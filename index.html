@@ -338,7 +338,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')" style="margin-left:auto">⬇ CSV</button>
   </div>
   <div class="card"><div class="table-wrap">
-    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Monto Neto</th><th>Anticipo</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
+    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Monto Neto</th><th>Forma de Pago</th><th>Pagado</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
   <div id="qaModal" class="modal-overlay" style="display:none">
@@ -906,7 +906,7 @@ function renderKPIs(){
   const revSemana=state.pedidos.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
   const revTotal=state.pedidos.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
   const atrasados=state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
-  const alertas=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length+state.pedidos.filter(p=>!p.fields['Anticipo pagado (50%)']&&p.fields['Estado pedido']==='Confirmado').length+atrasados+state.cotizaciones.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v)<today;}).length;
+  const alertas=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length+state.pedidos.filter(p=>!p.fields['Pagado']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length+atrasados+state.cotizaciones.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v)<today;}).length;
   const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);const avgM=cotM.length>0?cotM.reduce((sum,c)=>sum+getMargenCot(c.fields),0)/cotM.length:0;
   document.getElementById('kpiGrid').innerHTML=`
     <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total: ${formatCLP(revTotal)}</div></div>
@@ -935,7 +935,7 @@ function renderCotTable(){
 function renderAlertas(){
   const alertas=[];const today=new Date();today.setHours(0,0,0,0);
   state.clientes.forEach(c=>{const v=c.fields['Facturas vencidas']||0;if(v>=2) alertas.push({sev:3,icon:'🚫',msg:`<strong>${escapeHtml(c.fields['Empresa']||'')}</strong> tiene ${v} facturas vencidas`});});
-  state.pedidos.forEach(p=>{const f=p.fields,num=escapeHtml(f['N° Pedido']||'—'),cl=escapeHtml(resolveClienteName(f['Cliente'])),est=f['Estado pedido']||'';if(f['Fecha entrega']&&new Date(f['Fecha entrega'])<today&&!['Despachado','Cancelado'].includes(est)){const d=Math.round((today-new Date(f['Fecha entrega']))/86400000);alertas.push({sev:3,icon:'⏰',msg:`<strong>${num}</strong> (${cl}): atrasado ${d}d`});}if(!f['Anticipo pagado (50%)']&&est==='Confirmado') alertas.push({sev:2,icon:'💸',msg:`<strong>${num}</strong> (${cl}): Anticipo 50% pendiente`});});
+  state.pedidos.forEach(p=>{const f=p.fields,num=escapeHtml(f['N° Pedido']||'—'),cl=escapeHtml(resolveClienteName(f['Cliente'])),est=f['Estado pedido']||'';if(f['Fecha entrega']&&new Date(f['Fecha entrega'])<today&&!['Despachado','Cancelado'].includes(est)){const d=Math.round((today-new Date(f['Fecha entrega']))/86400000);alertas.push({sev:3,icon:'⏰',msg:`<strong>${num}</strong> (${cl}): atrasado ${d}d`});}if(!f['Pagado']&&['Confirmado','En producción'].includes(est)) alertas.push({sev:2,icon:'💸',msg:`<strong>${num}</strong> (${cl}): Pago pendiente`});});
   state.cotizaciones.forEach(c=>{const f=c.fields,est=f['Estado cotización']||'',vto=f['Fecha vencimiento'];if(['Enviada','Solicitada'].includes(est)&&vto){const dias=Math.round((new Date(vto)-today)/86400000);if(dias<0) alertas.push({sev:2,icon:'📅',msg:`<strong>${escapeHtml(f['N° Cotización']||'—')}</strong>: vencida hace ${Math.abs(dias)}d`});else if(dias<=3) alertas.push({sev:1,icon:'⏳',msg:`<strong>${escapeHtml(f['N° Cotización']||'—')}</strong>: vence en ${dias}d`});}});
   alertas.sort((a,b)=>b.sev-a.sev);const el=document.getElementById('alertasArea');
   if(!alertas.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div>Sin alertas activas</div>';return;}
@@ -1238,13 +1238,16 @@ ${notas?`<div class="notas-box"><strong>Notas:</strong> ${escHtml(notas)}</div>`
 function renderPedidos(filter){
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
   let data=filter==='all'?state.pedidos:filter==='atrasados'?state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
-  const tbody=document.getElementById('pedidosTableBody');if(!data.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📦</div>Sin pedidos</div></td></tr>';return;}
+  const tbody=document.getElementById('pedidosTableBody');if(!data.length){tbody.innerHTML='<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📦</div>Sin pedidos</div></td></tr>';return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
   tbody.innerHTML=data.map(p=>{
     const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);let actionCell='—';
     if(idx>=0&&idx<stages.length-1) actionCell=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') actionCell='<span class="badge badge-green">✓</span>';
+    const formaOpts=['Contado','Pago a 30 días desde OC','Pago a 45 días desde OC','60% inicial y 40% Contra entrega','50% para iniciar y 50% a 30 días'];
+    const formaActual=f['Forma de pago']||'';
     return`<tr><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td><span class="badge badge-gray">${escapeHtml(f['Equipo asignado']||'—')}</span></td><td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
-    <td style="text-align:center"><button onclick="toggleAnticipo('${p.id}',${!!f['Anticipo pagado (50%)']})" style="background:${f['Anticipo pagado (50%)']?'rgba(0,212,170,0.2)':'rgba(255,68,68,0.15)'};border:1px solid ${f['Anticipo pagado (50%)']?'rgba(0,212,170,0.4)':'rgba(255,68,68,0.3)'};color:${f['Anticipo pagado (50%)']?'var(--accent3)':'var(--danger)'};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:60px">${f['Anticipo pagado (50%)']?'✓ Pagado':'✕ Pendiente'}</button></td>
+    <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
+    <td style="text-align:center"><button onclick="togglePagado('${p.id}',${!!f['Pagado']})" style="background:${f['Pagado']?'rgba(0,212,170,0.2)':'rgba(255,68,68,0.15)'};border:1px solid ${f['Pagado']?'rgba(0,212,170,0.4)':'rgba(255,68,68,0.3)'};color:${f['Pagado']?'var(--accent3)':'var(--danger)'};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:60px">${f['Pagado']?'✓ Sí':'✕ No'}</button></td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
     <td>${actionCell}</td></tr>`;
@@ -1254,7 +1257,8 @@ function qaColor(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.2)';if(r==='R
 function qaBorder(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.4)';if(r==='Rechazado') return 'rgba(255,68,68,0.3)';return 'var(--border2)';}
 function qaTextColor(r){if(r==='QA aprobado') return 'var(--accent3)';if(r==='Rechazado') return 'var(--danger)';return 'var(--text2)';}
 function qaLabel(r){if(r==='QA aprobado') return '✓ Aprobado';if(r==='Rechazado') return '✕ Rechazado';return '— Pendiente';}
-async function toggleAnticipo(id,actual){try{const n=!actual;await airtableWrite('Pedidos','PATCH',id,{'Anticipo pagado (50%)':n});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Anticipo pagado (50%)']=n;toast(`Anticipo ${n?'✓ pagado':'pendiente'}`,n?'success':'info');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+async function updateFormaPago(id,forma){try{await airtableWrite('Pedidos','PATCH',id,{'Forma de pago':forma});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Forma de pago']=forma;toast(`Forma de pago → ${forma}`,'success');}catch(e){toast('Error: '+e.message,'error');}}
+async function togglePagado(id,actual){try{const n=!actual;await airtableWrite('Pedidos','PATCH',id,{'Pagado':n});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Pagado']=n;toast(`Pago ${n?'✓ confirmado':'pendiente'}`,n?'success':'info');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
 let qaItems=[],qaResultadoActual='Pendiente';
@@ -1272,7 +1276,7 @@ async function saveQAModal(){
   catch(e){try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Resultado QA']=qaResultadoActual;toast(`✓ QA ${qaResultadoActual}`,'success');closeQAModal();renderPedidos();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
 }
 function filterPedidos(filter,btn){document.querySelectorAll('.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');renderPedidos(filter);}
-async function advancePedido(id,estado){if(!confirm(`¿Avanzar a "${estado}"?`)) return;try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+async function advancePedido(id,estado){const p=state.pedidos.find(x=>x.id===id);if(p&&!p.fields['Pagado']){toast('⚠ Marca el pago como recibido antes de avanzar','error');return;}if(!confirm(`¿Avanzar a "${estado}"?`)) return;try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 
 // ── NUEVO LEAD ────────────────────────────────────────────────
 async function createLead(){
@@ -1491,7 +1495,7 @@ function exportToCSV(t){
   let rows=[],headers=[];
   if(t==='clientes'){headers=['Empresa','Contacto','Email','Teléfono','Etapa','Revenue','Estado','Fact.venc.'];rows=state.clientes.map(c=>{const f=c.fields;return[f['Empresa']||'',f['Contacto']||'',f['Email']||'',f['Teléfono']||'',f['Etapa venta']||'',f['Revenue total cliente (CLP)']||0,f['Estado cuenta']||'',f['Facturas vencidas']||0];});}
   else if(t==='cotizaciones'){headers=['N°','Cliente','Canal','Subtotal','Total','Urgente','Estado','Vto.'];rows=state.cotizaciones.map(c=>{const f=c.fields;return[f['N° Cotización']||'',resolveClienteName(f['Cliente']),f['Canal solicitud']||'',f['Subtotal (CLP)']||0,f['Total final (CLP)']||0,f['Urgencia (+25%)']?'Sí':'No',f['Estado cotización']||'',f['Fecha vencimiento']||''];});}
-  else if(t==='pedidos'){headers=['N°','Cliente','Estado','Monto','Anticipo','QA','Entrega'];rows=state.pedidos.map(p=>{const f=p.fields;return[f['N° Pedido']||'',resolveClienteName(f['Cliente']),f['Estado pedido']||'',f['Monto total (CLP)']||0,f['Anticipo pagado (50%)']?'Sí':'No',f['Resultado QA']||'',f['Fecha entrega']||''];});}
+  else if(t==='pedidos'){headers=['N°','Cliente','Estado','Monto','Forma de Pago','Pagado','QA','Entrega'];rows=state.pedidos.map(p=>{const f=p.fields;return[f['N° Pedido']||'',resolveClienteName(f['Cliente']),f['Estado pedido']||'',f['Monto total (CLP)']||0,f['Forma de pago']||'',f['Pagado']?'Sí':'No',f['Resultado QA']||'',f['Fecha entrega']||''];});}
   else{toast('Tipo desconocido','error');return;}
   if(!rows.length){toast('Sin datos','error');return;}
   const csv=[headers.join(','),...rows.map(r=>r.map(v=>{const s=String(v).replace(/"/g,'""');return/[",\n]/.test(s)?`"${s}"`:s;}).join(','))].join('\n');
