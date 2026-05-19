@@ -396,7 +396,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 <!-- NUEVA COT -->
 <div class="tab-panel" id="tab-nueva-cot">
   <div class="section-header"><div class="section-title">Nueva Cotización</div></div>
-  <div class="data-grid">
+  <div>
     <div class="card">
       <div class="card-header"><span class="card-title">Datos</span></div>
       <div class="form-grid">
@@ -410,10 +410,19 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
         </div>
         <div class="field-group"><label class="field-label">N° Cotización *</label><input class="field-input" id="cot-num" placeholder="260507"></div>
         <div class="field-group"><label class="field-label">Canal</label><select class="field-select" id="cot-canal"><option>WhatsApp</option><option>Email</option><option>LinkedIn</option><option>Teléfono</option><option>Presencial</option></select></div>
-        <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="cot-fecha" type="date"></div>
-        <div class="field-group"><label class="field-label">Fecha vencimiento</label><input class="field-input" id="cot-vto" type="date"></div>
-        <div class="field-group"><label class="field-label">Urgente (+25%)</label><select class="field-select" id="cot-urgente"><option value="false">No</option><option value="true">Sí (+25%)</option></select></div>
-        <div class="field-group form-full"><label class="field-label">Solicitud cliente</label><textarea class="field-textarea" id="cot-solicitud" rows="2"></textarea></div>
+        <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="cot-fecha" type="date" onchange="updateVtoPreview()"></div>
+        <div class="field-group"><label class="field-label">Vto. (auto 10 días háb.)</label><input class="field-input" id="cot-vto-preview" type="date" disabled style="opacity:0.5;cursor:not-allowed"></div>
+        <div class="field-group form-full">
+          <label class="field-label">Solicitud cliente</label>
+          <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
+            <div style="display:flex;border-bottom:1px solid var(--border2)">
+              <input class="field-input" id="cot-solicitud-inp" placeholder="Agregar ítem de solicitud..." style="border:none;border-radius:0;flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addSolicitudItem();}">
+              <button type="button" onclick="addSolicitudItem()" style="background:var(--surface3);border:none;border-left:1px solid var(--border2);color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:0 14px;cursor:pointer;white-space:nowrap">+ Agregar</button>
+            </div>
+            <div id="solicitudItems" style="min-height:32px;padding:6px 8px;display:flex;flex-direction:column;gap:4px"></div>
+          </div>
+          <textarea class="field-textarea" id="cot-solicitud" rows="2" placeholder="O escribe directamente aquí..."></textarea>
+        </div>
         <input type="hidden" id="cot-subtotal"><input type="hidden" id="cot-total">
         <div class="field-group form-full">
           <label class="field-label">Detalle productos</label>
@@ -444,10 +453,6 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
         <button class="btn btn-primary" id="createCotBtn" onclick="createCotizacion()">✚ Guardar Cotización</button>
       </div>
     </div>
-    <div class="card">
-      <div class="card-header"><span class="card-title">🤖 QUOTE_AGENT</span></div>
-      <div style="padding:16px"><div class="field-group" style="margin-bottom:12px"><label class="field-label">Describe el pedido</label><textarea class="field-textarea" id="aiQuoteInput" rows="5" placeholder="20 neones LED interior, texto WELCOME, 80cm…"></textarea></div><button class="btn btn-primary" onclick="aiQuote()" id="aiQuoteBtn">⚡ Generar con IA</button></div>
-      <div style="padding:0 16px 16px"><div class="ai-response empty" id="aiQuoteOutput">La IA generará la cotización completa...</div></div>
     </div>
   </div>
 </div>
@@ -749,7 +754,7 @@ async function airtableFetch(table,max=100){
     const r=await fetch(url,{headers:{'Authorization':'Bearer '+t}});
     if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`Airtable ${r.status}: ${j.error?.message||''}`);}
     const d=await r.json();all=[...all,...(d.records||[])];offset=d.offset||null;
-    if(all.length>=max&&table!=='Clientes') break;
+    if(all.length>=max&&table!=='Clientes'&&table!=='Cotizaciones') break;
   }while(offset);
   return{records:all};
 }
@@ -835,7 +840,7 @@ async function loadAllData(){
   if(!getToken()){setStatus('sin token',false);showTokenModal();return;}
   const btn=document.getElementById('refreshBtn');btn.disabled=true;btn.textContent='↺ Cargando...';setStatus('cargando...',false);
   try{
-    const[cRes,coRes,pRes,rRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',50),airtableFetch('Pedidos',50),airtableFetch('Reportes',20)]);
+    const[cRes,coRes,pRes,rRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20)]);
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
     else if(cRes.reason?.message?.includes('401')){sessionStorage.removeItem('airtable_token');showTokenModal();btn.disabled=false;btn.textContent='↺ Actualizar';return;}
     if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];renderCotizaciones();}
@@ -850,7 +855,7 @@ async function loadAllData(){
 async function loadAllDataSilent(){
   if(!getToken()) return;
   try{
-    const[cRes,coRes,pRes,rRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',50),airtableFetch('Pedidos',50),airtableFetch('Reportes',20)]);
+    const[cRes,coRes,pRes,rRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20)]);
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||'—';});}
     if(coRes.status==='fulfilled') state.cotizaciones=coRes.value.records||[];
     if(pRes.status==='fulfilled') state.pedidos=pRes.value.records||[];
@@ -888,6 +893,7 @@ function switchTab(name){
   if(name==='agentes') renderAgentesGrid();
   if(name==='maquinas') initMaquinas();
   if(name==='equipo') initEquipo();
+  if(name==='nueva-cot'){const cn=document.getElementById('cot-num');if(cn) cn.value=generarNumeroCotizacion();updateVtoPreview();}
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -1310,14 +1316,16 @@ async function createCotizacion(){
   updateItemsDetalle();const tots=calcItemsTotals();const s=tots.costo,t=tots.totalIva;btn.disabled=true;btn.textContent='Guardando...';
   try{
     const clienteId=document.getElementById('cot-cliente-id')?.value||'';
-    const fields={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0],'Fecha vencimiento':document.getElementById('cot-vto')?.value||'','Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':document.getElementById('cot-urgente')?.value==='true','Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada','SUBTOTAL':s,'TOTAL CON IVA':t};
+    const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];
+    const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];
+    const fields={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada','SUBTOTAL':s,'TOTAL CON IVA':t};
     if(clienteId) fields['Cliente']=[clienteId];
     const rows=document.querySelectorAll('#itemsContainer .item-row');rows.forEach((row,i)=>{const n=i+1;if(n>20) return;const desc=(row.querySelector('.item-desc')?.value||'').trim();const und=parseFloat(row.querySelector('.item-und')?.value)||1;const costo=parseFloat(row.querySelector('.item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.item-venta')?.value)||0;if(desc||venta>0){fields[`ITEM${n}`]=desc;fields[`UNIDADES${n}`]=und;fields[`COSTO NETO${n}`]=Math.round(costo*und);fields[`VALOR NETO${n}`]=Math.round(venta*und);}});
     await airtableWrite('Cotizaciones','POST',null,fields);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){
     if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('field')){
       toast('Creando campos en Airtable...','info');await crearCamposItemsAirtable();
-      try{const clienteId=document.getElementById('cot-cliente-id')?.value||'';const bf={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0],'Fecha vencimiento':document.getElementById('cot-vto')?.value||'','Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':document.getElementById('cot-urgente')?.value==='true','Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};if(clienteId) bf['Cliente']=[clienteId];await airtableWrite('Cotizaciones','POST',null,bf);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();}
+      try{const clienteId=document.getElementById('cot-cliente-id')?.value||'';const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];const bf={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};if(clienteId) bf['Cliente']=[clienteId];await airtableWrite('Cotizaciones','POST',null,bf);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();}
       catch(e2){toast('Error: '+e2.message,'error');}
     }else{toast('Error: '+e.message,'error');}
   }
@@ -1337,7 +1345,6 @@ function renderReportes(){const tbody=document.getElementById('reportesTableBody
 function renderAgentesGrid(){document.getElementById('agentesGrid').innerHTML=AGENTES_CFG.map(a=>`<div class="card" style="padding:0"><div class="card-header"><span class="card-title">${a.icon} ${a.label}</span><span class="badge ${a.badge}">Activo</span></div><div style="padding:14px"><div class="field-group" style="margin-bottom:10px"><div class="field-label">Descripción</div><textarea class="field-textarea" id="input_${a.id}" rows="3" placeholder="${a.pre}..."></textarea></div><button class="btn btn-primary btn-sm" onclick="runAgent('${a.id}')">▶ Ejecutar</button></div><div style="padding:0 14px 14px"><div class="ai-response-wrap"><button class="copy-btn" onclick="copyOut('out_${a.id}',this)">📋</button><div class="ai-response empty" id="out_${a.id}">Ejecuta el agente...</div></div></div></div>`).join('');}
 async function runAgent(id){const cfg=AGENTES_CFG.find(a=>a.id===id);if(!cfg) return;const inp=document.getElementById(`input_${id}`);const input=inp?.value.trim();if(!input){toast('Ingresa texto primero','error');inp?.focus();return;}const out=document.getElementById(`out_${id}`);out.classList.remove('empty');out.textContent='⏳ Procesando...';const panel=document.querySelector(`#agentesGrid .card:nth-child(${AGENTES_CFG.findIndex(a=>a.id===id)+1})`);const btn=panel?.querySelector('.btn-primary');if(btn) btn.disabled=true;try{out.textContent=await callClaude(cfg.sys,cfg.pre+input);}catch(e){out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}if(btn) btn.disabled=false;}
 function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
-async function aiQuote(){const input=document.getElementById('aiQuoteInput').value.trim();if(!input){toast('Describe el pedido','error');return;}const btn=document.getElementById('aiQuoteBtn');btn.disabled=true;const out=document.getElementById('aiQuoteOutput');out.classList.remove('empty');out.textContent='⏳ Calculando...';try{const response=await callClaude('Eres el QUOTE_AGENT de The Lab Solutions. COSTOS: Trofeo $18.000/und; Medalla $4.500/und; Neón $18.000-25.000/m; PLA $24/g+$1.200/h. Margen 35-45%.',`Cotización para: "${input}"`);out.textContent=response;document.getElementById('cot-solicitud').value=input;}catch(e){out.textContent='❌ Error: '+e.message;}btn.disabled=false;}
 
 // ── MÁQUINAS ──────────────────────────────────────────────────
 function fmtDate(d){return d.toISOString().split('T')[0];}
@@ -1439,6 +1446,21 @@ async function syncGcalEquipo(){
   toast(`✓ ${total} eventos importados`,'success');await saveEquipoEventosAirtable();renderEquipoCalendar();btn.disabled=false;btn.textContent='🔄 Sync';
 }
 
+// ── SOLICITUD ITEMS ───────────────────────────────────────────
+function addSolicitudItem(){
+  const inp=document.getElementById('cot-solicitud-inp');const val=(inp?.value||'').trim();if(!val) return;
+  const container=document.getElementById('solicitudItems');const item=document.createElement('div');
+  item.dataset.value=val;
+  item.style.cssText='display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:12px';
+  item.innerHTML=`<span style="color:var(--accent);flex-shrink:0">•</span><span style="flex:1">${escapeHtml(val)}</span><button onclick="removeSolicitudItem(this)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0;line-height:1" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
+  container.appendChild(item);inp.value='';syncSolicitudToTextarea();inp.focus();
+}
+function removeSolicitudItem(btn){btn.closest('[data-value]').remove();syncSolicitudToTextarea();}
+function syncSolicitudToTextarea(){
+  const items=[...document.querySelectorAll('#solicitudItems [data-value]')].map(el=>'• '+el.dataset.value);
+  const ta=document.getElementById('cot-solicitud');if(ta) ta.value=items.join('\n');
+}
+
 // ── FORM HELPERS ──────────────────────────────────────────────
 function onClienteSearchInput(){
   const inp=document.getElementById('cot-cliente-search'),dropdown=document.getElementById('cot-cliente-dropdown');
@@ -1453,13 +1475,16 @@ function selectClienteNew(){document.getElementById('cot-cliente-id').value='';d
 document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap')) document.querySelectorAll('.search-select-dropdown').forEach(d=>d.classList.remove('open'));});
 function clearForm(type){
   if(type==='lead'){['nl-empresa','nl-contacto','nl-cargo','nl-telefono','nl-email','nl-rut','nl-web','nl-notas','nl-ciudad'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});document.getElementById('nl-origen').value='Referido';document.getElementById('nl-industria').value='';}
-  if(type==='cot'){['cot-num','cot-subtotal','cot-total','cot-solicitud','cot-notas','cot-cliente-search','cot-cliente-id'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});document.getElementById('cot-urgente').value='false';document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();}
+  if(type==='cot'){['cot-num','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();}
 }
+function addBusinessDays(date,days){const d=new Date(date);let added=0;while(added<days){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6) added++;}return d;}
+function updateVtoPreview(){const fi=document.getElementById('cot-fecha');const prev=document.getElementById('cot-vto-preview');if(!fi||!prev) return;const base=fi.value?new Date(fi.value+'T00:00:00'):new Date();prev.value=addBusinessDays(base,10).toISOString().split('T')[0];}
 function initDates(){
-  const today=new Date().toISOString().split('T')[0],vto=new Date();vto.setDate(vto.getDate()+7);
-  const fi=document.getElementById('cot-fecha'),fv=document.getElementById('cot-vto'),cn=document.getElementById('cot-num');
-  if(fi&&!fi.value) fi.value=today;if(fv&&!fv.value) fv.value=vto.toISOString().split('T')[0];
-  if(cn&&!cn.value) cn.value=generarNumeroCotizacion();
+  const today=new Date().toISOString().split('T')[0];
+  const fi=document.getElementById('cot-fecha'),cn=document.getElementById('cot-num');
+  if(fi&&!fi.value) fi.value=today;
+  updateVtoPreview();
+  if(cn) cn.value=generarNumeroCotizacion();
   const container=document.getElementById('itemsContainer');if(container&&!container.children.length) initItemsContainer();
 }
 function exportToCSV(t){
