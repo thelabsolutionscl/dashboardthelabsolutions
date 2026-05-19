@@ -1259,7 +1259,25 @@ function qaBorder(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.4)';if(r==='
 function qaTextColor(r){if(r==='QA aprobado') return 'var(--accent3)';if(r==='Rechazado') return 'var(--danger)';return 'var(--text2)';}
 function qaLabel(r){if(r==='QA aprobado') return '✓ Aprobado';if(r==='Rechazado') return '✕ Rechazado';return '— Pendiente';}
 async function updateFormaPago(id,forma){try{await airtableWrite('Pedidos','PATCH',id,{'Forma de pago':forma});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Forma de pago']=forma;toast(`Forma de pago → ${forma}`,'success');}catch(e){toast('Error: '+e.message,'error');}}
-async function togglePagado(id,actual){try{const n=!actual;await airtableWrite('Pedidos','PATCH',id,{'Pagado':n});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Pagado']=n;toast(`Pago ${n?'✓ confirmado':'pendiente'}`,n?'success':'info');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+async function togglePagado(id,actual){
+  const n=!actual;
+  const p=state.pedidos.find(x=>x.id===id);
+  if(p) p.fields['Pagado']=n;
+  renderPedidos();renderOverview();
+  try{
+    await airtableWrite('Pedidos','PATCH',id,{'Pagado':n});
+    toast(`Pago ${n?'✓ confirmado':'pendiente'}`,n?'success':'info');
+  }catch(e){
+    const isMissingField=e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('field')||e.message.includes('422');
+    if(isMissingField){
+      toast('Crea el campo "Pagado" (checkbox) en Airtable para persistir','info');
+    }else{
+      if(p) p.fields['Pagado']=actual;
+      renderPedidos();renderOverview();
+      toast('Error: '+e.message,'error');
+    }
+  }
+}
 async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
 let qaItems=[],qaResultadoActual='Pendiente';
