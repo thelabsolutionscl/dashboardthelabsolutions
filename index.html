@@ -351,7 +351,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     </div>
   </div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap">
-    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Monto Neto</th><th>Forma de Pago</th><th>Pagado</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
+    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Pagado</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
   <div id="pedidosKanban" style="display:none"></div>
@@ -410,6 +410,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
           <th class="sort-th" onclick="sortProveedores('rep')">Rep.</th>
           <th class="sort-th" onclick="sortProveedores('estado')">Estado</th>
           <th class="sort-th" onclick="sortProveedores('plazo')">Plazo</th>
+          <th>Pedidos</th>
           <th>Acc.</th>
         </tr></thead>
         <tbody id="proveedoresTableBody"><tr><td colspan="9"><div class="loading-state"><div class="spinner"></div> cargando...</div></td></tr></tbody>
@@ -1393,12 +1394,31 @@ function renderAlertas(){
       alertas.push({sev:1,icon:'📋',type:'cot-sin-enviar',msg:`<strong>${escapeHtml(c.fields['N° Cotización']||'—')}</strong>: solicitada sin enviar por +48h`,id:c.id,tab:'cotizaciones'});
   });
 
+  // sev 3 — proveedores bloqueados con pedidos activos en su categoría
+  state.proveedores.forEach(pv=>{
+    if((pv.fields['Estado']||'')!=='Bloqueado') return;
+    const cat=pv.fields['Categoría']||'';
+    const nombre=pv.fields['Nombre']||'—';
+    const pedActivos=state.pedidos.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')).length;
+    if(pedActivos>0)
+      alertas.push({sev:3,icon:'🏭',type:'proveedor-bloqueado',msg:`<strong>${escapeHtml(nombre)}</strong> bloqueado${cat?` (${escapeHtml(cat)})`:''} — revisar pedidos activos`,id:pv.id,tab:'proveedores'});
+  });
+  // sev 2 — proveedor inactivo sin alternativa activa en la misma categoría
+  state.proveedores.forEach(pv=>{
+    if((pv.fields['Estado']||'')!=='Inactivo') return;
+    const cat=pv.fields['Categoría']||'';
+    if(!cat) return;
+    const hayAlternativa=state.proveedores.some(x=>x.id!==pv.id&&(x.fields['Categoría']||'')===cat&&(x.fields['Estado']||'')==='Activo');
+    if(!hayAlternativa)
+      alertas.push({sev:2,icon:'⚠️',type:'proveedor-sin-cobertura',msg:`Sin proveedor activo en <strong>${escapeHtml(cat)}</strong> — <strong>${escapeHtml(pv.fields['Nombre']||'—')}</strong> inactivo`,id:pv.id,tab:'proveedores'});
+  });
+
   alertas.sort((a,b)=>b.sev-a.sev);
 
   // agrupación: >=3 del mismo tipo → una sola fila
   const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
-  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa'};
-  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`};
+  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa','proveedor-bloqueado':'proveedores bloqueados con pedidos activos','proveedor-sin-cobertura':'categorías sin proveedor activo'};
+  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`,'proveedor-bloqueado':`goToAlert('proveedores')`,'proveedor-sin-cobertura':`goToAlert('proveedores')`};
   const sevBorder=s=>s===3?'rgba(255,68,68,0.3)':s===2?'rgba(255,107,53,0.3)':'rgba(255,170,0,0.22)';
 
   const seen=new Set();const rows=[];
@@ -1716,14 +1736,18 @@ ${notas?`<div class="notas-box"><strong>Notas:</strong> ${escHtml(notas)}</div>`
 function renderPedidos(filter){
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
   let data=filter==='all'?state.pedidos:filter==='atrasados'?state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
-  const tbody=document.getElementById('pedidosTableBody');if(!data.length){tbody.innerHTML='<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📦</div>Sin pedidos</div></td></tr>';return;}
+  const tbody=document.getElementById('pedidosTableBody');if(!data.length){tbody.innerHTML='<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">📦</div>Sin pedidos</div></td></tr>';return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
   tbody.innerHTML=data.map(p=>{
     const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);let actionCell='—';
     if(idx>=0&&idx<stages.length-1) actionCell=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') actionCell='<span class="badge badge-green">✓</span>';
     const formaOpts=['Contado','Pago a 30 días desde OC','Pago a 45 días desde OC','60% inicial y 40% Contra entrega','50% para iniciar y 50% a 30 días'];
     const formaActual=f['Forma de pago']||'';
-    return`<tr data-id="${p.id}"><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td><span class="badge badge-gray">${escapeHtml(f['Equipo asignado']||'—')}</span></td><td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
+    const pvActual=f['Proveedor']||'';
+    const pvOptsHtml=`<option value="">— ninguno —</option>`+state.proveedores.filter(x=>(x.fields['Estado']||'')==='Activo').map(x=>`<option value="${escapeHtml(x.fields['Nombre']||'')}" ${pvActual===x.fields['Nombre']?'selected':''}>${escapeHtml(x.fields['Nombre']||'')}</option>`).join('');
+    return`<tr data-id="${p.id}"><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td><span class="badge badge-gray">${escapeHtml(f['Equipo asignado']||'—')}</span></td>
+    <td><select onchange="updateProveedorPedido('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:140px">${pvOptsHtml}</select></td>
+    <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
     <td style="text-align:center"><button onclick="togglePagado('${p.id}',${!!f['Pagado']})" style="background:${f['Pagado']?'rgba(0,212,170,0.2)':'rgba(255,68,68,0.15)'};border:1px solid ${f['Pagado']?'rgba(0,212,170,0.4)':'rgba(255,68,68,0.3)'};color:${f['Pagado']?'var(--accent3)':'var(--danger)'};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:60px">${f['Pagado']?'✓ Sí':'✕ No'}</button></td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
@@ -1736,6 +1760,20 @@ function qaBorder(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.4)';if(r==='
 function qaTextColor(r){if(r==='QA aprobado') return 'var(--accent3)';if(r==='Rechazado') return 'var(--danger)';return 'var(--text2)';}
 function qaLabel(r){if(r==='QA aprobado') return '✓ Aprobado';if(r==='Rechazado') return '✕ Rechazado';return '— Pendiente';}
 async function updateFormaPago(id,forma){try{await airtableWrite('Pedidos','PATCH',id,{'Forma de pago':forma});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Forma de pago']=forma;toast(`Forma de pago → ${forma}`,'success');}catch(e){toast('Error: '+e.message,'error');}}
+async function updateProveedorPedido(id,nombre){
+  const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const old=p.fields['Proveedor']||'';
+  p.fields['Proveedor']=nombre;
+  try{
+    await airtableWrite('Pedidos','PATCH',id,{'Proveedor':nombre||null});
+    toast(nombre?`Proveedor → ${nombre}`:'Proveedor eliminado','success');
+    renderProveedores();// refresh pedidos count in proveedores tab
+  }catch(e){
+    const isMissing=e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('field')||e.message.includes('422');
+    if(isMissing){toast('Crea el campo "Proveedor" (texto) en la tabla Pedidos de Airtable para persistir','info');p.fields['Proveedor']=nombre;}
+    else{p.fields['Proveedor']=old;toast('Error: '+e.message,'error');}
+  }
+}
 async function togglePagado(id,actual){
   const n=!actual;
   const p=state.pedidos.find(x=>x.id===id);
@@ -2665,26 +2703,81 @@ function renderProveedores(){
   const sorted=getSortedProveedores(list);
   const count=document.getElementById('proveedoresCount');if(count) count.textContent=`${sorted.length} proveedor${sorted.length!==1?'es':''}`;
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
-  if(!sorted.length){tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
+  if(!sorted.length){tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
   renderProveedoresAnalytics();
 }
 function buildProveedorRow(p){
   const f=p.fields,id=p.id;
-  const tel=f['Teléfono']||'';const email=f['Email']||'';
-  const contactInfo=[tel?`<span style="font-size:10px;color:var(--text3)">📞 ${escapeHtml(tel)}</span>`:'',email?`<span style="font-size:10px;color:var(--text3)">✉ ${escapeHtml(email)}</span>`:''].filter(Boolean).join('<br>');
+  const tel=(f['Teléfono']||'').replace(/\s/g,'');
+  const email=f['Email']||'';
+  const web=f['Sitio web']||'';
+  const contactInfo=[tel?`<span style="font-size:10px;color:var(--text3)">📞 ${escapeHtml(f['Teléfono']||'')}</span>`:'',email?`<span style="font-size:10px;color:var(--text3)">✉ ${escapeHtml(email)}</span>`:''].filter(Boolean).join('<br>');
   const plazo=f['Plazo entrega (días)']?`${f['Plazo entrega (días)']} días`:'—';
-  return`<tr>
+  const rep=parseInt(f['Reputación'])||0;
+  const starsHtml=[1,2,3,4,5].map(n=>`<span onclick="event.stopPropagation();updateRepProveedor('${id}',${n})" style="cursor:pointer;font-size:14px;color:${n<=rep?'#facc15':'var(--text3)'};line-height:1" title="${n} estrella${n>1?'s':''}" onmouseenter="highlightStars(this,${n})" onmouseleave="resetStars(this.parentElement,${rep})">★</span>`).join('');
+  const starsCell=`<div style="display:flex;gap:1px;align-items:center" id="stars-${id}">${starsHtml}</div>`;
+  // Count active pedidos linked to this proveedor (by Proveedor text field)
+  const nombre=f['Nombre']||'';
+  const pedidosActivos=state.pedidos.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')&&(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
+  const pedCount=pedidosActivos.length;
+  const pedCell=pedCount>0?`<span style="background:rgba(0,212,204,0.12);border:1px solid rgba(0,212,204,0.3);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();toggleProveedorFicha('${id}')">${pedCount} activo${pedCount>1?'s':''}</span>`:`<span style="color:var(--text3);font-size:10px">—</span>`;
+  const estado=f['Estado']||'Activo';
+  const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
+  return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}">
     <td><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}</td>
     <td><span class="badge badge-purple" style="font-size:9px">${escapeHtml(f['Categoría']||'—')}</span></td>
     <td><div style="font-size:12px">${escapeHtml(f['Contacto']||'—')}</div>${f['Cargo']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['Cargo'])}</div>`:''}</td>
     <td>${contactInfo||'—'}</td>
-    <td>${escapeHtml(f['Comuna']||'—')}</td>
-    <td>${repBadge(f['Reputación'])}</td>
-    <td>${estadoPvBadge(f['Estado'])}</td>
+    <td style="font-size:11px">${escapeHtml(f['Comuna']||'—')}</td>
+    <td>${starsCell}</td>
+    <td>${estadoPvBadge(estado)}</td>
     <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${plazo}</td>
-    <td><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')">✏️ Editar</button></td>
+    <td>${pedCell}</td>
+    <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')">✏️</button></td>
+  </tr>
+  <tr id="pv-ficha-${id}" style="display:none">
+    <td colspan="10" style="padding:0;background:var(--surface2)">
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border2);border-bottom:2px solid var(--border)">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          ${tel?`<a href="https://wa.me/56${tel.replace(/^(\+56|56|0)/,'')}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="color:#25d366;border-color:rgba(37,211,102,0.3);font-size:11px">💬 WhatsApp</a>`:''}
+          ${email?`<a href="mailto:${escapeHtml(email)}" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px">✉ Email</a>`:''}
+          ${web?`<a href="${escapeHtml(web.startsWith('http')?web:'https://'+web)}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px">🌐 Sitio web</a>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditProveedor('${id}')" style="font-size:11px;margin-left:auto">✏️ Editar ficha completa</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+          ${f['Región']?`<div style="font-size:11px"><span style="color:var(--text3)">Región:</span> ${escapeHtml(f['Región'])}</div>`:''}
+          ${f['Condiciones de pago']?`<div style="font-size:11px"><span style="color:var(--text3)">Pago:</span> ${escapeHtml(f['Condiciones de pago'])}</div>`:''}
+          ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
+          ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px;white-space:pre-wrap">${escapeHtml(f['Notas'])}</div>`:''}
+        </div>
+        ${pedCount>0?`<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:6px">Pedidos activos vinculados</div><div style="display:flex;flex-direction:column;gap:4px">${pedidosActivos.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:11px;background:var(--surface3);border-radius:5px;padding:5px 10px"><span class="mono" style="color:var(--accent)">${escapeHtml(x.fields['N° Pedido']||'—')}</span><span style="color:var(--text2)">${escapeHtml(resolveClienteName(x.fields['Cliente']))}</span><span style="color:var(--text3)">${x.fields['Estado pedido']||'—'}</span>${x.fields['Fecha entrega']?`<span style="color:var(--text3);margin-left:auto">📅 ${x.fields['Fecha entrega']}</span>`:''}</div>`).join('')}</div></div>`:''}
+      </div>
+    </td>
   </tr>`;
+}
+function toggleProveedorFicha(id){
+  const row=document.getElementById('pv-ficha-'+id);if(!row) return;
+  const isOpen=row.style.display!=='none';
+  // close all
+  document.querySelectorAll('[id^="pv-ficha-"]').forEach(r=>{r.style.display='none';});
+  if(!isOpen) row.style.display='';
+}
+function highlightStars(el,n){const wrap=el.parentElement;wrap.querySelectorAll('span').forEach((s,i)=>{s.style.color=i<n?'#facc15':'var(--text3)';});}
+function resetStars(wrap,rep){wrap.querySelectorAll('span').forEach((s,i)=>{s.style.color=i<rep?'#facc15':'var(--text3)';});}
+async function updateRepProveedor(id,rep){
+  const p=state.proveedores.find(x=>x.id===id);if(!p) return;
+  const old=p.fields['Reputación'];
+  p.fields['Reputación']=rep;
+  const wrap=document.getElementById('stars-'+id);
+  if(wrap) resetStars(wrap,rep);
+  try{
+    await airtableWrite('Proveedores','PATCH',id,{'Reputación':rep});
+    toast(`★ ${rep}/5 guardado`,'success');
+  }catch(e){
+    if(p) p.fields['Reputación']=old;
+    toast('Error: '+e.message,'error');
+  }
 }
 async function createProveedor(){
   const nombre=(document.getElementById('np-nombre')?.value||'').trim();
