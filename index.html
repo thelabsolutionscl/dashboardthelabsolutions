@@ -757,7 +757,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 
 <div id="tokenModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeTokenModal()"></div>
-  <div class="modal-card"><div class="modal-title">🔑 Configurar Airtable</div><p class="modal-desc">Pega tu Personal Access Token de Airtable.</p><input class="field-input" id="modalTokenInput" type="password" placeholder="patXXXXXXX..." style="margin-top:12px"><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeTokenModal()">Cancelar</button><button class="btn btn-primary btn-sm" onclick="saveToken()">Guardar y Conectar</button></div></div>
+  <div class="modal-card"><div class="modal-title">🔑 Configurar Airtable</div><p class="modal-desc">Pega tu Personal Access Token de Airtable. Necesita scopes: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:read</code> + <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:write</code></p><input class="field-input" id="modalTokenInput" type="password" placeholder="patXXXXXXX..." style="margin-top:12px"><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeTokenModal()">Cancelar</button><button class="btn btn-ghost btn-sm" id="testWriteBtn" onclick="testAirtableWrite()">🔍 Probar escritura</button><button class="btn btn-primary btn-sm" onclick="saveToken()">Guardar y Conectar</button></div></div>
 </div>
 
 <!-- REPORTES -->
@@ -1064,8 +1064,26 @@ async function airtableWrite(table,method,recordId,fields){
   const t=getToken();if(!t) throw new Error('Sin token');
   const url=recordId?`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}/${recordId}`:`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}`;
   const r=await fetch(url,{method,headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields,typecast:true})});
-  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error?.message||`Error ${r.status}`);}
+  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${j.error?.message||j.error?.type||'Error desconocido'}`);}
   return await r.json();
+}
+async function testAirtableWrite(){
+  const btn=document.getElementById('testWriteBtn');if(btn){btn.disabled=true;btn.textContent='Probando...';}
+  // 1. Test read
+  try{
+    const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Proveedores?pageSize=1`,{headers:{'Authorization':'Bearer '+getToken()}});
+    if(!r.ok){const j=await r.json().catch(()=>({}));toast(`✕ Lectura falló (${r.status}): ${j.error?.message||''}`, 'error');if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}return;}
+  }catch(e){toast('✕ Error de red: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}return;}
+  // 2. Test write — PATCH with no changes on first record (or try creating empty)
+  try{
+    const rd=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Proveedores?pageSize=1`,{headers:{'Authorization':'Bearer '+getToken()}});
+    const rj=await rd.json();const firstId=rj.records?.[0]?.id;
+    if(!firstId){toast('Sin registros para probar PATCH — intenta crear uno','info');if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}return;}
+    const pw=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Proveedores/${firstId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({fields:{}})});
+    if(pw.ok){toast('✅ Lectura ✓ y Escritura ✓ — el token funciona correctamente','success');}
+    else{const pj=await pw.json().catch(()=>({}));toast(`✕ Escritura falló (HTTP ${pw.status}): ${pj.error?.message||pj.error?.type||'sin detalle'}`, 'error');}
+  }catch(e){toast('✕ Error: '+e.message,'error');}
+  if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}
 }
 async function airtableDelete(table,recordId){
   const t=getToken();if(!t) throw new Error('Sin token');
@@ -2804,18 +2822,24 @@ async function createProveedor(){
     'Notas':document.getElementById('np-notas')?.value||''
   };
   Object.keys(fields).forEach(k=>{if(fields[k]===null||fields[k]==='') delete fields[k];});
+  const refresh=async()=>{const pvRes=await airtableFetch('Proveedores',500);state.proveedores=pvRes.records||[];renderProveedores();};
   try{
     await airtableWrite('Proveedores','POST',null,fields);
-    toast(`✓ "${nombre}" creado`,'success');
-    clearForm('proveedor');
-    switchTab('proveedores');
-    const pvRes=await airtableFetch('Proveedores',500);
-    state.proveedores=pvRes.records||[];
-    renderProveedores();
+    toast(`✓ "${nombre}" creado`,'success');clearForm('proveedor');switchTab('proveedores');await refresh();
   }catch(e){
-    const isPermission=e.message.includes('permissions')||e.message.includes('model not found')||e.message.includes('403');
-    if(isPermission) toast('🔑 Token sin permiso de escritura — ve a Airtable → Developer Hub → Tokens y agrega "data:records:write"','error');
-    else toast('Error: '+e.message,'error');
+    // Retry with only safe fields to isolate if it's a field-name mismatch vs permissions
+    const safeFields={'Nombre':fields['Nombre'],'Categoría':fields['Categoría']};
+    if(fields['Contacto']) safeFields['Contacto']=fields['Contacto'];
+    if(fields['Estado']) safeFields['Estado']=fields['Estado'];
+    try{
+      await airtableWrite('Proveedores','POST',null,safeFields);
+      toast(`✓ "${nombre}" creado (algunos campos no existen aún en Airtable: ${Object.keys(fields).filter(k=>!safeFields[k]).join(', ')})`,'success');
+      clearForm('proveedor');switchTab('proveedores');await refresh();
+    }catch(e2){
+      const isPermission=e2.message.includes('403')||e2.message.includes('permissions')||e2.message.includes('model not found');
+      if(isPermission) toast(`🔑 Error escritura (${e2.message}) — abre el 🔑 modal → "Probar escritura" para diagnosticar`,'error');
+      else toast(`Error: ${e2.message}`,'error');
+    }
   }
   btn.disabled=false;btn.textContent='✚ Crear Proveedor';
 }
