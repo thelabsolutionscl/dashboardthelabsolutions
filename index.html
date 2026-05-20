@@ -75,6 +75,8 @@ th{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;co
 td{padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
 tr:last-child td{border-bottom:none;}
 tr:hover td{background:rgba(255,255,255,0.02);}
+@keyframes rowFlash{0%{background:rgba(0,212,204,0.22)}60%{background:rgba(0,212,204,0.1)}100%{background:transparent}}
+.row-flash td{animation:rowFlash 1.6s ease-out;}
 .badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;text-transform:uppercase;white-space:nowrap;}
 .badge-green{background:rgba(0,212,170,0.15);color:var(--accent3);border:1px solid rgba(0,212,170,0.3);}
 .badge-yellow{background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);}
@@ -1008,7 +1010,15 @@ function renderKPIs(){
   const revSemana=state.pedidos.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
   const revTotal=state.pedidos.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
   const atrasados=state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
-  const alertas=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length+state.pedidos.filter(p=>!p.fields['Pagado']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length+atrasados+state.cotizaciones.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v)<today;}).length;
+  const in2days=new Date(today);in2days.setDate(today.getDate()+2);
+  const ago48h=new Date(Date.now()-48*3600*1000);
+  const alertas=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length
+    +state.pedidos.filter(p=>!p.fields['Pagado']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length
+    +atrasados
+    +state.cotizaciones.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v+'T00:00:00')<today;}).length
+    +state.pedidos.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];if(!fe||['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;const d=new Date(fe+'T00:00:00');return d>=today&&d<=in2days;}).length
+    +state.cotizaciones.filter(c=>(c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h).length
+    +state.cotizaciones.filter(c=>{const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return false;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return false;const cl=state.clientes.find(x=>x.id===cid);return cl?.fields['Estado cuenta']==='Bloqueado';}).length;
   const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);const avgM=cotM.length>0?cotM.reduce((sum,c)=>sum+getMargenCot(c.fields),0)/cotM.length:0;
   document.getElementById('kpiGrid').innerHTML=`
     <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total: ${formatCLP(revTotal)}</div></div>
@@ -1034,14 +1044,100 @@ function renderCotTable(){
   if(!recent.length){document.getElementById('cotTableBody').innerHTML='<tr><td colspan="5"><div class="empty-state">Sin cotizaciones</div></td></tr>';return;}
   document.getElementById('cotTableBody').innerHTML=recent.map(c=>{const f=c.fields,neto=Math.round((f['Total final (CLP)']||0)/1.19),m=getMargenCot(f),est=f['Estado cotización']||'Enviada';return`<tr><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td class="clp">${formatCLP(neto)}</td><td>${estadoBadge(est)}</td><td>${margenBadge(m)}</td></tr>`;}).join('');
 }
+function goToAlert(tab,id){
+  switchTab(tab);
+  if(!id) return;
+  setTimeout(()=>{
+    const row=document.querySelector(`[data-id="${id}"]`);
+    if(row){row.scrollIntoView({behavior:'smooth',block:'center'});row.classList.add('row-flash');setTimeout(()=>row.classList.remove('row-flash'),1700);}
+  },160);
+}
 function renderAlertas(){
-  const alertas=[];const today=new Date();today.setHours(0,0,0,0);
-  state.clientes.forEach(c=>{const v=c.fields['Facturas vencidas']||0;if(v>=2) alertas.push({sev:3,icon:'🚫',msg:`<strong>${escapeHtml(c.fields['Empresa']||'')}</strong> tiene ${v} facturas vencidas`});});
-  state.pedidos.forEach(p=>{const f=p.fields,num=escapeHtml(f['N° Pedido']||'—'),cl=escapeHtml(resolveClienteName(f['Cliente'])),est=f['Estado pedido']||'';if(f['Fecha entrega']&&new Date(f['Fecha entrega'])<today&&!['Despachado','Cancelado'].includes(est)){const d=Math.round((today-new Date(f['Fecha entrega']))/86400000);alertas.push({sev:3,icon:'⏰',msg:`<strong>${num}</strong> (${cl}): atrasado ${d}d`});}if(!f['Pagado']&&['Confirmado','En producción'].includes(est)) alertas.push({sev:2,icon:'💸',msg:`<strong>${num}</strong> (${cl}): Pago pendiente`});});
-  state.cotizaciones.forEach(c=>{const f=c.fields,est=f['Estado cotización']||'',vto=f['Fecha vencimiento'];if(['Enviada','Solicitada'].includes(est)&&vto){const dias=Math.round((new Date(vto)-today)/86400000);if(dias<0) alertas.push({sev:2,icon:'📅',msg:`<strong>${escapeHtml(f['N° Cotización']||'—')}</strong>: vencida hace ${Math.abs(dias)}d`});else if(dias<=3) alertas.push({sev:1,icon:'⏳',msg:`<strong>${escapeHtml(f['N° Cotización']||'—')}</strong>: vence en ${dias}d`});}});
-  alertas.sort((a,b)=>b.sev-a.sev);const el=document.getElementById('alertasArea');
-  if(!alertas.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div>Sin alertas activas</div>';return;}
-  el.innerHTML=`<div style="padding:12px 16px;display:flex;flex-direction:column;gap:7px">${alertas.map(a=>`<div style="display:flex;align-items:center;gap:9px;font-size:12px;padding:8px 10px;border-radius:7px;background:var(--surface2);border:1px solid ${a.sev===3?'rgba(255,68,68,0.25)':'rgba(255,170,0,0.2)'}"><span style="font-size:15px;flex-shrink:0">${a.icon}</span><span>${a.msg}</span></div>`).join('')}</div>`;
+  const alertas=[];
+  const today=new Date();today.setHours(0,0,0,0);
+  const in2days=new Date(today);in2days.setDate(today.getDate()+2);
+  const ago48h=new Date(Date.now()-48*3600*1000);
+
+  // sev 3 — crítico (rojo)
+  state.clientes.forEach(c=>{
+    const v=c.fields['Facturas vencidas']||0;
+    if(v>=2) alertas.push({sev:3,icon:'🚫',type:'factura-vencida',msg:`<strong>${escapeHtml(c.fields['Empresa']||'—')}</strong>: ${v} facturas vencidas`,id:c.id,tab:'clientes'});
+  });
+  state.pedidos.forEach(p=>{
+    const f=p.fields,est=f['Estado pedido']||'';
+    if(f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(est)){
+      const d=Math.round((today-new Date(f['Fecha entrega']+'T00:00:00'))/86400000);
+      alertas.push({sev:3,icon:'⏰',type:'pedido-atrasado',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): atrasado ${d}d`,id:p.id,tab:'pedidos'});
+    }
+  });
+  state.cotizaciones.forEach(c=>{
+    const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return;
+    const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return;
+    const cl=state.clientes.find(x=>x.id===cid);
+    if(cl?.fields['Estado cuenta']==='Bloqueado')
+      alertas.push({sev:3,icon:'🔒',type:'cliente-bloqueado',msg:`<strong>${escapeHtml(cl.fields['Empresa']||'—')}</strong>: bloqueado con cot. activa <span style="color:var(--text3)">${escapeHtml(f['N° Cotización']||'—')}</span>`,id:c.id,tab:'cotizaciones'});
+  });
+
+  // sev 2 — advertencia (naranja)
+  state.pedidos.forEach(p=>{
+    const f=p.fields,est=f['Estado pedido']||'';
+    if(!f['Pagado']&&['Confirmado','En producción'].includes(est))
+      alertas.push({sev:2,icon:'💸',type:'pago-pendiente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): pago pendiente`,id:p.id,tab:'pedidos'});
+  });
+  state.pedidos.forEach(p=>{
+    const f=p.fields,est=f['Estado pedido']||'';
+    if(!f['Fecha entrega']||['Despachado','Cancelado'].includes(est)) return;
+    const fe=new Date(f['Fecha entrega']+'T00:00:00');
+    if(fe>=today&&fe<=in2days){
+      const d=Math.round((fe-today)/86400000);
+      alertas.push({sev:2,icon:'🚀',type:'pedido-urgente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): entrega ${d===0?'hoy':d+'d'}`,id:p.id,tab:'pedidos'});
+    }
+  });
+  state.cotizaciones.forEach(c=>{
+    const f=c.fields,est=f['Estado cotización']||'',vto=f['Fecha vencimiento'];
+    if(['Enviada','Solicitada'].includes(est)&&vto){
+      const dias=Math.round((new Date(vto+'T00:00:00')-today)/86400000);
+      if(dias<0) alertas.push({sev:2,icon:'📅',type:'cot-vencida',msg:`<strong>${escapeHtml(f['N° Cotización']||'—')}</strong>: vencida hace ${Math.abs(dias)}d`,id:c.id,tab:'cotizaciones'});
+    }
+  });
+
+  // sev 1 — info (amarillo)
+  state.cotizaciones.forEach(c=>{
+    const f=c.fields,est=f['Estado cotización']||'',vto=f['Fecha vencimiento'];
+    if(['Enviada','Solicitada'].includes(est)&&vto){
+      const dias=Math.round((new Date(vto+'T00:00:00')-today)/86400000);
+      if(dias>=0&&dias<=3) alertas.push({sev:1,icon:'⏳',type:'cot-por-vencer',msg:`<strong>${escapeHtml(f['N° Cotización']||'—')}</strong>: vence en ${dias}d`,id:c.id,tab:'cotizaciones'});
+    }
+  });
+  state.cotizaciones.forEach(c=>{
+    if((c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h)
+      alertas.push({sev:1,icon:'📋',type:'cot-sin-enviar',msg:`<strong>${escapeHtml(c.fields['N° Cotización']||'—')}</strong>: solicitada sin enviar por +48h`,id:c.id,tab:'cotizaciones'});
+  });
+
+  alertas.sort((a,b)=>b.sev-a.sev);
+
+  // agrupación: >=3 del mismo tipo → una sola fila
+  const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
+  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa'};
+  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`};
+  const sevBorder=s=>s===3?'rgba(255,68,68,0.3)':s===2?'rgba(255,107,53,0.3)':'rgba(255,170,0,0.22)';
+
+  const seen=new Set();const rows=[];
+  alertas.forEach(a=>{
+    if(typeCount[a.type]>=3){
+      if(!seen.has(a.type)){
+        seen.add(a.type);
+        const fn=typeTabFn[a.type]||`goToAlert('overview')`;
+        rows.push(`<div style="display:flex;align-items:center;gap:9px;font-size:12px;padding:8px 10px;border-radius:7px;background:var(--surface2);border:1px solid ${sevBorder(a.sev)}"><span style="font-size:15px;flex-shrink:0">${a.icon}</span><span style="flex:1"><strong>${typeCount[a.type]}</strong> ${typeLabel[a.type]||a.type}</span><button onclick="${fn}" class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:3px 9px">→ Ver todos</button></div>`);
+      }
+    } else {
+      rows.push(`<div style="display:flex;align-items:center;gap:9px;font-size:12px;padding:8px 10px;border-radius:7px;background:var(--surface2);border:1px solid ${sevBorder(a.sev)}"><span style="font-size:15px;flex-shrink:0">${a.icon}</span><span style="flex:1">${a.msg}</span><button onclick="goToAlert('${a.tab}','${a.id}')" class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:3px 9px">→ Ver</button></div>`);
+    }
+  });
+
+  const el=document.getElementById('alertasArea');
+  if(!rows.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div>Sin alertas activas</div>';return;}
+  el.innerHTML=`<div style="padding:12px 16px;display:flex;flex-direction:column;gap:7px">${rows.join('')}</div>`;
 }
 function renderAgentsMini(){
   const cotP=state.cotizaciones.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
@@ -1185,7 +1281,7 @@ function renderCotizaciones(){const tbody=document.getElementById('cotsTableBody
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
-  return`<tr><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td>${escapeHtml(resolveClienteName(f['Cliente']))}</td><td><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp">${formatCLP(neto)}</td><td>${f['Urgencia (+25%)']?'<span class="badge badge-orange">+25%</span>':'<span class="badge badge-gray">No</span>'}</td><td>${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
+  return`<tr data-id="${c.id}"><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td>${escapeHtml(resolveClienteName(f['Cliente']))}</td><td><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp">${formatCLP(neto)}</td><td>${f['Urgencia (+25%)']?'<span class="badge badge-orange">+25%</span>':'<span class="badge badge-gray">No</span>'}</td><td>${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
   <td style="white-space:nowrap">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">📄 PDF</button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
@@ -1347,7 +1443,7 @@ function renderPedidos(filter){
     if(idx>=0&&idx<stages.length-1) actionCell=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') actionCell='<span class="badge badge-green">✓</span>';
     const formaOpts=['Contado','Pago a 30 días desde OC','Pago a 45 días desde OC','60% inicial y 40% Contra entrega','50% para iniciar y 50% a 30 días'];
     const formaActual=f['Forma de pago']||'';
-    return`<tr><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td><span class="badge badge-gray">${escapeHtml(f['Equipo asignado']||'—')}</span></td><td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
+    return`<tr data-id="${p.id}"><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td><span class="badge badge-gray">${escapeHtml(f['Equipo asignado']||'—')}</span></td><td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
     <td style="text-align:center"><button onclick="togglePagado('${p.id}',${!!f['Pagado']})" style="background:${f['Pagado']?'rgba(0,212,170,0.2)':'rgba(255,68,68,0.15)'};border:1px solid ${f['Pagado']?'rgba(0,212,170,0.4)':'rgba(255,68,68,0.3)'};color:${f['Pagado']?'var(--accent3)':'var(--danger)'};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:60px">${f['Pagado']?'✓ Sí':'✕ No'}</button></td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
