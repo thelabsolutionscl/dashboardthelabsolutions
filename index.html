@@ -303,6 +303,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
       </table>
     </div>
   </div>
+  <div id="clientesAnalytics"></div>
 </div>
 
 <!-- COTIZACIONES -->
@@ -329,6 +330,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     </tr></thead>
     <tbody id="cotsTableBodyFull"><tr><td colspan="9"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div>
   </div>
+  <div id="cotAnalytics"></div>
 </div>
 
 <!-- PEDIDOS -->
@@ -345,6 +347,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px">
       <button id="btnVistaTabla" class="btn btn-ghost btn-sm active-filter" onclick="setPedidosView('tabla')" style="padding:4px 10px;font-size:10px">≡ Tabla</button>
       <button id="btnVistaKanban" class="btn btn-ghost btn-sm" onclick="setPedidosView('kanban')" style="padding:4px 10px;font-size:10px">⬛ Kanban</button>
+      <button id="btnVistaCal" class="btn btn-ghost btn-sm" onclick="setPedidosView('calendario')" style="padding:4px 10px;font-size:10px">📅 Cal.</button>
     </div>
   </div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap">
@@ -352,6 +355,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
   <div id="pedidosKanban" style="display:none"></div>
+  <div id="pedidosCalendario" style="display:none"></div>
   <div id="qaModal" class="modal-overlay" style="display:none">
     <div class="modal-backdrop" onclick="closeQAModal()"></div>
     <div class="modal-card">
@@ -412,6 +416,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
       </table>
     </div>
   </div>
+  <div id="proveedoresAnalytics"></div>
 </div>
 
 <!-- NUEVO PROVEEDOR -->
@@ -776,7 +781,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 </div>
 
 <div class="footer"><div class="footer-inner">
-  <div style="display:flex;align-items:center;gap:10px"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" style="height:14px;opacity:0.4;mix-blend-mode:screen"><span class="footer-text">v4.7 · Centro de Comando</span></div>
+  <div style="display:flex;align-items:center;gap:10px"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" style="height:14px;opacity:0.4;mix-blend-mode:screen"><span class="footer-text">v5.0 · Centro de Comando</span></div>
   <div style="display:flex;gap:8px;align-items:center"><span class="footer-text">Atajos:</span><kbd>1-8</kbd><span class="footer-text">tabs</span><kbd>Ctrl+R</kbd><span class="footer-text">refresh</span></div>
   <span class="footer-text">Auto-refresh: 90s</span>
 </div></div>
@@ -1290,16 +1295,17 @@ function renderKPIs(){
   const metaPct=revMeta>0?Math.min(Math.round((revSemana/revMeta)*100),100):0;
   const metaColor=metaPct>=100?'var(--accent3)':metaPct>=70?'var(--accent)':'var(--warn)';
   const metaHtml=revMeta>0
-    ?`<div style="margin-top:6px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:9px;color:var(--text3)">Meta ${formatCLP(revMeta)}</span><span style="font-size:9px;font-weight:700;color:${metaColor}">${metaPct}%${metaPct>=100?' ✓':''}</span></div><div style="height:4px;background:var(--surface3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${metaPct}%;background:${metaColor};border-radius:2px;transition:width .5s ease"></div></div></div>`
-    :`<div style="font-size:9px;color:var(--text3);margin-top:4px;cursor:pointer" onclick="openMetaModal()">+ definir meta semanal</div>`;
+    ?`<div style="margin-top:6px" onclick="event.stopPropagation();openMetaModal()"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:9px;color:var(--text3)">Meta ${formatCLP(revMeta)}</span><span style="font-size:9px;font-weight:700;color:${metaColor}">${metaPct}%${metaPct>=100?' ✓':''}</span></div><div style="height:4px;background:var(--surface3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${metaPct}%;background:${metaColor};border-radius:2px;transition:width .5s ease"></div></div></div>`
+    :`<div style="font-size:9px;color:var(--text3);margin-top:4px;cursor:pointer" onclick="event.stopPropagation();openMetaModal()">+ definir meta semanal</div>`;
 
+  const kpiStyle='cursor:pointer;transition:border-color .15s' ;
   document.getElementById('kpiGrid').innerHTML=`
-    <div class="kpi-card yellow" style="cursor:pointer" onclick="openMetaModal()"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${metaHtml}</div>
-    <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
-    <div class="kpi-card orange"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
-    <div class="kpi-card purple"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${state.clientes.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
-    <div class="kpi-card ${alertas>0?'red':'green'}"><div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
-    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}"><div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
+    <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${metaHtml}</div>
+    <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
+    <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
+    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${state.clientes.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
+    <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas"><div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
+    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones"><div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
 }
 function renderPipelineArea(){
   const todos=state.pedidos.filter(p=>p.fields['Estado pedido']!=='Cancelado');const activos=todos.filter(p=>p.fields['Estado pedido']!=='Despachado');
@@ -1476,6 +1482,7 @@ function renderClientes(){
   document.getElementById('clientesCount').textContent=`${state.clientes.length} clientes en CRM`;const tbody=document.getElementById('clientesTableBody');
   if(!state.clientes.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">👥</div>Sin clientes</div></td></tr>';return;}
   tbody.innerHTML=getSortedClientes().map(c=>buildClienteRow(c)).join('');if(document.getElementById('clienteSearch')?.value) filterClientes();
+  renderClientesAnalytics();
 }
 function filterClientes(){const q=document.getElementById('clienteSearch').value.toLowerCase();document.querySelectorAll('#clientesTableBody tr').forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(q)?'':'none';});updateBulkBar();}
 async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
@@ -1550,7 +1557,7 @@ function getSortedCotizaciones(){
     if(typeof va==='number') return(va-vb)*cotizacionesSort.dir;return va.localeCompare(vb,'es')*cotizacionesSort.dir;
   });
 }
-function renderCotizaciones(){const tbody=document.getElementById('cotsTableBodyFull');if(!state.cotizaciones.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state">Sin cotizaciones</div></td></tr>';return;}tbody.innerHTML=getSortedCotizaciones().map(c=>buildCotRow(c)).join('');}
+function renderCotizaciones(){const tbody=document.getElementById('cotsTableBodyFull');if(!state.cotizaciones.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state">Sin cotizaciones</div></td></tr>';return;}tbody.innerHTML=getSortedCotizaciones().map(c=>buildCotRow(c)).join('');renderCotAnalytics();}
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
@@ -1944,13 +1951,6 @@ function saveRevenueMeta(){
 function clearRevenueMeta(){localStorage.removeItem('revMetaSemanal');closeMetaModal();renderKPIs();toast('Meta eliminada','info');}
 
 // ── KANBAN PEDIDOS ────────────────────────────────────────────────────
-function setPedidosView(mode){
-  document.getElementById('pedidosTableWrap').style.display=mode==='tabla'?'':'none';
-  document.getElementById('pedidosKanban').style.display=mode==='kanban'?'':'none';
-  document.getElementById('btnVistaTabla').classList.toggle('active-filter',mode==='tabla');
-  document.getElementById('btnVistaKanban').classList.toggle('active-filter',mode==='kanban');
-  if(mode==='kanban') renderPedidosKanban();
-}
 function renderPedidosKanban(){
   const today=new Date();today.setHours(0,0,0,0);
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
@@ -1991,6 +1991,142 @@ document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openGlobalSearch();}
   if(e.key==='Escape'){closeGlobalSearch();closeMetaModal();}
 });
+
+// ── AUTO-REFRESH INTELIGENTE (Page Visibility) ─────────────────────────
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    if(getToken()&&state.loaded) loadAllDataSilent();
+    startAutoRefresh();
+  } else {
+    if(autoRefreshInterval){clearInterval(autoRefreshInterval);autoRefreshInterval=null;}
+  }
+});
+
+// ── KANBAN — actualizar setPedidosView con calendario ─────────────────
+// (reemplaza la función anterior con soporte de 3 vistas)
+function setPedidosView(mode){
+  document.getElementById('pedidosTableWrap').style.display=mode==='tabla'?'':'none';
+  document.getElementById('pedidosKanban').style.display=mode==='kanban'?'':'none';
+  document.getElementById('pedidosCalendario').style.display=mode==='calendario'?'':'none';
+  document.getElementById('btnVistaTabla').classList.toggle('active-filter',mode==='tabla');
+  document.getElementById('btnVistaKanban').classList.toggle('active-filter',mode==='kanban');
+  document.getElementById('btnVistaCal').classList.toggle('active-filter',mode==='calendario');
+  if(mode==='kanban') renderPedidosKanban();
+  if(mode==='calendario') renderPedidosCalendario();
+}
+
+// ── CALENDARIO DE PEDIDOS ─────────────────────────────────────────────
+const pedidosCalState={year:new Date().getFullYear(),month:new Date().getMonth()};
+function navPedidosCal(d){
+  if(d===0){pedidosCalState.year=new Date().getFullYear();pedidosCalState.month=new Date().getMonth();}
+  else{pedidosCalState.month+=d;if(pedidosCalState.month<0){pedidosCalState.month=11;pedidosCalState.year--;}if(pedidosCalState.month>11){pedidosCalState.month=0;pedidosCalState.year++;}}
+  renderPedidosCalendario();
+}
+function renderPedidosCalendario(){
+  const y=pedidosCalState.year,m=pedidosCalState.month;
+  const firstDay=new Date(y,m,1),lastDay=new Date(y,m+1,0);
+  const today=new Date();today.setHours(0,0,0,0);
+  const todayStr=fmtDate(today);
+  const monthLabel=firstDay.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
+  const stageColors={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
+  // Agrupar pedidos por Fecha entrega del mes
+  const byDate={};
+  state.pedidos.filter(p=>!['Cancelado'].includes(p.fields['Estado pedido']||'')).forEach(p=>{
+    const fe=p.fields['Fecha entrega'];if(!fe) return;
+    const [py,pm]=fe.split('-').map(Number);
+    if(py===y&&pm===m+1){if(!byDate[fe]) byDate[fe]=[];byDate[fe].push(p);}
+  });
+  // Celdas
+  const startWd=firstDay.getDay()||7; // lunes=1
+  const cells=[];
+  for(let i=1;i<startWd;i++) cells.push(null);
+  for(let d=1;d<=lastDay.getDate();d++) cells.push(d);
+  while(cells.length%7!==0) cells.push(null);
+  // Filas
+  const dayHdrs=['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
+  const rows=[];
+  for(let i=0;i<cells.length;i+=7){
+    const row=cells.slice(i,i+7).map(d=>{
+      if(!d) return`<td style="padding:4px;border:1px solid var(--border2);background:var(--surface2);opacity:.4;min-height:70px"></td>`;
+      const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isToday=ds===todayStr;const isPast=new Date(ds+'T00:00:00')<today;
+      const peds=byDate[ds]||[];
+      const chips=peds.map(p=>{
+        const f=p.fields,est=f['Estado pedido']||'',col=stageColors[est]||'var(--text3)';
+        const atras=isPast&&!['Despachado'].includes(est);
+        return`<div onclick="event.stopPropagation();goToAlert('pedidos','${p.id}')" title="${escapeHtml(resolveClienteName(f['Cliente']))}" style="font-size:9px;font-weight:700;color:${atras?'var(--danger)':col};background:${atras?'rgba(255,68,68,0.12)':'var(--surface3)'};border-radius:3px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;margin-bottom:2px">${escapeHtml(f['N° Pedido']||'—')}</div>`;
+      }).join('');
+      return`<td style="vertical-align:top;padding:5px;border:1px solid ${isToday?'var(--accent)':'var(--border)'};background:${isToday?'rgba(0,212,204,0.07)':'transparent'};min-height:70px">
+        <div style="font-size:11px;font-weight:${isToday?'700':'400'};color:${isToday?'var(--accent)':isPast?'var(--text3)':'var(--text2)'};margin-bottom:3px">${d}${peds.length?`<span style="font-size:9px;color:var(--text3);margin-left:4px">(${peds.length})</span>`:''}</div>
+        ${chips}
+      </td>`;
+    }).join('');
+    rows.push(`<tr>${row}</tr>`);
+  }
+  document.getElementById('pedidosCalendario').innerHTML=`<div class="card"><div class="card-header">
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="navPedidosCal(-1)">◄</button>
+      <span style="font-size:13px;font-weight:700;text-transform:capitalize;min-width:140px;text-align:center">${monthLabel}</span>
+      <button class="btn btn-ghost btn-sm" onclick="navPedidosCal(1)">►</button>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="navPedidosCal(0)">Hoy</button>
+    <div style="display:flex;gap:10px;font-size:10px;color:var(--text3)">${Object.entries(stageColors).map(([s,c])=>`<span style="color:${c}">● ${s.split(' ')[0]}</span>`).join(' ')}</div>
+  </div>
+  <div style="padding:10px 14px;overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+    <thead><tr>${dayHdrs.map(h=>`<th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);padding:6px 5px;text-align:left;min-width:80px">${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table></div></div>`;
+}
+
+// ── ANALYTICS DE CLIENTES ─────────────────────────────────────────────
+function renderClientesAnalytics(){
+  const el=document.getElementById('clientesAnalytics');if(!el||!state.clientes.length) return;
+  const revMap={};
+  state.pedidos.forEach(p=>{const f=p.fields,neto=Math.round((f['Monto total (CLP)']||0)/1.19);(Array.isArray(f['Cliente'])?f['Cliente']:[]).forEach(id=>{revMap[id]=(revMap[id]||0)+neto;});});
+  const top5=Object.entries(revMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([id,rev])=>({nombre:state.clientesById[id]||'—',rev}));
+  const withCot=new Set(state.cotizaciones.flatMap(c=>Array.isArray(c.fields['Cliente'])?c.fields['Cliente']:[]));
+  const withPed=new Set(state.pedidos.flatMap(p=>Array.isArray(p.fields['Cliente'])?p.fields['Cliente']:[]));
+  const total=state.clientes.length;
+  const maxRev=top5.length?top5[0].rev:1;
+  const barsHtml=top5.map(c=>{const pct=Math.round((c.rev/maxRev)*100);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="font-size:10px;color:var(--text2);min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.nombre)}</div><div style="flex:1;height:14px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent);border-radius:4px"></div></div><div style="font-size:10px;color:var(--accent);font-family:'JetBrains Mono',monospace;min-width:72px;text-align:right">${formatCLP(c.rev)}</div></div>`;}).join('');
+  const funnelSteps=[{l:'Total clientes',n:total,pct:100,col:'var(--accent4)'},{l:'Con cotización',n:withCot.size,pct:total?Math.round((withCot.size/total)*100):0,col:'var(--accent)'},{l:'Con pedido',n:withPed.size,pct:total?Math.round((withPed.size/total)*100):0,col:'var(--accent3)'}];
+  const funnelHtml=funnelSteps.map(f=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:10px;color:var(--text2)">${f.l}</span><span style="font-size:10px;font-weight:700;color:${f.col}">${f.n} <span style="color:var(--text3);font-weight:400">(${f.pct}%)</span></span></div><div style="height:5px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${f.pct}%;background:${f.col};border-radius:3px"></div></div></div>`).join('');
+  el.innerHTML=`<div class="data-grid" style="margin-top:16px"><div class="card"><div class="card-header"><span class="card-title">🏆 Top Clientes por Revenue</span></div><div style="padding:14px 16px">${top5.length?barsHtml:'<div class="empty-state">Sin pedidos asociados a clientes</div>'}</div></div><div class="card"><div class="card-header"><span class="card-title">🔄 Funnel de Conversión</span></div><div style="padding:14px 16px">${funnelHtml}</div></div></div>`;
+}
+
+// ── ANALYTICS DE COTIZACIONES ─────────────────────────────────────────
+function renderCotAnalytics(){
+  const el=document.getElementById('cotAnalytics');if(!el) return;
+  const estados=['Solicitada','Enviada','Aprobada','Rechazada'];
+  const colors={'Solicitada':'var(--accent)','Enviada':'var(--accent2)','Aprobada':'var(--accent3)','Rechazada':'var(--danger)'};
+  const counts={};estados.forEach(e=>counts[e]=0);
+  let revPipe=0;
+  state.cotizaciones.forEach(c=>{
+    const est=c.fields['Estado cotización']||'';
+    if(counts[est]!==undefined) counts[est]++;
+    if(['Enviada','Solicitada'].includes(est)) revPipe+=Math.round((c.fields['Total final (CLP)']||0)/1.19);
+  });
+  const total=state.cotizaciones.length;
+  const base=counts['Enviada']+counts['Aprobada'];
+  const conv=base>0?Math.round((counts['Aprobada']/base)*100):0;
+  const maxC=Math.max(...Object.values(counts),1);
+  const barsHtml=estados.map(e=>{const pct=Math.round((counts[e]/maxC)*100);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:10px;color:var(--text2);min-width:80px">${e}</div><div style="flex:1;height:16px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${colors[e]};border-radius:4px"></div></div><div style="font-size:12px;font-weight:700;color:${colors[e]};min-width:24px;text-align:right">${counts[e]}</div></div>`;}).join('');
+  el.innerHTML=`<div class="card" style="margin-top:16px"><div class="card-header"><span class="card-title">📊 Pipeline de Cotizaciones</span></div><div style="padding:14px 16px">${barsHtml}<div style="display:flex;gap:18px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div><div style="font-size:9px;color:var(--text3)">Conv. Env.→Apr.</div><div style="font-size:22px;font-family:'Bebas Neue';color:var(--accent3)">${conv}%</div></div><div><div style="font-size:9px;color:var(--text3)">Revenue en pipeline</div><div style="font-size:15px;font-weight:700;color:var(--accent);margin-top:3px">${formatCLP(revPipe)}</div></div><div><div style="font-size:9px;color:var(--text3)">Total cotizaciones</div><div style="font-size:22px;font-family:'Bebas Neue';color:var(--text2)">${total}</div></div></div></div></div>`;
+}
+
+// ── ANALYTICS DE PROVEEDORES ──────────────────────────────────────────
+function renderProveedoresAnalytics(){
+  const el=document.getElementById('proveedoresAnalytics');if(!el||!state.proveedores.length) return;
+  const catMap={};state.proveedores.forEach(p=>{const cat=p.fields['Categoría']||'Sin categoría';catMap[cat]=(catMap[cat]||0)+1;});
+  const topCats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,7);
+  const maxCat=topCats.length?topCats[0][1]:1;
+  const activos=state.proveedores.filter(p=>(p.fields['Estado']||p.fields['estado']||'')!=='Inactivo').length;
+  const pagoMap={};state.proveedores.forEach(p=>{const pg=p.fields['Condición de pago']||'Sin especificar';pagoMap[pg]=(pagoMap[pg]||0)+1;});
+  const topPagos=Object.entries(pagoMap).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  const catBars=topCats.map(([cat,n])=>{const pct=Math.round((n/maxCat)*100);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:10px;color:var(--text2);min-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(cat)}">${escapeHtml(cat)}</div><div style="flex:1;height:12px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent4);border-radius:4px"></div></div><div style="font-size:10px;font-weight:700;color:var(--accent4);min-width:20px;text-align:right">${n}</div></div>`;}).join('');
+  const pagoChips=topPagos.map(([pg,n])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center"><div style="font-size:14px;font-weight:700;color:var(--text1)">${n}</div><div style="font-size:9px;color:var(--text3);margin-top:2px;line-height:1.3">${escapeHtml(pg.length>20?pg.substring(0,20)+'…':pg)}</div></div>`).join('');
+  el.innerHTML=`<div class="data-grid" style="margin-top:16px"><div class="card"><div class="card-header"><span class="card-title">📦 Distribución por Categoría</span><span style="font-size:11px;color:var(--accent3)">${activos} activos / ${state.proveedores.length} total</span></div><div style="padding:14px 16px">${catBars}</div></div><div class="card"><div class="card-header"><span class="card-title">💳 Condiciones de Pago</span></div><div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">${pagoChips}</div></div></div>`;
+}
 
 // ── AGENTES ───────────────────────────────────────────────────
 function buildAgentContext(id){
@@ -2531,6 +2667,7 @@ function renderProveedores(){
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
   if(!sorted.length){tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
+  renderProveedoresAnalytics();
 }
 function buildProveedorRow(p){
   const f=p.fields,id=p.id;
@@ -2683,7 +2820,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(!token){setStatus('sin token',false);showTokenModal();}
   else{loadAllData().then(()=>{startAutoRefresh();});}
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.lastUpdateTs&&Date.now()-state.lastUpdateTs>120000) loadAllDataSilent();});
+  // visibilitychange handled above (auto-refresh inteligente)
   document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
     if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}
