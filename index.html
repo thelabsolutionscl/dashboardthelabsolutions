@@ -543,6 +543,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <button class="btn btn-ghost btn-sm" onclick="navSemana(1)">Siguiente →</button>
     <button class="btn btn-ghost btn-sm" onclick="goToday()">Hoy</button>
   </div>
+  <div id="heatmapSemanas" style="margin-bottom:12px"></div>
   <div id="maquinasKPIs" style="margin-bottom:14px"></div>
   <div class="card"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px"><thead id="maquinasHeader"></thead><tbody id="maquinasBody"></tbody></table></div></div>
 </div>
@@ -802,6 +803,13 @@ const MODELO_IMGS={
   'K2 Plus':'https://thelab.solutions/wp-content/uploads/2026/05/standard_resolution-260.png',
   'Ender-5 Max':'https://thelab.solutions/wp-content/uploads/2026/05/imagen-creality-ender-5-max.png',
   'Giga':'https://thelab.solutions/wp-content/uploads/2026/05/elegoo-orangestorm-giga-impresora-3d-fdm.jpg.png',
+};
+const MODEL_SPECS={
+  'K1':'PLA / PETG · 220×220×250mm · Velocidad alta',
+  'K2':'PLA / PETG / ABS · 350×350×350mm · Alta precisión',
+  'K2 Plus':'PLA / PETG / ABS · 500×500×500mm · Gran formato',
+  'Ender-5 Max':'PLA / PETG · 400×400×600mm · Producción masiva',
+  'Giga':'PLA / PETG · 800×800×800mm · Gigante',
 };
 const PERSONAS=[
   {id:'nicanor',nombre:'Nicanor Marambio',rol:'Producción',color:'#00d4cc',avatar:'NM',gcalId:''},
@@ -1917,19 +1925,67 @@ function renderMaquinasKPIs(dias,todayStr){
   </div>`;
 }
 
+function renderHeatmapSemanas(){
+  const el=document.getElementById('heatmapSemanas');if(!el) return;
+  const todayDate=new Date();todayDate.setHours(0,0,0,0);
+  const dow=todayDate.getDay();
+  const thisMon=todayDate.getTime()-((dow===0?6:dow-1)*86400000);
+  const fmtC=d=>d.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+  const pctColor=p=>p>=80?'var(--danger)':p>=50?'var(--warn)':p>0?'var(--accent3)':'var(--text3)';
+  const pctBg=p=>p>=80?'rgba(255,68,68,0.1)':p>=50?'rgba(255,170,0,0.1)':'transparent';
+  const chips=[];
+  for(let w=-2;w<=9;w++){
+    const lunMs=thisMon+w*7*86400000;
+    const lun=new Date(lunMs);
+    const dias=[];for(let i=0;i<7;i++) dias.push(fmtDate(new Date(lunMs+i*86400000)));
+    let occ=0;
+    MAQUINAS.forEach(m=>{dias.forEach(ds=>{const ev=maquinaState.eventos[`${m.id}_${ds}`];if(ev&&ev.tipo!=='disponible') occ++;});});
+    const pct=Math.round(occ/(MAQUINAS.length*7)*100);
+    const isCur=w===maquinaState.semanaOffset;
+    const isNow=w===0;
+    chips.push(`<button onclick="jumpToSemana(${w})" title="${fmtC(lun)}" style="flex-shrink:0;background:${isCur?'rgba(0,212,204,0.1)':pctBg(pct)};border:1px solid ${isCur?'var(--accent)':'var(--border2)'};border-radius:8px;padding:6px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:68px;transition:border-color 0.12s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='${isCur?'var(--accent)':'var(--border2)'}'">
+      <div style="font-size:8px;color:${isCur?'var(--accent)':isNow?'var(--text)':'var(--text3)'};font-family:'JetBrains Mono',monospace;white-space:nowrap;font-weight:${isNow?700:400}">${isNow?'← HOY':fmtC(lun)}</div>
+      <div style="width:46px;height:4px;border-radius:2px;background:var(--surface3);overflow:hidden"><div style="width:${pct}%;height:100%;background:${pctColor(pct)};border-radius:2px;transition:width 0.3s"></div></div>
+      <div style="font-size:9px;font-weight:700;color:${isCur?'var(--accent)':pctColor(pct)}">${pct>0?pct+'%':'libre'}</div>
+    </button>`);
+  }
+  el.innerHTML=`<div style="display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px">${chips.join('')}</div>`;
+}
+function jumpToSemana(w){maquinaState.semanaOffset=w;renderMaquinasCalendar();}
+
 function renderMaquinasCalendar(){
   const lunes=getMaquinaSemanaLunes();const dias=[];for(let i=0;i<7;i++){const d=new Date(lunes);d.setDate(lunes.getDate()+i);dias.push(d);}
   const today=fmtDate(new Date());const opts={day:'numeric',month:'short'};
   document.getElementById('semanaLabel').textContent=`${dias[0].toLocaleDateString('es-CL',opts)} — ${dias[6].toLocaleDateString('es-CL',opts)} ${dias[0].getFullYear()}`;
+  renderHeatmapSemanas();
   renderMaquinasKPIs(dias,today);
   document.getElementById('maquinasHeader').innerHTML=`<tr><th style="padding:9px 14px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);min-width:160px;background:var(--surface);position:sticky;left:0;z-index:3">Máquina</th><th style="padding:9px 10px;font-size:10px;color:var(--text3);text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:3;min-width:70px">Estado</th>${dias.map(d=>{const isH=fmtDate(d)===today;return`<th style="padding:7px 4px;font-size:10px;font-weight:${isH?700:500};color:${isH?'var(--accent)':'var(--text3)'};text-align:center;border-bottom:1px solid var(--border);min-width:95px;background:var(--surface)">${fmtDayLabel(d)}</th>`;}).join('')}</tr>`;
+  // pre-calcular stats por modelo para los headers de grupo
+  const modeloStats={};[...new Set(MAQUINAS.map(m=>m.modelo))].forEach(modelo=>{
+    const mqs=MAQUINAS.filter(x=>x.modelo===modelo);
+    const disp=mqs.filter(x=>getMaquinaEstadoGlobal(x.id)!=='mantencion'&&!maquinaState.eventos[`${x.id}_${today}`]).length;
+    const usados=mqs.reduce((s,x)=>{let u=0;dias.forEach(d=>{const ev=maquinaState.eventos[`${x.id}_${fmtDate(d)}`];if(ev&&ev.tipo==='uso') u++;});return s+u;},0);
+    const totalSlots=mqs.length*dias.length;
+    modeloStats[modelo]={total:mqs.length,disp,pct:Math.round(usados/totalSlots*100)};
+  });
   let lastModelo='';
   document.getElementById('maquinasBody').innerHTML=MAQUINAS.map(m=>{
     const isNewGroup=m.modelo!==lastModelo;lastModelo=m.modelo;
-    const groupRow=isNewGroup?`<tr><td colspan="${dias.length+2}" style="padding:6px 14px;background:rgba(0,0,0,0.3);border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:10px">
-        ${MODELO_IMGS[m.modelo]?`<img src="${MODELO_IMGS[m.modelo]}" alt="${m.modelo}" style="height:36px;width:auto;object-fit:contain;filter:brightness(0.95)" onerror="this.style.display='none'">`:''}
-        <span style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${m.color}">${m.modelo}</span>
+    const ms=modeloStats[m.modelo]||{total:0,disp:0,pct:0};
+    const dispColor=ms.disp>0?'var(--accent3)':'var(--danger)';
+    const dispBg=ms.disp>0?'rgba(0,212,170,0.1)':'rgba(255,68,68,0.1)';
+    const dispBorder=ms.disp>0?'rgba(0,212,170,0.3)':'rgba(255,68,68,0.3)';
+    const groupRow=isNewGroup?`<tr><td colspan="${dias.length+2}" style="padding:7px 14px;background:rgba(0,0,0,0.35);border-bottom:1px solid var(--border);border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        ${MODELO_IMGS[m.modelo]?`<img src="${MODELO_IMGS[m.modelo]}" alt="${m.modelo}" style="height:32px;width:auto;object-fit:contain;filter:brightness(0.9)" onerror="this.style.display='none'">`:''}
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${m.color}">${m.modelo}</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:1px">${MODEL_SPECS[m.modelo]||''}</div>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <span style="font-size:9px;font-weight:700;color:${dispColor};background:${dispBg};border:1px solid ${dispBorder};border-radius:4px;padding:2px 8px">${ms.disp}/${ms.total} disponibles hoy</span>
+          ${ms.pct>0?`<span style="font-size:9px;color:var(--text3)">${ms.pct>0?ms.pct+'% uso semana':''}</span>`:''}
+        </div>
       </div>
     </td></tr>`:'' ;
     const enMant=getMaquinaEstadoGlobal(m.id)==='mantencion';
