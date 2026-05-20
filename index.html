@@ -242,7 +242,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 <div class="main">
 <!-- OVERVIEW -->
 <div class="tab-panel active" id="tab-overview">
-  <div class="section-header"><div class="section-title">Centro de Comando</div><div class="section-subtitle" id="lastUpdate">—</div></div>
+  <div class="section-header"><div class="section-title">Centro de Comando</div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue">🎯 Meta</button></div></div>
   <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana</div><div class="kpi-skeleton"></div></div>
     <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-skeleton"></div></div>
@@ -342,11 +342,16 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Listo para despacho',this)">Listos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Despachado',this)">Despachados</button>
     <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')" style="margin-left:auto">⬇ CSV</button>
+    <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px">
+      <button id="btnVistaTabla" class="btn btn-ghost btn-sm active-filter" onclick="setPedidosView('tabla')" style="padding:4px 10px;font-size:10px">≡ Tabla</button>
+      <button id="btnVistaKanban" class="btn btn-ghost btn-sm" onclick="setPedidosView('kanban')" style="padding:4px 10px;font-size:10px">⬛ Kanban</button>
+    </div>
   </div>
-  <div class="card"><div class="table-wrap">
+  <div id="pedidosTableWrap" class="card"><div class="table-wrap">
     <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Monto Neto</th><th>Forma de Pago</th><th>Pagado</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
+  <div id="pedidosKanban" style="display:none"></div>
   <div id="qaModal" class="modal-overlay" style="display:none">
     <div class="modal-backdrop" onclick="closeQAModal()"></div>
     <div class="modal-card">
@@ -776,6 +781,40 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   <span class="footer-text">Auto-refresh: 90s</span>
 </div></div>
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- BÚSQUEDA GLOBAL -->
+<div id="globalSearchOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.78);z-index:9999;align-items:flex-start;justify-content:center;padding-top:72px" onclick="if(event.target===this)closeGlobalSearch()">
+  <div style="background:var(--surface);border-radius:14px;border:1px solid var(--border2);width:640px;max-width:92vw;overflow:hidden;box-shadow:0 28px 70px rgba(0,0,0,0.65)">
+    <div style="display:flex;align-items:center;padding:14px 16px;gap:10px;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text3);font-size:15px">🔍</span>
+      <input id="globalSearchInput" type="text" placeholder="Buscar clientes, cotizaciones, pedidos…" autocomplete="off" style="flex:1;background:none;border:none;outline:none;color:var(--text1);font-size:14px;font-family:'DM Sans',sans-serif" oninput="runGlobalSearch(this.value)" onkeydown="if(event.key==='Escape')closeGlobalSearch()">
+      <kbd style="font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border2);padding:2px 7px;border-radius:4px">Esc</kbd>
+    </div>
+    <div id="globalSearchResults" style="max-height:430px;overflow-y:auto;padding:6px 0"><div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Escribe para buscar en todo el dashboard…</div></div>
+    <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:14px">
+      <span style="font-size:10px;color:var(--text3)">👤 Clientes</span>
+      <span style="font-size:10px;color:var(--text3)">📋 Cotizaciones</span>
+      <span style="font-size:10px;color:var(--text3)">📦 Pedidos</span>
+      <kbd style="margin-left:auto;font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border2);padding:2px 7px;border-radius:4px">⌘K</kbd>
+    </div>
+  </div>
+</div>
+
+<!-- META SEMANAL -->
+<div id="metaModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeMetaModal()"></div>
+  <div class="modal-card" style="max-width:360px">
+    <div class="modal-title">🎯 Meta de Revenue Semanal</div>
+    <div style="padding:0 0 16px;display:flex;flex-direction:column;gap:10px">
+      <div class="field-group"><label class="field-label">Objetivo semanal (CLP neto)</label><input class="field-input" id="metaInput" type="number" placeholder="ej. 3000000" onkeydown="if(event.key==='Enter')saveRevenueMeta()"></div>
+      <div style="font-size:11px;color:var(--text3)">Se guarda en este dispositivo y aparece como barra de progreso en el KPI de Revenue.</div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="clearRevenueMeta()">🗑 Borrar</button>
+      <button class="btn btn-primary" onclick="saveRevenueMeta()">✓ Guardar meta</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const BASE_ID='app1YtD74AqiPWQhy';
@@ -1246,8 +1285,16 @@ function renderKPIs(){
     return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${arrow}${d>=0?'+':''}${d} ${label}</div>`;
   };
 
+  // ── Meta semanal ──────────────────────────────────────────────────────
+  const revMeta=parseInt(localStorage.getItem('revMetaSemanal'))||0;
+  const metaPct=revMeta>0?Math.min(Math.round((revSemana/revMeta)*100),100):0;
+  const metaColor=metaPct>=100?'var(--accent3)':metaPct>=70?'var(--accent)':'var(--warn)';
+  const metaHtml=revMeta>0
+    ?`<div style="margin-top:6px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:9px;color:var(--text3)">Meta ${formatCLP(revMeta)}</span><span style="font-size:9px;font-weight:700;color:${metaColor}">${metaPct}%${metaPct>=100?' ✓':''}</span></div><div style="height:4px;background:var(--surface3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${metaPct}%;background:${metaColor};border-radius:2px;transition:width .5s ease"></div></div></div>`
+    :`<div style="font-size:9px;color:var(--text3);margin-top:4px;cursor:pointer" onclick="openMetaModal()">+ definir meta semanal</div>`;
+
   document.getElementById('kpiGrid').innerHTML=`
-    <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}</div>
+    <div class="kpi-card yellow" style="cursor:pointer" onclick="openMetaModal()"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${metaHtml}</div>
     <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
     <div class="kpi-card orange"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
     <div class="kpi-card purple"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${state.clientes.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
@@ -1848,6 +1895,102 @@ function toggleReporteDetalle(rid,row){
     if(chev){chev.textContent='▲';chev.style.color='var(--accent)';}
   }
 }
+
+// ── BÚSQUEDA GLOBAL ──────────────────────────────────────────────────
+function openGlobalSearch(){
+  const overlay=document.getElementById('globalSearchOverlay');
+  overlay.style.display='flex';
+  setTimeout(()=>{
+    const inp=document.getElementById('globalSearchInput');
+    inp.value='';inp.focus();
+    document.getElementById('globalSearchResults').innerHTML='<div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Escribe para buscar en todo el dashboard…</div>';
+  },30);
+}
+function closeGlobalSearch(){document.getElementById('globalSearchOverlay').style.display='none';}
+function runGlobalSearch(q){
+  const res=document.getElementById('globalSearchResults');
+  if(!q||q.length<2){res.innerHTML='<div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Escribe al menos 2 caracteres…</div>';return;}
+  const query=q.toLowerCase();
+  const groups={cliente:[],cot:[],pedido:[]};
+  state.clientes.filter(c=>{const f=c.fields;return(f['Empresa']||'').toLowerCase().includes(query)||(f['Contacto']||'').toLowerCase().includes(query)||(f['Email']||'').toLowerCase().includes(query);}).slice(0,5).forEach(c=>groups.cliente.push({icon:'👤',label:c.fields['Empresa']||'—',sub:(c.fields['Etapa venta']||'—')+' · '+(c.fields['Ciudad']||''),id:c.id,tab:'clientes'}));
+  state.cotizaciones.filter(c=>{const f=c.fields;return(f['N° Cotización']||'').toLowerCase().includes(query)||(resolveClienteName(f['Cliente'])||'').toLowerCase().includes(query);}).slice(0,5).forEach(c=>groups.cot.push({icon:'📋',label:c.fields['N° Cotización']||'—',sub:resolveClienteName(c.fields['Cliente'])+' · '+(c.fields['Estado cotización']||'—'),id:c.id,tab:'cotizaciones'}));
+  state.pedidos.filter(p=>{const f=p.fields;return(f['N° Pedido']||'').toLowerCase().includes(query)||(resolveClienteName(f['Cliente'])||'').toLowerCase().includes(query)||(f['Equipo asignado']||'').toLowerCase().includes(query);}).slice(0,5).forEach(p=>groups.pedido.push({icon:'📦',label:p.fields['N° Pedido']||'—',sub:resolveClienteName(p.fields['Cliente'])+' · '+(p.fields['Estado pedido']||'—'),id:p.id,tab:'pedidos'}));
+  const total=groups.cliente.length+groups.cot.length+groups.pedido.length;
+  if(!total){res.innerHTML='<div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Sin resultados para "'+escapeHtml(q)+'"</div>';return;}
+  const labels={cliente:'Clientes',cot:'Cotizaciones',pedido:'Pedidos'};
+  let html='';
+  ['cliente','cot','pedido'].forEach(type=>{
+    const items=groups[type];if(!items.length) return;
+    html+=`<div style="padding:7px 16px 3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3)">${labels[type]}</div>`;
+    items.forEach(r=>{html+=`<div onclick="goToSearchResult('${r.tab}','${r.id}')" style="display:flex;align-items:center;gap:11px;padding:9px 14px;cursor:pointer;margin:1px 6px;border-radius:7px" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background='transparent'"><span style="font-size:18px;flex-shrink:0">${r.icon}</span><div style="min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text1)">${escapeHtml(r.label)}</div><div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.sub)}</div></div></div>`;});
+  });
+  res.innerHTML=html;
+}
+function goToSearchResult(tab,id){closeGlobalSearch();goToAlert(tab,id);}
+
+// ── META SEMANAL ──────────────────────────────────────────────────────
+function openMetaModal(){
+  const cur=localStorage.getItem('revMetaSemanal');
+  document.getElementById('metaInput').value=cur||'';
+  document.getElementById('metaModal').style.display='flex';
+  setTimeout(()=>document.getElementById('metaInput').focus(),60);
+}
+function closeMetaModal(){document.getElementById('metaModal').style.display='none';}
+function saveRevenueMeta(){
+  const v=parseInt(document.getElementById('metaInput').value)||0;
+  if(v>0){localStorage.setItem('revMetaSemanal',v);closeMetaModal();renderKPIs();toast(`✓ Meta: ${formatCLP(v)}/semana`,'success');}
+  else{toast('Ingresa un valor mayor a 0','error');}
+}
+function clearRevenueMeta(){localStorage.removeItem('revMetaSemanal');closeMetaModal();renderKPIs();toast('Meta eliminada','info');}
+
+// ── KANBAN PEDIDOS ────────────────────────────────────────────────────
+function setPedidosView(mode){
+  document.getElementById('pedidosTableWrap').style.display=mode==='tabla'?'':'none';
+  document.getElementById('pedidosKanban').style.display=mode==='kanban'?'':'none';
+  document.getElementById('btnVistaTabla').classList.toggle('active-filter',mode==='tabla');
+  document.getElementById('btnVistaKanban').classList.toggle('active-filter',mode==='kanban');
+  if(mode==='kanban') renderPedidosKanban();
+}
+function renderPedidosKanban(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
+  const colores={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
+  const activos=state.pedidos.filter(p=>!['Cancelado'].includes(p.fields['Estado pedido']||''));
+  const cols=stages.map(stage=>{
+    const items=activos.filter(p=>(p.fields['Estado pedido']||'')==stage);
+    const nextStage=stages[stages.indexOf(stage)+1];
+    const cards=items.map(p=>{
+      const f=p.fields,entrega=f['Fecha entrega']||'',atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&stage!=='Despachado';
+      const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
+      return`<div onclick="goToAlert('pedidos','${p.id}')" style="background:var(--surface);border:1px solid ${atrasado?'rgba(255,68,68,0.45)':'var(--border)'};border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='${colores[stage]}'" onmouseleave="this.style.borderColor='${atrasado?'rgba(255,68,68,0.45)':'var(--border)'}'">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${colores[stage]};font-weight:700">${escapeHtml(f['N° Pedido']||'—')}</span>
+          ${atrasado?'<span style="font-size:9px;color:var(--danger);font-weight:700;background:rgba(255,68,68,0.12);padding:1px 5px;border-radius:3px">⚠ ATRAS.</span>':f['Pagado']?'<span style="font-size:9px;color:var(--accent3)">✓ Pago</span>':''}
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(f['Cliente']))}</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:6px">${formatCLP(neto)}</div>
+        ${entrega?`<div style="font-size:10px;color:${atrasado?'var(--danger)':'var(--text3)'};margin-bottom:7px">📅 ${entrega}</div>`:''}
+        ${nextStage?`<button onclick="event.stopPropagation();advancePedido('${p.id}','${nextStage}')" style="width:100%;background:rgba(255,107,53,0.1);border:1px solid rgba(255,107,53,0.3);color:var(--accent2);border-radius:6px;padding:5px 0;font-size:10px;font-weight:700;cursor:pointer;transition:background .15s" onmouseenter="this.style.background='rgba(255,107,53,0.22)'" onmouseleave="this.style.background='rgba(255,107,53,0.1)'">→ ${nextStage.split(' ')[0]}</button>`:'<div style="text-align:center;font-size:10px;color:var(--accent3);font-weight:700">✓ Completado</div>'}
+      </div>`;
+    }).join('');
+    const colTotal=items.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+    return`<div style="flex:1;min-width:210px;max-width:285px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:9px 12px;background:var(--surface2);border-radius:9px;border-left:3px solid ${colores[stage]}">
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${colores[stage]};flex:1">${stage}</span>
+        <span style="font-size:10px;color:var(--text3);background:var(--surface3);border-radius:4px;padding:1px 6px">${items.length}</span>
+        ${colTotal>0?`<span style="font-size:9px;color:var(--text3)">${formatCLP(colTotal)}</span>`:''}
+      </div>
+      <div style="min-height:60px">${cards||'<div style="text-align:center;padding:22px;font-size:11px;color:var(--text3)">—</div>'}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('pedidosKanban').innerHTML=`<div style="display:flex;gap:12px;overflow-x:auto;padding:4px 0 16px;align-items:flex-start">${cols}</div>`;
+}
+
+// ── ATAJO TECLADO ─────────────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openGlobalSearch();}
+  if(e.key==='Escape'){closeGlobalSearch();closeMetaModal();}
+});
 
 // ── AGENTES ───────────────────────────────────────────────────
 function buildAgentContext(id){
