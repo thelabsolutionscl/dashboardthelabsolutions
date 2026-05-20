@@ -2812,7 +2812,11 @@ async function createProveedor(){
     const pvRes=await airtableFetch('Proveedores',500);
     state.proveedores=pvRes.records||[];
     renderProveedores();
-  }catch(e){toast('Error: '+e.message,'error');}
+  }catch(e){
+    const isPermission=e.message.includes('permissions')||e.message.includes('model not found')||e.message.includes('403');
+    if(isPermission) toast('🔑 Token sin permiso de escritura — ve a Airtable → Developer Hub → Tokens y agrega "data:records:write"','error');
+    else toast('Error: '+e.message,'error');
+  }
   btn.disabled=false;btn.textContent='✚ Crear Proveedor';
 }
 function openEditProveedor(id){
@@ -2869,7 +2873,11 @@ async function saveEditProveedor(){
     toast('✓ Proveedor actualizado','success');
     closeEditProveedor();
     renderProveedores();
-  }catch(e){toast('Error: '+e.message,'error');}
+  }catch(e){
+    const isPermission=e.message.includes('permissions')||e.message.includes('model not found')||e.message.includes('403');
+    if(isPermission) toast('🔑 Token sin permiso de escritura — ve a Airtable → Developer Hub → Tokens y agrega "data:records:write"','error');
+    else toast('Error: '+e.message,'error');
+  }
   btn.disabled=false;btn.textContent='💾 Guardar cambios';
 }
 async function deleteProveedor(id,nombre){
