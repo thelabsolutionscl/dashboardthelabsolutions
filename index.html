@@ -753,14 +753,15 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 <div class="tab-panel" id="tab-reporte">
   <div class="section-header"><div class="section-title">Reportes Ejecutivos</div></div>
   <div class="data-grid">
-    <div class="card"><div class="card-header"><span class="card-title">Historial</span></div><div class="table-wrap"><table><thead><tr><th>Semana</th><th>Revenue</th><th>Pedidos</th><th>Margen</th><th>Conv.</th><th>Estado</th></tr></thead><tbody id="reportesTableBody"></tbody></table></div></div>
+    <div class="card"><div class="card-header"><span class="card-title">Historial</span><span style="font-size:11px;color:var(--text3)">clic en fila para ver resumen</span></div><div class="table-wrap"><table><thead><tr><th>Semana</th><th>Revenue</th><th>Pedidos</th><th>Margen</th><th>Conv.</th><th>Estado</th><th style="width:28px"></th></tr></thead><tbody id="reportesTableBody"></tbody></table></div></div>
     <div class="card"><div class="card-header"><span class="card-title">📊 Generar Reporte</span></div>
       <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-ghost btn-sm" onclick="prefillReporte()" style="align-self:flex-start">⚡ Rellenar desde datos actuales</button>
         <div class="field-group"><label class="field-label">Semana</label><input class="field-input" id="rep-semana" placeholder="Semana 20 — mayo 2026"></div>
-        <div class="field-group"><label class="field-label">Revenue (CLP)</label><input class="field-input" id="rep-revenue" type="number"></div>
+        <div class="field-group"><label class="field-label">Revenue neto (CLP)</label><input class="field-input" id="rep-revenue" type="number"></div>
         <div class="field-group"><label class="field-label">Cotizaciones enviadas / aprobadas</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><input class="field-input" id="rep-cot-env" type="number" placeholder="enviadas"><input class="field-input" id="rep-cot-apr" type="number" placeholder="aprobadas"></div></div>
-        <div class="field-group"><label class="field-label">Pedidos activos / despachados</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><input class="field-input" id="rep-ped-act" type="number" placeholder="activos"><input class="field-input" id="rep-ped-des" type="number" placeholder="despachados"></div></div>
-        <div class="field-group"><label class="field-label">Notas</label><textarea class="field-textarea" id="rep-notas" rows="2"></textarea></div>
+        <div class="field-group"><label class="field-label">Pedidos activos / despachados esta sem.</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><input class="field-input" id="rep-ped-act" type="number" placeholder="activos"><input class="field-input" id="rep-ped-des" type="number" placeholder="despachados"></div></div>
+        <div class="field-group"><label class="field-label">Notas adicionales</label><textarea class="field-textarea" id="rep-notas" rows="2"></textarea></div>
         <button class="btn btn-primary" onclick="crearReporte()" id="createReporteBtn">📊 Generar y Guardar</button>
       </div>
       <div style="padding:0 16px 16px"><div class="ai-response empty" id="reporteOutput">CEO_AGENT generará el resumen...</div></div>
@@ -1778,13 +1779,75 @@ async function createCotizacion(){
 }
 
 // ── REPORTES ──────────────────────────────────────────────────
+function prefillReporte(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
+  // Número de semana ISO
+  const jan1=new Date(today.getFullYear(),0,1);
+  const weekNum=Math.ceil(((today-jan1)/86400000+jan1.getDay()+1)/7);
+  const mesLabel=today.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
+  document.getElementById('rep-semana').value=`Semana ${weekNum} — ${mesLabel}`;
+  // Revenue neto esta semana
+  const revSemana=state.pedidos.reduce((s,p)=>{
+    const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||'';
+    return d&&new Date(d+'T00:00:00')>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;
+  },0);
+  document.getElementById('rep-revenue').value=revSemana;
+  // Cotizaciones creadas esta semana
+  const cotSem=state.cotizaciones.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart);
+  document.getElementById('rep-cot-env').value=cotSem.length;
+  document.getElementById('rep-cot-apr').value=cotSem.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
+  // Pedidos activos y despachados esta semana
+  document.getElementById('rep-ped-act').value=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
+  const pedDesSem=state.pedidos.filter(p=>{
+    const f=p.fields;
+    if(f['Estado pedido']!=='Despachado') return false;
+    const d=f['Fecha despacho']||f['Fecha entrega']||'';
+    return d&&new Date(d+'T00:00:00')>=weekStart;
+  }).length;
+  document.getElementById('rep-ped-des').value=pedDesSem;
+  toast('✓ Métricas cargadas desde datos actuales','success');
+}
 async function crearReporte(){
   const btn=document.getElementById('createReporteBtn');btn.disabled=true;btn.textContent='Generando...';const out=document.getElementById('reporteOutput');out.classList.remove('empty');out.textContent='⏳ CEO_AGENT procesando...';
   try{const s=document.getElementById('rep-semana').value,rev=document.getElementById('rep-revenue').value,ce=document.getElementById('rep-cot-env').value,ca=document.getElementById('rep-cot-apr').value,pa=document.getElementById('rep-ped-act').value,pd=document.getElementById('rep-ped-des').value,n=document.getElementById('rep-notas').value;const conv=parseFloat(ce)>0?parseFloat(ca)/parseFloat(ce):0;const response=await callClaude('Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES',`Semana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);out.textContent=response;const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':new Date().toISOString().split('T')[0],'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
   catch(e){toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;}
   btn.disabled=false;btn.textContent='📊 Generar y Guardar';
 }
-function renderReportes(){const tbody=document.getElementById('reportesTableBody');if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="6"><div class="empty-state">Sin reportes</div></td></tr>';return;}tbody.innerHTML=state.reportes.map(r=>{const f=r.fields,mp=f['Margen promedio semana (%)']||0,m=mp<=1?mp*100:mp,cp=f['Tasa conversión (%)']||0,cv=cp<=1?cp*100:cp;return`<tr><td>${escapeHtml(f['Semana']||'—')}</td><td class="clp">${formatCLP(f['Revenue semana (CLP)']||0)}</td><td>${f['Pedidos activos']||0}/${f['Pedidos despachados']||0}</td><td><span class="badge ${m>=35?'badge-green':m>=20?'badge-yellow':'badge-red'}">${m.toFixed(0)}%</span></td><td class="text-small">${cv.toFixed(0)}%</td><td>${estadoBadge(f['Estado reporte']||'—')}</td></tr>`;}).join('');}
+function renderReportes(){
+  const tbody=document.getElementById('reportesTableBody');
+  if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state">Sin reportes</div></td></tr>';return;}
+  tbody.innerHTML=state.reportes.map((r,i)=>{
+    const f=r.fields;
+    const mp=f['Margen promedio semana (%)']||0,m=mp<=1?mp*100:mp;
+    const cp=f['Tasa conversión (%)']||0,cv=cp<=1?cp*100:cp;
+    const resumen=f['Resumen ejecutivo']||'';
+    const rid=`rd-${r.id||i}`;
+    return`<tr style="cursor:${resumen?'pointer':'default'}" onclick="${resumen?`toggleReporteDetalle('${rid}',this)`:''}">
+      <td>${escapeHtml(f['Semana']||'—')}</td>
+      <td class="clp">${formatCLP(f['Revenue semana (CLP)']||0)}</td>
+      <td>${f['Pedidos activos']||0}/${f['Pedidos despachados']||0}</td>
+      <td><span class="badge ${m>=35?'badge-green':m>=20?'badge-yellow':'badge-red'}">${m.toFixed(0)}%</span></td>
+      <td class="text-small">${cv.toFixed(0)}%</td>
+      <td>${estadoBadge(f['Estado reporte']||'—')}</td>
+      <td style="text-align:center;color:var(--text3);font-size:11px;transition:transform .2s" id="chev-${rid}">${resumen?'▼':''}</td>
+    </tr>
+    ${resumen?`<tr id="${rid}" style="display:none"><td colspan="7" style="padding:0"><div style="padding:14px 18px;background:var(--surface2);border-left:3px solid var(--accent);font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.7;border-bottom:1px solid var(--border)">${escapeHtml(resumen)}</div></td></tr>`:''}`;
+  }).join('');
+}
+function toggleReporteDetalle(rid,row){
+  const detail=document.getElementById(rid);
+  const chev=document.getElementById('chev-'+rid);
+  if(!detail) return;
+  const isOpen=detail.style.display!=='none';
+  // Cerrar todos
+  document.querySelectorAll('[id^="rd-"]').forEach(el=>{el.style.display='none';});
+  document.querySelectorAll('[id^="chev-rd-"]').forEach(el=>{el.textContent='▼';el.style.color='var(--text3)';});
+  if(!isOpen){
+    detail.style.display='';
+    if(chev){chev.textContent='▲';chev.style.color='var(--accent)';}
+  }
+}
 
 // ── AGENTES ───────────────────────────────────────────────────
 function buildAgentContext(id){
