@@ -2086,8 +2086,71 @@ function renderEquipoCalendar(){
   const ausentes=PERSONAS.filter(p=>{const ev=equipoState.eventos[`${p.id}_${today}`];return ev&&['ausente','vacaciones'].includes(ev.tipo);}).length;
   document.getElementById('equipoSubtitle').textContent=`${PERSONAS.length-ausentes} disponibles · ${ausentes} ausentes hoy`;
 }
-function renderEquipoResumenHoy(today){document.getElementById('equipoResumenHoy').innerHTML=PERSONAS.map(p=>{const ev=equipoState.eventos[`${p.id}_${today}`];const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):EQUIPO_TIPOS.disponible;return`<div class="card" style="padding:14px;display:flex;align-items:center;gap:10px"><div style="width:40px;height:40px;border-radius:50%;background:${p.color};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--black);flex-shrink:0">${p.avatar}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:12px;color:${cfg.color};font-weight:700">${cfg.icon} ${cfg.label}</div>${ev?.desc?`<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(ev.desc)}</div>`:''}</div><button class="btn-mini ${ev&&ev.tipo!=='disponible'?'btn-mini-red':'btn-mini-green'}" onclick="quickToggleEquipo('${p.id}','${today}')">${ev&&ev.tipo!=='disponible'?'🔴 Disp.':'🟢 OK'}</button></div>`;}).join('');}
-function renderEquipoDetalleSemana(dias){document.getElementById('equipoDetalleSemana').innerHTML=PERSONAS.map(p=>{const eventos=dias.map(d=>{const ds=fmtDate(d),ev=equipoState.eventos[`${p.id}_${ds}`],cfg=ev?(EQUIPO_TIPOS[ev.tipo]||null):null,esFinde=d.getDay()===0||d.getDay()===6;return`<div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:10px;color:var(--text3);min-width:44px">${fmtDayLabel(d)}</span>${cfg?`<span style="font-size:10px;font-weight:600;color:${cfg.color}">${cfg.icon} ${cfg.label}</span>${ev.desc?`<span style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;flex:1">${escapeHtml(ev.desc)}</span>`:''}`: `<span style="font-size:10px;color:${esFinde?'var(--text3)':'var(--accent3)'}">✓ ${esFinde?'Finde':'Disponible'}</span>`}</div>`;}).join('');const dispDias=dias.filter(d=>{const ev=equipoState.eventos[`${p.id}_${fmtDate(d)}`];return !ev||ev.tipo==='disponible';}).length;const pct=Math.round((dispDias/7)*100);const barColor=pct>=70?'var(--accent3)':pct>=40?'var(--warn)':'var(--danger)';return`<div class="card"><div class="card-header"><div style="display:flex;align-items:center;gap:9px"><div style="width:30px;height:30px;border-radius:50%;background:${p.color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--black)">${p.avatar}</div><div><div style="font-size:11px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:10px;color:var(--text3)">${p.rol}</div></div></div><div style="text-align:right"><div style="font-size:16px;font-family:'Bebas Neue';color:${barColor}">${dispDias}/7</div><div style="font-size:9px;color:var(--text3)">días disp.</div></div></div><div style="padding:0 14px 6px"><div style="height:3px;background:var(--surface3);border-radius:2px;margin-bottom:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px"></div></div>${eventos}</div></div>`;}).join('');}
+function renderEquipoResumenHoy(today){
+  const todayDate=new Date(today+'T00:00:00');
+  document.getElementById('equipoResumenHoy').innerHTML=PERSONAS.map(p=>{
+    const ev=equipoState.eventos[`${p.id}_${today}`];
+    const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):EQUIPO_TIPOS.disponible;
+    // #1 Carga de trabajo: pedidos activos asignados a esta persona
+    const fn=p.nombre.split(' ')[0].toLowerCase();
+    const misPedidos=state.pedidos.filter(x=>{
+      const ea=(x.fields['Equipo asignado']||'').toLowerCase();
+      return ea.includes(fn)&&!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'');
+    });
+    const proxEntrega=misPedidos
+      .filter(x=>x.fields['Fecha entrega']&&new Date(x.fields['Fecha entrega']+'T00:00:00')>=todayDate)
+      .map(x=>x.fields['Fecha entrega']).sort()[0];
+    const proxLabel=proxEntrega?` · próx: ${proxEntrega.substring(5).replace('-','/')}` :'';
+    const cargaHtml=misPedidos.length
+      ?`<div style="font-size:10px;color:var(--accent);margin-top:3px">📦 ${misPedidos.length} pedido${misPedidos.length>1?'s':''} activo${misPedidos.length>1?'s':''}${proxLabel}</div>`
+      :`<div style="font-size:10px;color:var(--text3);margin-top:3px">Sin pedidos activos</div>`;
+    // #2 Alertas de cobertura: ausencia coincide con fecha entrega de un pedido
+    const conflictos=[];
+    Object.entries(equipoState.eventos).forEach(([key,ev2])=>{
+      if(!key.startsWith(p.id+'_')||!['ausente','vacaciones'].includes(ev2.tipo)) return;
+      const dk=key.substring(p.id.length+1);
+      misPedidos.forEach(x=>{
+        if((x.fields['Fecha entrega']||'')===dk)
+          conflictos.push({ped:x.fields['N° Pedido']||'?',fecha:dk.substring(5).replace('-','/')});
+      });
+    });
+    const alertaHtml=conflictos.length
+      ?`<div style="font-size:10px;color:var(--danger);font-weight:700;margin-top:3px">⚠ Conflicto: ${conflictos.map(c=>`${c.ped} vence el ${c.fecha}`).join(' · ')}</div>`
+      :'';
+    return`<div class="card" style="padding:14px;display:flex;align-items:center;gap:10px${conflictos.length?';border-color:rgba(255,68,68,0.4)':''}"><div style="width:40px;height:40px;border-radius:50%;background:${p.color};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--black);flex-shrink:0">${p.avatar}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:12px;color:${cfg.color};font-weight:700">${cfg.icon} ${cfg.label}</div>${ev?.desc?`<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(ev.desc)}</div>`:''}${cargaHtml}${alertaHtml}</div><button class="btn-mini ${ev&&ev.tipo!=='disponible'?'btn-mini-red':'btn-mini-green'}" onclick="quickToggleEquipo('${p.id}','${today}')">${ev&&ev.tipo!=='disponible'?'🔴 Disp.':'🟢 OK'}</button></div>`;
+  }).join('');
+}
+function renderEquipoDetalleSemana(dias){
+  document.getElementById('equipoDetalleSemana').innerHTML=PERSONAS.map(p=>{
+    // #1 Pedidos activos asignados a esta persona
+    const fn=p.nombre.split(' ')[0].toLowerCase();
+    const misPedidos=state.pedidos.filter(x=>{
+      const ea=(x.fields['Equipo asignado']||'').toLowerCase();
+      return ea.includes(fn)&&!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'');
+    });
+    // Mapa fecha→lista de N°Pedido que vencen ese día
+    const entregasDias={};
+    misPedidos.forEach(x=>{const fe=x.fields['Fecha entrega'];if(fe){if(!entregasDias[fe])entregasDias[fe]=[];entregasDias[fe].push(x.fields['N° Pedido']||'?');}});
+    // Contar conflictos en la semana visible
+    const conflictCount=dias.filter(d=>{const ds=fmtDate(d),ev=equipoState.eventos[`${p.id}_${ds}`];return ev&&['ausente','vacaciones'].includes(ev.tipo)&&(entregasDias[ds]||[]).length>0;}).length;
+    // Filas de días con indicadores de entrega y conflicto
+    const eventosHtml=dias.map(d=>{
+      const ds=fmtDate(d),ev=equipoState.eventos[`${p.id}_${ds}`],cfg=ev?(EQUIPO_TIPOS[ev.tipo]||null):null,esFinde=d.getDay()===0||d.getDay()===6;
+      const pedEseDia=entregasDias[ds]||[];
+      const estaAusente=ev&&['ausente','vacaciones'].includes(ev.tipo);
+      const conflicto=estaAusente&&pedEseDia.length>0;
+      const pedTag=pedEseDia.length?`<span style="font-size:9px;font-weight:700;color:${conflicto?'var(--danger)':'var(--accent)'};margin-left:auto;flex-shrink:0">${conflicto?'⚠ ':'📦 '}${pedEseDia.join(', ')}</span>`:'';
+      return`<div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--border)${conflicto?';background:rgba(255,68,68,0.06)':''}"><span style="font-size:10px;color:var(--text3);min-width:44px">${fmtDayLabel(d)}</span>${cfg?`<span style="font-size:10px;font-weight:600;color:${cfg.color}">${cfg.icon} ${cfg.label}</span>${ev.desc?`<span style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;flex:1">${escapeHtml(ev.desc)}</span>`:''}`: `<span style="font-size:10px;color:${esFinde?'var(--text3)':'var(--accent3)'}">✓ ${esFinde?'Finde':'Disponible'}</span>`}${pedTag}</div>`;
+    }).join('');
+    const dispDias=dias.filter(d=>{const ev=equipoState.eventos[`${p.id}_${fmtDate(d)}`];return !ev||ev.tipo==='disponible';}).length;
+    const pct=Math.round((dispDias/7)*100);
+    const barColor=pct>=70?'var(--accent3)':pct>=40?'var(--warn)':'var(--danger)';
+    const statHtml=misPedidos.length
+      ?`<div style="font-size:9px;color:${conflictCount?'var(--danger)':'var(--accent)'};margin-top:2px">${conflictCount?`⚠ ${conflictCount} conflicto${conflictCount>1?'s':''}`:`📦 ${misPedidos.length} ped. activo${misPedidos.length>1?'s':''}`}</div>`
+      :'';
+    return`<div class="card"><div class="card-header"><div style="display:flex;align-items:center;gap:9px"><div style="width:30px;height:30px;border-radius:50%;background:${p.color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--black)">${p.avatar}</div><div><div style="font-size:11px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:10px;color:var(--text3)">${p.rol}</div></div></div><div style="text-align:right"><div style="font-size:16px;font-family:'Bebas Neue';color:${barColor}">${dispDias}/7</div><div style="font-size:9px;color:var(--text3)">días disp.</div>${statHtml}</div></div><div style="padding:0 14px 6px"><div style="height:3px;background:var(--surface3);border-radius:2px;margin-bottom:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px"></div></div>${eventosHtml}</div></div>`;
+  }).join('');
+}
 async function quickToggleEquipo(personaId,dateStr){const key=`${personaId}_${dateStr}`,ev=equipoState.eventos[key];if(ev&&ev.tipo!=='disponible'){delete equipoState.eventos[key];renderEquipoCalendar();await saveEquipoEventosAirtable();toast('✓ Disponible','success');}else openEquipoModal(personaId,PERSONAS.find(p=>p.id===personaId)?.nombre||'',dateStr);}
 function openEquipoModal(personaId,nombre,dateStr){document.getElementById('equipoModalPersonaId').value=personaId;document.getElementById('equipoModalDate').value=dateStr;const p=PERSONAS.find(x=>x.id===personaId);document.getElementById('equipoModalTitle').innerHTML=`<span style="display:flex;align-items:center;gap:8px"><span style="width:28px;height:28px;border-radius:50%;background:${p?.color||'#fff'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--black)">${p?.avatar||'?'}</span>📅 ${escapeHtml(nombre)} — ${dateStr}</span>`;document.getElementById('equipoModalDesc').value='';document.getElementById('equipoModalFechaInicio').value=dateStr;document.getElementById('equipoModalFechaFin').value=dateStr;document.getElementById('equipoModalHoraInicio').value='09:00';document.getElementById('equipoModalHoraFin').value='18:00';document.getElementById('equipoModalTipo').value='ocupado';onEquipoModalTipoChange();document.getElementById('equipoEventModal').style.display='flex';}
 function closeEquipoModal(){document.getElementById('equipoEventModal').style.display='none';}
