@@ -537,12 +537,13 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 <!-- MÁQUINAS -->
 <div class="tab-panel" id="tab-maquinas">
   <div class="section-header"><div class="section-title">Disponibilidad Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div></div>
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn btn-ghost btn-sm" onclick="navSemana(-1)">← Anterior</button>
     <span id="semanaLabel" style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)"></span>
     <button class="btn btn-ghost btn-sm" onclick="navSemana(1)">Siguiente →</button>
     <button class="btn btn-ghost btn-sm" onclick="goToday()">Hoy</button>
   </div>
+  <div id="maquinasKPIs" style="margin-bottom:14px"></div>
   <div class="card"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px"><thead id="maquinasHeader"></thead><tbody id="maquinasBody"></tbody></table></div></div>
 </div>
 
@@ -553,7 +554,13 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <input type="hidden" id="maquinaModalId"><input type="hidden" id="maquinaModalDate">
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
       <div class="field-group"><label class="field-label">Tipo</label><select class="field-select" id="maquinaModalTipo" onchange="onMaquinaModalTipoChange()"><option value="uso">🟠 En uso</option><option value="mantencion">🔴 Mantención</option><option value="disponible">🟢 Disponible</option></select></div>
-      <div class="field-group" id="maquinaModalDescGroup"><label class="field-label">Descripción</label><input class="field-input" id="maquinaModalDesc"></div>
+      <div class="field-group" id="maquinaModalPedidoGroup">
+        <label class="field-label">🔗 Vincular pedido</label>
+        <select class="field-select" id="maquinaModalPedido" onchange="onMaquinaModalPedidoChange()">
+          <option value="">— sin pedido vinculado —</option>
+        </select>
+      </div>
+      <div class="field-group" id="maquinaModalDescGroup"><label class="field-label">Descripción / nota</label><input class="field-input" id="maquinaModalDesc" placeholder="Opcional — se autorrellena al vincular pedido"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="field-group"><label class="field-label">Fecha inicio</label><input class="field-input" id="maquinaModalFechaInicio" type="date"></div>
         <div class="field-group"><label class="field-label">Fecha fin</label><input class="field-input" id="maquinaModalFechaFin" type="date"></div>
@@ -1884,10 +1891,37 @@ function goToday(){maquinaState.semanaOffset=0;renderMaquinasCalendar();}
 function getMaquinaEstadoGlobal(id){return sessionStorage.getItem('estado_maq_'+id)||'disponible';}
 async function toggleMaquinaEstado(id){const act=getMaquinaEstadoGlobal(id),nv=act==='disponible'?'mantencion':'disponible';sessionStorage.setItem('estado_maq_'+id,nv);const m=MAQUINAS.find(x=>x.id===id);toast(`${m?.nombre} #${m?.num}: ${nv==='mantencion'?'🔧 Mantención':'✓ Disponible'}`,nv==='mantencion'?'error':'success');renderMaquinasCalendar();}
 async function initMaquinas(){await loadMaquinaEventosAirtable();renderMaquinasCalendar();}
+
+function renderMaquinasKPIs(dias,todayStr){
+  const total=MAQUINAS.length*dias.length;
+  let usados=0,mant=0,horas=0,dispHoy=0,usoHoy=0,mantHoy=0;
+  MAQUINAS.forEach(m=>{
+    const globalMant=getMaquinaEstadoGlobal(m.id)==='mantencion';
+    dias.forEach(d=>{
+      const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key];
+      const esMant=globalMant||ev?.tipo==='mantencion';
+      const esUso=!globalMant&&ev?.tipo==='uso';
+      if(esMant){mant++;if(ds===todayStr) mantHoy++;}
+      else if(esUso){usados++;horas+=ev.tiempo||0;if(ds===todayStr) usoHoy++;}
+      else{if(ds===todayStr) dispHoy++;}
+    });
+  });
+  const ocupados=usados+mant,pct=Math.round(ocupados/total*100);
+  const pctColor=pct>=80?'var(--danger)':pct>=50?'var(--warn)':'var(--accent3)';
+  const pctCls=pct>=80?'red':pct>=50?'yellow':'green';
+  document.getElementById('maquinasKPIs').innerHTML=`<div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:0">
+    <div class="kpi-card green"><div class="kpi-label">Disponibles hoy</div><div class="kpi-value" style="color:var(--accent3)">${dispHoy}</div><div class="kpi-sub">de ${MAQUINAS.length} máquinas</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">En uso hoy</div><div class="kpi-value" style="color:var(--accent2)">${usoHoy}</div><div class="kpi-sub">${mantHoy>0?`${mantHoy} en mantención`:'sin mantención'}</div></div>
+    <div class="kpi-card ${pctCls}"><div class="kpi-label">Utilización semana</div><div class="kpi-value" style="color:${pctColor}">${pct}%</div><div class="kpi-sub">${ocupados}/${total} slots</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">Horas en producción</div><div class="kpi-value" style="color:var(--accent)">${horas>0?horas.toFixed(0)+'h':'—'}</div><div class="kpi-sub">estimadas semana</div></div>
+  </div>`;
+}
+
 function renderMaquinasCalendar(){
   const lunes=getMaquinaSemanaLunes();const dias=[];for(let i=0;i<7;i++){const d=new Date(lunes);d.setDate(lunes.getDate()+i);dias.push(d);}
   const today=fmtDate(new Date());const opts={day:'numeric',month:'short'};
   document.getElementById('semanaLabel').textContent=`${dias[0].toLocaleDateString('es-CL',opts)} — ${dias[6].toLocaleDateString('es-CL',opts)} ${dias[0].getFullYear()}`;
+  renderMaquinasKPIs(dias,today);
   document.getElementById('maquinasHeader').innerHTML=`<tr><th style="padding:9px 14px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);min-width:160px;background:var(--surface);position:sticky;left:0;z-index:3">Máquina</th><th style="padding:9px 10px;font-size:10px;color:var(--text3);text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:3;min-width:70px">Estado</th>${dias.map(d=>{const isH=fmtDate(d)===today;return`<th style="padding:7px 4px;font-size:10px;font-weight:${isH?700:500};color:${isH?'var(--accent)':'var(--text3)'};text-align:center;border-bottom:1px solid var(--border);min-width:95px;background:var(--surface)">${fmtDayLabel(d)}</th>`;}).join('')}</tr>`;
   let lastModelo='';
   document.getElementById('maquinasBody').innerHTML=MAQUINAS.map(m=>{
@@ -1900,19 +1934,70 @@ function renderMaquinasCalendar(){
     </td></tr>`:'' ;
     const enMant=getMaquinaEstadoGlobal(m.id)==='mantencion';
     const estadoBtn=enMant?`<button class="btn-mini btn-mini-red" onclick="toggleMaquinaEstado('${m.id}')">🔧 Mant.</button>`:`<button class="btn-mini btn-mini-green" onclick="toggleMaquinaEstado('${m.id}')">✓ Disp.</button>`;
-    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key],isH=ds===today;let bg='',content='';if(ev){if(ev.tipo==='mantencion'){bg='rgba(255,68,68,0.2)';content=`<div style="font-size:9px;font-weight:700;color:var(--danger)">🔧 MANT.</div>`;}else if(ev.tipo==='uso'){bg='rgba(255,107,53,0.2)';content=`<div style="font-size:9px;color:var(--accent2);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85px">${escapeHtml(ev.desc||'En uso')}</div>${ev.tiempo?`<div style="font-size:8px;color:var(--text3)">${ev.tiempo}h</div>`:''}`;}else{bg='rgba(0,212,170,0.12)';content=`<div style="font-size:9px;color:var(--accent3);font-weight:600">✓ Libre</div>`;}}return`<td onclick="openMaquinaModal('${m.id}','${m.nombre} #${m.num}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg||'transparent'};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.5)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content||`<span style="color:var(--text3);font-size:10px">+</span>`}${ev?`<button onclick="event.stopPropagation();deleteMaquinaEvento('${m.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:8px;padding:0">✕</button>`:''}</div></td>`;}).join('');
+    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key],isH=ds===today;let bg='',content='';if(ev){if(ev.tipo==='mantencion'){bg='rgba(255,68,68,0.2)';content=`<div style="font-size:9px;font-weight:700;color:var(--danger)">🔧 MANT.</div>`;}else if(ev.tipo==='uso'){bg='rgba(255,107,53,0.2)';const pedLabel=ev.pedidoId?state.pedidos.find(p=>p.id===ev.pedidoId)?.fields['N° Pedido']||null:null;const descLabel=pedLabel?`🔗 ${pedLabel}`:(ev.desc||'En uso');content=`<div style="font-size:9px;color:${pedLabel?'var(--accent)':'var(--accent2)'};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85px" title="${escapeHtml(ev.desc||'')}">${escapeHtml(descLabel)}</div>${ev.tiempo?`<div style="font-size:8px;color:var(--text3)">${ev.tiempo}h</div>`:''}`;}else{bg='rgba(0,212,170,0.12)';content=`<div style="font-size:9px;color:var(--accent3);font-weight:600">✓ Libre</div>`;}}return`<td onclick="openMaquinaModal('${m.id}','${m.nombre} #${m.num}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg||'transparent'};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.5)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content||`<span style="color:var(--text3);font-size:10px">+</span>`}${ev?`<button onclick="event.stopPropagation();deleteMaquinaEvento('${m.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:8px;padding:0">✕</button>`:''}</div></td>`;}).join('');
     return`${groupRow}<tr><td style="padding:9px 14px;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:0;z-index:2"><span style="width:7px;height:7px;border-radius:50%;background:${m.color};display:inline-block;margin-right:6px"></span>${escapeHtml(m.nombre)} <span style="color:var(--text3)">#${m.num}</span></td><td style="padding:4px 6px;text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:2">${estadoBtn}</td>${celdas}</tr>`;
   }).join('');
   document.getElementById('maquinasSubtitle').textContent=`${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)!=='mantencion').length} disponibles · ${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)==='mantencion').length} en mantención`;
 }
-function openMaquinaModal(maqId,nombre,dateStr){document.getElementById('maquinaModalId').value=maqId;document.getElementById('maquinaModalDate').value=dateStr;document.getElementById('maquinaModalTitle').textContent=`📅 ${nombre} — ${dateStr}`;document.getElementById('maquinaModalDesc').value='';document.getElementById('maquinaModalTiempo').value='';document.getElementById('maquinaModalFechaInicio').value=dateStr;document.getElementById('maquinaModalFechaFin').value=dateStr;document.getElementById('maquinaModalTipo').value='uso';onMaquinaModalTipoChange();document.getElementById('maquinaEventModal').style.display='flex';}
+function openMaquinaModal(maqId,nombre,dateStr){
+  document.getElementById('maquinaModalId').value=maqId;
+  document.getElementById('maquinaModalDate').value=dateStr;
+  document.getElementById('maquinaModalTitle').textContent=`📅 ${nombre} — ${dateStr}`;
+  document.getElementById('maquinaModalFechaInicio').value=dateStr;
+  document.getElementById('maquinaModalFechaFin').value=dateStr;
+  // poblar select de pedidos activos
+  const activos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+  const sel=document.getElementById('maquinaModalPedido');
+  sel.innerHTML='<option value="">— sin pedido vinculado —</option>'+activos.map(p=>{
+    const f=p.fields;
+    return`<option value="${p.id}">${escapeHtml(f['N° Pedido']||'—')} · ${escapeHtml(resolveClienteName(f['Cliente']))} · ${escapeHtml(f['Estado pedido']||'—')}</option>`;
+  }).join('');
+  // restaurar estado del evento existente si lo hay
+  const ev=maquinaState.eventos[`${maqId}_${dateStr}`];
+  if(ev){
+    document.getElementById('maquinaModalTipo').value=ev.tipo||'uso';
+    document.getElementById('maquinaModalDesc').value=ev.desc||'';
+    document.getElementById('maquinaModalTiempo').value=ev.tiempo||'';
+    // intentar re-vincular pedido desde descripción
+    if(ev.pedidoId) sel.value=ev.pedidoId;
+    else{const match=activos.find(p=>ev.desc&&ev.desc.startsWith(p.fields['N° Pedido']||'##'));if(match) sel.value=match.id;}
+  }else{
+    document.getElementById('maquinaModalTipo').value='uso';
+    document.getElementById('maquinaModalDesc').value='';
+    document.getElementById('maquinaModalTiempo').value='';
+    sel.value='';
+  }
+  onMaquinaModalTipoChange();
+  document.getElementById('maquinaEventModal').style.display='flex';
+}
 function closeMaquinaModal(){document.getElementById('maquinaEventModal').style.display='none';}
-function onMaquinaModalTipoChange(){const tipo=document.getElementById('maquinaModalTipo').value;document.getElementById('maquinaModalDescGroup').style.display=tipo==='disponible'?'none':'flex';document.getElementById('maquinaModalTiempoGroup').style.display=tipo==='uso'?'flex':'none';}
+function onMaquinaModalTipoChange(){
+  const tipo=document.getElementById('maquinaModalTipo').value;
+  const esUso=tipo==='uso',esDisp=tipo==='disponible';
+  document.getElementById('maquinaModalPedidoGroup').style.display=esUso?'flex':'none';
+  document.getElementById('maquinaModalDescGroup').style.display=esDisp?'none':'flex';
+  document.getElementById('maquinaModalTiempoGroup').style.display=esUso?'flex':'none';
+}
+function onMaquinaModalPedidoChange(){
+  const sel=document.getElementById('maquinaModalPedido');
+  const pid=sel.value;if(!pid) return;
+  const p=state.pedidos.find(x=>x.id===pid);if(!p) return;
+  const f=p.fields;
+  const nPed=f['N° Pedido']||'—',cliente=resolveClienteName(f['Cliente']),estado=f['Estado pedido']||'—';
+  document.getElementById('maquinaModalDesc').value=`${nPed} · ${cliente}`;
+  // sugerir horas según pedido si tiene monto (estimación rápida)
+  const monto=(f['Monto total (CLP)']||0)/1.19;
+  if(monto>0&&!document.getElementById('maquinaModalTiempo').value){
+    const hEst=Math.max(1,Math.round(monto/15000)); // aprox $15k neto/h como referencia
+    document.getElementById('maquinaModalTiempo').value=Math.min(hEst,24);
+  }
+}
 async function saveMaquinaEvento(){
   const maqId=document.getElementById('maquinaModalId').value,tipo=document.getElementById('maquinaModalTipo').value,desc=document.getElementById('maquinaModalDesc').value,tiempo=document.getElementById('maquinaModalTiempo').value,fi=document.getElementById('maquinaModalFechaInicio').value,ff=document.getElementById('maquinaModalFechaFin').value;
   if(!fi||!ff){toast('Ingresa las fechas','error');return;}
+  const pedidoId=document.getElementById('maquinaModalPedido')?.value||'';
   const start=new Date(fi+'T00:00:00'),end=new Date(ff+'T00:00:00');let count=0;
-  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){const key=`${maqId}_${fmtDate(new Date(d))}`;if(tipo==='disponible') delete maquinaState.eventos[key];else maquinaState.eventos[key]={tipo,desc,tiempo:parseFloat(tiempo)||null};count++;}
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){const key=`${maqId}_${fmtDate(new Date(d))}`;if(tipo==='disponible') delete maquinaState.eventos[key];else{const ev={tipo,desc,tiempo:parseFloat(tiempo)||null};if(pedidoId) ev.pedidoId=pedidoId;maquinaState.eventos[key]=ev;}count++;}
   closeMaquinaModal();renderMaquinasCalendar();toast(`✓ ${count} día${count>1?'s':''} marcados — guardando...`,'info');
   await saveMaquinaEventosAirtable();toast('✓ Guardado en Airtable','success');
 }
