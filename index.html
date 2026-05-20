@@ -1415,7 +1415,7 @@ function renderAlertas(){
   // sev 3 — proveedores bloqueados con pedidos activos en su categoría
   state.proveedores.forEach(pv=>{
     if((pv.fields['Estado']||'')!=='Bloqueado') return;
-    const cat=pv.fields['Categoría']||'';
+    const cat=pvCat(pv.fields);
     const nombre=pv.fields['Nombre']||'—';
     const pedActivos=state.pedidos.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')).length;
     if(pedActivos>0)
@@ -1424,9 +1424,9 @@ function renderAlertas(){
   // sev 2 — proveedor inactivo sin alternativa activa en la misma categoría
   state.proveedores.forEach(pv=>{
     if((pv.fields['Estado']||'')!=='Inactivo') return;
-    const cat=pv.fields['Categoría']||'';
+    const cat=pvCat(pv.fields);
     if(!cat) return;
-    const hayAlternativa=state.proveedores.some(x=>x.id!==pv.id&&(x.fields['Categoría']||'')===cat&&(x.fields['Estado']||'')==='Activo');
+    const hayAlternativa=state.proveedores.some(x=>x.id!==pv.id&&pvCat(x.fields)===cat&&(x.fields['Estado']||'')==='Activo');
     if(!hayAlternativa)
       alertas.push({sev:2,icon:'⚠️',type:'proveedor-sin-cobertura',msg:`Sin proveedor activo en <strong>${escapeHtml(cat)}</strong> — <strong>${escapeHtml(pv.fields['Nombre']||'—')}</strong> inactivo`,id:pv.id,tab:'proveedores'});
   });
@@ -2173,7 +2173,7 @@ function renderCotAnalytics(){
 // ── ANALYTICS DE PROVEEDORES ──────────────────────────────────────────
 function renderProveedoresAnalytics(){
   const el=document.getElementById('proveedoresAnalytics');if(!el||!state.proveedores.length) return;
-  const catMap={};state.proveedores.forEach(p=>{const cat=p.fields['Categoría']||'Sin categoría';catMap[cat]=(catMap[cat]||0)+1;});
+  const catMap={};state.proveedores.forEach(p=>{const cat=pvCat(p.fields)||'Sin categoría';catMap[cat]=(catMap[cat]||0)+1;});
   const topCats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,7);
   const maxCat=topCats.length?topCats[0][1]:1;
   const activos=state.proveedores.filter(p=>(p.fields['Estado']||p.fields['estado']||'')!=='Inactivo').length;
@@ -2686,6 +2686,8 @@ function repStars(n){const v=parseInt(n)||0;return'★'.repeat(Math.min(v,5))+'�
 function repBadge(n){const v=parseInt(n)||0;const cls=v>=4?'badge-green':v>=3?'badge-yellow':'badge-orange';return v?`<span class="badge ${cls}" title="${v}/5">${repStars(v)}</span>`:'—';}
 function estadoPvBadge(e){const map={'Activo':'badge-green','En evaluación':'badge-yellow','Inactivo':'badge-gray','Bloqueado':'badge-red'};return`<span class="badge ${map[e]||'badge-gray'}">${e||'—'}</span>`;}
 
+// Categoría en Airtable es multipleSelects → llega como [{id,name,color}] o string
+function pvCat(f){const c=f['Categoría'];if(!c) return '';if(Array.isArray(c)) return c.map(x=>x.name||x).join(', ');return String(c);}
 function sortProveedores(key){
   if(proveedoresSort.key===key) proveedoresSort.dir*=-1;
   else{proveedoresSort.key=key;proveedoresSort.dir=1;}
@@ -2698,12 +2700,12 @@ function getSortedProveedores(list){
     const fa=a.fields,fb=b.fields;
     let va,vb;
     if(k==='nombre'){va=(fa['Nombre']||'').toLowerCase();vb=(fb['Nombre']||'').toLowerCase();}
-    else if(k==='categoria'){va=(fa['Categoría']||'').toLowerCase();vb=(fb['Categoría']||'').toLowerCase();}
+    else if(k==='categoria'){va=pvCat(fa).toLowerCase();vb=pvCat(fb).toLowerCase();}
     else if(k==='contacto'){va=(fa['Contacto']||'').toLowerCase();vb=(fb['Contacto']||'').toLowerCase();}
     else if(k==='comuna'){va=(fa['Comuna']||'').toLowerCase();vb=(fb['Comuna']||'').toLowerCase();}
     else if(k==='rep'){va=parseInt(fa['Reputación'])||0;vb=parseInt(fb['Reputación'])||0;}
     else if(k==='estado'){va=(fa['Estado']||'').toLowerCase();vb=(fb['Estado']||'').toLowerCase();}
-    else if(k==='plazo'){va=parseInt(fa['Plazo entrega (días)'])||0;vb=parseInt(fb['Plazo entrega (días)'])||0;}
+    else if(k==='plazo'){va=parseInt(fa['Plazo de entrega (días)'])||0;vb=parseInt(fb['Plazo de entrega (días)'])||0;}
     else{va='';vb='';}
     if(va<vb) return -d;if(va>vb) return d;return 0;
   });
@@ -2714,8 +2716,8 @@ function renderProveedores(){
   const cat=document.getElementById('proveedorCatFilter')?.value||'';
   let list=state.proveedores.filter(p=>{
     const f=p.fields;
-    const matchSearch=!search||(f['Nombre']||'').toLowerCase().includes(search)||(f['Contacto']||'').toLowerCase().includes(search)||(f['Email']||'').toLowerCase().includes(search)||(f['Comuna']||'').toLowerCase().includes(search)||(f['Productos']||'').toLowerCase().includes(search);
-    const matchCat=!cat||(f['Categoría']||'')=== cat;
+    const matchSearch=!search||(f['Nombre']||'').toLowerCase().includes(search)||(f['Contacto']||'').toLowerCase().includes(search)||(f['Email']||'').toLowerCase().includes(search)||(f['Comuna']||'').toLowerCase().includes(search)||(f['Productos']||'').toLowerCase().includes(search)||pvCat(f).toLowerCase().includes(search);
+    const matchCat=!cat||pvCat(f).includes(cat);
     return matchSearch&&matchCat;
   });
   const sorted=getSortedProveedores(list);
@@ -2729,9 +2731,9 @@ function buildProveedorRow(p){
   const f=p.fields,id=p.id;
   const tel=(f['Teléfono']||'').replace(/\s/g,'');
   const email=f['Email']||'';
-  const web=f['Sitio web']||'';
+  const web=f['Sitio Web']||'';
   const contactInfo=[tel?`<span style="font-size:10px;color:var(--text3)">📞 ${escapeHtml(f['Teléfono']||'')}</span>`:'',email?`<span style="font-size:10px;color:var(--text3)">✉ ${escapeHtml(email)}</span>`:''].filter(Boolean).join('<br>');
-  const plazo=f['Plazo entrega (días)']?`${f['Plazo entrega (días)']} días`:'—';
+  const plazo=f['Plazo de entrega (días)']?`${f['Plazo de entrega (días)']} días`:'—';
   const rep=parseInt(f['Reputación'])||0;
   const starsHtml=[1,2,3,4,5].map(n=>`<span onclick="event.stopPropagation();updateRepProveedor('${id}',${n})" style="cursor:pointer;font-size:14px;color:${n<=rep?'#facc15':'var(--text3)'};line-height:1" title="${n} estrella${n>1?'s':''}" onmouseenter="highlightStars(this,${n})" onmouseleave="resetStars(this.parentElement,${rep})">★</span>`).join('');
   const starsCell=`<div style="display:flex;gap:1px;align-items:center" id="stars-${id}">${starsHtml}</div>`;
@@ -2744,7 +2746,7 @@ function buildProveedorRow(p){
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
   return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}">
     <td><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}</td>
-    <td><span class="badge badge-purple" style="font-size:9px">${escapeHtml(f['Categoría']||'—')}</span></td>
+    <td><span class="badge badge-purple" style="font-size:9px">${escapeHtml(pvCat(f)||'—')}</span></td>
     <td><div style="font-size:12px">${escapeHtml(f['Contacto']||'—')}</div>${f['Cargo']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['Cargo'])}</div>`:''}</td>
     <td>${contactInfo||'—'}</td>
     <td style="font-size:11px">${escapeHtml(f['Comuna']||'—')}</td>
@@ -2810,14 +2812,14 @@ async function createProveedor(){
     'Cargo':document.getElementById('np-cargo')?.value||'',
     'Teléfono':document.getElementById('np-telefono')?.value||'',
     'Email':document.getElementById('np-email')?.value||'',
-    'Sitio web':document.getElementById('np-web')?.value||'',
+    'Sitio Web':document.getElementById('np-web')?.value||'',
     'RUT':document.getElementById('np-rut')?.value||'',
     'Comuna':document.getElementById('np-comuna')?.value||'',
     'Región':document.getElementById('np-region')?.value||'',
     'Reputación':parseInt(document.getElementById('np-rep')?.value)||null,
     'Estado':document.getElementById('np-estado')?.value||'Activo',
     'Condiciones de pago':document.getElementById('np-condpago')?.value||'',
-    'Plazo entrega (días)':parseInt(document.getElementById('np-plazo')?.value)||null,
+    'Plazo de entrega (días)':parseInt(document.getElementById('np-plazo')?.value)||null,
     'Productos':document.getElementById('np-productos')?.value||'',
     'Notas':document.getElementById('np-notas')?.value||''
   };
@@ -2848,19 +2850,19 @@ function openEditProveedor(id){
   const f=p.fields;
   document.getElementById('epId').value=id;
   document.getElementById('epNombre').value=f['Nombre']||'';
-  document.getElementById('epCategoria').value=f['Categoría']||'';
+  document.getElementById('epCategoria').value=pvCat(f);
   document.getElementById('epContacto').value=f['Contacto']||'';
   document.getElementById('epCargo').value=f['Cargo']||'';
   document.getElementById('epTelefono').value=f['Teléfono']||'';
   document.getElementById('epEmail').value=f['Email']||'';
-  document.getElementById('epWeb').value=f['Sitio web']||'';
+  document.getElementById('epWeb').value=f['Sitio Web']||'';
   document.getElementById('epRut').value=f['RUT']||'';
   document.getElementById('epComuna').value=f['Comuna']||'';
   document.getElementById('epRegion').value=f['Región']||'';
   document.getElementById('epRep').value=f['Reputación']||'';
   document.getElementById('epEstado').value=f['Estado']||'Activo';
   document.getElementById('epCondPago').value=f['Condiciones de pago']||'';
-  document.getElementById('epPlazo').value=f['Plazo entrega (días)']||'';
+  document.getElementById('epPlazo').value=f['Plazo de entrega (días)']||'';
   document.getElementById('epProductos').value=f['Productos']||'';
   document.getElementById('epNotas').value=f['Notas']||'';
   document.getElementById('editProveedorModal').style.display='flex';
@@ -2878,14 +2880,14 @@ async function saveEditProveedor(){
     'Cargo':document.getElementById('epCargo').value||'',
     'Teléfono':document.getElementById('epTelefono').value||'',
     'Email':document.getElementById('epEmail').value||'',
-    'Sitio web':document.getElementById('epWeb').value||'',
+    'Sitio Web':document.getElementById('epWeb').value||'',
     'RUT':document.getElementById('epRut').value||'',
     'Comuna':document.getElementById('epComuna').value||'',
     'Región':document.getElementById('epRegion').value||'',
     'Reputación':parseInt(document.getElementById('epRep').value)||null,
     'Estado':document.getElementById('epEstado').value||'Activo',
     'Condiciones de pago':document.getElementById('epCondPago').value||'',
-    'Plazo entrega (días)':parseInt(document.getElementById('epPlazo').value)||null,
+    'Plazo de entrega (días)':parseInt(document.getElementById('epPlazo').value)||null,
     'Productos':document.getElementById('epProductos').value||'',
     'Notas':document.getElementById('epNotas').value||''
   };
@@ -2930,7 +2932,7 @@ function exportToCSV(t){
   if(t==='clientes'){headers=['Empresa','Contacto','Email','Teléfono','Etapa','Revenue','Estado','Fact.venc.'];rows=state.clientes.map(c=>{const f=c.fields;return[f['Empresa']||'',f['Contacto']||'',f['Email']||'',f['Teléfono']||'',f['Etapa venta']||'',f['Revenue total cliente (CLP)']||0,f['Estado cuenta']||'',f['Facturas vencidas']||0];});}
   else if(t==='cotizaciones'){headers=['N°','Cliente','Canal','Subtotal','Total','Urgente','Estado','Vto.'];rows=state.cotizaciones.map(c=>{const f=c.fields;return[f['N° Cotización']||'',resolveClienteName(f['Cliente']),f['Canal solicitud']||'',f['Subtotal (CLP)']||0,f['Total final (CLP)']||0,f['Urgencia (+25%)']?'Sí':'No',f['Estado cotización']||'',f['Fecha vencimiento']||''];});}
   else if(t==='pedidos'){headers=['N°','Cliente','Estado','Monto','Forma de Pago','Pagado','QA','Entrega'];rows=state.pedidos.map(p=>{const f=p.fields;return[f['N° Pedido']||'',resolveClienteName(f['Cliente']),f['Estado pedido']||'',f['Monto total (CLP)']||0,f['Forma de pago']||'',f['Pagado']?'Sí':'No',f['Resultado QA']||'',f['Fecha entrega']||''];});}
-  else if(t==='proveedores'){headers=['Nombre','Categoría','Contacto','Teléfono','Email','Comuna','Reputación','Estado','Plazo (días)','Condiciones pago','Productos','Notas'];rows=state.proveedores.map(p=>{const f=p.fields;return[f['Nombre']||'',f['Categoría']||'',f['Contacto']||'',f['Teléfono']||'',f['Email']||'',f['Comuna']||'',f['Reputación']||'',f['Estado']||'',f['Plazo entrega (días)']||'',f['Condiciones de pago']||'',f['Productos']||'',f['Notas']||''];});}
+  else if(t==='proveedores'){headers=['Nombre','Categoría','Contacto','Teléfono','Email','Comuna','Reputación','Estado','Plazo (días)','Condiciones pago','Productos','Notas'];rows=state.proveedores.map(p=>{const f=p.fields;return[f['Nombre']||'',pvCat(f),f['Contacto']||'',f['Teléfono']||'',f['Email']||'',f['Comuna']||'',f['Reputación']||'',f['Estado']||'',f['Plazo de entrega (días)']||'',f['Condiciones de pago']||'',f['Productos']||'',f['Notas']||''];});}
   else{toast('Tipo desconocido','error');return;}
   if(!rows.length){toast('Sin datos','error');return;}
   const csv=[headers.join(','),...rows.map(r=>r.map(v=>{const s=String(v).replace(/"/g,'""');return/[",\n]/.test(s)?`"${s}"`:s;}).join(','))].join('\n');
