@@ -1562,8 +1562,173 @@ async function crearReporte(){
 function renderReportes(){const tbody=document.getElementById('reportesTableBody');if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="6"><div class="empty-state">Sin reportes</div></td></tr>';return;}tbody.innerHTML=state.reportes.map(r=>{const f=r.fields,mp=f['Margen promedio semana (%)']||0,m=mp<=1?mp*100:mp,cp=f['Tasa conversión (%)']||0,cv=cp<=1?cp*100:cp;return`<tr><td>${escapeHtml(f['Semana']||'—')}</td><td class="clp">${formatCLP(f['Revenue semana (CLP)']||0)}</td><td>${f['Pedidos activos']||0}/${f['Pedidos despachados']||0}</td><td><span class="badge ${m>=35?'badge-green':m>=20?'badge-yellow':'badge-red'}">${m.toFixed(0)}%</span></td><td class="text-small">${cv.toFixed(0)}%</td><td>${estadoBadge(f['Estado reporte']||'—')}</td></tr>`;}).join('');}
 
 // ── AGENTES ───────────────────────────────────────────────────
-function renderAgentesGrid(){document.getElementById('agentesGrid').innerHTML=AGENTES_CFG.map(a=>`<div class="card" style="padding:0"><div class="card-header"><span class="card-title">${a.icon} ${a.label}</span><span class="badge ${a.badge}">Activo</span></div><div style="padding:14px"><div class="field-group" style="margin-bottom:10px"><div class="field-label">Descripción</div><textarea class="field-textarea" id="input_${a.id}" rows="3" placeholder="${a.pre}..."></textarea></div><button class="btn btn-primary btn-sm" onclick="runAgent('${a.id}')">▶ Ejecutar</button></div><div style="padding:0 14px 14px"><div class="ai-response-wrap"><button class="copy-btn" onclick="copyOut('out_${a.id}',this)">📋</button><div class="ai-response empty" id="out_${a.id}">Ejecuta el agente...</div></div></div></div>`).join('');}
-async function runAgent(id){const cfg=AGENTES_CFG.find(a=>a.id===id);if(!cfg) return;const inp=document.getElementById(`input_${id}`);const input=inp?.value.trim();if(!input){toast('Ingresa texto primero','error');inp?.focus();return;}const out=document.getElementById(`out_${id}`);out.classList.remove('empty');out.textContent='⏳ Procesando...';const panel=document.querySelector(`#agentesGrid .card:nth-child(${AGENTES_CFG.findIndex(a=>a.id===id)+1})`);const btn=panel?.querySelector('.btn-primary');if(btn) btn.disabled=true;try{out.textContent=await callClaude(cfg.sys,cfg.pre+input);}catch(e){out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}if(btn) btn.disabled=false;}
+function buildAgentContext(id){
+  const today=new Date();today.setHours(0,0,0,0);
+  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
+  const fmtCLP=n=>'$'+Math.round(n).toLocaleString('es-CL');
+  const lines=['=== DATOS EN TIEMPO REAL — THE LAB SOLUTIONS ===',`Fecha: ${today.toLocaleDateString('es-CL')}`];
+
+  // métricas base compartidas
+  const pedActivos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+  const pedAtrasados=pedActivos.filter(p=>p.fields['Fecha entrega']&&new Date(p.fields['Fecha entrega']+'T00:00:00')<today);
+  const cotAbiertas=state.cotizaciones.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||''));
+  const revSemana=state.pedidos.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
+  const revTotal=state.pedidos.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
+
+  if(['CEO','FINANCE','SALES','PRODUCTION','FOLLOWUP','QA','REPCLIENTE'].includes(id)){
+    lines.push('\nMÉTRICAS GENERALES:');
+    lines.push(`- Revenue semana (neto): ${fmtCLP(revSemana)}`);
+    lines.push(`- Revenue total acumulado: ${fmtCLP(revTotal)}`);
+    lines.push(`- Pedidos activos: ${pedActivos.length} | Atrasados: ${pedAtrasados.length}`);
+    lines.push(`- Cotizaciones abiertas (sin respuesta): ${cotAbiertas.length}`);
+    lines.push(`- Total clientes en CRM: ${state.clientes.length}`);
+  }
+
+  if(id==='CEO'){
+    const sinPago=pedActivos.filter(p=>!p.fields['Pagado']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||''));
+    const fv=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2);
+    const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);
+    const avgM=cotM.length?cotM.reduce((s,c)=>s+getMargenCot(c.fields),0)/cotM.length:0;
+    const aprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
+    const enviadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Enviada').length;
+    lines.push('\nALERTAS:');
+    lines.push(`- Pedidos sin pago: ${sinPago.length} | Clientes con fact. vencidas: ${fv.length}`);
+    lines.push('\nFINANCIERO:');
+    lines.push(`- Margen promedio: ${avgM.toFixed(1)}% | Conversión: ${enviadas>0?(aprobadas/(aprobadas+enviadas)*100).toFixed(0):'—'}%`);
+    const top5=pedActivos.slice(0,5);
+    if(top5.length){lines.push('\nPEDIDOS ACTIVOS:');top5.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);});}
+    const cotTop=cotAbiertas.slice(0,5);
+    if(cotTop.length){lines.push('\nCOTIZACIONES SIN RESPUESTA:');cotTop.forEach(c=>{const f=c.fields;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Vto: ${f['Fecha vencimiento']||'—'}`);});}
+  }
+
+  if(id==='FINANCE'){
+    const sinPago=pedActivos.filter(p=>!p.fields['Pagado']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||''));
+    const montoRiesgo=sinPago.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
+    const deudores=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
+    lines.push('\nCOBRANZA:');
+    lines.push(`- Pedidos sin pago: ${sinPago.length} | Monto en riesgo (neto): ${fmtCLP(montoRiesgo)}`);
+    if(sinPago.length){sinPago.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${fmtCLP((f['Monto total (CLP)']||0)/1.19)} | ${f['Estado pedido']||'—'} | Forma pago: ${f['Forma de pago']||'—'}`);});}
+    lines.push('\nCLIENTES CON FACTURAS VENCIDAS:');
+    if(deudores.length){deudores.forEach(c=>{const f=c.fields;lines.push(`  • ${f['Empresa']||'—'} | ${f['Facturas vencidas']||0} fact. vencidas | Estado: ${f['Estado cuenta']||'—'} | Email: ${f['Email']||'—'}`);});}else lines.push('  Ninguno ✓');
+    const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);
+    const avgM=cotM.length?cotM.reduce((s,c)=>s+getMargenCot(c.fields),0)/cotM.length:0;
+    lines.push(`\nMARGEN PROMEDIO: ${avgM.toFixed(1)}% | Objetivo: 35–45%`);
+  }
+
+  if(id==='PRODUCTION'){
+    lines.push('\nPEDIDOS EN PRODUCCIÓN:');
+    if(pedActivos.length){pedActivos.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Equipo: ${f['Equipo asignado']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);const req=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';if(req) lines.push(`    Solicitud: ${req.substring(0,100)}`);});}else lines.push('  Sin pedidos activos');
+  }
+
+  if(id==='QA'){
+    const listos=state.pedidos.filter(p=>p.fields['Estado pedido']==='Listo para despacho');
+    lines.push('\nPEDIDOS LISTOS PARA QA:');
+    if(listos.length){listos.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | Entrega: ${f['Fecha entrega']||'—'} | QA previo: ${f['Resultado QA']||'Pendiente'}`);const req=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';if(req) lines.push(`    Solicitud: ${req.substring(0,120)}`);});}else lines.push('  Ninguno en este momento');
+  }
+
+  if(id==='SALES'){
+    lines.push('\nCOTIZACIONES ABIERTAS:');
+    cotAbiertas.slice(0,8).forEach(c=>{const f=c.fields;const vto=f['Fecha vencimiento']?Math.round((new Date(f['Fecha vencimiento']+'T00:00:00')-today)/86400000):null;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado cotización']||'—'}${vto!==null?` | vence en ${vto}d`:''}${f['Canal solicitud']?` | Canal: ${f['Canal solicitud']}`:''}`);});
+    const leads=state.clientes.filter(c=>['Lead nuevo','Contactado'].includes(c.fields['Etapa venta']||'')).slice(0,6);
+    if(leads.length){lines.push('\nLEADS EN PIPELINE:');leads.forEach(c=>{const f=c.fields;lines.push(`  • ${f['Empresa']||'—'} | ${f['Contacto']||'—'} | ${f['Etapa venta']||'—'} | ${f['Teléfono']||f['Email']||'—'}`);});}
+  }
+
+  if(id==='FOLLOWUP'){
+    const hace5=new Date(Date.now()-5*86400000);
+    const sinResp=state.cotizaciones.filter(c=>{const f=c.fields;if(f['Estado cotización']!=='Enviada') return false;const fc=f['Fecha cotización']?new Date(f['Fecha cotización']+'T00:00:00'):null;return fc&&fc<hace5;}).slice(0,8);
+    lines.push('\nCOTIZACIONES SIN RESPUESTA (+5 DÍAS):');
+    if(sinResp.length){sinResp.forEach(c=>{const f=c.fields;const dias=f['Fecha cotización']?Math.round((today-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):'—';const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientes.find(x=>x.id===cid):null;const contacto=[cl?.fields['Teléfono'],cl?.fields['Email']].filter(Boolean).join(' | ')||'—';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${dias}d sin respuesta | Contacto: ${contacto}`);const sol=f['Solicitud cliente (texto libre)']||'';if(sol) lines.push(`    Solicitud: ${sol.substring(0,80)}`);});}else lines.push('  Sin cotizaciones pendientes +5 días ✓');
+  }
+
+  if(id==='QUOTE'){
+    const aprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-8);
+    lines.push('\nÚLTIMAS COTIZACIONES APROBADAS (referencia de precios reales):');
+    if(aprobadas.length){aprobadas.forEach(c=>{const f=c.fields;const neto=Math.round((f['Total final (CLP)']||0)/1.19);const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Neto: ${fmtCLP(neto)}${sol?' | '+sol.substring(0,70):''}`);});}else lines.push('  Sin cotizaciones aprobadas aún');
+    lines.push('\nCOST BASE (referencia interna):');
+    lines.push('  Trofeo $18.000/und | Medalla $4.500/und | Neón $18.000–25.000/m | PLA $24/g+$1.200/h');
+    lines.push('  Margen objetivo: 35–45%');
+  }
+
+  if(id==='REPCLIENTE'){
+    lines.push('\nPEDIDOS PARA REPORTAR A CLIENTE:');
+    if(pedActivos.length){pedActivos.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);const qa=f['Resultado QA'];if(qa) lines.push(`    QA: ${qa}`);});}else lines.push('  Sin pedidos activos');
+  }
+
+  if(id==='LEADGEN'){
+    lines.push('\nCLIENTES ACTUALES POR INDUSTRIA:');
+    const ind={};state.clientes.forEach(c=>{const i=c.fields['Industria']||'Sin clasificar';ind[i]=(ind[i]||0)+1;});
+    Object.entries(ind).sort((a,b)=>b[1]-a[1]).forEach(([i,n])=>lines.push(`  • ${i}: ${n}`));
+    lines.push('\nDISTRIBUCIÓN PIPELINE:');
+    const et={};state.clientes.forEach(c=>{const e=c.fields['Etapa venta']||'—';et[e]=(et[e]||0)+1;});
+    Object.entries(et).forEach(([e,n])=>lines.push(`  • ${e}: ${n}`));
+  }
+
+  if(id==='CONTENT'){
+    const recientes=state.pedidos.filter(p=>p.fields['Estado pedido']==='Despachado').slice(-6);
+    lines.push('\nÚLTIMOS PROYECTOS ENTREGADOS (para contenido):');
+    if(recientes.length){recientes.forEach(p=>{const f=p.fields;const sol=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';lines.push(`  • ${resolveClienteName(f['Cliente'])} | ${f['Fecha despacho']||f['Fecha entrega']||'—'} | ${fmtCLP((f['Monto total (CLP)']||0)/1.19)}${sol?' | '+sol.substring(0,60):''}`);});}else lines.push('  Sin proyectos despachados recientes');
+  }
+
+  if(id==='ONBOARDING'){
+    const recienAprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-3);
+    lines.push('\nCOTIZACIONES RECIENTEMENTE APROBADAS (nuevos clientes):');
+    if(recienAprobadas.length){recienAprobadas.forEach(c=>{const f=c.fields;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientes.find(x=>x.id===cid):null;const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])}${cl?.fields['Email']?' | '+cl.fields['Email']:''}${sol?' | Solicitud: '+sol.substring(0,70):''}`);});}else lines.push('  Sin aprobaciones recientes');
+  }
+
+  lines.push('\n=== FIN CONTEXTO ===');
+  return lines.join('\n');
+}
+
+function showAgentCtx(id,btn){
+  const box=document.getElementById(`ctx_${id}`);
+  if(box.style.display==='none'){
+    box.style.display='block';
+    box.textContent=state.loaded?buildAgentContext(id):'Sin datos. Haz click en ↺ Actualizar primero.';
+    btn.textContent='ocultar ↑';
+  }else{box.style.display='none';btn.textContent='ver contexto ↓';}
+}
+
+function renderAgentesGrid(){
+  document.getElementById('agentesGrid').innerHTML=AGENTES_CFG.map(a=>{
+    const ctxBadge=state.loaded?`<span class="badge badge-green" style="font-size:8px;letter-spacing:0">📊 datos vivos</span>`:`<span class="badge badge-gray" style="font-size:8px">sin datos</span>`;
+    return`<div class="card" style="padding:0">
+      <div class="card-header">
+        <span class="card-title">${a.icon} ${a.label}</span>
+        <div style="display:flex;gap:5px;align-items:center">${ctxBadge}<span class="badge ${a.badge}">Activo</span></div>
+      </div>
+      <div style="padding:14px">
+        <div class="field-group" style="margin-bottom:8px">
+          <div class="field-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span>Consulta</span>
+            <button onclick="showAgentCtx('${a.id}',this)" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0;font-family:'DM Sans',sans-serif">ver contexto ↓</button>
+          </div>
+          <div class="agent-ctx-box" id="ctx_${a.id}" style="display:none;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2);white-space:pre-wrap;max-height:150px;overflow-y:auto;margin-bottom:8px;line-height:1.5"></div>
+          <textarea class="field-textarea" id="input_${a.id}" rows="3" placeholder="${a.pre}..."></textarea>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="runAgent('${a.id}')">▶ Ejecutar</button>
+      </div>
+      <div style="padding:0 14px 14px">
+        <div class="ai-response-wrap"><button class="copy-btn" onclick="copyOut('out_${a.id}',this)">📋</button><div class="ai-response empty" id="out_${a.id}">Ejecuta el agente...</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function runAgent(id){
+  const cfg=AGENTES_CFG.find(a=>a.id===id);if(!cfg) return;
+  const inp=document.getElementById(`input_${id}`);
+  const input=inp?.value.trim();
+  if(!input){toast('Ingresa texto primero','error');inp?.focus();return;}
+  const out=document.getElementById(`out_${id}`);out.classList.remove('empty');out.textContent='⏳ Procesando...';
+  const cardIdx=AGENTES_CFG.findIndex(a=>a.id===id)+1;
+  const btn=document.querySelector(`#agentesGrid .card:nth-child(${cardIdx}) .btn-primary`);
+  if(btn) btn.disabled=true;
+  const ctx=state.loaded?buildAgentContext(id):'';
+  const fullInput=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
+  try{out.textContent=await callClaude(cfg.sys,fullInput);}
+  catch(e){out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
+  if(btn) btn.disabled=false;
+}
 function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
 
 // ── MÁQUINAS ──────────────────────────────────────────────────
