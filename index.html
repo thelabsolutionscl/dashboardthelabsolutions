@@ -251,6 +251,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <div class="kpi-card red"><div class="kpi-label">Alertas</div><div class="kpi-skeleton"></div></div>
     <div class="kpi-card green"><div class="kpi-label">Margen Prom.</div><div class="kpi-skeleton"></div></div>
   </div>
+  <div id="equipoSnapshot" style="margin-bottom:16px"></div>
   <div class="data-grid">
     <div class="card"><div class="card-header"><span class="card-title">Pipeline Pedidos</span><span class="card-badge" id="pedActivosBadge">—</span></div><div id="pipelineArea"><div class="loading-state"><div class="spinner"></div> cargando...</div></div></div>
     <div class="card"><div class="card-header"><span class="card-title">Cotizaciones Recientes</span><span class="card-badge" id="cotsBadge">—</span></div><div class="table-wrap"><table><thead><tr><th>N°</th><th>Cliente</th><th>Total Neto</th><th>Estado</th><th>Margen</th></tr></thead><tbody id="cotTableBody"><tr><td colspan="5"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div></div>
@@ -1155,14 +1156,64 @@ function switchTab(name){
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────
-function renderOverview(){renderKPIs();renderPipelineArea();renderCotTable();renderAlertas();renderCharts();renderAgentsMini();}
+function renderOverview(){renderKPIs();renderEquipoSnapshot();renderPipelineArea();renderCotTable();renderAlertas();renderCharts();renderAgentsMini();}
+function renderEquipoSnapshot(){
+  const el=document.getElementById('equipoSnapshot');if(!el) return;
+  const today=new Date();today.setHours(0,0,0,0);
+  const todayStr=fmtDate(today);
+  const dayLabel=today.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+  const chips=PERSONAS.map(p=>{
+    const ev=equipoState.eventos[`${p.id}_${todayStr}`];
+    const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):EQUIPO_TIPOS.disponible;
+    const fn=p.nombre.split(' ')[0].toLowerCase();
+    const misPedidos=state.pedidos.filter(x=>{
+      const ea=(x.fields['Equipo asignado']||'').toLowerCase();
+      return ea.includes(fn)&&!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'');
+    });
+    const proxEntrega=misPedidos
+      .filter(x=>x.fields['Fecha entrega']&&new Date(x.fields['Fecha entrega']+'T00:00:00')>=today)
+      .map(x=>x.fields['Fecha entrega']).sort()[0];
+    const proxLabel=proxEntrega?` · próx: ${proxEntrega.substring(5).replace('-','/')}` :'';
+    const conflictoHoy=ev&&['ausente','vacaciones'].includes(ev.tipo)&&misPedidos.some(x=>(x.fields['Fecha entrega']||'')===todayStr);
+    const borderColor=conflictoHoy?'rgba(255,68,68,0.5)':ev&&ev.tipo!=='disponible'?'var(--border2)':'var(--border)';
+    return`<div style="display:flex;align-items:flex-start;gap:10px;background:var(--surface2);border-radius:10px;padding:10px 14px;flex:1;min-width:170px;border:1px solid ${borderColor}">
+      <div style="width:36px;height:36px;border-radius:50%;background:${p.color};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--black);flex-shrink:0">${p.avatar}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:11px;font-weight:700">${escapeHtml(p.nombre)}</div>
+        <div style="font-size:11px;color:${cfg.color};font-weight:600">${cfg.icon} ${cfg.label}</div>
+        ${misPedidos.length?`<div style="font-size:10px;color:var(--accent);margin-top:2px">📦 ${misPedidos.length} ped. activo${misPedidos.length>1?'s':''}${proxLabel}</div>`:'<div style="font-size:10px;color:var(--text3);margin-top:2px">Sin pedidos</div>'}
+        ${conflictoHoy?`<div style="font-size:10px;color:var(--danger);font-weight:700;margin-top:2px">⚠ Entrega hoy — ausente</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">👥 Equipo Hoy</span><span style="font-size:11px;color:var(--text3);text-transform:capitalize">${dayLabel}</span><button class="btn btn-ghost btn-sm" onclick="switchTab('equipo')" style="margin-left:auto">Ver detalle →</button></div><div style="display:flex;gap:10px;padding:12px 16px;flex-wrap:wrap">${chips}</div></div>`;
+}
 function renderKPIs(){
-  const today=new Date();today.setHours(0,0,0,0);const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
-  const pedActivos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
-  const cotPend=state.cotizaciones.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
-  const revSemana=state.pedidos.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const today=new Date();today.setHours(0,0,0,0);
+  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
+  const prevWeekStart=new Date(weekStart);prevWeekStart.setDate(weekStart.getDate()-7);
+
+  // ── Revenue ──────────────────────────────────────────────────────────
+  const revSemana=state.pedidos.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||'';return d&&new Date(d+'T00:00:00')>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const revAnterior=state.pedidos.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||'';const dd=d?new Date(d+'T00:00:00'):null;return dd&&dd>=prevWeekStart&&dd<weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
   const revTotal=state.pedidos.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+
+  // ── Pedidos ───────────────────────────────────────────────────────────
+  const pedActivos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
   const atrasados=state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
+  const pedNuevosSem=state.pedidos.filter(p=>p.createdTime&&new Date(p.createdTime)>=weekStart).length;
+  const pedNuevosPrev=state.pedidos.filter(p=>{const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
+
+  // ── Cotizaciones ──────────────────────────────────────────────────────
+  const cotPend=state.cotizaciones.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
+  const cotNuevosSem=state.cotizaciones.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
+  const cotNuevosPrev=state.cotizaciones.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
+
+  // ── Clientes ──────────────────────────────────────────────────────────
+  const clientesNuevos=state.clientes.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
+  const clientesPrev=state.clientes.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
+
+  // ── Alertas ───────────────────────────────────────────────────────────
   const in2days=new Date(today);in2days.setDate(today.getDate()+2);
   const ago48h=new Date(Date.now()-48*3600*1000);
   const alertas=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length
@@ -1172,12 +1223,33 @@ function renderKPIs(){
     +state.pedidos.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];if(!fe||['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;const d=new Date(fe+'T00:00:00');return d>=today&&d<=in2days;}).length
     +state.cotizaciones.filter(c=>(c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h).length
     +state.cotizaciones.filter(c=>{const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return false;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return false;const cl=state.clientes.find(x=>x.id===cid);return cl?.fields['Estado cuenta']==='Bloqueado';}).length;
-  const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);const avgM=cotM.length>0?cotM.reduce((sum,c)=>sum+getMargenCot(c.fields),0)/cotM.length:0;
+
+  // ── Margen ────────────────────────────────────────────────────────────
+  const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);
+  const avgM=cotM.length>0?cotM.reduce((sum,c)=>sum+getMargenCot(c.fields),0)/cotM.length:0;
+
+  // ── Delta helpers ─────────────────────────────────────────────────────
+  // Percentage change badge (revenue)
+  const pctBadge=(cur,prev)=>{
+    if(!prev) return '';
+    const p=Math.round(((cur-prev)/prev)*100);
+    const col=p>=0?'var(--accent3)':'var(--danger)';
+    return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${p>=0?'↑':'↓'} ${p>=0?'+':''}${p}% vs sem. ant.</div>`;
+  };
+  // Count change badge (pedidos, cots, clientes)
+  const cntBadge=(cur,prev,label)=>{
+    const d=cur-prev;
+    if(cur===0&&prev===0) return '';
+    const col=d>0?'var(--accent3)':d<0?'var(--danger)':'var(--text3)';
+    const arrow=d>0?'↑ ':d<0?'↓ ':'';
+    return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${arrow}${d>=0?'+':''}${d} ${label}</div>`;
+  };
+
   document.getElementById('kpiGrid').innerHTML=`
-    <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total: ${formatCLP(revTotal)}</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div></div>
-    <div class="kpi-card purple"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${state.clientes.length}</div><div class="kpi-sub">en CRM</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}</div>
+    <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
+    <div class="kpi-card orange"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
+    <div class="kpi-card purple"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${state.clientes.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
     <div class="kpi-card ${alertas>0?'red':'green'}"><div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
     <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}"><div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
 }
