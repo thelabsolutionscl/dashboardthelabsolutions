@@ -369,7 +369,6 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
       <span class="card-title" id="cotTableTitle">Todas las Cotizaciones</span>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="switchTab('nueva-cot')">📝 Nueva Cot.</button>
-        <button class="btn btn-ghost btn-sm" onclick="descargarReporteCotizaciones()" style="background:rgba(0,212,204,0.08);border-color:rgba(0,212,204,0.4);color:var(--accent)">📄 Descargar PDF</button>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('cotizaciones')">⬇ CSV</button>
       </div>
     </div>
@@ -2005,7 +2004,7 @@ function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
   return`<tr data-id="${c.id}"><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td>${escapeHtml(resolveClienteName(f['Cliente']))}</td><td><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp">${formatCLP(neto)}</td><td>${f['Urgencia (+25%)']?'<span class="badge badge-orange">+25%</span>':'<span class="badge badge-gray">No</span>'}</td><td>${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
-  <td style="white-space:nowrap">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">📄 PDF</button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></td></tr>`;
+  <td style="white-space:nowrap">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">📄 Descargar PDF</button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
