@@ -351,7 +351,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     </div>
   </div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap">
-    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Pagado</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
+    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Pago (50/50)</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
   <div id="pedidosKanban" style="display:none"></div>
@@ -1036,15 +1036,19 @@ function generarNumeroCotizacion(){
 }
 
 // ── AUTH ──────────────────────────────────────────────────────
-function getAnthropicKey(){return sessionStorage.getItem('anthropic_key')||'';}
-function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=sessionStorage.getItem('anthropic_key')||'';i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
+// Persistencia: localStorage para que el token sobreviva al cerrar la pestaña.
+// Migra automáticamente cualquier valor antiguo guardado en sessionStorage.
+function lsGet(k){return localStorage.getItem(k)||sessionStorage.getItem(k)||'';}
+function lsSet(k,v){localStorage.setItem(k,v);sessionStorage.removeItem(k);}
+function getAnthropicKey(){return lsGet('anthropic_key');}
+function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=getAnthropicKey();i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
-function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}sessionStorage.setItem('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
-function getToken(){return sessionStorage.getItem('airtable_token')||'';}
-function clearToken(){sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
+function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
+function getToken(){return lsGet('airtable_token');}
+function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
 function showTokenModal(){const m=document.getElementById('tokenModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('modalTokenInput');i.value='';i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveToken();if(e.key==='Escape') closeTokenModal();};},50);}
 function closeTokenModal(){document.getElementById('tokenModal').style.display='none';}
-function saveToken(){const v=(document.getElementById('modalTokenInput').value||'').trim();if(!v){toast('Token vacío','error');return;}sessionStorage.setItem('airtable_token',v);closeTokenModal();toast('Token guardado ✓','success');loadAllData();}
+function saveToken(){const v=(document.getElementById('modalTokenInput').value||'').trim();if(!v){toast('Token vacío','error');return;}lsSet('airtable_token',v);closeTokenModal();toast('Token guardado ✓ (persistente)','success');loadAllData();}
 
 // ── AIRTABLE ──────────────────────────────────────────────────
 async function airtableFetch(table,max=100){
@@ -1162,7 +1166,7 @@ async function loadAllData(){
   try{
     const[cRes,coRes,pRes,rRes,pvRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500)]);
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
-    else if(cRes.reason?.message?.includes('401')){sessionStorage.removeItem('airtable_token');showTokenModal();btn.disabled=false;btn.textContent='↺ Actualizar';return;}
+    else if(cRes.reason?.message?.includes('401')){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');showTokenModal();btn.disabled=false;btn.textContent='↺ Actualizar';return;}
     if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];renderCotizaciones();}
     if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();}
     if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
@@ -1189,7 +1193,7 @@ function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInt
 
 // ── AI ────────────────────────────────────────────────────────
 async function callClaude(system,user){let k=getAnthropicKey();if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}return _callClaudeRaw(system,user,k);}
-async function _callClaudeRaw(system,user,k){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1500,system,messages:[{role:'user',content:user}]})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401) sessionStorage.removeItem('anthropic_key');throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
+async function _callClaudeRaw(system,user,k){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1500,system,messages:[{role:'user',content:user}]})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
 
 // ── HELPERS ───────────────────────────────────────────────────
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
@@ -1281,7 +1285,7 @@ function renderKPIs(){
   const in2days=new Date(today);in2days.setDate(today.getDate()+2);
   const ago48h=new Date(Date.now()-48*3600*1000);
   const alertas=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length
-    +state.pedidos.filter(p=>!p.fields['Pagado']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length
+    +state.pedidos.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length
     +atrasados
     +state.cotizaciones.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v+'T00:00:00')<today;}).length
     +state.pedidos.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];if(!fe||['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;const d=new Date(fe+'T00:00:00');return d>=today&&d<=in2days;}).length
@@ -1379,8 +1383,10 @@ function renderAlertas(){
   // sev 2 — advertencia (naranja)
   state.pedidos.forEach(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
-    if(!f['Pagado']&&['Confirmado','En producción'].includes(est))
-      alertas.push({sev:2,icon:'💸',type:'pago-pendiente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): pago pendiente`,id:p.id,tab:'pedidos'});
+    if(['Confirmado','En producción'].includes(est)&&!f['Anticipo pagado (50%)'])
+      alertas.push({sev:2,icon:'💸',type:'pago-pendiente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): anticipo 50% pendiente`,id:p.id,tab:'pedidos'});
+    else if(est==='Listo para despacho'&&!f['Saldo pagado (50%)'])
+      alertas.push({sev:2,icon:'💸',type:'pago-pendiente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): saldo 50% pendiente antes de despachar`,id:p.id,tab:'pedidos'});
   });
   state.pedidos.forEach(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
@@ -1767,7 +1773,7 @@ function renderPedidos(filter){
     <td><select onchange="updateProveedorPedido('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:140px">${pvOptsHtml}</select></td>
     <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
-    <td style="text-align:center"><button onclick="togglePagado('${p.id}',${!!f['Pagado']})" style="background:${f['Pagado']?'rgba(0,212,170,0.2)':'rgba(255,68,68,0.15)'};border:1px solid ${f['Pagado']?'rgba(0,212,170,0.4)':'rgba(255,68,68,0.3)'};color:${f['Pagado']?'var(--accent3)':'var(--danger)'};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:60px">${f['Pagado']?'✓ Sí':'✕ No'}</button></td>
+    <td style="text-align:center">${pagoChips(p.id,f)}</td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
     <td>${actionCell}</td></tr>`;
@@ -1777,6 +1783,11 @@ function qaColor(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.2)';if(r==='R
 function qaBorder(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.4)';if(r==='Rechazado') return 'rgba(255,68,68,0.3)';return 'var(--border2)';}
 function qaTextColor(r){if(r==='QA aprobado') return 'var(--accent3)';if(r==='Rechazado') return 'var(--danger)';return 'var(--text2)';}
 function qaLabel(r){if(r==='QA aprobado') return '✓ Aprobado';if(r==='Rechazado') return '✕ Rechazado';return '— Pendiente';}
+function pagoChips(id,f){
+  const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'];
+  const chip=(label,on,fn,title)=>`<button onclick="${fn}" title="${title}" style="background:${on?'rgba(0,212,170,0.18)':'rgba(255,68,68,0.12)'};border:1px solid ${on?'rgba(0,212,170,0.4)':'rgba(255,68,68,0.28)'};color:${on?'var(--accent3)':'var(--danger)'};border-radius:5px;padding:3px 7px;cursor:pointer;font-size:10px;font-weight:700;white-space:nowrap">${on?'✓':'✕'} ${label}</button>`;
+  return`<div style="display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${chip('Ant.',a,`toggleAnticipo('${id}',${a})`,'Anticipo 50%')}${chip('Saldo',s,`toggleSaldo('${id}',${s})`,'Saldo 50%')}</div>`;
+}
 async function updateFormaPago(id,forma){try{await airtableWrite('Pedidos','PATCH',id,{'Forma de pago':forma});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Forma de pago']=forma;toast(`Forma de pago → ${forma}`,'success');}catch(e){toast('Error: '+e.message,'error');}}
 async function updateProveedorPedido(id,nombre){
   const p=state.pedidos.find(x=>x.id===id);if(!p) return;
@@ -1792,24 +1803,29 @@ async function updateProveedorPedido(id,nombre){
     else{p.fields['Proveedor']=old;toast('Error: '+e.message,'error');}
   }
 }
-async function togglePagado(id,actual){
-  const n=!actual;
-  const p=state.pedidos.find(x=>x.id===id);
-  if(p) p.fields['Pagado']=n;
+// ── PAGOS: modelo real anticipo 50% + saldo 50% ───────────────
+// Estado de pago de un pedido: 0=nada, 1=anticipo, 2=completo
+function pedPagoEstado(f){const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'];return a&&s?2:a?1:0;}
+function pedPagado(f){return pedPagoEstado(f)===2;}
+async function toggleAnticipo(id,actual){
+  const n=!actual;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  p.fields['Anticipo pagado (50%)']=n;
+  if(!n) p.fields['Saldo pagado (50%)']=false;// no puede haber saldo sin anticipo
   renderPedidos();renderOverview();
   try{
-    await airtableWrite('Pedidos','PATCH',id,{'Pagado':n});
-    toast(`Pago ${n?'✓ confirmado':'pendiente'}`,n?'success':'info');
-  }catch(e){
-    const isMissingField=e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('field')||e.message.includes('422');
-    if(isMissingField){
-      toast('Crea el campo "Pagado" (checkbox) en Airtable para persistir','info');
-    }else{
-      if(p) p.fields['Pagado']=actual;
-      renderPedidos();renderOverview();
-      toast('Error: '+e.message,'error');
-    }
-  }
+    const patch={'Anticipo pagado (50%)':n};if(!n) patch['Saldo pagado (50%)']=false;
+    await airtableWrite('Pedidos','PATCH',id,patch);
+    toast(`Anticipo (50%) ${n?'✓ recibido':'pendiente'}`,n?'success':'info');
+  }catch(e){p.fields['Anticipo pagado (50%)']=actual;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
+}
+async function toggleSaldo(id,actual){
+  const n=!actual;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  if(n&&!p.fields['Anticipo pagado (50%)']){toast('⚠ Primero confirma el anticipo (50%)','error');return;}
+  p.fields['Saldo pagado (50%)']=n;renderPedidos();renderOverview();
+  try{
+    await airtableWrite('Pedidos','PATCH',id,{'Saldo pagado (50%)':n});
+    toast(`Saldo (50%) ${n?'✓ recibido — pago completo':'pendiente'}`,n?'success':'info');
+  }catch(e){p.fields['Saldo pagado (50%)']=actual;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
 }
 async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
@@ -1828,7 +1844,13 @@ async function saveQAModal(){
   catch(e){try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Resultado QA']=qaResultadoActual;toast(`✓ QA ${qaResultadoActual}`,'success');closeQAModal();renderPedidos();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
 }
 function filterPedidos(filter,btn){document.querySelectorAll('.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');renderPedidos(filter);}
-async function advancePedido(id,estado){const p=state.pedidos.find(x=>x.id===id);if(p&&!p.fields['Pagado']){toast('⚠ Marca el pago como recibido antes de avanzar','error');return;}if(!confirm(`¿Avanzar a "${estado}"?`)) return;try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+async function advancePedido(id,estado){
+  const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  // Regla de negocio: anticipo antes de producir, saldo antes de despachar
+  if(estado==='En producción'&&!p.fields['Anticipo pagado (50%)']){toast('⚠ Confirma el anticipo (50%) antes de producir','error');return;}
+  if(estado==='Despachado'&&!p.fields['Saldo pagado (50%)']){toast('⚠ Confirma el saldo (50%) antes de despachar','error');return;}
+  if(!confirm(`¿Avanzar a "${estado}"?`)) return;
+  try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 
 // ── NUEVO LEAD ────────────────────────────────────────────────
 async function createLead(){
@@ -2021,7 +2043,7 @@ function renderPedidosKanban(){
       return`<div onclick="goToAlert('pedidos','${p.id}')" style="background:var(--surface);border:1px solid ${atrasado?'rgba(255,68,68,0.45)':'var(--border)'};border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='${colores[stage]}'" onmouseleave="this.style.borderColor='${atrasado?'rgba(255,68,68,0.45)':'var(--border)'}'">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
           <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${colores[stage]};font-weight:700">${escapeHtml(f['N° Pedido']||'—')}</span>
-          ${atrasado?'<span style="font-size:9px;color:var(--danger);font-weight:700;background:rgba(255,68,68,0.12);padding:1px 5px;border-radius:3px">⚠ ATRAS.</span>':f['Pagado']?'<span style="font-size:9px;color:var(--accent3)">✓ Pago</span>':''}
+          ${atrasado?'<span style="font-size:9px;color:var(--danger);font-weight:700;background:rgba(255,68,68,0.12);padding:1px 5px;border-radius:3px">⚠ ATRAS.</span>':(pedPagoEstado(f)===2?'<span style="font-size:9px;color:var(--accent3)">✓ Pago total</span>':pedPagoEstado(f)===1?'<span style="font-size:9px;color:var(--accent2)">◐ Anticipo</span>':'<span style="font-size:9px;color:var(--danger)">✕ Sin pago</span>')}
         </div>
         <div style="font-size:11px;color:var(--text2);margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(f['Cliente']))}</div>
         <div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:6px">${formatCLP(neto)}</div>
@@ -2208,7 +2230,7 @@ function buildAgentContext(id){
   }
 
   if(id==='CEO'){
-    const sinPago=pedActivos.filter(p=>!p.fields['Pagado']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||''));
+    const sinPago=pedActivos.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||''));
     const fv=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2);
     const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);
     const avgM=cotM.length?cotM.reduce((s,c)=>s+getMargenCot(c.fields),0)/cotM.length:0;
@@ -2225,12 +2247,15 @@ function buildAgentContext(id){
   }
 
   if(id==='FINANCE'){
-    const sinPago=pedActivos.filter(p=>!p.fields['Pagado']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||''));
-    const montoRiesgo=sinPago.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
+    // Por cobrar real: anticipo pendiente + saldo pendiente (neto)
+    const porCobrar=pedActivos.reduce((s,p)=>{const f=p.fields,neto=(f['Monto total (CLP)']||0)/1.19;let r=0;if(!f['Anticipo pagado (50%)']) r+=neto*0.5;if(!f['Saldo pagado (50%)']) r+=neto*0.5;return s+r;},0);
+    const sinAnticipo=pedActivos.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||''));
+    const sinSaldo=pedActivos.filter(p=>!p.fields['Saldo pagado (50%)']&&p.fields['Estado pedido']==='Listo para despacho');
     const deudores=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
     lines.push('\nCOBRANZA:');
-    lines.push(`- Pedidos sin pago: ${sinPago.length} | Monto en riesgo (neto): ${fmtCLP(montoRiesgo)}`);
-    if(sinPago.length){sinPago.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${fmtCLP((f['Monto total (CLP)']||0)/1.19)} | ${f['Estado pedido']||'—'} | Forma pago: ${f['Forma de pago']||'—'}`);});}
+    lines.push(`- Total por cobrar (neto): ${fmtCLP(porCobrar)} | Sin anticipo: ${sinAnticipo.length} | Sin saldo (listos): ${sinSaldo.length}`);
+    if(sinAnticipo.length){lines.push('  ANTICIPO PENDIENTE:');sinAnticipo.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | anticipo ${fmtCLP((f['Monto total (CLP)']||0)/1.19*0.5)} | ${f['Estado pedido']||'—'} | Forma pago: ${f['Forma de pago']||'—'}`);});}
+    if(sinSaldo.length){lines.push('  SALDO PENDIENTE (listos para despacho):');sinSaldo.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | saldo ${fmtCLP((f['Monto total (CLP)']||0)/1.19*0.5)} | Forma pago: ${f['Forma de pago']||'—'}`);});}
     lines.push('\nCLIENTES CON FACTURAS VENCIDAS:');
     if(deudores.length){deudores.forEach(c=>{const f=c.fields;lines.push(`  • ${f['Empresa']||'—'} | ${f['Facturas vencidas']||0} fact. vencidas | Estado: ${f['Estado cuenta']||'—'} | Email: ${f['Email']||'—'}`);});}else lines.push('  Ninguno ✓');
     const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);
@@ -2931,7 +2956,7 @@ function exportToCSV(t){
   let rows=[],headers=[];
   if(t==='clientes'){headers=['Empresa','Contacto','Email','Teléfono','Etapa','Revenue','Estado','Fact.venc.'];rows=state.clientes.map(c=>{const f=c.fields;return[f['Empresa']||'',f['Contacto']||'',f['Email']||'',f['Teléfono']||'',f['Etapa venta']||'',f['Revenue total cliente (CLP)']||0,f['Estado cuenta']||'',f['Facturas vencidas']||0];});}
   else if(t==='cotizaciones'){headers=['N°','Cliente','Canal','Subtotal','Total','Urgente','Estado','Vto.'];rows=state.cotizaciones.map(c=>{const f=c.fields;return[f['N° Cotización']||'',resolveClienteName(f['Cliente']),f['Canal solicitud']||'',f['Subtotal (CLP)']||0,f['Total final (CLP)']||0,f['Urgencia (+25%)']?'Sí':'No',f['Estado cotización']||'',f['Fecha vencimiento']||''];});}
-  else if(t==='pedidos'){headers=['N°','Cliente','Estado','Monto','Forma de Pago','Pagado','QA','Entrega'];rows=state.pedidos.map(p=>{const f=p.fields;return[f['N° Pedido']||'',resolveClienteName(f['Cliente']),f['Estado pedido']||'',f['Monto total (CLP)']||0,f['Forma de pago']||'',f['Pagado']?'Sí':'No',f['Resultado QA']||'',f['Fecha entrega']||''];});}
+  else if(t==='pedidos'){headers=['N°','Cliente','Estado','Proveedor','Monto','Forma de Pago','Anticipo 50%','Saldo 50%','QA','Entrega'];rows=state.pedidos.map(p=>{const f=p.fields;return[f['N° Pedido']||'',resolveClienteName(f['Cliente']),f['Estado pedido']||'',f['Proveedor']||'',f['Monto total (CLP)']||0,f['Forma de pago']||'',f['Anticipo pagado (50%)']?'Sí':'No',f['Saldo pagado (50%)']?'Sí':'No',f['Resultado QA']||'',f['Fecha entrega']||''];});}
   else if(t==='proveedores'){headers=['Nombre','Categoría','Contacto','Teléfono','Email','Comuna','Reputación','Estado','Plazo (días)','Condiciones pago','Productos','Notas'];rows=state.proveedores.map(p=>{const f=p.fields;return[f['Nombre']||'',pvCat(f),f['Contacto']||'',f['Teléfono']||'',f['Email']||'',f['Comuna']||'',f['Reputación']||'',f['Estado']||'',f['Plazo de entrega (días)']||'',f['Condiciones de pago']||'',f['Productos']||'',f['Notas']||''];});}
   else{toast('Tipo desconocido','error');return;}
   if(!rows.length){toast('Sin datos','error');return;}
@@ -2943,7 +2968,7 @@ function exportToCSV(t){
 document.addEventListener('DOMContentLoaded',()=>{
   try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
   initDates();
-  const token=sessionStorage.getItem('airtable_token');
+  const token=getToken();
   if(!token){setStatus('sin token',false);showTokenModal();}
   else{loadAllData().then(()=>{startAutoRefresh();});}
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
