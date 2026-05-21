@@ -2599,7 +2599,7 @@ function renderProveedoresAnalytics(){
   const topCats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,7);
   const maxCat=topCats.length?topCats[0][1]:1;
   const activos=state.proveedores.filter(p=>(p.fields['Estado']||p.fields['estado']||'')!=='Inactivo').length;
-  const pagoMap={};state.proveedores.forEach(p=>{const pg=p.fields['Condición de pago']||'Sin especificar';pagoMap[pg]=(pagoMap[pg]||0)+1;});
+  const pagoMap={};state.proveedores.forEach(p=>{const pg=p.fields['Condiciones de pago']||'Sin especificar';pagoMap[pg]=(pagoMap[pg]||0)+1;});
   const topPagos=Object.entries(pagoMap).sort((a,b)=>b[1]-a[1]).slice(0,4);
   const catBars=topCats.map(([cat,n])=>{const pct=Math.round((n/maxCat)*100);const[color]=getPvCatColor(cat);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:10px;color:var(--text2);min-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(cat)}">${escapeHtml(cat)}</div><div style="flex:1;height:12px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:4px;box-shadow:0 0 6px ${color}55"></div></div><div style="font-size:10px;font-weight:700;color:${color};min-width:20px;text-align:right">${n}</div></div>`;}).join('');
   const pagoChips=topPagos.map(([pg,n])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center"><div style="font-size:14px;font-weight:700;color:var(--text1)">${n}</div><div style="font-size:9px;color:var(--text3);margin-top:2px;line-height:1.3">${escapeHtml(pg.length>20?pg.substring(0,20)+'…':pg)}</div></div>`).join('');
