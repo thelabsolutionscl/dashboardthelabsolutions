@@ -473,6 +473,70 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     </div>
   </div>
   <div id="proveedoresAnalytics"></div>
+
+  <!-- BÚSQUEDA IA -->
+  <div class="card" style="margin-top:16px;border-color:rgba(255,107,53,0.3)">
+    <div class="card-header" style="cursor:pointer;border-bottom-color:rgba(255,107,53,0.2)" onclick="togglePvssPanel()">
+      <span class="card-title" style="color:var(--accent2)">🔍 Buscar Proveedor con IA</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="badge badge-orange" style="font-size:8px">SUPPLIER SEARCH</span>
+        <span id="pvssChevron" style="color:var(--text3);font-size:11px;transition:transform 0.25s">▼</span>
+      </div>
+    </div>
+    <div id="pvssPanel" style="display:none">
+      <div style="padding:14px 16px 0">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+          <div class="field-group" style="grid-column:1/-1">
+            <label class="field-label">Producto / Material a buscar *</label>
+            <input class="field-input" id="pvss-producto" placeholder="ej: Filamento PLA 1.75mm | Neón LED 12V | Cinta satinada 2cm">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Categoría</label>
+            <select class="field-select" id="pvss-categoria">
+              <option value="">— cualquiera —</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Mercado</label>
+            <select class="field-select" id="pvss-mercado">
+              <option value="ambos">Chile + Internacional</option>
+              <option value="chile">Solo Chile</option>
+              <option value="internacional">Internacional</option>
+              <option value="china">China / Alibaba</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Prioridad</label>
+            <select class="field-select" id="pvss-prioridad">
+              <option value="equilibrado">Precio / Calidad</option>
+              <option value="precio">Menor precio</option>
+              <option value="calidad">Máxima calidad</option>
+              <option value="rapido">Entrega rápida</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Cantidad estimada</label>
+            <input class="field-input" id="pvss-cantidad" placeholder="ej: 50 kg, 200 und">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Presupuesto máx.</label>
+            <input class="field-input" id="pvss-presupuesto" placeholder="ej: $150.000 CLP">
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">
+          <span style="font-size:10px;color:var(--text3);align-self:center;margin-right:2px">Rápido:</span>
+          <button onclick="ssQuick('Filamento PLA 1.75mm, varios colores','Filamentos 3D','pvss')" class="btn-mini">PLA</button>
+          <button onclick="ssQuick('Neón LED flexible 12V SMD','Componentes LED / Neones','pvss')" class="btn-mini">LED Neón</button>
+          <button onclick="ssQuick('Resina UV para impresión 3D, 1L','Resinas y materiales','pvss')" class="btn-mini">Resina UV</button>
+          <button onclick="ssQuick('Cinta de raso satinada para medallas, 2cm','Trofeos y medallas','pvss')" class="btn-mini">Cintas</button>
+          <button onclick="ssQuick('Cajas de cartón para packaging personalizado','Packaging / Embalaje','pvss')" class="btn-mini">Packaging</button>
+          <button onclick="ssQuick('Acrílico transparente 3mm en plancha','Otro','pvss')" class="btn-mini">Acrílico</button>
+        </div>
+        <button class="btn btn-primary" id="pvssSearchBtn" onclick="runSupplierSearch('pvss')" style="background:var(--accent2)">🔍 Buscar Proveedores</button>
+      </div>
+      <div id="pvssResults" style="padding:14px 16px"></div>
+    </div>
+  </div>
 </div>
 
 <!-- NUEVO PROVEEDOR -->
@@ -1018,30 +1082,30 @@ REGLAS:
 - Adapta el análisis al volumen y presupuesto indicado
 - Al final agrega una línea: RECOMENDACIÓN: [2 frases sobre cuál elegir para The Lab Solutions]`;
 
-function ssQuick(producto,cat){
-  document.getElementById('ss-producto').value=producto;
-  const s=document.getElementById('ss-categoria');if(s) s.value=cat||'';
+function ssQuick(producto,cat,prefix='ss'){
+  const inp=document.getElementById(`${prefix}-producto`);if(inp) inp.value=producto;
+  const s=document.getElementById(`${prefix}-categoria`);if(s) s.value=cat||'';
 }
 
-async function runSupplierSearch(){
-  const producto=(document.getElementById('ss-producto')?.value||'').trim();
-  if(!producto){toast('Ingresa el producto a buscar','error');document.getElementById('ss-producto')?.focus();return;}
-  const cat=document.getElementById('ss-categoria')?.value||'';
-  const mercado=document.getElementById('ss-mercado')?.value||'ambos';
-  const prioridad=document.getElementById('ss-prioridad')?.value||'equilibrado';
-  const cantidad=document.getElementById('ss-cantidad')?.value||'';
-  const presupuesto=document.getElementById('ss-presupuesto')?.value||'';
-  const btn=document.getElementById('ssSearchBtn');
-  btn.disabled=true;btn.textContent='⏳ Buscando proveedores...';
-  const res=document.getElementById('ssResults');
-  res.innerHTML=`<div class="loading-state"><div class="spinner"></div> Investigando proveedores para <strong style="color:var(--accent2);margin-left:4px">${escapeHtml(producto)}</strong>...</div>`;
+async function runSupplierSearch(prefix='ss'){
+  const producto=(document.getElementById(`${prefix}-producto`)?.value||'').trim();
+  if(!producto){toast('Ingresa el producto a buscar','error');document.getElementById(`${prefix}-producto`)?.focus();return;}
+  const cat=document.getElementById(`${prefix}-categoria`)?.value||'';
+  const mercado=document.getElementById(`${prefix}-mercado`)?.value||'ambos';
+  const prioridad=document.getElementById(`${prefix}-prioridad`)?.value||'equilibrado';
+  const cantidad=document.getElementById(`${prefix}-cantidad`)?.value||'';
+  const presupuesto=document.getElementById(`${prefix}-presupuesto`)?.value||'';
+  const btn=document.getElementById(`${prefix}SearchBtn`);
+  if(btn){btn.disabled=true;btn.textContent='⏳ Buscando proveedores...';}
+  const res=document.getElementById(`${prefix}Results`);
+  if(res) res.innerHTML=`<div class="loading-state"><div class="spinner"></div> Investigando proveedores para <strong style="color:var(--accent2);margin-left:4px">${escapeHtml(producto)}</strong>...</div>`;
   const mercadoLabel={'ambos':'Chile e Internacional','chile':'Chile (nacional)','internacional':'Internacional','china':'China / Alibaba'}[mercado]||mercado;
   const query=`PRODUCTO: ${producto}\nCATEGORÍA: ${cat||'Sin especificar'}\nMERCADO: ${mercadoLabel}\nCANTIDAD REQUERIDA: ${cantidad||'No especificada'}\nPRESUPUESTO MÁX: ${presupuesto||'No especificado'}\nPRIORIDAD: ${prioridad}`;
   try{
     const raw=await callClaude(SUPPLIER_SYS,query);
-    renderSupplierResults(raw,producto);
-  }catch(e){res.innerHTML=`<div class="empty-state"><div class="empty-icon">❌</div>${escapeHtml(e.message)}</div>`;}
-  btn.disabled=false;btn.textContent='🔍 Buscar Proveedores';
+    renderSupplierResults(raw,producto,prefix);
+  }catch(e){if(res) res.innerHTML=`<div class="empty-state"><div class="empty-icon">❌</div>${escapeHtml(e.message)}</div>`;}
+  if(btn){btn.disabled=false;btn.textContent='🔍 Buscar Proveedores';}
 }
 
 function parseSupplierBlocks(text){
@@ -1063,9 +1127,10 @@ function parseSupplierBlocks(text){
 const SS_FLAG={'Chile':'🇨🇱','China':'🇨🇳','EEUU':'🇺🇸','España':'🇪🇸','Alemania':'🇩🇪','Argentina':'🇦🇷','México':'🇲🇽','Brasil':'🇧🇷','Italia':'🇮🇹','Japón':'🇯🇵'};
 const SS_TIPO_BADGE={'Nacional':'badge-green','Internacional':'badge-orange','Marketplace':'badge-yellow','Importador local':'badge-purple','Importador':'badge-purple'};
 
-function renderSupplierResults(raw,producto){
+function renderSupplierResults(raw,producto,prefix='ss'){
   const{blocks,recomendacion}=parseSupplierBlocks(raw);
-  const res=document.getElementById('ssResults');
+  const res=document.getElementById(`${prefix}Results`);
+  if(!res) return;
   if(!blocks.length){res.innerHTML=`<div class="empty-state"><div class="empty-icon">🔍</div>No se encontraron resultados estructurados.<br><pre style="font-size:10px;color:var(--text2);margin-top:10px;text-align:left;max-height:200px;overflow:auto">${escapeHtml(raw)}</pre></div>`;return;}
   const cards=blocks.map((p,i)=>{
     const flag=SS_FLAG[p.pais]||'🌍';
@@ -1097,9 +1162,15 @@ function renderSupplierResults(raw,producto){
   }).join('');
 
   const recHtml=recomendacion?`<div style="background:rgba(0,212,204,0.07);border:1px solid rgba(0,212,204,0.25);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text2);line-height:1.5"><span style="color:var(--accent);font-weight:700">⭐ Recomendación:</span> ${escapeHtml(recomendacion)}</div>`:'';
-  res.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--accent2)">${blocks.length} proveedores encontrados para: <em style="font-style:normal;color:var(--text)">${escapeHtml(producto)}</em></span><button onclick="document.getElementById('ssResults').innerHTML=''" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer">✕ Limpiar</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-bottom:12px">${cards}</div>${recHtml}`;
+  res.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--accent2)">${blocks.length} proveedores encontrados para: <em style="font-style:normal;color:var(--text)">${escapeHtml(producto)}</em></span><button onclick="document.getElementById('${prefix}Results').innerHTML=''" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer">✕ Limpiar</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-bottom:12px">${cards}</div>${recHtml}`;
 }
 
+function togglePvssPanel(){
+  const panel=document.getElementById('pvssPanel'),ch=document.getElementById('pvssChevron');
+  const open=panel.style.display==='none';
+  panel.style.display=open?'block':'none';
+  if(ch) ch.style.transform=open?'rotate(180deg)':'';
+}
 function addSupplierFromSearch(p){
   switchTab('nuevo-proveedor');
   const set=(id,v)=>{const el=document.getElementById(id);if(el&&v&&v!=='—') el.value=v;};
@@ -3087,6 +3158,7 @@ function fillCatSelects(){
     {id:'proveedorCatFilter', first:'<option value="">Todas las categorías</option>'},
     {id:'np-categoria',       first:'<option value="">— seleccionar —</option>'},
     {id:'ss-categoria',       first:'<option value="">— cualquiera —</option>'},
+    {id:'pvss-categoria',     first:'<option value="">— cualquiera —</option>'},
     {id:'epCategoria',        first:'<option value="">— seleccionar —</option>'},
   ];
   const optsHtml=cats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
