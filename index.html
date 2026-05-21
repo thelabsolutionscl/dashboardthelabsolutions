@@ -2167,7 +2167,7 @@ function renderPedidos(filter){
     const formaActual=f['Forma de pago']||'';
     const pvActual=f['Proveedor']||'';
     const pvOptsHtml=`<option value="">— ninguno —</option>`+state.proveedores.filter(x=>(x.fields['Estado']||'')==='Activo').map(x=>`<option value="${escapeHtml(x.fields['Nombre']||'')}" ${pvActual===x.fields['Nombre']?'selected':''}>${escapeHtml(x.fields['Nombre']||'')}</option>`).join('');
-    return`<tr data-id="${p.id}"><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td><span class="badge badge-gray">${escapeHtml(f['Equipo asignado']||'—')}</span></td>
+    return`<tr data-id="${p.id}"><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td>${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
     <td><select onchange="updateProveedorPedido('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:140px">${pvOptsHtml}</select></td>
     <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
@@ -2176,6 +2176,33 @@ function renderPedidos(filter){
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
     <td>${actionCell}</td></tr>`;
   }).join('');
+}
+function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
+function renderEquipoCell(pedidoId,equipoStr){
+  const asignados=equipoStr2Arr(equipoStr);
+  return`<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${PERSONAS.map(p=>{
+    const on=asignados.includes(p.nombre);
+    return`<span onclick="toggleEquipoPedido('${pedidoId}','${escapeHtml(p.nombre)}',event)" title="${on?'✓ Asignado: ':'Asignar: '}${escapeHtml(p.nombre)} · ${p.rol}" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:${on?p.color:'var(--surface3)'};color:${on?'#000':'var(--text3)'};font-size:9px;font-weight:700;cursor:pointer;border:2px solid ${on?p.color:'var(--border2)'};transition:all 0.15s;flex-shrink:0;user-select:none" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform=''">${p.avatar}</span>`;
+  }).join('')}</div>`;
+}
+async function toggleEquipoPedido(pedidoId,personaNombre,evt){
+  if(evt) evt.stopPropagation();
+  const ped=state.pedidos.find(x=>x.id===pedidoId);if(!ped) return;
+  const old=ped.fields['Equipo asignado']||'';
+  const arr=equipoStr2Arr(old);
+  const idx=arr.indexOf(personaNombre);
+  if(idx>=0) arr.splice(idx,1);else arr.push(personaNombre);
+  const nuevo=arr.join(', ');
+  ped.fields['Equipo asignado']=nuevo;
+  const row=document.querySelector(`tr[data-id="${pedidoId}"]`);
+  if(row&&row.cells[3]) row.cells[3].innerHTML=renderEquipoCell(pedidoId,nuevo);
+  try{
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Equipo asignado':nuevo});
+  }catch(e){
+    ped.fields['Equipo asignado']=old;
+    if(row&&row.cells[3]) row.cells[3].innerHTML=renderEquipoCell(pedidoId,old);
+    toast('Error: '+e.message,'error');
+  }
 }
 function qaColor(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.2)';if(r==='Rechazado') return 'rgba(255,68,68,0.15)';return 'rgba(255,255,255,0.06)';}
 function qaBorder(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.4)';if(r==='Rechazado') return 'rgba(255,68,68,0.3)';return 'var(--border2)';}
