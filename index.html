@@ -184,6 +184,16 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .form-grid{grid-template-columns:1fr;}
   .form-full{grid-column:1;}
   .modal-card.wide{max-width:calc(100% - 24px);}
+  /* Tablas de datos → tarjetas apiladas en móvil */
+  .table-wrap{overflow-x:visible;}
+  .table-wrap table,.table-wrap tbody{display:block;width:100%;}
+  .table-wrap thead{display:none;}
+  .table-wrap tbody tr{display:block;margin-bottom:10px;border:1px solid var(--border2);border-radius:9px;padding:8px 12px;background:var(--surface2);}
+  .table-wrap tbody tr td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;border:none;text-align:right;min-height:30px;}
+  .table-wrap tbody tr td::before{content:attr(data-label);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);text-align:left;flex-shrink:0;}
+  .table-wrap tbody tr td:last-child{padding-bottom:0;}
+  .table-wrap tbody tr td select,.table-wrap tbody tr td input[type=date]{max-width:60% !important;width:auto !important;}
+  .table-wrap tbody tr td.mono{font-weight:700;color:var(--accent);}
 }
 </style>
 </head>
@@ -1224,6 +1234,34 @@ function setStatus(text,live){
   if(dm) dm.className='status-dot'+(live?' live':'');if(tm) tm.textContent=text;
 }
 function toast(msg,type='info'){const c=document.getElementById('toastContainer'),icons={success:'✓',error:'✕',info:'ℹ'};const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`<span>${icons[type]}</span><span>${escapeHtml(msg)}</span>`;c.appendChild(el);setTimeout(()=>el.remove(),4000);}
+// Toast con botón Deshacer (para borrados reversibles)
+function toastUndo(msg,onUndo,seconds=7){
+  const c=document.getElementById('toastContainer');const el=document.createElement('div');el.className='toast info';
+  el.innerHTML=`<span>↩</span><span style="flex:1">${escapeHtml(msg)}</span>`;
+  const btn=document.createElement('button');btn.textContent='Deshacer';
+  btn.style.cssText='background:rgba(0,212,204,0.18);border:1px solid rgba(0,212,204,0.45);color:var(--accent);border-radius:5px;padding:3px 11px;cursor:pointer;font-size:11px;font-weight:700;margin-left:8px;white-space:nowrap;font-family:inherit';
+  let done=false;
+  btn.onclick=()=>{if(done) return;done=true;el.remove();onUndo();};
+  el.appendChild(btn);c.appendChild(el);
+  setTimeout(()=>{if(!done) el.remove();},seconds*1000);
+}
+// Limpia campos no escribibles (adjuntos) y normaliza selects para recrear un registro
+function sanitizeForRestore(fields){
+  const out={};
+  for(const[k,v] of Object.entries(fields||{})){
+    if(v===null||v===undefined||v==='') continue;
+    if(Array.isArray(v)){
+      if(v.length&&typeof v[0]==='object'){
+        if(v[0].url!==undefined) continue;// adjuntos: no se re-suben
+        if(v[0].name!==undefined) {out[k]=v.map(x=>x.name);continue;}// opciones de select
+      }
+      out[k]=v;continue;// links (array de IDs) u otros
+    }
+    if(typeof v==='object') continue;
+    out[k]=v;
+  }
+  return out;
+}
 function switchTab(name){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab-btn,.mobile-tab-btn').forEach(b=>b.classList.remove('active'));
@@ -1595,7 +1633,18 @@ async function saveEditCliente(){
   }
   btn.disabled=false;btn.textContent='💾 Guardar cambios';
 }
-async function deleteCliente(id,nombre){if(!confirm(`¿Eliminar a "${nombre}"?`)) return;try{await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];closeClienteDetalle();renderClientes();renderOverview();toast(`Cliente "${nombre}" eliminado`,'info');}catch(e){toast('Error: '+e.message,'error');}}
+async function deleteCliente(id,nombre){
+  if(!confirm(`¿Eliminar a "${nombre}"?`)) return;
+  const rec=state.clientes.find(x=>x.id===id);
+  const snapshot=rec?sanitizeForRestore(rec.fields):null;
+  try{
+    await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];closeClienteDetalle();renderClientes();renderOverview();
+    toastUndo(`Cliente "${nombre}" eliminado`,async()=>{
+      try{const r=await airtableWrite('Clientes','POST',null,snapshot);if(r&&r.id){state.clientes.push(r);state.clientesById[r.id]=r.fields['Empresa']||nombre;}renderClientes();renderOverview();toast(`✓ "${nombre}" restaurado`,'success');}
+      catch(e){toast('No se pudo restaurar: '+e.message,'error');}
+    });
+  }catch(e){toast('Error: '+e.message,'error');}
+}
 
 // ── COTIZACIONES ──────────────────────────────────────────────
 function sortCotizaciones(key){
@@ -2972,15 +3021,36 @@ async function saveEditProveedor(){
 }
 async function deleteProveedor(id,nombre){
   if(!confirm(`¿Eliminar proveedor "${nombre}"?`)) return;
+  const rec=state.proveedores.find(x=>x.id===id);
+  const snapshot=rec?sanitizeForRestore(rec.fields):null;
   try{
     await airtableDelete('Proveedores',id);
     state.proveedores=state.proveedores.filter(x=>x.id!==id);
-    toast('Proveedor eliminado','info');
     closeEditProveedor();
     renderProveedores();
+    toastUndo(`Proveedor "${nombre}" eliminado`,async()=>{
+      try{const r=await airtableWrite('Proveedores','POST',null,snapshot);if(r&&r.id) state.proveedores.push(r);renderProveedores();toast(`✓ "${nombre}" restaurado`,'success');}
+      catch(e){toast('No se pudo restaurar: '+e.message,'error');}
+    });
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
+// ── Móvil: convierte tablas en tarjetas auto-etiquetando cada celda ──
+function applyTableLabels(table){
+  const heads=[...table.querySelectorAll('thead th')].map(th=>th.textContent.trim());
+  if(!heads.length) return;
+  table.querySelectorAll('tbody > tr').forEach(tr=>{
+    if(tr.children.length<=1) return;// filas de estado vacío / loading
+    [...tr.children].forEach((td,i)=>{if(heads[i]&&!td.hasAttribute('data-label')) td.setAttribute('data-label',heads[i]);});
+  });
+}
+function initMobileTableLabels(){
+  document.querySelectorAll('.table-wrap table').forEach(t=>{
+    applyTableLabels(t);
+    const tb=t.querySelector('tbody');
+    if(tb&&!tb._labeled){tb._labeled=true;new MutationObserver(()=>applyTableLabels(t)).observe(tb,{childList:true});}
+  });
+}
 function addBusinessDays(date,days){const d=new Date(date);let added=0;while(added<days){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6) added++;}return d;}
 function updateVtoPreview(){const fi=document.getElementById('cot-fecha');const prev=document.getElementById('cot-vto-preview');if(!fi||!prev) return;const base=fi.value?new Date(fi.value+'T00:00:00'):new Date();prev.value=addBusinessDays(base,10).toISOString().split('T')[0];}
 function initDates(){
@@ -3010,6 +3080,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const token=getToken();
   if(!token){setStatus('sin token',false);showTokenModal();}
   else{loadAllData().then(()=>{startAutoRefresh();});}
+  initMobileTableLabels();
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
   // visibilitychange handled above (auto-refresh inteligente)
   document.addEventListener('keydown',e=>{
