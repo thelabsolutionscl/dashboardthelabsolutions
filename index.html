@@ -2004,7 +2004,7 @@ function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
   return`<tr data-id="${c.id}"><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td>${escapeHtml(resolveClienteName(f['Cliente']))}</td><td><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp">${formatCLP(neto)}</td><td>${f['Urgencia (+25%)']?'<span class="badge badge-orange">+25%</span>':'<span class="badge badge-gray">No</span>'}</td><td>${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
-  <td style="white-space:nowrap">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">📄 Descargar PDF</button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></td></tr>`;
+  <td style="white-space:nowrap">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}','ver')">👁 Ver PDF</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}','descargar')">📄 Descargar PDF</button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
@@ -2090,7 +2090,7 @@ function selectEditCotCliente(id){
 }
 
 // ── PDF ───────────────────────────────────────────────────────
-function generarPDFCotizacion(id){
+function generarPDFCotizacion(id,modo='descargar'){
   const c=state.cotizaciones.find(x=>x.id===id);if(!c){toast('Cotización no encontrada','error');return;}
   const f=c.fields;const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cf=(clienteId?state.clientes.find(x=>x.id===clienteId):null)?.fields||{};
   const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||new Date().toISOString().split('T')[0],vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',notas=f['Notas cotización']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
@@ -2150,8 +2150,8 @@ ${notas?`<div class="notas-box"><strong>Notas:</strong> ${escHtml(notas)}</div>`
 <tr style="background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Email</td><td style="font-weight:500">PAGOS@THELAB.SOLUTIONS</td></tr>
 </table></div>
 <div class="footer"><div class="left">The Lab Solutions SpA · Santiago, Chile<br>hola@thelab.solutions · +56 9 7180 6142</div><div class="validity">Válida hasta: <strong>${escHtml(vto)}</strong></div></div>
-<script>window.onload=()=>window.print();<\/script></body></html>`;
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const win=window.open(url,'_blank');if(!win) toast('Permite ventanas emergentes para ver el PDF','error');setTimeout(()=>URL.revokeObjectURL(url),30000);
+${modo==='descargar'?'<script>window.onload=()=>window.print();<\/script>':''}</body></html>`;
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const win=window.open(url,'_blank');if(!win) toast('Permite ventanas emergentes','error');setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
 function descargarReporteCotizaciones(){
