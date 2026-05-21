@@ -1068,6 +1068,7 @@ FORMATO DE SALIDA OBLIGATORIO — repite exactamente este bloque por cada provee
 NOMBRE: [nombre real de empresa, tienda o plataforma]
 PAIS: [Chile | China | EEUU | España | etc]
 WEB: [URL o dominio real: alibaba.com/store/xxx | mercadolibre.cl | amazon.com | etc]
+TELEFONO: [número de contacto si existe, ej: +56 2 2345 6789 | WhatsApp +56 9 XXXX XXXX | Consultar si no disponible]
 TIPO: [Nacional | Internacional | Marketplace | Importador local]
 PRECIO_EST: [rango realista 2024-2025, en CLP para Chile o USD para internacional]
 MOQ: [cantidad mínima con unidad, ej: 1 rollo | 5 kg | 100 und]
@@ -1119,7 +1120,7 @@ function parseSupplierBlocks(text){
     const end=part.indexOf('---PROVEEDOR_END---');const block=end>=0?part.substring(0,end):part;
     const get=(key)=>{const m=block.match(new RegExp(`^${key}:\\s*(.+)$`,'m'));return m?m[1].trim():'';};
     blocks.push({
-      nombre:get('NOMBRE'),pais:get('PAIS'),web:get('WEB'),tipo:get('TIPO'),
+      nombre:get('NOMBRE'),pais:get('PAIS'),web:get('WEB'),telefono:get('TELEFONO'),tipo:get('TIPO'),
       precio:get('PRECIO_EST'),moq:get('MOQ'),plazo:get('PLAZO'),condpago:get('CONDPAGO'),
       categoria:get('CATEGORIA'),pros:(get('PROS')||'').split('|').map(s=>s.trim()).filter(Boolean),
       contras:(get('CONTRAS')||'').split('|').map(s=>s.trim()).filter(Boolean),notas:get('NOTAS'),
@@ -1151,6 +1152,7 @@ function renderSupplierResults(raw,producto,prefix='ss'){
           <div style="font-size:11px;color:var(--text2);margin-top:2px">${escapeHtml(p.pais)} &nbsp;·&nbsp; <span class="badge ${tipoBadge}">${escapeHtml(p.tipo)}</span></div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
+          ${p.telefono&&p.telefono!=='—'&&p.telefono!=='Consultar'?`<a href="tel:${escapeHtml(p.telefono.replace(/\s/g,''))}" style="font-size:10px;color:var(--accent3);text-decoration:none;background:rgba(0,212,170,0.1);border:1px solid rgba(0,212,170,0.25);border-radius:5px;padding:4px 9px">📞 ${escapeHtml(p.telefono)}</a>`:''}
           ${p.web&&p.web!=='—'?`<a href="${webHref}" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);text-decoration:none;background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.25);border-radius:5px;padding:4px 9px">🌐 Visitar</a>`:''}
           <button onclick='addSupplierFromSearch(${JSON.stringify(p).replace(/'/g,"&#39;")})' style="font-size:10px;font-weight:700;color:var(--black);background:var(--accent2);border:none;border-radius:5px;padding:4px 10px;cursor:pointer">+ Agregar</button>
         </div>
