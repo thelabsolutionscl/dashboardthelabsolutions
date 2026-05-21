@@ -112,6 +112,31 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .loading-state{display:flex;align-items:center;justify-content:center;gap:8px;padding:36px;color:var(--text3);font-size:12px;}
 .spinner{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+/* ── SYSTEM LOADER ── */
+#sysLoader{position:fixed;inset:0;z-index:99999;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;transition:opacity 0.6s ease,visibility 0.6s ease;}
+#sysLoader.hidden{opacity:0;visibility:hidden;pointer-events:none;}
+.sl-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(0,212,204,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,204,0.04) 1px,transparent 1px);background-size:40px 40px;animation:slGridFade 3s ease-in-out infinite alternate;}
+@keyframes slGridFade{0%{opacity:0.4}100%{opacity:1}}
+.sl-glow{position:absolute;top:50%;left:50%;width:600px;height:600px;margin:-300px 0 0 -300px;background:radial-gradient(circle,rgba(0,212,204,0.07) 0%,transparent 70%);animation:slGlowPulse 2.5s ease-in-out infinite;}
+@keyframes slGlowPulse{0%,100%{transform:scale(0.9);opacity:0.6}50%{transform:scale(1.1);opacity:1}}
+.sl-content{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:32px;}
+.sl-logo-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;}
+.sl-logo{height:40px;width:auto;mix-blend-mode:screen;animation:slLogoBreathe 2.5s ease-in-out infinite;}
+@keyframes slLogoBreathe{0%,100%{filter:brightness(0.8) drop-shadow(0 0 8px rgba(0,212,204,0.3))}50%{filter:brightness(1.15) drop-shadow(0 0 22px rgba(0,212,204,0.7))}}
+.sl-title{font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:6px;color:var(--text);opacity:0;animation:slFadeUp 0.6s 0.2s ease forwards;}
+.sl-subtitle{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;opacity:0;animation:slFadeUp 0.6s 0.5s ease forwards;}
+@keyframes slFadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.sl-progress-wrap{width:280px;display:flex;flex-direction:column;gap:8px;opacity:0;animation:slFadeUp 0.6s 0.8s ease forwards;}
+.sl-progress-track{height:2px;background:var(--border2);border-radius:2px;overflow:hidden;}
+.sl-progress-bar{height:100%;background:linear-gradient(90deg,var(--accent3),var(--accent));border-radius:2px;width:0%;transition:width 0.5s cubic-bezier(0.4,0,0.2,1);box-shadow:0 0 8px var(--accent);}
+.sl-status{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;text-align:center;min-height:14px;transition:opacity 0.3s;}
+.sl-dots{display:flex;gap:6px;justify-content:center;}
+.sl-dot{width:4px;height:4px;border-radius:50%;background:var(--border2);}
+.sl-dot.active{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+.sl-dot:nth-child(1){animation:slDotPop 1.2s 0s ease-in-out infinite;}
+.sl-dot:nth-child(2){animation:slDotPop 1.2s 0.2s ease-in-out infinite;}
+.sl-dot:nth-child(3){animation:slDotPop 1.2s 0.4s ease-in-out infinite;}
+@keyframes slDotPop{0%,100%{transform:scale(1);background:var(--border2)}50%{transform:scale(1.8);background:var(--accent);box-shadow:0 0 6px var(--accent)}}
 .empty-state{padding:36px;text-align:center;color:var(--text3);font-size:12px;}
 .empty-icon{font-size:26px;margin-bottom:6px;}
 .toast-container{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;}
@@ -198,6 +223,26 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 </style>
 </head>
 <body>
+<!-- ── SYSTEM LOADER ── -->
+<div id="sysLoader">
+  <div class="sl-grid"></div>
+  <div class="sl-glow"></div>
+  <div class="sl-content">
+    <div class="sl-logo-wrap">
+      <img class="sl-logo" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions" style="height:36px;mix-blend-mode:normal;filter:brightness(0) invert(1);">
+      <div class="sl-subtitle">Centro de Comando</div>
+    </div>
+    <div class="sl-progress-wrap">
+      <div class="sl-progress-track"><div class="sl-progress-bar" id="slBar"></div></div>
+      <div class="sl-status" id="slStatus">Iniciando sistema...</div>
+      <div class="sl-dots">
+        <div class="sl-dot"></div>
+        <div class="sl-dot"></div>
+        <div class="sl-dot"></div>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="topbar">
   <div class="logo"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
@@ -553,6 +598,70 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 <!-- AGENTES -->
 <div class="tab-panel" id="tab-agentes">
   <div class="section-header"><div class="section-title">Centro de Agentes IA</div></div>
+
+  <!-- SUPPLIER SEARCH AGENT -->
+  <div class="card" style="margin-bottom:20px;border-color:rgba(255,107,53,0.35);box-shadow:0 0 24px rgba(255,107,53,0.07)">
+    <div class="card-header" style="border-bottom-color:rgba(255,107,53,0.2)">
+      <span class="card-title" style="color:var(--accent2)">🔍 SUPPLIER_SEARCH_AGENT</span>
+      <div style="display:flex;gap:5px;align-items:center">
+        <span class="badge badge-orange">Research IA</span>
+        <span class="badge badge-gray">Sourcing</span>
+      </div>
+    </div>
+    <div style="padding:14px 16px 0">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="field-group" style="grid-column:1/-1">
+          <label class="field-label">Producto / Material a buscar *</label>
+          <input class="field-input" id="ss-producto" placeholder="ej: Filamento PLA 1.75mm transparente, 1kg | Neón LED flexible 12V | Cinta satinada 2cm">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Categoría</label>
+          <select class="field-select" id="ss-categoria">
+            <option value="">— cualquiera —</option>
+            <option>Filamentos 3D</option><option>Resinas y materiales</option><option>Componentes LED / Neones</option><option>Trofeos y medallas</option><option>Packaging / Embalaje</option><option>Electrónica y cables</option><option>Logística y despacho</option><option>Diseño / Gráfica</option><option>Servicios varios</option><option>Otro</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Mercado</label>
+          <select class="field-select" id="ss-mercado">
+            <option value="ambos">Chile + Internacional</option>
+            <option value="chile">Solo Chile</option>
+            <option value="internacional">Internacional</option>
+            <option value="china">China / Asia (Alibaba)</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Prioridad</label>
+          <select class="field-select" id="ss-prioridad">
+            <option value="equilibrado">Precio/Calidad equilibrado</option>
+            <option value="precio">Menor precio posible</option>
+            <option value="calidad">Máxima calidad</option>
+            <option value="rapido">Entrega más rápida</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Cantidad estimada</label>
+          <input class="field-input" id="ss-cantidad" placeholder="ej: 50 kg, 200 und, 10 rollos">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Presupuesto máx.</label>
+          <input class="field-input" id="ss-presupuesto" placeholder="ej: $150.000 CLP / $200 USD">
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">
+        <span style="font-size:10px;color:var(--text3);align-self:center;margin-right:3px">Búsquedas rápidas:</span>
+        <button onclick="ssQuick('Filamento PLA 1.75mm, varios colores','Filamentos 3D')" class="btn-mini">PLA Filamento</button>
+        <button onclick="ssQuick('Neón LED flexible 12V SMD','Componentes LED / Neones')" class="btn-mini">LED Neón</button>
+        <button onclick="ssQuick('Resina UV para impresión 3D, gris, 1L','Resinas y materiales')" class="btn-mini">Resina UV</button>
+        <button onclick="ssQuick('Cinta de raso satinada para medallas, 2cm ancho','Trofeos y medallas')" class="btn-mini">Cintas medallas</button>
+        <button onclick="ssQuick('Cajas de cartón para packaging personalizado','Packaging / Embalaje')" class="btn-mini">Packaging</button>
+        <button onclick="ssQuick('Acrílico transparente 3mm en plancha, A3','Otro')" class="btn-mini">Acrílico</button>
+      </div>
+      <button class="btn btn-primary" id="ssSearchBtn" onclick="runSupplierSearch()" style="background:var(--accent2);color:#fff">🔍 Buscar Proveedores</button>
+    </div>
+    <div id="ssResults" style="padding:14px 16px"></div>
+  </div>
+
   <div class="data-grid-3" id="agentesGrid"></div>
 </div>
 
@@ -881,6 +990,136 @@ const EQUIPO_TIPOS={
   remoto:{label:'Remoto',bg:'rgba(0,150,255,0.2)',color:'#4db8ff',icon:'💻'},
   reunion:{label:'Reunión',bg:'rgba(255,200,0,0.2)',color:'#ffc800',icon:'🗣️'},
 };
+// ── SUPPLIER SEARCH AGENT ────────────────────────────────────
+const SUPPLIER_SYS=`Eres el SUPPLIER_SEARCH_AGENT de The Lab Solutions, empresa de fabricación digital en Santiago, Chile (trofeos, medallas, neones LED, impresión 3D, señalética, packaging personalizado).
+
+ROL: investigar y listar proveedores potenciales REALES para un producto o material específico.
+
+FORMATO DE SALIDA OBLIGATORIO — repite exactamente este bloque por cada proveedor (4 a 6 resultados):
+---PROVEEDOR_START---
+NOMBRE: [nombre real de empresa, tienda o plataforma]
+PAIS: [Chile | China | EEUU | España | etc]
+WEB: [URL o dominio real: alibaba.com/store/xxx | mercadolibre.cl | amazon.com | etc]
+TIPO: [Nacional | Internacional | Marketplace | Importador local]
+PRECIO_EST: [rango realista 2024-2025, en CLP para Chile o USD para internacional]
+MOQ: [cantidad mínima con unidad, ej: 1 rollo | 5 kg | 100 und]
+PLAZO: [días hábiles estimados para tener en Santiago]
+CONDPAGO: [Contado | 30 días | Transferencia | PayPal | Tarjeta | etc]
+CATEGORIA: [una de: Filamentos 3D | Resinas y materiales | Componentes LED / Neones | Trofeos y medallas | Packaging / Embalaje | Electrónica y cables | Logística y despacho | Diseño / Gráfica | Servicios varios | Otro]
+PROS: [ventaja 1] | [ventaja 2] | [ventaja 3]
+CONTRAS: [contra 1] | [contra 2]
+NOTAS: [tip de negociación, contacto si existe, o dato técnico relevante]
+---PROVEEDOR_END---
+
+REGLAS:
+- Solo proveedores y plataformas reales — no inventes nombres ni URLs
+- Incluye rango de precios desde bajo costo hasta calidad premium
+- Para Chile: MercadoLibre, distribuidores industriales, importadores locales
+- Para internacional: Alibaba (fabricantes directos), Amazon Business, aliexpress.com
+- Adapta el análisis al volumen y presupuesto indicado
+- Al final agrega una línea: RECOMENDACIÓN: [2 frases sobre cuál elegir para The Lab Solutions]`;
+
+function ssQuick(producto,cat){
+  document.getElementById('ss-producto').value=producto;
+  const s=document.getElementById('ss-categoria');if(s) s.value=cat||'';
+}
+
+async function runSupplierSearch(){
+  const producto=(document.getElementById('ss-producto')?.value||'').trim();
+  if(!producto){toast('Ingresa el producto a buscar','error');document.getElementById('ss-producto')?.focus();return;}
+  const cat=document.getElementById('ss-categoria')?.value||'';
+  const mercado=document.getElementById('ss-mercado')?.value||'ambos';
+  const prioridad=document.getElementById('ss-prioridad')?.value||'equilibrado';
+  const cantidad=document.getElementById('ss-cantidad')?.value||'';
+  const presupuesto=document.getElementById('ss-presupuesto')?.value||'';
+  const btn=document.getElementById('ssSearchBtn');
+  btn.disabled=true;btn.textContent='⏳ Buscando proveedores...';
+  const res=document.getElementById('ssResults');
+  res.innerHTML=`<div class="loading-state"><div class="spinner"></div> Investigando proveedores para <strong style="color:var(--accent2);margin-left:4px">${escapeHtml(producto)}</strong>...</div>`;
+  const mercadoLabel={'ambos':'Chile e Internacional','chile':'Chile (nacional)','internacional':'Internacional','china':'China / Alibaba'}[mercado]||mercado;
+  const query=`PRODUCTO: ${producto}\nCATEGORÍA: ${cat||'Sin especificar'}\nMERCADO: ${mercadoLabel}\nCANTIDAD REQUERIDA: ${cantidad||'No especificada'}\nPRESUPUESTO MÁX: ${presupuesto||'No especificado'}\nPRIORIDAD: ${prioridad}`;
+  try{
+    const raw=await callClaude(SUPPLIER_SYS,query);
+    renderSupplierResults(raw,producto);
+  }catch(e){res.innerHTML=`<div class="empty-state"><div class="empty-icon">❌</div>${escapeHtml(e.message)}</div>`;}
+  btn.disabled=false;btn.textContent='🔍 Buscar Proveedores';
+}
+
+function parseSupplierBlocks(text){
+  const blocks=[];const parts=text.split('---PROVEEDOR_START---');
+  parts.slice(1).forEach(part=>{
+    const end=part.indexOf('---PROVEEDOR_END---');const block=end>=0?part.substring(0,end):part;
+    const get=(key)=>{const m=block.match(new RegExp(`^${key}:\\s*(.+)$`,'m'));return m?m[1].trim():'';};
+    blocks.push({
+      nombre:get('NOMBRE'),pais:get('PAIS'),web:get('WEB'),tipo:get('TIPO'),
+      precio:get('PRECIO_EST'),moq:get('MOQ'),plazo:get('PLAZO'),condpago:get('CONDPAGO'),
+      categoria:get('CATEGORIA'),pros:(get('PROS')||'').split('|').map(s=>s.trim()).filter(Boolean),
+      contras:(get('CONTRAS')||'').split('|').map(s=>s.trim()).filter(Boolean),notas:get('NOTAS'),
+    });
+  });
+  const recMatch=text.match(/RECOMENDACIÓN:\s*(.+)/);
+  return{blocks,recomendacion:recMatch?recMatch[1].trim():''};
+}
+
+const SS_FLAG={'Chile':'🇨🇱','China':'🇨🇳','EEUU':'🇺🇸','España':'🇪🇸','Alemania':'🇩🇪','Argentina':'🇦🇷','México':'🇲🇽','Brasil':'🇧🇷','Italia':'🇮🇹','Japón':'🇯🇵'};
+const SS_TIPO_BADGE={'Nacional':'badge-green','Internacional':'badge-orange','Marketplace':'badge-yellow','Importador local':'badge-purple','Importador':'badge-purple'};
+
+function renderSupplierResults(raw,producto){
+  const{blocks,recomendacion}=parseSupplierBlocks(raw);
+  const res=document.getElementById('ssResults');
+  if(!blocks.length){res.innerHTML=`<div class="empty-state"><div class="empty-icon">🔍</div>No se encontraron resultados estructurados.<br><pre style="font-size:10px;color:var(--text2);margin-top:10px;text-align:left;max-height:200px;overflow:auto">${escapeHtml(raw)}</pre></div>`;return;}
+  const cards=blocks.map((p,i)=>{
+    const flag=SS_FLAG[p.pais]||'🌍';
+    const tipoBadge=SS_TIPO_BADGE[p.tipo]||'badge-gray';
+    const webHref=p.web&&p.web!=='—'?(p.web.startsWith('http')?p.web:'https://'+p.web):'#';
+    const prosHtml=p.pros.map(pr=>`<span style="font-size:10px;color:var(--accent3)">✓ ${escapeHtml(pr)}</span>`).join('');
+    const contrasHtml=p.contras.map(c=>`<span style="font-size:10px;color:var(--danger)">✕ ${escapeHtml(c)}</span>`).join('');
+    const safeData=btoa(unescape(encodeURIComponent(JSON.stringify(p))));
+    return`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:14px;position:relative">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700;font-size:13px;color:var(--text)">${flag} ${escapeHtml(p.nombre)}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">${escapeHtml(p.pais)} &nbsp;·&nbsp; <span class="badge ${tipoBadge}">${escapeHtml(p.tipo)}</span></div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          ${p.web&&p.web!=='—'?`<a href="${webHref}" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);text-decoration:none;background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.25);border-radius:5px;padding:4px 9px">🌐 Visitar</a>`:''}
+          <button onclick='addSupplierFromSearch(${JSON.stringify(p).replace(/'/g,"&#39;")})' style="font-size:10px;font-weight:700;color:var(--black);background:var(--accent2);border:none;border-radius:5px;padding:4px 10px;cursor:pointer">+ Agregar</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:10px">
+        <div style="background:var(--surface3);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase">Precio est.</div><div style="font-size:12px;font-weight:700;color:var(--accent3);font-family:'JetBrains Mono',monospace;margin-top:2px">${escapeHtml(p.precio||'—')}</div></div>
+        <div style="background:var(--surface3);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase">MOQ</div><div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">${escapeHtml(p.moq||'—')}</div></div>
+        <div style="background:var(--surface3);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase">Plazo</div><div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">${escapeHtml(p.plazo||'—')}</div></div>
+        <div style="background:var(--surface3);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase">Pago</div><div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">${escapeHtml(p.condpago||'—')}</div></div>
+      </div>
+      ${prosHtml||contrasHtml?`<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px">${prosHtml}${contrasHtml}</div>`:''}
+      ${p.notas?`<div style="font-size:10px;color:var(--text2);background:var(--surface3);border-radius:5px;padding:6px 9px;line-height:1.5">💡 ${escapeHtml(p.notas)}</div>`:''}
+    </div>`;
+  }).join('');
+
+  const recHtml=recomendacion?`<div style="background:rgba(0,212,204,0.07);border:1px solid rgba(0,212,204,0.25);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text2);line-height:1.5"><span style="color:var(--accent);font-weight:700">⭐ Recomendación:</span> ${escapeHtml(recomendacion)}</div>`:'';
+  res.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--accent2)">${blocks.length} proveedores encontrados para: <em style="font-style:normal;color:var(--text)">${escapeHtml(producto)}</em></span><button onclick="document.getElementById('ssResults').innerHTML=''" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer">✕ Limpiar</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-bottom:12px">${cards}</div>${recHtml}`;
+}
+
+function addSupplierFromSearch(p){
+  switchTab('nuevo-proveedor');
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v&&v!=='—') el.value=v;};
+  set('np-nombre',p.nombre);
+  if(p.web&&p.web!=='—') set('np-web',p.web.startsWith('http')?p.web:'https://'+p.web);
+  set('np-productos',p.notas);
+  if(p.pais!=='Chile') set('np-region',p.pais);
+  const notas=[p.pros?.length?'✅ '+p.pros.join(' | '):'',p.contras?.length?'❌ '+p.contras.join(' | '):'',p.notas].filter(Boolean).join('\n');
+  set('np-notas',notas);
+  const cp=document.getElementById('np-condpago');
+  if(cp&&p.condpago){const opts=[...cp.options];const match=opts.find(o=>p.condpago.toLowerCase().includes(o.value.toLowerCase())&&o.value);if(match) cp.value=match.value;}
+  const cat=document.getElementById('np-categoria');
+  if(cat&&p.categoria) cat.value=p.categoria;
+  const plazoNum=parseInt((p.plazo||'').replace(/\D/g,''));
+  if(!isNaN(plazoNum)&&plazoNum>0) set('np-plazo',plazoNum);
+  window.scrollTo(0,0);
+  toast('✓ Datos pre-cargados — revisa y completa el formulario','success');
+}
+
 const AGENTES_CFG=[
   {id:'SALES',label:'SALES_AGENT',icon:'💬',badge:'badge-green',
    sys:`Eres el SALES_AGENT de The Lab Solutions, empresa de fabricación digital en Santiago, Chile.
@@ -1173,18 +1412,25 @@ async function loadEquipoEventosAirtable(){
 async function loadAllData(){
   if(!getToken()){setStatus('sin token',false);showTokenModal();return;}
   const btn=document.getElementById('refreshBtn');btn.disabled=true;btn.textContent='↺ Cargando...';setStatus('cargando...',false);
+  const isFirst=!state.loaded;
+  if(isFirst) slProgress(10,'Conectando con Airtable...');
   try{
+    if(isFirst) slProgress(20,'Cargando clientes...');
     const[cRes,coRes,pRes,rRes,pvRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500)]);
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
-    else if(cRes.reason?.message?.includes('401')){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');showTokenModal();btn.disabled=false;btn.textContent='↺ Actualizar';return;}
+    else if(cRes.reason?.message?.includes('401')){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');hideSysLoader();showTokenModal();btn.disabled=false;btn.textContent='↺ Actualizar';return;}
+    if(isFirst) slProgress(50,'Cargando cotizaciones y pedidos...');
     if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];renderCotizaciones();}
     if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();}
+    if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
     if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
     if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();}
+    if(isFirst) slProgress(92,'Calculando resumen...');
     state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
-    renderOverview();toast('Datos actualizados ✓','success');
-  }catch(e){setStatus('error',false);toast('Error: '+e.message,'error');}
+    renderOverview();
+    if(isFirst){hideSysLoader();}else{toast('Datos actualizados ✓','success');}
+  }catch(e){setStatus('error',false);hideSysLoader();toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='↺ Actualizar';
 }
 async function loadAllDataSilent(){
@@ -1232,6 +1478,16 @@ function setStatus(text,live){
   document.getElementById('statusText').textContent=text;document.getElementById('statusDot').className='status-dot'+(live?' live':'');
   const dm=document.getElementById('statusDotMobile'),tm=document.getElementById('statusTextMobile');
   if(dm) dm.className='status-dot'+(live?' live':'');if(tm) tm.textContent=text;
+}
+function slProgress(pct,msg){
+  const bar=document.getElementById('slBar'),st=document.getElementById('slStatus');
+  if(bar) bar.style.width=Math.min(100,pct)+'%';
+  if(st){st.style.opacity='0';setTimeout(()=>{st.textContent=msg;st.style.opacity='1';},150);}
+}
+function hideSysLoader(){
+  const el=document.getElementById('sysLoader');if(!el) return;
+  slProgress(100,'Sistema listo ✓');
+  setTimeout(()=>{el.classList.add('hidden');setTimeout(()=>{el.style.display='none';},650);},500);
 }
 function toast(msg,type='info'){const c=document.getElementById('toastContainer'),icons={success:'✓',error:'✕',info:'ℹ'};const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`<span>${icons[type]}</span><span>${escapeHtml(msg)}</span>`;c.appendChild(el);setTimeout(()=>el.remove(),4000);}
 // Toast con botón Deshacer (para borrados reversibles)
@@ -2275,7 +2531,7 @@ function renderProveedoresAnalytics(){
   const activos=state.proveedores.filter(p=>(p.fields['Estado']||p.fields['estado']||'')!=='Inactivo').length;
   const pagoMap={};state.proveedores.forEach(p=>{const pg=p.fields['Condición de pago']||'Sin especificar';pagoMap[pg]=(pagoMap[pg]||0)+1;});
   const topPagos=Object.entries(pagoMap).sort((a,b)=>b[1]-a[1]).slice(0,4);
-  const catBars=topCats.map(([cat,n])=>{const pct=Math.round((n/maxCat)*100);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:10px;color:var(--text2);min-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(cat)}">${escapeHtml(cat)}</div><div style="flex:1;height:12px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent4);border-radius:4px"></div></div><div style="font-size:10px;font-weight:700;color:var(--accent4);min-width:20px;text-align:right">${n}</div></div>`;}).join('');
+  const catBars=topCats.map(([cat,n])=>{const pct=Math.round((n/maxCat)*100);const[color]=PV_CAT_COLORS[cat]||['#888'];return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:10px;color:var(--text2);min-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(cat)}">${escapeHtml(cat)}</div><div style="flex:1;height:12px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:4px;box-shadow:0 0 6px ${color}55"></div></div><div style="font-size:10px;font-weight:700;color:${color};min-width:20px;text-align:right">${n}</div></div>`;}).join('');
   const pagoChips=topPagos.map(([pg,n])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center"><div style="font-size:14px;font-weight:700;color:var(--text1)">${n}</div><div style="font-size:9px;color:var(--text3);margin-top:2px;line-height:1.3">${escapeHtml(pg.length>20?pg.substring(0,20)+'…':pg)}</div></div>`).join('');
   el.innerHTML=`<div class="data-grid" style="margin-top:16px"><div class="card"><div class="card-header"><span class="card-title">📦 Distribución por Categoría</span><span style="font-size:11px;color:var(--accent3)">${activos} activos / ${state.proveedores.length} total</span></div><div style="padding:14px 16px">${catBars}</div></div><div class="card"><div class="card-header"><span class="card-title">💳 Condiciones de Pago</span></div><div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">${pagoChips}</div></div></div>`;
 }
@@ -2787,6 +3043,26 @@ function estadoPvBadge(e){const map={'Activo':'badge-green','En evaluación':'ba
 
 // Categoría en Airtable es multipleSelects → llega como [{id,name,color}] o string
 function pvCat(f){const c=f['Categoría'];if(!c) return '';if(Array.isArray(c)) return c.map(x=>x.name||x).join(', ');return String(c);}
+const PV_CAT_COLORS={
+  'Filamentos 3D':           ['#00d4cc','rgba(0,212,204,0.13)','rgba(0,212,204,0.32)'],
+  'Resinas y materiales':    ['#ff6b35','rgba(255,107,53,0.13)','rgba(255,107,53,0.32)'],
+  'Componentes LED / Neones':['#ffaa00','rgba(255,170,0,0.13)','rgba(255,170,0,0.32)'],
+  'Trofeos y medallas':      ['#f59e0b','rgba(245,158,11,0.13)','rgba(245,158,11,0.32)'],
+  'Packaging / Embalaje':    ['#60a5fa','rgba(96,165,250,0.13)','rgba(96,165,250,0.32)'],
+  'Electrónica y cables':    ['#a78bfa','rgba(167,139,250,0.13)','rgba(167,139,250,0.32)'],
+  'Logística y despacho':    ['#00d4aa','rgba(0,212,170,0.13)','rgba(0,212,170,0.32)'],
+  'Diseño / Gráfica':        ['#f472b6','rgba(244,114,182,0.13)','rgba(244,114,182,0.32)'],
+  'Servicios varios':        ['#94a3b8','rgba(148,163,184,0.13)','rgba(148,163,184,0.32)'],
+  'Otro':                    ['#888','rgba(136,136,136,0.12)','rgba(136,136,136,0.28)'],
+};
+function pvCatBadge(cat){
+  if(!cat||cat==='—') return '<span class="badge badge-gray">—</span>';
+  return cat.split(', ').map(c=>{
+    const s=c.trim();
+    const[color,bg,border]=PV_CAT_COLORS[s]||['#888','rgba(136,136,136,0.12)','rgba(136,136,136,0.28)'];
+    return `<span style="display:inline-block;font-size:9px;font-weight:600;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;text-transform:uppercase;white-space:nowrap;color:${color};background:${bg};border:1px solid ${border}">${escapeHtml(s)}</span>`;
+  }).join(' ');
+}
 function sortProveedores(key){
   if(proveedoresSort.key===key) proveedoresSort.dir*=-1;
   else{proveedoresSort.key=key;proveedoresSort.dir=1;}
@@ -2845,7 +3121,7 @@ function buildProveedorRow(p){
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
   return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}">
     <td><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}</td>
-    <td><span class="badge badge-purple" style="font-size:9px">${escapeHtml(pvCat(f)||'—')}</span></td>
+    <td>${pvCatBadge(pvCat(f)||'—')}</td>
     <td><div style="font-size:12px">${escapeHtml(f['Contacto']||'—')}</div>${f['Cargo']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['Cargo'])}</div>`:''}</td>
     <td>${contactInfo||'—'}</td>
     <td style="font-size:11px">${escapeHtml(f['Comuna']||'—')}</td>
@@ -3078,8 +3354,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
   initDates();
   const token=getToken();
-  if(!token){setStatus('sin token',false);showTokenModal();}
-  else{loadAllData().then(()=>{startAutoRefresh();});}
+  if(!token){setStatus('sin token',false);hideSysLoader();showTokenModal();}
+  else{slProgress(5,'Verificando credenciales...');loadAllData().then(()=>{startAutoRefresh();});}
   initMobileTableLabels();
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
   // visibilitychange handled above (auto-refresh inteligente)
