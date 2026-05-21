@@ -1202,6 +1202,21 @@ function resolveClienteName(f){if(!f) return '—';if(typeof f==='string') retur
 function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-yellow','Confirmado':'badge-yellow','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Listo para despacho':'badge-green','Pendiente':'badge-gray','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
 function formatCLP(v){if(!v) return '$0';return '$'+Math.round(v).toLocaleString('es-CL');}
 function escapeHtml(s){if(s===null||s===undefined) return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+// ── Validaciones (Chile) ──────────────────────────────────────
+function validEmail(e){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);}
+function validPhone(p){const d=(p||'').replace(/[^\d]/g,'');return d.length>=8&&d.length<=12;}
+// RUT chileno con dígito verificador (módulo 11)
+function cleanRUT(r){return (r||'').replace(/[.\-\s]/g,'').toUpperCase();}
+function validRUT(r){
+  const c=cleanRUT(r);if(c.length<2) return false;
+  const cuerpo=c.slice(0,-1),dv=c.slice(-1);
+  if(!/^\d+$/.test(cuerpo)) return false;
+  let suma=0,mul=2;
+  for(let i=cuerpo.length-1;i>=0;i--){suma+=parseInt(cuerpo[i])*mul;mul=mul===7?2:mul+1;}
+  const res=11-(suma%11),dvCalc=res===11?'0':res===10?'K':String(res);
+  return dv===dvCalc;
+}
+function formatRUT(r){const c=cleanRUT(r);if(c.length<2) return r;const cuerpo=c.slice(0,-1),dv=c.slice(-1);return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'-'+dv;}
 function escHtml(s){if(!s&&s!==0) return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function setStatus(text,live){
   document.getElementById('statusText').textContent=text;document.getElementById('statusDot').className='status-dot'+(live?' live':'');
@@ -1562,6 +1577,11 @@ function closeEditCliente(){document.getElementById('editClienteModal').style.di
 async function saveEditCliente(){
   const btn=document.getElementById('ecGuardarBtn');const empresa=document.getElementById('ecEmpresa').value.trim();const contacto=document.getElementById('ecContacto').value.trim();
   if(!empresa){toast('Empresa requerida','error');return;}if(!contacto){toast('Contacto requerido','error');return;}
+  const ecEmail=document.getElementById('ecEmail').value.trim();const ecTel=document.getElementById('ecTelefono').value.trim();const ecRutEl=document.getElementById('ecRut');const ecRut=(ecRutEl?.value||'').trim();
+  if(ecEmail&&!validEmail(ecEmail)){toast('Email inválido','error');return;}
+  if(ecTel&&!validPhone(ecTel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
+  if(ecRut&&!validRUT(ecRut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
+  if(ecRut&&ecRutEl) ecRutEl.value=formatRUT(ecRut);
   btn.disabled=true;btn.textContent='Guardando...';const id=document.getElementById('ecId').value;
   const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('ecCargo').value,'Teléfono':document.getElementById('ecTelefono').value,'Email':document.getElementById('ecEmail').value,'Sitio web':document.getElementById('ecWeb').value,'RUT':document.getElementById('ecRut').value,'Industria / Rubro':document.getElementById('ecIndustria').value,'Origen lead':document.getElementById('ecOrigen').value,'Etapa venta':document.getElementById('ecEtapa').value,'Estado cuenta':document.getElementById('ecEstado').value,'Facturas vencidas':parseInt(document.getElementById('ecFactVenc').value)||0,'Notas internas':document.getElementById('ecNotas').value};
   if(document.getElementById('ecValoracion').value) fields['Valoración cliente']=parseInt(document.getElementById('ecValoracion').value);
@@ -1855,7 +1875,12 @@ async function advancePedido(id,estado){
 // ── NUEVO LEAD ────────────────────────────────────────────────
 async function createLead(){
   const btn=document.getElementById('createLeadBtn');const empresa=document.getElementById('nl-empresa').value.trim();const contacto=document.getElementById('nl-contacto').value.trim();const email=document.getElementById('nl-email').value.trim();
-  if(!empresa){toast('Empresa requerida','error');return;}if(!contacto){toast('Contacto requerido','error');return;}if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Email inválido','error');return;}
+  const tel=document.getElementById('nl-telefono').value.trim();const rutEl=document.getElementById('nl-rut');const rut=(rutEl?.value||'').trim();
+  if(!empresa){toast('Empresa requerida','error');return;}if(!contacto){toast('Contacto requerido','error');return;}
+  if(email&&!validEmail(email)){toast('Email inválido','error');return;}
+  if(tel&&!validPhone(tel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
+  if(rut&&!validRUT(rut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
+  if(rut&&rutEl) rutEl.value=formatRUT(rut);
   btn.disabled=true;btn.textContent='Creando...';
   const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Etapa venta':'Lead nuevo','Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
   if(document.getElementById('nl-industria').value) fields['Industria / Rubro']=document.getElementById('nl-industria').value;
@@ -2829,6 +2854,13 @@ async function createProveedor(){
   const categoria=(document.getElementById('np-categoria')?.value||'').trim();
   if(!nombre){toast('Nombre requerido','error');return;}
   if(!categoria){toast('Categoría requerida','error');return;}
+  const pvEmail=(document.getElementById('np-email')?.value||'').trim();
+  const pvTel=(document.getElementById('np-telefono')?.value||'').trim();
+  const pvRutEl=document.getElementById('np-rut');const pvRut=(pvRutEl?.value||'').trim();
+  if(pvEmail&&!validEmail(pvEmail)){toast('Email inválido','error');return;}
+  if(pvTel&&!validPhone(pvTel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
+  if(pvRut&&!validRUT(pvRut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
+  if(pvRut&&pvRutEl) pvRutEl.value=formatRUT(pvRut);
   const btn=document.getElementById('createProveedorBtn');btn.disabled=true;btn.textContent='Guardando...';
   const fields={
     'Nombre':nombre,
@@ -2897,6 +2929,13 @@ async function saveEditProveedor(){
   const id=document.getElementById('epId').value;if(!id) return;
   const nombre=(document.getElementById('epNombre').value||'').trim();
   if(!nombre){toast('Nombre requerido','error');return;}
+  const epEmail=(document.getElementById('epEmail').value||'').trim();
+  const epTel=(document.getElementById('epTelefono').value||'').trim();
+  const epRutEl=document.getElementById('epRut');const epRut=(epRutEl?.value||'').trim();
+  if(epEmail&&!validEmail(epEmail)){toast('Email inválido','error');return;}
+  if(epTel&&!validPhone(epTel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
+  if(epRut&&!validRUT(epRut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
+  if(epRut&&epRutEl) epRutEl.value=formatRUT(epRut);
   const btn=document.getElementById('epGuardarBtn');btn.disabled=true;btn.textContent='Guardando...';
   const fields={
     'Nombre':nombre,
