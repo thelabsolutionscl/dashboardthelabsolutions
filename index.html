@@ -221,6 +221,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .table-wrap tbody tr td.mono{font-weight:700;color:var(--accent);}
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
 <body>
 <!-- ── SYSTEM LOADER ── -->
@@ -2004,7 +2005,7 @@ function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
   return`<tr data-id="${c.id}"><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td>${escapeHtml(resolveClienteName(f['Cliente']))}</td><td><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp">${formatCLP(neto)}</td><td>${f['Urgencia (+25%)']?'<span class="badge badge-orange">+25%</span>':'<span class="badge badge-gray">No</span>'}</td><td>${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
-  <td style="white-space:nowrap">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}','ver')">👁 Ver PDF</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}','descargar')">📄 Descargar PDF</button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></td></tr>`;
+  <td style="white-space:nowrap">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁 Ver PDF</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄 Descargar PDF</button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
@@ -2090,8 +2091,8 @@ function selectEditCotCliente(id){
 }
 
 // ── PDF ───────────────────────────────────────────────────────
-function generarPDFCotizacion(id,modo='descargar'){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c){toast('Cotización no encontrada','error');return;}
+function buildCotizacionDoc(id){
+  const c=state.cotizaciones.find(x=>x.id===id);if(!c) return null;
   const f=c.fields;const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cf=(clienteId?state.clientes.find(x=>x.id===clienteId):null)?.fields||{};
   const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||new Date().toISOString().split('T')[0],vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',notas=f['Notas cotización']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
   const lineas=detalle.split('\n').filter(Boolean).map(l=>{const parts=l.split('|').map(s=>s.trim());return{desc:parts[0]||'',und:parts[1]||'',precio:(parts[3]||parts[2]||'').replace(/^venta:\s*/i,'').trim()};});
@@ -2150,8 +2151,32 @@ ${notas?`<div class="notas-box"><strong>Notas:</strong> ${escHtml(notas)}</div>`
 <tr style="background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Email</td><td style="font-weight:500">PAGOS@THELAB.SOLUTIONS</td></tr>
 </table></div>
 <div class="footer"><div class="left">The Lab Solutions SpA · Santiago, Chile<br>hola@thelab.solutions · +56 9 7180 6142</div><div class="validity">Válida hasta: <strong>${escHtml(vto)}</strong></div></div>
-${modo==='descargar'?'<script>window.onload=()=>window.print();<\/script>':''}</body></html>`;
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const win=window.open(url,'_blank');if(!win) toast('Permite ventanas emergentes','error');setTimeout(()=>URL.revokeObjectURL(url),30000);
+</body></html>`;
+  return {html,num,c};
+}
+function generarPDFCotizacion(id){
+  const res=buildCotizacionDoc(id);if(!res){toast('Cotización no encontrada','error');return;}
+  const blob=new Blob([res.html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const win=window.open(url,'_blank');if(!win) toast('Permite ventanas emergentes','error');setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+async function descargarPDFCotizacion(id){
+  const res=buildCotizacionDoc(id);if(!res){toast('Cotización no encontrada','error');return;}
+  const iframe=document.createElement('iframe');
+  iframe.style.cssText='position:fixed;left:-9999px;top:0;width:794px;height:1123px;border:none;z-index:-1;';
+  document.body.appendChild(iframe);
+  iframe.contentDocument.open();iframe.contentDocument.write(res.html);iframe.contentDocument.close();
+  await new Promise(resolve=>{iframe.onload=resolve;setTimeout(resolve,1500);});
+  toast('Generando PDF...','info');
+  try{
+    const slug=(res.c.fields['N° Cotización']||'cot').replace(/[^a-zA-Z0-9]/g,'-');
+    await html2pdf().set({
+      margin:8,filename:`Cotizacion-${slug}.pdf`,
+      image:{type:'jpeg',quality:0.98},
+      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(iframe.contentDocument.body).save();
+    toast('PDF descargado ✓','success');
+  }catch(e){toast('Error al generar PDF','error');console.error(e);}
+  finally{document.body.removeChild(iframe);}
 }
 
 function descargarReporteCotizaciones(){
