@@ -219,6 +219,10 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .table-wrap tbody tr td:last-child{padding-bottom:0;}
   .table-wrap tbody tr td select,.table-wrap tbody tr td input[type=date]{max-width:60% !important;width:auto !important;}
   .table-wrap tbody tr td.mono{font-weight:700;color:var(--accent);}
+  .btn-txt{display:none;}
+  .cot-td-actions{align-items:flex-start !important;min-height:auto !important;}
+  .cot-td-actions .cot-btns{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;}
+  .cot-td-actions .btn-mini{margin-right:0 !important;}
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
@@ -2004,8 +2008,8 @@ function renderCotizaciones(){const tbody=document.getElementById('cotsTableBody
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
-  return`<tr data-id="${c.id}"><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td>${escapeHtml(resolveClienteName(f['Cliente']))}</td><td><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp">${formatCLP(neto)}</td><td>${f['Urgencia (+25%)']?'<span class="badge badge-orange">+25%</span>':'<span class="badge badge-gray">No</span>'}</td><td>${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
-  <td style="white-space:nowrap">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁 Ver PDF</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄 Descargar PDF</button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></td></tr>`;
+  return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?'<span class="badge badge-orange">+25%</span>':'<span class="badge badge-gray">No</span>'}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
+  <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁<span class="btn-txt"> Ver PDF</span></button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄<span class="btn-txt"> Descargar PDF</span></button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></div></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
