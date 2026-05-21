@@ -369,6 +369,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
       <span class="card-title" id="cotTableTitle">Todas las Cotizaciones</span>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="switchTab('nueva-cot')">📝 Nueva Cot.</button>
+        <button class="btn btn-ghost btn-sm" onclick="descargarReporteCotizaciones()" style="background:rgba(0,212,204,0.08);border-color:rgba(0,212,204,0.4);color:var(--accent)">📄 Descargar PDF</button>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('cotizaciones')">⬇ CSV</button>
       </div>
     </div>
@@ -2152,6 +2153,74 @@ ${notas?`<div class="notas-box"><strong>Notas:</strong> ${escHtml(notas)}</div>`
 <div class="footer"><div class="left">The Lab Solutions SpA · Santiago, Chile<br>hola@thelab.solutions · +56 9 7180 6142</div><div class="validity">Válida hasta: <strong>${escHtml(vto)}</strong></div></div>
 <script>window.onload=()=>window.print();<\/script></body></html>`;
   const blob=new Blob([html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const win=window.open(url,'_blank');if(!win) toast('Permite ventanas emergentes para ver el PDF','error');setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+function descargarReporteCotizaciones(){
+  const cots=getSortedCotizaciones();
+  if(!cots.length){toast('Sin cotizaciones para exportar','error');return;}
+  const escH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const estadoColor={Enviada:'#3b82f6',Solicitada:'#f59e0b',Aprobada:'#10b981',Rechazada:'#ef4444','No enviada':'#94a3b8'};
+  const rows=cots.map((c,i)=>{
+    const f=c.fields,neto=Math.round((f['Total final (CLP)']||0)/1.19),total=f['Total final (CLP)']||0;
+    const m=getMargenCot(f),est=f['Estado cotización']||'—',col=estadoColor[est]||'#94a3b8';
+    return`<tr style="background:${i%2===0?'#f9fafb':'#ffffff'}">
+      <td style="padding:7px 10px;font-family:monospace;font-size:10px;font-weight:700;color:#0a0a0a;white-space:nowrap">${escH(f['N° Cotización']||'—')}</td>
+      <td style="padding:7px 10px;font-size:10px;color:#333">${escH(resolveClienteName(f['Cliente']))}</td>
+      <td style="padding:7px 10px;font-size:10px;color:#555">${escH(f['Canal solicitud']||'—')}</td>
+      <td style="padding:7px 10px;font-size:10px;color:#333;text-align:right">${formatCLP(neto)}</td>
+      <td style="padding:7px 10px;font-size:10px;font-weight:700;color:#0a0a0a;text-align:right">${formatCLP(total)}</td>
+      <td style="padding:7px 10px;text-align:center"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;background:${col}22;color:${col};border:1px solid ${col}55">${escH(est)}</span></td>
+      <td style="padding:7px 10px;font-size:10px;color:#555;text-align:center">${escH(f['Fecha cotización']||'—')}</td>
+      <td style="padding:7px 10px;font-size:10px;color:#555;text-align:center">${escH(f['Fecha vencimiento']||'—')}</td>
+      <td style="padding:7px 10px;font-size:10px;text-align:center;color:${m===null?'#aaa':m>=35?'#10b981':m>=20?'#f59e0b':'#ef4444'};font-weight:700">${m===null?'—':m.toFixed(0)+'%'}</td>
+    </tr>`;
+  }).join('');
+  const totalGeneral=cots.reduce((s,c)=>s+(c.fields['Total final (CLP)']||0),0);
+  const netoGeneral=Math.round(totalGeneral/1.19);
+  const aprobadas=cots.filter(c=>(c.fields['Estado cotización']||'')==='Aprobada').length;
+  const pendientes=cots.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
+  const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'});
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Cotizaciones — The Lab Solutions</title>
+<link rel="icon" href="https://thelab.solutions/wp-content/uploads/2024/05/cropped-THELAB-SOLUTIONS-ISOTIPO-32x32.png">
+<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:20px 28px;font-size:10px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:14px;border-bottom:3px solid #00d4cc;}
+.logo-area img{height:26px;}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
+.report-meta{text-align:right;}.report-meta h1{font-size:18px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#0a0a0a;}
+.report-meta .sub{font-size:9px;color:#999;margin-top:3px;}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.kpi{background:#f8f9fa;border-radius:7px;padding:10px 14px;border-top:3px solid #00d4cc;}
+.kpi .label{font-size:8px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#aaa;margin-bottom:5px;}
+.kpi .value{font-size:16px;font-weight:800;color:#0a0a0a;}.kpi .value.accent{color:#00d4cc;}
+table{width:100%;border-collapse:collapse;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;}
+thead tr{background:#0a0a0a;} thead th{padding:8px 10px;font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#fff;text-align:left;}
+thead th:nth-child(4),thead th:nth-child(5),thead th:nth-child(7),thead th:nth-child(8),thead th:nth-child(9){text-align:right;}
+thead th:nth-child(6){text-align:center;}
+tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:10px;font-weight:700;}
+.footer{margin-top:14px;padding-top:10px;border-top:2px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;}
+.footer .left{font-size:8px;color:#bbb;line-height:1.7;}.footer .right{font-size:8px;color:#bbb;}
+@media print{body{padding:10px 14px;}@page{margin:8mm;size:A4 landscape;}}</style></head><body>
+<div class="header">
+  <div class="logo-area"><img src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
+  <div class="report-meta"><h1>Reporte de Cotizaciones</h1><div class="sub">Generado el ${escH(now)} · ${cots.length} cotizaciones</div></div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="label">Total Cotizaciones</div><div class="value accent">${cots.length}</div></div>
+  <div class="kpi"><div class="label">Aprobadas</div><div class="value" style="color:#10b981">${aprobadas}</div></div>
+  <div class="kpi"><div class="label">Pendientes</div><div class="value" style="color:#f59e0b">${pendientes}</div></div>
+  <div class="kpi"><div class="label">Total General (IVA inc.)</div><div class="value accent" style="font-size:12px">${formatCLP(totalGeneral)}</div></div>
+</div>
+<table><thead><tr>
+  <th>N° Cotización</th><th>Cliente</th><th>Canal</th><th style="text-align:right">Neto</th><th style="text-align:right">Total c/IVA</th><th style="text-align:center">Estado</th><th style="text-align:center">Fecha</th><th style="text-align:center">Vto.</th><th style="text-align:center">Margen</th>
+</tr></thead><tbody>${rows}</tbody>
+<tfoot><tr>
+  <td colspan="3" style="color:#00d4cc;letter-spacing:1px;font-size:9px;text-transform:uppercase">TOTALES</td>
+  <td style="text-align:right;color:#fff">${formatCLP(netoGeneral)}</td>
+  <td style="text-align:right;color:#00d4cc">${formatCLP(totalGeneral)}</td>
+  <td colspan="4"></td>
+</tr></tfoot></table>
+<div class="footer"><div class="left">The Lab Solutions SpA · Santiago, Chile · hola@thelab.solutions · +56 9 7180 6142</div><div class="right">Reporte generado desde Centro de Comando · ${escH(now)}</div></div>
+<script>window.onload=()=>window.print();<\/script></body></html>`;
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const win=window.open(url,'_blank');if(!win) toast('Permite ventanas emergentes para descargar el PDF','error');setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
 // ── PEDIDOS ───────────────────────────────────────────────────
