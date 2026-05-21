@@ -449,8 +449,8 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
         <input class="field-input" style="width:160px;font-size:11px;padding:5px 10px" id="proveedorSearch" placeholder="🔍 buscar..." oninput="filterProveedores()">
         <select class="field-select" id="proveedorCatFilter" style="font-size:11px;padding:5px 8px;width:auto" onchange="filterProveedores()">
           <option value="">Todas las categorías</option>
-          <option>Filamentos 3D</option><option>Resinas y materiales</option><option>Componentes LED / Neones</option><option>Trofeos y medallas</option><option>Packaging / Embalaje</option><option>Electrónica y cables</option><option>Logística y despacho</option><option>Diseño / Gráfica</option><option>Servicios varios</option><option>Otro</option>
         </select>
+        <button class="btn btn-ghost btn-sm" onclick="openCatManager()" title="Gestionar categorías de proveedores">⚙ Categorías</button>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('proveedores')">⬇ CSV</button>
       </div>
     </div>
@@ -482,7 +482,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <div class="card-header"><span class="card-title">Datos del Proveedor</span></div>
     <div class="form-grid">
       <div class="field-group"><label class="field-label">Nombre / Empresa *</label><input class="field-input" id="np-nombre" placeholder="Empresa S.A."></div>
-      <div class="field-group"><label class="field-label">Categoría *</label><select class="field-select" id="np-categoria"><option value="">— seleccionar —</option><option>Filamentos 3D</option><option>Resinas y materiales</option><option>Componentes LED / Neones</option><option>Trofeos y medallas</option><option>Packaging / Embalaje</option><option>Electrónica y cables</option><option>Logística y despacho</option><option>Diseño / Gráfica</option><option>Servicios varios</option><option>Otro</option></select></div>
+      <div class="field-group"><label class="field-label">Categoría *</label><select class="field-select" id="np-categoria"><option value="">— seleccionar —</option></select></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="np-contacto" placeholder="Juan Pérez"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="np-cargo"></div>
       <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="np-telefono" placeholder="+56 9 1234 5678"></div>
@@ -618,7 +618,6 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
           <label class="field-label">Categoría</label>
           <select class="field-select" id="ss-categoria">
             <option value="">— cualquiera —</option>
-            <option>Filamentos 3D</option><option>Resinas y materiales</option><option>Componentes LED / Neones</option><option>Trofeos y medallas</option><option>Packaging / Embalaje</option><option>Electrónica y cables</option><option>Logística y despacho</option><option>Diseño / Gráfica</option><option>Servicios varios</option><option>Otro</option>
           </select>
         </div>
         <div class="field-group">
@@ -846,7 +845,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <input type="hidden" id="epId">
     <div class="form-grid" style="padding:0">
       <div class="field-group"><label class="field-label">Nombre / Empresa *</label><input class="field-input" id="epNombre"></div>
-      <div class="field-group"><label class="field-label">Categoría *</label><select class="field-select" id="epCategoria"><option value="">— seleccionar —</option><option>Filamentos 3D</option><option>Resinas y materiales</option><option>Componentes LED / Neones</option><option>Trofeos y medallas</option><option>Packaging / Embalaje</option><option>Electrónica y cables</option><option>Logística y despacho</option><option>Diseño / Gráfica</option><option>Servicios varios</option><option>Otro</option></select></div>
+      <div class="field-group"><label class="field-label">Categoría *</label><select class="field-select" id="epCategoria"><option value="">— seleccionar —</option></select></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="epContacto"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="epCargo"></div>
       <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="epTelefono"></div>
@@ -2531,7 +2530,7 @@ function renderProveedoresAnalytics(){
   const activos=state.proveedores.filter(p=>(p.fields['Estado']||p.fields['estado']||'')!=='Inactivo').length;
   const pagoMap={};state.proveedores.forEach(p=>{const pg=p.fields['Condición de pago']||'Sin especificar';pagoMap[pg]=(pagoMap[pg]||0)+1;});
   const topPagos=Object.entries(pagoMap).sort((a,b)=>b[1]-a[1]).slice(0,4);
-  const catBars=topCats.map(([cat,n])=>{const pct=Math.round((n/maxCat)*100);const[color]=PV_CAT_COLORS[cat]||['#888'];return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:10px;color:var(--text2);min-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(cat)}">${escapeHtml(cat)}</div><div style="flex:1;height:12px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:4px;box-shadow:0 0 6px ${color}55"></div></div><div style="font-size:10px;font-weight:700;color:${color};min-width:20px;text-align:right">${n}</div></div>`;}).join('');
+  const catBars=topCats.map(([cat,n])=>{const pct=Math.round((n/maxCat)*100);const[color]=getPvCatColor(cat);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:10px;color:var(--text2);min-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(cat)}">${escapeHtml(cat)}</div><div style="flex:1;height:12px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:4px;box-shadow:0 0 6px ${color}55"></div></div><div style="font-size:10px;font-weight:700;color:${color};min-width:20px;text-align:right">${n}</div></div>`;}).join('');
   const pagoChips=topPagos.map(([pg,n])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center"><div style="font-size:14px;font-weight:700;color:var(--text1)">${n}</div><div style="font-size:9px;color:var(--text3);margin-top:2px;line-height:1.3">${escapeHtml(pg.length>20?pg.substring(0,20)+'…':pg)}</div></div>`).join('');
   el.innerHTML=`<div class="data-grid" style="margin-top:16px"><div class="card"><div class="card-header"><span class="card-title">📦 Distribución por Categoría</span><span style="font-size:11px;color:var(--accent3)">${activos} activos / ${state.proveedores.length} total</span></div><div style="padding:14px 16px">${catBars}</div></div><div class="card"><div class="card-header"><span class="card-title">💳 Condiciones de Pago</span></div><div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">${pagoChips}</div></div></div>`;
 }
@@ -3055,11 +3054,108 @@ const PV_CAT_COLORS={
   'Servicios varios':        ['#94a3b8','rgba(148,163,184,0.13)','rgba(148,163,184,0.32)'],
   'Otro':                    ['#888','rgba(136,136,136,0.12)','rgba(136,136,136,0.28)'],
 };
+// Paleta extra para categorías nuevas (cicla automáticamente)
+const PV_CAT_EXTRA_PALETTE=[
+  ['#f43f5e','rgba(244,63,94,0.13)','rgba(244,63,94,0.32)'],
+  ['#8b5cf6','rgba(139,92,246,0.13)','rgba(139,92,246,0.32)'],
+  ['#06b6d4','rgba(6,182,212,0.13)','rgba(6,182,212,0.32)'],
+  ['#84cc16','rgba(132,204,22,0.13)','rgba(132,204,22,0.32)'],
+  ['#ec4899','rgba(236,72,153,0.13)','rgba(236,72,153,0.32)'],
+  ['#14b8a6','rgba(20,184,166,0.13)','rgba(20,184,166,0.32)'],
+  ['#f97316','rgba(249,115,22,0.13)','rgba(249,115,22,0.32)'],
+  ['#6366f1','rgba(99,102,241,0.13)','rgba(99,102,241,0.32)'],
+];
+const PV_CATS_DEFAULT=['Filamentos 3D','Resinas y materiales','Componentes LED / Neones','Trofeos y medallas','Packaging / Embalaje','Electrónica y cables','Logística y despacho','Diseño / Gráfica','Servicios varios','Otro'];
+function getPvCats(){try{const s=localStorage.getItem('pv_categorias');return s?JSON.parse(s):[...PV_CATS_DEFAULT];}catch{return[...PV_CATS_DEFAULT];}}
+function setPvCats(arr){localStorage.setItem('pv_categorias',JSON.stringify(arr));}
+function getPvCatColorMap(){try{const s=localStorage.getItem('pv_cat_colors');return s?JSON.parse(s):{};} catch{return {};}}
+function setPvCatColorMap(obj){localStorage.setItem('pv_cat_colors',JSON.stringify(obj));}
+function getPvCatColor(cat){
+  if(PV_CAT_COLORS[cat]) return PV_CAT_COLORS[cat];
+  const custom=getPvCatColorMap();
+  if(custom[cat]) return custom[cat];
+  // auto-asignar desde paleta extra y persistir
+  const cats=getPvCats();
+  const idx=Math.max(0,cats.indexOf(cat)-Object.keys(PV_CAT_COLORS).length);
+  const color=PV_CAT_EXTRA_PALETTE[idx%PV_CAT_EXTRA_PALETTE.length];
+  const cm=getPvCatColorMap();cm[cat]=color;setPvCatColorMap(cm);
+  return color||['#888','rgba(136,136,136,0.12)','rgba(136,136,136,0.28)'];
+}
+function fillCatSelects(){
+  const cats=getPvCats();
+  const configs=[
+    {id:'proveedorCatFilter', first:'<option value="">Todas las categorías</option>'},
+    {id:'np-categoria',       first:'<option value="">— seleccionar —</option>'},
+    {id:'ss-categoria',       first:'<option value="">— cualquiera —</option>'},
+    {id:'epCategoria',        first:'<option value="">— seleccionar —</option>'},
+  ];
+  const optsHtml=cats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  configs.forEach(({id,first})=>{
+    const el=document.getElementById(id);if(!el) return;
+    const curr=el.value;
+    el.innerHTML=first+optsHtml;
+    if(curr) el.value=curr;
+  });
+}
+// ── GESTIÓN DE CATEGORÍAS ─────────────────────────────────────
+function openCatManager(){renderCatManager();document.getElementById('catManagerModal').style.display='flex';}
+function closeCatManager(){document.getElementById('catManagerModal').style.display='none';}
+function renderCatManager(){
+  const cats=getPvCats();
+  const inUseCount={};
+  state.proveedores.forEach(p=>{
+    pvCat(p.fields).split(', ').forEach(c=>{const t=c.trim();if(t) inUseCount[t]=(inUseCount[t]||0)+1;});
+  });
+  document.getElementById('catManagerList').innerHTML=cats.length?cats.map((cat,i)=>{
+    const[color]=getPvCatColor(cat);
+    const n=inUseCount[cat]||0;
+    return`<div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px">
+      <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${color};box-shadow:0 0 6px ${color}88"></span>
+      <span style="flex:1;font-size:12px;color:var(--text)">${escapeHtml(cat)}</span>
+      ${n?`<span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">${n} uso${n!==1?'s':''}</span>`:''}
+      <button onclick="deletePvCat(${i})" title="${n?'Hay proveedores en esta categoría':''}" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>
+    </div>`;
+  }).join(''):`<div class="empty-state" style="padding:20px;font-size:12px">Sin categorías — agrega una abajo</div>`;
+}
+function addPvCat(){
+  const inp=document.getElementById('catManagerInput');
+  const name=(inp?.value||'').trim();
+  if(!name){toast('Ingresa el nombre de la categoría','error');inp?.focus();return;}
+  const cats=getPvCats();
+  if(cats.some(c=>c.toLowerCase()===name.toLowerCase())){toast('Esa categoría ya existe','error');return;}
+  cats.push(name);
+  setPvCats(cats);
+  fillCatSelects();
+  renderCatManager();
+  inp.value='';
+  inp.focus();
+  toast(`✓ Categoría "${name}" agregada`,'success');
+}
+function deletePvCat(idx){
+  const cats=getPvCats();
+  const name=cats[idx];if(!name) return;
+  const inUse=state.proveedores.some(p=>pvCat(p.fields).split(', ').map(s=>s.trim()).includes(name));
+  if(inUse&&!confirm(`"${name}" está siendo usada por algunos proveedores.\n¿Eliminar igualmente?`)) return;
+  cats.splice(idx,1);
+  setPvCats(cats);
+  const cm=getPvCatColorMap();delete cm[name];setPvCatColorMap(cm);
+  fillCatSelects();
+  renderCatManager();
+  toast(`Categoría "${name}" eliminada`,'info');
+}
+function resetPvCats(){
+  if(!confirm('¿Restaurar las 10 categorías predeterminadas?\nSe eliminarán las categorías personalizadas.')) return;
+  localStorage.removeItem('pv_categorias');
+  localStorage.removeItem('pv_cat_colors');
+  fillCatSelects();
+  renderCatManager();
+  toast('Categorías restauradas','success');
+}
 function pvCatBadge(cat){
   if(!cat||cat==='—') return '<span class="badge badge-gray">—</span>';
   return cat.split(', ').map(c=>{
     const s=c.trim();
-    const[color,bg,border]=PV_CAT_COLORS[s]||['#888','rgba(136,136,136,0.12)','rgba(136,136,136,0.28)'];
+    const[color,bg,border]=getPvCatColor(s);
     return `<span style="display:inline-block;font-size:9px;font-weight:600;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;text-transform:uppercase;white-space:nowrap;color:${color};background:${bg};border:1px solid ${border}">${escapeHtml(s)}</span>`;
   }).join(' ');
 }
@@ -3353,6 +3449,7 @@ function exportToCSV(t){
 document.addEventListener('DOMContentLoaded',()=>{
   try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
   initDates();
+  fillCatSelects();
   const token=getToken();
   if(!token){setStatus('sin token',false);hideSysLoader();showTokenModal();}
   else{slProgress(5,'Verificando credenciales...');loadAllData().then(()=>{startAutoRefresh();});}
@@ -3367,5 +3464,23 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 });
 </script>
+
+<!-- MODAL CATEGORÍAS PROVEEDORES -->
+<div id="catManagerModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeCatManager()"></div>
+  <div class="modal-card" style="max-width:400px">
+    <div class="modal-title">⚙ Categorías de Proveedores</div>
+    <p class="modal-desc" style="margin-bottom:16px">Agrega o elimina categorías. Los cambios aplican en todos los formularios al instante.</p>
+    <div id="catManagerList" style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:320px;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input class="field-input" id="catManagerInput" placeholder="Nombre de nueva categoría..." style="flex:1" onkeydown="if(event.key==='Enter') addPvCat()">
+      <button class="btn btn-primary btn-sm" onclick="addPvCat()">+ Agregar</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <button onclick="resetPvCats()" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif">↺ Restaurar predeterminadas</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeCatManager()">Cerrar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
