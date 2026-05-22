@@ -321,7 +321,6 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <div class="card"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
     <div class="card"><div class="card-header"><span class="card-title">Revenue últimas 4 semanas</span></div><div id="chartRevenue" style="padding:16px"></div></div>
   </div>
-  <div class="card" style="margin-top:24px"><div class="card-header"><span class="card-title">Estado Agentes IA</span><button class="btn btn-ghost btn-sm" onclick="switchTab('agentes')">Ver detalle →</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;padding:16px" id="agentsMini"></div></div>
 </div>
 
 <!-- CLIENTES -->
@@ -1613,7 +1612,7 @@ function switchTab(name){
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────
-function renderOverview(){renderKPIs();renderEquipoSnapshot();renderPipelineArea();renderCotTable();renderAlertas();renderCharts();renderAgentsMini();}
+function renderOverview(){renderKPIs();renderEquipoSnapshot();renderPipelineArea();renderCotTable();renderAlertas();renderCharts();}
 function renderEquipoSnapshot(){
   const el=document.getElementById('equipoSnapshot');if(!el) return;
   const today=new Date();today.setHours(0,0,0,0);
@@ -1851,13 +1850,7 @@ function renderAlertas(){
   if(!rows.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div>Sin alertas activas</div>';return;}
   el.innerHTML=`<div style="padding:12px 16px;display:flex;flex-direction:column;gap:7px">${rows.join('')}</div>`;
 }
-function renderAgentsMini(){
-  const cotP=state.cotizaciones.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
-  const pedA=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
-  const fv=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=1).length;
-  const agents=[{n:'SALES',i:'💬',s:cotP>0?`${cotP} pend.`:'Listo',t:cotP>0?'active':'idle'},{n:'QUOTE',i:'📋',s:'Listo',t:'idle'},{n:'PRODUCTION',i:'🔧',s:pedA>0?`${pedA} act.`:'Listo',t:pedA>0?'active':'idle'},{n:'QA',i:'✅',s:'Standby',t:'idle'},{n:'FOLLOWUP',i:'🔁',s:'Standby',t:'idle'},{n:'CEO',i:'📊',s:'Semanal',t:'idle'},{n:'FINANCE',i:'💰',s:fv>0?`⚠ ${fv}`:'OK',t:fv>0?'warn':'idle'},{n:'CONTENT',i:'📸',s:'Semanal',t:'idle'}];
-  document.getElementById('agentsMini').innerHTML=agents.map(a=>{const cls=a.t==='active'?'active-agent':a.t==='warn'?'warn-agent':'';const ind=a.t==='active'?'on':a.t==='warn'?'warn':'off';return`<div class="agent-chip ${cls}" onclick="switchTab('agentes')"><div class="agent-indicator ${ind}"></div><div style="font-size:18px;margin-bottom:4px">${a.i}</div><div style="font-size:9px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase">${a.n}</div><div style="font-size:9px;color:var(--text3);margin-top:2px">${a.s}</div></div>`;}).join('');
-}
+
 function renderCharts(){
   const estados=['Confirmado','En producción','Listo para despacho','Despachado'],colores={'Confirmado':'#00d4cc','En producción':'#ff6b35','Listo para despacho':'#00d4aa','Despachado':'#a78bfa'};
   const counts={};estados.forEach(e=>counts[e]=0);state.pedidos.forEach(p=>{const e=p.fields['Estado pedido']||'';if(counts[e]!==undefined) counts[e]++;});
