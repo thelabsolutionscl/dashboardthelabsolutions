@@ -410,7 +410,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     </div>
   </div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap">
-    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Pago (50/50)</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
+    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
   <div id="pedidosKanban" style="display:none"></div>
@@ -2272,10 +2272,8 @@ function renderPedidos(filter){
     if(idx>=0&&idx<stages.length-1) actionCell=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') actionCell='<span class="badge badge-green">✓</span>';
     const formaOpts=['Contado','Pago a 30 días desde OC','Pago a 45 días desde OC','60% inicial y 40% Contra entrega','50% para iniciar y 50% a 30 días'];
     const formaActual=f['Forma de pago']||'';
-    const pvActual=f['Proveedor']||'';
-    const pvOptsHtml=`<option value="">— ninguno —</option>`+state.proveedores.filter(x=>(x.fields['Estado']||'')==='Activo').map(x=>`<option value="${escapeHtml(x.fields['Nombre']||'')}" ${pvActual===x.fields['Nombre']?'selected':''}>${escapeHtml(x.fields['Nombre']||'')}</option>`).join('');
     return`<tr data-id="${p.id}"><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td>${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
-    <td><select onchange="updateProveedorPedido('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:140px">${pvOptsHtml}</select></td>
+    <td>${renderProveedorCell(p.id,f['Proveedor']||'')}</td>
     <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
@@ -2316,10 +2314,50 @@ function qaBorder(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.4)';if(r==='
 function qaTextColor(r){if(r==='QA aprobado') return 'var(--accent3)';if(r==='Rechazado') return 'var(--danger)';return 'var(--text2)';}
 function qaLabel(r){if(r==='QA aprobado') return '✓ Aprobado';if(r==='Rechazado') return '✕ Rechazado';return '— Pendiente';}
 function pagoChips(id,f){
-  const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'];
-  const chip=(label,on,fn,title)=>`<button onclick="${fn}" title="${title}" style="background:${on?'rgba(0,212,170,0.18)':'rgba(255,68,68,0.12)'};border:1px solid ${on?'rgba(0,212,170,0.4)':'rgba(255,68,68,0.28)'};color:${on?'var(--accent3)':'var(--danger)'};border-radius:5px;padding:3px 7px;cursor:pointer;font-size:10px;font-weight:700;white-space:nowrap">${on?'✓':'✕'} ${label}</button>`;
-  return`<div style="display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${chip('Ant.',a,`toggleAnticipo('${id}',${a})`,'Anticipo 50%')}${chip('Saldo',s,`toggleSaldo('${id}',${s})`,'Saldo 50%')}</div>`;
+  const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'],t=a&&s;
+  const btn=(label,on,fn)=>`<button onclick="${fn}" style="background:${on?'rgba(0,212,170,0.2)':'var(--surface3)'};border:1px solid ${on?'rgba(0,212,170,0.45)':'var(--border2)'};color:${on?'var(--accent3)':'var(--text3)'};border-radius:5px;padding:3px 7px;cursor:pointer;font-size:10px;font-weight:700;white-space:nowrap;transition:all 0.15s">${on?'✓ ':''} ${label}</button>`;
+  return`<div style="display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${btn('Abono',a,`toggleAnticipo('${id}',${a})`)}${btn('Saldo',s,`toggleSaldo('${id}',${s})`)}${btn('Total',t,`toggleTotal('${id}',${t})`)}</div>`;
 }
+function pvChipsHtml(arr){
+  if(!arr.length) return'<span style="color:var(--text3);font-size:10px">— ninguno</span>';
+  return arr.map(n=>`<span title="${escapeHtml(n)}" style="display:inline-block;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);border-radius:4px;padding:1px 5px;font-size:9px;color:var(--accent);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(n.length>12?n.slice(0,11)+'…':n)}</span>`).join('');
+}
+function renderProveedorCell(pedidoId,pvStr){
+  const arr=(pvStr||'').split(',').map(s=>s.trim()).filter(Boolean);
+  return`<div style="display:flex;align-items:center;gap:4px;min-width:90px"><div class="pv-chips" style="display:flex;gap:2px;flex-wrap:wrap;flex:1">${pvChipsHtml(arr)}</div><button onclick="openProveedorDrop('${pedidoId}',this);event.stopPropagation()" style="background:var(--surface3);border:1px solid var(--border2);border-radius:4px;color:var(--text3);font-size:10px;padding:2px 6px;cursor:pointer;flex-shrink:0" title="Seleccionar proveedores">▾</button></div>`;
+}
+let _pvDropId=null;
+function openProveedorDrop(pedidoId,btn){
+  _pvDropId=pedidoId;
+  const drop=document.getElementById('pvMultiDrop');
+  if(drop.style.display==='block'&&drop.dataset.pid===pedidoId){drop.style.display='none';return;}
+  drop.dataset.pid=pedidoId;
+  const p=state.pedidos.find(x=>x.id===pedidoId);
+  const selected=(p?.fields['Proveedor']||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const activos=state.proveedores.filter(x=>(x.fields['Estado']||'')==='Activo');
+  document.getElementById('pvMultiDropContent').innerHTML=activos.length
+    ?activos.map(x=>{const n=x.fields['Nombre']||'';const chk=selected.includes(n);return`<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:var(--text);background:${chk?'rgba(0,212,204,0.08)':'transparent'}"><input type="checkbox" ${chk?'checked':''} style="accent-color:var(--accent);cursor:pointer" onchange="pvMultiToggle('${escapeHtml(n)}',this.checked)"><span style="flex:1">${escapeHtml(n)}</span></label>`;}).join('')
+    :'<div style="color:var(--text3);font-size:11px;padding:8px">Sin proveedores activos</div>';
+  const rect=btn.getBoundingClientRect();
+  drop.style.top=(rect.bottom+4)+'px';
+  drop.style.left=Math.min(rect.left,window.innerWidth-220)+'px';
+  drop.style.display='block';
+}
+async function pvMultiToggle(nombre,checked){
+  const id=_pvDropId;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const arr=(p.fields['Proveedor']||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(checked&&!arr.includes(nombre)) arr.push(nombre);
+  else if(!checked){const i=arr.indexOf(nombre);if(i>=0) arr.splice(i,1);}
+  const nuevo=arr.join(', ');p.fields['Proveedor']=nuevo;
+  const wrap=document.querySelector(`tr[data-id="${id}"] .pv-chips`);
+  if(wrap) wrap.innerHTML=pvChipsHtml(arr);
+  try{await airtableWrite('Pedidos','PATCH',id,{'Proveedor':nuevo||null});}
+  catch(e){toast('Error: '+e.message,'error');}
+}
+document.addEventListener('click',function(e){
+  const drop=document.getElementById('pvMultiDrop');
+  if(drop&&drop.style.display==='block'&&!drop.contains(e.target)&&!e.target.closest('[onclick*="openProveedorDrop"]')) drop.style.display='none';
+});
 async function updateFormaPago(id,forma){try{await airtableWrite('Pedidos','PATCH',id,{'Forma de pago':forma});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Forma de pago']=forma;toast(`Forma de pago → ${forma}`,'success');}catch(e){toast('Error: '+e.message,'error');}}
 async function updateProveedorPedido(id,nombre){
   const p=state.pedidos.find(x=>x.id===id);if(!p) return;
@@ -2358,6 +2396,15 @@ async function toggleSaldo(id,actual){
     await airtableWrite('Pedidos','PATCH',id,{'Saldo pagado (50%)':n});
     toast(`Saldo (50%) ${n?'✓ recibido — pago completo':'pendiente'}`,n?'success':'info');
   }catch(e){p.fields['Saldo pagado (50%)']=actual;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
+}
+async function toggleTotal(id,actual){
+  const n=!actual;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  p.fields['Anticipo pagado (50%)']=n;p.fields['Saldo pagado (50%)']=n;
+  renderPedidos();renderOverview();
+  try{
+    await airtableWrite('Pedidos','PATCH',id,{'Anticipo pagado (50%)':n,'Saldo pagado (50%)':n});
+    toast(n?'✓ Pago total recibido':'Pago total revertido',n?'success':'info');
+  }catch(e){p.fields['Anticipo pagado (50%)']=!n;p.fields['Saldo pagado (50%)']=!n;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
 }
 async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
@@ -3695,6 +3742,10 @@ document.addEventListener('DOMContentLoaded',()=>{
       <button class="btn btn-ghost btn-sm" onclick="closeCatManager()">Cerrar</button>
     </div>
   </div>
+</div>
+<!-- Proveedor multi-select dropdown -->
+<div id="pvMultiDrop" style="display:none;position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:200px;max-height:260px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.45)">
+  <div id="pvMultiDropContent"></div>
 </div>
 </body>
 </html>
