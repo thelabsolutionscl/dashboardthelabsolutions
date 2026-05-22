@@ -2009,13 +2009,22 @@ function renderCotizaciones(){const tbody=document.getElementById('cotsTableBody
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
-  return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?'<span class="badge badge-orange">+25%</span>':'<span class="badge badge-gray">No</span>'}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
+  return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
   <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁<span class="btn-txt"> Ver PDF</span></button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄<span class="btn-txt"> Descargar PDF</span></button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></div></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
   try{await airtableWrite('Cotizaciones','PATCH',id,{'Estado cotización':estado});toast(`Cotización ${estado}`,'success');if(estado==='Aprobada') await crearPedidoDesdeCotizacion(id);await loadAllDataSilent();renderCotizaciones();renderOverview();}
   catch(e){toast('Error: '+e.message,'error');}
+}
+async function toggleUrgenciaCotizacion(id){
+  const c=state.cotizaciones.find(x=>x.id===id);if(!c) return;
+  const nuevo=!c.fields['Urgencia (+25%)'];
+  c.fields['Urgencia (+25%)']=nuevo;
+  const row=document.querySelector(`#cotsTableBodyFull tr[data-id="${id}"]`);
+  if(row){const cell=row.querySelector('[data-label="Urgente"]');if(cell) cell.innerHTML=nuevo?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${id}')">—<span class="btn-txt"> Normal</span></button>`;}
+  try{await airtableWrite('Cotizaciones','PATCH',id,{'Urgencia (+25%)':nuevo});toast(nuevo?'⚡ Marcada como urgente':'Urgencia quitada','info');}
+  catch(e){c.fields['Urgencia (+25%)']=!nuevo;renderCotizaciones();toast('Error: '+e.message,'error');}
 }
 async function crearPedidoDesdeCotizacion(cotId){
   const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;const f=cot.fields;
