@@ -734,16 +734,28 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 
 <!-- MÁQUINAS -->
 <div class="tab-panel" id="tab-maquinas">
-  <div class="section-header"><div class="section-title">Disponibilidad Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div></div>
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="btn btn-ghost btn-sm" onclick="navSemana(-1)">← Anterior</button>
-    <span id="semanaLabel" style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)"></span>
-    <button class="btn btn-ghost btn-sm" onclick="navSemana(1)">Siguiente →</button>
-    <button class="btn btn-ghost btn-sm" onclick="goToday()">Hoy</button>
+  <div class="section-header">
+    <div><div class="section-title">Disponibilidad Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div></div>
+    <button id="btnMonitorToggle" class="btn btn-ghost btn-sm" onclick="toggleMonitorView()" style="font-size:12px;white-space:nowrap">📡 Monitor en vivo</button>
   </div>
-  <div id="heatmapSemanas" style="margin-bottom:12px"></div>
-  <div id="maquinasKPIs" style="margin-bottom:14px"></div>
-  <div class="card"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px"><thead id="maquinasHeader"></thead><tbody id="maquinasBody"></tbody></table></div></div>
+  <div id="maquinaCalView">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="navSemana(-1)">← Anterior</button>
+      <span id="semanaLabel" style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="navSemana(1)">Siguiente →</button>
+      <button class="btn btn-ghost btn-sm" onclick="goToday()">Hoy</button>
+    </div>
+    <div id="heatmapSemanas" style="margin-bottom:12px"></div>
+    <div id="maquinasKPIs" style="margin-bottom:14px"></div>
+    <div class="card"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px"><thead id="maquinasHeader"></thead><tbody id="maquinasBody"></tbody></table></div></div>
+  </div>
+  <div id="maquinaMonView" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <span style="font-size:11px;color:var(--text3)">Actualizado: <span id="monitorLastUpdate">—</span> · Auto-refresh cada 15s</span>
+      <button class="btn btn-ghost btn-sm" onclick="pollPrinters()">↻ Actualizar ahora</button>
+    </div>
+    <div id="maquinaMonGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px"></div>
+  </div>
 </div>
 
 <div id="maquinaEventModal" class="modal-overlay" style="display:none">
@@ -1020,15 +1032,20 @@ const cotizacionesSort={key:null,dir:1};
 const proveedoresSort={key:null,dir:1};
 
 const MAQUINAS=[
-  {id:'k1-1',nombre:'Creality K1',num:1,modelo:'K1',color:'#00d4cc'},{id:'k1-2',nombre:'Creality K1',num:2,modelo:'K1',color:'#00d4cc'},
-  {id:'k1-3',nombre:'Creality K1',num:3,modelo:'K1',color:'#00d4cc'},{id:'k1-4',nombre:'Creality K1',num:4,modelo:'K1',color:'#00d4cc'},
-  {id:'k1-5',nombre:'Creality K1',num:5,modelo:'K1',color:'#00d4cc'},
-  {id:'k2-1',nombre:'Creality K2',num:1,modelo:'K2',color:'#a78bfa'},{id:'k2-2',nombre:'Creality K2',num:2,modelo:'K2',color:'#a78bfa'},
-  {id:'k2p-1',nombre:'Creality K2 Plus',num:1,modelo:'K2 Plus',color:'#ff6b35'},
-  {id:'e5-1',nombre:'Creality Ender-5 Max',num:1,modelo:'Ender-5 Max',color:'#ffaa00'},{id:'e5-2',nombre:'Creality Ender-5 Max',num:2,modelo:'Ender-5 Max',color:'#ffaa00'},
-  {id:'e5-3',nombre:'Creality Ender-5 Max',num:3,modelo:'Ender-5 Max',color:'#ffaa00'},{id:'e5-4',nombre:'Creality Ender-5 Max',num:4,modelo:'Ender-5 Max',color:'#ffaa00'},
-  {id:'e5-5',nombre:'Creality Ender-5 Max',num:5,modelo:'Ender-5 Max',color:'#ffaa00'},
-  {id:'giga-1',nombre:'Elegoo OrangeStorm Giga',num:1,modelo:'Giga',color:'#ff4444'},
+  {id:'k1-1',nombre:'Creality K1',num:1,numG:1,modelo:'K1',color:'#00d4cc',ip:'192.168.100.51'},
+  {id:'k1-2',nombre:'Creality K1',num:2,numG:2,modelo:'K1',color:'#00d4cc',ip:'192.168.100.126'},
+  {id:'k1-3',nombre:'Creality K1',num:3,numG:3,modelo:'K1',color:'#00d4cc',ip:'192.168.100.7'},
+  {id:'k1-4',nombre:'Creality K1',num:4,numG:4,modelo:'K1',color:'#00d4cc',ip:'192.168.100.68'},
+  {id:'k1-5',nombre:'Creality K1',num:5,numG:5,modelo:'K1',color:'#00d4cc',ip:null},
+  {id:'k2-1',nombre:'Creality K2',num:1,numG:12,modelo:'K2',color:'#a78bfa',ip:'192.168.100.71'},
+  {id:'k2-2',nombre:'Creality K2',num:2,numG:13,modelo:'K2',color:'#a78bfa',ip:'192.168.100.128'},
+  {id:'k2p-1',nombre:'Creality K2 Plus',num:1,numG:11,modelo:'K2 Plus',color:'#ff6b35',ip:null},
+  {id:'e5-1',nombre:'Creality Ender-5 Max',num:1,numG:6,modelo:'Ender-5 Max',color:'#ffaa00',ip:null},
+  {id:'e5-2',nombre:'Creality Ender-5 Max',num:2,numG:7,modelo:'Ender-5 Max',color:'#ffaa00',ip:null},
+  {id:'e5-3',nombre:'Creality Ender-5 Max',num:3,numG:8,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.65'},
+  {id:'e5-4',nombre:'Creality Ender-5 Max',num:4,numG:9,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.95'},
+  {id:'e5-5',nombre:'Creality Ender-5 Max',num:5,numG:10,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.64'},
+  {id:'giga-1',nombre:'Elegoo OrangeStorm Giga',num:1,numG:14,modelo:'Giga',color:'#ff4444',ip:null},
 ];
 const MODELO_IMGS={
   'K1':'https://thelab.solutions/wp-content/uploads/2026/05/K1-_02-2.png.png',
@@ -1606,6 +1623,7 @@ function switchTab(name){
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
   if(name==='maquinas') initMaquinas();
+  else{clearInterval(_monitorInterval);_monitorInterval=null;_monitorOn=false;const mv=document.getElementById('maquinaMonView');const cv=document.getElementById('maquinaCalView');if(mv) mv.style.display='none';if(cv) cv.style.display='';const bt=document.getElementById('btnMonitorToggle');if(bt) bt.textContent='📡 Monitor en vivo';}
   if(name==='equipo') initEquipo();
   if(name==='nueva-cot'){const cn=document.getElementById('cot-num');if(cn) cn.value=generarNumeroCotizacion();updateVtoPreview();}
   window.scrollTo({top:0,behavior:'smooth'});
@@ -2978,6 +2996,140 @@ function goToday(){maquinaState.semanaOffset=0;renderMaquinasCalendar();}
 function getMaquinaEstadoGlobal(id){return localStorage.getItem('estado_maq_'+id)||'disponible';}
 async function toggleMaquinaEstado(id){const act=getMaquinaEstadoGlobal(id),nv=act==='disponible'?'mantencion':'disponible';localStorage.setItem('estado_maq_'+id,nv);const m=MAQUINAS.find(x=>x.id===id);toast(`${m?.nombre} #${m?.num}: ${nv==='mantencion'?'🔧 Mantención':'✓ Disponible'}`,nv==='mantencion'?'error':'success');renderMaquinasCalendar();}
 async function initMaquinas(){await loadMaquinaEventosAirtable();renderMaquinasCalendar();}
+
+// ── PRINTER LIVE MONITOR ──────────────────────────────────────
+const MOONRAKER_PORT=7125;
+let _monitorInterval=null,_monitorOn=false;
+const _printerStatus={};
+
+function getPrinterIp(m){return m.ip||localStorage.getItem('printer_ip_'+m.id)||null;}
+
+function savePrinterIp(id){
+  const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();
+  if(!val)return;
+  localStorage.setItem('printer_ip_'+id,val);
+  const m=MAQUINAS.find(x=>x.id===id);
+  toast(`IP guardada · ${m?.nombre} #${m?.numG}`,'success');
+  pollPrinters();
+}
+
+async function fetchPrinterStatus(m){
+  const ip=getPrinterIp(m);
+  if(!ip) return{state:'noip'};
+  try{
+    const url=`http://${ip}:${MOONRAKER_PORT}/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(5000)});
+    if(!r.ok) return{state:'offline'};
+    const d=await r.json();
+    const s=d.result?.status||{};
+    const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{};
+    const progress=Math.round((vs.progress||0)*100);
+    const elapsed=ps.print_duration||0;
+    const eta=progress>0&&progress<100?Math.round(elapsed/progress*(100-progress)):0;
+    return{
+      state:ps.state||'standby',
+      progress,
+      filename:(ps.filename||'').replace(/\.gcode$/i,''),
+      hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},
+      bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},
+      elapsed,eta,ip
+    };
+  }catch(e){return{state:'offline',ip};}
+}
+
+function fmtSecs(s){if(!s||s<=0)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;}
+
+function printerStateMeta(state){
+  return{
+    printing:{label:'Imprimiendo',color:'#00d4aa',bg:'rgba(0,212,170,0.15)'},
+    paused:{label:'Pausado',color:'#ffaa00',bg:'rgba(255,170,0,0.15)'},
+    error:{label:'Error',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
+    complete:{label:'Completado',color:'#a78bfa',bg:'rgba(167,139,250,0.15)'},
+    standby:{label:'Idle',color:'var(--text3)',bg:'var(--surface2)'},
+    offline:{label:'Offline',color:'#888',bg:'rgba(120,120,120,0.12)'},
+    noip:{label:'Sin IP',color:'#ff6b35',bg:'rgba(255,107,53,0.12)'},
+  }[state]||{label:state,color:'var(--text3)',bg:'var(--surface2)'};
+}
+
+function renderMonitorGrid(){
+  const el=document.getElementById('maquinaMonGrid');if(!el)return;
+  el.innerHTML=MAQUINAS.map(m=>{
+    const s=_printerStatus[m.id]||{state:'offline'};
+    const sm=printerStateMeta(s.state);
+    const ip=getPrinterIp(m);
+    const img=MODELO_IMGS[m.modelo]||'';
+    const isPrinting=s.state==='printing'||s.state==='paused';
+
+    let body='';
+    if(s.state==='noip'){
+      body=`<div style="margin-top:10px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Ingresa la IP de esta impresora:</div>
+        <div style="display:flex;gap:6px">
+          <input id="ipin_${m.id}" type="text" placeholder="192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
+          <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button>
+        </div>
+      </div>`;
+    } else if(s.state==='offline'){
+      body=`<div style="margin-top:10px;text-align:center;color:var(--text3);font-size:11px">Sin respuesta · <span style="font-family:monospace">${ip}</span><br><span style="font-size:10px">Verifica que la impresora esté encendida</span></div>`;
+    } else {
+      body=`
+        ${isPrinting?`<div style="margin:8px 0 2px">
+          <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
+          <div style="background:var(--surface2);border-radius:4px;height:7px;overflow:hidden">
+            <div style="background:${sm.color};height:100%;width:${s.progress}%;border-radius:4px;transition:width 0.6s"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;color:var(--text3)">
+            <span style="font-weight:700;color:${sm.color}">${s.progress}%</span>
+            <span>⏱ ${fmtSecs(s.eta)} restante</span>
+          </div>
+        </div>`:''}
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="flex:1;background:var(--surface2);border-radius:7px;padding:6px;text-align:center">
+            <div style="font-size:9px;color:var(--text3);letter-spacing:.5px">HOTEND</div>
+            <div style="font-size:16px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'}">${s.hotend?.actual||0}°</div>
+            ${s.hotend?.target>0?`<div style="font-size:9px;color:var(--text3)">→ ${s.hotend.target}°</div>`:'<div style="font-size:9px;color:var(--text3)">fría</div>'}
+          </div>
+          <div style="flex:1;background:var(--surface2);border-radius:7px;padding:6px;text-align:center">
+            <div style="font-size:9px;color:var(--text3);letter-spacing:.5px">CAMA</div>
+            <div style="font-size:16px;font-weight:700;color:${s.bed?.target>0?'#ffaa00':'var(--text)'}">${s.bed?.actual||0}°</div>
+            ${s.bed?.target>0?`<div style="font-size:9px;color:var(--text3)">→ ${s.bed.target}°</div>`:'<div style="font-size:9px;color:var(--text3)">fría</div>'}
+          </div>
+        </div>
+        ${!isPrinting?`<div style="margin-top:6px;font-size:9px;color:var(--text3);text-align:center;font-family:monospace">${ip}</div>`:''}
+      `;
+    }
+
+    return`<div style="background:var(--surface);border:1px solid ${isPrinting?sm.color+'44':' var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
+      <div style="display:flex;align-items:center;gap:8px">
+        ${img?`<img src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.nombre}</div>
+          <div style="font-size:10px;color:var(--text3)">#${m.numG}</div>
+        </div>
+        <span style="background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700;flex-shrink:0;border:1px solid ${sm.color}33">${sm.label}</span>
+      </div>
+      ${body}
+    </div>`;
+  }).join('');
+
+  const lu=document.getElementById('monitorLastUpdate');
+  if(lu) lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+async function pollPrinters(){
+  await Promise.allSettled(MAQUINAS.map(async m=>{_printerStatus[m.id]=await fetchPrinterStatus(m);}));
+  renderMonitorGrid();
+}
+
+function toggleMonitorView(){
+  _monitorOn=!_monitorOn;
+  document.getElementById('maquinaCalView').style.display=_monitorOn?'none':'';
+  document.getElementById('maquinaMonView').style.display=_monitorOn?'':'none';
+  const btn=document.getElementById('btnMonitorToggle');
+  if(btn) btn.textContent=_monitorOn?'📅 Calendario':'📡 Monitor en vivo';
+  if(_monitorOn){pollPrinters();_monitorInterval=setInterval(pollPrinters,15000);}
+  else{clearInterval(_monitorInterval);_monitorInterval=null;}
+}
 
 function renderMaquinasKPIs(dias,todayStr){
   const total=MAQUINAS.length*dias.length;
