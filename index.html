@@ -745,10 +745,12 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:10px;color:var(--text3)">↻ <span id="monitorLastUpdate">cargando...</span></span>
         <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:11px">Actualizar</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:11px" title="Configurar alertas">⚙ Alertas</button>
       </div>
     </div>
-    <div id="monitorFilterTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
-    <div id="maquinaMonGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px"></div>
+    <div id="monitorFilterTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div id="monitorKPIs" style="margin-bottom:12px"></div>
+    <div id="maquinaMonGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
   </div>
 
   <!-- ── CALENDARIO ── -->
@@ -3007,6 +3009,8 @@ async function initMaquinas(){
   await loadMaquinaEventosAirtable();
   renderMaquinasCalendar();
   renderMonitorFilterTabs();
+  renderMonitorKPIs();
+  requestNotificationPermission(false);
   if(!_monitorInterval){
     pollPrinters();
     _monitorInterval=setInterval(pollPrinters,15000);
@@ -3015,8 +3019,9 @@ async function initMaquinas(){
 
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
 const MOONRAKER_PORT=7125;
+const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
-const _printerStatus={};
+const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={};
 
 const MONITOR_GRUPOS=[
   {key:'all',label:'Todas',color:'var(--accent)'},
@@ -3030,35 +3035,44 @@ const MONITOR_GRUPOS=[
 function getPrinterIp(m){return m.ip||localStorage.getItem('printer_ip_'+m.id)||null;}
 
 function savePrinterIp(id){
-  const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();
-  if(!val)return;
+  const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
   localStorage.setItem('printer_ip_'+id,val);
   const m=MAQUINAS.find(x=>x.id===id);
-  toast(`IP guardada · ${m?.nombre} #${m?.numG}`,'success');
-  pollPrinters();
+  toast(`IP guardada · ${m?.nombre} #${m?.numG}`,'success');pollPrinters();
 }
 
 async function fetchPrinterStatus(m){
-  const ip=getPrinterIp(m);
-  if(!ip) return{state:'noip'};
+  const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   try{
-    const url=`http://${ip}:${MOONRAKER_PORT}/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard`;
-    const r=await fetch(url,{signal:AbortSignal.timeout(5000)});
-    if(!r.ok) return{state:'offline'};
-    const d=await r.json();
-    const s=d.result?.status||{};
+    const r=await fetch(`http://${ip}:${MOONRAKER_PORT}/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard`,{signal:AbortSignal.timeout(5000)});
+    if(!r.ok)return{state:'offline'};
+    const d=await r.json();const s=d.result?.status||{};
     const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{};
     const progress=Math.round((vs.progress||0)*100);
     const elapsed=ps.print_duration||0;
     const eta=progress>0&&progress<100?Math.round(elapsed/progress*(100-progress)):0;
-    return{state:ps.state||'standby',progress,filename:(ps.filename||'').replace(/\.gcode$/i,''),hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
+    const filename=(ps.filename||'').replace(/\.gcode$/i,'');
+    // fetch thumbnail (cached)
+    let thumbUrl=null;
+    if((ps.state==='printing'||ps.state==='paused')&&filename){
+      const ck=m.id+'::'+filename;
+      if(_thumbCache[ck]!==undefined){thumbUrl=_thumbCache[ck];}
+      else{
+        try{
+          const tr=await fetch(`http://${ip}:${MOONRAKER_PORT}/server/files/thumbnails?filename=${encodeURIComponent(filename+'.gcode')}`,{signal:AbortSignal.timeout(3000)});
+          if(tr.ok){const td=await tr.json();const best=(td.result||[]).sort((a,b)=>b.size-a.size)[0];thumbUrl=best?`http://${ip}:${MOONRAKER_PORT}/server/files/gcodes/.thumbnails/${best.relative_path}`:null;}
+        }catch(e){}
+        _thumbCache[ck]=thumbUrl;
+      }
+    }
+    return{state:ps.state||'standby',progress,filename,thumbUrl,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
   }catch(e){return{state:'offline',ip};}
 }
 
 function fmtSecs(s){if(!s||s<=0)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;}
 
 function printerStateMeta(state){
-  return{
+  return({
     printing:{label:'Imprimiendo',color:'#00d4aa',bg:'rgba(0,212,170,0.15)'},
     paused:{label:'Pausado',color:'#ffaa00',bg:'rgba(255,170,0,0.15)'},
     error:{label:'Error',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
@@ -3066,7 +3080,16 @@ function printerStateMeta(state){
     standby:{label:'Idle',color:'var(--text3)',bg:'var(--surface2)'},
     offline:{label:'Offline',color:'#888',bg:'rgba(120,120,120,0.12)'},
     noip:{label:'Sin IP',color:'#ff6b35',bg:'rgba(255,107,53,0.12)'},
-  }[state]||{label:state,color:'var(--text3)',bg:'var(--surface2)'};
+  }[state])||{label:state,color:'var(--text3)',bg:'var(--surface2)'};
+}
+
+function renderSparkline(readings,key,color){
+  if(!readings||readings.length<2)return'';
+  const vals=readings.map(r=>r[key]||0);
+  const max=Math.max(...vals,50),min=Math.max(0,Math.min(...vals)-10),range=max-min||1;
+  const W=110,H=22;
+  const pts=vals.map((v,i)=>`${(i/(vals.length-1))*W},${H-((v-min)/range)*H}`).join(' ');
+  return`<svg width="${W}" height="${H}" style="overflow:visible;display:block"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/></svg>`;
 }
 
 function renderMonitorFilterTabs(){
@@ -3074,66 +3097,94 @@ function renderMonitorFilterTabs(){
   el.innerHTML=MONITOR_GRUPOS.map(g=>{
     const active=_monitorFilter===g.key;
     const count=g.key==='all'?MAQUINAS.length:MAQUINAS.filter(m=>m.modelo===g.key).length;
-    return`<button onclick="filterMonitor('${g.key}')" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid ${active?g.color:'var(--border2)'};background:${active?g.color+'22':'var(--surface2)'};color:${active?g.color:'var(--text3)'};font-size:11px;font-weight:${active?700:500};cursor:pointer;transition:all 0.15s">
-      ${g.label} <span style="background:${active?g.color+'33':'var(--surface3)'};border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700">${count}</span>
-    </button>`;
+    return`<button onclick="filterMonitor('${g.key}')" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid ${active?g.color:'var(--border2)'};background:${active?g.color+'22':'var(--surface2)'};color:${active?g.color:'var(--text3)'};font-size:11px;font-weight:${active?700:500};cursor:pointer;transition:all 0.15s">${g.label}<span style="background:${active?g.color+'33':'var(--surface3)'};border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700">${count}</span></button>`;
   }).join('');
 }
 
-function filterMonitor(grupo){
-  _monitorFilter=grupo;
-  renderMonitorFilterTabs();
-  renderMonitorGrid();
+function filterMonitor(grupo){_monitorFilter=grupo;renderMonitorFilterTabs();renderMonitorKPIs();renderMonitorGrid();}
+
+function renderMonitorKPIs(){
+  const el=document.getElementById('monitorKPIs');if(!el)return;
+  const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
+  let printing=0,paused=0,idle=0,error=0,offline=0,noip=0;
+  lista.forEach(m=>{const st=(_printerStatus[m.id]||{}).state||'offline';if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='noip')noip++;else if(st==='offline')offline++;else idle++;});
+  const total=lista.length,utilPct=total>0?Math.round((printing+paused)/total*100):0;
+  el.innerHTML=`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:11px">
+    ${printing>0?`<span style="color:#00d4aa;font-weight:700">🟢 ${printing} Imprimiendo</span>`:''}
+    ${paused>0?`<span style="color:#ffaa00;font-weight:700">⏸ ${paused} Pausado</span>`:''}
+    ${idle>0?`<span style="color:var(--text3)">⚪ ${idle} Idle</span>`:''}
+    ${error>0?`<span style="color:#ff4444;font-weight:700">🔴 ${error} Error</span>`:''}
+    ${offline>0?`<span style="color:#888">⚫ ${offline} Offline</span>`:''}
+    ${noip>0?`<span style="color:#ff6b35">❓ ${noip} Sin IP</span>`:''}
+    <span style="margin-left:auto;font-weight:700;color:${utilPct>0?'#00d4aa':'var(--text3)'}">Utilización ${utilPct}%</span>
+  </div>`;
 }
 
 function renderMonitorGrid(){
   const el=document.getElementById('maquinaMonGrid');if(!el)return;
   const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
-
   el.innerHTML=lista.map(m=>{
     const s=_printerStatus[m.id]||{state:'offline'};
     const sm=printerStateMeta(s.state);
     const ip=getPrinterIp(m);
     const img=MODELO_IMGS[m.modelo]||'';
-    const isPrinting=s.state==='printing'||s.state==='paused';
+    const isPrinting=s.state==='printing';
+    const isPaused=s.state==='paused';
+    const isActive=isPrinting||isPaused;
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
+    const hist=getHistoryForPrinter(m.id);
+    const th=_tempHistory[m.id]||[];
 
     let body='';
     if(s.state==='noip'){
-      body=`<div style="margin-top:10px">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Ingresa la IP:</div>
-        <div style="display:flex;gap:6px">
-          <input id="ipin_${m.id}" type="text" placeholder="192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
-          <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button>
-        </div>
-      </div>`;
+      body=`<div style="margin-top:10px"><div style="font-size:10px;color:var(--text3);margin-bottom:5px">Ingresa la IP:</div>
+        <div style="display:flex;gap:6px"><input id="ipin_${m.id}" type="text" placeholder="192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
+        <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button></div></div>`;
     } else if(s.state==='offline'){
-      body=`<div style="margin-top:10px;text-align:center;color:var(--text3);font-size:11px">Sin respuesta<br><span style="font-family:monospace;font-size:10px">${ip}</span></div>`;
+      body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:11px;padding:8px 0">Sin respuesta<br><span style="font-family:monospace;font-size:10px">${ip}</span><br><span style="font-size:10px">Verifica que esté encendida</span></div>`;
     } else {
       body=`
-        ${isPrinting?`<div style="margin:8px 0 2px">
-          <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
-          <div style="background:var(--surface2);border-radius:4px;height:7px;overflow:hidden"><div style="background:${sm.color};height:100%;width:${s.progress}%;border-radius:4px;transition:width 0.6s"></div></div>
-          <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;color:var(--text3)">
-            <span style="font-weight:700;color:${sm.color}">${s.progress}%</span><span>⏱ ${fmtSecs(s.eta)} restante</span>
+        ${isActive?`<div style="margin:10px 0 6px;display:flex;gap:8px;align-items:flex-start">
+          ${s.thumbUrl?`<img src="${s.thumbUrl}" style="width:52px;height:52px;object-fit:cover;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
+            <div style="background:var(--surface2);border-radius:4px;height:8px;overflow:hidden"><div style="background:${sm.color};height:100%;width:${s.progress}%;border-radius:4px;transition:width 0.6s"></div></div>
+            <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;color:var(--text3)">
+              <span style="font-weight:700;color:${sm.color}">${s.progress}%</span><span>⏱ ${fmtSecs(s.eta)} restante</span>
+            </div>
           </div>
         </div>`:''}
         <div style="display:flex;gap:6px;margin-top:8px">
-          <div style="flex:1;background:var(--surface2);border-radius:7px;padding:6px;text-align:center">
-            <div style="font-size:9px;color:var(--text3);letter-spacing:.5px">HOTEND</div>
-            <div style="font-size:16px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'}">${s.hotend?.actual||0}°</div>
-            ${s.hotend?.target>0?`<div style="font-size:9px;color:var(--text3)">→ ${s.hotend.target}°</div>`:'<div style="font-size:9px;color:var(--text3)">fría</div>'}
+          <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
+            <div style="font-size:9px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">HOTEND</div>
+            <div style="font-size:17px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'};line-height:1">${s.hotend?.actual||0}°</div>
+            <div style="font-size:9px;color:var(--text3);margin-top:2px">${s.hotend?.target>0?'→ '+s.hotend.target+'°':'fría'}</div>
           </div>
-          <div style="flex:1;background:var(--surface2);border-radius:7px;padding:6px;text-align:center">
-            <div style="font-size:9px;color:var(--text3);letter-spacing:.5px">CAMA</div>
-            <div style="font-size:16px;font-weight:700;color:${s.bed?.target>0?'#ffaa00':'var(--text)'}">${s.bed?.actual||0}°</div>
-            ${s.bed?.target>0?`<div style="font-size:9px;color:var(--text3)">→ ${s.bed.target}°</div>`:'<div style="font-size:9px;color:var(--text3)">fría</div>'}
+          <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
+            <div style="font-size:9px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">CAMA</div>
+            <div style="font-size:17px;font-weight:700;color:${s.bed?.target>0?'#ffaa00':'var(--text)'};line-height:1">${s.bed?.actual||0}°</div>
+            <div style="font-size:9px;color:var(--text3);margin-top:2px">${s.bed?.target>0?'→ '+s.bed.target+'°':'fría'}</div>
           </div>
         </div>
-        ${!isPrinting?`<div style="margin-top:5px;font-size:9px;color:var(--text3);text-align:center;font-family:monospace">${ip}</div>`:''}`;
+        ${isActive?`<div style="display:flex;gap:6px;margin-top:8px">
+          ${isPrinting?`<button onclick="printerControl('${m.id}','pause')" style="flex:1;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.4);color:#ffaa00;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">⏸ Pausar</button>`:''}
+          ${isPaused?`<button onclick="printerControl('${m.id}','resume')" style="flex:1;background:rgba(0,212,170,0.15);border:1px solid rgba(0,212,170,0.4);color:#00d4aa;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">▶ Reanudar</button>`:''}
+          <button onclick="printerControl('${m.id}','cancel')" style="flex:1;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.35);color:#ff4444;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">■ Cancelar</button>
+        </div>`:''}
+        ${th.length>=2?`<div style="margin-top:8px;padding:6px 8px;background:var(--surface2);border-radius:7px">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:3px">Temperatura hotend</div>
+          ${renderSparkline(th,'h','#ff6b35')}
+        </div>`:''}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}</span>
+          <div style="display:flex;gap:4px">
+            <button onclick="openWebcamModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Webcam">📷</button>
+            <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
+          </div>
+        </div>`;
     }
 
-    return`<div style="background:var(--surface);border:1px solid ${isPrinting?sm.color+'55':'var(--border2)'};border-top:2px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
+    return`<div style="background:var(--surface);border:1px solid ${isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
@@ -3145,13 +3196,94 @@ function renderMonitorGrid(){
       ${body}
     </div>`;
   }).join('');
-
   const lu=document.getElementById('monitorLastUpdate');
-  if(lu) lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(lu)lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
 
+async function printerControl(id,action){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return;}
+  if(action==='cancel'&&!confirm(`¿Cancelar impresión en ${m.nombre} #${m.numG}?`))return;
+  toast({pause:'⏸ Pausando',resume:'▶ Reanudando',cancel:'■ Cancelando'}[action]+` ${m.nombre} #${m.numG}`,'info');
+  try{
+    const r=await fetch(`http://${ip}:${MOONRAKER_PORT}/printer/print/${action}`,{method:'POST',signal:AbortSignal.timeout(6000)});
+    if(r.ok)setTimeout(pollPrinters,1500);else toast('Error: '+r.status,'error');
+  }catch(e){toast('Sin conexión con la impresora','error');}
+}
+
+function checkTransitions(m,s){
+  const prev=_prevState[m.id];const st=s.state;
+  if(st==='error'&&prev!=='error'){sendBrowserNotification(`⚠ Error en ${m.nombre} #${m.numG}`,'Requiere atención');sendWebhookAlert(m,'error');}
+  if(st==='printing'&&prev!=='printing')_sessions[m.id]={file:s.filename,start:Date.now()};
+  if(prev==='printing'&&st!=='printing'){
+    const sess=_sessions[m.id];
+    if(sess){const dur=Math.round((Date.now()-sess.start)/60000);saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,st==='complete'?'Completado':'Cancelado');delete _sessions[m.id];if(st==='complete'){sendBrowserNotification(`✅ ${m.nombre} #${m.numG} completado`,`${sess.file} · ${dur}m`);}}
+  }
+  _prevState[m.id]=st;
+}
+
+function saveHistoryEntry(m,file,start,end,dur,result){
+  try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift({id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,ts:Date.now()});if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
+}
+
+function getHistoryForPrinter(id){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(h=>h.id===id);}catch(e){return[];}}
+
+function requestNotificationPermission(manual){
+  if(!('Notification'in window))return;
+  if(Notification.permission==='default')Notification.requestPermission().then(p=>{if(manual)toast(p==='granted'?'🔔 Notificaciones activadas':'Permiso denegado',p==='granted'?'success':'error');});
+  else if(manual)toast(Notification.permission==='granted'?'🔔 Notificaciones ya activas':'Permiso denegado',Notification.permission==='granted'?'success':'error');
+}
+
+function sendBrowserNotification(title,body){if('Notification'in window&&Notification.permission==='granted')new Notification(title,{body});}
+
+async function sendWebhookAlert(m,event){
+  const url=localStorage.getItem('monitor_webhook_url');if(!url)return;
+  try{await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({maquina:m.nombre,num:m.numG,evento:event,timestamp:new Date().toISOString()})});}catch(e){}
+}
+
+function openWebcamModal(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const url=localStorage.getItem('printer_cam_'+id)||'';
+  document.getElementById('webcamModalTitle').textContent=`${m.nombre} #${m.numG}`;
+  document.getElementById('webcamModalId').value=id;
+  document.getElementById('webcamModalUrl').value=url;
+  const img=document.getElementById('webcamModalImg');
+  const nf=document.getElementById('webcamNoFeed');
+  if(url){img.src=url;img.style.display='block';nf.style.display='none';}else{img.src='';img.style.display='none';nf.style.display='flex';}
+  document.getElementById('webcamModal').style.display='flex';
+}
+function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();localStorage.setItem('printer_cam_'+id,url);document.getElementById('webcamModalImg').src=url;toast('URL guardada','success');}
+function closeWebcamModal(){document.getElementById('webcamModal').style.display='none';document.getElementById('webcamModalImg').src='';}
+
+function openHistoryModal(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  document.getElementById('histModalTitle').textContent=`${m.nombre} #${m.numG}`;
+  const hist=getHistoryForPrinter(id);
+  const el=document.getElementById('histModalBody');
+  el.innerHTML=hist.length?hist.slice(0,50).map(h=>{const d=new Date(h.start);return`<div style="padding:8px 0;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px">
+    <span style="background:${h.result==='Completado'?'rgba(0,212,170,0.15)':'rgba(255,68,68,0.12)'};color:${h.result==='Completado'?'#00d4aa':'#ff4444'};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:700;flex-shrink:0">${h.result}</span>
+    <div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.file||'—')}</div>
+    <div style="font-size:10px;color:var(--text3)">${d.toLocaleDateString('es-CL')} ${d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})} · ${h.dur}m</div></div>
+  </div>`;}).join(''):'<div style="text-align:center;color:var(--text3);padding:24px;font-size:12px">Sin historial registrado aún</div>';
+  document.getElementById('histModal').style.display='flex';
+}
+function closeHistoryModal(){document.getElementById('histModal').style.display='none';}
+
+function openAlertSettings(){
+  document.getElementById('alertWebhookUrl').value=localStorage.getItem('monitor_webhook_url')||'';
+  document.getElementById('alertSettingsModal').style.display='flex';
+}
+function saveAlertSettings(){const url=document.getElementById('alertWebhookUrl').value.trim();if(url)localStorage.setItem('monitor_webhook_url',url);else localStorage.removeItem('monitor_webhook_url');toast(url?'Webhook configurado ✓':'Webhook eliminado','success');closeAlertSettings();}
+function closeAlertSettings(){document.getElementById('alertSettingsModal').style.display='none';}
+
 async function pollPrinters(){
-  await Promise.allSettled(MAQUINAS.map(async m=>{_printerStatus[m.id]=await fetchPrinterStatus(m);}));
+  await Promise.allSettled(MAQUINAS.map(async m=>{
+    const s=await fetchPrinterStatus(m);
+    checkTransitions(m,s);
+    _printerStatus[m.id]=s;
+    if(s.hotend){if(!_tempHistory[m.id])_tempHistory[m.id]=[];_tempHistory[m.id].push({h:s.hotend.actual,b:s.bed?.actual||0});if(_tempHistory[m.id].length>20)_tempHistory[m.id].shift();}
+  }));
+  renderMonitorKPIs();
   renderMonitorGrid();
 }
 
@@ -3923,5 +4055,62 @@ document.addEventListener('DOMContentLoaded',()=>{
 <div id="pvMultiDrop" style="display:none;position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:200px;max-height:260px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.45)">
   <div id="pvMultiDropContent"></div>
 </div>
+
+<!-- WEBCAM MODAL -->
+<div id="webcamModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeWebcamModal()"></div>
+  <div class="modal-card" style="max-width:700px;width:95vw">
+    <div class="modal-title">📷 <span id="webcamModalTitle">Webcam</span></div>
+    <div style="margin-top:12px;background:#000;border-radius:10px;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center">
+      <img id="webcamModalImg" src="" style="max-width:100%;max-height:60vh;display:block" onerror="this.style.display='none';document.getElementById('webcamNoFeed').style.display='flex'" onload="document.getElementById('webcamNoFeed').style.display='none';this.style.display='block'">
+      <div id="webcamNoFeed" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px;color:#666">
+        <span style="font-size:32px">📷</span>
+        <span style="font-size:12px">Sin feed · configura la URL abajo</span>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <input id="webcamModalUrl" type="text" placeholder="http://192.168.100.51/webcam/?action=stream" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+      <button class="btn btn-primary btn-sm" onclick="saveWebcamUrl()">Guardar</button>
+    </div>
+    <input type="hidden" id="webcamModalId">
+    <div style="margin-top:6px;font-size:10px;color:var(--text3)">URL del stream mjpeg de la impresora. Ejemplo: http://IP/webcam/?action=stream</div>
+    <button class="btn btn-ghost btn-sm" onclick="closeWebcamModal()" style="margin-top:14px;width:100%">Cerrar</button>
+  </div>
+</div>
+
+<!-- HISTORIAL MODAL -->
+<div id="histModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeHistoryModal()"></div>
+  <div class="modal-card" style="max-width:500px;width:95vw">
+    <div class="modal-title">📋 <span id="histModalTitle">Historial</span></div>
+    <div id="histModalBody" style="margin-top:14px;max-height:400px;overflow-y:auto"></div>
+    <button class="btn btn-ghost btn-sm" onclick="closeHistoryModal()" style="margin-top:14px;width:100%">Cerrar</button>
+  </div>
+</div>
+
+<!-- ALERTAS MODAL -->
+<div id="alertSettingsModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeAlertSettings()"></div>
+  <div class="modal-card" style="max-width:480px;width:95vw">
+    <div class="modal-title">⚙ Configurar alertas</div>
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:14px">
+      <div>
+        <div class="field-label" style="margin-bottom:6px">Notificaciones del navegador</div>
+        <button class="btn btn-ghost btn-sm" onclick="requestNotificationPermission(true)">🔔 Solicitar permiso de notificaciones</button>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">Recibe alertas cuando una impresora entra en error o completa una impresión</div>
+      </div>
+      <div>
+        <div class="field-label" style="margin-bottom:6px">Webhook (Make.com / Zapier)</div>
+        <input id="alertWebhookUrl" type="text" placeholder="https://hook.make.com/..." style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">Se enviará un POST con la info de la impresora cuando ocurra un error</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-primary btn-sm" onclick="saveAlertSettings()" style="flex:1">Guardar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeAlertSettings()" style="flex:1">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
