@@ -743,6 +743,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
 <div class="tab-panel" id="tab-maquinas">
   <div class="section-header">
     <div><div class="section-title">Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div></div>
+    <button class="btn btn-ghost btn-sm" onclick="openMaquinasManager()" style="font-size:11px">⚙ Gestionar máquinas</button>
   </div>
 
   <!-- ── MONITOR EN VIVO ── -->
@@ -1068,7 +1069,7 @@ const clientesSort={key:null,dir:1};
 const cotizacionesSort={key:null,dir:1};
 const proveedoresSort={key:null,dir:1};
 
-const MAQUINAS=[
+let MAQUINAS=[
   {id:'k1-1',nombre:'Creality K1',num:1,numG:1,modelo:'K1',color:'#00d4cc',ip:'192.168.100.51'},
   {id:'k1-2',nombre:'Creality K1',num:2,numG:2,modelo:'K1',color:'#00d4cc',ip:'192.168.100.126'},
   {id:'k1-3',nombre:'Creality K1',num:3,numG:3,modelo:'K1',color:'#00d4cc',ip:'192.168.100.7'},
@@ -1488,6 +1489,184 @@ async function crearCamposItemsAirtable(){
   toast(`Creando ${campos.length} campos...`,'info');let ok=0,fail=0;
   for(const c of campos){try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${realTableId}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(c)});if(r.ok) ok++;else fail++;}catch(e){fail++;}}
   fail>0?toast(`${ok} creados · ${fail} fallaron`,'info'):toast(`✓ ${ok} campos creados`,'success');
+}
+
+// ── MAQUINAS CONFIG (lista + estado en Airtable) ──────────────
+const MAQUINAS_HARDCODED=[
+  {id:'k1-1',nombre:'Creality K1',num:1,numG:1,modelo:'K1',color:'#00d4cc',ip:'192.168.100.51'},
+  {id:'k1-2',nombre:'Creality K1',num:2,numG:2,modelo:'K1',color:'#00d4cc',ip:'192.168.100.126'},
+  {id:'k1-3',nombre:'Creality K1',num:3,numG:3,modelo:'K1',color:'#00d4cc',ip:'192.168.100.7'},
+  {id:'k1-4',nombre:'Creality K1',num:4,numG:4,modelo:'K1',color:'#00d4cc',ip:'192.168.100.68'},
+  {id:'k1-5',nombre:'Creality K1',num:5,numG:5,modelo:'K1',color:'#00d4cc',ip:null},
+  {id:'k2-1',nombre:'Creality K2',num:1,numG:12,modelo:'K2',color:'#a78bfa',ip:'192.168.100.71'},
+  {id:'k2-2',nombre:'Creality K2',num:2,numG:13,modelo:'K2',color:'#a78bfa',ip:'192.168.100.128'},
+  {id:'k2p-1',nombre:'Creality K2 Plus',num:1,numG:11,modelo:'K2 Plus',color:'#ff6b35',ip:'192.168.100.75'},
+  {id:'e5-1',nombre:'Creality Ender-5 Max',num:1,numG:6,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.67'},
+  {id:'e5-2',nombre:'Creality Ender-5 Max',num:2,numG:7,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.162'},
+  {id:'e5-3',nombre:'Creality Ender-5 Max',num:3,numG:8,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.65'},
+  {id:'e5-4',nombre:'Creality Ender-5 Max',num:4,numG:9,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.95'},
+  {id:'e5-5',nombre:'Creality Ender-5 Max',num:5,numG:10,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.64'},
+  {id:'giga-1',nombre:'Elegoo OrangeStorm Giga',num:1,numG:14,modelo:'Giga',color:'#ff4444',ip:'192.168.100.44'},
+];
+const MODELO_COLORES={'K1':'#00d4cc','K2':'#a78bfa','K2 Plus':'#ff6b35','Ender-5 Max':'#ffaa00','Giga':'#ff4444'};
+
+async function crearTablaMaquinas(){
+  const t=getToken();if(!t) return false;
+  try{
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    if(!r.ok) return false;
+    const d=await r.json();
+    if(d.tables?.find(x=>x.name==='Maquinas')) return true;
+    const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas',fields:[
+      {name:'id',type:'singleLineText'},
+      {name:'nombre',type:'singleLineText'},
+      {name:'num',type:'number',options:{precision:0}},
+      {name:'numG',type:'number',options:{precision:0}},
+      {name:'modelo',type:'singleLineText'},
+      {name:'color',type:'singleLineText'},
+      {name:'ip',type:'singleLineText'},
+      {name:'estado',type:'singleLineText'},
+    ]})});
+    return cr.ok;
+  }catch(e){return false;}
+}
+
+async function loadMaquinasAirtable(){
+  const t=getToken();if(!t){MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));return;}
+  try{
+    const res=await airtableFetch('Maquinas',200);
+    const recs=res.records||[];
+    if(recs.length===0){
+      // Primera vez: crear tabla y poblar con la lista hardcodeada
+      await crearTablaMaquinas();
+      const batch=MAQUINAS_HARDCODED.map(m=>({fields:{id:m.id,nombre:m.nombre,num:m.num,numG:m.numG,modelo:m.modelo,color:m.color,ip:m.ip||'',estado:'disponible'}}));
+      for(let i=0;i<batch.length;i+=10){
+        await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:batch.slice(i,i+10),typecast:true})});
+      }
+      MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));
+    }else{
+      MAQUINAS=recs.map(r=>({
+        _airtableId:r.id,
+        id:r.fields.id||r.id,
+        nombre:r.fields.nombre||'',
+        num:r.fields.num||1,
+        numG:r.fields.numG||1,
+        modelo:r.fields.modelo||'K1',
+        color:r.fields.color||'#00d4cc',
+        ip:r.fields.ip||null,
+        estado:r.fields.estado||'disponible',
+      })).sort((a,b)=>a.numG-b.numG);
+    }
+  }catch(e){
+    if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')){
+      await crearTablaMaquinas();
+      MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));
+    }else{
+      MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));
+    }
+  }
+}
+
+async function saveMaquinaEstadoAirtable(id,estado){
+  const t=getToken();if(!t) return;
+  const m=MAQUINAS.find(x=>x.id===id);
+  if(!m?._airtableId) return;
+  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{estado}})});
+}
+
+async function saveMaquinaToAirtable(maquina){
+  const t=getToken();if(!t) return null;
+  const fields={id:maquina.id,nombre:maquina.nombre,num:maquina.num,numG:maquina.numG,modelo:maquina.modelo,color:maquina.color,ip:maquina.ip||'',estado:maquina.estado||'disponible'};
+  if(maquina._airtableId){
+    const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${maquina._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields})});
+    return r.ok?maquina._airtableId:null;
+  }else{
+    const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields}],typecast:true})});
+    const d=await r.json();return d.records?.[0]?.id||null;
+  }
+}
+
+async function deleteMaquinaFromAirtable(airtableId){
+  const t=getToken();if(!t) return;
+  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${airtableId}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});
+}
+
+// ── GESTOR DE MÁQUINAS ────────────────────────────────────────
+function openMaquinasManager(){
+  renderMaquinasManagerModal();
+  document.getElementById('modalMaquinasManager').style.display='flex';
+}
+function closeMaquinasManager(){document.getElementById('modalMaquinasManager').style.display='none';}
+
+function renderMaquinasManagerModal(){
+  const rows=MAQUINAS.map(m=>`
+    <tr id="mgr-row-${m.id}">
+      <td style="padding:6px 8px;font-size:12px;color:var(--text2)">#${m.numG}</td>
+      <td style="padding:6px 8px"><span style="font-size:11px;background:${m.color}22;color:${m.color};border-radius:4px;padding:2px 6px">${m.modelo}</span></td>
+      <td style="padding:6px 8px;font-size:12px">${m.nombre} <span style="color:var(--text3)">#${m.num}</span></td>
+      <td style="padding:6px 8px"><input id="mgr-ip-${m.id}" value="${m.ip||''}" placeholder="192.168.100.x" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text);width:130px"></td>
+      <td style="padding:6px 8px">
+        <select id="mgr-estado-${m.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text)">
+          <option value="disponible" ${m.estado!=='mantencion'?'selected':''}>✓ Disponible</option>
+          <option value="mantencion" ${m.estado==='mantencion'?'selected':''}>🔧 Mantención</option>
+        </select>
+      </td>
+      <td style="padding:6px 8px;display:flex;gap:4px">
+        <button onclick="saveMgrRow('${m.id}')" class="btn btn-primary btn-sm" style="font-size:10px;padding:3px 8px">💾</button>
+        <button onclick="deleteMgrRow('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px;color:var(--danger)">✕</button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('mgrTableBody').innerHTML=rows;
+}
+
+async function saveMgrRow(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m) return;
+  m.ip=document.getElementById(`mgr-ip-${id}`)?.value?.trim()||null;
+  m.estado=document.getElementById(`mgr-estado-${id}`)?.value||'disponible';
+  localStorage.setItem('estado_maq_'+id,m.estado);
+  try{
+    await saveMaquinaToAirtable(m);
+    toast(`${m.nombre} #${m.num} guardada ✓`,'success');
+    renderMaquinasCalendar();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function deleteMgrRow(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m) return;
+  if(!confirm(`¿Eliminar ${m.nombre} #${m.num}?`)) return;
+  if(m._airtableId) await deleteMaquinaFromAirtable(m._airtableId);
+  MAQUINAS=MAQUINAS.filter(x=>x.id!==id);
+  renderMaquinasManagerModal();
+  renderMaquinasCalendar();
+  toast('Máquina eliminada','info');
+}
+
+async function addMaquinaDesdeForm(){
+  const modelo=document.getElementById('mgr-new-modelo').value;
+  const ip=(document.getElementById('mgr-new-ip').value||'').trim();
+  const numG=parseInt(document.getElementById('mgr-new-numG').value)||1;
+  if(!modelo){toast('Selecciona un modelo','error');return;}
+  const mismoModelo=MAQUINAS.filter(m=>m.modelo===modelo);
+  const num=mismoModelo.length+1;
+  const nombres={'K1':'Creality K1','K2':'Creality K2','K2 Plus':'Creality K2 Plus','Ender-5 Max':'Creality Ender-5 Max','Giga':'Elegoo OrangeStorm Giga'};
+  const prefijos={'K1':'k1','K2':'k2','K2 Plus':'k2p','Ender-5 Max':'e5','Giga':'giga'};
+  const newM={
+    id:`${prefijos[modelo]||'m'}-${num}`,
+    nombre:nombres[modelo]||modelo,
+    num,numG,
+    modelo,
+    color:MODELO_COLORES[modelo]||'#888',
+    ip:ip||null,
+    estado:'disponible',
+  };
+  const aid=await saveMaquinaToAirtable(newM);
+  newM._airtableId=aid;
+  MAQUINAS.push(newM);
+  MAQUINAS.sort((a,b)=>a.numG-b.numG);
+  renderMaquinasManagerModal();
+  renderMaquinasCalendar();
+  document.getElementById('mgr-new-ip').value='';
+  toast(`${newM.nombre} #${newM.num} agregada ✓`,'success');
 }
 
 // ── MAQUINAS PERSISTENCE ──────────────────────────────────────
@@ -3030,9 +3209,18 @@ function fmtDayLabel(d){return['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.ge
 function getMaquinaSemanaLunes(){const t=new Date();t.setHours(0,0,0,0);const day=t.getDay();const l=new Date(t);l.setDate(t.getDate()-(day===0?6:day-1)+(maquinaState.semanaOffset*7));return l;}
 function navSemana(d){maquinaState.semanaOffset+=d;renderMaquinasCalendar();}
 function goToday(){maquinaState.semanaOffset=0;renderMaquinasCalendar();}
-function getMaquinaEstadoGlobal(id){return localStorage.getItem('estado_maq_'+id)||'disponible';}
-async function toggleMaquinaEstado(id){const act=getMaquinaEstadoGlobal(id),nv=act==='disponible'?'mantencion':'disponible';localStorage.setItem('estado_maq_'+id,nv);const m=MAQUINAS.find(x=>x.id===id);toast(`${m?.nombre} #${m?.num}: ${nv==='mantencion'?'🔧 Mantención':'✓ Disponible'}`,nv==='mantencion'?'error':'success');renderMaquinasCalendar();}
+function getMaquinaEstadoGlobal(id){const m=MAQUINAS.find(x=>x.id===id);return m?.estado||localStorage.getItem('estado_maq_'+id)||'disponible';}
+async function toggleMaquinaEstado(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m) return;
+  const nv=m.estado==='mantencion'?'disponible':'mantencion';
+  m.estado=nv;
+  localStorage.setItem('estado_maq_'+id,nv);
+  renderMaquinasCalendar();
+  toast(`${m.nombre} #${m.num}: ${nv==='mantencion'?'🔧 Mantención':'✓ Disponible'}`,nv==='mantencion'?'error':'success');
+  try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);}
+}
 async function initMaquinas(){
+  await loadMaquinasAirtable();
   await loadMaquinaEventosAirtable();
   renderMaquinasCalendar();
   renderMonitorFilterTabs();
@@ -4385,6 +4573,54 @@ document.addEventListener('DOMContentLoaded',()=>{
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn btn-primary btn-sm" onclick="saveAlertSettings()" style="flex:1">Guardar</button>
       <button class="btn btn-ghost btn-sm" onclick="closeAlertSettings()" style="flex:1">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL GESTIONAR MÁQUINAS ─────────────────────────────── -->
+<div id="modalMaquinasManager" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeMaquinasManager()"></div>
+  <div class="modal-card" style="max-width:780px;width:96vw;max-height:85vh;overflow-y:auto">
+    <div class="modal-title" style="margin-bottom:16px">⚙ Gestionar máquinas</div>
+
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="color:var(--text3);border-bottom:1px solid var(--border)">
+          <th style="padding:4px 8px;text-align:left;font-weight:600">#</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:600">Modelo</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:600">Nombre</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:600">IP</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:600">Estado</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:600">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="mgrTableBody"></tbody>
+    </table>
+
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:10px">+ Agregar máquina</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <div class="field-label" style="font-size:10px;margin-bottom:3px">Modelo</div>
+          <select id="mgr-new-modelo" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--text)">
+            <option value="">— seleccionar —</option>
+            <option>K1</option><option>K2</option><option>K2 Plus</option><option>Ender-5 Max</option><option>Giga</option>
+          </select>
+        </div>
+        <div>
+          <div class="field-label" style="font-size:10px;margin-bottom:3px">IP</div>
+          <input id="mgr-new-ip" placeholder="192.168.100.x" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--text);width:130px">
+        </div>
+        <div>
+          <div class="field-label" style="font-size:10px;margin-bottom:3px">N° global</div>
+          <input id="mgr-new-numG" type="number" placeholder="15" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--text);width:70px">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="addMaquinaDesdeForm()" style="align-self:flex-end">+ Agregar</button>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-ghost btn-sm" onclick="closeMaquinasManager()">Cerrar</button>
     </div>
   </div>
 </div>
