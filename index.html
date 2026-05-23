@@ -324,6 +324,32 @@ body.kiosk .maquina-section{display:none!important;}
 body.kiosk #tab-maquinas .section-header{display:none!important;}
 body.kiosk #maquinaMonGrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;}
 body.kiosk .tab-content{padding-top:12px!important;}
+/* ── Supplier Search Agent ──────────────────────────────────────── */
+.ss-results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:14px}
+.ss-card{background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.ss-card-hdr{display:flex;flex-direction:column;gap:4px}
+.ss-card-title{font-weight:700;font-size:14px;color:var(--text);line-height:1.3;word-break:break-word}
+.ss-card-sub{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ss-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ss-stat{background:var(--surface3);border-radius:6px;padding:7px 10px;min-width:0}
+.ss-stat-label{font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase}
+.ss-stat-val{font-size:11px;font-weight:700;color:var(--text);margin-top:2px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.ss-stat-val.price{color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px}
+.ss-pros-contras{display:flex;flex-direction:column;gap:3px}
+.ss-notas{font-size:10px;color:var(--text2);background:var(--surface3);border-radius:6px;padding:8px 10px;line-height:1.5}
+.ss-card-footer{display:flex;gap:6px;padding-top:6px;border-top:1px solid var(--border);flex-wrap:wrap;margin-top:auto}
+.ss-btn-tel{font-size:11px;color:var(--accent3);text-decoration:none;background:rgba(0,212,170,0.1);border:1px solid rgba(0,212,170,0.25);border-radius:6px;padding:8px 12px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.ss-btn-web{font-size:11px;color:var(--accent);text-decoration:none;background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.25);border-radius:6px;padding:8px 12px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.ss-btn-add{font-size:11px;font-weight:700;color:var(--black);background:var(--accent2);border:none;border-radius:6px;padding:8px 14px;cursor:pointer;white-space:nowrap;margin-left:auto}
+.ss-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:10px}
+@media(max-width:768px){
+  .ss-results-grid{grid-template-columns:1fr!important}
+  .ss-stats{grid-template-columns:1fr 1fr!important}
+  .ss-card-footer{gap:8px}
+  .ss-btn-tel,.ss-btn-web{flex:1!important;justify-content:center!important;padding:10px 8px!important}
+  .ss-btn-add{flex:1!important;margin-left:0!important;padding:10px 8px!important;text-align:center}
+  .ss-form-grid .field-group[style*="grid-column"]{grid-column:1/-1!important}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
@@ -777,7 +803,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
       </div>
     </div>
     <div style="padding:14px 16px 0">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="ss-form-grid">
         <div class="field-group" style="grid-column:1/-1">
           <label class="field-label">Producto / Material a buscar *</label>
           <input class="field-input" id="ss-producto" placeholder="ej: Filamento PLA 1.75mm transparente, 1kg | Neón LED flexible 12V | Cinta satinada 2cm">
@@ -1285,38 +1311,34 @@ function renderSupplierResults(raw,producto,prefix='ss'){
   const res=document.getElementById(`${prefix}Results`);
   if(!res) return;
   if(!blocks.length){res.innerHTML=`<div class="empty-state"><div class="empty-icon">🔍</div>No se encontraron resultados estructurados.<br><pre style="font-size:10px;color:var(--text2);margin-top:10px;text-align:left;max-height:200px;overflow:auto">${escapeHtml(raw)}</pre></div>`;return;}
-  const cards=blocks.map((p,i)=>{
+  const cards=blocks.map((p)=>{
     const flag=SS_FLAG[p.pais]||'🌍';
     const tipoBadge=SS_TIPO_BADGE[p.tipo]||'badge-gray';
-    const webHref=p.web&&p.web!=='—'?(p.web.startsWith('http')?p.web:'https://'+p.web):'#';
-    const prosHtml=p.pros.map(pr=>`<span style="font-size:10px;color:var(--accent3)">✓ ${escapeHtml(pr)}</span>`).join('');
-    const contrasHtml=p.contras.map(c=>`<span style="font-size:10px;color:var(--danger)">✕ ${escapeHtml(c)}</span>`).join('');
-    const safeData=btoa(unescape(encodeURIComponent(JSON.stringify(p))));
-    return`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:14px;position:relative">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-        <div>
-          <div style="font-weight:700;font-size:13px;color:var(--text)">${flag} ${escapeHtml(p.nombre)}</div>
-          <div style="font-size:11px;color:var(--text2);margin-top:2px">${escapeHtml(p.pais)} &nbsp;·&nbsp; <span class="badge ${tipoBadge}">${escapeHtml(p.tipo)}</span></div>
-        </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
-          ${p.telefono&&p.telefono!=='—'&&p.telefono!=='Consultar'?`<a href="tel:${escapeHtml(p.telefono.replace(/\s/g,''))}" style="font-size:10px;color:var(--accent3);text-decoration:none;background:rgba(0,212,170,0.1);border:1px solid rgba(0,212,170,0.25);border-radius:5px;padding:4px 9px">📞 ${escapeHtml(p.telefono)}</a>`:''}
-          ${p.web&&p.web!=='—'?`<a href="${webHref}" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);text-decoration:none;background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.25);border-radius:5px;padding:4px 9px">🌐 Visitar</a>`:''}
-          <button onclick='addSupplierFromSearch(${JSON.stringify(p).replace(/'/g,"&#39;")})' style="font-size:10px;font-weight:700;color:var(--black);background:var(--accent2);border:none;border-radius:5px;padding:4px 10px;cursor:pointer">+ Agregar</button>
-        </div>
+    const webHref=p.web&&p.web!=='—'?(p.web.startsWith('http')?p.web:'https://'+p.web):'';
+    const prosHtml=p.pros.map(pr=>`<div style="font-size:10px;color:var(--accent3)">✓ ${escapeHtml(pr)}</div>`).join('');
+    const contrasHtml=p.contras.map(c=>`<div style="font-size:10px;color:var(--danger)">✕ ${escapeHtml(c)}</div>`).join('');
+    const telOk=p.telefono&&!['—','Consultar','N/A'].includes(p.telefono.trim());
+    const telBtn=telOk?`<a href="tel:${escapeHtml(p.telefono.replace(/\s/g,''))}" class="ss-btn-tel">📞 ${escapeHtml(p.telefono)}</a>`:'';
+    const webBtn=webHref?`<a href="${webHref}" target="_blank" rel="noopener" class="ss-btn-web">🌐 Visitar</a>`:'';
+    const addBtn=`<button onclick='addSupplierFromSearch(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="ss-btn-add">+ Agregar →</button>`;
+    return`<div class="ss-card">
+      <div class="ss-card-hdr">
+        <div class="ss-card-title">${flag} ${escapeHtml(p.nombre)}</div>
+        <div class="ss-card-sub">${escapeHtml(p.pais)}<span class="badge ${tipoBadge}">${escapeHtml(p.tipo)}</span></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:10px">
-        <div style="background:var(--surface3);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase">Precio est.</div><div style="font-size:12px;font-weight:700;color:var(--accent3);font-family:'JetBrains Mono',monospace;margin-top:2px">${escapeHtml(p.precio||'—')}</div></div>
-        <div style="background:var(--surface3);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase">MOQ</div><div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">${escapeHtml(p.moq||'—')}</div></div>
-        <div style="background:var(--surface3);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase">Plazo</div><div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">${escapeHtml(p.plazo||'—')}</div></div>
-        <div style="background:var(--surface3);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase">Pago</div><div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">${escapeHtml(p.condpago||'—')}</div></div>
+      <div class="ss-stats">
+        <div class="ss-stat"><div class="ss-stat-label">Precio est.</div><div class="ss-stat-val price">${escapeHtml(p.precio||'—')}</div></div>
+        <div class="ss-stat"><div class="ss-stat-label">MOQ</div><div class="ss-stat-val">${escapeHtml(p.moq||'—')}</div></div>
+        <div class="ss-stat"><div class="ss-stat-label">Plazo</div><div class="ss-stat-val">${escapeHtml(p.plazo||'—')}</div></div>
+        <div class="ss-stat"><div class="ss-stat-label">Pago</div><div class="ss-stat-val">${escapeHtml(p.condpago||'—')}</div></div>
       </div>
-      ${prosHtml||contrasHtml?`<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px">${prosHtml}${contrasHtml}</div>`:''}
-      ${p.notas?`<div style="font-size:10px;color:var(--text2);background:var(--surface3);border-radius:5px;padding:6px 9px;line-height:1.5">💡 ${escapeHtml(p.notas)}</div>`:''}
+      ${prosHtml||contrasHtml?`<div class="ss-pros-contras">${prosHtml}${contrasHtml}</div>`:''}
+      ${p.notas?`<div class="ss-notas">💡 ${escapeHtml(p.notas)}</div>`:''}
+      <div class="ss-card-footer">${telBtn}${webBtn}${addBtn}</div>
     </div>`;
   }).join('');
-
   const recHtml=recomendacion?`<div style="background:rgba(0,212,204,0.07);border:1px solid rgba(0,212,204,0.25);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text2);line-height:1.5"><span style="color:var(--accent);font-weight:700">⭐ Recomendación:</span> ${escapeHtml(recomendacion)}</div>`:'';
-  res.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--accent2)">${blocks.length} proveedores encontrados para: <em style="font-style:normal;color:var(--text)">${escapeHtml(producto)}</em></span><button onclick="document.getElementById('${prefix}Results').innerHTML=''" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer">✕ Limpiar</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-bottom:12px">${cards}</div>${recHtml}`;
+  res.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--accent2)">${blocks.length} proveedor${blocks.length!==1?'es':''} encontrado${blocks.length!==1?'s':''} para: <em style="font-style:normal;color:var(--text)">${escapeHtml(producto)}</em></span><button onclick="document.getElementById('${prefix}Results').innerHTML=''" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer">✕ Limpiar</button></div><div class="ss-results-grid">${cards}</div>${recHtml}`;
 }
 
 function togglePvssPanel(){
