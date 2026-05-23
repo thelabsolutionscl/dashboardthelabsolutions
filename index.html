@@ -3048,6 +3048,8 @@ async function initMaquinas(){
 
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
 const MOONRAKER_PORT=7125;
+const TUNNEL_BASE='https://printers.thelab.solutions';
+function printerUrl(ip,path){return`${TUNNEL_BASE}/${ip}${path}`;}
 const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={};
@@ -3073,7 +3075,7 @@ function savePrinterIp(id){
 async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   try{
-    const r=await fetch(`http://${ip}:${MOONRAKER_PORT}/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard`,{signal:AbortSignal.timeout(5000)});
+    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard`),{signal:AbortSignal.timeout(5000)});
     if(!r.ok)return{state:'offline'};
     const d=await r.json();const s=d.result?.status||{};
     const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{};
@@ -3088,8 +3090,8 @@ async function fetchPrinterStatus(m){
       if(_thumbCache[ck]!==undefined){thumbUrl=_thumbCache[ck];}
       else{
         try{
-          const tr=await fetch(`http://${ip}:${MOONRAKER_PORT}/server/files/thumbnails?filename=${encodeURIComponent(filename+'.gcode')}`,{signal:AbortSignal.timeout(3000)});
-          if(tr.ok){const td=await tr.json();const best=(td.result||[]).sort((a,b)=>b.size-a.size)[0];thumbUrl=best?`http://${ip}:${MOONRAKER_PORT}/server/files/gcodes/.thumbnails/${best.relative_path}`:null;}
+          const tr=await fetch(printerUrl(ip,`/server/files/thumbnails?filename=${encodeURIComponent(filename+'.gcode')}`),{signal:AbortSignal.timeout(3000)});
+          if(tr.ok){const td=await tr.json();const best=(td.result||[]).sort((a,b)=>b.size-a.size)[0];thumbUrl=best?printerUrl(ip,`/server/files/gcodes/.thumbnails/${best.relative_path}`):null;}
         }catch(e){}
         _thumbCache[ck]=thumbUrl;
       }
@@ -3247,7 +3249,7 @@ async function printerControl(id,action){
   if(action==='cancel'&&!confirm(`¿Cancelar impresión en ${m.nombre} #${m.numG}?`))return;
   toast({pause:'⏸ Pausando',resume:'▶ Reanudando',cancel:'■ Cancelando'}[action]+` ${m.nombre} #${m.numG}`,'info');
   try{
-    const r=await fetch(`http://${ip}:${MOONRAKER_PORT}/printer/print/${action}`,{method:'POST',signal:AbortSignal.timeout(6000)});
+    const r=await fetch(printerUrl(ip,`/printer/print/${action}`),{method:'POST',signal:AbortSignal.timeout(6000)});
     if(r.ok)setTimeout(pollPrinters,1500);else toast('Error: '+r.status,'error');
   }catch(e){toast('Sin conexión con la impresora','error');}
 }
