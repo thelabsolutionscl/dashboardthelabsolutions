@@ -735,10 +735,25 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 <!-- MÁQUINAS -->
 <div class="tab-panel" id="tab-maquinas">
   <div class="section-header">
-    <div><div class="section-title">Disponibilidad Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div></div>
-    <button id="btnMonitorToggle" class="btn btn-ghost btn-sm" onclick="toggleMonitorView()" style="font-size:12px;white-space:nowrap">📡 Monitor en vivo</button>
+    <div><div class="section-title">Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div></div>
   </div>
+
+  <!-- ── MONITOR EN VIVO ── -->
+  <div style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">📡 Monitor en vivo</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;color:var(--text3)">↻ <span id="monitorLastUpdate">cargando...</span></span>
+        <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:11px">Actualizar</button>
+      </div>
+    </div>
+    <div id="monitorFilterTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div id="maquinaMonGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px"></div>
+  </div>
+
+  <!-- ── CALENDARIO ── -->
   <div id="maquinaCalView">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">📅 Disponibilidad semanal</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="navSemana(-1)">← Anterior</button>
       <span id="semanaLabel" style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)"></span>
@@ -748,13 +763,6 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <div id="heatmapSemanas" style="margin-bottom:12px"></div>
     <div id="maquinasKPIs" style="margin-bottom:14px"></div>
     <div class="card"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px"><thead id="maquinasHeader"></thead><tbody id="maquinasBody"></tbody></table></div></div>
-  </div>
-  <div id="maquinaMonView" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <span style="font-size:11px;color:var(--text3)">Actualizado: <span id="monitorLastUpdate">—</span> · Auto-refresh cada 15s</span>
-      <button class="btn btn-ghost btn-sm" onclick="pollPrinters()">↻ Actualizar ahora</button>
-    </div>
-    <div id="maquinaMonGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px"></div>
   </div>
 </div>
 
@@ -1623,7 +1631,7 @@ function switchTab(name){
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
   if(name==='maquinas') initMaquinas();
-  else{clearInterval(_monitorInterval);_monitorInterval=null;_monitorOn=false;const mv=document.getElementById('maquinaMonView');const cv=document.getElementById('maquinaCalView');if(mv) mv.style.display='none';if(cv) cv.style.display='';const bt=document.getElementById('btnMonitorToggle');if(bt) bt.textContent='📡 Monitor en vivo';}
+  else{clearInterval(_monitorInterval);_monitorInterval=null;}
   if(name==='equipo') initEquipo();
   if(name==='nueva-cot'){const cn=document.getElementById('cot-num');if(cn) cn.value=generarNumeroCotizacion();updateVtoPreview();}
   window.scrollTo({top:0,behavior:'smooth'});
@@ -2995,12 +3003,29 @@ function navSemana(d){maquinaState.semanaOffset+=d;renderMaquinasCalendar();}
 function goToday(){maquinaState.semanaOffset=0;renderMaquinasCalendar();}
 function getMaquinaEstadoGlobal(id){return localStorage.getItem('estado_maq_'+id)||'disponible';}
 async function toggleMaquinaEstado(id){const act=getMaquinaEstadoGlobal(id),nv=act==='disponible'?'mantencion':'disponible';localStorage.setItem('estado_maq_'+id,nv);const m=MAQUINAS.find(x=>x.id===id);toast(`${m?.nombre} #${m?.num}: ${nv==='mantencion'?'🔧 Mantención':'✓ Disponible'}`,nv==='mantencion'?'error':'success');renderMaquinasCalendar();}
-async function initMaquinas(){await loadMaquinaEventosAirtable();renderMaquinasCalendar();}
+async function initMaquinas(){
+  await loadMaquinaEventosAirtable();
+  renderMaquinasCalendar();
+  renderMonitorFilterTabs();
+  if(!_monitorInterval){
+    pollPrinters();
+    _monitorInterval=setInterval(pollPrinters,15000);
+  }
+}
 
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
 const MOONRAKER_PORT=7125;
-let _monitorInterval=null,_monitorOn=false;
+let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={};
+
+const MONITOR_GRUPOS=[
+  {key:'all',label:'Todas',color:'var(--accent)'},
+  {key:'K1',label:'K1',color:'#00d4cc'},
+  {key:'K2',label:'K2',color:'#a78bfa'},
+  {key:'K2 Plus',label:'K2 Plus',color:'#ff6b35'},
+  {key:'Ender-5 Max',label:'Ender-5 Max',color:'#ffaa00'},
+  {key:'Giga',label:'Giga',color:'#ff4444'},
+];
 
 function getPrinterIp(m){return m.ip||localStorage.getItem('printer_ip_'+m.id)||null;}
 
@@ -3026,14 +3051,7 @@ async function fetchPrinterStatus(m){
     const progress=Math.round((vs.progress||0)*100);
     const elapsed=ps.print_duration||0;
     const eta=progress>0&&progress<100?Math.round(elapsed/progress*(100-progress)):0;
-    return{
-      state:ps.state||'standby',
-      progress,
-      filename:(ps.filename||'').replace(/\.gcode$/i,''),
-      hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},
-      bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},
-      elapsed,eta,ip
-    };
+    return{state:ps.state||'standby',progress,filename:(ps.filename||'').replace(/\.gcode$/i,''),hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
   }catch(e){return{state:'offline',ip};}
 }
 
@@ -3051,36 +3069,53 @@ function printerStateMeta(state){
   }[state]||{label:state,color:'var(--text3)',bg:'var(--surface2)'};
 }
 
+function renderMonitorFilterTabs(){
+  const el=document.getElementById('monitorFilterTabs');if(!el)return;
+  el.innerHTML=MONITOR_GRUPOS.map(g=>{
+    const active=_monitorFilter===g.key;
+    const count=g.key==='all'?MAQUINAS.length:MAQUINAS.filter(m=>m.modelo===g.key).length;
+    return`<button onclick="filterMonitor('${g.key}')" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid ${active?g.color:'var(--border2)'};background:${active?g.color+'22':'var(--surface2)'};color:${active?g.color:'var(--text3)'};font-size:11px;font-weight:${active?700:500};cursor:pointer;transition:all 0.15s">
+      ${g.label} <span style="background:${active?g.color+'33':'var(--surface3)'};border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700">${count}</span>
+    </button>`;
+  }).join('');
+}
+
+function filterMonitor(grupo){
+  _monitorFilter=grupo;
+  renderMonitorFilterTabs();
+  renderMonitorGrid();
+}
+
 function renderMonitorGrid(){
   const el=document.getElementById('maquinaMonGrid');if(!el)return;
-  el.innerHTML=MAQUINAS.map(m=>{
+  const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
+
+  el.innerHTML=lista.map(m=>{
     const s=_printerStatus[m.id]||{state:'offline'};
     const sm=printerStateMeta(s.state);
     const ip=getPrinterIp(m);
     const img=MODELO_IMGS[m.modelo]||'';
     const isPrinting=s.state==='printing'||s.state==='paused';
+    const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
 
     let body='';
     if(s.state==='noip'){
       body=`<div style="margin-top:10px">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Ingresa la IP de esta impresora:</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Ingresa la IP:</div>
         <div style="display:flex;gap:6px">
           <input id="ipin_${m.id}" type="text" placeholder="192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
           <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button>
         </div>
       </div>`;
     } else if(s.state==='offline'){
-      body=`<div style="margin-top:10px;text-align:center;color:var(--text3);font-size:11px">Sin respuesta · <span style="font-family:monospace">${ip}</span><br><span style="font-size:10px">Verifica que la impresora esté encendida</span></div>`;
+      body=`<div style="margin-top:10px;text-align:center;color:var(--text3);font-size:11px">Sin respuesta<br><span style="font-family:monospace;font-size:10px">${ip}</span></div>`;
     } else {
       body=`
         ${isPrinting?`<div style="margin:8px 0 2px">
           <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
-          <div style="background:var(--surface2);border-radius:4px;height:7px;overflow:hidden">
-            <div style="background:${sm.color};height:100%;width:${s.progress}%;border-radius:4px;transition:width 0.6s"></div>
-          </div>
+          <div style="background:var(--surface2);border-radius:4px;height:7px;overflow:hidden"><div style="background:${sm.color};height:100%;width:${s.progress}%;border-radius:4px;transition:width 0.6s"></div></div>
           <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;color:var(--text3)">
-            <span style="font-weight:700;color:${sm.color}">${s.progress}%</span>
-            <span>⏱ ${fmtSecs(s.eta)} restante</span>
+            <span style="font-weight:700;color:${sm.color}">${s.progress}%</span><span>⏱ ${fmtSecs(s.eta)} restante</span>
           </div>
         </div>`:''}
         <div style="display:flex;gap:6px;margin-top:8px">
@@ -3095,16 +3130,15 @@ function renderMonitorGrid(){
             ${s.bed?.target>0?`<div style="font-size:9px;color:var(--text3)">→ ${s.bed.target}°</div>`:'<div style="font-size:9px;color:var(--text3)">fría</div>'}
           </div>
         </div>
-        ${!isPrinting?`<div style="margin-top:6px;font-size:9px;color:var(--text3);text-align:center;font-family:monospace">${ip}</div>`:''}
-      `;
+        ${!isPrinting?`<div style="margin-top:5px;font-size:9px;color:var(--text3);text-align:center;font-family:monospace">${ip}</div>`:''}`;
     }
 
-    return`<div style="background:var(--surface);border:1px solid ${isPrinting?sm.color+'44':' var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
+    return`<div style="background:var(--surface);border:1px solid ${isPrinting?sm.color+'55':'var(--border2)'};border-top:2px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.nombre}</div>
-          <div style="font-size:10px;color:var(--text3)">#${m.numG}</div>
+          <div style="font-size:10px;color:var(--text3)">Máquina #${m.numG}</div>
         </div>
         <span style="background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700;flex-shrink:0;border:1px solid ${sm.color}33">${sm.label}</span>
       </div>
@@ -3119,16 +3153,6 @@ function renderMonitorGrid(){
 async function pollPrinters(){
   await Promise.allSettled(MAQUINAS.map(async m=>{_printerStatus[m.id]=await fetchPrinterStatus(m);}));
   renderMonitorGrid();
-}
-
-function toggleMonitorView(){
-  _monitorOn=!_monitorOn;
-  document.getElementById('maquinaCalView').style.display=_monitorOn?'none':'';
-  document.getElementById('maquinaMonView').style.display=_monitorOn?'':'none';
-  const btn=document.getElementById('btnMonitorToggle');
-  if(btn) btn.textContent=_monitorOn?'📅 Calendario':'📡 Monitor en vivo';
-  if(_monitorOn){pollPrinters();_monitorInterval=setInterval(pollPrinters,15000);}
-  else{clearInterval(_monitorInterval);_monitorInterval=null;}
 }
 
 function renderMaquinasKPIs(dias,todayStr){
