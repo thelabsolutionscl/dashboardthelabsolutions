@@ -1062,7 +1062,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
 const BASE_ID='app1YtD74AqiPWQhy';
 let autoRefreshInterval=null;
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null};
-const maquinaState={semanaOffset:0,eventos:{}};
+const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
 const selectedClientes=new Set();
 const clientesSort={key:null,dir:1};
@@ -1695,6 +1695,58 @@ async function loadMaquinaEventosAirtable(){
   try{const res=await airtableFetch('Maquinas_Eventos',500);maquinaState.eventos={};(res.records||[]).forEach(r=>{const f=r.fields;if(f.maquina_id&&f.fecha) maquinaState.eventos[`${f.maquina_id}_${f.fecha}`]={tipo:f.tipo||'uso',desc:f.desc||'',tiempo:f.tiempo||null};});}
   catch(e){if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaMaquinasEventos();}
 }
+
+async function crearTablaMaquinasMant(){
+  const t=getToken();if(!t) return false;
+  try{
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    if(!r.ok) return false;
+    const d=await r.json();
+    if(d.tables?.find(x=>x.name==='Maquinas_Mant')) return true;
+    const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Mant',fields:[
+      {name:'maquina_id',type:'singleLineText'},
+      {name:'tipo',type:'singleLineText'},
+      {name:'notas',type:'multilineText'},
+      {name:'print_hours',type:'number',options:{precision:1}},
+      {name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},
+      {name:'ts',type:'number',options:{precision:0}},
+    ]})});
+    return cr.ok;
+  }catch(e){return false;}
+}
+
+async function loadMaintLogAirtable(){
+  const t=getToken();if(!t){
+    maquinaState.maintLog=getMaintLogLocal();return;
+  }
+  try{
+    const res=await airtableFetch('Maquinas_Mant',500);
+    maquinaState.maintLog=(res.records||[]).map(r=>({
+      _airtableId:r.id,
+      maquinaId:r.fields.maquina_id||'',
+      tipo:r.fields.tipo||'general',
+      notas:r.fields.notas||'',
+      printHoursAtTime:r.fields.print_hours||0,
+      fecha:r.fields.fecha||'',
+      ts:r.fields.ts||0,
+    })).sort((a,b)=>b.ts-a.ts);
+  }catch(e){
+    if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')){
+      await crearTablaMaquinasMant();
+      // migrar datos locales si existen
+      const local=getMaintLogLocal();
+      if(local.length) await Promise.all(local.map(r=>saveMaintRecordAirtable(r)));
+    }
+    maquinaState.maintLog=getMaintLogLocal();
+  }
+}
+
+async function saveMaintRecordAirtable(rec){
+  const t=getToken();if(!t) return;
+  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields:{maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()}}],typecast:true})});
+}
+
+function getMaintLogLocal(){try{return JSON.parse(localStorage.getItem(MAINT_KEY)||'[]');}catch(e){return[];}}
 
 // ── EQUIPO PERSISTENCE ────────────────────────────────────────
 async function crearTablaEquipoEventos(){
@@ -3221,7 +3273,7 @@ async function toggleMaquinaEstado(id){
 }
 async function initMaquinas(){
   await loadMaquinasAirtable();
-  await loadMaquinaEventosAirtable();
+  await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
   renderMaquinasCalendar();
   renderMonitorFilterTabs();
   renderMonitorKPIs();
@@ -3553,7 +3605,7 @@ const MAINT_TYPES=[
 ];
 function getMaintConfig(){try{return JSON.parse(localStorage.getItem(MAINT_CFG_KEY)||'{}');}catch(e){return{};}}
 function getMaintThreshold(tipo){const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;}
-function getMaintLog(){try{return JSON.parse(localStorage.getItem(MAINT_KEY)||'[]');}catch(e){return[];}}
+function getMaintLog(){return maquinaState.maintLog.length?maquinaState.maintLog:getMaintLogLocal();}
 function getPrintHours(id){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}catch(e){return 0;}}
 function getHoursSinceMaint(id,tipo){
   const log=getMaintLog().filter(x=>x.maquinaId===id&&x.tipo===tipo).sort((a,b)=>b.ts-a.ts);
@@ -3572,7 +3624,7 @@ function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFlo
 function renderMaintenanceTable(){
   const el=document.getElementById('maintTable');if(!el)return;
   const rows=MAQUINAS.map(m=>{
-    const totalH=getPrintHours(m).toFixed(1);
+    const totalH=getPrintHours(m.id).toFixed(1);
     const filKg=getTotalFilamentKg(m.id).toFixed(3);
     const filCost=getFilamentCost(m.id);
     const alerts=getMaintAlerts(m);
@@ -3609,16 +3661,18 @@ function openMaintModal(id){
   document.getElementById('maintModal').style.display='flex';
 }
 function closeMaintModal(){document.getElementById('maintModal').style.display='none';}
-function saveMaintRecord(){
+async function saveMaintRecord(){
   const id=document.getElementById('maintModalId').value;
   const tipo=document.getElementById('maintModalTipo').value;
   const notas=document.getElementById('maintModalNotas').value.trim();
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
-  const log=getMaintLog();
-  log.unshift({maquinaId:id,nombre:m.nombre,numG:m.numG,tipo,notas,printHoursAtTime:getPrintHours(id),ts:Date.now(),fecha:new Date().toISOString()});
-  localStorage.setItem(MAINT_KEY,JSON.stringify(log));
+  const rec={maquinaId:id,nombre:m.nombre,numG:m.numG,tipo,notas,printHoursAtTime:getPrintHours(id),ts:Date.now(),fecha:new Date().toISOString()};
+  maquinaState.maintLog.unshift(rec);
+  // guardar también en localStorage como backup
+  const local=getMaintLogLocal();local.unshift(rec);localStorage.setItem(MAINT_KEY,JSON.stringify(local.slice(0,200)));
   closeMaintModal();renderMaintenanceTable();renderMonitorGrid();
   toast(`🔧 Mantención registrada · ${MAINT_TYPES.find(t=>t.key===tipo)?.label}`,'success');
+  try{await saveMaintRecordAirtable(rec);}catch(e){console.warn('No se pudo guardar mantención en Airtable',e);}
 }
 function openMaintConfig(){
   const cfg=getMaintConfig();
