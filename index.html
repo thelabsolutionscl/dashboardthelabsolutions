@@ -1300,7 +1300,7 @@ function parseSupplierBlocks(text){
     const end=part.indexOf('---PROVEEDOR_END---');const block=end>=0?part.substring(0,end):part;
     const get=(key)=>{const m=block.match(new RegExp(`^${key}:\\s*(.+)$`,'m'));return m?m[1].trim():'';};
     blocks.push({
-      nombre:get('NOMBRE'),pais:get('PAIS'),web:get('WEB'),telefono:get('TELEFONO'),whatsapp:get('WHATSAPP'),tipo:get('TIPO'),
+      nombre:get('NOMBRE').replace(/\s*\(.*?\)\s*/g,'').trim(),pais:get('PAIS'),web:get('WEB'),telefono:get('TELEFONO'),whatsapp:get('WHATSAPP'),tipo:get('TIPO'),
       precio:get('PRECIO_EST'),moq:get('MOQ'),plazo:get('PLAZO'),condpago:get('CONDPAGO'),
       categoria:get('CATEGORIA'),pros:(get('PROS')||'').split('|').map(s=>s.trim()).filter(Boolean),
       contras:(get('CONTRAS')||'').split('|').map(s=>s.trim()).filter(Boolean),notas:get('NOTAS'),
