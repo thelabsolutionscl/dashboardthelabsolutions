@@ -720,7 +720,21 @@ body.kiosk .tab-content{padding-top:12px!important;}
     </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="clearForm('lead')">Limpiar</button>
+      <button class="btn btn-ghost" id="leadAgentBtn" onclick="runLeadAgent()" style="color:var(--accent2);border-color:rgba(255,107,53,0.4)">🤖 Analizar con IA</button>
       <button class="btn btn-primary" id="createLeadBtn" onclick="createLead()">✚ Crear en Airtable</button>
+    </div>
+  </div>
+  <!-- Panel resultado LEAD_AGENT -->
+  <div id="leadAgentPanel" style="display:none;margin-top:12px">
+    <div class="card" style="border-color:rgba(255,107,53,0.3)">
+      <div class="card-header">
+        <span class="card-title">🤖 Análisis LEAD_AGENT</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:10px;color:var(--text3)">Se guardará en Airtable al crear</span>
+          <button onclick="document.getElementById('leadAgentPanel').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:0 4px">✕</button>
+        </div>
+      </div>
+      <div id="leadAgentResult" style="padding:4px 0 8px"></div>
     </div>
   </div>
 </div>
@@ -2875,7 +2889,76 @@ async function advancePedido(id,estado){
   if(!confirm(`¿Avanzar a "${estado}"?`)) return;
   try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 
-// ── NUEVO LEAD ────────────────────────────────────────────────
+// ── NUEVO LEAD + LEAD_AGENT ───────────────────────────────────
+let _leadAgentResponse=null;
+const LEAD_AGENT_SYS=`Eres el LEAD_AGENT de The Lab Solutions, empresa de fabricación digital premium en Santiago, Chile.
+PRODUCTOS: trofeos y medallas personalizadas, neones LED, impresión 3D (PLA/PETG/Resina), señalética, packaging personalizado.
+CLIENTES IDEALES: empresas con necesidad recurrente de reconocimientos, branding físico o regalos corporativos.
+ROL: calificar el lead, identificar su necesidad probable y generar mensajes de primer contacto que generen respuesta.
+TONO: profesional pero cálido, español chileno natural, directo y sin tecnicismos.`;
+
+async function runLeadAgent(){
+  const empresa=(document.getElementById('nl-empresa').value||'').trim();
+  if(!empresa){toast('Ingresa al menos la empresa para analizar','error');return;}
+  const contacto=(document.getElementById('nl-contacto').value||'').trim();
+  const cargo=(document.getElementById('nl-cargo').value||'').trim();
+  const origen=document.getElementById('nl-origen').value;
+  const industria=document.getElementById('nl-industria').value;
+  const tel=(document.getElementById('nl-telefono').value||'').trim();
+  const email=(document.getElementById('nl-email').value||'').trim();
+  const web=(document.getElementById('nl-web').value||'').trim();
+  const notas=(document.getElementById('nl-notas').value||'').trim();
+  const btn=document.getElementById('leadAgentBtn');
+  btn.disabled=true;btn.textContent='⏳ Analizando...';
+  document.getElementById('leadAgentPanel').style.display='none';
+  const query=`Analiza este nuevo lead. Usa EXACTAMENTE estas etiquetas de sección:
+
+EMPRESA: ${empresa}${contacto?`\nCONTACTO: ${contacto}${cargo?` (${cargo})`:''}`:''} ${industria?`\nINDUSTRIA: ${industria}`:''}${origen?`\nORIGEN: ${origen}`:''}${tel?`\nTELÉFONO: ${tel}`:''}${email?`\nEMAIL: ${email}`:''}${web?`\nWEB: ${web}`:''}${notas?`\nNOTAS: ${notas}`:''}
+
+CALIFICACION: [🔥 Alto | ⚡ Medio | ❄ Bajo] — [razón en 1 línea]
+
+NECESIDAD:
+[qué productos de The Lab necesita este cliente y por qué, 1-2 líneas]
+
+MENSAJE_WA:
+[primer mensaje WhatsApp, máx 4 líneas, natural y directo${contacto?`, usa "${contacto.split(' ')[0]}"`:''}]
+
+ASUNTO_EMAIL: [asunto breve y atractivo]
+MENSAJE_EMAIL:
+[cuerpo del email, 4-6 líneas, propuesta de valor concreta, cierra con llamada a la acción]
+
+PASOS:
+1. [acción concreta hoy]
+2. [acción días 2-3]
+3. [seguimiento siguiente semana]`;
+  try{
+    const raw=await callClaude(LEAD_AGENT_SYS,query);
+    _leadAgentResponse=raw;
+    renderLeadAgentResult(raw);
+  }catch(e){toast('Error IA: '+e.message,'error');}
+  btn.disabled=false;btn.textContent='🤖 Analizar con IA';
+}
+function renderLeadAgentResult(raw){
+  const get=(key)=>{const m=raw.match(new RegExp(`^${key}:\\s*(.+)`,'m'));return m?m[1].trim():'';};
+  const getBlock=(key)=>{const m=raw.match(new RegExp(`^${key}:\\s*\\n([\\s\\S]*?)(?=\\n[A-ZÁÉÍÓÚÑ_]+:|$)`,'m'));return m?m[1].trim():'';};
+  const cal=get('CALIFICACION');
+  const calColor=cal.includes('🔥')?'var(--accent3)':cal.includes('⚡')?'var(--accent)':'#aaa';
+  const necesidad=getBlock('NECESIDAD')||'';
+  const wa=getBlock('MENSAJE_WA')||'';
+  const asunto=get('ASUNTO_EMAIL');
+  const emailBody=getBlock('MENSAJE_EMAIL')||'';
+  const pasos=raw.split('PASOS:')[1]?.trim()||'';
+  const cpBtn=(text,lbl)=>`<button onclick="navigator.clipboard.writeText(${JSON.stringify(text)}).then(()=>toast('Copiado ✓','success'))" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;margin-top:6px">📋 ${lbl}</button>`;
+  document.getElementById('leadAgentResult').innerHTML=`<div style="display:flex;flex-direction:column;gap:12px;padding:2px 4px 8px">
+    ${cal?`<div style="display:flex;align-items:flex-start;gap:10px;background:var(--surface2);border-radius:8px;padding:10px 12px"><span style="font-size:13px;font-weight:700;color:${calColor};white-space:nowrap">${escapeHtml(cal.split('—')[0].trim())}</span>${necesidad?`<span style="font-size:11px;color:var(--text2);line-height:1.4">${escapeHtml(cal.split('—').slice(1).join('—').trim())} · ${escapeHtml(necesidad)}</span>`:''}</div>`:''}
+    ${wa?`<div style="background:rgba(37,211,102,0.06);border:1px solid rgba(37,211,102,0.2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#25d366;margin-bottom:6px">💬 WhatsApp</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6">${escapeHtml(wa)}</div>${cpBtn(wa,'Copiar mensaje')}</div>`:''}
+    ${emailBody?`<div style="background:rgba(129,140,248,0.06);border:1px solid rgba(129,140,248,0.2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#818cf8;margin-bottom:6px">✉ Email${asunto?` — <span style="font-weight:400;opacity:.8">${escapeHtml(asunto)}</span>`:''}</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6">${escapeHtml(emailBody)}</div>${cpBtn(emailBody,'Copiar cuerpo')}</div>`:''}
+    ${pasos?`<div style="background:var(--surface2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:6px">📋 Próximos pasos</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.7">${escapeHtml(pasos)}</div></div>`:''}
+    <button onclick="document.getElementById('nl-notas').value+=(_leadAgentResponse?'\n\n--- LEAD_AGENT ---\n'+_leadAgentResponse.substring(0,1500):'')" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:6px;padding:5px 12px;font-size:10px;cursor:pointer;align-self:flex-start">↓ Añadir análisis a Notas</button>
+  </div>`;
+  document.getElementById('leadAgentPanel').style.display='block';
+  document.getElementById('leadAgentPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
 async function createLead(){
   const btn=document.getElementById('createLeadBtn');const empresa=document.getElementById('nl-empresa').value.trim();const contacto=document.getElementById('nl-contacto').value.trim();const email=document.getElementById('nl-email').value.trim();
   const tel=document.getElementById('nl-telefono').value.trim();const rutEl=document.getElementById('nl-rut');const rut=(rutEl?.value||'').trim();
@@ -2890,8 +2973,29 @@ async function createLead(){
   if(document.getElementById('nl-rut').value) fields['RUT']=document.getElementById('nl-rut').value;
   if(document.getElementById('nl-web').value) fields['Sitio web']=document.getElementById('nl-web').value;
   const ciudadVal=document.getElementById('nl-ciudad').value.trim();if(ciudadVal) fields['Ciudad']=ciudadVal;
-  try{await airtableWrite('Clientes','POST',null,fields);toast(`✓ "${empresa}" creado`,'success');clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();}
-  catch(e){if(ciudadVal&&e.message.toLowerCase().includes('unknown')){try{delete fields['Ciudad'];await airtableWrite('Clientes','POST',null,fields);toast(`✓ "${empresa}" creado`,'success');clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}else{toast('Error: '+e.message,'error');}}
+  // Pre-carga análisis del agente si existe
+  if(_leadAgentResponse) fields['Respuesta SALES_AGENT']=_leadAgentResponse.substring(0,5000);
+  const saveAndPatch=async(f)=>{
+    const rec=await airtableWrite('Clientes','POST',null,f);
+    // Guardar mensaje de bienvenida WhatsApp por separado
+    if(rec?.id&&_leadAgentResponse){
+      const waM=_leadAgentResponse.match(/^MENSAJE_WA:\s*\n([\s\S]*?)(?=\n[A-ZÁÉÍÓÚÑ_]+:|$)/m);
+      if(waM) try{await airtableWrite('Clientes','PATCH',rec.id,{'Mensaje bienvenida':waM[1].trim()});}catch(e){}
+    }
+    return rec;
+  };
+  try{
+    await saveAndPatch(fields);
+    toast(`✓ "${empresa}" creado${_leadAgentResponse?' + análisis guardado':''}`, 'success');
+    _leadAgentResponse=null;
+    document.getElementById('leadAgentPanel').style.display='none';
+    clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();
+  }catch(e){
+    if(ciudadVal&&e.message.toLowerCase().includes('unknown')){
+      try{delete fields['Ciudad'];await saveAndPatch(fields);toast(`✓ "${empresa}" creado`,'success');_leadAgentResponse=null;document.getElementById('leadAgentPanel').style.display='none';clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();}
+      catch(e2){toast('Error: '+e2.message,'error');}
+    }else{toast('Error: '+e.message,'error');}
+  }
   btn.disabled=false;btn.textContent='✚ Crear en Airtable';
 }
 
