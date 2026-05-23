@@ -1166,15 +1166,17 @@ body.kiosk .tab-content{padding-top:12px!important;}
 <!-- META SEMANAL -->
 <div id="metaModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeMetaModal()"></div>
-  <div class="modal-card" style="max-width:360px">
-    <div class="modal-title">🎯 Meta de Revenue Semanal</div>
+  <div class="modal-card" style="max-width:400px">
+    <div class="modal-title">🎯 Metas de Revenue</div>
     <div style="padding:0 0 16px;display:flex;flex-direction:column;gap:10px">
-      <div class="field-group"><label class="field-label">Objetivo semanal (CLP neto)</label><input class="field-input" id="metaInput" type="number" placeholder="ej. 3000000" onkeydown="if(event.key==='Enter')saveRevenueMeta()"></div>
-      <div style="font-size:11px;color:var(--text3)">Se guarda en este dispositivo y aparece como barra de progreso en el KPI de Revenue.</div>
+      <div id="metaContext" style="font-size:11px;color:var(--accent);background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.2);border-radius:6px;padding:7px 11px;line-height:1.6">—</div>
+      <div class="field-group"><label class="field-label">Meta semanal (CLP neto)</label><input class="field-input" id="metaInput" type="number" placeholder="ej. 3000000" onkeydown="if(event.key==='Enter')saveRevenueMeta()"></div>
+      <div class="field-group"><label class="field-label">Meta mensual (CLP neto)</label><input class="field-input" id="metaInputMensual" type="number" placeholder="ej. 12000000" onkeydown="if(event.key==='Enter')saveRevenueMeta()"></div>
+      <div style="font-size:11px;color:var(--text3)">Guardado en Airtable — disponible en todos los dispositivos.</div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn btn-ghost btn-sm" onclick="clearRevenueMeta()">🗑 Borrar</button>
-      <button class="btn btn-primary" onclick="saveRevenueMeta()">✓ Guardar meta</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearRevenueMeta()">🗑 Borrar todo</button>
+      <button class="btn btn-primary" id="metaSaveBtn" onclick="saveRevenueMeta()">✓ Guardar metas</button>
     </div>
   </div>
 </div>
@@ -1182,7 +1184,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
 <script>
 const BASE_ID='app1YtD74AqiPWQhy';
 let autoRefreshInterval=null;
-const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null};
+const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null};
 const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
 const selectedClientes=new Set();
@@ -1917,7 +1919,7 @@ async function loadAllData(){
   if(isFirst) slProgress(10,'Conectando con Airtable...');
   try{
     if(isFirst) slProgress(20,'Cargando clientes...');
-    const[cRes,coRes,pRes,rRes,pvRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500)]);
+    const[cRes,coRes,pRes,rRes,pvRes,monRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50)]);
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
     else if(cRes.reason?.message?.includes('401')){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');hideSysLoader();showTokenModal();btn.disabled=false;btn.textContent='↺ Actualizar';return;}
     if(isFirst) slProgress(50,'Cargando cotizaciones y pedidos...');
@@ -1926,6 +1928,7 @@ async function loadAllData(){
     if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
     if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
     if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();}
+    if(monRes.status==='fulfilled'){const rec=monRes.value.records?.find(r=>r.fields['Name']==='META_REVENUE');if(rec){state.metaRecordId=rec.id;try{const cfg=JSON.parse(rec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}}
     if(isFirst) slProgress(92,'Calculando resumen...');
     state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
@@ -1937,12 +1940,13 @@ async function loadAllData(){
 async function loadAllDataSilent(){
   if(!getToken()) return;
   try{
-    const[cRes,coRes,pRes,rRes,pvRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500)]);
+    const[cRes,coRes,pRes,rRes,pvRes,monRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50)]);
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||'—';});}
     if(coRes.status==='fulfilled') state.cotizaciones=coRes.value.records||[];
     if(pRes.status==='fulfilled') state.pedidos=pRes.value.records||[];
     if(rRes.status==='fulfilled') state.reportes=rRes.value.records||[];
     if(pvRes.status==='fulfilled') state.proveedores=pvRes.value.records||[];
+    if(monRes.status==='fulfilled'){const rec=monRes.value.records?.find(r=>r.fields['Name']==='META_REVENUE');if(rec){state.metaRecordId=rec.id;try{const cfg=JSON.parse(rec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}}
     state.lastUpdateTs=Date.now();document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;renderOverview();
   }catch(e){}
 }
@@ -2124,12 +2128,18 @@ function renderKPIs(){
     return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${arrow}${d>=0?'+':''}${d} ${label}</div>`;
   };
 
-  // ── Meta semanal ──────────────────────────────────────────────────────
+  // ── Metas semanal + mensual ───────────────────────────────────────────
   const revMeta=parseInt(localStorage.getItem('revMetaSemanal'))||0;
+  const revMetaMensual=parseInt(localStorage.getItem('revMetaMensual'))||0;
+  const monthStart=new Date(today.getFullYear(),today.getMonth(),1);
+  const revMes=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
   const metaPct=revMeta>0?Math.min(Math.round((revSemana/revMeta)*100),100):0;
   const metaColor=metaPct>=100?'var(--accent3)':metaPct>=70?'var(--accent)':'var(--warn)';
-  const metaHtml=revMeta>0
-    ?`<div style="margin-top:6px" onclick="event.stopPropagation();openMetaModal()"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:9px;color:var(--text3)">Meta ${formatCLP(revMeta)}</span><span style="font-size:9px;font-weight:700;color:${metaColor}">${metaPct}%${metaPct>=100?' ✓':''}</span></div><div style="height:4px;background:var(--surface3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${metaPct}%;background:${metaColor};border-radius:2px;transition:width .5s ease"></div></div></div>`
+  const metaMPct=revMetaMensual>0?Math.min(Math.round((revMes/revMetaMensual)*100),100):0;
+  const metaMColor=metaMPct>=100?'var(--accent3)':metaMPct>=70?'var(--accent)':'var(--warn)';
+  const metaBar=(val,pct,color,label)=>`<div style="margin-top:4px"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:9px;color:var(--text3)">${label} ${formatCLP(val)}</span><span style="font-size:9px;font-weight:700;color:${color}">${pct}%${pct>=100?' ✓':''}</span></div><div style="height:4px;background:var(--surface3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:width .5s ease"></div></div></div>`;
+  const metaHtml=(revMeta>0||revMetaMensual>0)
+    ?`<div style="margin-top:6px;cursor:pointer" onclick="event.stopPropagation();openMetaModal()">${revMeta>0?metaBar(revMeta,metaPct,metaColor,'Sem.'):''}${revMetaMensual>0?metaBar(revMetaMensual,metaMPct,metaMColor,'Mes'):''}${metaPct>=100?`<div style="font-size:9px;color:var(--accent3);font-weight:700;margin-top:3px;text-align:center">🎯 ¡Meta semanal alcanzada!</div>`:''}</div>`
     :`<div style="font-size:9px;color:var(--text3);margin-top:4px;cursor:pointer" onclick="event.stopPropagation();openMetaModal()">+ definir meta semanal</div>`;
 
   const kpiStyle='cursor:pointer;transition:border-color .15s' ;
@@ -3029,20 +3039,51 @@ function runGlobalSearch(q){
 }
 function goToSearchResult(tab,id){closeGlobalSearch();goToAlert(tab,id);}
 
-// ── META SEMANAL ──────────────────────────────────────────────────────
+// ── META SEMANAL + MENSUAL ────────────────────────────────────────────
+async function saveMetaAirtable(metaSemanal,metaMensual){
+  const notes=JSON.stringify({metaSemanal,metaMensual,updatedAt:new Date().toISOString()});
+  if(state.metaRecordId){
+    await airtableWrite('Monitor Sistema','PATCH',state.metaRecordId,{'Notes':notes});
+  } else {
+    const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'META_REVENUE','Notes':notes});
+    if(r?.id) state.metaRecordId=r.id;
+  }
+}
 function openMetaModal(){
-  const cur=localStorage.getItem('revMetaSemanal');
-  document.getElementById('metaInput').value=cur||'';
+  document.getElementById('metaInput').value=localStorage.getItem('revMetaSemanal')||'';
+  const inputM=document.getElementById('metaInputMensual');if(inputM) inputM.value=localStorage.getItem('revMetaMensual')||'';
+  const today=new Date();today.setHours(0,0,0,0);
+  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());
+  const monthStart=new Date(today.getFullYear(),today.getMonth(),1);
+  const revSem=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const revMes=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const dLeft=6-today.getDay();
+  const el=document.getElementById('metaContext');
+  if(el) el.innerHTML=`Esta semana: <strong>${formatCLP(revSem)}</strong> &nbsp;·&nbsp; Faltan <strong>${dLeft} día${dLeft!==1?'s':''}</strong><br>Este mes: <strong>${formatCLP(revMes)}</strong>`;
   document.getElementById('metaModal').style.display='flex';
   setTimeout(()=>document.getElementById('metaInput').focus(),60);
 }
 function closeMetaModal(){document.getElementById('metaModal').style.display='none';}
-function saveRevenueMeta(){
+async function saveRevenueMeta(){
   const v=parseInt(document.getElementById('metaInput').value)||0;
-  if(v>0){localStorage.setItem('revMetaSemanal',v);closeMetaModal();renderKPIs();toast(`✓ Meta: ${formatCLP(v)}/semana`,'success');}
-  else{toast('Ingresa un valor mayor a 0','error');}
+  const vm=parseInt(document.getElementById('metaInputMensual')?.value)||0;
+  if(!v&&!vm){toast('Ingresa al menos un valor mayor a 0','error');return;}
+  if(v>0) localStorage.setItem('revMetaSemanal',v); else localStorage.removeItem('revMetaSemanal');
+  if(vm>0) localStorage.setItem('revMetaMensual',vm); else localStorage.removeItem('revMetaMensual');
+  const btn=document.getElementById('metaSaveBtn');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  try{
+    await saveMetaAirtable(v,vm);
+    closeMetaModal();renderKPIs();toast('✓ Meta guardada en Airtable','success');
+  }catch(e){
+    closeMetaModal();renderKPIs();toast('Meta guardada localmente (Airtable no disponible)','info');
+  }
+  if(btn){btn.disabled=false;btn.textContent='✓ Guardar metas';}
 }
-function clearRevenueMeta(){localStorage.removeItem('revMetaSemanal');closeMetaModal();renderKPIs();toast('Meta eliminada','info');}
+async function clearRevenueMeta(){
+  localStorage.removeItem('revMetaSemanal');localStorage.removeItem('revMetaMensual');
+  try{if(state.metaRecordId) await airtableWrite('Monitor Sistema','PATCH',state.metaRecordId,{'Notes':''});}catch(e){}
+  closeMetaModal();renderKPIs();toast('Metas eliminadas','info');
+}
 
 // ── KANBAN PEDIDOS ────────────────────────────────────────────────────
 function renderPedidosKanban(){
