@@ -1244,7 +1244,7 @@ FORMATO DE SALIDA OBLIGATORIO — repite exactamente este bloque por cada provee
 ---PROVEEDOR_START---
 NOMBRE: [nombre real de empresa, tienda o plataforma]
 PAIS: [Chile | China | EEUU | España | etc]
-WEB: [URL o dominio real: alibaba.com/store/xxx | mercadolibre.cl | amazon.com | etc]
+WEB: [URL o dominio real del proveedor o fabricante directo]
 TELEFONO: [teléfono fijo o celular principal, ej: +56 2 2345 6789 | Consultar si no disponible]
 WHATSAPP: [número WhatsApp si existe y es distinto al teléfono, ej: +56 9 XXXX XXXX | — si no aplica o es el mismo]
 TIPO: [Nacional | Internacional | Marketplace | Importador local]
@@ -1259,10 +1259,12 @@ NOTAS: [tip de negociación, contacto si existe, o dato técnico relevante]
 ---PROVEEDOR_END---
 
 REGLAS:
-- Solo proveedores y plataformas reales — no inventes nombres ni URLs
+- Solo proveedores y fabricantes reales — no inventes nombres ni URLs
+- EXCLUIR completamente: Amazon, MercadoLibre, Alibaba, AliExpress y cualquier marketplace genérico
+- Busca fabricantes directos, distribuidores industriales e importadores especializados
 - Incluye rango de precios desde bajo costo hasta calidad premium
-- Para Chile: MercadoLibre, distribuidores industriales, importadores locales
-- Para internacional: Alibaba (fabricantes directos), Amazon Business, aliexpress.com
+- Para Chile: distribuidores industriales, importadores locales especializados
+- Para internacional: fabricantes directos en China, España, EEUU u otros países
 - Adapta el análisis al volumen y presupuesto indicado
 - Al final agrega una línea: RECOMENDACIÓN: [2 frases sobre cuál elegir para The Lab Solutions]`;
 
