@@ -289,7 +289,35 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     flex:1!important;padding:7px 0!important;font-size:11px!important;
     justify-content:center!important;text-align:center!important;
   }
+  /* ── Proveedores: tarjetas móvil ──────────────────────────────── */
+  #proveedoresTableBody tr:not([id^="pv-ficha-"]){
+    display:grid!important;
+    grid-template-columns:1fr auto;
+    grid-template-areas:
+      "nombre cat"
+      "contacto contacto"
+      "tel email"
+      "rep estado"
+      "plazo acc";
+    gap:0;padding:14px!important;border-radius:12px!important;
+  }
+  #proveedoresTableBody .pv-nombre{grid-area:nombre;display:block!important;min-height:auto!important;padding:0 8px 10px 0!important;}
+  #proveedoresTableBody .pv-nombre::before{display:none!important;}
+  #proveedoresTableBody .pv-cat{grid-area:cat;display:flex!important;align-items:flex-start!important;justify-content:flex-end!important;min-height:auto!important;padding:0 0 10px 0!important;}
+  #proveedoresTableBody .pv-cat::before{display:none!important;}
+  #proveedoresTableBody .pv-contacto{grid-area:contacto;border-top:1px solid var(--border)!important;padding-top:8px!important;padding-bottom:4px!important;min-height:auto!important;display:block!important;}
+  #proveedoresTableBody .pv-tel{grid-area:tel;border-top:1px solid var(--border)!important;padding-top:8px!important;min-height:auto!important;display:flex!important;align-items:center!important;}
+  #proveedoresTableBody .pv-email{grid-area:email;border-top:1px solid var(--border)!important;padding-top:8px!important;min-height:auto!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;}
+  #proveedoresTableBody .pv-tel::before,#proveedoresTableBody .pv-email::before{display:none!important;}
+  #proveedoresTableBody .pv-rep{grid-area:rep;border-top:1px solid var(--border)!important;padding-top:8px!important;min-height:auto!important;display:flex!important;align-items:center!important;}
+  #proveedoresTableBody .pv-estado{grid-area:estado;border-top:1px solid var(--border)!important;padding-top:8px!important;min-height:auto!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;}
+  #proveedoresTableBody .pv-rep::before,#proveedoresTableBody .pv-estado::before{display:none!important;}
+  #proveedoresTableBody .pv-plazo{grid-area:plazo;border-top:1px solid var(--border)!important;padding-top:8px!important;min-height:auto!important;display:flex!important;align-items:center!important;}
+  #proveedoresTableBody .pv-acc{grid-area:acc;border-top:1px solid var(--border)!important;padding-top:8px!important;min-height:auto!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;}
+  #proveedoresTableBody .pv-plazo::before,#proveedoresTableBody .pv-acc::before{display:none!important;}
+  #proveedoresTableBody .pv-comuna{display:none!important;}
 }
+#clientesTableBody tr.cliente-hidden{display:none!important;}
 body.kiosk .topbar{display:none!important;}
 body.kiosk .mobile-nav-overlay{display:none!important;}
 body.kiosk .maquina-section{display:none!important;}
@@ -536,15 +564,15 @@ body.kiosk .tab-content{padding-top:12px!important;}
           <th class="sort-th" onclick="sortProveedores('nombre')">Nombre / Empresa</th>
           <th class="sort-th" onclick="sortProveedores('categoria')">Categoría</th>
           <th class="sort-th" onclick="sortProveedores('contacto')">Contacto</th>
-          <th>Tel. / Email</th>
+          <th>Teléfono</th>
+          <th>Email</th>
           <th class="sort-th" onclick="sortProveedores('comuna')">Comuna</th>
           <th class="sort-th" onclick="sortProveedores('rep')">Rep.</th>
           <th class="sort-th" onclick="sortProveedores('estado')">Estado</th>
           <th class="sort-th" onclick="sortProveedores('plazo')">Plazo</th>
-          <th>Pedidos</th>
           <th>Acc.</th>
         </tr></thead>
-        <tbody id="proveedoresTableBody"><tr><td colspan="9"><div class="loading-state"><div class="spinner"></div> cargando...</div></td></tr></tbody>
+        <tbody id="proveedoresTableBody"><tr><td colspan="10"><div class="loading-state"><div class="spinner"></div> cargando...</div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -1832,12 +1860,12 @@ async function saveEquipoEventosAirtable(){
     for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);await fetch(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.personaId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}}))})});}
     const toDelete=existentes.filter(r=>!equipoState.eventos[`${r.fields.persona_id}_${r.fields.fecha}`]);
     for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await fetch(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
-  }catch(e){if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')||e.message?.includes('unknown')){const ok=await crearTablaEquipoEventos();if(ok){toast('Tabla Equipo_Eventos creada ✓','success');await saveEquipoEventosAirtable();}}}
+  }catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('unknown')){const ok=await crearTablaEquipoEventos();if(ok){toast('Tabla Equipo_Eventos creada ✓','success');await saveEquipoEventosAirtable();}}}
 }
 async function loadEquipoEventosAirtable(){
   const t=getToken();if(!t) return;
   try{const res=await airtableFetch('Equipo_Eventos',500);equipoState.eventos={};(res.records||[]).forEach(r=>{const f=r.fields;if(f.persona_id&&f.fecha) equipoState.eventos[`${f.persona_id}_${f.fecha}`]={tipo:f.tipo||'ocupado',desc:f.desc||'',horaInicio:f.hora_inicio||'',horaFin:f.hora_fin||''};});}
-  catch(e){if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaEquipoEventos();}
+  catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaEquipoEventos();}
 }
 
 // ── LOAD DATA ─────────────────────────────────────────────────
@@ -2271,7 +2299,7 @@ function renderClientes(){
   tbody.innerHTML=getSortedClientes().map(c=>buildClienteRow(c)).join('');if(document.getElementById('clienteSearch')?.value) filterClientes();
   renderClientesAnalytics();
 }
-function filterClientes(){const q=document.getElementById('clienteSearch').value.toLowerCase();document.querySelectorAll('#clientesTableBody tr').forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(q)?'':'none';});updateBulkBar();}
+function filterClientes(){const q=document.getElementById('clienteSearch').value.toLowerCase();document.querySelectorAll('#clientesTableBody tr').forEach(r=>{r.classList.toggle('cliente-hidden',!!(q&&!r.textContent.toLowerCase().includes(q)));});updateBulkBar();}
 async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
@@ -2387,6 +2415,7 @@ async function crearPedidoDesdeCotizacion(cotId){
   const numPedido=`PED-${year}-${String(maxNum+1).padStart(3,'0')}`;
   const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0};
   if(Array.isArray(f['Cliente'])&&f['Cliente'].length>0) fields['Cliente']=f['Cliente'];
+  if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
   try{await airtableWrite('Pedidos','POST',null,fields);toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();}
   catch(e){if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('cliente')){try{await airtableWrite('Pedidos','POST',null,{'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']});toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');}}else{toast(`⚠ Error: ${e.message}`,'error');}}
 }
@@ -2681,22 +2710,29 @@ function renderProveedorCell(pedidoId,pvStr){
   const arr=(pvStr||'').split(',').map(s=>s.trim()).filter(Boolean);
   return`<div style="display:flex;align-items:center;gap:4px;min-width:90px"><div class="pv-chips" style="display:flex;gap:2px;flex-wrap:wrap;flex:1">${pvChipsHtml(arr)}</div><button onclick="openProveedorDrop('${pedidoId}',this);event.stopPropagation()" style="background:var(--surface3);border:1px solid var(--border2);border-radius:4px;color:var(--text3);font-size:10px;padding:2px 6px;cursor:pointer;flex-shrink:0" title="Seleccionar proveedores">▾</button></div>`;
 }
-let _pvDropId=null;
+let _pvDropId=null,_pvDropCat='';
 function openProveedorDrop(pedidoId,btn){
   _pvDropId=pedidoId;
   const drop=document.getElementById('pvMultiDrop');
   if(drop.style.display==='block'&&drop.dataset.pid===pedidoId){drop.style.display='none';return;}
   drop.dataset.pid=pedidoId;
-  const p=state.pedidos.find(x=>x.id===pedidoId);
-  const selected=(p?.fields['Proveedor']||'').split(',').map(s=>s.trim()).filter(Boolean);
-  const activos=state.proveedores.filter(x=>(x.fields['Estado']||'')==='Activo');
-  document.getElementById('pvMultiDropContent').innerHTML=activos.length
-    ?activos.map(x=>{const n=x.fields['Nombre']||'';const chk=selected.includes(n);return`<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:var(--text);background:${chk?'rgba(0,212,204,0.08)':'transparent'}"><input type="checkbox" ${chk?'checked':''} style="accent-color:var(--accent);cursor:pointer" onchange="pvMultiToggle('${escapeHtml(n)}',this.checked)"><span style="flex:1">${escapeHtml(n)}</span></label>`;}).join('')
-    :'<div style="color:var(--text3);font-size:11px;padding:8px">Sin proveedores activos</div>';
+  _pvDropCat='';
+  renderPvMultiDrop();
   const rect=btn.getBoundingClientRect();
   drop.style.top=(rect.bottom+4)+'px';
-  drop.style.left=Math.min(rect.left,window.innerWidth-220)+'px';
+  drop.style.left=Math.min(rect.left,window.innerWidth-240)+'px';
   drop.style.display='block';
+}
+function pvDropSetCat(cat){_pvDropCat=cat;renderPvMultiDrop();}
+function renderPvMultiDrop(){
+  const p=state.pedidos.find(x=>x.id===_pvDropId);
+  const selected=(p?.fields['Proveedor']||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const activos=state.proveedores.filter(x=>(x.fields['Estado']||'')==='Activo');
+  const cats=[...new Set(activos.flatMap(x=>pvCat(x.fields).split(',').map(s=>s.trim()).filter(Boolean)))].sort();
+  const catBar=cats.length?`<div style="padding:6px 8px 4px;border-bottom:1px solid var(--border2);margin-bottom:2px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:5px">Categoría</div><div style="display:flex;flex-wrap:wrap;gap:3px"><button onclick="pvDropSetCat('')" style="font-size:10px;padding:2px 9px;border-radius:12px;cursor:pointer;border:1px solid ${_pvDropCat===''?'var(--accent)':'var(--border2)'};background:${_pvDropCat===''?'rgba(0,212,204,0.15)':'transparent'};color:${_pvDropCat===''?'var(--accent)':'var(--text2)'}">Todos</button>${cats.map(c=>`<button onclick="pvDropSetCat('${escapeHtml(c)}')" style="font-size:10px;padding:2px 9px;border-radius:12px;cursor:pointer;border:1px solid ${_pvDropCat===c?'var(--accent)':'var(--border2)'};background:${_pvDropCat===c?'rgba(0,212,204,0.15)':'transparent'};color:${_pvDropCat===c?'var(--accent)':'var(--text2)'}">${escapeHtml(c)}</button>`).join('')}</div></div>`:'';
+  const filtered=_pvDropCat?activos.filter(x=>pvCat(x.fields).split(',').map(s=>s.trim()).includes(_pvDropCat)):activos;
+  const pvHtml=filtered.length?filtered.map(x=>{const n=x.fields['Nombre']||'';const chk=selected.includes(n);return`<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:var(--text);background:${chk?'rgba(0,212,204,0.08)':'transparent'}"><input type="checkbox" ${chk?'checked':''} style="accent-color:var(--accent);cursor:pointer" onchange="pvMultiToggle('${escapeHtml(n)}',this.checked)"><span style="flex:1">${escapeHtml(n)}</span></label>`;}).join(''):'<div style="color:var(--text3);font-size:11px;padding:8px 10px">Sin proveedores en esta categoría</div>';
+  document.getElementById('pvMultiDropContent').innerHTML=catBar+pvHtml;
 }
 async function pvMultiToggle(nombre,checked){
   const id=_pvDropId;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
@@ -2835,14 +2871,14 @@ async function createCotizacion(){
     const clienteId=document.getElementById('cot-cliente-id')?.value||'';
     const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];
     const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];
-    const fields={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Forma de pago':document.getElementById('cot-forma-pago')?.value||'','Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada','SUBTOTAL':s,'TOTAL CON IVA':t};
+    const fields={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Forma de pago':document.getElementById('cot-forma-pago')?.value||null,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada','SUBTOTAL':s,'TOTAL CON IVA':t};
     if(clienteId) fields['Cliente']=[clienteId];
     const rows=document.querySelectorAll('#itemsContainer .item-row');rows.forEach((row,i)=>{const n=i+1;if(n>20) return;const desc=(row.querySelector('.item-desc')?.value||'').trim();const und=parseFloat(row.querySelector('.item-und')?.value)||1;const costo=parseFloat(row.querySelector('.item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.item-venta')?.value)||0;if(desc||venta>0){fields[`ITEM${n}`]=desc;fields[`UNIDADES${n}`]=und;fields[`COSTO NETO${n}`]=Math.round(costo*und);fields[`VALOR NETO${n}`]=Math.round(venta*und);}});
     await airtableWrite('Cotizaciones','POST',null,fields);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){
     if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('field')){
       toast('Creando campos en Airtable...','info');await crearCamposItemsAirtable();
-      try{const clienteId=document.getElementById('cot-cliente-id')?.value||'';const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];const bf={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Forma de pago':document.getElementById('cot-forma-pago')?.value||'','Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};if(clienteId) bf['Cliente']=[clienteId];await airtableWrite('Cotizaciones','POST',null,bf);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();}
+      try{const clienteId=document.getElementById('cot-cliente-id')?.value||'';const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];const bf={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Forma de pago':document.getElementById('cot-forma-pago')?.value||null,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};if(clienteId) bf['Cliente']=[clienteId];await airtableWrite('Cotizaciones','POST',null,bf);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();}
       catch(e2){toast('Error: '+e2.message,'error');}
     }else{toast('Error: '+e.message,'error');}
   }
@@ -4356,29 +4392,28 @@ function buildProveedorRow(p){
   const tel=(f['Teléfono']||'').replace(/\s/g,'');
   const email=f['Email']||'';
   const web=f['Sitio Web']||'';
-  const contactInfo=[tel?`<a href="tel:${tel}" onclick="event.stopPropagation()" style="display:block;font-size:13px;font-weight:600;color:#fff;text-decoration:none" title="Llamar">📞 ${escapeHtml(f['Teléfono']||'')}</a>`:'',email?`<a href="mailto:${email}" onclick="event.stopPropagation()" style="display:block;font-size:13px;font-weight:600;color:#fff;text-decoration:none;margin-top:2px" title="Enviar correo">✉ ${escapeHtml(email)}</a>`:''].filter(Boolean).join('');
+  const telCell=tel?`<a href="tel:${tel}" onclick="event.stopPropagation()" style="font-size:13px;font-weight:600;color:#fff;text-decoration:none" title="Llamar">📞 ${escapeHtml(f['Teléfono']||'')}</a>`:'<span style="color:var(--text3)">—</span>';
+  const emailCell=email?`<a href="mailto:${email}" onclick="event.stopPropagation()" style="font-size:13px;font-weight:600;color:#fff;text-decoration:none" title="Enviar correo">✉ ${escapeHtml(email)}</a>`:'<span style="color:var(--text3)">—</span>';
   const plazo=f['Plazo de entrega (días)']?`${f['Plazo de entrega (días)']} días`:'—';
   const rep=parseInt(f['Reputación'])||0;
   const starsHtml=[1,2,3,4,5].map(n=>`<span onclick="event.stopPropagation();updateRepProveedor('${id}',${n})" style="cursor:pointer;font-size:14px;color:${n<=rep?'#facc15':'var(--text3)'};line-height:1" title="${n} estrella${n>1?'s':''}" onmouseenter="highlightStars(this,${n})" onmouseleave="resetStars(this.parentElement,${rep})">★</span>`).join('');
   const starsCell=`<div style="display:flex;gap:1px;align-items:center" id="stars-${id}">${starsHtml}</div>`;
-  // Count active pedidos linked to this proveedor (by Proveedor text field)
   const nombre=f['Nombre']||'';
   const pedidosActivos=state.pedidos.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')&&(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
   const pedCount=pedidosActivos.length;
-  const pedCell=pedCount>0?`<span style="background:rgba(0,212,204,0.12);border:1px solid rgba(0,212,204,0.3);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();toggleProveedorFicha('${id}')">${pedCount} activo${pedCount>1?'s':''}</span>`:`<span style="color:var(--text3);font-size:10px">—</span>`;
   const estado=f['Estado']||'Activo';
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
   return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}">
-    <td><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}</td>
-    <td>${pvCatBadge(pvCat(f)||'—')}</td>
-    <td><div style="font-size:12px">${escapeHtml(f['Contacto']||'—')}</div>${f['Cargo']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['Cargo'])}</div>`:''}</td>
-    <td>${contactInfo||'—'}</td>
-    <td style="font-size:11px">${escapeHtml(f['Comuna']||'—')}</td>
-    <td>${starsCell}</td>
-    <td>${estadoPvBadge(estado)}</td>
-    <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${plazo}</td>
-    <td>${pedCell}</td>
-    <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')">✏️</button></td>
+    <td class="pv-nombre"><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}</td>
+    <td class="pv-cat">${pvCatBadge(pvCat(f)||'—')}</td>
+    <td class="pv-contacto"><div style="font-size:12px">${escapeHtml(f['Contacto']||'—')}</div>${f['Cargo']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['Cargo'])}</div>`:''}</td>
+    <td class="pv-tel">${telCell}</td>
+    <td class="pv-email">${emailCell}</td>
+    <td class="pv-comuna" style="font-size:11px">${escapeHtml(f['Comuna']||'—')}</td>
+    <td class="pv-rep">${starsCell}</td>
+    <td class="pv-estado">${estadoPvBadge(estado)}</td>
+    <td class="pv-plazo" style="font-family:'JetBrains Mono',monospace;font-size:11px">${plazo}</td>
+    <td class="pv-acc" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')">✏️</button></td>
   </tr>
   <tr id="pv-ficha-${id}" style="display:none">
     <td colspan="10" style="padding:0;background:var(--surface2)">
@@ -4638,7 +4673,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   </div>
 </div>
 <!-- Proveedor multi-select dropdown -->
-<div id="pvMultiDrop" style="display:none;position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:200px;max-height:260px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.45)">
+<div id="pvMultiDrop" style="display:none;position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:240px;max-height:360px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.45)">
   <div id="pvMultiDropContent"></div>
 </div>
 
