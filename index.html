@@ -622,7 +622,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
     <div class="card-header"><span class="card-title">Datos del Proveedor</span></div>
     <div class="form-grid">
       <div class="field-group"><label class="field-label">Nombre / Empresa *</label><input class="field-input" id="np-nombre" placeholder="Empresa S.A."></div>
-      <div class="field-group"><label class="field-label">Categoría *</label><select class="field-select" id="np-categoria"><option value="">— seleccionar —</option></select></div>
+      <div class="field-group form-full"><label class="field-label">Categorías *</label><div class="pv-catbox" id="np-catbox" style="display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;min-height:38px;cursor:default"></div><div style="font-size:10px;color:var(--text3);margin-top:4px">Haz clic en las categorías para seleccionarlas (puedes elegir varias)</div></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="np-contacto" placeholder="Juan Pérez"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="np-cargo"></div>
       <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="np-telefono" placeholder="+56 9 1234 5678"></div>
@@ -1028,7 +1028,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
     <input type="hidden" id="epId">
     <div class="form-grid" style="padding:0">
       <div class="field-group"><label class="field-label">Nombre / Empresa *</label><input class="field-input" id="epNombre"></div>
-      <div class="field-group"><label class="field-label">Categoría *</label><select class="field-select" id="epCategoria"><option value="">— seleccionar —</option></select></div>
+      <div class="field-group form-full"><label class="field-label">Categorías *</label><div class="pv-catbox" id="ep-catbox" style="display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;min-height:38px;cursor:default"></div></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="epContacto"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="epCargo"></div>
       <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="epTelefono"></div>
@@ -1308,8 +1308,7 @@ function addSupplierFromSearch(p){
   set('np-notas',notas);
   const cp=document.getElementById('np-condpago');
   if(cp&&p.condpago){const opts=[...cp.options];const match=opts.find(o=>p.condpago.toLowerCase().includes(o.value.toLowerCase())&&o.value);if(match) cp.value=match.value;}
-  const cat=document.getElementById('np-categoria');
-  if(cat&&p.categoria) cat.value=p.categoria;
+  if(p.categoria){setPvSelectedCats('np',p.categoria.split(',').map(s=>s.trim()).filter(Boolean));}
   const plazoNum=parseInt((p.plazo||'').replace(/\D/g,''));
   if(!isNaN(plazoNum)&&plazoNum>0) set('np-plazo',plazoNum);
   window.scrollTo(0,0);
@@ -4148,7 +4147,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap'
 function clearForm(type){
   if(type==='lead'){['nl-empresa','nl-contacto','nl-cargo','nl-telefono','nl-email','nl-rut','nl-web','nl-notas','nl-ciudad'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});document.getElementById('nl-origen').value='Referido';document.getElementById('nl-industria').value='';}
   if(type==='cot'){['cot-num','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();}
-  if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});const cat=document.getElementById('np-categoria');if(cat) cat.value='';const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
+  if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});setPvSelectedCats('np',[]);const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
 }
 // ── PROVEEDORES ───────────────────────────────────────────────
 function repStars(n){const v=parseInt(n)||0;return'★'.repeat(Math.min(v,5))+'☆'.repeat(Math.max(0,5-v));}
@@ -4200,10 +4199,8 @@ function fillCatSelects(){
   const cats=getPvCats();
   const configs=[
     {id:'proveedorCatFilter', first:'<option value="">Todas las categorías</option>'},
-    {id:'np-categoria',       first:'<option value="">— seleccionar —</option>'},
     {id:'ss-categoria',       first:'<option value="">— cualquiera —</option>'},
     {id:'pvss-categoria',     first:'<option value="">— cualquiera —</option>'},
-    {id:'epCategoria',        first:'<option value="">— seleccionar —</option>'},
   ];
   const optsHtml=cats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
   configs.forEach(({id,first})=>{
@@ -4212,10 +4209,48 @@ function fillCatSelects(){
     el.innerHTML=first+optsHtml;
     if(curr) el.value=curr;
   });
+  renderPvCatChips('np');
+  renderPvCatChips('ep');
 }
+// ── MULTI-SELECT CATEGORÍAS ───────────────────────────────────
+const _pvCatSel={np:[],ep:[]};
+function renderPvCatChips(prefix){
+  const box=document.getElementById(`${prefix}-catbox`);if(!box) return;
+  const cats=getPvCats();const sel=_pvCatSel[prefix]||[];
+  if(!cats.length){box.innerHTML='<span style="font-size:11px;color:var(--text3)">Sin categorías — crea una con ⚙ Categorías</span>';return;}
+  box.innerHTML=cats.map(cat=>{
+    const isSelected=sel.includes(cat);
+    const[color,bg,border]=getPvCatColor(cat);
+    return`<span onclick="togglePvCatChip('${prefix}','${cat.replace(/'/g,"\\'")}')"`+
+      ` style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 10px;border-radius:5px;letter-spacing:.3px;`+
+      `border:1px solid ${isSelected?border:'var(--border2)'};`+
+      `color:${isSelected?color:'var(--text3)'};`+
+      `background:${isSelected?bg:'transparent'};`+
+      `transition:all .12s;user-select:none;white-space:nowrap">`+
+      `${escapeHtml(cat)}${isSelected?' ✓':''}</span>`;
+  }).join('');
+}
+function togglePvCatChip(prefix,cat){
+  const sel=_pvCatSel[prefix];const idx=sel.indexOf(cat);
+  if(idx>=0) sel.splice(idx,1);else sel.push(cat);
+  renderPvCatChips(prefix);
+}
+function getPvSelectedCats(prefix){return _pvCatSel[prefix]||[];}
+function setPvSelectedCats(prefix,arr){_pvCatSel[prefix]=[...arr];renderPvCatChips(prefix);}
+
 // ── GESTIÓN DE CATEGORÍAS ─────────────────────────────────────
 function openCatManager(){renderCatManager();document.getElementById('catManagerModal').style.display='flex';}
 function closeCatManager(){document.getElementById('catManagerModal').style.display='none';}
+let _catDragIdx=null;
+function catDragStart(e,idx){_catDragIdx=idx;e.dataTransfer.effectAllowed='move';e.target.closest('[data-cidx]').style.opacity='.4';}
+function catDragOver(e,el){e.preventDefault();e.dataTransfer.dropEffect='move';document.querySelectorAll('#catManagerList [data-cidx]').forEach(x=>x.style.borderColor='var(--border)');el.style.borderColor='var(--accent)';}
+function catDrop(e,targetIdx){
+  e.preventDefault();
+  if(_catDragIdx===null||_catDragIdx===targetIdx) return;
+  const cats=getPvCats();const[item]=cats.splice(_catDragIdx,1);cats.splice(targetIdx,0,item);
+  setPvCats(cats);fillCatSelects();renderCatManager();
+}
+function catDragEnd(){_catDragIdx=null;document.querySelectorAll('#catManagerList [data-cidx]').forEach(x=>{x.style.opacity='1';x.style.borderColor='var(--border)';});}
 function renderCatManager(){
   const cats=getPvCats();
   const inUseCount={};
@@ -4223,9 +4258,11 @@ function renderCatManager(){
     pvCat(p.fields).split(', ').forEach(c=>{const t=c.trim();if(t) inUseCount[t]=(inUseCount[t]||0)+1;});
   });
   document.getElementById('catManagerList').innerHTML=cats.length?cats.map((cat,i)=>{
-    const[color]=getPvCatColor(cat);
-    const n=inUseCount[cat]||0;
-    return`<div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px">
+    const[color]=getPvCatColor(cat);const n=inUseCount[cat]||0;
+    return`<div draggable="true" data-cidx="${i}"
+      ondragstart="catDragStart(event,${i})" ondragover="catDragOver(event,this)" ondrop="catDrop(event,${i})" ondragend="catDragEnd()"
+      style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;transition:border-color .15s">
+      <span style="cursor:grab;color:var(--text3);font-size:13px;flex-shrink:0;line-height:1;padding:0 2px" title="Arrastrar para reordenar">⠿</span>
       <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${color};box-shadow:0 0 6px ${color}88"></span>
       <span style="flex:1;font-size:12px;color:var(--text)">${escapeHtml(cat)}</span>
       ${n?`<span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">${n} uso${n!==1?'s':''}</span>`:''}
@@ -4388,9 +4425,9 @@ async function updateRepProveedor(id,rep){
 }
 async function createProveedor(){
   const nombre=(document.getElementById('np-nombre')?.value||'').trim();
-  const categoria=(document.getElementById('np-categoria')?.value||'').trim();
+  const categorias=getPvSelectedCats('np');
   if(!nombre){toast('Nombre requerido','error');return;}
-  if(!categoria){toast('Categoría requerida','error');return;}
+  if(!categorias.length){toast('Selecciona al menos una categoría','error');return;}
   const pvEmail=(document.getElementById('np-email')?.value||'').trim();
   const pvTel=(document.getElementById('np-telefono')?.value||'').trim();
   const pvRutEl=document.getElementById('np-rut');const pvRut=(pvRutEl?.value||'').trim();
@@ -4401,7 +4438,7 @@ async function createProveedor(){
   const btn=document.getElementById('createProveedorBtn');btn.disabled=true;btn.textContent='Guardando...';
   const fields={
     'Nombre':nombre,
-    'Categoría':categoria,
+    'Categoría':categorias,
     'Contacto':document.getElementById('np-contacto')?.value||'',
     'Cargo':document.getElementById('np-cargo')?.value||'',
     'Teléfono':document.getElementById('np-telefono')?.value||'',
@@ -4444,7 +4481,8 @@ function openEditProveedor(id){
   const f=p.fields;
   document.getElementById('epId').value=id;
   document.getElementById('epNombre').value=f['Nombre']||'';
-  document.getElementById('epCategoria').value=pvCat(f);
+  const existCats=Array.isArray(f['Categoría'])?f['Categoría'].map(x=>x.name||x):(f['Categoría']?[String(f['Categoría'])]:[]);
+  setPvSelectedCats('ep',existCats);
   document.getElementById('epContacto').value=f['Contacto']||'';
   document.getElementById('epCargo').value=f['Cargo']||'';
   document.getElementById('epTelefono').value=f['Teléfono']||'';
@@ -4466,6 +4504,7 @@ async function saveEditProveedor(){
   const id=document.getElementById('epId').value;if(!id) return;
   const nombre=(document.getElementById('epNombre').value||'').trim();
   if(!nombre){toast('Nombre requerido','error');return;}
+  if(!getPvSelectedCats('ep').length){toast('Selecciona al menos una categoría','error');return;}
   const epEmail=(document.getElementById('epEmail').value||'').trim();
   const epTel=(document.getElementById('epTelefono').value||'').trim();
   const epRutEl=document.getElementById('epRut');const epRut=(epRutEl?.value||'').trim();
@@ -4476,7 +4515,7 @@ async function saveEditProveedor(){
   const btn=document.getElementById('epGuardarBtn');btn.disabled=true;btn.textContent='Guardando...';
   const fields={
     'Nombre':nombre,
-    'Categoría':document.getElementById('epCategoria').value||'',
+    'Categoría':getPvSelectedCats('ep'),
     'Contacto':document.getElementById('epContacto').value||'',
     'Cargo':document.getElementById('epCargo').value||'',
     'Teléfono':document.getElementById('epTelefono').value||'',
