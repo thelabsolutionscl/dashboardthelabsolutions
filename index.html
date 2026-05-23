@@ -1543,8 +1543,11 @@ async function loadMaquinasAirtable(){
       for(let i=0;i<batch.length;i+=10){
         await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:batch.slice(i,i+10),typecast:true})});
       }
-      MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));
-    }else{
+      // Recargar para obtener _airtableId de cada registro
+      const reloaded=await airtableFetch('Maquinas',200);
+      recs.push(...(reloaded.records||[]));
+    }
+    if(recs.length>0){
       MAQUINAS=recs.map(r=>({
         _airtableId:r.id,
         id:r.fields.id||r.id,
