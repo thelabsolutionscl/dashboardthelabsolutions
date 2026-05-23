@@ -358,11 +358,11 @@ body.kiosk .tab-content{padding-top:12px!important;}
           <th style="width:36px;text-align:center"><input type="checkbox" id="selectAllChk" onchange="toggleSelectAll(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
           <th class="sort-th" onclick="sortClientes('empresa')">Empresa / Email</th>
           <th class="sort-th" onclick="sortClientes('contacto')">Contacto</th>
+          <th>Teléfono</th>
           <th class="sort-th" onclick="sortClientes('etapa')">Etapa</th>
           <th class="sort-th" onclick="sortClientes('revenue')">Revenue</th>
           <th class="sort-th" onclick="sortClientes('val')">Val.</th>
           <th class="sort-th" onclick="sortClientes('estado')">Estado</th>
-          <th class="sort-th" onclick="sortClientes('venc')">F.Venc</th>
           <th>Acc.</th>
         </tr></thead>
         <tbody id="clientesTableBody"><tr><td colspan="9"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody>
@@ -2187,11 +2187,11 @@ function buildClienteRow(c){
     <td style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td><strong>${escapeHtml(f['Empresa']||'—')}</strong><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
     <td class="text-small">${escapeHtml(f['Contacto']||'—')}</td>
+    <td class="text-small">${f['Teléfono']?`<a href="tel:${f['Teléfono'].replace(/\s/g,'')}" style="color:var(--accent);text-decoration:none;font-weight:600" title="Llamar">📞 ${escapeHtml(f['Teléfono'])}</a>`:'<span style="color:var(--text3)">—</span>'}</td>
     <td><select onchange="updateEtapaCliente('${c.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;text-transform:uppercase">${['Lead nuevo','Contactado','Propuesta enviada','Negociación','Cliente activo','Cliente inactivo','Perdido'].map(op=>`<option value="${op}" ${(f['Etapa venta']||'')===op?'selected':''}>${op}</option>`).join('')}</select></td>
     <td class="clp">${formatCLP(f['Revenue total cliente (CLP)']||0)}</td>
     <td>${'★'.repeat(val)}${'☆'.repeat(5-val)}</td>
     <td>${estadoBadge(f['Estado cuenta']||'Al día')}</td>
-    <td><span class="badge ${venc>=2?'badge-red':venc>=1?'badge-yellow':'badge-gray'}">${venc}</span></td>
     <td style="white-space:nowrap">
       <button class="btn-mini" onclick="openClienteDetalle('${c.id}')">👁</button>
       <button class="btn-mini btn-mini-yellow" onclick="verCotizacionesCliente('${c.id}','${escapeHtml(f['Empresa']||'')}')">📋</button>
@@ -3634,7 +3634,10 @@ function renderMaintenanceTable(){
     const chips=MAINT_TYPES.map(t=>{
       const h=getHoursSinceMaint(m.id,t.key);const thresh=getMaintThreshold(t.key);
       const pct=h/thresh;const ok=pct<0.9;const over=pct>=1;
-      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':'rgba(0,212,170,0.1)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':'#00d4aa'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':'rgba(0,212,170,0.2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${over?'⚠':ok?'✓':'~'}${Math.round(h)}h</span>`;
+      const lastRec=getMaintLog().filter(x=>x.maquinaId===m.id&&x.tipo===t.key).sort((a,b)=>b.ts-a.ts)[0];
+      const lastStr=lastRec?new Date(lastRec.ts).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'sin reg.';
+      const statusIcon=over?'⚠':ok?'✓':'~';
+      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':lastRec?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':lastRec?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':lastRec?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${lastStr}</span></span>`;
     }).join('');
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
     return`<tr style="border-bottom:1px solid var(--border2)">
@@ -4249,7 +4252,7 @@ function buildProveedorRow(p){
   const tel=(f['Teléfono']||'').replace(/\s/g,'');
   const email=f['Email']||'';
   const web=f['Sitio Web']||'';
-  const contactInfo=[tel?`<span style="font-size:10px;color:var(--text3)">📞 ${escapeHtml(f['Teléfono']||'')}</span>`:'',email?`<span style="font-size:10px;color:var(--text3)">✉ ${escapeHtml(email)}</span>`:''].filter(Boolean).join('<br>');
+  const contactInfo=[tel?`<a href="tel:${tel}" onclick="event.stopPropagation()" style="display:block;font-size:13px;font-weight:600;color:#fff;text-decoration:none" title="Llamar">📞 ${escapeHtml(f['Teléfono']||'')}</a>`:'',email?`<a href="mailto:${email}" onclick="event.stopPropagation()" style="display:block;font-size:13px;font-weight:600;color:#fff;text-decoration:none;margin-top:2px" title="Enviar correo">✉ ${escapeHtml(email)}</a>`:''].filter(Boolean).join('');
   const plazo=f['Plazo de entrega (días)']?`${f['Plazo de entrega (días)']} días`:'—';
   const rep=parseInt(f['Reputación'])||0;
   const starsHtml=[1,2,3,4,5].map(n=>`<span onclick="event.stopPropagation();updateRepProveedor('${id}',${n})" style="cursor:pointer;font-size:14px;color:${n<=rep?'#facc15':'var(--text3)'};line-height:1" title="${n} estrella${n>1?'s':''}" onmouseenter="highlightStars(this,${n})" onmouseleave="resetStars(this.parentElement,${rep})">★</span>`).join('');
