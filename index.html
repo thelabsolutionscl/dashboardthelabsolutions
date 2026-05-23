@@ -679,7 +679,8 @@ body.kiosk .tab-content{padding-top:12px!important;}
       <div class="field-group form-full"><label class="field-label">Categorías *</label><div class="pv-catbox" id="np-catbox" style="display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;min-height:38px;cursor:default"></div><div style="font-size:10px;color:var(--text3);margin-top:4px">Haz clic en las categorías para seleccionarlas (puedes elegir varias)</div></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="np-contacto" placeholder="Juan Pérez"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="np-cargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="np-telefono" placeholder="+56 9 1234 5678"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="np-telefono" placeholder="+56 2 1234 5678"></div>
+      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="np-whatsapp" placeholder="+56 9 1234 5678"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="np-email" type="email"></div>
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="np-web" placeholder="https://proveedor.cl"></div>
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="np-rut" placeholder="76.123.456-7"></div>
@@ -1086,6 +1087,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="epContacto"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="epCargo"></div>
       <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="epTelefono"></div>
+      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="epWhatsapp"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="epEmail" type="email"></div>
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="epWeb"></div>
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="epRut"></div>
@@ -1241,7 +1243,8 @@ FORMATO DE SALIDA OBLIGATORIO — repite exactamente este bloque por cada provee
 NOMBRE: [nombre real de empresa, tienda o plataforma]
 PAIS: [Chile | China | EEUU | España | etc]
 WEB: [URL o dominio real: alibaba.com/store/xxx | mercadolibre.cl | amazon.com | etc]
-TELEFONO: [número de contacto si existe, ej: +56 2 2345 6789 | WhatsApp +56 9 XXXX XXXX | Consultar si no disponible]
+TELEFONO: [teléfono fijo o celular principal, ej: +56 2 2345 6789 | Consultar si no disponible]
+WHATSAPP: [número WhatsApp si existe y es distinto al teléfono, ej: +56 9 XXXX XXXX | — si no aplica o es el mismo]
 TIPO: [Nacional | Internacional | Marketplace | Importador local]
 PRECIO_EST: [rango realista 2024-2025, en CLP para Chile o USD para internacional]
 MOQ: [cantidad mínima con unidad, ej: 1 rollo | 5 kg | 100 und]
@@ -1293,7 +1296,7 @@ function parseSupplierBlocks(text){
     const end=part.indexOf('---PROVEEDOR_END---');const block=end>=0?part.substring(0,end):part;
     const get=(key)=>{const m=block.match(new RegExp(`^${key}:\\s*(.+)$`,'m'));return m?m[1].trim():'';};
     blocks.push({
-      nombre:get('NOMBRE'),pais:get('PAIS'),web:get('WEB'),telefono:get('TELEFONO'),tipo:get('TIPO'),
+      nombre:get('NOMBRE'),pais:get('PAIS'),web:get('WEB'),telefono:get('TELEFONO'),whatsapp:get('WHATSAPP'),tipo:get('TIPO'),
       precio:get('PRECIO_EST'),moq:get('MOQ'),plazo:get('PLAZO'),condpago:get('CONDPAGO'),
       categoria:get('CATEGORIA'),pros:(get('PROS')||'').split('|').map(s=>s.trim()).filter(Boolean),
       contras:(get('CONTRAS')||'').split('|').map(s=>s.trim()).filter(Boolean),notas:get('NOTAS'),
@@ -1352,8 +1355,14 @@ function addSupplierFromSearch(p){
   const skipVals=['—','Consultar','N/A','n/a',''];
   const set=(id,v)=>{const el=document.getElementById(id);if(el&&v&&!skipVals.includes(v.trim())) el.value=v;};
   set('np-nombre',p.nombre);
-  if(p.web&&p.web!=='—') set('np-web',p.web.startsWith('http')?p.web:'https://'+p.web);
-  set('np-telefono',p.telefono);
+  // Web: extraer solo la URL antes de cualquier " | texto extra"
+  if(p.web&&p.web!=='—'){const cleanWeb=(p.web.split('|')[0]).trim();if(cleanWeb) set('np-web',cleanWeb.startsWith('http')?cleanWeb:'https://'+cleanWeb);}
+  // Teléfono y WhatsApp: campos separados (maneja formato combinado legacy "tel | WhatsApp wa")
+  let phoneVal=(p.telefono||'').trim();
+  let waVal=(p.whatsapp||'').trim();
+  if(phoneVal.includes('WhatsApp')||phoneVal.includes('|')){const pts=phoneVal.split(/\|\s*WhatsApp\s*/i);phoneVal=pts[0].trim();if(!waVal&&pts[1]) waVal=pts[1].trim();}
+  set('np-telefono',phoneVal);
+  set('np-whatsapp',waVal);
   if(p.pais&&p.pais!=='Chile') set('np-region',p.pais);
   // Notas internas: pros, contras, tip, precio estimado y MOQ
   const notas=[
@@ -4215,7 +4224,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap'
 function clearForm(type){
   if(type==='lead'){['nl-empresa','nl-contacto','nl-cargo','nl-telefono','nl-email','nl-rut','nl-web','nl-notas','nl-ciudad'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});document.getElementById('nl-origen').value='Referido';document.getElementById('nl-industria').value='';}
   if(type==='cot'){['cot-num','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();}
-  if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});setPvSelectedCats('np',[]);const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
+  if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-whatsapp','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});setPvSelectedCats('np',[]);const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
 }
 // ── PROVEEDORES ───────────────────────────────────────────────
 function repStars(n){const v=parseInt(n)||0;return'★'.repeat(Math.min(v,5))+'☆'.repeat(Math.max(0,5-v));}
@@ -4451,7 +4460,7 @@ function buildProveedorRow(p){
     <td colspan="10" style="padding:0;background:var(--surface2)">
       <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border2);border-bottom:2px solid var(--border)">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          ${tel?`<a href="https://wa.me/56${tel.replace(/^(\+56|56|0)/,'')}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="color:#25d366;border-color:rgba(37,211,102,0.3);font-size:11px">💬 WhatsApp</a>`:''}
+          ${(()=>{const wa=(f['WhatsApp']||'').replace(/\s/g,'')||tel;return wa?`<a href="https://wa.me/${wa.replace(/^\+/,'').replace(/^56/,'56')}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="color:#25d366;border-color:rgba(37,211,102,0.3);font-size:11px">💬 WhatsApp</a>`:'';})()}
           ${email?`<a href="mailto:${escapeHtml(email)}" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px">✉ Email</a>`:''}
           ${web?`<a href="${escapeHtml(web.startsWith('http')?web:'https://'+web)}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px">🌐 Sitio web</a>`:''}
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditProveedor('${id}')" style="font-size:11px;margin-left:auto">✏️ Editar ficha completa</button>
@@ -4509,6 +4518,7 @@ async function createProveedor(){
     'Contacto':document.getElementById('np-contacto')?.value||'',
     'Cargo':document.getElementById('np-cargo')?.value||'',
     'Teléfono':document.getElementById('np-telefono')?.value||'',
+    'WhatsApp':document.getElementById('np-whatsapp')?.value||'',
     'Email':document.getElementById('np-email')?.value||'',
     'Sitio Web':document.getElementById('np-web')?.value||'',
     'RUT':document.getElementById('np-rut')?.value||'',
@@ -4553,6 +4563,7 @@ function openEditProveedor(id){
   document.getElementById('epContacto').value=f['Contacto']||'';
   document.getElementById('epCargo').value=f['Cargo']||'';
   document.getElementById('epTelefono').value=f['Teléfono']||'';
+  document.getElementById('epWhatsapp').value=f['WhatsApp']||'';
   document.getElementById('epEmail').value=f['Email']||'';
   document.getElementById('epWeb').value=f['Sitio Web']||'';
   document.getElementById('epRut').value=f['RUT']||'';
@@ -4586,6 +4597,7 @@ async function saveEditProveedor(){
     'Contacto':document.getElementById('epContacto').value||'',
     'Cargo':document.getElementById('epCargo').value||'',
     'Teléfono':document.getElementById('epTelefono').value||'',
+    'WhatsApp':document.getElementById('epWhatsapp').value||'',
     'Email':document.getElementById('epEmail').value||'',
     'Sitio Web':document.getElementById('epWeb').value||'',
     'RUT':document.getElementById('epRut').value||'',
