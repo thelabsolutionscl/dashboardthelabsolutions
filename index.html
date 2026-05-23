@@ -1689,14 +1689,15 @@ async function saveMaquinaEventosAirtable(){
     const toDelete=existentes.filter(r=>!maquinaState.eventos[`${r.fields.maquina_id}_${r.fields.fecha}`]);
     for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
   }catch(e){
-    if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')){const ok=await crearTablaMaquinasEventos();if(ok){toast('Tabla Maquinas_Eventos creada ✓','success');await saveMaquinaEventosAirtable();}else{toast('No se pudo crear tabla Maquinas_Eventos','error');}}
+    const isNotFound=e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')||e.message?.includes('not found');
+    if(isNotFound){const ok=await crearTablaMaquinasEventos();if(ok){toast('Tabla Maquinas_Eventos creada ✓','success');await saveMaquinaEventosAirtable();}else{toast('No se pudo crear tabla Maquinas_Eventos','error');}}
     else{throw e;}
   }
 }
 async function loadMaquinaEventosAirtable(){
   const t=getToken();if(!t) return;
   try{const res=await airtableFetch('Maquinas_Eventos',500);maquinaState.eventos={};(res.records||[]).forEach(r=>{const f=r.fields;if(f.maquina_id&&f.fecha) maquinaState.eventos[`${f.maquina_id}_${f.fecha}`]={tipo:f.tipo||'uso',desc:f.desc||'',tiempo:f.tiempo||null};});}
-  catch(e){if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaMaquinasEventos();}
+  catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaMaquinasEventos();}
 }
 
 async function crearTablaMaquinasMant(){
