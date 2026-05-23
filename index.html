@@ -704,7 +704,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
 <div class="tab-panel" id="tab-nuevo-lead">
   <div class="section-header"><div class="section-title">Nuevo Lead / Cliente</div></div>
   <div class="card">
-    <div class="card-header"><span class="card-title">Datos del Lead</span></div>
+    <div class="card-header"><span class="card-title">Datos del Lead</span><button id="watiConfigBtn" onclick="openWatiModal()" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer">⚙ WATI</button></div>
     <div class="form-grid">
       <div class="field-group"><label class="field-label">Empresa *</label><input class="field-input" id="nl-empresa" placeholder="Acme Corp"></div>
       <div class="field-group"><label class="field-label">Contacto *</label><input class="field-input" id="nl-contacto" placeholder="Juan Pérez"></div>
@@ -1195,10 +1195,29 @@ body.kiosk .tab-content{padding-top:12px!important;}
   </div>
 </div>
 
+<!-- WATI CONFIG MODAL -->
+<div id="watiModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeWatiModal()"></div>
+  <div class="modal-card" style="max-width:430px">
+    <div class="modal-title">💬 Configuración WATI</div>
+    <div style="padding:0 0 16px;display:flex;flex-direction:column;gap:10px">
+      <div id="watiStatusBox" style="font-size:11px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:7px 11px;line-height:1.6">Sin configurar</div>
+      <div class="field-group"><label class="field-label">URL del servidor WATI</label><input class="field-input" id="watiUrlInput" placeholder="https://live-server-XXXXX.wati.io"></div>
+      <div class="field-group"><label class="field-label">Token Bearer (API Key)</label><input class="field-input" id="watiTokenInput" type="password" placeholder="eyJhbGciOiJIUzI1NiIs..."></div>
+      <div style="font-size:11px;color:var(--text3)">Guardado en Airtable — disponible en todos los dispositivos.</div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" id="watiTestBtn" onclick="testWatiConnection()">🔌 Probar conexión</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeWatiModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="saveWatiCfg()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const BASE_ID='app1YtD74AqiPWQhy';
 let autoRefreshInterval=null;
-const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null};
+const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
 const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
 const selectedClientes=new Set();
@@ -1944,7 +1963,7 @@ async function loadAllData(){
     if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
     if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
     if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();}
-    if(monRes.status==='fulfilled'){const rec=monRes.value.records?.find(r=>r.fields['Name']==='META_REVENUE');if(rec){state.metaRecordId=rec.id;try{const cfg=JSON.parse(rec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}}
+    if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}renderWatiConfigBtn();}
     if(isFirst) slProgress(92,'Calculando resumen...');
     state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
@@ -1962,7 +1981,7 @@ async function loadAllDataSilent(){
     if(pRes.status==='fulfilled') state.pedidos=pRes.value.records||[];
     if(rRes.status==='fulfilled') state.reportes=rRes.value.records||[];
     if(pvRes.status==='fulfilled') state.proveedores=pvRes.value.records||[];
-    if(monRes.status==='fulfilled'){const rec=monRes.value.records?.find(r=>r.fields['Name']==='META_REVENUE');if(rec){state.metaRecordId=rec.id;try{const cfg=JSON.parse(rec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}}
+    if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}renderWatiConfigBtn();}
     state.lastUpdateTs=Date.now();document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;renderOverview();
   }catch(e){}
 }
@@ -2897,6 +2916,82 @@ CLIENTES IDEALES: empresas con necesidad recurrente de reconocimientos, branding
 ROL: calificar el lead, identificar su necesidad probable y generar mensajes de primer contacto que generen respuesta.
 TONO: profesional pero cálido, español chileno natural, directo y sin tecnicismos.`;
 
+// ── WATI WhatsApp API ─────────────────────────────────────────
+function getWatiCfg(){try{return JSON.parse(localStorage.getItem('wati_cfg')||'{}');}catch(e){return {};}}
+function renderWatiConfigBtn(){
+  const cfg=getWatiCfg();const btn=document.getElementById('watiConfigBtn');if(!btn) return;
+  if(cfg?.url&&cfg?.token){btn.style.color='#25d366';btn.style.borderColor='rgba(37,211,102,0.4)';btn.textContent='💬 WATI ✓';}
+  else{btn.style.color='var(--text3)';btn.style.borderColor='var(--border2)';btn.textContent='⚙ WATI';}
+}
+function openWatiModal(){
+  const cfg=getWatiCfg();
+  document.getElementById('watiUrlInput').value=cfg.url||'';
+  document.getElementById('watiTokenInput').value=cfg.token||'';
+  const sb=document.getElementById('watiStatusBox');
+  if(sb){if(cfg?.url&&cfg?.token){sb.style.color='var(--accent)';sb.innerHTML='✅ Conectado a: <strong>'+escapeHtml(cfg.url)+'</strong>';}else{sb.style.color='var(--text3)';sb.textContent='Sin configurar — ingresa la URL y token de tu cuenta WATI.';}}
+  document.getElementById('watiModal').style.display='flex';
+}
+function closeWatiModal(){document.getElementById('watiModal').style.display='none';}
+async function testWatiConnection(){
+  const url=(document.getElementById('watiUrlInput').value||'').trim().replace(/\/+$/,'');
+  const token=(document.getElementById('watiTokenInput').value||'').trim();
+  if(!url||!token){toast('Completa la URL y el token primero','error');return;}
+  const btn=document.getElementById('watiTestBtn');btn.disabled=true;btn.textContent='⏳ Probando...';
+  try{
+    const r=await fetch(`${url}/api/v1/getContacts?pageSize=1`,{method:'GET',headers:{'Authorization':'Bearer '+token}});
+    const sb=document.getElementById('watiStatusBox');
+    if(r.ok){toast('✅ Conexión exitosa con WATI','success');if(sb){sb.style.color='var(--accent)';sb.innerHTML='✅ Conectado a: <strong>'+escapeHtml(url)+'</strong>';}}
+    else{const e=await r.json().catch(()=>({}));toast('Error WATI: '+(e.message||`HTTP ${r.status}`),'error');if(sb){sb.style.color='var(--accent3)';sb.textContent='⛔ Error: '+(e.message||`HTTP ${r.status}`);}}
+  }catch(e){toast('Error de red: '+e.message,'error');const sb=document.getElementById('watiStatusBox');if(sb){sb.style.color='var(--accent3)';sb.textContent='⛔ No se pudo conectar: '+e.message;}}
+  btn.disabled=false;btn.textContent='🔌 Probar conexión';
+}
+async function saveWatiCfg(){
+  const url=(document.getElementById('watiUrlInput').value||'').trim().replace(/\/+$/,'');
+  const token=(document.getElementById('watiTokenInput').value||'').trim();
+  if(!url||!token){toast('URL y token son requeridos','error');return;}
+  localStorage.setItem('wati_cfg',JSON.stringify({url,token}));
+  const notes=JSON.stringify({url,token,updatedAt:new Date().toISOString()});
+  try{
+    if(state.watiRecordId){await airtableWrite('Monitor Sistema','PATCH',state.watiRecordId,{'Notes':notes});}
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'WATI_CONFIG','Notes':notes});if(r?.id) state.watiRecordId=r.id;}
+    toast('✓ Configuración WATI guardada en Airtable','success');
+  }catch(e){toast('Guardado localmente (Airtable: '+e.message+')','error');}
+  renderWatiConfigBtn();closeWatiModal();
+}
+async function sendWatiMessage(phone,message){
+  const cfg=getWatiCfg();if(!cfg?.url||!cfg?.token) throw new Error('WATI no configurado');
+  const clean=phone.replace(/[^0-9]/g,'');
+  const r=await fetch(`${cfg.url}/api/v1/sendSessionMessage/${clean}`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.token},body:JSON.stringify({messageText:message})});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.message||`Error ${r.status}`);}
+  return await r.json();
+}
+async function sendLeadViaWati(){
+  const phone=(document.getElementById('nl-telefono').value||'').trim();
+  if(!phone){toast('Ingresa el teléfono del lead primero','error');return;}
+  if(!_leadAgentResponse){toast('Genera el análisis IA primero','error');return;}
+  const waM=_leadAgentResponse.match(/^MENSAJE_WA:\s*\n([\s\S]*?)(?=\n[A-ZÁÉÍÓÚÑ_]+:|$)/m);
+  const msg=waM?waM[1].trim():'';
+  if(!msg){toast('No se encontró mensaje WhatsApp en el análisis','error');return;}
+  const cfg=getWatiCfg();
+  const btn=document.getElementById('watiSendBtn');
+  if(!cfg?.url||!cfg?.token){
+    const clean=phone.replace(/[^0-9]/g,'');
+    window.open(`https://wa.me/${clean}?text=${encodeURIComponent(msg)}`,'_blank');
+    toast('Abriendo WhatsApp Web (configura WATI para envío directo)','');
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='⏳ Enviando...';}
+  try{
+    await sendWatiMessage(phone,msg);
+    toast('✅ Mensaje enviado por WATI','success');
+    if(btn){btn.textContent='✓ Enviado';btn.style.background='rgba(37,211,102,0.2)';}
+  }catch(e){
+    toast('WATI falló — abriendo WhatsApp Web...','error');
+    const clean=phone.replace(/[^0-9]/g,'');
+    window.open(`https://wa.me/${clean}?text=${encodeURIComponent(msg)}`,'_blank');
+    if(btn){btn.disabled=false;btn.textContent='📤 Enviar por WATI';}
+  }
+}
 async function runLeadAgent(){
   const empresa=(document.getElementById('nl-empresa').value||'').trim();
   if(!empresa){toast('Ingresa al menos la empresa para analizar','error');return;}
@@ -2951,7 +3046,7 @@ function renderLeadAgentResult(raw){
   const cpBtn=(text,lbl)=>`<button onclick="navigator.clipboard.writeText(${JSON.stringify(text)}).then(()=>toast('Copiado ✓','success'))" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;margin-top:6px">📋 ${lbl}</button>`;
   document.getElementById('leadAgentResult').innerHTML=`<div style="display:flex;flex-direction:column;gap:12px;padding:2px 4px 8px">
     ${cal?`<div style="display:flex;align-items:flex-start;gap:10px;background:var(--surface2);border-radius:8px;padding:10px 12px"><span style="font-size:13px;font-weight:700;color:${calColor};white-space:nowrap">${escapeHtml(cal.split('—')[0].trim())}</span>${necesidad?`<span style="font-size:11px;color:var(--text2);line-height:1.4">${escapeHtml(cal.split('—').slice(1).join('—').trim())} · ${escapeHtml(necesidad)}</span>`:''}</div>`:''}
-    ${wa?`<div style="background:rgba(37,211,102,0.06);border:1px solid rgba(37,211,102,0.2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#25d366;margin-bottom:6px">💬 WhatsApp</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6">${escapeHtml(wa)}</div>${cpBtn(wa,'Copiar mensaje')}</div>`:''}
+    ${wa?`<div style="background:rgba(37,211,102,0.06);border:1px solid rgba(37,211,102,0.2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#25d366;margin-bottom:6px">💬 WhatsApp</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6">${escapeHtml(wa)}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${cpBtn(wa,'Copiar mensaje')}<button id="watiSendBtn" onclick="sendLeadViaWati()" style="background:rgba(37,211,102,0.12);border:1px solid rgba(37,211,102,0.4);color:#25d366;border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer">📤 Enviar por WATI</button></div></div>`:''}
     ${emailBody?`<div style="background:rgba(129,140,248,0.06);border:1px solid rgba(129,140,248,0.2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#818cf8;margin-bottom:6px">✉ Email${asunto?` — <span style="font-weight:400;opacity:.8">${escapeHtml(asunto)}</span>`:''}</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6">${escapeHtml(emailBody)}</div>${cpBtn(emailBody,'Copiar cuerpo')}</div>`:''}
     ${pasos?`<div style="background:var(--surface2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:6px">📋 Próximos pasos</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.7">${escapeHtml(pasos)}</div></div>`:''}
     <button onclick="document.getElementById('nl-notas').value+=(_leadAgentResponse?'\n\n--- LEAD_AGENT ---\n'+_leadAgentResponse.substring(0,1500):'')" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:6px;padding:5px 12px;font-size:10px;cursor:pointer;align-self:flex-start">↓ Añadir análisis a Notas</button>
