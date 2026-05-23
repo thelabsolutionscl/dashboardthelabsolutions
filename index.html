@@ -224,6 +224,12 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .cot-td-actions .cot-btns{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;}
   .cot-td-actions .btn-mini{margin-right:0 !important;}
 }
+body.kiosk .topbar{display:none!important;}
+body.kiosk .mobile-nav-overlay{display:none!important;}
+body.kiosk .maquina-section{display:none!important;}
+body.kiosk #tab-maquinas .section-header{display:none!important;}
+body.kiosk #maquinaMonGrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;}
+body.kiosk .tab-content{padding-top:12px!important;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
@@ -742,9 +748,11 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   <div style="margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">📡 Monitor en vivo</span>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span style="font-size:10px;color:var(--text3)">↻ <span id="monitorLastUpdate">cargando...</span></span>
         <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:11px">Actualizar</button>
+        <button id="btnSort" class="btn btn-ghost btn-sm" onclick="toggleSort()" style="font-size:11px" title="Ordenar por estado">↕ Estado</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleKiosk()" style="font-size:11px" title="Modo pantalla completa">⛶ Kiosko</button>
         <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:11px" title="Configurar alertas">⚙ Alertas</button>
       </div>
     </div>
@@ -754,7 +762,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   </div>
 
   <!-- ── CALENDARIO ── -->
-  <div id="maquinaCalView">
+  <div id="maquinaCalView" class="maquina-section">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">📅 Disponibilidad semanal</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="navSemana(-1)">← Anterior</button>
@@ -765,6 +773,24 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     <div id="heatmapSemanas" style="margin-bottom:12px"></div>
     <div id="maquinasKPIs" style="margin-bottom:14px"></div>
     <div class="card"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px"><thead id="maquinasHeader"></thead><tbody id="maquinasBody"></tbody></table></div></div>
+  </div>
+
+  <!-- ── MANTENIMIENTO PREVENTIVO ── -->
+  <div id="maquinaMaintView" class="maquina-section" style="margin-top:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🔧 Mantenimiento preventivo</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="openMaintConfig()" style="font-size:11px">⚙ Configurar umbrales</button>
+        <button class="btn btn-ghost btn-sm" onclick="renderMaintenanceTable()" style="font-size:11px">↻ Actualizar</button>
+      </div>
+    </div>
+    <div id="maintTable"></div>
+  </div>
+
+  <!-- ── ANALÍTICA ── -->
+  <div id="maquinaAnalyticsView" class="maquina-section" style="margin-top:28px">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:14px">📊 Analítica de producción</div>
+    <div id="analyticsContent"></div>
   </div>
 </div>
 
@@ -3010,6 +3036,8 @@ async function initMaquinas(){
   renderMaquinasCalendar();
   renderMonitorFilterTabs();
   renderMonitorKPIs();
+  renderMaintenanceTable();
+  renderProductionAnalytics();
   requestNotificationPermission(false);
   if(!_monitorInterval){
     pollPrinters();
@@ -3065,7 +3093,8 @@ async function fetchPrinterStatus(m){
         _thumbCache[ck]=thumbUrl;
       }
     }
-    return{state:ps.state||'standby',progress,filename,thumbUrl,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
+    const filamentMm=Math.round(ps.filament_used||0);
+    return{state:ps.state||'standby',progress,filename,thumbUrl,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
   }catch(e){return{state:'offline',ip};}
 }
 
@@ -3122,7 +3151,8 @@ function renderMonitorKPIs(){
 
 function renderMonitorGrid(){
   const el=document.getElementById('maquinaMonGrid');if(!el)return;
-  const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
+  const base=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
+  const lista=sortedList(base);
   el.innerHTML=lista.map(m=>{
     const s=_printerStatus[m.id]||{state:'offline'};
     const sm=printerStateMeta(s.state);
@@ -3134,6 +3164,9 @@ function renderMonitorGrid(){
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
     const hist=getHistoryForPrinter(m.id);
     const th=_tempHistory[m.id]||[];
+    const maintAlerts=getMaintAlerts(m);
+    const idleHours=getIdleHours(m.id,s.state);
+    const idleWarn=idleHours>0;
 
     let body='';
     if(s.state==='noip'){
@@ -3187,14 +3220,18 @@ function renderMonitorGrid(){
         </div>`;
     }
 
-    return`<div style="background:var(--surface);border:1px solid ${isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
+    return`<div style="background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.nombre}</div>
           <div style="font-size:10px;color:var(--text3)">Máquina #${m.numG}</div>
         </div>
-        <span style="background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700;flex-shrink:0;border:1px solid ${sm.color}33">${sm.label}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+          <span style="background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700;border:1px solid ${sm.color}33">${sm.label}</span>
+          ${maintAlerts.length?`<span style="background:rgba(255,170,0,0.15);color:#ffaa00;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(255,170,0,0.3)" title="${maintAlerts.map(a=>a.label).join(', ')}">🔧 ${maintAlerts.length} alerta${maintAlerts.length>1?'s':''}</span>`:''}
+          ${idleWarn?`<span style="background:rgba(100,100,100,0.15);color:#888;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(100,100,100,0.2)">💤 ${idleHours}h idle</span>`:''}
+        </div>
       </div>
       ${body}
     </div>`;
@@ -3217,16 +3254,16 @@ async function printerControl(id,action){
 function checkTransitions(m,s){
   const prev=_prevState[m.id];const st=s.state;
   if(st==='error'&&prev!=='error'){sendBrowserNotification(`⚠ Error en ${m.nombre} #${m.numG}`,'Requiere atención');sendWebhookAlert(m,'error');}
-  if(st==='printing'&&prev!=='printing')_sessions[m.id]={file:s.filename,start:Date.now()};
+  if(st==='printing'&&prev!=='printing')_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
   if(prev==='printing'&&st!=='printing'){
     const sess=_sessions[m.id];
-    if(sess){const dur=Math.round((Date.now()-sess.start)/60000);saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,st==='complete'?'Completado':'Cancelado');delete _sessions[m.id];if(st==='complete'){sendBrowserNotification(`✅ ${m.nombre} #${m.numG} completado`,`${sess.file} · ${dur}m`);}}
+    if(sess){const dur=Math.round((Date.now()-sess.start)/60000);const filamentMm=Math.max(0,(s.filamentMm||0)-sess.filamentStart);saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,st==='complete'?'Completado':'Cancelado',filamentMm);delete _sessions[m.id];if(st==='complete'){sendBrowserNotification(`✅ ${m.nombre} #${m.numG} completado`,`${sess.file} · ${dur}m`);}}
   }
   _prevState[m.id]=st;
 }
 
-function saveHistoryEntry(m,file,start,end,dur,result){
-  try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift({id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,ts:Date.now()});if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
+function saveHistoryEntry(m,file,start,end,dur,result,filamentMm=0){
+  try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift({id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,filamentMm,ts:Date.now()});if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
 }
 
 function getHistoryForPrinter(id){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(h=>h.id===id);}catch(e){return[];}}
@@ -3279,6 +3316,192 @@ function openAlertSettings(){
 function saveAlertSettings(){const url=document.getElementById('alertWebhookUrl').value.trim();if(url)localStorage.setItem('monitor_webhook_url',url);else localStorage.removeItem('monitor_webhook_url');toast(url?'Webhook configurado ✓':'Webhook eliminado','success');closeAlertSettings();}
 function closeAlertSettings(){document.getElementById('alertSettingsModal').style.display='none';}
 
+// ── SORT & KIOSK ──────────────────────────────────────────────
+let _sortByState=true,_kioskMode=false;
+function stateOrder(s){return{printing:0,paused:1,error:2,complete:3,standby:4,offline:5,noip:6}[s]??7;}
+function sortedList(lista){if(!_sortByState)return lista;return[...lista].sort((a,b)=>stateOrder((_printerStatus[a.id]||{}).state||'offline')-stateOrder((_printerStatus[b.id]||{}).state||'offline'));}
+function toggleSort(){_sortByState=!_sortByState;const btn=document.getElementById('btnSort');if(btn)btn.style.color=_sortByState?'var(--accent)':'var(--text3)';renderMonitorGrid();}
+function toggleKiosk(){
+  _kioskMode=!_kioskMode;
+  if(_kioskMode){document.documentElement.requestFullscreen?.();document.body.classList.add('kiosk');}
+  else{document.exitFullscreen?.();document.body.classList.remove('kiosk');}
+  renderMonitorGrid();
+}
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&_kioskMode){_kioskMode=false;document.body.classList.remove('kiosk');renderMonitorGrid();}});
+
+// ── IDLE ALERT ────────────────────────────────────────────────
+const _lastActiveTime={},_idleAlerted={};
+function getIdleHours(id,state){
+  if(state==='printing'||state==='paused'||state==='offline'||state==='noip')return 0;
+  const last=_lastActiveTime[id];if(!last)return 0;
+  const threshold=parseFloat(localStorage.getItem('idle_alert_hours')||'2');
+  const h=(Date.now()-last)/3600000;
+  return h>=threshold?Math.round(h):0;
+}
+function checkIdleAlerts(){
+  const now=new Date();const h=now.getHours();
+  const isWork=h>=8&&h<19&&now.getDay()>0&&now.getDay()<6;
+  MAQUINAS.forEach(m=>{
+    const st=(_printerStatus[m.id]||{}).state||'offline';
+    if(st==='printing'||st==='paused'){_lastActiveTime[m.id]=Date.now();delete _idleAlerted[m.id];}
+    else if(isWork&&_lastActiveTime[m.id]&&!_idleAlerted[m.id]){
+      const idleH=(Date.now()-_lastActiveTime[m.id])/3600000;
+      const threshold=parseFloat(localStorage.getItem('idle_alert_hours')||'2');
+      if(idleH>=threshold){sendBrowserNotification(`💤 ${m.nombre} #${m.numG} lleva ${Math.round(idleH)}h sin imprimir`,'Máquina inactiva en horario laboral');sendWebhookAlert(m,'idle');_idleAlerted[m.id]=true;}
+    }
+  });
+}
+
+// ── MANTENIMIENTO ─────────────────────────────────────────────
+const MAINT_KEY='printer_maint_v1',MAINT_CFG_KEY='printer_maint_cfg',FILAMENT_COST_KEY='filament_cost_clp';
+const MAINT_TYPES=[
+  {key:'nozzle',label:'Nozzle',icon:'🔩',defaultHours:200},
+  {key:'lubrication',label:'Lubricación',icon:'🛢️',defaultHours:100},
+  {key:'belt',label:'Correa',icon:'⚙️',defaultHours:500},
+  {key:'general',label:'General',icon:'🔧',defaultHours:50},
+];
+function getMaintConfig(){try{return JSON.parse(localStorage.getItem(MAINT_CFG_KEY)||'{}');}catch(e){return{};}}
+function getMaintThreshold(tipo){const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;}
+function getMaintLog(){try{return JSON.parse(localStorage.getItem(MAINT_KEY)||'[]');}catch(e){return[];}}
+function getPrintHours(id){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}catch(e){return 0;}}
+function getHoursSinceMaint(id,tipo){
+  const log=getMaintLog().filter(x=>x.maquinaId===id&&x.tipo===tipo).sort((a,b)=>b.ts-a.ts);
+  const total=getPrintHours(id);
+  if(!log.length)return total;
+  return Math.max(0,total-log[0].printHoursAtTime);
+}
+function getMaintAlerts(m){
+  return MAINT_TYPES.filter(t=>getHoursSinceMaint(m.id,t.key)>=getMaintThreshold(t.key)*0.9)
+    .map(t=>({...t,hours:getHoursSinceMaint(m.id,t.key),threshold:getMaintThreshold(t.key)}));
+}
+function getTotalFilamentKg(id){
+  try{const mm=JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*0.000002982;}catch(e){return 0;}}
+function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFloat(localStorage.getItem(FILAMENT_COST_KEY)||'0');return Math.round(kg*cost);}
+
+function renderMaintenanceTable(){
+  const el=document.getElementById('maintTable');if(!el)return;
+  const rows=MAQUINAS.map(m=>{
+    const totalH=getPrintHours(m).toFixed(1);
+    const filKg=getTotalFilamentKg(m.id).toFixed(3);
+    const filCost=getFilamentCost(m.id);
+    const alerts=getMaintAlerts(m);
+    const chips=MAINT_TYPES.map(t=>{
+      const h=getHoursSinceMaint(m.id,t.key);const thresh=getMaintThreshold(t.key);
+      const pct=h/thresh;const ok=pct<0.9;const over=pct>=1;
+      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':'rgba(0,212,170,0.1)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':'#00d4aa'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':'rgba(0,212,170,0.2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${over?'⚠':ok?'✓':'~'}${Math.round(h)}h</span>`;
+    }).join('');
+    const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
+    return`<tr style="border-bottom:1px solid var(--border2)">
+      <td style="padding:9px 10px;font-size:11px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc?.color||'#888'};margin-right:6px"></span><b>${m.nombre}</b> <span style="color:var(--text3)">#${m.numG}</span></td>
+      <td style="padding:9px 10px;font-size:11px;text-align:center;font-weight:700;color:var(--accent)">${totalH}h</td>
+      <td style="padding:9px 10px"><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div></td>
+      <td style="padding:9px 10px;font-size:10px;color:var(--text3);white-space:nowrap">${filKg}kg${filCost>0?` · $${filCost.toLocaleString('es-CL')}`:''}  </td>
+      <td style="padding:9px 10px"><button onclick="openMaintModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:4px 10px;cursor:pointer;white-space:nowrap" ${alerts.length?'style="border-color:rgba(255,170,0,0.5)"':''}>+ Registrar</button></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:700px">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Máquina</th>
+      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:center">Horas totales</th>
+      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Estado mantención</th>
+      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Filamento</th>
+      <th style="padding:8px 10px;font-size:10px;color:var(--text3)"></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+function openMaintModal(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  document.getElementById('maintModalId').value=id;
+  document.getElementById('maintModalNombre').textContent=`${m.nombre} — Máquina #${m.numG}`;
+  document.getElementById('maintModal').style.display='flex';
+}
+function closeMaintModal(){document.getElementById('maintModal').style.display='none';}
+function saveMaintRecord(){
+  const id=document.getElementById('maintModalId').value;
+  const tipo=document.getElementById('maintModalTipo').value;
+  const notas=document.getElementById('maintModalNotas').value.trim();
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const log=getMaintLog();
+  log.unshift({maquinaId:id,nombre:m.nombre,numG:m.numG,tipo,notas,printHoursAtTime:getPrintHours(id),ts:Date.now(),fecha:new Date().toISOString()});
+  localStorage.setItem(MAINT_KEY,JSON.stringify(log));
+  closeMaintModal();renderMaintenanceTable();renderMonitorGrid();
+  toast(`🔧 Mantención registrada · ${MAINT_TYPES.find(t=>t.key===tipo)?.label}`,'success');
+}
+function openMaintConfig(){
+  const cfg=getMaintConfig();
+  document.getElementById('cfgNozzle').value=cfg.nozzle||200;
+  document.getElementById('cfgLubrication').value=cfg.lubrication||100;
+  document.getElementById('cfgBelt').value=cfg.belt||500;
+  document.getElementById('cfgGeneral').value=cfg.general||50;
+  document.getElementById('cfgIdle').value=localStorage.getItem('idle_alert_hours')||2;
+  document.getElementById('cfgFilamentCost').value=localStorage.getItem(FILAMENT_COST_KEY)||0;
+  document.getElementById('maintConfigModal').style.display='flex';
+}
+function saveMaintConfig(){
+  const cfg={nozzle:parseInt(document.getElementById('cfgNozzle').value)||200,lubrication:parseInt(document.getElementById('cfgLubrication').value)||100,belt:parseInt(document.getElementById('cfgBelt').value)||500,general:parseInt(document.getElementById('cfgGeneral').value)||50};
+  localStorage.setItem(MAINT_CFG_KEY,JSON.stringify(cfg));
+  localStorage.setItem('idle_alert_hours',document.getElementById('cfgIdle').value||2);
+  localStorage.setItem(FILAMENT_COST_KEY,document.getElementById('cfgFilamentCost').value||0);
+  closeMaintConfig();renderMaintenanceTable();renderMonitorGrid();toast('Configuración guardada ✓','success');
+}
+function closeMaintConfig(){document.getElementById('maintConfigModal').style.display='none';}
+
+// ── ANALÍTICA ─────────────────────────────────────────────────
+function renderProductionAnalytics(){
+  const el=document.getElementById('analyticsContent');if(!el)return;
+  let hist=[];try{hist=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}catch(e){}
+  if(!hist.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center">Sin datos aún — el historial se generará automáticamente cuando las impresoras estén conectadas</div>';return;}
+
+  // Impresiones últimas 7 días
+  const days=[];const today=new Date();today.setHours(0,0,0,0);
+  for(let i=6;i>=0;i--){const d=new Date(today);d.setDate(d.getDate()-i);days.push(d);}
+  const dayData=days.map(d=>{
+    const ds=d.toDateString();
+    const entries=hist.filter(h=>new Date(h.start).toDateString()===ds);
+    const count=entries.filter(h=>h.result==='Completado').length;
+    const hours=entries.reduce((s,h)=>s+(h.dur||0)/60,0);
+    const filKg=entries.reduce((s,h)=>s+(h.filamentMm||0),0)*0.000002982;
+    return{label:`${d.getDate()}/${d.getMonth()+1}`,count,hours:Math.round(hours*10)/10,filKg:Math.round(filKg*100)/100};
+  });
+  const maxCount=Math.max(...dayData.map(d=>d.count),1);
+  const maxHours=Math.max(...dayData.map(d=>d.hours),1);
+  const totalPrints=dayData.reduce((s,d)=>s+d.count,0);
+  const totalHours=dayData.reduce((s,d)=>s+d.hours,0).toFixed(1);
+  const totalFilKg=(hist.reduce((s,h)=>s+(h.filamentMm||0),0)*0.000002982).toFixed(2);
+
+  // Top printers by hours
+  const byPrinter=MAQUINAS.map(m=>({m,h:getPrintHours(m.id)})).sort((a,b)=>b.h-a.h).slice(0,5);
+  const maxPH=Math.max(...byPrinter.map(x=>x.h),1);
+
+  el.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
+      <div class="kpi-card"><div class="kpi-label">Impresiones (7d)</div><div class="kpi-value">${totalPrints}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Horas activas (7d)</div><div class="kpi-value">${totalHours}h</div></div>
+      <div class="kpi-card"><div class="kpi-label">Filamento total</div><div class="kpi-value">${totalFilKg}kg</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div class="card" style="padding:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px">IMPRESIONES POR DÍA</div>
+        <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
+          ${dayData.map(d=>{const h=Math.max(d.count/maxCount*76,d.count>0?4:1);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="background:var(--accent);border-radius:3px 3px 0 0;width:100%;height:${h}px;min-height:${d.count>0?4:1}px;opacity:0.85"></div><div style="font-size:9px;color:var(--text3)">${d.label}</div>${d.count>0?`<div style="font-size:9px;font-weight:700;color:var(--accent)">${d.count}</div>`:'<div style="font-size:9px;color:var(--border2)">—</div>'}</div>`;}).join('')}
+        </div>
+      </div>
+      <div class="card" style="padding:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px">HORAS ACTIVAS POR DÍA</div>
+        <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
+          ${dayData.map(d=>{const h=Math.max(d.hours/maxHours*76,d.hours>0?4:1);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="background:#a78bfa;border-radius:3px 3px 0 0;width:100%;height:${h}px;min-height:${d.hours>0?4:1}px;opacity:0.85"></div><div style="font-size:9px;color:var(--text3)">${d.label}</div>${d.hours>0?`<div style="font-size:9px;font-weight:700;color:#a78bfa">${d.hours}h</div>`:'<div style="font-size:9px;color:var(--border2)">—</div>'}</div>`;}).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px">TOP MÁQUINAS POR HORAS ACUMULADAS</div>
+      ${byPrinter.map(({m,h})=>{const pct=Math.round(h/maxPH*100);const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div style="font-size:11px;color:var(--text);white-space:nowrap;min-width:160px">${m.nombre} <span style="color:var(--text3)">#${m.numG}</span></div><div style="flex:1;background:var(--surface2);border-radius:4px;height:8px;overflow:hidden"><div style="background:${gc?.color||'var(--accent)'};height:100%;width:${pct}%;border-radius:4px"></div></div><div style="font-size:10px;color:var(--text3);min-width:40px;text-align:right">${h.toFixed(1)}h</div></div>`;}).join('')}
+    </div>`;
+}
+
+let _pollCount=0;
 async function pollPrinters(){
   await Promise.allSettled(MAQUINAS.map(async m=>{
     const s=await fetchPrinterStatus(m);
@@ -3286,8 +3509,11 @@ async function pollPrinters(){
     _printerStatus[m.id]=s;
     if(s.hotend){if(!_tempHistory[m.id])_tempHistory[m.id]=[];_tempHistory[m.id].push({h:s.hotend.actual,b:s.bed?.actual||0});if(_tempHistory[m.id].length>20)_tempHistory[m.id].shift();}
   }));
+  _pollCount++;
+  checkIdleAlerts();
   renderMonitorKPIs();
   renderMonitorGrid();
+  if(_pollCount%4===0){renderMaintenanceTable();renderProductionAnalytics();}
 }
 
 function renderMaquinasKPIs(dias,todayStr){
@@ -4057,6 +4283,51 @@ document.addEventListener('DOMContentLoaded',()=>{
 <!-- Proveedor multi-select dropdown -->
 <div id="pvMultiDrop" style="display:none;position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:200px;max-height:260px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.45)">
   <div id="pvMultiDropContent"></div>
+</div>
+
+<!-- MANTENIMIENTO REGISTRO MODAL -->
+<div id="maintModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeMaintModal()"></div>
+  <div class="modal-card" style="max-width:440px;width:95vw">
+    <div class="modal-title">🔧 Registrar mantención</div>
+    <input type="hidden" id="maintModalId">
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
+      <div><div class="field-label">Máquina</div><div id="maintModalNombre" style="font-size:13px;font-weight:700;color:var(--accent);margin-top:4px"></div></div>
+      <div><div class="field-label">Tipo de mantención</div>
+        <select id="maintModalTipo" class="field-select" style="margin-top:6px">
+          <option value="nozzle">🔩 Cambio de Nozzle</option>
+          <option value="lubrication">🛢️ Lubricación de ejes</option>
+          <option value="belt">⚙️ Ajuste/cambio de correa</option>
+          <option value="general">🔧 Mantención general</option>
+        </select>
+      </div>
+      <div><div class="field-label">Notas (opcional)</div><textarea id="maintModalNotas" class="field-input" rows="3" placeholder="Descripción del trabajo realizado..." style="resize:vertical;margin-top:6px;width:100%;box-sizing:border-box"></textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-primary btn-sm" onclick="saveMaintRecord()" style="flex:1">Guardar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeMaintModal()" style="flex:1">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MANTENIMIENTO CONFIG MODAL -->
+<div id="maintConfigModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeMaintConfig()"></div>
+  <div class="modal-card" style="max-width:420px;width:95vw">
+    <div class="modal-title">⚙ Umbrales de mantención (horas)</div>
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🔩 Cambio de Nozzle</label><input id="cfgNozzle" type="number" min="10" max="2000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🛢️ Lubricación de ejes</label><input id="cfgLubrication" type="number" min="10" max="2000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">⚙️ Ajuste/cambio de correa</label><input id="cfgBelt" type="number" min="10" max="5000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🔧 Mantención general</label><input id="cfgGeneral" type="number" min="10" max="2000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border2);padding-top:10px"><label style="font-size:12px;color:var(--text)">💤 Alerta idle (horario laboral)</label><input id="cfgIdle" type="number" min="1" max="24" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">💰 Costo filamento (CLP/kg)</label><input id="cfgFilamentCost" type="number" min="0" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-primary btn-sm" onclick="saveMaintConfig()" style="flex:1">Guardar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeMaintConfig()" style="flex:1">Cancelar</button>
+    </div>
+  </div>
 </div>
 
 <!-- WEBCAM MODAL -->
