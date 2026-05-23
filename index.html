@@ -1327,15 +1327,25 @@ function togglePvssPanel(){
 }
 function addSupplierFromSearch(p){
   switchTab('nuevo-proveedor');
-  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v&&v!=='—') el.value=v;};
+  const skipVals=['—','Consultar','N/A','n/a',''];
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v&&!skipVals.includes(v.trim())) el.value=v;};
   set('np-nombre',p.nombre);
   if(p.web&&p.web!=='—') set('np-web',p.web.startsWith('http')?p.web:'https://'+p.web);
-  set('np-productos',p.notas);
-  if(p.pais!=='Chile') set('np-region',p.pais);
-  const notas=[p.pros?.length?'✅ '+p.pros.join(' | '):'',p.contras?.length?'❌ '+p.contras.join(' | '):'',p.notas].filter(Boolean).join('\n');
+  set('np-telefono',p.telefono);
+  if(p.pais&&p.pais!=='Chile') set('np-region',p.pais);
+  // Notas internas: pros, contras, tip, precio estimado y MOQ
+  const notas=[
+    p.pros?.length?'✅ '+p.pros.join(' | '):'',
+    p.contras?.length?'❌ '+p.contras.join(' | '):'',
+    p.notas?'💡 '+p.notas:'',
+    p.precio?'💰 Precio est.: '+p.precio:'',
+    p.moq?'📦 MOQ: '+p.moq:'',
+  ].filter(Boolean).join('\n');
   set('np-notas',notas);
+  // Productos: usar MOQ como referencia de lo que ofrecen
+  if(p.moq&&p.moq!=='—') set('np-productos',p.moq);
   const cp=document.getElementById('np-condpago');
-  if(cp&&p.condpago){const opts=[...cp.options];const match=opts.find(o=>p.condpago.toLowerCase().includes(o.value.toLowerCase())&&o.value);if(match) cp.value=match.value;}
+  if(cp&&p.condpago){const opts=[...cp.options];const match=opts.find(o=>o.value&&p.condpago.toLowerCase().includes(o.value.toLowerCase()));if(match) cp.value=match.value;}
   if(p.categoria){setPvSelectedCats('np',p.categoria.split(',').map(s=>s.trim()).filter(Boolean));}
   const plazoNum=parseInt((p.plazo||'').replace(/\D/g,''));
   if(!isNaN(plazoNum)&&plazoNum>0) set('np-plazo',plazoNum);
