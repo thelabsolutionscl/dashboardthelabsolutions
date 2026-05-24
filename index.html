@@ -5257,12 +5257,12 @@ const AUTH={
         {username:'nicanor@thelab.solutions', name:'Nicanor Marambio', role:'produccion',  hash:h},
         {username:'gustavo@thelab.solutions',  name:'Gustavo Kaiser',   role:'operaciones', hash:h},
       ];
-      localStorage.setItem(AUTH.USERS_KEY,JSON.stringify(users));
-    } else if(!users.find(u=>u.username==='demo@thelab.solutions')){
+    }
+    if(!users.find(u=>u.username==='demo@thelab.solutions')){
       const hDemo=await AUTH.hashPwd('Demo123');
       users.push({username:'demo@thelab.solutions',name:'Demo',role:'demo',hash:hDemo});
-      localStorage.setItem(AUTH.USERS_KEY,JSON.stringify(users));
     }
+    localStorage.setItem(AUTH.USERS_KEY,JSON.stringify(users));
   },
 
   async login(username,password,remember){
