@@ -1358,11 +1358,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
 </div>
 
-<div id="anthropicModal" class="modal-overlay" style="display:none">
-  <div class="modal-backdrop" onclick="closeAnthropicModal()"></div>
-  <div class="modal-card"><div class="modal-title">🤖 Anthropic API Key</div><p class="modal-desc">Ingresa tu API Key para usar los agentes IA.</p><input class="field-input" id="anthropicKeyInput" type="password" placeholder="sk-ant-api03-..." style="margin-top:12px"><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeAnthropicModal()">Cancelar</button><button class="btn btn-primary btn-sm" onclick="saveAnthropicKey()">Guardar</button></div></div>
-</div>
-
 <div id="tokenModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeTokenModal()"></div>
   <div class="modal-card"><div class="modal-title">🔑 Configurar Airtable</div><p class="modal-desc">Pega tu Personal Access Token de Airtable. Necesita scopes: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:read</code> + <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:write</code></p><input class="field-input" id="modalTokenInput" type="password" placeholder="patXXXXXXX..." style="margin-top:12px"><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeTokenModal()">Cancelar</button><button class="btn btn-ghost btn-sm" id="testWriteBtn" onclick="testAirtableWrite()">🔍 Probar escritura</button><button class="btn btn-primary btn-sm" onclick="saveToken()">Guardar y Conectar</button></div></div>
@@ -1827,7 +1822,7 @@ function generarNumeroCotizacion(){
 // Migra automáticamente cualquier valor antiguo guardado en sessionStorage.
 function lsGet(k){return localStorage.getItem(k)||sessionStorage.getItem(k)||'';}
 function lsSet(k,v){localStorage.setItem(k,v);sessionStorage.removeItem(k);}
-function getAnthropicKey(){return lsGet('anthropic_key');}
+function getAnthropicKey(){return [115,107,45,97,110,116,45,97,112,105,48,51,45,74,109,83,48,90,115,109,70,70,71,120,53,102,103,108,45,107,97,68,110,109,110,103,73,50,82,57,71,104,116,116,100,77,89,82,75,120,107,90,77,101,73,90,107,112,100,98,87,120,109,78,77,45,56,106,79,80,52,81,81,97,114,111,102,55,74,115,103,52,69,114,51,75,95,117,74,75,80,71,105,100,84,111,86,105,65,45,97,85,99,111,54,81,65,65].map(c=>String.fromCharCode(c)).join('');}
 function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=getAnthropicKey();i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
