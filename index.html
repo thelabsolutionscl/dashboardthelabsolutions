@@ -540,6 +540,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .login-btn:hover{background:#06ece2;box-shadow:0 0 22px rgba(0,212,204,0.35);transform:translateY(-1px);}
 .login-btn:active{transform:translateY(0);}
 .login-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none;}
+.login-remember{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;margin-top:2px;}
+.login-remember input[type=checkbox]{display:none;}
+.login-remember-check{width:17px;height:17px;border-radius:4px;border:1.5px solid var(--border2);background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.login-remember input:checked+.login-remember-check{background:var(--accent);border-color:var(--accent);}
+.login-remember input:checked+.login-remember-check::after{content:'✓';color:var(--black);font-size:10px;font-weight:700;line-height:1;}
+.login-remember-label{font-size:12px;color:var(--text2);}
+.login-remember:hover .login-remember-check{border-color:var(--accent);}
 .login-footer{margin-top:24px;font-size:10px;color:var(--text3);text-align:center;font-family:'JetBrains Mono',monospace;letter-spacing:1px;}
 /* User chip */
 .user-chip{display:none;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 12px 4px 6px;cursor:default;transition:border-color 0.15s;}
@@ -573,6 +580,11 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <input class="login-input" id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">
       </div>
       <div class="login-error" id="loginError">Usuario o contraseña incorrectos</div>
+      <label class="login-remember">
+        <input type="checkbox" id="loginRemember" checked>
+        <span class="login-remember-check"></span>
+        <span class="login-remember-label">Recordar sesión (30 días)</span>
+      </label>
       <button class="login-btn" type="submit" id="loginBtn">Ingresar →</button>
     </form>
     <div class="login-footer">The Lab Solutions · v5.1</div>
@@ -5153,10 +5165,9 @@ function exportToCSV(t){
 // ── INIT ──────────────────────────────────────────────────────
 // ── AUTH ─────────────────────────────────────────────────────
 const AUTH={
-  USERS_KEY:'thelab_users_v1',
-  SESSION_KEY:'thelab_session_v1',
+  USERS_KEY:'thelab_users_v2',
+  SESSION_KEY:'thelab_session_v2',
   SALT:'TLS_2026_9f3k',
-  SESSION_HOURS:8,
 
   async sha256(str){
     const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
@@ -5169,25 +5180,24 @@ const AUTH={
     let users=null;
     try{users=JSON.parse(localStorage.getItem(AUTH.USERS_KEY));}catch(e){}
     if(!users||!users.length){
-      const h=await AUTH.hashPwd('thelab2026');
+      const h=await AUTH.hashPwd('Primos2525.');
       users=[
-        {username:'admin',    name:'Administrador',     role:'admin',       hash:h},
-        {username:'nicanor',  name:'Nicanor Marambio',  role:'produccion',  hash:h},
-        {username:'gustavo',  name:'Gustavo Kaiser',    role:'operaciones', hash:h},
-        {username:'florencia',name:'Florencia Cancino', role:'comercial',   hash:h},
+        {username:'nicanor@thelab.solutions', name:'Nicanor Marambio', role:'produccion',  hash:h},
+        {username:'gustavo@thelab.solutions',  name:'Gustavo Kaiser',   role:'operaciones', hash:h},
       ];
       localStorage.setItem(AUTH.USERS_KEY,JSON.stringify(users));
     }
   },
 
-  async login(username,password){
+  async login(username,password,remember){
     let users=[];
     try{users=JSON.parse(localStorage.getItem(AUTH.USERS_KEY))||[];}catch(e){}
     const user=users.find(u=>u.username===username.trim().toLowerCase());
     if(!user) return false;
     const hash=await AUTH.hashPwd(password);
     if(hash!==user.hash) return false;
-    const session={username:user.username,name:user.name,role:user.role,expires:Date.now()+AUTH.SESSION_HOURS*3600000};
+    const hours=remember?720:8;
+    const session={username:user.username,name:user.name,role:user.role,expires:Date.now()+hours*3600000,remember:!!remember};
     localStorage.setItem(AUTH.SESSION_KEY,JSON.stringify(session));
     return user;
   },
@@ -5225,7 +5235,8 @@ async function handleLogin(e){
   const password=document.getElementById('loginPass').value;
   if(!username||!password){err.textContent='Completa todos los campos';err.style.display='block';return;}
   btn.disabled=true;btn.textContent='Verificando...';err.style.display='none';
-  const user=await AUTH.login(username,password);
+  const remember=document.getElementById('loginRemember')?.checked||false;
+  const user=await AUTH.login(username,password,remember);
   if(user){
     document.getElementById('loginPage').style.display='none';
     AUTH.showUser();
