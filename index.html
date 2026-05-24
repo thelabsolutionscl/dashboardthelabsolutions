@@ -5233,27 +5233,18 @@ const AUTH={
 
   // Usuarios fijos — mismos en todos los dispositivos
   USERS:[
-    {username:'nicanor@thelab.solutions', name:'Nicanor Marambio', role:'produccion',  hash:'7d37496d65d4fe8a8763bebf6c452e362e63384139861fb56fff435b9b18e41b'},
-    {username:'gustavo@thelab.solutions',  name:'Gustavo Kaiser',   role:'operaciones', hash:'7d37496d65d4fe8a8763bebf6c452e362e63384139861fb56fff435b9b18e41b'},
-    {username:'demo@thelab.solutions',     name:'Demo',             role:'demo',         hash:'0b458e68f5f0d4d573cb41b27bd91beb6321763d3eb8d2f30211f409083dacdd'},
+    {username:'nicanor@thelab.solutions', name:'Nicanor Marambio', role:'produccion',  pwd:[80,114,105,109,111,115,50,53,50,53,46]},
+    {username:'gustavo@thelab.solutions',  name:'Gustavo Kaiser',   role:'operaciones', pwd:[80,114,105,109,111,115,50,53,50,53,46]},
+    {username:'demo@thelab.solutions',     name:'Demo',             role:'demo',         pwd:[68,101,109,111,49,50,51]},
   ],
-
-  SALT:'TLS_2026_9f3k',
-
-  async sha256(str){
-    const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  },
-
-  async hashPwd(pwd){return AUTH.sha256(AUTH.SALT+pwd);},
 
   async init(){},
 
   async login(username,password,remember){
     const user=AUTH.USERS.find(u=>u.username===username.trim().toLowerCase());
     if(!user) return false;
-    const hash=await AUTH.hashPwd(password);
-    if(hash!==user.hash) return false;
+    const expected=user.pwd.map(c=>String.fromCharCode(c)).join('');
+    if(password!==expected) return false;
     const hours=remember?720:8;
     const session={username:user.username,name:user.name,role:user.role,expires:Date.now()+hours*3600000,remember:!!remember};
     localStorage.setItem(AUTH.SESSION_KEY,JSON.stringify(session));
