@@ -5237,8 +5237,15 @@ function enableDemoMode(){
 
 // ── AUTH ─────────────────────────────────────────────────────
 const AUTH={
-  USERS_KEY:'thelab_users_v2',
   SESSION_KEY:'thelab_session_v2',
+
+  // Usuarios fijos — mismos en todos los dispositivos
+  USERS:[
+    {username:'nicanor@thelab.solutions', name:'Nicanor Marambio', role:'produccion',  hash:'7d37496d65d4fe8a8763bebf6c452e362e63384139861fb56fff435b9b18e41b'},
+    {username:'gustavo@thelab.solutions',  name:'Gustavo Kaiser',   role:'operaciones', hash:'7d37496d65d4fe8a8763bebf6c452e362e63384139861fb56fff435b9b18e41b'},
+    {username:'demo@thelab.solutions',     name:'Demo',             role:'demo',         hash:'0b458e68f5f0d4d573cb41b27bd91beb6321763d3eb8d2f30211f409083dacdd'},
+  ],
+
   SALT:'TLS_2026_9f3k',
 
   async sha256(str){
@@ -5248,27 +5255,10 @@ const AUTH={
 
   async hashPwd(pwd){return AUTH.sha256(AUTH.SALT+pwd);},
 
-  async init(){
-    let users=null;
-    try{users=JSON.parse(localStorage.getItem(AUTH.USERS_KEY));}catch(e){}
-    if(!users||!users.length){
-      const h=await AUTH.hashPwd('Primos2525.');
-      users=[
-        {username:'nicanor@thelab.solutions', name:'Nicanor Marambio', role:'produccion',  hash:h},
-        {username:'gustavo@thelab.solutions',  name:'Gustavo Kaiser',   role:'operaciones', hash:h},
-      ];
-    }
-    if(!users.find(u=>u.username==='demo@thelab.solutions')){
-      const hDemo=await AUTH.hashPwd('Demo123');
-      users.push({username:'demo@thelab.solutions',name:'Demo',role:'demo',hash:hDemo});
-    }
-    localStorage.setItem(AUTH.USERS_KEY,JSON.stringify(users));
-  },
+  async init(){},
 
   async login(username,password,remember){
-    let users=[];
-    try{users=JSON.parse(localStorage.getItem(AUTH.USERS_KEY))||[];}catch(e){}
-    const user=users.find(u=>u.username===username.trim().toLowerCase());
+    const user=AUTH.USERS.find(u=>u.username===username.trim().toLowerCase());
     if(!user) return false;
     const hash=await AUTH.hashPwd(password);
     if(hash!==user.hash) return false;
