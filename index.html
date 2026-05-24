@@ -502,10 +502,82 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 /* Badge polish */
 .badge{border-radius:5px;letter-spacing:0.2px;}
+
+/* ── LOGIN PAGE ──────────────────────────────────────────────── */
+#loginPage{
+  position:fixed;inset:0;z-index:999999;
+  background:var(--black);
+  display:none;align-items:center;justify-content:center;
+}
+#loginPage .lp-glow{
+  position:absolute;top:50%;left:50%;
+  width:700px;height:700px;margin:-350px 0 0 -350px;
+  background:radial-gradient(circle,rgba(0,212,204,0.07) 0%,transparent 65%);
+  animation:slGlowPulse 3s ease-in-out infinite;
+  pointer-events:none;
+}
+.login-card{
+  position:relative;z-index:1;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:16px;
+  padding:44px 40px 36px;
+  width:100%;max-width:400px;
+  box-shadow:0 28px 80px rgba(0,0,0,0.65),0 0 0 1px rgba(255,255,255,0.05);
+  display:flex;flex-direction:column;align-items:center;
+  animation:tabIn 0.35s ease forwards;
+}
+.login-logo{height:30px;mix-blend-mode:screen;filter:brightness(0) invert(1);margin-bottom:22px;}
+.login-title{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:4px;margin-bottom:4px;text-align:center;}
+.login-subtitle{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:32px;text-align:center;}
+.login-form{width:100%;display:flex;flex-direction:column;gap:16px;}
+.login-field{display:flex;flex-direction:column;gap:6px;}
+.login-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);}
+.login-input{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:12px 14px;outline:none;transition:border-color 0.15s,box-shadow 0.15s;width:100%;box-sizing:border-box;}
+.login-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,204,0.12);}
+.login-error{background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.3);border-radius:7px;color:var(--danger);font-size:12px;padding:10px 14px;display:none;text-align:center;animation:tabIn 0.2s ease;}
+.login-btn{background:var(--accent);border:none;border-radius:8px;color:var(--black);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;padding:13px;cursor:pointer;transition:all 0.15s;margin-top:4px;letter-spacing:0.5px;width:100%;}
+.login-btn:hover{background:#06ece2;box-shadow:0 0 22px rgba(0,212,204,0.35);transform:translateY(-1px);}
+.login-btn:active{transform:translateY(0);}
+.login-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none;}
+.login-footer{margin-top:24px;font-size:10px;color:var(--text3);text-align:center;font-family:'JetBrains Mono',monospace;letter-spacing:1px;}
+/* User chip */
+.user-chip{display:none;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 12px 4px 6px;cursor:default;transition:border-color 0.15s;}
+.user-avatar{width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--black);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:0;}
+.user-name{font-size:11px;color:var(--text);font-weight:500;white-space:nowrap;}
+.logout-btn{display:none;background:none;border:1px solid rgba(255,68,68,0.3);color:var(--danger);border-radius:6px;font-family:'DM Sans',sans-serif;font-size:10px;padding:4px 10px;cursor:pointer;transition:all 0.15s;font-weight:600;white-space:nowrap;}
+.logout-btn:hover{background:rgba(255,68,68,0.1);border-color:var(--danger);}
+@media(max-width:768px){
+  .login-card{margin:16px;padding:28px 20px 24px;}
+  .user-name{display:none;}
+  .logout-btn{display:none!important;}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
 <body>
+<!-- ── LOGIN PAGE ── -->
+<div id="loginPage">
+  <div class="lp-glow"></div>
+  <div class="login-card">
+    <img class="login-logo" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions">
+    <div class="login-title">Centro de Comando</div>
+    <div class="login-subtitle">Acceso restringido</div>
+    <form class="login-form" onsubmit="handleLogin(event)" autocomplete="on">
+      <div class="login-field">
+        <label class="login-label" for="loginUser">Usuario</label>
+        <input class="login-input" id="loginUser" type="text" placeholder="usuario" autocomplete="username">
+      </div>
+      <div class="login-field">
+        <label class="login-label" for="loginPass">Contraseña</label>
+        <input class="login-input" id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="login-error" id="loginError">Usuario o contraseña incorrectos</div>
+      <button class="login-btn" type="submit" id="loginBtn">Ingresar →</button>
+    </form>
+    <div class="login-footer">The Lab Solutions · v5.1</div>
+  </div>
+</div>
 <!-- ── SYSTEM LOADER ── -->
 <div id="sysLoader">
   <div class="sl-grid"></div>
@@ -546,6 +618,11 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="refresh-btn" id="refreshBtn" onclick="loadAllData()">↺ Actualizar</button>
     <button class="refresh-btn btn-key" onclick="clearToken()">🔑</button>
     <button class="refresh-btn btn-ai" onclick="showAnthropicModal()">🤖</button>
+    <div class="user-chip" id="userChip">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <span class="user-name" id="userName">—</span>
+    </div>
+    <button class="logout-btn" id="logoutBtn" onclick="AUTH.logout()">Salir</button>
   </div>
 </div>
 
@@ -5074,7 +5151,94 @@ function exportToCSV(t){
 }
 
 // ── INIT ──────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded',()=>{
+// ── AUTH ─────────────────────────────────────────────────────
+const AUTH={
+  USERS_KEY:'thelab_users_v1',
+  SESSION_KEY:'thelab_session_v1',
+  SALT:'TLS_2026_9f3k',
+  SESSION_HOURS:8,
+
+  async sha256(str){
+    const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  },
+
+  async hashPwd(pwd){return AUTH.sha256(AUTH.SALT+pwd);},
+
+  async init(){
+    let users=null;
+    try{users=JSON.parse(localStorage.getItem(AUTH.USERS_KEY));}catch(e){}
+    if(!users||!users.length){
+      const h=await AUTH.hashPwd('thelab2026');
+      users=[
+        {username:'admin',    name:'Administrador',     role:'admin',       hash:h},
+        {username:'nicanor',  name:'Nicanor Marambio',  role:'produccion',  hash:h},
+        {username:'gustavo',  name:'Gustavo Kaiser',    role:'operaciones', hash:h},
+        {username:'florencia',name:'Florencia Cancino', role:'comercial',   hash:h},
+      ];
+      localStorage.setItem(AUTH.USERS_KEY,JSON.stringify(users));
+    }
+  },
+
+  async login(username,password){
+    let users=[];
+    try{users=JSON.parse(localStorage.getItem(AUTH.USERS_KEY))||[];}catch(e){}
+    const user=users.find(u=>u.username===username.trim().toLowerCase());
+    if(!user) return false;
+    const hash=await AUTH.hashPwd(password);
+    if(hash!==user.hash) return false;
+    const session={username:user.username,name:user.name,role:user.role,expires:Date.now()+AUTH.SESSION_HOURS*3600000};
+    localStorage.setItem(AUTH.SESSION_KEY,JSON.stringify(session));
+    return user;
+  },
+
+  isLoggedIn(){
+    let s=null;
+    try{s=JSON.parse(localStorage.getItem(AUTH.SESSION_KEY));}catch(e){}
+    if(!s||s.expires<Date.now()){localStorage.removeItem(AUTH.SESSION_KEY);return false;}
+    return true;
+  },
+
+  getUser(){try{return JSON.parse(localStorage.getItem(AUTH.SESSION_KEY));}catch(e){return null;}},
+
+  showUser(){
+    const u=AUTH.getUser();if(!u) return;
+    const initials=u.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const chip=document.getElementById('userChip');
+    if(chip){
+      document.getElementById('userAvatar').textContent=initials;
+      document.getElementById('userName').textContent=u.name.split(' ')[0];
+      chip.style.display='flex';
+    }
+    const lb=document.getElementById('logoutBtn');
+    if(lb) lb.style.display='flex';
+  },
+
+  logout(){localStorage.removeItem(AUTH.SESSION_KEY);location.reload();}
+};
+
+async function handleLogin(e){
+  e.preventDefault();
+  const btn=document.getElementById('loginBtn');
+  const err=document.getElementById('loginError');
+  const username=document.getElementById('loginUser').value;
+  const password=document.getElementById('loginPass').value;
+  if(!username||!password){err.textContent='Completa todos los campos';err.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Verificando...';err.style.display='none';
+  const user=await AUTH.login(username,password);
+  if(user){
+    document.getElementById('loginPage').style.display='none';
+    AUTH.showUser();
+    initDashboard();
+  } else {
+    err.textContent='Usuario o contraseña incorrectos';err.style.display='block';
+    btn.disabled=false;btn.textContent='Ingresar →';
+    document.getElementById('loginPass').value='';
+    document.getElementById('loginPass').focus();
+  }
+}
+
+function initDashboard(){
   try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
   initDates();
   fillCatSelects();
@@ -5083,12 +5247,26 @@ document.addEventListener('DOMContentLoaded',()=>{
   else{slProgress(5,'Verificando credenciales...');loadAllData().then(()=>{startAutoRefresh();});}
   initMobileTableLabels();
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
-  // visibilitychange handled above (auto-refresh inteligente)
   document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
     if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}
     const tabs=['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte'];
     const n=parseInt(e.key);if(n>=1&&n<=tabs.length&&!e.ctrlKey&&!e.metaKey&&!e.altKey) switchTab(tabs[n-1]);
+  });
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  AUTH.init().then(()=>{
+    if(!AUTH.isLoggedIn()){
+      const lp=document.getElementById('loginPage');
+      if(lp) lp.style.display='flex';
+      const sl=document.getElementById('sysLoader');
+      if(sl) sl.classList.add('hidden');
+      setTimeout(()=>document.getElementById('loginUser')?.focus(),100);
+      return;
+    }
+    AUTH.showUser();
+    initDashboard();
   });
 });
 </script>
