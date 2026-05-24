@@ -5163,6 +5163,78 @@ function exportToCSV(t){
 }
 
 // ── INIT ──────────────────────────────────────────────────────
+// ── DEMO DATA ────────────────────────────────────────────────
+const DEMO_DATA={
+  Clientes:{records:[
+    {id:'recC001',createdTime:'2026-03-15T10:00:00.000Z',fields:{'Empresa':'Agencia Creativa DG','Email':'contacto@agenciadg.cl','Contacto':'Diego González','Teléfono':'+56 9 8823 4411','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':2540000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Instagram'}},
+    {id:'recC002',createdTime:'2026-04-02T10:00:00.000Z',fields:{'Empresa':'Universidad de Chile','Email':'compras@uchile.cl','Contacto':'Patricia Vega','Teléfono':'+56 2 2978 2000','Etapa venta':'Negociación','Revenue total cliente (CLP)':850000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Educación','Origen':'Contacto directo'}},
+    {id:'recC003',createdTime:'2026-05-10T10:00:00.000Z',fields:{'Empresa':'Corporación Eventos XYZ','Email':'info@eventosxyz.cl','Contacto':'Rodrigo Méndez','Teléfono':'+56 9 7712 3344','Etapa venta':'Lead nuevo','Revenue total cliente (CLP)':0,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Referido'}},
+    {id:'recC004',createdTime:'2026-02-20T10:00:00.000Z',fields:{'Empresa':'Retail Sur SpA','Email':'pedidos@retailsur.cl','Contacto':'Carmen López','Teléfono':'+56 9 9900 1122','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':1820000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Retail','Origen':'Google'}},
+    {id:'recC005',createdTime:'2026-04-18T10:00:00.000Z',fields:{'Empresa':'Tech Solutions Ltda','Email':'compras@techsol.cl','Contacto':'Felipe Ríos','Teléfono':'+56 9 6688 9900','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':3240000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Tecnología','Origen':'LinkedIn'}},
+    {id:'recC006',createdTime:'2026-05-05T10:00:00.000Z',fields:{'Empresa':'Eventos Santiago','Email':'admin@eventossantiago.cl','Contacto':'Valentina Araya','Teléfono':'+56 9 5544 7788','Etapa venta':'Propuesta enviada','Revenue total cliente (CLP)':450000,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Instagram'}},
+    {id:'recC007',createdTime:'2026-05-18T10:00:00.000Z',fields:{'Empresa':'Diseños & Co','Email':'hola@disenosco.cl','Contacto':'Javiera Torres','Teléfono':'+56 9 3311 5566','Etapa venta':'Contactado','Revenue total cliente (CLP)':0,'Valoración cliente':0,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Referido'}},
+    {id:'recC008',createdTime:'2026-01-10T10:00:00.000Z',fields:{'Empresa':'Municipalidad Las Condes','Email':'licitaciones@lascondes.cl','Contacto':'Roberto Soto','Teléfono':'+56 2 2159 5000','Etapa venta':'Cliente inactivo','Revenue total cliente (CLP)':320000,'Valoración cliente':3,'Estado cuenta':'Con deuda','Industria':'Otro','Origen':'Contacto directo','Facturas vencidas':1}},
+  ]},
+  Cotizaciones:{records:[
+    {id:'recQ001',createdTime:'2026-05-20T10:00:00.000Z',fields:{'N° Cotización':'260520','Cliente':['recC001'],'Canal solicitud':'WhatsApp','Subtotal (CLP)':295000,'Total final (CLP)':450000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-03','Forma de pago':'Contado'}},
+    {id:'recQ002',createdTime:'2026-05-15T10:00:00.000Z',fields:{'N° Cotización':'260515','Cliente':['recC004'],'Canal solicitud':'Email','Subtotal (CLP)':470000,'Total final (CLP)':820000,'Estado cotización':'Aprobada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-05-29','Forma de pago':'Pago a 30 días desde OC'}},
+    {id:'recQ003',createdTime:'2026-05-22T10:00:00.000Z',fields:{'N° Cotización':'260522','Cliente':['recC006'],'Canal solicitud':'WhatsApp','Subtotal (CLP)':200000,'Total final (CLP)':280000,'Estado cotización':'Solicitada','Urgencia (+25%)':true,'Fecha vencimiento':'2026-06-05','Forma de pago':'Contado'}},
+    {id:'recQ004',createdTime:'2026-05-08T10:00:00.000Z',fields:{'N° Cotización':'260508','Cliente':['recC005'],'Canal solicitud':'LinkedIn','Subtotal (CLP)':105000,'Total final (CLP)':150000,'Estado cotización':'Rechazada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-05-22','Forma de pago':'Contado'}},
+    {id:'recQ005',createdTime:'2026-05-19T10:00:00.000Z',fields:{'N° Cotización':'260519','Cliente':['recC002'],'Canal solicitud':'Email','Subtotal (CLP)':728000,'Total final (CLP)':1200000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-02','Forma de pago':'Pago a 45 días desde OC'}},
+    {id:'recQ006',createdTime:'2026-05-23T10:00:00.000Z',fields:{'N° Cotización':'260523','Cliente':['recC003'],'Canal solicitud':'WhatsApp','Subtotal (CLP)':240000,'Total final (CLP)':320000,'Estado cotización':'Solicitada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-06','Forma de pago':'Contado'}},
+  ]},
+  Pedidos:{records:[
+    {id:'recP001',createdTime:'2026-05-10T10:00:00.000Z',fields:{'N° Pedido':'PED-047','Cliente':['recC001'],'Estado pedido':'En producción','Monto total (CLP)':420000,'Fecha entrega':'2026-05-27','Equipo responsable':'Nicanor','Forma de pago':'60% inicial y 40% Contra entrega','Anticipo pagado (50%)':true,'QA':'Pendiente','Proveedor':'FilamentoCL'}},
+    {id:'recP002',createdTime:'2026-05-14T10:00:00.000Z',fields:{'N° Pedido':'PED-048','Cliente':['recC004'],'Estado pedido':'Confirmado','Monto total (CLP)':780000,'Fecha entrega':'2026-05-30','Equipo responsable':'Gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':false,'QA':'Pendiente','Proveedor':'LED Masters Chile'}},
+    {id:'recP003',createdTime:'2026-05-16T10:00:00.000Z',fields:{'N° Pedido':'PED-049','Cliente':['recC005'],'Estado pedido':'Listo para despacho','Monto total (CLP)':290000,'Fecha entrega':'2026-05-24','Equipo responsable':'Nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'Packaging Total SpA'}},
+    {id:'recP004',createdTime:'2026-05-05T10:00:00.000Z',fields:{'N° Pedido':'PED-046','Cliente':['recC002'],'Estado pedido':'Despachado','Monto total (CLP)':1100000,'Fecha entrega':'2026-05-20','Equipo responsable':'Gustavo','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
+  ]},
+  Reportes:{records:[]},
+  Proveedores:{records:[
+    {id:'recV001',createdTime:'2026-01-10T10:00:00.000Z',fields:{'Nombre / Empresa':'FilamentoCL','Categorías':['Filamentos 3D'],'Contacto':'Carlos Muñoz','Teléfono':'+56 9 8811 2233','Email':'ventas@filamentocl.cl','Estado':'Activo','Reputación':5,'Plazo entrega (días)':3,'Comuna':'Maipú','Región':'Región Metropolitana'}},
+    {id:'recV002',createdTime:'2026-01-15T10:00:00.000Z',fields:{'Nombre / Empresa':'LED Masters Chile','Categorías':['Componentes LED / Neones'],'Contacto':'Ana Pérez','Teléfono':'+56 9 7722 3344','Email':'info@ledmasters.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':5,'Comuna':'Pudahuel','Región':'Región Metropolitana'}},
+    {id:'recV003',createdTime:'2026-02-01T10:00:00.000Z',fields:{'Nombre / Empresa':'Packaging Total SpA','Categorías':['Packaging / Embalaje'],'Contacto':'Luis Herrera','Teléfono':'+56 2 2234 5566','Email':'ventas@packagingtotal.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':7,'Comuna':'Santiago','Región':'Región Metropolitana'}},
+    {id:'recV004',createdTime:'2026-03-10T10:00:00.000Z',fields:{'Nombre / Empresa':'Acrílicos Express','Categorías':['Otro'],'Contacto':'María Soto','Teléfono':'+56 9 6633 4455','Email':'info@acrilicosex.cl','Estado':'En evaluación','Reputación':3,'Plazo entrega (días)':4,'Comuna':'Quilicura','Región':'Región Metropolitana'}},
+    {id:'recV005',createdTime:'2026-02-20T10:00:00.000Z',fields:{'Nombre / Empresa':'Distribuidora Industrial Norte','Categorías':['Otro'],'Contacto':'Jorge Castro','Teléfono':'+56 9 5544 6677','Email':'jcastro@dinorte.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':10,'Comuna':'Renca','Región':'Región Metropolitana'}},
+  ]},
+  'Monitor Sistema':{records:[]},
+};
+
+function enableDemoMode(){
+  window._DEMO_MODE=true;
+  // Token falso para pasar la guarda de airtableFetch
+  try{localStorage.setItem('airtable_token','DEMO_TOKEN');}catch(e){}
+  // Badge DEMO en el chip de usuario
+  const chip=document.getElementById('userChip');
+  if(chip){
+    const b=document.createElement('span');
+    b.textContent='DEMO';
+    b.style.cssText='font-size:8px;font-weight:700;background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.4);color:var(--accent2);border-radius:4px;padding:2px 6px;letter-spacing:1px;font-family:"JetBrains Mono",monospace;flex-shrink:0;';
+    chip.appendChild(b);
+  }
+  // Interceptar fetch — devolver datos demo para Airtable, bloquear escrituras
+  const _fetch=window.fetch;
+  window.fetch=async(url,opts={})=>{
+    const u=typeof url==='string'?url:url.toString();
+    if(u.includes('api.airtable.com')){
+      const method=(opts.method||'GET').toUpperCase();
+      if(method!=='GET'){
+        return new Response(JSON.stringify({records:[{id:'recDEMO',fields:{}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+      }
+      const dec=decodeURIComponent(u);
+      let data={records:[]};
+      if(dec.includes('Cotizaciones')) data=DEMO_DATA.Cotizaciones;
+      else if(dec.includes('Pedidos')) data=DEMO_DATA.Pedidos;
+      else if(dec.includes('Reportes')) data=DEMO_DATA.Reportes;
+      else if(dec.includes('Proveedores')) data=DEMO_DATA.Proveedores;
+      else if(dec.includes('Monitor')) data=DEMO_DATA['Monitor Sistema'];
+      else if(dec.includes('Clientes')) data=DEMO_DATA.Clientes;
+      return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+    }
+    return _fetch(url,opts);
+  };
+}
+
 // ── AUTH ─────────────────────────────────────────────────────
 const AUTH={
   USERS_KEY:'thelab_users_v2',
@@ -5185,6 +5257,10 @@ const AUTH={
         {username:'nicanor@thelab.solutions', name:'Nicanor Marambio', role:'produccion',  hash:h},
         {username:'gustavo@thelab.solutions',  name:'Gustavo Kaiser',   role:'operaciones', hash:h},
       ];
+      localStorage.setItem(AUTH.USERS_KEY,JSON.stringify(users));
+    } else if(!users.find(u=>u.username==='demo@thelab.solutions')){
+      const hDemo=await AUTH.hashPwd('Demo123');
+      users.push({username:'demo@thelab.solutions',name:'Demo',role:'demo',hash:hDemo});
       localStorage.setItem(AUTH.USERS_KEY,JSON.stringify(users));
     }
   },
@@ -5253,6 +5329,21 @@ function initDashboard(){
   try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
   initDates();
   fillCatSelects();
+  const user=AUTH.getUser();
+  if(user&&user.role==='demo'){
+    enableDemoMode();
+    slProgress(5,'Cargando datos demo...');
+    loadAllData().then(()=>{hideSysLoader();setStatus('modo demo',true);startAutoRefresh();});
+    initMobileTableLabels();
+    window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
+    document.addEventListener('keydown',e=>{
+      if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+      if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}
+      const tabs=['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte'];
+      const n=parseInt(e.key);if(n>=1&&n<=tabs.length&&!e.ctrlKey&&!e.metaKey&&!e.altKey) switchTab(tabs[n-1]);
+    });
+    return;
+  }
   const token=getToken();
   if(!token){setStatus('sin token',false);hideSysLoader();showTokenModal();}
   else{slProgress(5,'Verificando credenciales...');loadAllData().then(()=>{startAutoRefresh();});}
