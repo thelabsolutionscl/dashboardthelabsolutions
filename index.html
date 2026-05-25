@@ -623,6 +623,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="tab-btn" data-tab="maquinas" onclick="switchTab('maquinas')">🖨️ Máquinas</button>
     <button class="tab-btn" data-tab="equipo" onclick="switchTab('equipo')">👤 Equipo</button>
     <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')">📊 Reportes</button>
+    <button class="tab-btn" data-tab="seo" onclick="switchTab('seo')">🔍 SEO</button>
   </nav>
   <div class="topbar-right">
     <div class="status-dot" id="statusDot"></div>
@@ -656,6 +657,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="maquinas" onclick="switchTabMobile('maquinas')"><span class="mobile-tab-icon">🖨️</span>Máquinas</button>
     <button class="mobile-tab-btn" data-tab="equipo" onclick="switchTabMobile('equipo')"><span class="mobile-tab-icon">👤</span>Equipo</button>
     <button class="mobile-tab-btn" data-tab="reporte" onclick="switchTabMobile('reporte')"><span class="mobile-tab-icon">📊</span>Reportes</button>
+    <button class="mobile-tab-btn" data-tab="seo" onclick="switchTabMobile('seo')"><span class="mobile-tab-icon">🔍</span>SEO</button>
   </nav>
   <div class="mobile-nav-footer">
     <button onclick="loadAllData();closeMobileMenu()">↺ Actualizar</button>
@@ -1387,6 +1389,32 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
 </div>
+</div>
+
+<!-- SEO TAB -->
+<div class="tab-panel" id="tab-seo">
+  <div class="section-header">
+    <div class="section-title">SEO · WordPress</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="toggleWPConfig()">⚙ Configurar</button>
+      <button class="btn btn-primary btn-sm" onclick="loadWPPages()">↺ Cargar páginas</button>
+    </div>
+  </div>
+  <div id="wpConfigPanel" style="display:none;margin-bottom:16px">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Credenciales WordPress</span></div>
+      <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div class="field-group"><label class="field-label">URL del sitio</label><input class="field-input" id="wp-url" placeholder="https://thelab.solutions"></div>
+        <div class="field-group"><label class="field-label">Usuario</label><input class="field-input" id="wp-user" placeholder="thelabsolu"></div>
+        <div class="field-group"><label class="field-label">Application Password</label><input class="field-input" id="wp-pass" type="password" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"></div>
+      </div>
+      <div style="padding:0 16px 16px;display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveWPConfig()">💾 Guardar</button>
+        <button class="btn btn-ghost btn-sm" onclick="testWPConnection()">🔌 Probar conexión</button>
+      </div>
+    </div>
+  </div>
+  <div id="seoPagesList"><div class="empty-state" style="padding:60px 0"><div class="empty-icon">🔍</div><div>Configura las credenciales y carga las páginas para comenzar</div></div></div>
 </div>
 
 <div class="footer"><div class="footer-inner">
@@ -2311,6 +2339,7 @@ function switchTab(name){
   document.querySelector(`.mobile-tab-btn[data-tab="${name}"]`)?.classList.add('active');
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
+  if(name==='seo'){const cfg=getWPConfig();if(cfg.url) loadWPPages();}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
   if(name==='equipo') initEquipo();
@@ -5343,6 +5372,7 @@ async function handleLogin(e){
 
 function initDashboard(){
   try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
+  if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'thelabsolu',pass:'SiSL91aUBuQWr7XxO9oOmipI'}));
   initDates();
   fillCatSelects();
   const user=AUTH.getUser();
@@ -5385,6 +5415,147 @@ document.addEventListener('DOMContentLoaded',()=>{
     initDashboard();
   });
 });
+
+// ── SEO WORDPRESS ─────────────────────────────────────────────
+function getWPConfig(){return JSON.parse(localStorage.getItem('wp_config')||'{}');}
+function saveWPConfig(){
+  const url=(document.getElementById('wp-url')?.value||'').trim().replace(/\/$/,'');
+  const user=(document.getElementById('wp-user')?.value||'').trim();
+  const pass=(document.getElementById('wp-pass')?.value||'').trim();
+  if(!url||!user||!pass){toast('Completa todos los campos','error');return;}
+  localStorage.setItem('wp_config',JSON.stringify({url,user,pass}));
+  toast('✓ Credenciales guardadas','success');
+  document.getElementById('wpConfigPanel').style.display='none';
+}
+function loadWPConfigForm(){
+  const cfg=getWPConfig();
+  if(cfg.url) document.getElementById('wp-url').value=cfg.url;
+  if(cfg.user) document.getElementById('wp-user').value=cfg.user;
+  if(cfg.pass) document.getElementById('wp-pass').value=cfg.pass;
+}
+function toggleWPConfig(){
+  const p=document.getElementById('wpConfigPanel');
+  const visible=p.style.display!=='none';
+  p.style.display=visible?'none':'block';
+  if(!visible) loadWPConfigForm();
+}
+function wpAuthHeader(){
+  const cfg=getWPConfig();if(!cfg.url) return null;
+  return{Authorization:'Basic '+btoa(cfg.user+':'+cfg.pass.replace(/\s/g,'')),'Content-Type':'application/json'};
+}
+async function testWPConnection(){
+  const cfg=getWPConfig();if(!cfg.url){toast('Guarda las credenciales primero','error');return;}
+  try{
+    const r=await fetch(cfg.url+'/wp-json/wp/v2/users/me',{headers:wpAuthHeader()});
+    if(r.ok){const d=await r.json();toast(`✓ Conectado como ${d.name||d.slug}`,'success');}
+    else toast(`Error ${r.status}: verifica credenciales`,'error');
+  }catch(e){toast('Error de conexión: '+e.message,'error');}
+}
+async function loadWPPages(){
+  const cfg=getWPConfig();
+  if(!cfg.url){document.getElementById('wpConfigPanel').style.display='block';loadWPConfigForm();toast('Configura las credenciales primero','info');return;}
+  const list=document.getElementById('seoPagesList');
+  list.innerHTML='<div style="padding:30px;text-align:center;color:var(--text3)">Cargando páginas...</div>';
+  try{
+    const h=wpAuthHeader();
+    const [pagesRes,postsRes]=await Promise.all([
+      fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=100&_fields=id,slug,title,link,yoast_head_json,meta&status=publish',{headers:h}),
+      fetch(cfg.url+'/wp-json/wp/v2/posts?per_page=100&_fields=id,slug,title,link,yoast_head_json,meta&status=publish',{headers:h})
+    ]);
+    const pages=pagesRes.ok?await pagesRes.json():[];
+    const posts=postsRes.ok?await postsRes.json():[];
+    const all=[...pages.map(p=>({...p,_type:'page'})),...posts.map(p=>({...p,_type:'post'}))];
+    if(!all.length){list.innerHTML='<div class="empty-state">No se encontraron páginas</div>';return;}
+    renderSEOList(all);
+  }catch(e){list.innerHTML=`<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;}
+}
+function renderSEOList(pages){
+  const list=document.getElementById('seoPagesList');
+  list.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">Páginas y Posts (${pages.length})</span></div>
+  <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+  <thead><tr style="border-bottom:2px solid var(--border2)">
+    <th style="padding:10px;font-size:10px;text-align:left;color:var(--text3);font-weight:700;text-transform:uppercase;white-space:nowrap">Página</th>
+    <th style="padding:10px;font-size:10px;text-align:left;color:var(--text3);font-weight:700;text-transform:uppercase">SEO Title <span style="color:var(--text3);font-weight:400">(60 car.)</span></th>
+    <th style="padding:10px;font-size:10px;text-align:left;color:var(--text3);font-weight:700;text-transform:uppercase">Meta Description <span style="color:var(--text3);font-weight:400">(155 car.)</span></th>
+    <th style="padding:10px;font-size:10px;text-align:left;color:var(--text3);font-weight:700;text-transform:uppercase;white-space:nowrap">Acciones</th>
+  </tr></thead><tbody>
+  ${pages.map(p=>{
+    const yoast=p.yoast_head_json||{};
+    const curTitle=yoast.title||p.title?.rendered||'';
+    const curDesc=yoast.description||'';
+    const pageTitle=p.title?.rendered||p.slug||'—';
+    const tid=`seo-title-${p.id}`;const did=`seo-desc-${p.id}`;
+    return`<tr data-wpid="${p.id}" data-wptype="${p._type}" style="border-bottom:1px solid var(--border2)">
+      <td style="padding:10px;min-width:140px;max-width:200px">
+        <div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.3">${escapeHtml(pageTitle)}</div>
+        <div style="font-size:9px;color:var(--text3);margin-top:2px">${p._type==='post'?'Post':'Página'}</div>
+        <a href="${escapeHtml(p.link||'#')}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none">↗ ver</a>
+      </td>
+      <td style="padding:10px;min-width:220px">
+        <input id="${tid}" value="${escapeHtml(curTitle)}" oninput="seoCounter(this,60,'${tid}-cnt')" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:11px;padding:5px 8px;outline:none;font-family:'DM Sans',sans-serif">
+        <div id="${tid}-cnt" style="font-size:9px;margin-top:2px;color:${curTitle.length>60?'var(--danger)':'var(--text3)'}">${curTitle.length}/60</div>
+      </td>
+      <td style="padding:10px;min-width:280px">
+        <textarea id="${did}" oninput="seoCounter(this,155,'${did}-cnt')" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:11px;padding:5px 8px;outline:none;font-family:'DM Sans',sans-serif;resize:vertical;min-height:52px">${escapeHtml(curDesc)}</textarea>
+        <div id="${did}-cnt" style="font-size:9px;margin-top:2px;color:${curDesc.length>155?'var(--danger)':'var(--text3)'}">${curDesc.length}/155</div>
+      </td>
+      <td style="padding:10px;white-space:nowrap;vertical-align:top">
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <button onclick="optimizarSEOPage('${p.id}','${escapeHtml(pageTitle)}','${p._type}')" class="btn btn-ghost btn-sm" style="font-size:10px;white-space:nowrap">✨ Optimizar IA</button>
+          <button onclick="saveYoastFields('${p.id}','${p._type}')" class="btn btn-primary btn-sm" style="font-size:10px">💾 Guardar</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('')}
+  </tbody></table></div></div>`;
+}
+function seoCounter(el,max,cntId){
+  const cnt=document.getElementById(cntId);if(!cnt) return;
+  cnt.textContent=el.value.length+'/'+max;
+  cnt.style.color=el.value.length>max?'var(--danger)':'var(--text3)';
+}
+async function optimizarSEOPage(wpId,pageTitle,wpType){
+  const tid=`seo-title-${wpId}`;const did=`seo-desc-${wpId}`;
+  const curTitle=document.getElementById(tid)?.value||'';
+  const curDesc=document.getElementById(did)?.value||'';
+  const btn=document.querySelector(`tr[data-wpid="${wpId}"] button`);
+  if(btn){btn.disabled=true;btn.textContent='Analizando...';}
+  try{
+    const system=`Eres un experto en SEO para The Lab Solutions, empresa chilena de impresión 3D, neones y trofeos personalizados ubicada en Santiago de Chile. Tu tarea es optimizar títulos y meta descripciones para Google, enfocados en búsquedas locales chilenas. Siempre responde SOLO con JSON válido, sin markdown.`;
+    const user=`Optimiza el SEO de esta página:
+Nombre: ${pageTitle}
+Tipo: ${wpType==='post'?'blog post':'página web'}
+SEO Title actual: ${curTitle||'(vacío)'}
+Meta Description actual: ${curDesc||'(vacío)'}
+
+Genera:
+- SEO title: máximo 60 caracteres, incluye keyword principal y marca "The Lab Solutions" si cabe
+- Meta description: máximo 155 caracteres, persuasiva con beneficio claro y CTA
+
+Responde SOLO en JSON: {"title":"...","description":"..."}`;
+    const raw=await callClaude(system,user);
+    const json=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    if(json.title){document.getElementById(tid).value=json.title;seoCounter(document.getElementById(tid),60,tid+'-cnt');}
+    if(json.description){document.getElementById(did).value=json.description;seoCounter(document.getElementById(did),155,did+'-cnt');}
+    toast('✓ SEO optimizado con IA — revisa y guarda','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+  if(btn){btn.disabled=false;btn.textContent='✨ Optimizar IA';}
+}
+async function saveYoastFields(wpId,wpType){
+  const cfg=getWPConfig();if(!cfg.url){toast('Configura credenciales primero','error');return;}
+  const tid=`seo-title-${wpId}`;const did=`seo-desc-${wpId}`;
+  const newTitle=document.getElementById(tid)?.value||'';
+  const newDesc=document.getElementById(did)?.value||'';
+  const endpoint=cfg.url+`/wp-json/wp/v2/${wpType==='post'?'posts':'pages'}/${wpId}`;
+  const btn=document.querySelector(`tr[data-wpid="${wpId}"] .btn-primary`);
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  try{
+    const r=await fetch(endpoint,{method:'POST',headers:wpAuthHeader(),body:JSON.stringify({meta:{_yoast_wpseo_title:newTitle,_yoast_wpseo_metadesc:newDesc}})});
+    if(r.ok){toast('✓ SEO guardado en WordPress','success');}
+    else{const j=await r.json().catch(()=>({}));toast(`Error ${r.status}: ${j.message||'verifica permisos'}`,'error');}
+  }catch(e){toast('Error: '+e.message,'error');}
+  if(btn){btn.disabled=false;btn.textContent='💾 Guardar';}
+}
 </script>
 
 <!-- MODAL CATEGORÍAS PROVEEDORES -->
