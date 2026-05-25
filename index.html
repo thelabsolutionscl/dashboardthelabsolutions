@@ -1129,6 +1129,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button id="btnSort" class="btn btn-ghost btn-sm" onclick="toggleSort()" style="font-size:11px" title="Ordenar por estado">↕ Estado</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleKiosk()" style="font-size:11px" title="Modo pantalla completa">⛶ Kiosko</button>
         <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:11px" title="Configurar alertas">⚙ Alertas</button>
+        <button class="btn btn-ghost btn-sm" onclick="openOrcaConfigModal()" style="font-size:11px" title="Configurar OrcaSlicer">🦙 OrcaSlicer</button>
       </div>
     </div>
     <div id="monitorFilterTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
@@ -4078,6 +4079,7 @@ function renderMonitorGrid(){
           <div style="display:flex;gap:4px">
             <button onclick="openWebcamModal('${m.id}')" style="background:${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${localStorage.getItem('printer_cam_'+m.id)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
             <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
+            <button onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Enviar G-code a esta impresora">📤</button>
           </div>
         </div>`;
     }
@@ -4177,6 +4179,94 @@ function openAlertSettings(){
 }
 function saveAlertSettings(){const url=document.getElementById('alertWebhookUrl').value.trim();if(url)localStorage.setItem('monitor_webhook_url',url);else localStorage.removeItem('monitor_webhook_url');toast(url?'Webhook configurado ✓':'Webhook eliminado','success');closeAlertSettings();}
 function closeAlertSettings(){document.getElementById('alertSettingsModal').style.display='none';}
+
+// ── GCODE UPLOAD ─────────────────────────────────────────────
+let _uploadTargetId=null;
+
+function openGcodeUpload(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada para esta impresora','error');return;}
+  _uploadTargetId=id;
+  const inp=document.getElementById('gcodeFileInput');
+  inp.value='';
+  inp.click();
+}
+
+async function handleGcodeUpload(evt){
+  const file=evt.target.files?.[0];if(!file)return;
+  const id=_uploadTargetId;if(!id)return;
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const ip=getPrinterIp(m);if(!ip)return;
+
+  const modal=document.getElementById('gcodeUploadModal');
+  const prog=document.getElementById('gcodeUploadProg');
+  const statusEl=document.getElementById('gcodeUploadStatus');
+  const actionsEl=document.getElementById('gcodeUploadActions');
+  const titleEl=document.getElementById('gcodeUploadModalTitle');
+
+  titleEl.textContent=`${m.nombre} #${m.numG}`;
+  document.getElementById('gcodeUploadLabel').textContent=file.name;
+  prog.style.width='0%';
+  statusEl.textContent='Subiendo...';
+  statusEl.style.color='var(--text3)';
+  actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;
+  modal.style.display='flex';
+
+  try{
+    const fd=new FormData();
+    fd.append('file',file,file.name);
+    fd.append('root','gcodes');
+
+    await new Promise((resolve,reject)=>{
+      const xhr=new XMLHttpRequest();
+      xhr.open('POST',printerUrl(ip,'/server/files/upload'));
+      xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};
+      xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};
+      xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));
+      xhr.send(fd);
+    });
+
+    prog.style.width='100%';
+    statusEl.textContent='Archivo subido correctamente ✓';
+    statusEl.style.color='var(--success)';
+    actionsEl.innerHTML=`
+      <button class="btn btn-primary" onclick="startUploadedPrint('${id}','${file.name.replace(/'/g,"\\'")}')" style="flex:1">▶ Iniciar impresión</button>
+      <button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>
+    `;
+  }catch(e){
+    prog.style.width='0%';
+    statusEl.textContent='Error: '+e.message;
+    statusEl.style.color='var(--danger)';
+    actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;
+  }
+}
+
+async function startUploadedPrint(id,filename){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const ip=getPrinterIp(m);if(!ip)return;
+  try{
+    const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000)});
+    if(r.ok){toast(`▶ Iniciando: ${filename}`,'success');closeGcodeUpload();setTimeout(pollPrinters,2000);}
+    else{toast('Error al iniciar impresión: '+r.status,'error');}
+  }catch(e){toast('Sin conexión con la impresora','error');}
+}
+
+function closeGcodeUpload(){document.getElementById('gcodeUploadModal').style.display='none';}
+
+function openOrcaConfigModal(){
+  const rows=MAQUINAS.filter(m=>getPrinterIp(m)).map(m=>{
+    const ip=getPrinterIp(m);
+    return`<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</td>
+      <td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--accent)">${escapeHtml(ip)}</td>
+      <td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text2)">7125</td>
+      <td style="padding:8px 10px"><span style="background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">Moonraker</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('orcaTableBody').innerHTML=rows||`<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text3);font-size:11px">No hay IPs configuradas. Agrégalas en cada tarjeta de impresora primero.</td></tr>`;
+  document.getElementById('orcaConfigModal').style.display='flex';
+}
+function closeOrcaConfigModal(){document.getElementById('orcaConfigModal').style.display='none';}
 
 // ── SORT & KIOSK ──────────────────────────────────────────────
 let _sortByState=true,_kioskMode=false;
@@ -5528,6 +5618,73 @@ document.addEventListener('DOMContentLoaded',()=>{
     <div style="display:flex;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-ghost btn-sm" onclick="closeMaquinasManager()">Cerrar</button>
     </div>
+  </div>
+</div>
+
+<!-- FILE INPUT OCULTO PARA UPLOAD GCODE -->
+<input type="file" id="gcodeFileInput" accept=".gcode,.gc,.g" style="display:none" onchange="handleGcodeUpload(event)">
+
+<!-- MODAL UPLOAD GCODE -->
+<div id="gcodeUploadModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeGcodeUpload()"></div>
+  <div class="modal-card" style="max-width:440px;width:95vw">
+    <div class="modal-title">📤 Enviar G-code — <span id="gcodeUploadModalTitle" style="color:var(--accent);font-size:16px"></span></div>
+    <div style="margin-top:16px">
+      <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Archivo</div>
+      <div id="gcodeUploadLabel" style="font-size:12px;font-family:monospace;color:var(--text);background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:8px 12px;word-break:break-all"></div>
+    </div>
+    <div style="margin-top:14px">
+      <div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden;border:1px solid var(--border2)">
+        <div id="gcodeUploadProg" style="background:var(--accent);height:100%;width:0%;border-radius:6px;transition:width 0.2s ease"></div>
+      </div>
+    </div>
+    <div id="gcodeUploadStatus" style="margin-top:8px;font-size:11px;color:var(--text3);min-height:20px">Subiendo...</div>
+    <div id="gcodeUploadActions" style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ORCASLICER CONFIG -->
+<div id="orcaConfigModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeOrcaConfigModal()"></div>
+  <div class="modal-card" style="max-width:620px;width:95vw">
+    <div class="modal-title">🦙 Configurar OrcaSlicer</div>
+    <div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.6">
+      En OrcaSlicer ve a <strong style="color:var(--text)">Printer → Physical Printer → Add printer</strong> y usa estos datos para cada máquina:
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;flex:1;min-width:140px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Host type</div>
+        <div style="font-size:13px;font-weight:700;font-family:monospace;color:var(--accent)">Moonraker</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;flex:1;min-width:140px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Puerto</div>
+        <div style="font-size:13px;font-weight:700;font-family:monospace;color:var(--accent)">7125</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;flex:1;min-width:140px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">API Key</div>
+        <div style="font-size:13px;font-weight:700;font-family:monospace;color:var(--text3)">(dejar vacío)</div>
+      </div>
+    </div>
+    <div style="margin-top:18px;font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text2);text-transform:uppercase;margin-bottom:8px">IPs disponibles</div>
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border2);background:var(--surface2)">
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Máquina</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Hostname / IP</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Puerto</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Tipo</th>
+          </tr>
+        </thead>
+        <tbody id="orcaTableBody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;background:rgba(0,212,204,0.06);border:1px solid rgba(0,212,204,0.2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text2);line-height:1.5">
+      💡 También puedes enviar G-code directamente desde el dashboard sin abrir OrcaSlicer — usa el botón <strong style="color:var(--text)">📤</strong> en cada tarjeta de impresora.
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="closeOrcaConfigModal()" style="margin-top:16px;width:100%">Cerrar</button>
   </div>
 </div>
 
