@@ -3359,21 +3359,12 @@ async function createCotizacion(){
     const clienteId=document.getElementById('cot-cliente-id')?.value||'';
     const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];
     const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];
-    const tiempoProd=parseInt(document.getElementById('cot-tiempo-prod')?.value)||null;
-    const tipoDias=document.getElementById('cot-tipo-dias')?.value||'DÍAS HÁBILES';
+    const fields={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};
     const formaVal=document.getElementById('cot-forma-pago')?.value||'';
-    const fields={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Tiempo de producción':tiempoProd,'Tipo días producción':tipoDias,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};
     if(formaVal) fields['Forma de pago']=formaVal;
     if(clienteId) fields['Cliente']=[clienteId];
-    const rows=document.querySelectorAll('#itemsContainer .item-row');rows.forEach((row,i)=>{const n=i+1;if(n>20) return;const desc=(row.querySelector('.item-desc')?.value||'').trim();const und=parseFloat(row.querySelector('.item-und')?.value)||1;const costo=parseFloat(row.querySelector('.item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.item-venta')?.value)||0;if(desc||venta>0){fields[`ITEM${n}`]=desc;fields[`UNIDADES${n}`]=und;fields[`COSTO NETO${n}`]=Math.round(costo*und);fields[`VALOR NETO${n}`]=Math.round(venta*und);}});
     await airtableWrite('Cotizaciones','POST',null,fields);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
-  }catch(e){
-    if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('field')){
-      toast('Creando campos en Airtable...','info');await crearCamposItemsAirtable();
-      try{const clienteId=document.getElementById('cot-cliente-id')?.value||'';const fechaCotR=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];const vtoStrR=addBusinessDays(new Date(fechaCotR+'T00:00:00'),10).toISOString().split('T')[0];const bf={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCotR,'Fecha vencimiento':vtoStrR,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};const formaValR=document.getElementById('cot-forma-pago')?.value||'';if(formaValR) bf['Forma de pago']=formaValR;if(clienteId) bf['Cliente']=[clienteId];await airtableWrite('Cotizaciones','POST',null,bf);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();}
-      catch(e2){toast('Error: '+e2.message,'error');}
-    }else{toast('Error: '+e.message,'error');}
-  }
+  }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='✚ Guardar Cotización';
 }
 
