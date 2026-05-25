@@ -1254,7 +1254,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">Urgente</label><select class="field-select" id="editCotUrgente"><option value="false">No</option><option value="true">Sí (+25%)</option></select></div>
       <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="editCotFecha" type="date"></div>
       <div class="field-group"><label class="field-label">Fecha vencimiento</label><input class="field-input" id="editCotVto" type="date"></div>
-      <div class="field-group form-full"><label class="field-label">Observaciones</label><textarea class="field-textarea" id="editCotSolicitud" rows="2"></textarea></div>
+      <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="editCotFormaPago"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
+      <div class="field-group"><label class="field-label">Tiempo de Producción</label><div style="display:flex;align-items:center;gap:8px"><input class="field-input" id="editCotTiempoProd" type="number" min="1" step="1" placeholder="0" style="width:80px;text-align:center;flex-shrink:0"><input type="hidden" id="editCotTipoDias" value="DÍAS HÁBILES"><button type="button" id="editCotTipoDiasBtn" onclick="toggleEditTipoDias()" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.5);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">DÍAS HÁBILES</button></div></div>
+      <div class="field-group form-full"><label class="field-label">Solicitud cliente</label><textarea class="field-textarea" id="editCotSolicitud" rows="2"></textarea></div>
       <div class="field-group form-full">
         <label class="field-label">Detalle productos / ítems</label>
         <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
@@ -2744,6 +2746,9 @@ async function crearPedidoDesdeCotizacion(cotId){
 function openEditCot(id){
   const c=state.cotizaciones.find(x=>x.id===id);if(!c) return;const f=c.fields;
   document.getElementById('editCotId').value=id;document.getElementById('editCotNum').value=f['N° Cotización']||'';document.getElementById('editCotCanal').value=f['Canal solicitud']||'WhatsApp';document.getElementById('editCotEstado').value=f['Estado cotización']||'Enviada';document.getElementById('editCotUrgente').value=f['Urgencia (+25%)']?'true':'false';document.getElementById('editCotFecha').value=f['Fecha cotización']||'';document.getElementById('editCotVto').value=f['Fecha vencimiento']||'';document.getElementById('editCotSolicitud').value=f['Solicitud cliente (texto libre)']||'';document.getElementById('editCotNotas').value=f['Notas cotización']||'';
+  const _efp=document.getElementById('editCotFormaPago');if(_efp) _efp.value=f['Forma de pago']||'';
+  const _etp=document.getElementById('editCotTiempoProd');if(_etp) _etp.value=f['Tiempo de producción']||'';
+  const _etd=document.getElementById('editCotTipoDias');const _etdb=document.getElementById('editCotTipoDiasBtn');const _tdv=f['Tipo días producción']||'DÍAS HÁBILES';if(_etd) _etd.value=_tdv;if(_etdb){_etdb.textContent=_tdv;if(_tdv==='DÍAS NORMALES'){_etdb.style.background='rgba(255,170,0,0.15)';_etdb.style.borderColor='rgba(255,170,0,0.5)';_etdb.style.color='var(--accent2)';}else{_etdb.style.background='rgba(0,212,204,0.15)';_etdb.style.borderColor='rgba(0,212,204,0.5)';_etdb.style.color='var(--accent)';}}
   const clienteIdActual=Array.isArray(f['Cliente'])?f['Cliente'][0]:(f['Cliente']||'');const clienteRec=clienteIdActual?state.clientes.find(x=>x.id===clienteIdActual):null;
   document.getElementById('editCotClienteSearch').value=clienteRec?.fields['Empresa']||resolveClienteName(f['Cliente'])||'';document.getElementById('editCotClienteId').value=clienteIdActual||'';document.getElementById('editCotClienteInfo').textContent=clienteRec?'✓ Cliente cargado':'';document.getElementById('editCotClienteInfo').style.color='var(--text2)';
   const container=document.getElementById('editItemsContainer');container.innerHTML='';document.getElementById('editItemsTotalRow').style.display='none';
@@ -2779,19 +2784,13 @@ async function saveEditCot(){
     const rows=document.querySelectorAll('#editItemsContainer .edit-item-row');let costoTotal=0,ventaTotal=0;
     rows.forEach(row=>{const und=parseFloat(row.querySelector('.edit-item-und')?.value)||1;const costo=parseFloat(row.querySelector('.edit-item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.edit-item-venta')?.value)||0;costoTotal+=costo*und;ventaTotal+=venta*und;});
     costoTotal=Math.round(costoTotal);ventaTotal=Math.round(ventaTotal);const totalIva=Math.round(ventaTotal*1.19);const detalle=document.getElementById('editCotDetalle').value;
-    const itemFields={};rows.forEach((row,i)=>{const n=i+1;if(n>20) return;const desc=(row.querySelector('.edit-item-desc')?.value||'').trim();const und=parseFloat(row.querySelector('.edit-item-und')?.value)||1;const costo=parseFloat(row.querySelector('.edit-item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.edit-item-venta')?.value)||0;if(desc||venta>0){itemFields[`ITEM${n}`]=desc;itemFields[`UNIDADES${n}`]=und;itemFields[`COSTO NETO${n}`]=Math.round(costo*und);itemFields[`VALOR NETO${n}`]=Math.round(venta*und);}});
-    const fields={'N° Cotización':document.getElementById('editCotNum').value,'Canal solicitud':document.getElementById('editCotCanal').value,'Estado cotización':document.getElementById('editCotEstado').value,'Urgencia (+25%)':document.getElementById('editCotUrgente').value==='true','Fecha cotización':document.getElementById('editCotFecha').value,'Fecha vencimiento':document.getElementById('editCotVto').value,'Solicitud cliente (texto libre)':document.getElementById('editCotSolicitud').value,'Detalle productos':detalle,'Notas cotización':document.getElementById('editCotNotas').value,'Subtotal (CLP)':costoTotal,'Total final (CLP)':totalIva,'SUBTOTAL':costoTotal,'TOTAL CON IVA':totalIva,...itemFields};
+    const fields={'N° Cotización':document.getElementById('editCotNum').value,'Canal solicitud':document.getElementById('editCotCanal').value,'Estado cotización':document.getElementById('editCotEstado').value,'Urgencia (+25%)':document.getElementById('editCotUrgente').value==='true','Fecha cotización':document.getElementById('editCotFecha').value,'Fecha vencimiento':document.getElementById('editCotVto').value,'Solicitud cliente (texto libre)':document.getElementById('editCotSolicitud').value,'Detalle productos':detalle,'Notas cotización':document.getElementById('editCotNotas').value,'Subtotal (CLP)':costoTotal,'Total final (CLP)':totalIva};
+    const _sfp=document.getElementById('editCotFormaPago')?.value||'';if(_sfp) fields['Forma de pago']=_sfp;
+    const _stp=document.getElementById('editCotTiempoProd')?.value||'';if(_stp) fields['Tiempo de producción']=parseInt(_stp);
+    const _std=document.getElementById('editCotTipoDias')?.value||'';if(_std) fields['Tipo días producción']=_std;
     const editClienteId=document.getElementById('editCotClienteId').value;if(editClienteId) fields['Cliente']=[editClienteId];
     const cotId=document.getElementById('editCotId').value;
-    try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}
-    catch(e){
-      if(e.message.toLowerCase().includes('unknown')){
-        const sf={'N° Cotización':fields['N° Cotización'],'Canal solicitud':fields['Canal solicitud'],'Estado cotización':fields['Estado cotización'],'Urgencia (+25%)':fields['Urgencia (+25%)'],'Fecha cotización':fields['Fecha cotización'],'Fecha vencimiento':fields['Fecha vencimiento'],'Solicitud cliente (texto libre)':fields['Solicitud cliente (texto libre)'],'Detalle productos':fields['Detalle productos'],'Notas cotización':fields['Notas cotización'],'Subtotal (CLP)':fields['Subtotal (CLP)'],'Total final (CLP)':fields['Total final (CLP)']};
-        if(fields['Cliente']) sf['Cliente']=fields['Cliente'];
-        await airtableWrite('Cotizaciones','PATCH',cotId,sf);
-        toast('✓ Guardado (usa ⚙ Crear campos para SUBTOTAL/ITEMS)','info');closeEditCot();await loadAllDataSilent();renderCotizaciones();renderOverview();btn.disabled=false;btn.textContent='💾 Guardar';return;
-      }throw e;
-    }
+    await airtableWrite('Cotizaciones','PATCH',cotId,fields);
     toast('✓ Cotización actualizada','success');closeEditCot();await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='💾 Guardar';
@@ -4684,6 +4683,18 @@ function toggleTipoDias(){
     btn.style.background='rgba(0,212,204,0.15)';
     btn.style.borderColor='rgba(0,212,204,0.5)';
     btn.style.color='var(--accent)';
+  }
+}
+function toggleEditTipoDias(){
+  const inp=document.getElementById('editCotTipoDias');
+  const btn=document.getElementById('editCotTipoDiasBtn');
+  if(!inp||!btn) return;
+  if(inp.value==='DÍAS HÁBILES'){
+    inp.value='DÍAS NORMALES';btn.textContent='DÍAS NORMALES';
+    btn.style.background='rgba(255,170,0,0.15)';btn.style.borderColor='rgba(255,170,0,0.5)';btn.style.color='var(--accent2)';
+  } else {
+    inp.value='DÍAS HÁBILES';btn.textContent='DÍAS HÁBILES';
+    btn.style.background='rgba(0,212,204,0.15)';btn.style.borderColor='rgba(0,212,204,0.5)';btn.style.color='var(--accent)';
   }
 }
 function addSolicitudItem(){
