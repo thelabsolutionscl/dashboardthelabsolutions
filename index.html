@@ -2982,8 +2982,9 @@ function renderPedidos(filter){
   tbody.innerHTML=data.map(p=>{
     const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);let actionCell='—';
     if(idx>=0&&idx<stages.length-1) actionCell=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') actionCell='<span class="badge badge-green">✓</span>';
-    const formaOpts=['Contado','Pago a 30 días desde OC','Pago a 45 días desde OC','60% inicial y 40% Contra entrega','50% para iniciar y 50% a 30 días'];
-    const formaActual=f['Forma de pago']||'';
+    const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
+    let formaActual=f['Forma de pago']||'';
+    if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
     return`<tr data-id="${p.id}"><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td>${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
     <td>${renderProveedorCell(p.id,f['Proveedor']||'')}</td>
     <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
