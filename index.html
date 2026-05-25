@@ -997,12 +997,12 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="cot-fecha" type="date" onchange="updateVtoPreview()"></div>
         <div class="field-group"><label class="field-label">Vto. (auto 10 días háb.)</label><input class="field-input" id="cot-vto-preview" type="date" disabled style="opacity:0.5;cursor:not-allowed"></div>
         <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="cot-forma-pago"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
-        <div class="field-group"><label class="field-label">Tiempo de Producción</label><div style="display:flex;align-items:center;gap:8px"><input class="field-input" id="cot-tiempo-prod" type="number" min="1" step="1" placeholder="0" style="width:80px;text-align:center;flex-shrink:0"><span style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em">días hábiles</span></div></div>
+        <div class="field-group"><label class="field-label">Tiempo de Producción</label><div style="display:flex;align-items:center;gap:8px"><input class="field-input" id="cot-tiempo-prod" type="number" min="1" step="1" placeholder="0" style="width:80px;text-align:center;flex-shrink:0"><input type="hidden" id="cot-tipo-dias" value="DÍAS HÁBILES"><button type="button" id="cot-tipo-dias-btn" onclick="toggleTipoDias()" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.5);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">DÍAS HÁBILES</button></div></div>
         <div class="field-group form-full">
-          <label class="field-label">Solicitud cliente</label>
+          <label class="field-label">Observaciones</label>
           <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
             <div style="display:flex;border-bottom:1px solid var(--border2)">
-              <input class="field-input" id="cot-solicitud-inp" placeholder="Agregar ítem de solicitud..." style="border:none;border-radius:0;flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addSolicitudItem();}">
+              <input class="field-input" id="cot-solicitud-inp" placeholder="Agregar ítem..." style="border:none;border-radius:0;flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addSolicitudItem();}">
               <button type="button" onclick="addSolicitudItem()" style="background:var(--surface3);border:none;border-left:1px solid var(--border2);color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:0 14px;cursor:pointer;white-space:nowrap">+ Agregar</button>
             </div>
             <div id="solicitudItems" style="min-height:32px;padding:6px 8px;display:flex;flex-direction:column;gap:4px"></div>
@@ -1254,7 +1254,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">Urgente</label><select class="field-select" id="editCotUrgente"><option value="false">No</option><option value="true">Sí (+25%)</option></select></div>
       <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="editCotFecha" type="date"></div>
       <div class="field-group"><label class="field-label">Fecha vencimiento</label><input class="field-input" id="editCotVto" type="date"></div>
-      <div class="field-group form-full"><label class="field-label">Solicitud cliente</label><textarea class="field-textarea" id="editCotSolicitud" rows="2"></textarea></div>
+      <div class="field-group form-full"><label class="field-label">Observaciones</label><textarea class="field-textarea" id="editCotSolicitud" rows="2"></textarea></div>
       <div class="field-group form-full">
         <label class="field-label">Detalle productos / ítems</label>
         <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
@@ -1889,6 +1889,8 @@ async function crearCamposItemsAirtable(){
   for(let i=1;i<=20;i++){if(!existingFields.includes(`ITEM${i}`)) campos.push({name:`ITEM${i}`,type:'singleLineText'});if(!existingFields.includes(`UNIDADES${i}`)) campos.push({name:`UNIDADES${i}`,type:'number',options:{precision:0}});if(!existingFields.includes(`COSTO NETO${i}`)) campos.push({name:`COSTO NETO${i}`,type:'currency',options:{precision:0,symbol:'$'}});if(!existingFields.includes(`VALOR NETO${i}`)) campos.push({name:`VALOR NETO${i}`,type:'currency',options:{precision:0,symbol:'$'}});}
   if(!existingFields.includes('SUBTOTAL')) campos.push({name:'SUBTOTAL',type:'currency',options:{precision:0,symbol:'$'}});
   if(!existingFields.includes('TOTAL CON IVA')) campos.push({name:'TOTAL CON IVA',type:'currency',options:{precision:0,symbol:'$'}});
+  if(!existingFields.includes('Tiempo de producción')) campos.push({name:'Tiempo de producción',type:'number',options:{precision:0}});
+  if(!existingFields.includes('Tipo días producción')) campos.push({name:'Tipo días producción',type:'singleLineText'});
   if(!campos.length){toast('✓ Todos los campos ya existen','info');return;}
   toast(`Creando ${campos.length} campos...`,'info');let ok=0,fail=0;
   for(const c of campos){try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${realTableId}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(c)});if(r.ok) ok++;else fail++;}catch(e){fail++;}}
@@ -3358,14 +3360,15 @@ async function createCotizacion(){
     const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];
     const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];
     const tiempoProd=parseInt(document.getElementById('cot-tiempo-prod')?.value)||null;
-    const fields={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Forma de pago':document.getElementById('cot-forma-pago')?.value||null,'Tiempo de producción (días háb.)':tiempoProd,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada','SUBTOTAL':s,'TOTAL CON IVA':t};
+    const tipoDias=document.getElementById('cot-tipo-dias')?.value||'DÍAS HÁBILES';
+    const fields={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Forma de pago':document.getElementById('cot-forma-pago')?.value||null,'Tiempo de producción':tiempoProd,'Tipo días producción':tipoDias,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada','SUBTOTAL':s,'TOTAL CON IVA':t};
     if(clienteId) fields['Cliente']=[clienteId];
     const rows=document.querySelectorAll('#itemsContainer .item-row');rows.forEach((row,i)=>{const n=i+1;if(n>20) return;const desc=(row.querySelector('.item-desc')?.value||'').trim();const und=parseFloat(row.querySelector('.item-und')?.value)||1;const costo=parseFloat(row.querySelector('.item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.item-venta')?.value)||0;if(desc||venta>0){fields[`ITEM${n}`]=desc;fields[`UNIDADES${n}`]=und;fields[`COSTO NETO${n}`]=Math.round(costo*und);fields[`VALOR NETO${n}`]=Math.round(venta*und);}});
     await airtableWrite('Cotizaciones','POST',null,fields);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){
     if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('field')){
       toast('Creando campos en Airtable...','info');await crearCamposItemsAirtable();
-      try{const clienteId=document.getElementById('cot-cliente-id')?.value||'';const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];const tiempoProdB=parseInt(document.getElementById('cot-tiempo-prod')?.value)||null;const bf={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Forma de pago':document.getElementById('cot-forma-pago')?.value||null,'Tiempo de producción (días háb.)':tiempoProdB,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};if(clienteId) bf['Cliente']=[clienteId];await airtableWrite('Cotizaciones','POST',null,bf);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();}
+      try{const clienteId=document.getElementById('cot-cliente-id')?.value||'';const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];const tiempoProdB=parseInt(document.getElementById('cot-tiempo-prod')?.value)||null;const tipoDiasB=document.getElementById('cot-tipo-dias')?.value||'DÍAS HÁBILES';const bf={'N° Cotización':num,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':false,'Forma de pago':document.getElementById('cot-forma-pago')?.value||null,'Tiempo de producción':tiempoProdB,'Tipo días producción':tipoDiasB,'Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};if(clienteId) bf['Cliente']=[clienteId];await airtableWrite('Cotizaciones','POST',null,bf);toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();}
       catch(e2){toast('Error: '+e2.message,'error');}
     }else{toast('Error: '+e.message,'error');}
   }
@@ -4672,6 +4675,24 @@ async function syncGcalEquipo(){
 }
 
 // ── SOLICITUD ITEMS ───────────────────────────────────────────
+function toggleTipoDias(){
+  const inp=document.getElementById('cot-tipo-dias');
+  const btn=document.getElementById('cot-tipo-dias-btn');
+  if(!inp||!btn) return;
+  if(inp.value==='DÍAS HÁBILES'){
+    inp.value='DÍAS NORMALES';
+    btn.textContent='DÍAS NORMALES';
+    btn.style.background='rgba(255,170,0,0.15)';
+    btn.style.borderColor='rgba(255,170,0,0.5)';
+    btn.style.color='var(--accent2)';
+  } else {
+    inp.value='DÍAS HÁBILES';
+    btn.textContent='DÍAS HÁBILES';
+    btn.style.background='rgba(0,212,204,0.15)';
+    btn.style.borderColor='rgba(0,212,204,0.5)';
+    btn.style.color='var(--accent)';
+  }
+}
 function addSolicitudItem(){
   const inp=document.getElementById('cot-solicitud-inp');const val=(inp?.value||'').trim();if(!val) return;
   const container=document.getElementById('solicitudItems');const item=document.createElement('div');
@@ -4700,7 +4721,7 @@ function selectClienteNew(){document.getElementById('cot-cliente-id').value='';d
 document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap')) document.querySelectorAll('.search-select-dropdown').forEach(d=>d.classList.remove('open'));});
 function clearForm(type){
   if(type==='lead'){['nl-empresa','nl-contacto','nl-cargo','nl-telefono','nl-email','nl-rut','nl-web','nl-notas','nl-ciudad'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});document.getElementById('nl-origen').value='Referido';document.getElementById('nl-industria').value='';}
-  if(type==='cot'){['cot-num','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id','cot-tiempo-prod'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();}
+  if(type==='cot'){['cot-num','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id','cot-tiempo-prod'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';const td=document.getElementById('cot-tipo-dias');if(td) td.value='DÍAS HÁBILES';const tdb=document.getElementById('cot-tipo-dias-btn');if(tdb){tdb.textContent='DÍAS HÁBILES';tdb.style.background='rgba(0,212,204,0.15)';tdb.style.borderColor='rgba(0,212,204,0.5)';tdb.style.color='var(--accent)';};document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();}
   if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-whatsapp','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});setPvSelectedCats('np',[]);const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
 }
 // ── PROVEEDORES ───────────────────────────────────────────────
