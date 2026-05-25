@@ -5502,7 +5502,8 @@ function renderSEOList(pages){
       <td style="padding:10px;white-space:nowrap;vertical-align:top">
         <div style="display:flex;flex-direction:column;gap:5px">
           <button onclick="optimizarSEOPage('${p.id}','${escapeHtml(pageTitle)}','${p._type}')" class="btn btn-ghost btn-sm" style="font-size:10px;white-space:nowrap">✨ Optimizar IA</button>
-          <button onclick="saveYoastFields('${p.id}','${p._type}')" class="btn btn-primary btn-sm" style="font-size:10px">💾 Guardar</button>
+          <button onclick="saveYoastFields('${p.id}','${p._type}','${escapeHtml(p.link||'')}')" class="btn btn-primary btn-sm" style="font-size:10px">💾 Guardar</button>
+          <button id="idx-btn-${p.id}" onclick="solicitarIndexacion('${escapeHtml(p.link||'')}')" class="btn btn-ghost btn-sm" style="font-size:10px;display:none;border-color:rgba(0,212,204,0.5);color:var(--accent)">🔍 Indexar en Google</button>
         </div>
       </td>
     </tr>`;
@@ -5541,7 +5542,7 @@ Responde SOLO en JSON: {"title":"...","description":"..."}`;
   }catch(e){toast('Error: '+e.message,'error');}
   if(btn){btn.disabled=false;btn.textContent='✨ Optimizar IA';}
 }
-async function saveYoastFields(wpId,wpType){
+async function saveYoastFields(wpId,wpType,pageUrl){
   const cfg=getWPConfig();if(!cfg.url){toast('Configura credenciales primero','error');return;}
   const tid=`seo-title-${wpId}`;const did=`seo-desc-${wpId}`;
   const newTitle=document.getElementById(tid)?.value||'';
@@ -5551,10 +5552,20 @@ async function saveYoastFields(wpId,wpType){
   if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   try{
     const r=await fetch(endpoint,{method:'POST',headers:wpAuthHeader(),body:JSON.stringify({meta:{_yoast_wpseo_title:newTitle,_yoast_wpseo_metadesc:newDesc}})});
-    if(r.ok){toast('✓ SEO guardado en WordPress','success');}
+    if(r.ok){
+      toast('✓ SEO guardado en WordPress','success');
+      const idxBtn=document.getElementById(`idx-btn-${wpId}`);
+      if(idxBtn) idxBtn.style.display='block';
+    }
     else{const j=await r.json().catch(()=>({}));toast(`Error ${r.status}: ${j.message||'verifica permisos'}`,'error');}
   }catch(e){toast('Error: '+e.message,'error');}
   if(btn){btn.disabled=false;btn.textContent='💾 Guardar';}
+}
+function solicitarIndexacion(pageUrl){
+  if(!pageUrl){toast('URL no disponible','error');return;}
+  const scUrl='https://search.google.com/search-console/inspect?resource_id=https://thelab.solutions/&url='+encodeURIComponent(pageUrl);
+  window.open(scUrl,'_blank');
+  toast('Abre Search Console → haz clic en "Solicitar indexación"','info');
 }
 </script>
 
