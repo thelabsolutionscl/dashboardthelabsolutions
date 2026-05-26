@@ -1727,6 +1727,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 const BASE_ID='app1YtD74AqiPWQhy';
 let autoRefreshInterval=null;
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
+let wpPagesCache=[];
 const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
 const selectedClientes=new Set();
@@ -5710,6 +5711,7 @@ async function loadWPPages(){
     const posts=postsRes.ok?await postsRes.json():[];
     const all=[...pages.map(p=>({...p,_type:'page'})),...posts.map(p=>({...p,_type:'post'}))];
     if(!all.length){list.innerHTML='<div class="empty-state">No se encontraron páginas</div>';return;}
+    wpPagesCache=all;
     renderSEOList(all);renderWebKPIs(all);
   }catch(e){list.innerHTML=`<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;}
 }
@@ -5886,16 +5888,31 @@ async function runSEODiag(){
     seoDiagStep('schema','⚠','OPTIONS bloqueado por CORS','El servidor no permite OPTIONS — continuando.','var(--warn)');
   }
 
-  // Step 3b: read meta fields — use same params as loadWPPages (known working)
+  // Step 3b: read meta fields — use cached pages from loadWPPages if available
   seoDiagStep('meta','⏳','Leyendo meta de página real…','','var(--text3)');
   let testPageId=null;
-  try{
-    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish&_fields=id,slug,meta',{headers:wpAuthHeader()});
-    if(!r.ok) throw new Error('HTTP '+r.status+' — '+cfg.url+'/wp-json/wp/v2/pages');
-    const items=await r.json();
-    if(!items.length) throw new Error('No hay páginas publicadas en WordPress');
-    testPageId=items[0].id;
-    const meta=items[0].meta;
+  let diagMeta=null;
+  if(wpPagesCache.length>0){
+    // reuse data already fetched by loadWPPages (avoids second CORS request)
+    const p=wpPagesCache[0];
+    testPageId=p.id;
+    diagMeta=p.meta;
+  } else {
+    try{
+      const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish&_fields=id,slug,meta',{headers:wpAuthHeader()});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const items=await r.json();
+      if(!items.length) throw new Error('No hay páginas publicadas en WordPress');
+      testPageId=items[0].id;
+      diagMeta=items[0].meta;
+    }catch(e){
+      seoDiagStep('meta','❌','Error al leer meta',`${e.message} — Abre primero la pestaña Web para que el listado de páginas cargue, luego vuelve a ejecutar el diagnóstico.`,'var(--danger)');
+      if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
+      return;
+    }
+  }
+  {
+    const meta=diagMeta;
     const hasTitle=meta&&meta._yoast_wpseo_title!==undefined;
     const hasDesc=meta&&meta._yoast_wpseo_metadesc!==undefined;
     if(hasTitle&&hasDesc){
@@ -5911,10 +5928,6 @@ async function runSEODiag(){
       if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
       return;
     }
-  }catch(e){
-    seoDiagStep('meta','❌','Error al leer meta',`${e.message} — Si las páginas sí se ven en el listado SEO, recarga el dashboard con Ctrl+Shift+R e intenta de nuevo.`,'var(--danger)');
-    if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
-    return;
   }
 
   // Step 4: write test
