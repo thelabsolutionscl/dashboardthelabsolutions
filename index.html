@@ -1469,6 +1469,150 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
   <!-- Tabla SEO -->
   <div id="seoPagesList"><div class="empty-state" style="padding:60px 0"><div class="empty-icon">🌐</div><div>Haz clic en "Actualizar" para cargar las páginas de WordPress</div></div></div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- GOOGLE ADS AGENT -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div style="margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
+    <div class="section-header" style="margin-bottom:12px">
+      <div class="section-title" style="display:flex;align-items:center;gap:8px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Google Ads
+        <span id="adsStatusDot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--border2);margin-left:2px" title="Sin conectar"></span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="adsPeriodSelect" class="field-input" style="width:auto;padding:4px 10px;font-size:11px" onchange="loadAdsData()">
+          <option value="7">Últimos 7 días</option>
+          <option value="30" selected>Últimos 30 días</option>
+          <option value="90">Últimos 90 días</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="toggleAdsConfig()">⚙ Configurar</button>
+        <button class="btn btn-primary btn-sm" onclick="loadAdsData()">↺ Actualizar</button>
+      </div>
+    </div>
+
+    <!-- Quick links -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <a href="https://ads.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:15px">📢</span>Google Ads</a>
+      <a href="https://ads.google.com/aw/keywordplanner/home" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:15px">🔑</span>Keyword Planner</a>
+      <a href="https://lookerstudio.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:15px">📊</span>Looker Studio</a>
+    </div>
+
+    <!-- Config panel (colapsable) -->
+    <div id="adsConfigPanel" style="display:none;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Conexión Google Ads</span></div>
+        <div style="padding:16px;display:grid;grid-template-columns:1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">URL del endpoint (Google Apps Script)</label>
+            <input class="field-input" id="ads-endpoint" placeholder="https://script.google.com/macros/s/XXXXXXX/exec">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Customer ID (opcional, para mostrar en la UI)</label>
+            <input class="field-input" id="ads-customer-id" placeholder="123-456-7890">
+          </div>
+        </div>
+        <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="saveAdsConfig()">💾 Guardar</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('adsScriptBox').style.display=document.getElementById('adsScriptBox').style.display==='none'?'block':'none'">📋 Ver Apps Script</button>
+        </div>
+        <!-- Apps Script instructions -->
+        <div id="adsScriptBox" style="display:none;padding:0 16px 16px">
+          <div style="background:#1a1a2e;border:1px solid rgba(255,200,0,0.25);border-radius:8px;padding:12px">
+            <div style="font-size:11px;font-weight:600;color:#ffc107;margin-bottom:6px">⚙ Cómo conectar Google Ads</div>
+            <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.6">1) Ve a <strong>script.google.com</strong> → Nuevo proyecto<br>2) Pega el código de abajo<br>3) En línea 2 pon tu <strong>Customer ID</strong> sin guiones<br>4) Implementar → Nueva implementación → Aplicación web → Acceso: <em>Cualquier persona</em><br>5) Copia la URL y pégala arriba</div>
+            <div style="position:relative">
+              <pre id="adsScriptCode" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:9.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">function doGet(e) {
+  var customerId = 'TU_CUSTOMER_ID'; // ej: 1234567890
+  var days = parseInt((e && e.parameter && e.parameter.days) || 30);
+  var dateRange = 'LAST_' + days + '_DAYS';
+
+  var report = AdsApp.report(
+    'SELECT campaign.name, campaign.id, campaign.status, ' +
+    'campaign.budget_amount_micros, ' +
+    'metrics.impressions, metrics.clicks, metrics.cost_micros, ' +
+    'metrics.conversions, metrics.conversions_value ' +
+    'FROM campaign ' +
+    'WHERE segments.date DURING ' + dateRange +
+    ' ORDER BY metrics.cost_micros DESC'
+  );
+
+  var rows = report.rows();
+  var campaigns = [];
+  var totals = {gasto:0, impresiones:0, clics:0, conversiones:0, valor_conversion:0};
+
+  while (rows.hasNext()) {
+    var row = rows.next();
+    var gasto = Math.round(parseInt(row['metrics.cost_micros']) / 1e6);
+    var imp   = parseInt(row['metrics.impressions']);
+    var cl    = parseInt(row['metrics.clicks']);
+    var conv  = parseFloat(row['metrics.conversions']);
+    var valConv = parseFloat(row['metrics.conversions_value']);
+    totals.gasto += gasto;
+    totals.impresiones += imp;
+    totals.clics += cl;
+    totals.conversiones += conv;
+    totals.valor_conversion += valConv;
+    campaigns.push({
+      id: row['campaign.id'],
+      nombre: row['campaign.name'],
+      estado: row['campaign.status'],
+      presupuesto: Math.round(parseInt(row['campaign.budget_amount_micros']||0)/1e6),
+      gasto: gasto, impresiones: imp, clics: cl,
+      conversiones: conv, valor_conversion: valConv
+    });
+  }
+
+  var result = {
+    ok: true,
+    periodo: days + ' días',
+    gasto: totals.gasto,
+    impresiones: totals.impresiones,
+    clics: totals.clics,
+    conversiones: totals.conversiones,
+    valor_conversion: totals.valor_conversion,
+    campanas: campaigns
+  };
+
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}</pre>
+              <button onclick="copyAdsScript()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs Google Ads -->
+    <div id="adsKPIs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px">
+      <div class="stat-card"><div class="stat-label">Gasto Total</div><div class="stat-value" id="ads-kpi-gasto" style="color:var(--accent)">—</div><div class="stat-sub" id="ads-kpi-periodo"></div></div>
+      <div class="stat-card"><div class="stat-label">Impresiones</div><div class="stat-value" id="ads-kpi-imp">—</div></div>
+      <div class="stat-card"><div class="stat-label">Clics</div><div class="stat-value" id="ads-kpi-clics">—</div></div>
+      <div class="stat-card"><div class="stat-label">CTR</div><div class="stat-value" id="ads-kpi-ctr" style="color:var(--accent)">—</div></div>
+      <div class="stat-card"><div class="stat-label">CPC Prom.</div><div class="stat-value" id="ads-kpi-cpc" style="color:var(--warn)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Conversiones</div><div class="stat-value" id="ads-kpi-conv" style="color:var(--success)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Costo/Conv.</div><div class="stat-value" id="ads-kpi-cpa" style="color:var(--text2)">—</div></div>
+      <div class="stat-card"><div class="stat-label">ROAS</div><div class="stat-value" id="ads-kpi-roas" style="color:var(--success)">—</div></div>
+    </div>
+
+    <!-- Recomendaciones del Agente -->
+    <div id="adsAgentBox" style="display:none;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">🤖 Recomendaciones del Agente</span><span id="adsAgentBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span></div>
+        <div id="adsAgentList" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+
+    <!-- Tabla campañas -->
+    <div id="adsCampaignsArea">
+      <div class="empty-state" style="padding:40px 0">
+        <div class="empty-icon">📢</div>
+        <div>Configura el endpoint y haz clic en "Actualizar" para cargar campañas</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="footer"><div class="footer-inner">
@@ -5807,6 +5951,157 @@ function copySEODiagSnippet(){
   });
 }
 async function testYoastWrite(){openSEODiag();await runSEODiag();}
+// ── GOOGLE ADS AGENT ─────────────────────────────────────
+function getAdsConfig(){return JSON.parse(localStorage.getItem('ads_config')||'{}');}
+function saveAdsConfig(){
+  const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
+  const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
+  if(!endpoint){toast('Ingresa la URL del endpoint','error');return;}
+  localStorage.setItem('ads_config',JSON.stringify({endpoint,customerId}));
+  document.getElementById('adsConfigPanel').style.display='none';
+  toast('✓ Configuración Google Ads guardada','success');
+  loadAdsData();
+}
+function toggleAdsConfig(){
+  const p=document.getElementById('adsConfigPanel');
+  const visible=p.style.display!=='none';
+  p.style.display=visible?'none':'block';
+  if(!visible){
+    const cfg=getAdsConfig();
+    if(cfg.endpoint) document.getElementById('ads-endpoint').value=cfg.endpoint;
+    if(cfg.customerId) document.getElementById('ads-customer-id').value=cfg.customerId;
+  }
+}
+function copyAdsScript(){
+  const code=document.getElementById('adsScriptCode')?.textContent||'';
+  navigator.clipboard.writeText(code).then(()=>toast('✓ Script copiado','success')).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Script copiado','success');
+  });
+}
+function fmtMoney(n){if(!n&&n!==0)return'—';if(n>=1000000)return'$'+(n/1000000).toFixed(1)+'M';if(n>=1000)return'$'+(n/1000).toFixed(0)+'K';return'$'+Math.round(n).toLocaleString('es-CL');}
+function fmtNum(n){if(!n&&n!==0)return'—';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(0)+'K';return Math.round(n).toLocaleString('es-CL');}
+function fmtPct(n){return(n||0).toFixed(2)+'%';}
+async function loadAdsData(){
+  const cfg=getAdsConfig();
+  if(!cfg.endpoint){
+    document.getElementById('adsCampaignsArea').innerHTML='<div class="empty-state" style="padding:40px 0"><div class="empty-icon">📢</div><div>Configura el endpoint en <strong>⚙ Configurar</strong> para cargar campañas</div></div>';
+    return;
+  }
+  const days=document.getElementById('adsPeriodSelect')?.value||'30';
+  document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:40px 0"><div class="spinner"></div> Cargando Google Ads…</div>';
+  document.getElementById('adsAgentBox').style.display='none';
+  ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='…';});
+  try{
+    const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'days='+days+'&_t='+Date.now();
+    const r=await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const data=await r.json();
+    if(!data.ok) throw new Error(data.error||'Respuesta inválida del script');
+    renderAdsKPIs(data,days);
+    renderAdsCampaigns(data);
+    renderAdsAgent(data);
+    const dot=document.getElementById('adsStatusDot');
+    if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
+  }catch(e){
+    document.getElementById('adsCampaignsArea').innerHTML=`<div class="empty-state" style="padding:40px 0"><div class="empty-icon">⚠</div><div style="color:var(--danger)">${e.message}</div><div style="font-size:11px;color:var(--text3);margin-top:8px">Verifica que el Apps Script esté publicado como aplicación web con acceso público</div></div>`;
+    ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='—';});
+    const dot=document.getElementById('adsStatusDot');
+    if(dot){dot.style.background='var(--danger)';dot.title='Error: '+e.message;}
+  }
+}
+function renderAdsKPIs(data,days){
+  const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
+  const conv=data.conversiones||0,valConv=data.valor_conversion||0;
+  const ctr=imp>0?(clics/imp*100):0;
+  const cpc=clics>0?(gasto/clics):0;
+  const cpa=conv>0?(gasto/conv):0;
+  const roas=gasto>0?(valConv/gasto):0;
+  document.getElementById('ads-kpi-gasto').textContent=fmtMoney(gasto);
+  document.getElementById('ads-kpi-periodo').textContent=data.periodo||days+' días';
+  document.getElementById('ads-kpi-imp').textContent=fmtNum(imp);
+  document.getElementById('ads-kpi-clics').textContent=fmtNum(clics);
+  document.getElementById('ads-kpi-ctr').textContent=fmtPct(ctr);
+  document.getElementById('ads-kpi-cpc').textContent=fmtMoney(cpc);
+  document.getElementById('ads-kpi-conv').textContent=conv>0?conv.toFixed(0):'0';
+  document.getElementById('ads-kpi-cpa').textContent=conv>0?fmtMoney(cpa):'—';
+  document.getElementById('ads-kpi-roas').textContent=valConv>0?roas.toFixed(2)+'x':'—';
+}
+function renderAdsCampaigns(data){
+  const camps=data.campanas||[];
+  if(!camps.length){
+    document.getElementById('adsCampaignsArea').innerHTML='<div class="empty-state" style="padding:30px 0"><div>No hay campañas en el período seleccionado</div></div>';
+    return;
+  }
+  const rows=camps.map(c=>{
+    const ctr=c.impresiones>0?(c.clics/c.impresiones*100):0;
+    const cpc=c.clics>0?(c.gasto/c.clics):0;
+    const cpa=c.conversiones>0?(c.gasto/c.conversiones):0;
+    const activa=c.estado==='ENABLED';
+    const estadoBadge=activa
+      ?'<span style="background:rgba(0,212,170,0.15);color:var(--accent3);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Activa</span>'
+      :'<span style="background:rgba(255,68,68,0.12);color:var(--danger);border:1px solid rgba(255,68,68,0.25);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Pausada</span>';
+    const ctrColor=ctr>=5?'var(--success)':ctr>=2?'var(--text)':'var(--danger)';
+    return `<tr>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</td>
+      <td>${estadoBadge}</td>
+      <td style="text-align:right">${fmtMoney(c.gasto)}</td>
+      <td style="text-align:right">${fmtNum(c.impresiones)}</td>
+      <td style="text-align:right">${fmtNum(c.clics)}</td>
+      <td style="text-align:right;color:${ctrColor}">${fmtPct(ctr)}</td>
+      <td style="text-align:right">${fmtMoney(cpc)}</td>
+      <td style="text-align:right;color:var(--success)">${c.conversiones>0?Number(c.conversiones).toFixed(0):'—'}</td>
+      <td style="text-align:right">${c.conversiones>0?fmtMoney(cpa):'—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('adsCampaignsArea').innerHTML=`
+    <div class="card">
+      <div class="card-header"><span class="card-title">Campañas</span><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+}
+function renderAdsAgent(data){
+  const camps=data.campanas||[];
+  const recs=[];
+  const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0,conv=data.conversiones||0;
+  const ctrGlobal=imp>0?(clics/imp*100):0;
+  const cpcGlobal=clics>0?(gasto/clics):0;
+  // Análisis global
+  if(ctrGlobal<2&&imp>1000) recs.push({tipo:'warn',msg:`CTR global bajo (${fmtPct(ctrGlobal)}). Considera revisar el copy de los anuncios o mejorar la relevancia de las palabras clave.`});
+  if(ctrGlobal>=5) recs.push({tipo:'success',msg:`CTR global excelente (${fmtPct(ctrGlobal)}). Los anuncios tienen buena relevancia.`});
+  if(conv===0&&gasto>0) recs.push({tipo:'danger',msg:`Sin conversiones en el período con $${gasto.toLocaleString('es-CL')} gastados. Verifica el tracking de conversiones y las landing pages.`});
+  const valConv=data.valor_conversion||0;
+  if(valConv>0&&gasto>0){const roas=valConv/gasto;if(roas<2) recs.push({tipo:'warn',msg:`ROAS bajo (${roas.toFixed(2)}x). Por cada $1 invertido se generan $${roas.toFixed(2)}. Objetivo recomendado: >3x.`});}
+  // Análisis por campaña
+  camps.forEach(c=>{
+    const ctr=c.impresiones>0?(c.clics/c.impresiones*100):0;
+    const cpc=c.clics>0?(c.gasto/c.clics):0;
+    if(c.estado==='ENABLED'&&c.impresiones>500&&ctr<1) recs.push({tipo:'danger',msg:`"${c.nombre}": CTR muy bajo (${fmtPct(ctr)}). Revisa la relevancia de palabras clave y el copy del anuncio.`});
+    if(c.estado==='PAUSED'&&c.gasto>0) recs.push({tipo:'info',msg:`"${c.nombre}" está pausada pero registró gasto (${fmtMoney(c.gasto)}). Verifica que sea intencional.`});
+    if(c.estado==='ENABLED'&&c.clics===0&&c.impresiones>0) recs.push({tipo:'warn',msg:`"${c.nombre}": tiene ${fmtNum(c.impresiones)} impresiones pero 0 clics. El anuncio no está atrayendo tráfico.`});
+  });
+  // Campaña top y bajo rendimiento
+  const activas=camps.filter(c=>c.estado==='ENABLED'&&c.gasto>0);
+  if(activas.length>1){
+    const top=activas.reduce((a,b)=>(b.conversiones>a.conversiones?b:a),activas[0]);
+    const bottom=activas.reduce((a,b)=>{const ctrA=a.impresiones>0?a.clics/a.impresiones:0;const ctrB=b.impresiones>0?b.clics/b.impresiones:0;return ctrB<ctrA?b:a;},activas[0]);
+    if(top.conversiones>0) recs.push({tipo:'success',msg:`Mejor campaña: "${top.nombre}" con ${top.conversiones.toFixed(0)} conversiones. Considera aumentar su presupuesto.`});
+    if(bottom!==top&&bottom.impresiones>200){const ctr=bottom.impresiones>0?(bottom.clics/bottom.impresiones*100):0;recs.push({tipo:'warn',msg:`Campaña de menor CTR: "${bottom.nombre}" (${fmtPct(ctr)}). Evalúa pausarla o reestructurar sus palabras clave.`});}
+  }
+  if(!recs.length) recs.push({tipo:'success',msg:'Todo en orden — no hay alertas críticas en este período.'});
+  const colorMap={success:'var(--success)',warn:'var(--warn)',danger:'var(--danger)',info:'var(--accent)'};
+  const iconMap={success:'✓',warn:'⚠',danger:'❌',info:'ℹ'};
+  document.getElementById('adsAgentList').innerHTML=recs.map(r=>`
+    <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--surface2);border-radius:7px;border-left:3px solid ${colorMap[r.tipo]}">
+      <span style="color:${colorMap[r.tipo]};font-size:13px;flex-shrink:0;margin-top:1px">${iconMap[r.tipo]}</span>
+      <span style="font-size:11px;color:var(--text2);line-height:1.5">${r.msg}</span>
+    </div>`).join('');
+  document.getElementById('adsAgentBadge').textContent=recs.length+' hallazgo'+(recs.length!==1?'s':'');
+  document.getElementById('adsAgentBox').style.display='block';
+}
+// ─────────────────────────────────────────────────────────
 function copyPhpSnippet(){
   const code=document.getElementById('phpSnippetCode')?.textContent||'';
   navigator.clipboard.writeText(code).then(()=>toast('✓ Código copiado','success')).catch(()=>{
