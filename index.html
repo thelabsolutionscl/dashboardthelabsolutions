@@ -5891,8 +5891,7 @@ async function runSEODiag(){
   let testPageId=null;
   try{
     const cb='&_cb='+Date.now();
-    const h=Object.assign({'Cache-Control':'no-cache','Pragma':'no-cache'},wpAuthHeader());
-    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish&_fields=id,meta'+cb,{headers:h});
+    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish&_fields=id,meta'+cb,{headers:wpAuthHeader(),cache:'no-store'});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const items=await r.json();
     if(!items.length) throw new Error('No hay páginas publicadas');
