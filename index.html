@@ -623,7 +623,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="tab-btn" data-tab="maquinas" onclick="switchTab('maquinas')">🖨️ Máquinas</button>
     <button class="tab-btn" data-tab="equipo" onclick="switchTab('equipo')">👤 Equipo</button>
     <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')">📊 Reportes</button>
-    <button class="tab-btn" data-tab="seo" onclick="switchTab('seo')">🔍 SEO</button>
+    <button class="tab-btn" data-tab="web" onclick="switchTab('web')">🌐 Web</button>
   </nav>
   <div class="topbar-right">
     <div class="status-dot" id="statusDot"></div>
@@ -657,7 +657,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="maquinas" onclick="switchTabMobile('maquinas')"><span class="mobile-tab-icon">🖨️</span>Máquinas</button>
     <button class="mobile-tab-btn" data-tab="equipo" onclick="switchTabMobile('equipo')"><span class="mobile-tab-icon">👤</span>Equipo</button>
     <button class="mobile-tab-btn" data-tab="reporte" onclick="switchTabMobile('reporte')"><span class="mobile-tab-icon">📊</span>Reportes</button>
-    <button class="mobile-tab-btn" data-tab="seo" onclick="switchTabMobile('seo')"><span class="mobile-tab-icon">🔍</span>SEO</button>
+    <button class="mobile-tab-btn" data-tab="web" onclick="switchTabMobile('web')"><span class="mobile-tab-icon">🌐</span>Web</button>
   </nav>
   <div class="mobile-nav-footer">
     <button onclick="loadAllData();closeMobileMenu()">↺ Actualizar</button>
@@ -1391,15 +1391,35 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 </div>
 </div>
 
-<!-- SEO TAB -->
-<div class="tab-panel" id="tab-seo">
+<!-- WEB TAB -->
+<div class="tab-panel" id="tab-web">
   <div class="section-header">
-    <div class="section-title">SEO · WordPress</div>
+    <div class="section-title">Web · thelab.solutions</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="toggleWPConfig()">⚙ Configurar</button>
-      <button class="btn btn-primary btn-sm" onclick="loadWPPages()">↺ Cargar páginas</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleWPConfig()">⚙ Configurar WP</button>
+      <button class="btn btn-primary btn-sm" onclick="loadWPPages()">↺ Actualizar</button>
     </div>
   </div>
+
+  <!-- Accesos rápidos -->
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+    <a href="https://search.google.com/search-console" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">🔍</span>Search Console</a>
+    <a href="https://analytics.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">📊</span>Google Analytics</a>
+    <a href="https://thelab.solutions/wp-admin" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">⚙️</span>WordPress Admin</a>
+    <a href="https://thelab.solutions" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">🌐</span>Ver sitio</a>
+  </div>
+
+  <!-- KPIs -->
+  <div id="webKPIs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px">
+    <div class="stat-card"><div class="stat-label">Páginas + Posts</div><div class="stat-value" id="kpi-total">—</div></div>
+    <div class="stat-card"><div class="stat-label">SEO Completo</div><div class="stat-value" id="kpi-completo" style="color:var(--success)">—</div><div class="stat-sub" id="kpi-completo-sub"></div></div>
+    <div class="stat-card"><div class="stat-label">Sin Title</div><div class="stat-value" id="kpi-sin-title" style="color:var(--danger)">—</div></div>
+    <div class="stat-card"><div class="stat-label">Sin Descripción</div><div class="stat-value" id="kpi-sin-desc" style="color:var(--warn)">—</div></div>
+    <div class="stat-card"><div class="stat-label">Títulos Óptimos</div><div class="stat-value" id="kpi-title-ok" style="color:var(--accent)">—</div><div class="stat-sub" style="font-size:9px;color:var(--text3)">40–60 car.</div></div>
+    <div class="stat-card"><div class="stat-label">Desc. Óptimas</div><div class="stat-value" id="kpi-desc-ok" style="color:var(--accent)">—</div><div class="stat-sub" style="font-size:9px;color:var(--text3)">120–155 car.</div></div>
+  </div>
+
+  <!-- Config WP (colapsable) -->
   <div id="wpConfigPanel" style="display:none;margin-bottom:16px">
     <div class="card">
       <div class="card-header"><span class="card-title">Credenciales WordPress</span></div>
@@ -1414,7 +1434,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       </div>
     </div>
   </div>
-  <div id="seoPagesList"><div class="empty-state" style="padding:60px 0"><div class="empty-icon">🔍</div><div>Configura las credenciales y carga las páginas para comenzar</div></div></div>
+
+  <!-- Tabla SEO -->
+  <div id="seoPagesList"><div class="empty-state" style="padding:60px 0"><div class="empty-icon">🌐</div><div>Haz clic en "Actualizar" para cargar las páginas de WordPress</div></div></div>
 </div>
 
 <div class="footer"><div class="footer-inner">
@@ -2339,7 +2361,7 @@ function switchTab(name){
   document.querySelector(`.mobile-tab-btn[data-tab="${name}"]`)?.classList.add('active');
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
-  if(name==='seo'){const cfg=getWPConfig();if(cfg.url) loadWPPages();}
+  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
   if(name==='equipo') initEquipo();
@@ -5466,7 +5488,7 @@ async function loadWPPages(){
     const posts=postsRes.ok?await postsRes.json():[];
     const all=[...pages.map(p=>({...p,_type:'page'})),...posts.map(p=>({...p,_type:'post'}))];
     if(!all.length){list.innerHTML='<div class="empty-state">No se encontraron páginas</div>';return;}
-    renderSEOList(all);
+    renderSEOList(all);renderWebKPIs(all);
   }catch(e){list.innerHTML=`<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;}
 }
 function renderSEOList(pages){
@@ -5566,6 +5588,26 @@ function solicitarIndexacion(pageUrl){
   const scUrl='https://search.google.com/search-console/inspect?resource_id=https://thelab.solutions/&url='+encodeURIComponent(pageUrl);
   window.open(scUrl,'_blank');
   toast('Abre Search Console → haz clic en "Solicitar indexación"','info');
+}
+function renderWebKPIs(pages){
+  const total=pages.length;
+  const withTitle=pages.filter(p=>(p.yoast_head_json?.title||'').trim().length>0);
+  const withDesc=pages.filter(p=>(p.yoast_head_json?.description||'').trim().length>0);
+  const completo=pages.filter(p=>(p.yoast_head_json?.title||'').trim()&&(p.yoast_head_json?.description||'').trim());
+  const titleOk=pages.filter(p=>{const l=(p.yoast_head_json?.title||'').length;return l>=40&&l<=60;});
+  const descOk=pages.filter(p=>{const l=(p.yoast_head_json?.description||'').length;return l>=120&&l<=155;});
+  const sinTitle=total-withTitle.length;
+  const sinDesc=total-withDesc.length;
+  const pct=n=>total>0?Math.round(n/total*100)+'%':'—';
+  document.getElementById('kpi-total').textContent=total;
+  document.getElementById('kpi-completo').textContent=completo.length;
+  document.getElementById('kpi-completo-sub').textContent=pct(completo.length);
+  document.getElementById('kpi-sin-title').textContent=sinTitle||'✓';
+  document.getElementById('kpi-sin-title').style.color=sinTitle>0?'var(--danger)':'var(--success)';
+  document.getElementById('kpi-sin-desc').textContent=sinDesc||'✓';
+  document.getElementById('kpi-sin-desc').style.color=sinDesc>0?'var(--warn)':'var(--success)';
+  document.getElementById('kpi-title-ok').textContent=titleOk.length+'/'+total;
+  document.getElementById('kpi-desc-ok').textContent=descOk.length+'/'+total;
 }
 </script>
 
