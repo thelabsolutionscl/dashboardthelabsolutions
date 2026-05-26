@@ -2583,7 +2583,7 @@ function switchTab(name){
   document.querySelector(`.mobile-tab-btn[data-tab="${name}"]`)?.classList.add('active');
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
-  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();}
+  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsData();}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
   if(name==='equipo') initEquipo();
@@ -5981,16 +5981,43 @@ function copyAdsScript(){
 function fmtMoney(n){if(!n&&n!==0)return'—';if(n>=1000000)return'$'+(n/1000000).toFixed(1)+'M';if(n>=1000)return'$'+(n/1000).toFixed(0)+'K';return'$'+Math.round(n).toLocaleString('es-CL');}
 function fmtNum(n){if(!n&&n!==0)return'—';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(0)+'K';return Math.round(n).toLocaleString('es-CL');}
 function fmtPct(n){return(n||0).toFixed(2)+'%';}
+function getAdsDemoData(days){
+  const f=days<=7?0.23:days<=30?1:3;
+  return{ok:true,periodo:'Demo · '+days+' días',demo:true,
+    gasto:Math.round(187400*f),impresiones:Math.round(94200*f),clics:Math.round(2310*f),
+    conversiones:Math.round(38*f),valor_conversion:Math.round(1140000*f),
+    campanas:[
+      {id:'1',nombre:'Búsqueda - Impresión 3D General',estado:'ENABLED',presupuesto:8000,
+        gasto:Math.round(74200*f),impresiones:Math.round(38400*f),clics:Math.round(980*f),conversiones:Math.round(18*f),valor_conversion:Math.round(540000*f)},
+      {id:'2',nombre:'Búsqueda - Arquitectura & Diseño',estado:'ENABLED',presupuesto:6000,
+        gasto:Math.round(58900*f),impresiones:Math.round(29100*f),clics:Math.round(820*f),conversiones:Math.round(12*f),valor_conversion:Math.round(360000*f)},
+      {id:'3',nombre:'Display Remarketing',estado:'ENABLED',presupuesto:3000,
+        gasto:Math.round(31400*f),impresiones:Math.round(22700*f),clics:Math.round(310*f),conversiones:Math.round(6*f),valor_conversion:Math.round(180000*f)},
+      {id:'4',nombre:'Búsqueda - Papelería Corporativa',estado:'PAUSED',presupuesto:4000,
+        gasto:Math.round(18200*f),impresiones:Math.round(3900*f),clics:Math.round(180*f),conversiones:Math.round(2*f),valor_conversion:Math.round(60000*f)},
+      {id:'5',nombre:'YouTube - Branding Lab',estado:'ENABLED',presupuesto:2000,
+        gasto:Math.round(4700*f),impresiones:Math.round(102*f*100),clics:Math.round(20*f),conversiones:0,valor_conversion:0},
+    ]
+  };
+}
 async function loadAdsData(){
   const cfg=getAdsConfig();
-  if(!cfg.endpoint){
-    document.getElementById('adsCampaignsArea').innerHTML='<div class="empty-state" style="padding:40px 0"><div class="empty-icon">📢</div><div>Configura el endpoint en <strong>⚙ Configurar</strong> para cargar campañas</div></div>';
-    return;
-  }
-  const days=document.getElementById('adsPeriodSelect')?.value||'30';
-  document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:40px 0"><div class="spinner"></div> Cargando Google Ads…</div>';
+  const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
   document.getElementById('adsAgentBox').style.display='none';
   ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='…';});
+  if(!cfg.endpoint){
+    // Modo demo
+    document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div></div>';
+    await new Promise(r=>setTimeout(r,600));
+    const demo=getAdsDemoData(days);
+    renderAdsKPIs(demo,days);
+    renderAdsCampaigns(demo);
+    renderAdsAgent(demo);
+    const dot=document.getElementById('adsStatusDot');
+    if(dot){dot.style.background='var(--warn)';dot.title='Modo demo — configura tu endpoint real';}
+    return;
+  }
+  document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:40px 0"><div class="spinner"></div> Cargando Google Ads…</div>';
   try{
     const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'days='+days+'&_t='+Date.now();
     const r=await fetch(url);
@@ -6053,9 +6080,11 @@ function renderAdsCampaigns(data){
       <td style="text-align:right">${c.conversiones>0?fmtMoney(cpa):'—'}</td>
     </tr>`;
   }).join('');
+  const demoBanner=data.demo?`<div style="background:rgba(255,200,0,0.08);border-bottom:1px solid rgba(255,200,0,0.2);padding:7px 16px;font-size:10px;color:#ffc107;display:flex;align-items:center;gap:6px"><span>⚠</span><span>Datos de demostración — <button onclick="toggleAdsConfig()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">configura tu endpoint</button> para ver datos reales</span></div>`:'';
   document.getElementById('adsCampaignsArea').innerHTML=`
     <div class="card">
       <div class="card-header"><span class="card-title">Campañas</span><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span></div>
+      ${demoBanner}
       <div class="table-wrap"><table>
         <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th></tr></thead>
         <tbody>${rows}</tbody>
