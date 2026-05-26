@@ -5720,13 +5720,35 @@ async function runSEODiag(){
     return;
   }
 
-  // Step 3: read meta fields (cache-bust to avoid stale responses)
-  seoDiagStep('meta','⏳','Verificando campos Yoast en REST API…','','var(--text3)');
+  // Step 3a: schema check via OPTIONS
+  seoDiagStep('schema','⏳','Verificando esquema REST API (OPTIONS)…','','var(--text3)');
+  let schemaHasFields=false;
+  try{
+    const sr=await fetch(cfg.url+'/wp-json/wp/v2/pages',{method:'OPTIONS',headers:wpAuthHeader()});
+    if(sr.ok){
+      const sd=await sr.json();
+      const metaProps=sd?.schema?.properties?.meta?.properties||sd?.endpoints?.[0]?.args?.meta?.properties||null;
+      schemaHasFields=!!(metaProps&&metaProps._yoast_wpseo_title&&metaProps._yoast_wpseo_metadesc);
+      if(schemaHasFields){
+        seoDiagStep('schema','✓','Esquema registra campos Yoast','_yoast_wpseo_title y _yoast_wpseo_metadesc presentes en el schema','var(--success)');
+      } else {
+        const schemaKeys=metaProps?Object.keys(metaProps).slice(0,6).join(', '):'(sin propiedades meta en schema)';
+        seoDiagStep('schema','❌','Campos Yoast ausentes en el schema REST',`El schema no incluye los campos. Claves meta en schema: ${schemaKeys}. El snippet PHP aún no está activo.`,'var(--danger)');
+      }
+    } else {
+      seoDiagStep('schema','⚠','No se pudo leer el schema (OPTIONS)',`HTTP ${sr.status} — continuando con verificación de datos.`,'var(--warn)');
+    }
+  }catch(e){
+    seoDiagStep('schema','⚠','OPTIONS bloqueado por CORS','El servidor no permite OPTIONS — continuando.','var(--warn)');
+  }
+
+  // Step 3b: read meta fields (cache-bust to avoid stale responses)
+  seoDiagStep('meta','⏳','Leyendo meta de página real…','','var(--text3)');
   let testPageId=null;
   try{
     const cb='&_cb='+Date.now();
     const h=Object.assign({'Cache-Control':'no-cache','Pragma':'no-cache'},wpAuthHeader());
-    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish'+cb,{headers:h});
+    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish&_fields=id,meta'+cb,{headers:h});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const items=await r.json();
     if(!items.length) throw new Error('No hay páginas publicadas');
@@ -5738,8 +5760,11 @@ async function runSEODiag(){
       seoDiagStep('meta','✓','Campos Yoast registrados correctamente',`_yoast_wpseo_title = "${meta._yoast_wpseo_title||'(vacío)'}" | _yoast_wpseo_metadesc = "${(meta._yoast_wpseo_metadesc||'').slice(0,60)||'(vacío)'}"`,'var(--success)');
     } else {
       const metaKeys=meta?Object.keys(meta):[];
-      const metaDebug=meta?(metaKeys.length?`Claves presentes: ${metaKeys.slice(0,8).join(', ')}`:'meta existe pero está vacío {}'):'meta es null/undefined';
-      seoDiagStep('meta','❌','Campos Yoast NO están registrados en REST API',`${metaDebug} — El snippet PHP puede no haberse guardado, o hay un cache de servidor activo. Verifica que no haya errores PHP en functions.php y limpia el cache de WordPress.`,'var(--danger)');
+      const rawSnippet=JSON.stringify(meta).slice(0,120);
+      const metaDebug=meta
+        ?(metaKeys.length?`Claves en meta: ${metaKeys.slice(0,8).join(', ')} | raw: ${rawSnippet}`:'meta existe pero es {} vacío')
+        :'meta es null/undefined — WordPress no expone meta en este endpoint';
+      seoDiagStep('meta','❌','Campos Yoast NO están en la respuesta',metaDebug,'var(--danger)');
       document.getElementById('seoDiagPhpBox').style.display='block';
       if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
       return;
