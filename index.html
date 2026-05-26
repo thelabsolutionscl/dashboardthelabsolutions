@@ -1490,7 +1490,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div id="seoDiagPhpBox" style="display:none;margin-top:14px">
         <div style="background:#1a1a2e;border:1px solid rgba(255,200,0,0.3);border-radius:8px;padding:12px">
           <div style="font-size:12px;font-weight:600;color:#ffc107;margin-bottom:8px">⚠ Requiere snippet PHP en functions.php</div>
-          <div style="font-size:11px;color:var(--text2);margin-bottom:8px">Agrégalo en <strong>WordPress → Apariencia → Editor de temas → functions.php</strong></div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:6px">Agrégalo en <strong>WordPress → Apariencia → Editor de temas → functions.php</strong></div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.5">Si ya lo agregaste y sigue fallando: <strong>1)</strong> Limpia el cache de WordPress (plugin de cache o <em>WP → Ajustes → Cache</em>) <strong>2)</strong> Verifica que no haya errores PHP en functions.php (el sitio mostraría pantalla blanca) <strong>3)</strong> Si usas tema hijo, agrega el snippet al functions.php del <em>tema hijo</em></div>
           <div style="position:relative">
             <pre id="seoDiagPhpCode" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:10.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">add_action( 'rest_api_init', function () {
     foreach ( [ 'post', 'page' ] as $post_type ) {
@@ -5719,11 +5720,13 @@ async function runSEODiag(){
     return;
   }
 
-  // Step 3: read meta fields
+  // Step 3: read meta fields (cache-bust to avoid stale responses)
   seoDiagStep('meta','⏳','Verificando campos Yoast en REST API…','','var(--text3)');
   let testPageId=null;
   try{
-    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish',{headers:wpAuthHeader()});
+    const cb='&_cb='+Date.now();
+    const h=Object.assign({'Cache-Control':'no-cache','Pragma':'no-cache'},wpAuthHeader());
+    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish'+cb,{headers:h});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const items=await r.json();
     if(!items.length) throw new Error('No hay páginas publicadas');
@@ -5734,7 +5737,9 @@ async function runSEODiag(){
     if(hasTitle&&hasDesc){
       seoDiagStep('meta','✓','Campos Yoast registrados correctamente',`_yoast_wpseo_title = "${meta._yoast_wpseo_title||'(vacío)'}" | _yoast_wpseo_metadesc = "${(meta._yoast_wpseo_metadesc||'').slice(0,60)||'(vacío)'}"`,'var(--success)');
     } else {
-      seoDiagStep('meta','❌','Campos Yoast NO están registrados en REST API',`El campo "meta" en la respuesta ${meta?'existe pero no contiene los campos Yoast':'no existe o es null'}. Agrega el snippet PHP para registrarlos.`,'var(--danger)');
+      const metaKeys=meta?Object.keys(meta):[];
+      const metaDebug=meta?(metaKeys.length?`Claves presentes: ${metaKeys.slice(0,8).join(', ')}`:'meta existe pero está vacío {}'):'meta es null/undefined';
+      seoDiagStep('meta','❌','Campos Yoast NO están registrados en REST API',`${metaDebug} — El snippet PHP puede no haberse guardado, o hay un cache de servidor activo. Verifica que no haya errores PHP en functions.php y limpia el cache de WordPress.`,'var(--danger)');
       document.getElementById('seoDiagPhpBox').style.display='block';
       if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
       return;
