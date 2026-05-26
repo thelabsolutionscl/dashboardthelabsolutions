@@ -1421,16 +1421,47 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
   <!-- Config WP (colapsable) -->
   <div id="wpConfigPanel" style="display:none;margin-bottom:16px">
-    <div class="card">
+    <div class="card" style="margin-bottom:12px">
       <div class="card-header"><span class="card-title">Credenciales WordPress</span></div>
       <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
         <div class="field-group"><label class="field-label">URL del sitio</label><input class="field-input" id="wp-url" placeholder="https://thelab.solutions"></div>
         <div class="field-group"><label class="field-label">Usuario</label><input class="field-input" id="wp-user" placeholder="thelabsolu"></div>
         <div class="field-group"><label class="field-label">Application Password</label><input class="field-input" id="wp-pass" type="password" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"></div>
       </div>
-      <div style="padding:0 16px 16px;display:flex;gap:8px">
+      <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary btn-sm" onclick="saveWPConfig()">💾 Guardar</button>
         <button class="btn btn-ghost btn-sm" onclick="testWPConnection()">🔌 Probar conexión</button>
+        <button class="btn btn-ghost btn-sm" onclick="testYoastWrite()">🧪 Verificar guardado SEO</button>
+        <span id="yoastWriteStatus" style="font-size:11px;color:var(--text3);margin-left:4px"></span>
+      </div>
+    </div>
+    <div class="card" id="phpSnippetCard" style="display:none">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span class="card-title">⚠ Requerido: activar escritura SEO en WordPress</span>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('phpSnippetCard').style.display='none'">✕</button>
+      </div>
+      <div style="padding:12px 16px">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Para que el botón "Guardar" funcione, debes agregar este código a <strong>functions.php</strong> de tu tema en WordPress (Apariencia → Editor de temas → functions.php):</p>
+        <div style="position:relative">
+          <pre id="phpSnippetCode" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:11px;padding:14px;border-radius:8px;overflow-x:auto;border:1px solid var(--border2);margin:0;line-height:1.6">add_action( 'rest_api_init', function () {
+    foreach ( [ 'post', 'page' ] as $post_type ) {
+        register_post_meta( $post_type, '_yoast_wpseo_title', [
+            'show_in_rest'  => true,
+            'single'        => true,
+            'type'          => 'string',
+            'auth_callback' => function() { return current_user_can( 'edit_posts' ); },
+        ] );
+        register_post_meta( $post_type, '_yoast_wpseo_metadesc', [
+            'show_in_rest'  => true,
+            'single'        => true,
+            'type'          => 'string',
+            'auth_callback' => function() { return current_user_can( 'edit_posts' ); },
+        ] );
+    }
+} );</pre>
+          <button onclick="copyPhpSnippet()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.08)">📋 Copiar</button>
+        </div>
+        <p style="font-size:11px;color:var(--text3);margin-top:8px">Después de agregar el código, haz clic en "Verificar guardado SEO" para confirmar que funciona.</p>
       </div>
     </div>
   </div>
@@ -5575,13 +5606,55 @@ async function saveYoastFields(wpId,wpType,pageUrl){
   try{
     const r=await fetch(endpoint,{method:'POST',headers:wpAuthHeader(),body:JSON.stringify({meta:{_yoast_wpseo_title:newTitle,_yoast_wpseo_metadesc:newDesc}})});
     if(r.ok){
-      toast('✓ SEO guardado en WordPress','success');
-      const idxBtn=document.getElementById(`idx-btn-${wpId}`);
-      if(idxBtn) idxBtn.style.display='block';
+      // verify the save actually persisted by reading back meta fields
+      const vr=await fetch(endpoint+'?_fields=meta',{headers:wpAuthHeader()}).catch(()=>null);
+      const vd=vr&&vr.ok?await vr.json().catch(()=>null):null;
+      const savedOk=vd&&vd.meta&&(vd.meta._yoast_wpseo_title!==undefined||vd.meta._yoast_wpseo_metadesc!==undefined);
+      if(!savedOk){
+        // fields not registered — show PHP snippet
+        document.getElementById('phpSnippetCard').style.display='block';
+        document.getElementById('wpConfigPanel').style.display='block';
+        loadWPConfigForm();
+        toast('⚠ SEO no guardado — agrega el snippet PHP a WordPress','warn');
+      } else {
+        toast('✓ SEO guardado en WordPress','success');
+        const idxBtn=document.getElementById(`idx-btn-${wpId}`);
+        if(idxBtn) idxBtn.style.display='block';
+      }
     }
     else{const j=await r.json().catch(()=>({}));toast(`Error ${r.status}: ${j.message||'verifica permisos'}`,'error');}
   }catch(e){toast('Error: '+e.message,'error');}
   if(btn){btn.disabled=false;btn.textContent='💾 Guardar';}
+}
+async function testYoastWrite(){
+  const cfg=getWPConfig();if(!cfg.url){toast('Guarda las credenciales primero','error');return;}
+  const st=document.getElementById('yoastWriteStatus');
+  if(st) st.textContent='Verificando...';
+  try{
+    // fetch first page/post to test
+    const h=wpAuthHeader();
+    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&_fields=id,meta',{headers:h});
+    if(!r.ok){if(st) st.textContent='❌ Error de autenticación';return;}
+    const items=await r.json();
+    if(!items.length){if(st) st.textContent='❌ Sin páginas para probar';return;}
+    const item=items[0];
+    const registered=item.meta&&(item.meta._yoast_wpseo_title!==undefined||item.meta._yoast_wpseo_metadesc!==undefined);
+    if(registered){
+      if(st){st.textContent='✓ Guardado SEO funciona';st.style.color='var(--success)';}
+      document.getElementById('phpSnippetCard').style.display='none';
+      toast('✓ Los campos Yoast están registrados — el guardado funciona','success');
+    } else {
+      if(st){st.textContent='⚠ Se requiere snippet PHP';st.style.color='var(--warn)';}
+      document.getElementById('phpSnippetCard').style.display='block';
+      toast('⚠ Campos Yoast no registrados — agrega el snippet PHP','warn');
+    }
+  }catch(e){if(st) st.textContent='❌ '+e.message;toast('Error: '+e.message,'error');}
+}
+function copyPhpSnippet(){
+  const code=document.getElementById('phpSnippetCode')?.textContent||'';
+  navigator.clipboard.writeText(code).then(()=>toast('✓ Código copiado','success')).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Código copiado','success');
+  });
 }
 function solicitarIndexacion(pageUrl){
   if(!pageUrl){toast('URL no disponible','error');return;}
