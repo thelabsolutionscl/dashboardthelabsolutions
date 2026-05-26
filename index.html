@@ -5893,6 +5893,7 @@ async function runSEODiag(){
   let testPageId=null;
   let diagMeta=null;
   if(wpPagesCache.length>0){
+    seoDiagStep('meta-src','ℹ','Usando datos ya cargados',`Cache tiene ${wpPagesCache.length} páginas/posts — sin fetch adicional.`,'var(--text3)');
     // reuse data already fetched by loadWPPages (avoids second CORS request)
     const p=wpPagesCache[0];
     testPageId=p.id;
