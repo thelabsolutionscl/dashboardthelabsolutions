@@ -1397,6 +1397,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="section-title">Web · thelab.solutions</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="toggleWPConfig()">⚙ Configurar WP</button>
+      <button class="btn btn-ghost btn-sm" onclick="openSEODiag()">🔬 Diagnóstico SEO</button>
       <button class="btn btn-primary btn-sm" onclick="loadWPPages()">↺ Actualizar</button>
     </div>
   </div>
@@ -1476,6 +1477,51 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <span class="footer-text">Auto-refresh: 90s</span>
 </div></div>
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- MODAL DIAGNÓSTICO SEO -->
+<div id="seoDiagOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.78);z-index:9999;align-items:flex-start;justify-content:center;padding-top:60px" onclick="if(event.target===this)closeSEODiag()">
+  <div style="background:var(--surface);border-radius:14px;border:1px solid var(--border2);width:580px;max-width:94vw;overflow:hidden;box-shadow:0 28px 70px rgba(0,0,0,0.65)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:700;font-size:14px;color:var(--text)">🔬 Diagnóstico SEO WordPress</div>
+      <button onclick="closeSEODiag()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+    </div>
+    <div style="padding:16px 18px;max-height:70vh;overflow-y:auto">
+      <div id="seoDiagSteps" style="display:flex;flex-direction:column;gap:10px"></div>
+      <div id="seoDiagPhpBox" style="display:none;margin-top:14px">
+        <div style="background:#1a1a2e;border:1px solid rgba(255,200,0,0.3);border-radius:8px;padding:12px">
+          <div style="font-size:12px;font-weight:600;color:#ffc107;margin-bottom:8px">⚠ Requiere snippet PHP en functions.php</div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:8px">Agrégalo en <strong>WordPress → Apariencia → Editor de temas → functions.php</strong></div>
+          <div style="position:relative">
+            <pre id="seoDiagPhpCode" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:10.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">add_action( 'rest_api_init', function () {
+    foreach ( [ 'post', 'page' ] as $post_type ) {
+        register_post_meta( $post_type, '_yoast_wpseo_title', [
+            'show_in_rest'  => true,
+            'single'        => true,
+            'type'          => 'string',
+            'default'       => '',
+            'auth_callback' => function() { return current_user_can( 'edit_posts' ); },
+        ] );
+        register_post_meta( $post_type, '_yoast_wpseo_metadesc', [
+            'show_in_rest'  => true,
+            'single'        => true,
+            'type'          => 'string',
+            'default'       => '',
+            'auth_callback' => function() { return current_user_can( 'edit_posts' ); },
+        ] );
+    }
+} );</pre>
+            <button onclick="copySEODiagSnippet()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
+          </div>
+          <p style="font-size:10px;color:var(--text3);margin:8px 0 0">Tras guardar el archivo, vuelve a hacer clic en <strong>"Diagnóstico SEO"</strong> para verificar.</p>
+        </div>
+      </div>
+    </div>
+    <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px">
+      <button id="seoDiagRunBtn" class="btn btn-primary btn-sm" onclick="runSEODiag()">▶ Ejecutar diagnóstico</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeSEODiag()">Cerrar</button>
+    </div>
+  </div>
+</div>
 
 <!-- BÚSQUEDA GLOBAL -->
 <div id="globalSearchOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.78);z-index:9999;align-items:flex-start;justify-content:center;padding-top:72px" onclick="if(event.target===this)closeGlobalSearch()">
@@ -5611,11 +5657,11 @@ async function saveYoastFields(wpId,wpType,pageUrl){
       const vd=vr&&vr.ok?await vr.json().catch(()=>null):null;
       const savedOk=vd&&vd.meta&&(vd.meta._yoast_wpseo_title!==undefined||vd.meta._yoast_wpseo_metadesc!==undefined);
       if(!savedOk){
-        // fields not registered — show PHP snippet
-        document.getElementById('phpSnippetCard').style.display='block';
-        document.getElementById('wpConfigPanel').style.display='block';
-        loadWPConfigForm();
-        toast('⚠ SEO no guardado — agrega el snippet PHP a WordPress','warn');
+        // fields not registered — open diagnostic modal
+        openSEODiag();
+        document.getElementById('seoDiagPhpBox').style.display='block';
+        document.getElementById('seoDiagSteps').innerHTML='<div style="color:var(--warn);font-size:12px;font-weight:600">⚠ El SEO no se guardó — los campos Yoast no están registrados en la REST API. Agrega el snippet PHP indicado abajo y luego ejecuta el diagnóstico para verificar.</div>';
+        toast('⚠ SEO no guardado — revisa el Diagnóstico SEO','warn');
       } else {
         toast('✓ SEO guardado en WordPress','success');
         const idxBtn=document.getElementById(`idx-btn-${wpId}`);
@@ -5626,30 +5672,111 @@ async function saveYoastFields(wpId,wpType,pageUrl){
   }catch(e){toast('Error: '+e.message,'error');}
   if(btn){btn.disabled=false;btn.textContent='💾 Guardar';}
 }
-async function testYoastWrite(){
-  const cfg=getWPConfig();if(!cfg.url){toast('Guarda las credenciales primero','error');return;}
-  const st=document.getElementById('yoastWriteStatus');
-  if(st) st.textContent='Verificando...';
-  try{
-    // fetch first page/post to test
-    const h=wpAuthHeader();
-    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&_fields=id,meta',{headers:h});
-    if(!r.ok){if(st) st.textContent='❌ Error de autenticación';return;}
-    const items=await r.json();
-    if(!items.length){if(st) st.textContent='❌ Sin páginas para probar';return;}
-    const item=items[0];
-    const registered=item.meta&&(item.meta._yoast_wpseo_title!==undefined||item.meta._yoast_wpseo_metadesc!==undefined);
-    if(registered){
-      if(st){st.textContent='✓ Guardado SEO funciona';st.style.color='var(--success)';}
-      document.getElementById('phpSnippetCard').style.display='none';
-      toast('✓ Los campos Yoast están registrados — el guardado funciona','success');
-    } else {
-      if(st){st.textContent='⚠ Se requiere snippet PHP';st.style.color='var(--warn)';}
-      document.getElementById('phpSnippetCard').style.display='block';
-      toast('⚠ Campos Yoast no registrados — agrega el snippet PHP','warn');
-    }
-  }catch(e){if(st) st.textContent='❌ '+e.message;toast('Error: '+e.message,'error');}
+function openSEODiag(){
+  const el=document.getElementById('seoDiagOverlay');
+  el.style.display='flex';
+  document.getElementById('seoDiagSteps').innerHTML='<div style="color:var(--text3);font-size:12px">Haz clic en "Ejecutar diagnóstico" para comenzar.</div>';
+  document.getElementById('seoDiagPhpBox').style.display='none';
 }
+function closeSEODiag(){document.getElementById('seoDiagOverlay').style.display='none';}
+function seoDiagStep(id,icon,label,detail,color){
+  const c=document.getElementById('seoDiagSteps');
+  let el=document.getElementById('diag-step-'+id);
+  if(!el){el=document.createElement('div');el.id='diag-step-'+id;el.style.cssText='display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)';c.appendChild(el);}
+  el.innerHTML=`<span style="font-size:16px;min-width:22px;text-align:center">${icon}</span><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:${color||'var(--text)'}">${label}</div>${detail?`<div style="font-size:11px;color:var(--text3);margin-top:3px;word-break:break-all">${detail}</div>`:''}</div>`;
+}
+async function runSEODiag(){
+  const cfg=getWPConfig();
+  const c=document.getElementById('seoDiagSteps');
+  c.innerHTML='';
+  document.getElementById('seoDiagPhpBox').style.display='none';
+  const btn=document.getElementById('seoDiagRunBtn');
+  if(btn){btn.disabled=true;btn.textContent='Ejecutando...';}
+
+  // Step 1: check config
+  if(!cfg.url||!cfg.user||!cfg.pass){
+    seoDiagStep('cfg','❌','Sin credenciales configuradas','Abre "⚙ Configurar WP" y guarda las credenciales.','var(--danger)');
+    if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
+    return;
+  }
+  seoDiagStep('cfg','✓',`Credenciales cargadas`,`${cfg.user} @ ${cfg.url}`,'var(--success)');
+
+  // Step 2: connectivity
+  seoDiagStep('conn','⏳','Comprobando conexión…','','var(--text3)');
+  try{
+    const r=await fetch(cfg.url+'/wp-json/wp/v2/users/me',{headers:wpAuthHeader()});
+    if(!r.ok){
+      const j=await r.json().catch(()=>({}));
+      seoDiagStep('conn','❌',`Error de autenticación (HTTP ${r.status})`,j.message||'Verifica usuario y Application Password.','var(--danger)');
+      if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
+      return;
+    }
+    const me=await r.json();
+    seoDiagStep('conn','✓',`Conectado como: ${me.name||me.slug}`,`Roles: ${(me.roles||[]).join(', ')}`,'var(--success)');
+  }catch(e){
+    seoDiagStep('conn','❌','Error de red / CORS',`${e.message} — WordPress puede estar bloqueando peticiones externas. Verifica que REST API esté habilitada y no haya plugins de seguridad bloqueando.`,'var(--danger)');
+    if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
+    return;
+  }
+
+  // Step 3: read meta fields
+  seoDiagStep('meta','⏳','Verificando campos Yoast en REST API…','','var(--text3)');
+  let testPageId=null;
+  try{
+    const r=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=publish',{headers:wpAuthHeader()});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const items=await r.json();
+    if(!items.length) throw new Error('No hay páginas publicadas');
+    testPageId=items[0].id;
+    const meta=items[0].meta;
+    const hasTitle=meta&&meta._yoast_wpseo_title!==undefined;
+    const hasDesc=meta&&meta._yoast_wpseo_metadesc!==undefined;
+    if(hasTitle&&hasDesc){
+      seoDiagStep('meta','✓','Campos Yoast registrados correctamente',`_yoast_wpseo_title = "${meta._yoast_wpseo_title||'(vacío)'}" | _yoast_wpseo_metadesc = "${(meta._yoast_wpseo_metadesc||'').slice(0,60)||'(vacío)'}"`,'var(--success)');
+    } else {
+      seoDiagStep('meta','❌','Campos Yoast NO están registrados en REST API',`El campo "meta" en la respuesta ${meta?'existe pero no contiene los campos Yoast':'no existe o es null'}. Agrega el snippet PHP para registrarlos.`,'var(--danger)');
+      document.getElementById('seoDiagPhpBox').style.display='block';
+      if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
+      return;
+    }
+  }catch(e){
+    seoDiagStep('meta','❌','Error al leer meta',e.message,'var(--danger)');
+    if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
+    return;
+  }
+
+  // Step 4: write test
+  seoDiagStep('write','⏳','Probando escritura de campo SEO…','','var(--text3)');
+  try{
+    const testVal='__diag_test__';
+    const wr=await fetch(cfg.url+`/wp-json/wp/v2/pages/${testPageId}`,{
+      method:'POST',headers:wpAuthHeader(),
+      body:JSON.stringify({meta:{_yoast_wpseo_title:testVal}})
+    });
+    if(!wr.ok){const j=await wr.json().catch(()=>({}));throw new Error(`HTTP ${wr.status}: ${j.message||'sin detalle'}`);}
+    // verify write persisted
+    const vr=await fetch(cfg.url+`/wp-json/wp/v2/pages/${testPageId}`,{headers:wpAuthHeader()});
+    const vd=vr.ok?await vr.json():{};
+    const written=vd.meta&&vd.meta._yoast_wpseo_title===testVal;
+    if(written){
+      seoDiagStep('write','✓','Escritura verificada — el guardado SEO funciona','El campo _yoast_wpseo_title se guardó y se leyó correctamente.','var(--success)');
+      // restore (optional — leave test value, Yoast will overwrite on next save from WP admin)
+      seoDiagStep('done','🎉','Todo listo','Puedes guardar SEO desde el dashboard sin problemas.','var(--accent)');
+    } else {
+      seoDiagStep('write','⚠','Escritura aceptada pero valor no persistió',`WordPress aceptó el POST (HTTP ${wr.status}) pero el valor leído de vuelta no coincide. Puede ser un cache o un plugin de seguridad.`,'var(--warn)');
+    }
+  }catch(e){
+    seoDiagStep('write','❌','Error al escribir campo SEO',e.message,'var(--danger)');
+  }
+  if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
+}
+function copySEODiagSnippet(){
+  const code=document.getElementById('seoDiagPhpCode')?.textContent||'';
+  navigator.clipboard.writeText(code).then(()=>toast('✓ Código PHP copiado','success')).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Código PHP copiado','success');
+  });
+}
+async function testYoastWrite(){openSEODiag();await runSEODiag();}
 function copyPhpSnippet(){
   const code=document.getElementById('phpSnippetCode')?.textContent||'';
   navigator.clipboard.writeText(code).then(()=>toast('✓ Código copiado','success')).catch(()=>{
