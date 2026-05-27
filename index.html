@@ -350,6 +350,8 @@ body.kiosk .tab-content{padding-top:12px!important;}
   .ss-btn-add{flex:1!important;margin-left:0!important;padding:10px 8px!important;text-align:center}
   .ss-form-grid .field-group[style*="grid-column"]{grid-column:1/-1!important}
 }
+.nuevo-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:10px 16px;background:none;border:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:background .12s;}
+.nuevo-item:hover{background:rgba(255,255,255,0.06);}
 </style>
 <style>
 /* ══ UI/UX Pro Max — mejoras visuales v5.1 ══════════════════════ */
@@ -720,6 +722,19 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')">📊 Reportes</button>
     <button class="tab-btn" data-tab="web" onclick="switchTab('web')">🌐 Web</button>
     <button class="tab-btn" data-tab="finanzas" onclick="switchTab('finanzas')">💰 Finanzas</button>
+    <div id="nuevoDropdown" style="position:relative;display:inline-flex;align-items:center">
+      <button class="tab-btn" id="nuevoDropBtn" onclick="toggleNuevoMenu(event)" style="display:flex;align-items:center;gap:4px;background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);font-weight:700">
+        ➕ Nuevo <span id="nuevoDropArrow" style="font-size:9px;margin-left:2px;transition:transform .2s">▾</span>
+      </button>
+      <div id="nuevoDropPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 10px 36px rgba(0,0,0,0.5);z-index:3000;overflow:hidden;padding:4px 0">
+        <button onclick="closeNuevoMenu();switchTab('nuevo-lead')" class="nuevo-item">👤 Nuevo Lead / Cliente</button>
+        <button onclick="closeNuevoMenu();switchTab('nuevo-proveedor')" class="nuevo-item">🏭 Nuevo Proveedor</button>
+        <button onclick="closeNuevoMenu();switchTab('nueva-cot')" class="nuevo-item">📋 Nueva Cotización</button>
+        <div style="height:1px;background:var(--border);margin:3px 0"></div>
+        <button onclick="closeNuevoMenu();switchTab('finanzas');setTimeout(()=>finSwitchTab('nueva'),80)" class="nuevo-item">💰 Nueva Venta</button>
+        <button onclick="closeNuevoMenu();switchTab('finanzas');setTimeout(()=>finSwitchTab('diario'),80)" class="nuevo-item">📒 Nuevo Registro (Diario)</button>
+      </div>
+    </div>
   </nav>
   <div class="topbar-right">
     <div class="status-dot" id="statusDot"></div>
@@ -741,6 +756,20 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
   <div class="mobile-status"><div class="status-dot" id="statusDotMobile"></div><span id="statusTextMobile">iniciando...</span></div>
   <nav class="mobile-nav-body">
+    <!-- Acordeón NUEVO -->
+    <div style="border-bottom:1px solid var(--border)">
+      <button onclick="toggleMobileNuevo()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 18px;background:rgba(0,212,204,0.07);border:none;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.3px">
+        <span>➕ NUEVO</span>
+        <span id="mobileNuevoChevron" style="font-size:11px;transition:transform .2s">▾</span>
+      </button>
+      <div id="mobileNuevoBody" style="display:none;background:rgba(0,0,0,0.18)">
+        <button onclick="closeMobileMenu();switchTab('nuevo-lead')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">👤</span>Nuevo Lead / Cliente</button>
+        <button onclick="closeMobileMenu();switchTab('nuevo-proveedor')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">🏭</span>Nuevo Proveedor</button>
+        <button onclick="closeMobileMenu();switchTab('nueva-cot')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📋</span>Nueva Cotización</button>
+        <button onclick="closeMobileMenu();switchTab('finanzas');setTimeout(()=>finSwitchTab('nueva'),80)" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">💰</span>Nueva Venta</button>
+        <button onclick="closeMobileMenu();switchTab('finanzas');setTimeout(()=>finSwitchTab('diario'),80)" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📒</span>Nuevo Registro (Diario)</button>
+      </div>
+    </div>
     <button class="mobile-tab-btn active" data-tab="overview" onclick="switchTabMobile('overview')"><span class="mobile-tab-icon">🏠</span>Overview</button>
     <button class="mobile-tab-btn" data-tab="clientes" onclick="switchTabMobile('clientes')"><span class="mobile-tab-icon">👥</span>Clientes</button>
     <button class="mobile-tab-btn" data-tab="cotizaciones" onclick="switchTabMobile('cotizaciones')"><span class="mobile-tab-icon">📋</span>Cotizaciones</button>
@@ -8259,6 +8288,33 @@ if(typeof ResizeObserver!=='undefined'&&_finPanel){
   });
   _finResizeObs.observe(_finPanel);
 }
+
+// ── Menú NUEVO (dropdown topbar + acordeón mobile) ──────────────
+function toggleNuevoMenu(e){
+  e.stopPropagation();
+  const panel=document.getElementById('nuevoDropPanel');
+  const arrow=document.getElementById('nuevoDropArrow');
+  const isOpen=panel.style.display!=='none';
+  panel.style.display=isOpen?'none':'block';
+  if(arrow)arrow.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+}
+function closeNuevoMenu(){
+  const panel=document.getElementById('nuevoDropPanel');
+  const arrow=document.getElementById('nuevoDropArrow');
+  if(panel)panel.style.display='none';
+  if(arrow)arrow.style.transform='rotate(0deg)';
+}
+function toggleMobileNuevo(){
+  const body=document.getElementById('mobileNuevoBody');
+  const chevron=document.getElementById('mobileNuevoChevron');
+  const isOpen=body&&body.style.display!=='none';
+  if(body)body.style.display=isOpen?'none':'block';
+  if(chevron)chevron.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+}
+document.addEventListener('click',function(e){
+  const dd=document.getElementById('nuevoDropdown');
+  if(dd&&!dd.contains(e.target))closeNuevoMenu();
+});
 </script>
 
 </body>
