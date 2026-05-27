@@ -1652,6 +1652,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </div>
         <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" onclick="saveAdsConfig()">💾 Guardar</button>
+          <button class="btn btn-ghost btn-sm" onclick="testAdsEndpoint()">🔗 Probar URL</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('adsScriptBox').style.display=document.getElementById('adsScriptBox').style.display==='none'?'block':'none'">📋 Ver Apps Script</button>
         </div>
         <!-- Apps Script instructions -->
@@ -6773,6 +6774,12 @@ function getAdsDemoData(days){
         gasto:Math.round(4700*f),impresiones:Math.round(102*f*100),clics:Math.round(20*f),conversiones:0,valor_conversion:0},
     ]
   };
+}
+function testAdsEndpoint(){
+  const url=document.getElementById('ads-endpoint').value.trim();
+  if(!url){alert('Primero pega la URL del endpoint en el campo de arriba.');return;}
+  const testUrl=url+(url.includes('?')?'&':'?')+'days=30';
+  window.open(testUrl,'_blank');
 }
 async function loadAdsData(){
   const cfg=getAdsConfig();
