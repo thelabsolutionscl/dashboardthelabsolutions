@@ -1624,42 +1624,49 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="section-header">
     <div class="section-title">💰 Finanzas</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <span class="section-subtitle" id="finActualizadoEn">Datos al 27/05/2026</span>
-      <button class="btn btn-ghost btn-sm" onclick="exportarFinanzasCSV()">⬇ Exportar CSV</button>
+      <span class="section-subtitle" id="finActualizadoEn">—</span>
+      <button class="btn btn-ghost btn-sm" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportarFinanzasCSV()">⬇ CSV</button>
     </div>
   </div>
 
-  <!-- KPIs -->
-  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
-    <div class="kpi-card yellow">
-      <div class="kpi-label">Ventas 2026 (1er sem)</div>
-      <div class="kpi-value" id="fin-kpi-ventas26">$33,4M</div>
-      <div class="kpi-sub" id="fin-kpi-ventas26-sub">Ene–May 2026</div>
+  <!-- KPIs dinámicos con sparklines -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px">
+    <div class="kpi-card yellow" style="position:relative;overflow:hidden">
+      <div class="kpi-label">Ventas 2026 (Ene–May)</div>
+      <div class="kpi-value" id="fin-k1">—</div>
+      <div class="kpi-sub" id="fin-k1s">—</div>
+      <canvas id="fin-sp1" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
     </div>
-    <div class="kpi-card green">
+    <div class="kpi-card green" style="position:relative;overflow:hidden">
       <div class="kpi-label">Media Mensual 2026</div>
-      <div class="kpi-value">$5,6M</div>
-      <div class="kpi-sub">↑ 68.5% vs 2025</div>
+      <div class="kpi-value" id="fin-k2">—</div>
+      <div class="kpi-sub" id="fin-k2s">—</div>
+      <canvas id="fin-sp2" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
     </div>
-    <div class="kpi-card orange">
+    <div class="kpi-card orange" style="position:relative;overflow:hidden">
       <div class="kpi-label">Por Cobrar + IVA</div>
-      <div class="kpi-value">$22,5M</div>
-      <div class="kpi-sub">Neto: $18,9M</div>
+      <div class="kpi-value" id="fin-k3">—</div>
+      <div class="kpi-sub" id="fin-k3s">—</div>
+      <canvas id="fin-sp3" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
     </div>
-    <div class="kpi-card red">
-      <div class="kpi-label">Préstamo Pendiente</div>
-      <div class="kpi-value">$23,1M</div>
-      <div class="kpi-sub">Acumulado 2026</div>
+    <div class="kpi-card red" style="position:relative;overflow:hidden">
+      <div class="kpi-label">Préstamo Acumulado</div>
+      <div class="kpi-value" id="fin-k4">—</div>
+      <div class="kpi-sub" id="fin-k4s">—</div>
+      <canvas id="fin-sp4" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
     </div>
-    <div class="kpi-card red">
-      <div class="kpi-label">Deuda Total Abril</div>
-      <div class="kpi-value">$33,9M</div>
-      <div class="kpi-sub">IVA Postergado incl.</div>
+    <div class="kpi-card red" style="position:relative;overflow:hidden">
+      <div class="kpi-label">Deuda Pendiente</div>
+      <div class="kpi-value" id="fin-k5">—</div>
+      <div class="kpi-sub" id="fin-k5s">—</div>
+      <canvas id="fin-sp5" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
     </div>
-    <div class="kpi-card purple">
-      <div class="kpi-label">Total Año 2024 (record)</div>
-      <div class="kpi-value">$108M</div>
-      <div class="kpi-sub">Mejor año histórico</div>
+    <div class="kpi-card purple" style="position:relative;overflow:hidden">
+      <div class="kpi-label">Record — Año 2024</div>
+      <div class="kpi-value" id="fin-k6">—</div>
+      <div class="kpi-sub" id="fin-k6s">—</div>
+      <canvas id="fin-sp6" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
     </div>
   </div>
 
@@ -1675,30 +1682,12 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
   <!-- ── RESUMEN ── -->
   <div id="fin-panel-resumen">
-    <!-- Comparativa anual -->
-    <div class="data-grid" style="grid-template-columns:1fr 1.3fr">
-      <div class="card">
-        <div class="card-header"><span class="card-title">Resumen por Año</span></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Año</th><th>Total Ventas</th><th>Media/Mes</th><th>Variación</th></tr></thead>
-            <tbody>
-              <tr><td><span class="badge badge-gray">2022 *</span></td><td>$9.000.000</td><td>$1.500.000</td><td><span class="badge badge-gray">—</span></td></tr>
-              <tr><td><span class="badge badge-yellow">2023</span></td><td>$47.161.715</td><td>$3.930.143</td><td><span class="badge badge-green">+424%</span></td></tr>
-              <tr><td><span class="badge badge-orange">2024</span></td><td>$108.424.056</td><td>$9.035.338</td><td><span class="badge badge-green">+130%</span></td></tr>
-              <tr><td><span class="badge badge-orange">2025</span></td><td>$73.734.797</td><td>$6.144.566</td><td><span class="badge badge-red">-32%</span></td></tr>
-              <tr style="background:rgba(0,212,204,0.05)"><td><span class="badge badge-green">2026 *</span></td><td>$33.461.820</td><td>$5.576.970</td><td><span class="badge badge-green">+69%</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div style="padding:10px 16px;font-size:10px;color:var(--text3)">* 2022: solo Jun–Dic | 2026: solo Ene–May</div>
-      </div>
-
-      <!-- Gráfico canvas -->
+    <!-- Fila 1: Chart principal + donut canal -->
+    <div class="data-grid" style="grid-template-columns:1.8fr 1fr;margin-bottom:14px">
       <div class="card">
         <div class="card-header">
           <span class="card-title">Ventas Mensuales por Año</span>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
             <button class="btn-mini btn-mini-yellow" onclick="finChartSetYear('all')" id="fc-all">Todos</button>
             <button class="btn-mini" onclick="finChartSetYear(2023)" id="fc-2023">2023</button>
             <button class="btn-mini" onclick="finChartSetYear(2024)" id="fc-2024">2024</button>
@@ -1706,14 +1695,45 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <button class="btn-mini" onclick="finChartSetYear(2026)" id="fc-2026">2026</button>
           </div>
         </div>
-        <div style="padding:12px 16px">
-          <canvas id="finVentasChart" height="220" style="width:100%;display:block"></canvas>
+        <div style="padding:10px 16px;position:relative">
+          <canvas id="finVentasChart" style="width:100%;display:block;cursor:crosshair" height="240"></canvas>
+          <div id="fin-chart-tooltip" style="display:none;position:absolute;background:rgba(17,17,17,0.96);border:1px solid var(--border2);border-radius:7px;padding:7px 11px;font-size:11px;pointer-events:none;z-index:10;min-width:140px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Distribución por Canal</span><span class="card-badge" id="fin-donut-year-label">2026</span></div>
+        <div style="padding:10px 16px;display:flex;flex-direction:column;align-items:center;gap:10px">
+          <canvas id="finCanalDonut" width="160" height="160" style="display:block"></canvas>
+          <div id="fin-donut-legend" style="width:100%;font-size:11px;display:flex;flex-direction:column;gap:5px"></div>
         </div>
       </div>
     </div>
 
-    <!-- Semestral histórico -->
-    <div class="card" style="margin-bottom:20px">
+    <!-- Fila 2: Resumen anual + Top clientes -->
+    <div class="data-grid" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Resumen por Año</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Año</th><th>Total Ventas</th><th>Media/Mes</th><th>Variación</th><th>Barra</th></tr></thead>
+            <tbody id="fin-resumen-anual-body"></tbody>
+          </table>
+        </div>
+        <div style="padding:8px 16px;font-size:10px;color:var(--text3)">* 2022: solo Jun–Dic | 2026: Ene–May</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Top Clientes 2026</span><span class="card-badge" id="fin-topclientes-label">por volumen</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cliente / Empresa</th><th>Total</th><th>%</th></tr></thead>
+            <tbody id="fin-top-clientes-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fila 3: Semestral + mensual -->
+    <div class="card" style="margin-bottom:14px">
       <div class="card-header"><span class="card-title">Evolución Semestral</span></div>
       <div class="table-wrap">
         <table>
@@ -1722,26 +1742,29 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <tr><td>1er Año</td><td>1° SEM Jun–Dic 2022</td><td>$9.000.000</td><td rowspan="2" style="vertical-align:middle">$23.725.190</td><td>$1.500.000</td><td>—</td></tr>
             <tr><td>1er Año</td><td>2° SEM Ene–Jun 2023</td><td>$14.725.190</td><td>$2.454.198</td><td><span class="badge badge-green">+63,6%</span></td></tr>
             <tr style="background:rgba(255,255,255,0.015)"><td>2do Año</td><td>3° SEM Jul–Dic 2023</td><td>$32.436.525</td><td rowspan="2" style="vertical-align:middle">—</td><td>$5.406.088</td><td><span class="badge badge-green">+120%</span></td></tr>
-            <tr style="background:rgba(255,255,255,0.015)"><td>2do Año</td><td>4° SEM Ene–Jun 2024</td><td>$19.858.172</td><td>$3.309.695</td><td><span class="badge badge-red">-39%</span></td></tr>
+            <tr style="background:rgba(255,255,255,0.015)"><td>2do Año</td><td>4° SEM Ene–Jun 2024</td><td>$19.858.172</td><td>$3.309.695</td><td><span class="badge badge-red">−39%</span></td></tr>
             <tr><td>3er Año</td><td>1° SEM Ene–Jun 2024</td><td>$32.542.366</td><td rowspan="2" style="vertical-align:middle">$108.424.056</td><td>$5.423.728</td><td><span class="badge badge-green">+121%</span></td></tr>
             <tr><td>3er Año</td><td>2° SEM Jul–Dic 2024</td><td>$75.881.690</td><td>$12.646.948</td><td><span class="badge badge-green">+134%</span></td></tr>
-            <tr style="background:rgba(255,255,255,0.015)"><td>4to Año</td><td>1° SEM Ene–Jun 2025</td><td>$19.858.172</td><td rowspan="2" style="vertical-align:middle">$73.734.797</td><td>$3.309.695</td><td><span class="badge badge-red">-39%</span></td></tr>
+            <tr style="background:rgba(255,255,255,0.015)"><td>4to Año</td><td>1° SEM Ene–Jun 2025</td><td>$19.858.172</td><td rowspan="2" style="vertical-align:middle">$73.734.797</td><td>$3.309.695</td><td><span class="badge badge-red">−39%</span></td></tr>
             <tr style="background:rgba(255,255,255,0.015)"><td>4to Año</td><td>2° SEM Jul–Dic 2025</td><td>$53.876.625</td><td>$8.979.438</td><td><span class="badge badge-green">+66,1%</span></td></tr>
-            <tr style="background:rgba(0,212,204,0.04)"><td>5to Año</td><td>Ene–Jun 2026 (en curso)</td><td>$33.461.820</td><td>—</td><td>$5.576.970</td><td><span class="badge badge-green">+68,5%</span></td></tr>
+            <tr style="background:rgba(0,212,204,0.04)"><td>5to Año</td><td>Ene–May 2026 (en curso)</td><td>$33.461.820</td><td>—</td><td>$5.576.970</td><td><span class="badge badge-green">+68,5%</span></td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Tabla mensual detallada -->
+    <!-- Tabla mensual con heatmap -->
     <div class="card">
-      <div class="card-header"><span class="card-title">Ventas Mensuales Detalladas</span><span class="card-badge">CLP neto sin IVA</span></div>
+      <div class="card-header"><span class="card-title">Ventas Mensuales Detalladas</span><span class="card-badge">neto sin IVA · color = intensidad</span></div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Mes</th>
-              <th>2022</th><th>2023</th><th>2024</th><th>Var 23/24</th><th>2025</th><th>Var 24/25</th><th>2026</th><th>Var 25/26</th>
+              <th style="color:rgba(167,139,250,0.8)">2023</th>
+              <th style="color:rgba(255,170,0,0.8)">2024</th><th>Var</th>
+              <th style="color:rgba(255,107,53,0.8)">2025</th><th>Var</th>
+              <th style="color:var(--accent)">2026</th><th>Var</th>
             </tr>
           </thead>
           <tbody id="finMensualBody"></tbody>
@@ -1872,26 +1895,36 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div id="fin-panel-prestamos" style="display:none">
     <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
       <div class="kpi-card red">
-        <div class="kpi-label">Deuda Préstamos Total</div>
+        <div class="kpi-label">Deuda Total Acumulada</div>
         <div class="kpi-value">$23.071.220</div>
         <div class="kpi-sub">Al 06/05/2026</div>
       </div>
       <div class="kpi-card orange">
-        <div class="kpi-label">Préstamos 2026</div>
-        <div class="kpi-value">18 movimientos</div>
-        <div class="kpi-sub">Ene–May 2026</div>
+        <div class="kpi-label">Mayor préstamo único</div>
+        <div class="kpi-value">$4.320.000</div>
+        <div class="kpi-sub">08/04/26 — pagos de facturas</div>
       </div>
       <div class="kpi-card yellow">
-        <div class="kpi-label">Mayor préstamo</div>
-        <div class="kpi-value">$4.320.000</div>
-        <div class="kpi-sub">08/04/26 — Pago facturas</div>
+        <div class="kpi-label">Devuelto</div>
+        <div class="kpi-value">$1.500.000</div>
+        <div class="kpi-sub">13/03/25 — única devolución</div>
+      </div>
+    </div>
+    <!-- Progreso de deuda visual -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><span class="card-title">Evolución de la Deuda</span><span class="card-badge">Ene 2026 → May 2026</span></div>
+      <div style="padding:12px 16px">
+        <canvas id="finDeudaChart" style="width:100%;display:block" height="120"></canvas>
+      </div>
+      <div style="padding:0 16px 12px;display:flex;justify-content:space-between;font-size:10px;color:var(--text3)">
+        <span>Inicio: $4.985.904</span><span style="color:var(--danger);font-weight:700">Actual: $23.071.220</span>
       </div>
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">Historial de Préstamos</span><span class="card-badge">CLP</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Préstamo</th><th>Devolución</th><th>Deuda Pendiente</th><th>Observación</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Préstamo</th><th>Devolución</th><th>Deuda Acumulada</th><th>Barra</th><th>Observación</th></tr></thead>
           <tbody id="fin-prestamos-body"></tbody>
         </table>
       </div>
@@ -6832,7 +6865,7 @@ function renderWebKPIs(pages){
 
 <script>
 /* ══════════════════════════════════════════════════════════════
-   FINANZAS — datos históricos y lógica completa
+   FINANZAS — OPTIMIZADO v2
    ══════════════════════════════════════════════════════════════ */
 
 /* ── Datos mensuales por año (neto sin IVA) ── */
@@ -6958,10 +6991,10 @@ function finSwitchTab(tab){
       btn.classList.toggle('active-filter',t===tab);
     }
   });
-  if(tab==='resumen'){finDrawChart();}
+  if(tab==='resumen'){finDrawChart();finDrawCanalDonut();finRenderResumenAnual();finRenderTopClientes();}
   if(tab==='facturas'){finRenderFacturas();}
   if(tab==='cobrar'){finRenderCobrar();}
-  if(tab==='prestamos'){finRenderPrestamos();}
+  if(tab==='prestamos'){finRenderPrestamos();finDrawDeudaTimeline();}
   if(tab==='nueva'){finRenderNuevaLista();}
 }
 
@@ -6969,9 +7002,20 @@ function finSwitchTab(tab){
 function finRenderMensual(){
   const tb=document.getElementById('finMensualBody');
   if(!tb)return;
+  const max23=Math.max(...FIN_VENTAS[2023]);
+  const max24=Math.max(...FIN_VENTAS[2024]);
+  const max25=Math.max(...FIN_VENTAS[2025]);
+  const max26=Math.max(...FIN_VENTAS[2026]);
+  function heatBg(v,maxV,alpha){
+    if(!v||!maxV)return '';
+    const ratio=v/maxV;
+    const r=Math.round(0*ratio+30*(1-ratio));
+    const g=Math.round(212*ratio+30*(1-ratio));
+    const b=Math.round(204*ratio+30*(1-ratio));
+    return `background:rgba(${r},${g},${b},${alpha*ratio.toFixed(2)})`;
+  }
   let html='';
   FIN_MESES.forEach((m,i)=>{
-    const v22=FIN_VENTAS[2022][i]||0;
     const v23=FIN_VENTAS[2023][i]||0;
     const v24=FIN_VENTAS[2024][i]||0;
     const v25=FIN_VENTAS[2025][i]||0;
@@ -6979,13 +7023,12 @@ function finRenderMensual(){
     const p2324=varPct(v23,v24),p2425=varPct(v24,v25),p2526=varPct(v25,v26);
     html+=`<tr>
       <td style="font-weight:600">${m}</td>
-      <td style="font-size:11px;color:var(--text3)">${v22?clp(v22):'—'}</td>
-      <td>${v23?clp(v23):'—'}</td>
-      <td>${v24?clp(v24):'—'}</td>
+      <td style="${heatBg(v23,max23,0.35)}">${v23?clp(v23):'—'}</td>
+      <td style="${heatBg(v24,max24,0.35)}">${v24?clp(v24):'—'}</td>
       <td>${p2324!==null?pct(p2324):'—'}</td>
-      <td>${v25?clp(v25):'—'}</td>
+      <td style="${heatBg(v25,max25,0.35)}">${v25?clp(v25):'—'}</td>
       <td>${p2425!==null?pct(p2425):'—'}</td>
-      <td style="color:var(--accent)">${v26?clp(v26):'—'}</td>
+      <td style="${heatBg(v26,max26,0.4)};color:var(--accent);font-weight:700">${v26?clp(v26):'—'}</td>
       <td>${(v25&&v26)?pct(p2526):'—'}</td>
     </tr>`;
   });
@@ -7138,14 +7181,18 @@ function finRenderCobrar(){
 function finRenderPrestamos(){
   const tb=document.getElementById('fin-prestamos-body');
   if(!tb)return;
+  const maxDeuda=Math.max(...FIN_PRESTAMOS.map(r=>r.deuda));
   let html='';
   FIN_PRESTAMOS.forEach(r=>{
     const esDev=!r.prestamo&&r.devolucion;
+    const pct=Math.round((r.deuda/maxDeuda)*100);
+    const barColor=esDev?'var(--accent3)':'var(--danger)';
     html+=`<tr>
       <td style="font-family:monospace;font-size:11px">${r.fecha}</td>
       <td style="color:${r.prestamo?'var(--danger)':'var(--text3)'};font-weight:${r.prestamo?700:400}">${r.prestamo?clp(r.prestamo):'—'}</td>
       <td style="color:${esDev?'var(--accent3)':'var(--text3)'};font-weight:${esDev?700:400}">${r.devolucion?clp(r.devolucion):'—'}</td>
       <td style="font-weight:700;color:var(--accent)">${clp(r.deuda)}</td>
+      <td style="min-width:80px"><div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .3s"></div></div></td>
       <td style="font-size:11px;color:var(--text3)">${r.obs||''}</td>
     </tr>`;
   });
@@ -7256,11 +7303,245 @@ function exportarFinanzasCSV(){
   URL.revokeObjectURL(url);
 }
 
+/* ── KPIs dinámicos ── */
+function finInitKPIs(){
+  const v26=FIN_VENTAS[2026];
+  const v25=FIN_VENTAS[2025];
+  const tot26=v26.reduce((a,b)=>a+b,0);
+  const meses26=v26.filter(v=>v>0).length||1;
+  const avg26=Math.round(tot26/meses26);
+  const tot25=v25.reduce((a,b)=>a+b,0);
+  const avg25=Math.round(tot25/12);
+  const varAvg=avg25?Math.round((avg26/avg25-1)*100):0;
+  // Por cobrar: facturas con porCobrar>0
+  const cobrar=FIN_FACTURAS_BASE.filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
+  const cobrarNeto=Math.round(cobrar/1.19);
+  // Prestamo ultimo
+  const lastPrestamo=FIN_PRESTAMOS[FIN_PRESTAMOS.length-1];
+  // Deuda: prestamos + cobrar estimado
+  const deudaPrest=lastPrestamo.deuda;
+  // 2024 total
+  const tot24=FIN_VENTAS[2024].reduce((a,b)=>a+b,0);
+  function fmt(n){
+    if(n>=1e9)return '$'+(n/1e9).toFixed(1)+'B';
+    if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';
+    return clp(n);
+  }
+  function setKPI(k,val,sub){
+    const el=document.getElementById('fin-k'+k);
+    const els=document.getElementById('fin-k'+k+'s');
+    if(el)el.textContent=val;
+    if(els)els.textContent=sub;
+  }
+  setKPI(1,fmt(tot26),'Ene–May 2026');
+  setKPI(2,fmt(avg26),(varAvg>=0?'↑':'↓')+Math.abs(varAvg)+'% vs 2025');
+  setKPI(3,fmt(cobrar),'Neto: '+fmt(cobrarNeto));
+  setKPI(4,fmt(deudaPrest),'Al '+lastPrestamo.fecha);
+  setKPI(5,fmt(deudaPrest),'Préstamos pendientes');
+  setKPI(6,fmt(tot24),'Mejor año histórico');
+  // fecha actualización
+  const fa=document.getElementById('finActualizadoEn');
+  if(fa){const now=new Date();fa.textContent='Datos al '+now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear();}
+}
+
+/* ── Sparklines en KPIs ── */
+function finDrawSparklines(){
+  const datasets=[
+    FIN_VENTAS[2026].slice(0,6),
+    FIN_VENTAS[2026].slice(0,6),
+    FIN_FACTURAS_BASE.filter(r=>r.porCobrar>0).reduce((acc,r)=>{const m=parseInt(r.mes)-1;acc[m]=(acc[m]||0)+r.porCobrar;return acc;},Array(6).fill(0)),
+    FIN_PRESTAMOS.slice(-6).map(r=>r.deuda),
+    FIN_PRESTAMOS.slice(-6).map(r=>r.deuda),
+    [2022,2023,2024,2025,2026].map(y=>FIN_VENTAS[y].reduce((a,b)=>a+b,0)/1e6)
+  ];
+  datasets.forEach((data,idx)=>{
+    const canvas=document.getElementById('fin-sp'+(idx+1));
+    if(!canvas)return;
+    const ctx=canvas.getContext('2d');
+    const w=80,h=32;
+    ctx.clearRect(0,0,w,h);
+    const max=Math.max(...data)||1;
+    const min=Math.min(...data.filter(v=>v>0))||0;
+    const range=max-min||1;
+    const pts=data.map((v,i)=>[i*(w/(data.length-1||1)),(1-(v-min)/range)*(h-4)+2]);
+    ctx.strokeStyle='rgba(255,255,255,0.7)';
+    ctx.lineWidth=1.5;
+    ctx.beginPath();
+    pts.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
+    ctx.stroke();
+  });
+}
+
+/* ── Donut canal ── */
+function finDrawCanalDonut(){
+  const canvas=document.getElementById('finCanalDonut');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const w=160,h=160,cx=80,cy=80,r=60,ri=38;
+  ctx.clearRect(0,0,w,h);
+  const facts2026=FIN_FACTURAS_BASE.filter(r=>r.year==='2026');
+  const totByCanal={};
+  facts2026.forEach(r=>{totByCanal[r.canal]=(totByCanal[r.canal]||0)+r.pago;});
+  const entries=Object.entries(totByCanal).sort((a,b)=>b[1]-a[1]);
+  const total=entries.reduce((s,[,v])=>s+v,0)||1;
+  const colors=['#00d4cc','#a78bfa','#ffaa00','#ff6b35','#00d4aa','#ff4444'];
+  let angle=-Math.PI/2;
+  entries.forEach(([canal,val],i)=>{
+    const sweep=(val/total)*2*Math.PI;
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,angle,angle+sweep);ctx.closePath();
+    ctx.fillStyle=colors[i%colors.length];ctx.fill();
+    ctx.beginPath();ctx.arc(cx,cy,ri,0,2*Math.PI);ctx.fillStyle='#111';ctx.fill();
+    angle+=sweep;
+  });
+  ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='bold 11px DM Sans';ctx.textAlign='center';
+  ctx.fillText('Canal',cx,cy-5);ctx.fillText('2026',cx,cy+10);
+  // leyenda
+  const legend=document.getElementById('fin-donut-legend');
+  if(legend){
+    legend.innerHTML=entries.map(([canal,val],i)=>`<div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:2px;background:${colors[i%colors.length]};flex-shrink:0"></div><span style="flex:1;color:var(--text2)">${canal}</span><span style="color:var(--text1);font-weight:600">${Math.round(val/1e6*10)/10}M</span></div>`).join('');
+  }
+}
+
+/* ── Resumen anual dinámico ── */
+function finRenderResumenAnual(){
+  const tb=document.getElementById('fin-resumen-anual-body');
+  if(!tb)return;
+  const anos=[2022,2023,2024,2025,2026];
+  const totales=anos.map(y=>FIN_VENTAS[y].reduce((a,b)=>a+b,0));
+  const maxTot=Math.max(...totales)||1;
+  const meses={2022:7,2023:12,2024:12,2025:12,2026:5};
+  const badges={2022:'badge-gray',2023:'badge-yellow',2024:'badge-orange',2025:'badge-orange',2026:'badge-green'};
+  let html='';
+  anos.forEach((y,i)=>{
+    const tot=totales[i];
+    const avg=Math.round(tot/meses[y]);
+    const prev=i>0?totales[i-1]:null;
+    const varPct2=prev?Math.round((tot/prev-1)*100):null;
+    const barW=Math.round((tot/maxTot)*100);
+    const isRecord=y===2024;
+    html+=`<tr style="${isRecord?'background:rgba(255,170,0,0.06)':''}">
+      <td><span class="badge ${badges[y]}">${y}${y===2022||y===2026?' *':''}</span></td>
+      <td style="font-weight:${isRecord?700:400}">${clp(tot)}</td>
+      <td style="font-size:11px">${clp(avg)}</td>
+      <td>${varPct2!==null?`<span class="badge ${varPct2>=0?'badge-green':'badge-red'}">${varPct2>=0?'+':''}${varPct2}%</span>`:'<span class="badge badge-gray">—</span>'}</td>
+      <td style="min-width:80px"><div style="height:5px;border-radius:3px;background:rgba(255,255,255,0.06)"><div style="height:100%;width:${barW}%;background:${isRecord?'#ffaa00':'rgba(0,212,204,0.7)'};border-radius:3px"></div></div></td>
+    </tr>`;
+  });
+  tb.innerHTML=html;
+}
+
+/* ── Top clientes ── */
+function finRenderTopClientes(){
+  const tb=document.getElementById('fin-top-clientes-body');
+  if(!tb)return;
+  const facts2026=FIN_FACTURAS_BASE.filter(r=>r.year==='2026');
+  const byCliente={};
+  facts2026.forEach(r=>{
+    const key=(r.empresa&&r.empresa!=='—')?r.empresa:r.nombre;
+    byCliente[key]=(byCliente[key]||0)+r.pago;
+  });
+  const total=Object.values(byCliente).reduce((a,b)=>a+b,0)||1;
+  const sorted=Object.entries(byCliente).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  tb.innerHTML=sorted.map(([nombre,val])=>`<tr>
+    <td style="font-size:11px">${nombre}</td>
+    <td style="font-weight:600">${clp(val)}</td>
+    <td style="font-size:11px;color:var(--accent)">${Math.round(val/total*100)}%</td>
+  </tr>`).join('');
+}
+
+/* ── Evolución de deuda (line chart) ── */
+function finDrawDeudaTimeline(){
+  const canvas=document.getElementById('finDeudaChart');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const w=canvas.offsetWidth||600;
+  canvas.width=w;canvas.height=120;
+  ctx.clearRect(0,0,w,120);
+  const data=FIN_PRESTAMOS.map(r=>r.deuda);
+  const labels=FIN_PRESTAMOS.map(r=>r.fecha);
+  const maxV=Math.max(...data)||1;
+  const pad={t:10,r:10,b:24,l:70};
+  const ch=120-pad.t-pad.b;
+  const cw=w-pad.l-pad.r;
+  const n=data.length;
+  // grid
+  ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;
+  for(let i=0;i<=3;i++){
+    const y2=pad.t+ch*(1-i/3);
+    ctx.beginPath();ctx.moveTo(pad.l,y2);ctx.lineTo(w-pad.r,y2);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='8px DM Sans';ctx.textAlign='right';
+    ctx.fillText(clp(Math.round(maxV*i/3)),pad.l-3,y2+3);
+  }
+  // gradient fill
+  const grad=ctx.createLinearGradient(0,pad.t,0,pad.t+ch);
+  grad.addColorStop(0,'rgba(255,68,68,0.35)');
+  grad.addColorStop(1,'rgba(255,68,68,0)');
+  const pts=data.map((v,i)=>[pad.l+i*(cw/(n-1||1)),pad.t+ch*(1-v/maxV)]);
+  ctx.beginPath();
+  pts.forEach(([x,y2],i)=>i===0?ctx.moveTo(x,y2):ctx.lineTo(x,y2));
+  ctx.lineTo(pts[pts.length-1][0],pad.t+ch);
+  ctx.lineTo(pts[0][0],pad.t+ch);
+  ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+  // line
+  ctx.beginPath();
+  pts.forEach(([x,y2],i)=>i===0?ctx.moveTo(x,y2):ctx.lineTo(x,y2));
+  ctx.strokeStyle='rgba(255,68,68,0.9)';ctx.lineWidth=2;ctx.stroke();
+  // dots at key points
+  [0,Math.floor(n/2),n-1].forEach(i=>{
+    ctx.beginPath();ctx.arc(pts[i][0],pts[i][1],3,0,2*Math.PI);
+    ctx.fillStyle='#ff4444';ctx.fill();
+    if(i===0||i===n-1){
+      ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='8px DM Sans';
+      ctx.textAlign=i===0?'left':'right';
+      ctx.fillText(labels[i],pts[i][0]+(i===0?2:-2),pad.t+ch+14);
+    }
+  });
+}
+
+/* ── Tooltip para el chart principal ── */
+function finSetupTooltip(){
+  const canvas=document.getElementById('finVentasChart');
+  const tooltip=document.getElementById('fin-chart-tooltip');
+  if(!canvas||!tooltip)return;
+  canvas.addEventListener('mousemove',(e)=>{
+    const years=finChartActiveYear==='all'?[2023,2024,2025,2026]:[finChartActiveYear];
+    const w=canvas.width;
+    const pad={t:20,r:10,b:40,l:60};
+    const cw=w-pad.l-pad.r;
+    const grpW=cw/12;
+    const rect=canvas.getBoundingClientRect();
+    const mx=(e.clientX-rect.left)*(canvas.width/rect.width);
+    const mi=Math.floor((mx-pad.l)/grpW);
+    if(mi<0||mi>11){tooltip.style.display='none';return;}
+    const colors={2023:'#a78bfa',2024:'#ffaa00',2025:'#ff6b35',2026:'#00d4cc'};
+    let lines=`<div style="font-weight:700;margin-bottom:5px;color:var(--text1)">${FIN_MESES[mi]}</div>`;
+    years.forEach(y=>{
+      const v=FIN_VENTAS[y][mi];
+      if(v)lines+=`<div style="color:${colors[y]||'#fff'}">${y}: ${clp(v)}</div>`;
+    });
+    tooltip.innerHTML=lines;
+    tooltip.style.display='block';
+    const canvasEl=canvas.parentElement;
+    const lx=e.clientX-canvasEl.getBoundingClientRect().left;
+    tooltip.style.left=Math.min(lx+10,canvasEl.offsetWidth-160)+'px';
+    tooltip.style.top=(e.clientY-canvasEl.getBoundingClientRect().top-10)+'px';
+  });
+  canvas.addEventListener('mouseleave',()=>{tooltip.style.display='none';});
+}
+
 /* ── Init cuando se activa el tab ── */
 function finInit(){
   finRenderMensual();
-  // pequeño delay para que el canvas esté visible
-  setTimeout(finDrawChart,100);
+  finInitKPIs();
+  setTimeout(()=>{
+    finDrawChart();
+    finDrawSparklines();
+    finDrawCanalDonut();
+    finRenderResumenAnual();
+    finRenderTopClientes();
+    finSetupTooltip();
+  },120);
 }
 
 /* Hookear al switchTab existente */
@@ -7284,6 +7565,23 @@ const _finObserver=new MutationObserver((muts)=>{
 });
 const _finPanel=document.getElementById('tab-finanzas');
 if(_finPanel)_finObserver.observe(_finPanel,{attributes:true,attributeFilter:['class']});
+
+/* ResizeObserver para redibujado responsivo */
+if(typeof ResizeObserver!=='undefined'&&_finPanel){
+  let _finResizeTimer;
+  const _finResizeObs=new ResizeObserver(()=>{
+    clearTimeout(_finResizeTimer);
+    _finResizeTimer=setTimeout(()=>{
+      if(_finPanel.classList.contains('active')){
+        finDrawChart();
+        finDrawCanalDonut();
+        finDrawDeudaTimeline();
+        finDrawSparklines();
+      }
+    },100);
+  });
+  _finResizeObs.observe(_finPanel);
+}
 </script>
 
 </body>
