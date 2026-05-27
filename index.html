@@ -6692,7 +6692,7 @@ function copySEODiagSnippet(){
 }
 async function testYoastWrite(){openSEODiag();await runSEODiag();}
 // ── GOOGLE ADS AGENT ─────────────────────────────────────
-function getAdsConfig(){return JSON.parse(localStorage.getItem('ads_config')||'{}');}
+function getAdsConfig(){return JSON.parse(localStorage.getItem('ads_config')||JSON.stringify({endpoint:'https://script.google.com/macros/s/AKfycbyn8h8PcEpPc97TD45vJgSnRRIWyhQ6ANRbFoE_ZsvF2S9Iy58y4cnG7iO_yY_gxcRuNQ/exec',customerId:'757-781-2099'}));}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
@@ -6759,7 +6759,8 @@ async function loadAdsData(){
   }
   document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:40px 0"><div class="spinner"></div> Cargando Google Ads…</div>';
   try{
-    const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'days='+days+'&_t='+Date.now();
+    const cidParam=cfg.customerId?'&customerId='+encodeURIComponent(cfg.customerId):'';
+    const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'days='+days+cidParam+'&_t='+Date.now();
     const r=await fetch(url);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const data=await r.json();
