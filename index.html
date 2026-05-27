@@ -6343,7 +6343,7 @@ async function handleLogin(e){
 
 function initDashboard(){
   try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
-  if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'thelabsolu',pass:''}));
+  if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));
   initDates();
   fillCatSelects();
   const user=AUTH.getUser();
@@ -6388,7 +6388,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 // ── SEO WORDPRESS ─────────────────────────────────────────────
-function getWPConfig(){return JSON.parse(localStorage.getItem('wp_config')||'{}');}
+function getWPConfig(){return JSON.parse(localStorage.getItem('wp_config')||JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));}
 function saveWPConfig(){
   const url=(document.getElementById('wp-url')?.value||'').trim().replace(/\/$/,'');
   const user=(document.getElementById('wp-user')?.value||'').trim();
