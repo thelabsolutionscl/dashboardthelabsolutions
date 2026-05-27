@@ -784,6 +784,82 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="card"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
     <div class="card"><div class="card-header"><span class="card-title">Revenue últimas 4 semanas</span></div><div id="chartRevenue" style="padding:16px"></div></div>
   </div>
+
+  <!-- ── Snapshots: Finanzas + Web ── -->
+  <div class="data-grid">
+    <!-- Finanzas snapshot -->
+    <div class="card" id="overview-fin-card">
+      <div class="card-header">
+        <span class="card-title">💰 Finanzas</span>
+        <span class="card-badge" id="ov-fin-badge">2026</span>
+        <button class="btn btn-ghost btn-sm" onclick="switchTab('finanzas')" style="margin-left:auto">Ver todo →</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr)">
+        <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
+          <div class="kpi-label">Ventas 2026 YTD</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent);line-height:1.2;margin:2px 0" id="ov-fin-v26">—</div>
+          <div style="font-size:10px;color:var(--text3)" id="ov-fin-v26s">—</div>
+        </div>
+        <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+          <div class="kpi-label">Media Mensual 2026</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent3);line-height:1.2;margin:2px 0" id="ov-fin-avg">—</div>
+          <div style="font-size:10px;color:var(--text3)" id="ov-fin-avgs">—</div>
+        </div>
+        <div style="padding:10px 12px;border-right:1px solid var(--border)">
+          <div class="kpi-label">Por Cobrar + IVA</div>
+          <div style="font-size:22px;font-weight:700;color:#ffaa00;line-height:1.2;margin:2px 0" id="ov-fin-cobrar">—</div>
+          <div style="font-size:10px;color:var(--text3)" id="ov-fin-cobras">facturas pendientes</div>
+        </div>
+        <div style="padding:10px 12px">
+          <div class="kpi-label">Deuda Préstamos</div>
+          <div style="font-size:22px;font-weight:700;color:var(--danger);line-height:1.2;margin:2px 0" id="ov-fin-deuda">—</div>
+          <div style="font-size:10px;color:var(--text3)" id="ov-fin-deudas">acumulada 2026</div>
+        </div>
+      </div>
+      <div style="padding:10px 16px 14px">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Ventas — últimos 8 meses</div>
+        <canvas id="ov-fin-chart" style="width:100%;display:block" height="54"></canvas>
+      </div>
+    </div>
+
+    <!-- Web / SEO snapshot -->
+    <div class="card" id="overview-web-card">
+      <div class="card-header">
+        <span class="card-title">🌐 Web · SEO</span>
+        <button class="btn btn-ghost btn-sm" onclick="switchTab('web')" style="margin-left:auto">Ver todo →</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr)">
+        <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
+          <div class="kpi-label">Páginas & Posts</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent);line-height:1.2;margin:2px 0" id="ov-web-total">—</div>
+          <div style="font-size:10px;color:var(--text3)">thelab.solutions</div>
+        </div>
+        <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+          <div class="kpi-label">SEO Completo</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent3);line-height:1.2;margin:2px 0" id="ov-web-ok">—</div>
+          <div style="font-size:10px;color:var(--text3)" id="ov-web-oks">—</div>
+        </div>
+        <div style="padding:10px 12px;border-right:1px solid var(--border)">
+          <div class="kpi-label">Sin Title SEO</div>
+          <div style="font-size:22px;font-weight:700;color:var(--danger);line-height:1.2;margin:2px 0" id="ov-web-title">—</div>
+          <div style="font-size:10px;color:var(--text3)">páginas</div>
+        </div>
+        <div style="padding:10px 12px">
+          <div class="kpi-label">Sin Descripción</div>
+          <div style="font-size:22px;font-weight:700;color:#ffaa00;line-height:1.2;margin:2px 0" id="ov-web-desc">—</div>
+          <div style="font-size:10px;color:var(--text3)">páginas</div>
+        </div>
+      </div>
+      <div style="padding:8px 16px 12px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:10px;font-style:italic" id="ov-web-status">Abre la sección Web y haz clic en Actualizar para ver datos SEO</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <a href="https://search.google.com/search-console" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px">🔍 Search Console</a>
+          <a href="https://ads.google.com" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px">📢 Google Ads</a>
+          <a href="https://thelab.solutions/wp-admin" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px">⚙ WP Admin</a>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- CLIENTES -->
@@ -6784,6 +6860,22 @@ function renderWebKPIs(pages){
   document.getElementById('kpi-sin-desc').style.color=sinDesc>0?'var(--warn)':'var(--success)';
   document.getElementById('kpi-title-ok').textContent=titleOk.length+'/'+total;
   document.getElementById('kpi-desc-ok').textContent=descOk.length+'/'+total;
+  // Sincronizar al card de Overview
+  ovSyncWebKPIs(total, completo.length, sinTitle, sinDesc, pct(completo.length));
+}
+
+function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('ov-web-total', total||'—');
+  set('ov-web-ok', completo||'—');
+  set('ov-web-oks', total>0?pctStr+' de las páginas':'—');
+  const titleEl=document.getElementById('ov-web-title');
+  if(titleEl){titleEl.textContent=sinTitle||'✓';titleEl.style.color=sinTitle>0?'var(--danger)':'var(--accent3)';}
+  const descEl=document.getElementById('ov-web-desc');
+  if(descEl){descEl.textContent=sinDesc||'✓';descEl.style.color=sinDesc>0?'#ffaa00':'var(--accent3)';}
+  const now=new Date();
+  const ts=now.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+  set('ov-web-status','Actualizado '+now.toLocaleDateString('es-CL')+' a las '+ts);
 }
 </script>
 
@@ -7629,6 +7721,7 @@ function finSetupTooltip(){
 function finInit(){
   finRenderMensual();
   finInitKPIs();
+  renderOverviewFinanzas();
   setTimeout(()=>{
     finDrawChart();
     finDrawSparklines();
@@ -7637,6 +7730,76 @@ function finInit(){
     finRenderTopClientes();
     finSetupTooltip();
   },120);
+}
+
+/* ── Overview Finanzas snapshot ── */
+function renderOverviewFinanzas(){
+  function fmt(n){
+    if(n>=1e9)return '$'+(n/1e9).toFixed(1)+'B';
+    if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';
+    return clp(n);
+  }
+  function set(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
+
+  const v26=FIN_VENTAS[2026];
+  const v25=FIN_VENTAS[2025];
+  const tot26=v26.reduce((a,b)=>a+b,0);
+  const meses26=v26.filter(v=>v>0).length||1;
+  const avg26=Math.round(tot26/meses26);
+  const avg25=Math.round(v25.reduce((a,b)=>a+b,0)/12);
+  const varAvg=avg25?Math.round((avg26/avg25-1)*100):0;
+  const cobrar=FIN_FACTURAS_BASE.filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
+  const nFact=FIN_FACTURAS_BASE.filter(r=>r.porCobrar>0).length;
+  const deuda=FIN_PRESTAMOS[FIN_PRESTAMOS.length-1].deuda;
+
+  set('ov-fin-v26', fmt(tot26));
+  set('ov-fin-v26s', 'Ene–May 2026 · '+meses26+' meses');
+  set('ov-fin-avg', fmt(avg26));
+  set('ov-fin-avgs', (varAvg>=0?'↑':'↓')+Math.abs(varAvg)+'% vs media 2025');
+  set('ov-fin-cobrar', fmt(cobrar));
+  set('ov-fin-cobras', nFact+' factura'+(nFact!==1?'s':'')+' pendiente'+(nFact!==1?'s':''));
+  set('ov-fin-deuda', fmt(deuda));
+  set('ov-fin-deudas', 'al '+FIN_PRESTAMOS[FIN_PRESTAMOS.length-1].fecha);
+
+  // Mini bar chart: últimos 8 meses (Oct 2025 – May 2026)
+  setTimeout(drawOvFinChart, 80);
+}
+
+function drawOvFinChart(){
+  const canvas=document.getElementById('ov-fin-chart');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const w=canvas.offsetWidth||400;
+  canvas.width=w; canvas.height=54;
+  ctx.clearRect(0,0,w,54);
+
+  // oct=9, nov=10, dic=11 de 2025; ene=0..may=4 de 2026
+  const meses=[
+    {lbl:'Oct25',v:FIN_VENTAS[2025][9],color:'rgba(255,107,53,0.7)'},
+    {lbl:'Nov25',v:FIN_VENTAS[2025][10],color:'rgba(255,107,53,0.7)'},
+    {lbl:'Dic25',v:FIN_VENTAS[2025][11],color:'rgba(255,107,53,0.7)'},
+    {lbl:'Ene26',v:FIN_VENTAS[2026][0],color:'rgba(0,212,204,0.85)'},
+    {lbl:'Feb26',v:FIN_VENTAS[2026][1],color:'rgba(0,212,204,0.85)'},
+    {lbl:'Mar26',v:FIN_VENTAS[2026][2],color:'rgba(0,212,204,0.85)'},
+    {lbl:'Abr26',v:FIN_VENTAS[2026][3],color:'rgba(0,212,204,0.85)'},
+    {lbl:'May26',v:FIN_VENTAS[2026][4],color:'rgba(0,212,204,0.85)'},
+  ];
+  const maxV=Math.max(...meses.map(m=>m.v))||1;
+  const pad={t:4,b:16,l:2,r:2};
+  const ch=54-pad.t-pad.b;
+  const cw=w-pad.l-pad.r;
+  const bw=Math.floor(cw/meses.length)-3;
+  meses.forEach((m,i)=>{
+    if(!m.v)return;
+    const bh=Math.round((m.v/maxV)*ch);
+    const x=pad.l+i*(bw+3)+1;
+    const y=pad.t+ch-bh;
+    ctx.fillStyle=m.color;
+    ctx.beginPath();ctx.roundRect(x,y,bw,bh,2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.35)';
+    ctx.font='7px DM Sans';ctx.textAlign='center';
+    ctx.fillText(m.lbl,x+bw/2,54-2);
+  });
 }
 
 /* Hookear al switchTab existente */
@@ -7648,6 +7811,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(mesEl)mesEl.value=String(now.getMonth()+1).padStart(2,'0');
   const yearEl=document.getElementById('nv-year');
   if(yearEl)yearEl.value=String(now.getFullYear());
+  // Renderizar snapshot de finanzas en el overview al cargar
+  renderOverviewFinanzas();
 });
 
 /* Observar cuando el tab finanzas se activa */
