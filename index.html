@@ -559,6 +559,101 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .user-name{display:none;}
   .logout-btn{display:none!important;}
 }
+
+/* ══ Finanzas — Mobile UX ═══════════════════════════════════════ */
+@media(max-width:768px){
+  /* Sub-nav: scroll horizontal sin wrapping */
+  #fin-subnav{
+    overflow-x:auto!important;
+    flex-wrap:nowrap!important;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+    padding-bottom:12px!important;
+    gap:5px!important;
+    margin-bottom:16px!important;
+  }
+  #fin-subnav::-webkit-scrollbar{display:none;}
+  #fin-subnav .btn{white-space:nowrap;flex-shrink:0;}
+
+  /* KPI principal: 2 col en móvil */
+  #tab-finanzas>.kpi-grid{
+    grid-template-columns:repeat(2,1fr)!important;
+  }
+
+  /* KPIs internos de sub-paneles: 2 col (override inline repeat(3,1fr)) */
+  #fin-panel-prestamos>.kpi-grid,
+  #fin-panel-deudas>.kpi-grid,
+  #fin-panel-cobrar>.kpi-grid{
+    grid-template-columns:repeat(2,1fr)!important;
+  }
+
+  /* Resumen grids inline: forzar 1 columna */
+  #fin-panel-resumen>.data-grid{
+    grid-template-columns:1fr!important;
+  }
+
+  /* Reducir alto de charts */
+  #finVentasChart{height:180px!important;}
+  #finDeudaChart{height:80px!important;}
+
+  /* Donut más pequeño */
+  #finCanalDonut{width:120px!important;height:120px!important;}
+
+  /* Filtros facturas: stack vertical full-width */
+  #fin-panel-facturas .card-header{
+    flex-direction:column!important;
+    align-items:stretch!important;
+  }
+  #fin-panel-facturas .card-header>div{
+    display:flex!important;
+    flex-direction:column!important;
+    gap:6px!important;
+    width:100%;
+  }
+  #fin-panel-facturas select.field-select,
+  #fin-panel-facturas input.field-input{
+    width:100%!important;
+    max-width:none!important;
+    box-sizing:border-box;
+  }
+  #fin-panel-facturas #fin-fact-count{
+    text-align:right;font-size:11px;
+  }
+
+  /* Paginación: compacta centrada */
+  #fin-panel-facturas [style*="justify-content:space-between"]:last-child{
+    flex-direction:column!important;gap:8px!important;align-items:center!important;
+  }
+  #fin-fact-totales{font-size:9px!important;text-align:center!important;line-height:1.6!important;}
+
+  /* Semestral: scroll horizontal, no card-view */
+  .fin-semestral-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+  .fin-semestral-wrap .table-wrap{overflow-x:visible!important;}
+  .fin-semestral-wrap .table-wrap table{min-width:520px;display:table!important;}
+  .fin-semestral-wrap .table-wrap thead{display:table-header-group!important;}
+  .fin-semestral-wrap .table-wrap tbody{display:table-row-group!important;}
+  .fin-semestral-wrap .table-wrap tr{display:table-row!important;border:none!important;margin:0!important;padding:0!important;border-radius:0!important;}
+  .fin-semestral-wrap .table-wrap td{display:table-cell!important;padding:7px 10px!important;text-align:left!important;min-height:auto!important;border-bottom:1px solid var(--border)!important;}
+  .fin-semestral-wrap .table-wrap td::before{display:none!important;}
+
+  /* Mensual: scroll horizontal con primera columna sticky */
+  .fin-mensual-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+  .fin-mensual-wrap .table-wrap{overflow-x:visible!important;}
+  .fin-mensual-wrap .table-wrap table{min-width:460px;display:table!important;}
+  .fin-mensual-wrap .table-wrap thead{display:table-header-group!important;}
+  .fin-mensual-wrap .table-wrap tbody{display:table-row-group!important;}
+  .fin-mensual-wrap .table-wrap tr{display:table-row!important;border:none!important;margin:0!important;padding:0!important;border-radius:0!important;}
+  .fin-mensual-wrap .table-wrap td,.fin-mensual-wrap .table-wrap th{display:table-cell!important;padding:6px 8px!important;font-size:10px!important;border-bottom:1px solid var(--border)!important;min-height:auto!important;}
+  .fin-mensual-wrap .table-wrap td:first-child{
+    position:sticky;left:0;
+    background:var(--surface);
+    font-weight:700;z-index:2;
+    min-height:auto!important;
+    text-align:left!important;
+  }
+  .fin-mensual-wrap .table-wrap td::before{display:none!important;}
+  .fin-mensual-wrap .table-wrap th:first-child{position:sticky;left:0;background:var(--surface2);z-index:3;}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
@@ -1671,7 +1766,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
 
   <!-- Sub-navegación interna -->
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
+  <div id="fin-subnav" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
     <button class="btn btn-ghost btn-sm active-filter" id="fin-nav-resumen" onclick="finSwitchTab('resumen')">📊 Resumen</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-facturas" onclick="finSwitchTab('facturas')">📄 Facturas</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-cobrar" onclick="finSwitchTab('cobrar')">💸 Por Cobrar</button>
@@ -1735,7 +1830,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <!-- Fila 3: Semestral + mensual -->
     <div class="card" style="margin-bottom:14px">
       <div class="card-header"><span class="card-title">Evolución Semestral</span></div>
-      <div class="table-wrap">
+      <div class="fin-semestral-wrap"><div class="table-wrap">
         <table>
           <thead><tr><th>Período</th><th>Semestre</th><th>Venta Neta</th><th>Total Año</th><th>Media/Mes</th><th>Variación</th></tr></thead>
           <tbody>
@@ -1750,13 +1845,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <tr style="background:rgba(0,212,204,0.04)"><td>5to Año</td><td>Ene–May 2026 (en curso)</td><td>$33.461.820</td><td>—</td><td>$5.576.970</td><td><span class="badge badge-green">+68,5%</span></td></tr>
           </tbody>
         </table>
-      </div>
+      </div></div>
     </div>
 
     <!-- Tabla mensual con heatmap -->
     <div class="card">
       <div class="card-header"><span class="card-title">Ventas Mensuales Detalladas</span><span class="card-badge">neto sin IVA · color = intensidad</span></div>
-      <div class="table-wrap">
+      <div class="fin-mensual-wrap"><div class="table-wrap">
         <table>
           <thead>
             <tr>
@@ -1769,7 +1864,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           </thead>
           <tbody id="finMensualBody"></tbody>
         </table>
-      </div>
+      </div></div>
     </div>
   </div>
 
@@ -1853,13 +1948,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <table>
           <thead><tr><th>Ítem</th><th>Cant.</th><th>Total Neto</th><th>IVA</th><th>Total</th><th>Fact. N°</th><th>Estado</th></tr></thead>
           <tbody>
-            <tr><td>CARTEL NEON VANS</td><td>2</td><td>$200.000</td><td>$38.000</td><td>$238.000</td><td>353</td><td><span class="badge badge-green">Pagado</span></td></tr>
-            <tr><td>CARTEL NEON NIVEA 130×90</td><td>1</td><td>$500.000</td><td>$95.000</td><td>$595.000</td><td>360</td><td><span class="badge badge-green">Pagado</span></td></tr>
-            <tr><td>PARIS × LOLLA 210×62</td><td>1</td><td>$450.000</td><td>$85.500</td><td>$535.500</td><td>367</td><td><span class="badge badge-orange">Pendiente</span></td></tr>
-            <tr><td>ISOTIPO MISTRAL 42cm Ø</td><td>2</td><td>$140.000</td><td>$26.600</td><td>$166.600</td><td>365</td><td><span class="badge badge-green">Pagado</span></td></tr>
-            <tr><td>LOLLA × MISTRAL 157×31</td><td>1</td><td>$360.000</td><td>$68.400</td><td>$428.400</td><td>368</td><td><span class="badge badge-green">Pagado</span></td></tr>
-            <tr><td>LOLLA × MISTRAL 157×31 (2a)</td><td>1</td><td>$360.000</td><td>$68.400</td><td>$428.400</td><td>—</td><td><span class="badge badge-gray">S/Fact.</span></td></tr>
-            <tr><td>CARTEL NEON VANS (2a)</td><td>2</td><td>$200.000</td><td>$38.000</td><td>$238.000</td><td>370</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td data-label="Ítem">CARTEL NEON VANS</td><td data-label="Cant.">2</td><td data-label="Neto">$200.000</td><td data-label="IVA">$38.000</td><td data-label="Total">$238.000</td><td data-label="Fact.">353</td><td data-label="Estado"><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td data-label="Ítem">CARTEL NEON NIVEA 130×90</td><td data-label="Cant.">1</td><td data-label="Neto">$500.000</td><td data-label="IVA">$95.000</td><td data-label="Total">$595.000</td><td data-label="Fact.">360</td><td data-label="Estado"><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td data-label="Ítem">PARIS × LOLLA 210×62</td><td data-label="Cant.">1</td><td data-label="Neto">$450.000</td><td data-label="IVA">$85.500</td><td data-label="Total">$535.500</td><td data-label="Fact.">367</td><td data-label="Estado"><span class="badge badge-orange">Pendiente</span></td></tr>
+            <tr><td data-label="Ítem">ISOTIPO MISTRAL 42cm Ø</td><td data-label="Cant.">2</td><td data-label="Neto">$140.000</td><td data-label="IVA">$26.600</td><td data-label="Total">$166.600</td><td data-label="Fact.">365</td><td data-label="Estado"><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td data-label="Ítem">LOLLA × MISTRAL 157×31</td><td data-label="Cant.">1</td><td data-label="Neto">$360.000</td><td data-label="IVA">$68.400</td><td data-label="Total">$428.400</td><td data-label="Fact.">368</td><td data-label="Estado"><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td data-label="Ítem">LOLLA × MISTRAL 157×31 (2a)</td><td data-label="Cant.">1</td><td data-label="Neto">$360.000</td><td data-label="IVA">$68.400</td><td data-label="Total">$428.400</td><td data-label="Fact.">—</td><td data-label="Estado"><span class="badge badge-gray">S/Fact.</span></td></tr>
+            <tr><td data-label="Ítem">CARTEL NEON VANS (2a)</td><td data-label="Cant.">2</td><td data-label="Neto">$200.000</td><td data-label="IVA">$38.000</td><td data-label="Total">$238.000</td><td data-label="Fact.">370</td><td data-label="Estado"><span class="badge badge-green">Pagado</span></td></tr>
           </tbody>
           <tfoot>
             <tr style="border-top:2px solid var(--border2)">
@@ -1958,15 +2053,15 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <table>
           <thead><tr><th>Acreedor / Categoría</th><th>Deuda</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead>
           <tbody>
-            <tr><td>German Kaiser</td><td>$15.000.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$15.000.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
-            <tr><td>IVA Postergado</td><td>$7.000.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$7.000.000</td><td><span class="badge badge-red">Urgente</span></td></tr>
-            <tr><td>Jaime</td><td>$2.000.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$2.000.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
-            <tr><td>RICKY</td><td>$1.500.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$1.500.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
-            <tr><td>FLO</td><td>$1.000.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$1.000.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
-            <tr><td>FREDDY</td><td>$1.200.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$1.200.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
-            <tr><td>ROJAS</td><td>$952.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$952.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
-            <tr><td>EQUIPO GRÁF.</td><td>$556.920</td><td>—</td><td style="color:var(--danger);font-weight:700">$556.920</td><td><span class="badge badge-red">Pendiente</span></td></tr>
-            <tr><td>TROQUEL + CATIRE</td><td>$400.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$400.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td data-label="Acreedor">German Kaiser</td><td data-label="Deuda">$15.000.000</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$15.000.000</td><td data-label="Estado"><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td data-label="Acreedor">IVA Postergado</td><td data-label="Deuda">$7.000.000</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$7.000.000</td><td data-label="Estado"><span class="badge badge-red">Urgente</span></td></tr>
+            <tr><td data-label="Acreedor">Jaime</td><td data-label="Deuda">$2.000.000</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$2.000.000</td><td data-label="Estado"><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td data-label="Acreedor">RICKY</td><td data-label="Deuda">$1.500.000</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$1.500.000</td><td data-label="Estado"><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td data-label="Acreedor">FLO</td><td data-label="Deuda">$1.000.000</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$1.000.000</td><td data-label="Estado"><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td data-label="Acreedor">FREDDY</td><td data-label="Deuda">$1.200.000</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$1.200.000</td><td data-label="Estado"><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td data-label="Acreedor">ROJAS</td><td data-label="Deuda">$952.000</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$952.000</td><td data-label="Estado"><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td data-label="Acreedor">EQUIPO GRÁF.</td><td data-label="Deuda">$556.920</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$556.920</td><td data-label="Estado"><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td data-label="Acreedor">TROQUEL + CATIRE</td><td data-label="Deuda">$400.000</td><td data-label="Pagado">—</td><td data-label="Pendiente" style="color:var(--danger);font-weight:700">$400.000</td><td data-label="Estado"><span class="badge badge-red">Pendiente</span></td></tr>
             <tr><td>Luz</td><td>$2.400.000</td><td style="color:var(--accent3)">$2.400.000</td><td style="color:var(--accent3)">$0</td><td><span class="badge badge-green">Pagado</span></td></tr>
             <tr><td>Lorena</td><td>$720.000</td><td style="color:var(--accent3)">$720.000</td><td style="color:var(--accent3)">$0</td><td><span class="badge badge-green">Pagado</span></td></tr>
             <tr><td>PAPEL</td><td>$610.000</td><td style="color:var(--accent3)">$610.000</td><td style="color:var(--accent3)">$0</td><td><span class="badge badge-green">Pagado</span></td></tr>
@@ -7129,19 +7224,19 @@ function finRenderFacturasPage(){
     const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
     const canalBadge=r.canal==='ADWORDS'?'badge-yellow':r.canal==='VENDEDORES'?'badge-green':'badge-gray';
     html+=`<tr>
-      <td style="white-space:nowrap">${mesNombre} ${r.year}</td>
-      <td style="font-weight:600;white-space:nowrap">${r.nombre}</td>
-      <td style="color:var(--text2);font-size:11px">${r.empresa}</td>
-      <td>${r.item}</td>
-      <td style="text-align:right">${r.cant.toLocaleString('es-CL')}</td>
-      <td style="text-align:right">${clp(r.valor)}</td>
-      <td style="text-align:right">${clp(neto)}</td>
-      <td style="text-align:right;color:var(--text3)">${clp(iva)}</td>
-      <td style="text-align:right;font-weight:600;color:var(--accent)">${clp(tot)}</td>
-      <td style="text-align:right;color:${r.porCobrar>0?'var(--danger)':'var(--accent3)'}">${clp(r.porCobrar)}</td>
-      <td style="font-size:11px;color:var(--text3)">${r.fact||'—'}</td>
-      <td><span class="badge ${canalBadge}">${r.canal}</span></td>
-      <td style="font-size:11px">${r.cat||'—'}</td>
+      <td data-label="Mes/Año" style="white-space:nowrap">${mesNombre} ${r.year}</td>
+      <td data-label="Cliente" style="font-weight:600;white-space:nowrap">${r.nombre}</td>
+      <td data-label="Empresa" style="color:var(--text2);font-size:11px">${r.empresa}</td>
+      <td data-label="Ítem">${r.item}</td>
+      <td data-label="Cant." style="text-align:right">${r.cant.toLocaleString('es-CL')}</td>
+      <td data-label="Valor Unit." style="text-align:right">${clp(r.valor)}</td>
+      <td data-label="Neto" style="text-align:right">${clp(neto)}</td>
+      <td data-label="IVA" style="text-align:right;color:var(--text3)">${clp(iva)}</td>
+      <td data-label="Total+IVA" style="text-align:right;font-weight:600;color:var(--accent)">${clp(tot)}</td>
+      <td data-label="Por Cobrar" style="text-align:right;color:${r.porCobrar>0?'var(--danger)':'var(--accent3)'}">${clp(r.porCobrar)}</td>
+      <td data-label="Fact.N°" style="font-size:11px;color:var(--text3)">${r.fact||'—'}</td>
+      <td data-label="Canal"><span class="badge ${canalBadge}">${r.canal}</span></td>
+      <td data-label="Categoría" style="font-size:11px">${r.cat||'—'}</td>
     </tr>`;
   });
   if(!slice.length)html='<tr><td colspan="13" style="text-align:center;padding:30px;color:var(--text3)">Sin resultados</td></tr>';
@@ -7164,13 +7259,13 @@ function finRenderCobrar(){
     const tot=r.valor*r.cant+Math.round(r.valor*r.cant*0.19);
     const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
     html+=`<tr>
-      <td>${mesNombre} ${r.year}</td>
-      <td style="font-weight:600">${r.nombre}</td>
-      <td>${r.empresa}</td>
-      <td>${r.item}</td>
-      <td style="text-align:right">${clp(tot)}</td>
-      <td style="text-align:right;color:var(--danger);font-weight:700">${clp(r.porCobrar)}</td>
-      <td>${r.fact||'—'}</td>
+      <td data-label="Mes">${mesNombre} ${r.year}</td>
+      <td data-label="Cliente" style="font-weight:600">${r.nombre}</td>
+      <td data-label="Empresa">${r.empresa}</td>
+      <td data-label="Ítem">${r.item}</td>
+      <td data-label="Total+IVA" style="text-align:right">${clp(tot)}</td>
+      <td data-label="Por Cobrar" style="text-align:right;color:var(--danger);font-weight:700">${clp(r.porCobrar)}</td>
+      <td data-label="Fact.N°">${r.fact||'—'}</td>
     </tr>`;
   });
   if(!html)html='<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro registradas</td></tr>';
@@ -7188,12 +7283,12 @@ function finRenderPrestamos(){
     const pct=Math.round((r.deuda/maxDeuda)*100);
     const barColor=esDev?'var(--accent3)':'var(--danger)';
     html+=`<tr>
-      <td style="font-family:monospace;font-size:11px">${r.fecha}</td>
-      <td style="color:${r.prestamo?'var(--danger)':'var(--text3)'};font-weight:${r.prestamo?700:400}">${r.prestamo?clp(r.prestamo):'—'}</td>
-      <td style="color:${esDev?'var(--accent3)':'var(--text3)'};font-weight:${esDev?700:400}">${r.devolucion?clp(r.devolucion):'—'}</td>
-      <td style="font-weight:700;color:var(--accent)">${clp(r.deuda)}</td>
-      <td style="min-width:80px"><div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .3s"></div></div></td>
-      <td style="font-size:11px;color:var(--text3)">${r.obs||''}</td>
+      <td data-label="Fecha" style="font-family:monospace;font-size:11px">${r.fecha}</td>
+      <td data-label="Préstamo" style="color:${r.prestamo?'var(--danger)':'var(--text3)'};font-weight:${r.prestamo?700:400}">${r.prestamo?clp(r.prestamo):'—'}</td>
+      <td data-label="Devolución" style="color:${esDev?'var(--accent3)':'var(--text3)'};font-weight:${esDev?700:400}">${r.devolucion?clp(r.devolucion):'—'}</td>
+      <td data-label="Deuda" style="font-weight:700;color:var(--accent)">${clp(r.deuda)}</td>
+      <td data-label="Progreso" style="min-width:80px"><div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .3s"></div></div></td>
+      <td data-label="Obs." style="font-size:11px;color:var(--text3)">${r.obs||''}</td>
     </tr>`;
   });
   tb.innerHTML=html;
