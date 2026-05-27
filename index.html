@@ -1908,6 +1908,7 @@ function main() {
     <button class="btn btn-ghost btn-sm" id="fin-nav-prestamos" onclick="finSwitchTab('prestamos')">🏦 Préstamos</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-deudas" onclick="finSwitchTab('deudas')">⚠️ Deudas</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-nueva" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-diario" onclick="finSwitchTab('diario')">📒 Libro Diario</button>
   </div>
 
   <!-- ── RESUMEN ── -->
@@ -2356,6 +2357,133 @@ function main() {
           <tbody id="fin-nueva-lista-body"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <!-- ── LIBRO DIARIO ── -->
+  <div id="fin-panel-diario" style="display:none">
+
+    <!-- KPIs resumen período -->
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(155px,1fr));margin-bottom:16px">
+      <div class="kpi-card green">
+        <div class="kpi-label">Ingresos (período)</div>
+        <div class="kpi-value" id="ld-k-ing">—</div>
+        <div class="kpi-sub" id="ld-k-ings">—</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Gastos (período)</div>
+        <div class="kpi-value" id="ld-k-gas">—</div>
+        <div class="kpi-sub" id="ld-k-gass">—</div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-label">Saldo neto</div>
+        <div class="kpi-value" id="ld-k-sal">—</div>
+        <div class="kpi-sub" id="ld-k-sals">—</div>
+      </div>
+      <div class="kpi-card yellow">
+        <div class="kpi-label">Saldo mes actual</div>
+        <div class="kpi-value" id="ld-k-mes">—</div>
+        <div class="kpi-sub" id="ld-k-mess">—</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-label">Movimientos hoy</div>
+        <div class="kpi-value" id="ld-k-hoy">—</div>
+        <div class="kpi-sub" id="ld-k-hoys">—</div>
+      </div>
+    </div>
+
+    <!-- Formulario nuevo registro -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <span class="card-title">➕ Nuevo Registro</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="ldLimpiar()">Limpiar</button>
+          <button class="btn btn-primary btn-sm" onclick="ldGuardar()">💾 Guardar</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px;padding:16px">
+        <div class="field-group">
+          <label class="field-label">Fecha</label>
+          <input class="field-input" id="ld-fecha" type="date">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Tipo</label>
+          <select class="field-select" id="ld-tipo" onchange="ldSwitchTipo()">
+            <option value="gasto">💸 Gasto</option>
+            <option value="ingreso">💰 Ingreso</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Categoría</label>
+          <select class="field-select" id="ld-categoria"></select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Descripción</label>
+          <input class="field-input" id="ld-descripcion" placeholder="Detalle del registro" maxlength="150">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Monto (neto, $)</label>
+          <input class="field-input" id="ld-monto" type="number" min="0" step="1" placeholder="0">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Método de pago</label>
+          <select class="field-select" id="ld-metodo">
+            <option>Transferencia</option>
+            <option>Efectivo</option>
+            <option>Tarjeta débito</option>
+            <option>Tarjeta crédito</option>
+            <option>Cheque</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Referencia / N° doc.</label>
+          <input class="field-input" id="ld-referencia" placeholder="Boleta, factura, etc.">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Proveedor / Cliente</label>
+          <input class="field-input" id="ld-contraparte" placeholder="Nombre (opcional)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtros + tabla cronológica -->
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <span class="card-title">📒 Registro Cronológico</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-left:auto">
+          <input class="field-input" id="ld-f-desde" type="date" style="width:130px;font-size:11px;padding:4px 8px" onchange="ldFiltrar()">
+          <span style="color:var(--text3);font-size:11px">→</span>
+          <input class="field-input" id="ld-f-hasta" type="date" style="width:130px;font-size:11px;padding:4px 8px" onchange="ldFiltrar()">
+          <select class="field-select" id="ld-f-tipo" style="width:100px;font-size:11px;padding:4px 8px" onchange="ldFiltrar()">
+            <option value="">Todo</option>
+            <option value="ingreso">Ingresos</option>
+            <option value="gasto">Gastos</option>
+          </select>
+          <input class="field-input" id="ld-f-busca" placeholder="🔍 buscar..." style="width:140px;font-size:11px;padding:4px 8px" oninput="ldFiltrar()">
+          <button class="btn btn-ghost btn-sm" onclick="ldExportCSV()">⬇ CSV</button>
+        </div>
+      </div>
+      <div id="ld-count" style="padding:6px 18px 4px;font-size:11px;color:var(--text3)"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="ldSort('fecha')" style="cursor:pointer;user-select:none">Fecha ↕</th>
+              <th>Tipo</th>
+              <th>Categoría</th>
+              <th>Descripción</th>
+              <th onclick="ldSort('monto')" style="cursor:pointer;user-select:none;text-align:right">Monto ↕</th>
+              <th>Método</th>
+              <th>Referencia</th>
+              <th>Proveedor/Cliente</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ld-tbody"></tbody>
+        </table>
+      </div>
+      <div id="ld-pag" style="display:flex;gap:6px;justify-content:center;padding:12px 16px;align-items:center;flex-wrap:wrap"></div>
     </div>
   </div>
 </div>
@@ -7240,7 +7368,7 @@ function varPct(a,b){if(!a||!b)return null;return ((b-a)/a)*100;}
 /* ── Sub-tabs internos ── */
 function finSwitchTab(tab){
   finCurrentTab=tab;
-  ['resumen','facturas','cobrar','prestamos','deudas','nueva'].forEach(t=>{
+  ['resumen','facturas','cobrar','prestamos','deudas','nueva','diario'].forEach(t=>{
     document.getElementById('fin-panel-'+t).style.display=(t===tab)?'':'none';
     const btn=document.getElementById('fin-nav-'+t);
     if(btn){
@@ -7252,6 +7380,7 @@ function finSwitchTab(tab){
   if(tab==='cobrar'){finRenderCobrar();}
   if(tab==='prestamos'){finRenderPrestamos();finDrawDeudaTimeline();}
   if(tab==='nueva'){finRenderNuevaLista();}
+  if(tab==='diario'){ldInit();}
 }
 
 /* ── Tabla mensual comparativa ── */
@@ -7816,6 +7945,189 @@ function finInit(){
     finRenderTopClientes();
     finSetupTooltip();
   },120);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LIBRO DIARIO — Gastos e Ingresos diarios
+// ═══════════════════════════════════════════════════════════════
+const LD_KEY='fin_diario';
+const LD_PAG=25;
+let ldFiltradas=[];
+let ldPag=0;
+let ldSortKey='fecha';
+let ldSortDir=-1;
+
+const LD_CAT={
+  gasto:['Materiales e insumos','Filamentos / resinas','Maquinaria y equipos',
+    'Arriendo local','Servicios básicos','Internet y telecomunicaciones',
+    'Marketing y publicidad','Sueldos y honorarios','Cuota préstamo',
+    'Transporte y logística','Software y tecnología','Mantención',
+    'Contabilidad y legal','Otros gastos'],
+  ingreso:['Impresión 3D','Diseño 3D','Papelería corporativa',
+    'Desarrollo web','Marketing digital','Consultoría',
+    'Arriendo de equipos','Otros ingresos']
+};
+
+function ldGetAll(){try{return JSON.parse(localStorage.getItem(LD_KEY)||'[]');}catch(e){return[];}}
+function ldSaveAll(arr){try{localStorage.setItem(LD_KEY,JSON.stringify(arr));}catch(e){toast('Sin espacio de almacenamiento','error');}}
+
+function ldSwitchTipo(){
+  const tipo=document.getElementById('ld-tipo')?.value||'gasto';
+  const sel=document.getElementById('ld-categoria');
+  if(!sel)return;
+  sel.innerHTML=(LD_CAT[tipo]||[]).map(c=>`<option>${c}</option>`).join('');
+}
+
+function ldLimpiar(){
+  const hoy=new Date().toISOString().split('T')[0];
+  const f=document.getElementById('ld-fecha');if(f)f.value=hoy;
+  const t=document.getElementById('ld-tipo');if(t)t.value='gasto';
+  ldSwitchTipo();
+  ['ld-descripcion','ld-referencia','ld-contraparte'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const m=document.getElementById('ld-monto');if(m)m.value='';
+  const mt=document.getElementById('ld-metodo');if(mt)mt.value='Transferencia';
+}
+
+function ldGuardar(){
+  const fecha=document.getElementById('ld-fecha')?.value;
+  const tipo=document.getElementById('ld-tipo')?.value;
+  const categoria=document.getElementById('ld-categoria')?.value||'';
+  const descripcion=(document.getElementById('ld-descripcion')?.value||'').trim();
+  const monto=parseFloat(document.getElementById('ld-monto')?.value||0);
+  const metodo=document.getElementById('ld-metodo')?.value||'Transferencia';
+  const referencia=(document.getElementById('ld-referencia')?.value||'').trim();
+  const contraparte=(document.getElementById('ld-contraparte')?.value||'').trim();
+  if(!fecha){toast('Selecciona una fecha','error');return;}
+  if(!descripcion){toast('Ingresa una descripción','error');return;}
+  if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
+  const entry={
+    id:Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    fecha,tipo,categoria,descripcion,monto,metodo,referencia,contraparte
+  };
+  const all=ldGetAll();all.push(entry);ldSaveAll(all);
+  ldLimpiar();ldInit();
+  toast('✓ Registro guardado correctamente','success');
+}
+
+function ldEliminar(id){
+  if(!confirm('¿Eliminar este registro?'))return;
+  ldSaveAll(ldGetAll().filter(e=>e.id!==id));
+  ldInit();toast('Registro eliminado','success');
+}
+
+function ldSort(key){
+  if(ldSortKey===key)ldSortDir*=-1;
+  else{ldSortKey=key;ldSortDir=-1;}
+  ldRenderTabla();
+}
+
+function ldFiltrar(){
+  const desde=document.getElementById('ld-f-desde')?.value||'';
+  const hasta=document.getElementById('ld-f-hasta')?.value||'';
+  const tipo=document.getElementById('ld-f-tipo')?.value||'';
+  const busca=(document.getElementById('ld-f-busca')?.value||'').toLowerCase();
+  ldFiltradas=ldGetAll().filter(e=>{
+    if(desde&&e.fecha<desde)return false;
+    if(hasta&&e.fecha>hasta)return false;
+    if(tipo&&e.tipo!==tipo)return false;
+    if(busca&&![e.descripcion,e.categoria,e.referencia,e.contraparte].join(' ').toLowerCase().includes(busca))return false;
+    return true;
+  });
+  ldFiltradas.sort((a,b)=>{
+    let va=a[ldSortKey],vb=b[ldSortKey];
+    if(ldSortKey==='monto'){va=+va;vb=+vb;}
+    return va>vb?ldSortDir:va<vb?-ldSortDir:0;
+  });
+  ldPag=0;ldRenderTabla();ldRenderKPIs();
+}
+
+function ldRenderTabla(){
+  const tb=document.getElementById('ld-tbody');
+  if(!tb)return;
+  const total=ldFiltradas.length;
+  const countEl=document.getElementById('ld-count');
+  if(countEl){
+    const ing=ldFiltradas.filter(e=>e.tipo==='ingreso');
+    const gas=ldFiltradas.filter(e=>e.tipo==='gasto');
+    const sumIng=ing.reduce((s,e)=>s+(+e.monto||0),0);
+    const sumGas=gas.reduce((s,e)=>s+(+e.monto||0),0);
+    const neto=sumIng-sumGas;
+    countEl.innerHTML=total===0?'Sin registros para este filtro':
+      `<span style="color:var(--accent3)">↑ ${ing.length} ingresos ${fmtMoney(sumIng)}</span>&nbsp;·&nbsp;<span style="color:var(--danger)">↓ ${gas.length} gastos ${fmtMoney(sumGas)}</span>&nbsp;·&nbsp;<strong style="color:${neto>=0?'var(--accent3)':'var(--danger)'}">Neto: ${neto>=0?'+':'−'}${fmtMoney(Math.abs(neto))}</strong>`;
+  }
+  const page=ldFiltradas.slice(ldPag*LD_PAG,(ldPag+1)*LD_PAG);
+  if(!page.length){
+    tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--text3)">Sin registros — agrega el primer movimiento arriba</td></tr>';
+    document.getElementById('ld-pag').innerHTML='';return;
+  }
+  tb.innerHTML=page.map(e=>{
+    const isIng=e.tipo==='ingreso';
+    const color=isIng?'var(--accent3)':'var(--danger)';
+    const badge=isIng
+      ?'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(100,220,80,0.12);color:var(--accent3);font-weight:600">↑ Ingreso</span>'
+      :'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(255,68,68,0.12);color:var(--danger);font-weight:600">↓ Gasto</span>';
+    return`<tr>
+<td style="white-space:nowrap;font-size:12px">${e.fecha}</td>
+<td>${badge}</td>
+<td style="color:var(--text2);font-size:11px">${escapeHtml(e.categoria||'—')}</td>
+<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(e.descripcion)}">${escapeHtml(e.descripcion)}</td>
+<td style="font-weight:700;color:${color};white-space:nowrap;text-align:right">${isIng?'+':'−'}${fmtMoney(e.monto)}</td>
+<td style="font-size:11px;color:var(--text3)">${escapeHtml(e.metodo||'—')}</td>
+<td style="font-size:11px;color:var(--text3)">${escapeHtml(e.referencia||'—')}</td>
+<td style="font-size:11px;color:var(--text3)">${escapeHtml(e.contraparte||'—')}</td>
+<td><button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:2px 6px;font-size:12px" onclick="ldEliminar('${e.id}')" title="Eliminar">✕</button></td>
+</tr>`;
+  }).join('');
+  const totalPages=Math.ceil(total/LD_PAG);
+  const pagEl=document.getElementById('ld-pag');
+  if(totalPages<=1){pagEl.innerHTML='';return;}
+  pagEl.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="ldPagGo(${ldPag-1})" ${ldPag===0?'disabled':''}>‹ Anterior</button><span style="font-size:11px;color:var(--text3);margin:0 8px">Pág ${ldPag+1} / ${totalPages}</span><button class="btn btn-ghost btn-sm" onclick="ldPagGo(${ldPag+1})" ${ldPag>=totalPages-1?'disabled':''}>Siguiente ›</button>`;
+}
+
+function ldPagGo(p){ldPag=p;ldRenderTabla();}
+
+function ldRenderKPIs(){
+  const hoy=new Date().toISOString().split('T')[0];
+  const mes=hoy.slice(0,7);
+  const all=ldGetAll();
+  const mesData=all.filter(e=>e.fecha.startsWith(mes));
+  const hoyData=all.filter(e=>e.fecha===hoy);
+  const sum=(arr,tipo)=>arr.filter(e=>e.tipo===tipo).reduce((s,e)=>s+(+e.monto||0),0);
+  const fIng=sum(ldFiltradas,'ingreso'),fGas=sum(ldFiltradas,'gasto');
+  const mIng=sum(mesData,'ingreso'),mGas=sum(mesData,'gasto');
+  const hNet=sum(hoyData,'ingreso')-sum(hoyData,'gasto');
+  const saldo=fIng-fGas,sMes=mIng-mGas;
+  function s(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
+  function sc(id,c){const el=document.getElementById(id);if(el)el.style.color=c;}
+  const ingCount=ldFiltradas.filter(e=>e.tipo==='ingreso').length;
+  const gasCount=ldFiltradas.filter(e=>e.tipo==='gasto').length;
+  s('ld-k-ing',fmtMoney(fIng));s('ld-k-ings',ingCount+' entr'+(ingCount===1?'ada':'adas'));
+  s('ld-k-gas',fmtMoney(fGas));s('ld-k-gass',gasCount+' salid'+(gasCount===1?'a':'as'));
+  s('ld-k-sal',fmtMoney(Math.abs(saldo)));s('ld-k-sals',saldo>=0?'superávit':'déficit');sc('ld-k-sal',saldo>=0?'var(--accent3)':'var(--danger)');
+  s('ld-k-mes',fmtMoney(Math.abs(sMes)));s('ld-k-mess',(sMes>=0?'↑ superávit':'↓ déficit')+' en '+new Date().toLocaleString('es-CL',{month:'long'}));sc('ld-k-mes',sMes>=0?'var(--accent3)':'var(--danger)');
+  s('ld-k-hoy',hoyData.length===0?'$0':fmtMoney(Math.abs(hNet)));s('ld-k-hoys',hoyData.length+' mov. hoy'+(hNet!==0?' · '+(hNet>=0?'↑':'↓'):''));sc('ld-k-hoy',hNet>=0?'var(--accent3)':'var(--danger)');
+}
+
+function ldExportCSV(){
+  if(!ldFiltradas.length){toast('Sin datos para exportar','error');return;}
+  const rows=[['Fecha','Tipo','Categoría','Descripción','Monto','Método','Referencia','Proveedor/Cliente']];
+  ldFiltradas.forEach(e=>rows.push([e.fecha,e.tipo,e.categoria,e.descripcion,e.monto,e.metodo||'',e.referencia||'',e.contraparte||'']));
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='libro_diario_thelab.csv';a.click();
+  URL.revokeObjectURL(url);toast('✓ CSV exportado','success');
+}
+
+function ldInit(){
+  const hoy=new Date().toISOString().split('T')[0];
+  const fd=document.getElementById('ld-fecha');if(fd&&!fd.value)fd.value=hoy;
+  const desde=document.getElementById('ld-f-desde');
+  const hasta=document.getElementById('ld-f-hasta');
+  if(desde&&!desde.value)desde.value=hoy.slice(0,8)+'01';
+  if(hasta&&!hasta.value)hasta.value=hoy;
+  ldSwitchTipo();
+  ldFiltrar();
 }
 
 /* ── Overview Google Ads snapshot ── */
