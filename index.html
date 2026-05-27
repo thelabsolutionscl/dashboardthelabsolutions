@@ -859,6 +859,39 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </div>
       </div>
     </div>
+
+    <!-- Google Ads snapshot -->
+    <div class="card" id="overview-ads-card">
+      <div class="card-header">
+        <span class="card-title">📢 Google Ads</span>
+        <button class="btn btn-ghost btn-sm" onclick="switchTab('web')" style="margin-left:auto">Ver todo →</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr)">
+        <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
+          <div class="kpi-label">Gasto (30 días)</div>
+          <div style="font-size:22px;font-weight:700;color:#ffaa00;line-height:1.2;margin:2px 0" id="ov-ads-gasto">—</div>
+          <div style="font-size:10px;color:var(--text3)" id="ov-ads-gastos">—</div>
+        </div>
+        <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+          <div class="kpi-label">Conversiones</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent3);line-height:1.2;margin:2px 0" id="ov-ads-conv">—</div>
+          <div style="font-size:10px;color:var(--text3)" id="ov-ads-convs">—</div>
+        </div>
+        <div style="padding:10px 12px;border-right:1px solid var(--border)">
+          <div class="kpi-label">Clics</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent);line-height:1.2;margin:2px 0" id="ov-ads-clics">—</div>
+          <div style="font-size:10px;color:var(--text3)">total período</div>
+        </div>
+        <div style="padding:10px 12px">
+          <div class="kpi-label">ROAS</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent3);line-height:1.2;margin:2px 0" id="ov-ads-roas">—</div>
+          <div style="font-size:10px;color:var(--text3)" id="ov-ads-roass">retorno gasto</div>
+        </div>
+      </div>
+      <div style="padding:8px 16px 12px">
+        <div style="font-size:10px;color:var(--text3);font-style:italic" id="ov-ads-status">Abre la sección Web → Google Ads para ver datos</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -6758,6 +6791,7 @@ function renderAdsKPIs(data,days){
   document.getElementById('ads-kpi-conv').textContent=conv>0?conv.toFixed(0):'0';
   document.getElementById('ads-kpi-cpa').textContent=conv>0?fmtMoney(cpa):'—';
   document.getElementById('ads-kpi-roas').textContent=valConv>0?roas.toFixed(2)+'x':'—';
+  ovSyncAdsKPIs(data);
 }
 function renderAdsCampaigns(data){
   const camps=data.campanas||[];
@@ -7197,10 +7231,11 @@ function finSwitchTab(tab){
 function finRenderMensual(){
   const tb=document.getElementById('finMensualBody');
   if(!tb)return;
-  const max23=Math.max(...FIN_VENTAS[2023]);
-  const max24=Math.max(...FIN_VENTAS[2024]);
-  const max25=Math.max(...FIN_VENTAS[2025]);
-  const max26=Math.max(...FIN_VENTAS[2026]);
+  const VM=finVentasMerged();
+  const max23=Math.max(...VM[2023]);
+  const max24=Math.max(...VM[2024]);
+  const max25=Math.max(...VM[2025]);
+  const max26=Math.max(...VM[2026]);
   function heatBg(v,maxV,alpha){
     if(!v||!maxV)return '';
     const ratio=v/maxV;
@@ -7211,10 +7246,10 @@ function finRenderMensual(){
   }
   let html='';
   FIN_MESES.forEach((m,i)=>{
-    const v23=FIN_VENTAS[2023][i]||0;
-    const v24=FIN_VENTAS[2024][i]||0;
-    const v25=FIN_VENTAS[2025][i]||0;
-    const v26=FIN_VENTAS[2026][i]||0;
+    const v23=VM[2023][i]||0;
+    const v24=VM[2024][i]||0;
+    const v25=VM[2025][i]||0;
+    const v26=VM[2026][i]||0;
     const p2324=varPct(v23,v24),p2425=varPct(v24,v25),p2526=varPct(v25,v26);
     html+=`<tr>
       <td style="font-weight:600">${m}</td>
@@ -7243,7 +7278,7 @@ function finDrawChart(){
   const canvas=document.getElementById('finVentasChart');
   if(!canvas)return;
   const ctx=canvas.getContext('2d');
-  const w=canvas.offsetWidth||600;
+  const w=canvas.offsetWidth||canvas.parentElement?.clientWidth||600;
   canvas.width=w;
   canvas.height=220;
   ctx.clearRect(0,0,w,220);
@@ -7253,8 +7288,9 @@ function finDrawChart(){
   const ch=220-pad.t-pad.b;
   const cw=w-pad.l-pad.r;
   // max
+  const VM=finVentasMerged();
   let maxVal=0;
-  years.forEach(y=>FIN_VENTAS[y].forEach(v=>{if(v>maxVal)maxVal=v;}));
+  years.forEach(y=>VM[y].forEach(v=>{if(v>maxVal)maxVal=v;}));
   if(!maxVal)maxVal=1;
   const barW=Math.max(4,Math.floor((cw/12)/years.length)-2);
   const grpW=cw/12;
@@ -7268,7 +7304,7 @@ function finDrawChart(){
   }
   // bars
   years.forEach((y,yi)=>{
-    FIN_VENTAS[y].forEach((v,mi)=>{
+    VM[y].forEach((v,mi)=>{
       if(!v)return;
       const bh=Math.round((v/maxVal)*ch);
       const x=pad.l+grpW*mi+(yi*(barW+2))+(grpW-years.length*(barW+2))/2;
@@ -7292,6 +7328,15 @@ function finDrawChart(){
 function finGetAllFacturas(){
   const local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
   return [...FIN_FACTURAS_BASE,...local];
+}
+function finVentasMerged(){
+  const m={};
+  [2022,2023,2024,2025,2026].forEach(y=>{m[y]=[...FIN_VENTAS[y]];});
+  JSON.parse(localStorage.getItem('fin_ventas')||'[]').forEach(r=>{
+    const y=parseInt(r.year,10),mi=(parseInt(r.mes,10)||1)-1;
+    if(m[y])m[y][mi]=(m[y][mi]||0)+r.valor*r.cant;
+  });
+  return m;
 }
 function finRenderFacturas(){
   const year=document.getElementById('fin-filtro-year')?.value||'';
@@ -7441,16 +7486,17 @@ function nvGuardar(){
   };
   const existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
   existing.push(rec);
-  localStorage.setItem('fin_ventas',JSON.stringify(existing));
+  try{localStorage.setItem('fin_ventas',JSON.stringify(existing));}catch(e){toast('Sin espacio para guardar','error');return;}
   nvLimpiar();
   finRenderNuevaLista();
-  if(typeof showToast==='function')showToast('Venta guardada correctamente','success');
-  else alert('Venta guardada ✓');
+  toast('Venta guardada correctamente','success');
+  finInit();
 }
 function nvLimpiarTodas(){
   if(!confirm('¿Eliminar todas las ventas ingresadas manualmente?'))return;
   localStorage.removeItem('fin_ventas');
   finRenderNuevaLista();
+  finInit();
 }
 function finRenderNuevaLista(){
   const data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
@@ -7500,23 +7546,24 @@ function exportarFinanzasCSV(){
 
 /* ── KPIs dinámicos ── */
 function finInitKPIs(){
-  const v26=FIN_VENTAS[2026];
-  const v25=FIN_VENTAS[2025];
+  const VM=finVentasMerged();
+  const v26=VM[2026];
+  const v25=VM[2025];
   const tot26=v26.reduce((a,b)=>a+b,0);
   const meses26=v26.filter(v=>v>0).length||1;
   const avg26=Math.round(tot26/meses26);
   const tot25=v25.reduce((a,b)=>a+b,0);
   const avg25=Math.round(tot25/12);
   const varAvg=avg25?Math.round((avg26/avg25-1)*100):0;
-  // Por cobrar: facturas con porCobrar>0
-  const cobrar=FIN_FACTURAS_BASE.filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
+  // Por cobrar: facturas con porCobrar>0 (incluyendo ventas manuales)
+  const cobrar=finGetAllFacturas().filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
   const cobrarNeto=Math.round(cobrar/1.19);
   // Prestamo ultimo
   const lastPrestamo=FIN_PRESTAMOS[FIN_PRESTAMOS.length-1];
   // Deuda: prestamos + cobrar estimado
   const deudaPrest=lastPrestamo.deuda;
   // 2024 total
-  const tot24=FIN_VENTAS[2024].reduce((a,b)=>a+b,0);
+  const tot24=VM[2024].reduce((a,b)=>a+b,0);
   function fmt(n){
     if(n>=1e9)return '$'+(n/1e9).toFixed(1)+'B';
     if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';
@@ -7541,13 +7588,14 @@ function finInitKPIs(){
 
 /* ── Sparklines en KPIs ── */
 function finDrawSparklines(){
+  const VM=finVentasMerged();
   const datasets=[
-    FIN_VENTAS[2026].slice(0,6),
-    FIN_VENTAS[2026].slice(0,6),
-    FIN_FACTURAS_BASE.filter(r=>r.porCobrar>0).reduce((acc,r)=>{const m=parseInt(r.mes)-1;acc[m]=(acc[m]||0)+r.porCobrar;return acc;},Array(6).fill(0)),
+    VM[2026].slice(0,6),
+    VM[2026].slice(0,6),
+    finGetAllFacturas().filter(r=>r.porCobrar>0).reduce((acc,r)=>{const m=parseInt(r.mes)-1;acc[m]=(acc[m]||0)+r.porCobrar;return acc;},Array(6).fill(0)),
     FIN_PRESTAMOS.slice(-6).map(r=>r.deuda),
     FIN_PRESTAMOS.slice(-6).map(r=>r.deuda),
-    [2022,2023,2024,2025,2026].map(y=>FIN_VENTAS[y].reduce((a,b)=>a+b,0)/1e6)
+    [2022,2023,2024,2025,2026].map(y=>VM[y].reduce((a,b)=>a+b,0)/1e6)
   ];
   datasets.forEach((data,idx)=>{
     const canvas=document.getElementById('fin-sp'+(idx+1));
@@ -7574,9 +7622,9 @@ function finDrawCanalDonut(){
   const ctx=canvas.getContext('2d');
   const w=160,h=160,cx=80,cy=80,r=60,ri=38;
   ctx.clearRect(0,0,w,h);
-  const facts2026=FIN_FACTURAS_BASE.filter(r=>r.year==='2026');
+  const facts2026=finGetAllFacturas().filter(r=>String(r.year)==='2026');
   const totByCanal={};
-  facts2026.forEach(r=>{totByCanal[r.canal]=(totByCanal[r.canal]||0)+r.pago;});
+  facts2026.forEach(r=>{const amt=r.pago!=null?r.pago:r.valor*r.cant;totByCanal[r.canal]=(totByCanal[r.canal]||0)+amt;});
   const entries=Object.entries(totByCanal).sort((a,b)=>b[1]-a[1]);
   const total=entries.reduce((s,[,v])=>s+v,0)||1;
   const colors=['#00d4cc','#a78bfa','#ffaa00','#ff6b35','#00d4aa','#ff4444'];
@@ -7603,7 +7651,8 @@ function finRenderResumenAnual(){
   const tb=document.getElementById('fin-resumen-anual-body');
   if(!tb)return;
   const anos=[2022,2023,2024,2025,2026];
-  const totales=anos.map(y=>FIN_VENTAS[y].reduce((a,b)=>a+b,0));
+  const VM=finVentasMerged();
+  const totales=anos.map(y=>VM[y].reduce((a,b)=>a+b,0));
   const maxTot=Math.max(...totales)||1;
   const meses={2022:7,2023:12,2024:12,2025:12,2026:5};
   const badges={2022:'badge-gray',2023:'badge-yellow',2024:'badge-orange',2025:'badge-orange',2026:'badge-green'};
@@ -7630,11 +7679,12 @@ function finRenderResumenAnual(){
 function finRenderTopClientes(){
   const tb=document.getElementById('fin-top-clientes-body');
   if(!tb)return;
-  const facts2026=FIN_FACTURAS_BASE.filter(r=>r.year==='2026');
+  const facts2026=finGetAllFacturas().filter(r=>String(r.year)==='2026');
   const byCliente={};
   facts2026.forEach(r=>{
     const key=(r.empresa&&r.empresa!=='—')?r.empresa:r.nombre;
-    byCliente[key]=(byCliente[key]||0)+r.pago;
+    const amt=r.pago!=null?r.pago:r.valor*r.cant;
+    byCliente[key]=(byCliente[key]||0)+amt;
   });
   const total=Object.values(byCliente).reduce((a,b)=>a+b,0)||1;
   const sorted=Object.entries(byCliente).sort((a,b)=>b[1]-a[1]).slice(0,8);
@@ -7650,7 +7700,7 @@ function finDrawDeudaTimeline(){
   const canvas=document.getElementById('finDeudaChart');
   if(!canvas)return;
   const ctx=canvas.getContext('2d');
-  const w=canvas.offsetWidth||600;
+  const w=canvas.offsetWidth||canvas.parentElement?.clientWidth||600;
   canvas.width=w;canvas.height=120;
   ctx.clearRect(0,0,w,120);
   const data=FIN_PRESTAMOS.map(r=>r.deuda);
@@ -7710,9 +7760,10 @@ function finSetupTooltip(){
     const mi=Math.floor((mx-pad.l)/grpW);
     if(mi<0||mi>11){tooltip.style.display='none';return;}
     const colors={2023:'#a78bfa',2024:'#ffaa00',2025:'#ff6b35',2026:'#00d4cc'};
+    const VM=finVentasMerged();
     let lines=`<div style="font-weight:700;margin-bottom:5px;color:var(--text1)">${FIN_MESES[mi]}</div>`;
     years.forEach(y=>{
-      const v=FIN_VENTAS[y][mi];
+      const v=VM[y][mi];
       if(v)lines+=`<div style="color:${colors[y]||'#fff'}">${y}: ${clp(v)}</div>`;
     });
     tooltip.innerHTML=lines;
@@ -7740,6 +7791,22 @@ function finInit(){
   },120);
 }
 
+/* ── Overview Google Ads snapshot ── */
+function ovSyncAdsKPIs(data){
+  function set(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
+  const gasto=data.gasto||0,conv=data.conversiones||0,clics=data.clics||0;
+  const valConv=data.valor_conversion||0;
+  const roas=gasto>0?(valConv/gasto):0;
+  set('ov-ads-gasto',fmtMoney(gasto));
+  set('ov-ads-gastos',data.periodo||'30 días');
+  set('ov-ads-conv',conv>0?conv.toFixed(0):'0');
+  set('ov-ads-convs',conv>0?fmtMoney(valConv/conv)+'/conv':'—');
+  set('ov-ads-clics',fmtNum(clics));
+  set('ov-ads-roas',roas>0?roas.toFixed(2)+'x':'—');
+  set('ov-ads-roass',roas>0?'retorno sobre gasto':'sin conversiones');
+  set('ov-ads-status','Actualizado '+new Date().toLocaleTimeString('es-CL'));
+}
+
 /* ── Overview Finanzas snapshot ── */
 function renderOverviewFinanzas(){
   function fmt(n){
@@ -7749,15 +7816,17 @@ function renderOverviewFinanzas(){
   }
   function set(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
 
-  const v26=FIN_VENTAS[2026];
-  const v25=FIN_VENTAS[2025];
+  const VM=finVentasMerged();
+  const v26=VM[2026];
+  const v25=VM[2025];
   const tot26=v26.reduce((a,b)=>a+b,0);
   const meses26=v26.filter(v=>v>0).length||1;
   const avg26=Math.round(tot26/meses26);
   const avg25=Math.round(v25.reduce((a,b)=>a+b,0)/12);
   const varAvg=avg25?Math.round((avg26/avg25-1)*100):0;
-  const cobrar=FIN_FACTURAS_BASE.filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
-  const nFact=FIN_FACTURAS_BASE.filter(r=>r.porCobrar>0).length;
+  const allFacts=finGetAllFacturas();
+  const cobrar=allFacts.filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
+  const nFact=allFacts.filter(r=>r.porCobrar>0).length;
   const deuda=FIN_PRESTAMOS[FIN_PRESTAMOS.length-1].deuda;
 
   set('ov-fin-v26', fmt(tot26));
@@ -7777,20 +7846,21 @@ function drawOvFinChart(){
   const canvas=document.getElementById('ov-fin-chart');
   if(!canvas)return;
   const ctx=canvas.getContext('2d');
-  const w=canvas.offsetWidth||400;
+  const w=canvas.offsetWidth||canvas.parentElement?.clientWidth||400;
   canvas.width=w; canvas.height=54;
   ctx.clearRect(0,0,w,54);
 
   // oct=9, nov=10, dic=11 de 2025; ene=0..may=4 de 2026
+  const VM=finVentasMerged();
   const meses=[
-    {lbl:'Oct25',v:FIN_VENTAS[2025][9],color:'rgba(255,107,53,0.7)'},
-    {lbl:'Nov25',v:FIN_VENTAS[2025][10],color:'rgba(255,107,53,0.7)'},
-    {lbl:'Dic25',v:FIN_VENTAS[2025][11],color:'rgba(255,107,53,0.7)'},
-    {lbl:'Ene26',v:FIN_VENTAS[2026][0],color:'rgba(0,212,204,0.85)'},
-    {lbl:'Feb26',v:FIN_VENTAS[2026][1],color:'rgba(0,212,204,0.85)'},
-    {lbl:'Mar26',v:FIN_VENTAS[2026][2],color:'rgba(0,212,204,0.85)'},
-    {lbl:'Abr26',v:FIN_VENTAS[2026][3],color:'rgba(0,212,204,0.85)'},
-    {lbl:'May26',v:FIN_VENTAS[2026][4],color:'rgba(0,212,204,0.85)'},
+    {lbl:'Oct25',v:VM[2025][9],color:'rgba(255,107,53,0.7)'},
+    {lbl:'Nov25',v:VM[2025][10],color:'rgba(255,107,53,0.7)'},
+    {lbl:'Dic25',v:VM[2025][11],color:'rgba(255,107,53,0.7)'},
+    {lbl:'Ene26',v:VM[2026][0],color:'rgba(0,212,204,0.85)'},
+    {lbl:'Feb26',v:VM[2026][1],color:'rgba(0,212,204,0.85)'},
+    {lbl:'Mar26',v:VM[2026][2],color:'rgba(0,212,204,0.85)'},
+    {lbl:'Abr26',v:VM[2026][3],color:'rgba(0,212,204,0.85)'},
+    {lbl:'May26',v:VM[2026][4],color:'rgba(0,212,204,0.85)'},
   ];
   const maxV=Math.max(...meses.map(m=>m.v))||1;
   const pad={t:4,b:16,l:2,r:2};
