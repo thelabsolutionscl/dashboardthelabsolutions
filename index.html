@@ -1657,66 +1657,91 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <!-- Apps Script instructions -->
         <div id="adsScriptBox" style="display:none;padding:0 16px 16px">
           <div style="background:#1a1a2e;border:1px solid rgba(255,200,0,0.25);border-radius:8px;padding:12px">
-            <div style="font-size:11px;font-weight:600;color:#ffc107;margin-bottom:6px">⚙ Cómo conectar Google Ads</div>
-            <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.6">1) Ve a <strong>script.google.com</strong> → Nuevo proyecto<br>2) Pega el código de abajo<br>3) En línea 2 pon tu <strong>Customer ID</strong> sin guiones<br>4) Implementar → Nueva implementación → Aplicación web → Acceso: <em>Cualquier persona</em><br>5) Copia la URL y pégala arriba</div>
+            <div style="font-size:11px;font-weight:600;color:#ffc107;margin-bottom:6px">⚙ Configuración — 2 scripts</div>
+            <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.6"><strong>Por qué 2 scripts:</strong> AdsApp (la API de datos de Ads) solo corre <em>dentro</em> de Google Ads, nunca en Apps Script.<br><br><strong style="color:#e6edf3">Script 1 — Apps Script</strong> (script.google.com, el que ya tienes desplegado):<br>Reemplaza TODO el código con el bloque de abajo → Desplegar → Nueva versión → Acceso: Cualquier persona.<br><br><strong style="color:#e6edf3">Script 2 — Google Ads Script</strong> (ads.google.com → Herramientas y config. → Scripts):<br>Crea un nuevo script con el 2° bloque, ejecútalo manualmente una vez y programa diario.</div>
             <div style="position:relative">
-              <pre id="adsScriptCode" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:9.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">function doGet(e) {
-  var customerId = 'TU_CUSTOMER_ID'; // ej: 1234567890
-  var days = parseInt((e && e.parameter && e.parameter.days) || 30);
-  var dateRange = 'LAST_' + days + '_DAYS';
+              <pre id="adsScriptCode" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:9.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">// ── Script 1: Apps Script (script.google.com) ──────────────────────────
+// Reemplaza TODO el contenido del proyecto y vuelve a desplegar (nueva versión).
 
+var SECRET = 'thelab2025'; // clave compartida con el Script 2
+
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+    if (body.secret !== SECRET) return json({ok:false, error:'No autorizado'});
+    PropertiesService.getScriptProperties().setProperty('ads_cache', JSON.stringify({
+      guardado: new Date().toISOString(),
+      gasto: body.gasto, impresiones: body.impresiones, clics: body.clics,
+      conversiones: body.conversiones, valor_conversion: body.valor_conversion,
+      campanas: body.campanas
+    }));
+    return json({ok:true, saved:true});
+  } catch(err) { return json({ok:false, error:err.message}); }
+}
+
+function doGet(e) {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty('ads_cache');
+    if (!raw) return json({ok:false, error:'Sin datos — ejecuta primero el Script 2 en Google Ads'});
+    var data = JSON.parse(raw);
+    data.ok = true;
+    data.periodo = '30 días';
+    return json(data);
+  } catch(err) { return json({ok:false, error:err.message}); }
+}
+
+function json(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}</pre>
+              <button onclick="copyAdsScript('adsScriptCode')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
+            </div>
+            <div style="margin-top:12px;position:relative">
+              <div style="font-size:10px;font-weight:600;color:#e6edf3;margin-bottom:6px">Script 2 — Google Ads Script (ads.google.com → Herramientas → Scripts)</div>
+              <pre id="adsScriptCode2" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:9.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">// ── Script 2: Google Ads Script ────────────────────────────────────────
+// ads.google.com → Herramientas y configuración → Scripts → + Nuevo script
+// Programar: diario. Ejecutar manualmente la primera vez.
+
+var ENDPOINT = 'https://script.google.com/macros/s/AKfycbyn8h8PcEpPc97TD45vJgSnRRIWyhQ6ANRbFoE_ZsvF2S9Iy58y4cnG7iO_yY_gxcRuNQ/exec';
+var SECRET   = 'thelab2025'; // misma clave que en el Script 1
+
+function main() {
   var report = AdsApp.report(
     'SELECT campaign.name, campaign.id, campaign.status, ' +
-    'campaign.budget_amount_micros, ' +
-    'metrics.impressions, metrics.clicks, metrics.cost_micros, ' +
-    'metrics.conversions, metrics.conversions_value ' +
-    'FROM campaign ' +
-    'WHERE segments.date DURING ' + dateRange +
-    ' ORDER BY metrics.cost_micros DESC'
+    'campaign.budget_amount_micros, metrics.impressions, metrics.clicks, ' +
+    'metrics.cost_micros, metrics.conversions, metrics.conversions_value ' +
+    'FROM campaign WHERE segments.date DURING LAST_30_DAYS ' +
+    'ORDER BY metrics.cost_micros DESC'
   );
 
   var rows = report.rows();
-  var campaigns = [];
-  var totals = {gasto:0, impresiones:0, clics:0, conversiones:0, valor_conversion:0};
+  var campaigns = [], t = {gasto:0,impresiones:0,clics:0,conversiones:0,valor_conversion:0};
 
   while (rows.hasNext()) {
     var row = rows.next();
-    var gasto = Math.round(parseInt(row['metrics.cost_micros']) / 1e6);
-    var imp   = parseInt(row['metrics.impressions']);
-    var cl    = parseInt(row['metrics.clicks']);
-    var conv  = parseFloat(row['metrics.conversions']);
-    var valConv = parseFloat(row['metrics.conversions_value']);
-    totals.gasto += gasto;
-    totals.impresiones += imp;
-    totals.clics += cl;
-    totals.conversiones += conv;
-    totals.valor_conversion += valConv;
+    var g  = Math.round(parseInt(row['metrics.cost_micros'])/1e6);
+    var i  = parseInt(row['metrics.impressions']);
+    var c  = parseInt(row['metrics.clicks']);
+    var cv = parseFloat(row['metrics.conversions']);
+    var vc = parseFloat(row['metrics.conversions_value']);
+    t.gasto+=g; t.impresiones+=i; t.clics+=c; t.conversiones+=cv; t.valor_conversion+=vc;
     campaigns.push({
-      id: row['campaign.id'],
-      nombre: row['campaign.name'],
-      estado: row['campaign.status'],
-      presupuesto: Math.round(parseInt(row['campaign.budget_amount_micros']||0)/1e6),
-      gasto: gasto, impresiones: imp, clics: cl,
-      conversiones: conv, valor_conversion: valConv
+      id:row['campaign.id'], nombre:row['campaign.name'], estado:row['campaign.status'],
+      presupuesto:Math.round(parseInt(row['campaign.budget_amount_micros']||0)/1e6),
+      gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
     });
   }
 
-  var result = {
-    ok: true,
-    periodo: days + ' días',
-    gasto: totals.gasto,
-    impresiones: totals.impresiones,
-    clics: totals.clics,
-    conversiones: totals.conversiones,
-    valor_conversion: totals.valor_conversion,
-    campanas: campaigns
-  };
-
-  return ContentService
-    .createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
+  UrlFetchApp.fetch(ENDPOINT, {
+    method:'post', contentType:'application/json', muteHttpExceptions:true,
+    payload:JSON.stringify({
+      secret:SECRET, campanas:campaigns,
+      gasto:t.gasto, impresiones:t.impresiones, clics:t.clics,
+      conversiones:t.conversiones, valor_conversion:t.valor_conversion
+    })
+  });
 }</pre>
-              <button onclick="copyAdsScript()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
+              <button onclick="copyAdsScript('adsScriptCode2')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
             </div>
           </div>
         </div>
@@ -6712,8 +6737,8 @@ function toggleAdsConfig(){
     if(cfg.customerId) document.getElementById('ads-customer-id').value=cfg.customerId;
   }
 }
-function copyAdsScript(){
-  const code=document.getElementById('adsScriptCode')?.textContent||'';
+function copyAdsScript(id){
+  const code=document.getElementById(id||'adsScriptCode')?.textContent||'';
   navigator.clipboard.writeText(code).then(()=>toast('✓ Script copiado','success')).catch(()=>{
     const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Script copiado','success');
   });
