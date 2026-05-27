@@ -624,6 +624,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="tab-btn" data-tab="equipo" onclick="switchTab('equipo')">👤 Equipo</button>
     <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')">📊 Reportes</button>
     <button class="tab-btn" data-tab="web" onclick="switchTab('web')">🌐 Web</button>
+    <button class="tab-btn" data-tab="finanzas" onclick="switchTab('finanzas')">💰 Finanzas</button>
   </nav>
   <div class="topbar-right">
     <div class="status-dot" id="statusDot"></div>
@@ -658,6 +659,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="equipo" onclick="switchTabMobile('equipo')"><span class="mobile-tab-icon">👤</span>Equipo</button>
     <button class="mobile-tab-btn" data-tab="reporte" onclick="switchTabMobile('reporte')"><span class="mobile-tab-icon">📊</span>Reportes</button>
     <button class="mobile-tab-btn" data-tab="web" onclick="switchTabMobile('web')"><span class="mobile-tab-icon">🌐</span>Web</button>
+    <button class="mobile-tab-btn" data-tab="finanzas" onclick="switchTabMobile('finanzas')"><span class="mobile-tab-icon">💰</span>Finanzas</button>
   </nav>
   <div class="mobile-nav-footer">
     <button onclick="loadAllData();closeMobileMenu()">↺ Actualizar</button>
@@ -1610,6 +1612,486 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="empty-state" style="padding:40px 0">
         <div class="empty-icon">📢</div>
         <div>Configura el endpoint y haz clic en "Actualizar" para cargar campañas</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- FINANZAS TAB                                               -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-finanzas">
+  <div class="section-header">
+    <div class="section-title">💰 Finanzas</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="section-subtitle" id="finActualizadoEn">Datos al 27/05/2026</span>
+      <button class="btn btn-ghost btn-sm" onclick="exportarFinanzasCSV()">⬇ Exportar CSV</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Ventas 2026 (1er sem)</div>
+      <div class="kpi-value" id="fin-kpi-ventas26">$33,4M</div>
+      <div class="kpi-sub" id="fin-kpi-ventas26-sub">Ene–May 2026</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Media Mensual 2026</div>
+      <div class="kpi-value">$5,6M</div>
+      <div class="kpi-sub">↑ 68.5% vs 2025</div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">Por Cobrar + IVA</div>
+      <div class="kpi-value">$22,5M</div>
+      <div class="kpi-sub">Neto: $18,9M</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Préstamo Pendiente</div>
+      <div class="kpi-value">$23,1M</div>
+      <div class="kpi-sub">Acumulado 2026</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Deuda Total Abril</div>
+      <div class="kpi-value">$33,9M</div>
+      <div class="kpi-sub">IVA Postergado incl.</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">Total Año 2024 (record)</div>
+      <div class="kpi-value">$108M</div>
+      <div class="kpi-sub">Mejor año histórico</div>
+    </div>
+  </div>
+
+  <!-- Sub-navegación interna -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
+    <button class="btn btn-ghost btn-sm active-filter" id="fin-nav-resumen" onclick="finSwitchTab('resumen')">📊 Resumen</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-facturas" onclick="finSwitchTab('facturas')">📄 Facturas</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-cobrar" onclick="finSwitchTab('cobrar')">💸 Por Cobrar</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-prestamos" onclick="finSwitchTab('prestamos')">🏦 Préstamos</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-deudas" onclick="finSwitchTab('deudas')">⚠️ Deudas</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-nueva" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
+  </div>
+
+  <!-- ── RESUMEN ── -->
+  <div id="fin-panel-resumen">
+    <!-- Comparativa anual -->
+    <div class="data-grid" style="grid-template-columns:1fr 1.3fr">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Resumen por Año</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Año</th><th>Total Ventas</th><th>Media/Mes</th><th>Variación</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge badge-gray">2022 *</span></td><td>$9.000.000</td><td>$1.500.000</td><td><span class="badge badge-gray">—</span></td></tr>
+              <tr><td><span class="badge badge-yellow">2023</span></td><td>$47.161.715</td><td>$3.930.143</td><td><span class="badge badge-green">+424%</span></td></tr>
+              <tr><td><span class="badge badge-orange">2024</span></td><td>$108.424.056</td><td>$9.035.338</td><td><span class="badge badge-green">+130%</span></td></tr>
+              <tr><td><span class="badge badge-orange">2025</span></td><td>$73.734.797</td><td>$6.144.566</td><td><span class="badge badge-red">-32%</span></td></tr>
+              <tr style="background:rgba(0,212,204,0.05)"><td><span class="badge badge-green">2026 *</span></td><td>$33.461.820</td><td>$5.576.970</td><td><span class="badge badge-green">+69%</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:10px 16px;font-size:10px;color:var(--text3)">* 2022: solo Jun–Dic | 2026: solo Ene–May</div>
+      </div>
+
+      <!-- Gráfico canvas -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Ventas Mensuales por Año</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn-mini btn-mini-yellow" onclick="finChartSetYear('all')" id="fc-all">Todos</button>
+            <button class="btn-mini" onclick="finChartSetYear(2023)" id="fc-2023">2023</button>
+            <button class="btn-mini" onclick="finChartSetYear(2024)" id="fc-2024">2024</button>
+            <button class="btn-mini" onclick="finChartSetYear(2025)" id="fc-2025">2025</button>
+            <button class="btn-mini" onclick="finChartSetYear(2026)" id="fc-2026">2026</button>
+          </div>
+        </div>
+        <div style="padding:12px 16px">
+          <canvas id="finVentasChart" height="220" style="width:100%;display:block"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Semestral histórico -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><span class="card-title">Evolución Semestral</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Período</th><th>Semestre</th><th>Venta Neta</th><th>Total Año</th><th>Media/Mes</th><th>Variación</th></tr></thead>
+          <tbody>
+            <tr><td>1er Año</td><td>1° SEM Jun–Dic 2022</td><td>$9.000.000</td><td rowspan="2" style="vertical-align:middle">$23.725.190</td><td>$1.500.000</td><td>—</td></tr>
+            <tr><td>1er Año</td><td>2° SEM Ene–Jun 2023</td><td>$14.725.190</td><td>$2.454.198</td><td><span class="badge badge-green">+63,6%</span></td></tr>
+            <tr style="background:rgba(255,255,255,0.015)"><td>2do Año</td><td>3° SEM Jul–Dic 2023</td><td>$32.436.525</td><td rowspan="2" style="vertical-align:middle">—</td><td>$5.406.088</td><td><span class="badge badge-green">+120%</span></td></tr>
+            <tr style="background:rgba(255,255,255,0.015)"><td>2do Año</td><td>4° SEM Ene–Jun 2024</td><td>$19.858.172</td><td>$3.309.695</td><td><span class="badge badge-red">-39%</span></td></tr>
+            <tr><td>3er Año</td><td>1° SEM Ene–Jun 2024</td><td>$32.542.366</td><td rowspan="2" style="vertical-align:middle">$108.424.056</td><td>$5.423.728</td><td><span class="badge badge-green">+121%</span></td></tr>
+            <tr><td>3er Año</td><td>2° SEM Jul–Dic 2024</td><td>$75.881.690</td><td>$12.646.948</td><td><span class="badge badge-green">+134%</span></td></tr>
+            <tr style="background:rgba(255,255,255,0.015)"><td>4to Año</td><td>1° SEM Ene–Jun 2025</td><td>$19.858.172</td><td rowspan="2" style="vertical-align:middle">$73.734.797</td><td>$3.309.695</td><td><span class="badge badge-red">-39%</span></td></tr>
+            <tr style="background:rgba(255,255,255,0.015)"><td>4to Año</td><td>2° SEM Jul–Dic 2025</td><td>$53.876.625</td><td>$8.979.438</td><td><span class="badge badge-green">+66,1%</span></td></tr>
+            <tr style="background:rgba(0,212,204,0.04)"><td>5to Año</td><td>Ene–Jun 2026 (en curso)</td><td>$33.461.820</td><td>—</td><td>$5.576.970</td><td><span class="badge badge-green">+68,5%</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tabla mensual detallada -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Ventas Mensuales Detalladas</span><span class="card-badge">CLP neto sin IVA</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th>2022</th><th>2023</th><th>2024</th><th>Var 23/24</th><th>2025</th><th>Var 24/25</th><th>2026</th><th>Var 25/26</th>
+            </tr>
+          </thead>
+          <tbody id="finMensualBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FACTURAS ── -->
+  <div id="fin-panel-facturas" style="display:none">
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <span class="card-title">Registro de Facturas / Ventas</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select class="field-select" id="fin-filtro-year" style="width:90px;padding:4px 8px;font-size:11px" onchange="finRenderFacturas()">
+            <option value="">Todos</option>
+            <option value="2026" selected>2026</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+            <option value="2023">2023</option>
+          </select>
+          <select class="field-select" id="fin-filtro-mes" style="width:100px;padding:4px 8px;font-size:11px" onchange="finRenderFacturas()">
+            <option value="">Todos los meses</option>
+            <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+            <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+            <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+            <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+          <select class="field-select" id="fin-filtro-canal" style="width:110px;padding:4px 8px;font-size:11px" onchange="finRenderFacturas()">
+            <option value="">Canal: Todos</option>
+            <option value="CONTACTO">Contacto</option>
+            <option value="ADWORDS">Adwords</option>
+            <option value="VENDEDORES">Vendedores</option>
+          </select>
+          <input class="field-input" id="fin-filtro-buscar" placeholder="Buscar cliente / ítem..." style="width:180px;padding:4px 10px;font-size:11px" oninput="finRenderFacturas()">
+          <span id="fin-fact-count" style="font-size:11px;color:var(--text3);white-space:nowrap"></span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mes/Año</th><th>Nombre</th><th>Empresa</th><th>Ítem</th><th>Cant.</th>
+              <th>Valor Unit.</th><th>Total Neto</th><th>IVA</th><th>Total+IVA</th>
+              <th>Por Cobrar</th><th>Fact. N°</th><th>Canal</th><th>Categoría</th>
+            </tr>
+          </thead>
+          <tbody id="fin-facturas-body"></tbody>
+        </table>
+      </div>
+      <div style="padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border)">
+        <span style="font-size:11px;color:var(--text3)" id="fin-fact-totales"></span>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" id="fin-pag-prev" onclick="finPagPrev()">← Ant</button>
+          <span style="font-size:11px;color:var(--text2);padding:5px 8px" id="fin-pag-info"></span>
+          <button class="btn btn-ghost btn-sm" id="fin-pag-next" onclick="finPagNext()">Sig →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── POR COBRAR ── -->
+  <div id="fin-panel-cobrar" style="display:none">
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+      <div class="kpi-card orange">
+        <div class="kpi-label">Por Cobrar + IVA (2025)</div>
+        <div class="kpi-value">$22.460.179</div>
+        <div class="kpi-sub">Facturas pendientes año 2025</div>
+      </div>
+      <div class="kpi-card yellow">
+        <div class="kpi-label">Por Cobrar Neto (2025)</div>
+        <div class="kpi-value">$18.874.100</div>
+        <div class="kpi-sub">Sin IVA</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Graficas City Spa — Saldo</div>
+        <div class="kpi-value">$535.500</div>
+        <div class="kpi-sub">De $2.629.900 total facturado</div>
+      </div>
+    </div>
+
+    <!-- Seguimiento Graficas City Spa -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><span class="card-title">Seguimiento — Graficas City Spa (RUT 76.619.215-7)</span><span class="card-badge">2026</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ítem</th><th>Cant.</th><th>Total Neto</th><th>IVA</th><th>Total</th><th>Fact. N°</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td>CARTEL NEON VANS</td><td>2</td><td>$200.000</td><td>$38.000</td><td>$238.000</td><td>353</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>CARTEL NEON NIVEA 130×90</td><td>1</td><td>$500.000</td><td>$95.000</td><td>$595.000</td><td>360</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>PARIS × LOLLA 210×62</td><td>1</td><td>$450.000</td><td>$85.500</td><td>$535.500</td><td>367</td><td><span class="badge badge-orange">Pendiente</span></td></tr>
+            <tr><td>ISOTIPO MISTRAL 42cm Ø</td><td>2</td><td>$140.000</td><td>$26.600</td><td>$166.600</td><td>365</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>LOLLA × MISTRAL 157×31</td><td>1</td><td>$360.000</td><td>$68.400</td><td>$428.400</td><td>368</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>LOLLA × MISTRAL 157×31 (2a)</td><td>1</td><td>$360.000</td><td>$68.400</td><td>$428.400</td><td>—</td><td><span class="badge badge-gray">S/Fact.</span></td></tr>
+            <tr><td>CARTEL NEON VANS (2a)</td><td>2</td><td>$200.000</td><td>$38.000</td><td>$238.000</td><td>370</td><td><span class="badge badge-green">Pagado</span></td></tr>
+          </tbody>
+          <tfoot>
+            <tr style="border-top:2px solid var(--border2)">
+              <td colspan="4" style="font-weight:700;color:var(--text2);font-size:11px;text-transform:uppercase">TOTAL FACTURADO</td>
+              <td style="font-weight:700;color:var(--accent)">$2.629.900</td><td colspan="2"></td>
+            </tr>
+            <tr>
+              <td colspan="4" style="font-size:11px;color:var(--text3)">Transferido</td>
+              <td style="color:var(--accent3)">$2.094.400</td><td colspan="2"></td>
+            </tr>
+            <tr>
+              <td colspan="4" style="font-size:11px;font-weight:700;color:var(--danger)">DIFERENCIA A PAGAR</td>
+              <td style="color:var(--danger);font-weight:700">$535.500</td><td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- Cuentas por cobrar generales -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro (2026)</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mes</th><th>Cliente</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Por Cobrar</th><th>Fact. N°</th></tr></thead>
+          <tbody id="fin-cobrar-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PRÉSTAMOS ── -->
+  <div id="fin-panel-prestamos" style="display:none">
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+      <div class="kpi-card red">
+        <div class="kpi-label">Deuda Préstamos Total</div>
+        <div class="kpi-value">$23.071.220</div>
+        <div class="kpi-sub">Al 06/05/2026</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-label">Préstamos 2026</div>
+        <div class="kpi-value">18 movimientos</div>
+        <div class="kpi-sub">Ene–May 2026</div>
+      </div>
+      <div class="kpi-card yellow">
+        <div class="kpi-label">Mayor préstamo</div>
+        <div class="kpi-value">$4.320.000</div>
+        <div class="kpi-sub">08/04/26 — Pago facturas</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Historial de Préstamos</span><span class="card-badge">CLP</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Fecha</th><th>Préstamo</th><th>Devolución</th><th>Deuda Pendiente</th><th>Observación</th></tr></thead>
+          <tbody id="fin-prestamos-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DEUDAS ── -->
+  <div id="fin-panel-deudas" style="display:none">
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+      <div class="kpi-card red">
+        <div class="kpi-label">Deuda Total Abril 2026</div>
+        <div class="kpi-value">$33.928.920</div>
+        <div class="kpi-sub">Todas las categorías</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">IVA Postergado</div>
+        <div class="kpi-value">$7.000.000</div>
+        <div class="kpi-sub">Prioritario</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-label">German Kaiser</div>
+        <div class="kpi-value">$15.000.000</div>
+        <div class="kpi-sub">Mayor acreedor</div>
+      </div>
+    </div>
+
+    <!-- Deudas Abril 2026 -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><span class="card-title">Detalle Deudas — Abril 2026</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Acreedor / Categoría</th><th>Deuda</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td>German Kaiser</td><td>$15.000.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$15.000.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td>IVA Postergado</td><td>$7.000.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$7.000.000</td><td><span class="badge badge-red">Urgente</span></td></tr>
+            <tr><td>Jaime</td><td>$2.000.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$2.000.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td>RICKY</td><td>$1.500.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$1.500.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td>FLO</td><td>$1.000.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$1.000.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td>FREDDY</td><td>$1.200.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$1.200.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td>ROJAS</td><td>$952.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$952.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td>EQUIPO GRÁF.</td><td>$556.920</td><td>—</td><td style="color:var(--danger);font-weight:700">$556.920</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td>TROQUEL + CATIRE</td><td>$400.000</td><td>—</td><td style="color:var(--danger);font-weight:700">$400.000</td><td><span class="badge badge-red">Pendiente</span></td></tr>
+            <tr><td>Luz</td><td>$2.400.000</td><td style="color:var(--accent3)">$2.400.000</td><td style="color:var(--accent3)">$0</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>Lorena</td><td>$720.000</td><td style="color:var(--accent3)">$720.000</td><td style="color:var(--accent3)">$0</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>PAPEL</td><td>$610.000</td><td style="color:var(--accent3)">$610.000</td><td style="color:var(--accent3)">$0</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>CONTADORA</td><td>$190.000</td><td style="color:var(--accent3)">$190.000</td><td style="color:var(--accent3)">$0</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>TEMPO</td><td>$400.000</td><td style="color:var(--accent3)">$400.000</td><td style="color:var(--accent3)">$0</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr style="border-top:2px solid var(--border2);background:rgba(255,68,68,0.04)">
+              <td style="font-weight:700">TOTAL</td>
+              <td style="font-weight:700">$33.928.920</td>
+              <td style="color:var(--accent3);font-weight:700">$4.320.000</td>
+              <td style="color:var(--danger);font-weight:700">$29.608.920</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Historial deudas personales (Jaime + otros) -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Historial Deudas Personales</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Acreedor</th><th>Cuota/Monto</th><th>Pagado</th><th>Fecha Pago</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td>Meli Ramirez</td><td>$150.000</td><td style="color:var(--accent3)">$150.000</td><td>25/07/23</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>Tío German</td><td>$300.000</td><td style="color:var(--accent3)">$300.000</td><td>27/07/23</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>Alfonso</td><td>$77.085</td><td style="color:var(--accent3)">$77.085</td><td>—</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>Jaime (cuotas 1–4)</td><td>$105.000 c/u</td><td style="color:var(--accent3)">$420.000</td><td>17/07/22 – 29/12/23</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>German Kaiser</td><td>$1.700.000</td><td style="color:var(--accent3)">$1.700.000</td><td>07/12/23</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>German Kaiser</td><td>$3.000.000</td><td style="color:var(--accent3)">$3.000.000</td><td>09/12/23</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>Tío German</td><td>$2.000.000</td><td style="color:var(--accent3)">$2.000.000</td><td>11/12/23</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>Cata</td><td>$175.000</td><td style="color:var(--accent3)">$175.000</td><td>29/12/23</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>German Kaiser</td><td>$500.000</td><td style="color:var(--accent3)">$500.000</td><td>29/12/23</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>German Kaiser</td><td>$600.000</td><td style="color:var(--accent3)">$600.000</td><td>05/01/24</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>German Kaiser</td><td>$1.500.000</td><td style="color:var(--accent3)">$1.500.000</td><td>05/09/24</td><td><span class="badge badge-green">Pagado</span></td></tr>
+            <tr><td>Vane</td><td>$175.000</td><td>—</td><td>—</td><td><span class="badge badge-orange">Pendiente</span></td></tr>
+            <tr><td>Jaime (cuotas 5–24 pend.)</td><td>$105.000 × 20</td><td>$10.597.085</td><td>—</td><td><span class="badge badge-red">-$3.600.000 saldo</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NUEVA VENTA ── -->
+  <div id="fin-panel-nueva" style="display:none">
+    <div class="card" style="max-width:800px">
+      <div class="card-header"><span class="card-title">Registrar Nueva Venta / Factura</span></div>
+      <div class="form-grid">
+        <div class="field-group">
+          <label class="field-label">Mes</label>
+          <select class="field-select" id="nv-mes">
+            <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+            <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+            <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+            <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Año</label>
+          <select class="field-select" id="nv-year">
+            <option value="2026" selected>2026</option>
+            <option value="2025">2025</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Nombre Contacto</label>
+          <input class="field-input" id="nv-nombre" placeholder="Ej: Virginia Venturino">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Empresa</label>
+          <input class="field-input" id="nv-empresa" placeholder="Ej: BCI Pagos">
+        </div>
+        <div class="field-group">
+          <label class="field-label">RUT</label>
+          <input class="field-input" id="nv-rut" placeholder="77.190.661-3">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Factura N°</label>
+          <input class="field-input" id="nv-factura" type="number" placeholder="378">
+        </div>
+        <div class="field-group form-full">
+          <label class="field-label">Ítem / Descripción</label>
+          <input class="field-input" id="nv-item" placeholder="Ej: CAJAS BCI 5/0">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Cantidad</label>
+          <input class="field-input" id="nv-cantidad" type="number" placeholder="2000" oninput="nvRecalcular()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Valor Unitario (neto)</label>
+          <input class="field-input" id="nv-valor" type="number" placeholder="3890" oninput="nvRecalcular()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Total Neto (calculado)</label>
+          <input class="field-input" id="nv-total" placeholder="$7.780.000" readonly style="opacity:0.6">
+        </div>
+        <div class="field-group">
+          <label class="field-label">IVA 19% (calculado)</label>
+          <input class="field-input" id="nv-iva" placeholder="$1.478.200" readonly style="opacity:0.6">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Total + IVA</label>
+          <input class="field-input" id="nv-total-iva" placeholder="$9.258.200" readonly style="color:var(--accent);font-weight:700;opacity:0.9">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Pago Recibido</label>
+          <input class="field-input" id="nv-pago" type="number" placeholder="0" oninput="nvRecalcular()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Canal</label>
+          <select class="field-select" id="nv-canal">
+            <option value="CONTACTO">Contacto</option>
+            <option value="ADWORDS">Adwords</option>
+            <option value="VENDEDORES">Vendedores</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Categoría</label>
+          <select class="field-select" id="nv-categoria">
+            <option value="">— Sin categoría —</option>
+            <option value="IMPRENTA">Imprenta</option>
+            <option value="3D">3D</option>
+            <option value="NEON/CARTEL">Neón / Cartel</option>
+            <option value="DISEÑO">Diseño</option>
+            <option value="SERVICIO">Servicio</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Fecha Facturación</label>
+          <input class="field-input" id="nv-fecha-fact" type="date">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Fecha Pago</label>
+          <input class="field-input" id="nv-fecha-pago" type="date">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Costo (opcional)</label>
+          <input class="field-input" id="nv-costo" type="number" placeholder="0" oninput="nvRecalcular()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Utilidad (calculada)</label>
+          <input class="field-input" id="nv-utilidad" placeholder="$0" readonly style="color:var(--accent3);opacity:0.9">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="nvLimpiar()">Limpiar</button>
+        <button class="btn btn-primary" onclick="nvGuardar()">💾 Guardar Venta</button>
+      </div>
+    </div>
+
+    <!-- Ventas ingresadas manualmente -->
+    <div class="card" style="margin-top:20px" id="fin-nueva-lista-card">
+      <div class="card-header"><span class="card-title">Ventas Ingresadas Manualmente</span><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="nvLimpiarTodas()">🗑 Borrar todas</button></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mes/Año</th><th>Nombre</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Canal</th><th>Acción</th></tr></thead>
+          <tbody id="fin-nueva-lista-body"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -6347,6 +6829,462 @@ function renderWebKPIs(pages){
     </div>
   </div>
 </div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   FINANZAS — datos históricos y lógica completa
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Datos mensuales por año (neto sin IVA) ── */
+const FIN_MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const FIN_VENTAS = {
+  2022: [0,0,0,0,0,2600000,400000,800000,1400000,1400000,800000,1600000],
+  2023: [1610100,1638504,3070827,4246782,1200532,2958445,2559724,3464269,2433360,954400,16789488,6235284],
+  2024: [4255270,5013442,4343000,1267882,16071493,1591279,10946818,8886000,12445264,19130663,16001944,8471000],
+  2025: [0,1382040,6025486,6460093,5152953,837600,2210780,19170355,8935134,8537317,13666039,1357000],
+  2026: [180000,5734120,5179000,2391000,19977700,0,0,0,0,0,0,0]
+};
+
+/* ── Facturas históricas (muestra completa 2026) ── */
+const FIN_FACTURAS_BASE = [
+  /* ─ ENE 2026 ─ */
+  {year:'2026',mes:'01',nombre:'Jourdan Lucente',empresa:'—',item:'SINTRA',cant:1,valor:108000,canal:'CONTACTO',cat:'IMPRENTA',fact:'356',pago:128520,porCobrar:0},
+  {year:'2026',mes:'01',nombre:'Jourdan Lucente',empresa:'—',item:'VINILO',cant:1,valor:87000,canal:'CONTACTO',cat:'IMPRENTA',fact:'356',pago:103530,porCobrar:0},
+  {year:'2026',mes:'01',nombre:'Jourdan Lucente',empresa:'—',item:'DESPACHO',cant:1,valor:30000,canal:'CONTACTO',cat:'IMPRENTA',fact:'356',pago:35700,porCobrar:0},
+  {year:'2026',mes:'01',nombre:'Jourdan Lucente',empresa:'—',item:'DESCUENTO',cant:1,valor:-45000,canal:'CONTACTO',cat:'IMPRENTA',fact:'356',pago:-53550,porCobrar:0},
+  /* ─ FEB 2026 ─ */
+  {year:'2026',mes:'02',nombre:'Marco Pulgar',empresa:'LifeFitness',item:'DISEÑO 3D (10 modelos)',cant:10,valor:94000,canal:'CONTACTO',cat:'3D',fact:'357',pago:535500,porCobrar:69200},
+  {year:'2026',mes:'02',nombre:'Julio Miranda',empresa:'Comercial TSA SPA',item:'TROFEO',cant:2,valor:57000,canal:'CONTACTO',cat:'3D',fact:'358',pago:135660,porCobrar:0},
+  {year:'2026',mes:'02',nombre:'Claudia Carvallo',empresa:'Jardín Taruca',item:'AGENDAS ANILLADAS 122p',cant:100,valor:9000,canal:'CONTACTO',cat:'IMPRENTA',fact:'359',pago:1071000,porCobrar:0},
+  {year:'2026',mes:'02',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'CARTEL NEON NIVEA 130×90',cant:1,valor:500000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'360',pago:595000,porCobrar:0},
+  {year:'2026',mes:'02',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'BOLSAS TNT',cant:2000,valor:1550,canal:'CONTACTO',cat:'IMPRENTA',fact:'361',pago:3689000,porCobrar:0},
+  /* ─ MAR 2026 ─ */
+  {year:'2026',mes:'03',nombre:'María Jesús Vergara',empresa:'Cervecería Chile SA',item:'TABLE TEND STELLA',cant:500,valor:7500,canal:'CONTACTO',cat:'IMPRENTA',fact:'366',pago:4462500,porCobrar:0},
+  {year:'2026',mes:'03',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'PARIS × LOLLA 210×62',cant:1,valor:450000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'367',pago:535500,porCobrar:535500},
+  {year:'2026',mes:'03',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'ISOTIPO MISTRAL 42cm Ø',cant:2,valor:70000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'365',pago:166600,porCobrar:0},
+  {year:'2026',mes:'03',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'LOLLA × MISTRAL 157×31',cant:1,valor:360000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'368',pago:428400,porCobrar:0},
+  {year:'2026',mes:'03',nombre:'Marcelo Cabrera',empresa:'BIG CUT SPA',item:'PAPEL MANTEQUILLA',cant:2000,valor:52,canal:'CONTACTO',cat:'IMPRENTA',fact:'369',pago:123760,porCobrar:0},
+  /* ─ ABR 2026 ─ */
+  {year:'2026',mes:'04',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'CARTEL NEON VANS',cant:2,valor:100000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'370',pago:238000,porCobrar:0},
+  {year:'2026',mes:'04',nombre:'Keybin Gil Ramirez',empresa:'Impulso Creativo KD SPA',item:'FRASE NEON 110×30',cant:1,valor:275000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'372',pago:327250,porCobrar:0},
+  {year:'2026',mes:'04',nombre:'Keybin Gil Ramirez',empresa:'Impulso Creativo KD SPA',item:'FRANJAS NEON COLORES 200×50',cant:1,valor:297000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'372',pago:353430,porCobrar:0},
+  {year:'2026',mes:'04',nombre:'Joaquín Urrutia',empresa:'ART DESIGN SPA',item:'NEON MICHAEL',cant:1,valor:479000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'373',pago:570010,porCobrar:0},
+  {year:'2026',mes:'04',nombre:'Nayareth Guerra',empresa:'DERMIK',item:'CARTEL 28×18',cant:1,valor:50000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'374',pago:59500,porCobrar:0},
+  {year:'2026',mes:'04',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'NEON NBY',cant:1,valor:300000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'375',pago:357000,porCobrar:0},
+  {year:'2026',mes:'04',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'NEON RUN NIKE',cant:1,valor:300000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'376',pago:357000,porCobrar:0},
+  {year:'2026',mes:'04',nombre:'Joaquín Urrutia',empresa:'ART DESIGN SPA',item:'NEON MIKO × GAP',cant:1,valor:350000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'377',pago:416500,porCobrar:0},
+  /* ─ MAY 2026 ─ */
+  {year:'2026',mes:'05',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'CAJAS BCI 5/0',cant:2000,valor:3890,canal:'CONTACTO',cat:'IMPRENTA',fact:'378',pago:9258200,porCobrar:0},
+  {year:'2026',mes:'05',nombre:'María Jesús Vergara',empresa:'Cervecería Chile SA',item:'TAP HANDLER QUILMES',cant:10,valor:72700,canal:'CONTACTO',cat:'IMPRENTA',fact:'380',pago:865130,porCobrar:0},
+  {year:'2026',mes:'05',nombre:'María Jesús Vergara',empresa:'Cervecería Chile SA',item:'TABLE TENT QUILMES',cant:100,valor:6162,canal:'CONTACTO',cat:'IMPRENTA',fact:'',pago:733278,porCobrar:0},
+  {year:'2026',mes:'05',nombre:'Francisco Contardo',empresa:'Comité de Paltas de Chile A.G.',item:'LLAVERO NFC',cant:30,valor:5000,canal:'CONTACTO',cat:'DISEÑO',fact:'379',pago:178500,porCobrar:0},
+  {year:'2026',mes:'05',nombre:'María Jesús Vergara',empresa:'Cervecería Chile SA',item:'TABLE TENT MICHELOB',cant:400,valor:11817,canal:'CONTACTO',cat:'IMPRENTA',fact:'',pago:5624892,porCobrar:0},
+  {year:'2026',mes:'05',nombre:'María Jesús Vergara',empresa:'Cervecería Chile SA',item:'HIELERA MICHELOB',cant:70,valor:82390,canal:'CONTACTO',cat:'IMPRENTA',fact:'',pago:6863087,porCobrar:0},
+  {year:'2026',mes:'05',nombre:'Ahira General Vera',empresa:'Exportadora Baika SA',item:'LLAVEROS PALTAS',cant:30,valor:5000,canal:'CONTACTO',cat:'DISEÑO',fact:'382',pago:178500,porCobrar:0},
+  /* ─ muestra 2025 ─ */
+  {year:'2025',mes:'08',nombre:'Gonzalo Casas',empresa:'Constructora DLB',item:'MUSEO',cant:1,valor:3640485,canal:'CONTACTO',cat:'SERVICIO',fact:'305',pago:4332177,porCobrar:0},
+  {year:'2025',mes:'08',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'CAJA BCI 2 (x2000)',cant:2000,valor:3890,canal:'VENDEDORES',cat:'IMPRENTA',fact:'314',pago:9258200,porCobrar:0},
+  {year:'2025',mes:'09',nombre:'María Jesús Vergara',empresa:'Cervecería Chile SA',item:'TABLE TEND STELLA 1000',cant:1000,valor:7100,canal:'CONTACTO',cat:'IMPRENTA',fact:'319',pago:8449000,porCobrar:0},
+  {year:'2025',mes:'10',nombre:'Martín Caballero',empresa:'Tres Dedos Producciones',item:'MACETERO CONTAINER ×250',cant:250,valor:11000,canal:'CONTACTO',cat:'IMPRENTA',fact:'339',pago:3272500,porCobrar:0},
+  {year:'2025',mes:'11',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'BOLSAS BCI (×2000)',cant:2000,valor:1530,canal:'VENDEDORES',cat:'IMPRENTA',fact:'345',pago:3641400,porCobrar:0},
+  {year:'2025',mes:'11',nombre:'Israel Muñoz',empresa:'Multigremial Nacional',item:'STAND MULTIGREMIAL',cant:1,valor:4420000,canal:'CONTACTO',cat:'SERVICIO',fact:'249',pago:5259800,porCobrar:0},
+  {year:'2025',mes:'07',nombre:'Hans Schmitz',empresa:'TECH STREAM SPA',item:'LOBERA ×500',cant:500,valor:2470,canal:'ADWORDS',cat:'DISEÑO',fact:'304',pago:1469650,porCobrar:0},
+  {year:'2025',mes:'03',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'ADHESIVO VERIFONE V240M ×600',cant:600,valor:608,canal:'VENDEDORES',cat:'IMPRENTA',fact:'278',pago:434112,porCobrar:0},
+  {year:'2025',mes:'06',nombre:'Ricardo Jorquera',empresa:'Aerovantage',item:'LOGO + WEB + BRANDING',cant:1,valor:717600,canal:'CONTACTO',cat:'DISEÑO',fact:'296',pago:837600,porCobrar:0},
+  /* ─ muestra 2024 ─ */
+  {year:'2024',mes:'05',nombre:'Francisco Dittborn',empresa:'Inversiones Las Rosas LTDA.',item:'DISEÑO Y REMODELACIÓN',cant:1,valor:13803300,canal:'CONTACTO',cat:'SERVICIO',fact:'147',pago:16425927,porCobrar:0},
+  {year:'2024',mes:'10',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'CAJAS BCI ×2000',cant:2000,valor:3300,canal:'VENDEDORES',cat:'IMPRENTA',fact:'232',pago:7854000,porCobrar:0},
+  {year:'2024',mes:'11',nombre:'Alvaro Hidalgo',empresa:'Grupo NTS',item:'Articulado Billy y Mike ×5000',cant:5000,valor:1200,canal:'CONTACTO',cat:'3D',fact:'101',pago:7140000,porCobrar:0},
+  {year:'2024',mes:'10',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'BOLSA TNT 30×40×12 ×2000',cant:2000,valor:1500,canal:'VENDEDORES',cat:'IMPRENTA',fact:'',pago:3570000,porCobrar:0},
+  {year:'2024',mes:'08',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'CAJAS BCI ×2000',cant:2000,valor:3300,canal:'VENDEDORES',cat:'IMPRENTA',fact:'185',pago:7854000,porCobrar:0},
+  {year:'2024',mes:'11',nombre:'Israel Muñoz',empresa:'Multigremial Nacional',item:'STAND MULTIGREMIAL',cant:1,valor:4420000,canal:'CONTACTO',cat:'SERVICIO',fact:'249',pago:5259800,porCobrar:0},
+  /* ─ muestra 2023 ─ */
+  {year:'2023',mes:'11',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'CAJA BCI ×2000',cant:2000,valor:3250,canal:'VENDEDORES',cat:'IMPRENTA',fact:'106',pago:7735000,porCobrar:0},
+  {year:'2023',mes:'11',nombre:'Alvaro Hidalgo',empresa:'Grupo NTS',item:'Articulado Billy y Mike ×5000',cant:5000,valor:1200,canal:'CONTACTO',cat:'3D',fact:'101',pago:7140000,porCobrar:0},
+  {year:'2023',mes:'04',nombre:'Hans Schmitz',empresa:'Techstream',item:'Loberas ×500',cant:500,valor:2586,canal:'CONTACTO',cat:'DISEÑO',fact:'41',pago:1538670,porCobrar:0},
+];
+
+/* ── Préstamos ── */
+const FIN_PRESTAMOS = [
+  {fecha:'05/01/26',prestamo:200000,devolucion:null,deuda:4985904,obs:''},
+  {fecha:'23/01/26',prestamo:200000,devolucion:null,deuda:5185904,obs:''},
+  {fecha:'03/02/26',prestamo:2499990,devolucion:null,deuda:7685894,obs:'ELEGOO'},
+  {fecha:'09/02/26',prestamo:3689000,devolucion:null,deuda:11374894,obs:'BOLSAS'},
+  {fecha:'24/02/26',prestamo:1200000,devolucion:null,deuda:12574894,obs:''},
+  {fecha:'04/03/26',prestamo:361364,devolucion:null,deuda:12936258,obs:''},
+  {fecha:'13/03/25',prestamo:null,devolucion:1500000,deuda:11436258,obs:'Devolución'},
+  {fecha:'13/03/26',prestamo:1500980,devolucion:null,deuda:12937238,obs:'2 ENDER 5 MAX TARJETA DE CRÉDITO'},
+  {fecha:'16/03/26',prestamo:1500980,devolucion:null,deuda:14438218,obs:'2 ENDER 5 MAX TARJETA DE CRÉDITO'},
+  {fecha:'27/03/26',prestamo:300000,devolucion:null,deuda:14738218,obs:''},
+  {fecha:'01/04/26',prestamo:400000,devolucion:null,deuda:15138218,obs:''},
+  {fecha:'03/04/26',prestamo:200000,devolucion:null,deuda:15338218,obs:''},
+  {fecha:'08/04/26',prestamo:4320000,devolucion:null,deuda:19658218,obs:'PARA PAGOS DE FACTURAS'},
+  {fecha:'13/04/26',prestamo:275571,devolucion:null,deuda:19933789,obs:'674311'},
+  {fecha:'14/04/26',prestamo:100000,devolucion:null,deuda:20033789,obs:''},
+  {fecha:'22/04/26',prestamo:200000,devolucion:null,deuda:20233789,obs:''},
+  {fecha:'24/04/26',prestamo:1337431,devolucion:null,deuda:21571220,obs:''},
+  {fecha:'06/05/26',prestamo:1500000,devolucion:null,deuda:23071220,obs:'PAGOS FACTURAS'},
+];
+
+/* ── Estado global finanzas ── */
+let finCurrentTab = 'resumen';
+let finFactPag = 0;
+const FIN_PAG_SIZE = 20;
+let finFactFiltradas = [];
+let finChartActiveYear = 'all';
+
+/* ── Formateadores ── */
+function clp(n){
+  if(n===null||n===undefined||n==='')return '—';
+  const abs=Math.abs(Number(n));
+  const fmt='$'+abs.toLocaleString('es-CL');
+  return n<0?'-'+fmt:fmt;
+}
+function pct(v){
+  if(v===null||v===undefined)return '—';
+  const n=Number(v);
+  const cls=n>=0?'badge-green':'badge-red';
+  return `<span class="badge ${cls}">${n>=0?'+':''}${n.toFixed(1)}%</span>`;
+}
+function varPct(a,b){if(!a||!b)return null;return ((b-a)/a)*100;}
+
+/* ── Sub-tabs internos ── */
+function finSwitchTab(tab){
+  finCurrentTab=tab;
+  ['resumen','facturas','cobrar','prestamos','deudas','nueva'].forEach(t=>{
+    document.getElementById('fin-panel-'+t).style.display=(t===tab)?'':'none';
+    const btn=document.getElementById('fin-nav-'+t);
+    if(btn){
+      btn.classList.toggle('active-filter',t===tab);
+    }
+  });
+  if(tab==='resumen'){finDrawChart();}
+  if(tab==='facturas'){finRenderFacturas();}
+  if(tab==='cobrar'){finRenderCobrar();}
+  if(tab==='prestamos'){finRenderPrestamos();}
+  if(tab==='nueva'){finRenderNuevaLista();}
+}
+
+/* ── Tabla mensual comparativa ── */
+function finRenderMensual(){
+  const tb=document.getElementById('finMensualBody');
+  if(!tb)return;
+  let html='';
+  FIN_MESES.forEach((m,i)=>{
+    const v22=FIN_VENTAS[2022][i]||0;
+    const v23=FIN_VENTAS[2023][i]||0;
+    const v24=FIN_VENTAS[2024][i]||0;
+    const v25=FIN_VENTAS[2025][i]||0;
+    const v26=FIN_VENTAS[2026][i]||0;
+    const p2324=varPct(v23,v24),p2425=varPct(v24,v25),p2526=varPct(v25,v26);
+    html+=`<tr>
+      <td style="font-weight:600">${m}</td>
+      <td style="font-size:11px;color:var(--text3)">${v22?clp(v22):'—'}</td>
+      <td>${v23?clp(v23):'—'}</td>
+      <td>${v24?clp(v24):'—'}</td>
+      <td>${p2324!==null?pct(p2324):'—'}</td>
+      <td>${v25?clp(v25):'—'}</td>
+      <td>${p2425!==null?pct(p2425):'—'}</td>
+      <td style="color:var(--accent)">${v26?clp(v26):'—'}</td>
+      <td>${(v25&&v26)?pct(p2526):'—'}</td>
+    </tr>`;
+  });
+  tb.innerHTML=html;
+}
+
+/* ── Gráfico canvas ── */
+function finChartSetYear(y){
+  finChartActiveYear=y;
+  ['all',2023,2024,2025,2026].forEach(k=>{
+    const btn=document.getElementById('fc-'+k);
+    if(btn)btn.classList.toggle('btn-mini-yellow',k===y);
+  });
+  finDrawChart();
+}
+function finDrawChart(){
+  const canvas=document.getElementById('finVentasChart');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const w=canvas.offsetWidth||600;
+  canvas.width=w;
+  canvas.height=220;
+  ctx.clearRect(0,0,w,220);
+  const years=finChartActiveYear==='all'?[2023,2024,2025,2026]:[finChartActiveYear];
+  const colors={2023:'rgba(167,139,250,0.8)',2024:'rgba(255,170,0,0.8)',2025:'rgba(255,107,53,0.8)',2026:'rgba(0,212,204,0.9)'};
+  const pad={t:20,r:10,b:40,l:60};
+  const ch=220-pad.t-pad.b;
+  const cw=w-pad.l-pad.r;
+  // max
+  let maxVal=0;
+  years.forEach(y=>FIN_VENTAS[y].forEach(v=>{if(v>maxVal)maxVal=v;}));
+  if(!maxVal)maxVal=1;
+  const barW=Math.max(4,Math.floor((cw/12)/years.length)-2);
+  const grpW=cw/12;
+  // grid lines
+  ctx.strokeStyle='rgba(255,255,255,0.06)';ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y2=pad.t+ch*(1-i/4);
+    ctx.beginPath();ctx.moveTo(pad.l,y2);ctx.lineTo(w-pad.r,y2);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='9px DM Sans';ctx.textAlign='right';
+    ctx.fillText(clp(Math.round(maxVal*i/4)),pad.l-4,y2+3);
+  }
+  // bars
+  years.forEach((y,yi)=>{
+    FIN_VENTAS[y].forEach((v,mi)=>{
+      if(!v)return;
+      const bh=Math.round((v/maxVal)*ch);
+      const x=pad.l+grpW*mi+(yi*(barW+2))+(grpW-years.length*(barW+2))/2;
+      const yPos=pad.t+ch-bh;
+      ctx.fillStyle=colors[y]||'rgba(0,212,204,0.8)';
+      ctx.beginPath();ctx.roundRect(x,yPos,barW,bh,2);ctx.fill();
+    });
+  });
+  // month labels
+  ctx.fillStyle='rgba(255,255,255,0.4)';ctx.font='9px DM Sans';ctx.textAlign='center';
+  FIN_MESES.forEach((m,i)=>{ctx.fillText(m,pad.l+grpW*i+grpW/2,220-pad.b+12);});
+  // legend
+  ctx.font='10px DM Sans';ctx.textAlign='left';
+  years.forEach((y,i)=>{
+    ctx.fillStyle=colors[y];ctx.fillRect(pad.l+i*60,6,10,8);
+    ctx.fillStyle='rgba(255,255,255,0.6)';ctx.fillText(y,pad.l+i*60+14,14);
+  });
+}
+
+/* ── Tabla de facturas ── */
+function finGetAllFacturas(){
+  const local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  return [...FIN_FACTURAS_BASE,...local];
+}
+function finRenderFacturas(){
+  const year=document.getElementById('fin-filtro-year')?.value||'';
+  const mes=document.getElementById('fin-filtro-mes')?.value||'';
+  const canal=document.getElementById('fin-filtro-canal')?.value||'';
+  const buscar=(document.getElementById('fin-filtro-buscar')?.value||'').toLowerCase();
+  let data=finGetAllFacturas().filter(r=>{
+    if(year&&r.year!==year)return false;
+    if(mes&&r.mes!==mes)return false;
+    if(canal&&r.canal!==canal)return false;
+    if(buscar&&!(r.nombre.toLowerCase().includes(buscar)||r.empresa.toLowerCase().includes(buscar)||r.item.toLowerCase().includes(buscar)))return false;
+    return true;
+  });
+  finFactFiltradas=data;
+  finFactPag=0;
+  finRenderFacturasPage();
+}
+function finRenderFacturasPage(){
+  const data=finFactFiltradas;
+  const total=data.length;
+  const pages=Math.ceil(total/FIN_PAG_SIZE)||1;
+  const slice=data.slice(finFactPag*FIN_PAG_SIZE,(finFactPag+1)*FIN_PAG_SIZE);
+  const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  let html='',sumNeto=0,sumIva=0,sumTotal=0,sumCobrar=0;
+  data.forEach(r=>{const iva=Math.round(r.valor*r.cant*0.19);sumNeto+=r.valor*r.cant;sumIva+=iva;sumTotal+=r.valor*r.cant+iva;sumCobrar+=r.porCobrar||0;});
+  slice.forEach(r=>{
+    const neto=r.valor*r.cant;
+    const iva=Math.round(neto*0.19);
+    const tot=neto+iva;
+    const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
+    const canalBadge=r.canal==='ADWORDS'?'badge-yellow':r.canal==='VENDEDORES'?'badge-green':'badge-gray';
+    html+=`<tr>
+      <td style="white-space:nowrap">${mesNombre} ${r.year}</td>
+      <td style="font-weight:600;white-space:nowrap">${r.nombre}</td>
+      <td style="color:var(--text2);font-size:11px">${r.empresa}</td>
+      <td>${r.item}</td>
+      <td style="text-align:right">${r.cant.toLocaleString('es-CL')}</td>
+      <td style="text-align:right">${clp(r.valor)}</td>
+      <td style="text-align:right">${clp(neto)}</td>
+      <td style="text-align:right;color:var(--text3)">${clp(iva)}</td>
+      <td style="text-align:right;font-weight:600;color:var(--accent)">${clp(tot)}</td>
+      <td style="text-align:right;color:${r.porCobrar>0?'var(--danger)':'var(--accent3)'}">${clp(r.porCobrar)}</td>
+      <td style="font-size:11px;color:var(--text3)">${r.fact||'—'}</td>
+      <td><span class="badge ${canalBadge}">${r.canal}</span></td>
+      <td style="font-size:11px">${r.cat||'—'}</td>
+    </tr>`;
+  });
+  if(!slice.length)html='<tr><td colspan="13" style="text-align:center;padding:30px;color:var(--text3)">Sin resultados</td></tr>';
+  document.getElementById('fin-facturas-body').innerHTML=html;
+  document.getElementById('fin-fact-count').textContent=total+' registros';
+  document.getElementById('fin-fact-totales').textContent=`Totales filtrados → Neto: ${clp(sumNeto)} | IVA: ${clp(sumIva)} | Total: ${clp(sumTotal)} | Por cobrar: ${clp(sumCobrar)}`;
+  document.getElementById('fin-pag-info').textContent=`${finFactPag+1}/${pages}`;
+  document.getElementById('fin-pag-prev').disabled=finFactPag===0;
+  document.getElementById('fin-pag-next').disabled=finFactPag>=pages-1;
+}
+function finPagPrev(){if(finFactPag>0){finFactPag--;finRenderFacturasPage();}}
+function finPagNext(){const pages=Math.ceil(finFactFiltradas.length/FIN_PAG_SIZE);if(finFactPag<pages-1){finFactPag++;finRenderFacturasPage();}}
+
+/* ── Por cobrar ── */
+function finRenderCobrar(){
+  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  let html='';
+  const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  data.forEach(r=>{
+    const tot=r.valor*r.cant+Math.round(r.valor*r.cant*0.19);
+    const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
+    html+=`<tr>
+      <td>${mesNombre} ${r.year}</td>
+      <td style="font-weight:600">${r.nombre}</td>
+      <td>${r.empresa}</td>
+      <td>${r.item}</td>
+      <td style="text-align:right">${clp(tot)}</td>
+      <td style="text-align:right;color:var(--danger);font-weight:700">${clp(r.porCobrar)}</td>
+      <td>${r.fact||'—'}</td>
+    </tr>`;
+  });
+  if(!html)html='<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro registradas</td></tr>';
+  document.getElementById('fin-cobrar-body').innerHTML=html;
+}
+
+/* ── Préstamos ── */
+function finRenderPrestamos(){
+  const tb=document.getElementById('fin-prestamos-body');
+  if(!tb)return;
+  let html='';
+  FIN_PRESTAMOS.forEach(r=>{
+    const esDev=!r.prestamo&&r.devolucion;
+    html+=`<tr>
+      <td style="font-family:monospace;font-size:11px">${r.fecha}</td>
+      <td style="color:${r.prestamo?'var(--danger)':'var(--text3)'};font-weight:${r.prestamo?700:400}">${r.prestamo?clp(r.prestamo):'—'}</td>
+      <td style="color:${esDev?'var(--accent3)':'var(--text3)'};font-weight:${esDev?700:400}">${r.devolucion?clp(r.devolucion):'—'}</td>
+      <td style="font-weight:700;color:var(--accent)">${clp(r.deuda)}</td>
+      <td style="font-size:11px;color:var(--text3)">${r.obs||''}</td>
+    </tr>`;
+  });
+  tb.innerHTML=html;
+}
+
+/* ── Nueva Venta ── */
+function nvRecalcular(){
+  const cant=parseFloat(document.getElementById('nv-cantidad').value)||0;
+  const val=parseFloat(document.getElementById('nv-valor').value)||0;
+  const pago=parseFloat(document.getElementById('nv-pago').value)||0;
+  const costo=parseFloat(document.getElementById('nv-costo').value)||0;
+  const neto=cant*val;
+  const iva=Math.round(neto*0.19);
+  const tot=neto+iva;
+  document.getElementById('nv-total').value=clp(neto);
+  document.getElementById('nv-iva').value=clp(iva);
+  document.getElementById('nv-total-iva').value=clp(tot);
+  document.getElementById('nv-utilidad').value=costo?clp(tot-costo):'—';
+}
+function nvLimpiar(){
+  ['nv-nombre','nv-empresa','nv-rut','nv-factura','nv-item','nv-pago','nv-costo','nv-fecha-fact','nv-fecha-pago'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  ['nv-cantidad','nv-valor'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  nvRecalcular();
+}
+function nvGuardar(){
+  const cant=parseFloat(document.getElementById('nv-cantidad').value)||1;
+  const val=parseFloat(document.getElementById('nv-valor').value)||0;
+  const pago=parseFloat(document.getElementById('nv-pago').value)||0;
+  const nombre=document.getElementById('nv-nombre').value.trim();
+  const empresa=document.getElementById('nv-empresa').value.trim();
+  const item=document.getElementById('nv-item').value.trim();
+  if(!nombre||!item||!val){alert('Completa al menos Nombre, Ítem y Valor.');return;}
+  const noto=cant*val;
+  const iva=Math.round(noto*0.19);
+  const tot=noto+iva;
+  const cobrar=Math.max(0,tot-pago);
+  const rec={
+    year:document.getElementById('nv-year').value,
+    mes:document.getElementById('nv-mes').value,
+    nombre,empresa,item,cant,valor:val,
+    canal:document.getElementById('nv-canal').value,
+    cat:document.getElementById('nv-categoria').value,
+    fact:document.getElementById('nv-factura').value,
+    pago:pago,porCobrar:cobrar,
+    fechaFact:document.getElementById('nv-fecha-fact').value,
+    fechaPago:document.getElementById('nv-fecha-pago').value,
+    _manual:true
+  };
+  const existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  existing.push(rec);
+  localStorage.setItem('fin_ventas',JSON.stringify(existing));
+  nvLimpiar();
+  finRenderNuevaLista();
+  if(typeof showToast==='function')showToast('Venta guardada correctamente','success');
+  else alert('Venta guardada ✓');
+}
+function nvLimpiarTodas(){
+  if(!confirm('¿Eliminar todas las ventas ingresadas manualmente?'))return;
+  localStorage.removeItem('fin_ventas');
+  finRenderNuevaLista();
+}
+function finRenderNuevaLista(){
+  const data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  let html='';
+  data.forEach((r,idx)=>{
+    const neto=r.valor*r.cant;
+    const tot=neto+Math.round(neto*0.19);
+    const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
+    const canalBadge=r.canal==='ADWORDS'?'badge-yellow':r.canal==='VENDEDORES'?'badge-green':'badge-gray';
+    html+=`<tr>
+      <td>${mesNombre} ${r.year}</td>
+      <td style="font-weight:600">${r.nombre}</td>
+      <td>${r.empresa||'—'}</td>
+      <td>${r.item}</td>
+      <td style="color:var(--accent);font-weight:700">${clp(tot)}</td>
+      <td><span class="badge ${canalBadge}">${r.canal}</span></td>
+      <td><button class="btn-mini btn-mini-red" onclick="nvEliminar(${idx})">✕</button></td>
+    </tr>`;
+  });
+  if(!html)html='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Sin ventas ingresadas aún</td></tr>';
+  const tb=document.getElementById('fin-nueva-lista-body');
+  if(tb)tb.innerHTML=html;
+}
+function nvEliminar(idx){
+  const data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  data.splice(idx,1);
+  localStorage.setItem('fin_ventas',JSON.stringify(data));
+  finRenderNuevaLista();
+}
+
+/* ── Exportar CSV ── */
+function exportarFinanzasCSV(){
+  const data=finGetAllFacturas();
+  const headers=['Año','Mes','Nombre','Empresa','Ítem','Cantidad','Valor Unit.','Total Neto','IVA','Total+IVA','Por Cobrar','Canal','Categoría','Factura N°'];
+  const rows=data.map(r=>{
+    const neto=r.valor*r.cant;
+    const iva=Math.round(neto*0.19);
+    return [r.year,r.mes,r.nombre,r.empresa,r.item,r.cant,r.valor,neto,iva,neto+iva,r.porCobrar||0,r.canal,r.cat||'',r.fact||''];
+  });
+  const csv=[headers,...rows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='finanzas_thelab.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ── Init cuando se activa el tab ── */
+function finInit(){
+  finRenderMensual();
+  // pequeño delay para que el canvas esté visible
+  setTimeout(finDrawChart,100);
+}
+
+/* Hookear al switchTab existente */
+const _origSwitch=typeof switchTab!=='undefined'?switchTab:null;
+document.addEventListener('DOMContentLoaded',()=>{
+  // Precargar mes actual en el form de nueva venta
+  const now=new Date();
+  const mesEl=document.getElementById('nv-mes');
+  if(mesEl)mesEl.value=String(now.getMonth()+1).padStart(2,'0');
+  const yearEl=document.getElementById('nv-year');
+  if(yearEl)yearEl.value=String(now.getFullYear());
+});
+
+/* Observar cuando el tab finanzas se activa */
+const _finObserver=new MutationObserver((muts)=>{
+  muts.forEach(m=>{
+    if(m.target.id==='tab-finanzas'&&m.target.classList.contains('active')){
+      finInit();
+    }
+  });
+});
+const _finPanel=document.getElementById('tab-finanzas');
+if(_finPanel)_finObserver.observe(_finPanel,{attributes:true,attributeFilter:['class']});
+</script>
 
 </body>
 </html>
