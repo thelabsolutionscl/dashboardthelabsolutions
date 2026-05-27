@@ -706,7 +706,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
 </div>
 <div class="topbar">
-  <div class="logo"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
+  <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
   <nav class="topbar-nav">
     <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button>
@@ -736,7 +736,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div class="mobile-nav-overlay" id="mobileOverlay" onclick="closeMobileMenu()"></div>
 <div class="mobile-nav-panel" id="mobileNavPanel">
   <div class="mobile-nav-header">
-    <img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab">
+    <img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab" onclick="closeMobileMenu();switchTab('overview')" style="cursor:pointer">
     <button class="mobile-nav-close" onclick="closeMobileMenu()">✕</button>
   </div>
   <div class="mobile-status"><div class="status-dot" id="statusDotMobile"></div><span id="statusTextMobile">iniciando...</span></div>
