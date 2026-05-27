@@ -776,23 +776,23 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
   <div id="equipoSnapshot" style="margin-bottom:16px"></div>
   <div class="data-grid">
-    <div class="card"><div class="card-header"><span class="card-title">Pipeline Pedidos</span><span class="card-badge" id="pedActivosBadge">—</span></div><div id="pipelineArea"><div class="loading-state"><div class="spinner"></div> cargando...</div></div></div>
-    <div class="card"><div class="card-header"><span class="card-title">Cotizaciones Recientes</span><span class="card-badge" id="cotsBadge">—</span></div><div class="table-wrap"><table><thead><tr><th>N°</th><th>Cliente</th><th>Total Neto</th><th>Estado</th><th>Margen</th></tr></thead><tbody id="cotTableBody"><tr><td colspan="5"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div></div>
+    <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pipeline Pedidos</span><span class="card-badge" id="pedActivosBadge">—</span></div><div id="pipelineArea"><div class="loading-state"><div class="spinner"></div> cargando...</div></div></div>
+    <div class="card" onclick="switchTab('cotizaciones')" style="cursor:pointer"><div class="card-header"><span class="card-title">Cotizaciones Recientes</span><span class="card-badge" id="cotsBadge">—</span></div><div class="table-wrap"><table><thead><tr><th>N°</th><th>Cliente</th><th>Total Neto</th><th>Estado</th><th>Margen</th></tr></thead><tbody id="cotTableBody"><tr><td colspan="5"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div></div>
   </div>
-  <div class="card" style="margin-bottom:24px"><div class="card-header"><span class="card-title">⚠ Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
+  <div class="card" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title">⚠ Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
   <div class="data-grid">
-    <div class="card"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
-    <div class="card"><div class="card-header"><span class="card-title">Revenue últimas 4 semanas</span></div><div id="chartRevenue" style="padding:16px"></div></div>
+    <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
+    <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Revenue últimas 4 semanas</span></div><div id="chartRevenue" style="padding:16px"></div></div>
   </div>
 
   <!-- ── Snapshots: Finanzas + Web ── -->
   <div class="data-grid">
     <!-- Finanzas snapshot -->
-    <div class="card" id="overview-fin-card">
+    <div class="card" id="overview-fin-card" onclick="switchTab('finanzas')" style="cursor:pointer">
       <div class="card-header">
         <span class="card-title">💰 Finanzas</span>
         <span class="card-badge" id="ov-fin-badge">2026</span>
-        <button class="btn btn-ghost btn-sm" onclick="switchTab('finanzas')" style="margin-left:auto">Ver todo →</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('finanzas')" style="margin-left:auto">Ver todo →</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(2,1fr)">
         <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
@@ -823,10 +823,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
 
     <!-- Web / SEO snapshot -->
-    <div class="card" id="overview-web-card">
+    <div class="card" id="overview-web-card" onclick="switchTab('web')" style="cursor:pointer">
       <div class="card-header">
         <span class="card-title">🌐 Web · SEO</span>
-        <button class="btn btn-ghost btn-sm" onclick="switchTab('web')" style="margin-left:auto">Ver todo →</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('web')" style="margin-left:auto">Ver todo →</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(2,1fr)">
         <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
@@ -853,18 +853,18 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="padding:8px 16px 12px">
         <div style="font-size:10px;color:var(--text3);margin-bottom:10px;font-style:italic" id="ov-web-status">Abre la sección Web y haz clic en Actualizar para ver datos SEO</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <a href="https://search.google.com/search-console" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px">🔍 Search Console</a>
-          <a href="https://ads.google.com" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px">📢 Google Ads</a>
-          <a href="https://thelab.solutions/wp-admin" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px">⚙ WP Admin</a>
+          <a href="https://search.google.com/search-console" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()">🔍 Search Console</a>
+          <a href="https://ads.google.com" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()">📢 Google Ads</a>
+          <a href="https://thelab.solutions/wp-admin" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()">⚙ WP Admin</a>
         </div>
       </div>
     </div>
 
     <!-- Google Ads snapshot -->
-    <div class="card" id="overview-ads-card">
+    <div class="card" id="overview-ads-card" onclick="switchTab('web')" style="cursor:pointer">
       <div class="card-header">
         <span class="card-title">📢 Google Ads</span>
-        <button class="btn btn-ghost btn-sm" onclick="switchTab('web')" style="margin-left:auto">Ver todo →</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('web')" style="margin-left:auto">Ver todo →</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(2,1fr)">
         <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
