@@ -676,6 +676,161 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .fin-mensual-wrap .table-wrap td::before{display:none!important;}
   .fin-mensual-wrap .table-wrap th:first-child{position:sticky;left:0;background:var(--surface2);z-index:3;}
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE REFINEMENTS — PORTRAIT
+   ═══════════════════════════════════════════════════════════ */
+@media(max-width:768px){
+
+  /* ── Safe areas (notched phones) ────────────────────── */
+  .topbar{
+    height:54px;
+    padding-left:max(14px,env(safe-area-inset-left))!important;
+    padding-right:max(14px,env(safe-area-inset-right))!important;
+  }
+  .main{
+    padding:12px max(12px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+  }
+  .mobile-nav-panel{
+    width:min(280px,85vw);
+    padding-bottom:max(0px,env(safe-area-inset-bottom));
+  }
+
+  /* ── Typography ──────────────────────────────────────── */
+  .section-title{font-size:20px!important;letter-spacing:1px!important;}
+  .section-header{margin-bottom:12px;flex-wrap:wrap;gap:8px;align-items:center;}
+  .section-subtitle{font-size:10px!important;}
+  .kpi-value{font-size:26px!important;}
+  .kpi-card{padding:12px 14px;}
+  .kpi-label{font-size:9px!important;}
+  .kpi-sub{font-size:9px!important;}
+
+  /* ── Grids ───────────────────────────────────────────── */
+  .data-grid,.data-grid-3{gap:10px;margin-bottom:14px;}
+  .kpi-grid{gap:8px;margin-bottom:14px;}
+
+  /* ── Cards ───────────────────────────────────────────── */
+  .card{border-radius:10px;}
+  .card-header{padding:10px 14px;flex-wrap:wrap;gap:8px;}
+  .card-header>span.card-title{flex-shrink:0;}
+
+  /* ── Form ────────────────────────────────────────────── */
+  .form-grid{padding:12px 14px;gap:10px;}
+  .field-label{font-size:11px;}
+  .field-input,.field-select{min-height:42px;font-size:14px!important;padding:8px 12px;}
+  .field-textarea{font-size:14px!important;}
+
+  /* Form actions: full-width stacked */
+  .form-actions{flex-direction:column;padding:8px 14px 16px;gap:8px;}
+  .form-actions .btn{width:100%;justify-content:center;min-height:44px;font-size:13px!important;padding:10px 16px;}
+
+  /* ── Buttons: touch targets ──────────────────────────── */
+  .btn{min-height:36px;}
+  .btn-sm{min-height:32px;padding:6px 12px;}
+  .btn-mini{padding:6px 10px!important;font-size:11px!important;min-height:32px;}
+
+  /* ── Card-header: search inputs fill available width ─── */
+  #clienteSearch,#proveedorSearch{width:100%!important;max-width:none!important;min-width:0;}
+  #proveedorCatFilter{width:100%!important;max-width:none!important;}
+  #tab-clientes .card-header>div,
+  #tab-cotizaciones .card-header>div,
+  #tab-proveedores .card-header>div{width:100%;}
+  #tab-clientes .card-header>div .btn,
+  #tab-cotizaciones .card-header>div .btn{min-height:38px;}
+
+  /* ── Pedidos filter bar: horizontal scroll ───────────── */
+  #pedidosFilterBar{
+    overflow-x:auto!important;
+    flex-wrap:nowrap!important;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+    padding-bottom:4px;
+    margin-right:-12px;
+    padding-right:12px;
+    gap:5px!important;
+  }
+  #pedidosFilterBar::-webkit-scrollbar{display:none;}
+  #pedidosFilterBar>.btn{flex-shrink:0;white-space:nowrap;}
+  #pedidosBulkBar{flex-shrink:0;flex-wrap:wrap;gap:5px;}
+  #pedidosBulkBar .btn,#pedidosBulkBar select{flex-shrink:0;}
+
+  /* ── Bulk bars ───────────────────────────────────────── */
+  #bulkBar{flex-wrap:wrap!important;gap:6px!important;width:100%;}
+  #proveedoresBulkBar{flex-wrap:wrap!important;gap:6px!important;width:100%;}
+
+  /* ── Table-card action buttons: bigger, spaced ───────── */
+  .cot-btns{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;width:100%;}
+  .cot-btns .btn-mini{flex:1;min-width:52px;justify-content:center;text-align:center;padding:7px 8px!important;}
+
+  /* ── Modals ───────────────────────────────────────────── */
+  .modal-card{
+    max-width:calc(100vw - 20px)!important;
+    max-height:calc(100dvh - 20px);
+    overflow-y:auto;
+    border-radius:12px;
+    margin:10px;
+  }
+  .modal-card.wide{max-width:calc(100vw - 20px)!important;}
+  .modal-body{padding:12px 14px!important;}
+
+  /* ── 3D Calculator inline: single column ────────────── */
+  #c3d-inline-panel>div:nth-child(2)>div>div:first-child>div:first-child{
+    grid-template-columns:1fr!important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE REFINEMENTS — LANDSCAPE  (height ≤ 500px)
+   ═══════════════════════════════════════════════════════════ */
+@media(max-height:500px) and (orientation:landscape){
+
+  /* Topbar compacto */
+  .topbar{
+    height:46px!important;
+    padding-left:max(12px,env(safe-area-inset-left))!important;
+    padding-right:max(12px,env(safe-area-inset-right))!important;
+  }
+  .main{
+    padding-top:8px!important;
+    padding-bottom:max(8px,env(safe-area-inset-bottom))!important;
+    padding-left:max(12px,env(safe-area-inset-left))!important;
+    padding-right:max(12px,env(safe-area-inset-right))!important;
+  }
+
+  /* Títulos más compactos */
+  .section-title{font-size:17px!important;letter-spacing:0.5px!important;}
+  .section-header{margin-bottom:8px!important;}
+  .kpi-value{font-size:22px!important;}
+  .kpi-card{padding:8px 12px!important;}
+  .kpi-label{font-size:8px!important;}
+
+  /* Grids landscape */
+  .kpi-grid{
+    grid-template-columns:repeat(4,1fr)!important;
+    gap:6px!important;
+    margin-bottom:10px!important;
+  }
+  .data-grid{grid-template-columns:1fr 1fr!important;gap:8px!important;margin-bottom:10px!important;}
+  .data-grid-3{grid-template-columns:repeat(3,1fr)!important;gap:8px!important;margin-bottom:10px!important;}
+
+  /* Forms: 2 columnas en landscape */
+  .form-grid{grid-template-columns:1fr 1fr!important;padding:10px 14px!important;gap:8px!important;}
+  .form-full{grid-column:1/-1!important;}
+  .form-actions{flex-direction:row!important;padding:6px 14px 14px!important;}
+  .form-actions .btn{width:auto!important;min-height:38px!important;}
+
+  /* Nav lateral más estrecha */
+  .mobile-nav-panel{width:240px!important;}
+  .mobile-tab-btn{padding:9px 18px!important;}
+
+  /* Finance charts compactos */
+  #finVentasChart{height:140px!important;}
+  #finDeudaChart{height:70px!important;}
+  #finCanalDonut{width:100px!important;height:100px!important;}
+
+  /* Ocultar subtítulos de sección si hay poco espacio */
+  .section-subtitle{display:none!important;}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
@@ -1013,7 +1168,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- PEDIDOS -->
 <div class="tab-panel" id="tab-pedidos">
   <div class="section-header"><div class="section-title">Pedidos en Producción</div></div>
-  <div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+  <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)">⚠ Atrasados</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Confirmado',this)">Confirmados</button>
