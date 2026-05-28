@@ -1718,7 +1718,7 @@ var SECRET   = 'thelab2025';
 function main() {
   var report = AdsApp.report(
     'SELECT campaign.name, campaign.id, campaign.status, ' +
-    'campaign.budget_amount_micros, metrics.impressions, metrics.clicks, ' +
+    'campaign_budget.amount_micros, metrics.impressions, metrics.clicks, ' +
     'metrics.cost_micros, metrics.conversions, metrics.conversions_value ' +
     'FROM campaign WHERE segments.date DURING LAST_30_DAYS ' +
     'ORDER BY metrics.cost_micros DESC'
@@ -1737,7 +1737,7 @@ function main() {
     t.gasto+=g; t.impresiones+=i; t.clics+=c; t.conversiones+=cv; t.valor_conversion+=vc;
     campaigns.push({
       id:row['campaign.id'], nombre:row['campaign.name'], estado:row['campaign.status'],
-      presupuesto:Math.round(parseInt(row['campaign.budget_amount_micros']||0)/1e6),
+      presupuesto:Math.round(parseInt(row['campaign_budget.amount_micros']||0)/1e6),
       gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
     });
   }
