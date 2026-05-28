@@ -732,7 +732,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button onclick="closeNuevoMenu();switchTab('nueva-cot')" class="nuevo-item">📋 Nueva Cotización</button>
         <div style="height:1px;background:var(--border);margin:3px 0"></div>
         <button onclick="closeNuevoMenu();switchTab('finanzas');setTimeout(()=>finSwitchTab('nueva'),80)" class="nuevo-item">💰 Nueva Venta</button>
-        <button onclick="closeNuevoMenu();switchTab('finanzas');setTimeout(()=>finSwitchTab('diario'),80)" class="nuevo-item">📒 Nuevo Registro (Diario)</button>
+        <button onclick="closeNuevoMenu();irALibroDiario()" class="nuevo-item">📒 Nuevo Registro (Diario)</button>
       </div>
     </div>
   </nav>
@@ -767,7 +767,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button onclick="closeMobileMenu();switchTab('nuevo-proveedor')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">🏭</span>Nuevo Proveedor</button>
         <button onclick="closeMobileMenu();switchTab('nueva-cot')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📋</span>Nueva Cotización</button>
         <button onclick="closeMobileMenu();switchTab('finanzas');setTimeout(()=>finSwitchTab('nueva'),80)" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">💰</span>Nueva Venta</button>
-        <button onclick="closeMobileMenu();switchTab('finanzas');setTimeout(()=>finSwitchTab('diario'),80)" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📒</span>Nuevo Registro (Diario)</button>
+        <button onclick="closeMobileMenu();irALibroDiario()" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📒</span>Nuevo Registro (Diario)</button>
       </div>
     </div>
     <button class="mobile-tab-btn active" data-tab="overview" onclick="switchTabMobile('overview')"><span class="mobile-tab-icon">🏠</span>Overview</button>
@@ -8290,6 +8290,16 @@ if(typeof ResizeObserver!=='undefined'&&_finPanel){
 }
 
 // ── Menú NUEVO (dropdown topbar + acordeón mobile) ──────────────
+function irALibroDiario(){
+  switchTab('finanzas');
+  setTimeout(()=>{
+    finSwitchTab('diario');
+    setTimeout(()=>{
+      const el=document.getElementById('ld-fecha');
+      if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.focus();}
+    },100);
+  },80);
+}
 function toggleNuevoMenu(e){
   e.stopPropagation();
   const panel=document.getElementById('nuevoDropPanel');
