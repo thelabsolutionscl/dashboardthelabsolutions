@@ -1103,11 +1103,22 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </select>
         <button class="btn btn-ghost btn-sm" onclick="openCatManager()" title="Gestionar categorías de proveedores">⚙ Categorías</button>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('proveedores')">⬇ CSV</button>
+        <div id="proveedoresBulkBar" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
+          <span id="proveedoresBulkCount" style="font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace"></span>
+          <select id="proveedoresBulkEstado" class="field-select" style="font-size:11px;padding:4px 8px;width:auto;border-color:var(--accent)">
+            <option value="">— Cambiar estado —</option>
+            <option>Activo</option><option>En evaluación</option><option>Inactivo</option><option>Bloqueado</option>
+          </select>
+          <button class="btn btn-sm" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.3);color:var(--accent)" onclick="bulkEditProveedorEstado()">✓ Aplicar</button>
+          <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeleteProveedores()">🗑 Eliminar</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearProveedoresSelection()">✕ Cancelar</button>
+        </div>
       </div>
     </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
+          <th style="width:36px;text-align:center"><input type="checkbox" id="proveedoresSelectAll" onchange="toggleSelectAllProveedores(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
           <th class="sort-th" onclick="sortProveedores('nombre')">Nombre / Empresa</th>
           <th class="sort-th" onclick="sortProveedores('categoria')">Categoría</th>
           <th class="sort-th" onclick="sortProveedores('contacto')">Contacto</th>
@@ -1119,7 +1130,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <th class="sort-th" onclick="sortProveedores('plazo')">Plazo</th>
           <th>Acc.</th>
         </tr></thead>
-        <tbody id="proveedoresTableBody"><tr><td colspan="10"><div class="loading-state"><div class="spinner"></div> cargando...</div></td></tr></tbody>
+        <tbody id="proveedoresTableBody"><tr><td colspan="11"><div class="loading-state"><div class="spinner"></div> cargando...</div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -2723,6 +2734,7 @@ const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
 const selectedClientes=new Set();
 const selectedPedidos=new Set();
+const selectedProveedores=new Set();
 const clientesSort={key:null,dir:1};
 const cotizacionesSort={key:null,dir:1};
 const proveedoresSort={key:null,dir:1};
@@ -6289,7 +6301,7 @@ function renderProveedores(){
   const sorted=getSortedProveedores(list);
   const count=document.getElementById('proveedoresCount');if(count) count.textContent=`${sorted.length} proveedor${sorted.length!==1?'es':''}`;
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
-  if(!sorted.length){tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
+  if(!sorted.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
   renderProveedoresAnalytics();
 }
@@ -6309,7 +6321,8 @@ function buildProveedorRow(p){
   const pedCount=pedidosActivos.length;
   const estado=f['Estado']||'Activo';
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
-  return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}">
+  return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}" class="${selectedProveedores.has(id)?'row-selected':''}">
+    <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="row-chk" data-id="${id}" ${selectedProveedores.has(id)?'checked':''} onchange="toggleProveedorRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="pv-nombre"><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}</td>
     <td class="pv-cat">${pvCatBadge(pvCat(f)||'—')}</td>
     <td class="pv-contacto"><div style="font-size:12px">${escapeHtml(f['Contacto']||'—')}</div>${f['Cargo']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['Cargo'])}</div>`:''}</td>
@@ -6322,7 +6335,7 @@ function buildProveedorRow(p){
     <td class="pv-acc" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')">✏️</button></td>
   </tr>
   <tr id="pv-ficha-${id}" style="display:none">
-    <td colspan="10" style="padding:0;background:var(--surface2)">
+    <td colspan="11" style="padding:0;background:var(--surface2)">
       <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border2);border-bottom:2px solid var(--border)">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           ${(()=>{const wa=(f['WhatsApp']||'').replace(/\s/g,'')||tel;return wa?`<a href="https://wa.me/${wa.replace(/^\+/,'').replace(/^56/,'56')}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="color:#25d366;border-color:rgba(37,211,102,0.3);font-size:11px">💬 WhatsApp</a>`:'';})()}
@@ -6489,6 +6502,45 @@ async function saveEditProveedor(){
     else toast('Error: '+e.message,'error');
   }
   btn.disabled=false;btn.textContent='💾 Guardar cambios';
+}
+// ── PROVEEDORES MULTI-SELECT ──────────────────────────────────
+function toggleProveedorRow(chk){const id=chk.dataset.id;if(chk.checked) selectedProveedores.add(id);else selectedProveedores.delete(id);chk.closest('tr')?.classList.toggle('row-selected',chk.checked);updateProveedoresBulkBar();}
+function toggleSelectAllProveedores(chk){document.querySelectorAll('#proveedoresTableBody .row-chk').forEach(c=>{c.checked=chk.checked;if(chk.checked) selectedProveedores.add(c.dataset.id);else selectedProveedores.delete(c.dataset.id);c.closest('tr')?.classList.toggle('row-selected',chk.checked);});updateProveedoresBulkBar();}
+function updateProveedoresBulkBar(){
+  const n=selectedProveedores.size;
+  const bar=document.getElementById('proveedoresBulkBar');if(bar) bar.style.display=n>0?'flex':'none';
+  const cnt=document.getElementById('proveedoresBulkCount');if(cnt) cnt.textContent=`${n} seleccionado${n!==1?'s':''}`;
+  const sa=document.getElementById('proveedoresSelectAll');if(sa){const all=document.querySelectorAll('#proveedoresTableBody .row-chk');sa.checked=all.length>0&&n===all.length;sa.indeterminate=n>0&&n<all.length;}
+}
+function clearProveedoresSelection(){selectedProveedores.clear();document.querySelectorAll('#proveedoresTableBody .row-chk').forEach(c=>{c.checked=false;c.closest('tr')?.classList.remove('row-selected');});const sa=document.getElementById('proveedoresSelectAll');if(sa){sa.checked=false;sa.indeterminate=false;}updateProveedoresBulkBar();}
+async function bulkDeleteProveedores(){
+  const ids=[...selectedProveedores];if(!ids.length) return;
+  const nombres=ids.map(id=>state.proveedores.find(p=>p.id===id)?.fields['Nombre']||id).join(', ');
+  if(!confirm(`¿Eliminar ${ids.length} proveedor${ids.length!==1?'es':''}?\n${nombres}`)) return;
+  let ok=0,err=0;
+  for(const id of ids){
+    try{
+      const rec=state.proveedores.find(x=>x.id===id);
+      await airtableDelete('Proveedores',id);
+      state.proveedores=state.proveedores.filter(x=>x.id!==id);
+      selectedProveedores.delete(id);ok++;
+    }catch(e){err++;}
+  }
+  err?toast(`${ok} eliminados, ${err} con error`,'info'):toast(`✓ ${ok} proveedor${ok!==1?'es':''} eliminados`,'success');
+  clearProveedoresSelection();renderProveedores();
+}
+async function bulkEditProveedorEstado(){
+  const estado=document.getElementById('proveedoresBulkEstado')?.value;if(!estado){toast('Selecciona un estado primero','error');return;}
+  const ids=[...selectedProveedores];if(!ids.length) return;
+  if(!confirm(`¿Cambiar estado a "${estado}" para ${ids.length} proveedor${ids.length!==1?'es':''}?`)) return;
+  let ok=0,err=0;
+  for(const id of ids){
+    try{await airtableWrite('Proveedores','PATCH',id,{'Estado':estado});const p=state.proveedores.find(x=>x.id===id);if(p) p.fields['Estado']=estado;ok++;}
+    catch(e){err++;}
+  }
+  document.getElementById('proveedoresBulkEstado').value='';
+  err?toast(`${ok} actualizados, ${err} con error`,'info'):toast(`✓ ${ok} proveedor${ok!==1?'es':''} → "${estado}"`,'success');
+  clearProveedoresSelection();renderProveedores();
 }
 async function deleteProveedor(id,nombre){
   if(!confirm(`¿Eliminar proveedor "${nombre}"?`)) return;
