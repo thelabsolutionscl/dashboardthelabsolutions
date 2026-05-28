@@ -350,6 +350,18 @@ body.kiosk .tab-content{padding-top:12px!important;}
   .ss-btn-add{flex:1!important;margin-left:0!important;padding:10px 8px!important;text-align:center}
   .ss-form-grid .field-group[style*="grid-column"]{grid-column:1/-1!important}
 }
+/* Calculadora 3D */
+.c3d-maq-item{display:flex;flex-direction:column;gap:4px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:8px 10px;}
+.c3d-maq-label{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);letter-spacing:0.4px}
+.c3d-maq-costo{font-size:9px;color:var(--text3)}
+.c3d-extra-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.c3d-extra-row:last-child{border-bottom:none}
+.c3d-extra-row label{flex:1;font-size:11px;cursor:pointer}
+.c3d-extra-amt{width:72px;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 6px;text-align:right;outline:none}
+.c3d-extra-amt:focus{border-color:var(--accent)}
+.c3d-bk-row{display:flex;justify-content:space-between;align-items:center;padding:2px 0}
+.c3d-bk-row span:first-child{color:var(--text3)}
+.c3d-bk-row span:last-child{font-family:'JetBrains Mono',monospace;font-weight:600}
 .nuevo-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:10px 16px;background:none;border:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:background .12s;}
 .nuevo-item:hover{background:rgba(255,255,255,0.06);}
 .kpi-exp-btn{display:block;width:calc(100% + 32px);margin:10px -16px -16px;background:rgba(0,0,0,0.22);border:none;border-top:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.42);font-size:10px;padding:5px 16px;cursor:pointer;text-align:left;transition:color .12s,background .12s;font-family:'DM Sans',sans-serif;letter-spacing:.4px;}
@@ -742,6 +754,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="height:1px;background:var(--border);margin:3px 0"></div>
       <button onclick="closeNuevoMenu();irANuevaVenta()" class="nuevo-item">💰 Nueva Venta</button>
       <button onclick="closeNuevoMenu();irALibroDiario()" class="nuevo-item">📒 Nuevo Registro (Diario)</button>
+      <div style="height:1px;background:var(--border);margin:3px 0"></div>
+      <button onclick="closeNuevoMenu();switchTab('cot3d')" class="nuevo-item">🖨️ Cot. Impresión 3D</button>
     </div>
   </div>
   <div class="topbar-right">
@@ -776,6 +790,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button onclick="closeMobileMenu();switchTab('nueva-cot')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📋</span>Nueva Cotización</button>
         <button onclick="closeMobileMenu();irANuevaVenta()" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">💰</span>Nueva Venta</button>
         <button onclick="closeMobileMenu();irALibroDiario()" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📒</span>Nuevo Registro (Diario)</button>
+        <button onclick="closeMobileMenu();switchTab('cot3d')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">🖨️</span>Cot. Impresión 3D</button>
       </div>
     </div>
     <button class="mobile-tab-btn active" data-tab="overview" onclick="switchTabMobile('overview')"><span class="mobile-tab-icon">🏠</span>Overview</button>
@@ -1337,6 +1352,137 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-primary" id="createCotBtn" onclick="createCotizacion()">✚ Guardar Cotización</button>
       </div>
     </div>
+    </div>
+  </div>
+</div>
+
+<!-- CALCULADORA 3D -->
+<div class="tab-panel" id="tab-cot3d">
+  <div class="section-header"><div class="section-title">🖨️ Calculadora de Cotización — Impresión 3D</div></div>
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start">
+
+    <!-- LEFT: INPUTS -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Cliente + N° -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Datos del Pedido</span></div>
+        <div class="form-grid">
+          <div class="field-group form-full"><label class="field-label">Cliente</label>
+            <div class="search-select-wrap">
+              <input class="field-input" id="c3d-cliente-search" placeholder="🔍 buscar cliente..." autocomplete="off" oninput="onC3dClienteSearch()" onfocus="onC3dClienteSearch()">
+              <input type="hidden" id="c3d-cliente-id">
+              <div class="search-select-dropdown" id="c3d-cliente-dropdown"></div>
+            </div>
+          </div>
+          <div class="field-group"><label class="field-label">N° Cotización</label><input class="field-input" id="c3d-num" placeholder="260507"></div>
+          <div class="field-group"><label class="field-label">Cantidad de piezas</label><input class="field-input" id="c3d-qty" type="number" min="1" value="1" oninput="calc3dUpdate()"></div>
+        </div>
+      </div>
+
+      <!-- Material -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">🧱 Material</span></div>
+        <div class="form-grid">
+          <div class="field-group"><label class="field-label">Tipo de Material</label>
+            <select class="field-select" id="c3d-mat" onchange="calc3dUpdate()">
+              <option value="PLA">PLA — $18/g</option>
+              <option value="PLA+" selected>PLA+ — $20/g</option>
+              <option value="PETG">PETG — $20/g</option>
+              <option value="Resina UV">Resina UV — $30/mL</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label" id="c3d-mat-lbl">Cantidad (gramos)</label>
+            <input class="field-input" id="c3d-mat-qty" type="number" min="0" value="0" placeholder="0" oninput="calc3dUpdate()">
+          </div>
+        </div>
+        <div style="margin-top:8px;padding:8px 12px;background:var(--surface3);border-radius:6px;font-size:11px;color:var(--text2)" id="c3d-mat-info">Incluye 20% de merma. Costo material: $0</div>
+      </div>
+
+      <!-- Máquinas -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">⚙️ Uso de Máquinas (horas)</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="c3d-maq-grid">
+          <!-- populated by JS -->
+        </div>
+      </div>
+
+      <!-- Extras -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">🔧 Extras / Insumos</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px" id="c3d-extras-list">
+          <!-- populated by JS -->
+        </div>
+      </div>
+
+      <!-- Notas -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">📝 Notas</span></div>
+        <textarea class="field-textarea" id="c3d-notas" rows="2" placeholder="Descripción del trabajo, observaciones..."></textarea>
+      </div>
+    </div>
+
+    <!-- RIGHT: RESUMEN LIVE -->
+    <div style="position:sticky;top:72px;display:flex;flex-direction:column;gap:14px">
+      <div class="card" style="border-color:rgba(0,212,204,0.3)">
+        <div class="card-header" style="border-bottom-color:rgba(0,212,204,0.2)"><span class="card-title" style="color:var(--accent)">💰 Resumen de Precio</span></div>
+
+        <!-- Margen slider -->
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <label class="field-label" style="margin:0">Margen de ganancia</label>
+            <span id="c3d-margen-label" style="font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent)">65%</span>
+          </div>
+          <input type="range" id="c3d-margen" min="10" max="90" value="65" oninput="calc3dUpdate()" style="width:100%;accent-color:var(--accent);cursor:pointer">
+        </div>
+
+        <!-- Filas de resumen -->
+        <div style="display:flex;flex-direction:column;gap:0">
+          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
+            <span style="color:var(--text3)">Costo total</span>
+            <span id="c3d-r-costo" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
+            <span style="color:var(--text3)">Precio neto (sin IVA)</span>
+            <span id="c3d-r-neto" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--text)">$0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
+            <span style="color:var(--text3)">IVA (19%)</span>
+            <span id="c3d-r-iva" style="font-family:'JetBrains Mono',monospace;color:var(--text2)">$0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border2)">
+            <span style="font-weight:700;font-size:13px">TOTAL con IVA</span>
+            <span id="c3d-r-total" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:var(--accent3)">$0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
+            <span style="color:var(--text3)">Utilidad</span>
+            <span id="c3d-r-util" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--success)">$0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:9px 0;font-size:12px">
+            <span style="color:var(--text3)">Precio por pieza</span>
+            <span id="c3d-r-pieza" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent)">$0</span>
+          </div>
+        </div>
+
+        <!-- Desglose por categoría -->
+        <div style="margin-top:12px;padding:10px;background:var(--surface3);border-radius:7px;font-size:11px" id="c3d-breakdown">
+          <div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Desglose de costos</div>
+          <div id="c3d-breakdown-body" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+          <button class="btn btn-primary" onclick="calc3dGuardar()" id="c3d-guardar-btn">✚ Guardar como Cotización</button>
+          <button class="btn btn-ghost btn-sm" onclick="calc3dCopiarACot()">📋 Copiar a Nueva Cotización</button>
+          <button class="btn btn-ghost btn-sm" onclick="calc3dLimpiar()">↺ Limpiar calculadora</button>
+        </div>
+      </div>
+
+      <!-- Historial rápido -->
+      <div class="card" id="c3d-hist-card" style="display:none">
+        <div class="card-header"><span class="card-title">🕓 Últimas cotizaciones 3D</span></div>
+        <div id="c3d-hist-body" style="display:flex;flex-direction:column;gap:6px;font-size:11px"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -3594,6 +3740,7 @@ function switchTab(name){
   document.querySelector(`.mobile-tab-btn[data-tab="${name}"]`)?.classList.add('active');
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
+  if(name==='cot3d') setTimeout(calc3dInit,50);
   if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsData();}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
@@ -8592,6 +8739,217 @@ function irANuevaVenta(){
     },100);
   },80);
 }
+// ── CALCULADORA COTIZACIÓN 3D ─────────────────────────────────
+const C3D_MATERIALES={
+  'PLA':      {preciog:18,merma:0.2,unidad:'gramos'},
+  'PLA+':     {preciog:20,merma:0.2,unidad:'gramos'},
+  'PETG':     {preciog:20,merma:0.2,unidad:'gramos'},
+  'Resina UV':{preciog:30,merma:0.2,unidad:'mL'}
+};
+const C3D_MAQUINAS=[
+  {id:'ender7',  nombre:'Ender 7',        sub:'FDM',      costo:150},
+  {id:'halot',   nombre:'Halot One',      sub:'Resina',   costo:150},
+  {id:'wycure',  nombre:'Wash & Cure',    sub:'Post-proc',costo:150},
+  {id:'cnc',     nombre:'CNC',            sub:'$330/h',   costo:330},
+  {id:'router',  nombre:'Router',         sub:'$100/h',   costo:100},
+  {id:'fresa',   nombre:'Fresa',          sub:'$500/h',   costo:500},
+  {id:'luz',     nombre:'Luz / Electr.',  sub:'$100/h',   costo:100},
+];
+const C3D_EXTRAS=[
+  {id:'disenio',  nombre:'Diseño (flat)',       costo:20000, tipo:'flat'},
+  {id:'hxh',      nombre:'Post-proceso HXH',    costo:5000,  tipo:'flat'},
+  {id:'packaging',nombre:'Packaging',           costo:100,   tipo:'unit'},
+  {id:'pintura',  nombre:'Pintado',             costo:2000,  tipo:'unit'},
+  {id:'lija',     nombre:'Lija / Pulido',       costo:420,   tipo:'unit'},
+  {id:'acetona',  nombre:'Acetona (frasco)',     costo:10000, tipo:'flat'},
+  {id:'alcohol',  nombre:'Alcohol ISO 10lt',    costo:36600, tipo:'flat'},
+  {id:'cianoacr', nombre:'Cianoacrilato',        costo:10000, tipo:'flat'},
+  {id:'poliur',   nombre:'Poliuretano',         costo:10000, tipo:'flat'},
+  {id:'laca',     nombre:'Laca (por pieza)',     costo:500,   tipo:'unit'},
+  {id:'filler',   nombre:'Filler / Masilla',    costo:10000, tipo:'flat'},
+  {id:'dtf',      nombre:'Impresión DTF',       costo:18000, tipo:'flat'},
+];
+
+function calc3dInit(){
+  // Máquinas
+  const grid=document.getElementById('c3d-maq-grid');
+  if(!grid||grid.dataset.init) return;
+  grid.dataset.init='1';
+  grid.innerHTML=C3D_MAQUINAS.map(m=>`
+    <div class="c3d-maq-item">
+      <span class="c3d-maq-label">${m.nombre}</span>
+      <span class="c3d-maq-costo">${m.sub} · $${m.costo.toLocaleString('es-CL')}/h</span>
+      <input type="number" id="c3d-maq-${m.id}" min="0" step="0.5" value="0" placeholder="0 h"
+        oninput="calc3dUpdate()"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:4px 7px;outline:none;width:100%;margin-top:2px">
+    </div>`).join('');
+  // Extras
+  const list=document.getElementById('c3d-extras-list');
+  if(list&&!list.dataset.init){
+    list.dataset.init='1';
+    list.innerHTML=C3D_EXTRAS.map(e=>`
+      <div class="c3d-extra-row">
+        <input type="checkbox" id="c3d-ex-${e.id}" onchange="calc3dUpdate()" style="accent-color:var(--accent);cursor:pointer;width:15px;height:15px;flex-shrink:0">
+        <label for="c3d-ex-${e.id}">${e.nombre} <span style="color:var(--text3)">${e.tipo==='unit'?'(× piezas)':'(flat)'}</span></label>
+        <span style="font-size:10px;color:var(--text3);white-space:nowrap">$${e.costo.toLocaleString('es-CL')}</span>
+        <input class="c3d-extra-amt" type="number" id="c3d-examt-${e.id}" min="0" value="${e.tipo==='unit'?1:1}" oninput="calc3dUpdate()" placeholder="1" title="Cantidad / multiplicador">
+      </div>`).join('');
+  }
+  calc3dUpdate();
+}
+
+function calc3dUpdate(){
+  const qty=Math.max(1,parseFloat(document.getElementById('c3d-qty')?.value)||1);
+  const margen=(parseFloat(document.getElementById('c3d-margen')?.value)||65)/100;
+  const matKey=document.getElementById('c3d-mat')?.value||'PLA+';
+  const mat=C3D_MATERIALES[matKey];
+  const matQty=parseFloat(document.getElementById('c3d-mat-qty')?.value)||0;
+  // Update material label
+  const lbl=document.getElementById('c3d-mat-lbl');
+  if(lbl) lbl.textContent=`Cantidad (${mat.unidad})`;
+  // Costo material (con merma)
+  const costoMat=Math.round(matQty*mat.preciog*(1+mat.merma));
+  const matInfo=document.getElementById('c3d-mat-info');
+  if(matInfo) matInfo.textContent=`Incluye ${Math.round(mat.merma*100)}% de merma. Costo material: $${costoMat.toLocaleString('es-CL')}`;
+  // Margen label
+  const ml=document.getElementById('c3d-margen-label');
+  if(ml) ml.textContent=Math.round(margen*100)+'%';
+  // Costo máquinas
+  let costoMaq=0;
+  C3D_MAQUINAS.forEach(m=>{const h=parseFloat(document.getElementById('c3d-maq-'+m.id)?.value)||0;costoMaq+=Math.round(h*m.costo);});
+  // Costo extras
+  let costoExtras=0;
+  const extrasUsados=[];
+  C3D_EXTRAS.forEach(e=>{
+    const chk=document.getElementById('c3d-ex-'+e.id);
+    if(!chk?.checked) return;
+    const mult=parseFloat(document.getElementById('c3d-examt-'+e.id)?.value)||1;
+    const subtotal=Math.round(e.costo*(e.tipo==='unit'?mult*qty:mult));
+    costoExtras+=subtotal;
+    extrasUsados.push({nombre:e.nombre,subtotal});
+  });
+  // Totales
+  const costoTotal=costoMat+costoMaq+costoExtras;
+  const precioNeto=margen>=1?costoTotal:Math.round(costoTotal/(1-margen));
+  const iva=Math.round(precioNeto*0.19);
+  const totalConIva=precioNeto+iva;
+  const utilidad=precioNeto-costoTotal;
+  const precioPieza=qty>0?Math.round(totalConIva/qty):0;
+  // Render summary
+  const fmt=n=>'$'+Math.round(n).toLocaleString('es-CL');
+  document.getElementById('c3d-r-costo').textContent=fmt(costoTotal);
+  document.getElementById('c3d-r-neto').textContent=fmt(precioNeto);
+  document.getElementById('c3d-r-iva').textContent=fmt(iva);
+  document.getElementById('c3d-r-total').textContent=fmt(totalConIva);
+  const uel=document.getElementById('c3d-r-util');if(uel){uel.textContent=fmt(utilidad);uel.style.color=utilidad>=0?'var(--success)':'var(--danger)';}
+  document.getElementById('c3d-r-pieza').textContent=fmt(precioPieza);
+  // Breakdown
+  const bk=document.getElementById('c3d-breakdown-body');
+  if(bk){
+    const brow=(lbl,val,hl)=>`<div class="c3d-bk-row"><span>${lbl}</span><span style="${hl?'color:var(--accent)':''}">${fmt(val)}</span></div>`;
+    let html=brow('Material ('+matKey+')',costoMat);
+    if(costoMaq>0) html+=brow('Máquinas',costoMaq);
+    extrasUsados.forEach(e=>{ html+=brow(e.nombre,e.subtotal); });
+    if(!costoTotal) html='<div style="color:var(--text3);text-align:center;padding:4px">Ingresa datos para ver el desglose</div>';
+    bk.innerHTML=html;
+  }
+  // Store for later use
+  window._c3dResult={costoTotal,precioNeto,iva,totalConIva,utilidad,precioPieza,qty,matKey,matQty,margen};
+}
+
+function onC3dClienteSearch(){
+  const inp=document.getElementById('c3d-cliente-search');
+  const dd=document.getElementById('c3d-cliente-dropdown');
+  document.getElementById('c3d-cliente-id').value='';
+  const q=inp.value.toLowerCase().trim();
+  const src=q?state.clientes.filter(c=>((c.fields['Empresa']||'')+' '+(c.fields['Contacto']||'')).toLowerCase().includes(q)).slice(0,8):state.clientes.slice(0,6);
+  dd.innerHTML=src.map(c=>`<div class="search-select-item" onclick="selectC3dCliente('${c.id}')"><strong>${escapeHtml(c.fields['Empresa']||'—')}</strong><span class="text-muted text-small" style="margin-left:7px">${escapeHtml(c.fields['Contacto']||'')}</span></div>`).join('');
+  dd.classList.toggle('open',!!src.length);
+}
+function selectC3dCliente(id){
+  const c=state.clientes.find(x=>x.id===id);if(!c) return;
+  document.getElementById('c3d-cliente-search').value=c.fields['Empresa']||'';
+  document.getElementById('c3d-cliente-id').value=id;
+  document.getElementById('c3d-cliente-dropdown').classList.remove('open');
+}
+
+function calc3dLimpiar(){
+  ['c3d-mat-qty','c3d-qty','c3d-notas','c3d-num','c3d-cliente-search','c3d-cliente-id'].forEach(id=>{const el=document.getElementById(id);if(el) el.value=id==='c3d-qty'?'1':id==='c3d-mat-qty'?'0':id==='c3d-margen'?'65':'';});
+  document.getElementById('c3d-mat').value='PLA+';
+  document.getElementById('c3d-margen').value='65';
+  C3D_MAQUINAS.forEach(m=>{const el=document.getElementById('c3d-maq-'+m.id);if(el) el.value='0';});
+  C3D_EXTRAS.forEach(e=>{const chk=document.getElementById('c3d-ex-'+e.id);if(chk) chk.checked=false;const amt=document.getElementById('c3d-examt-'+e.id);if(amt) amt.value=1;});
+  calc3dUpdate();
+  toast('Calculadora limpiada','info');
+}
+
+function calc3dBuildDetalle(){
+  const r=window._c3dResult||{};
+  const matKey=document.getElementById('c3d-mat')?.value||'PLA+';
+  const matQty=parseFloat(document.getElementById('c3d-mat-qty')?.value)||0;
+  const mat=C3D_MATERIALES[matKey];
+  const lines=[];
+  if(matQty>0) lines.push(`${matKey} ${matQty} ${mat.unidad} | 1 und. | Costo: $${Math.round(matQty*mat.preciog*(1+mat.merma)).toLocaleString('es-CL')} | Venta: $${(r.precioNeto||0).toLocaleString('es-CL')}`);
+  C3D_MAQUINAS.forEach(m=>{const h=parseFloat(document.getElementById('c3d-maq-'+m.id)?.value)||0;if(h>0) lines.push(`${m.nombre} ${h}h | 1 und. | Costo: $${Math.round(h*m.costo).toLocaleString('es-CL')} | Venta: $0`);});
+  C3D_EXTRAS.forEach(e=>{const chk=document.getElementById('c3d-ex-'+e.id);if(chk?.checked){const mult=parseFloat(document.getElementById('c3d-examt-'+e.id)?.value)||1;lines.push(`${e.nombre} | ${mult} und. | Costo: $${e.costo.toLocaleString('es-CL')} | Venta: $0`);}});
+  return lines.join('\n');
+}
+
+async function calc3dGuardar(){
+  const r=window._c3dResult;
+  if(!r||!r.costoTotal){toast('Ingresa datos antes de guardar','error');return;}
+  const num=(document.getElementById('c3d-num')?.value||'').trim();
+  if(!num){toast('N° Cotización requerido','error');return;}
+  const token=getToken();if(!token){toast('Token Airtable requerido','error');showTokenModal();return;}
+  const btn=document.getElementById('c3d-guardar-btn');btn.disabled=true;btn.textContent='Guardando...';
+  try{
+    const clienteId=document.getElementById('c3d-cliente-id')?.value||'';
+    const notas=document.getElementById('c3d-notas')?.value||'';
+    const fields={
+      'N° Cotización':num,
+      'Canal solicitud':'Presencial',
+      'Fecha cotización':new Date().toISOString().split('T')[0],
+      'Fecha vencimiento':addBusinessDays(new Date(),10).toISOString().split('T')[0],
+      'Subtotal (CLP)':r.costoTotal,
+      'Total final (CLP)':r.totalConIva,
+      'Urgencia (+25%)':false,
+      'Solicitud cliente (texto libre)':'Impresión 3D — '+document.getElementById('c3d-mat')?.value+' '+( document.getElementById('c3d-mat-qty')?.value||'0')+(C3D_MATERIALES[document.getElementById('c3d-mat')?.value]?.unidad||'g')+(notas?'\n'+notas:''),
+      'Detalle productos':calc3dBuildDetalle(),
+      'Notas cotización':'Calculadora 3D · Margen '+Math.round(r.margen*100)+'% · '+r.qty+' pieza(s)',
+      'Estado cotización':'Enviada'
+    };
+    if(clienteId) fields['Cliente']=[clienteId];
+    await airtableWrite('Cotizaciones','POST',null,fields);
+    toast(`✓ Cotización ${num} guardada`,'success');
+    await loadAllDataSilent();renderCotizaciones();renderOverview();
+  }catch(e){toast('Error: '+e.message,'error');}
+  btn.disabled=false;btn.textContent='✚ Guardar como Cotización';
+}
+
+function calc3dCopiarACot(){
+  const r=window._c3dResult;
+  if(!r||!r.costoTotal){toast('Ingresa datos primero','error');return;}
+  switchTab('nueva-cot');
+  setTimeout(()=>{
+    const matKey=document.getElementById('c3d-mat')?.value||'PLA+';
+    const matQty=document.getElementById('c3d-mat-qty')?.value||'0';
+    const mat=C3D_MATERIALES[matKey];
+    const notas=document.getElementById('c3d-notas')?.value||'';
+    const numEl=document.getElementById('cot-num');if(numEl&&!numEl.value) numEl.value=document.getElementById('c3d-num')?.value||'';
+    const solEl=document.getElementById('cot-solicitud');
+    if(solEl) solEl.value='Impresión 3D — '+matKey+' '+matQty+(mat?.unidad||'g')+(notas?'\n'+notas:'');
+    const notasEl=document.getElementById('cot-notas');
+    if(notasEl) notasEl.value='Calculadora 3D · Margen '+Math.round(r.margen*100)+'% · '+r.qty+' pieza(s)';
+    const detEl=document.getElementById('cot-detalle');
+    if(detEl) detEl.value=calc3dBuildDetalle();
+    // Pre-fill cliente
+    const cId=document.getElementById('c3d-cliente-id')?.value;
+    const cSearch=document.getElementById('c3d-cliente-search')?.value;
+    if(cId){document.getElementById('cot-cliente-id').value=cId;document.getElementById('cot-cliente-search').value=cSearch;document.getElementById('cot-cliente-info').textContent='✓ Cliente cargado';}
+    toast('Datos copiados a Nueva Cotización','success');
+  },120);
+}
+
 function toggleNuevoMenu(e){
   e.stopPropagation();
   const panel=document.getElementById('nuevoDropPanel');
