@@ -8802,6 +8802,7 @@ function c3dAddPieza(){
   const list=document.getElementById('c3d-i-piezas');
   if(!list) return;
   const maqInputs=C3D_MAQUINAS.map(m=>`<div style="display:flex;align-items:center;gap:5px;min-width:120px"><span style="font-size:9px;color:var(--text3);flex:1;white-space:nowrap">${m.nombre}<br><span style="color:var(--text3);font-size:8px">$${m.costo.toLocaleString('es-CL')}/h</span></span><input type="number" min="0" step="0.5" value="0" id="c3d-pm-${id}-${m.id}" oninput="c3dUpdateAll()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 5px;outline:none;width:52px;text-align:center"></div>`).join('');
+  const extrasInputs=C3D_EXTRAS.map(e=>`<div style="display:flex;align-items:center;gap:5px;background:var(--surface3);border-radius:5px;padding:4px 7px"><input type="checkbox" id="c3d-ex-${id}-${e.id}" onchange="c3dUpdateAll()" style="accent-color:var(--accent);cursor:pointer;width:13px;height:13px;flex-shrink:0"><label for="c3d-ex-${id}-${e.id}" style="font-size:10px;color:var(--text2);cursor:pointer;flex:1;line-height:1.2">${e.nombre}</label>${e.tipo==='unit'?`<input type="number" min="1" value="1" id="c3d-exqty-${id}-${e.id}" oninput="c3dUpdateAll()" title="Cantidad" style="width:40px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 4px;outline:none;text-align:center">`:'&nbsp;'}<span style="font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0">$${e.costo.toLocaleString('es-CL')}${e.tipo==='unit'?'/u':''}</span></div>`).join('');
   const wrapper=document.createElement('div');
   wrapper.id='c3d-pieza-'+id;
   wrapper.innerHTML=`<div style="border:1px solid var(--border2);border-radius:8px;overflow:hidden">
@@ -8830,6 +8831,10 @@ function c3dAddPieza(){
         <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Máquinas (horas)</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px">${maqInputs}</div>
       </div>
+    </div>
+    <div style="padding:8px 10px;border-top:1px solid var(--border2)">
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Extras / Insumos <span style="font-weight:400;color:var(--text3)">(u = por pieza · flat = costo fijo)</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:5px">${extrasInputs}</div>
     </div>
     <div style="padding:6px 10px;border-top:1px solid var(--border2);background:var(--surface3);display:flex;justify-content:flex-end;gap:16px;align-items:center;font-size:11px;flex-wrap:wrap">
       <span style="color:var(--text3)">Costo: <strong id="c3d-p-costo-${id}" style="font-family:'JetBrains Mono',monospace">$0</strong></span>
@@ -8862,7 +8867,14 @@ function c3dCalcPieza(id){
   const costoMat=Math.round(matQty*mat.preciog*(1+mat.merma));
   let costoMaq=0;
   C3D_MAQUINAS.forEach(m=>{const h=parseFloat(document.getElementById('c3d-pm-'+id+'-'+m.id)?.value)||0;costoMaq+=Math.round(h*m.costo);});
-  const costoUnit=costoMat+costoMaq;
+  let costoExtras=0;
+  C3D_EXTRAS.forEach(e=>{
+    const chk=document.getElementById('c3d-ex-'+id+'-'+e.id);
+    if(!chk?.checked) return;
+    if(e.tipo==='unit'){const extQty=parseFloat(document.getElementById('c3d-exqty-'+id+'-'+e.id)?.value)||qty;costoExtras+=Math.round(e.costo*extQty);}
+    else costoExtras+=e.costo;
+  });
+  const costoUnit=costoMat+costoMaq+costoExtras;
   const netoUnit=margen<1?Math.round(costoUnit/(1-margen)):costoUnit;
   return{costoUnit,netoUnit,costoTotal:costoUnit*qty,netoTotal:netoUnit*qty,totalConIva:Math.round(netoUnit*qty*1.19),qty};
 }
