@@ -1001,13 +1001,23 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- PEDIDOS -->
 <div class="tab-panel" id="tab-pedidos">
   <div class="section-header"><div class="section-title">Pedidos en Producción</div></div>
-  <div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap">
+  <div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)">⚠ Atrasados</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Confirmado',this)">Confirmados</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('En producción',this)">En Prod.</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Listo para despacho',this)">Listos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Despachado',this)">Despachados</button>
+    <div id="pedidosBulkBar" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
+      <span id="pedidosBulkCount" style="font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace"></span>
+      <select id="pedidosBulkEstado" class="field-select" style="font-size:11px;padding:4px 8px;width:auto;border-color:var(--accent)">
+        <option value="">— Cambiar estado —</option>
+        <option>Confirmado</option><option>En producción</option><option>Listo para despacho</option><option>Despachado</option><option>Cancelado</option>
+      </select>
+      <button class="btn btn-sm" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.3);color:var(--accent)" onclick="bulkEditPedidoEstado()">✓ Aplicar estado</button>
+      <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeletePedidos()">🗑 Eliminar</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearPedidosSelection()">✕ Cancelar</button>
+    </div>
     <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')" style="margin-left:auto">⬇ CSV</button>
     <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px">
       <button id="btnVistaTabla" class="btn btn-ghost btn-sm active-filter" onclick="setPedidosView('tabla')" style="padding:4px 10px;font-size:10px">≡ Tabla</button>
@@ -1016,9 +1026,40 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap">
-    <table><thead><tr><th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th><th>Entrega</th><th>Acción</th></tr></thead>
+    <table><thead><tr>
+      <th style="width:36px;text-align:center"><input type="checkbox" id="pedidosSelectAll" onchange="toggleSelectAllPedidos(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
+      <th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th><th>Entrega</th><th>Acciones</th>
+    </tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
+  <!-- Modal edición individual pedido -->
+  <div id="editPedidoModal" class="modal-overlay" style="display:none">
+    <div class="modal-backdrop" onclick="closeEditPedidoModal()"></div>
+    <div class="modal-card">
+      <div class="modal-title">✏️ Editar Pedido</div>
+      <input type="hidden" id="editPedidoId">
+      <div class="form-grid" style="padding:10px 0 0">
+        <div class="field-group"><label class="field-label">Estado</label>
+          <select class="field-select" id="editPedidoEstado">
+            <option>Confirmado</option><option>En producción</option><option>Listo para despacho</option><option>Despachado</option><option>Cancelado</option>
+          </select>
+        </div>
+        <div class="field-group"><label class="field-label">Fecha entrega</label><input class="field-input" id="editPedidoFecha" type="date"></div>
+        <div class="field-group"><label class="field-label">Forma de Pago</label>
+          <select class="field-select" id="editPedidoFormaPago">
+            <option value="">— Seleccionar —</option>
+            <option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option>
+          </select>
+        </div>
+        <div class="field-group"><label class="field-label">Equipo asignado</label><input class="field-input" id="editPedidoEquipo" placeholder="Gustavo, Florencia..."></div>
+        <div class="field-group form-full"><label class="field-label">Proveedor</label><input class="field-input" id="editPedidoProveedor" placeholder="Nombre del proveedor"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-ghost btn-sm" onclick="closeEditPedidoModal()">Cancelar</button>
+        <button class="btn btn-primary btn-sm" onclick="saveEditPedido()" id="saveEditPedidoBtn">💾 Guardar</button>
+      </div>
+    </div>
+  </div>
   <div id="pedidosKanban" style="display:none"></div>
   <div id="pedidosCalendario" style="display:none"></div>
   <div id="qaModal" class="modal-overlay" style="display:none">
@@ -2681,6 +2722,7 @@ let wpPagesCache=[];
 const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
 const selectedClientes=new Set();
+const selectedPedidos=new Set();
 const clientesSort={key:null,dir:1};
 const cotizacionesSort={key:null,dir:1};
 const proveedoresSort={key:null,dir:1};
@@ -4212,22 +4254,25 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
 function renderPedidos(filter){
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
   let data=filter==='all'?state.pedidos:filter==='atrasados'?state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
-  const tbody=document.getElementById('pedidosTableBody');if(!data.length){tbody.innerHTML='<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">📦</div>Sin pedidos</div></td></tr>';return;}
+  const tbody=document.getElementById('pedidosTableBody');if(!data.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty-state"><div class="empty-icon">📦</div>Sin pedidos</div></td></tr>';return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
   tbody.innerHTML=data.map(p=>{
-    const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);let actionCell='—';
-    if(idx>=0&&idx<stages.length-1) actionCell=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') actionCell='<span class="badge badge-green">✓</span>';
+    const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
+    let advBtn='';
+    if(idx>=0&&idx<stages.length-1) advBtn=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') advBtn='<span class="badge badge-green">✓</span>';
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
-    return`<tr data-id="${p.id}"><td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td>${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
+    return`<tr data-id="${p.id}" class="${sel?'row-selected':''}">
+    <td style="text-align:center"><input type="checkbox" class="row-chk" data-id="${p.id}" ${sel?'checked':''} onchange="togglePedidoRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
+    <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td>${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
     <td>${renderProveedorCell(p.id,f['Proveedor']||'')}</td>
     <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
-    <td>${actionCell}</td></tr>`;
+    <td><div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${advBtn}<button class="btn-mini" onclick="openEditPedidoModal('${p.id}')" title="Editar">✏️</button><button class="btn-mini btn-mini-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" title="Eliminar">🗑</button></div></td></tr>`;
   }).join('');
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
@@ -4378,6 +4423,68 @@ async function saveQAModal(){
   catch(e){try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Resultado QA']=qaResultadoActual;toast(`✓ QA ${qaResultadoActual}`,'success');closeQAModal();renderPedidos();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
 }
 function filterPedidos(filter,btn){document.querySelectorAll('.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');renderPedidos(filter);}
+
+// ── PEDIDOS MULTI-SELECT ──────────────────────────────────────
+function togglePedidoRow(chk){const id=chk.dataset.id;if(chk.checked) selectedPedidos.add(id);else selectedPedidos.delete(id);chk.closest('tr')?.classList.toggle('row-selected',chk.checked);updatePedidosBulkBar();}
+function toggleSelectAllPedidos(chk){document.querySelectorAll('#pedidosTableBody .row-chk').forEach(c=>{c.checked=chk.checked;if(chk.checked) selectedPedidos.add(c.dataset.id);else selectedPedidos.delete(c.dataset.id);c.closest('tr')?.classList.toggle('row-selected',chk.checked);});updatePedidosBulkBar();}
+function updatePedidosBulkBar(){
+  const n=selectedPedidos.size;
+  const bar=document.getElementById('pedidosBulkBar');if(bar) bar.style.display=n>0?'flex':'none';
+  const cnt=document.getElementById('pedidosBulkCount');if(cnt) cnt.textContent=`${n} seleccionado${n!==1?'s':''}`;
+  const sa=document.getElementById('pedidosSelectAll');if(sa){const all=document.querySelectorAll('#pedidosTableBody .row-chk');sa.checked=all.length>0&&n===all.length;sa.indeterminate=n>0&&n<all.length;}
+}
+function clearPedidosSelection(){selectedPedidos.clear();document.querySelectorAll('#pedidosTableBody .row-chk').forEach(c=>{c.checked=false;c.closest('tr')?.classList.remove('row-selected');});const sa=document.getElementById('pedidosSelectAll');if(sa){sa.checked=false;sa.indeterminate=false;}updatePedidosBulkBar();}
+async function deletePedido(id,num){
+  if(!confirm(`¿Eliminar pedido ${num}?`)) return;
+  try{await airtableDelete('Pedidos',id);state.pedidos=state.pedidos.filter(x=>x.id!==id);selectedPedidos.delete(id);toast('Pedido eliminado','info');renderPedidos();renderOverview();}
+  catch(e){toast('Error: '+e.message,'error');}
+}
+async function bulkDeletePedidos(){
+  const ids=[...selectedPedidos];if(!ids.length) return;
+  const nums=ids.map(id=>state.pedidos.find(p=>p.id===id)?.fields['N° Pedido']||id).join(', ');
+  if(!confirm(`¿Eliminar ${ids.length} pedido${ids.length!==1?'s':''}?\n${nums}`)) return;
+  let ok=0,err=0;
+  for(const id of ids){try{await airtableDelete('Pedidos',id);state.pedidos=state.pedidos.filter(x=>x.id!==id);selectedPedidos.delete(id);ok++;}catch(e){err++;}}
+  err?toast(`${ok} eliminados, ${err} con error`,'info'):toast(`✓ ${ok} pedido${ok!==1?'s':''} eliminados`,'success');
+  clearPedidosSelection();renderPedidos();renderOverview();
+}
+async function bulkEditPedidoEstado(){
+  const estado=document.getElementById('pedidosBulkEstado')?.value;if(!estado){toast('Selecciona un estado primero','error');return;}
+  const ids=[...selectedPedidos];if(!ids.length) return;
+  if(!confirm(`¿Cambiar estado a "${estado}" para ${ids.length} pedido${ids.length!==1?'s':''}?`)) return;
+  const btn=document.querySelector('[onclick="bulkEditPedidoEstado()"]');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  let ok=0,err=0;
+  for(const id of ids){try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Estado pedido']=estado;ok++;}catch(e){err++;}}
+  document.getElementById('pedidosBulkEstado').value='';
+  err?toast(`${ok} actualizados, ${err} con error`,'info'):toast(`✓ ${ok} pedido${ok!==1?'s':''} → "${estado}"`,'success');
+  if(btn){btn.disabled=false;btn.textContent='✓ Aplicar estado';}
+  clearPedidosSelection();renderPedidos();renderOverview();
+}
+function openEditPedidoModal(id){
+  const p=state.pedidos.find(x=>x.id===id);if(!p) return;const f=p.fields;
+  document.getElementById('editPedidoId').value=id;
+  document.getElementById('editPedidoEstado').value=f['Estado pedido']||'Confirmado';
+  document.getElementById('editPedidoFecha').value=f['Fecha entrega']||'';
+  document.getElementById('editPedidoFormaPago').value=f['Forma de pago']||'';
+  document.getElementById('editPedidoEquipo').value=f['Equipo asignado']||'';
+  document.getElementById('editPedidoProveedor').value=f['Proveedor']||'';
+  document.getElementById('editPedidoModal').style.display='flex';
+}
+function closeEditPedidoModal(){document.getElementById('editPedidoModal').style.display='none';}
+async function saveEditPedido(){
+  const btn=document.getElementById('saveEditPedidoBtn');btn.disabled=true;btn.textContent='Guardando...';
+  const id=document.getElementById('editPedidoId').value;
+  try{
+    const fields={'Estado pedido':document.getElementById('editPedidoEstado').value,'Fecha entrega':document.getElementById('editPedidoFecha').value||null,'Equipo asignado':document.getElementById('editPedidoEquipo').value,'Proveedor':document.getElementById('editPedidoProveedor').value};
+    const fp=document.getElementById('editPedidoFormaPago').value;if(fp) fields['Forma de pago']=fp;
+    if(fields['Estado pedido']==='Despachado'&&!state.pedidos.find(x=>x.id===id)?.fields['Fecha despacho']) fields['Fecha despacho']=new Date().toISOString().split('T')[0];
+    await airtableWrite('Pedidos','PATCH',id,fields);
+    const p=state.pedidos.find(x=>x.id===id);if(p) Object.assign(p.fields,fields);
+    toast('✓ Pedido actualizado','success');closeEditPedidoModal();renderPedidos();renderOverview();
+  }catch(e){toast('Error: '+e.message,'error');}
+  btn.disabled=false;btn.textContent='💾 Guardar';
+}
+
 async function advancePedido(id,estado){
   const p=state.pedidos.find(x=>x.id===id);if(!p) return;
   // Regla de negocio: anticipo antes de producir, saldo antes de despachar
