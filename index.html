@@ -730,20 +730,20 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')">📊 Reportes</button>
     <button class="tab-btn" data-tab="web" onclick="switchTab('web')">🌐 Web</button>
     <button class="tab-btn" data-tab="finanzas" onclick="switchTab('finanzas')">💰 Finanzas</button>
-    <div id="nuevoDropdown" style="position:relative;display:inline-flex;align-items:center">
-      <button class="tab-btn" id="nuevoDropBtn" onclick="toggleNuevoMenu(event)" style="display:flex;align-items:center;gap:4px;background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);font-weight:700">
-        ➕ Nuevo <span id="nuevoDropArrow" style="font-size:9px;margin-left:2px;transition:transform .2s">▾</span>
-      </button>
-      <div id="nuevoDropPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 10px 36px rgba(0,0,0,0.5);z-index:3000;overflow:hidden;padding:4px 0">
-        <button onclick="closeNuevoMenu();switchTab('nuevo-lead')" class="nuevo-item">👤 Nuevo Lead / Cliente</button>
-        <button onclick="closeNuevoMenu();switchTab('nuevo-proveedor')" class="nuevo-item">🏭 Nuevo Proveedor</button>
-        <button onclick="closeNuevoMenu();switchTab('nueva-cot')" class="nuevo-item">📋 Nueva Cotización</button>
-        <div style="height:1px;background:var(--border);margin:3px 0"></div>
-        <button onclick="closeNuevoMenu();irANuevaVenta()" class="nuevo-item">💰 Nueva Venta</button>
-        <button onclick="closeNuevoMenu();irALibroDiario()" class="nuevo-item">📒 Nuevo Registro (Diario)</button>
-      </div>
-    </div>
   </nav>
+  <div id="nuevoDropdown" style="position:relative;display:inline-flex;align-items:center;flex-shrink:0">
+    <button class="tab-btn" id="nuevoDropBtn" onclick="toggleNuevoMenu(event)" style="display:flex;align-items:center;gap:4px;background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);font-weight:700">
+      ➕ Nuevo <span id="nuevoDropArrow" style="font-size:9px;margin-left:2px;transition:transform .2s">▾</span>
+    </button>
+    <div id="nuevoDropPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 10px 36px rgba(0,0,0,0.5);z-index:3000;overflow:hidden;padding:4px 0">
+      <button onclick="closeNuevoMenu();switchTab('nuevo-lead')" class="nuevo-item">👤 Nuevo Lead / Cliente</button>
+      <button onclick="closeNuevoMenu();switchTab('nuevo-proveedor')" class="nuevo-item">🏭 Nuevo Proveedor</button>
+      <button onclick="closeNuevoMenu();switchTab('nueva-cot')" class="nuevo-item">📋 Nueva Cotización</button>
+      <div style="height:1px;background:var(--border);margin:3px 0"></div>
+      <button onclick="closeNuevoMenu();irANuevaVenta()" class="nuevo-item">💰 Nueva Venta</button>
+      <button onclick="closeNuevoMenu();irALibroDiario()" class="nuevo-item">📒 Nuevo Registro (Diario)</button>
+    </div>
+  </div>
   <div class="topbar-right">
     <div class="status-dot" id="statusDot"></div>
     <span class="status-text" id="statusText">iniciando...</span>
