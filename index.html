@@ -352,6 +352,14 @@ body.kiosk .tab-content{padding-top:12px!important;}
 }
 .nuevo-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:10px 16px;background:none;border:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:background .12s;}
 .nuevo-item:hover{background:rgba(255,255,255,0.06);}
+.kpi-exp-btn{display:block;width:calc(100% + 32px);margin:10px -16px -16px;background:rgba(0,0,0,0.22);border:none;border-top:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.42);font-size:10px;padding:5px 16px;cursor:pointer;text-align:left;transition:color .12s,background .12s;font-family:'DM Sans',sans-serif;letter-spacing:.4px;}
+.kpi-exp-btn:hover{color:rgba(255,255,255,0.85);background:rgba(0,0,0,0.35);}
+.kpi-exp-data{margin:0 -16px -16px;padding:8px 16px 10px;background:rgba(0,0,0,0.2);}
+.kpi-exp-row{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.05);}
+.kpi-exp-row:last-child{border-bottom:none;}
+.kpi-exp-row .ker{color:rgba(255,255,255,0.62);}
+.kpi-exp-row .kev{font-weight:600;color:rgba(255,255,255,0.88);}
+.kpi-exp-row.hl .kev{color:var(--accent);}
 </style>
 <style>
 /* ══ UI/UX Pro Max — mejoras visuales v5.1 ══════════════════════ */
@@ -1888,41 +1896,53 @@ function main() {
 
   <!-- KPIs dinámicos con sparklines -->
   <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px">
-    <div class="kpi-card yellow" style="position:relative;overflow:hidden">
+    <div class="kpi-card yellow">
       <div class="kpi-label">Ventas 2026 (Ene–May)</div>
       <div class="kpi-value" id="fin-k1">—</div>
       <div class="kpi-sub" id="fin-k1s">—</div>
-      <canvas id="fin-sp1" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
+      <canvas id="fin-sp1" style="position:absolute;top:14px;right:0;opacity:0.15;pointer-events:none" width="80" height="32"></canvas>
+      <button class="kpi-exp-btn" onclick="finToggleKPI(1,event)">▾ desglose por año</button>
+      <div class="kpi-exp-data" id="fin-k1-exp" style="display:none"></div>
     </div>
-    <div class="kpi-card green" style="position:relative;overflow:hidden">
+    <div class="kpi-card green">
       <div class="kpi-label">Media Mensual 2026</div>
       <div class="kpi-value" id="fin-k2">—</div>
       <div class="kpi-sub" id="fin-k2s">—</div>
-      <canvas id="fin-sp2" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
+      <canvas id="fin-sp2" style="position:absolute;top:14px;right:0;opacity:0.15;pointer-events:none" width="80" height="32"></canvas>
+      <button class="kpi-exp-btn" onclick="finToggleKPI(2,event)">▾ media por año</button>
+      <div class="kpi-exp-data" id="fin-k2-exp" style="display:none"></div>
     </div>
-    <div class="kpi-card orange" style="position:relative;overflow:hidden">
+    <div class="kpi-card orange">
       <div class="kpi-label">Por Cobrar + IVA</div>
       <div class="kpi-value" id="fin-k3">—</div>
       <div class="kpi-sub" id="fin-k3s">—</div>
-      <canvas id="fin-sp3" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
+      <canvas id="fin-sp3" style="position:absolute;top:14px;right:0;opacity:0.15;pointer-events:none" width="80" height="32"></canvas>
+      <button class="kpi-exp-btn" onclick="finToggleKPI(3,event)">▾ top deudores</button>
+      <div class="kpi-exp-data" id="fin-k3-exp" style="display:none"></div>
     </div>
-    <div class="kpi-card red" style="position:relative;overflow:hidden">
+    <div class="kpi-card red">
       <div class="kpi-label">Préstamo Acumulado</div>
       <div class="kpi-value" id="fin-k4">—</div>
       <div class="kpi-sub" id="fin-k4s">—</div>
-      <canvas id="fin-sp4" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
+      <canvas id="fin-sp4" style="position:absolute;top:14px;right:0;opacity:0.15;pointer-events:none" width="80" height="32"></canvas>
+      <button class="kpi-exp-btn" onclick="finToggleKPI(4,event)">▾ historial préstamos</button>
+      <div class="kpi-exp-data" id="fin-k4-exp" style="display:none"></div>
     </div>
-    <div class="kpi-card red" style="position:relative;overflow:hidden">
+    <div class="kpi-card red">
       <div class="kpi-label">Deuda Pendiente</div>
       <div class="kpi-value" id="fin-k5">—</div>
       <div class="kpi-sub" id="fin-k5s">—</div>
-      <canvas id="fin-sp5" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
+      <canvas id="fin-sp5" style="position:absolute;top:14px;right:0;opacity:0.15;pointer-events:none" width="80" height="32"></canvas>
+      <button class="kpi-exp-btn" onclick="finToggleKPI(5,event)">▾ evolución deuda</button>
+      <div class="kpi-exp-data" id="fin-k5-exp" style="display:none"></div>
     </div>
-    <div class="kpi-card purple" style="position:relative;overflow:hidden">
-      <div class="kpi-label">Record — Año 2024</div>
+    <div class="kpi-card purple">
+      <div class="kpi-label" id="fin-k6-label">Record — Año 2024</div>
       <div class="kpi-value" id="fin-k6">—</div>
       <div class="kpi-sub" id="fin-k6s">—</div>
-      <canvas id="fin-sp6" style="position:absolute;bottom:0;right:0;opacity:0.3" width="80" height="32"></canvas>
+      <canvas id="fin-sp6" style="position:absolute;top:14px;right:0;opacity:0.15;pointer-events:none" width="80" height="32"></canvas>
+      <button class="kpi-exp-btn" onclick="finToggleKPI(6,event)">▾ todos los años</button>
+      <div class="kpi-exp-data" id="fin-k6-exp" style="display:none"></div>
     </div>
   </div>
 
@@ -7726,6 +7746,17 @@ function exportarFinanzasCSV(){
   URL.revokeObjectURL(url);
 }
 
+/* ── KPI expand toggle ── */
+function finToggleKPI(n,e){
+  e.stopPropagation();
+  const exp=document.getElementById('fin-k'+n+'-exp');
+  const btn=e.currentTarget;
+  if(!exp)return;
+  const open=exp.style.display!=='none';
+  exp.style.display=open?'none':'block';
+  btn.innerHTML=open?btn.dataset.label:'▴ cerrar';
+}
+
 /* ── KPIs dinámicos ── */
 function finInitKPIs(){
   const VM=finVentasMerged();
@@ -7757,12 +7788,44 @@ function finInitKPIs(){
     if(el)el.textContent=val;
     if(els)els.textContent=sub;
   }
+  // Totales por año (para expand y record dinámico)
+  const yearTotals={};
+  [2022,2023,2024,2025,2026].forEach(y=>{yearTotals[y]=VM[y].reduce((a,b)=>a+b,0);});
+  const recordYear=Object.entries(yearTotals).reduce((a,b)=>b[1]>a[1]?b:a)[0];
+  const recordVal=yearTotals[recordYear];
+  // Actualizar label record dinámicamente
+  const lbl6=document.getElementById('fin-k6-label');
+  if(lbl6)lbl6.textContent='Record — Año '+recordYear;
   setKPI(1,fmt(tot26),'Ene–May 2026');
   setKPI(2,fmt(avg26),(varAvg>=0?'↑':'↓')+Math.abs(varAvg)+'% vs 2025');
   setKPI(3,fmt(cobrar),'Neto: '+fmt(cobrarNeto));
   setKPI(4,fmt(deudaPrest),'Al '+lastPrestamo.fecha);
   setKPI(5,fmt(deudaPrest),'Préstamos pendientes');
-  setKPI(6,fmt(tot24),'Mejor año histórico');
+  setKPI(6,fmt(recordVal),'Mejor año histórico');
+  // ── Contenido expandido ──
+  const MS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  function er(label,val,hl,note){
+    const n=note?`<span style="font-size:10px;opacity:0.5;margin-left:5px">${note}</span>`:'';
+    return `<div class="kpi-exp-row${hl?' hl':''}"><span class="ker">${label}</span><span class="kev">${val}${n}</span></div>`;
+  }
+  function setExp(n,html){const el=document.getElementById('fin-k'+n+'-exp');if(el)el.innerHTML=html;
+    const btn=document.querySelector('[onclick="finToggleKPI('+n+',event)"]');
+    if(btn&&!btn.dataset.label)btn.dataset.label=btn.innerHTML;}
+  // Card 1 — Ventas totales por año
+  setExp(1,[2022,2023,2024,2025,2026].map(y=>er(String(y),fmt(yearTotals[y]),y===2026,y===2026?'YTD':y===+recordYear?'★ record':'')).join(''));
+  // Card 2 — Media mensual por año
+  setExp(2,[2022,2023,2024,2025,2026].map(y=>{const v=VM[y].filter(x=>x>0);const a=v.length?Math.round(v.reduce((s,x)=>s+x,0)/v.length):0;return er(String(y),fmt(a),y===2026,v.length+'m');}).join(''));
+  // Card 3 — Top deudores
+  const byC={};finGetAllFacturas().filter(r=>r.porCobrar>0).forEach(r=>{const k=(r.nombre||r.empresa||'—').slice(0,22);byC[k]=(byC[k]||0)+(r.porCobrar||0);});
+  const topC=Object.entries(byC).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  setExp(3,topC.length?topC.map(([n,v])=>er(n.length>20?n.slice(0,19)+'…':n,fmt(v),false)).join(''):'<div style="font-size:11px;opacity:0.55;padding:4px 0">Sin facturas pendientes</div>');
+  // Card 4 — Historial préstamos (últimas 7 entradas)
+  setExp(4,FIN_PRESTAMOS.slice(-7).reverse().map(r=>{const label=r.fecha+(r.obs?' · '+r.obs.slice(0,16):'');const note=r.prestamo?'+'+fmt(r.prestamo):r.devolucion?'−'+fmt(r.devolucion):'';return er(label,fmt(r.deuda),false,note);}).join(''));
+  // Card 5 — Evolución deuda (último registro de cada año)
+  const dbyY={};FIN_PRESTAMOS.forEach(r=>{const y=r.fecha.slice(-2);dbyY[y]=r.deuda;});
+  setExp(5,Object.entries(dbyY).sort().map(([y,d])=>er("'"+y,fmt(d),false)).join(''));
+  // Card 6 — Totales por año (con mes récord de cada año)
+  setExp(6,[2022,2023,2024,2025,2026].map(y=>{const mx=Math.max(...VM[y]);const mi=VM[y].indexOf(mx);return er(String(y),fmt(yearTotals[y]),y===+recordYear,MS[mi]+' '+fmt(mx));}).join(''));
   // fecha actualización
   const fa=document.getElementById('finActualizadoEn');
   if(fa){const now=new Date();fa.textContent='Datos al '+now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear();}
