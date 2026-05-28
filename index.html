@@ -735,7 +735,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="tab-btn" id="nuevoDropBtn" onclick="toggleNuevoMenu(event)" style="display:flex;align-items:center;gap:4px;background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);font-weight:700">
       ➕ Nuevo <span id="nuevoDropArrow" style="font-size:9px;margin-left:2px;transition:transform .2s">▾</span>
     </button>
-    <div id="nuevoDropPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 10px 36px rgba(0,0,0,0.5);z-index:3000;overflow:hidden;padding:4px 0">
+    <div id="nuevoDropPanel" style="display:none;position:fixed;min-width:210px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 10px 36px rgba(0,0,0,0.5);z-index:99999;overflow:hidden;padding:4px 0">
       <button onclick="closeNuevoMenu();switchTab('nuevo-lead')" class="nuevo-item">👤 Nuevo Lead / Cliente</button>
       <button onclick="closeNuevoMenu();switchTab('nuevo-proveedor')" class="nuevo-item">🏭 Nuevo Proveedor</button>
       <button onclick="closeNuevoMenu();switchTab('nueva-cot')" class="nuevo-item">📋 Nueva Cotización</button>
@@ -8397,10 +8397,20 @@ function irANuevaVenta(){
 function toggleNuevoMenu(e){
   e.stopPropagation();
   const panel=document.getElementById('nuevoDropPanel');
+  const btn=document.getElementById('nuevoDropBtn');
   const arrow=document.getElementById('nuevoDropArrow');
   const isOpen=panel.style.display!=='none';
-  panel.style.display=isOpen?'none':'block';
-  if(arrow)arrow.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+  if(isOpen){
+    panel.style.display='none';
+    if(arrow)arrow.style.transform='rotate(0deg)';
+  } else {
+    const rect=btn.getBoundingClientRect();
+    panel.style.top=(rect.bottom+8)+'px';
+    panel.style.right=(window.innerWidth-rect.right)+'px';
+    panel.style.left='auto';
+    panel.style.display='block';
+    if(arrow)arrow.style.transform='rotate(180deg)';
+  }
 }
 function closeNuevoMenu(){
   const panel=document.getElementById('nuevoDropPanel');
