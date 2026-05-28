@@ -7001,6 +7001,8 @@ async function loadAdsData(){
     renderPendingMutations();
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
+    const btnNueva=document.getElementById('btnNuevaCampana');
+    if(btnNueva) btnNueva.style.display='inline-flex';
   }catch(e){
     document.getElementById('adsCampaignsArea').innerHTML=`<div class="empty-state" style="padding:40px 0"><div class="empty-icon">⚠</div><div style="color:var(--danger)">${e.message}</div><div style="font-size:11px;color:var(--text3);margin-top:8px">Verifica que el Apps Script esté publicado como aplicación web con acceso público</div></div>`;
     ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='—';});
@@ -7042,8 +7044,12 @@ function renderAdsCampaigns(data){
       :'<span style="background:rgba(255,68,68,0.12);color:var(--danger);border:1px solid rgba(255,68,68,0.25);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Pausada</span>';
     const ctrColor=ctr>=5?'var(--success)':ctr>=2?'var(--text)':'var(--danger)';
     const safeNombre=JSON.stringify(c.nombre||'');
+    const acciones=`<span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">
+        <button onclick="event.stopPropagation();openEditCampaign('${c.id}',${safeNombre},'${c.estado}',${c.presupuesto||0})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
+        <button onclick="event.stopPropagation();openDeleteCampaign('${c.id}',${safeNombre})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar">🗑</button>
+      </span>`;
     return `<tr>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</td>
+      <td style="white-space:nowrap"><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</span>${acciones}</td>
       <td>${estadoBadge}</td>
       <td style="text-align:right">${fmtMoney(c.gasto)}</td>
       <td style="text-align:right">${fmtNum(c.impresiones)}</td>
@@ -7052,10 +7058,6 @@ function renderAdsCampaigns(data){
       <td style="text-align:right">${fmtMoney(cpc)}</td>
       <td style="text-align:right;color:var(--success)">${c.conversiones>0?Number(c.conversiones).toFixed(0):'—'}</td>
       <td style="text-align:right">${c.conversiones>0?fmtMoney(cpa):'—'}</td>
-      <td style="text-align:right;white-space:nowrap">
-        <button onclick="openEditCampaign('${c.id}',${safeNombre},'${c.estado}',${c.presupuesto||0})" style="background:none;border:1px solid var(--border2);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer;margin-right:4px" title="Editar">✏</button>
-        <button onclick="openDeleteCampaign('${c.id}',${safeNombre})" style="background:none;border:1px solid rgba(255,68,68,0.3);color:var(--danger);border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer" title="Eliminar">🗑</button>
-      </td>
     </tr>`;
   }).join('');
   const demoBanner=data.demo?`<div style="background:rgba(255,200,0,0.08);border-bottom:1px solid rgba(255,200,0,0.2);padding:7px 16px;font-size:10px;color:#ffc107;display:flex;align-items:center;gap:6px"><span>⚠</span><span>Datos de demostración — <button onclick="toggleAdsConfig()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">configura tu endpoint</button> para ver datos reales</span></div>`:'';
@@ -7064,7 +7066,7 @@ function renderAdsCampaigns(data){
       <div class="card-header"><span class="card-title">Campañas</span><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span><button onclick="openCreateCampaign()" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer;font-weight:600">+ Nueva</button></div></div>
       ${demoBanner}
       <div class="table-wrap"><table>
-        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th><th style="text-align:right"></th></tr></thead>
+        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </div>`;
