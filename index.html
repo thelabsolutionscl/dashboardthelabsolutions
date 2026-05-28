@@ -3488,7 +3488,7 @@ async function loadAllData(){
     if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();}
     if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
     if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
-    if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();}
+    if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();fillCatSelects();}
     if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}renderWatiConfigBtn();}
     if(isFirst) slProgress(92,'Calculando resumen...');
     state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
@@ -6150,7 +6150,15 @@ function getPvCatColor(cat){
   return color||['#888','rgba(136,136,136,0.12)','rgba(136,136,136,0.28)'];
 }
 function fillCatSelects(){
-  const cats=getPvCats();
+  const configured=getPvCats();
+  // Merge with categories actually present in loaded data (preserving configured order, appending extras)
+  const fromData=[];
+  (state?.proveedores||[]).forEach(p=>{
+    const c=p.fields['Categoría'];
+    const names=Array.isArray(c)?c.map(x=>x.name||x):[c].filter(Boolean);
+    names.forEach(n=>{if(n&&!configured.includes(n)&&!fromData.includes(n)) fromData.push(n);});
+  });
+  const cats=[...configured,...fromData];
   const configs=[
     {id:'proveedorCatFilter', first:'<option value="">Todas las categorías</option>'},
     {id:'ss-categoria',       first:'<option value="">— cualquiera —</option>'},
