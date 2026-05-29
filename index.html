@@ -3542,7 +3542,8 @@ async function airtableFetch(table,max=100){
   do{
     let url=`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}?pageSize=${Math.min(max,100)}`;
     if(offset) url+=`&offset=${encodeURIComponent(offset)}`;
-    const r=await fetch(url,{headers:{'Authorization':'Bearer '+t}});
+    const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),20000);
+    let r;try{r=await fetch(url,{headers:{'Authorization':'Bearer '+t},signal:ctrl.signal});}finally{clearTimeout(tid);}
     if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`Airtable ${r.status}: ${j.error?.message||''}`);}
     const d=await r.json();all=[...all,...(d.records||[])];offset=d.offset||null;
     if(all.length>=max&&table!=='Clientes'&&table!=='Cotizaciones') break;
@@ -3894,16 +3895,24 @@ let isLoadingData=false;
 async function loadAllData(){
   if(isLoadingData)return;
   isLoadingData=true;
-  try{
-  if(!getToken()){setStatus('sin token',false);hideSysLoader();showTokenModal();return;}
-  const btn=document.getElementById('refreshBtn');btn.disabled=true;btn.textContent='↺ Cargando...';setStatus('cargando...',false);
   const isFirst=!state.loaded;
-  if(isFirst) slProgress(10,'Conectando con Airtable...');
+  const btn=document.getElementById('refreshBtn');
   try{
+    if(btn){btn.disabled=true;btn.textContent='↺ Cargando...';}
+    setStatus('cargando...',false);
+    if(isFirst) slProgress(10,'Conectando con Airtable...');
     if(isFirst) slProgress(20,'Cargando clientes...');
-    const[cRes,coRes,pRes,rRes,pvRes,monRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50)]);
+    const[cRes,coRes,pRes,rRes,pvRes,monRes]=await Promise.allSettled([
+      airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),
+      airtableFetch('Pedidos',50),airtableFetch('Reportes',20),
+      airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50)
+    ]);
+    // Detectar token inválido (401) — solo avisa, no bloquea el dashboard
+    if(cRes.status==='rejected'&&(cRes.reason?.message||'').includes('401')){
+      localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');
+      setStatus('token inválido',false);toast('⚠ Token Airtable vencido — configura uno nuevo en ⚙','error');
+    }
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
-    else if(cRes.reason?.message?.includes('401')){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');hideSysLoader();showTokenModal();btn.disabled=false;btn.textContent='↺ Actualizar';return;}
     if(isFirst) slProgress(50,'Cargando cotizaciones y pedidos...');
     if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];renderCotizaciones();}
     if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();}
@@ -3915,10 +3924,17 @@ async function loadAllData(){
     state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
     renderOverview();
-    if(isFirst){hideSysLoader();ensureCotizacionFields();}else{toast('Datos actualizados ✓','success');}
-  }catch(e){setStatus('error',false);hideSysLoader();toast('Error: '+e.message,'error');}
-  btn.disabled=false;btn.textContent='↺ Actualizar';
-  }finally{isLoadingData=false;}
+    if(!isFirst) toast('Datos actualizados ✓','success');
+    ensureCotizacionFields();
+  }catch(e){
+    setStatus('error',false);
+    console.error('loadAllData error:',e);
+    toast('Error cargando datos: '+e.message,'error');
+  }finally{
+    isLoadingData=false;
+    hideSysLoader();  // siempre se oculta, sin importar qué pasó
+    if(btn){btn.disabled=false;btn.textContent='↺ Actualizar';}
+  }
 }
 async function loadAllDataSilent(){
   if(!getToken()) return;
