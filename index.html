@@ -3094,14 +3094,15 @@ function main() {
   <div class="modal-backdrop" onclick="closeSIIConfigModal()"></div>
   <div class="modal-card" style="max-width:460px">
     <div class="modal-title">🇨🇱 Configuración SII / DTE</div>
-    <p class="modal-desc" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px">Ingresa la URL del webhook de Make.com que procesará el DTE con tu proveedor (Lioren, HaulmerDTE, Bsale, etc.).<br>El webhook debe retornar <code style="background:var(--surface3);padding:1px 4px;border-radius:3px;font-size:10px">{"dte_numero":"123","pdf_url":"..."}</code></p>
+    <p class="modal-desc" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px">Conecta directamente con el SII usando tu Cloudflare Worker.<br>El Worker maneja la firma XML, el token SII y la subida del DTE.</p>
     <div id="siiStatusBox" style="font-size:11px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:7px 11px;line-height:1.6;margin-bottom:12px">Sin configurar</div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <div class="field-group"><label class="field-label">URL Webhook Make.com</label><input class="field-input" id="siiWebhookUrl" placeholder="https://hook.us1.make.com/xxxxxxxxxxxxxxxx"></div>
+      <div class="field-group"><label class="field-label">URL del Cloudflare Worker</label><input class="field-input" id="siiWebhookUrl" placeholder="https://sii-dte-worker.TU-USUARIO.workers.dev"></div>
       <div class="field-group"><label class="field-label">RUT Emisor (tu empresa)</label><input class="field-input" id="siiRutEmisor" placeholder="77.190.661-3"></div>
       <div class="field-group"><label class="field-label">Razón Social Emisor</label><input class="field-input" id="siiRazonEmisor" placeholder="The Lab Solutions SpA"></div>
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;align-items:center">
+      <button class="btn btn-ghost btn-sm" onclick="testSIIWorker()" style="margin-right:auto;font-size:10px">🔌 Probar</button>
       <button class="btn btn-ghost btn-sm" onclick="closeSIIConfigModal()">Cancelar</button>
       <button class="btn btn-primary btn-sm" onclick="saveSIIConfig()">💾 Guardar</button>
     </div>
@@ -9437,14 +9438,34 @@ function saveSIIConfig(){
   const webhookUrl=(document.getElementById('siiWebhookUrl').value||'').trim();
   const rutEmisor=(document.getElementById('siiRutEmisor').value||'').trim();
   const razonEmisor=(document.getElementById('siiRazonEmisor').value||'').trim();
-  if(!webhookUrl){toast('La URL del webhook es requerida','error');return;}
+  if(!webhookUrl){toast('La URL del Worker es requerida','error');return;}
   localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl,rutEmisor,razonEmisor}));
   toast('✓ Configuración SII guardada','success');
   const sb=document.getElementById('dteSIIStatus');
   if(sb&&document.getElementById('dteModal').style.display!=='none'){
-    sb.style.color='var(--accent)';sb.innerHTML=`✅ Webhook configurado — emisor: <strong>${escapeHtml(razonEmisor||rutEmisor||'Tu empresa')}</strong>`;
+    sb.style.color='var(--accent)';sb.innerHTML='✅ Worker SII configurado — emisor: <strong>'+escapeHtml(razonEmisor||rutEmisor||'Tu empresa')+'</strong>';
   }
   closeSIIConfigModal();
+}
+async function testSIIWorker(){
+  const url=(document.getElementById('siiWebhookUrl').value||'').trim();
+  if(!url){toast('Ingresa la URL del Worker primero','error');return;}
+  const sb=document.getElementById('siiStatusBox');
+  if(sb){sb.style.color='var(--text3)';sb.textContent='⏳ Probando conexión...';}
+  try{
+    const r=await fetch(url+'/health',{method:'GET'});
+    const d=await r.json();
+    if(r.ok){
+      if(sb){sb.style.color='var(--accent)';sb.innerHTML='✅ Worker activo — env: <strong>'+escapeHtml(d.sii_env||'?')+'</strong> | RUT: '+escapeHtml(d.rut_emisor||'?')+'<br>'+(d.cert_loaded?'🔐 Certificado cargado':'⚠ Certificado no cargado');}
+      toast('✅ Worker SII conectado','success');
+    }else{
+      if(sb){sb.style.color='var(--danger)';sb.textContent='⛔ Error '+r.status+': '+JSON.stringify(d);}
+      toast('Error: '+r.status,'error');
+    }
+  }catch(e){
+    if(sb){sb.style.color='var(--danger)';sb.textContent='⛔ No se pudo conectar: '+e.message;}
+    toast('Error de conexión: '+e.message,'error');
+  }
 }
 </script>
 

@@ -1,0 +1,27 @@
+name = "sii-dte-worker"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cambiar a "certificacion" para pruebas con maullin.sii.cl
+[vars]
+SII_ENV = "certificacion"
+
+# KV namespace para folios y CAFs (crear con: wrangler kv namespace create FOLIOS_KV)
+[[kv_namespaces]]
+binding = "FOLIOS_KV"
+id = "REEMPLAZAR_CON_TU_KV_ID"
+
+# Secrets — configurar con: wrangler secret put <NOMBRE>
+#
+# CERT_PFX_BASE64     base64 del archivo .pfx  →  base64 -i empresa.pfx
+# CERT_PFX_PASSWORD   contraseña del .pfx (puede ser cadena vacía "")
+# RUT_EMISOR          ej: "77.190.661-3"
+# RAZON_SOCIAL        ej: "The Lab Solutions SpA"
+# GIRO_EMISOR         ej: "Fabricación mediante impresión 3D"
+# ACTECO              código actividad económica SII  ej: "329900"
+# DIR_EMISOR          ej: "Avda. Las Torres 1234"
+# CMNA_EMISOR         ej: "Las Condes"
+# CIUDAD_EMISOR       ej: "Santiago"
+# RESOLUCION_FECHA    ej: "2024-01-15"  (de tu resolución SII)
+# RESOLUCION_NUMERO   ej: "0"  (MiPymes usan 0)
