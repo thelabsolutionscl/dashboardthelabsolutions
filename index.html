@@ -372,6 +372,17 @@ body.kiosk .tab-content{padding-top:12px!important;}
 .kpi-exp-row .ker{color:rgba(255,255,255,0.62);}
 .kpi-exp-row .kev{font-weight:600;color:rgba(255,255,255,0.88);}
 .kpi-exp-row.hl .kev{color:var(--accent);}
+
+/* ── VISUAL AI SECTION ─────────────────────────────────────── */
+#tab-visual .vai-frame-wrap{position:relative;width:100%;height:calc(100vh - 160px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);}
+#tab-visual .vai-frame-wrap iframe{width:100%;height:100%;border:none;display:block;}
+#tab-visual .vai-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+#tab-visual .vai-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);}
+#tab-visual .vai-status-dot{width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;}
+#tab-visual .vai-open-btn{background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:flex;align-items:center;gap:5px;}
+#tab-visual .vai-open-btn:hover{background:rgba(0,212,204,0.2);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
 </style>
 <style>
 /* ══ UI/UX Pro Max — mejoras visuales v5.1 ══════════════════════ */
@@ -897,6 +908,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')">📊 Reportes</button>
     <button class="tab-btn" data-tab="web" onclick="switchTab('web')">🌐 Web</button>
     <button class="tab-btn" data-tab="finanzas" onclick="switchTab('finanzas')">💰 Finanzas</button>
+    <button class="tab-btn" data-tab="visual" onclick="switchTab('visual')">🎨 Visual AI</button>
   </nav>
   <div id="nuevoDropdown" style="position:relative;display:inline-flex;align-items:center;flex-shrink:0">
     <button class="tab-btn" id="nuevoDropBtn" onclick="toggleNuevoMenu(event)" style="display:flex;align-items:center;gap:4px;background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);font-weight:700">
@@ -4485,6 +4497,37 @@ ${notas?`<div class="notas-box"><strong>Notas:</strong> ${escHtml(notas)}</div>`
 <tr style="background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Email</td><td style="font-weight:500">PAGOS@THELAB.SOLUTIONS</td></tr>
 </table></div>
 <div class="footer"><div class="left">The Lab Solutions SpA · Santiago, Chile<br>hola@thelab.solutions · +56 9 7180 6142</div><div class="validity">Válida hasta: <strong>${escHtml(vto)}</strong></div></div>
+
+<!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
+<div class="tab-panel" id="tab-visual">
+  <div class="section-header" style="margin-bottom:16px">
+    <div class="section-title">🎨 Herramientas Visuales</div>
+    <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
+  </div>
+  <div id="tab-visual" style="padding:0">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
+        OpenGen Studio — Live
+      </div>
+      <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
+         style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+        ↗ Abrir en nueva pestaña
+      </a>
+      <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
+    </div>
+    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+      <iframe
+        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
+        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
+        loading="lazy"
+        allow="camera; microphone; clipboard-write; fullscreen"
+        title="OpenGen Studio">
+      </iframe>
+    </div>
+  </div>
+</div>
+
 </body></html>`;
   return {html,num,c};
 }
@@ -4494,7 +4537,69 @@ function generarPDFCotizacion(id){
 }
 function descargarPDFCotizacion(id){
   const res=buildCotizacionDoc(id);if(!res){toast('Cotización no encontrada','error');return;}
-  const htmlWithPrint=res.html.replace('</body></html>','<script>window.onload=function(){window.focus();window.print();};<\/script></body></html>');
+  const htmlWithPrint=res.html.replace('
+<!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
+<div class="tab-panel" id="tab-visual">
+  <div class="section-header" style="margin-bottom:16px">
+    <div class="section-title">🎨 Herramientas Visuales</div>
+    <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
+  </div>
+  <div id="tab-visual" style="padding:0">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
+        OpenGen Studio — Live
+      </div>
+      <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
+         style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+        ↗ Abrir en nueva pestaña
+      </a>
+      <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
+    </div>
+    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+      <iframe
+        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
+        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
+        loading="lazy"
+        allow="camera; microphone; clipboard-write; fullscreen"
+        title="OpenGen Studio">
+      </iframe>
+    </div>
+  </div>
+</div>
+
+</body></html>','<script>window.onload=function(){window.focus();window.print();};<\/script>
+<!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
+<div class="tab-panel" id="tab-visual">
+  <div class="section-header" style="margin-bottom:16px">
+    <div class="section-title">🎨 Herramientas Visuales</div>
+    <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
+  </div>
+  <div id="tab-visual" style="padding:0">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
+        OpenGen Studio — Live
+      </div>
+      <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
+         style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+        ↗ Abrir en nueva pestaña
+      </a>
+      <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
+    </div>
+    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+      <iframe
+        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
+        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
+        loading="lazy"
+        allow="camera; microphone; clipboard-write; fullscreen"
+        title="OpenGen Studio">
+      </iframe>
+    </div>
+  </div>
+</div>
+
+</body></html>');
   const blob=new Blob([htmlWithPrint],{type:'text/html;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const win=window.open(url,'_blank');
@@ -4566,7 +4671,38 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
   <td colspan="4"></td>
 </tr></tfoot></table>
 <div class="footer"><div class="left">The Lab Solutions SpA · Santiago, Chile · hola@thelab.solutions · +56 9 7180 6142</div><div class="right">Reporte generado desde Centro de Comando · ${escH(now)}</div></div>
-<script>window.onload=()=>window.print();<\/script></body></html>`;
+<script>window.onload=()=>window.print();<\/script>
+<!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
+<div class="tab-panel" id="tab-visual">
+  <div class="section-header" style="margin-bottom:16px">
+    <div class="section-title">🎨 Herramientas Visuales</div>
+    <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
+  </div>
+  <div id="tab-visual" style="padding:0">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
+        OpenGen Studio — Live
+      </div>
+      <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
+         style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+        ↗ Abrir en nueva pestaña
+      </a>
+      <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
+    </div>
+    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+      <iframe
+        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
+        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
+        loading="lazy"
+        allow="camera; microphone; clipboard-write; fullscreen"
+        title="OpenGen Studio">
+      </iframe>
+    </div>
+  </div>
+</div>
+
+</body></html>`;
   const blob=new Blob([html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const win=window.open(url,'_blank');if(!win) toast('Permite ventanas emergentes para descargar el PDF','error');setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
@@ -9115,6 +9251,37 @@ document.addEventListener('click',function(e){
   if(dd&&!dd.contains(e.target))closeNuevoMenu();
 });
 </script>
+
+
+<!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
+<div class="tab-panel" id="tab-visual">
+  <div class="section-header" style="margin-bottom:16px">
+    <div class="section-title">🎨 Herramientas Visuales</div>
+    <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
+  </div>
+  <div id="tab-visual" style="padding:0">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
+        OpenGen Studio — Live
+      </div>
+      <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
+         style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+        ↗ Abrir en nueva pestaña
+      </a>
+      <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
+    </div>
+    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+      <iframe
+        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
+        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
+        loading="lazy"
+        allow="camera; microphone; clipboard-write; fullscreen"
+        title="OpenGen Studio">
+      </iframe>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
