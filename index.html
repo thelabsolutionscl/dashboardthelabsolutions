@@ -1239,6 +1239,76 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       </div>
     </div>
   </div>
+
+  <!-- DTE / SII MODAL -->
+  <div id="dteModal" class="modal-overlay" style="display:none">
+    <div class="modal-backdrop" onclick="closeDTEModal()"></div>
+    <div class="modal-card" style="max-width:540px;width:95%">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="modal-title">📄 Emitir DTE — SII Chile</div>
+        <button onclick="closeDTEModal()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button>
+      </div>
+      <input type="hidden" id="dtePedidoId">
+      <div id="dteSIIStatus" style="font-size:11px;background:var(--surface2);border-radius:6px;padding:7px 11px;margin-bottom:12px;color:var(--text3)">Sin configurar</div>
+      <div class="form-grid">
+        <div class="field-group">
+          <label class="field-label">Tipo Documento</label>
+          <select class="field-select" id="dteTipoDoc">
+            <option value="33">Factura Electrónica (33)</option>
+            <option value="39">Boleta Electrónica (39)</option>
+            <option value="61">Nota de Crédito (61)</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Referencia Pedido</label>
+          <input class="field-input" id="dteRefPedido" readonly style="opacity:0.7">
+        </div>
+        <div class="field-group">
+          <label class="field-label">RUT Receptor</label>
+          <input class="field-input" id="dteRut" placeholder="76.123.456-7" oninput="dteValidarRut(this)">
+          <div id="dteRutMsg" style="font-size:10px;margin-top:3px;color:var(--text3)"></div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Razón Social</label>
+          <input class="field-input" id="dteRazonSocial" placeholder="Empresa S.A.">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Giro del Receptor</label>
+          <input class="field-input" id="dteGiro" placeholder="Comercio al por menor">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Email Receptor</label>
+          <input class="field-input" id="dteEmail" type="email" placeholder="contacto@empresa.cl">
+        </div>
+        <div class="field-group form-full">
+          <label class="field-label">Descripción del Servicio / Producto</label>
+          <input class="field-input" id="dteDescripcion" placeholder="Impresión 3D y servicios de fabricación digital">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Monto Neto (CLP)</label>
+          <input class="field-input" id="dteMontoNeto" type="number" min="0" oninput="dteRecalcular()" placeholder="100000">
+        </div>
+        <div class="field-group">
+          <label class="field-label">IVA 19%</label>
+          <input class="field-input" id="dteIva" readonly style="opacity:0.7">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Total (CLP)</label>
+          <input class="field-input" id="dteTotal" readonly style="font-weight:700;color:var(--accent);opacity:1">
+        </div>
+        <div class="field-group form-full">
+          <label class="field-label">Observaciones (opcional)</label>
+          <input class="field-input" id="dteObservaciones" placeholder="Según cotización COT-###">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="openSIIConfigModal()" style="margin-right:auto;font-size:10px;opacity:0.75">⚙ Make.com</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeDTEModal()">Cancelar</button>
+        <button class="btn btn-primary btn-sm" onclick="emitirDTE()" id="dteSubmitBtn">📤 Emitir DTE</button>
+      </div>
+    </div>
+  </div>
+
   <div id="pedidosKanban" style="display:none"></div>
   <div id="pedidosCalendario" style="display:none"></div>
   <div id="qaModal" class="modal-overlay" style="display:none">
@@ -3019,6 +3089,25 @@ function main() {
   </div>
 </div>
 
+<!-- SII / DTE CONFIG MODAL -->
+<div id="siiConfigModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeSIIConfigModal()"></div>
+  <div class="modal-card" style="max-width:460px">
+    <div class="modal-title">🇨🇱 Configuración SII / DTE</div>
+    <p class="modal-desc" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px">Ingresa la URL del webhook de Make.com que procesará el DTE con tu proveedor (Lioren, HaulmerDTE, Bsale, etc.).<br>El webhook debe retornar <code style="background:var(--surface3);padding:1px 4px;border-radius:3px;font-size:10px">{"dte_numero":"123","pdf_url":"..."}</code></p>
+    <div id="siiStatusBox" style="font-size:11px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:7px 11px;line-height:1.6;margin-bottom:12px">Sin configurar</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="field-group"><label class="field-label">URL Webhook Make.com</label><input class="field-input" id="siiWebhookUrl" placeholder="https://hook.us1.make.com/xxxxxxxxxxxxxxxx"></div>
+      <div class="field-group"><label class="field-label">RUT Emisor (tu empresa)</label><input class="field-input" id="siiRutEmisor" placeholder="77.190.661-3"></div>
+      <div class="field-group"><label class="field-label">Razón Social Emisor</label><input class="field-input" id="siiRazonEmisor" placeholder="The Lab Solutions SpA"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-ghost btn-sm" onclick="closeSIIConfigModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="saveSIIConfig()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- WATI CONFIG MODAL -->
 <div id="watiModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeWatiModal()"></div>
@@ -4716,6 +4805,8 @@ function renderPedidos(filter){
     const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
     let advBtn='';
     if(idx>=0&&idx<stages.length-1) advBtn=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') advBtn='<span class="badge badge-green">✓</span>';
+    const dteNum=f['DTE N°']||'';
+    const dteBtn=`<button class="btn-mini${dteNum?' btn-mini-green':''}" onclick="openDTEModal('${p.id}')" title="${dteNum?'DTE N° '+escapeHtml(dteNum):'Emitir DTE / Factura SII'}">📄${dteNum?' ✓':''}</button>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -4728,7 +4819,7 @@ function renderPedidos(filter){
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
-    <td><div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${advBtn}<button class="btn-mini" onclick="openEditPedidoModal('${p.id}')" title="Editar">✏️</button><button class="btn-mini btn-mini-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" title="Eliminar">🗑</button></div></td></tr>`;
+    <td><div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${advBtn}${dteBtn}<button class="btn-mini" onclick="openEditPedidoModal('${p.id}')" title="Editar">✏️</button><button class="btn-mini btn-mini-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" title="Eliminar">🗑</button></div></td></tr>`;
   }).join('');
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
@@ -9250,6 +9341,111 @@ document.addEventListener('click',function(e){
   const dd=document.getElementById('nuevoDropdown');
   if(dd&&!dd.contains(e.target))closeNuevoMenu();
 });
+
+// ── SII / DTE ─────────────────────────────────────────────────
+function getSIICfg(){try{return JSON.parse(localStorage.getItem('sii_cfg')||'{}');}catch(e){return {};}}
+function openDTEModal(pedidoId){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const f=p.fields;
+  const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:f['Cliente'];
+  const c=state.clientes.find(x=>x.id===clienteId);
+  const cf=c?.fields||{};
+  document.getElementById('dtePedidoId').value=pedidoId;
+  document.getElementById('dteRefPedido').value=f['N° Pedido']||'';
+  document.getElementById('dteRut').value=cf['RUT']||'';
+  document.getElementById('dteRazonSocial').value=cf['Empresa']||'';
+  document.getElementById('dteGiro').value=cf['Industria / Rubro']||'';
+  document.getElementById('dteEmail').value=cf['Email']||'';
+  document.getElementById('dteDescripcion').value=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'Servicio de fabricación digital';
+  const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
+  document.getElementById('dteMontoNeto').value=neto||'';
+  dteRecalcular();
+  document.getElementById('dteObservaciones').value=('Pedido '+(f['N° Pedido']||'')).trim();
+  document.getElementById('dteRutMsg').textContent='';
+  const btn=document.getElementById('dteSubmitBtn');if(btn){btn.disabled=false;btn.textContent='📤 Emitir DTE';}
+  const dteNum=f['DTE N°']||'';
+  if(dteNum&&btn){btn.textContent='📤 Emitir nuevo DTE';btn.style.opacity='0.85';}else if(btn){btn.style.opacity='1';}
+  const cfg=getSIICfg();
+  const sb=document.getElementById('dteSIIStatus');
+  if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML='\u2705 Webhook configurado \u2014 emisor: <strong>'+escapeHtml(cfg.razonEmisor||cfg.rutEmisor||'Tu empresa')+'</strong>'+(dteNum?' &nbsp;&middot;&nbsp; <span style="color:var(--accent3)">DTE anterior: N\u00b0 '+escapeHtml(dteNum)+'</span>':'');}
+  else{sb.style.color='var(--text3)';sb.innerHTML='⚠ Sin configurar — <a href="#" onclick="openSIIConfigModal();event.preventDefault()" style="color:var(--accent)">configura el webhook de Make.com</a>';}
+  document.getElementById('dteModal').style.display='flex';
+}
+function closeDTEModal(){document.getElementById('dteModal').style.display='none';}
+function dteRecalcular(){
+  const neto=parseInt(document.getElementById('dteMontoNeto').value)||0;
+  const iva=Math.round(neto*0.19);
+  document.getElementById('dteIva').value=neto?formatCLP(iva):'';
+  document.getElementById('dteTotal').value=neto?formatCLP(neto+iva):'';
+}
+function dteValidarRut(el){
+  const msg=document.getElementById('dteRutMsg');const v=(el.value||'').trim();
+  if(!v){msg.textContent='';return;}
+  if(validRUT(v)){msg.style.color='var(--accent)';msg.textContent='✓ RUT válido';el.value=formatRUT(v);}
+  else{msg.style.color='var(--danger)';msg.textContent='✗ RUT inválido — revisa el dígito verificador';}
+}
+async function emitirDTE(){
+  const cfg=getSIICfg();
+  if(!cfg?.webhookUrl){toast('Configura el webhook de Make.com primero','error');openSIIConfigModal();return;}
+  const pedidoId=document.getElementById('dtePedidoId').value;
+  const rut=(document.getElementById('dteRut').value||'').trim();
+  const razonSocial=(document.getElementById('dteRazonSocial').value||'').trim();
+  const neto=parseInt(document.getElementById('dteMontoNeto').value)||0;
+  if(!rut||!validRUT(rut)){toast('RUT receptor inválido — revisa el dígito verificador','error');return;}
+  if(!razonSocial){toast('La razón social es requerida','error');return;}
+  if(!neto){toast('El monto neto debe ser mayor a 0','error');return;}
+  const btn=document.getElementById('dteSubmitBtn');btn.disabled=true;btn.textContent='⏳ Emitiendo...';
+  const iva=Math.round(neto*0.19);
+  const payload={
+    tipo_documento:document.getElementById('dteTipoDoc').value,
+    referencia:document.getElementById('dteRefPedido').value,
+    emisor:{rut:cfg.rutEmisor||'',razon_social:cfg.razonEmisor||''},
+    receptor:{rut:formatRUT(rut),razon_social:razonSocial,giro:document.getElementById('dteGiro').value,email:document.getElementById('dteEmail').value},
+    detalle:[{nombre:document.getElementById('dteDescripcion').value||'Servicio de fabricación digital',cantidad:1,precio_unitario:neto,monto_neto:neto}],
+    totales:{neto,iva,total:neto+iva},
+    observaciones:document.getElementById('dteObservaciones').value
+  };
+  try{
+    const r=await fetch(cfg.webhookUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!r.ok) throw new Error(`HTTP ${r.status} — verifica la URL del webhook`);
+    let resp={};try{resp=await r.json();}catch(e){}
+    const dteNum=resp.dte_numero||resp.folio||resp.numero||resp.id||'';
+    const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||'';
+    if(dteNum){
+      try{await airtableWrite('Pedidos','PATCH',pedidoId,{'DTE N°':String(dteNum)});}catch(e){}
+      const p=state.pedidos.find(x=>x.id===pedidoId);if(p) p.fields['DTE N°']=String(dteNum);
+      renderPedidos();
+    }
+    toast('\u2705 DTE emitido'+(dteNum?' \u2014 N\u00b0 '+dteNum:'')+(pdfUrl?' \u00b7 <a href="'+escapeHtml(pdfUrl)+'" target="_blank" style="color:var(--accent)">Ver PDF</a>':''),'success');
+    if(pdfUrl) window.open(pdfUrl,'_blank');
+    closeDTEModal();
+  }catch(e){toast('Error al emitir DTE: '+e.message,'error');}
+  btn.disabled=false;btn.textContent='📤 Emitir DTE';
+}
+function openSIIConfigModal(){
+  const cfg=getSIICfg();
+  document.getElementById('siiWebhookUrl').value=cfg.webhookUrl||'';
+  document.getElementById('siiRutEmisor').value=cfg.rutEmisor||'';
+  document.getElementById('siiRazonEmisor').value=cfg.razonEmisor||'';
+  const sb=document.getElementById('siiStatusBox');
+  if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML=`✅ Webhook activo: <strong>${escapeHtml(cfg.webhookUrl)}</strong>`;}
+  else{sb.style.color='var(--text3)';sb.textContent='Sin configurar — ingresa la URL del webhook de Make.com.';}
+  document.getElementById('siiConfigModal').style.display='flex';
+}
+function closeSIIConfigModal(){document.getElementById('siiConfigModal').style.display='none';}
+function saveSIIConfig(){
+  const webhookUrl=(document.getElementById('siiWebhookUrl').value||'').trim();
+  const rutEmisor=(document.getElementById('siiRutEmisor').value||'').trim();
+  const razonEmisor=(document.getElementById('siiRazonEmisor').value||'').trim();
+  if(!webhookUrl){toast('La URL del webhook es requerida','error');return;}
+  localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl,rutEmisor,razonEmisor}));
+  toast('✓ Configuración SII guardada','success');
+  const sb=document.getElementById('dteSIIStatus');
+  if(sb&&document.getElementById('dteModal').style.display!=='none'){
+    sb.style.color='var(--accent)';sb.innerHTML=`✅ Webhook configurado — emisor: <strong>${escapeHtml(razonEmisor||rutEmisor||'Tu empresa')}</strong>`;
+  }
+  closeSIIConfigModal();
+}
 </script>
 
 
