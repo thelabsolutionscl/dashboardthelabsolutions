@@ -7309,7 +7309,7 @@ function initDashboard(){
   if(user&&user.role==='demo'){
     enableDemoMode();
     slProgress(5,'Cargando datos demo...');
-    loadAllData().then(()=>{hideSysLoader();setStatus('modo demo',true);startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
+    loadAllData().then(()=>{setStatus('modo demo',true);startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
     initMobileTableLabels();
     window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
     document.addEventListener('keydown',e=>{
