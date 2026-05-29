@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<!-- v20260528-4 -->
 <title>The Lab Solutions — Centro de Comando</title>
 <link rel="icon" type="image/png" href="https://thelab.solutions/wp-content/uploads/2024/05/faviconthelab.png">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -2115,6 +2119,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <option value="90">Últimos 90 días</option>
         </select>
         <button class="btn btn-ghost btn-sm" onclick="toggleAdsConfig()">⚙ Configurar</button>
+        <button class="btn btn-ghost btn-sm" onclick="openCreateCampaign()" id="btnNuevaCampana">+ Nueva Campaña</button>
         <button class="btn btn-primary btn-sm" onclick="loadAdsData()">↺ Actualizar</button>
       </div>
     </div>
@@ -2142,23 +2147,45 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </div>
         <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" onclick="saveAdsConfig()">💾 Guardar</button>
+          <button class="btn btn-ghost btn-sm" onclick="testAdsEndpoint()">🔗 Probar URL</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('adsScriptBox').style.display=document.getElementById('adsScriptBox').style.display==='none'?'block':'none'">📋 Ver Apps Script</button>
         </div>
         <!-- Apps Script instructions -->
         <div id="adsScriptBox" style="display:none;padding:0 16px 16px">
           <div style="background:#1a1a2e;border:1px solid rgba(255,200,0,0.25);border-radius:8px;padding:12px">
-            <div style="font-size:11px;font-weight:600;color:#ffc107;margin-bottom:6px">⚙ Configuración — 2 scripts</div>
-            <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.6"><strong>Por qué 2 scripts:</strong> AdsApp (la API de datos de Ads) solo corre <em>dentro</em> de Google Ads, nunca en Apps Script.<br><br><strong style="color:#e6edf3">Script 1 — Apps Script</strong> (script.google.com, el que ya tienes desplegado):<br>Reemplaza TODO el código con el bloque de abajo → Desplegar → Nueva versión → Acceso: Cualquier persona.<br><br><strong style="color:#e6edf3">Script 2 — Google Ads Script</strong> (ads.google.com → Herramientas y config. → Scripts):<br>Crea un nuevo script con el 2° bloque, ejecútalo manualmente una vez y programa diario.</div>
+            <div style="font-size:11px;font-weight:600;color:#ffc107;margin-bottom:6px">⚙ Configuración — 2 scripts obligatorios</div>
+            <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.6">
+              <strong>Por qué 2 scripts:</strong> <code>AdsApp</code> solo existe <em>dentro</em> de Google Ads y no puede desplegarse como App Web. Se necesita un puente.<br><br>
+              <strong style="color:#e6edf3">Script 1 — Apps Script</strong> (script.google.com) = el endpoint web:<br>
+              Crea un proyecto nuevo → pega el código → <em>Desplegar → App Web → Ejecutar como: Yo → Acceso: Cualquier persona</em> → copia la URL al campo Endpoint arriba.<br><br>
+              <strong style="color:#e6edf3">Script 2 — Google Ads Script</strong> (ads.google.com → Herramientas → Scripts):<br>
+              Crea un nuevo script → pega el 2° bloque → actualiza <code>ENDPOINT</code> con la URL del Script 1 → ejecútalo manualmente una vez y programa diario.
+            </div>
             <div style="position:relative">
+              <div style="font-size:10px;font-weight:600;color:#e6edf3;margin-bottom:6px">Script 1 — Apps Script (script.google.com) — el endpoint web</div>
               <pre id="adsScriptCode" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:9.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">// ── Script 1: Apps Script (script.google.com) ──────────────────────────
-// Reemplaza TODO el contenido del proyecto y vuelve a desplegar (nueva versión).
+// Proyecto nuevo → pega este código → Desplegar → App Web
+// Ejecutar como: Yo  |  Quién tiene acceso: Cualquier persona
 
-var SECRET = 'thelab2025'; // clave compartida con el Script 2
+var SECRET = 'thelab2025';
 
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     if (body.secret !== SECRET) return json({ok:false, error:'No autorizado'});
+
+    if (body.type === 'mutation') {
+      var muts = JSON.parse(PropertiesService.getScriptProperties().getProperty('ads_mutations') || '[]');
+      muts.push({op:body.op, id:body.id||'', data:body.data, timestamp:body.timestamp||new Date().toISOString(), status:'pending'});
+      PropertiesService.getScriptProperties().setProperty('ads_mutations', JSON.stringify(muts));
+      return json({ok:true, queued:true, pending:muts.filter(function(m){return m.status==='pending';}).length});
+    }
+
+    if (body.type === 'update_mutations') {
+      PropertiesService.getScriptProperties().setProperty('ads_mutations', JSON.stringify(body.mutations));
+      return json({ok:true});
+    }
+
     PropertiesService.getScriptProperties().setProperty('ads_cache', JSON.stringify({
       guardado: new Date().toISOString(),
       gasto: body.gasto, impresiones: body.impresiones, clics: body.clics,
@@ -2171,11 +2198,17 @@ function doPost(e) {
 
 function doGet(e) {
   try {
+    var action = e &amp;&amp; e.parameter &amp;&amp; e.parameter.action;
+    if (action === 'mutations') {
+      var muts = JSON.parse(PropertiesService.getScriptProperties().getProperty('ads_mutations') || '[]');
+      return json({ok:true, mutations:muts});
+    }
+    var days = parseInt((e &amp;&amp; e.parameter &amp;&amp; e.parameter.days) || 30);
     var raw = PropertiesService.getScriptProperties().getProperty('ads_cache');
-    if (!raw) return json({ok:false, error:'Sin datos — ejecuta primero el Script 2 en Google Ads'});
+    if (!raw) return json({ok:false, error:'Sin datos aún — ejecuta el Script 2 en Google Ads primero'});
     var data = JSON.parse(raw);
     data.ok = true;
-    data.periodo = '30 días';
+    data.periodo = days + ' días';
     return json(data);
   } catch(err) { return json({ok:false, error:err.message}); }
 }
@@ -2189,24 +2222,23 @@ function json(obj) {
             <div style="margin-top:12px;position:relative">
               <div style="font-size:10px;font-weight:600;color:#e6edf3;margin-bottom:6px">Script 2 — Google Ads Script (ads.google.com → Herramientas → Scripts)</div>
               <pre id="adsScriptCode2" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:9.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">// ── Script 2: Google Ads Script ────────────────────────────────────────
-// ads.google.com → Herramientas y configuración → Scripts → + Nuevo script
-// Programar: diario. Ejecutar manualmente la primera vez.
+// ads.google.com → Herramientas → Scripts → + Nuevo script
+// Actualiza ENDPOINT con la URL del Script 1. Programa ejecución: diaria.
 
-var ENDPOINT = 'https://script.google.com/macros/s/AKfycbyn8h8PcEpPc97TD45vJgSnRRIWyhQ6ANRbFoE_ZsvF2S9Iy58y4cnG7iO_yY_gxcRuNQ/exec';
-var SECRET   = 'thelab2025'; // misma clave que en el Script 1
+var ENDPOINT = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
+var SECRET   = 'thelab2025';
 
 function main() {
+  // 1. Sincronizar datos al Script 1
   var report = AdsApp.report(
     'SELECT campaign.name, campaign.id, campaign.status, ' +
-    'campaign.budget_amount_micros, metrics.impressions, metrics.clicks, ' +
+    'campaign_budget.amount_micros, metrics.impressions, metrics.clicks, ' +
     'metrics.cost_micros, metrics.conversions, metrics.conversions_value ' +
     'FROM campaign WHERE segments.date DURING LAST_30_DAYS ' +
     'ORDER BY metrics.cost_micros DESC'
   );
-
   var rows = report.rows();
   var campaigns = [], t = {gasto:0,impresiones:0,clics:0,conversiones:0,valor_conversion:0};
-
   while (rows.hasNext()) {
     var row = rows.next();
     var g  = Math.round(parseInt(row['metrics.cost_micros'])/1e6);
@@ -2217,19 +2249,67 @@ function main() {
     t.gasto+=g; t.impresiones+=i; t.clics+=c; t.conversiones+=cv; t.valor_conversion+=vc;
     campaigns.push({
       id:row['campaign.id'], nombre:row['campaign.name'], estado:row['campaign.status'],
-      presupuesto:Math.round(parseInt(row['campaign.budget_amount_micros']||0)/1e6),
+      presupuesto:Math.round(parseInt(row['campaign_budget.amount_micros']||0)/1e6),
       gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
     });
   }
-
   UrlFetchApp.fetch(ENDPOINT, {
     method:'post', contentType:'application/json', muteHttpExceptions:true,
-    payload:JSON.stringify({
-      secret:SECRET, campanas:campaigns,
+    payload:JSON.stringify({secret:SECRET, campanas:campaigns,
       gasto:t.gasto, impresiones:t.impresiones, clics:t.clics,
-      conversiones:t.conversiones, valor_conversion:t.valor_conversion
-    })
+      conversiones:t.conversiones, valor_conversion:t.valor_conversion})
   });
+
+  // 2. Procesar mutaciones pendientes del dashboard
+  try {
+    var mutResp = UrlFetchApp.fetch(ENDPOINT+'?action=mutations', {muteHttpExceptions:true});
+    var mutData = JSON.parse(mutResp.getContentText());
+    if (!mutData.ok || !mutData.mutations) return;
+    var muts = mutData.mutations;
+    var changed = false;
+    for (var k=0; k&lt;muts.length; k++) {
+      var m = muts[k];
+      if (m.status !== 'pending') continue;
+      try {
+        if (m.op === 'create') {
+          var budget = AdsApp.newCampaignBudgetBuilder()
+            .withName('Budget_'+m.data.nombre)
+            .withAmount(m.data.presupuesto/1000)
+            .build().getResult();
+          AdsApp.newCampaignBuilder()
+            .withName(m.data.nombre)
+            .withBudget(budget)
+            .withStatus(m.data.estado||'ENABLED')
+            .withSearchSettings().campaigns().build();
+          muts[k].status = 'aplicado';
+        } else if (m.op === 'edit') {
+          var iter = AdsApp.campaigns().withIds([m.id]).get();
+          if (iter.hasNext()) {
+            var camp = iter.next();
+            if (m.data.nombre) camp.setName(m.data.nombre);
+            if (m.data.estado === 'ENABLED') camp.enable();
+            if (m.data.estado === 'PAUSED') camp.pause();
+            if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto/1000);
+            muts[k].status = 'aplicado';
+          }
+        } else if (m.op === 'delete') {
+          var iter = AdsApp.campaigns().withIds([m.id]).get();
+          if (iter.hasNext()) { iter.next().pause(); muts[k].status = 'aplicado'; }
+        }
+        changed = true;
+      } catch(e) {
+        muts[k].status = 'error';
+        muts[k].error = e.message;
+        changed = true;
+      }
+    }
+    if (changed) {
+      UrlFetchApp.fetch(ENDPOINT, {
+        method:'post', contentType:'application/json', muteHttpExceptions:true,
+        payload:JSON.stringify({secret:SECRET, type:'update_mutations', mutations:muts})
+      });
+    }
+  } catch(e) { Logger.log('Mutations error: '+e.message); }
 }</pre>
               <button onclick="copyAdsScript('adsScriptCode2')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
             </div>
@@ -2255,6 +2335,18 @@ function main() {
       <div class="card">
         <div class="card-header"><span class="card-title">🤖 Recomendaciones del Agente</span><span id="adsAgentBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span></div>
         <div id="adsAgentList" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+
+    <!-- Cambios pendientes -->
+    <div id="adsPendingPanel" style="display:none;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">⏳ Cambios pendientes</span>
+          <span id="adsPendingBadge" style="font-size:10px;background:rgba(255,193,7,0.12);color:#ffc107;border:1px solid rgba(255,193,7,0.3);border-radius:4px;padding:2px 7px">0</span>
+        </div>
+        <div id="adsPendingList" style="padding:12px 16px;display:flex;flex-direction:column;gap:6px"></div>
+        <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">Los cambios se aplicarán la próxima vez que el Script 2 se ejecute en Google Ads. <button onclick="window.open('https://ads.google.com','_blank')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">Ir a Google Ads para ejecutarlo ahora →</button></div>
       </div>
     </div>
 
@@ -4603,37 +4695,6 @@ ${notas?`<div class="notas-box"><strong>Notas:</strong> ${escHtml(notas)}</div>`
 <tr style="background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Email</td><td style="font-weight:500">PAGOS@THELAB.SOLUTIONS</td></tr>
 </table></div>
 <div class="footer"><div class="left">The Lab Solutions SpA · Santiago, Chile<br>hola@thelab.solutions · +56 9 7180 6142</div><div class="validity">Válida hasta: <strong>${escHtml(vto)}</strong></div></div>
-
-<!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
-<div class="tab-panel" id="tab-visual">
-  <div class="section-header" style="margin-bottom:16px">
-    <div class="section-title">🎨 Herramientas Visuales</div>
-    <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
-  </div>
-  <div id="tab-visual" style="padding:0">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
-        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
-        OpenGen Studio — Live
-      </div>
-      <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
-         style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
-        ↗ Abrir en nueva pestaña
-      </a>
-      <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
-    </div>
-    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
-      <iframe
-        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
-        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
-        loading="lazy"
-        allow="camera; microphone; clipboard-write; fullscreen"
-        title="OpenGen Studio">
-      </iframe>
-    </div>
-  </div>
-</div>
-
 </body></html>`;
   return {html,num,c};
 }
@@ -4643,69 +4704,7 @@ function generarPDFCotizacion(id){
 }
 function descargarPDFCotizacion(id){
   const res=buildCotizacionDoc(id);if(!res){toast('Cotización no encontrada','error');return;}
-  const htmlWithPrint=res.html.replace('
-<!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
-<div class="tab-panel" id="tab-visual">
-  <div class="section-header" style="margin-bottom:16px">
-    <div class="section-title">🎨 Herramientas Visuales</div>
-    <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
-  </div>
-  <div id="tab-visual" style="padding:0">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
-        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
-        OpenGen Studio — Live
-      </div>
-      <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
-         style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
-        ↗ Abrir en nueva pestaña
-      </a>
-      <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
-    </div>
-    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
-      <iframe
-        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
-        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
-        loading="lazy"
-        allow="camera; microphone; clipboard-write; fullscreen"
-        title="OpenGen Studio">
-      </iframe>
-    </div>
-  </div>
-</div>
-
-</body></html>','<script>window.onload=function(){window.focus();window.print();};<\/script>
-<!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
-<div class="tab-panel" id="tab-visual">
-  <div class="section-header" style="margin-bottom:16px">
-    <div class="section-title">🎨 Herramientas Visuales</div>
-    <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
-  </div>
-  <div id="tab-visual" style="padding:0">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
-        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
-        OpenGen Studio — Live
-      </div>
-      <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
-         style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
-        ↗ Abrir en nueva pestaña
-      </a>
-      <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
-    </div>
-    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
-      <iframe
-        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
-        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
-        loading="lazy"
-        allow="camera; microphone; clipboard-write; fullscreen"
-        title="OpenGen Studio">
-      </iframe>
-    </div>
-  </div>
-</div>
-
-</body></html>');
+  const htmlWithPrint=res.html.replace('</body></html>','<script>window.onload=function(){window.focus();window.print();};<\/script></body></html>');
   const blob=new Blob([htmlWithPrint],{type:'text/html;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const win=window.open(url,'_blank');
@@ -7653,7 +7652,7 @@ function copySEODiagSnippet(){
 }
 async function testYoastWrite(){openSEODiag();await runSEODiag();}
 // ── GOOGLE ADS AGENT ─────────────────────────────────────
-function getAdsConfig(){return JSON.parse(localStorage.getItem('ads_config')||JSON.stringify({endpoint:'https://script.google.com/macros/s/AKfycbyn8h8PcEpPc97TD45vJgSnRRIWyhQ6ANRbFoE_ZsvF2S9Iy58y4cnG7iO_yY_gxcRuNQ/exec',customerId:'757-781-2099'}));}
+function getAdsConfig(){return JSON.parse(localStorage.getItem('ads_config')||JSON.stringify({endpoint:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:'757-781-2099'}));}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
@@ -7701,6 +7700,122 @@ function getAdsDemoData(days){
     ]
   };
 }
+function testAdsEndpoint(){
+  const url=document.getElementById('ads-endpoint').value.trim();
+  if(!url){alert('Primero pega la URL del endpoint en el campo de arriba.');return;}
+  const testUrl=url+(url.includes('?')?'&':'?')+'days=30';
+  window.open(testUrl,'_blank');
+}
+// ─── Ads Campaign Management ────────────────────────────────
+var _adsPendingMutations = JSON.parse(localStorage.getItem('ads_pending_mutations')||'[]');
+
+function savePendingToStorage(){
+  localStorage.setItem('ads_pending_mutations', JSON.stringify(_adsPendingMutations));
+}
+
+function openCreateCampaign(){
+  document.getElementById('adsCampaignModalId').value='';
+  document.getElementById('adsCampaignModalOp').value='create';
+  document.getElementById('adsCampaignModalTitle').textContent='Nueva Campaña';
+  document.getElementById('adsCampaignModalDesc').textContent='La campaña se creará en Google Ads en la próxima ejecución del Script 2.';
+  document.getElementById('adsCampaignModalNombre').value='';
+  document.getElementById('adsCampaignModalPresupuesto').value='';
+  document.getElementById('adsCampaignModalEstado').value='ENABLED';
+  document.getElementById('adsCampaignModalTipoGroup').style.display='';
+  document.getElementById('adsCampaignModal').style.display='flex';
+}
+
+function openEditCampaign(id, nombre, estado, presupuesto){
+  document.getElementById('adsCampaignModalId').value=id;
+  document.getElementById('adsCampaignModalOp').value='edit';
+  document.getElementById('adsCampaignModalTitle').textContent='Editar Campaña';
+  document.getElementById('adsCampaignModalDesc').textContent='Los cambios se aplicarán en Google Ads en la próxima ejecución del Script 2.';
+  document.getElementById('adsCampaignModalNombre').value=nombre||'';
+  document.getElementById('adsCampaignModalPresupuesto').value=presupuesto||'';
+  document.getElementById('adsCampaignModalEstado').value=estado||'ENABLED';
+  document.getElementById('adsCampaignModalTipoGroup').style.display='none';
+  document.getElementById('adsCampaignModal').style.display='flex';
+}
+
+function closeAdsCampaignModal(){
+  document.getElementById('adsCampaignModal').style.display='none';
+}
+
+function openDeleteCampaign(id, nombre){
+  document.getElementById('adsDeleteModalId').value=id;
+  document.getElementById('adsDeleteModalNombre').textContent='Campaña: '+nombre;
+  document.getElementById('adsDeleteModal').style.display='flex';
+}
+
+function closeAdsDeleteModal(){
+  document.getElementById('adsDeleteModal').style.display='none';
+}
+
+function saveCampaignMutation(){
+  const op=document.getElementById('adsCampaignModalOp').value;
+  const id=document.getElementById('adsCampaignModalId').value;
+  const nombre=document.getElementById('adsCampaignModalNombre').value.trim();
+  const presupuesto=parseInt(document.getElementById('adsCampaignModalPresupuesto').value)||0;
+  const estado=document.getElementById('adsCampaignModalEstado').value;
+  const tipo=document.getElementById('adsCampaignModalTipo').value;
+  if(!nombre){alert('El nombre de la campaña es obligatorio.');return;}
+  if(presupuesto<1000){alert('El presupuesto debe ser al menos $1.000 CLP.');return;}
+  const mutation={op,id,data:{nombre,presupuesto,estado,tipo},timestamp:new Date().toISOString(),status:'pending'};
+  _adsPendingMutations.push(mutation);
+  savePendingToStorage();
+  closeAdsCampaignModal();
+  sendAdsMutation(mutation);
+  renderPendingMutations();
+}
+
+function confirmDeleteCampaign(){
+  const id=document.getElementById('adsDeleteModalId').value;
+  const nombre=document.getElementById('adsDeleteModalNombre').textContent.replace('Campaña: ','');
+  const mutation={op:'delete',id,data:{nombre},timestamp:new Date().toISOString(),status:'pending'};
+  _adsPendingMutations.push(mutation);
+  savePendingToStorage();
+  closeAdsDeleteModal();
+  sendAdsMutation(mutation);
+  renderPendingMutations();
+}
+
+function sendAdsMutation(mutation){
+  const cfg=getAdsConfig();
+  if(!cfg.endpoint) return;
+  fetch(cfg.endpoint,{
+    method:'post',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({secret:'thelab2025',type:'mutation',...mutation})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok) mutation.status='enviado';
+    renderPendingMutations();
+  }).catch(()=>{});
+}
+
+function renderPendingMutations(){
+  const panel=document.getElementById('adsPendingPanel');
+  const list=document.getElementById('adsPendingList');
+  const badge=document.getElementById('adsPendingBadge');
+  if(!_adsPendingMutations.length){panel.style.display='none';return;}
+  panel.style.display='block';
+  const pending=_adsPendingMutations.filter(m=>m.status!=='aplicado');
+  badge.textContent=pending.length+' pendiente'+(pending.length!==1?'s':'');
+  const opLabel={create:'Crear',edit:'Editar',delete:'Eliminar'};
+  list.innerHTML=pending.map((m,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface2);border-radius:6px;font-size:11px">
+      <span style="color:${m.op==='delete'?'var(--danger)':m.op==='create'?'var(--success)':'var(--accent)'};font-weight:600">${opLabel[m.op]||m.op}</span>
+      <span style="color:var(--text2);flex:1">${m.data?.nombre||m.id}</span>
+      <span style="color:${m.status==='enviado'?'var(--accent3)':'var(--warn)'};font-size:10px">${m.status==='enviado'?'✓ Enviado':'⏳ Pendiente'}</span>
+      <button onclick="removePendingMutation(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0;line-height:1" title="Eliminar">×</button>
+    </div>`).join('');
+}
+
+function removePendingMutation(idx){
+  _adsPendingMutations.splice(idx,1);
+  savePendingToStorage();
+  renderPendingMutations();
+}
+
 async function loadAdsData(){
   const cfg=getAdsConfig();
   const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
@@ -7714,6 +7829,7 @@ async function loadAdsData(){
     renderAdsKPIs(demo,days);
     renderAdsCampaigns(demo);
     renderAdsAgent(demo);
+    renderPendingMutations();
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--warn)';dot.title='Modo demo — configura tu endpoint real';}
     return;
@@ -7729,8 +7845,11 @@ async function loadAdsData(){
     renderAdsKPIs(data,days);
     renderAdsCampaigns(data);
     renderAdsAgent(data);
+    renderPendingMutations();
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
+    const btnNueva=document.getElementById('btnNuevaCampana');
+    if(btnNueva) btnNueva.style.display='inline-flex';
   }catch(e){
     document.getElementById('adsCampaignsArea').innerHTML=`<div class="empty-state" style="padding:40px 0"><div class="empty-icon">⚠</div><div style="color:var(--danger)">${e.message}</div><div style="font-size:11px;color:var(--text3);margin-top:8px">Verifica que el Apps Script esté publicado como aplicación web con acceso público</div></div>`;
     ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='—';});
@@ -7771,8 +7890,13 @@ function renderAdsCampaigns(data){
       ?'<span style="background:rgba(0,212,170,0.15);color:var(--accent3);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Activa</span>'
       :'<span style="background:rgba(255,68,68,0.12);color:var(--danger);border:1px solid rgba(255,68,68,0.25);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Pausada</span>';
     const ctrColor=ctr>=5?'var(--success)':ctr>=2?'var(--text)':'var(--danger)';
+    const safeNombre=JSON.stringify(c.nombre||'');
+    const acciones=`<span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">
+        <button onclick="event.stopPropagation();openEditCampaign('${c.id}',${safeNombre},'${c.estado}',${c.presupuesto||0})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
+        <button onclick="event.stopPropagation();openDeleteCampaign('${c.id}',${safeNombre})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar">🗑</button>
+      </span>`;
     return `<tr>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</td>
+      <td style="white-space:nowrap"><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</span>${acciones}</td>
       <td>${estadoBadge}</td>
       <td style="text-align:right">${fmtMoney(c.gasto)}</td>
       <td style="text-align:right">${fmtNum(c.impresiones)}</td>
@@ -7786,7 +7910,7 @@ function renderAdsCampaigns(data){
   const demoBanner=data.demo?`<div style="background:rgba(255,200,0,0.08);border-bottom:1px solid rgba(255,200,0,0.2);padding:7px 16px;font-size:10px;color:#ffc107;display:flex;align-items:center;gap:6px"><span>⚠</span><span>Datos de demostración — <button onclick="toggleAdsConfig()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">configura tu endpoint</button> para ver datos reales</span></div>`:'';
   document.getElementById('adsCampaignsArea').innerHTML=`
     <div class="card">
-      <div class="card-header"><span class="card-title">Campañas</span><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span></div>
+      <div class="card-header"><span class="card-title">Campañas</span><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span><button onclick="openCreateCampaign()" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer;font-weight:600">+ Nueva</button></div></div>
       ${demoBanner}
       <div class="table-wrap"><table>
         <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th></tr></thead>
@@ -9514,6 +9638,61 @@ async function testSIIWorker(){
         allow="camera; microphone; clipboard-write; fullscreen"
         title="OpenGen Studio">
       </iframe>
+    </div>
+  </div>
+</div>
+
+<div id="adsCampaignModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeAdsCampaignModal()"></div>
+  <div class="modal-card">
+    <div class="modal-title" id="adsCampaignModalTitle">Nueva Campaña</div>
+    <div class="modal-desc" id="adsCampaignModalDesc">Los cambios se aplicarán en la próxima ejecución del Script 2.</div>
+    <input type="hidden" id="adsCampaignModalId">
+    <input type="hidden" id="adsCampaignModalOp">
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+      <div class="field-group">
+        <label class="field-label">Nombre de la campaña</label>
+        <input class="field-input" id="adsCampaignModalNombre" placeholder="Ej: Campaña Búsqueda - Producto X">
+      </div>
+      <div class="field-group" id="adsCampaignModalTipoGroup">
+        <label class="field-label">Tipo de campaña</label>
+        <select class="field-input" id="adsCampaignModalTipo">
+          <option value="SEARCH">Búsqueda (Search)</option>
+          <option value="DISPLAY">Display</option>
+          <option value="VIDEO">Video (YouTube)</option>
+          <option value="SHOPPING">Shopping</option>
+          <option value="PERFORMANCE_MAX">Performance Max</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Presupuesto diario (CLP)</label>
+        <input class="field-input" id="adsCampaignModalPresupuesto" type="number" min="1000" step="1000" placeholder="Ej: 50000">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Estado</label>
+        <select class="field-input" id="adsCampaignModalEstado">
+          <option value="ENABLED">Habilitada</option>
+          <option value="PAUSED">Pausada</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-ghost btn-sm" onclick="closeAdsCampaignModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="saveCampaignMutation()">💾 Guardar cambio</button>
+    </div>
+  </div>
+</div>
+
+<div id="adsDeleteModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeAdsDeleteModal()"></div>
+  <div class="modal-card">
+    <div class="modal-title">⚠ Eliminar campaña</div>
+    <div class="modal-desc">Esta acción pausará la campaña en Google Ads. Esta operación se aplicará en la próxima ejecución del Script 2.</div>
+    <input type="hidden" id="adsDeleteModalId">
+    <div style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.25);border-radius:8px;padding:12px;margin:16px 0;font-size:12px;color:var(--text)" id="adsDeleteModalNombre"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeAdsDeleteModal()">Cancelar</button>
+      <button class="btn btn-sm" style="background:var(--danger);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600" onclick="confirmDeleteCampaign()">Eliminar</button>
     </div>
   </div>
 </div>
