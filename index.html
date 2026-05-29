@@ -3895,7 +3895,7 @@ async function loadAllData(){
   if(isLoadingData)return;
   isLoadingData=true;
   try{
-  if(!getToken()){setStatus('sin token',false);showTokenModal();return;}
+  if(!getToken()){setStatus('sin token',false);hideSysLoader();showTokenModal();return;}
   const btn=document.getElementById('refreshBtn');btn.disabled=true;btn.textContent='↺ Cargando...';setStatus('cargando...',false);
   const isFirst=!state.loaded;
   if(isFirst) slProgress(10,'Conectando con Airtable...');
@@ -7316,6 +7316,8 @@ function initDashboard(){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
+  // Fallback: si el loader no se oculta en 15s, lo fuerza oculto
+  setTimeout(()=>{const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')){sl.classList.add('hidden');if(!getToken()) showTokenModal();}},15000);
   AUTH.init().then(()=>{
     if(!AUTH.isLoggedIn()){
       const lp=document.getElementById('loginPage');
