@@ -47,11 +47,10 @@ printf 'Santiago' | npx wrangler secret put CIUDAD_EMISOR
 # ── Resolución SII ───────────────────────────────────────────
 # Ver en: mipyme.sii.cl → Mi empresa → o en el PDF de autorización SII
 echo "📄 [10/11] Fecha resolución SII..."
-printf 'REEMPLAZAR_YYYY-MM-DD' | npx wrangler secret put RESOLUCION_FECHA
-# Ejemplo: printf '2024-03-15' | npx wrangler secret put RESOLUCION_FECHA
+printf '2014-10-21' | npx wrangler secret put RESOLUCION_FECHA
 
-echo "🔢 [11/11] Número resolución (MiPymes = 0)..."
-printf '0' | npx wrangler secret put RESOLUCION_NUMERO
+echo "🔢 [11/11] Número resolución..."
+printf '99' | npx wrangler secret put RESOLUCION_NUMERO
 
 echo ""
 echo "✅ Secrets configurados."
