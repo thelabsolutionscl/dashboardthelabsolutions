@@ -36,7 +36,7 @@ echo "🔢 [6/11] Código actividad económica (ACTECO)..."
 printf '329900' | npx wrangler secret put ACTECO
 
 echo "📍 [7/11] Dirección..."
-printf 'Eulogia Sanchez 065' | npx wrangler secret put DIR_EMISOR
+printf 'VILLAGRA 70' | npx wrangler secret put DIR_EMISOR
 
 echo "🏙 [8/11] Comuna..."
 printf 'Providencia' | npx wrangler secret put CMNA_EMISOR
