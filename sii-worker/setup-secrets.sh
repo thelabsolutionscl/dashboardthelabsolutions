@@ -30,7 +30,7 @@ echo "🏢 [4/11] Razón social..."
 printf 'WAST3D SPA' | npx wrangler secret put RAZON_SOCIAL
 
 echo "📦 [5/11] Giro..."
-printf 'Fabricación mediante impresión 3D' | npx wrangler secret put GIRO_EMISOR
+printf 'SERVICIOS DE IMPRESION Y PUBLICIDAD' | npx wrangler secret put GIRO_EMISOR
 
 echo "🔢 [6/11] Código actividad económica (ACTECO)..."
 printf '329900' | npx wrangler secret put ACTECO
