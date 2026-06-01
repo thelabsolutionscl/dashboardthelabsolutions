@@ -1,57 +1,67 @@
 #!/bin/bash
 # ============================================================
 # SETUP SECRETS — Cloudflare Worker SII DTE
-# Ejecutar desde la carpeta sii-worker/
+# Ejecutar desde la carpeta sii-worker/ en tu máquina local:
+#   cd sii-worker && bash setup-secrets.sh
 # ============================================================
 set -e
 
 WORKER_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$WORKER_DIR"
 
-echo "🔐 Configurando secrets del Worker SII..."
+echo "🔐 Configurando secrets del Worker SII — WAST3D SPA"
 echo ""
 
 # ── Certificado digital ──────────────────────────────────────
-echo "📋 Subiendo certificado digital (CERT_PFX_BASE64)..."
-cat /tmp/cert_pfx_b64.txt | npx wrangler secret put CERT_PFX_BASE64
+echo "📋 [1/11] Certificado digital (CERT_PFX_BASE64)..."
+echo "   Convirtiendo archivo .pfx a base64..."
+base64 -i ../cert/169374015.pfx | tr -d '\n' | npx wrangler secret put CERT_PFX_BASE64
+# Si el archivo está en otra ruta, ajusta la línea anterior. Alternativa:
+#   base64 -i /ruta/a/tu.pfx | tr -d '\n' | npx wrangler secret put CERT_PFX_BASE64
 
-echo "🔑 Contraseña del certificado..."
-echo -n "Primos2525" | npx wrangler secret put CERT_PFX_PASSWORD
+echo "🔑 [2/11] Contraseña del certificado..."
+printf 'Primos2525' | npx wrangler secret put CERT_PFX_PASSWORD
 
 # ── Datos del emisor ─────────────────────────────────────────
-# RUT del emisor (quien firma y emite las facturas/boletas)
-# Opciones:
-#   a) RUT personal de Gustavo: 16937401-5
-#   b) RUT de The Lab Solutions SpA (si la empresa es el emisor registrado en SII)
-echo "🏢 RUT del emisor..."
-echo -n "16937401-5" | npx wrangler secret put RUT_EMISOR
+echo "🏢 [3/11] RUT del emisor..."
+printf '77.499.554-4' | npx wrangler secret put RUT_EMISOR
 
-echo "🏢 Razón social..."
-echo -n "GUSTAVO ANDRES KAISER ORTIZ" | npx wrangler secret put RAZON_SOCIAL
+echo "🏢 [4/11] Razón social..."
+printf 'WAST3D SPA' | npx wrangler secret put RAZON_SOCIAL
 
-echo "📦 Giro..."
-echo -n "Fabricación mediante impresión 3D" | npx wrangler secret put GIRO_EMISOR
+echo "📦 [5/11] Giro..."
+printf 'Fabricación mediante impresión 3D' | npx wrangler secret put GIRO_EMISOR
 
-echo "🔢 Código actividad económica (ACTECO)..."
-echo -n "329900" | npx wrangler secret put ACTECO
+echo "🔢 [6/11] Código actividad económica (ACTECO)..."
+printf '329900' | npx wrangler secret put ACTECO
 
-echo "📍 Dirección..."
-echo -n "Zaragoza 8882" | npx wrangler secret put DIR_EMISOR
+echo "📍 [7/11] Dirección..."
+printf 'Eulogia Sanchez 065' | npx wrangler secret put DIR_EMISOR
 
-echo "🏙 Comuna..."
-echo -n "Las Condes" | npx wrangler secret put CMNA_EMISOR
+echo "🏙 [8/11] Comuna..."
+printf 'Providencia' | npx wrangler secret put CMNA_EMISOR
 
-echo "🌆 Ciudad..."
-echo -n "Santiago" | npx wrangler secret put CIUDAD_EMISOR
+echo "🌆 [9/11] Ciudad..."
+printf 'Santiago' | npx wrangler secret put CIUDAD_EMISOR
 
 # ── Resolución SII ───────────────────────────────────────────
-# Obtener estos datos desde: mipyme.sii.cl → Mi empresa → Resolución
-echo "📄 Fecha resolución SII (formato YYYY-MM-DD)..."
-echo -n "2024-01-01" | npx wrangler secret put RESOLUCION_FECHA
+# Ver en: mipyme.sii.cl → Mi empresa → o en el PDF de autorización SII
+echo "📄 [10/11] Fecha resolución SII..."
+printf 'REEMPLAZAR_YYYY-MM-DD' | npx wrangler secret put RESOLUCION_FECHA
+# Ejemplo: printf '2024-03-15' | npx wrangler secret put RESOLUCION_FECHA
 
-echo "🔢 Número resolución (MiPymes usan 0)..."
-echo -n "0" | npx wrangler secret put RESOLUCION_NUMERO
+echo "🔢 [11/11] Número resolución (MiPymes = 0)..."
+printf '0' | npx wrangler secret put RESOLUCION_NUMERO
 
 echo ""
-echo "✅ Secrets configurados. Ahora ejecuta:"
+echo "✅ Secrets configurados."
+echo ""
+echo "📌 IMPORTANTE: Actualiza RESOLUCION_FECHA con la fecha real de tu"
+echo "   autorización SII antes de emitir DTEs en producción."
+echo ""
+echo "👉 Siguiente paso — desplegar el Worker:"
 echo "   npx wrangler deploy"
+echo ""
+echo "👉 Luego crear el KV namespace (si no existe):"
+echo "   npx wrangler kv namespace create FOLIOS_KV"
+echo "   (Copia el id que devuelve y ponlo en wrangler.toml)"
