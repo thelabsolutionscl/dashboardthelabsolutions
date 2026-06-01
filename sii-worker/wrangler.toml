@@ -10,7 +10,7 @@ SII_ENV = "certificacion"
 # KV namespace para folios y CAFs (crear con: wrangler kv namespace create FOLIOS_KV)
 [[kv_namespaces]]
 binding = "FOLIOS_KV"
-id = "REEMPLAZAR_CON_TU_KV_ID"
+id = "12c2c38ebe2d47b39e20daafddfa6ea7"
 
 # Secrets — ejecutar: bash setup-secrets.sh
 #
