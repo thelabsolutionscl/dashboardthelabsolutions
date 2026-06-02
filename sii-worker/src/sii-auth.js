@@ -87,12 +87,14 @@ function extractSoapReturn(xml, methodName) {
 export async function getSIIToken(privateKey, certificate, env) {
   const semilla = await getSeed(env);
 
-  const itemContent = `<Semilla>${semilla}</Semilla>`;
+  // SII getCertificado() espera <Certificate> como hijo directo de <item>
+  const certB64 = certDerb64(certificate);
+  const itemContent = `<Semilla>${semilla}</Semilla><Certificate>${certB64}</Certificate>`;
   const itemXml = `<item>${itemContent}</item>`;
   const signature = buildXmlSignature('', itemXml, privateKey, certificate);
 
   // Axis1 SimpleDeserializer espera un String — el XML debe ir entity-encoded
-  const innerXml = `<item><Semilla>${semilla}</Semilla>${signature}</item>`;
+  const innerXml = `<item>${itemContent}${signature}</item>`;
   const escapedXml = innerXml.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   const soapBody =
