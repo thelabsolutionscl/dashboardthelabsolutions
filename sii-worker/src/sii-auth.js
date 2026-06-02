@@ -76,36 +76,50 @@ async function getSeed(env) {
   return semilla;
 }
 
+// helper para desescapar entidades XML dentro de un elemento SOAP
+function extractSoapReturn(xml, methodName) {
+  const m = xml.match(new RegExp(`<[^:>\\s]+:${methodName}Return[^>]*>([\\s\\S]*?)<\\/[^:>\\s]+:${methodName}Return>`));
+  if (!m) return null;
+  return m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"');
+}
+
 // Paso 2: firma la semilla y obtiene token de sesión
 export async function getSIIToken(privateKey, certificate, env) {
   const semilla = await getSeed(env);
 
-  // El item que se firma es el contenido del elemento <item> (SII usa enveloped sobre <item>)
   const itemContent = `<Semilla>${semilla}</Semilla>`;
   const itemXml = `<item>${itemContent}</item>`;
-
   const signature = buildXmlSignature('', itemXml, privateKey, certificate);
 
-  const body =
-    `<?xml version="1.0"?>\n<getToken>\n<item>\n` +
-    `<Semilla>${semilla}</Semilla>\n` +
-    signature +
-    `\n</item>\n</getToken>`;
+  // GetTokenFromSeed.jws requiere SOAP (igual que CrSeed)
+  const soapBody =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">` +
+    `<soapenv:Header/>` +
+    `<soapenv:Body><impl:getToken>` +
+    `<item><Semilla>${semilla}</Semilla>${signature}</item>` +
+    `</impl:getToken></soapenv:Body>` +
+    `</soapenv:Envelope>`;
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
-    headers: {
-      ...SII_HEADERS,
-      'Content-Type': 'text/xml; charset=utf-8',
-    },
-    body,
+    headers: { ...SII_HEADERS, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' },
+    body: soapBody,
   });
 
   const xml = await res.text();
-  const tokenMatch = xml.match(/<TOKEN>([^<]+)<\/TOKEN>/);
-  if (!tokenMatch) {
+
+  // Buscar TOKEN directo o dentro de getTokenReturn (entity-encoded)
+  let token = (xml.match(/<TOKEN>([^<]+)<\/TOKEN>/) || [])[1]?.trim();
+  if (!token) {
+    const inner = extractSoapReturn(xml, 'getToken');
+    if (inner) token = (inner.match(/<TOKEN>([^<]+)<\/TOKEN>/) || [])[1]?.trim();
+  }
+
+  if (!token) {
+    const fault = xml.match(/<faultstring>([^<]+)<\/faultstring>/);
     const glosa = xml.match(/<GLOSA>([^<]+)<\/GLOSA>/);
-    throw new Error('Error obteniendo token SII: ' + (glosa ? glosa[1] : xml.substring(0, 400)));
+    throw new Error('Error obteniendo token SII: ' + (fault ? fault[1] : glosa ? glosa[1] : xml.substring(0, 400)));
   }
   return tokenMatch[1].trim();
 }
