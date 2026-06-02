@@ -163,6 +163,46 @@ app.get('/folio/:tipo', (req, res) => {
   }
 });
 
+// GET /test-raw — envía XML mínimo para diagnosticar transporte SOAP
+app.get('/test-raw', async (req, res) => {
+  try {
+    const hdrs = { 'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)', 'Accept': 'text/xml' };
+    // Obtener semilla primero
+    const seedSoap =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">' +
+      '<soapenv:Header/><soapenv:Body><impl:getSeed/></soapenv:Body></soapenv:Envelope>';
+    const seedRes = await fetch(`${siiHost(env)}/DTEWS/CrSeed.jws`, {
+      method: 'POST', headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' }, body: seedSoap,
+    });
+    const seedXml = await seedRes.text();
+    const m = seedXml.match(/<[^:>\s]+:getSeedReturn[^>]*>([\s\S]*?)<\/[^:>\s]+:getSeedReturn>/);
+    const inner = m ? m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&') : seedXml;
+    const semilla = (inner.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1] || (seedXml.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1];
+
+    // XML mínimo con Certificate de prueba (sin firma)
+    const minXml = `<item><Semilla>${semilla}</Semilla><Certificate>DUMMYCERTIFICATEFORTEST</Certificate></item>`;
+    const escaped = minXml.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const soap =
+      `<?xml version="1.0" encoding="UTF-8"?>` +
+      `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+      `<soapenv:Header/><soapenv:Body>` +
+      `<getToken xmlns="http://DefaultNamespace">` +
+      `<pszXml xsi:type="xsd:string">${escaped}</pszXml>` +
+      `</getToken></soapenv:Body></soapenv:Envelope>`;
+
+    const r = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
+      method: 'POST', headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' }, body: soap,
+    });
+    const raw = await r.text();
+    const innerResp = raw.match(/<[^:>\s]+:getTokenReturn[^>]*>([\s\S]*?)<\/[^:>\s]+:getTokenReturn>/);
+    const decoded = innerResp ? innerResp[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"') : null;
+    res.json({ semilla, minXml, sii_raw: raw.substring(0, 600), sii_decoded: decoded ? decoded.substring(0, 400) : null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /test-token — prueba el flujo semilla→token sin emitir DTE
 app.get('/test-token', async (req, res) => {
   try {

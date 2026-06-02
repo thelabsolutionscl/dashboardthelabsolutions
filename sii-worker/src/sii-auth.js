@@ -117,7 +117,7 @@ export async function getSIIToken(privateKey, certificate, env) {
 
   console.log('[DEBUG getToken] innerXml length:', innerXml.length);
   console.log('[DEBUG getToken] Certificate present:', innerXml.includes('<Certificate>'));
-  console.log('[DEBUG getToken] X509Certificate present:', innerXml.includes('<X509Certificate>'));
+  console.log('[DEBUG getToken] SOAP body (first 800):', soapBody.substring(0, 800));
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
