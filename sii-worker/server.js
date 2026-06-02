@@ -112,6 +112,17 @@ app.get('/debug', async (req, res) => {
     results.CrSeed_WSDL_targetNS = (txt.match(/targetNamespace="([^"]+)"/) || [])[1];
   } catch (e) { results.CrSeed_WSDL_ops = 'ERROR: ' + e.message; }
 
+  // WSDL de GetTokenFromSeed para ver nombre exacto del parámetro
+  try {
+    const r = await fetch('https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws?wsdl', { headers: hdrs });
+    const txt = await r.text();
+    const ops = [...txt.matchAll(/name="([^"]+)"/g)].map(m => m[1]).filter(n => n.length < 60);
+    const parts = [...txt.matchAll(/<part[^>]+name="([^"]+)"[^>]*type="([^"]+)"/g)].map(m => ({ name: m[1], type: m[2] }));
+    results.GetTokenFromSeed_WSDL_ops = ops;
+    results.GetTokenFromSeed_WSDL_parts = parts;
+    results.GetTokenFromSeed_WSDL_raw = txt.substring(0, 1500);
+  } catch (e) { results.GetTokenFromSeed_WSDL_ops = 'ERROR: ' + e.message; }
+
   res.json(results);
 });
 

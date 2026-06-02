@@ -34,7 +34,6 @@ function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
     `<KeyInfo>` +
     `<KeyValue><RSAKeyValue><Modulus>${mod}</Modulus><Exponent>${exp}</Exponent></RSAKeyValue></KeyValue>` +
     `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>` +
-    `<Certificate>${certB64}</Certificate>` +
     `</KeyInfo>` +
     `</Signature>`
   );
@@ -94,20 +93,21 @@ export async function getSIIToken(privateKey, certificate, env) {
   const itemXml = `<item>${itemContent}</item>`;
   const signature = buildXmlSignature('', itemXml, privateKey, certificate);
 
-  // Axis1 SimpleDeserializer espera un String — el XML debe ir entity-encoded
+  // Axis1 SimpleDeserializer espera un String — usamos CDATA para evitar doble-codificación
   const innerXml = `<item>${itemContent}${signature}</item>`;
-  const escapedXml = innerXml.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   const soapBody =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">` +
     `<soapenv:Header/>` +
     `<soapenv:Body><impl:getToken>` +
-    `<pszXml>${escapedXml}</pszXml>` +
+    `<pszXml><![CDATA[${innerXml}]]></pszXml>` +
     `</impl:getToken></soapenv:Body>` +
     `</soapenv:Envelope>`;
 
-  console.log('[DEBUG getToken] innerXml (primeros 500 chars):', innerXml.substring(0, 500));
+  console.log('[DEBUG getToken] innerXml length:', innerXml.length);
+  console.log('[DEBUG getToken] innerXml (first 600):', innerXml.substring(0, 600));
+  console.log('[DEBUG getToken] Certificate present:', innerXml.includes('<Certificate>'));
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
@@ -116,6 +116,8 @@ export async function getSIIToken(privateKey, certificate, env) {
   });
 
   const xml = await res.text();
+  console.log('[DEBUG getToken] SII HTTP status:', res.status);
+  console.log('[DEBUG getToken] SII raw response:', xml.substring(0, 800));
 
   // Buscar TOKEN directo o dentro de getTokenReturn (entity-encoded)
   let token = (xml.match(/<TOKEN>([^<]+)<\/TOKEN>/) || [])[1]?.trim();
