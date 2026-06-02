@@ -87,15 +87,14 @@ function extractSoapReturn(xml, methodName) {
 export async function getSIIToken(privateKey, certificate, env) {
   const semilla = await getSeed(env);
 
-  // SII getCertificado() espera <Certificate> como hijo directo de <item>
-  const certB64 = certDerb64(certificate);
-  const itemContent = `<Semilla>${semilla}</Semilla><Certificate>${certB64}</Certificate>`;
-  const itemXml = `<item>${itemContent}</item>`;
+  // Estructura estándar XMLDSig: solo <Semilla> en item, certificado en <X509Certificate>
+  const itemXml = `<item><Semilla>${semilla}</Semilla></item>`;
   const signature = buildXmlSignature('', itemXml, privateKey, certificate);
 
-  // Axis1 SimpleDeserializer espera un String — usamos CDATA para evitar doble-codificación
-  const innerXml = `<item>${itemContent}${signature}</item>`;
+  // XML declaration hace explícito el encoding para el parser Java
+  const innerXml = `<?xml version="1.0" encoding="UTF-8"?><item><Semilla>${semilla}</Semilla>${signature}</item>`;
 
+  // Axis1 SimpleDeserializer: probamos pszXml y como fallback in0
   const soapBody =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">` +
@@ -107,7 +106,7 @@ export async function getSIIToken(privateKey, certificate, env) {
 
   console.log('[DEBUG getToken] innerXml length:', innerXml.length);
   console.log('[DEBUG getToken] innerXml (first 600):', innerXml.substring(0, 600));
-  console.log('[DEBUG getToken] Certificate present:', innerXml.includes('<Certificate>'));
+  console.log('[DEBUG getToken] X509Certificate present:', innerXml.includes('<X509Certificate>'));
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
