@@ -61,30 +61,42 @@ app.get('/health', (req, res) => {
   });
 });
 
-// GET /debug — diagnóstico: IP de salida + acceso al SII
+// GET /debug — diagnóstico: IP de salida + prueba múltiples endpoints SII
 app.get('/debug', async (req, res) => {
+  const results = {};
+
   try {
     const ipRes = await fetch('https://api.ipify.org?format=json');
-    const { ip } = await ipRes.json();
+    results.outbound_ip = (await ipRes.json()).ip;
+  } catch (e) { results.outbound_ip = 'ERROR: ' + e.message; }
 
-    let siiStatus = 'desconocido';
+  const siiTests = [
+    { name: 'GET_CrSeed_jws', url: 'https://maullin.sii.cl/DTEWS/CrSeed.jws', method: 'GET' },
+    { name: 'GET_CrSeed_getSeed_param', url: 'https://maullin.sii.cl/DTEWS/CrSeed.jws?getSeed', method: 'GET' },
+    { name: 'GET_services_CrSeed', url: 'https://maullin.sii.cl/DTEWS/services/CrSeed.getSeed', method: 'GET' },
+    { name: 'SOAP_CrSeed_jws', url: 'https://maullin.sii.cl/DTEWS/CrSeed.jws', method: 'POST',
+      body: '<?xml version="1.0"?><SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"><SOAP-ENV:Body><getSeed/></SOAP-ENV:Body></SOAP-ENV:Envelope>',
+      ct: 'text/xml; charset=utf-8' },
+  ];
+
+  for (const t of siiTests) {
     try {
-      const siiRes = await fetch('https://maullin.sii.cl/DTEWS/CrSeed.jws', {
-        headers: {
-          'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)',
-          'Accept': 'text/xml',
-        },
-      });
-      const txt = await siiRes.text();
-      siiStatus = txt.includes('<SEMILLA>') ? 'OK — semilla recibida' : 'BLOQUEADO: ' + txt.substring(0, 200);
-    } catch (e) {
-      siiStatus = 'ERROR: ' + e.message;
-    }
-
-    res.json({ outbound_ip: ip, sii_seed_test: siiStatus });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+      const opts = {
+        method: t.method,
+        headers: { 'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)', 'Accept': 'text/xml' },
+      };
+      if (t.body) { opts.body = t.body; opts.headers['Content-Type'] = t.ct; }
+      const r = await fetch(t.url, opts);
+      const txt = await r.text();
+      if (txt.includes('<SEMILLA>')) {
+        results[t.name] = 'OK — semilla encontrada!';
+      } else {
+        results[t.name] = `HTTP ${r.status} — ` + txt.replace(/\n/g,' ').substring(0, 120);
+      }
+    } catch (e) { results[t.name] = 'ERROR: ' + e.message; }
   }
+
+  res.json(results);
 });
 
 // PUT /caf
