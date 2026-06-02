@@ -192,7 +192,6 @@ app.get('/test-raw', async (req, res) => {
       `<pszXml xsi:type="xsd:string">${escaped}</pszXml>` +
       `</getToken></soapenv:Body></soapenv:Envelope>`;
 
-    const host = env.SII_ENV === 'produccion' ? 'https://palena.sii.cl' : 'https://maullin.sii.cl';
     const r = await fetch(`${host}/DTEWS/GetTokenFromSeed.jws`, {
       method: 'POST', headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' }, body: soap,
     });
