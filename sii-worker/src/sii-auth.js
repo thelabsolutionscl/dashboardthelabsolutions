@@ -94,13 +94,13 @@ export async function getSIIToken(privateKey, certificate, env) {
   // XML declaration hace explícito el encoding para el parser Java
   const innerXml = `<?xml version="1.0" encoding="UTF-8"?><item><Semilla>${semilla}</Semilla>${signature}</item>`;
 
-  // Axis1 SimpleDeserializer: probamos pszXml y como fallback in0
+  // Axis1 usa "in0" cuando el WSDL no define nombre explícito de parámetro
   const soapBody =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">` +
     `<soapenv:Header/>` +
     `<soapenv:Body><impl:getToken>` +
-    `<pszXml><![CDATA[${innerXml}]]></pszXml>` +
+    `<in0><![CDATA[${innerXml}]]></in0>` +
     `</impl:getToken></soapenv:Body>` +
     `</soapenv:Envelope>`;
 

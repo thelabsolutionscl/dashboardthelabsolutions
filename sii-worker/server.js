@@ -163,6 +163,18 @@ app.get('/folio/:tipo', (req, res) => {
   }
 });
 
+// GET /test-token — prueba el flujo semilla→token sin emitir DTE
+app.get('/test-token', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const token = await getSIIToken(privateKey, certificate, env);
+    res.json({ ok: true, token: token.substring(0, 20) + '...' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST / — emitir DTE
 app.post('/', async (req, res) => {
   try {
