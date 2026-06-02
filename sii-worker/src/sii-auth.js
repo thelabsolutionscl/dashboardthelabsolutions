@@ -34,6 +34,7 @@ function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
     `<KeyInfo>` +
     `<KeyValue><RSAKeyValue><Modulus>${mod}</Modulus><Exponent>${exp}</Exponent></RSAKeyValue></KeyValue>` +
     `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>` +
+    `<Certificate>${certB64}</Certificate>` +
     `</KeyInfo>` +
     `</Signature>`
   );
@@ -105,6 +106,8 @@ export async function getSIIToken(privateKey, certificate, env) {
     `<pszXml>${escapedXml}</pszXml>` +
     `</impl:getToken></soapenv:Body>` +
     `</soapenv:Envelope>`;
+
+  console.log('[DEBUG getToken] innerXml (primeros 500 chars):', innerXml.substring(0, 500));
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
