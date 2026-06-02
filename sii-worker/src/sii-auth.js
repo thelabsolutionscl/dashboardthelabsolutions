@@ -40,10 +40,17 @@ function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
 }
 
 // Paso 1: obtiene semilla del SII
+const SII_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/xml, application/xml, text/html, */*',
+  'Accept-Language': 'es-CL,es;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Connection': 'keep-alive',
+};
+
 async function getSeed(env) {
-  const res = await fetch(`${siiHost(env)}/DTEWS/CrSeed.jws`, {
-    headers: { 'User-Agent': 'Mozilla/4.0 (compatible)' },
-  });
+  const url = `${siiHost(env)}/DTEWS/CrSeed.jws`;
+  const res = await fetch(url, { headers: SII_HEADERS });
   const xml = await res.text();
   const m = xml.match(/<SEMILLA>(\d+)<\/SEMILLA>/);
   if (!m) throw new Error('SII no devolvió semilla: ' + xml.substring(0, 300));
@@ -69,8 +76,8 @@ export async function getSIIToken(privateKey, certificate, env) {
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
     headers: {
+      ...SII_HEADERS,
       'Content-Type': 'text/xml; charset=utf-8',
-      'User-Agent': 'Mozilla/4.0 (compatible)',
     },
     body,
   });
@@ -105,9 +112,9 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
   const res = await fetch(`${siiHost(env)}/cgi_dte/UPL/DTEUpload`, {
     method: 'POST',
     headers: {
+      ...SII_HEADERS,
       'Content-Type': `multipart/form-data; boundary=${boundary}`,
       'Cookie': `TOKEN=${token}`,
-      'User-Agent': 'Mozilla/4.0 (compatible)',
     },
     body,
   });

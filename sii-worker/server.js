@@ -61,6 +61,33 @@ app.get('/health', (req, res) => {
   });
 });
 
+// GET /debug — diagnóstico: IP de salida + acceso al SII
+app.get('/debug', async (req, res) => {
+  try {
+    const ipRes = await fetch('https://api.ipify.org?format=json');
+    const { ip } = await ipRes.json();
+
+    let siiStatus = 'desconocido';
+    try {
+      const siiRes = await fetch('https://maullin.sii.cl/DTEWS/CrSeed.jws', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/xml, application/xml, */*',
+          'Accept-Language': 'es-CL,es;q=0.9',
+        },
+      });
+      const txt = await siiRes.text();
+      siiStatus = txt.includes('<SEMILLA>') ? 'OK — semilla recibida' : 'BLOQUEADO: ' + txt.substring(0, 200);
+    } catch (e) {
+      siiStatus = 'ERROR: ' + e.message;
+    }
+
+    res.json({ outbound_ip: ip, sii_seed_test: siiStatus });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // PUT /caf
 app.put('/caf', (req, res) => {
   try {
