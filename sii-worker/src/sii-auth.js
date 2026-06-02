@@ -87,25 +87,36 @@ function extractSoapReturn(xml, methodName) {
 export async function getSIIToken(privateKey, certificate, env) {
   const semilla = await getSeed(env);
 
-  // Estructura estándar XMLDSig: solo <Semilla> en item, certificado en <X509Certificate>
-  const itemXml = `<item><Semilla>${semilla}</Semilla></item>`;
+  // Estructura que usan implementaciones PHP funcionales con SII:
+  // <item><Semilla>X</Semilla><Certificate>CERT</Certificate><Signature>...</Signature></item>
+  const certB64 = certDerb64(certificate);
+  const itemContent = `<Semilla>${semilla}</Semilla><Certificate>${certB64}</Certificate>`;
+  const itemXml = `<item>${itemContent}</item>`;
   const signature = buildXmlSignature('', itemXml, privateKey, certificate);
+  const innerXml = `<item>${itemContent}${signature}</item>`;
 
-  // XML declaration hace explícito el encoding para el parser Java
-  const innerXml = `<?xml version="1.0" encoding="UTF-8"?><item><Semilla>${semilla}</Semilla>${signature}</item>`;
+  // Entity-encode: &amp; primero, luego <, >, "
+  const escapedXml = innerXml
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 
-  // Axis1 usa "in0" cuando el WSDL no define nombre explícito de parámetro
+  // SOAP con namespace inline en <getToken> para que <pszXml> herede DefaultNamespace
+  // y xsi:type="xsd:string" para que Axis1 matchee el parámetro correctamente
   const soapBody =
     `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">` +
+    `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
     `<soapenv:Header/>` +
-    `<soapenv:Body><impl:getToken>` +
-    `<in0><![CDATA[${innerXml}]]></in0>` +
-    `</impl:getToken></soapenv:Body>` +
+    `<soapenv:Body>` +
+    `<getToken xmlns="http://DefaultNamespace">` +
+    `<pszXml xsi:type="xsd:string">${escapedXml}</pszXml>` +
+    `</getToken>` +
+    `</soapenv:Body>` +
     `</soapenv:Envelope>`;
 
   console.log('[DEBUG getToken] innerXml length:', innerXml.length);
-  console.log('[DEBUG getToken] innerXml (first 600):', innerXml.substring(0, 600));
+  console.log('[DEBUG getToken] Certificate present:', innerXml.includes('<Certificate>'));
   console.log('[DEBUG getToken] X509Certificate present:', innerXml.includes('<X509Certificate>'));
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
