@@ -91,13 +91,16 @@ export async function getSIIToken(privateKey, certificate, env) {
   const itemXml = `<item>${itemContent}</item>`;
   const signature = buildXmlSignature('', itemXml, privateKey, certificate);
 
-  // GetTokenFromSeed.jws requiere SOAP (igual que CrSeed)
+  // Axis1 SimpleDeserializer espera un String — el XML debe ir entity-encoded
+  const innerXml = `<item><Semilla>${semilla}</Semilla>${signature}</item>`;
+  const escapedXml = innerXml.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
   const soapBody =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">` +
     `<soapenv:Header/>` +
     `<soapenv:Body><impl:getToken>` +
-    `<item><Semilla>${semilla}</Semilla>${signature}</item>` +
+    `<pszXml>${escapedXml}</pszXml>` +
     `</impl:getToken></soapenv:Body>` +
     `</soapenv:Envelope>`;
 
