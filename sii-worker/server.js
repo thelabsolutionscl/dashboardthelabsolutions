@@ -61,40 +61,42 @@ app.get('/health', (req, res) => {
   });
 });
 
-// GET /debug — diagnóstico: IP de salida + prueba múltiples endpoints SII
+// GET /debug — diagnóstico: IP de salida + prueba endpoints SII
 app.get('/debug', async (req, res) => {
   const results = {};
+  const hdrs = { 'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)', 'Accept': 'text/xml' };
 
   try {
-    const ipRes = await fetch('https://api.ipify.org?format=json');
-    results.outbound_ip = (await ipRes.json()).ip;
+    results.outbound_ip = (await (await fetch('https://api.ipify.org?format=json')).json()).ip;
   } catch (e) { results.outbound_ip = 'ERROR: ' + e.message; }
 
-  const siiTests = [
-    { name: 'GET_CrSeed_jws', url: 'https://maullin.sii.cl/DTEWS/CrSeed.jws', method: 'GET' },
-    { name: 'GET_CrSeed_getSeed_param', url: 'https://maullin.sii.cl/DTEWS/CrSeed.jws?getSeed', method: 'GET' },
-    { name: 'GET_services_CrSeed', url: 'https://maullin.sii.cl/DTEWS/services/CrSeed.getSeed', method: 'GET' },
-    { name: 'SOAP_CrSeed_jws', url: 'https://maullin.sii.cl/DTEWS/CrSeed.jws', method: 'POST',
-      body: '<?xml version="1.0"?><SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"><SOAP-ENV:Body><getSeed/></SOAP-ENV:Body></SOAP-ENV:Envelope>',
-      ct: 'text/xml; charset=utf-8' },
-  ];
+  // ¿CrSeed.jws redirige?
+  try {
+    const r = await fetch('https://maullin.sii.cl/DTEWS/CrSeed.jws', { redirect: 'manual', headers: hdrs });
+    results.CrSeed_redirect = `HTTP ${r.status} → location: ${r.headers.get('location') || '(ninguno)'}`;
+  } catch (e) { results.CrSeed_redirect = 'ERROR: ' + e.message; }
 
-  for (const t of siiTests) {
-    try {
-      const opts = {
-        method: t.method,
-        headers: { 'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)', 'Accept': 'text/xml' },
-      };
-      if (t.body) { opts.body = t.body; opts.headers['Content-Type'] = t.ct; }
-      const r = await fetch(t.url, opts);
-      const txt = await r.text();
-      if (txt.includes('<SEMILLA>')) {
-        results[t.name] = 'OK — semilla encontrada!';
-      } else {
-        results[t.name] = `HTTP ${r.status} — ` + txt.replace(/\n/g,' ').substring(0, 120);
-      }
-    } catch (e) { results[t.name] = 'ERROR: ' + e.message; }
-  }
+  // WSDL de GetTokenFromSeed — ¿tiene operación getSeed?
+  try {
+    const r = await fetch('https://maullin.sii.cl/DTEWS/services/GetTokenFromSeed.jws?wsdl', { headers: hdrs });
+    const txt = await r.text();
+    const ops = [...txt.matchAll(/operation name="([^"]+)"/g)].map(m => m[1]);
+    results.GetTokenFromSeed_operations = ops.length ? ops : txt.substring(0, 300);
+  } catch (e) { results.GetTokenFromSeed_operations = 'ERROR: ' + e.message; }
+
+  // ¿Existe CrSeed como Axis2 service?
+  try {
+    const r = await fetch('https://maullin.sii.cl/DTEWS/services/CrSeed', { headers: hdrs });
+    const txt = await r.text();
+    results.Axis2_CrSeed = `HTTP ${r.status} — ` + txt.replace(/[\r\n]/g,' ').substring(0, 150);
+  } catch (e) { results.Axis2_CrSeed = 'ERROR: ' + e.message; }
+
+  // ¿getSeed como operación REST de GetTokenFromSeed?
+  try {
+    const r = await fetch('https://maullin.sii.cl/DTEWS/services/GetTokenFromSeed.jws/getSeed', { headers: hdrs });
+    const txt = await r.text();
+    results.GetTokenFromSeed_getSeed = txt.includes('<SEMILLA>') ? 'OK — semilla!' : `HTTP ${r.status} — ` + txt.replace(/[\r\n]/g,' ').substring(0, 150);
+  } catch (e) { results.GetTokenFromSeed_getSeed = 'ERROR: ' + e.message; }
 
   res.json(results);
 });
