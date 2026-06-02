@@ -114,17 +114,21 @@ export async function getSIIToken(privateKey, certificate, env) {
 
   // Buscar TOKEN directo o dentro de getTokenReturn (entity-encoded)
   let token = (xml.match(/<TOKEN>([^<]+)<\/TOKEN>/) || [])[1]?.trim();
-  if (!token) {
-    const inner = extractSoapReturn(xml, 'getToken');
-    if (inner) token = (inner.match(/<TOKEN>([^<]+)<\/TOKEN>/) || [])[1]?.trim();
-  }
+  const inner = extractSoapReturn(xml, 'getToken');
+  if (!token && inner) token = (inner.match(/<TOKEN>([^<]+)<\/TOKEN>/) || [])[1]?.trim();
 
   if (!token) {
-    const fault = xml.match(/<faultstring>([^<]+)<\/faultstring>/);
-    const glosa = xml.match(/<GLOSA>([^<]+)<\/GLOSA>/);
-    throw new Error('Error obteniendo token SII: ' + (fault ? fault[1] : glosa ? glosa[1] : xml.substring(0, 400)));
+    const fault  = xml.match(/<faultstring>([^<]+)<\/faultstring>/);
+    const glosa  = (inner || xml).match(/<GLOSA>([^<]+)<\/GLOSA>/);
+    const estado = (inner || xml).match(/<ESTADO>([^<]+)<\/ESTADO>/);
+    const detail = [
+      fault  ? `FAULT: ${fault[1]}`   : '',
+      estado ? `ESTADO: ${estado[1]}` : '',
+      glosa  ? `GLOSA: ${glosa[1]}`   : '',
+    ].filter(Boolean).join(' | ');
+    throw new Error('Error obteniendo token SII: ' + (detail || (inner || xml).substring(0, 400)));
   }
-  return tokenMatch[1].trim();
+  return token;
 }
 
 // Sube el EnvioDTE firmado al SII y devuelve trackid + estado
