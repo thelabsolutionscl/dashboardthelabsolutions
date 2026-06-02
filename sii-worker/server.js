@@ -82,12 +82,23 @@ app.get('/debug', async (req, res) => {
   const soapNs = (ns, body) =>
     `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="${ns}"><soapenv:Header/><soapenv:Body>${body}</soapenv:Body></soapenv:Envelope>`;
 
-  // SOAP con namespace DefaultNamespace (del WSDL de CrSeed)
-  results.CrSeed_SOAP_DefaultNS = await check('https://maullin.sii.cl/DTEWS/CrSeed.jws', {
-    method: 'POST',
-    body: soapNs('http://DefaultNamespace', '<impl:getSeed/>'),
-    headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' },
-  });
+  // SOAP CrSeed — mostrar respuesta completa
+  try {
+    const r = await fetch('https://maullin.sii.cl/DTEWS/CrSeed.jws', {
+      method: 'POST',
+      headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' },
+      body: soapNs('http://DefaultNamespace', '<impl:getSeed/>'),
+    });
+    const txt = await r.text();
+    const semilla = (txt.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1];
+    const returnEl = (txt.match(/<[^:>\s]+:getSeedReturn[^>]*>([\s\S]*?)<\/[^:>\s]+:getSeedReturn>/) || [])[1];
+    results.CrSeed_SOAP_full = {
+      http_status: r.status,
+      semilla_directa: semilla || null,
+      getSeedReturn_raw: returnEl ? returnEl.substring(0, 400) : null,
+      raw_response: txt.substring(0, 600),
+    };
+  } catch (e) { results.CrSeed_SOAP_full = 'ERROR: ' + e.message; }
 
   // GET con parámetro ?method=getSeed (Axis1 HTTP GET invocation)
   results.CrSeed_GET_method = await check('https://maullin.sii.cl/DTEWS/CrSeed.jws?method=getSeed');

@@ -39,19 +39,41 @@ function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
   );
 }
 
-// Paso 1: obtiene semilla del SII
 const SII_HEADERS = {
   'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)',
   'Accept': 'text/xml',
 };
 
+// CrSeed.jws requiere SOAP POST (no GET simple)
 async function getSeed(env) {
-  const url = `${siiHost(env)}/DTEWS/CrSeed.jws`;
-  const res = await fetch(url, { headers: SII_HEADERS });
+  const soap =
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">' +
+    '<soapenv:Header/>' +
+    '<soapenv:Body><impl:getSeed/></soapenv:Body>' +
+    '</soapenv:Envelope>';
+
+  const res = await fetch(`${siiHost(env)}/DTEWS/CrSeed.jws`, {
+    method: 'POST',
+    headers: { ...SII_HEADERS, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' },
+    body: soap,
+  });
   const xml = await res.text();
-  const m = xml.match(/<SEMILLA>(\d+)<\/SEMILLA>/);
-  if (!m) throw new Error('SII no devolvió semilla: ' + xml.substring(0, 300));
-  return m[1];
+
+  // Buscar SEMILLA directamente (si el XML es raw dentro del SOAP)
+  let semilla = (xml.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1];
+
+  // Si no, extraer getSeedReturn y desescapar entidades HTML
+  if (!semilla) {
+    const m = xml.match(/<[^:>\s]+:getSeedReturn[^>]*>([\s\S]*?)<\/[^:>\s]+:getSeedReturn>/);
+    if (m) {
+      const inner = m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+      semilla = (inner.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1];
+    }
+  }
+
+  if (!semilla) throw new Error('SII no devolvió semilla: ' + xml.substring(0, 400));
+  return semilla;
 }
 
 // Paso 2: firma la semilla y obtiene token de sesión
