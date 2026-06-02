@@ -208,6 +208,14 @@ app.get('/test-raw', async (req, res) => {
     const results = await Promise.all([
       sendTest('A_dummy_cert',    `<item><Semilla>${semilla}</Semilla><Certificate>DUMMYCERT</Certificate></item>`),
       sendTest('B_real_cert_only',`<item><Semilla>${semilla}</Semilla><Certificate>${realCertB64}</Certificate></item>`),
+      // C: ¿el namespace xmldsig en Signature rompe el parsing?
+      sendTest('C_cert_fake_sig_ns',
+        `<item><Semilla>${semilla}</Semilla><Certificate>${realCertB64}</Certificate>` +
+        `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><Dummy>X</Dummy></Signature></item>`),
+      // D: ¿el problema está en el contenido real de Signature (SHA1, RSA, X509)?
+      sendTest('D_cert_fake_sig_noNS',
+        `<item><Semilla>${semilla}</Semilla><Certificate>${realCertB64}</Certificate>` +
+        `<Signature><SignedInfo/><SignatureValue>${realCertB64.substring(0,100)}</SignatureValue></Signature></item>`),
     ]);
 
     res.json({ semilla, certB64Len: realCertB64.length, certB64HasNewline: realCertB64.includes('\n'), results });
