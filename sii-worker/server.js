@@ -172,7 +172,8 @@ app.get('/test-raw', async (req, res) => {
       '<?xml version="1.0" encoding="UTF-8"?>' +
       '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">' +
       '<soapenv:Header/><soapenv:Body><impl:getSeed/></soapenv:Body></soapenv:Envelope>';
-    const seedRes = await fetch(`${siiHost(env)}/DTEWS/CrSeed.jws`, {
+    const host = env.SII_ENV === 'produccion' ? 'https://palena.sii.cl' : 'https://maullin.sii.cl';
+    const seedRes = await fetch(`${host}/DTEWS/CrSeed.jws`, {
       method: 'POST', headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' }, body: seedSoap,
     });
     const seedXml = await seedRes.text();
@@ -191,7 +192,8 @@ app.get('/test-raw', async (req, res) => {
       `<pszXml xsi:type="xsd:string">${escaped}</pszXml>` +
       `</getToken></soapenv:Body></soapenv:Envelope>`;
 
-    const r = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
+    const host = env.SII_ENV === 'produccion' ? 'https://palena.sii.cl' : 'https://maullin.sii.cl';
+    const r = await fetch(`${host}/DTEWS/GetTokenFromSeed.jws`, {
       method: 'POST', headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' }, body: soap,
     });
     const raw = await r.text();
