@@ -71,9 +71,8 @@ app.get('/debug', async (req, res) => {
     try {
       const siiRes = await fetch('https://maullin.sii.cl/DTEWS/CrSeed.jws', {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'text/xml, application/xml, */*',
-          'Accept-Language': 'es-CL,es;q=0.9',
+          'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)',
+          'Accept': 'text/xml',
         },
       });
       const txt = await siiRes.text();

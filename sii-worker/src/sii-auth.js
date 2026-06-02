@@ -41,11 +41,8 @@ function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
 
 // Paso 1: obtiene semilla del SII
 const SII_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'text/xml, application/xml, text/html, */*',
-  'Accept-Language': 'es-CL,es;q=0.9',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Connection': 'keep-alive',
+  'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)',
+  'Accept': 'text/xml',
 };
 
 async function getSeed(env) {
