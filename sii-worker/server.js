@@ -74,26 +74,32 @@ app.get('/debug', async (req, res) => {
     try {
       const r = await fetch(url, { headers: hdrs, ...opts });
       const txt = await r.text();
-      if (txt.includes('<SEMILLA>')) return 'OK — SEMILLA ENCONTRADA!';
-      return `HTTP ${r.status} — ` + txt.replace(/[\r\n\t]/g,' ').substring(0, 180);
+      if (txt.includes('<SEMILLA>')) return 'OK — SEMILLA: ' + (txt.match(/<SEMILLA>(\d+)<\/SEMILLA>/)||[])[1];
+      return `HTTP ${r.status} — ` + txt.replace(/[\r\n\t]/g,' ').substring(0, 300);
     } catch (e) { return 'ERROR: ' + e.message; }
   };
 
-  // Métodos del servicio GetTokenFromSeed (GET directo al JWS)
-  results.GetTokenFromSeed_jws_GET = await check('https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws');
+  const soapNs = (ns, body) =>
+    `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="${ns}"><soapenv:Header/><soapenv:Body>${body}</soapenv:Body></soapenv:Envelope>`;
 
-  // SOAP getSeed en GetTokenFromSeed
-  results.GetTokenFromSeed_SOAP_getSeed = await check('https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws', {
+  // SOAP con namespace DefaultNamespace (del WSDL de CrSeed)
+  results.CrSeed_SOAP_DefaultNS = await check('https://maullin.sii.cl/DTEWS/CrSeed.jws', {
     method: 'POST',
-    body: '<?xml version="1.0"?><SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"><SOAP-ENV:Body><getSeed/></SOAP-ENV:Body></SOAP-ENV:Envelope>',
+    body: soapNs('http://DefaultNamespace', '<impl:getSeed/>'),
     headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' },
   });
 
-  // WSDL de CrSeed.jws — ¿existe?
-  results.CrSeed_WSDL = await check('https://maullin.sii.cl/DTEWS/CrSeed.jws?wsdl');
+  // GET con parámetro ?method=getSeed (Axis1 HTTP GET invocation)
+  results.CrSeed_GET_method = await check('https://maullin.sii.cl/DTEWS/CrSeed.jws?method=getSeed');
 
-  // Producción: ¿CrSeed funciona en palena.sii.cl?
-  results.PRODUCCION_CrSeed = await check('https://palena.sii.cl/DTEWS/CrSeed.jws');
+  // WSDL completo de CrSeed para ver la operación exacta
+  try {
+    const r = await fetch('https://maullin.sii.cl/DTEWS/CrSeed.jws?wsdl', { headers: hdrs });
+    const txt = await r.text();
+    const ops = [...txt.matchAll(/name="([^"]+)"/g)].map(m => m[1]).filter(n => n.length < 40);
+    results.CrSeed_WSDL_ops = ops;
+    results.CrSeed_WSDL_targetNS = (txt.match(/targetNamespace="([^"]+)"/) || [])[1];
+  } catch (e) { results.CrSeed_WSDL_ops = 'ERROR: ' + e.message; }
 
   res.json(results);
 });
