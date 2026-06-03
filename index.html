@@ -4693,6 +4693,7 @@ async function saveFactura(){
     toast('Factura guardada ✓','success');
     closeFacturaModal();
     renderClienteFacturas(clienteId,empresa);
+    if(typeof finRenderFacturas==='function') finRenderFacturas();
   }catch(e){toast('Error: '+e.message,'error');}
   finally{btn.disabled=false;btn.textContent='💾 Guardar';}
 }
@@ -4704,6 +4705,7 @@ async function deleteFactura(id,clienteId){
     state.facturas=state.facturas.filter(x=>x.id!==id);
     toast('Factura eliminada','info');
     renderClienteFacturas(clienteId,empresa);
+    if(typeof finRenderFacturas==='function') finRenderFacturas();
   }catch(e){toast('Error: '+e.message,'error');}
 }
 function closeClienteDetalle(){document.getElementById('clienteDetalleModal').style.display='none';}
@@ -9280,6 +9282,7 @@ function finInit(){
   finRenderMensual();
   finInitKPIs();
   renderOverviewFinanzas();
+  if(finCurrentTab==='facturas') finRenderFacturas();
   setTimeout(()=>{
     finDrawChart();
     finDrawSparklines();
