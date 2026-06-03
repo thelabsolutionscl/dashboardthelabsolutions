@@ -92,23 +92,51 @@ function signEnveloped(fullXml, xpath, refUri, privateKey, certificate) {
 }
 
 // Construye las líneas de <Detalle>. Soporta: unidad de medida, descuento por
-// monto, e ítems exentos (IndExe=1).
+// porcentaje o monto, ítems exentos (IndExe=1) y líneas solo-texto (sin monto,
+// para notas que corrigen texto).
 function buildDetalles(detalle) {
+  const round = Math.round;
   return detalle
     .map((item, i) => {
+      const prc = item.precio ?? item.precio_unitario;
       let d = `<Detalle>` + `<NroLinDet>${i + 1}</NroLinDet>`;
       if (item.exento) d += `<IndExe>1</IndExe>`;
       d += `<NmbItem>${x(item.nombre)}</NmbItem>`;
       if (item.descripcion) d += `<DscItem>${x(item.descripcion)}</DscItem>`;
+
+      // Línea solo-texto: sin cantidad/precio (ej: NC que corrige giro)
+      if (prc == null) return d + `</Detalle>`;
+
+      const gross = round(item.cantidad * prc);
       d += `<QtyItem>${item.cantidad}</QtyItem>`;
       if (item.unidad) d += `<UnmdItem>${x(item.unidad)}</UnmdItem>`;
-      d += `<PrcItem>${Math.round(item.precio_unitario)}</PrcItem>`;
-      if (item.descuento_monto) d += `<DescuentoMonto>${Math.round(item.descuento_monto)}</DescuentoMonto>`;
-      d += `<MontoItem>${Math.round(item.monto_neto)}</MontoItem>`;
+      d += `<PrcItem>${round(prc)}</PrcItem>`;
+      if (item.descuento_pct) {
+        d += `<DescuentoPct>${item.descuento_pct}</DescuentoPct>`;
+        d += `<DescuentoMonto>${round(gross * item.descuento_pct / 100)}</DescuentoMonto>`;
+      } else if (item.descuento_monto) {
+        d += `<DescuentoMonto>${round(item.descuento_monto)}</DescuentoMonto>`;
+      }
+      // MontoItem es el monto BRUTO de la línea (cantidad × precio); el descuento
+      // va aparte. MntNeto = Σ MontoItem − Σ DescuentoMonto − descuento global.
+      d += `<MontoItem>${gross}</MontoItem>`;
       d += `</Detalle>`;
       return d;
     })
     .join('');
+}
+
+// Descuento/Recargo global (DscRcgGlobal). Solo descuento por % a ítems afectos.
+function buildDscRcgGlobal(pct) {
+  if (!pct) return '';
+  return (
+    `<DscRcgGlobal>` +
+    `<NroLinDR>1</NroLinDR>` +
+    `<TpoMov>D</TpoMov>` +
+    `<TpoValor>%</TpoValor>` +
+    `<ValorDR>${pct}</ValorDR>` +
+    `</DscRcgGlobal>`
+  );
 }
 
 // Construye las <Referencia> (necesarias para Notas de Crédito/Débito).
@@ -161,7 +189,8 @@ function buildDocumento(data, folio, cafXml, env) {
     `<TipoDTE>${tipo_documento}</TipoDTE>` +
     `<Folio>${folio}</Folio>` +
     `<FchEmis>${today()}</FchEmis>` +
-    `<FmaPago>${data.forma_pago || 1}</FmaPago>` +
+    // FmaPago aplica a facturas; las notas de crédito/débito no lo llevan
+    (['33', '34'].includes(String(tipo_documento)) ? `<FmaPago>${data.forma_pago || 1}</FmaPago>` : '') +
     `</IdDoc>` +
     `<Emisor>` +
     `<RUTEmisor>${cleanRut(rutEmisor)}</RUTEmisor>` +
@@ -183,6 +212,7 @@ function buildDocumento(data, folio, cafXml, env) {
     totalesXml +
     `</Encabezado>` +
     buildDetalles(detalle) +
+    buildDscRcgGlobal(data.descuento_global_pct) +
     buildReferencias(referencias) +
     ted +
     `<TmstFirma>${stamp}</TmstFirma>` +

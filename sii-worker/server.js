@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { parsePFX } from './src/sii-crypto.js';
 import { getSIIToken, uploadDTE, getUploadStatus } from './src/sii-auth.js';
-import { buildSignedEnvioDTE } from './src/dte-xml.js';
+import { buildSignedEnvioDTE, buildSignedEnvioDTESet } from './src/dte-xml.js';
+import { buildSetCases, SET_FOLIOS_NEEDED } from './src/set-pruebas.js';
 
 const require = createRequire(import.meta.url);
 try { require('dotenv').config(); } catch {}
@@ -311,6 +312,79 @@ app.get('/test-emit', async (req, res) => {
 
     res.json({
       folio,
+      trackid: siiResult.trackid,
+      estado_sii: siiResult.estado,
+      glosa_sii: siiResult.glosa || '',
+      http: siiResult.http,
+      raw: siiResult.raw,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reserva los próximos `count` folios de un tipo SIN persistir todavía.
+function peekFolios(tipo, count, cafXml) {
+  const range = parseCafRange(cafXml);
+  let current = parseInt(kv.get(`folio_${tipo}`) || String(range.desde - 1));
+  const folios = [];
+  for (let i = 0; i < count; i++) {
+    current++;
+    if (current > range.hasta) throw new Error(`Folios agotados para tipo ${tipo} (rango ${range.desde}-${range.hasta})`);
+    folios.push(current);
+  }
+  return folios;
+}
+
+// Arma el SET BÁSICO de certificación: asigna folios, construye los 8 casos
+// y devuelve { folioMap, cafs, documentos }.
+function prepareSet() {
+  const cafs = {};
+  const folioMap = {};
+  for (const [tipo, count] of Object.entries(SET_FOLIOS_NEEDED)) {
+    const cafXml = kv.get(`caf_${tipo}`);
+    if (!cafXml) throw new Error(`Falta CAF para tipo ${tipo}. Súbelo con PUT /caf (necesario: ${Object.keys(SET_FOLIOS_NEEDED).join(', ')}).`);
+    cafs[tipo] = cafXml;
+    folioMap[tipo] = peekFolios(tipo, count, cafXml);
+  }
+  const cases = buildSetCases(folioMap);
+  const documentos = cases.map(data => ({ data, folio: data.folio, cafXml: cafs[data.tipo_documento] }));
+  return { folioMap, cafs, documentos };
+}
+
+// GET /preview-set — genera el SET BÁSICO completo (XML) sin subirlo ni consumir folios.
+app.get('/preview-set', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const { documentos } = prepareSet();
+    const xml = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
+    res.type('application/xml').send(xml);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /set-pruebas — emite el SET BÁSICO completo al SII (consume folios).
+app.post('/set-pruebas', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const { folioMap, documentos } = prepareSet();
+
+    const token = await getSIIToken(privateKey, certificate, env);
+    const envioDte = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
+    const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
+
+    // Persistir los folios consumidos solo si la recepción fue OK (STATUS 0)
+    if (siiResult.estado === '0') {
+      for (const [tipo, folios] of Object.entries(folioMap)) {
+        kv.put(`folio_${tipo}`, String(folios[folios.length - 1]));
+      }
+    }
+
+    res.json({
+      folios: folioMap,
       trackid: siiResult.trackid,
       estado_sii: siiResult.estado,
       glosa_sii: siiResult.glosa || '',
