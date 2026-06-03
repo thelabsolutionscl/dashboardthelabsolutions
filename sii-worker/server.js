@@ -210,14 +210,16 @@ app.get('/test-raw', async (req, res) => {
     };
 
     // Secuencial: cada test usa su propia semilla fresca
-    const padding3700 = 'A'.repeat(3700);
-    const dsNs = 'xmlns:ds="http://www.w3.org/2000/09/xmldsig#"';
+    const sigNs = 'xmlns="http://www.w3.org/2000/09/xmldsig#"';
     const results = [];
-    results.push(await sendTest('B_real_cert_only',    s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate></item>`));
-    results.push(await sendTest('C_cert_fake_sig_ns',  s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><Dummy>X</Dummy></Signature></item>`));
-    results.push(await sendTest('D_cert_fake_sig_noNS',s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Signature><Dummy>X</Dummy></Signature></item>`));
-    results.push(await sendTest('E_cert_big_padding',  s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Padding>${padding3700}</Padding></item>`));
-    results.push(await sendTest('F_cert_ds_sig',       s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><ds:Signature ${dsNs}><ds:Dummy>X</ds:Dummy></ds:Signature></item>`));
+    // Estructura antigua: Signature DENTRO de <item>
+    results.push(await sendTest('B_item_cert_only',         s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate></item>`));
+    results.push(await sendTest('C_item_cert_fakeSig',      s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Signature ${sigNs}><Dummy>X</Dummy></Signature></item>`));
+    // Estructura nueva: Signature como HERMANA bajo <getToken>
+    results.push(await sendTest('D_getToken_cert_only',     s => `<getToken><item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate></item></getToken>`));
+    results.push(await sendTest('E_getToken_cert_fakeSig',  s => `<getToken><item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate></item><Signature ${sigNs}><Dummy>X</Dummy></Signature></getToken>`));
+    // Sin Certificate en item, cert solo en X509Certificate de KeyInfo
+    results.push(await sendTest('F_getToken_x509_only',     s => `<getToken><item><Semilla>${s}</Semilla></item><Signature ${sigNs}><KeyInfo><X509Data><X509Certificate>${realCertB64}</X509Certificate></X509Data></KeyInfo></Signature></getToken>`));
 
     res.json({ certB64Len: realCertB64.length, results });
   } catch (e) {

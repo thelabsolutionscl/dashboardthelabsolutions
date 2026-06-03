@@ -6,25 +6,27 @@ function siiHost(env) {
     : 'https://maullin.sii.cl';
 }
 
-// Construye un bloque XMLDSig Signature usando prefijo ds: para evitar que la
-// declaración xmlns default afecte el namespace de elementos hermanos como <Certificate>.
+// Construye un bloque XMLDSig Signature.
+// Reglas críticas para que SII lo acepte:
+//  1. xmlns default (sin prefijo) — SII Java usa getElementsByTagName("Signature")
+//     con namespace-unaware parsing, que busca el nombre literal del tag.
+//  2. xmlns declarado en <SignedInfo> (no solo en <Signature> padre) para que el
+//     string que firmamos coincida exactamente con la salida C14N del subtree.
+//  3. Tags vacíos con cierre explícito (C14N expande <Foo/> a <Foo></Foo>).
 function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
   const digest = sha1b64(contentToDigest);
 
-  // ds: prefix so XMLDSig namespace never becomes the default namespace inside <item>.
-  // C14N 1.0 expands self-closing tags to explicit open/close pairs — sign with
-  // explicit close tags so what we sign matches what SII canonicalizes for verification.
-  const ns = 'xmlns:ds="http://www.w3.org/2000/09/xmldsig#"';
+  const ns = 'xmlns="http://www.w3.org/2000/09/xmldsig#"';
   const signedInfo =
-    `<ds:SignedInfo ${ns}>` +
-    `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></ds:CanonicalizationMethod>` +
-    `<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></ds:SignatureMethod>` +
-    `<ds:Reference URI="${refUri}">` +
-    `<ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></ds:Transform></ds:Transforms>` +
-    `<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></ds:DigestMethod>` +
-    `<ds:DigestValue>${digest}</ds:DigestValue>` +
-    `</ds:Reference>` +
-    `</ds:SignedInfo>`;
+    `<SignedInfo ${ns}>` +
+    `<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></CanonicalizationMethod>` +
+    `<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></SignatureMethod>` +
+    `<Reference URI="${refUri}">` +
+    `<Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></Transform></Transforms>` +
+    `<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></DigestMethod>` +
+    `<DigestValue>${digest}</DigestValue>` +
+    `</Reference>` +
+    `</SignedInfo>`;
 
   const sigValue = rsaSha1b64(signedInfo, privateKey);
   const certB64 = certDerb64(certificate);
@@ -32,14 +34,14 @@ function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
   const exp = rsaExponentb64(certificate);
 
   return (
-    `<ds:Signature ${ns}>` +
+    `<Signature ${ns}>` +
     signedInfo +
-    `<ds:SignatureValue>${sigValue}</ds:SignatureValue>` +
-    `<ds:KeyInfo>` +
-    `<ds:KeyValue><ds:RSAKeyValue><ds:Modulus>${mod}</ds:Modulus><ds:Exponent>${exp}</ds:Exponent></ds:RSAKeyValue></ds:KeyValue>` +
-    `<ds:X509Data><ds:X509Certificate>${certB64}</ds:X509Certificate></ds:X509Data>` +
-    `</ds:KeyInfo>` +
-    `</ds:Signature>`
+    `<SignatureValue>${sigValue}</SignatureValue>` +
+    `<KeyInfo>` +
+    `<KeyValue><RSAKeyValue><Modulus>${mod}</Modulus><Exponent>${exp}</Exponent></RSAKeyValue></KeyValue>` +
+    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>` +
+    `</KeyInfo>` +
+    `</Signature>`
   );
 }
 
@@ -91,13 +93,18 @@ function extractSoapReturn(xml, methodName) {
 export async function getSIIToken(privateKey, certificate, env) {
   const semilla = await getSeed(env);
 
-  // Estructura que usan implementaciones PHP funcionales con SII:
-  // <item><Semilla>X</Semilla><Certificate>CERT</Certificate><Signature>...</Signature></item>
+  // Estructura estándar SII (LibreDTE / documentación oficial):
+  //   <getToken>
+  //     <item><Semilla>X</Semilla><Certificate>CERT</Certificate></item>
+  //     <Signature xmlns="...">...</Signature>   ← hermana de item, NO dentro de item
+  //   </getToken>
+  // getCertificado() de SII usa getElementsByTagName("Certificate") sobre este doc.
+  // Reference URI="" digiere <getToken> completo menos la <Signature>.
   const certB64 = certDerb64(certificate);
-  const itemContent = `<Semilla>${semilla}</Semilla><Certificate>${certB64}</Certificate>`;
-  const itemXml = `<item>${itemContent}</item>`;
-  const signature = buildXmlSignature('', itemXml, privateKey, certificate);
-  const innerXml = `<item>${itemContent}${signature}</item>`;
+  const itemXml = `<item><Semilla>${semilla}</Semilla><Certificate>${certB64}</Certificate></item>`;
+  const docWithoutSig = `<getToken>${itemXml}</getToken>`;
+  const signature = buildXmlSignature('', docWithoutSig, privateKey, certificate);
+  const innerXml = `<getToken>${itemXml}${signature}</getToken>`;
 
   // Entity-encode: &amp; primero, luego <, >, "
   const escapedXml = innerXml
