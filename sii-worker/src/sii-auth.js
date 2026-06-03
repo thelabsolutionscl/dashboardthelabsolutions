@@ -223,7 +223,7 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
   const text = await res.text();
 
   console.log('[DEBUG uploadDTE] HTTP status:', res.status);
-  console.log('[DEBUG uploadDTE] respuesta cruda SII:', text.substring(0, 1000));
+  console.log('[DEBUG uploadDTE] respuesta cruda SII COMPLETA:\n', text);
 
   const trackid = (text.match(/TRACKID[^>]*>([^<]+)/i) || [])[1]?.trim() || null;
   const estado = (text.match(/ESTADO[^>]*>(\-?\d+)/i) || [])[1]?.trim() || null;
@@ -232,6 +232,10 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
   if (estado === '-11') throw new Error('RUT no autorizado como emisor electrónico en SII');
   if (estado === '-1')  throw new Error('Error autenticación SII: ' + glosa);
 
-  // Devuelve también la respuesta cruda (truncada) para diagnóstico
-  return { trackid, estado, glosa, http: res.status, raw: text.substring(0, 600) };
+  // Extrae el texto de error de la página HTML del SII (quita tags) para diagnóstico
+  const errSection = text.includes('HA OCURRIDO UN ERROR')
+    ? text.slice(text.indexOf('HA OCURRIDO UN ERROR')).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 800)
+    : text.substring(0, 800);
+
+  return { trackid, estado, glosa, http: res.status, raw: errSection };
 }
