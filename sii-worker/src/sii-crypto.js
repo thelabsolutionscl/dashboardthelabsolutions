@@ -102,6 +102,11 @@ export function certDerb64(certificate) {
   );
 }
 
+// Clave privada en PEM (para xml-crypto, que usa el crypto nativo de Node)
+export function privateKeyPem(privateKey) {
+  return forge.pki.privateKeyToPem(privateKey);
+}
+
 // Módulo RSA en base64 (para RSAKeyValue/Modulus)
 export function rsaModulusb64(certificate) {
   const hex = certificate.publicKey.n.toString(16);

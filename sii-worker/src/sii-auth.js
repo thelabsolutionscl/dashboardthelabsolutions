@@ -1,4 +1,8 @@
-import { sha1b64, rsaSha1b64, certDerb64, rsaModulusb64, rsaExponentb64 } from './sii-crypto.js';
+import { createRequire } from 'module';
+import { sha1b64, rsaSha1b64, certDerb64, rsaModulusb64, rsaExponentb64, privateKeyPem } from './sii-crypto.js';
+
+const require = createRequire(import.meta.url);
+const { SignedXml } = require('xml-crypto');
 
 function siiHost(env) {
   return env.SII_ENV === 'produccion'
@@ -89,22 +93,47 @@ function extractSoapReturn(xml, methodName) {
   return m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"');
 }
 
+// Firma el documento getToken con xml-crypto (C14N correcto garantizado).
+// Estructura estándar SII:
+//   <getToken>
+//     <item><Semilla>X</Semilla></item>
+//     <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">...</Signature>
+//   </getToken>
+function signGetToken(semilla, privateKey, certificate) {
+  const certB64 = certDerb64(certificate);
+  const mod = rsaModulusb64(certificate);
+  const exp = rsaExponentb64(certificate);
+
+  const xml = `<getToken><item><Semilla>${semilla}</Semilla></item></getToken>`;
+
+  const sig = new SignedXml({
+    privateKey: privateKeyPem(privateKey),
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+  });
+
+  sig.addReference({
+    xpath: '/*',
+    transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    isEmptyUri: true,
+  });
+
+  // KeyInfo con RSAKeyValue + X509Certificate (formato que SII espera)
+  sig.getKeyInfoContent = () =>
+    `<KeyValue><RSAKeyValue><Modulus>${mod}</Modulus><Exponent>${exp}</Exponent></RSAKeyValue></KeyValue>` +
+    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`;
+
+  // Sin prefijo → <Signature xmlns="...">; append → Signature como último hijo de <getToken>
+  sig.computeSignature(xml, { location: { reference: '/*', action: 'append' } });
+
+  return sig.getSignedXml();
+}
+
 // Paso 2: firma la semilla y obtiene token de sesión
 export async function getSIIToken(privateKey, certificate, env) {
   const semilla = await getSeed(env);
-
-  // Estructura estándar SII (LibreDTE / documentación oficial):
-  //   <getToken>
-  //     <item><Semilla>X</Semilla><Certificate>CERT</Certificate></item>
-  //     <Signature xmlns="...">...</Signature>   ← hermana de item, NO dentro de item
-  //   </getToken>
-  // getCertificado() de SII usa getElementsByTagName("Certificate") sobre este doc.
-  // Reference URI="" digiere <getToken> completo menos la <Signature>.
-  const certB64 = certDerb64(certificate);
-  const itemXml = `<item><Semilla>${semilla}</Semilla><Certificate>${certB64}</Certificate></item>`;
-  const docWithoutSig = `<getToken>${itemXml}</getToken>`;
-  const signature = buildXmlSignature('', docWithoutSig, privateKey, certificate);
-  const innerXml = `<getToken>${itemXml}${signature}</getToken>`;
+  const innerXml = signGetToken(semilla, privateKey, certificate);
 
   // Entity-encode: &amp; primero, luego <, >, "
   const escapedXml = innerXml
@@ -126,9 +155,7 @@ export async function getSIIToken(privateKey, certificate, env) {
     `</soapenv:Body>` +
     `</soapenv:Envelope>`;
 
-  console.log('[DEBUG getToken] innerXml length:', innerXml.length);
-  console.log('[DEBUG getToken] Certificate present:', innerXml.includes('<Certificate>'));
-  console.log('[DEBUG getToken] SOAP body (first 800):', soapBody.substring(0, 800));
+  console.log('[DEBUG getToken] innerXml firmado:', innerXml);
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
