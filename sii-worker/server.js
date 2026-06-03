@@ -1,5 +1,5 @@
 import express from 'express';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
@@ -494,6 +494,33 @@ app.post('/set-pruebas', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// GET /emitted-dtes — lista los DTEs emitidos y guardados en ./data/dte/
+app.get('/emitted-dtes', (req, res) => {
+  const dir = join(DATA_DIR, 'dte');
+  if (!existsSync(dir)) return res.json({ dtes: [] });
+  const rx = (xml, tag) => (xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`)) || [])[1] || '';
+  const dtes = readdirSync(dir)
+    .filter(f => f.endsWith('.xml'))
+    .map(filename => {
+      try {
+        const xml = readFileSync(join(dir, filename), 'utf8');
+        return {
+          tipo: rx(xml, 'TipoDTE'),
+          folio: parseInt(rx(xml, 'Folio')) || 0,
+          fecha: rx(xml, 'FchEmis'),
+          neto: parseInt(rx(xml, 'MntNeto')) || 0,
+          iva: parseInt(rx(xml, 'IVA')) || 0,
+          exento: parseInt(rx(xml, 'MntExe')) || 0,
+          total: parseInt(rx(xml, 'MntTotal')) || 0,
+          receptor: rx(xml, 'RznSocRecep') || rx(xml, 'RUTRecep') || '',
+        };
+      } catch { return null; }
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.tipo.localeCompare(b.tipo) || a.folio - b.folio);
+  res.json({ dtes });
 });
 
 // GET /estado/:trackid — consulta el estado de procesamiento de un envío
