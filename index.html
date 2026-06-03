@@ -2003,7 +2003,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">📋 Cotizaciones</div><div id="cdCotizaciones" style="font-size:12px"></div></div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">🧾 Facturas emitidas</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">🧾 Facturas emitidas</div>
+          <button onclick="configurarSiiUrl()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:1px 4px;border-radius:4px" title="Configurar URL servidor SII">⚙</button>
+        </div>
         <button class="btn btn-ghost btn-sm" id="cdAddFacturaBtn" style="font-size:10px;padding:4px 9px">➕ Registrar factura</button>
       </div>
       <div id="cdFacturas" style="font-size:12px"></div>
@@ -4512,25 +4515,43 @@ function facturasForCliente(clienteId,empresa){
     return (f['Cliente']||'')===(empresa||'');
   });
 }
+function siiEstadoBadge(estado){
+  if(!estado) return '—';
+  const e=(estado||'').toLowerCase();
+  const cls=e.includes('acept')||e==='0'?'badge-green':e.includes('rechaz')||e.includes('error')?'badge-red':e==='epr'||e.includes('pendiente')||e.includes('proceso')||e==='1'?'badge-yellow':'badge-gray';
+  return `<span class="badge ${cls}">${escapeHtml(estado)}</span>`;
+}
+function getSiiWorkerUrl(){return(localStorage.getItem('sii_worker_url')||'http://localhost:3000').replace(/\/$/,'');}
+function configurarSiiUrl(){
+  const nueva=prompt('URL del servidor SII (ej: http://localhost:3000 o tu URL de ngrok):',getSiiWorkerUrl());
+  if(nueva!==null){localStorage.setItem('sii_worker_url',nueva.trim().replace(/\/$/,''));toast('URL del servidor SII guardada','success');}
+}
 function renderClienteFacturas(clienteId,empresa){
   const cont=document.getElementById('cdFacturas');if(!cont) return;
   const facs=facturasForCliente(clienteId,empresa).sort((a,b)=>(b.fields['Fecha']||'').localeCompare(a.fields['Fecha']||''));
   if(!facs.length){cont.innerHTML='<span style="color:var(--text3)">Sin facturas registradas</span>';return;}
   const totalEmitido=facs.reduce((s,r)=>s+(r.fields['Total']||0),0);
+  const workerUrl=getSiiWorkerUrl();
   cont.innerHTML=`<table style="width:100%;border-collapse:collapse">
     <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
       <th style="text-align:left;padding:4px">Tipo / Folio</th><th style="text-align:left;padding:4px">Fecha</th>
-      <th style="text-align:right;padding:4px">Total</th><th style="text-align:left;padding:4px">Estado</th><th style="padding:4px"></th>
+      <th style="text-align:right;padding:4px">Total</th><th style="text-align:left;padding:4px">Estado SII</th><th style="padding:4px"></th>
     </tr></thead><tbody>
-    ${facs.map(r=>{const f=r.fields;return`<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px 4px"><strong>${escapeHtml(String(f['Tipo DTE']||'—').split(' - ')[0])}</strong> <span class="mono">#${escapeHtml(String(f['Folio']??'—'))}</span></td>
-      <td style="padding:6px 4px">${escapeHtml(f['Fecha']||'—')}</td>
-      <td style="padding:6px 4px;text-align:right" class="clp">${formatCLP(f['Total']||0)}</td>
-      <td style="padding:6px 4px">${f['Estado SII']?`<span class="badge badge-green">${escapeHtml(f['Estado SII'])}</span>`:'—'}</td>
-      <td style="padding:6px 4px;text-align:right;white-space:nowrap">
-        <button class="btn-mini" title="Editar" onclick="openFacturaModal('${clienteId}','${r.id}')">✏️</button>
-        <button class="btn-mini" title="Eliminar" onclick="deleteFactura('${r.id}','${clienteId}')">🗑</button>
-      </td></tr>`;}).join('')}
+    ${facs.map(r=>{
+      const f=r.fields;
+      const tipoNum=String(f['Tipo DTE']||'').split(' - ')[0].replace(/\D/g,'');
+      const folio=f['Folio'];
+      const pdfHref=tipoNum&&folio?`${workerUrl}/pdf/${tipoNum}/${folio}`:'';
+      return`<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 4px"><strong>${escapeHtml(String(f['Tipo DTE']||'—').split(' - ')[0])}</strong> <span class="mono">#${escapeHtml(String(folio??'—'))}</span></td>
+        <td style="padding:6px 4px">${escapeHtml(f['Fecha']||'—')}</td>
+        <td style="padding:6px 4px;text-align:right" class="clp">${formatCLP(f['Total']||0)}</td>
+        <td style="padding:6px 4px">${siiEstadoBadge(f['Estado SII'])}</td>
+        <td style="padding:6px 4px;text-align:right;white-space:nowrap">
+          ${pdfHref?`<a href="${pdfHref}" target="_blank" class="btn-mini" title="Ver PDF representación impresa">📄</a>`:''}
+          <button class="btn-mini" title="Editar" onclick="openFacturaModal('${clienteId}','${r.id}')">✏️</button>
+          <button class="btn-mini" title="Eliminar" onclick="deleteFactura('${r.id}','${clienteId}')">🗑</button>
+        </td></tr>`;}).join('')}
     </tbody></table>
     <div style="text-align:right;margin-top:8px;font-size:11px;color:var(--text2)">Total emitido: <strong class="clp">${formatCLP(totalEmitido)}</strong> · ${facs.length} factura${facs.length>1?'s':''}</div>`;
 }
