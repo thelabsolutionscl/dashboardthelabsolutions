@@ -227,6 +227,16 @@ app.get('/test-raw', async (req, res) => {
   }
 });
 
+// GET /test-cert — inspecciona el .pfx: cuántos certs trae y cuál matchea la clave
+app.get('/test-cert', async (req, res) => {
+  try {
+    const { describePFX } = await import('./src/sii-crypto.js');
+    res.json(describePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /test-token — prueba el flujo semilla→token sin emitir DTE
 app.get('/test-token', async (req, res) => {
   try {
