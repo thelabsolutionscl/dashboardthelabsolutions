@@ -397,8 +397,10 @@ app.get('/preview-set', async (req, res) => {
     const comentario =
       `<!-- PREVIEW SET 4877403 | documentos incluidos: ${incluidos}` +
       (missing.length ? ` | OMITIDOS por falta de CAF tipo(s): ${missing.join(', ')}` : '') +
-      ` -->\n`;
-    res.type('application/xml').send(comentario + xml);
+      ` -->`;
+    // El comentario va DESPUÉS de la declaración <?xml?> (debe ir primero el prolog)
+    const out = xml.replace(/(<\?xml[^>]*\?>\s*)/, `$1${comentario}\n`);
+    res.type('application/xml').send(out);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
