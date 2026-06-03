@@ -188,21 +188,27 @@ export async function getSIIToken(privateKey, certificate, env) {
 
 // Sube el EnvioDTE firmado al SII y devuelve trackid + estado
 export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
-  const rutClean = rutEmisor.replace(/\./g, '');  // "77190661-3"
-  const boundary = '------SIIWorkerBoundary' + Date.now().toString(16);
+  // SII espera el RUT separado: número (sin DV) y dígito verificador.
+  const rutClean = rutEmisor.replace(/\./g, '');           // "77499554-4"
+  const [rutNum, dv] = rutClean.split('-');                // ["77499554", "4"]
+  const boundary = '----SIIWorkerBoundary' + Date.now().toString(16);
 
+  // Campos correctos del DTEUpload del SII: rutSender/dvSender (quien envía),
+  // rutCompany/dvCompany (emisor), archivo. La auth va por la cookie TOKEN.
   const body =
     `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="rutSender"\r\n\r\n${rutClean}\r\n` +
+    `Content-Disposition: form-data; name="rutSender"\r\n\r\n${rutNum}\r\n` +
     `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="passSender"\r\n\r\n${token}\r\n` +
+    `Content-Disposition: form-data; name="dvSender"\r\n\r\n${dv}\r\n` +
     `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="rutCompany"\r\n\r\n${rutClean}\r\n` +
+    `Content-Disposition: form-data; name="rutCompany"\r\n\r\n${rutNum}\r\n` +
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="dvCompany"\r\n\r\n${dv}\r\n` +
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="archivo"; filename="EnvioDTE.xml"\r\n` +
     `Content-Type: text/xml\r\n\r\n` +
     envioDteXml + `\r\n` +
-    `--${boundary}--`;
+    `--${boundary}--\r\n`;
 
   const res = await fetch(`${siiHost(env)}/cgi_dte/UPL/DTEUpload`, {
     method: 'POST',
