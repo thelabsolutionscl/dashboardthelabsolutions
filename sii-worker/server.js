@@ -4,7 +4,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { parsePFX } from './src/sii-crypto.js';
-import { getSIIToken, uploadDTE } from './src/sii-auth.js';
+import { getSIIToken, uploadDTE, getUploadStatus } from './src/sii-auth.js';
 import { buildSignedEnvioDTE } from './src/dte-xml.js';
 
 const require = createRequire(import.meta.url);
@@ -317,6 +317,19 @@ app.get('/test-emit', async (req, res) => {
       http: siiResult.http,
       raw: siiResult.raw,
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /estado/:trackid — consulta el estado de procesamiento de un envío
+app.get('/estado/:trackid', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const token = await getSIIToken(privateKey, certificate, env);
+    const result = await getUploadStatus(req.params.trackid, token, env.RUT_EMISOR, env);
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

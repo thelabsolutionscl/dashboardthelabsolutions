@@ -218,9 +218,10 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
   console.log('[DEBUG uploadDTE] HTTP status:', res.status);
   console.log('[DEBUG uploadDTE] respuesta cruda SII COMPLETA:\n', text);
 
+  // La respuesta de recepción usa <TRACKID> y <STATUS> (mayúsculas).
   const trackid = (text.match(/TRACKID[^>]*>([^<]+)/i) || [])[1]?.trim() || null;
-  const estado = (text.match(/ESTADO[^>]*>(\-?\d+)/i) || [])[1]?.trim() || null;
-  const glosa = (text.match(/GLOSA[^>]*>([^<]+)/i) || [])[1]?.trim() || '';
+  const estado = (text.match(/(?:STATUS|ESTADO)[^>]*>(\-?\d+)/i) || [])[1]?.trim() || null;
+  const glosa = (text.match(/(?:GLOSA|DETAIL)[^>]*>([^<]+)/i) || [])[1]?.trim() || '';
 
   if (estado === '-11') throw new Error('RUT no autorizado como emisor electrónico en SII');
   if (estado === '-1')  throw new Error('Error autenticación SII: ' + glosa);
@@ -231,4 +232,39 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
     : text.substring(0, 800);
 
   return { trackid, estado, glosa, http: res.status, raw: errSection };
+}
+
+// Consulta el estado de procesamiento de un envío por su TrackId.
+// Usa el SOAP QueryEstUp.jws. Devuelve estado + glosa del SII.
+export async function getUploadStatus(trackId, token, rutEmisor, env) {
+  const rutClean = rutEmisor.replace(/\./g, '');
+  const [rutNum, dv] = rutClean.split('-');
+
+  const soapBody =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+    `<soapenv:Header/>` +
+    `<soapenv:Body>` +
+    `<getEstUp xmlns="http://DefaultNamespace">` +
+    `<Rut xsi:type="xsd:string">${rutNum}</Rut>` +
+    `<Dv xsi:type="xsd:string">${dv}</Dv>` +
+    `<TrackId xsi:type="xsd:string">${trackId}</TrackId>` +
+    `<Token xsi:type="xsd:string">${token}</Token>` +
+    `</getEstUp>` +
+    `</soapenv:Body>` +
+    `</soapenv:Envelope>`;
+
+  const res = await fetch(`${siiHost(env)}/DTEWS/QueryEstUp.jws`, {
+    method: 'POST',
+    headers: { ...SII_HEADERS, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""', 'Cookie': `TOKEN=${token}` },
+    body: soapBody,
+  });
+
+  const xml = await res.text();
+  const inner = extractSoapReturn(xml, 'getEstUp') || xml;
+  console.log('[DEBUG getEstUp] respuesta:', inner.substring(0, 600));
+
+  const estado = (inner.match(/<ESTADO>([^<]+)<\/ESTADO>/) || [])[1]?.trim() || null;
+  const glosa  = (inner.match(/<GLOSA>([^<]+)<\/GLOSA>/) || [])[1]?.trim() || '';
+  return { estado, glosa, http: res.status, raw: inner.substring(0, 600) };
 }
