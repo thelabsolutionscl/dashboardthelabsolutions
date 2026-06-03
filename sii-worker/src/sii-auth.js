@@ -191,33 +191,26 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
   // SII espera el RUT separado: número (sin DV) y dígito verificador.
   const rutClean = rutEmisor.replace(/\./g, '');           // "77499554-4"
   const [rutNum, dv] = rutClean.split('-');                // ["77499554", "4"]
-  const boundary = '----SIIWorkerBoundary' + Date.now().toString(16);
 
-  // Campos correctos del DTEUpload del SII: rutSender/dvSender (quien envía),
-  // rutCompany/dvCompany (emisor), archivo. La auth va por la cookie TOKEN.
-  const body =
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="rutSender"\r\n\r\n${rutNum}\r\n` +
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="dvSender"\r\n\r\n${dv}\r\n` +
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="rutCompany"\r\n\r\n${rutNum}\r\n` +
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="dvCompany"\r\n\r\n${dv}\r\n` +
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="archivo"; filename="EnvioDTE.xml"\r\n` +
-    `Content-Type: text/xml\r\n\r\n` +
-    envioDteXml + `\r\n` +
-    `--${boundary}--\r\n`;
+  // FormData nativo arma el multipart correctamente (boundary automático).
+  // El archivo se codifica en ISO-8859-1 según declara el <?xml?> del EnvioDTE.
+  const fileBytes = Buffer.from(envioDteXml, 'latin1');
+  const form = new FormData();
+  form.append('rutSender', rutNum);
+  form.append('dvSender', dv);
+  form.append('rutCompany', rutNum);
+  form.append('dvCompany', dv);
+  form.append('archivo', new Blob([fileBytes], { type: 'application/xml' }), 'EnvioDTE.xml');
 
   const res = await fetch(`${siiHost(env)}/cgi_dte/UPL/DTEUpload`, {
     method: 'POST',
     headers: {
-      ...SII_HEADERS,
-      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      // No fijar Content-Type: fetch lo pone con el boundary correcto del FormData
+      'User-Agent': 'Mozilla/4.0 (compatible; PROG 1.0; SII-Worker)',
+      'Accept': 'text/html, text/xml',
       'Cookie': `TOKEN=${token}`,
     },
-    body,
+    body: form,
   });
 
   const text = await res.text();
