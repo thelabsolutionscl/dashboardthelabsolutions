@@ -2683,6 +2683,7 @@ function main() {
             <option value="">Canal: Todos</option>
             <option value="CONTACTO">Contacto</option>
             <option value="ADWORDS">Adwords</option>
+            <option value="DTE">DTE (Emitidos)</option>
             <option value="VENDEDORES">Vendedores</option>
           </select>
           <input class="field-input" id="fin-filtro-buscar" placeholder="Buscar cliente / ítem..." style="width:180px;padding:4px 10px;font-size:11px" oninput="finRenderFacturas()">
@@ -8733,9 +8734,37 @@ function finDrawChart(){
 }
 
 /* ── Tabla de facturas ── */
+function finFacturasFromAirtable(){
+  return state.facturas
+    .filter(r=>r.fields['Total']>0||r.fields['Neto']>0)
+    .map(r=>{
+      const f=r.fields;
+      const fecha=f['Fecha']||'';
+      const year=fecha.slice(0,4)||String(new Date().getFullYear());
+      const mes=String(parseInt(fecha.slice(5,7))||1).padStart(2,'0');
+      const neto=f['Neto']||0;
+      const iva=f['IVA']||0;
+      const exento=f['Exento']||0;
+      const total=f['Total']||0;
+      const porCobrar=f['Estado Pago']==='Cobrada'?0:total;
+      return{
+        year,mes,
+        nombre:f['Cliente']||'—',
+        empresa:f['Cliente']||'—',
+        item:f['Tipo DTE']||'DTE',
+        cant:1,
+        valor:neto||total,
+        porCobrar,
+        fact:f['Folio']||'',
+        canal:'DTE',
+        cat:f['Estado Pago']||'Pendiente',
+        _neto:neto,_iva:iva,_exento:exento,_total:total,
+      };
+    });
+}
 function finGetAllFacturas(){
   const local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
-  return [...FIN_FACTURAS_BASE,...local];
+  return [...FIN_FACTURAS_BASE,...local,...finFacturasFromAirtable()];
 }
 function finVentasMerged(){
   const m={};
@@ -8769,13 +8798,18 @@ function finRenderFacturasPage(){
   const slice=data.slice(finFactPag*FIN_PAG_SIZE,(finFactPag+1)*FIN_PAG_SIZE);
   const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   let html='',sumNeto=0,sumIva=0,sumTotal=0,sumCobrar=0;
-  data.forEach(r=>{const iva=Math.round(r.valor*r.cant*0.19);sumNeto+=r.valor*r.cant;sumIva+=iva;sumTotal+=r.valor*r.cant+iva;sumCobrar+=r.porCobrar||0;});
+  data.forEach(r=>{
+    const neto=r._neto!=null?r._neto:r.valor*r.cant;
+    const iva=r._iva!=null?r._iva:Math.round(neto*0.19);
+    const tot=r._total!=null?r._total:neto+iva;
+    sumNeto+=neto;sumIva+=iva;sumTotal+=tot;sumCobrar+=r.porCobrar||0;
+  });
   slice.forEach(r=>{
-    const neto=r.valor*r.cant;
-    const iva=Math.round(neto*0.19);
-    const tot=neto+iva;
+    const neto=r._neto!=null?r._neto:r.valor*r.cant;
+    const iva=r._iva!=null?r._iva:Math.round(neto*0.19);
+    const tot=r._total!=null?r._total:neto+iva;
     const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
-    const canalBadge=r.canal==='ADWORDS'?'badge-yellow':r.canal==='VENDEDORES'?'badge-green':'badge-gray';
+    const canalBadge=r.canal==='ADWORDS'?'badge-yellow':r.canal==='VENDEDORES'?'badge-green':r.canal==='DTE'?'badge-purple':'badge-gray';
     html+=`<tr>
       <td data-label="Mes/Año" style="white-space:nowrap">${mesNombre} ${r.year}</td>
       <td data-label="Cliente" style="font-weight:600;white-space:nowrap">${r.nombre}</td>
