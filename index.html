@@ -4528,13 +4528,32 @@ function openClienteDetalle(id){
   document.getElementById('cdCotizarBtn').onclick=()=>{closeClienteDetalle();cotizarParaCliente(id);};
   document.getElementById('clienteDetalleModal').style.display='flex';
 }
-// ── Facturas por cliente (tabla Airtable "Facturas") ──────────────────
+// ── Facturas por cliente: Airtable + base Finanzas ────────────────────
 function facturasForCliente(clienteId,empresa){
-  return state.facturas.filter(r=>{
+  // Registros en Airtable
+  const fromAirtable=state.facturas.filter(r=>{
     const f=r.fields;
     if(f['Cliente ID']&&clienteId) return f['Cliente ID']===clienteId;
     return (f['Cliente']||'')===(empresa||'');
   });
+  // Registros en la base de Finanzas (FIN_FACTURAS_BASE + localStorage), sin _dte para evitar duplicados
+  const airtableFolios=new Set(fromAirtable.map(r=>String(r.fields['Folio']||'')).filter(Boolean));
+  const fromFin=(typeof finGetAllFacturas==='function'?finGetAllFacturas():[])
+    .filter(r=>!r._dte&&(r.empresa||'').toLowerCase()===(empresa||'').toLowerCase())
+    .filter(r=>!airtableFolios.has(String(r.fact||'')))
+    .map((r,i)=>{
+      const neto=r.valor*r.cant;
+      const iva=Math.round(neto*0.19);
+      return{id:`_fin_${i}_${r.year}_${r.mes}_${r.fact}`,_readonly:true,fields:{
+        'Tipo DTE':'33 - Factura Electrónica',
+        'Folio':r.fact||'',
+        'Fecha':`${r.year}-${r.mes}-01`,
+        'Neto':neto,'IVA':iva,'Exento':0,'Total':neto+iva,
+        'Estado SII':'','Estado Pago':r.porCobrar>0?'Pendiente':'Cobrada',
+        'Notas':r.item||'','Track ID':'',
+      }};
+    });
+  return [...fromAirtable,...fromFin];
 }
 function siiEstadoBadge(estado){
   if(!estado) return '—';
@@ -4592,9 +4611,8 @@ function renderClienteFacturas(clienteId,empresa){
         <td style="padding:6px 4px">${estadoPagoBadge(f['Estado Pago'],f['Fecha'],f['Fecha Vencimiento'])}</td>
         <td style="padding:6px 4px;text-align:right;white-space:nowrap">
           ${pdfHref?`<a href="${pdfHref}" target="_blank" class="btn-mini" title="Ver PDF">📄</a>`:''}
-          ${f['Track ID']?`<button class="btn-mini" title="Actualizar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}','${escapeHtml(empresa)}')">🔄</button>`:''}
-          <button class="btn-mini" title="Editar" onclick="openFacturaModal('${clienteId}','${rid}')">✏️</button>
-          <button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}','${clienteId}')">🗑</button>
+          ${!r._readonly&&f['Track ID']?`<button class="btn-mini" title="Actualizar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}','${escapeHtml(empresa)}')">🔄</button>`:''}
+          ${r._readonly?`<span class="badge badge-gray" style="font-size:8px" title="Registro de Finanzas (solo lectura)">FIN</span>`:`<button class="btn-mini" title="Editar" onclick="openFacturaModal('${clienteId}','${rid}')">✏️</button><button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}','${clienteId}')">🗑</button>`}
         </td></tr>`;}).join('')}
     </tbody></table>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px">
