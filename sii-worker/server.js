@@ -144,6 +144,25 @@ app.put('/caf', (req, res) => {
   }
 });
 
+// PUT /caf-file/:tipo — sube el CAF enviando el XML crudo en el body
+// (más simple: curl -X PUT .../caf-file/61 -H "Content-Type: text/xml" --data-binary @CAF_61.xml)
+app.put('/caf-file/:tipo', express.text({ type: () => true, limit: '5mb' }), (req, res) => {
+  try {
+    const tipo = String(req.params.tipo);
+    const cafXml = typeof req.body === 'string' ? req.body : '';
+    if (!cafXml.trim()) return res.status(400).json({ error: 'Body vacío: envía el XML del CAF como cuerpo de la petición' });
+    if (!['33','39','61','56','52'].includes(tipo))
+      return res.status(400).json({ error: 'tipo_documento no soportado' });
+    if (!cafXml.includes('<CAF')) return res.status(400).json({ error: 'El body no parece un CAF (falta <CAF>)' });
+    const range = parseCafRange(cafXml);
+    kv.put(`caf_${tipo}`, cafXml);
+    kv.put(`folio_${tipo}`, String(range.desde - 1));
+    res.json({ ok: true, tipo_documento: tipo, rango: range, siguiente_folio: range.desde });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /folio/:tipo
 app.get('/folio/:tipo', (req, res) => {
   try {
