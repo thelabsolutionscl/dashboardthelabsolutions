@@ -355,30 +355,50 @@ function peekFolios(tipo, count, cafXml) {
   return folios;
 }
 
-// Arma el SET BÁSICO de certificación: asigna folios, construye los 8 casos
-// y devuelve { folioMap, cafs, documentos }.
-function prepareSet() {
+// Arma el SET BÁSICO de certificación: asigna folios, construye los casos
+// y devuelve { folioMap, cafs, documentos, missing, skipped }.
+// allowPartial=true genera solo los documentos cuyos CAF ya están disponibles.
+function prepareSet({ allowPartial = false } = {}) {
   const cafs = {};
   const folioMap = {};
+  const missing = [];
   for (const [tipo, count] of Object.entries(SET_FOLIOS_NEEDED)) {
     const cafXml = kv.get(`caf_${tipo}`);
-    if (!cafXml) throw new Error(`Falta CAF para tipo ${tipo}. Súbelo con PUT /caf (necesario: ${Object.keys(SET_FOLIOS_NEEDED).join(', ')}).`);
+    if (!cafXml) { missing.push(tipo); folioMap[tipo] = []; continue; }
     cafs[tipo] = cafXml;
     folioMap[tipo] = peekFolios(tipo, count, cafXml);
   }
-  const cases = buildSetCases(folioMap);
-  const documentos = cases.map(data => ({ data, folio: data.folio, cafXml: cafs[data.tipo_documento] }));
-  return { folioMap, cafs, documentos };
+  if (missing.length && !allowPartial) {
+    throw new Error(`Falta CAF para tipo(s) ${missing.join(', ')}. Súbelo con PUT /caf-file/:tipo (necesarios: ${Object.keys(SET_FOLIOS_NEEDED).join(', ')}).`);
+  }
+  const allCases = buildSetCases(folioMap);
+  const documentos = [], skipped = [];
+  for (const data of allCases) {
+    if (cafs[data.tipo_documento]) documentos.push({ data, folio: data.folio, cafXml: cafs[data.tipo_documento] });
+    else skipped.push(data.tipo_documento);
+  }
+  // Solo persistir/contar los tipos que efectivamente se incluyeron
+  const usedFolioMap = {};
+  for (const tipo of Object.keys(cafs)) usedFolioMap[tipo] = folioMap[tipo];
+  return { folioMap: usedFolioMap, cafs, documentos, missing, skipped };
 }
 
-// GET /preview-set — genera el SET BÁSICO completo (XML) sin subirlo ni consumir folios.
+// GET /preview-set — genera el SET BÁSICO (XML) sin subirlo ni consumir folios.
+// Genera solo los documentos con CAF disponible (parcial), y antepone un
+// comentario con lo incluido/omitido.
 app.get('/preview-set', async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
-    const { documentos } = prepareSet();
+    const { documentos, missing } = prepareSet({ allowPartial: true });
+    if (!documentos.length) throw new Error('No hay ningún CAF disponible para generar el set.');
+    const incluidos = documentos.map(d => `${d.data.tipo_documento}#${d.folio}`).join(', ');
     const xml = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
-    res.type('application/xml').send(xml);
+    const comentario =
+      `<!-- PREVIEW SET 4877403 | documentos incluidos: ${incluidos}` +
+      (missing.length ? ` | OMITIDOS por falta de CAF tipo(s): ${missing.join(', ')}` : '') +
+      ` -->\n`;
+    res.type('application/xml').send(comentario + xml);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -389,7 +409,9 @@ app.post('/set-pruebas', async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
-    const { folioMap, documentos } = prepareSet();
+    const allowPartial = req.query.partial === 'true' || req.query.partial === '1';
+    const { folioMap, documentos, missing } = prepareSet({ allowPartial });
+    if (!documentos.length) throw new Error('No hay documentos para emitir (faltan CAF).');
 
     const token = await getSIIToken(privateKey, certificate, env);
     const envioDte = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
@@ -404,6 +426,8 @@ app.post('/set-pruebas', async (req, res) => {
 
     res.json({
       folios: folioMap,
+      documentos_emitidos: documentos.length,
+      omitidos_por_falta_caf: missing,
       trackid: siiResult.trackid,
       estado_sii: siiResult.estado,
       glosa_sii: siiResult.glosa || '',
