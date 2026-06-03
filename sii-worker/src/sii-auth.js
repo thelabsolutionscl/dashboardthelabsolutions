@@ -6,21 +6,23 @@ function siiHost(env) {
     : 'https://maullin.sii.cl';
 }
 
-// Construye un bloque XMLDSig Signature. El parámetro `refUri` es el URI
-// del Reference (ej: "" para documento completo, "#F33T1" para elemento por ID).
+// Construye un bloque XMLDSig Signature usando prefijo ds: para evitar que la
+// declaración xmlns default afecte el namespace de elementos hermanos como <Certificate>.
 function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
   const digest = sha1b64(contentToDigest);
 
+  // ds: prefix so XMLDSig namespace never becomes the default namespace inside <item>
+  const ns = 'xmlns:ds="http://www.w3.org/2000/09/xmldsig#"';
   const signedInfo =
-    `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">` +
-    `<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>` +
-    `<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>` +
-    `<Reference URI="${refUri}">` +
-    `<Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms>` +
-    `<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>` +
-    `<DigestValue>${digest}</DigestValue>` +
-    `</Reference>` +
-    `</SignedInfo>`;
+    `<ds:SignedInfo ${ns}>` +
+    `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>` +
+    `<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>` +
+    `<ds:Reference URI="${refUri}">` +
+    `<ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></ds:Transforms>` +
+    `<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>` +
+    `<ds:DigestValue>${digest}</ds:DigestValue>` +
+    `</ds:Reference>` +
+    `</ds:SignedInfo>`;
 
   const sigValue = rsaSha1b64(signedInfo, privateKey);
   const certB64 = certDerb64(certificate);
@@ -28,14 +30,14 @@ function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
   const exp = rsaExponentb64(certificate);
 
   return (
-    `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">` +
+    `<ds:Signature ${ns}>` +
     signedInfo +
-    `<SignatureValue>${sigValue}</SignatureValue>` +
-    `<KeyInfo>` +
-    `<KeyValue><RSAKeyValue><Modulus>${mod}</Modulus><Exponent>${exp}</Exponent></RSAKeyValue></KeyValue>` +
-    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>` +
-    `</KeyInfo>` +
-    `</Signature>`
+    `<ds:SignatureValue>${sigValue}</ds:SignatureValue>` +
+    `<ds:KeyInfo>` +
+    `<ds:KeyValue><ds:RSAKeyValue><ds:Modulus>${mod}</ds:Modulus><ds:Exponent>${exp}</ds:Exponent></ds:RSAKeyValue></ds:KeyValue>` +
+    `<ds:X509Data><ds:X509Certificate>${certB64}</ds:X509Certificate></ds:X509Data>` +
+    `</ds:KeyInfo>` +
+    `</ds:Signature>`
   );
 }
 

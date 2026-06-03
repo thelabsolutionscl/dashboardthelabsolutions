@@ -211,11 +211,13 @@ app.get('/test-raw', async (req, res) => {
 
     // Secuencial: cada test usa su propia semilla fresca
     const padding3700 = 'A'.repeat(3700);
+    const dsNs = 'xmlns:ds="http://www.w3.org/2000/09/xmldsig#"';
     const results = [];
     results.push(await sendTest('B_real_cert_only',    s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate></item>`));
     results.push(await sendTest('C_cert_fake_sig_ns',  s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><Dummy>X</Dummy></Signature></item>`));
     results.push(await sendTest('D_cert_fake_sig_noNS',s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Signature><Dummy>X</Dummy></Signature></item>`));
     results.push(await sendTest('E_cert_big_padding',  s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Padding>${padding3700}</Padding></item>`));
+    results.push(await sendTest('F_cert_ds_sig',       s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><ds:Signature ${dsNs}><ds:Dummy>X</ds:Dummy></ds:Signature></item>`));
 
     res.json({ certB64Len: realCertB64.length, results });
   } catch (e) {
