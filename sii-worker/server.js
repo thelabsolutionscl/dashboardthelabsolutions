@@ -173,20 +173,24 @@ app.get('/test-raw', async (req, res) => {
     const hdrs = { 'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)', 'Accept': 'text/xml' };
     const host = env.SII_ENV === 'produccion' ? 'https://palena.sii.cl' : 'https://maullin.sii.cl';
 
-    // Obtener semilla
-    const seedSoap =
-      '<?xml version="1.0" encoding="UTF-8"?>' +
-      '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">' +
-      '<soapenv:Header/><soapenv:Body><impl:getSeed/></soapenv:Body></soapenv:Envelope>';
-    const seedRes = await fetch(`${host}/DTEWS/CrSeed.jws`, {
-      method: 'POST', headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' }, body: seedSoap,
-    });
-    const seedXml = await seedRes.text();
-    const m = seedXml.match(/<[^:>\s]+:getSeedReturn[^>]*>([\s\S]*?)<\/[^:>\s]+:getSeedReturn>/);
-    const innerSeed = m ? m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&') : seedXml;
-    const semilla = (innerSeed.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1] || (seedXml.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1];
+    // Obtiene una semilla fresca (SII la invalida después del primer uso)
+    const getFreshSemilla = async () => {
+      const seedSoap =
+        '<?xml version="1.0" encoding="UTF-8"?>' +
+        '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:impl="http://DefaultNamespace">' +
+        '<soapenv:Header/><soapenv:Body><impl:getSeed/></soapenv:Body></soapenv:Envelope>';
+      const r = await fetch(`${host}/DTEWS/CrSeed.jws`, {
+        method: 'POST', headers: { ...hdrs, 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '""' }, body: seedSoap,
+      });
+      const xml = await r.text();
+      const m = xml.match(/<[^:>\s]+:getSeedReturn[^>]*>([\s\S]*?)<\/[^:>\s]+:getSeedReturn>/);
+      const inner = m ? m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&') : xml;
+      return (inner.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1] || (xml.match(/<SEMILLA>(\d+)<\/SEMILLA>/) || [])[1];
+    };
 
-    const sendTest = async (label, xml) => {
+    const sendTest = async (label, xmlFn) => {
+      const semilla = await getFreshSemilla();
+      const xml = xmlFn(semilla);
       const escaped = xml.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       const soap =
         `<?xml version="1.0" encoding="UTF-8"?>` +
@@ -200,25 +204,20 @@ app.get('/test-raw', async (req, res) => {
       const raw = await r.text();
       const ir = raw.match(/<[^:>\s]+:getTokenReturn[^>]*>([\s\S]*?)<\/[^:>\s]+:getTokenReturn>/);
       const dec = ir ? ir[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"') : raw.substring(0,300);
-      const estado = (dec.match(/<ESTADO>([^<]+)<\/ESTADO>/) || [])[1];
-      const glosa  = (dec.match(/<GLOSA>([^<]+)<\/GLOSA>/)  || [])[1];
-      return { label, xmlLen: xml.length, estado, glosa };
+      const estado = (dec.match(/<ESTADO>([^<]+)<\/ESTADO>/) || [])[1] || '?';
+      const glosa  = (dec.match(/<GLOSA>([^<]+)<\/GLOSA>/)  || [])[1] || dec.substring(0,100);
+      return { label, semilla, xmlLen: xml.length, estado, glosa };
     };
 
-    const results = await Promise.all([
-      sendTest('A_dummy_cert',    `<item><Semilla>${semilla}</Semilla><Certificate>DUMMYCERT</Certificate></item>`),
-      sendTest('B_real_cert_only',`<item><Semilla>${semilla}</Semilla><Certificate>${realCertB64}</Certificate></item>`),
-      // C: ¿el namespace xmldsig en Signature rompe el parsing?
-      sendTest('C_cert_fake_sig_ns',
-        `<item><Semilla>${semilla}</Semilla><Certificate>${realCertB64}</Certificate>` +
-        `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><Dummy>X</Dummy></Signature></item>`),
-      // D: ¿el problema está en el contenido real de Signature (SHA1, RSA, X509)?
-      sendTest('D_cert_fake_sig_noNS',
-        `<item><Semilla>${semilla}</Semilla><Certificate>${realCertB64}</Certificate>` +
-        `<Signature><SignedInfo/><SignatureValue>${realCertB64.substring(0,100)}</SignatureValue></Signature></item>`),
-    ]);
+    // Secuencial: cada test usa su propia semilla fresca
+    const padding3700 = 'A'.repeat(3700);
+    const results = [];
+    results.push(await sendTest('B_real_cert_only',    s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate></item>`));
+    results.push(await sendTest('C_cert_fake_sig_ns',  s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><Dummy>X</Dummy></Signature></item>`));
+    results.push(await sendTest('D_cert_fake_sig_noNS',s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Signature><Dummy>X</Dummy></Signature></item>`));
+    results.push(await sendTest('E_cert_big_padding',  s => `<item><Semilla>${s}</Semilla><Certificate>${realCertB64}</Certificate><Padding>${padding3700}</Padding></item>`));
 
-    res.json({ semilla, certB64Len: realCertB64.length, certB64HasNewline: realCertB64.includes('\n'), results });
+    res.json({ certB64Len: realCertB64.length, results });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
