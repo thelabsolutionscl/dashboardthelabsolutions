@@ -132,7 +132,11 @@ export async function generateDtePdf(dteXml, env, out) {
   doc.font('Helvetica').fontSize(9);
   doc.text(`${dte.receptor.razon}   R.U.T.: ${dte.receptor.rut}`, M + 75, y + 7, { width: contentW - 85 });
   doc.text(`Giro: ${dte.receptor.giro}`, M + 8, y + 22, { width: contentW - 16 });
-  doc.text(`Dirección: ${dte.receptor.dir || '—'} ${dte.receptor.comuna || ''}`.trim(), M + 8, y + 37, { width: contentW - 16 });
+  const dirLinea = [
+    dte.receptor.dir ? `Dirección: ${dte.receptor.dir}` : '',
+    dte.receptor.comuna ? `Comuna: ${dte.receptor.comuna}` : '',
+  ].filter(Boolean).join('   ') || 'Dirección: —';
+  doc.text(dirLinea, M + 8, y + 37, { width: contentW - 16 });
   y += 56 + 14;
 
   // ── Tabla de detalle ──
@@ -194,9 +198,12 @@ export async function generateDtePdf(dteXml, env, out) {
   if (y > doc.page.height - 130) { doc.addPage(); y = M; }
   doc.image(pdf417, M, y, { width: imgW });
   const resol = String(env.SII_ENV) === 'produccion' ? (env.RESOLUCION_NUMERO || 0) : 0;
+  const fechaResol = env.RESOLUCION_FECHA || '';
+  const glosaY = doc.y + 4;
   doc.font('Helvetica').fontSize(7.5).fillColor('#333')
-     .text(`Timbre Electrónico SII - Res. ${resol} de ${env.RESOLUCION_FECHA || ''}`, M, y + imgW * 0.32, { width: imgW + 60 })
-     .text('Verifique documento: www.sii.cl', M, doc.y, { width: imgW + 60 });
+     .text('Timbre Electrónico SII', M, glosaY, { width: imgW, align: 'center' })
+     .text(`Res. N° ${resol}${fechaResol ? ' de ' + fechaResol : ''}`, M, doc.y + 1, { width: imgW, align: 'center' })
+     .text('Verifique en www.sii.cl', M, doc.y + 1, { width: imgW, align: 'center' });
 
   doc.end();
 }
