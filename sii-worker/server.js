@@ -7,6 +7,7 @@ import { parsePFX } from './src/sii-crypto.js';
 import { getSIIToken, uploadDTE, getUploadStatus } from './src/sii-auth.js';
 import { buildSignedEnvioDTE, buildSignedEnvioDTESet } from './src/dte-xml.js';
 import { buildSetCases, SET_FOLIOS_NEEDED } from './src/set-pruebas.js';
+import { buildSetCasesBe, SET_FOLIOS_NEEDED_BE } from './src/set-pruebas-be.js';
 
 const require = createRequire(import.meta.url);
 try { require('dotenv').config(); } catch {}
@@ -550,6 +551,98 @@ app.post('/', async (req, res) => {
     });
   } catch (e) {
     console.error('[SII Server]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Set Boleta Electrónica ────────────────────────────────────────────────────
+
+function prepareSetBe({ allowPartial = false } = {}) {
+  const cafs = {}, folioMap = {}, missing = [];
+  for (const [tipo, count] of Object.entries(SET_FOLIOS_NEEDED_BE)) {
+    const cafXml = kv.get(`caf_${tipo}`);
+    if (!cafXml) { missing.push(tipo); folioMap[tipo] = []; continue; }
+    cafs[tipo] = cafXml;
+    folioMap[tipo] = peekFolios(tipo, count, cafXml);
+  }
+  if (missing.length && !allowPartial)
+    throw new Error(`Falta CAF para tipo(s) ${missing.join(', ')}. Súbelo con PUT /caf-file/39`);
+  const allCases = buildSetCasesBe(folioMap);
+  const documentos = [], skipped = [];
+  for (const data of allCases) {
+    if (cafs[data.tipo_documento]) documentos.push({ data, folio: data.folio, cafXml: cafs[data.tipo_documento] });
+    else skipped.push(data.tipo_documento);
+  }
+  const usedFolioMap = {};
+  for (const tipo of Object.keys(cafs)) usedFolioMap[tipo] = folioMap[tipo];
+  return { folioMap: usedFolioMap, cafs, documentos, missing, skipped };
+}
+
+// GET /preview-set-be — previsualiza el set de boleta electrónica sin emitir
+app.get('/preview-set-be', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const { documentos, missing } = prepareSetBe({ allowPartial: true });
+    if (!documentos.length) throw new Error('No hay CAF tipo 39 disponible. Súbelo con PUT /caf-file/39');
+    const xml = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
+    const incluidos = documentos.map(d => `39#${d.folio}`).join(', ');
+    const comentario = `<!-- PREVIEW SET BE | incluidos: ${incluidos}${missing.length ? ` | OMITIDOS: ${missing.join(', ')}` : ''} -->`;
+    const out = xml.replace(/(<\?xml[^>]*\?>\s*)/, `$1${comentario}\n`);
+    res.type('application/xml').send(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /preview-pdf-be — PDF de prueba de boleta electrónica
+app.get('/preview-pdf-be', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const { documentos } = prepareSetBe({ allowPartial: true });
+    if (!documentos.length) throw new Error('No hay CAF tipo 39 disponible.');
+    const xml = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
+    const blocks = xml.match(/<DTE\b[\s\S]*?<\/DTE>/g) || [];
+    let block = blocks[0];
+    if (req.query.caso) {
+      const idx = parseInt(req.query.caso) - 1;
+      block = blocks[idx] || blocks[0];
+    }
+    const { generateDtePdf } = await import('./src/pdf-dte.js');
+    res.type('application/pdf');
+    await generateDtePdf(block, env, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /set-pruebas-be — emite el set de boleta electrónica al SII (consume folios)
+app.post('/set-pruebas-be', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const { folioMap, documentos, missing } = prepareSetBe({ allowPartial: false });
+    if (!documentos.length) throw new Error('No hay documentos para emitir (falta CAF tipo 39).');
+    const token = await getSIIToken(privateKey, certificate, env);
+    const envioDte = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
+    persistEmittedDtes(envioDte);
+    const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
+    if (siiResult.estado === '0') {
+      for (const [tipo, folios] of Object.entries(folioMap))
+        kv.put(`folio_${tipo}`, String(folios[folios.length - 1]));
+    }
+    res.json({
+      folios: folioMap,
+      documentos_emitidos: documentos.length,
+      omitidos_por_falta_caf: missing,
+      trackid: siiResult.trackid,
+      estado_sii: siiResult.estado,
+      glosa_sii: siiResult.glosa || '',
+      http: siiResult.http,
+      raw: siiResult.raw,
+    });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
