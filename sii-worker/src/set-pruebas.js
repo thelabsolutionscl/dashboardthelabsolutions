@@ -14,7 +14,7 @@ const RECEPTOR = {
   ciudad: 'Santiago',
 };
 
-const ATENCION = '4871837';
+const ATENCION = '4877403';
 
 // Referencia que identifica el caso del set (SII las usa para emparejar documentos).
 function setRef(casoNum) {
@@ -53,8 +53,8 @@ export function buildSetCases(folioMap) {
   // ── CASO 1: Factura afecta simple ──
   {
     const detalle = [
-      { nombre: 'Cajon AFECTO', cantidad: 158, precio: 2937 },
-      { nombre: 'Relleno AFECTO', cantidad: 67, precio: 4878 },
+      { nombre: 'Cajon AFECTO', cantidad: 180, precio: 4201 },
+      { nombre: 'Relleno AFECTO', cantidad: 76, precio: 7015 },
     ];
     cases.push({
       tipo_documento: '33', folio: f33[0], receptor: RECEPTOR, detalle,
@@ -66,8 +66,8 @@ export function buildSetCases(folioMap) {
   // ── CASO 2: Factura con descuentos por línea ──
   {
     const detalle = [
-      { nombre: 'Panuelo AFECTO', cantidad: 646, precio: 5023, descuento_pct: 8 },
-      { nombre: 'ITEM 2 AFECTO', cantidad: 586, precio: 4077, descuento_pct: 19 },
+      { nombre: 'Panuelo AFECTO', cantidad: 904, precio: 6968, descuento_pct: 11 },
+      { nombre: 'ITEM 2 AFECTO', cantidad: 853, precio: 6015, descuento_pct: 28 },
     ];
     cases.push({
       tipo_documento: '33', folio: f33[1], receptor: RECEPTOR, detalle,
@@ -79,9 +79,9 @@ export function buildSetCases(folioMap) {
   // ── CASO 3: Factura con ítem exento ──
   {
     const detalle = [
-      { nombre: 'Pintura B&W AFECTO', cantidad: 51, precio: 5892 },
-      { nombre: 'ITEM 2 AFECTO', cantidad: 217, precio: 3741 },
-      { nombre: 'ITEM 3 SERVICIO EXENTO', cantidad: 1, precio: 35165, exento: true },
+      { nombre: 'Pintura B&W AFECTO', cantidad: 84, precio: 8059 },
+      { nombre: 'ITEM 2 AFECTO', cantidad: 261, precio: 4404 },
+      { nombre: 'ITEM 3 SERVICIO EXENTO', cantidad: 1, precio: 35455, exento: true },
     ];
     cases.push({
       tipo_documento: '33', folio: f33[2], receptor: RECEPTOR, detalle,
@@ -93,14 +93,14 @@ export function buildSetCases(folioMap) {
   // ── CASO 4: Factura con ítem exento y descuento global a los afectos ──
   {
     const detalle = [
-      { nombre: 'ITEM 1 AFECTO', cantidad: 342, precio: 5003 },
-      { nombre: 'ITEM 2 AFECTO', cantidad: 145, precio: 5954 },
-      { nombre: 'ITEM 3 SERVICIO EXENTO', cantidad: 2, precio: 6819, exento: true },
+      { nombre: 'ITEM 1 AFECTO', cantidad: 506, precio: 7095 },
+      { nombre: 'ITEM 2 AFECTO', cantidad: 214, precio: 8810 },
+      { nombre: 'ITEM 3 SERVICIO EXENTO', cantidad: 2, precio: 6851, exento: true },
     ];
     cases.push({
       tipo_documento: '33', folio: f33[3], receptor: RECEPTOR, detalle,
-      descuento_global_pct: 19,
-      totales: calcTotales(detalle, 19),
+      descuento_global_pct: 27,
+      totales: calcTotales(detalle, 27),
       referencias: [setRef(4)],
     });
   }
@@ -121,8 +121,8 @@ export function buildSetCases(folioMap) {
   // ── CASO 6: Nota de Crédito por devolución parcial de caso 2 (CodRef 3) ──
   {
     const detalle = [
-      { nombre: 'Panuelo AFECTO', cantidad: 237, precio: 5023, descuento_pct: 8 },
-      { nombre: 'ITEM 2 AFECTO', cantidad: 398, precio: 4077, descuento_pct: 19 },
+      { nombre: 'Panuelo AFECTO', cantidad: 332, precio: 6968, descuento_pct: 11 },
+      { nombre: 'ITEM 2 AFECTO', cantidad: 579, precio: 6015, descuento_pct: 28 },
     ];
     cases.push({
       tipo_documento: '61', folio: f61[1], receptor: RECEPTOR, detalle,
@@ -137,9 +137,9 @@ export function buildSetCases(folioMap) {
   // ── CASO 7: Nota de Crédito que anula la Factura de caso 3 (CodRef 1) ──
   {
     const detalle = [
-      { nombre: 'Pintura B&W AFECTO', cantidad: 51, precio: 5892 },
-      { nombre: 'ITEM 2 AFECTO', cantidad: 217, precio: 3741 },
-      { nombre: 'ITEM 3 SERVICIO EXENTO', cantidad: 1, precio: 35165, exento: true },
+      { nombre: 'Pintura B&W AFECTO', cantidad: 84, precio: 8059 },
+      { nombre: 'ITEM 2 AFECTO', cantidad: 261, precio: 4404 },
+      { nombre: 'ITEM 3 SERVICIO EXENTO', cantidad: 1, precio: 35455, exento: true },
     ];
     cases.push({
       tipo_documento: '61', folio: f61[2], receptor: RECEPTOR, detalle,
