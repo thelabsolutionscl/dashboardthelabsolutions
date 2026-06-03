@@ -1,4 +1,8 @@
-import { sha1b64, rsaSha1b64, certDerb64, rsaModulusb64, rsaExponentb64 } from './sii-crypto.js';
+import { createRequire } from 'module';
+import { rsaSha1b64Pem, certDerb64, rsaModulusb64, rsaExponentb64, privateKeyPem } from './sii-crypto.js';
+
+const require = createRequire(import.meta.url);
+const { SignedXml } = require('xml-crypto');
 
 function x(str) {
   return (str || '')
@@ -20,20 +24,27 @@ function cleanRut(rut) {
   return (rut || '').replace(/\./g, '');  // elimina puntos, conserva guión
 }
 
-// Extrae el bloque <CAF>...</CAF> del XML de autorización completo
+// Extrae el bloque <CAF>...</CAF> del XML de autorización completo (verbatim).
+// Debe ir byte-a-byte como lo entregó SII, porque trae su propia firma <FRMA>.
 function extractCafElement(cafXml) {
   const m = cafXml.match(/<CAF[\s\S]*?<\/CAF>/);
   return m ? m[0] : cafXml;
 }
 
-// Genera el TED (Timbre Electrónico) y lo firma con la clave privada de la empresa.
-// El TED va embebido dentro del <Documento> antes de <TmstFirma>.
-function generateTED(params, cafXml, privateKey) {
+// Extrae la llave privada del CAF (<RSASK>) en formato PEM. El timbre (FRMT)
+// se firma con ESTA llave, no con la del certificado de la empresa.
+function extractCafPrivateKey(cafXml) {
+  const m = cafXml.match(/<RSASK>([\s\S]*?)<\/RSASK>/);
+  if (!m) throw new Error('CAF no contiene <RSASK> (llave privada del timbre)');
+  return m[1].trim();
+}
+
+// Genera el TED (Timbre Electrónico) firmado con la llave privada del CAF.
+function generateTED(params, cafXml, stamp) {
   const { tipoDTE, folio, rutEmisor, receptor, totales, detalle } = params;
   const cafElement = extractCafElement(cafXml);
-  const stamp = ts();
+  const cafKeyPem = extractCafPrivateKey(cafXml);
 
-  // DD incluye el CAF exactamente como lo entregó SII (sin modificaciones)
   const dd =
     `<DD>` +
     `<RE>${cleanRut(rutEmisor)}</RE>` +
@@ -48,48 +59,108 @@ function generateTED(params, cafXml, privateKey) {
     `<TSTED>${stamp}</TSTED>` +
     `</DD>`;
 
-  const frmt = rsaSha1b64(dd, privateKey);
-
+  const frmt = rsaSha1b64Pem(dd, cafKeyPem);
   return `<TED version="1.0">${dd}<FRMT algoritmo="SHA1withRSA">${frmt}</FRMT></TED>`;
 }
 
-// Construye el XML del bloque Signature para el Documento o el SetDTE.
-// contentToDigest: el XML del elemento referenciado (para calcular el DigestValue).
-// refUri: URI del Reference (ej: "#F33T1" o "#SetDoc").
-function buildSignature(contentToDigest, refUri, privateKey, certificate) {
-  const digest = sha1b64(contentToDigest);
-
-  const signedInfo =
-    `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">` +
-    `<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>` +
-    `<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>` +
-    `<Reference URI="${refUri}">` +
-    `<Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms>` +
-    `<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>` +
-    `<DigestValue>${digest}</DigestValue>` +
-    `</Reference>` +
-    `</SignedInfo>`;
-
-  const sigValue = rsaSha1b64(signedInfo, privateKey);
+// Firma enveloped con xml-crypto sobre el elemento que matchea `xpath`
+// (referenciado por `refUri`), insertando el <Signature> como hermano posterior.
+function signEnveloped(fullXml, xpath, refUri, privateKey, certificate) {
   const certB64 = certDerb64(certificate);
   const mod = rsaModulusb64(certificate);
   const exp = rsaExponentb64(certificate);
 
-  return (
-    `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">` +
-    signedInfo +
-    `<SignatureValue>${sigValue}</SignatureValue>` +
-    `<KeyInfo>` +
+  const sig = new SignedXml({
+    privateKey: privateKeyPem(privateKey),
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+  });
+
+  sig.addReference({
+    xpath,
+    transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    uri: refUri,
+  });
+
+  sig.getKeyInfoContent = () =>
     `<KeyValue><RSAKeyValue><Modulus>${mod}</Modulus><Exponent>${exp}</Exponent></RSAKeyValue></KeyValue>` +
-    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>` +
-    `</KeyInfo>` +
-    `</Signature>`
+    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`;
+
+  sig.computeSignature(fullXml, { location: { reference: xpath, action: 'after' } });
+  return sig.getSignedXml();
+}
+
+// Construye las líneas de <Detalle>. Soporta: unidad de medida, descuento por
+// porcentaje o monto, ítems exentos (IndExe=1) y líneas solo-texto (sin monto,
+// para notas que corrigen texto).
+function buildDetalles(detalle) {
+  const round = Math.round;
+  return detalle
+    .map((item, i) => {
+      const prc = item.precio ?? item.precio_unitario;
+      let d = `<Detalle>` + `<NroLinDet>${i + 1}</NroLinDet>`;
+      if (item.exento) d += `<IndExe>1</IndExe>`;
+      d += `<NmbItem>${x(item.nombre)}</NmbItem>`;
+      if (item.descripcion) d += `<DscItem>${x(item.descripcion)}</DscItem>`;
+
+      // Línea solo-texto: sin cantidad/precio (ej: NC que corrige giro)
+      if (prc == null) return d + `</Detalle>`;
+
+      const gross = round(item.cantidad * prc);
+      d += `<QtyItem>${item.cantidad}</QtyItem>`;
+      if (item.unidad) d += `<UnmdItem>${x(item.unidad)}</UnmdItem>`;
+      d += `<PrcItem>${round(prc)}</PrcItem>`;
+      if (item.descuento_pct) {
+        d += `<DescuentoPct>${item.descuento_pct}</DescuentoPct>`;
+        d += `<DescuentoMonto>${round(gross * item.descuento_pct / 100)}</DescuentoMonto>`;
+      } else if (item.descuento_monto) {
+        d += `<DescuentoMonto>${round(item.descuento_monto)}</DescuentoMonto>`;
+      }
+      // MontoItem es el monto BRUTO de la línea (cantidad × precio); el descuento
+      // va aparte. MntNeto = Σ MontoItem − Σ DescuentoMonto − descuento global.
+      d += `<MontoItem>${gross}</MontoItem>`;
+      d += `</Detalle>`;
+      return d;
+    })
+    .join('');
+}
+
+// Descuento/Recargo global (DscRcgGlobal). Solo descuento por % a ítems afectos.
+function buildDscRcgGlobal(pct) {
+  if (!pct) return '';
+  return (
+    `<DscRcgGlobal>` +
+    `<NroLinDR>1</NroLinDR>` +
+    `<TpoMov>D</TpoMov>` +
+    `<TpoValor>%</TpoValor>` +
+    `<ValorDR>${pct}</ValorDR>` +
+    `</DscRcgGlobal>`
   );
 }
 
-// Genera el DTE completo firmado (listo para ir dentro del EnvioDTE).
-export function generateSignedDTE(data, folio, cafXml, privateKey, certificate, env) {
-  const { tipo_documento, receptor, detalle, totales, referencia } = data;
+// Construye las <Referencia> (necesarias para Notas de Crédito/Débito).
+// data.referencias = [{ tipo_doc, folio, fecha, cod_ref, razon }]
+function buildReferencias(referencias) {
+  if (!referencias?.length) return '';
+  return referencias
+    .map((r, i) => {
+      let ref = `<Referencia>` + `<NroLinRef>${i + 1}</NroLinRef>`;
+      ref += `<TpoDocRef>${r.tipo_doc}</TpoDocRef>`;
+      ref += `<FolioRef>${r.folio}</FolioRef>`;
+      ref += `<FchRef>${r.fecha || today()}</FchRef>`;
+      if (r.cod_ref) ref += `<CodRef>${r.cod_ref}</CodRef>`;
+      if (r.razon) ref += `<RazonRef>${x(r.razon)}</RazonRef>`;
+      ref += `</Referencia>`;
+      return ref;
+    })
+    .join('');
+}
+
+// Construye el <Documento> sin firmar (con el TED ya firmado dentro).
+// Hereda el namespace SiiDte del EnvioDTE (sin xmlns propio).
+function buildDocumento(data, folio, cafXml, env) {
+  const { tipo_documento, receptor, detalle, totales, referencias } = data;
   const rutEmisor = env.RUT_EMISOR;
   const docId = `F${tipo_documento}T${folio}`;
   const stamp = ts();
@@ -97,32 +168,29 @@ export function generateSignedDTE(data, folio, cafXml, privateKey, certificate, 
   const ted = generateTED(
     { tipoDTE: tipo_documento, folio, rutEmisor, receptor, totales, detalle },
     cafXml,
-    privateKey
+    stamp
   );
 
-  const detalles = detalle
-    .map((item, i) =>
-      `<Detalle>` +
-      `<NroLinDet>${i + 1}</NroLinDet>` +
-      `<NmbItem>${x(item.nombre)}</NmbItem>` +
-      `<QtyItem>${item.cantidad}</QtyItem>` +
-      `<PrcItem>${Math.round(item.precio_unitario)}</PrcItem>` +
-      `<MontoItem>${Math.round(item.monto_neto)}</MontoItem>` +
-      `</Detalle>`
-    )
-    .join('');
+  // Totales: soporta neto + exento. Si no hay neto (factura exenta total), omite IVA.
+  let totalesXml = `<Totales>`;
+  if (totales.neto) totalesXml += `<MntNeto>${totales.neto}</MntNeto>`;
+  if (totales.exento) totalesXml += `<MntExe>${totales.exento}</MntExe>`;
+  if (totales.neto) {
+    totalesXml += `<TasaIVA>19</TasaIVA>`;
+    totalesXml += `<IVA>${totales.iva}</IVA>`;
+  }
+  totalesXml += `<MntTotal>${totales.total}</MntTotal>`;
+  totalesXml += `</Totales>`;
 
-  // El Documento incluye xmlns explícito para que el digest sea C14N-correcto
-  // (en C14N inclusive, el namespace del elemento padre se hereda en el hijo;
-  //  al ponerlo explícito aquí el string para hash coincide con el C14N output).
-  const documento =
-    `<Documento ID="${docId}" xmlns="http://www.sii.cl/SiiDte">` +
+  return (
+    `<Documento ID="${docId}">` +
     `<Encabezado>` +
     `<IdDoc>` +
     `<TipoDTE>${tipo_documento}</TipoDTE>` +
     `<Folio>${folio}</Folio>` +
     `<FchEmis>${today()}</FchEmis>` +
-    `<FmaPago>1</FmaPago>` +
+    // FmaPago aplica a facturas; las notas de crédito/débito no lo llevan
+    (['33', '34'].includes(String(tipo_documento)) ? `<FmaPago>${data.forma_pago || 1}</FmaPago>` : '') +
     `</IdDoc>` +
     `<Emisor>` +
     `<RUTEmisor>${cleanRut(rutEmisor)}</RUTEmisor>` +
@@ -137,37 +205,49 @@ export function generateSignedDTE(data, folio, cafXml, privateKey, certificate, 
     `<RUTRecep>${cleanRut(receptor.rut)}</RUTRecep>` +
     `<RznSocRecep>${x(receptor.razon_social)}</RznSocRecep>` +
     `<GiroRecep>${x(receptor.giro || 'Sin giro')}</GiroRecep>` +
-    (receptor.email ? `<Contacto>${x(receptor.email)}</Contacto>` : '') +
     (receptor.direccion ? `<DirRecep>${x(receptor.direccion)}</DirRecep>` : '') +
     (receptor.comuna ? `<CmnaRecep>${x(receptor.comuna)}</CmnaRecep>` : '') +
     (receptor.ciudad ? `<CiudadRecep>${x(receptor.ciudad)}</CiudadRecep>` : '') +
     `</Receptor>` +
-    `<Totales>` +
-    `<MntNeto>${totales.neto}</MntNeto>` +
-    `<TasaIVA>19</TasaIVA>` +
-    `<IVA>${totales.iva}</IVA>` +
-    `<MntTotal>${totales.total}</MntTotal>` +
-    `</Totales>` +
+    totalesXml +
     `</Encabezado>` +
-    detalles +
+    buildDetalles(detalle) +
+    buildDscRcgGlobal(data.descuento_global_pct) +
+    buildReferencias(referencias) +
     ted +
     `<TmstFirma>${stamp}</TmstFirma>` +
-    `</Documento>`;
-
-  const docSignature = buildSignature(documento, `#${docId}`, privateKey, certificate);
-
-  return (
-    `<DTE version="1.0">` +
-    documento +
-    docSignature +
-    `</DTE>`
+    `</Documento>`
   );
 }
 
-// Construye el EnvioDTE completo con su firma sobre el SetDTE.
-export function buildEnvioDTE(signedDte, data, folio, env, privateKey, certificate) {
+// Construye el EnvioDTE completo y firmado con UNO o VARIOS DTE.
+// documentos: array de { data, folio, cafXml }.
+// Firma cada <Documento> por su ID y luego el <SetDTE>.
+export function buildSignedEnvioDTESet(documentos, env, privateKey, certificate) {
   const rutEmisor = cleanRut(env.RUT_EMISOR);
   const stamp = ts();
+
+  // Construye todos los DTE (sin firmar) y recolecta IDs + conteo por tipo
+  const docIds = [];
+  const countByTipo = {};
+  const dtes = documentos
+    .map(({ data, folio, cafXml }) => {
+      const docId = `F${data.tipo_documento}T${folio}`;
+      docIds.push(docId);
+      countByTipo[data.tipo_documento] = (countByTipo[data.tipo_documento] || 0) + 1;
+      const documento = buildDocumento(data, folio, cafXml, env);
+      return `<DTE version="1.0">${documento}</DTE>`;
+    })
+    .join('');
+
+  // SubTotDTE: un bloque por cada tipo de documento del set
+  const subTotDte = Object.entries(countByTipo)
+    .map(([tipo, n]) => `<SubTotDTE><TpoDTE>${tipo}</TpoDTE><NroDTE>${n}</NroDTE></SubTotDTE>`)
+    .join('');
+
+  // En certificación SII exige NroResol=0; el número real de resolución solo
+  // aplica en producción. Así no depende de configurar bien el .env.
+  const nroResol = String(env.SII_ENV) === 'produccion' ? env.RESOLUCION_NUMERO : 0;
 
   const caratula =
     `<Caratula version="1.0">` +
@@ -175,25 +255,33 @@ export function buildEnvioDTE(signedDte, data, folio, env, privateKey, certifica
     `<RutEnvia>${rutEmisor}</RutEnvia>` +
     `<RutReceptor>60803000-K</RutReceptor>` +
     `<FchResol>${env.RESOLUCION_FECHA}</FchResol>` +
-    `<NroResol>${env.RESOLUCION_NUMERO}</NroResol>` +
+    `<NroResol>${nroResol}</NroResol>` +
     `<TmstFirmaEnv>${stamp}</TmstFirmaEnv>` +
-    `<SubTotDTE><TpoDTE>${data.tipo_documento}</TpoDTE><NroDTE>1</NroDTE></SubTotDTE>` +
+    subTotDte +
     `</Caratula>`;
 
-  // El SetDTE tiene su propio ID para la firma
-  const setDteInner = caratula + signedDte;
-  const setDteWithId = `<SetDTE ID="SetDoc">${setDteInner}</SetDTE>`;
+  const setDte = `<SetDTE ID="SetDoc">${caratula}${dtes}</SetDTE>`;
 
-  const setSignature = buildSignature(setDteWithId, '#SetDoc', privateKey, certificate);
-
-  return (
-    `<?xml version="1.0" encoding="ISO-8859-1"?>\n` +
+  const envioUnsigned =
     `<EnvioDTE version="1.0" ` +
     `xmlns="http://www.sii.cl/SiiDte" ` +
     `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
     `xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd">` +
-    setDteWithId +
-    setSignature +
-    `</EnvioDTE>`
-  );
+    setDte +
+    `</EnvioDTE>`;
+
+  // 1. Firma cada Documento por su ID (Signature queda dentro de su <DTE>)
+  let signed = envioUnsigned;
+  for (const docId of docIds) {
+    signed = signEnveloped(signed, `//*[@ID='${docId}']`, `#${docId}`, privateKey, certificate);
+  }
+  // 2. Firma el SetDTE (cubre carátula + todos los DTE ya firmados)
+  signed = signEnveloped(signed, `//*[@ID='SetDoc']`, '#SetDoc', privateKey, certificate);
+
+  return `<?xml version="1.0" encoding="ISO-8859-1"?>\n${signed}`;
+}
+
+// Helper para un solo DTE (compatibilidad con POST / y /test-emit).
+export function buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env) {
+  return buildSignedEnvioDTESet([{ data, folio, cafXml }], env, privateKey, certificate);
 }

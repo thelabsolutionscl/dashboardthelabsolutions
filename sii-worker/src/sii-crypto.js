@@ -6,7 +6,7 @@ export function parsePFX(pfxBase64, password) {
   const pfx = forge.pkcs12.pkcs12FromAsn1(pfxAsn1, password || '');
 
   let privateKey = null;
-  let certificate = null;
+  const certs = [];
 
   for (const safeContents of pfx.safeContents) {
     for (const safeBag of safeContents.safeBags) {
@@ -16,19 +16,69 @@ export function parsePFX(pfxBase64, password) {
       ) {
         privateKey = safeBag.key;
       }
-      if (safeBag.type === forge.pki.oids.certBag) {
-        // Prefer non-CA certificate
-        if (!certificate || !safeBag.cert.isIssuer(safeBag.cert)) {
-          certificate = safeBag.cert;
-        }
+      if (safeBag.type === forge.pki.oids.certBag && safeBag.cert) {
+        certs.push(safeBag.cert);
       }
     }
   }
 
   if (!privateKey) throw new Error('No se encontró clave privada en el .pfx');
-  if (!certificate) throw new Error('No se encontró certificado en el .pfx');
+  if (!certs.length) throw new Error('No se encontró certificado en el .pfx');
+
+  // CRÍTICO: elegir el certificado cuya clave pública corresponde a la clave
+  // privada. Si el .pfx trae la cadena de la CA, otros certs NO matchean la
+  // clave privada y SII rechazaría la firma (ESTADO 10 "Error Interno").
+  let certificate = certs.find(
+    c => c.publicKey && c.publicKey.n && c.publicKey.n.equals(privateKey.n)
+  );
+
+  if (!certificate) {
+    // Fallback: el primer cert que NO sea auto-firmado (no-CA)
+    certificate = certs.find(c => !c.isIssuer(c)) || certs[0];
+  }
 
   return { privateKey, certificate };
+}
+
+// Diagnóstico: verifica que el certificado seleccionado corresponda a la clave
+// privada (mismo módulo RSA). Devuelve detalle útil para depurar el .pfx.
+export function describePFX(pfxBase64, password) {
+  const pfxDer = forge.util.decode64(pfxBase64);
+  const pfxAsn1 = forge.asn1.fromDer(pfxDer);
+  const pfx = forge.pkcs12.pkcs12FromAsn1(pfxAsn1, password || '');
+
+  let privateKey = null;
+  const certs = [];
+  for (const safeContents of pfx.safeContents) {
+    for (const safeBag of safeContents.safeBags) {
+      if (safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag || safeBag.type === forge.pki.oids.keyBag) {
+        privateKey = safeBag.key;
+      }
+      if (safeBag.type === forge.pki.oids.certBag && safeBag.cert) certs.push(safeBag.cert);
+    }
+  }
+
+  const pkN = privateKey?.n?.toString(16) || null;
+  return {
+    cert_count: certs.length,
+    private_key_present: !!privateKey,
+    certs: certs.map(c => {
+      const subjCN = (c.subject.getField('CN') || {}).value || null;
+      const issuerCN = (c.issuer.getField('CN') || {}).value || null;
+      const certN = c.publicKey?.n?.toString(16) || null;
+      // RUT suele ir en el serialNumber del subject
+      const subjSerial = (c.subject.getField({ name: 'serialName' }) || c.subject.getField('2.5.4.5') || {}).value || null;
+      return {
+        subject_cn: subjCN,
+        subject_rut: subjSerial,
+        issuer_cn: issuerCN,
+        self_signed: c.isIssuer(c),
+        matches_private_key: certN && pkN ? certN === pkN : false,
+        not_before: c.validity.notBefore,
+        not_after: c.validity.notAfter,
+      };
+    }),
+  };
 }
 
 // SHA1 digest → base64 (para XMLDSig DigestValue y FRMT del TED)
@@ -45,11 +95,25 @@ export function rsaSha1b64(str, privateKey) {
   return forge.util.encode64(privateKey.sign(md));
 }
 
+// RSA-SHA1 firma → base64 usando una clave privada en formato PEM.
+// Se usa para firmar el DD del TED con la llave privada del CAF (<RSASK>).
+export function rsaSha1b64Pem(str, pemKey) {
+  const privateKey = forge.pki.privateKeyFromPem(pemKey);
+  const md = forge.md.sha1.create();
+  md.update(str, 'utf8');
+  return forge.util.encode64(privateKey.sign(md));
+}
+
 // Certificado DER en base64 (para X509Certificate en KeyInfo)
 export function certDerb64(certificate) {
   return forge.util.encode64(
     forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).bytes()
   );
+}
+
+// Clave privada en PEM (para xml-crypto, que usa el crypto nativo de Node)
+export function privateKeyPem(privateKey) {
+  return forge.pki.privateKeyToPem(privateKey);
 }
 
 // Módulo RSA en base64 (para RSAKeyValue/Modulus)
