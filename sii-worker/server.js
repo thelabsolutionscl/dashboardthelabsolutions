@@ -309,7 +309,14 @@ app.get('/test-emit', async (req, res) => {
       kv.put(`folio_${tipo}`, String(folio));
     }
 
-    res.json({ folio, trackid: siiResult.trackid, estado_sii: siiResult.estado, glosa_sii: siiResult.glosa || '' });
+    res.json({
+      folio,
+      trackid: siiResult.trackid,
+      estado_sii: siiResult.estado,
+      glosa_sii: siiResult.glosa || '',
+      http: siiResult.http,
+      raw: siiResult.raw,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

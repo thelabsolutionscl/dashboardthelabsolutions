@@ -216,6 +216,9 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
 
   const text = await res.text();
 
+  console.log('[DEBUG uploadDTE] HTTP status:', res.status);
+  console.log('[DEBUG uploadDTE] respuesta cruda SII:', text.substring(0, 1000));
+
   const trackid = (text.match(/TRACKID[^>]*>([^<]+)/i) || [])[1]?.trim() || null;
   const estado = (text.match(/ESTADO[^>]*>(\-?\d+)/i) || [])[1]?.trim() || null;
   const glosa = (text.match(/GLOSA[^>]*>([^<]+)/i) || [])[1]?.trim() || '';
@@ -223,5 +226,6 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
   if (estado === '-11') throw new Error('RUT no autorizado como emisor electrónico en SII');
   if (estado === '-1')  throw new Error('Error autenticación SII: ' + glosa);
 
-  return { trackid, estado, glosa };
+  // Devuelve también la respuesta cruda (truncada) para diagnóstico
+  return { trackid, estado, glosa, http: res.status, raw: text.substring(0, 600) };
 }
