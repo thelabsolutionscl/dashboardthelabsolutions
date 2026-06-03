@@ -323,6 +323,7 @@ app.get('/test-emit', async (req, res) => {
     const folio = nextFolio(tipo, cafXml);
     const token = await getSIIToken(privateKey, certificate, env);
     const envioDte = buildSignedEnvioDTE(sample, folio, cafXml, privateKey, certificate, env);
+    persistEmittedDtes(envioDte);
     const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
 
     if (siiResult.estado !== '-11' && siiResult.estado !== '-1') {
@@ -341,6 +342,19 @@ app.get('/test-emit', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// Guarda cada <DTE> del EnvioDTE en ./data/dte/{tipo}_{folio}.xml para poder
+// generar después su representación impresa (PDF con timbre).
+function persistEmittedDtes(envioXml) {
+  const dir = join(DATA_DIR, 'dte');
+  if (!existsSync(dir)) mkdirSync(dir);
+  const blocks = envioXml.match(/<DTE\b[\s\S]*?<\/DTE>/g) || [];
+  for (const b of blocks) {
+    const tipo = (b.match(/<TipoDTE>(\d+)<\/TipoDTE>/) || [])[1];
+    const folio = (b.match(/<Folio>(\d+)<\/Folio>/) || [])[1];
+    if (tipo && folio) writeFileSync(join(dir, `${tipo}_${folio}.xml`), b, 'utf8');
+  }
+}
 
 // Reserva los próximos `count` folios de un tipo SIN persistir todavía.
 function peekFolios(tipo, count, cafXml) {
@@ -406,6 +420,45 @@ app.get('/preview-set', async (req, res) => {
   }
 });
 
+// GET /pdf/:tipo/:folio — representación impresa (PDF + timbre PDF417) de un DTE YA emitido.
+app.get('/pdf/:tipo/:folio', async (req, res) => {
+  try {
+    const f = join(DATA_DIR, 'dte', `${req.params.tipo}_${req.params.folio}.xml`);
+    if (!existsSync(f)) return res.status(404).json({ error: `No hay DTE emitido para tipo ${req.params.tipo} folio ${req.params.folio}. Emítelo primero.` });
+    const { generateDtePdf } = await import('./src/pdf-dte.js');
+    res.type('application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="DTE_${req.params.tipo}_${req.params.folio}.pdf"`);
+    await generateDtePdf(readFileSync(f, 'utf8'), env, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /preview-pdf — PDF de prueba del layout sin emitir. ?tipo=&folio= para elegir,
+// si no, toma el primer documento del set.
+app.get('/preview-pdf', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const { documentos } = prepareSet({ allowPartial: true });
+    if (!documentos.length) throw new Error('No hay CAF disponible para generar el set.');
+    const xml = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
+    const blocks = xml.match(/<DTE\b[\s\S]*?<\/DTE>/g) || [];
+    let block = blocks[0];
+    if (req.query.tipo && req.query.folio) {
+      block = blocks.find(b =>
+        (b.match(/<TipoDTE>(\d+)<\/TipoDTE>/) || [])[1] === String(req.query.tipo) &&
+        (b.match(/<Folio>(\d+)<\/Folio>/) || [])[1] === String(req.query.folio)
+      ) || blocks[0];
+    }
+    const { generateDtePdf } = await import('./src/pdf-dte.js');
+    res.type('application/pdf');
+    await generateDtePdf(block, env, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /set-pruebas — emite el SET BÁSICO completo al SII (consume folios).
 app.post('/set-pruebas', async (req, res) => {
   try {
@@ -417,6 +470,7 @@ app.post('/set-pruebas', async (req, res) => {
 
     const token = await getSIIToken(privateKey, certificate, env);
     const envioDte = buildSignedEnvioDTESet(documentos, env, privateKey, certificate);
+    persistEmittedDtes(envioDte);
     const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
 
     // Persistir los folios consumidos solo si la recepción fue OK (STATUS 0)
@@ -480,6 +534,7 @@ app.post('/', async (req, res) => {
     const folio = nextFolio(data.tipo_documento, cafXml);
     const token = await getSIIToken(privateKey, certificate, env);
     const envioDte = buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env);
+    persistEmittedDtes(envioDte);
     const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
 
     if (siiResult.estado !== '-11' && siiResult.estado !== '-1') {
