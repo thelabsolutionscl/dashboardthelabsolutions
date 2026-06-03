@@ -11,15 +11,17 @@ function siiHost(env) {
 function buildXmlSignature(refUri, contentToDigest, privateKey, certificate) {
   const digest = sha1b64(contentToDigest);
 
-  // ds: prefix so XMLDSig namespace never becomes the default namespace inside <item>
+  // ds: prefix so XMLDSig namespace never becomes the default namespace inside <item>.
+  // C14N 1.0 expands self-closing tags to explicit open/close pairs — sign with
+  // explicit close tags so what we sign matches what SII canonicalizes for verification.
   const ns = 'xmlns:ds="http://www.w3.org/2000/09/xmldsig#"';
   const signedInfo =
     `<ds:SignedInfo ${ns}>` +
-    `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>` +
-    `<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>` +
+    `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></ds:CanonicalizationMethod>` +
+    `<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></ds:SignatureMethod>` +
     `<ds:Reference URI="${refUri}">` +
-    `<ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></ds:Transforms>` +
-    `<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>` +
+    `<ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></ds:Transform></ds:Transforms>` +
+    `<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></ds:DigestMethod>` +
     `<ds:DigestValue>${digest}</ds:DigestValue>` +
     `</ds:Reference>` +
     `</ds:SignedInfo>`;
