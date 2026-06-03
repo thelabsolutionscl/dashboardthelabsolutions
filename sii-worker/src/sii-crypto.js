@@ -95,6 +95,15 @@ export function rsaSha1b64(str, privateKey) {
   return forge.util.encode64(privateKey.sign(md));
 }
 
+// RSA-SHA1 firma → base64 usando una clave privada en formato PEM.
+// Se usa para firmar el DD del TED con la llave privada del CAF (<RSASK>).
+export function rsaSha1b64Pem(str, pemKey) {
+  const privateKey = forge.pki.privateKeyFromPem(pemKey);
+  const md = forge.md.sha1.create();
+  md.update(str, 'utf8');
+  return forge.util.encode64(privateKey.sign(md));
+}
+
 // Certificado DER en base64 (para X509Certificate en KeyInfo)
 export function certDerb64(certificate) {
   return forge.util.encode64(

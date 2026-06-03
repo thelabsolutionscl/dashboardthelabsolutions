@@ -1,4 +1,8 @@
-import { sha1b64, rsaSha1b64, certDerb64, rsaModulusb64, rsaExponentb64 } from './sii-crypto.js';
+import { createRequire } from 'module';
+import { rsaSha1b64Pem, certDerb64, rsaModulusb64, rsaExponentb64, privateKeyPem } from './sii-crypto.js';
+
+const require = createRequire(import.meta.url);
+const { SignedXml } = require('xml-crypto');
 
 function x(str) {
   return (str || '')
@@ -20,17 +24,27 @@ function cleanRut(rut) {
   return (rut || '').replace(/\./g, '');  // elimina puntos, conserva guión
 }
 
-// Extrae el bloque <CAF>...</CAF> del XML de autorización completo
+// Extrae el bloque <CAF>...</CAF> del XML de autorización completo (verbatim).
+// Debe ir byte-a-byte como lo entregó SII, porque trae su propia firma <FRMA>.
 function extractCafElement(cafXml) {
   const m = cafXml.match(/<CAF[\s\S]*?<\/CAF>/);
   return m ? m[0] : cafXml;
 }
 
-// Genera el TED (Timbre Electrónico) y lo firma con la clave privada de la empresa.
+// Extrae la llave privada del CAF (<RSASK>) en formato PEM. El timbre (FRMT)
+// se firma con ESTA llave, no con la del certificado de la empresa.
+function extractCafPrivateKey(cafXml) {
+  const m = cafXml.match(/<RSASK>([\s\S]*?)<\/RSASK>/);
+  if (!m) throw new Error('CAF no contiene <RSASK> (llave privada del timbre)');
+  return m[1].trim();
+}
+
+// Genera el TED (Timbre Electrónico) firmado con la llave privada del CAF.
 // El TED va embebido dentro del <Documento> antes de <TmstFirma>.
-function generateTED(params, cafXml, privateKey) {
+function generateTED(params, cafXml) {
   const { tipoDTE, folio, rutEmisor, receptor, totales, detalle } = params;
   const cafElement = extractCafElement(cafXml);
+  const cafKeyPem = extractCafPrivateKey(cafXml);
   const stamp = ts();
 
   // DD incluye el CAF exactamente como lo entregó SII (sin modificaciones)
@@ -48,56 +62,54 @@ function generateTED(params, cafXml, privateKey) {
     `<TSTED>${stamp}</TSTED>` +
     `</DD>`;
 
-  const frmt = rsaSha1b64(dd, privateKey);
+  // FRMT = RSA-SHA1(DD) firmado con la llave privada del CAF (RSASK)
+  const frmt = rsaSha1b64Pem(dd, cafKeyPem);
 
   return `<TED version="1.0">${dd}<FRMT algoritmo="SHA1withRSA">${frmt}</FRMT></TED>`;
 }
 
-// Construye el XML del bloque Signature para el Documento o el SetDTE.
-// contentToDigest: el XML del elemento referenciado (para calcular el DigestValue).
-// refUri: URI del Reference (ej: "#F33T1" o "#SetDoc").
-function buildSignature(contentToDigest, refUri, privateKey, certificate) {
-  const digest = sha1b64(contentToDigest);
-
-  const signedInfo =
-    `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">` +
-    `<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>` +
-    `<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>` +
-    `<Reference URI="${refUri}">` +
-    `<Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms>` +
-    `<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>` +
-    `<DigestValue>${digest}</DigestValue>` +
-    `</Reference>` +
-    `</SignedInfo>`;
-
-  const sigValue = rsaSha1b64(signedInfo, privateKey);
+// Firma enveloped con xml-crypto sobre el elemento `localName` (referenciado por
+// `refUri`), insertando el <Signature> como hermano posterior. xml-crypto maneja
+// la canonicalización C14N correctamente incluyendo herencia de namespaces.
+function signEnveloped(fullXml, localName, refUri, privateKey, certificate) {
   const certB64 = certDerb64(certificate);
   const mod = rsaModulusb64(certificate);
   const exp = rsaExponentb64(certificate);
+  const xpath = `//*[local-name(.)='${localName}']`;
 
-  return (
-    `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">` +
-    signedInfo +
-    `<SignatureValue>${sigValue}</SignatureValue>` +
-    `<KeyInfo>` +
+  const sig = new SignedXml({
+    privateKey: privateKeyPem(privateKey),
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+  });
+
+  sig.addReference({
+    xpath,
+    transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    uri: refUri,
+  });
+
+  sig.getKeyInfoContent = () =>
     `<KeyValue><RSAKeyValue><Modulus>${mod}</Modulus><Exponent>${exp}</Exponent></RSAKeyValue></KeyValue>` +
-    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>` +
-    `</KeyInfo>` +
-    `</Signature>`
-  );
+    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`;
+
+  sig.computeSignature(fullXml, { location: { reference: xpath, action: 'after' } });
+  return sig.getSignedXml();
 }
 
-// Genera el DTE completo firmado (listo para ir dentro del EnvioDTE).
-export function generateSignedDTE(data, folio, cafXml, privateKey, certificate, env) {
-  const { tipo_documento, receptor, detalle, totales, referencia } = data;
+// Construye el <Documento> sin firmar (con el TED ya firmado dentro).
+// No lleva xmlns propio: hereda http://www.sii.cl/SiiDte del EnvioDTE, así la
+// C14N al firmar coincide con la C14N al verificar (mismo contexto namespace).
+function buildDocumento(data, folio, cafXml, env) {
+  const { tipo_documento, receptor, detalle, totales } = data;
   const rutEmisor = env.RUT_EMISOR;
   const docId = `F${tipo_documento}T${folio}`;
   const stamp = ts();
 
   const ted = generateTED(
     { tipoDTE: tipo_documento, folio, rutEmisor, receptor, totales, detalle },
-    cafXml,
-    privateKey
+    cafXml
   );
 
   const detalles = detalle
@@ -112,11 +124,8 @@ export function generateSignedDTE(data, folio, cafXml, privateKey, certificate, 
     )
     .join('');
 
-  // El Documento incluye xmlns explícito para que el digest sea C14N-correcto
-  // (en C14N inclusive, el namespace del elemento padre se hereda en el hijo;
-  //  al ponerlo explícito aquí el string para hash coincide con el C14N output).
-  const documento =
-    `<Documento ID="${docId}" xmlns="http://www.sii.cl/SiiDte">` +
+  return (
+    `<Documento ID="${docId}">` +
     `<Encabezado>` +
     `<IdDoc>` +
     `<TipoDTE>${tipo_documento}</TipoDTE>` +
@@ -152,22 +161,21 @@ export function generateSignedDTE(data, folio, cafXml, privateKey, certificate, 
     detalles +
     ted +
     `<TmstFirma>${stamp}</TmstFirma>` +
-    `</Documento>`;
-
-  const docSignature = buildSignature(documento, `#${docId}`, privateKey, certificate);
-
-  return (
-    `<DTE version="1.0">` +
-    documento +
-    docSignature +
-    `</DTE>`
+    `</Documento>`
   );
 }
 
-// Construye el EnvioDTE completo con su firma sobre el SetDTE.
-export function buildEnvioDTE(signedDte, data, folio, env, privateKey, certificate) {
+// Construye el EnvioDTE completo y firmado, listo para subir al SII.
+// Estrategia: arma TODO el documento sin firmar primero, luego firma el
+// <Documento> (#F..) y el <SetDTE> (#SetDoc) EN CONTEXTO con xml-crypto.
+// Así el namespace SiiDte es idéntico al firmar y al verificar.
+export function buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env) {
   const rutEmisor = cleanRut(env.RUT_EMISOR);
+  const docId = `F${data.tipo_documento}T${folio}`;
   const stamp = ts();
+
+  const documento = buildDocumento(data, folio, cafXml, env);
+  const dte = `<DTE version="1.0">${documento}</DTE>`;
 
   const caratula =
     `<Caratula version="1.0">` +
@@ -180,20 +188,22 @@ export function buildEnvioDTE(signedDte, data, folio, env, privateKey, certifica
     `<SubTotDTE><TpoDTE>${data.tipo_documento}</TpoDTE><NroDTE>1</NroDTE></SubTotDTE>` +
     `</Caratula>`;
 
-  // El SetDTE tiene su propio ID para la firma
-  const setDteInner = caratula + signedDte;
-  const setDteWithId = `<SetDTE ID="SetDoc">${setDteInner}</SetDTE>`;
+  const setDte = `<SetDTE ID="SetDoc">${caratula}${dte}</SetDTE>`;
 
-  const setSignature = buildSignature(setDteWithId, '#SetDoc', privateKey, certificate);
-
-  return (
-    `<?xml version="1.0" encoding="ISO-8859-1"?>\n` +
+  // Documento sin prólogo XML (xml-crypto/xmldom lo maneja mejor sin <?xml?>)
+  const envioUnsigned =
     `<EnvioDTE version="1.0" ` +
     `xmlns="http://www.sii.cl/SiiDte" ` +
     `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
     `xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd">` +
-    setDteWithId +
-    setSignature +
-    `</EnvioDTE>`
-  );
+    setDte +
+    `</EnvioDTE>`;
+
+  // 1. Firma el Documento (Signature queda como hermano dentro de <DTE>)
+  let signed = signEnveloped(envioUnsigned, 'Documento', `#${docId}`, privateKey, certificate);
+  // 2. Firma el SetDTE (Signature queda como hermano dentro de <EnvioDTE>,
+  //    cubriendo la carátula + DTE ya firmado)
+  signed = signEnveloped(signed, 'SetDTE', '#SetDoc', privateKey, certificate);
+
+  return `<?xml version="1.0" encoding="ISO-8859-1"?>\n${signed}`;
 }

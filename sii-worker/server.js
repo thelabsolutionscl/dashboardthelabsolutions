@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { parsePFX } from './src/sii-crypto.js';
 import { getSIIToken, uploadDTE } from './src/sii-auth.js';
-import { generateSignedDTE, buildEnvioDTE } from './src/dte-xml.js';
+import { buildSignedEnvioDTE } from './src/dte-xml.js';
 
 const require = createRequire(import.meta.url);
 try { require('dotenv').config(); } catch {}
@@ -237,6 +237,42 @@ app.get('/test-cert', async (req, res) => {
   }
 });
 
+// GET /preview-dte — genera un EnvioDTE de ejemplo y lo devuelve como XML,
+// SIN subirlo al SII y SIN consumir folio. Sirve para inspeccionar la firma.
+app.get('/preview-dte', async (req, res) => {
+  try {
+    validateEnvSecrets(env);
+    const tipo = '33';
+    const cafXml = kv.get(`caf_${tipo}`);
+    if (!cafXml) throw new Error(`CAF no encontrado para tipo ${tipo}`);
+
+    const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
+    const range = parseCafRange(cafXml);
+    const folio = range.desde;  // primer folio del rango (no se persiste)
+
+    const sample = {
+      tipo_documento: tipo,
+      receptor: {
+        rut: '66666666-6',
+        razon_social: 'Cliente de Prueba SII',
+        giro: 'Servicios de prueba',
+        direccion: 'Calle Falsa 123',
+        comuna: 'Santiago',
+        ciudad: 'Santiago',
+      },
+      detalle: [
+        { nombre: 'Servicio de prueba', cantidad: 1, precio_unitario: 100000, monto_neto: 100000 },
+      ],
+      totales: { neto: 100000, iva: 19000, total: 119000 },
+    };
+
+    const xml = buildSignedEnvioDTE(sample, folio, cafXml, privateKey, certificate, env);
+    res.type('application/xml').send(xml);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /test-token — prueba el flujo semilla→token sin emitir DTE
 app.get('/test-token', async (req, res) => {
   try {
@@ -262,8 +298,7 @@ app.post('/', async (req, res) => {
 
     const folio = nextFolio(data.tipo_documento, cafXml);
     const token = await getSIIToken(privateKey, certificate, env);
-    const signedDte = generateSignedDTE(data, folio, cafXml, privateKey, certificate, env);
-    const envioDte = buildEnvioDTE(signedDte, data, folio, env, privateKey, certificate);
+    const envioDte = buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env);
     const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
 
     if (siiResult.estado !== '-11' && siiResult.estado !== '-1') {
