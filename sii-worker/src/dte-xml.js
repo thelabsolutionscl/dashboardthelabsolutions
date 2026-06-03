@@ -245,13 +245,17 @@ export function buildSignedEnvioDTESet(documentos, env, privateKey, certificate)
     .map(([tipo, n]) => `<SubTotDTE><TpoDTE>${tipo}</TpoDTE><NroDTE>${n}</NroDTE></SubTotDTE>`)
     .join('');
 
+  // En certificación SII exige NroResol=0; el número real de resolución solo
+  // aplica en producción. Así no depende de configurar bien el .env.
+  const nroResol = String(env.SII_ENV) === 'produccion' ? env.RESOLUCION_NUMERO : 0;
+
   const caratula =
     `<Caratula version="1.0">` +
     `<RutEmisor>${rutEmisor}</RutEmisor>` +
     `<RutEnvia>${rutEmisor}</RutEnvia>` +
     `<RutReceptor>60803000-K</RutReceptor>` +
     `<FchResol>${env.RESOLUCION_FECHA}</FchResol>` +
-    `<NroResol>${env.RESOLUCION_NUMERO}</NroResol>` +
+    `<NroResol>${nroResol}</NroResol>` +
     `<TmstFirmaEnv>${stamp}</TmstFirmaEnv>` +
     subTotDte +
     `</Caratula>`;
