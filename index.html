@@ -165,6 +165,21 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);}
 .modal-card{position:relative;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:24px;max-width:480px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.6);}
 .modal-card.wide{max-width:640px;}
+/* ── Facturas cliente: estilos base ──────────────────────────── */
+.fac-kpi-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.fac-kpi{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;flex:1;min-width:80px;display:flex;flex-direction:column;gap:2px;}
+.fac-kpi-danger{border-color:rgba(255,68,68,0.4);background:rgba(255,68,68,0.06);}
+.fac-kpi-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);}
+.fac-kpi-val{font-size:13px;font-weight:700;color:var(--text);}
+.fac-kpi-danger .fac-kpi-val{color:var(--danger);}
+.fac-filtros{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap;}
+.fac-chip{background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s;}
+.fac-chip:hover{border-color:var(--accent);color:var(--accent);}
+.fac-chip-active{background:rgba(0,212,204,0.12);border-color:var(--accent);color:var(--accent);}
+.fac-chip-n{display:inline-block;background:rgba(255,255,255,0.12);border-radius:8px;padding:0 5px;font-size:9px;font-weight:700;margin-left:2px;}
+.fac-btn-cobrar{background:rgba(0,212,170,0.15)!important;border:1px solid rgba(0,212,170,0.4)!important;color:var(--success)!important;font-weight:700!important;}
+.fac-btn-cobrar:hover{background:rgba(0,212,170,0.3)!important;}
+/* ─────────────────────────────────────────────────────────────── */
 .modal-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1.5px;margin-bottom:6px;}
 .modal-desc{font-size:12px;color:var(--text2);line-height:1.5;}
 .agent-chip{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative;}
@@ -821,8 +836,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
   /* Header: título+engranaje arriba, botones abajo en fila completa */
   #cdFacturasHeader{flex-direction:column!important;align-items:stretch!important;gap:8px!important;}
-  #cdFacturasHeader>div:last-child{display:grid!important;grid-template-columns:repeat(3,1fr);gap:6px;}
-  #cdFacturasHeader>div:last-child .btn{justify-content:center;width:100%;min-height:40px!important;font-size:11px!important;padding:8px 4px!important;}
+  #cdFacturasHeader>div:last-child{display:grid!important;grid-template-columns:repeat(4,1fr);gap:5px;}
+  #cdFacturasHeader>div:last-child .btn{justify-content:center;width:100%;min-height:40px!important;font-size:10px!important;padding:6px 2px!important;}
+
+  /* KPI row: 2 en fila en mobile */
+  .fac-kpi-row{gap:6px;}
+  .fac-kpi{min-width:calc(50% - 3px);flex:1 1 calc(50% - 3px);}
+  .fac-filtros{gap:4px;}
+  .fac-chip{padding:6px 10px;font-size:11px;min-height:34px;}
 
   /* Tabla → tarjetas apiladas */
   .fac-tw table,.fac-tw tbody{display:block;width:100%;}
@@ -2130,8 +2151,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <button onclick="configurarSiiUrl()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:1px 4px;border-radius:4px" title="Configurar URL servidor SII">⚙</button>
         </div>
         <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-sm" onclick="actualizarTodosEstadosSII()" style="font-size:10px;padding:4px 8px" title="Consultar estado SII de todas las facturas pendientes">🔄 SII</button>
           <button class="btn btn-ghost btn-sm" onclick="exportarFacturasCSV()" style="font-size:10px;padding:4px 8px" title="Exportar a CSV">⬇ CSV</button>
-          <button class="btn btn-ghost btn-sm" onclick="abrirImportarDtes()" style="font-size:10px;padding:4px 8px" title="Importar DTEs del servidor SII">⬆ SII</button>
+          <button class="btn btn-ghost btn-sm" onclick="abrirImportarDtes()" style="font-size:10px;padding:4px 8px" title="Importar DTEs del servidor SII">⬆ DTE</button>
           <button class="btn btn-ghost btn-sm" id="cdAddFacturaBtn" style="font-size:10px;padding:4px 8px">➕ Nueva</button>
         </div>
       </div>
@@ -3418,6 +3440,7 @@ const CHILE_COMUNAS={
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
 let cdCurrentId='',cdCurrentEmpresa='';
 let _importDtes=[];
+let _facFiltro='todas';
 let wpPagesCache=[];
 const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
@@ -4702,16 +4725,43 @@ function estadoPagoBadge(estado,fecha,fechaVenc){
 }
 function renderClienteFacturas(clienteId,empresa){
   const cont=document.getElementById('cdFacturas');if(!cont) return;
-  const facs=facturasForCliente(clienteId,empresa).sort((a,b)=>(b.fields['Fecha']||'').localeCompare(a.fields['Fecha']||''));
-  if(!facs.length){cont.innerHTML='<span style="color:var(--text3)">Sin facturas registradas</span>';return;}
+  const all=facturasForCliente(clienteId,empresa).sort((a,b)=>(b.fields['Fecha']||'').localeCompare(a.fields['Fecha']||''));
+  if(!all.length){cont.innerHTML='<span style="color:var(--text3)">Sin facturas registradas</span>';return;}
   const workerUrl=getSiiWorkerUrl();
-  const totalEmitido=facs.reduce((s,r)=>s+(r.fields['Total']||0),0);
-  const totalCobrado=facs.filter(r=>r.fields['Estado Pago']==='Cobrada').reduce((s,r)=>s+(r.fields['Total']||0),0);
-  const totalPendiente=totalEmitido-totalCobrado;
-  cont.innerHTML=`<div class="fac-tw"><table style="width:100%;border-collapse:collapse">
+
+  // ── KPIs globales (sobre todos los registros, no filtrados) ──
+  const kpiEmitido=all.reduce((s,r)=>s+(r.fields['Total']||0),0);
+  const kpiCobrado=all.filter(r=>r.fields['Estado Pago']==='Cobrada').reduce((s,r)=>s+(r.fields['Total']||0),0);
+  const kpiPendiente=kpiEmitido-kpiCobrado;
+  const kpiVencidas=all.filter(r=>r.fields['Estado Pago']!=='Cobrada'&&calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento'])>0).length;
+
+  // ── Filtros ──
+  const filtros=[
+    {k:'todas',  label:'Todas',     n:all.length},
+    {k:'pendiente',label:'Pendientes',n:all.filter(r=>r.fields['Estado Pago']==='Pendiente').length},
+    {k:'cobrada', label:'Cobradas',  n:all.filter(r=>r.fields['Estado Pago']==='Cobrada').length},
+    {k:'vencida', label:'Vencidas',  n:kpiVencidas},
+  ];
+  const facs=_facFiltro==='pendiente'?all.filter(r=>r.fields['Estado Pago']==='Pendiente')
+            :_facFiltro==='cobrada' ?all.filter(r=>r.fields['Estado Pago']==='Cobrada')
+            :_facFiltro==='vencida' ?all.filter(r=>r.fields['Estado Pago']!=='Cobrada'&&calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento'])>0)
+            :all;
+
+  cont.innerHTML=`
+  <div class="fac-kpi-row">
+    <div class="fac-kpi"><span class="fac-kpi-lbl">Emitido</span><span class="fac-kpi-val clp">${formatCLP(kpiEmitido)}</span></div>
+    <div class="fac-kpi"><span class="fac-kpi-lbl">Cobrado</span><span class="fac-kpi-val" style="color:var(--success)" >${formatCLP(kpiCobrado)}</span></div>
+    <div class="fac-kpi"><span class="fac-kpi-lbl">Pendiente</span><span class="fac-kpi-val" style="color:${kpiPendiente>0?'var(--warn)':'var(--text2)'}">${formatCLP(kpiPendiente)}</span></div>
+    ${kpiVencidas?`<div class="fac-kpi fac-kpi-danger"><span class="fac-kpi-lbl">Vencidas</span><span class="fac-kpi-val">${kpiVencidas}</span></div>`:''}
+  </div>
+  <div class="fac-filtros">
+    ${filtros.map(f=>`<button class="fac-chip${_facFiltro===f.k?' fac-chip-active':''}" onclick="_facFiltro='${f.k}';renderClienteFacturas('${clienteId}','${escapeHtml(empresa)}')">${f.label}${f.n>0?` <span class="fac-chip-n">${f.n}</span>`:''}</button>`).join('')}
+  </div>
+  ${facs.length===0?`<div style="color:var(--text3);font-size:12px;padding:8px 0">Sin resultados para este filtro.</div>`:`
+  <div class="fac-tw"><table style="width:100%;border-collapse:collapse">
     <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
       <th style="text-align:left;padding:4px">Tipo / Folio</th><th style="text-align:left;padding:4px">Fecha</th>
-      <th style="text-align:right;padding:4px">Total</th><th style="text-align:left;padding:4px">Estado SII</th>
+      <th style="text-align:right;padding:4px">Total</th><th style="text-align:left;padding:4px">SII</th>
       <th style="text-align:left;padding:4px">Pago</th><th style="padding:4px"></th>
     </tr></thead><tbody>
     ${facs.map(r=>{
@@ -4724,11 +4774,14 @@ function renderClienteFacturas(clienteId,empresa){
       const tipoLabel=String(f['Tipo DTE']||'—').split(' - ');
       const tipoNum2=tipoLabel[0].trim();
       const tipoNombre=tipoLabel[1]||'';
-      return`<tr style="border-bottom:1px solid var(--border)"${notasTip}>
+      const dias=calcDiasMora(f['Fecha'],f['Fecha Vencimiento']);
+      const esVencida=f['Estado Pago']!=='Cobrada'&&dias>0;
+      const rowStyle=esVencida?'border-bottom:1px solid var(--border);background:rgba(255,68,68,0.05)':'border-bottom:1px solid var(--border)';
+      return`<tr style="${rowStyle}"${notasTip}>
         <td style="padding:6px 4px">
           <strong style="color:var(--accent)">${escapeHtml(tipoNum2)}</strong>
           ${tipoNombre?`<span style="color:var(--text3);font-size:10px;font-weight:400"> ${escapeHtml(tipoNombre)}</span>`:''}
-          <span class="mono" style="font-size:12px;font-weight:700">#${escapeHtml(String(folio??'—'))}</span>
+          <span class="mono" style="font-size:12px;font-weight:700"> #${escapeHtml(String(folio??'—'))}</span>
           <button class="btn-mini" onclick="copiarFolio(${folio})" title="Copiar folio" style="font-size:9px;padding:0 3px;opacity:.7">📋</button>
         </td>
         <td style="padding:6px 4px;font-size:11px;color:var(--text2)">${escapeHtml(f['Fecha']||'—')}</td>
@@ -4737,17 +4790,48 @@ function renderClienteFacturas(clienteId,empresa){
         <td style="padding:6px 4px">${estadoPagoBadge(f['Estado Pago'],f['Fecha'],f['Fecha Vencimiento'])}</td>
         <td style="padding:6px 4px;text-align:right;white-space:nowrap">
           ${pdfHref?`<a href="${pdfHref}" target="_blank" class="btn-mini" title="Ver PDF">📄</a>`:''}
-          ${!r._readonly&&f['Track ID']?`<button class="btn-mini" title="Actualizar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}','${escapeHtml(empresa)}')">🔄</button>`:''}
-          ${r._readonly?`<span class="badge badge-gray" style="font-size:8px" title="Registro de Finanzas (solo lectura)">FIN</span>`:`<button class="btn-mini" title="Editar" onclick="openFacturaModal('${clienteId}','${rid}')">✏️</button><button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}','${clienteId}')">🗑</button>`}
+          ${!r._readonly&&f['Track ID']?`<button class="btn-mini" title="Consultar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}','${escapeHtml(empresa)}')">🔄</button>`:''}
+          ${r._readonly
+            ?`<span class="badge badge-gray" style="font-size:8px" title="Registro de Finanzas (solo lectura)">FIN</span>`
+            :`${f['Estado Pago']!=='Cobrada'?`<button class="btn-mini fac-btn-cobrar" title="Marcar como cobrada" onclick="marcarFacturaCobrada('${rid}','${clienteId}','${escapeHtml(empresa)}')">✓</button>`:''}
+             <button class="btn-mini" title="Editar" onclick="openFacturaModal('${clienteId}','${rid}')">✏️</button>
+             <button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}','${clienteId}')">🗑</button>`}
         </td></tr>`;}).join('')}
     </tbody></table></div>
-    <div class="fac-summary" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px">
-      <span style="color:var(--text3)">${facs.length} factura${facs.length>1?'s':''}</span>
-      <span style="color:var(--text2)">
-        Cobrado: <strong style="color:var(--success)" class="clp">${formatCLP(totalCobrado)}</strong>
-        &nbsp;·&nbsp;Pendiente: <strong style="color:${totalPendiente>0?'var(--warn)':'var(--text2)'}" class="clp">${formatCLP(totalPendiente)}</strong>
-      </span>
-    </div>`;
+  `}
+  <div class="fac-summary" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px">
+    <span style="color:var(--text3)">${facs.length} de ${all.length} factura${all.length!==1?'s':''}</span>
+    <span style="color:var(--text2)">
+      Cobrado: <strong style="color:var(--success)" class="clp">${formatCLP(kpiCobrado)}</strong>
+      &nbsp;·&nbsp;Pendiente: <strong style="color:${kpiPendiente>0?'var(--warn)':'var(--text2)'}" class="clp">${formatCLP(kpiPendiente)}</strong>
+    </span>
+  </div>`;
+}
+async function marcarFacturaCobrada(id,clienteId,empresa){
+  try{
+    await airtableWrite('Facturas','PATCH',id,{'Estado Pago':'Cobrada'});
+    const rec=state.facturas.find(x=>x.id===id);if(rec) rec.fields['Estado Pago']='Cobrada';
+    toast('Marcada como cobrada ✓','success');
+    renderClienteFacturas(clienteId,empresa);
+    if(typeof finRenderFacturas==='function') finRenderFacturas();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+async function actualizarTodosEstadosSII(){
+  const facs=facturasForCliente(cdCurrentId,cdCurrentEmpresa).filter(r=>!r._readonly&&r.fields['Track ID']&&r.fields['Estado Pago']!=='Cobrada');
+  if(!facs.length){toast('Sin facturas pendientes con Track ID','info');return;}
+  toast(`Consultando ${facs.length} factura${facs.length>1?'s':''}…`,'info');
+  let ok=0,err=0;
+  for(const r of facs){
+    try{
+      const res=await fetch(`${getSiiWorkerUrl()}/estado/${r.fields['Track ID']}`);
+      const data=await res.json();
+      const estado=data.estado||data.ESTADO||data.glosa||JSON.stringify(data).slice(0,40);
+      await airtableWrite('Facturas','PATCH',r.id,{'Estado SII':estado});
+      r.fields['Estado SII']=estado;ok++;
+    }catch(e){err++;}
+  }
+  toast(`${ok} actualizad${ok!==1?'as':'a'}${err?` · ${err} error${err>1?'es':''}`:''}`,'success');
+  renderClienteFacturas(cdCurrentId,cdCurrentEmpresa);
 }
 function facRecalcTotal(){
   const neto=parseInt(document.getElementById('facNeto').value)||0;
@@ -4799,6 +4883,8 @@ async function ensureFacturasTable(){
       {name:'Total',type:'number',options:{precision:0}},
       {name:'Track ID',type:'singleLineText'},
       {name:'Estado SII',type:'singleLineText'},
+      {name:'Estado Pago',type:'singleLineText'},
+      {name:'Fecha Vencimiento',type:'date',options:{dateFormat:{name:'iso'}}},
       {name:'Notas',type:'singleLineText'},
     ]})});
   }catch(e){}
@@ -4807,6 +4893,12 @@ async function saveFactura(){
   const btn=document.getElementById('facGuardarBtn');
   const folio=document.getElementById('facFolio').value.trim();
   if(!folio){toast('Folio requerido','error');return;}
+  const tipo=document.getElementById('facTipo').value;
+  const facId=document.getElementById('facId').value;
+  const clienteId=document.getElementById('facClienteId').value;
+  // Validar folio duplicado (mismo tipo+folio en el mismo cliente)
+  const duplicado=state.facturas.find(r=>r.id!==facId&&String(r.fields['Folio'])===folio&&r.fields['Tipo DTE']===tipo&&(r.fields['Cliente ID']===clienteId||(r.fields['Cliente']||'').toLowerCase()===(document.getElementById('facClienteNombre').value||'').toLowerCase()));
+  if(duplicado){toast(`Ya existe un ${tipo} con folio #${folio} para este cliente`,'error');return;}
   const num=el=>{const v=parseInt(document.getElementById(el).value);return isNaN(v)?null:v;};
   const fields={
     'Cliente':document.getElementById('facClienteNombre').value||'',
@@ -4821,8 +4913,6 @@ async function saveFactura(){
     'Fecha Vencimiento':document.getElementById('facFechaVenc').value||null,
     'Notas':document.getElementById('facNotas').value||'',
   };
-  const facId=document.getElementById('facId').value;
-  const clienteId=document.getElementById('facClienteId').value;
   const empresa=document.getElementById('facClienteNombre').value;
   try{
     btn.disabled=true;btn.textContent='Guardando...';
@@ -4925,7 +5015,7 @@ async function confirmarImportarDtes(){
     const cliId=document.getElementById(`imp-cli-${i}`)?.value||'';
     const cliNombre=cliId?(state.clientesById[cliId]||''):'';
     const d=_importDtes[i];
-    const fields={'Tipo DTE':tipoLabel[String(d.tipo)]||String(d.tipo),'Folio':d.folio,'Fecha':d.fecha||new Date().toISOString().slice(0,10),'Neto':d.neto||null,'IVA':d.iva||null,'Exento':d.exento||null,'Total':d.total||null,'Estado SII':d.trackid?'Enviado':'','Estado Pago':'Pendiente','Cliente':cliNombre,'Cliente ID':cliId};
+    const fields={'Tipo DTE':tipoLabel[String(d.tipo)]||String(d.tipo),'Folio':d.folio,'Fecha':d.fecha||new Date().toISOString().slice(0,10),'Neto':d.neto||null,'IVA':d.iva||null,'Exento':d.exento||null,'Total':d.total||null,'Track ID':d.trackid||'','Estado SII':d.trackid?'Enviado':'','Estado Pago':'Pendiente','Cliente':cliNombre,'Cliente ID':cliId};
     try{
       await ensureFacturasTable();
       const res=await airtableWrite('Facturas','POST',null,fields);
