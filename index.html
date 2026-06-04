@@ -3425,6 +3425,10 @@ function main() {
 <script>
 const BASE_ID='app1YtD74AqiPWQhy';
 let autoRefreshInterval=null;
+const AUTO_REFRESH_MS=600000;   // 10 min entre refresco automático
+const SILENT_DEBOUNCE_MS=300000; // 5 min mínimo entre cualquier fetch silencioso
+let _lastSilentFetch=0;          // timestamp del último silent fetch exitoso
+let _apiLimitHit=false;          // true cuando Airtable devuelve 429 por límite mensual
 // ── Red de seguridad global: captura errores no atrapados para que la UI no quede en estado inconsistente ──
 (function(){
   let _lastErr=0;
@@ -3852,7 +3856,12 @@ async function airtableFetch(table,max=100){
     let url=`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}?pageSize=${Math.min(max,100)}`;
     if(offset) url+=`&offset=${encodeURIComponent(offset)}`;
     const r=await airtableHttp(url,{headers:{'Authorization':'Bearer '+t}});
-    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`Airtable ${r.status}: ${j.error?.message||''}`);}
+    if(!r.ok){
+      const j=await r.json().catch(()=>({}));
+      const msg=j.error?.message||'';
+      if(r.status===429){_apiLimitHit=true;setStatus('límite API alcanzado',false);toast('⚠ Límite mensual de API Airtable alcanzado. Los datos no se actualizarán hasta el 1° del próximo mes.','error');throw new Error('Límite API Airtable');}
+      throw new Error(`Airtable ${r.status}: ${msg}`);
+    }
     const d=await r.json();all=[...all,...(d.records||[])];offset=d.offset||null;
     if(all.length>=max&&table!=='Clientes'&&table!=='Cotizaciones') break;
   }while(offset);
@@ -4222,6 +4231,7 @@ let isLoadingData=false;
 async function loadAllData(){
   if(isLoadingData)return;
   isLoadingData=true;
+  _lastSilentFetch=Date.now(); // el refresh manual también reinicia el debounce
   const isFirst=!state.loaded;
   const btn=document.getElementById('refreshBtn');
   try{
@@ -4282,6 +4292,10 @@ async function loadAllData(){
 }
 async function loadAllDataSilent(){
   if(!getToken()) return;
+  if(_apiLimitHit) return; // no reintentar si ya se superó el límite mensual
+  const now=Date.now();
+  if(now-_lastSilentFetch<SILENT_DEBOUNCE_MS) return; // debounce 5 min
+  _lastSilentFetch=now;
   try{
     const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),airtableFetch('Facturas',1000)]);
     if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
@@ -4294,7 +4308,7 @@ async function loadAllDataSilent(){
     state.lastUpdateTs=Date.now();document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;renderOverview();
   }catch(e){setStatus('error (auto)',false);}
 }
-function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},90000);}
+function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);if(_apiLimitHit) return;autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()&&!_apiLimitHit) loadAllDataSilent();},AUTO_REFRESH_MS);}
 
 // ── AI ────────────────────────────────────────────────────────
 async function callClaude(system,user){let k=getAnthropicKey();if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}return _callClaudeRaw(system,user,k);}
@@ -6144,7 +6158,8 @@ document.addEventListener('keydown',e=>{
 // ── AUTO-REFRESH INTELIGENTE (Page Visibility) ─────────────────────────
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
-    if(getToken()&&state.loaded) loadAllDataSilent();
+    // Solo re-fetcha al volver al tab si han pasado más de 5 min desde el último fetch
+    if(getToken()&&state.loaded&&!_apiLimitHit&&(Date.now()-_lastSilentFetch>SILENT_DEBOUNCE_MS)) loadAllDataSilent();
     startAutoRefresh();
   } else {
     if(autoRefreshInterval){clearInterval(autoRefreshInterval);autoRefreshInterval=null;}
