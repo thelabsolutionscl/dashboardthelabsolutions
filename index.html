@@ -4237,24 +4237,38 @@ async function loadAllData(){
     ]);
     // Facturas emitidas (tabla opcional; si no existe aún, queda vacía)
     if(facRes.status==='fulfilled'){state.facturas=facRes.value.records||[];}
-    // Detectar token inválido (401) — solo avisa, no bloquea el dashboard
-    if(cRes.status==='rejected'&&(cRes.reason?.message||'').includes('401')){
+    // Detectar sin-token o 401 globalmente
+    const _sinToken=[cRes,coRes,pRes,pvRes].every(r=>r.status==='rejected'&&r.reason?.message==='Sin token');
+    const _token401=(cRes.reason?.message||'').includes('401')||(pvRes.reason?.message||'').includes('401');
+    if(_sinToken){
+      setStatus('sin token',false);
+      toast('⚙ Configura el token de Airtable en ⚙ Configuración para cargar los datos','info');
+    } else if(_token401){
       localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');
       setStatus('token inválido',false);toast('⚠ Token Airtable vencido — configura uno nuevo en ⚙','error');
     }
-    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
+    // Asignar datos (solo si llegaron) y SIEMPRE renderizar para limpiar el estado "cargando..."
+    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});}
+    renderClientes();
     if(isFirst) slProgress(50,'Cargando cotizaciones y pedidos...');
-    if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];renderCotizaciones();}
-    if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();}
+    if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];}
+    renderCotizaciones();
+    if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];}
+    renderPedidos();
     if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
-    if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
-    if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();fillCatSelects();}
+    if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];}
+    renderReportes();
+    if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];}
+    renderProveedores();fillCatSelects();
     if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}renderWatiConfigBtn();}
     if(isFirst) slProgress(92,'Calculando resumen...');
-    state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
+    state.loaded=true;state.lastUpdateTs=Date.now();
+    // Solo "en vivo" si al menos cargó algo y no hay problema de token
+    const _anyOk=[cRes,coRes,pRes,pvRes].some(r=>r.status==='fulfilled');
+    if(!_sinToken&&!_token401){setStatus(_anyOk?'en vivo':'sin datos',_anyOk);}
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
     renderOverview();
-    if(!isFirst) toast('Datos actualizados ✓','success');
+    if(!isFirst&&_anyOk) toast('Datos actualizados ✓','success');
     ensureCotizacionFields();
   }catch(e){
     setStatus('error',false);
@@ -7503,7 +7517,7 @@ function renderProveedores(){
   const sorted=getSortedProveedores(list);
   const count=document.getElementById('proveedoresCount');if(count) count.textContent=`${sorted.length} proveedor${sorted.length!==1?'es':''}`;
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
-  if(!sorted.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
+  if(!sorted.length){const msg=state.proveedores.length?'Sin resultados para esta búsqueda':!getToken()?'⚙ Sin conexión — configura el token en ⚙ Configuración':'Sin proveedores aún — agrega el primero ↗';tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${msg}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
   renderProveedoresAnalytics();
 }
