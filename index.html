@@ -4009,6 +4009,18 @@ async function ensureFichaTecnicaField(){
     await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Tecnica',type:'multilineText'})});
   }catch(e){}
 }
+async function ensureFichaPropuestaField(){
+  const t=getToken();if(!t) return;
+  try{
+    const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    if(!r.ok) return;
+    const d=await r.json();
+    const tbl=d.tables?.find(x=>x.name==='Cotizaciones');
+    if(!tbl) return;
+    if(tbl.fields?.some(x=>x.name==='Ficha Propuesta')) return;
+    await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Propuesta',type:'multilineText'})});
+  }catch(e){}
+}
 async function crearCamposItemsAirtable(){
   const t=getToken();if(!t) return;
   let existingFields=[],realTableId='tblvVAc4TtiERA0Tc';
@@ -4351,6 +4363,7 @@ async function loadAllData(){
     if(!isFirst) toast('Datos actualizados ✓','success');
     ensureCotizacionFields();
     ensureFichaTecnicaField();
+    ensureFichaPropuestaField();
   }catch(e){
     setStatus('error',false);
     console.error('loadAllData error:',e);
@@ -5274,8 +5287,9 @@ function renderCotizaciones(){const tbody=document.getElementById('cotsTableBody
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
+  const fpData=parseFichaPropData(f['Ficha Propuesta']);
   return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
-  <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁<span class="btn-txt"> Ver PDF</span></button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄<span class="btn-txt"> Descargar PDF</span></button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></div></td></tr>`;
+  <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁<span class="btn-txt"> Ver PDF</span></button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄<span class="btn-txt"> Descargar PDF</span></button><button class="btn-mini${fpData?' btn-mini-purple':''}" onclick="openFichaPropModal('${c.id}')" title="Ficha Técnica Propuesta">📋<span class="btn-txt"> Ficha</span></button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></div></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
@@ -5642,6 +5656,228 @@ function descargarFichaTecnica(pedidoId){
   const url=URL.createObjectURL(blob);
   const win=window.open(url,'_blank');
   if(!win){toast('Permite ventanas emergentes para descargar el PDF','error');return;}
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
+// ── FICHA PROPUESTA AL CLIENTE ────────────────────────────────
+let _fpCotId='';
+let _fpItems=[];
+
+function parseFichaPropData(s){try{return s?JSON.parse(s):null;}catch(e){return null;}}
+
+function openFichaPropModal(cotId){
+  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
+  _fpCotId=cotId;
+  const f=cot.fields;
+  const saved=parseFichaPropData(f['Ficha Propuesta'])||{};
+  document.getElementById('fpNumFicha').value=saved.numFicha||'';
+  document.getElementById('fpNombreProyecto').value=saved.nombreProyecto||'';
+  if(saved.items?.length){
+    _fpItems=saved.items.map(it=>({...it}));
+  } else {
+    const lineas=(f['Detalle productos']||'').split('\n').filter(Boolean);
+    _fpItems=lineas.map(l=>{const p=l.split('|').map(s=>s.trim());return{nombre:p[0]||'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:''};});
+    if(!_fpItems.length) _fpItems=[{nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:''}];
+  }
+  renderFPItems();
+  document.getElementById('fichaPropModal').style.display='flex';
+}
+
+function closeFichaPropModal(){document.getElementById('fichaPropModal').style.display='none';}
+
+function addFPItem(){
+  _fpItems.push({nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:''});
+  renderFPItems();
+}
+
+function removeFPItem(idx){
+  _fpItems.splice(idx,1);
+  renderFPItems();
+}
+
+function renderFPItems(){
+  const container=document.getElementById('fpItemsList');if(!container) return;
+  if(!_fpItems.length){container.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin muestras — agrega la primera ↑</div>';return;}
+  container.innerHTML=_fpItems.map((item,idx)=>`
+    <div style="border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surface2)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:11px;font-weight:700;color:#c084fc">MUESTRA ${idx+1}</span>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="removeFPItem(${idx})">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="field-group">
+          <label class="field-label">Nombre del producto</label>
+          <input class="field-input" placeholder="ej. CARTEL ILUMINADO NEGRO" value="${escapeHtml(item.nombre||'')}" oninput="_fpItems[${idx}].nombre=this.value">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Tipo de muestra</label>
+          <input class="field-input" placeholder="ej. IMPRESIÓN 3D" value="${escapeHtml(item.tipo||'')}" oninput="_fpItems[${idx}].tipo=this.value">
+        </div>
+        <div class="field-group" style="grid-column:1/-1">
+          <label class="field-label">Material principal</label>
+          <textarea class="field-input" rows="2" placeholder="ej. PLA Terminación Negro&#10;Acrílico Blanco. Luz Led Blanca" oninput="_fpItems[${idx}].material=this.value">${escapeHtml(item.material||'')}</textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Opción alternativa (label)</label>
+          <input class="field-input" placeholder="ej. ACRÍLICO NEGRO / NEGRO" value="${escapeHtml(item.optLabel||'')}" oninput="_fpItems[${idx}].optLabel=this.value">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Material opción alt.</label>
+          <textarea class="field-input" rows="2" placeholder="ej. Acrílico color Negro 3mm." oninput="_fpItems[${idx}].optMaterial=this.value">${escapeHtml(item.optMaterial||'')}</textarea>
+        </div>
+        <div class="field-group" style="grid-column:1/-1">
+          <label class="field-label">Dimensiones</label>
+          <input class="field-input" placeholder="ej. 40 × 35 × 8 cm" value="${escapeHtml(item.dims||'')}" oninput="_fpItems[${idx}].dims=this.value">
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function saveFichaPropModal(verPDF=false){
+  if(!_fpCotId) return;
+  const data={
+    numFicha:document.getElementById('fpNumFicha').value||'01',
+    nombreProyecto:document.getElementById('fpNombreProyecto').value||'',
+    items:_fpItems.map(it=>({...it})),
+    updatedAt:new Date().toISOString().slice(0,10)
+  };
+  try{
+    await airtableWrite('Cotizaciones','PATCH',_fpCotId,{'Ficha Propuesta':JSON.stringify(data)});
+    const cot=state.cotizaciones.find(x=>x.id===_fpCotId);
+    if(cot) cot.fields['Ficha Propuesta']=JSON.stringify(data);
+    toast('Ficha propuesta guardada ✓','success');
+    renderCotizaciones();
+    if(verPDF){closeFichaPropModal();descargarFichaPropuesta(_fpCotId);}
+    else closeFichaPropModal();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+function buildFichaPropuestaDoc(cotId){
+  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return null;
+  const f=cot.fields;
+  const data=parseFichaPropData(f['Ficha Propuesta'])||{};
+  const escH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  const num=f['N° Cotización']||'—';
+  const cliente=resolveClienteName(f['Cliente']);
+  const proyecto=(data.nombreProyecto||f['Solicitud cliente (texto libre)']||'PROPUESTA').toUpperCase();
+  const numFicha=data.numFicha||'01';
+  const items=data.items||[];
+
+  const portada=`
+    <div class="pagina portada">
+      <div class="portada-bg">
+        <div class="portada-logo">
+          <img src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'" style="height:32px;filter:brightness(0)invert(1)">
+          <div style="font-size:9px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px">Impresión 3D · Neones · Trofeos</div>
+        </div>
+        <div class="portada-content">
+          <div class="portada-tag">FICHA TÉCNICA</div>
+          <div class="portada-ficha-label">FICHA DE ESTE PROYECTO N°:</div>
+          <div class="portada-num">${escH(numFicha)}</div>
+          <div class="portada-divider"></div>
+          <div class="portada-info-row"><span class="portada-lbl">CLIENTE:</span><span class="portada-val">${escH(cliente)}</span></div>
+          <div class="portada-info-row"><span class="portada-lbl">PROYECTO:</span><span class="portada-val">${escH(proyecto)}</span></div>
+          <div class="portada-info-row"><span class="portada-lbl">COTIZACIÓN:</span><span class="portada-val">${escH(num)}</span></div>
+        </div>
+        <div class="portada-footer">thelab.solutions · hola@thelab.solutions · +56 9 7180 6142</div>
+      </div>
+    </div>`;
+
+  const itemPages=items.map((item,idx)=>`
+    <div class="pagina item-pagina">
+      <div class="item-header">
+        <div class="item-header-left">${escH(proyecto)} — ${escH(cliente)}</div>
+        <div class="item-header-right">FICHA TÉCNICA</div>
+      </div>
+      <div class="item-body">
+        <div class="item-nombre">${escH(item.nombre||`MUESTRA ${idx+1}`)}</div>
+        ${item.tipo?`<div class="muestra-label">MUESTRA ${idx+1} — ${escH(item.tipo)}</div>`:`<div class="muestra-label">MUESTRA ${idx+1}</div>`}
+        <div class="item-cols">
+          <div class="item-col-main">
+            ${item.material?`<div class="spec-block"><div class="spec-title">MATERIAL</div><div class="spec-text">${escH(item.material)}</div></div>`:''}
+            ${item.optLabel?`
+              <div class="opcion-alt">
+                <div class="opcion-plus">+</div>
+                <div>
+                  <div class="opcion-label">OPCIÓN 2 — ${escH(item.optLabel)}</div>
+                  ${item.optMaterial?`<div class="spec-block" style="margin-top:6px"><div class="spec-title">MATERIAL</div><div class="spec-text">${escH(item.optMaterial)}</div></div>`:''}
+                </div>
+              </div>`:''}
+          </div>
+          ${item.dims?`<div class="item-col-dims"><div class="dims-box"><div class="dims-label">DIMENSIONES</div><div class="dims-val">${escH(item.dims)}</div></div></div>`:''}
+        </div>
+      </div>
+      <div class="item-footer">${escH(proyecto)} — ${escH(cliente)} · N° ${escH(numFicha)} · thelab.solutions</div>
+    </div>`).join('');
+
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Ficha Técnica ${escH(num)}</title>
+<link rel="icon" href="https://thelab.solutions/wp-content/uploads/2024/05/cropped-THELAB-SOLUTIONS-ISOTIPO-32x32.png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;}
+.pagina{width:210mm;min-height:297mm;page-break-after:always;position:relative;overflow:hidden;}
+.pagina:last-child{page-break-after:avoid;}
+
+/* PORTADA */
+.portada-bg{background:#0a0a0a;min-height:297mm;display:flex;flex-direction:column;padding:40px 48px;}
+.portada-logo{margin-bottom:auto;}
+.portada-content{flex:1;display:flex;flex-direction:column;justify-content:center;padding:40px 0;}
+.portada-tag{display:inline-block;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:6px 16px;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:32px;width:fit-content;}
+.portada-ficha-label{font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;}
+.portada-num{font-size:96px;font-weight:900;color:#ffffff;line-height:1;letter-spacing:-2px;margin-bottom:32px;}
+.portada-divider{width:60px;height:3px;background:#ffffff;margin-bottom:32px;}
+.portada-info-row{display:flex;gap:12px;margin-bottom:14px;align-items:baseline;}
+.portada-lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);width:90px;flex-shrink:0;}
+.portada-val{font-size:16px;font-weight:700;color:#ffffff;letter-spacing:.5px;}
+.portada-footer{font-size:9px;color:rgba(255,255,255,0.25);letter-spacing:1px;text-align:center;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08);}
+
+/* ITEM PAGES */
+.item-pagina{display:flex;flex-direction:column;padding:0;}
+.item-header{background:#0a0a0a;display:flex;justify-content:space-between;align-items:center;padding:12px 32px;}
+.item-header-left{font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.5);}
+.item-header-right{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#ffffff;}
+.item-body{flex:1;padding:40px 32px;}
+.item-nombre{font-size:26px;font-weight:900;color:#0a0a0a;text-transform:uppercase;letter-spacing:-0.5px;margin-bottom:8px;line-height:1.1;}
+.muestra-label{display:inline-block;background:#0a0a0a;color:#fff;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:4px 12px;border-radius:3px;margin-bottom:24px;}
+.item-cols{display:flex;gap:24px;align-items:flex-start;}
+.item-col-main{flex:1;}
+.spec-block{margin-bottom:16px;}
+.spec-title{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:6px;}
+.spec-text{font-size:11px;color:#1a1a1a;line-height:1.6;font-weight:500;}
+.opcion-alt{display:flex;gap:12px;align-items:flex-start;margin-top:20px;padding-top:20px;border-top:2px dashed #e8e8e8;}
+.opcion-plus{width:32px;height:32px;background:#0a0a0a;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0;margin-top:2px;}
+.opcion-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#0a0a0a;margin-bottom:6px;}
+.item-col-dims{width:160px;flex-shrink:0;}
+.dims-box{border:2px solid #0a0a0a;border-radius:8px;padding:16px;text-align:center;}
+.dims-label{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:8px;}
+.dims-val{font-size:14px;font-weight:700;color:#0a0a0a;line-height:1.4;}
+.item-footer{background:#f5f5f5;padding:8px 32px;font-size:8px;color:#aaa;letter-spacing:.5px;display:flex;justify-content:space-between;}
+
+@media print{body{background:#fff;}.pagina{page-break-after:always;}@page{margin:0;size:A4;}}
+</style></head><body>
+${portada}
+${itemPages}
+</body></html>`;
+  return {html, num};
+}
+
+function generarFichaPropuesta(cotId){
+  const res=buildFichaPropuestaDoc(cotId);if(!res){toast('Cotización no encontrada','error');return;}
+  const blob=new Blob([res.html],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank');
+  if(!win) toast('Permite ventanas emergentes','error');
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+function descargarFichaPropuesta(cotId){
+  const res=buildFichaPropuestaDoc(cotId);if(!res){toast('Cotización no encontrada','error');return;}
+  const htmlWithPrint=res.html.replace('</body></html>','<script>window.onload=function(){window.focus();window.print();};<\/script></body></html>');
+  const blob=new Blob([htmlWithPrint],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank');
+  if(!win){toast('Permite ventanas emergentes','error');return;}
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 
@@ -10664,6 +10900,38 @@ async function testSIIWorker(){
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost btn-sm" onclick="closeAdsDeleteModal()">Cancelar</button>
       <button class="btn btn-sm" style="background:var(--danger);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600" onclick="confirmDeleteCampaign()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FICHA PROPUESTA MODAL ───────────────────────────────── -->
+<div id="fichaPropModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeFichaPropModal()">
+  <div class="modal-box" style="max-width:640px;width:95%;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <span class="modal-title">📋 Ficha Técnica — Propuesta Cliente</span>
+      <button class="modal-close" onclick="closeFichaPropModal()">✕</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px">
+      <div style="display:grid;grid-template-columns:110px 1fr;gap:12px">
+        <div class="field-group">
+          <label class="field-label">N° Ficha</label>
+          <input class="field-input" id="fpNumFicha" placeholder="01">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Nombre del Proyecto</label>
+          <input class="field-input" id="fpNombreProyecto" placeholder="ej. PROPUESTA CARTELES">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">Muestras / Productos</span>
+        <button class="btn btn-ghost btn-sm" onclick="addFPItem()">+ Agregar muestra</button>
+      </div>
+      <div id="fpItemsList"></div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="closeFichaPropModal()">Cancelar</button>
+      <button class="btn btn-ghost" onclick="saveFichaPropModal(false)">💾 Guardar</button>
+      <button class="btn btn-primary" onclick="saveFichaPropModal(true)">📄 Guardar y ver PDF</button>
     </div>
   </div>
 </div>
