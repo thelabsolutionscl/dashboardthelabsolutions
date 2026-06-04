@@ -113,6 +113,8 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .btn-mini-red:hover{background:var(--danger);color:var(--black);}
 .btn-mini-yellow{background:rgba(0,212,204,0.1);border-color:rgba(0,212,204,0.3);color:var(--accent);}
 .btn-mini-yellow:hover{background:var(--accent);color:var(--black);}
+.btn-mini-blue{background:rgba(59,130,246,0.15)!important;border-color:rgba(59,130,246,0.4)!important;color:#60a5fa!important;}
+.btn-mini-blue:hover{background:rgba(59,130,246,0.35)!important;color:#93c5fd!important;}
 .loading-state{display:flex;align-items:center;justify-content:center;gap:8px;padding:36px;color:var(--text3);font-size:12px;}
 .spinner{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -1483,6 +1485,86 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-ghost btn-sm" onclick="closeQAModal()">Cancelar</button>
         <button class="btn btn-primary btn-sm" onclick="saveQAModal()">💾 Guardar</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FICHA TÉCNICA MODAL ─────────────────────────────────── -->
+<div id="fichaModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeFichaModal()">
+  <div class="modal-box" style="max-width:560px;width:95%">
+    <div class="modal-header">
+      <span class="modal-title">📋 Ficha Técnica</span>
+      <button class="modal-close" onclick="closeFichaModal()">✕</button>
+    </div>
+    <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <input type="hidden" id="fichaPedidoId">
+      <!-- Col 1 -->
+      <div class="field-group">
+        <label class="field-label">Material *</label>
+        <select id="fichaMaterial" class="field-select">
+          <option value="">— Seleccionar —</option>
+          <option>PLA</option><option>PLA+</option><option>PETG</option>
+          <option>ABS</option><option>ASA</option><option>TPU</option>
+          <option>PC</option><option>Nylon</option><option>Resina</option><option>Otro</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Color</label>
+        <input class="field-input" id="fichaColor" placeholder="ej. Blanco, Negro, RAL 3020">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Acabado</label>
+        <select id="fichaAcabado" class="field-select">
+          <option value="">— Sin acabado —</option>
+          <option>Lijado</option><option>Pintado</option><option>Cromado / Metalizado</option>
+          <option>Ensamblado</option><option>Otro</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Cantidad de piezas</label>
+        <input class="field-input" id="fichaCantidad" type="number" min="1" placeholder="ej. 10">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Impresora / Equipo</label>
+        <input class="field-input" id="fichaImpresora" placeholder="ej. Creality K1 #3">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Altura de capa</label>
+        <input class="field-input" id="fichaAltaCapa" placeholder="ej. 0.20 mm">
+      </div>
+      <!-- Col 2 -->
+      <div class="field-group">
+        <label class="field-label">% Relleno</label>
+        <input class="field-input" id="fichaRelleno" placeholder="ej. 20%">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Soportes</label>
+        <select id="fichaSoportes" class="field-select">
+          <option value="">— —</option>
+          <option value="Sí">Sí</option><option value="No">No</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Peso estimado</label>
+        <input class="field-input" id="fichaPeso" placeholder="ej. 120 g">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Tiempo de impresión</label>
+        <input class="field-input" id="fichaTiempo" placeholder="ej. 4h 30min">
+      </div>
+      <div class="field-group" style="grid-column:1/-1">
+        <label class="field-label">Notas de producción</label>
+        <textarea class="field-input" id="fichaNotas" rows="3" placeholder="Observaciones, instrucciones especiales, post-procesado..."></textarea>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Aprobado por</label>
+        <input class="field-input" id="fichaAprobado" placeholder="Nombre del responsable">
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="closeFichaModal()">Cancelar</button>
+      <button class="btn btn-ghost" onclick="saveFichaModal(false)">💾 Guardar</button>
+      <button class="btn btn-primary" onclick="saveFichaModal(true)">📄 Guardar y ver PDF</button>
     </div>
   </div>
 </div>
@@ -3425,10 +3507,6 @@ function main() {
 <script>
 const BASE_ID='app1YtD74AqiPWQhy';
 let autoRefreshInterval=null;
-const AUTO_REFRESH_MS=600000;   // 10 min entre refresco automático
-const SILENT_DEBOUNCE_MS=300000; // 5 min mínimo entre cualquier fetch silencioso
-let _lastSilentFetch=0;          // timestamp del último silent fetch exitoso
-let _apiLimitHit=false;          // true cuando Airtable devuelve 429 por límite mensual
 // ── Red de seguridad global: captura errores no atrapados para que la UI no quede en estado inconsistente ──
 (function(){
   let _lastErr=0;
@@ -3856,12 +3934,7 @@ async function airtableFetch(table,max=100){
     let url=`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}?pageSize=${Math.min(max,100)}`;
     if(offset) url+=`&offset=${encodeURIComponent(offset)}`;
     const r=await airtableHttp(url,{headers:{'Authorization':'Bearer '+t}});
-    if(!r.ok){
-      const j=await r.json().catch(()=>({}));
-      const msg=j.error?.message||'';
-      if(r.status===429){_apiLimitHit=true;setStatus('límite API alcanzado',false);toast('⚠ Límite mensual de API Airtable alcanzado. Los datos no se actualizarán hasta el 1° del próximo mes.','error');throw new Error('Límite API Airtable');}
-      throw new Error(`Airtable ${r.status}: ${msg}`);
-    }
+    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`Airtable ${r.status}: ${j.error?.message||''}`);}
     const d=await r.json();all=[...all,...(d.records||[])];offset=d.offset||null;
     if(all.length>=max&&table!=='Clientes'&&table!=='Cotizaciones') break;
   }while(offset);
@@ -3922,12 +3995,24 @@ async function ensureCotizacionFields(){
   const t=getToken();if(!t) return;
   const tableId='tblvVAc4TtiERA0Tc';
   const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'}];
-  for(const c of needed){try{await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
+  for(const c of needed){try{await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
+}
+async function ensureFichaTecnicaField(){
+  const t=getToken();if(!t) return;
+  try{
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    if(!r.ok) return;
+    const d=await r.json();
+    const tbl=d.tables?.find(x=>x.name==='Pedidos');
+    if(!tbl) return;
+    if(tbl.fields?.some(x=>x.name==='Ficha Tecnica')) return;
+    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Tecnica',type:'multilineText'})});
+  }catch(e){}
 }
 async function crearCamposItemsAirtable(){
   const t=getToken();if(!t) return;
   let existingFields=[],realTableId='tblvVAc4TtiERA0Tc';
-  try{const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(r.ok){const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Cotizaciones');existingFields=(tbl?.fields||[]).map(f=>f.name);if(tbl?.id) realTableId=tbl.id;}}catch(e){}
+  try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(r.ok){const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Cotizaciones');existingFields=(tbl?.fields||[]).map(f=>f.name);if(tbl?.id) realTableId=tbl.id;}}catch(e){}
   const campos=[];
   for(let i=1;i<=20;i++){if(!existingFields.includes(`ITEM${i}`)) campos.push({name:`ITEM${i}`,type:'singleLineText'});if(!existingFields.includes(`UNIDADES${i}`)) campos.push({name:`UNIDADES${i}`,type:'number',options:{precision:0}});if(!existingFields.includes(`COSTO NETO${i}`)) campos.push({name:`COSTO NETO${i}`,type:'currency',options:{precision:0,symbol:'$'}});if(!existingFields.includes(`VALOR NETO${i}`)) campos.push({name:`VALOR NETO${i}`,type:'currency',options:{precision:0,symbol:'$'}});}
   if(!existingFields.includes('SUBTOTAL')) campos.push({name:'SUBTOTAL',type:'currency',options:{precision:0,symbol:'$'}});
@@ -3937,7 +4022,7 @@ async function crearCamposItemsAirtable(){
   if(!existingFields.includes('Forma de pago')) campos.push({name:'Forma de pago',type:'singleSelect'});
   if(!campos.length){toast('✓ Todos los campos ya existen','info');return;}
   toast(`Creando ${campos.length} campos...`,'info');let ok=0,fail=0;
-  for(const c of campos){try{const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${realTableId}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(c)});if(r.ok) ok++;else fail++;}catch(e){fail++;}}
+  for(const c of campos){try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${realTableId}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(c)});if(r.ok) ok++;else fail++;}catch(e){fail++;}}
   fail>0?toast(`${ok} creados · ${fail} fallaron`,'info'):toast(`✓ ${ok} campos creados`,'success');
 }
 
@@ -3963,11 +4048,11 @@ const MODELO_COLORES={'K1':'#00d4cc','K2':'#a78bfa','K2 Plus':'#ff6b35','Ender-5
 async function crearTablaMaquinas(){
   const t=getToken();if(!t) return false;
   try{
-    const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
     if(!r.ok) return false;
     const d=await r.json();
     if(d.tables?.find(x=>x.name==='Maquinas')) return true;
-    const cr=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas',fields:[
+    const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas',fields:[
       {name:'id',type:'singleLineText'},
       {name:'nombre',type:'singleLineText'},
       {name:'num',type:'number',options:{precision:0}},
@@ -3991,7 +4076,7 @@ async function loadMaquinasAirtable(){
       await crearTablaMaquinas();
       const batch=MAQUINAS_HARDCODED.map(m=>({fields:{id:m.id,nombre:m.nombre,num:m.num,numG:m.numG,modelo:m.modelo,color:m.color,ip:m.ip||'',estado:'disponible'}}));
       for(let i=0;i<batch.length;i+=10){
-        await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:batch.slice(i,i+10),typecast:true})});
+        await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:batch.slice(i,i+10),typecast:true})});
       }
       // Recargar para obtener _airtableId de cada registro
       const reloaded=await airtableFetch('Maquinas',200);
@@ -4024,24 +4109,24 @@ async function saveMaquinaEstadoAirtable(id,estado){
   const t=getToken();if(!t) return;
   const m=MAQUINAS.find(x=>x.id===id);
   if(!m?._airtableId) return;
-  await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{estado}})});
+  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{estado}})});
 }
 
 async function saveMaquinaToAirtable(maquina){
   const t=getToken();if(!t) return null;
   const fields={id:maquina.id,nombre:maquina.nombre,num:maquina.num,numG:maquina.numG,modelo:maquina.modelo,color:maquina.color,ip:maquina.ip||'',estado:maquina.estado||'disponible'};
   if(maquina._airtableId){
-    const r=await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${maquina._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields})});
+    const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${maquina._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields})});
     return r.ok?maquina._airtableId:null;
   }else{
-    const r=await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields}],typecast:true})});
+    const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields}],typecast:true})});
     const d=await r.json();return d.records?.[0]?.id||null;
   }
 }
 
 async function deleteMaquinaFromAirtable(airtableId){
   const t=getToken();if(!t) return;
-  await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${airtableId}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});
+  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${airtableId}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});
 }
 
 // ── GESTOR DE MÁQUINAS ────────────────────────────────────────
@@ -4125,7 +4210,7 @@ async function addMaquinaDesdeForm(){
 // ── MAQUINAS PERSISTENCE ──────────────────────────────────────
 async function crearTablaMaquinasEventos(){
   const t=getToken();if(!t) return false;
-  try{const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Maquinas_Eventos')) return true;const cr=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Eventos',fields:[{name:'maquina_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'tiempo',type:'number',options:{precision:1}}]})});return cr.ok;}catch(e){return false;}
+  try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Maquinas_Eventos')) return true;const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Eventos',fields:[{name:'maquina_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'tiempo',type:'number',options:{precision:1}}]})});return cr.ok;}catch(e){return false;}
 }
 async function saveMaquinaEventosAirtable(){
   const t=getToken();if(!t) return;
@@ -4133,11 +4218,11 @@ async function saveMaquinaEventosAirtable(){
     const res=await airtableFetch('Maquinas_Eventos',500);const existentes=res.records||[];const existMap={};existentes.forEach(r=>{existMap[`${r.fields.maquina_id}_${r.fields.fecha}`]=r.id;});
     const toUpsert=Object.entries(maquinaState.eventos).map(([key,ev])=>{const[maqId,...dp]=key.split('_');return{key,maqId,fecha:dp.join('_'),ev};});
     const toCreate=toUpsert.filter(x=>!existMap[`${x.maqId}_${x.fecha}`]);
-    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);const r=await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{maquina_id:x.maqId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',tiempo:x.ev.tiempo||0,pedido_id:x.ev.pedidoId||''}})),typecast:true})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}}
+    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{maquina_id:x.maqId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',tiempo:x.ev.tiempo||0,pedido_id:x.ev.pedidoId||''}})),typecast:true})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}}
     const toUpdate=toUpsert.filter(x=>existMap[`${x.maqId}_${x.fecha}`]);
-    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);const r=await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.maqId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',tiempo:x.ev.tiempo||0,pedido_id:x.ev.pedidoId||''}}))})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}}
+    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.maqId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',tiempo:x.ev.tiempo||0,pedido_id:x.ev.pedidoId||''}}))})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}}
     const toDelete=existentes.filter(r=>!maquinaState.eventos[`${r.fields.maquina_id}_${r.fields.fecha}`]);
-    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
+    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
   }catch(e){
     const isNotFound=e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')||e.message?.includes('not found');
     if(isNotFound){const ok=await crearTablaMaquinasEventos();if(ok){toast('Tabla Maquinas_Eventos creada ✓','success');await saveMaquinaEventosAirtable();}else{toast('No se pudo crear tabla Maquinas_Eventos','error');}}
@@ -4153,11 +4238,11 @@ async function loadMaquinaEventosAirtable(){
 async function crearTablaMaquinasMant(){
   const t=getToken();if(!t) return false;
   try{
-    const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
     if(!r.ok) return false;
     const d=await r.json();
     if(d.tables?.find(x=>x.name==='Maquinas_Mant')) return true;
-    const cr=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Mant',fields:[
+    const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Mant',fields:[
       {name:'maquina_id',type:'singleLineText'},
       {name:'tipo',type:'singleLineText'},
       {name:'notas',type:'multilineText'},
@@ -4197,7 +4282,7 @@ async function loadMaintLogAirtable(){
 
 async function saveMaintRecordAirtable(rec){
   const t=getToken();if(!t) return;
-  await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields:{maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()}}],typecast:true})});
+  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields:{maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()}}],typecast:true})});
 }
 
 function getMaintLogLocal(){try{return JSON.parse(localStorage.getItem(MAINT_KEY)||'[]');}catch(e){return[];}}
@@ -4205,7 +4290,7 @@ function getMaintLogLocal(){try{return JSON.parse(localStorage.getItem(MAINT_KEY
 // ── EQUIPO PERSISTENCE ────────────────────────────────────────
 async function crearTablaEquipoEventos(){
   const t=getToken();if(!t) return false;
-  try{const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Equipo_Eventos')) return true;const cr=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Equipo_Eventos',fields:[{name:'persona_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'hora_inicio',type:'singleLineText'},{name:'hora_fin',type:'singleLineText'}]})});return cr.ok;}catch(e){return false;}
+  try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Equipo_Eventos')) return true;const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Equipo_Eventos',fields:[{name:'persona_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'hora_inicio',type:'singleLineText'},{name:'hora_fin',type:'singleLineText'}]})});return cr.ok;}catch(e){return false;}
 }
 async function saveEquipoEventosAirtable(){
   const t=getToken();if(!t) return;
@@ -4213,11 +4298,11 @@ async function saveEquipoEventosAirtable(){
     const res=await airtableFetch('Equipo_Eventos',500);const existentes=res.records||[];const existMap={};existentes.forEach(r=>{existMap[`${r.fields.persona_id}_${r.fields.fecha}`]=r.id;});
     const toUpsert=Object.entries(equipoState.eventos).map(([key,ev])=>{const[pid,...dp]=key.split('_');return{key,personaId:pid,fecha:dp.join('_'),ev};});
     const toCreate=toUpsert.filter(x=>!existMap[`${x.personaId}_${x.fecha}`]);
-    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{persona_id:x.personaId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}})),typecast:true})});}
+    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);await fetch(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{persona_id:x.personaId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}})),typecast:true})});}
     const toUpdate=toUpsert.filter(x=>existMap[`${x.personaId}_${x.fecha}`]);
-    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.personaId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}}))})});}
+    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);await fetch(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.personaId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}}))})});}
     const toDelete=existentes.filter(r=>!equipoState.eventos[`${r.fields.persona_id}_${r.fields.fecha}`]);
-    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
+    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await fetch(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
   }catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('unknown')){const ok=await crearTablaEquipoEventos();if(ok){toast('Tabla Equipo_Eventos creada ✓','success');await saveEquipoEventosAirtable();}}}
 }
 async function loadEquipoEventosAirtable(){
@@ -4231,7 +4316,6 @@ let isLoadingData=false;
 async function loadAllData(){
   if(isLoadingData)return;
   isLoadingData=true;
-  _lastSilentFetch=Date.now(); // el refresh manual también reinicia el debounce
   const isFirst=!state.loaded;
   const btn=document.getElementById('refreshBtn');
   try{
@@ -4247,39 +4331,26 @@ async function loadAllData(){
     ]);
     // Facturas emitidas (tabla opcional; si no existe aún, queda vacía)
     if(facRes.status==='fulfilled'){state.facturas=facRes.value.records||[];}
-    // Detectar sin-token o 401 globalmente
-    const _sinToken=[cRes,coRes,pRes,pvRes].every(r=>r.status==='rejected'&&r.reason?.message==='Sin token');
-    const _token401=(cRes.reason?.message||'').includes('401')||(pvRes.reason?.message||'').includes('401');
-    if(_sinToken){
-      setStatus('sin token',false);
-      toast('⚙ Configura el token de Airtable en ⚙ Configuración para cargar los datos','info');
-    } else if(_token401){
+    // Detectar token inválido (401) — solo avisa, no bloquea el dashboard
+    if(cRes.status==='rejected'&&(cRes.reason?.message||'').includes('401')){
       localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');
       setStatus('token inválido',false);toast('⚠ Token Airtable vencido — configura uno nuevo en ⚙','error');
     }
-    // Asignar datos (solo si llegaron) y SIEMPRE renderizar para limpiar el estado "cargando..."
-    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});}
-    renderClientes();
+    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
     if(isFirst) slProgress(50,'Cargando cotizaciones y pedidos...');
-    if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];}
-    renderCotizaciones();
-    if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];}
-    renderPedidos();
+    if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];renderCotizaciones();}
+    if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();}
     if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
-    if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];}
-    renderReportes();
-    if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];}
-    renderProveedores();fillCatSelects();
+    if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
+    if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();fillCatSelects();}
     if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}renderWatiConfigBtn();}
     if(isFirst) slProgress(92,'Calculando resumen...');
-    state.loaded=true;state.lastUpdateTs=Date.now();
-    // Solo "en vivo" si al menos cargó algo y no hay problema de token
-    const _anyOk=[cRes,coRes,pRes,pvRes].some(r=>r.status==='fulfilled');
-    if(!_sinToken&&!_token401){setStatus(_anyOk?'en vivo':'sin datos',_anyOk);}
+    state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
     renderOverview();
-    if(!isFirst&&_anyOk) toast('Datos actualizados ✓','success');
+    if(!isFirst) toast('Datos actualizados ✓','success');
     ensureCotizacionFields();
+    ensureFichaTecnicaField();
   }catch(e){
     setStatus('error',false);
     console.error('loadAllData error:',e);
@@ -4292,10 +4363,6 @@ async function loadAllData(){
 }
 async function loadAllDataSilent(){
   if(!getToken()) return;
-  if(_apiLimitHit) return; // no reintentar si ya se superó el límite mensual
-  const now=Date.now();
-  if(now-_lastSilentFetch<SILENT_DEBOUNCE_MS) return; // debounce 5 min
-  _lastSilentFetch=now;
   try{
     const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),airtableFetch('Facturas',1000)]);
     if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
@@ -4308,7 +4375,7 @@ async function loadAllDataSilent(){
     state.lastUpdateTs=Date.now();document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;renderOverview();
   }catch(e){setStatus('error (auto)',false);}
 }
-function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);if(_apiLimitHit) return;autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()&&!_apiLimitHit) loadAllDataSilent();},AUTO_REFRESH_MS);}
+function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},90000);}
 
 // ── AI ────────────────────────────────────────────────────────
 async function callClaude(system,user){let k=getAnthropicKey();if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}return _callClaudeRaw(system,user,k);}
@@ -4979,11 +5046,11 @@ function closeFacturaModal(){document.getElementById('facturaModal').style.displ
 async function ensureFacturasTable(){
   const t=getToken();if(!t) return;
   try{
-    const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
     if(!r.ok) return;
     const d=await r.json();
     if(d.tables?.find(x=>x.name==='Facturas')) return;
-    await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Facturas',fields:[
+    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Facturas',fields:[
       {name:'Cliente',type:'singleLineText'},
       {name:'Cliente ID',type:'singleLineText'},
       {name:'Tipo DTE',type:'singleLineText'},
@@ -5383,6 +5450,201 @@ function descargarPDFCotizacion(id){
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 
+// ── FICHAS TÉCNICAS ───────────────────────────────────────────
+function parseFichaData(s){try{return s?JSON.parse(s):null;}catch(e){return null;}}
+
+function openFichaModal(pedidoId){
+  const ped=state.pedidos.find(x=>x.id===pedidoId);if(!ped) return;
+  const f=ped.fields;
+  const data=parseFichaData(f['Ficha Tecnica'])||{};
+  document.getElementById('fichaPedidoId').value=pedidoId;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el) el.value=v||'';};
+  set('fichaMaterial',data.material||'');
+  set('fichaColor',data.color||'');
+  set('fichaAcabado',data.acabado||'');
+  set('fichaCantidad',data.cantidad||'');
+  set('fichaImpresora',data.impresora||'');
+  set('fichaAltaCapa',data.altaCapa||'');
+  set('fichaRelleno',data.relleno||'');
+  set('fichaSoportes',data.soportes||'');
+  set('fichaPeso',data.peso||'');
+  set('fichaTiempo',data.tiempo||'');
+  set('fichaNotas',data.notas||'');
+  set('fichaAprobado',data.aprobado||'');
+  document.getElementById('fichaModal').style.display='flex';
+}
+
+function closeFichaModal(){document.getElementById('fichaModal').style.display='none';}
+
+async function saveFichaModal(verPDF=false){
+  const pedidoId=document.getElementById('fichaPedidoId').value;
+  if(!pedidoId) return;
+  const get=id=>document.getElementById(id)?.value||'';
+  const data={
+    material:get('fichaMaterial'),color:get('fichaColor'),acabado:get('fichaAcabado'),
+    cantidad:get('fichaCantidad'),impresora:get('fichaImpresora'),altaCapa:get('fichaAltaCapa'),
+    relleno:get('fichaRelleno'),soportes:get('fichaSoportes'),peso:get('fichaPeso'),
+    tiempo:get('fichaTiempo'),notas:get('fichaNotas'),aprobado:get('fichaAprobado'),
+    updatedAt:new Date().toISOString().slice(0,10)
+  };
+  try{
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(data)});
+    const ped=state.pedidos.find(x=>x.id===pedidoId);
+    if(ped) ped.fields['Ficha Tecnica']=JSON.stringify(data);
+    toast('Ficha técnica guardada ✓','success');
+    renderPedidos();
+    if(verPDF){closeFichaModal();descargarFichaTecnica(pedidoId);}
+    else closeFichaModal();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+function buildFichaDoc(pedidoId){
+  const ped=state.pedidos.find(x=>x.id===pedidoId);if(!ped) return null;
+  const f=ped.fields;
+  const data=parseFichaData(f['Ficha Tecnica'])||{};
+  const escH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  const num=f['N° Pedido']||'—';
+  const cliente=resolveClienteName(f['Cliente']);
+  const fecha=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'});
+  const entrega=f['Fecha entrega']||'—';
+  const solicitud=f['Solicitud cliente (texto libre)']||'';
+  const detalle=f['Detalle productos']||'';
+  const estado=f['Estado pedido']||'—';
+  const equipo=(f['Equipo asignado']||'').split(',').map(s=>s.trim()).filter(Boolean).join(', ')||'—';
+  const qaRes=f['Resultado QA']||'Pendiente';
+  let qaItems=[];
+  try{qaItems=JSON.parse(f['Notas QA']||'[]');if(!Array.isArray(qaItems)) qaItems=[];}catch(e){qaItems=[];}
+
+  const specRow=(label,val)=>val?`<tr><td class="spec-label">${escH(label)}</td><td class="spec-val">${escH(val)}</td></tr>`:'';
+
+  const lineas=detalle.split('\n').filter(Boolean).map(l=>{const p=l.split('|').map(s=>s.trim());return{desc:p[0]||'',cant:p[1]||'',precio:(p[3]||p[2]||'').replace(/^venta:\s*/i,'').trim()};});
+  const itemsHTML=lineas.length>0?lineas.map((l,i)=>`<tr style="background:${i%2===0?'#f9f9f9':'#fff'}"><td style="padding:5px 10px;font-size:10px;border-bottom:1px solid #eee">${escH(l.desc)}</td><td style="padding:5px 10px;font-size:10px;text-align:center;border-bottom:1px solid #eee">${escH(l.cant)}</td><td style="padding:5px 10px;font-size:10px;text-align:right;border-bottom:1px solid #eee;font-weight:600">${escH(l.precio)}</td></tr>`).join(''):`<tr><td colspan="3" style="padding:10px;text-align:center;color:#aaa;font-size:10px">Sin detalle</td></tr>`;
+
+  const qaColor=qaRes==='QA aprobado'?'#10b981':qaRes==='Rechazado'?'#ef4444':'#f59e0b';
+  const qaBadge=`<span style="display:inline-block;padding:3px 10px;background:${qaColor}22;color:${qaColor};border:1px solid ${qaColor}55;border-radius:20px;font-size:9px;font-weight:700;text-transform:uppercase">${escH(qaRes)}</span>`;
+  const qaList=qaItems.length>0?`<ul style="margin:6px 0 0 16px;padding:0;font-size:9px;color:#555;line-height:1.8">${qaItems.map(it=>`<li>${it.checked?'✓':'✗'} ${escH(it.text||String(it))}</li>`).join('')}</ul>`:'';
+
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Ficha Técnica ${escH(num)}</title>
+<link rel="icon" href="https://thelab.solutions/wp-content/uploads/2024/05/cropped-THELAB-SOLUTIONS-ISOTIPO-32x32.png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:18px 24px;font-size:10px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #3b82f6;}
+.logo-area img{height:28px;}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
+.doc-meta{text-align:right;}.doc-meta h1{font-size:18px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#0a0a0a;}
+.doc-meta .num{font-size:14px;font-weight:700;color:#3b82f6;font-family:monospace;margin-top:2px;}
+.doc-meta .fecha{font-size:9px;color:#999;margin-top:4px;}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.info-box{background:#f8f8f8;border-radius:6px;padding:10px 12px;border-top:3px solid #3b82f6;}
+.info-box h3{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#aaa;margin-bottom:8px;}
+.info-row{display:flex;gap:6px;margin-bottom:4px;}.info-lbl{font-size:9px;color:#888;width:80px;flex-shrink:0;}.info-val{font-size:9px;color:#1a1a1a;font-weight:500;}
+.section-label{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#aaa;margin:12px 0 6px;}
+.spec-table{width:100%;border-collapse:collapse;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;}
+.spec-table .spec-label{padding:6px 12px;font-size:9px;font-weight:700;color:#555;background:#f8f8f8;border-bottom:1px solid #eee;text-transform:uppercase;letter-spacing:.5px;width:140px;}
+.spec-table .spec-val{padding:6px 12px;font-size:10px;color:#1a1a1a;font-weight:600;border-bottom:1px solid #eee;}
+.spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.spec-box{background:#f8f8f8;border-radius:6px;padding:10px 12px;border-left:3px solid #3b82f6;}
+.spec-box h3{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#aaa;margin-bottom:8px;}
+.solicitud-box{background:#f0f7ff;border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:8px 10px;font-size:10px;color:#333;line-height:1.5;margin-bottom:12px;}
+table.items{width:100%;border-collapse:collapse;border:1px solid #e8e8e8;}
+table.items thead tr{background:#0a0a0a;color:#fff;}
+table.items thead th{padding:6px 10px;font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;text-align:left;}
+.qa-box{background:#f8f8f8;border-radius:6px;padding:10px 12px;margin-top:12px;border-left:4px solid ${qaColor};}
+.firma-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px;}
+.firma-box{text-align:center;}.firma-line{border-top:1px solid #ccc;padding-top:5px;margin-top:30px;font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.8px;}
+.footer{margin-top:14px;padding-top:10px;border-top:2px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;}
+.footer .left{font-size:8px;color:#bbb;line-height:1.7;}.footer .right{font-size:8px;color:#999;}
+@media print{body{padding:10px 14px;}@page{margin:8mm;size:A4;}}
+</style></head><body>
+<div class="header">
+  <div class="logo-area">
+    <img src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'">
+    <div class="tagline">Impresión 3D · Neones · Trofeos</div>
+  </div>
+  <div class="doc-meta">
+    <h1>Ficha Técnica</h1>
+    <div class="num">Pedido ${escH(num)}</div>
+    <div class="fecha">Generada: ${escH(fecha)}${data.updatedAt?' · Actualizada: '+escH(data.updatedAt):''}</div>
+  </div>
+</div>
+
+<div class="info-grid">
+  <div class="info-box"><h3>Datos del pedido</h3>
+    <div class="info-row"><span class="info-lbl">N° Pedido</span><span class="info-val">${escH(num)}</span></div>
+    <div class="info-row"><span class="info-lbl">Cliente</span><span class="info-val">${escH(cliente)}</span></div>
+    <div class="info-row"><span class="info-lbl">Estado</span><span class="info-val">${escH(estado)}</span></div>
+    <div class="info-row"><span class="info-lbl">F. Entrega</span><span class="info-val">${escH(entrega)}</span></div>
+    <div class="info-row"><span class="info-lbl">Equipo</span><span class="info-val">${escH(equipo)}</span></div>
+  </div>
+  <div class="info-box"><h3>Especificaciones</h3>
+    <div class="info-row"><span class="info-lbl">Material</span><span class="info-val">${escH(data.material||'—')}</span></div>
+    <div class="info-row"><span class="info-lbl">Color</span><span class="info-val">${escH(data.color||'—')}</span></div>
+    <div class="info-row"><span class="info-lbl">Acabado</span><span class="info-val">${escH(data.acabado||'Sin acabado')}</span></div>
+    <div class="info-row"><span class="info-lbl">Cantidad</span><span class="info-val">${escH(data.cantidad?data.cantidad+' piezas':'—')}</span></div>
+    <div class="info-row"><span class="info-lbl">Peso est.</span><span class="info-val">${escH(data.peso||'—')}</span></div>
+  </div>
+</div>
+
+${solicitud?`<div class="section-label">Solicitud del cliente</div><div class="solicitud-box">${escH(solicitud)}</div>`:''}
+
+<div class="section-label">Detalle de productos / servicios</div>
+<table class="items">
+  <thead><tr><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">Precio</th></tr></thead>
+  <tbody>${itemsHTML}</tbody>
+</table>
+
+<div class="section-label">Proceso de producción</div>
+<table class="spec-table">
+  ${specRow('Impresora / Equipo',data.impresora)}
+  ${specRow('Altura de capa',data.altaCapa)}
+  ${specRow('% Relleno',data.relleno)}
+  ${specRow('Soportes',data.soportes)}
+  ${specRow('Tiempo estimado',data.tiempo)}
+</table>
+
+${data.notas?`<div class="section-label">Notas de producción</div><div class="solicitud-box" style="background:#fffbf0;border-color:rgba(255,170,0,0.3)">${escH(data.notas)}</div>`:''}
+
+<div class="qa-box">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+    <span style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555">Control de Calidad</span>
+    ${qaBadge}
+  </div>
+  ${qaList}
+</div>
+
+<div class="firma-grid">
+  <div class="firma-box"><div class="firma-line">Producción</div></div>
+  <div class="firma-box"><div class="firma-line">Control de calidad</div></div>
+  <div class="firma-box"><div class="firma-line">${escH(data.aprobado||'Aprobado por')}</div></div>
+</div>
+
+<div class="footer">
+  <div class="left">The Lab Solutions SpA · Zaragoza 8882, Las Condes, Santiago<br>hola@thelab.solutions · +56 9 7180 6142 · thelab.solutions</div>
+  <div class="right">Ficha Técnica ${escH(num)} · Generada ${escH(fecha)}</div>
+</div>
+</body></html>`;
+  return {html, num};
+}
+
+function generarFichaTecnica(pedidoId){
+  const res=buildFichaDoc(pedidoId);if(!res){toast('Pedido no encontrado','error');return;}
+  const blob=new Blob([res.html],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank');
+  if(!win) toast('Permite ventanas emergentes','error');
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+function descargarFichaTecnica(pedidoId){
+  const res=buildFichaDoc(pedidoId);if(!res){toast('Pedido no encontrado','error');return;}
+  const htmlWithPrint=res.html.replace('</body></html>','<script>window.onload=function(){window.focus();window.print();};<\/script></body></html>');
+  const blob=new Blob([htmlWithPrint],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank');
+  if(!win){toast('Permite ventanas emergentes para descargar el PDF','error');return;}
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
 function descargarReporteCotizaciones(){
   const cots=getSortedCotizaciones();
   if(!cots.length){toast('Sin cotizaciones para exportar','error');return;}
@@ -5494,6 +5756,8 @@ function renderPedidos(filter){
     if(idx>=0&&idx<stages.length-1) advBtn=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') advBtn='<span class="badge badge-green">✓</span>';
     const dteNum=f['DTE N°']||'';
     const dteBtn=`<button class="btn-mini${dteNum?' btn-mini-green':''}" onclick="openDTEModal('${p.id}')" title="${dteNum?'DTE N° '+escapeHtml(dteNum):'Emitir DTE / Factura SII'}">📄${dteNum?' ✓':''}</button>`;
+    const fichaData=parseFichaData(f['Ficha Tecnica']);
+    const fichaBtn=`<button class="btn-mini${fichaData?' btn-mini-blue':''}" onclick="openFichaModal('${p.id}')" title="Ficha Técnica">📋</button>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -5506,7 +5770,7 @@ function renderPedidos(filter){
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
-    <td><div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${advBtn}${dteBtn}<button class="btn-mini" onclick="openEditPedidoModal('${p.id}')" title="Editar">✏️</button><button class="btn-mini btn-mini-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" title="Eliminar">🗑</button></div></td></tr>`;
+    <td><div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${advBtn}${dteBtn}${fichaBtn}<button class="btn-mini" onclick="openEditPedidoModal('${p.id}')" title="Editar">✏️</button><button class="btn-mini btn-mini-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" title="Eliminar">🗑</button></div></td></tr>`;
   }).join('');
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
@@ -6158,8 +6422,7 @@ document.addEventListener('keydown',e=>{
 // ── AUTO-REFRESH INTELIGENTE (Page Visibility) ─────────────────────────
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
-    // Solo re-fetcha al volver al tab si han pasado más de 5 min desde el último fetch
-    if(getToken()&&state.loaded&&!_apiLimitHit&&(Date.now()-_lastSilentFetch>SILENT_DEBOUNCE_MS)) loadAllDataSilent();
+    if(getToken()&&state.loaded) loadAllDataSilent();
     startAutoRefresh();
   } else {
     if(autoRefreshInterval){clearInterval(autoRefreshInterval);autoRefreshInterval=null;}
@@ -7532,7 +7795,7 @@ function renderProveedores(){
   const sorted=getSortedProveedores(list);
   const count=document.getElementById('proveedoresCount');if(count) count.textContent=`${sorted.length} proveedor${sorted.length!==1?'es':''}`;
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
-  if(!sorted.length){const msg=state.proveedores.length?'Sin resultados para esta búsqueda':!getToken()?'⚙ Sin conexión — configura el token en ⚙ Configuración':'Sin proveedores aún — agrega el primero ↗';tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${msg}</td></tr>`;return;}
+  if(!sorted.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
   renderProveedoresAnalytics();
 }
