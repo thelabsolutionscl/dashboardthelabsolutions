@@ -844,6 +844,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .fac-kpi{min-width:calc(50% - 3px);flex:1 1 calc(50% - 3px);}
   .fac-filtros{gap:4px;}
   .fac-chip{padding:6px 10px;font-size:11px;min-height:34px;}
+  .fac-search{width:100%!important;flex-shrink:1!important;}
+  #fin-cobrar-aging .fac-kpi{min-width:calc(50% - 4px);flex:1 1 calc(50% - 4px);}
 
   /* Tabla → tarjetas apiladas */
   .fac-tw table,.fac-tw tbody{display:block;width:100%;}
@@ -2832,6 +2834,7 @@ function main() {
           </select>
           <input class="field-input" id="fin-filtro-buscar" placeholder="Buscar cliente / ítem..." style="width:180px;padding:4px 10px;font-size:11px" oninput="finRenderFacturas()">
           <span id="fin-fact-count" style="font-size:11px;color:var(--text3);white-space:nowrap"></span>
+          <button class="btn btn-ghost btn-sm" onclick="exportarLibroVentas()" style="font-size:10px;padding:4px 8px;white-space:nowrap" title="Exportar Libro de Ventas DTE en formato CSV">📋 Libro Ventas</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -2912,7 +2915,10 @@ function main() {
 
     <!-- Cuentas por cobrar generales -->
     <div class="card">
-      <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro (2026)</span></div>
+      <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro</span></div>
+      <div style="padding:12px 16px 0">
+        <div id="fin-cobrar-aging"></div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Mes</th><th>Cliente</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Por Cobrar</th><th>Fact. N°</th></tr></thead>
@@ -3441,6 +3447,7 @@ const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],f
 let cdCurrentId='',cdCurrentEmpresa='';
 let _importDtes=[];
 let _facFiltro='todas';
+let _facBuscar='';
 let wpPagesCache=[];
 const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
@@ -4666,6 +4673,7 @@ function openClienteDetalle(id){
   const cots=state.cotizaciones.filter(co=>{const campo=co.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(id);return campo===(f['Empresa']||'');});
   document.getElementById('cdCotizaciones').innerHTML=!cots.length?'<span style="color:var(--text3)">Sin cotizaciones</span>':`<table style="width:100%;border-collapse:collapse">${cots.map(co=>{const cf=co.fields;return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 4px" class="mono">${escapeHtml(cf['N° Cotización']||'—')}</td><td style="padding:6px 4px">${estadoBadge(cf['Estado cotización']||'—')}</td><td style="padding:6px 4px" class="clp">${formatCLP(cf['Total final (CLP)']||0)}</td></tr>`;}).join('')}</table>`;
   cdCurrentId=id; cdCurrentEmpresa=f['Empresa']||'';
+  _facFiltro='todas'; _facBuscar='';
   renderClienteFacturas(id,f['Empresa']||'');
   document.getElementById('cdAddFacturaBtn').onclick=()=>openFacturaModal(id);
   document.getElementById('cdEditarBtn').onclick=()=>{closeClienteDetalle();openEditCliente(id);};
@@ -4729,35 +4737,52 @@ function renderClienteFacturas(clienteId,empresa){
   if(!all.length){cont.innerHTML='<span style="color:var(--text3)">Sin facturas registradas</span>';return;}
   const workerUrl=getSiiWorkerUrl();
 
-  // ── KPIs globales (sobre todos los registros, no filtrados) ──
+  // KPIs (sobre todos, sin filtrar)
   const kpiEmitido=all.reduce((s,r)=>s+(r.fields['Total']||0),0);
   const kpiCobrado=all.filter(r=>r.fields['Estado Pago']==='Cobrada').reduce((s,r)=>s+(r.fields['Total']||0),0);
   const kpiPendiente=kpiEmitido-kpiCobrado;
   const kpiVencidas=all.filter(r=>r.fields['Estado Pago']!=='Cobrada'&&calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento'])>0).length;
 
-  // ── Filtros ──
+  // Filtros por estado
   const filtros=[
     {k:'todas',  label:'Todas',     n:all.length},
     {k:'pendiente',label:'Pendientes',n:all.filter(r=>r.fields['Estado Pago']==='Pendiente').length},
     {k:'cobrada', label:'Cobradas',  n:all.filter(r=>r.fields['Estado Pago']==='Cobrada').length},
     {k:'vencida', label:'Vencidas',  n:kpiVencidas},
   ];
-  const facs=_facFiltro==='pendiente'?all.filter(r=>r.fields['Estado Pago']==='Pendiente')
-            :_facFiltro==='cobrada' ?all.filter(r=>r.fields['Estado Pago']==='Cobrada')
-            :_facFiltro==='vencida' ?all.filter(r=>r.fields['Estado Pago']!=='Cobrada'&&calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento'])>0)
-            :all;
+  let facs=_facFiltro==='pendiente'?all.filter(r=>r.fields['Estado Pago']==='Pendiente')
+          :_facFiltro==='cobrada' ?all.filter(r=>r.fields['Estado Pago']==='Cobrada')
+          :_facFiltro==='vencida' ?all.filter(r=>r.fields['Estado Pago']!=='Cobrada'&&calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento'])>0)
+          :all;
+
+  // Búsqueda por texto
+  if(_facBuscar){
+    const q=_facBuscar.toLowerCase();
+    facs=facs.filter(r=>{const f=r.fields;return String(f['Folio']||'').includes(q)||(f['Notas']||'').toLowerCase().includes(q)||(f['Tipo DTE']||'').toLowerCase().includes(q);});
+  }
+
+  // Botón bulk: cuántas pendientes accionables hay en la vista
+  const nBulk=facs.filter(r=>!r._readonly&&r.fields['Estado Pago']!=='Cobrada').length;
+
+  // Teléfono del cliente para WhatsApp
+  const clienteObj=state.clientes.find(x=>x.id===clienteId);
+  const clienteTel=(clienteObj?.fields['Teléfono']||'').replace(/\D/g,'');
 
   cont.innerHTML=`
   <div class="fac-kpi-row">
     <div class="fac-kpi"><span class="fac-kpi-lbl">Emitido</span><span class="fac-kpi-val clp">${formatCLP(kpiEmitido)}</span></div>
-    <div class="fac-kpi"><span class="fac-kpi-lbl">Cobrado</span><span class="fac-kpi-val" style="color:var(--success)" >${formatCLP(kpiCobrado)}</span></div>
+    <div class="fac-kpi"><span class="fac-kpi-lbl">Cobrado</span><span class="fac-kpi-val" style="color:var(--success)">${formatCLP(kpiCobrado)}</span></div>
     <div class="fac-kpi"><span class="fac-kpi-lbl">Pendiente</span><span class="fac-kpi-val" style="color:${kpiPendiente>0?'var(--warn)':'var(--text2)'}">${formatCLP(kpiPendiente)}</span></div>
     ${kpiVencidas?`<div class="fac-kpi fac-kpi-danger"><span class="fac-kpi-lbl">Vencidas</span><span class="fac-kpi-val">${kpiVencidas}</span></div>`:''}
   </div>
-  <div class="fac-filtros">
-    ${filtros.map(f=>`<button class="fac-chip${_facFiltro===f.k?' fac-chip-active':''}" onclick="_facFiltro='${f.k}';renderClienteFacturas('${clienteId}','${escapeHtml(empresa)}')">${f.label}${f.n>0?` <span class="fac-chip-n">${f.n}</span>`:''}</button>`).join('')}
+  <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+    <div class="fac-filtros" style="margin-bottom:0;flex:1;min-width:0">
+      ${filtros.map(f=>`<button class="fac-chip${_facFiltro===f.k?' fac-chip-active':''}" onclick="_facFiltro='${f.k}';_facBuscar='';renderClienteFacturas(cdCurrentId,cdCurrentEmpresa)">${f.label}${f.n>0?` <span class="fac-chip-n">${f.n}</span>`:''}</button>`).join('')}
+    </div>
+    <input class="field-input fac-search" placeholder="🔍 Folio / texto…" value="${escapeHtml(_facBuscar)}" oninput="_facBuscar=this.value;renderClienteFacturas(cdCurrentId,cdCurrentEmpresa)" style="width:130px;padding:3px 8px;font-size:11px;height:28px;flex-shrink:0">
+    ${nBulk>1?`<button class="btn btn-sm fac-btn-cobrar" onclick="marcarFiltradasCobradas()" style="font-size:10px;padding:4px 8px;flex-shrink:0;white-space:nowrap">✓ Cobrar ${nBulk}</button>`:''}
   </div>
-  ${facs.length===0?`<div style="color:var(--text3);font-size:12px;padding:8px 0">Sin resultados para este filtro.</div>`:`
+  ${facs.length===0?`<div style="color:var(--text3);font-size:12px;padding:8px 0">Sin resultados${_facBuscar?` para "<em>${escapeHtml(_facBuscar)}</em>"`:' para este filtro'}.</div>`:`
   <div class="fac-tw"><table style="width:100%;border-collapse:collapse">
     <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
       <th style="text-align:left;padding:4px">Tipo / Folio</th><th style="text-align:left;padding:4px">Fecha</th>
@@ -4765,18 +4790,18 @@ function renderClienteFacturas(clienteId,empresa){
       <th style="text-align:left;padding:4px">Pago</th><th style="padding:4px"></th>
     </tr></thead><tbody>
     ${facs.map(r=>{
-      const f=r.fields;
+      const f=r.fields,rid=r.id;
       const tipoNum=String(f['Tipo DTE']||'').split(' - ')[0].replace(/\D/g,'');
       const folio=f['Folio'];
       const pdfHref=tipoNum&&folio?`${workerUrl}/pdf/${tipoNum}/${folio}`:'';
       const notasTip=f['Notas']?` title="${escapeHtml(f['Notas'])}"`:' title=""';
-      const rid=r.id;
       const tipoLabel=String(f['Tipo DTE']||'—').split(' - ');
       const tipoNum2=tipoLabel[0].trim();
       const tipoNombre=tipoLabel[1]||'';
       const dias=calcDiasMora(f['Fecha'],f['Fecha Vencimiento']);
       const esVencida=f['Estado Pago']!=='Cobrada'&&dias>0;
       const rowStyle=esVencida?'border-bottom:1px solid var(--border);background:rgba(255,68,68,0.05)':'border-bottom:1px solid var(--border)';
+      const waMsg=clienteTel&&esVencida?encodeURIComponent(`Estimados, les recordamos que la factura N°${folio} por ${formatCLP(f['Total']||0)} está pendiente de pago. Quedo atento para coordinar. Gracias.`):'';
       return`<tr style="${rowStyle}"${notasTip}>
         <td style="padding:6px 4px">
           <strong style="color:var(--accent)">${escapeHtml(tipoNum2)}</strong>
@@ -4790,22 +4815,52 @@ function renderClienteFacturas(clienteId,empresa){
         <td style="padding:6px 4px">${estadoPagoBadge(f['Estado Pago'],f['Fecha'],f['Fecha Vencimiento'])}</td>
         <td style="padding:6px 4px;text-align:right;white-space:nowrap">
           ${pdfHref?`<a href="${pdfHref}" target="_blank" class="btn-mini" title="Ver PDF">📄</a>`:''}
-          ${!r._readonly&&f['Track ID']?`<button class="btn-mini" title="Consultar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}','${escapeHtml(empresa)}')">🔄</button>`:''}
+          ${waMsg?`<a href="https://wa.me/${clienteTel}?text=${waMsg}" target="_blank" class="btn-mini" title="Recordatorio WhatsApp" style="background:rgba(37,211,102,0.15);border-color:rgba(37,211,102,0.4);color:#25d366">📱</a>`:''}
+          ${!r._readonly&&f['Track ID']?`<button class="btn-mini" title="Consultar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}',cdCurrentEmpresa)">🔄</button>`:''}
           ${r._readonly
             ?`<span class="badge badge-gray" style="font-size:8px" title="Registro de Finanzas (solo lectura)">FIN</span>`
-            :`${f['Estado Pago']!=='Cobrada'?`<button class="btn-mini fac-btn-cobrar" title="Marcar como cobrada" onclick="marcarFacturaCobrada('${rid}','${clienteId}','${escapeHtml(empresa)}')">✓</button>`:''}
-             <button class="btn-mini" title="Editar" onclick="openFacturaModal('${clienteId}','${rid}')">✏️</button>
-             <button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}','${clienteId}')">🗑</button>`}
+            :`${f['Estado Pago']!=='Cobrada'?`<button class="btn-mini fac-btn-cobrar" title="Marcar como cobrada" onclick="marcarFacturaCobrada('${rid}',cdCurrentId,cdCurrentEmpresa)">✓</button>`:''}
+             <button class="btn-mini" title="Editar" onclick="openFacturaModal(cdCurrentId,'${rid}')">✏️</button>
+             <button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}',cdCurrentId)">🗑</button>`}
         </td></tr>`;}).join('')}
-    </tbody></table></div>
-  `}
+    </tbody></table></div>`}
   <div class="fac-summary" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px">
     <span style="color:var(--text3)">${facs.length} de ${all.length} factura${all.length!==1?'s':''}</span>
-    <span style="color:var(--text2)">
-      Cobrado: <strong style="color:var(--success)" class="clp">${formatCLP(kpiCobrado)}</strong>
-      &nbsp;·&nbsp;Pendiente: <strong style="color:${kpiPendiente>0?'var(--warn)':'var(--text2)'}" class="clp">${formatCLP(kpiPendiente)}</strong>
-    </span>
+    <span style="color:var(--text2)">Cobrado: <strong style="color:var(--success)" class="clp">${formatCLP(kpiCobrado)}</strong>&nbsp;·&nbsp;Pendiente: <strong style="color:${kpiPendiente>0?'var(--warn)':'var(--text2)'}" class="clp">${formatCLP(kpiPendiente)}</strong></span>
   </div>`;
+}
+async function marcarFiltradasCobradas(){
+  const all=facturasForCliente(cdCurrentId,cdCurrentEmpresa);
+  let targets=_facFiltro==='vencida'
+    ?all.filter(r=>!r._readonly&&r.fields['Estado Pago']!=='Cobrada'&&calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento'])>0)
+    :all.filter(r=>!r._readonly&&r.fields['Estado Pago']!=='Cobrada');
+  if(_facBuscar){const q=_facBuscar.toLowerCase();targets=targets.filter(r=>String(r.fields['Folio']||'').includes(q)||(r.fields['Notas']||'').toLowerCase().includes(q));}
+  if(!targets.length){toast('Sin facturas pendientes para marcar','info');return;}
+  if(!confirm(`¿Marcar ${targets.length} factura${targets.length>1?'s':''} como cobradas?`)) return;
+  let ok=0;
+  for(const r of targets){
+    try{await airtableWrite('Facturas','PATCH',r.id,{'Estado Pago':'Cobrada'});r.fields['Estado Pago']='Cobrada';ok++;}catch(e){}
+  }
+  toast(`${ok} marcada${ok!==1?'s':''} como cobradas ✓`,'success');
+  renderClienteFacturas(cdCurrentId,cdCurrentEmpresa);
+  if(typeof finRenderFacturas==='function') finRenderFacturas();
+}
+function exportarLibroVentas(){
+  const dtes=state.facturas.filter(r=>r.fields['Total']>0||r.fields['Neto']>0).sort((a,b)=>(a.fields['Fecha']||'').localeCompare(b.fields['Fecha']||''));
+  if(!dtes.length){toast('Sin facturas DTE para exportar','info');return;}
+  const rutEmisor=localStorage.getItem('rut_emisor')||'77.499.554-4';
+  const headers=['RUT Emisor','Tipo Doc','Folio','Fecha Emision','Neto','IVA','Exento','Total','Track ID','Estado SII','Estado Pago','Cliente'];
+  const rows=[headers,...dtes.map(r=>{
+    const f=r.fields;
+    const tipo=String(f['Tipo DTE']||'').split(' - ')[0].trim();
+    return[rutEmisor,tipo,f['Folio']||'',f['Fecha']||'',f['Neto']||0,f['IVA']||0,f['Exento']||0,f['Total']||0,f['Track ID']||'',f['Estado SII']||'',f['Estado Pago']||'',f['Cliente']||''];
+  })];
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`libro_ventas_dte_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();URL.revokeObjectURL(a.href);
+  toast('Libro de Ventas exportado ✓','success');
 }
 async function marcarFacturaCobrada(id,clienteId,empresa){
   try{
@@ -9078,10 +9133,42 @@ function finPagNext(){const pages=Math.ceil(finFactFiltradas.length/FIN_PAG_SIZE
 /* ── Por cobrar ── */
 function finRenderCobrar(){
   const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
-  let html='';
   const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const hoy=Date.now();
+  // Aging buckets
+  const buckets={b0:0,b30:0,b60:0,b90:0};
+  let sumTotal=0;
   data.forEach(r=>{
-    const tot=r.valor*r.cant+Math.round(r.valor*r.cant*0.19);
+    const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
+    const cobrar=r.porCobrar||tot;
+    sumTotal+=cobrar;
+    // Estimamos vencimiento: año-mes-01 + 30 días para registros sin fecha exacta
+    const fechaBase=`${r.year}-${r.mes}-01`;
+    const venc=new Date(new Date(fechaBase).getTime()+30*86400000);
+    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    if(dias<=30) buckets.b0+=cobrar;
+    else if(dias<=60) buckets.b30+=cobrar;
+    else if(dias<=90) buckets.b60+=cobrar;
+    else buckets.b90+=cobrar;
+  });
+
+  // Resumen aging
+  const agingEl=document.getElementById('fin-cobrar-aging');
+  if(agingEl){
+    agingEl.innerHTML=data.length?`
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">Total cobrar</span><span class="fac-kpi-val" style="color:var(--danger)">${clp(sumTotal)}</span></div>
+      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">0–30 días</span><span class="fac-kpi-val" style="color:var(--warn)">${clp(buckets.b0)}</span></div>
+      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">31–60 días</span><span class="fac-kpi-val" style="color:var(--warn)">${clp(buckets.b30)}</span></div>
+      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">61–90 días</span><span class="fac-kpi-val" style="color:var(--danger)">${clp(buckets.b60)}</span></div>
+      <div class="fac-kpi fac-kpi-danger" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">&gt;90 días</span><span class="fac-kpi-val">${clp(buckets.b90)}</span></div>
+    </div>`:'';
+  }
+
+  let html='';
+  data.forEach(r=>{
+    const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
+    const cobrar=r.porCobrar||tot;
     const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
     html+=`<tr>
       <td data-label="Mes">${mesNombre} ${r.year}</td>
@@ -9089,7 +9176,7 @@ function finRenderCobrar(){
       <td data-label="Empresa">${r.empresa}</td>
       <td data-label="Ítem">${r.item}</td>
       <td data-label="Total+IVA" style="text-align:right">${clp(tot)}</td>
-      <td data-label="Por Cobrar" style="text-align:right;color:var(--danger);font-weight:700">${clp(r.porCobrar)}</td>
+      <td data-label="Por Cobrar" style="text-align:right;color:var(--danger);font-weight:700">${clp(cobrar)}</td>
       <td data-label="Fact.N°">${r.fact||'—'}</td>
     </tr>`;
   });
