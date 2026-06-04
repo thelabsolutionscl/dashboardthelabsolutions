@@ -792,6 +792,106 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   #c3d-inline-panel>div:nth-child(2)>div>div:first-child>div:first-child{
     grid-template-columns:1fr!important;
   }
+
+  /* ══════════════════════════════════════════════════════
+     FACTURAS CLIENTE — móvil
+     ══════════════════════════════════════════════════════ */
+
+  /* Header: título+engranaje arriba, botones abajo en fila completa */
+  #cdFacturasHeader{flex-direction:column!important;align-items:stretch!important;gap:8px!important;}
+  #cdFacturasHeader>div:last-child{display:grid!important;grid-template-columns:repeat(3,1fr);gap:6px;}
+  #cdFacturasHeader>div:last-child .btn{justify-content:center;width:100%;min-height:40px!important;font-size:11px!important;padding:8px 4px!important;}
+
+  /* Tabla → tarjetas apiladas */
+  .fac-tw table,.fac-tw tbody{display:block;width:100%;}
+  .fac-tw thead{display:none;}
+  .fac-tw tbody tr{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-areas:"folio folio" "fecha total" "sii pago" "acc acc";
+    gap:0 10px;
+    margin-bottom:12px;
+    border:1px solid var(--border2);
+    border-radius:12px;
+    padding:12px;
+    background:var(--surface2);
+    box-shadow:0 1px 4px rgba(0,0,0,.18);
+  }
+  /* Folio / tipo — cabecera de la tarjeta */
+  .fac-tw tbody tr td:nth-child(1){
+    grid-area:folio;
+    font-size:13px;font-weight:700;
+    padding-bottom:10px;
+    border-bottom:1px solid var(--border);
+    margin-bottom:2px;
+    display:flex;align-items:center;gap:6px;
+  }
+  /* Fecha */
+  .fac-tw tbody tr td:nth-child(2){
+    grid-area:fecha;
+    font-size:11px;color:var(--text2);
+    padding-top:8px;
+    display:flex;align-items:center;
+  }
+  /* Total */
+  .fac-tw tbody tr td:nth-child(3){
+    grid-area:total;
+    text-align:right!important;
+    padding-top:8px;
+    font-size:15px!important;font-weight:700;color:var(--accent);
+    display:flex;align-items:center;justify-content:flex-end;
+  }
+  /* Estado SII */
+  .fac-tw tbody tr td:nth-child(4){
+    grid-area:sii;
+    padding-top:6px;
+    display:flex;align-items:center;
+  }
+  /* Estado Pago */
+  .fac-tw tbody tr td:nth-child(5){
+    grid-area:pago;
+    padding-top:6px;
+    display:flex;align-items:center;justify-content:flex-end;
+  }
+  /* Acciones — franja inferior */
+  .fac-tw tbody tr td:nth-child(6){
+    grid-area:acc;
+    display:flex!important;
+    justify-content:flex-end;
+    gap:6px;
+    border-top:1px solid var(--border);
+    padding-top:10px;
+    margin-top:6px;
+    white-space:nowrap;
+    flex-wrap:wrap;
+  }
+  .fac-tw td:nth-child(6) a.btn-mini,
+  .fac-tw td:nth-child(6) button.btn-mini{
+    padding:9px 14px!important;
+    font-size:15px!important;
+    min-height:38px!important;
+    border-radius:8px!important;
+  }
+  .fac-tw td:nth-child(6) span.badge{
+    min-height:32px;
+    display:inline-flex!important;
+    align-items:center!important;
+    font-size:10px!important;
+    padding:4px 10px!important;
+  }
+
+  /* Resumen Cobrado/Pendiente */
+  .fac-summary{flex-direction:column!important;align-items:flex-start!important;gap:4px!important;}
+
+  /* Modal importar DTEs: tabla con scroll horizontal */
+  #importarDtesBody .imp-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  #importarDtesBody .imp-scroll table{min-width:480px;}
+  #importarDtesBody .imp-actions{flex-direction:column!important;gap:8px!important;}
+  #importarDtesBody .imp-actions .btn{width:100%;justify-content:center;min-height:42px!important;}
+
+  /* Modal facturas form: acciones apiladas */
+  #facturaModal .modal-card>div:last-child{flex-direction:column!important;gap:8px!important;}
+  #facturaModal .modal-card>div:last-child .btn{width:100%;justify-content:center;min-height:42px!important;}
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2002,7 +2102,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:8px">📝 Notas</div><div id="cdNotas" style="font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap"></div></div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">📋 Cotizaciones</div><div id="cdCotizaciones" style="font-size:12px"></div></div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div id="cdFacturasHeader" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:6px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">🧾 Facturas emitidas</div>
           <button onclick="configurarSiiUrl()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:1px 4px;border-radius:4px" title="Configurar URL servidor SII">⚙</button>
@@ -4586,7 +4686,7 @@ function renderClienteFacturas(clienteId,empresa){
   const totalEmitido=facs.reduce((s,r)=>s+(r.fields['Total']||0),0);
   const totalCobrado=facs.filter(r=>r.fields['Estado Pago']==='Cobrada').reduce((s,r)=>s+(r.fields['Total']||0),0);
   const totalPendiente=totalEmitido-totalCobrado;
-  cont.innerHTML=`<table style="width:100%;border-collapse:collapse">
+  cont.innerHTML=`<div class="fac-tw"><table style="width:100%;border-collapse:collapse">
     <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
       <th style="text-align:left;padding:4px">Tipo / Folio</th><th style="text-align:left;padding:4px">Fecha</th>
       <th style="text-align:right;padding:4px">Total</th><th style="text-align:left;padding:4px">Estado SII</th>
@@ -4599,14 +4699,18 @@ function renderClienteFacturas(clienteId,empresa){
       const pdfHref=tipoNum&&folio?`${workerUrl}/pdf/${tipoNum}/${folio}`:'';
       const notasTip=f['Notas']?` title="${escapeHtml(f['Notas'])}"`:' title=""';
       const rid=r.id;
+      const tipoLabel=String(f['Tipo DTE']||'—').split(' - ');
+      const tipoNum2=tipoLabel[0].trim();
+      const tipoNombre=tipoLabel[1]||'';
       return`<tr style="border-bottom:1px solid var(--border)"${notasTip}>
         <td style="padding:6px 4px">
-          <strong>${escapeHtml(String(f['Tipo DTE']||'—').split(' - ')[0])}</strong>
-          <span class="mono">#${escapeHtml(String(folio??'—'))}</span>
-          <button class="btn-mini" onclick="copiarFolio(${folio})" title="Copiar folio" style="font-size:9px;padding:0 3px">📋</button>
+          <strong style="color:var(--accent)">${escapeHtml(tipoNum2)}</strong>
+          ${tipoNombre?`<span style="color:var(--text3);font-size:10px;font-weight:400"> ${escapeHtml(tipoNombre)}</span>`:''}
+          <span class="mono" style="font-size:12px;font-weight:700">#${escapeHtml(String(folio??'—'))}</span>
+          <button class="btn-mini" onclick="copiarFolio(${folio})" title="Copiar folio" style="font-size:9px;padding:0 3px;opacity:.7">📋</button>
         </td>
-        <td style="padding:6px 4px">${escapeHtml(f['Fecha']||'—')}</td>
-        <td style="padding:6px 4px;text-align:right" class="clp">${formatCLP(f['Total']||0)}</td>
+        <td style="padding:6px 4px;font-size:11px;color:var(--text2)">${escapeHtml(f['Fecha']||'—')}</td>
+        <td style="padding:6px 4px;text-align:right;font-weight:700;font-size:13px" class="clp">${formatCLP(f['Total']||0)}</td>
         <td style="padding:6px 4px">${siiEstadoBadge(f['Estado SII'])}</td>
         <td style="padding:6px 4px">${estadoPagoBadge(f['Estado Pago'],f['Fecha'],f['Fecha Vencimiento'])}</td>
         <td style="padding:6px 4px;text-align:right;white-space:nowrap">
@@ -4614,8 +4718,8 @@ function renderClienteFacturas(clienteId,empresa){
           ${!r._readonly&&f['Track ID']?`<button class="btn-mini" title="Actualizar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}','${escapeHtml(empresa)}')">🔄</button>`:''}
           ${r._readonly?`<span class="badge badge-gray" style="font-size:8px" title="Registro de Finanzas (solo lectura)">FIN</span>`:`<button class="btn-mini" title="Editar" onclick="openFacturaModal('${clienteId}','${rid}')">✏️</button><button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}','${clienteId}')">🗑</button>`}
         </td></tr>`;}).join('')}
-    </tbody></table>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px">
+    </tbody></table></div>
+    <div class="fac-summary" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px">
       <span style="color:var(--text3)">${facs.length} factura${facs.length>1?'s':''}</span>
       <span style="color:var(--text2)">
         Cobrado: <strong style="color:var(--success)" class="clp">${formatCLP(totalCobrado)}</strong>
@@ -4766,6 +4870,7 @@ async function abrirImportarDtes(){
     if(!_importDtes.length){body.innerHTML='<div style="color:var(--text3);padding:20px;text-align:center">Todos los DTEs del servidor ya están registrados en el dashboard.</div>';return;}
     const cliOpts=state.clientes.map(c=>`<option value="${c.id}">${escapeHtml(c.fields['Empresa']||'—')}</option>`).join('');
     body.innerHTML=`<p style="font-size:11px;color:var(--text2);margin-bottom:12px">${_importDtes.length} DTE${_importDtes.length>1?'s':''} nuevo${_importDtes.length>1?'s':''} disponible${_importDtes.length>1?'s':''}. Asigna un cliente y marca los que deseas importar:</p>
+    <div class="imp-scroll">
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
         <th style="padding:4px;text-align:left">Tipo</th><th style="padding:4px">Folio</th>
@@ -4778,10 +4883,11 @@ async function abrirImportarDtes(){
         <td style="padding:5px 4px">${d.fecha||'—'}</td>
         <td style="padding:5px 4px;text-align:right">${formatCLP(d.total||0)}</td>
         <td style="padding:5px 4px"><select class="field-select" id="imp-cli-${i}" style="font-size:11px;padding:3px 6px"><option value="">Sin cliente</option>${cliOpts}</select></td>
-        <td style="padding:5px 4px;text-align:center"><input type="checkbox" id="imp-chk-${i}" checked></td>
+        <td style="padding:5px 4px;text-align:center"><input type="checkbox" id="imp-chk-${i}" checked style="width:18px;height:18px"></td>
       </tr>`).join('')}
       </tbody></table>
-      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+    </div>
+      <div class="imp-actions" style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importarDtesModal').style.display='none'">Cancelar</button>
         <button class="btn btn-primary btn-sm" id="impConfirmarBtn" onclick="confirmarImportarDtes()">⬆ Importar seleccionados</button>
       </div>`;
