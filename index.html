@@ -1526,7 +1526,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="openSIIConfigModal()" style="margin-right:auto;font-size:10px;opacity:0.75">⚙ Make.com</button>
+        <button class="btn btn-ghost btn-sm" onclick="openSIIConfigModal()" style="margin-right:auto;font-size:10px;opacity:0.75">⚙ Worker SII</button>
         <button class="btn btn-ghost btn-sm" onclick="closeDTEModal()">Cancelar</button>
         <button class="btn btn-primary btn-sm" onclick="emitirDTE()" id="dteSubmitBtn">📤 Emitir DTE</button>
       </div>
@@ -3542,16 +3542,44 @@ function main() {
 <div id="siiConfigModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeSIIConfigModal()"></div>
   <div class="modal-card" style="max-width:460px">
-    <div class="modal-title">🇨🇱 Configuración SII / DTE</div>
-    <p class="modal-desc" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px">Conecta directamente con el SII usando tu Cloudflare Worker.<br>El Worker maneja la firma XML, el token SII y la subida del DTE.</p>
+    <div class="modal-title">🇨🇱 Configuración Worker SII / DTE</div>
+    <p class="modal-desc" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px">Conecta directamente con el SII usando el Worker desplegado.<br>El Worker maneja la firma XML, el token SII y la subida del DTE.</p>
     <div id="siiStatusBox" style="font-size:11px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:7px 11px;line-height:1.6;margin-bottom:12px">Sin configurar</div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <div class="field-group"><label class="field-label">URL del Cloudflare Worker</label><input class="field-input" id="siiWebhookUrl" placeholder="https://sii-dte-worker.TU-USUARIO.workers.dev"></div>
+      <div class="field-group"><label class="field-label">URL del Worker SII</label><input class="field-input" id="siiWebhookUrl" placeholder="https://sii-dte-worker.TU-USUARIO.workers.dev"></div>
       <div class="field-group"><label class="field-label">RUT Emisor (tu empresa)</label><input class="field-input" id="siiRutEmisor" placeholder="77.190.661-3"></div>
       <div class="field-group"><label class="field-label">Razón Social Emisor</label><input class="field-input" id="siiRazonEmisor" placeholder="The Lab Solutions SpA"></div>
     </div>
+    <!-- CAF Section -->
+    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">📂 CAF — Certificados de Autorización de Folios</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.5">Sube los archivos XML que te entrega el SII para cada tipo de documento. Sin CAF no se pueden emitir documentos.</div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--text2);min-width:170px">Factura Electrónica (33)</span>
+          <input type="file" id="cafFile33" accept=".xml" style="display:none" onchange="uploadCAF('33',this)">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile33').click()" style="font-size:10px">📁 Subir CAF</button>
+          <button class="btn btn-ghost btn-sm" onclick="checkFolios('33')" style="font-size:10px">📊 Folios</button>
+          <span id="cafStatus33" style="font-size:10px;color:var(--text3)">—</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--text2);min-width:170px">Boleta Electrónica (39)</span>
+          <input type="file" id="cafFile39" accept=".xml" style="display:none" onchange="uploadCAF('39',this)">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile39').click()" style="font-size:10px">📁 Subir CAF</button>
+          <button class="btn btn-ghost btn-sm" onclick="checkFolios('39')" style="font-size:10px">📊 Folios</button>
+          <span id="cafStatus39" style="font-size:10px;color:var(--text3)">—</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--text2);min-width:170px">Nota de Crédito (61)</span>
+          <input type="file" id="cafFile61" accept=".xml" style="display:none" onchange="uploadCAF('61',this)">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile61').click()" style="font-size:10px">📁 Subir CAF</button>
+          <button class="btn btn-ghost btn-sm" onclick="checkFolios('61')" style="font-size:10px">📊 Folios</button>
+          <span id="cafStatus61" style="font-size:10px;color:var(--text3)">—</span>
+        </div>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;align-items:center">
-      <button class="btn btn-ghost btn-sm" onclick="testSIIWorker()" style="margin-right:auto;font-size:10px">🔌 Probar</button>
+      <button class="btn btn-ghost btn-sm" onclick="testSIIWorker()" style="margin-right:auto;font-size:10px">🔌 Probar conexión</button>
       <button class="btn btn-ghost btn-sm" onclick="closeSIIConfigModal()">Cancelar</button>
       <button class="btn btn-primary btn-sm" onclick="saveSIIConfig()">💾 Guardar</button>
     </div>
@@ -11446,7 +11474,49 @@ document.addEventListener('click',function(e){
 });
 
 // ── SII / DTE ─────────────────────────────────────────────────
-function getSIICfg(){try{return JSON.parse(localStorage.getItem('sii_cfg')||'{}');}catch(e){return {};}}
+function getSIICfg(){try{return JSON.parse(localStorage.getItem('sii_cfg')||'{}');}catch(e){return {};}
+async function uploadCAF(tipo,input){
+  const file=input.files[0];if(!file)return;
+  const cfg=getSIICfg();
+  if(!cfg?.webhookUrl){toast('Configura primero la URL del Worker SII','error');input.value='';return;}
+  const statusEl=document.getElementById('cafStatus'+tipo);
+  if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='⏳ Subiendo...';}
+  try{
+    const caf_xml=await file.text();
+    const r=await fetch(cfg.webhookUrl+'/caf',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo_documento:tipo,caf_xml})});
+    const d=await r.json();
+    if(r.ok){
+      if(statusEl){statusEl.style.color='var(--accent)';statusEl.textContent='✅ Folios '+d.rango?.desde+'–'+d.rango?.hasta;}
+      toast('✅ CAF tipo '+tipo+' subido — folios '+d.rango?.desde+'–'+d.rango?.hasta,'success');
+    }else{
+      if(statusEl){statusEl.style.color='var(--danger)';statusEl.textContent='⛔ '+(d.error||r.status);}
+      toast('Error subiendo CAF: '+(d.error||r.status),'error');
+    }
+  }catch(e){
+    if(statusEl){statusEl.style.color='var(--danger)';statusEl.textContent='⛔ '+e.message;}
+    toast('Error: '+e.message,'error');
+  }
+  input.value='';
+}
+async function checkFolios(tipo){
+  const cfg=getSIICfg();
+  if(!cfg?.webhookUrl){toast('Configura primero la URL del Worker SII','error');return;}
+  const statusEl=document.getElementById('cafStatus'+tipo);
+  if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='⏳...';}
+  try{
+    const r=await fetch(cfg.webhookUrl+'/folio/'+tipo);
+    const d=await r.json();
+    if(r.ok){
+      const disp=d.folios_disponibles;
+      const color=disp<=10?'var(--danger)':disp<=30?'var(--warning)':'var(--accent)';
+      if(statusEl){statusEl.style.color=color;statusEl.textContent=(disp<=10?'⚠ ':'✅ ')+'Sgte: '+d.siguiente_folio+' · Disp: '+disp;}
+    }else{
+      if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='Sin CAF cargado';}
+    }
+  }catch(e){
+    if(statusEl){statusEl.style.color='var(--danger)';statusEl.textContent='⛔ '+e.message;}
+  }
+}
 function openDTEModal(pedidoId){
   const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
   const f=p.fields;
@@ -11471,7 +11541,7 @@ function openDTEModal(pedidoId){
   const cfg=getSIICfg();
   const sb=document.getElementById('dteSIIStatus');
   if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML='\u2705 Webhook configurado \u2014 emisor: <strong>'+escapeHtml(cfg.razonEmisor||cfg.rutEmisor||'Tu empresa')+'</strong>'+(dteNum?' &nbsp;&middot;&nbsp; <span style="color:var(--accent3)">DTE anterior: N\u00b0 '+escapeHtml(dteNum)+'</span>':'');}
-  else{sb.style.color='var(--text3)';sb.innerHTML='⚠ Sin configurar — <a href="#" onclick="openSIIConfigModal();event.preventDefault()" style="color:var(--accent)">configura el webhook de Make.com</a>';}
+  else{sb.style.color='var(--text3)';sb.innerHTML='⚠ Sin configurar — <a href="#" onclick="openSIIConfigModal();event.preventDefault()" style="color:var(--accent)">configura el Worker SII</a>';}
   document.getElementById('dteModal').style.display='flex';
 }
 function closeDTEModal(){document.getElementById('dteModal').style.display='none';}
@@ -11489,7 +11559,7 @@ function dteValidarRut(el){
 }
 async function emitirDTE(){
   const cfg=getSIICfg();
-  if(!cfg?.webhookUrl){toast('Configura el webhook de Make.com primero','error');openSIIConfigModal();return;}
+  if(!cfg?.webhookUrl){toast('Configura el Worker SII primero','error');openSIIConfigModal();return;}
   const pedidoId=document.getElementById('dtePedidoId').value;
   const rut=(document.getElementById('dteRut').value||'').trim();
   const razonSocial=(document.getElementById('dteRazonSocial').value||'').trim();
@@ -11513,7 +11583,8 @@ async function emitirDTE(){
     if(!r.ok) throw new Error(`HTTP ${r.status} — verifica la URL del webhook`);
     let resp={};try{resp=await r.json();}catch(e){}
     const dteNum=resp.dte_numero||resp.folio||resp.numero||resp.id||'';
-    const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||'';
+    const tipoDTE=document.getElementById('dteTipoDoc').value;
+    const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||(dteNum?cfg.webhookUrl+'/pdf/'+tipoDTE+'/'+dteNum:'');
     if(dteNum){
       try{await airtableWrite('Pedidos','PATCH',pedidoId,{'DTE N°':String(dteNum)});}catch(e){}
       const p=state.pedidos.find(x=>x.id===pedidoId);if(p) p.fields['DTE N°']=String(dteNum);
@@ -11531,9 +11602,13 @@ function openSIIConfigModal(){
   document.getElementById('siiRutEmisor').value=cfg.rutEmisor||'';
   document.getElementById('siiRazonEmisor').value=cfg.razonEmisor||'';
   const sb=document.getElementById('siiStatusBox');
-  if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML=`✅ Webhook activo: <strong>${escapeHtml(cfg.webhookUrl)}</strong>`;}
-  else{sb.style.color='var(--text3)';sb.textContent='Sin configurar — ingresa la URL del webhook de Make.com.';}
+  if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML='✅ Worker activo: <strong>'+escapeHtml(cfg.webhookUrl)+'</strong>';}
+  else{sb.style.color='var(--text3)';sb.textContent='Sin configurar — ingresa la URL del Worker SII.';}
+  // Reset CAF status
+  ['33','39','61'].forEach(t=>{const el=document.getElementById('cafStatus'+t);if(el){el.style.color='var(--text3)';el.textContent='—';}});
   document.getElementById('siiConfigModal').style.display='flex';
+  // Auto-check folios if URL is configured
+  if(cfg?.webhookUrl) setTimeout(()=>['33','39','61'].forEach(checkFolios),300);
 }
 function closeSIIConfigModal(){document.getElementById('siiConfigModal').style.display='none';}
 function saveSIIConfig(){
@@ -11545,7 +11620,7 @@ function saveSIIConfig(){
   toast('✓ Configuración SII guardada','success');
   const sb=document.getElementById('dteSIIStatus');
   if(sb&&document.getElementById('dteModal').style.display!=='none'){
-    sb.style.color='var(--accent)';sb.innerHTML='✅ Worker SII configurado — emisor: <strong>'+escapeHtml(razonEmisor||rutEmisor||'Tu empresa')+'</strong>';
+    sb.style.color='var(--accent)';sb.innerHTML='✅ Worker SII activo — emisor: <strong>'+escapeHtml(razonEmisor||rutEmisor||'Tu empresa')+'</strong>';
   }
   closeSIIConfigModal();
 }
