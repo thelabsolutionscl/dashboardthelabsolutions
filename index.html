@@ -5852,6 +5852,7 @@ async function generarVistasIA(idx){
             }
           }catch(editErr){
             lastDallEError='edits exception: '+editErr.message;
+            console.error('[IA edits]',editErr);
             setStatus('⚠️ '+lastDallEError);
           }
         }
@@ -5878,9 +5879,12 @@ async function generarVistasIA(idx){
               const blob=await(await fetch(d.data[0].url)).blob();
               imgData=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});
             }
-            if(imgData) usedAI=true;
+            if(imgData){usedAI=true;console.log('[IA generacion] OK',v.label);}
+            else{console.warn('[IA generacion] no imgData',d);}
           }catch(genErr){
             lastDallEError=genErr.message;
+            console.error('[IA generacion]',genErr);
+            toast('Error IA: '+genErr.message,'error');
             setStatus('❌ '+genErr.message);
           }
         }
