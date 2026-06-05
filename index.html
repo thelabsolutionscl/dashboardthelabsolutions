@@ -6341,6 +6341,47 @@ async function _fichaHTMLtoPdfBlob(htmlDoc){
   });
 }
 
+async function subirFactura(pedidoId){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const f=p.fields;
+  const nPedido=f['N° Pedido']||pedidoId;
+  // Crear input file invisible y dispararlo
+  const input=document.createElement('input');
+  input.type='file';input.accept='application/pdf,image/*';
+  input.onchange=async()=>{
+    const file=input.files[0];if(!file) return;
+    const btn=document.querySelector(`[onclick="subirFactura('${pedidoId}')"]`);
+    if(btn){btn.disabled=true;btn.textContent='⏳';}
+    try{
+      const token=await _driveGetToken();
+      // Crear carpeta Facturas/N° Pedido
+      const rootId=await _driveGetOrCreateFolder('Facturas');
+      const folderId=await _driveGetOrCreateFolder(nPedido,rootId);
+      // Subir el archivo
+      const meta={name:file.name,parents:[folderId]};
+      const form=new FormData();
+      form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+      form.append('file',file,file.name);
+      const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{
+        method:'POST',headers:{'Authorization':'Bearer '+token},body:form
+      });
+      if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||r.statusText);}
+      const result=await r.json();
+      const link=result.webViewLink;
+      // Guardar link en localStorage y Airtable
+      localStorage.setItem('factura_drive_'+pedidoId,link);
+      try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Factura URL':link});}catch(e){}
+      if(p) p.fields['Factura URL']=link;
+      renderPedidos();
+      toast('✅ Factura subida a Drive — <a href="'+escapeHtml(link)+'" target="_blank" style="color:var(--accent)">Ver archivo</a>','success');
+    }catch(e){
+      if(btn){btn.disabled=false;btn.textContent='🧾 Subir';}
+      toast('Error subiendo factura: '+e.message,'error');
+    }
+  };
+  input.click();
+}
+
 async function guardarFichaEnDrive(cotId){
   const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
   const f=cot.fields;
@@ -6733,8 +6774,10 @@ function renderPedidos(filter){
     const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
     let advBtn='';
     if(idx>=0&&idx<stages.length-1) advBtn=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') advBtn='<span class="badge badge-green">✓</span>';
-    const dteNum=f['DTE N°']||'';
-    const dteBtn=`<button class="btn-mini${dteNum?' btn-mini-green':''}" onclick="openDTEModal('${p.id}')" title="${dteNum?'DTE N° '+escapeHtml(dteNum):'Emitir DTE / Factura SII'}">📄${dteNum?' ✓':''}</button>`;
+    const facturaLink=localStorage.getItem('factura_drive_'+p.id)||f['Factura URL']||'';
+    const dteBtn=facturaLink
+      ? `<button class="btn-mini btn-mini-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')" title="Ver factura en Drive">🧾 ✓</button>`
+      : `<button class="btn-mini btn-mini-red" onclick="subirFactura('${p.id}')" title="Subir factura PDF">🧾 Subir</button>`;
     const fichaData=parseFichaData(f['Ficha Tecnica']);
     const fichaBtn=`<button class="btn-mini${fichaData?' btn-mini-blue':''}" onclick="openFichaModal('${p.id}')" title="Ficha Técnica">📋</button>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
