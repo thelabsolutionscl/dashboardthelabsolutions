@@ -6345,19 +6345,29 @@ async function subirFactura(pedidoId){
   const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
   const f=p.fields;
   const nPedido=f['N° Pedido']||pedidoId;
-  // Crear input file invisible y dispararlo
+  const btn=document.querySelector(`[onclick="subirFactura('${pedidoId}')"]`);
+  if(btn){btn.disabled=true;btn.textContent='⏳ Autorizando...';}
+  let token;
+  try{
+    token=await _driveGetToken();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='🧾 Subir';}
+    toast('Error autorizando Drive: '+e.message,'error');
+    return;
+  }
+  // Token OK — ahora abrir selector de archivo
   const input=document.createElement('input');
   input.type='file';input.accept='application/pdf,image/*';
+  input.style.display='none';
+  document.body.appendChild(input);
   input.onchange=async()=>{
-    const file=input.files[0];if(!file) return;
-    const btn=document.querySelector(`[onclick="subirFactura('${pedidoId}')"]`);
-    if(btn){btn.disabled=true;btn.textContent='⏳';}
+    const file=input.files[0];
+    document.body.removeChild(input);
+    if(!file){if(btn){btn.disabled=false;btn.textContent='🧾 Subir';}return;}
+    if(btn) btn.textContent='⏳ Subiendo...';
     try{
-      const token=await _driveGetToken();
-      // Crear carpeta Facturas/N° Pedido
       const rootId=await _driveGetOrCreateFolder('Facturas');
       const folderId=await _driveGetOrCreateFolder(nPedido,rootId);
-      // Subir el archivo
       const meta={name:file.name,parents:[folderId]};
       const form=new FormData();
       form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
@@ -6368,17 +6378,17 @@ async function subirFactura(pedidoId){
       if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||r.statusText);}
       const result=await r.json();
       const link=result.webViewLink;
-      // Guardar link en localStorage y Airtable
       localStorage.setItem('factura_drive_'+pedidoId,link);
       try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Factura URL':link});}catch(e){}
       if(p) p.fields['Factura URL']=link;
       renderPedidos();
-      toast('✅ Factura subida a Drive — <a href="'+escapeHtml(link)+'" target="_blank" style="color:var(--accent)">Ver archivo</a>','success');
+      toast('✅ Factura subida — <a href="'+escapeHtml(link)+'" target="_blank" style="color:var(--accent)">Ver en Drive</a>','success');
     }catch(e){
       if(btn){btn.disabled=false;btn.textContent='🧾 Subir';}
       toast('Error subiendo factura: '+e.message,'error');
     }
   };
+  input.oncancel=()=>{document.body.removeChild(input);if(btn){btn.disabled=false;btn.textContent='🧾 Subir';}};
   input.click();
 }
 
