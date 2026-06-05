@@ -5662,6 +5662,7 @@ function descargarFichaTecnica(pedidoId){
 // ── FICHA PROPUESTA AL CLIENTE ────────────────────────────────
 let _fpCotId='';
 let _fpItems=[];
+let _fpLogoCliente='';
 
 function parseFichaPropData(s){try{return s?JSON.parse(s):null;}catch(e){return null;}}
 
@@ -5679,11 +5680,25 @@ function openFichaPropModal(cotId){
     _fpItems=lineas.map(l=>{const p=l.split('|').map(s=>s.trim());return{nombre:p[0]||'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''};});
     if(!_fpItems.length) _fpItems=[{nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''}];
   }
+  _fpLogoCliente='';
+  const lp=document.getElementById('fpLogoPrev');if(lp){lp.src='';lp.style.display='none';}
+  const lph=document.getElementById('fpLogoPh');if(lph) lph.style.display='flex';
   renderFPItems();
   document.getElementById('fichaPropModal').style.display='flex';
 }
 
 function closeFichaPropModal(){document.getElementById('fichaPropModal').style.display='none';}
+
+function handleFPLogo(evt){
+  const file=evt.target.files[0];if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    _fpLogoCliente=e.target.result;
+    const prev=document.getElementById('fpLogoPrev');if(prev){prev.src=e.target.result;prev.style.display='block';}
+    const ph=document.getElementById('fpLogoPh');if(ph) ph.style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
 
 function addFPItem(){
   _fpItems.push({nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''});
@@ -5746,20 +5761,18 @@ function renderFPItems(){
       <div style="margin-top:10px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px">Fotos del producto</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          ${['imgFrontal','imgIsometrica','imgAerea'].map(campo=>{
-            const labels={imgFrontal:'Vista Frontal',imgIsometrica:'Vista Isométrica',imgAerea:'Vista Aérea'};
-            return `<div class="field-group">
-              <label class="field-label">${labels[campo]}</label>
-              <label style="cursor:pointer;display:block;border:1px dashed var(--border2);border-radius:8px;overflow:hidden;min-height:72px;position:relative;background:var(--surface)">
-                <img id="fpi-${idx}-${campo}" src="${item[campo]||''}" style="width:100%;height:72px;object-fit:cover;display:${item[campo]?'block':'none'}">
-                <div id="fpp-${idx}-${campo}" style="display:${item[campo]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:72px;gap:4px;color:var(--text3)">
+          ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Aérea'}].map(({c,l})=>`
+            <div>
+              <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:5px 4px;border-radius:6px 6px 0 0;font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase">${l}</div>
+              <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;min-height:72px;background:var(--surface)">
+                <img id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:72px;object-fit:cover;display:${item[c]?'block':'none'}">
+                <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:72px;gap:4px;color:var(--text3)">
                   <span style="font-size:18px">📷</span>
-                  <span style="font-size:9px">Subir foto</span>
+                  <span style="font-size:8px">Subir foto</span>
                 </div>
-                <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${campo}')">
+                <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${c}')">
               </label>
-            </div>`;
-          }).join('')}
+            </div>`).join('')}
         </div>
         <div style="font-size:9px;color:var(--text3);margin-top:4px">Las fotos no se guardan en Airtable — súbelas cada vez antes de generar el PDF.</div>
       </div>
@@ -5845,7 +5858,7 @@ function buildFichaPropuestaDoc(cotId){
       ${items.slice(0,3).map(it=>it.imgFrontal?'<img src="'+it.imgFrontal+'" style="flex:1;max-width:32%;height:200px;object-fit:cover;border:1px solid #e8e8e8">':'').join('')||'<div style="color:#ccc;font-size:11px;text-align:center">Las fotos aparecerán aquí</div>'}
     </div>
     <div style="padding:16px 36px;border-top:3px solid #00c8cc;display:flex;justify-content:space-between;align-items:center">
-      <div style="font-size:8px;color:#aaa;letter-spacing:.5px">hola@thelab.solutions · +56 9 7180 6142</div>
+      ${_fpLogoCliente?'<img src="'+_fpLogoCliente+'" style="height:36px;max-width:160px;object-fit:contain">':'<div style="font-size:8px;color:#aaa;letter-spacing:.5px">hola@thelab.solutions · +56 9 7180 6142</div>'}
       <div style="font-size:8px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase">THELAB.SOLUTIONS</div>
     </div>
   </div>`;
@@ -5903,10 +5916,10 @@ function buildFichaPropuestaDoc(cotId){
 body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#f0f0f0;}
 .pagina{width:210mm;min-height:297mm;page-break-after:always;position:relative;overflow:hidden;background:#fff;margin:0 auto 20px;}
 .pagina:last-child{page-break-after:avoid;}
-.fbox{display:flex;flex-direction:column;align-items:center;gap:6px;}
-.flbl{font-size:7px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#888;}
-.fimg{width:100%;height:160px;object-fit:cover;border:1px solid #e8e8e8;}
-.fph{width:100%;height:160px;background:#f8f8f8;border:1px dashed #ddd;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;}
+.fbox{display:flex;flex-direction:column;align-items:stretch;gap:0;}
+.flbl{font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,#00c8cc,#0097a7);padding:6px 8px;text-align:center;border-radius:4px 4px 0 0;}
+.fimg{width:100%;height:155px;object-fit:cover;border:2px solid #00c8cc;border-top:none;border-radius:0 0 4px 4px;}
+.fph{width:100%;height:155px;background:#f8f8f8;border:2px solid #00c8cc;border-top:none;border-radius:0 0 4px 4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;}
 @media print{body{background:#fff;}.pagina{page-break-after:always;margin:0;}@page{margin:0;size:A4;}}
 </style></head><body>
 ${portada}
@@ -10974,6 +10987,17 @@ async function testSIIWorker(){
           <label class="field-label">Nombre del Proyecto</label>
           <input class="field-input" id="fpNombreProyecto" placeholder="ej. PROPUESTA CARTELES">
         </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Logo del cliente <span style="color:var(--text3);font-weight:400">(aparece en la portada del PDF)</span></label>
+        <label style="cursor:pointer;display:block;border:1px dashed var(--border2);border-radius:8px;overflow:hidden;height:64px;background:var(--surface)">
+          <img id="fpLogoPrev" style="height:64px;width:100%;object-fit:contain;display:none;padding:6px">
+          <div id="fpLogoPh" style="display:flex;flex-direction:row;align-items:center;justify-content:center;height:64px;gap:8px;color:var(--text3)">
+            <span style="font-size:22px">🏢</span>
+            <span style="font-size:10px">Subir logo empresa (PNG/JPG)</span>
+          </div>
+          <input type="file" accept="image/*" style="display:none" onchange="handleFPLogo(event)">
+        </label>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">Muestras / Productos</span>
