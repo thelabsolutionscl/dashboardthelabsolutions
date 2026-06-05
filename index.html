@@ -5750,25 +5750,26 @@ async function generarVistasIA(idx){
     }
     if(!descripcion){
       const item=_fpItems[idx];
-      descripcion=(item.nombre||'product')+((item.tipo?' '+item.tipo:'')+((item.material?' made of '+item.material.split('\n')[0]:'')));
+      descripcion=(item.nombre||'product')+(item.tipo?' '+item.tipo:'');
     }
-    const basePrompt='Luxury premium product mockup photograph, studio lighting, pure white background, soft shadows, professional DSLR camera f/1.8, sharp focus, high-end advertising style, luxury brand catalog, clean minimalist. Product: '+descripcion;
+    descripcion=descripcion.slice(0,80);
+    const seed=Math.floor(Math.random()*99999);
     const views=[
-      {campo:'imgFrontal',label:'FRONTAL',angulo:'frontal straight-on centered eye-level view'},
-      {campo:'imgIsometrica',label:'ISOMÉTRICA',angulo:'isometric 45-degree angle three-quarter view showing front and side'},
-      {campo:'imgAerea',label:'AÉREA',angulo:'top-down bird eye aerial overhead view'}
+      {campo:'imgFrontal',label:'FRONTAL',angulo:'front view'},
+      {campo:'imgIsometrica',label:'ISOMÉTRICA',angulo:'isometric 45 degree angle'},
+      {campo:'imgAerea',label:'AÉREA',angulo:'top down overhead view'}
     ];
     for(const v of views){
       if(btn) btn.textContent='Vista '+v.label+'...';
-      setStatus('🎨 '+v.label+' generándose... aparecerá en segundos');
-      const prompt=encodeURIComponent(basePrompt+', '+v.angulo);
-      const imgUrl=`https://image.pollinations.ai/prompt/${prompt}?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${Math.floor(Math.random()*99999)}`;
+      setStatus('🎨 Generando '+v.label+'...');
+      const prompt=encodeURIComponent('luxury product photo white background studio lighting '+v.angulo+', '+descripcion);
+      const imgUrl=`https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&model=flux&seed=${seed+views.indexOf(v)}`;
       _fpItems[idx][v.campo]=imgUrl;
       const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
       if(prev){prev.src=imgUrl;prev.style.display='block';}
       const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
       if(ph) ph.style.display='none';
-      await new Promise(r=>setTimeout(r,800));
+      await new Promise(r=>setTimeout(r,500));
     }
     setStatus('✅ ¡Vistas generadas con éxito!');
     setTimeout(()=>{if(statusEl) statusEl.style.display='none';},5000);
