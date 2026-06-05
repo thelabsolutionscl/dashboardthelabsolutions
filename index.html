@@ -5883,6 +5883,37 @@ async function generarVistasIA(idx){
       c.getContext('2d').drawImage(img,0,0);
       return await new Promise(r=>c.toBlob(r,'image/png'));
     };
+    const removeBackground=async(dataUrl)=>{
+      const img=new Image();img.crossOrigin='anonymous';img.src=dataUrl;
+      await new Promise(r=>{img.onload=r;img.onerror=r;});
+      const w=img.naturalWidth||1024,h=img.naturalHeight||1024;
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
+      const id=ctx.getImageData(0,0,w,h);const d=id.data;
+      // sample background from 4 corners and average
+      const corners=[0,(w-1)*4,(h-1)*w*4,((h-1)*w+(w-1))*4];
+      let bgR=0,bgG=0,bgB=0;
+      corners.forEach(i=>{bgR+=d[i];bgG+=d[i+1];bgB+=d[i+2];});
+      bgR=Math.round(bgR/4);bgG=Math.round(bgG/4);bgB=Math.round(bgB/4);
+      const thresh=40;
+      const isBg=(i)=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB)<thresh*3;
+      const visited=new Uint8Array(w*h);
+      const queue=[];
+      // seed BFS from all 4 edges
+      for(let x=0;x<w;x++){[x,x+(h-1)*w].forEach(p=>{if(!visited[p]&&isBg(p*4)){visited[p]=1;queue.push(p);}});}
+      for(let y=1;y<h-1;y++){[y*w,y*w+(w-1)].forEach(p=>{if(!visited[p]&&isBg(p*4)){visited[p]=1;queue.push(p);}});}
+      let qi=0;
+      while(qi<queue.length){
+        const p=queue[qi++];const pi=p*4;d[pi+3]=0;
+        const x=p%w,y=Math.floor(p/w);
+        if(x>0){const n=p-1;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+        if(x<w-1){const n=p+1;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+        if(y>0){const n=p-w;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+        if(y<h-1){const n=p+w;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+      }
+      ctx.putImageData(id,0,0);
+      return c.toDataURL('image/png');
+    };
     let usedAI=false;
     let lastDallEError='';
     for(const v of views){
@@ -5951,6 +5982,10 @@ async function generarVistasIA(idx){
             setStatus('❌ '+genErr.message);
           }
         }
+      }
+      if(imgData&&usedAI){
+        try{setStatus('✂️ '+v.label+': eliminando fondo...');imgData=await removeBackground(imgData);}
+        catch(rbErr){console.warn('[removeBackground]',rbErr);}
       }
       if(!imgData) imgData=genImgCanvas(v.label,_fpItems[idx]?.nombre||descripcion);
       _fpItems[idx][v.campo]=imgData;
@@ -6145,6 +6180,7 @@ function buildFichaPropuestaDoc(cotId){
         <div style="font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#888;margin-bottom:4px">■ FICHA DE ÉSTE PROYECTO N°:</div>
         <div style="font-size:72px;font-weight:900;color:#1a1a1a;line-height:1;letter-spacing:-3px">${escH(numFicha)}</div>
       </div>
+      <img src="${theLabLogo}" onerror="this.style.display='none'" style="height:52px;object-fit:contain;opacity:0.9;max-width:200px">
     </div>
     <div style="padding:20px 36px 0">
       <div style="font-size:10px;font-weight:900;color:#00c8cc;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">CLIENTE:</div>
