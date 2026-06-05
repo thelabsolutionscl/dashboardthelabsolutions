@@ -569,12 +569,14 @@ app.post('/', async (req, res) => {
       kv.put(`folio_${data.tipo_documento}`, String(folio));
     }
 
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.json({
       dte_numero: folio,
       tipo_documento: data.tipo_documento,
       trackid: siiResult.trackid,
       estado_sii: siiResult.estado,
       glosa_sii: siiResult.glosa || '',
+      pdf_url: `${baseUrl}/pdf/${data.tipo_documento}/${folio}`,
     });
   } catch (e) {
     console.error('[SII Server]', e.message);
