@@ -1,7 +1,14 @@
 import { createRequire } from 'module';
+import { readFileSync, existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 const require = createRequire(import.meta.url);
 const PDFDocument = require('pdfkit');
 const bwipjs = require('bwip-js');
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const LOGO_PATH = join(__dirname, 'logo.png');
+const LOGO_BUF = existsSync(LOGO_PATH) ? readFileSync(LOGO_PATH) : null;
 
 const TIPO_NOMBRE = {
   '33': 'FACTURA ELECTRONICA',
@@ -115,10 +122,16 @@ export async function generateDtePdf(dteXml, env, out) {
      .text('S.I.I. - SANTIAGO', boxX, boxY + 76, { width: boxW, align: 'center' });
 
   // ── Datos del emisor (arriba a la izquierda) ──
-  doc.fillColor('#000').font('Helvetica-Bold').fontSize(15).text(dte.emisor.razon, M, M + 4, { width: contentW - boxW - 20 });
+  const emisorW = contentW - boxW - 20;
+  let emisorY = M;
+  if (LOGO_BUF) {
+    doc.image(LOGO_BUF, M, emisorY, { height: 48, fit: [140, 48] });
+    emisorY += 54;
+  }
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(LOGO_BUF ? 11 : 15).text(dte.emisor.razon, M, emisorY, { width: emisorW });
   doc.font('Helvetica').fontSize(9).fillColor('#333');
-  doc.text(`Giro: ${dte.emisor.giro}`, M, doc.y + 4, { width: contentW - boxW - 20 });
-  doc.text(`${dte.emisor.dir}, ${dte.emisor.comuna} ${dte.emisor.ciudad}`.trim(), { width: contentW - boxW - 20 });
+  doc.text(`Giro: ${dte.emisor.giro}`, M, doc.y + 4, { width: emisorW });
+  doc.text(`${dte.emisor.dir}, ${dte.emisor.comuna} ${dte.emisor.ciudad}`.trim(), { width: emisorW });
 
   // ── Fecha emisión ──
   let y = Math.max(doc.y, boxY + boxH) + 16;
