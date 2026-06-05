@@ -163,10 +163,23 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .ai-response-wrap{position:relative;}
 .copy-btn{position:absolute;top:7px;right:7px;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text2);font-size:10px;padding:3px 8px;cursor:pointer;}
 .copy-btn:hover{color:var(--accent);border-color:var(--accent);}
-.modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;}
+.modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);}
 .modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);}
 .modal-card{position:relative;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:24px;max-width:480px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.6);}
 .modal-card.wide{max-width:640px;}
+/* Modal box — header/body/footer pattern */
+.modal-box{position:relative;background:var(--surface);border:1px solid var(--border2);border-radius:14px;width:calc(100% - 32px);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.75),0 0 0 1px rgba(255,255,255,0.04);}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border2);flex-shrink:0;gap:12px;min-height:56px;}
+.modal-body{padding:20px;overflow-y:auto;flex:1;}
+.modal-footer{padding:12px 20px;border-top:1px solid var(--border2);flex-shrink:0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center;background:var(--surface2);}
+.modal-close{background:transparent;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1;transition:background .15s;flex-shrink:0;}
+.modal-close:hover{background:rgba(255,255,255,0.08);color:var(--text);}
+/* Ficha Propuesta layout helpers */
+.fp-top-grid{display:grid;grid-template-columns:110px 1fr;gap:12px;}
+.fp-fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.fp-span-2{grid-column:1/-1;}
+.fp-views-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.fp-ia-row{display:flex;gap:12px;align-items:flex-start;}
 /* ── Facturas cliente: estilos base ──────────────────────────── */
 .fac-kpi-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
 .fac-kpi{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;flex:1;min-width:80px;display:flex;flex-direction:column;gap:2px;}
@@ -818,6 +831,17 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   }
   .modal-card.wide{max-width:calc(100vw - 20px)!important;}
   .modal-body{padding:12px 14px!important;}
+  .modal-box{max-width:calc(100vw - 16px)!important;max-height:calc(100dvh - 16px);margin:8px;border-radius:12px;}
+  .modal-header{padding:12px 14px;min-height:48px;}
+  .modal-footer{padding:10px 14px;flex-wrap:wrap;}
+  .modal-footer .btn{flex:1 1 auto;min-width:100px;justify-content:center;}
+  /* Ficha Propuesta: collapse grids on mobile */
+  .fp-top-grid,.fp-fields-grid{grid-template-columns:1fr!important;}
+  .fp-span-2{grid-column:1!important;}
+  .fp-views-grid{grid-template-columns:1fr 1fr!important;}
+  .fp-ia-row{flex-direction:column!important;}
+  .fp-ia-row>div{width:100%!important;padding-top:0!important;}
+  .fp-ia-row [id^="fpGenBtn-"]{width:100%!important;}
 
   /* ── 3D Calculator inline: single column ────────────── */
   #c3d-inline-panel>div:nth-child(2)>div>div:first-child>div:first-child{
@@ -1610,7 +1634,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <input class="field-input" id="fichaAprobado" placeholder="Nombre del responsable">
       </div>
     </div>
-    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+    <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeFichaModal()">Cancelar</button>
       <button class="btn btn-ghost" onclick="saveFichaModal(false)">💾 Guardar</button>
       <button class="btn btn-primary" onclick="saveFichaModal(true)">📄 Guardar y ver PDF</button>
@@ -6098,76 +6122,78 @@ function handleFPImage(evt,idx,campo){
 
 function renderFPItems(){
   const container=document.getElementById('fpItemsList');if(!container) return;
-  if(!_fpItems.length){container.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin muestras — agrega la primera ↑</div>';return;}
+  if(!_fpItems.length){container.innerHTML='<div style="text-align:center;color:var(--text3);padding:24px;font-size:12px">Sin muestras — agrega la primera ↑</div>';return;}
   container.innerHTML=_fpItems.map((item,idx)=>`
-    <div style="border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surface2)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span style="font-size:11px;font-weight:700;color:#00d4cc">MUESTRA ${idx+1}</span>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="removeFPItem(${idx})">✕</button>
+    <div style="border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border2)">
+        <span style="font-size:11px;font-weight:700;color:#00d4cc;letter-spacing:.5px">MUESTRA ${idx+1}</span>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:4px 8px" onclick="removeFPItem(${idx})">✕ Eliminar</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div class="field-group">
-          <label class="field-label">Nombre del producto</label>
-          <input class="field-input" placeholder="ej. CARTEL ILUMINADO NEGRO" value="${escapeHtml(item.nombre||'')}" oninput="_fpItems[${idx}].nombre=this.value">
+      <div style="padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:12px">
+        <div class="fp-fields-grid">
+          <div class="field-group">
+            <label class="field-label">Nombre del producto</label>
+            <input class="field-input" placeholder="ej. CARTEL ILUMINADO NEGRO" value="${escapeHtml(item.nombre||'')}" oninput="_fpItems[${idx}].nombre=this.value">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Tipo de muestra</label>
+            <input class="field-input" placeholder="ej. 3D Y ACRÍLICO" value="${escapeHtml(item.tipo||'')}" oninput="_fpItems[${idx}].tipo=this.value">
+          </div>
+          <div class="field-group fp-span-2">
+            <label class="field-label">Material principal</label>
+            <textarea class="field-input" rows="2" placeholder="ej. 3D: PLA Terminación blanca&#10;ACRÍLICO: Transparente 2mm" oninput="_fpItems[${idx}].material=this.value">${escapeHtml(item.material||'')}</textarea>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Opción alternativa</label>
+            <input class="field-input" placeholder="ej. 3D Y LAMINADO MIC" value="${escapeHtml(item.optLabel||'')}" oninput="_fpItems[${idx}].optLabel=this.value">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Material opción alt.</label>
+            <textarea class="field-input" rows="2" placeholder="ej. GRÁFICA: Laminado MIC 240." oninput="_fpItems[${idx}].optMaterial=this.value">${escapeHtml(item.optMaterial||'')}</textarea>
+          </div>
+          <div class="field-group fp-span-2">
+            <label class="field-label">Dimensiones</label>
+            <input class="field-input" placeholder="ej. 40 × 35 × 8 cm" value="${escapeHtml(item.dims||'')}" oninput="_fpItems[${idx}].dims=this.value">
+          </div>
         </div>
-        <div class="field-group">
-          <label class="field-label">Tipo de muestra</label>
-          <input class="field-input" placeholder="ej. 3D Y ACRÍLICO" value="${escapeHtml(item.tipo||'')}" oninput="_fpItems[${idx}].tipo=this.value">
-        </div>
-        <div class="field-group" style="grid-column:1/-1">
-          <label class="field-label">Material principal</label>
-          <textarea class="field-input" rows="2" placeholder="ej. 3D: PLA Terminación blanca&#10;ACRÍLICO: Transparente 2mm" oninput="_fpItems[${idx}].material=this.value">${escapeHtml(item.material||'')}</textarea>
-        </div>
-        <div class="field-group">
-          <label class="field-label">Opción alternativa (label)</label>
-          <input class="field-input" placeholder="ej. 3D Y LAMINADO MIC" value="${escapeHtml(item.optLabel||'')}" oninput="_fpItems[${idx}].optLabel=this.value">
-        </div>
-        <div class="field-group">
-          <label class="field-label">Material opción alt.</label>
-          <textarea class="field-input" rows="2" placeholder="ej. GRÁFICA: Laminado MIC 240." oninput="_fpItems[${idx}].optMaterial=this.value">${escapeHtml(item.optMaterial||'')}</textarea>
-        </div>
-        <div class="field-group" style="grid-column:1/-1">
-          <label class="field-label">Dimensiones</label>
-          <input class="field-input" placeholder="ej. 40 × 35 × 8 cm" value="${escapeHtml(item.dims||'')}" oninput="_fpItems[${idx}].dims=this.value">
-        </div>
-      </div>
-      <div style="margin-top:10px">
-        <div style="border:1px solid #00c8cc;border-radius:10px;padding:12px;margin-bottom:10px;background:linear-gradient(135deg,rgba(0,200,204,0.06),rgba(0,151,167,0.04))">
-          <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#0097a7;margin-bottom:10px">✨ Generar vistas con IA</div>
-          <div style="display:flex;gap:10px;align-items:flex-start">
-            <div style="flex:1">
-              <div style="font-size:9px;color:var(--text3);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Foto del producto</div>
+        <div style="border:1px solid #00c8cc;border-radius:10px;padding:14px;background:linear-gradient(135deg,rgba(0,200,204,0.06),rgba(0,151,167,0.04))">
+          <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#0097a7;margin-bottom:12px">✨ Generar vistas con IA</div>
+          <div class="fp-ia-row">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:9px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Foto de referencia del producto</div>
               <label style="cursor:pointer;display:block;border:2px dashed #00c8cc;border-radius:8px;overflow:hidden;background:var(--surface)">
-                <img id="fpRaw-${idx}" src="${_fpRawImages[idx]?.dataUrl||''}" style="width:100%;height:88px;object-fit:cover;display:${_fpRawImages[idx]?'block':'none'}">
-                <div id="fpRawPh-${idx}" style="display:${_fpRawImages[idx]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:88px;gap:5px;color:#0097a7">
-                  <span style="font-size:26px">📸</span>
-                  <span style="font-size:8px;font-weight:700">Subir foto del producto</span>
+                <img id="fpRaw-${idx}" src="${_fpRawImages[idx]?.dataUrl||''}" style="width:100%;height:100px;object-fit:contain;display:${_fpRawImages[idx]?'block':'none'}">
+                <div id="fpRawPh-${idx}" style="display:${_fpRawImages[idx]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100px;gap:6px;color:#0097a7">
+                  <span style="font-size:28px">📸</span>
+                  <span style="font-size:9px;font-weight:700">Subir foto del producto</span>
                 </div>
                 <input type="file" accept="image/*" style="display:none" onchange="handleFPRawImage(event,${idx})">
               </label>
             </div>
-            <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;padding-top:18px">
-              <button id="fpGenBtn-${idx}" onclick="generarVistasIA(${idx})" style="background:linear-gradient(135deg,#00c8cc,#0097a7);color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap;min-width:130px">✨ Generar 3 vistas</button>
-              <div id="fpAiStatus-${idx}" style="font-size:9px;color:#0097a7;text-align:center;display:none;max-width:140px;line-height:1.4"></div>
+            <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;flex-shrink:0">
+              <button id="fpGenBtn-${idx}" onclick="generarVistasIA(${idx})" style="background:linear-gradient(135deg,#00c8cc,#0097a7);color:#fff;border:none;border-radius:8px;padding:11px 16px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap">✨ Generar 3 vistas</button>
+              <div id="fpAiStatus-${idx}" style="font-size:9px;color:#0097a7;text-align:center;display:none;max-width:160px;line-height:1.5"></div>
             </div>
           </div>
         </div>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px">Fotos del producto</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Lateral'}].map(({c,l})=>`
-            <div>
-              <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:5px 4px;border-radius:6px 6px 0 0;font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase">${l}</div>
-              <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
-                <img id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:#f5f5f5;display:${item[c]?'block':'none'}">
-                <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100%;gap:4px;color:var(--text3)">
-                  <span style="font-size:18px">📷</span>
-                  <span style="font-size:8px">Subir foto</span>
-                </div>
-                <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${c}')">
-              </label>
-            </div>`).join('')}
+        <div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:10px">Fotos del producto</div>
+          <div class="fp-views-grid">
+            ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Lateral'}].map(({c,l})=>`
+              <div>
+                <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:6px 4px;border-radius:8px 8px 0 0;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase">${l}</div>
+                <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
+                  <img id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:var(--surface);display:${item[c]?'block':'none'}">
+                  <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;color:var(--text3)">
+                    <span style="font-size:22px">📷</span>
+                    <span style="font-size:9px;font-weight:600">Subir foto</span>
+                  </div>
+                  <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${c}')">
+                </label>
+              </div>`).join('')}
+          </div>
+          <div style="font-size:9px;color:var(--text3);margin-top:6px">Las fotos se guardan localmente en este navegador al guardar la ficha.</div>
         </div>
-        <div style="font-size:9px;color:var(--text3);margin-top:4px">Las fotos se guardan localmente en este navegador. Al guardar la ficha quedan disponibles para la próxima sesión.</div>
       </div>
     </div>
   `).join('');
@@ -11567,7 +11593,7 @@ async function testSIIWorker(){
       </div>
       <div id="iaTestResult" style="display:none;font-size:11px;border-radius:6px;padding:8px 10px;line-height:1.6"></div>
     </div>
-    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end">
+    <div class="modal-footer">
       <button class="btn btn-ghost" onclick="testIAKey()">🔍 Probar key</button>
       <button class="btn btn-ghost" onclick="closeIAConfigModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveIAConfig()">💾 Guardar</button>
@@ -11577,13 +11603,13 @@ async function testSIIWorker(){
 
 <!-- ── FICHA PROPUESTA MODAL ───────────────────────────────── -->
 <div id="fichaPropModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeFichaPropModal()">
-  <div class="modal-box" style="max-width:640px;width:95%;max-height:90vh;display:flex;flex-direction:column">
+  <div class="modal-box" style="max-width:640px;width:95%">
     <div class="modal-header">
       <span class="modal-title">📋 Ficha Técnica — Propuesta Cliente</span>
       <button class="modal-close" onclick="closeFichaPropModal()">✕</button>
     </div>
-    <div class="modal-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px">
-      <div style="display:grid;grid-template-columns:110px 1fr;gap:12px">
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+      <div class="fp-top-grid">
         <div class="field-group">
           <label class="field-label">N° Ficha</label>
           <input class="field-input" id="fpNumFicha" placeholder="01">
@@ -11610,7 +11636,7 @@ async function testSIIWorker(){
       </div>
       <div id="fpItemsList"></div>
     </div>
-    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
+    <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeFichaPropModal()">Cancelar</button>
       <button id="fpDriveBtn" class="btn btn-ghost" style="color:#1a73e8;border-color:#1a73e8" onclick="guardarFichaEnDrive(_fpCotId)" title="Sube fotos, vistas IA y ficha a Google Drive organizado por contacto y cotización">📁 Guardar en Drive</button>
       <button class="btn btn-ghost" onclick="saveFichaPropModal(false)">💾 Guardar</button>
