@@ -603,10 +603,24 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .login-remember:hover .login-remember-check{border-color:var(--accent);}
 .login-footer{margin-top:24px;font-size:10px;color:var(--text3);text-align:center;font-family:'JetBrains Mono',monospace;letter-spacing:1px;}
 /* User chip */
-.user-chip{display:none;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 12px 4px 6px;cursor:default;transition:border-color 0.15s;}
+.user-chip{display:none;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 12px 4px 6px;cursor:pointer;transition:border-color 0.15s;position:relative;user-select:none;}
+.user-chip:hover{border-color:var(--accent);}
 .user-avatar{width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--black);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:0;}
 .user-name{font-size:11px;color:var(--text);font-weight:500;white-space:nowrap;}
-.logout-btn{display:none;background:none;border:1px solid rgba(255,68,68,0.3);color:var(--danger);border-radius:6px;font-family:'DM Sans',sans-serif;font-size:10px;padding:4px 10px;cursor:pointer;transition:all 0.15s;font-weight:600;white-space:nowrap;}
+.user-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--border2);border-radius:10px;min-width:240px;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:9999;overflow:hidden;}
+.user-menu.open{display:block;}
+.user-menu-header{padding:10px 14px 8px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+.user-menu-item{display:flex;align-items:center;gap:9px;padding:9px 14px;font-size:12px;color:var(--text);cursor:pointer;transition:background 0.1s;font-family:'DM Sans',sans-serif;}
+.user-menu-item:hover{background:var(--surface2);}
+.user-menu-item.danger{color:var(--danger);}
+.user-menu-sep{height:1px;background:var(--border);margin:3px 0;}
+.user-menu-token{padding:8px 14px 10px;border-top:1px solid var(--border);}
+.user-menu-token-label{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
+.user-menu-token input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box;}
+.user-menu-token input:focus{border-color:var(--accent);}
+.user-menu-token-actions{display:flex;gap:6px;margin-top:5px;}
+.user-menu-token-actions button{flex:1;font-size:10px;padding:4px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;}
+.logout-btn{display:none!important;}
 .logout-btn:hover{background:rgba(255,68,68,0.1);border-color:var(--danger);}
 @media(max-width:768px){
   .login-card{margin:16px;padding:28px 20px 24px;}
@@ -1078,9 +1092,33 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="status-dot" id="statusDot"></div>
     <span class="status-text" id="statusText">iniciando...</span>
     <button class="refresh-btn" id="refreshBtn" onclick="loadAllData()">↺ Actualizar</button>
-    <div class="user-chip" id="userChip">
+    <div class="user-chip" id="userChip" onclick="toggleUserMenu(event)">
       <div class="user-avatar" id="userAvatar">?</div>
       <span class="user-name" id="userName">—</span>
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="opacity:.5;margin-left:1px"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="user-menu" id="userMenu" onclick="event.stopPropagation()">
+        <div class="user-menu-header">Mi cuenta</div>
+        <div class="user-menu-item" onclick="loadAllData();closeUserMenu()">↺ Actualizar datos</div>
+        <div class="user-menu-sep"></div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">🔑 Token Airtable</div>
+          <input type="password" id="umAirtableToken" placeholder="patXXX..." autocomplete="off">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuToken()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuToken()">Limpiar</button>
+          </div>
+        </div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">🤖 OpenAI API Key</div>
+          <input type="password" id="umOpenaiKey" placeholder="sk-proj-..." autocomplete="off">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuOpenai()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuOpenai()">Limpiar</button>
+          </div>
+        </div>
+        <div class="user-menu-sep"></div>
+        <div class="user-menu-item danger" onclick="AUTH.logout();closeUserMenu()">⏻ Cerrar sesión</div>
+      </div>
     </div>
     <button class="logout-btn" id="logoutBtn" onclick="AUTH.logout()">Salir</button>
   </div>
@@ -3923,9 +3961,31 @@ function closeAnthropicModal(){document.getElementById('anthropicModal').style.d
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
 function getToken(){return lsGet('airtable_token')||'';}
 function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
-function showTokenModal(){const m=document.getElementById('tokenModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('modalTokenInput');i.value='';i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveToken();if(e.key==='Escape') closeTokenModal();};},50);}
-function closeTokenModal(){document.getElementById('tokenModal').style.display='none';}
-function saveToken(){const v=(document.getElementById('modalTokenInput').value||'').trim();if(!v){toast('Token vacío','error');return;}lsSet('airtable_token',v);closeTokenModal();toast('Token guardado ✓ (persistente)','success');loadAllData();}
+function showTokenModal(){openUserMenu();const i=document.getElementById('umAirtableToken');if(i){i.type='text';i.focus();}}
+function closeTokenModal(){}
+function saveToken(){const v=(document.getElementById('modalTokenInput')?.value||'').trim();if(!v) return;lsSet('airtable_token',v);toast('Token guardado ✓','success');loadAllData();}
+// ── User menu ──────────────────────────────────────────────────
+function toggleUserMenu(e){e.stopPropagation();const m=document.getElementById('userMenu');const isOpen=m.classList.contains('open');closeUserMenu();if(!isOpen){openUserMenu();}}
+function openUserMenu(){
+  const m=document.getElementById('userMenu');m.classList.add('open');
+  const at=document.getElementById('umAirtableToken');if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado)':'patXXX...';}
+  const oi=document.getElementById('umOpenaiKey');if(oi){const v=localStorage.getItem('fp_openai_key');oi.value=v?'••••••••'+v.slice(-4):'';oi.placeholder=v?'(guardado)':'sk-proj-...';}
+  setTimeout(()=>document.addEventListener('click',closeUserMenuOutside),10);
+}
+function closeUserMenu(){document.getElementById('userMenu')?.classList.remove('open');document.removeEventListener('click',closeUserMenuOutside);}
+function closeUserMenuOutside(e){if(!document.getElementById('userChip')?.contains(e.target)) closeUserMenu();}
+function saveUserMenuToken(){
+  const inp=document.getElementById('umAirtableToken');const v=(inp?.value||'').trim();
+  if(!v||v.startsWith('••')){toast('Ingresa el token completo (patXXX...)','error');inp.value='';inp.type='text';inp.focus();return;}
+  lsSet('airtable_token',v);closeUserMenu();toast('Token Airtable guardado ✓','success');loadAllData();
+}
+function clearUserMenuToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');closeUserMenu();toast('Token Airtable eliminado','info');openUserMenu();}
+function saveUserMenuOpenai(){
+  const inp=document.getElementById('umOpenaiKey');const v=(inp?.value||'').trim();
+  if(!v||v.startsWith('••')){toast('Ingresa la key completa (sk-...)','error');inp.value='';inp.type='text';inp.focus();return;}
+  localStorage.setItem('fp_openai_key',v);closeUserMenu();toast('OpenAI key guardada ✓','success');
+}
+function clearUserMenuOpenai(){localStorage.removeItem('fp_openai_key');closeUserMenu();toast('OpenAI key eliminada','info');}
 
 // ── AIRTABLE ──────────────────────────────────────────────────
 async function airtableFetch(table,max=100){
