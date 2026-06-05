@@ -5696,6 +5696,37 @@ function openIAConfigModal(){
   document.getElementById('iaConfigModal').style.display='flex';
 }
 function closeIAConfigModal(){document.getElementById('iaConfigModal').style.display='none';}
+async function testIAKey(){
+  const key=(document.getElementById('iaOpenaiKey')?.value||'').trim();
+  const res=document.getElementById('iaTestResult');
+  if(!res) return;
+  if(!key){res.style.display='block';res.style.background='#fff3cd';res.style.color='#856404';res.innerHTML='⚠️ Ingresa una API key primero.';return;}
+  res.style.display='block';res.style.background='var(--surface2)';res.style.color='var(--text2)';res.innerHTML='🔄 Probando key...';
+  const lines=[];
+  // Test 1: chat completions (GPT-4o mini — barato)
+  try{
+    const r=await fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:5,messages:[{role:'user',content:'hi'}]})
+    });
+    if(r.ok) lines.push('✅ GPT-4o-mini: OK');
+    else{const e=await r.json();lines.push('❌ GPT-4o-mini: '+(e.error?.message||r.status));}
+  }catch(e){lines.push('❌ GPT-4o-mini: '+e.message);}
+  // Test 2: DALL-E 3 image generation
+  res.innerHTML='🔄 Probando DALL-E 3...';
+  try{
+    const r=await fetch('https://api.openai.com/v1/images/generations',{
+      method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({model:'dall-e-3',prompt:'a red apple',n:1,size:'1024x1024',response_format:'b64_json',quality:'standard'})
+    });
+    if(r.ok){lines.push('✅ DALL-E 3: OK — imágenes funcionan');}
+    else{const e=await r.json();lines.push('❌ DALL-E 3: '+(e.error?.message||r.status));}
+  }catch(e){lines.push('❌ DALL-E 3: '+e.message);}
+  const allOk=lines.every(l=>l.startsWith('✅'));
+  res.style.background=allOk?'#d4edda':'#f8d7da';
+  res.style.color=allOk?'#155724':'#721c24';
+  res.innerHTML=lines.join('<br>');
+}
 function saveIAConfig(){
   const o=document.getElementById('iaOpenaiKey');
   if(o?.value.trim()) localStorage.setItem('fp_openai_key',o.value.trim());
@@ -11151,14 +11182,16 @@ async function testSIIWorker(){
         La API key se guarda solo en este navegador (localStorage). No se envía a ningún servidor propio.
       </div>
       <div class="field-group">
-        <label class="field-label">OpenAI API Key <span style="color:var(--text3);font-weight:400">(opcional — mejora el análisis de la foto con GPT-4o)</span></label>
+        <label class="field-label">OpenAI API Key <span style="color:var(--text3);font-weight:400">(requerida para DALL-E 3 + GPT-4o)</span></label>
         <input class="field-input" id="iaOpenaiKey" type="text" placeholder="sk-..." oninput="localStorage.setItem('fp_openai_key',this.value)" onchange="localStorage.setItem('fp_openai_key',this.value)" style="font-family:monospace;font-size:11px">
       </div>
       <div style="font-size:10px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:8px 10px;line-height:1.5">
-        💡 Las imágenes se generan con <strong>Pollinations.ai (gratis, sin API key)</strong>. Si tienes OpenAI key, GPT-4o analiza la foto para un mejor resultado.
+        💡 Con tu key: GPT-4o analiza la foto → DALL-E 3 genera 3 vistas reales (Frontal, Isométrica, Aérea).<br>Sin key: se usan placeholders Canvas con el nombre del producto.
       </div>
+      <div id="iaTestResult" style="display:none;font-size:11px;border-radius:6px;padding:8px 10px;line-height:1.6"></div>
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="testIAKey()">🔍 Probar key</button>
       <button class="btn btn-ghost" onclick="closeIAConfigModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveIAConfig()">💾 Guardar</button>
     </div>
