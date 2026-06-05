@@ -5813,6 +5813,13 @@ async function generarVistasIA(idx){
       x.fillStyle='#00c8cc';x.font='bold 12px Arial';x.fillText('THE LAB SOLUTIONS',256,420);
       return c.toDataURL('image/png');
     };
+    const toPngBlob=async(dataUrl)=>{
+      const img=new Image();img.src=dataUrl;
+      await new Promise(r=>{img.onload=r;img.onerror=r;});
+      const c=document.createElement('canvas');c.width=img.naturalWidth||512;c.height=img.naturalHeight||512;
+      c.getContext('2d').drawImage(img,0,0);
+      return await new Promise(r=>c.toBlob(r,'image/png'));
+    };
     let usedAI=false;
     let lastDallEError='';
     for(const v of views){
@@ -5821,24 +5828,46 @@ async function generarVistasIA(idx){
       let imgData=null;
       if(openaiKey){
         try{
-          const fullPrompt='Professional luxury product photography, '+v.prompt+', pure white background, studio lighting, high detail, photorealistic. Product: '+descripcion.slice(0,200);
-          // Intentar gpt-image-1 primero (nuevo modelo OpenAI)
-          let r=await fetch('https://api.openai.com/v1/images/generations',{
-            method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-            body:JSON.stringify({model:'gpt-image-1',prompt:fullPrompt,n:1,size:'1024x1024',quality:'low'})
-          });
-          // Si falla, intentar dall-e-3 como fallback
-          if(!r.ok){
-            const e1=await r.json();
-            r=await fetch('https://api.openai.com/v1/images/generations',{
-              method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-              body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',quality:'standard'})
+          // Si hay foto del producto: usar edits para que el AI use el mismo producto
+          if(rawImg){
+            setStatus('🎨 '+v.label+': procesando foto del producto...');
+            const pngBlob=await toPngBlob(rawImg.dataUrl);
+            const fd=new FormData();
+            fd.append('image',new File([pngBlob],'product.png',{type:'image/png'}));
+            fd.append('prompt','Show this exact same product from '+v.prompt+'. Professional product photography, pure white background, studio lighting. Preserve the exact same design, colors, text, logo, shape and dimensions. Only change the camera angle.');
+            fd.append('model','gpt-image-1');
+            fd.append('n','1');
+            fd.append('size','1024x1024');
+            fd.append('quality','low');
+            const r=await fetch('https://api.openai.com/v1/images/edits',{
+              method:'POST',headers:{'Authorization':'Bearer '+openaiKey},body:fd
             });
-            if(!r.ok){const e2=await r.json();throw new Error('gpt-image-1: '+(e1.error?.message||'?')+' / dall-e-3: '+(e2.error?.message||r.statusText));}
+            if(r.ok){
+              const d=await r.json();
+              imgData='data:image/png;base64,'+d.data[0].b64_json;
+              usedAI=true;
+            }else{
+              const e=await r.json();
+              lastDallEError='edits: '+(e.error?.message||r.status);
+              setStatus('⚠️ '+lastDallEError+' — intentando generación...');
+            }
           }
-          if(r.ok){
+          // Fallback: generación desde texto (sin foto o si edits falló)
+          if(!imgData){
+            const fullPrompt='Professional luxury product photography, '+v.prompt+', pure white background, studio lighting, high detail, photorealistic. Product: '+descripcion.slice(0,200);
+            let r=await fetch('https://api.openai.com/v1/images/generations',{
+              method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+              body:JSON.stringify({model:'gpt-image-1',prompt:fullPrompt,n:1,size:'1024x1024',quality:'low'})
+            });
+            if(!r.ok){
+              const e1=await r.json();
+              r=await fetch('https://api.openai.com/v1/images/generations',{
+                method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+                body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',quality:'standard'})
+              });
+              if(!r.ok){const e2=await r.json();throw new Error('gpt-image-1: '+(e1.error?.message||'?')+' / dall-e-3: '+(e2.error?.message||r.statusText));}
+            }
             const d=await r.json();
-            // gpt-image-1 devuelve b64_json directo; dall-e-3 devuelve URL
             if(d.data[0].b64_json){
               imgData='data:image/png;base64,'+d.data[0].b64_json;
             }else{
