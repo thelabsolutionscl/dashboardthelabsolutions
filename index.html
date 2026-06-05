@@ -5861,7 +5861,7 @@ async function generarVistasIA(idx){
     const views=[
       {campo:'imgFrontal',label:'FRONTAL',prompt:'front view centered eye level'},
       {campo:'imgIsometrica',label:'ISOMÉTRICA',prompt:'isometric 45-degree angle view'},
-      {campo:'imgAerea',label:'AÉREA',prompt:'directly overhead 90-degree top-down view, camera pointing straight down from above, aerial drone-like perspective looking straight down at the product'}
+      {campo:'imgAerea',label:'LATERAL',prompt:'side profile view, 90-degree lateral angle from the right side, camera at eye level showing the full side of the product'}
     ];
     const genImgCanvas=(label,nombre)=>{
       const c=document.createElement('canvas');c.width=512;c.height=512;
@@ -6091,7 +6091,7 @@ function renderFPItems(){
         </div>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px">Fotos del producto</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Aérea'}].map(({c,l})=>`
+          ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Lateral'}].map(({c,l})=>`
             <div>
               <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:5px 4px;border-radius:6px 6px 0 0;font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase">${l}</div>
               <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
@@ -6243,7 +6243,7 @@ function buildFichaPropuestaDoc(cotId){
           ${foto(item.imgIsometrica,'VISTA ISOMÉTRICA')}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px">
-          ${foto(item.imgAerea,'VISTA AÉREA')}
+          ${foto(item.imgAerea,'VISTA LATERAL')}
           <div></div>
         </div>
       </div>
@@ -11353,7 +11353,7 @@ async function testSIIWorker(){
         <input class="field-input" id="iaOpenaiKey" type="text" placeholder="sk-..." oninput="localStorage.setItem('fp_openai_key',this.value)" onchange="localStorage.setItem('fp_openai_key',this.value)" style="font-family:monospace;font-size:11px">
       </div>
       <div style="font-size:10px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:8px 10px;line-height:1.5">
-        💡 Con tu key: GPT-4o analiza la foto → DALL-E 3 genera 3 vistas reales (Frontal, Isométrica, Aérea).<br>Sin key: se usan placeholders Canvas con el nombre del producto.
+        💡 Con tu key: GPT-4o analiza la foto → gpt-image-1 genera 3 vistas reales (Frontal, Isométrica, Lateral).<br>Sin key: se usan placeholders Canvas con el nombre del producto.
       </div>
       <div id="iaTestResult" style="display:none;font-size:11px;border-radius:6px;padding:8px 10px;line-height:1.6"></div>
     </div>
