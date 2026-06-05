@@ -4029,7 +4029,7 @@ function getAnthropicKey(){return lsGet('anthropic_key');}
 function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=lsGet('anthropic_key');i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
-function getToken(){return lsGet('airtable_token')||_DEFAULTS.AIRTABLE_TOKEN;}
+function getToken(){return lsGet('airtable_token');}
 function getOpenAIKey(){return localStorage.getItem('fp_openai_key')||_DEFAULTS.OPENAI_KEY;}
 function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
 function showTokenModal(){openUserMenu();const i=document.getElementById('umAirtableToken');if(i){i.type='text';i.focus();}}
@@ -4039,7 +4039,7 @@ function saveToken(){const v=(document.getElementById('modalTokenInput')?.value|
 function toggleUserMenu(e){e.stopPropagation();const m=document.getElementById('userMenu');const isOpen=m.classList.contains('open');closeUserMenu();if(!isOpen){openUserMenu();}}
 function openUserMenu(){
   const m=document.getElementById('userMenu');m.classList.add('open');
-  const at=document.getElementById('umAirtableToken');if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado)':'patXXX...';}
+  const at=document.getElementById('umAirtableToken');if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado — clic para cambiar)':'patXXX...';at.onfocus=()=>{if(at.value.startsWith('••')){at.value='';at.placeholder='patXXX...';}};at.onblur=()=>{if(!at.value){const vv=lsGet('airtable_token');at.value=vv?'••••••••'+vv.slice(-4):'';at.placeholder=vv?'(guardado — clic para cambiar)':'patXXX...';}}}
   const oi=document.getElementById('umOpenaiKey');if(oi){const v=localStorage.getItem('fp_openai_key');oi.value=v?'••••••••'+v.slice(-4):'';oi.placeholder=v?'(guardado)':'sk-proj-...';}
   const gc=document.getElementById('umGoogleClientId');if(gc){const v=localStorage.getItem('google_drive_client_id')||'';gc.value=v?v.slice(0,12)+'…'+v.slice(-8):'';}
   const ds=document.getElementById('umDriveStatus');if(ds){const v=localStorage.getItem('google_drive_client_id');ds.textContent=v?'✓ Client ID configurado':'Sin configurar — necesitas un Client ID de Google Cloud';}
@@ -4049,7 +4049,14 @@ function closeUserMenu(){document.getElementById('userMenu')?.classList.remove('
 function closeUserMenuOutside(e){if(!document.getElementById('userChip')?.contains(e.target)) closeUserMenu();}
 function saveUserMenuToken(){
   const inp=document.getElementById('umAirtableToken');const v=(inp?.value||'').trim();
-  if(!v||v.startsWith('••')){toast('Ingresa el token completo (patXXX...)','error');inp.value='';inp.type='text';inp.focus();return;}
+  if(v.startsWith('••')){
+    // Token no cambiado — solo reconectar con el existente
+    const existing=lsGet('airtable_token');
+    if(!existing){toast('Ingresa el token (patXXX...)','error');inp.value='';inp.onfocus&&inp.onfocus();inp.focus();return;}
+    closeUserMenu();loadAllData();return;
+  }
+  if(!v){toast('Ingresa el token (patXXX...)','error');inp.focus();return;}
+  if(!v.startsWith('pat')&&!v.startsWith('key')){toast('El token debe comenzar con "pat" — verifica en Airtable → Developer Hub','error');return;}
   lsSet('airtable_token',v);closeUserMenu();toast('Token Airtable guardado ✓','success');loadAllData();
 }
 function clearUserMenuToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');closeUserMenu();toast('Token Airtable eliminado','info');openUserMenu();}
