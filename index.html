@@ -1009,6 +1009,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <!-- ── LOGIN PAGE ── -->
@@ -1115,6 +1116,15 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuOpenai()">Guardar</button>
             <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuOpenai()">Limpiar</button>
           </div>
+        </div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">📁 Google Drive Client ID</div>
+          <input type="text" id="umGoogleClientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" style="font-size:9px">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="saveGoogleClientId()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearGoogleClientId()">Limpiar</button>
+          </div>
+          <div id="umDriveStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-item danger" onclick="AUTH.logout();closeUserMenu()">⏻ Cerrar sesión</div>
@@ -3970,6 +3980,8 @@ function openUserMenu(){
   const m=document.getElementById('userMenu');m.classList.add('open');
   const at=document.getElementById('umAirtableToken');if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado)':'patXXX...';}
   const oi=document.getElementById('umOpenaiKey');if(oi){const v=localStorage.getItem('fp_openai_key');oi.value=v?'••••••••'+v.slice(-4):'';oi.placeholder=v?'(guardado)':'sk-proj-...';}
+  const gc=document.getElementById('umGoogleClientId');if(gc){const v=localStorage.getItem('google_drive_client_id')||'';gc.value=v?v.slice(0,12)+'…'+v.slice(-8):'';}
+  const ds=document.getElementById('umDriveStatus');if(ds){const v=localStorage.getItem('google_drive_client_id');ds.textContent=v?'✓ Client ID configurado':'Sin configurar — necesitas un Client ID de Google Cloud';}
   setTimeout(()=>document.addEventListener('click',closeUserMenuOutside),10);
 }
 function closeUserMenu(){document.getElementById('userMenu')?.classList.remove('open');document.removeEventListener('click',closeUserMenuOutside);}
@@ -3986,6 +3998,13 @@ function saveUserMenuOpenai(){
   localStorage.setItem('fp_openai_key',v);closeUserMenu();toast('OpenAI key guardada ✓','success');
 }
 function clearUserMenuOpenai(){localStorage.removeItem('fp_openai_key');closeUserMenu();toast('OpenAI key eliminada','info');}
+function saveGoogleClientId(){
+  const inp=document.getElementById('umGoogleClientId');const v=(inp?.value||'').trim();
+  if(!v){toast('Ingresa el Client ID de Google Cloud','error');return;}
+  localStorage.setItem('google_drive_client_id',v);_driveTokenClient=null;_driveAccessToken=null;
+  closeUserMenu();toast('Google Client ID guardado ✓','success');
+}
+function clearGoogleClientId(){localStorage.removeItem('google_drive_client_id');_driveTokenClient=null;_driveAccessToken=null;closeUserMenu();toast('Google Client ID eliminado','info');}
 
 // ── AIRTABLE ──────────────────────────────────────────────────
 async function airtableFetch(table,max=100){
@@ -5781,6 +5800,13 @@ function openFichaPropModal(cotId){
   const lph=document.getElementById('fpLogoPh');if(lph) lph.style.display='flex';
   renderFPItems();
   document.getElementById('fichaPropModal').style.display='flex';
+  // Restore Drive button state if folder already exists
+  const existingLink=localStorage.getItem('fp_drive_folder_'+cotId);
+  const driveBtn=document.getElementById('fpDriveBtn');
+  if(driveBtn){
+    if(existingLink){driveBtn.textContent='📂 Ver en Drive';driveBtn.onclick=()=>window.open(existingLink,'_blank');}
+    else{driveBtn.textContent='📁 Guardar en Drive';driveBtn.onclick=()=>guardarFichaEnDrive(_fpCotId);driveBtn.disabled=false;}
+  }
 }
 
 function closeFichaPropModal(){document.getElementById('fichaPropModal').style.display='none';}
@@ -6146,6 +6172,146 @@ function renderFPItems(){
     </div>
   `).join('');
 }
+
+// ── Google Drive Integration ────────────────────────────────
+let _driveTokenClient=null;
+let _driveAccessToken=null;
+let _driveTokenExpiry=0;
+
+function _driveGetClientId(){return localStorage.getItem('google_drive_client_id')||'';}
+
+function _driveGetToken(){
+  return new Promise((resolve,reject)=>{
+    if(_driveAccessToken&&Date.now()<_driveTokenExpiry-60000){resolve(_driveAccessToken);return;}
+    const clientId=_driveGetClientId();
+    if(!clientId){reject(new Error('Configura el Google Drive Client ID en ⚙️ Mi cuenta'));return;}
+    if(typeof google==='undefined'||!google.accounts){reject(new Error('SDK de Google no cargado aún, intenta en unos segundos'));return;}
+    if(!_driveTokenClient){
+      _driveTokenClient=google.accounts.oauth2.initTokenClient({
+        client_id:clientId,
+        scope:'https://www.googleapis.com/auth/drive.file',
+        callback:(resp)=>{
+          if(resp.error){reject(new Error('OAuth: '+resp.error));return;}
+          _driveAccessToken=resp.access_token;
+          _driveTokenExpiry=Date.now()+(resp.expires_in||3600)*1000;
+          resolve(_driveAccessToken);
+        }
+      });
+    }
+    _driveTokenClient.requestAccessToken({prompt:_driveAccessToken?'':'select_account'});
+  });
+}
+
+async function _driveApiFetch(url,opts={}){
+  const token=await _driveGetToken();
+  const hdrs={'Authorization':'Bearer '+token,...(opts.headers||{})};
+  const r=await fetch(url,{...opts,headers:hdrs});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message)||r.statusText);}
+  return r.json();
+}
+
+async function _driveGetOrCreateFolder(name,parentId){
+  const safe=name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,100);
+  const q=`name='${safe.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder'${parentId?" and '"+parentId+"' in parents":""} and trashed=false`;
+  const search=await _driveApiFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id)&pageSize=1');
+  if(search.files?.length) return search.files[0].id;
+  const meta={name:safe,mimeType:'application/vnd.google-apps.folder'};
+  if(parentId) meta.parents=[parentId];
+  const created=await _driveApiFetch('https://www.googleapis.com/drive/v3/files?fields=id',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(meta)
+  });
+  return created.id;
+}
+
+async function _driveUploadDataUrl(filename,dataUrl,folderId){
+  const token=await _driveGetToken();
+  const res=await fetch(dataUrl);const blob=await res.blob();
+  const meta={name:filename};if(folderId) meta.parents=[folderId];
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',blob,filename);
+  const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{
+    method:'POST',headers:{'Authorization':'Bearer '+token},body:form
+  });
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message)||r.statusText);}
+  return r.json();
+}
+
+async function _driveUploadText(filename,content,mimeType,folderId){
+  const token=await _driveGetToken();
+  const meta={name:filename};if(folderId) meta.parents=[folderId];
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',new Blob([content],{type:mimeType}),filename);
+  const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{
+    method:'POST',headers:{'Authorization':'Bearer '+token},body:form
+  });
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message)||r.statusText);}
+  return r.json();
+}
+
+async function guardarFichaEnDrive(cotId){
+  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
+  const f=cot.fields;
+  const numCot=f['N° Cotización']||cotId;
+  const clienteNombre=(resolveClienteName(f['Cliente'])||'Sin_Contacto').replace(/[<>:"/\\|?*]/g,'_');
+  const btn=document.getElementById('fpDriveBtn');
+  const setDriveStatus=msg=>{if(btn){btn.textContent=msg;btn.disabled=true;}};
+
+  try{
+    setDriveStatus('🔐 Autenticando...');
+    await _driveGetToken();
+
+    setDriveStatus('📁 Creando carpetas...');
+    const rootId=await _driveGetOrCreateFolder('The Lab Solutions',null);
+    const contactoId=await _driveGetOrCreateFolder(clienteNombre,rootId);
+    const cotFolderId=await _driveGetOrCreateFolder('COT-'+numCot,contactoId);
+
+    let uploadedCount=0;
+    // Fotos del producto (raw)
+    for(let i=0;i<_fpItems.length;i++){
+      if(_fpRawImages[i]?.dataUrl){
+        setDriveStatus('⬆️ Foto producto '+(i+1)+'...');
+        await _driveUploadDataUrl('foto_producto_'+(i+1)+'.jpg',_fpRawImages[i].dataUrl,cotFolderId);
+        uploadedCount++;
+      }
+    }
+    // Vistas generadas
+    const vistaMap={imgFrontal:'frontal',imgIsometrica:'isometrica',imgAerea:'lateral'};
+    for(let i=0;i<_fpItems.length;i++){
+      for(const[campo,nombre]of Object.entries(vistaMap)){
+        if(_fpItems[i][campo]){
+          setDriveStatus('⬆️ Vista '+nombre+' muestra '+(i+1)+'...');
+          await _driveUploadDataUrl('muestra_'+(i+1)+'_'+nombre+'.png',_fpItems[i][campo],cotFolderId);
+          uploadedCount++;
+        }
+      }
+    }
+    // Ficha propuesta (HTML)
+    const docResult=buildFichaPropuestaDoc(cotId);
+    if(docResult?.html){
+      setDriveStatus('⬆️ Ficha propuesta...');
+      await _driveUploadText('ficha_propuesta_'+numCot+'.html',docResult.html,'text/html',cotFolderId);
+      uploadedCount++;
+    }
+    // Guardar link de carpeta
+    const folderLink='https://drive.google.com/drive/folders/'+cotFolderId;
+    localStorage.setItem('fp_drive_folder_'+cotId,folderLink);
+
+    toast('✅ '+uploadedCount+' archivos guardados en Drive','success');
+    setDriveStatus('✅ Guardado en Drive');
+    if(btn){
+      btn.disabled=false;
+      btn.onclick=()=>window.open(folderLink,'_blank');
+      btn.textContent='📂 Ver en Drive';
+    }
+  }catch(err){
+    console.error('[Drive]',err);
+    toast('Error Drive: '+err.message,'error');
+    if(btn){btn.disabled=false;btn.textContent='📁 Guardar en Drive';}
+  }
+}
+// ────────────────────────────────────────────────────────────
 
 async function saveFichaPropModal(verPDF=false){
   if(!_fpCotId) return;
@@ -11444,8 +11610,9 @@ async function testSIIWorker(){
       </div>
       <div id="fpItemsList"></div>
     </div>
-    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
       <button class="btn btn-ghost" onclick="closeFichaPropModal()">Cancelar</button>
+      <button id="fpDriveBtn" class="btn btn-ghost" style="color:#1a73e8;border-color:#1a73e8" onclick="guardarFichaEnDrive(_fpCotId)" title="Sube fotos, vistas IA y ficha a Google Drive organizado por contacto y cotización">📁 Guardar en Drive</button>
       <button class="btn btn-ghost" onclick="saveFichaPropModal(false)">💾 Guardar</button>
       <button class="btn btn-primary" onclick="saveFichaPropModal(true)">📄 Guardar y ver PDF</button>
     </div>
