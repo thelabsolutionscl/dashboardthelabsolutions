@@ -5730,6 +5730,35 @@ let _fpLogoCliente='';
 let _fpRawImages={};
 
 function parseFichaPropData(s){try{return s?JSON.parse(s):null;}catch(e){return null;}}
+const _fpImgCompress=async(dataUrl,maxPx=700)=>{
+  if(!dataUrl) return null;
+  const img=new Image();img.src=dataUrl;
+  await new Promise(r=>{img.onload=r;img.onerror=r;});
+  const scale=Math.min(1,maxPx/Math.max(img.naturalWidth||maxPx,img.naturalHeight||maxPx));
+  const w=Math.round((img.naturalWidth||maxPx)*scale),h=Math.round((img.naturalHeight||maxPx)*scale);
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  c.getContext('2d').drawImage(img,0,0,w,h);
+  return c.toDataURL('image/jpeg',0.78);
+};
+async function saveFPImgCache(cotId){
+  const campos=['imgFrontal','imgIsometrica','imgAerea'];
+  const cache={};
+  for(let i=0;i<_fpItems.length;i++){
+    for(const c of campos){if(_fpItems[i][c]){try{cache[i+'_'+c]=await _fpImgCompress(_fpItems[i][c]);}catch(e){}}}
+    if(_fpRawImages[i]?.dataUrl){try{cache[i+'_raw']=await _fpImgCompress(_fpRawImages[i].dataUrl,400);}catch(e){}}
+  }
+  try{localStorage.setItem('fp_imgs_'+cotId,JSON.stringify(cache));}
+  catch(e){console.warn('[fp cache] quota excedida, omitiendo imágenes');}
+}
+function loadFPImgCache(cotId){
+  try{
+    const cache=JSON.parse(localStorage.getItem('fp_imgs_'+cotId)||'{}');
+    _fpItems.forEach((item,i)=>{
+      ['imgFrontal','imgIsometrica','imgAerea'].forEach(c=>{if(cache[i+'_'+c]) item[c]=cache[i+'_'+c];});
+      if(cache[i+'_raw']) _fpRawImages[i]={dataUrl:cache[i+'_raw']};
+    });
+  }catch(e){}
+}
 
 function openFichaPropModal(cotId){
   const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
@@ -5747,6 +5776,7 @@ function openFichaPropModal(cotId){
   }
   _fpLogoCliente='';
   _fpRawImages={};
+  loadFPImgCache(cotId);
   const lp=document.getElementById('fpLogoPrev');if(lp){lp.src='';lp.style.display='none';}
   const lph=document.getElementById('fpLogoPh');if(lph) lph.style.display='flex';
   renderFPItems();
@@ -5914,6 +5944,13 @@ async function generarVistasIA(idx){
       ctx.putImageData(id,0,0);
       return c.toDataURL('image/png');
     };
+    // Show shimmer on all 3 placeholders before starting
+    views.forEach(v=>{
+      const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
+      if(ph){ph.style.display='flex';ph.classList.add('fp-img-loading');ph.innerHTML='<div class="fp-spin-el"></div><span style="font-size:8px;color:#0097a7">Generando...</span>';}
+      const im=document.getElementById('fpi-'+idx+'-'+v.campo);
+      if(im) im.style.display='none';
+    });
     let usedAI=false;
     let lastDallEError='';
     for(const v of views){
@@ -5990,9 +6027,9 @@ async function generarVistasIA(idx){
       if(!imgData) imgData=genImgCanvas(v.label,_fpItems[idx]?.nombre||descripcion);
       _fpItems[idx][v.campo]=imgData;
       const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
-      if(prev){prev.src=imgData;prev.style.display='block';}
+      if(prev){prev.src=imgData;prev.style.display='block';prev.classList.remove('fp-img-done');void prev.offsetWidth;prev.classList.add('fp-img-done');}
       const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
-      if(ph) ph.style.display='none';
+      if(ph){ph.classList.remove('fp-img-loading');ph.style.display='none';ph.innerHTML='<span style="font-size:18px">📷</span><span style="font-size:8px">Subir foto</span>';}
     }
     if(usedAI){
       setStatus('✅ ¡Vistas IA generadas con éxito!');
@@ -6104,7 +6141,7 @@ function renderFPItems(){
               </label>
             </div>`).join('')}
         </div>
-        <div style="font-size:9px;color:var(--text3);margin-top:4px">Las fotos no se guardan en Airtable — súbelas cada vez antes de generar el PDF.</div>
+        <div style="font-size:9px;color:var(--text3);margin-top:4px">Las fotos se guardan localmente en este navegador. Al guardar la ficha quedan disponibles para la próxima sesión.</div>
       </div>
     </div>
   `).join('');
@@ -6121,6 +6158,7 @@ async function saveFichaPropModal(verPDF=false){
   const applyAndClose=()=>{
     const cot=state.cotizaciones.find(x=>x.id===_fpCotId);
     if(cot) cot.fields['Ficha Propuesta']=JSON.stringify(data);
+    saveFPImgCache(_fpCotId);
     toast('Ficha propuesta guardada ✓','success');
     renderCotizaciones();
     if(verPDF){closeFichaPropModal();descargarFichaPropuesta(_fpCotId);}
@@ -6268,6 +6306,12 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#f0f
 .flbl{font-size:8px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#00c8cc;text-align:center;}
 .fimg{width:100%;aspect-ratio:1/1;object-fit:contain;background:#fff;}
 .fph{width:100%;aspect-ratio:1/1;background:#f5f5f5;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;}
+@keyframes fp-shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes fp-spin{to{transform:rotate(360deg)}}
+.fp-img-loading{background:linear-gradient(90deg,#e0f7fa 25%,#b2ebf2 50%,#e0f7fa 75%)!important;background-size:200% 100%!important;animation:fp-shimmer 1.4s infinite linear!important;}
+.fp-spin-el{width:28px;height:28px;border:3px solid #b2ebf2;border-top-color:#00c8cc;border-radius:50%;animation:fp-spin .8s linear infinite;margin-bottom:4px;}
+@keyframes fp-fadein{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.fp-img-done{animation:fp-fadein .35s ease}
 @media print{body{background:#fff;}.pagina{page-break-after:always;margin:0;}@page{margin:0;size:A4;}}
 </style></head><body>
 ${portada}
