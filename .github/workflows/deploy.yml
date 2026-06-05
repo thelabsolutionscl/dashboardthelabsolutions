@@ -1,0 +1,40 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inject credentials from secrets
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        run: |
+          python3 - <<'EOF'
+          import os
+          with open('index.html', 'r', encoding='utf-8') as f:
+              html = f.read()
+          html = html.replace('%%AIRTABLE_TOKEN%%',  os.environ['AIRTABLE_TOKEN'])
+          html = html.replace('%%OPENAI_KEY%%',      os.environ['OPENAI_KEY'])
+          html = html.replace('%%GOOGLE_CLIENT_ID%%', os.environ['GOOGLE_CLIENT_ID'])
+          with open('index.html', 'w', encoding='utf-8') as f:
+              f.write(html)
+          print('✓ Credentials injected')
+          EOF
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: gh-pages
+          exclude_assets: '.github'
