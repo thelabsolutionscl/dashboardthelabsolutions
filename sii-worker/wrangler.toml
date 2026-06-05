@@ -1,0 +1,27 @@
+name = "sii-dte-worker"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cambiar a "certificacion" para pruebas con maullin.sii.cl
+[vars]
+SII_ENV = "certificacion"
+
+# KV namespace para folios y CAFs (crear con: wrangler kv namespace create FOLIOS_KV)
+[[kv_namespaces]]
+binding = "FOLIOS_KV"
+id = "12c2c38ebe2d47b39e20daafddfa6ea7"
+
+# Secrets — ejecutar: bash setup-secrets.sh
+#
+# CERT_PFX_BASE64   →  base64 del archivo 169374015.pfx
+# CERT_PFX_PASSWORD →  Primos2525
+# RUT_EMISOR        →  77.499.554-4  (WAST3D SPA)
+# RAZON_SOCIAL      →  WAST3D SPA
+# GIRO_EMISOR       →  SERVICIOS DE IMPRESION Y PUBLICIDAD
+# ACTECO            →  329900
+# DIR_EMISOR        →  VILLAGRA 70
+# CMNA_EMISOR       →  Providencia
+# CIUDAD_EMISOR     →  Santiago
+# RESOLUCION_FECHA  →  2014-10-21
+# RESOLUCION_NUMERO →  99
