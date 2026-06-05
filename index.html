@@ -5673,11 +5673,11 @@ function openFichaPropModal(cotId){
   document.getElementById('fpNumFicha').value=saved.numFicha||'';
   document.getElementById('fpNombreProyecto').value=saved.nombreProyecto||'';
   if(saved.items?.length){
-    _fpItems=saved.items.map(it=>({...it}));
+    _fpItems=saved.items.map(it=>({nombre:it.nombre||'',tipo:it.tipo||'',material:it.material||'',optLabel:it.optLabel||'',optMaterial:it.optMaterial||'',dims:it.dims||'',imgFrontal:'',imgIsometrica:'',imgAerea:''}));
   } else {
     const lineas=(f['Detalle productos']||'').split('\n').filter(Boolean);
-    _fpItems=lineas.map(l=>{const p=l.split('|').map(s=>s.trim());return{nombre:p[0]||'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:''};});
-    if(!_fpItems.length) _fpItems=[{nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:''}];
+    _fpItems=lineas.map(l=>{const p=l.split('|').map(s=>s.trim());return{nombre:p[0]||'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''};});
+    if(!_fpItems.length) _fpItems=[{nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''}];
   }
   renderFPItems();
   document.getElementById('fichaPropModal').style.display='flex';
@@ -5686,7 +5686,7 @@ function openFichaPropModal(cotId){
 function closeFichaPropModal(){document.getElementById('fichaPropModal').style.display='none';}
 
 function addFPItem(){
-  _fpItems.push({nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:''});
+  _fpItems.push({nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''});
   renderFPItems();
 }
 
@@ -5695,13 +5695,26 @@ function removeFPItem(idx){
   renderFPItems();
 }
 
+function handleFPImage(evt,idx,campo){
+  const file=evt.target.files[0];if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    _fpItems[idx][campo]=e.target.result;
+    const prev=document.getElementById(`fpi-${idx}-${campo}`);
+    if(prev){prev.src=e.target.result;prev.style.display='block';}
+    const ph=document.getElementById(`fpp-${idx}-${campo}`);
+    if(ph) ph.style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
+
 function renderFPItems(){
   const container=document.getElementById('fpItemsList');if(!container) return;
   if(!_fpItems.length){container.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin muestras — agrega la primera ↑</div>';return;}
   container.innerHTML=_fpItems.map((item,idx)=>`
     <div style="border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surface2)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span style="font-size:11px;font-weight:700;color:#c084fc">MUESTRA ${idx+1}</span>
+        <span style="font-size:11px;font-weight:700;color:#00d4cc">MUESTRA ${idx+1}</span>
         <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="removeFPItem(${idx})">✕</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -5711,24 +5724,44 @@ function renderFPItems(){
         </div>
         <div class="field-group">
           <label class="field-label">Tipo de muestra</label>
-          <input class="field-input" placeholder="ej. IMPRESIÓN 3D" value="${escapeHtml(item.tipo||'')}" oninput="_fpItems[${idx}].tipo=this.value">
+          <input class="field-input" placeholder="ej. 3D Y ACRÍLICO" value="${escapeHtml(item.tipo||'')}" oninput="_fpItems[${idx}].tipo=this.value">
         </div>
         <div class="field-group" style="grid-column:1/-1">
           <label class="field-label">Material principal</label>
-          <textarea class="field-input" rows="2" placeholder="ej. PLA Terminación Negro&#10;Acrílico Blanco. Luz Led Blanca" oninput="_fpItems[${idx}].material=this.value">${escapeHtml(item.material||'')}</textarea>
+          <textarea class="field-input" rows="2" placeholder="ej. 3D: PLA Terminación blanca&#10;ACRÍLICO: Transparente 2mm" oninput="_fpItems[${idx}].material=this.value">${escapeHtml(item.material||'')}</textarea>
         </div>
         <div class="field-group">
           <label class="field-label">Opción alternativa (label)</label>
-          <input class="field-input" placeholder="ej. ACRÍLICO NEGRO / NEGRO" value="${escapeHtml(item.optLabel||'')}" oninput="_fpItems[${idx}].optLabel=this.value">
+          <input class="field-input" placeholder="ej. 3D Y LAMINADO MIC" value="${escapeHtml(item.optLabel||'')}" oninput="_fpItems[${idx}].optLabel=this.value">
         </div>
         <div class="field-group">
           <label class="field-label">Material opción alt.</label>
-          <textarea class="field-input" rows="2" placeholder="ej. Acrílico color Negro 3mm." oninput="_fpItems[${idx}].optMaterial=this.value">${escapeHtml(item.optMaterial||'')}</textarea>
+          <textarea class="field-input" rows="2" placeholder="ej. GRÁFICA: Laminado MIC 240." oninput="_fpItems[${idx}].optMaterial=this.value">${escapeHtml(item.optMaterial||'')}</textarea>
         </div>
         <div class="field-group" style="grid-column:1/-1">
           <label class="field-label">Dimensiones</label>
           <input class="field-input" placeholder="ej. 40 × 35 × 8 cm" value="${escapeHtml(item.dims||'')}" oninput="_fpItems[${idx}].dims=this.value">
         </div>
+      </div>
+      <div style="margin-top:10px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px">Fotos del producto</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          ${['imgFrontal','imgIsometrica','imgAerea'].map(campo=>{
+            const labels={imgFrontal:'Vista Frontal',imgIsometrica:'Vista Isométrica',imgAerea:'Vista Aérea'};
+            return `<div class="field-group">
+              <label class="field-label">${labels[campo]}</label>
+              <label style="cursor:pointer;display:block;border:1px dashed var(--border2);border-radius:8px;overflow:hidden;min-height:72px;position:relative;background:var(--surface)">
+                <img id="fpi-${idx}-${campo}" src="${item[campo]||''}" style="width:100%;height:72px;object-fit:cover;display:${item[campo]?'block':'none'}">
+                <div id="fpp-${idx}-${campo}" style="display:${item[campo]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:72px;gap:4px;color:var(--text3)">
+                  <span style="font-size:18px">📷</span>
+                  <span style="font-size:9px">Subir foto</span>
+                </div>
+                <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${campo}')">
+              </label>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="font-size:9px;color:var(--text3);margin-top:4px">Las fotos no se guardan en Airtable — súbelas cada vez antes de generar el PDF.</div>
       </div>
     </div>
   `).join('');
@@ -5739,7 +5772,7 @@ async function saveFichaPropModal(verPDF=false){
   const data={
     numFicha:document.getElementById('fpNumFicha').value||'01',
     nombreProyecto:document.getElementById('fpNombreProyecto').value||'',
-    items:_fpItems.map(it=>({...it})),
+    items:_fpItems.map(it=>({nombre:it.nombre,tipo:it.tipo,material:it.material,optLabel:it.optLabel,optMaterial:it.optMaterial,dims:it.dims})),
     updatedAt:new Date().toISOString().slice(0,10)
   };
   const applyAndClose=()=>{
@@ -5777,100 +5810,104 @@ function buildFichaPropuestaDoc(cotId){
   const num=f['N° Cotización']||'—';
   const cliente=resolveClienteName(f['Cliente']);
   const proyecto=(data.nombreProyecto||f['Solicitud cliente (texto libre)']||'PROPUESTA').toUpperCase();
-  const numFicha=data.numFicha||'01';
-  const items=data.items||[];
+  const numFicha=String(data.numFicha||'01').padStart(2,'0');
+  const savedItems=data.items||[];
+  // Merge saved text data with session images (images are not saved to Airtable)
+  const sessionItems=_fpCotId===cotId?_fpItems:[];
+  const items=savedItems.map((it,i)=>({...it,imgFrontal:sessionItems[i]?.imgFrontal||'',imgIsometrica:sessionItems[i]?.imgIsometrica||'',imgAerea:sessionItems[i]?.imgAerea||''}));
+  if(!items.length&&sessionItems.length) items.push(...sessionItems);
 
-  const portada=`
-    <div class="pagina portada">
-      <div class="portada-bg">
-        <div class="portada-logo">
-          <img src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'" style="height:32px;filter:brightness(0)invert(1)">
-          <div style="font-size:9px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px">Impresión 3D · Neones · Trofeos</div>
+  const foto=(src,label)=>src
+    ?'<div class="fbox"><div class="flbl">'+label+'</div><img src="'+src+'" class="fimg"></div>'
+    :'<div class="fbox"><div class="flbl">'+label+'</div><div class="fph">Sin foto</div></div>';
+
+  const portada=`<div class="pagina" style="display:flex;flex-direction:column;border:3px solid #00c8cc;">
+    <div style="padding:28px 36px 20px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e8e8e8">
+      <div>
+        <div style="font-size:13px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#1a1a1a;margin-bottom:14px">FICHA TÉCNICA</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#888;margin-bottom:4px">■ FICHA DE ÉSTE PROYECTO N°:</div>
+        <div style="font-size:64px;font-weight:900;color:#1a1a1a;line-height:1;letter-spacing:-2px">${escH(numFicha)}</div>
+      </div>
+      <img src="https://thelab.solutions/wp-content/uploads/2024/05/Logo-the-lab-solutions.png" onerror="this.style.display='none'" style="height:80px;margin-top:4px">
+    </div>
+    <div style="padding:20px 36px 0">
+      <div style="font-size:10px;font-weight:900;color:#00c8cc;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">CLIENTE:</div>
+      <div style="font-size:26px;font-weight:900;color:#1a1a1a;letter-spacing:-.5px">${escH(cliente)}</div>
+    </div>
+    <div style="background:#00c8cc;padding:18px 36px;margin:18px 0;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:10px;font-weight:700;color:rgba(0,0,0,0.5);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">PROYECTO:</div>
+        <div style="font-size:22px;font-weight:900;color:#fff;text-transform:uppercase;letter-spacing:-.3px">${escH(proyecto)}</div>
+      </div>
+      <img src="https://thelab.solutions/wp-content/uploads/2024/05/Logo-the-lab-solutions.png" onerror="this.style.display='none'" style="height:48px;filter:brightness(0)invert(1)">
+    </div>
+    <div style="flex:1;padding:0 36px;display:flex;gap:12px;align-items:center;justify-content:center;min-height:200px">
+      ${items.slice(0,3).map(it=>it.imgFrontal?'<img src="'+it.imgFrontal+'" style="flex:1;max-width:32%;height:200px;object-fit:cover;border:1px solid #e8e8e8">':'').join('')||'<div style="color:#ccc;font-size:11px;text-align:center">Las fotos aparecerán aquí</div>'}
+    </div>
+    <div style="padding:16px 36px;border-top:3px solid #00c8cc;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:8px;color:#aaa;letter-spacing:.5px">hola@thelab.solutions · +56 9 7180 6142</div>
+      <div style="font-size:8px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase">THELAB.SOLUTIONS</div>
+    </div>
+  </div>`;
+
+  const itemPages=items.map((item,idx)=>{
+    const mat=item.material||'';
+    const matLines=mat.split('\n').filter(Boolean);
+    const optMat=item.optMaterial||'';
+    const optMatLines=optMat.split('\n').filter(Boolean);
+    return `<div class="pagina" style="display:flex;flex-direction:column;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 32px;background:#f2f2f2;border-bottom:3px solid #00c8cc">
+        <div style="font-size:9px;font-style:italic;color:#555;letter-spacing:.5px;text-transform:uppercase">${escH(proyecto)} — ${escH(cliente)}</div>
+        <div style="font-size:10px;font-weight:900;color:#1a1a1a;letter-spacing:1px;text-transform:uppercase">FICHA TÉCNICA</div>
+      </div>
+      <div style="flex:1;padding:24px 32px 16px 36px;border-left:4px solid #00c8cc;margin-left:12px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+          <div style="width:16px;height:16px;background:#00c8cc;flex-shrink:0"></div>
+          <div style="font-size:22px;font-weight:900;color:#1a1a1a;text-transform:uppercase">CARACTERÍSTICAS</div>
         </div>
-        <div class="portada-content">
-          <div class="portada-tag">FICHA TÉCNICA</div>
-          <div class="portada-ficha-label">FICHA DE ESTE PROYECTO N°:</div>
-          <div class="portada-num">${escH(numFicha)}</div>
-          <div class="portada-divider"></div>
-          <div class="portada-info-row"><span class="portada-lbl">CLIENTE:</span><span class="portada-val">${escH(cliente)}</span></div>
-          <div class="portada-info-row"><span class="portada-lbl">PROYECTO:</span><span class="portada-val">${escH(proyecto)}</span></div>
-          <div class="portada-info-row"><span class="portada-lbl">COTIZACIÓN:</span><span class="portada-val">${escH(num)}</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div>
+            <div style="background:#00c8cc;padding:8px 14px;margin-bottom:10px">
+              <span style="font-size:10px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.5px">MUESTRA ${idx+1}${item.tipo?' — '+escH(item.tipo):''}</span>
+            </div>
+            ${matLines.map(l=>'<div style="font-size:9.5px;color:#1a1a1a;line-height:1.8">'+escH(l)+'</div>').join('')}
+          </div>
+          ${item.optLabel?`<div>
+            <div style="border:2px solid #ccc;padding:8px 14px;margin-bottom:10px">
+              <span style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">OPCIÓN 2 — ${escH(item.optLabel)}</span>
+            </div>
+            ${optMatLines.map(l=>'<div style="font-size:9.5px;color:#1a1a1a;line-height:1.8">'+escH(l)+'</div>').join('')}
+          </div>`:'<div></div>'}
         </div>
-        <div class="portada-footer">thelab.solutions · hola@thelab.solutions · +56 9 7180 6142</div>
+        ${item.dims?`<div style="display:inline-block;border:2px solid #1a1a1a;padding:10px 20px;margin-bottom:14px;text-align:center">
+          <div style="font-size:7px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:4px">DIMENSIONES</div>
+          <div style="font-size:13px;font-weight:700;color:#1a1a1a">${escH(item.dims)}</div>
+        </div>`:''}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:8px">
+          ${foto(item.imgFrontal,'VISTA FRONTAL')}
+          ${foto(item.imgIsometrica,'VISTA ISOMÉTRICA')}
+          ${foto(item.imgAerea,'VISTA AÉREA')}
+        </div>
+      </div>
+      <div style="padding:8px 32px;border-top:1px solid #e8e8e8;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:8px;color:#aaa">${escH(proyecto)} — ${escH(cliente)} · N° ${escH(numFicha)}</div>
+        <div style="font-size:8px;font-weight:700;color:#aaa;letter-spacing:1px">THELAB.SOLUTIONS</div>
       </div>
     </div>`;
-
-  const itemPages=items.map((item,idx)=>`
-    <div class="pagina item-pagina">
-      <div class="item-header">
-        <div class="item-header-left">${escH(proyecto)} — ${escH(cliente)}</div>
-        <div class="item-header-right">FICHA TÉCNICA</div>
-      </div>
-      <div class="item-body">
-        <div class="item-nombre">${escH(item.nombre||`MUESTRA ${idx+1}`)}</div>
-        ${item.tipo?`<div class="muestra-label">MUESTRA ${idx+1} — ${escH(item.tipo)}</div>`:`<div class="muestra-label">MUESTRA ${idx+1}</div>`}
-        <div class="item-cols">
-          <div class="item-col-main">
-            ${item.material?`<div class="spec-block"><div class="spec-title">MATERIAL</div><div class="spec-text">${escH(item.material)}</div></div>`:''}
-            ${item.optLabel?`
-              <div class="opcion-alt">
-                <div class="opcion-plus">+</div>
-                <div>
-                  <div class="opcion-label">OPCIÓN 2 — ${escH(item.optLabel)}</div>
-                  ${item.optMaterial?`<div class="spec-block" style="margin-top:6px"><div class="spec-title">MATERIAL</div><div class="spec-text">${escH(item.optMaterial)}</div></div>`:''}
-                </div>
-              </div>`:''}
-          </div>
-          ${item.dims?`<div class="item-col-dims"><div class="dims-box"><div class="dims-label">DIMENSIONES</div><div class="dims-val">${escH(item.dims)}</div></div></div>`:''}
-        </div>
-      </div>
-      <div class="item-footer">${escH(proyecto)} — ${escH(cliente)} · N° ${escH(numFicha)} · thelab.solutions</div>
-    </div>`).join('');
+  }).join('');
 
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Ficha Técnica ${escH(num)}</title>
 <link rel="icon" href="https://thelab.solutions/wp-content/uploads/2024/05/cropped-THELAB-SOLUTIONS-ISOTIPO-32x32.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;}
-.pagina{width:210mm;min-height:297mm;page-break-after:always;position:relative;overflow:hidden;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#f0f0f0;}
+.pagina{width:210mm;min-height:297mm;page-break-after:always;position:relative;overflow:hidden;background:#fff;margin:0 auto 20px;}
 .pagina:last-child{page-break-after:avoid;}
-
-/* PORTADA */
-.portada-bg{background:#0a0a0a;min-height:297mm;display:flex;flex-direction:column;padding:40px 48px;}
-.portada-logo{margin-bottom:auto;}
-.portada-content{flex:1;display:flex;flex-direction:column;justify-content:center;padding:40px 0;}
-.portada-tag{display:inline-block;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:6px 16px;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:32px;width:fit-content;}
-.portada-ficha-label{font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;}
-.portada-num{font-size:96px;font-weight:900;color:#ffffff;line-height:1;letter-spacing:-2px;margin-bottom:32px;}
-.portada-divider{width:60px;height:3px;background:#ffffff;margin-bottom:32px;}
-.portada-info-row{display:flex;gap:12px;margin-bottom:14px;align-items:baseline;}
-.portada-lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);width:90px;flex-shrink:0;}
-.portada-val{font-size:16px;font-weight:700;color:#ffffff;letter-spacing:.5px;}
-.portada-footer{font-size:9px;color:rgba(255,255,255,0.25);letter-spacing:1px;text-align:center;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08);}
-
-/* ITEM PAGES */
-.item-pagina{display:flex;flex-direction:column;padding:0;}
-.item-header{background:#0a0a0a;display:flex;justify-content:space-between;align-items:center;padding:12px 32px;}
-.item-header-left{font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.5);}
-.item-header-right{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#ffffff;}
-.item-body{flex:1;padding:40px 32px;}
-.item-nombre{font-size:26px;font-weight:900;color:#0a0a0a;text-transform:uppercase;letter-spacing:-0.5px;margin-bottom:8px;line-height:1.1;}
-.muestra-label{display:inline-block;background:#0a0a0a;color:#fff;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:4px 12px;border-radius:3px;margin-bottom:24px;}
-.item-cols{display:flex;gap:24px;align-items:flex-start;}
-.item-col-main{flex:1;}
-.spec-block{margin-bottom:16px;}
-.spec-title{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:6px;}
-.spec-text{font-size:11px;color:#1a1a1a;line-height:1.6;font-weight:500;}
-.opcion-alt{display:flex;gap:12px;align-items:flex-start;margin-top:20px;padding-top:20px;border-top:2px dashed #e8e8e8;}
-.opcion-plus{width:32px;height:32px;background:#0a0a0a;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0;margin-top:2px;}
-.opcion-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#0a0a0a;margin-bottom:6px;}
-.item-col-dims{width:160px;flex-shrink:0;}
-.dims-box{border:2px solid #0a0a0a;border-radius:8px;padding:16px;text-align:center;}
-.dims-label{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:8px;}
-.dims-val{font-size:14px;font-weight:700;color:#0a0a0a;line-height:1.4;}
-.item-footer{background:#f5f5f5;padding:8px 32px;font-size:8px;color:#aaa;letter-spacing:.5px;display:flex;justify-content:space-between;}
-
-@media print{body{background:#fff;}.pagina{page-break-after:always;}@page{margin:0;size:A4;}}
+.fbox{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.flbl{font-size:7px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#888;}
+.fimg{width:100%;height:160px;object-fit:cover;border:1px solid #e8e8e8;}
+.fph{width:100%;height:160px;background:#f8f8f8;border:1px dashed #ddd;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;}
+@media print{body{background:#fff;}.pagina{page-break-after:always;margin:0;}@page{margin:0;size:A4;}}
 </style></head><body>
 ${portada}
 ${itemPages}
