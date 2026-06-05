@@ -5663,6 +5663,7 @@ function descargarFichaTecnica(pedidoId){
 let _fpCotId='';
 let _fpItems=[];
 let _fpLogoCliente='';
+let _fpRawImages={};
 
 function parseFichaPropData(s){try{return s?JSON.parse(s):null;}catch(e){return null;}}
 
@@ -5681,8 +5682,11 @@ function openFichaPropModal(cotId){
     if(!_fpItems.length) _fpItems=[{nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''}];
   }
   _fpLogoCliente='';
+  _fpRawImages={};
   const lp=document.getElementById('fpLogoPrev');if(lp){lp.src='';lp.style.display='none';}
   const lph=document.getElementById('fpLogoPh');if(lph) lph.style.display='flex';
+  const antK=document.getElementById('fpAnthropicKey');if(antK) antK.value=localStorage.getItem('fp_anthropic_key')||'';
+  const oaiK=document.getElementById('fpOpenaiKey');if(oaiK) oaiK.value=localStorage.getItem('fp_openai_key')||'';
   renderFPItems();
   document.getElementById('fichaPropModal').style.display='flex';
 }
@@ -5698,6 +5702,78 @@ function handleFPLogo(evt){
     const ph=document.getElementById('fpLogoPh');if(ph) ph.style.display='none';
   };
   reader.readAsDataURL(file);
+}
+
+function handleFPRawImage(evt,idx){
+  const file=evt.target.files[0];if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    _fpRawImages[idx]={dataUrl:e.target.result,type:file.type};
+    const prev=document.getElementById('fpRaw-'+idx);
+    if(prev){prev.src=e.target.result;prev.style.display='block';}
+    const ph=document.getElementById('fpRawPh-'+idx);
+    if(ph) ph.style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function generarVistasIA(idx){
+  const anthropicKey=localStorage.getItem('fp_anthropic_key')||'';
+  const openaiKey=localStorage.getItem('fp_openai_key')||'';
+  if(!anthropicKey||!openaiKey){
+    const cfg=document.getElementById('fpIaConfig');if(cfg) cfg.style.display='block';
+    toast('Configura las API keys de Anthropic y OpenAI ↑','error');return;
+  }
+  const rawImg=_fpRawImages[idx];
+  if(!rawImg){toast('Primero sube una foto del producto','error');return;}
+  const statusEl=document.getElementById('fpAiStatus-'+idx);
+  const setStatus=msg=>{if(statusEl){statusEl.style.display='block';statusEl.innerHTML=msg;}};
+  const btn=document.getElementById('fpGenBtn-'+idx);
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
+  try{
+    setStatus('🔍 Analizando imagen con Claude...');
+    const base64=rawImg.dataUrl.split(',')[1];
+    const claudeRes=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'x-api-key':anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-allow-browser':'true'},
+      body:JSON.stringify({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:rawImg.type,data:base64}},
+        {type:'text',text:'Describe this product concisely for a product photography prompt. Include: product type, materials, colors, shape, distinctive features. Return only the description in English, max 60 words, no other text.'}
+      ]}]})
+    });
+    if(!claudeRes.ok){const er=await claudeRes.json();throw new Error('Claude: '+(er.error?.message||claudeRes.status));}
+    const claudeData=await claudeRes.json();
+    const descripcion=claudeData.content[0].text.trim();
+    const basePrompt='A luxury premium mockup product photograph. Studio lighting, pure white background, soft shadows and controlled reflections. Professional full-frame DSLR camera, high aperture lens f/1.8, sharp focus on the product, soft depth of field. High-end advertising style, luxury brand catalog, clean minimalist and refined. The product: '+descripcion+'.';
+    const views=[
+      {campo:'imgFrontal',label:'FRONTAL',extra:'Straight-on frontal view, product perfectly centered, eye-level perspective.'},
+      {campo:'imgIsometrica',label:'ISOMÉTRICA',extra:'Isometric three-quarter view at 45-degree angle showing front and one side of the product.'},
+      {campo:'imgAerea',label:'AÉREA',extra:'Top-down aerial bird\'s eye view, product perfectly centered when viewed directly from above.'}
+    ];
+    for(const v of views){
+      setStatus('🎨 Generando vista '+v.label+'... (~30s)');
+      const dalleRes=await fetch('https://api.openai.com/v1/images/generations',{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+        body:JSON.stringify({model:'dall-e-3',prompt:basePrompt+' '+v.extra,n:1,size:'1024x1024',quality:'standard',response_format:'b64_json'})
+      });
+      if(!dalleRes.ok){const er=await dalleRes.json();throw new Error('DALL-E: '+(er.error?.message||dalleRes.status));}
+      const dalleData=await dalleRes.json();
+      const imgData='data:image/png;base64,'+dalleData.data[0].b64_json;
+      _fpItems[idx][v.campo]=imgData;
+      const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
+      if(prev){prev.src=imgData;prev.style.display='block';}
+      const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
+      if(ph) ph.style.display='none';
+    }
+    setStatus('✅ ¡Vistas generadas con éxito!');
+    setTimeout(()=>{if(statusEl) statusEl.style.display='none';},5000);
+  }catch(e){
+    setStatus('❌ '+e.message);
+    toast('Error IA: '+e.message,'error');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='✨ Generar 3 vistas';}
+  }
 }
 
 function addFPItem(){
@@ -5759,6 +5835,26 @@ function renderFPItems(){
         </div>
       </div>
       <div style="margin-top:10px">
+        <div style="border:1px solid #00c8cc;border-radius:10px;padding:12px;margin-bottom:10px;background:linear-gradient(135deg,rgba(0,200,204,0.06),rgba(0,151,167,0.04))">
+          <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#0097a7;margin-bottom:10px">✨ Generar vistas con IA</div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="flex:1">
+              <div style="font-size:9px;color:var(--text3);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Foto del producto</div>
+              <label style="cursor:pointer;display:block;border:2px dashed #00c8cc;border-radius:8px;overflow:hidden;background:var(--surface)">
+                <img id="fpRaw-${idx}" src="${_fpRawImages[idx]?.dataUrl||''}" style="width:100%;height:88px;object-fit:cover;display:${_fpRawImages[idx]?'block':'none'}">
+                <div id="fpRawPh-${idx}" style="display:${_fpRawImages[idx]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:88px;gap:5px;color:#0097a7">
+                  <span style="font-size:26px">📸</span>
+                  <span style="font-size:8px;font-weight:700">Subir foto del producto</span>
+                </div>
+                <input type="file" accept="image/*" style="display:none" onchange="handleFPRawImage(event,${idx})">
+              </label>
+            </div>
+            <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;padding-top:18px">
+              <button id="fpGenBtn-${idx}" onclick="generarVistasIA(${idx})" style="background:linear-gradient(135deg,#00c8cc,#0097a7);color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap;min-width:130px">✨ Generar 3 vistas</button>
+              <div id="fpAiStatus-${idx}" style="font-size:9px;color:#0097a7;text-align:center;display:none;max-width:140px;line-height:1.4"></div>
+            </div>
+          </div>
+        </div>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px">Fotos del producto</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
           ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Aérea'}].map(({c,l})=>`
@@ -11015,6 +11111,25 @@ async function testSIIWorker(){
           </div>
           <input type="file" accept="image/*" style="display:none" onchange="handleFPLogo(event)">
         </label>
+      </div>
+      <div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden">
+        <button onclick="const c=document.getElementById('fpIaConfig');c.style.display=c.style.display==='none'?'block':'none'" style="width:100%;background:var(--surface2);border:none;padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;color:var(--text2);text-align:left">
+          <span>⚙️ Configuración IA (Anthropic + OpenAI)</span>
+          <span style="font-size:9px;color:var(--text3)">▼ expandir</span>
+        </button>
+        <div id="fpIaConfig" style="display:none;padding:12px;background:var(--surface);border-top:1px solid var(--border2)">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:10px">Las API keys se guardan solo en este navegador (localStorage). No se envían a ningún servidor propio.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="field-group">
+              <label class="field-label">Anthropic API Key</label>
+              <input class="field-input" id="fpAnthropicKey" type="password" placeholder="sk-ant-..." oninput="localStorage.setItem('fp_anthropic_key',this.value)" style="font-family:monospace;font-size:10px">
+            </div>
+            <div class="field-group">
+              <label class="field-label">OpenAI API Key</label>
+              <input class="field-input" id="fpOpenaiKey" type="password" placeholder="sk-..." oninput="localStorage.setItem('fp_openai_key',this.value)" style="font-family:monospace;font-size:10px">
+            </div>
+          </div>
+        </div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">Muestras / Productos</span>
