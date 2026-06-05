@@ -5897,7 +5897,7 @@ async function generarVistasIA(idx){
             const pngBlob=await toPngBlob(rawImg.dataUrl);
             const fd=new FormData();
             fd.append('image',new File([pngBlob],'product.png',{type:'image/png'}));
-            fd.append('prompt','Show this exact same product from '+v.prompt+'. Remove background completely, isolate product on pure white background (#FFFFFF). Professional studio product photography, clean white backdrop, no shadows, no props. Preserve the exact same design, colors, text, logo, shape and dimensions. Only change the camera angle.');
+            fd.append('prompt','Show this exact same product from '+v.prompt+'. Pure white background (#FFFFFF), background completely removed. The ENTIRE product must be fully visible and NOT cropped — leave generous white margins around all sides. Product occupies about 65% of the frame, centered. Professional studio product photography. Preserve exact design, colors, text, logo, shape.');
             fd.append('model','gpt-image-1');
             fd.append('n','1');
             fd.append('size','1024x1024');
@@ -5923,7 +5923,7 @@ async function generarVistasIA(idx){
         if(!imgData){
           try{
             setStatus('🎨 Generando '+v.label+' desde texto...');
-            const fullPrompt='Product isolated on pure white background (#FFFFFF), background completely removed, '+v.prompt+', professional studio photography, no shadows, clean white backdrop, high detail, photorealistic. Product: '+descripcion.slice(0,200);
+            const fullPrompt='Entire product fully visible, NOT cropped, generous white margins on all sides, product centered at 65% of frame. '+v.prompt+'. Pure white background (#FFFFFF), background removed, no shadows. Product: '+descripcion.slice(0,200);
             let r=await fetch('https://api.openai.com/v1/images/generations',{
               method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
               body:JSON.stringify({model:'gpt-image-1',prompt:fullPrompt,n:1,size:'1024x1024',quality:'low'})
@@ -6228,10 +6228,10 @@ function buildFichaPropuestaDoc(cotId){
 body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#f0f0f0;}
 .pagina{width:210mm;min-height:297mm;page-break-after:always;position:relative;overflow:hidden;background:#fff;margin:0 auto 20px;}
 .pagina:last-child{page-break-after:avoid;}
-.fbox{display:flex;flex-direction:column;align-items:stretch;gap:0;}
-.flbl{font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,#00c8cc,#0097a7);padding:6px 8px;text-align:center;border-radius:4px 4px 0 0;}
-.fimg{width:100%;aspect-ratio:1/1;object-fit:contain;background:#f8f8f8;border:2px solid #00c8cc;border-top:none;border-radius:0 0 4px 4px;}
-.fph{width:100%;aspect-ratio:1/1;background:#f8f8f8;border:2px solid #00c8cc;border-top:none;border-radius:0 0 4px 4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;}
+.fbox{display:flex;flex-direction:column;align-items:stretch;gap:4px;}
+.flbl{font-size:8px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#00c8cc;text-align:center;}
+.fimg{width:100%;aspect-ratio:1/1;object-fit:contain;background:#fff;}
+.fph{width:100%;aspect-ratio:1/1;background:#f5f5f5;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;}
 @media print{body{background:#fff;}.pagina{page-break-after:always;margin:0;}@page{margin:0;size:A4;}}
 </style></head><body>
 ${portada}
