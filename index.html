@@ -5729,50 +5729,54 @@ function handleFPRawImage(evt,idx){
 
 async function generarVistasIA(idx){
   const openaiKey=localStorage.getItem('fp_openai_key')||'';
-  if(!openaiKey){
-    toast('Agrega tu OpenAI API key en 🔑 Config IA','error');return;
-  }
   const rawImg=_fpRawImages[idx];
-  if(!rawImg){toast('Primero sube una foto del producto','error');return;}
   const statusEl=document.getElementById('fpAiStatus-'+idx);
   const setStatus=msg=>{if(statusEl){statusEl.style.display='block';statusEl.innerHTML=msg;}};
   const btn=document.getElementById('fpGenBtn-'+idx);
-  if(btn){btn.disabled=true;btn.textContent='Analizando...';}
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
-    setStatus('🔍 Analizando imagen con GPT-4o...');
-    const visionRes=await fetch('https://api.openai.com/v1/chat/completions',{
-      method:'POST',
-      headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-      body:JSON.stringify({model:'gpt-4o',max_tokens:200,messages:[{role:'user',content:[
-        {type:'image_url',image_url:{url:rawImg.dataUrl,detail:'low'}},
-        {type:'text',text:'Describe this product concisely for a product photography prompt. Include: product type, materials, colors, shape, distinctive features. Return only the description in English, max 60 words, no other text.'}
-      ]}]})
-    });
-    if(!visionRes.ok){const er=await visionRes.json();throw new Error('GPT-4o: '+(er.error?.message||visionRes.status));}
-    const visionData=await visionRes.json();
-    const descripcion=visionData.choices[0].message.content.trim();
-    const basePrompt='A luxury premium mockup product photograph. Studio lighting, pure white background, soft shadows and controlled reflections. Professional full-frame DSLR camera, high aperture lens f/1.8, sharp focus on the product, soft depth of field. High-end advertising style, luxury brand catalog, clean minimalist and refined. The product: '+descripcion+'.';
-    const views=[
-      {campo:'imgFrontal',label:'FRONTAL',extra:'Straight-on frontal view, product perfectly centered, eye-level perspective.'},
-      {campo:'imgIsometrica',label:'ISOMÉTRICA',extra:'Isometric three-quarter view at 45-degree angle showing front and one side of the product.'},
-      {campo:'imgAerea',label:'AÉREA',extra:'Top-down aerial bird\'s eye view, product perfectly centered when viewed directly from above.'}
-    ];
-    for(const v of views){
-      if(btn) btn.textContent='Generando '+v.label+'...';
-      setStatus('🎨 Generando vista '+v.label+'... (~30s)');
-      const dalleRes=await fetch('https://api.openai.com/v1/images/generations',{
+    let descripcion='';
+    if(rawImg&&openaiKey){
+      setStatus('🔍 Analizando imagen con GPT-4o...');
+      const visionRes=await fetch('https://api.openai.com/v1/chat/completions',{
         method:'POST',
         headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-        body:JSON.stringify({model:'dall-e-3',prompt:(basePrompt+' '+v.extra).slice(0,4000),n:1,size:'1024x1024',quality:'standard'})
+        body:JSON.stringify({model:'gpt-4o',max_tokens:150,messages:[{role:'user',content:[
+          {type:'image_url',image_url:{url:rawImg.dataUrl,detail:'low'}},
+          {type:'text',text:'Describe this product concisely for a luxury product photography prompt. Include: product type, materials, colors, shape, key features. English only, max 50 words, no punctuation at end.'}
+        ]}]})
       });
-      if(!dalleRes.ok){const er=await dalleRes.json();const msg=er.error?.message||dalleRes.status;throw new Error('DALL-E: '+msg+(msg.includes('does not exist')?'\n→ Tu API key no tiene permisos de Image Generation. Crea una nueva key con "All permissions" en platform.openai.com':'')); }
-      const dalleData=await dalleRes.json();
-      const imgUrl=dalleData.data[0].url;
-      _fpItems[idx][v.campo]=imgUrl;
-      const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
-      if(prev){prev.src=imgUrl;prev.style.display='block';}
-      const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
-      if(ph) ph.style.display='none';
+      if(visionRes.ok){const d=await visionRes.json();descripcion=d.choices[0].message.content.trim();}
+    }
+    if(!descripcion){
+      const item=_fpItems[idx];
+      descripcion=(item.nombre||'product')+((item.tipo?' '+item.tipo:'')+((item.material?' made of '+item.material.split('\n')[0]:'')));
+    }
+    const basePrompt='Luxury premium product mockup photograph, studio lighting, pure white background, soft shadows, professional DSLR camera f/1.8, sharp focus, high-end advertising style, luxury brand catalog, clean minimalist. Product: '+descripcion;
+    const views=[
+      {campo:'imgFrontal',label:'FRONTAL',angulo:'frontal straight-on centered eye-level view'},
+      {campo:'imgIsometrica',label:'ISOMÉTRICA',angulo:'isometric 45-degree angle three-quarter view showing front and side'},
+      {campo:'imgAerea',label:'AÉREA',angulo:'top-down bird eye aerial overhead view'}
+    ];
+    for(const v of views){
+      if(btn) btn.textContent='Vista '+v.label+'...';
+      setStatus('🎨 Generando '+v.label+'...');
+      const prompt=encodeURIComponent(basePrompt+', '+v.angulo);
+      const imgUrl=`https://image.pollinations.ai/prompt/${prompt}?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${Math.floor(Math.random()*99999)}`;
+      await new Promise((resolve,reject)=>{
+        const img=new Image();
+        img.crossOrigin='anonymous';
+        img.onload=()=>{
+          _fpItems[idx][v.campo]=imgUrl;
+          const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
+          if(prev){prev.src=imgUrl;prev.style.display='block';}
+          const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
+          if(ph) ph.style.display='none';
+          resolve();
+        };
+        img.onerror=()=>reject(new Error('Error cargando imagen '+v.label));
+        img.src=imgUrl;
+      });
     }
     setStatus('✅ ¡Vistas generadas con éxito!');
     setTimeout(()=>{if(statusEl) statusEl.style.display='none';},5000);
@@ -11103,11 +11107,11 @@ async function testSIIWorker(){
         La API key se guarda solo en este navegador (localStorage). No se envía a ningún servidor propio.
       </div>
       <div class="field-group">
-        <label class="field-label">OpenAI API Key <span style="color:var(--text3);font-weight:400">(analiza la foto con GPT-4o + genera vistas con DALL-E 3)</span></label>
+        <label class="field-label">OpenAI API Key <span style="color:var(--text3);font-weight:400">(opcional — mejora el análisis de la foto con GPT-4o)</span></label>
         <input class="field-input" id="iaOpenaiKey" type="text" placeholder="sk-..." oninput="localStorage.setItem('fp_openai_key',this.value)" onchange="localStorage.setItem('fp_openai_key',this.value)" style="font-family:monospace;font-size:11px">
       </div>
       <div style="font-size:10px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:8px 10px;line-height:1.5">
-        💡 Una ficha con 3 vistas cuesta ~$0.12 USD (3 imágenes DALL-E 3 estándar + análisis GPT-4o)
+        💡 Las imágenes se generan con <strong>Pollinations.ai (gratis, sin API key)</strong>. Si tienes OpenAI key, GPT-4o analiza la foto para un mejor resultado.
       </div>
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end">
