@@ -5897,7 +5897,7 @@ async function generarVistasIA(idx){
             const pngBlob=await toPngBlob(rawImg.dataUrl);
             const fd=new FormData();
             fd.append('image',new File([pngBlob],'product.png',{type:'image/png'}));
-            fd.append('prompt','Show this exact same product from '+v.prompt+'. Professional product photography, pure white background, studio lighting. Preserve the exact same design, colors, text, logo, shape and dimensions. Only change the camera angle.');
+            fd.append('prompt','Show this exact same product from '+v.prompt+'. Remove background completely, isolate product on pure white background (#FFFFFF). Professional studio product photography, clean white backdrop, no shadows, no props. Preserve the exact same design, colors, text, logo, shape and dimensions. Only change the camera angle.');
             fd.append('model','gpt-image-1');
             fd.append('n','1');
             fd.append('size','1024x1024');
@@ -5923,7 +5923,7 @@ async function generarVistasIA(idx){
         if(!imgData){
           try{
             setStatus('🎨 Generando '+v.label+' desde texto...');
-            const fullPrompt='Professional luxury product photography, '+v.prompt+', pure white background, studio lighting, high detail, photorealistic. Product: '+descripcion.slice(0,200);
+            const fullPrompt='Product isolated on pure white background (#FFFFFF), background completely removed, '+v.prompt+', professional studio photography, no shadows, clean white backdrop, high detail, photorealistic. Product: '+descripcion.slice(0,200);
             let r=await fetch('https://api.openai.com/v1/images/generations',{
               method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
               body:JSON.stringify({model:'gpt-image-1',prompt:fullPrompt,n:1,size:'1024x1024',quality:'low'})
@@ -6059,9 +6059,9 @@ function renderFPItems(){
           ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Aérea'}].map(({c,l})=>`
             <div>
               <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:5px 4px;border-radius:6px 6px 0 0;font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase">${l}</div>
-              <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;min-height:72px;background:var(--surface)">
-                <img id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:72px;object-fit:cover;display:${item[c]?'block':'none'}">
-                <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:72px;gap:4px;color:var(--text3)">
+              <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
+                <img id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:#f5f5f5;display:${item[c]?'block':'none'}">
+                <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100%;gap:4px;color:var(--text3)">
                   <span style="font-size:18px">📷</span>
                   <span style="font-size:8px">Subir foto</span>
                 </div>
@@ -6230,8 +6230,8 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#f0f
 .pagina:last-child{page-break-after:avoid;}
 .fbox{display:flex;flex-direction:column;align-items:stretch;gap:0;}
 .flbl{font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,#00c8cc,#0097a7);padding:6px 8px;text-align:center;border-radius:4px 4px 0 0;}
-.fimg{width:100%;height:155px;object-fit:cover;border:2px solid #00c8cc;border-top:none;border-radius:0 0 4px 4px;}
-.fph{width:100%;height:155px;background:#f8f8f8;border:2px solid #00c8cc;border-top:none;border-radius:0 0 4px 4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;}
+.fimg{width:100%;aspect-ratio:1/1;object-fit:contain;background:#f8f8f8;border:2px solid #00c8cc;border-top:none;border-radius:0 0 4px 4px;}
+.fph{width:100%;aspect-ratio:1/1;background:#f8f8f8;border:2px solid #00c8cc;border-top:none;border-radius:0 0 4px 4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;}
 @media print{body{background:#fff;}.pagina{page-break-after:always;margin:0;}@page{margin:0;size:A4;}}
 </style></head><body>
 ${portada}
