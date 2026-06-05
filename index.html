@@ -5760,15 +5760,22 @@ async function generarVistasIA(idx){
     ];
     for(const v of views){
       if(btn) btn.textContent='Vista '+v.label+'...';
-      setStatus('🎨 Generando '+v.label+'... (puede tardar ~30s)');
+      setStatus('🎨 Generando '+v.label+'... (espera ~30s)');
       const prompt=encodeURIComponent(basePrompt+', '+v.angulo);
       const imgUrl=`https://image.pollinations.ai/prompt/${prompt}?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${Math.floor(Math.random()*99999)}`;
-      _fpItems[idx][v.campo]=imgUrl;
+      let imgData=imgUrl;
+      try{
+        const res=await fetch(imgUrl);
+        if(res.ok){
+          const blob=await res.blob();
+          imgData=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(blob);});
+        }
+      }catch(_){}
+      _fpItems[idx][v.campo]=imgData;
       const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
-      if(prev){prev.src=imgUrl;prev.style.display='block';}
+      if(prev){prev.src=imgData;prev.style.display='block';}
       const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
       if(ph) ph.style.display='none';
-      await new Promise(r=>setTimeout(r,2000));
     }
     setStatus('✅ ¡Vistas generadas con éxito!');
     setTimeout(()=>{if(statusEl) statusEl.style.display='none';},5000);
