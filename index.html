@@ -5834,14 +5834,22 @@ function buildFichaPropuestaDoc(cotId){
     ?'<div class="fbox"><div class="flbl">'+label+'</div><img src="'+src+'" class="fimg"></div>'
     :'<div class="fbox"><div class="flbl">'+label+'</div><div class="fph">Sin foto</div></div>';
 
+  const theLabLogo='https://thelab.solutions/wp-content/uploads/2024/05/Logo-the-lab-solutions.png';
+  const contacto='thelab.solutions  ·  hola@thelab.solutions  ·  +56 9 7180 6142';
+
   const portada=`<div class="pagina" style="display:flex;flex-direction:column;border:3px solid #00c8cc;">
-    <div style="padding:28px 36px 20px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e8e8e8">
+    <div style="background:#1a1a1a;padding:18px 36px;display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="font-size:13px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#1a1a1a;margin-bottom:14px">FICHA TÉCNICA</div>
-        <div style="font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#888;margin-bottom:4px">■ FICHA DE ÉSTE PROYECTO N°:</div>
-        <div style="font-size:64px;font-weight:900;color:#1a1a1a;line-height:1;letter-spacing:-2px">${escH(numFicha)}</div>
+        <div style="font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:3px">■ FICHA TÉCNICA</div>
+        <div style="font-size:8px;color:rgba(255,255,255,0.3);letter-spacing:.5px">${contacto}</div>
       </div>
-      <img src="https://thelab.solutions/wp-content/uploads/2024/05/Logo-the-lab-solutions.png" onerror="this.style.display='none'" style="height:80px;margin-top:4px">
+      <img src="${theLabLogo}" onerror="this.style.display='none'" style="height:52px;filter:brightness(0)invert(1)">
+    </div>
+    <div style="padding:24px 36px 16px;border-bottom:1px solid #e8e8e8;display:flex;justify-content:space-between;align-items:flex-end">
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#888;margin-bottom:4px">■ FICHA DE ÉSTE PROYECTO N°:</div>
+        <div style="font-size:72px;font-weight:900;color:#1a1a1a;line-height:1;letter-spacing:-3px">${escH(numFicha)}</div>
+      </div>
     </div>
     <div style="padding:20px 36px 0">
       <div style="font-size:10px;font-weight:900;color:#00c8cc;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">CLIENTE:</div>
@@ -5852,14 +5860,17 @@ function buildFichaPropuestaDoc(cotId){
         <div style="font-size:10px;font-weight:700;color:rgba(0,0,0,0.5);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">PROYECTO:</div>
         <div style="font-size:22px;font-weight:900;color:#fff;text-transform:uppercase;letter-spacing:-.3px">${escH(proyecto)}</div>
       </div>
-      <img src="https://thelab.solutions/wp-content/uploads/2024/05/Logo-the-lab-solutions.png" onerror="this.style.display='none'" style="height:48px;filter:brightness(0)invert(1)">
+      <img src="${theLabLogo}" onerror="this.style.display='none'" style="height:44px;filter:brightness(0)invert(1)">
     </div>
-    <div style="flex:1;padding:0 36px;display:flex;gap:12px;align-items:center;justify-content:center;min-height:200px">
-      ${items.slice(0,3).map(it=>it.imgFrontal?'<img src="'+it.imgFrontal+'" style="flex:1;max-width:32%;height:200px;object-fit:cover;border:1px solid #e8e8e8">':'').join('')||'<div style="color:#ccc;font-size:11px;text-align:center">Las fotos aparecerán aquí</div>'}
+    <div style="flex:1;padding:0 36px;display:flex;gap:12px;align-items:center;justify-content:center;min-height:180px">
+      ${items.slice(0,3).map(it=>it.imgFrontal?'<img src="'+it.imgFrontal+'" style="flex:1;max-width:32%;height:180px;object-fit:cover;border:1px solid #e8e8e8">':'').join('')||'<div style="color:#ccc;font-size:11px;text-align:center">Las fotos aparecerán aquí</div>'}
     </div>
-    <div style="padding:16px 36px;border-top:3px solid #00c8cc;display:flex;justify-content:space-between;align-items:center">
-      ${_fpLogoCliente?'<img src="'+_fpLogoCliente+'" style="height:36px;max-width:160px;object-fit:contain">':'<div style="font-size:8px;color:#aaa;letter-spacing:.5px">hola@thelab.solutions · +56 9 7180 6142</div>'}
-      <div style="font-size:8px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase">THELAB.SOLUTIONS</div>
+    <div style="padding:14px 36px;border-top:3px solid #00c8cc;display:flex;justify-content:space-between;align-items:center;gap:16px">
+      ${_fpLogoCliente?'<img src="'+_fpLogoCliente+'" style="height:32px;max-width:140px;object-fit:contain">':'<div></div>'}
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <img src="${theLabLogo}" onerror="this.style.display='none'" style="height:22px">
+        <div style="font-size:7px;color:#999;letter-spacing:.3px">${contacto}</div>
+      </div>
     </div>
   </div>`;
 
@@ -5902,9 +5913,12 @@ function buildFichaPropuestaDoc(cotId){
           ${foto(item.imgAerea,'VISTA AÉREA')}
         </div>
       </div>
-      <div style="padding:8px 32px;border-top:1px solid #e8e8e8;display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:8px;color:#aaa">${escH(proyecto)} — ${escH(cliente)} · N° ${escH(numFicha)}</div>
-        <div style="font-size:8px;font-weight:700;color:#aaa;letter-spacing:1px">THELAB.SOLUTIONS</div>
+      <div style="padding:8px 32px;border-top:2px solid #00c8cc;display:flex;justify-content:space-between;align-items:center;background:#fff">
+        <div style="font-size:8px;color:#888">${escH(proyecto)} — ${escH(cliente)} · N° ${escH(numFicha)}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <img src="${theLabLogo}" style="height:18px;object-fit:contain" onerror="this.style.display='none'">
+          <div style="font-size:7px;color:#555;text-align:right;line-height:1.5">${contacto}</div>
+        </div>
       </div>
     </div>`;
   }).join('');
