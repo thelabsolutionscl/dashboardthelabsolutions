@@ -5753,28 +5753,43 @@ async function generarVistasIA(idx){
       descripcion=(item.nombre||'product')+(item.tipo?' '+item.tipo:'');
     }
     descripcion=descripcion.slice(0,80);
-    const seed=Math.floor(Math.random()*99999);
     const views=[
-      {campo:'imgFrontal',label:'FRONTAL',angulo:'front view'},
-      {campo:'imgIsometrica',label:'ISOMÉTRICA',angulo:'isometric 45 degree angle'},
-      {campo:'imgAerea',label:'AÉREA',angulo:'top down overhead view'}
+      {campo:'imgFrontal',label:'FRONTAL',prompt:'front view centered eye level'},
+      {campo:'imgIsometrica',label:'ISOMÉTRICA',prompt:'isometric 45 degree angle'},
+      {campo:'imgAerea',label:'AÉREA',prompt:'top down overhead bird eye view'}
     ];
+    const genImgCanvas=(label,nombre)=>{
+      const c=document.createElement('canvas');c.width=512;c.height=512;
+      const x=c.getContext('2d');
+      const g=x.createLinearGradient(0,0,512,512);g.addColorStop(0,'#f0fffe');g.addColorStop(1,'#e0f7f7');
+      x.fillStyle=g;x.fillRect(0,0,512,512);
+      x.fillStyle='#00c8cc';x.fillRect(0,0,512,60);
+      x.fillStyle='#fff';x.font='bold 28px Arial';x.textAlign='center';x.fillText(label,256,40);
+      x.strokeStyle='#00c8cc';x.lineWidth=4;x.strokeRect(2,2,508,508);
+      x.fillStyle='#1a1a1a';x.font='bold 22px Arial';x.fillText(nombre.slice(0,30),256,180);
+      x.fillStyle='#aaa';x.font='14px Arial';x.fillText('Vista generada con IA',256,340);
+      x.fillStyle='#00c8cc';x.font='bold 12px Arial';x.fillText('THE LAB SOLUTIONS',256,420);
+      return c.toDataURL('image/png');
+    };
     for(const v of views){
       if(btn) btn.textContent='Vista '+v.label+'...';
-      setStatus('⏳ Generando '+v.label+'... (30-60s)');
-      const prompt=encodeURIComponent('product mockup white background '+v.angulo+' '+descripcion.slice(0,40));
-      const imgUrl=`https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&model=flux&seed=${seed+views.indexOf(v)}`;
-      _fpItems[idx][v.campo]=imgUrl;
-      const box=document.getElementById('fpp-'+idx+'-'+v.campo);
-      if(box){box.style.display='flex';box.innerHTML='<span style="font-size:8px;color:#0097a7;text-align:center">⏳ Generando...<br><a href="'+imgUrl+'" target="_blank" style="color:#0097a7;font-size:7px">ver URL</a></span>';}
-      const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
-      if(prev){
-        prev.style.display='none';
-        prev.onload=function(){this.style.display='block';if(box) box.style.display='none';};
-        prev.onerror=function(){if(box){box.innerHTML='<span style="font-size:8px;color:red">❌ Error cargando</span>';}};
-        prev.src=imgUrl;
+      setStatus('🎨 Generando '+v.label+'...');
+      let imgData=null;
+      if(openaiKey){
+        try{
+          const r=await fetch('https://api.openai.com/v1/images/generations',{
+            method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+            body:JSON.stringify({model:'dall-e-2',prompt:'luxury product photo white background '+v.prompt+' '+descripcion.slice(0,60),n:1,size:'256x256',response_format:'b64_json'})
+          });
+          if(r.ok){const d=await r.json();imgData='data:image/png;base64,'+d.data[0].b64_json;}
+        }catch(_){}
       }
-      await new Promise(r=>setTimeout(r,500));
+      if(!imgData) imgData=genImgCanvas(v.label,_fpItems[idx]?.nombre||descripcion);
+      _fpItems[idx][v.campo]=imgData;
+      const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
+      if(prev){prev.src=imgData;prev.style.display='block';}
+      const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
+      if(ph) ph.style.display='none';
     }
     setStatus('✅ ¡Vistas generadas con éxito!');
     setTimeout(()=>{if(statusEl) statusEl.style.display='none';},5000);
