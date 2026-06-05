@@ -5712,16 +5712,24 @@ async function testIAKey(){
     if(r.ok) lines.push('✅ GPT-4o-mini: OK');
     else{const e=await r.json();lines.push('❌ GPT-4o-mini: '+(e.error?.message||r.status));}
   }catch(e){lines.push('❌ GPT-4o-mini: '+e.message);}
-  // Test 2: DALL-E 3 image generation
-  res.innerHTML='🔄 Probando DALL-E 3...';
+  // Test 2: gpt-image-1 (nuevo modelo), con fallback a dall-e-3
+  res.innerHTML='🔄 Probando generación de imágenes...';
   try{
     const r=await fetch('https://api.openai.com/v1/images/generations',{
       method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({model:'dall-e-3',prompt:'a red apple',n:1,size:'1024x1024',quality:'standard'})
+      body:JSON.stringify({model:'gpt-image-1',prompt:'a red apple on white background',n:1,size:'1024x1024',quality:'low'})
     });
-    if(r.ok){lines.push('✅ DALL-E 3: OK — imágenes funcionan');}
-    else{const e=await r.json();lines.push('❌ DALL-E 3: '+(e.error?.message||r.status));}
-  }catch(e){lines.push('❌ DALL-E 3: '+e.message);}
+    if(r.ok){lines.push('✅ gpt-image-1: OK — imágenes funcionan');}
+    else{
+      const e=await r.json();const msg=e.error?.message||r.status;
+      const r2=await fetch('https://api.openai.com/v1/images/generations',{
+        method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+        body:JSON.stringify({model:'dall-e-3',prompt:'a red apple',n:1,size:'1024x1024',quality:'standard'})
+      });
+      if(r2.ok){lines.push('✅ dall-e-3: OK — imágenes funcionan');}
+      else{const e2=await r2.json();lines.push('❌ Imágenes: gpt-image-1='+msg+' / dall-e-3='+(e2.error?.message||r2.status));}
+    }
+  }catch(e){lines.push('❌ Imágenes: '+e.message);}
   const allOk=lines.every(l=>l.startsWith('✅'));
   res.style.background=allOk?'#d4edda':'#f8d7da';
   res.style.color=allOk?'#155724':'#721c24';
@@ -5809,28 +5817,38 @@ async function generarVistasIA(idx){
     let lastDallEError='';
     for(const v of views){
       if(btn) btn.textContent='Vista '+v.label+'...';
-      setStatus('🎨 Generando '+v.label+' con DALL-E 3...');
+      setStatus('🎨 Generando '+v.label+'...');
       let imgData=null;
       if(openaiKey){
         try{
           const fullPrompt='Professional luxury product photography, '+v.prompt+', pure white background, studio lighting, high detail, photorealistic. Product: '+descripcion.slice(0,200);
-          const r=await fetch('https://api.openai.com/v1/images/generations',{
+          // Intentar gpt-image-1 primero (nuevo modelo OpenAI)
+          let r=await fetch('https://api.openai.com/v1/images/generations',{
             method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-            body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',quality:'standard'})
+            body:JSON.stringify({model:'gpt-image-1',prompt:fullPrompt,n:1,size:'1024x1024',quality:'low'})
           });
+          // Si falla, intentar dall-e-3 como fallback
+          if(!r.ok){
+            const e1=await r.json();
+            r=await fetch('https://api.openai.com/v1/images/generations',{
+              method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+              body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',quality:'standard'})
+            });
+            if(!r.ok){const e2=await r.json();throw new Error('gpt-image-1: '+(e1.error?.message||'?')+' / dall-e-3: '+(e2.error?.message||r.statusText));}
+          }
           if(r.ok){
             const d=await r.json();
-            const imageUrl=d.data[0].url;
-            const imgFetch=await fetch(imageUrl);
-            const blob=await imgFetch.blob();
-            imgData=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});
+            // gpt-image-1 devuelve b64_json directo; dall-e-3 devuelve URL
+            if(d.data[0].b64_json){
+              imgData='data:image/png;base64,'+d.data[0].b64_json;
+            }else{
+              const imgFetch=await fetch(d.data[0].url);
+              const blob=await imgFetch.blob();
+              imgData=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});
+            }
             usedAI=true;
-          }else{
-            const errData=await r.json();
-            lastDallEError=errData.error?.message||r.statusText;
-            setStatus('⚠️ DALL-E 3: '+lastDallEError);
           }
-        }catch(de){lastDallEError=de.message;setStatus('⚠️ DALL-E: '+de.message);}
+        }catch(de){lastDallEError=de.message;setStatus('⚠️ '+de.message);}
       }
       if(!imgData) imgData=genImgCanvas(v.label,_fpItems[idx]?.nombre||descripcion);
       _fpItems[idx][v.campo]=imgData;
