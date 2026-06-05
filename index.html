@@ -5763,7 +5763,7 @@ async function generarVistasIA(idx){
       const dalleRes=await fetch('https://api.openai.com/v1/images/generations',{
         method:'POST',
         headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-        body:JSON.stringify({model:'dall-e-3',prompt:basePrompt+' '+v.extra,n:1,size:'1024x1024',quality:'standard'})
+        body:JSON.stringify({model:'dall-e-2',prompt:(basePrompt+' '+v.extra).slice(0,1000),n:1,size:'1024x1024'})
       });
       if(!dalleRes.ok){const er=await dalleRes.json();throw new Error('DALL-E: '+(er.error?.message||dalleRes.status));}
       const dalleData=await dalleRes.json();
