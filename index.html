@@ -5717,7 +5717,7 @@ async function testIAKey(){
   try{
     const r=await fetch('https://api.openai.com/v1/images/generations',{
       method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({model:'dall-e-3',prompt:'a red apple',n:1,size:'1024x1024',response_format:'b64_json',quality:'standard'})
+      body:JSON.stringify({model:'dall-e-3',prompt:'a red apple',n:1,size:'1024x1024',quality:'standard'})
     });
     if(r.ok){lines.push('✅ DALL-E 3: OK — imágenes funcionan');}
     else{const e=await r.json();lines.push('❌ DALL-E 3: '+(e.error?.message||r.status));}
@@ -5816,11 +5816,14 @@ async function generarVistasIA(idx){
           const fullPrompt='Professional luxury product photography, '+v.prompt+', pure white background, studio lighting, high detail, photorealistic. Product: '+descripcion.slice(0,200);
           const r=await fetch('https://api.openai.com/v1/images/generations',{
             method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-            body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',response_format:'b64_json',quality:'standard'})
+            body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',quality:'standard'})
           });
           if(r.ok){
             const d=await r.json();
-            imgData='data:image/png;base64,'+d.data[0].b64_json;
+            const imageUrl=d.data[0].url;
+            const imgFetch=await fetch(imageUrl);
+            const blob=await imgFetch.blob();
+            imgData=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});
             usedAI=true;
           }else{
             const errData=await r.json();
