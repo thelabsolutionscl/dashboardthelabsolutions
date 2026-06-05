@@ -5907,10 +5907,13 @@ function buildFichaPropuestaDoc(cotId){
           <div style="font-size:7px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:4px">DIMENSIONES</div>
           <div style="font-size:13px;font-weight:700;color:#1a1a1a">${escH(item.dims)}</div>
         </div>`:''}
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
           ${foto(item.imgFrontal,'VISTA FRONTAL')}
           ${foto(item.imgIsometrica,'VISTA ISOMÉTRICA')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px">
           ${foto(item.imgAerea,'VISTA AÉREA')}
+          <div></div>
         </div>
       </div>
       <div style="padding:8px 32px;border-top:2px solid #00c8cc;display:flex;justify-content:space-between;align-items:center;background:#fff">
