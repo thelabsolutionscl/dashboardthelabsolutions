@@ -5697,6 +5697,16 @@ function openIAConfigModal(){
   document.getElementById('iaConfigModal').style.display='flex';
 }
 function closeIAConfigModal(){document.getElementById('iaConfigModal').style.display='none';}
+function saveIAConfig(){
+  const a=document.getElementById('iaAnthropicKey');
+  const o=document.getElementById('iaOpenaiKey');
+  if(a?.value) localStorage.setItem('fp_anthropic_key',a.value.trim());
+  if(o?.value) localStorage.setItem('fp_openai_key',o.value.trim());
+  closeIAConfigModal();
+  const hasAnt=!!(a?.value.trim());
+  const hasOai=!!(o?.value.trim());
+  toast(hasAnt&&hasOai?'API keys guardadas ✓ (Anthropic + OpenAI)':hasAnt?'Anthropic key guardada ✓ — sin OpenAI, solo análisis':'Sin API keys configuradas','success');
+}
 
 function handleFPLogo(evt){
   const file=evt.target.files[0];if(!file) return;
@@ -5725,16 +5735,15 @@ function handleFPRawImage(evt,idx){
 async function generarVistasIA(idx){
   const anthropicKey=localStorage.getItem('fp_anthropic_key')||'';
   const openaiKey=localStorage.getItem('fp_openai_key')||'';
-  if(!anthropicKey||!openaiKey){
-    const cfg=document.getElementById('fpIaConfig');if(cfg) cfg.style.display='block';
-    toast('Configura las API keys de Anthropic y OpenAI ↑','error');return;
+  if(!anthropicKey){
+    toast('Falta la Anthropic API key — agrégala en 🔑 Config IA','error');return;
   }
   const rawImg=_fpRawImages[idx];
   if(!rawImg){toast('Primero sube una foto del producto','error');return;}
   const statusEl=document.getElementById('fpAiStatus-'+idx);
   const setStatus=msg=>{if(statusEl){statusEl.style.display='block';statusEl.innerHTML=msg;}};
   const btn=document.getElementById('fpGenBtn-'+idx);
-  if(btn){btn.disabled=true;btn.textContent='Generando...';}
+  if(btn){btn.disabled=true;btn.textContent='Analizando...';}
   try{
     setStatus('🔍 Analizando imagen con Claude...');
     const base64=rawImg.dataUrl.split(',')[1];
@@ -5750,12 +5759,18 @@ async function generarVistasIA(idx){
     const claudeData=await claudeRes.json();
     const descripcion=claudeData.content[0].text.trim();
     const basePrompt='A luxury premium mockup product photograph. Studio lighting, pure white background, soft shadows and controlled reflections. Professional full-frame DSLR camera, high aperture lens f/1.8, sharp focus on the product, soft depth of field. High-end advertising style, luxury brand catalog, clean minimalist and refined. The product: '+descripcion+'.';
+    if(!openaiKey){
+      setStatus('✅ Análisis listo. Agrega OpenAI key en 🔑 Config IA para generar imágenes automáticamente.<br><br><span style="font-size:8px;opacity:.8">Prompt listo:<br>'+basePrompt.slice(0,120)+'...</span>');
+      toast('Análisis con Claude listo. Agrega OpenAI key para generar imágenes.','info');
+      return;
+    }
     const views=[
       {campo:'imgFrontal',label:'FRONTAL',extra:'Straight-on frontal view, product perfectly centered, eye-level perspective.'},
       {campo:'imgIsometrica',label:'ISOMÉTRICA',extra:'Isometric three-quarter view at 45-degree angle showing front and one side of the product.'},
       {campo:'imgAerea',label:'AÉREA',extra:'Top-down aerial bird\'s eye view, product perfectly centered when viewed directly from above.'}
     ];
     for(const v of views){
+      if(btn) btn.textContent='Generando '+v.label+'...';
       setStatus('🎨 Generando vista '+v.label+'... (~30s)');
       const dalleRes=await fetch('https://api.openai.com/v1/images/generations',{
         method:'POST',
@@ -11101,16 +11116,19 @@ async function testSIIWorker(){
       </div>
       <div class="field-group">
         <label class="field-label">Anthropic API Key <span style="color:var(--text3);font-weight:400">(para analizar la foto del producto)</span></label>
-        <input class="field-input" id="iaAnthropicKey" type="password" placeholder="sk-ant-api03-..." oninput="localStorage.setItem('fp_anthropic_key',this.value)" style="font-family:monospace;font-size:11px">
+        <input class="field-input" id="iaAnthropicKey" type="text" placeholder="sk-ant-api03-..." oninput="localStorage.setItem('fp_anthropic_key',this.value)" onchange="localStorage.setItem('fp_anthropic_key',this.value)" style="font-family:monospace;font-size:11px">
       </div>
       <div class="field-group">
-        <label class="field-label">OpenAI API Key <span style="color:var(--text3);font-weight:400">(para generar las vistas con DALL-E 3)</span></label>
-        <input class="field-input" id="iaOpenaiKey" type="password" placeholder="sk-..." oninput="localStorage.setItem('fp_openai_key',this.value)" style="font-family:monospace;font-size:11px">
+        <label class="field-label">OpenAI API Key <span style="color:var(--text3);font-weight:400">(opcional — para generar vistas con DALL-E 3)</span></label>
+        <input class="field-input" id="iaOpenaiKey" type="text" placeholder="sk-..." oninput="localStorage.setItem('fp_openai_key',this.value)" onchange="localStorage.setItem('fp_openai_key',this.value)" style="font-family:monospace;font-size:11px">
+      </div>
+      <div style="font-size:10px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:8px 10px;line-height:1.5">
+        💡 <strong>Sin OpenAI:</strong> Claude igual analiza la foto y genera el prompt luxury. Puedes usarlo en ChatGPT o DALL-E manualmente.
       </div>
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="closeIAConfigModal()">Cerrar</button>
-      <button class="btn btn-primary" onclick="closeIAConfigModal();toast('API keys guardadas ✓','success')">💾 Guardar</button>
+      <button class="btn btn-ghost" onclick="closeIAConfigModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveIAConfig()">💾 Guardar</button>
     </div>
   </div>
 </div>
