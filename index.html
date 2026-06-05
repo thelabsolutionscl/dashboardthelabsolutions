@@ -5738,25 +5738,28 @@ async function generarVistasIA(idx){
     let descripcion='';
     if(rawImg&&openaiKey){
       setStatus('🔍 Analizando imagen con GPT-4o...');
-      const visionRes=await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST',
-        headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-        body:JSON.stringify({model:'gpt-4o',max_tokens:150,messages:[{role:'user',content:[
-          {type:'image_url',image_url:{url:rawImg.dataUrl,detail:'low'}},
-          {type:'text',text:'Describe this product concisely for a luxury product photography prompt. Include: product type, materials, colors, shape, key features. English only, max 50 words, no punctuation at end.'}
-        ]}]})
-      });
-      if(visionRes.ok){const d=await visionRes.json();descripcion=d.choices[0].message.content.trim();}
+      try{
+        const visionRes=await fetch('https://api.openai.com/v1/chat/completions',{
+          method:'POST',
+          headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+          body:JSON.stringify({model:'gpt-4o',max_tokens:150,messages:[{role:'user',content:[
+            {type:'image_url',image_url:{url:rawImg.dataUrl,detail:'low'}},
+            {type:'text',text:'Describe this product concisely for a luxury product photography prompt. Include: product type, materials, colors, shape, key features. English only, max 50 words, no punctuation at end.'}
+          ]}]})
+        });
+        if(visionRes.ok){const d=await visionRes.json();descripcion=d.choices[0].message.content.trim();}
+        else{const e=await visionRes.json();setStatus('⚠️ GPT-4o: '+(e.error?.message||visionRes.statusText));}
+      }catch(ve){setStatus('⚠️ Visión: '+ve.message);}
     }
     if(!descripcion){
       const item=_fpItems[idx];
       descripcion=(item.nombre||'product')+(item.tipo?' '+item.tipo:'');
     }
-    descripcion=descripcion.slice(0,80);
+    descripcion=descripcion.slice(0,150);
     const views=[
       {campo:'imgFrontal',label:'FRONTAL',prompt:'front view centered eye level'},
-      {campo:'imgIsometrica',label:'ISOMÉTRICA',prompt:'isometric 45 degree angle'},
-      {campo:'imgAerea',label:'AÉREA',prompt:'top down overhead bird eye view'}
+      {campo:'imgIsometrica',label:'ISOMÉTRICA',prompt:'isometric 45-degree angle view'},
+      {campo:'imgAerea',label:'AÉREA',prompt:'top-down overhead bird-eye view'}
     ];
     const genImgCanvas=(label,nombre)=>{
       const c=document.createElement('canvas');c.width=512;c.height=512;
@@ -5771,18 +5774,29 @@ async function generarVistasIA(idx){
       x.fillStyle='#00c8cc';x.font='bold 12px Arial';x.fillText('THE LAB SOLUTIONS',256,420);
       return c.toDataURL('image/png');
     };
+    let usedAI=false;
+    let lastDallEError='';
     for(const v of views){
       if(btn) btn.textContent='Vista '+v.label+'...';
-      setStatus('🎨 Generando '+v.label+'...');
+      setStatus('🎨 Generando '+v.label+' con DALL-E 3...');
       let imgData=null;
       if(openaiKey){
         try{
+          const fullPrompt='Professional luxury product photography, '+v.prompt+', pure white background, studio lighting, high detail, photorealistic. Product: '+descripcion.slice(0,200);
           const r=await fetch('https://api.openai.com/v1/images/generations',{
             method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-            body:JSON.stringify({model:'dall-e-2',prompt:'luxury product photo white background '+v.prompt+' '+descripcion.slice(0,60),n:1,size:'256x256',response_format:'b64_json'})
+            body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',response_format:'b64_json',quality:'standard'})
           });
-          if(r.ok){const d=await r.json();imgData='data:image/png;base64,'+d.data[0].b64_json;}
-        }catch(_){}
+          if(r.ok){
+            const d=await r.json();
+            imgData='data:image/png;base64,'+d.data[0].b64_json;
+            usedAI=true;
+          }else{
+            const errData=await r.json();
+            lastDallEError=errData.error?.message||r.statusText;
+            setStatus('⚠️ DALL-E 3: '+lastDallEError);
+          }
+        }catch(de){lastDallEError=de.message;setStatus('⚠️ DALL-E: '+de.message);}
       }
       if(!imgData) imgData=genImgCanvas(v.label,_fpItems[idx]?.nombre||descripcion);
       _fpItems[idx][v.campo]=imgData;
@@ -5791,8 +5805,14 @@ async function generarVistasIA(idx){
       const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
       if(ph) ph.style.display='none';
     }
-    setStatus('✅ ¡Vistas generadas con éxito!');
-    setTimeout(()=>{if(statusEl) statusEl.style.display='none';},5000);
+    if(usedAI){
+      setStatus('✅ ¡Vistas IA generadas con éxito!');
+    }else if(lastDallEError){
+      setStatus('⚠️ DALL-E falló: '+lastDallEError+'<br>Se usaron placeholders Canvas. Verifica tu API key en 🔑 Config IA.');
+    }else{
+      setStatus('✅ Vistas generadas (sin API key — usando placeholders)');
+    }
+    setTimeout(()=>{if(statusEl) statusEl.style.display='none';},10000);
   }catch(e){
     setStatus('❌ '+e.message);
     toast('Error IA: '+e.message,'error');
