@@ -11474,7 +11474,7 @@ document.addEventListener('click',function(e){
 });
 
 // ── SII / DTE ─────────────────────────────────────────────────
-function getSIICfg(){try{return JSON.parse(localStorage.getItem('sii_cfg')||'{}');}catch(e){return {};}
+function getSIICfg(){try{return JSON.parse(localStorage.getItem('sii_cfg')||'{}');}catch(e){return {};}}
 async function uploadCAF(tipo,input){
   const file=input.files[0];if(!file)return;
   const cfg=getSIICfg();
