@@ -5742,15 +5742,31 @@ async function saveFichaPropModal(verPDF=false){
     items:_fpItems.map(it=>({...it})),
     updatedAt:new Date().toISOString().slice(0,10)
   };
-  try{
-    await airtableWrite('Cotizaciones','PATCH',_fpCotId,{'Ficha Propuesta':JSON.stringify(data)});
+  const applyAndClose=()=>{
     const cot=state.cotizaciones.find(x=>x.id===_fpCotId);
     if(cot) cot.fields['Ficha Propuesta']=JSON.stringify(data);
     toast('Ficha propuesta guardada ✓','success');
     renderCotizaciones();
     if(verPDF){closeFichaPropModal();descargarFichaPropuesta(_fpCotId);}
     else closeFichaPropModal();
-  }catch(e){toast('Error: '+e.message,'error');}
+  };
+  try{
+    await airtableWrite('Cotizaciones','PATCH',_fpCotId,{'Ficha Propuesta':JSON.stringify(data)});
+    applyAndClose();
+  }catch(e){
+    if(e.message.includes('422')||e.message.toLowerCase().includes('unknown field')){
+      toast('Creando campo en Airtable...','info');
+      await ensureFichaPropuestaField();
+      try{
+        await airtableWrite('Cotizaciones','PATCH',_fpCotId,{'Ficha Propuesta':JSON.stringify(data)});
+        applyAndClose();
+      }catch(e2){
+        toast('Crea el campo "Ficha Propuesta" (texto largo) manualmente en Airtable → tabla Cotizaciones','error');
+      }
+    } else {
+      toast('Error: '+e.message,'error');
+    }
+  }
 }
 
 function buildFichaPropuestaDoc(cotId){
