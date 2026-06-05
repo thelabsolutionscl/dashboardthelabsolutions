@@ -11113,11 +11113,11 @@ async function testSIIWorker(){
         </label>
       </div>
       <div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden">
-        <button onclick="const c=document.getElementById('fpIaConfig');c.style.display=c.style.display==='none'?'block':'none'" style="width:100%;background:var(--surface2);border:none;padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;color:var(--text2);text-align:left">
+        <button onclick="const c=document.getElementById('fpIaConfig');const open=c.style.display!=='none';c.style.display=open?'none':'block';document.getElementById('fpIaConfigArrow').textContent=open?'▼ expandir':'▲ colapsar'" style="width:100%;background:var(--surface2);border:none;padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;color:var(--text2);text-align:left">
           <span>⚙️ Configuración IA (Anthropic + OpenAI)</span>
-          <span style="font-size:9px;color:var(--text3)">▼ expandir</span>
+          <span id="fpIaConfigArrow" style="font-size:9px;color:var(--text3)">▲ colapsar</span>
         </button>
-        <div id="fpIaConfig" style="display:none;padding:12px;background:var(--surface);border-top:1px solid var(--border2)">
+        <div id="fpIaConfig" style="display:block;padding:12px;background:var(--surface);border-top:1px solid var(--border2)">
           <div style="font-size:9px;color:var(--text3);margin-bottom:10px">Las API keys se guardan solo en este navegador (localStorage). No se envían a ningún servidor propio.</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div class="field-group">
