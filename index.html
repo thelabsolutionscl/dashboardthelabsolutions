@@ -5762,7 +5762,7 @@ async function generarVistasIA(idx){
     for(const v of views){
       if(btn) btn.textContent='Vista '+v.label+'...';
       setStatus('🎨 Generando '+v.label+'...');
-      const prompt=encodeURIComponent('luxury product photo white background studio lighting '+v.angulo+', '+descripcion);
+      const prompt=encodeURIComponent('product mockup white background '+v.angulo+' '+descripcion.slice(0,40));
       const imgUrl=`https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&model=flux&seed=${seed+views.indexOf(v)}`;
       _fpItems[idx][v.campo]=imgUrl;
       const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
