@@ -5827,10 +5827,10 @@ async function generarVistasIA(idx){
       setStatus('🎨 Generando '+v.label+'...');
       let imgData=null;
       if(openaiKey){
-        try{
-          // Si hay foto del producto: usar edits para que el AI use el mismo producto
-          if(rawImg){
-            setStatus('🎨 '+v.label+': procesando foto del producto...');
+        // Bloque 1: edits con foto del producto (para consistencia entre vistas)
+        if(rawImg){
+          try{
+            setStatus('🎨 '+v.label+': enviando foto a gpt-image-1...');
             const pngBlob=await toPngBlob(rawImg.dataUrl);
             const fd=new FormData();
             fd.append('image',new File([pngBlob],'product.png',{type:'image/png'}));
@@ -5838,7 +5838,6 @@ async function generarVistasIA(idx){
             fd.append('model','gpt-image-1');
             fd.append('n','1');
             fd.append('size','1024x1024');
-            fd.append('quality','low');
             const r=await fetch('https://api.openai.com/v1/images/edits',{
               method:'POST',headers:{'Authorization':'Bearer '+openaiKey},body:fd
             });
@@ -5849,11 +5848,17 @@ async function generarVistasIA(idx){
             }else{
               const e=await r.json();
               lastDallEError='edits: '+(e.error?.message||r.status);
-              setStatus('⚠️ '+lastDallEError+' — intentando generación...');
+              setStatus('⚠️ '+lastDallEError);
             }
+          }catch(editErr){
+            lastDallEError='edits exception: '+editErr.message;
+            setStatus('⚠️ '+lastDallEError);
           }
-          // Fallback: generación desde texto (sin foto o si edits falló)
-          if(!imgData){
+        }
+        // Bloque 2: fallback texto (sin foto, o si edits falló)
+        if(!imgData){
+          try{
+            setStatus('🎨 Generando '+v.label+' desde texto...');
             const fullPrompt='Professional luxury product photography, '+v.prompt+', pure white background, studio lighting, high detail, photorealistic. Product: '+descripcion.slice(0,200);
             let r=await fetch('https://api.openai.com/v1/images/generations',{
               method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
@@ -5868,16 +5873,17 @@ async function generarVistasIA(idx){
               if(!r.ok){const e2=await r.json();throw new Error('gpt-image-1: '+(e1.error?.message||'?')+' / dall-e-3: '+(e2.error?.message||r.statusText));}
             }
             const d=await r.json();
-            if(d.data[0].b64_json){
-              imgData='data:image/png;base64,'+d.data[0].b64_json;
-            }else{
-              const imgFetch=await fetch(d.data[0].url);
-              const blob=await imgFetch.blob();
+            imgData=d.data[0].b64_json?'data:image/png;base64,'+d.data[0].b64_json:null;
+            if(!imgData&&d.data[0].url){
+              const blob=await(await fetch(d.data[0].url)).blob();
               imgData=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});
             }
-            usedAI=true;
+            if(imgData) usedAI=true;
+          }catch(genErr){
+            lastDallEError=genErr.message;
+            setStatus('❌ '+genErr.message);
           }
-        }catch(de){lastDallEError=de.message;setStatus('⚠️ '+de.message);}
+        }
       }
       if(!imgData) imgData=genImgCanvas(v.label,_fpItems[idx]?.nombre||descripcion);
       _fpItems[idx][v.campo]=imgData;
