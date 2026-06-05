@@ -5861,7 +5861,7 @@ async function generarVistasIA(idx){
     const views=[
       {campo:'imgFrontal',label:'FRONTAL',prompt:'front view centered eye level'},
       {campo:'imgIsometrica',label:'ISOMÉTRICA',prompt:'isometric 45-degree angle view'},
-      {campo:'imgAerea',label:'AÉREA',prompt:'top-down overhead bird-eye view'}
+      {campo:'imgAerea',label:'AÉREA',prompt:'directly overhead 90-degree top-down view, camera pointing straight down from above, aerial drone-like perspective looking straight down at the product'}
     ];
     const genImgCanvas=(label,nombre)=>{
       const c=document.createElement('canvas');c.width=512;c.height=512;
@@ -6157,8 +6157,8 @@ function buildFichaPropuestaDoc(cotId){
       </div>
       <img src="${theLabLogo}" onerror="this.style.display='none'" style="height:44px;filter:brightness(0)invert(1)">
     </div>
-    <div style="flex:1;padding:0 36px;display:flex;gap:12px;align-items:center;justify-content:center;min-height:180px">
-      ${items.slice(0,3).map(it=>it.imgFrontal?'<img src="'+it.imgFrontal+'" style="flex:1;max-width:32%;height:180px;object-fit:cover;border:1px solid #e8e8e8">':'').join('')||'<div style="color:#ccc;font-size:11px;text-align:center">Las fotos aparecerán aquí</div>'}
+    <div style="flex:1;padding:16px 36px;display:flex;gap:16px;align-items:center;justify-content:center;background:#fafafa;min-height:220px">
+      ${(()=>{const imgs=items.slice(0,3).filter(it=>it.imgFrontal);if(!imgs.length) return '<div style="color:#ccc;font-size:11px;text-align:center">Las fotos aparecerán aquí</div>';const single=imgs.length===1;return imgs.map(it=>'<img src="'+it.imgFrontal+'" style="object-fit:contain;max-height:280px;'+(single?'max-width:65%;':'flex:1;max-width:30%;')+'">'). join('');})()}
     </div>
     <div style="padding:14px 36px;border-top:3px solid #00c8cc;display:flex;justify-content:space-between;align-items:center;gap:16px">
       ${_fpLogoCliente?'<img src="'+_fpLogoCliente+'" style="height:32px;max-width:140px;object-fit:contain">':'<div></div>'}
