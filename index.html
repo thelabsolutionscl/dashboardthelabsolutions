@@ -3609,6 +3609,14 @@ const CHILE_COMUNAS={
   'Magallanes':['Punta Arenas','Laguna Blanca','Río Verde','San Gregorio','Cabo de Hornos','Antártica','Porvenir','Primavera','Timaukel','Natales','Torres del Paine'],
   'Metropolitana':['Santiago','Cerrillos','Cerro Navia','Conchalí','El Bosque','Estación Central','Huechuraba','Independencia','La Cisterna','La Florida','La Granja','La Pintana','La Reina','Las Condes','Lo Barnechea','Lo Espejo','Lo Prado','Macul','Maipú','Ñuñoa','Pedro Aguirre Cerda','Peñalolén','Providencia','Pudahuel','Quilicura','Quinta Normal','Recoleta','Renca','San Joaquín','San Miguel','San Ramón','Vitacura','Puente Alto','Pirque','San José de Maipo','Colina','Lampa','Til Til','San Bernardo','Buin','Calera de Tango','Paine','Melipilla','Alhué','Curacaví','María Pinto','San Pedro','Talagante','El Monte','Isla de Maipo','Padre Hurtado','Peñaflor']
 };
+// ── Credenciales por defecto ────────────────────────────────
+// Los valores en localStorage tienen prioridad. Estos son el fallback.
+const _DEFAULTS={
+  AIRTABLE_TOKEN:'TU_AIRTABLE_PAT_AQUI',
+  OPENAI_KEY:'TU_OPENAI_KEY_AQUI',
+  GOOGLE_CLIENT_ID:'TU_GOOGLE_CLIENT_ID_AQUI'
+};
+// ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
 let cdCurrentId='',cdCurrentEmpresa='';
 let _importDtes=[];
@@ -3993,7 +4001,8 @@ function getAnthropicKey(){return lsGet('anthropic_key');}
 function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=lsGet('anthropic_key');i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
-function getToken(){return lsGet('airtable_token')||'';}
+function getToken(){return lsGet('airtable_token')||_DEFAULTS.AIRTABLE_TOKEN;}
+function getOpenAIKey(){return localStorage.getItem('fp_openai_key')||_DEFAULTS.OPENAI_KEY;}
 function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
 function showTokenModal(){openUserMenu();const i=document.getElementById('umAirtableToken');if(i){i.type='text';i.focus();}}
 function closeTokenModal(){}
@@ -5910,7 +5919,7 @@ function handleFPRawImage(evt,idx){
 }
 
 async function generarVistasIA(idx){
-  const openaiKey=localStorage.getItem('fp_openai_key')||'';
+  const openaiKey=getOpenAIKey();
   const rawImg=_fpRawImages[idx];
   const statusEl=document.getElementById('fpAiStatus-'+idx);
   const setStatus=msg=>{if(statusEl){statusEl.style.display='block';statusEl.innerHTML=msg;}};
@@ -6204,7 +6213,7 @@ let _driveTokenClient=null;
 let _driveAccessToken=null;
 let _driveTokenExpiry=0;
 
-function _driveGetClientId(){return localStorage.getItem('google_drive_client_id')||'';}
+function _driveGetClientId(){return localStorage.getItem('google_drive_client_id')||_DEFAULTS.GOOGLE_CLIENT_ID;}
 
 function _driveGetToken(){
   return new Promise((resolve,reject)=>{
@@ -6276,6 +6285,34 @@ async function _driveUploadText(filename,content,mimeType,folderId){
   return r.json();
 }
 
+async function _fichaHTMLtoPdfBlob(htmlDoc){
+  return new Promise(async(resolve,reject)=>{
+    const iframe=document.createElement('iframe');
+    iframe.style.cssText='position:fixed;top:-99999px;left:-99999px;width:794px;height:1123px;border:none;visibility:hidden;';
+    document.body.appendChild(iframe);
+    try{
+      iframe.contentDocument.open();
+      iframe.contentDocument.write(htmlDoc);
+      iframe.contentDocument.close();
+      // wait for images inside the iframe
+      await new Promise(r=>{
+        const imgs=[...iframe.contentDocument.querySelectorAll('img')];
+        if(!imgs.length){r();return;}
+        let done=0;const check=()=>{if(++done>=imgs.length) r();};
+        imgs.forEach(img=>{if(img.complete) check();else{img.onload=check;img.onerror=check;}});
+        setTimeout(r,4000);
+      });
+      const blob=await html2pdf().set({
+        margin:0,
+        image:{type:'jpeg',quality:0.93},
+        html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,backgroundColor:'#ffffff'},
+        jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+      }).from(iframe.contentDocument.body).outputPdf('blob');
+      resolve(blob);
+    }catch(e){reject(e);}finally{document.body.removeChild(iframe);}
+  });
+}
+
 async function guardarFichaEnDrive(cotId){
   const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
   const f=cot.fields;
@@ -6313,12 +6350,29 @@ async function guardarFichaEnDrive(cotId){
         }
       }
     }
-    // Ficha propuesta (HTML)
+    // Ficha propuesta → PDF
     const docResult=buildFichaPropuestaDoc(cotId);
     if(docResult?.html){
-      setDriveStatus('⬆️ Ficha propuesta...');
-      await _driveUploadText('ficha_propuesta_'+numCot+'.html',docResult.html,'text/html',cotFolderId);
-      uploadedCount++;
+      setDriveStatus('📄 Generando PDF de ficha...');
+      try{
+        const pdfBlob=await _fichaHTMLtoPdfBlob(docResult.html);
+        setDriveStatus('⬆️ Subiendo ficha PDF...');
+        const token=await _driveGetToken();
+        const meta={name:'ficha_propuesta_'+numCot+'.pdf'};if(cotFolderId) meta.parents=[cotFolderId];
+        const form=new FormData();
+        form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+        form.append('file',pdfBlob,'ficha_propuesta_'+numCot+'.pdf');
+        const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{
+          method:'POST',headers:{'Authorization':'Bearer '+token},body:form
+        });
+        if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||r.statusText);}
+        uploadedCount++;
+      }catch(pdfErr){
+        console.warn('[Drive PDF]',pdfErr);
+        setDriveStatus('⬆️ Subiendo ficha (HTML fallback)...');
+        await _driveUploadText('ficha_propuesta_'+numCot+'.html',docResult.html,'text/html',cotFolderId);
+        uploadedCount++;
+      }
     }
     // Guardar link de carpeta
     const folderLink='https://drive.google.com/drive/folders/'+cotFolderId;
