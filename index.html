@@ -5761,14 +5761,19 @@ async function generarVistasIA(idx){
     ];
     for(const v of views){
       if(btn) btn.textContent='Vista '+v.label+'...';
-      setStatus('🎨 Generando '+v.label+'...');
+      setStatus('⏳ Generando '+v.label+'... (30-60s)');
       const prompt=encodeURIComponent('product mockup white background '+v.angulo+' '+descripcion.slice(0,40));
       const imgUrl=`https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&model=flux&seed=${seed+views.indexOf(v)}`;
       _fpItems[idx][v.campo]=imgUrl;
+      const box=document.getElementById('fpp-'+idx+'-'+v.campo);
+      if(box){box.style.display='flex';box.innerHTML='<span style="font-size:8px;color:#0097a7;text-align:center">⏳ Generando...<br><a href="'+imgUrl+'" target="_blank" style="color:#0097a7;font-size:7px">ver URL</a></span>';}
       const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
-      if(prev){prev.src=imgUrl;prev.style.display='block';}
-      const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
-      if(ph) ph.style.display='none';
+      if(prev){
+        prev.style.display='none';
+        prev.onload=function(){this.style.display='block';if(box) box.style.display='none';};
+        prev.onerror=function(){if(box){box.innerHTML='<span style="font-size:8px;color:red">❌ Error cargando</span>';}};
+        prev.src=imgUrl;
+      }
       await new Promise(r=>setTimeout(r,500));
     }
     setStatus('✅ ¡Vistas generadas con éxito!');
