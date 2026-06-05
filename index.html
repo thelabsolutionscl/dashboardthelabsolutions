@@ -5763,14 +5763,14 @@ async function generarVistasIA(idx){
       const dalleRes=await fetch('https://api.openai.com/v1/images/generations',{
         method:'POST',
         headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-        body:JSON.stringify({model:'dall-e-3',prompt:basePrompt+' '+v.extra,n:1,size:'1024x1024',quality:'standard',response_format:'b64_json'})
+        body:JSON.stringify({model:'dall-e-3',prompt:basePrompt+' '+v.extra,n:1,size:'1024x1024',quality:'standard'})
       });
       if(!dalleRes.ok){const er=await dalleRes.json();throw new Error('DALL-E: '+(er.error?.message||dalleRes.status));}
       const dalleData=await dalleRes.json();
-      const imgData='data:image/png;base64,'+dalleData.data[0].b64_json;
-      _fpItems[idx][v.campo]=imgData;
+      const imgUrl=dalleData.data[0].url;
+      _fpItems[idx][v.campo]=imgUrl;
       const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
-      if(prev){prev.src=imgData;prev.style.display='block';}
+      if(prev){prev.src=imgUrl;prev.style.display='block';}
       const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
       if(ph) ph.style.display='none';
     }
