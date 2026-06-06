@@ -115,6 +115,28 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .btn-mini-yellow:hover{background:var(--accent);color:var(--black);}
 .btn-mini-blue{background:rgba(59,130,246,0.15)!important;border-color:rgba(59,130,246,0.4)!important;color:#60a5fa!important;}
 .btn-mini-blue:hover{background:rgba(59,130,246,0.35)!important;color:#93c5fd!important;}
+.btn-mini-purple{background:rgba(192,132,252,0.15)!important;border-color:rgba(192,132,252,0.4)!important;color:#c084fc!important;}
+.btn-mini-purple:hover{background:rgba(192,132,252,0.3)!important;color:#e9d5ff!important;}
+/* ── ACTION DROPDOWN ── */
+.act-drop{position:relative;display:inline-block;}
+.act-toggle{min-width:34px;text-align:center;font-size:13px;font-weight:700;letter-spacing:1px;padding:3px 6px!important;}
+.act-menu{position:absolute;right:0;top:calc(100% + 4px);background:var(--surface2);border:1px solid var(--border2);border-radius:9px;min-width:190px;z-index:300;box-shadow:0 10px 30px rgba(0,0,0,0.55);display:none;overflow:hidden;}
+.act-menu.open{display:block;animation:actIn 0.12s ease;}
+@keyframes actIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.act-item{display:flex;align-items:center;gap:9px;width:100%;padding:9px 14px;background:none;border:none;border-bottom:1px solid var(--border1);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:background 0.1s;white-space:nowrap;}
+.act-item:last-child{border-bottom:none;}
+.act-item:hover{background:var(--surface3);}
+.act-sep{height:1px;background:var(--border2);margin:3px 0;}
+.act-item-green{color:var(--accent3)!important;}
+.act-item-green:hover{background:rgba(0,212,170,0.12)!important;}
+.act-item-red{color:var(--danger)!important;}
+.act-item-red:hover{background:rgba(255,68,68,0.12)!important;}
+.act-item-yellow{color:var(--accent)!important;font-weight:700!important;}
+.act-item-yellow:hover{background:rgba(0,212,204,0.1)!important;}
+.act-item-blue{color:#60a5fa!important;}
+.act-item-blue:hover{background:rgba(59,130,246,0.1)!important;}
+.act-item-purple{color:#c084fc!important;}
+.act-item-purple:hover{background:rgba(192,132,252,0.1)!important;}
 .loading-state{display:flex;align-items:center;justify-content:center;gap:8px;padding:36px;color:var(--text3);font-size:12px;}
 .spinner{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -4923,6 +4945,14 @@ async function deleteSelectedClientes(){
 function sortClientes(key){if(clientesSort.key===key) clientesSort.dir*=-1;else{clientesSort.key=key;clientesSort.dir=1;}document.querySelectorAll('#tab-clientes .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(/sortClientes\('(\w+)'\)/)?.[1];th.classList.remove('asc','desc');if(k===key) th.classList.add(clientesSort.dir===1?'asc':'desc');});renderClientes();}
 function getSortValue(c,key){const f=c.fields;switch(key){case 'empresa':return(f['Empresa']||'').toLowerCase();case 'contacto':return(f['Contacto']||'').toLowerCase();case 'etapa':return(f['Etapa venta']||'').toLowerCase();case 'revenue':return f['Revenue total cliente (CLP)']||0;case 'val':return parseInt(f['Valoración cliente'])||0;case 'estado':return(f['Estado cuenta']||'').toLowerCase();case 'venc':return f['Facturas vencidas']||0;default:return '';}}
 function getSortedClientes(){if(!clientesSort.key) return state.clientes;return[...state.clientes].sort((a,b)=>{const va=getSortValue(a,clientesSort.key),vb=getSortValue(b,clientesSort.key);if(typeof va==='number') return(va-vb)*clientesSort.dir;return va.localeCompare(vb,'es')*clientesSort.dir;});}
+function toggleActMenu(evt,menuId){
+  evt.stopPropagation();
+  const menu=document.getElementById(menuId);if(!menu) return;
+  const wasOpen=menu.classList.contains('open');
+  document.querySelectorAll('.act-menu.open').forEach(m=>m.classList.remove('open'));
+  if(!wasOpen) menu.classList.add('open');
+}
+document.addEventListener('click',()=>document.querySelectorAll('.act-menu.open').forEach(m=>m.classList.remove('open')));
 function buildClienteRow(c){
   const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0));
   const tel=f['Teléfono']||'';
@@ -4936,9 +4966,14 @@ function buildClienteRow(c){
     <td class="td-val" data-label="Val.">${'★'.repeat(val)}${'☆'.repeat(5-val)}</td>
     <td class="td-estado" data-label="Estado">${estadoBadge(f['Estado cuenta']||'Al día')}</td>
     <td class="td-acc">
-      <button class="btn-mini" onclick="openClienteDetalle('${c.id}')">👁 Ver</button>
-      <button class="btn-mini btn-mini-yellow" onclick="verCotizacionesCliente('${c.id}','${escapeHtml(f['Empresa']||'')}')">📋 Cots.</button>
-      <button class="btn-mini" onclick="cotizarParaCliente('${c.id}')">+ Cot.</button>
+      <div class="act-drop">
+        <button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cli-${c.id}')">⋯</button>
+        <div class="act-menu" id="actmenu-cli-${c.id}">
+          <button class="act-item" onclick="openClienteDetalle('${c.id}')">👁 &nbsp;Ver detalle</button>
+          <button class="act-item act-item-yellow" onclick="verCotizacionesCliente('${c.id}','${escapeHtml(f['Empresa']||'')}')">📋 &nbsp;Ver cotizaciones</button>
+          <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
+        </div>
+      </div>
     </td>
   </tr>`;
 }
@@ -5444,14 +5479,14 @@ function getSortedCotizaciones(){
 function renderCotizaciones(){const tbody=document.getElementById('cotsTableBodyFull');if(!state.cotizaciones.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state">Sin cotizaciones</div></td></tr>';return;}tbody.innerHTML=getSortedCotizaciones().map(c=>buildCotRow(c)).join('');renderCotAnalytics();}
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
-  const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
   const fpData=parseFichaPropData(f['Ficha Propuesta']);
   const cotDriveLink=localStorage.getItem('fp_drive_folder_'+c.id);
   const numCotEsc=escapeHtml(f['N° Cotización']||'');
   const cliNomEsc=escapeHtml(resolveClienteName(f['Cliente']));
-  const driveBtn=`<button class="btn-mini${cotDriveLink?' btn-mini-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')" title="${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}">📂</button>`;
+  const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✅ &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">❌ &nbsp;Rechazar cotización</button><div class="act-sep"></div>`:'';
+  const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}<button class="act-item" onclick="openEditCot('${c.id}')">✏️ &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')">👁 &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')">📄 &nbsp;Descargar PDF</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')">📋 &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')">📂 &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')">🗑 &nbsp;Eliminar</button></div></div>`;
   return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
-  <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁<span class="btn-txt"> Ver PDF</span></button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄<span class="btn-txt"> Descargar PDF</span></button><button class="btn-mini${fpData?' btn-mini-purple':''}" onclick="openFichaPropModal('${c.id}')" title="Ficha Técnica Propuesta">📋<span class="btn-txt"> Ficha</span></button>${driveBtn}<button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></div></td></tr>`;
+  <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${actMenu}</div></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
@@ -6809,15 +6844,12 @@ function renderPedidos(filter){
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
   tbody.innerHTML=data.map(p=>{
     const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
-    let advBtn='';
-    if(idx>=0&&idx<stages.length-1) advBtn=`<button class="btn-mini btn-mini-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ ${stages[idx+1].split(' ')[0]}</button>`;else if(estado==='Despachado') advBtn='<span class="badge badge-green">✓</span>';
     const dteNum=f['DTE N°']||'';
-    const dteBtn=`<button class="btn-mini${dteNum?' btn-mini-green':''}" onclick="openDTEModal('${p.id}')" title="${dteNum?'DTE N° '+escapeHtml(dteNum):'Emitir DTE / Factura SII'}">📄${dteNum?' ✓':''}</button>`;
     const fichaData=parseFichaData(f['Ficha Tecnica']);
-    const fichaBtn=`<button class="btn-mini${fichaData?' btn-mini-blue':''}" onclick="openFichaModal('${p.id}')" title="Ficha Técnica">📋</button>`;
     const pedDriveCotId=f['Cotizaciones']?.[0];
     const pedDriveLink=pedDriveCotId?localStorage.getItem('fp_drive_folder_'+pedDriveCotId):localStorage.getItem('fp_drive_folder_ped_'+p.id);
-    const driveBtn=`<button class="btn-mini${pedDriveLink?' btn-mini-blue':''}" onclick="openPedidoDrive('${p.id}')" title="${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}">📂</button>`;
+    const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item act-item-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ &nbsp;Avanzar a "${stages[idx+1]}"</button><div class="act-sep"></div>`:(estado==='Despachado'?'':'');
+    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')">✏️ &nbsp;Editar pedido</button><button class="act-item${dteNum?' act-item-green':''}" onclick="openDTEModal('${p.id}')">${dteNum?'📄 ✓ &nbsp;DTE N° '+escapeHtml(dteNum):'📄 &nbsp;Emitir DTE / Factura'}</button><button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')">📋 &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')">📂 &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')">🗑 &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -6830,7 +6862,7 @@ function renderPedidos(filter){
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
-    <td><div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${advBtn}${dteBtn}${fichaBtn}${driveBtn}<button class="btn-mini" onclick="openEditPedidoModal('${p.id}')" title="Editar">✏️</button><button class="btn-mini btn-mini-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" title="Eliminar">🗑</button></div></td></tr>`;
+    <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
   }).join('');
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
