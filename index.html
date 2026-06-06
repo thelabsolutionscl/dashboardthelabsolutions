@@ -5446,8 +5446,12 @@ function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const statusAcc=isOpen?`<button class="btn-mini btn-mini-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✓</button><button class="btn-mini btn-mini-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">✕</button>`:'';
   const fpData=parseFichaPropData(f['Ficha Propuesta']);
+  const cotDriveLink=localStorage.getItem('fp_drive_folder_'+c.id);
+  const numCotEsc=escapeHtml(f['N° Cotización']||'');
+  const cliNomEsc=escapeHtml(resolveClienteName(f['Cliente']));
+  const driveBtn=`<button class="btn-mini${cotDriveLink?' btn-mini-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')" title="${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}">📂</button>`;
   return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
-  <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁<span class="btn-txt"> Ver PDF</span></button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄<span class="btn-txt"> Descargar PDF</span></button><button class="btn-mini${fpData?' btn-mini-purple':''}" onclick="openFichaPropModal('${c.id}')" title="Ficha Técnica Propuesta">📋<span class="btn-txt"> Ficha</span></button><button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></div></td></tr>`;
+  <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${statusAcc}<button class="btn-mini" onclick="openEditCot('${c.id}')">✏️</button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="generarPDFCotizacion('${c.id}')">👁<span class="btn-txt"> Ver PDF</span></button><button class="btn-mini" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.35);color:var(--accent);font-weight:700" onclick="descargarPDFCotizacion('${c.id}')">📄<span class="btn-txt"> Descargar PDF</span></button><button class="btn-mini${fpData?' btn-mini-purple':''}" onclick="openFichaPropModal('${c.id}')" title="Ficha Técnica Propuesta">📋<span class="btn-txt"> Ficha</span></button>${driveBtn}<button class="btn-mini btn-mini-red" onclick="deleteCotizacion('${c.id}','${escapeHtml(f['N° Cotización']||'—')}')">🗑</button></div></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
@@ -6434,6 +6438,50 @@ async function guardarFichaEnDrive(cotId){
   }
 }
 // ────────────────────────────────────────────────────────────
+async function openDriveFolder(cotId,numCot,clienteNombre){
+  const existing=localStorage.getItem('fp_drive_folder_'+cotId);
+  if(existing){window.open(existing,'_blank');return;}
+  if(!confirm('No hay carpeta Drive para esta cotización.\n¿Crear ahora?')) return;
+  try{
+    toast('Creando carpeta en Drive...','info');
+    const rootId=await _driveGetOrCreateFolder('The Lab Solutions',null);
+    const cliId=await _driveGetOrCreateFolder(clienteNombre||'Cliente',rootId);
+    const foldId=await _driveGetOrCreateFolder('COT-'+numCot,cliId);
+    const link='https://drive.google.com/drive/folders/'+foldId;
+    localStorage.setItem('fp_drive_folder_'+cotId,link);
+    window.open(link,'_blank');
+    toast('📂 Carpeta creada en Drive ✓','success');
+    renderCotizaciones();renderPedidos();
+  }catch(e){toast('Error Drive: '+e.message,'error');}
+}
+async function openPedidoDrive(pedidoId){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const f=p.fields;
+  const cotIds=f['Cotizaciones'];
+  if(cotIds&&cotIds.length){
+    const cot=state.cotizaciones.find(x=>x.id===cotIds[0]);
+    const numCot=cot?.fields['N° Cotización']||'';
+    const cliente=resolveClienteName(cot?.fields['Cliente']||f['Cliente']);
+    await openDriveFolder(cotIds[0],numCot,cliente);
+  }else{
+    const key='fp_drive_folder_ped_'+pedidoId;
+    const existing=localStorage.getItem(key);
+    if(existing){window.open(existing,'_blank');return;}
+    if(!confirm('No hay carpeta Drive para este pedido.\n¿Crear ahora?')) return;
+    try{
+      toast('Creando carpeta en Drive...','info');
+      const rootId=await _driveGetOrCreateFolder('The Lab Solutions',null);
+      const cliId=await _driveGetOrCreateFolder(resolveClienteName(f['Cliente'])||'Cliente',rootId);
+      const foldId=await _driveGetOrCreateFolder(f['N° Pedido']||pedidoId.slice(-6),cliId);
+      const link='https://drive.google.com/drive/folders/'+foldId;
+      localStorage.setItem(key,link);
+      window.open(link,'_blank');
+      toast('📂 Carpeta creada ✓','success');
+      renderPedidos();
+    }catch(e){toast('Error Drive: '+e.message,'error');}
+  }
+}
+// ────────────────────────────────────────────────────────────
 
 async function saveFichaPropModal(verPDF=false){
   if(!_fpCotId) return;
@@ -6767,6 +6815,9 @@ function renderPedidos(filter){
     const dteBtn=`<button class="btn-mini${dteNum?' btn-mini-green':''}" onclick="openDTEModal('${p.id}')" title="${dteNum?'DTE N° '+escapeHtml(dteNum):'Emitir DTE / Factura SII'}">📄${dteNum?' ✓':''}</button>`;
     const fichaData=parseFichaData(f['Ficha Tecnica']);
     const fichaBtn=`<button class="btn-mini${fichaData?' btn-mini-blue':''}" onclick="openFichaModal('${p.id}')" title="Ficha Técnica">📋</button>`;
+    const pedDriveCotId=f['Cotizaciones']?.[0];
+    const pedDriveLink=pedDriveCotId?localStorage.getItem('fp_drive_folder_'+pedDriveCotId):localStorage.getItem('fp_drive_folder_ped_'+p.id);
+    const driveBtn=`<button class="btn-mini${pedDriveLink?' btn-mini-blue':''}" onclick="openPedidoDrive('${p.id}')" title="${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}">📂</button>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -6779,7 +6830,7 @@ function renderPedidos(filter){
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
     <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
-    <td><div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${advBtn}${dteBtn}${fichaBtn}<button class="btn-mini" onclick="openEditPedidoModal('${p.id}')" title="Editar">✏️</button><button class="btn-mini btn-mini-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" title="Eliminar">🗑</button></div></td></tr>`;
+    <td><div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${advBtn}${dteBtn}${fichaBtn}${driveBtn}<button class="btn-mini" onclick="openEditPedidoModal('${p.id}')" title="Editar">✏️</button><button class="btn-mini btn-mini-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" title="Eliminar">🗑</button></div></td></tr>`;
   }).join('');
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
