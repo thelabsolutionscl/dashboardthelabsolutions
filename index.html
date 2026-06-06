@@ -4956,8 +4956,28 @@ function getSortedClientes(){if(!clientesSort.key) return state.clientes;return[
 // ── NOTAS INTERNAS ──────────────────────────────────────────
 let _notasType='',_notasId='';
 function _notasKey(t,id){return'notas_'+t+'_'+id;}
-function _getNotas(t,id){try{return JSON.parse(localStorage.getItem(_notasKey(t,id))||'[]');}catch{return[];}}
-function _saveNotas(t,id,arr){localStorage.setItem(_notasKey(t,id),JSON.stringify(arr));}
+function _getNotas(t,id){
+  const recs=t==='cot'?state.cotizaciones:state.pedidos;
+  const rec=recs.find(x=>x.id===id);
+  if(rec&&rec.fields['Notas internas']){
+    try{const p=JSON.parse(rec.fields['Notas internas']);if(Array.isArray(p)) return p;}catch{}
+  }
+  try{return JSON.parse(localStorage.getItem(_notasKey(t,id))||'[]');}catch{return[];}
+}
+async function _saveNotas(t,id,arr){
+  const json=JSON.stringify(arr);
+  localStorage.setItem(_notasKey(t,id),json);
+  const recs=t==='cot'?state.cotizaciones:state.pedidos;
+  const rec=recs.find(x=>x.id===id);
+  if(rec) rec.fields['Notas internas']=json;
+  const table=t==='cot'?'Cotizaciones':'Pedidos';
+  try{await airtableWrite(table,'PATCH',id,{'Notas internas':json});}
+  catch(e){
+    if(!e.message.toLowerCase().includes('unknown field')&&!e.message.toLowerCase().includes('notas internas')){
+      console.warn('[Notas]',e.message);
+    }
+  }
+}
 function openNotasModal(type,id,label){
   _notasType=type;_notasId=id;
   document.getElementById('notasModalTitle').textContent='📝 Notas — '+label;
@@ -4967,20 +4987,20 @@ function openNotasModal(type,id,label){
   setTimeout(()=>document.getElementById('notasInput').focus(),80);
 }
 function closeNotasModal(){document.getElementById('notasModal').style.display='none';}
-function addNota(){
+async function addNota(){
   const txt=(document.getElementById('notasInput').value||'').trim();
   if(!txt) return;
   const arr=_getNotas(_notasType,_notasId);
   arr.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ts:new Date().toISOString(),text:txt});
-  _saveNotas(_notasType,_notasId,arr);
   document.getElementById('notasInput').value='';
+  await _saveNotas(_notasType,_notasId,arr);
   renderNotasList();
   if(_notasType==='cot') renderCotizaciones(); else renderPedidos();
 }
-function deleteNota(notaId){
+async function deleteNota(notaId){
   if(!confirm('¿Eliminar esta nota?')) return;
   const arr=_getNotas(_notasType,_notasId).filter(n=>n.id!==notaId);
-  _saveNotas(_notasType,_notasId,arr);
+  await _saveNotas(_notasType,_notasId,arr);
   renderNotasList();
   if(_notasType==='cot') renderCotizaciones(); else renderPedidos();
 }
