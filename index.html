@@ -4050,29 +4050,36 @@ function closeUserMenuOutside(e){if(!document.getElementById('userChip')?.contai
 function saveUserMenuToken(){
   const inp=document.getElementById('umAirtableToken');const v=(inp?.value||'').trim();
   if(v.startsWith('••')){
-    // Token no cambiado — solo reconectar con el existente
     const existing=lsGet('airtable_token');
     if(!existing){toast('Ingresa el token (patXXX...)','error');inp.value='';inp.onfocus&&inp.onfocus();inp.focus();return;}
-    closeUserMenu();loadAllData();return;
+    toast('Conectando...','info');loadAllData();return;
   }
   if(!v){toast('Ingresa el token (patXXX...)','error');inp.focus();return;}
   if(!v.startsWith('pat')&&!v.startsWith('key')){toast('El token debe comenzar con "pat" — verifica en Airtable → Developer Hub','error');return;}
-  lsSet('airtable_token',v);closeUserMenu();toast('Token Airtable guardado ✓','success');loadAllData();
+  lsSet('airtable_token',v);
+  // Refresca el campo a enmascarado sin cerrar el menú
+  inp.value='••••••••'+v.slice(-4);inp.placeholder='(guardado — clic para cambiar)';
+  toast('Token Airtable guardado ✓','success');loadAllData();
 }
-function clearUserMenuToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');closeUserMenu();toast('Token Airtable eliminado','info');openUserMenu();}
+function clearUserMenuToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');const inp=document.getElementById('umAirtableToken');if(inp){inp.value='';inp.placeholder='patXXX...';}toast('Token Airtable eliminado','info');}
 function saveUserMenuOpenai(){
   const inp=document.getElementById('umOpenaiKey');const v=(inp?.value||'').trim();
-  if(!v||v.startsWith('••')){toast('Ingresa la key completa (sk-...)','error');inp.value='';inp.type='text';inp.focus();return;}
-  localStorage.setItem('fp_openai_key',v);closeUserMenu();toast('OpenAI key guardada ✓','success');
+  if(v.startsWith('••')){toast('Key ya guardada ✓','success');return;}
+  if(!v){toast('Ingresa la key (sk-...)','error');inp.focus();return;}
+  localStorage.setItem('fp_openai_key',v);
+  inp.value='••••••••'+v.slice(-4);inp.placeholder='(guardado)';
+  toast('OpenAI key guardada ✓','success');
 }
-function clearUserMenuOpenai(){localStorage.removeItem('fp_openai_key');closeUserMenu();toast('OpenAI key eliminada','info');}
+function clearUserMenuOpenai(){localStorage.removeItem('fp_openai_key');const inp=document.getElementById('umOpenaiKey');if(inp){inp.value='';inp.placeholder='sk-proj-...';}toast('OpenAI key eliminada','info');}
 function saveGoogleClientId(){
   const inp=document.getElementById('umGoogleClientId');const v=(inp?.value||'').trim();
   if(!v){toast('Ingresa el Client ID de Google Cloud','error');return;}
   localStorage.setItem('google_drive_client_id',v);_driveTokenClient=null;_driveAccessToken=null;
-  closeUserMenu();toast('Google Client ID guardado ✓','success');
+  inp.value=v.slice(0,12)+'…'+v.slice(-8);
+  const ds=document.getElementById('umDriveStatus');if(ds) ds.textContent='✓ Client ID configurado';
+  toast('Google Client ID guardado ✓','success');
 }
-function clearGoogleClientId(){localStorage.removeItem('google_drive_client_id');_driveTokenClient=null;_driveAccessToken=null;closeUserMenu();toast('Google Client ID eliminado','info');}
+function clearGoogleClientId(){localStorage.removeItem('google_drive_client_id');_driveTokenClient=null;_driveAccessToken=null;const inp=document.getElementById('umGoogleClientId');if(inp){inp.value='';}const ds=document.getElementById('umDriveStatus');if(ds) ds.textContent='Sin configurar — necesitas un Client ID de Google Cloud';toast('Google Client ID eliminado','info');}
 
 // ── AIRTABLE ──────────────────────────────────────────────────
 async function airtableFetch(table,max=100){
