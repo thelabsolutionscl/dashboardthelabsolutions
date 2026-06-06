@@ -6994,11 +6994,16 @@ async function saveEditPedido(){
 
 async function advancePedido(id,estado){
   const p=state.pedidos.find(x=>x.id===id);if(!p) return;
-  // Regla de negocio: anticipo antes de producir, saldo antes de despachar
-  if(estado==='En producción'&&!p.fields['Anticipo pagado (50%)']){toast('⚠ Confirma el anticipo (50%) antes de producir','error');return;}
-  if(estado==='Despachado'&&!p.fields['Saldo pagado (50%)']){toast('⚠ Confirma el saldo (50%) antes de despachar','error');return;}
-  if(!confirm(`¿Avanzar a "${estado}"?`)) return;
-  try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+  const f=p.fields;
+  // Bloqueo duro: saldo antes de despachar
+  if(estado==='Despachado'&&!f['Saldo pagado (50%)']){toast('⚠ Confirma el saldo (50%) antes de despachar','error');return;}
+  // Advertencia suave: sin ningún pago al pasar a producción
+  if(estado==='En producción'&&!f['Anticipo pagado (50%)']&&!f['Saldo pagado (50%)']){
+    if(!confirm('⚠ No hay abono ni pago total registrado para este pedido.\n¿Estás seguro que quieres avanzar a "En producción"?')) return;
+  } else {
+    if(!confirm(`¿Avanzar a "${estado}"?`)) return;
+  }
+  try{const flds={'Estado pedido':estado};if(estado==='Despachado') flds['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,flds);toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 
 // ── NUEVO LEAD + LEAD_AGENT ───────────────────────────────────
 let _leadAgentResponse=null;
