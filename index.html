@@ -4543,7 +4543,7 @@ async function loadAllData(){
     if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
     if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
     if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();fillCatSelects();}
-    if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}renderWatiConfigBtn();}
+    if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}const finRec=recs.find(r=>r.fields['Name']==='FIN_VENTAS');if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){}}renderWatiConfigBtn();}
     if(isFirst) slProgress(92,'Calculando resumen...');
     state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
@@ -4572,7 +4572,7 @@ async function loadAllDataSilent(){
     if(pRes.status==='fulfilled') state.pedidos=pRes.value.records||[];
     if(rRes.status==='fulfilled') state.reportes=rRes.value.records||[];
     if(pvRes.status==='fulfilled') state.proveedores=pvRes.value.records||[];
-    if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}renderWatiConfigBtn();}
+    if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}const finRec=recs.find(r=>r.fields['Name']==='FIN_VENTAS');if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){}}renderWatiConfigBtn();}
     state.lastUpdateTs=Date.now();document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;renderOverview();
   }catch(e){setStatus('error (auto)',false);}
 }
@@ -7580,6 +7580,19 @@ async function saveMetaAirtable(metaSemanal,metaMensual){
     const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'META_REVENUE','Notes':notes});
     if(r?.id) state.metaRecordId=r.id;
   }
+}
+// Persiste las ventas manuales (fin_ventas) en Airtable usando el mismo
+// patrón Name/Notes de Monitor Sistema. Falla en silencio → localStorage queda como respaldo.
+async function saveFinVentasAirtable(){
+  const notes=localStorage.getItem('fin_ventas')||'[]';
+  try{
+    if(state.finVentasRecordId){
+      await airtableWrite('Monitor Sistema','PATCH',state.finVentasRecordId,{'Notes':notes});
+    } else {
+      const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'FIN_VENTAS','Notes':notes});
+      if(r?.id) state.finVentasRecordId=r.id;
+    }
+  }catch(e){console.warn('[FinVentas] no se pudo guardar en Airtable:',e.message);}
 }
 function openMetaModal(){
   document.getElementById('metaInput').value=localStorage.getItem('revMetaSemanal')||'';
@@ -10839,6 +10852,7 @@ function nvGuardar(){
   const existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
   existing.push(rec);
   try{localStorage.setItem('fin_ventas',JSON.stringify(existing));}catch(e){toast('Sin espacio para guardar','error');return;}
+  saveFinVentasAirtable();
   nvLimpiar();
   finRenderNuevaLista();
   toast('Venta guardada correctamente','success');
@@ -10847,6 +10861,7 @@ function nvGuardar(){
 function nvLimpiarTodas(){
   if(!confirm('¿Eliminar todas las ventas ingresadas manualmente?'))return;
   localStorage.removeItem('fin_ventas');
+  saveFinVentasAirtable();
   finRenderNuevaLista();
   finInit();
 }
@@ -10877,6 +10892,7 @@ function nvEliminar(idx){
   const data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
   data.splice(idx,1);
   localStorage.setItem('fin_ventas',JSON.stringify(data));
+  saveFinVentasAirtable();
   finRenderNuevaLista();
 }
 
