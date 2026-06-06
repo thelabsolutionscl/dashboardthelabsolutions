@@ -4866,6 +4866,23 @@ function renderAlertas(){
     if((c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h)
       alertas.push({sev:1,icon:'📋',type:'cot-sin-enviar',msg:`<strong>${escapeHtml(c.fields['N° Cotización']||'—')}</strong>: solicitada sin enviar por +48h`,id:c.id,tab:'cotizaciones'});
   });
+  // sev 1 — clientes que se enfrían: cotizaron antes, pero nada en +90 días
+  const ago90d=new Date(today);ago90d.setDate(today.getDate()-90);
+  const ultCotCliente={};
+  state.cotizaciones.forEach(c=>{
+    const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
+    if(!cid||!c.createdTime) return;
+    const t=new Date(c.createdTime).getTime();
+    if(!ultCotCliente[cid]||t>ultCotCliente[cid]) ultCotCliente[cid]=t;
+  });
+  state.clientes.forEach(cl=>{
+    const last=ultCotCliente[cl.id];if(!last) return;
+    if(['Perdido','Cliente inactivo'].includes(cl.fields['Etapa venta']||'')) return;
+    if(last<ago90d.getTime()){
+      const dias=Math.round((today-last)/86400000);
+      alertas.push({sev:1,icon:'😴',type:'cliente-inactivo',msg:`<strong>${escapeHtml(cl.fields['Empresa']||'—')}</strong>: sin cotizar hace ${dias}d`,id:cl.id,tab:'clientes'});
+    }
+  });
 
   // sev 3 — proveedores bloqueados con pedidos activos en su categoría
   state.proveedores.forEach(pv=>{
@@ -4890,8 +4907,8 @@ function renderAlertas(){
 
   // agrupación: >=3 del mismo tipo → una sola fila
   const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
-  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa','proveedor-bloqueado':'proveedores bloqueados con pedidos activos','proveedor-sin-cobertura':'categorías sin proveedor activo'};
-  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`,'proveedor-bloqueado':`goToAlert('proveedores')`,'proveedor-sin-cobertura':`goToAlert('proveedores')`};
+  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa','cliente-inactivo':'clientes sin cotizar +90 días','proveedor-bloqueado':'proveedores bloqueados con pedidos activos','proveedor-sin-cobertura':'categorías sin proveedor activo'};
+  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`,'cliente-inactivo':`goToAlert('clientes')`,'proveedor-bloqueado':`goToAlert('proveedores')`,'proveedor-sin-cobertura':`goToAlert('proveedores')`};
   const sevBorder=s=>s===3?'rgba(255,68,68,0.3)':s===2?'rgba(255,107,53,0.3)':'rgba(255,170,0,0.22)';
 
   const seen=new Set();const rows=[];
@@ -7760,8 +7777,24 @@ function renderCotAnalytics(){
   const base=counts['Enviada']+counts['Aprobada'];
   const conv=base>0?Math.round((counts['Aprobada']/base)*100):0;
   const maxC=Math.max(...Object.values(counts),1);
+  // Ticket promedio de cotizaciones aprobadas (neto)
+  const aprobadas=state.cotizaciones.filter(c=>(c.fields['Estado cotización']||'')==='Aprobada');
+  const ticketProm=aprobadas.length?Math.round(aprobadas.reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0)/aprobadas.length):0;
+  // Tiempo medio de cierre: días entre creación de cotización y del pedido vinculado
+  const cierreDias=[];
+  state.pedidos.forEach(p=>{
+    const cotIds=p.fields['Cotizaciones'];
+    if(cotIds&&cotIds.length&&p.createdTime){
+      const cot=state.cotizaciones.find(x=>x.id===cotIds[0]);
+      if(cot&&cot.createdTime){
+        const d=Math.round((new Date(p.createdTime)-new Date(cot.createdTime))/86400000);
+        if(d>=0&&d<365) cierreDias.push(d);
+      }
+    }
+  });
+  const tiempoCierre=cierreDias.length?Math.round(cierreDias.reduce((a,b)=>a+b,0)/cierreDias.length):null;
   const barsHtml=estados.map(e=>{const pct=Math.round((counts[e]/maxC)*100);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:10px;color:var(--text2);min-width:80px">${e}</div><div style="flex:1;height:16px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${colors[e]};border-radius:4px"></div></div><div style="font-size:12px;font-weight:700;color:${colors[e]};min-width:24px;text-align:right">${counts[e]}</div></div>`;}).join('');
-  el.innerHTML=`<div class="card" style="margin-top:16px"><div class="card-header"><span class="card-title">📊 Pipeline de Cotizaciones</span></div><div style="padding:14px 16px">${barsHtml}<div style="display:flex;gap:18px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div><div style="font-size:9px;color:var(--text3)">Conv. Env.→Apr.</div><div style="font-size:22px;font-family:'Bebas Neue';color:var(--accent3)">${conv}%</div></div><div><div style="font-size:9px;color:var(--text3)">Revenue en pipeline</div><div style="font-size:15px;font-weight:700;color:var(--accent);margin-top:3px">${formatCLP(revPipe)}</div></div><div><div style="font-size:9px;color:var(--text3)">Total cotizaciones</div><div style="font-size:22px;font-family:'Bebas Neue';color:var(--text2)">${total}</div></div></div></div></div>`;
+  el.innerHTML=`<div class="card" style="margin-top:16px"><div class="card-header"><span class="card-title">📊 Pipeline de Cotizaciones</span></div><div style="padding:14px 16px">${barsHtml}<div style="display:flex;gap:18px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap"><div><div style="font-size:9px;color:var(--text3)">Conv. Env.→Apr.</div><div style="font-size:22px;font-family:'Bebas Neue';color:var(--accent3)">${conv}%</div></div><div><div style="font-size:9px;color:var(--text3)">🎫 Ticket prom. (aprob.)</div><div style="font-size:15px;font-weight:700;color:var(--accent3);margin-top:3px">${ticketProm>0?formatCLP(ticketProm):'—'}</div></div><div><div style="font-size:9px;color:var(--text3)">⏱️ Cierre promedio</div><div style="font-size:15px;font-weight:700;color:var(--accent2);margin-top:3px">${tiempoCierre!==null?tiempoCierre+' día'+(tiempoCierre!==1?'s':''):'—'}</div></div><div><div style="font-size:9px;color:var(--text3)">Revenue en pipeline</div><div style="font-size:15px;font-weight:700;color:var(--accent);margin-top:3px">${formatCLP(revPipe)}</div></div><div><div style="font-size:9px;color:var(--text3)">Total cotizaciones</div><div style="font-size:22px;font-family:'Bebas Neue';color:var(--text2)">${total}</div></div></div></div></div>`;
 }
 
 // ── ANALYTICS DE PROVEEDORES ──────────────────────────────────────────
