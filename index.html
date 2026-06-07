@@ -1182,6 +1182,15 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           </div>
           <div id="umProxyStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">🖨 Túnel Impresoras <span style="font-size:9px;color:var(--text3);font-weight:400">(opcional)</span></div>
+          <input type="text" id="umPrinterTunnel" placeholder="https://printers.thelab.solutions" autocomplete="off" style="font-size:9px">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="savePrinterTunnel()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearPrinterTunnel()">Limpiar</button>
+          </div>
+          <div id="umPrinterTunnelStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
+        </div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-item danger" onclick="AUTH.logout();closeUserMenu()">⏻ Cerrar sesión</div>
       </div>
@@ -4079,6 +4088,8 @@ function openUserMenu(){
   const pu=document.getElementById('umProxyUrl');if(pu){pu.value=localStorage.getItem('proxy_url')||'';}
   const pk=document.getElementById('umProxyKey');if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const ps=document.getElementById('umProxyStatus');if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo — token Airtable vive en el Worker':'Sin proxy — token guardado localmente';}
+  const pt=document.getElementById('umPrinterTunnel');if(pt){pt.value=localStorage.getItem('printer_tunnel')||'';}
+  const pts=document.getElementById('umPrinterTunnelStatus');if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=v?`✓ Túnel personalizado: ${v}`:'Default: https://printers.thelab.solutions';}
   setTimeout(()=>document.addEventListener('click',closeUserMenuOutside),10);
 }
 function closeUserMenu(){document.getElementById('userMenu')?.classList.remove('open');document.removeEventListener('click',closeUserMenuOutside);}
@@ -4134,6 +4145,20 @@ function saveUserMenuProxy(){
   if(ps) ps.textContent='✓ Proxy activo — token Airtable vive en el Worker';
   toast('Proxy configurado ✓ — el token Airtable ya no viaja al browser','success');
   loadAllData();
+}
+function savePrinterTunnel(){
+  const inp=document.getElementById('umPrinterTunnel');
+  const val=(inp?.value||'').trim();
+  if(val)localStorage.setItem('printer_tunnel',val);else localStorage.removeItem('printer_tunnel');
+  const pts=document.getElementById('umPrinterTunnelStatus');
+  if(pts)pts.textContent=val?`✓ Túnel personalizado: ${val}`:'Default: https://printers.thelab.solutions';
+  toast(val?'Túnel de impresoras guardado ✓':'Usando túnel por defecto','success');
+}
+function clearPrinterTunnel(){
+  localStorage.removeItem('printer_tunnel');
+  const inp=document.getElementById('umPrinterTunnel');if(inp) inp.value='';
+  const pts=document.getElementById('umPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
+  toast('Túnel restaurado al default','info');
 }
 function clearUserMenuProxy(){
   localStorage.removeItem('proxy_url');localStorage.removeItem('proxy_key');
@@ -7923,8 +7948,8 @@ async function initMaquinas(){
 
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
 const MOONRAKER_PORT=7125;
-const TUNNEL_BASE='https://printers.thelab.solutions';
-function printerUrl(ip,path){return`${TUNNEL_BASE}/${ip}${path}`;}
+function getPrinterTunnel(){return(localStorage.getItem('printer_tunnel')||'https://printers.thelab.solutions').replace(/\/$/,'');}
+function printerUrl(ip,path){return`${getPrinterTunnel()}/${ip}${path}`;}
 const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={};
@@ -7938,7 +7963,9 @@ const MONITOR_GRUPOS=[
   {key:'Giga',label:'Giga',color:'#ff4444'},
 ];
 
-function getPrinterIp(m){return m.ip||localStorage.getItem('printer_ip_'+m.id)||null;}
+function getPrinterIp(m){return localStorage.getItem('printer_ip_'+m.id)||m.ip||null;}
+function getPrinterApiKey(id){return localStorage.getItem('printer_key_'+id)||'';}
+function getPrinterAuthHeaders(id){const k=getPrinterApiKey(id);return k?{'X-Api-Key':k}:{};}
 
 function savePrinterIp(id){
   const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
@@ -7947,10 +7974,40 @@ function savePrinterIp(id){
   toast(`IP guardada · ${m?.nombre} #${m?.numG}`,'success');pollPrinters();
 }
 
+function savePrinterApiKey(id){
+  const inp=document.getElementById('ipkey_'+id);if(!inp)return;
+  const val=inp.value.trim();
+  if(val)localStorage.setItem('printer_key_'+id,val);else localStorage.removeItem('printer_key_'+id);
+  const m=MAQUINAS.find(x=>x.id===id);
+  toast(`API Key ${val?'guardada':'eliminada'} · ${m?.nombre} #${m?.numG}`,'success');
+}
+
+function openPrinterConnModal(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  document.getElementById('printerConnTitle').textContent=`${m.nombre} #${m.numG}`;
+  document.getElementById('printerConnId').value=id;
+  document.getElementById('printerConnIp').value=getPrinterIp(m)||'';
+  document.getElementById('printerConnKey').value=getPrinterApiKey(id);
+  document.getElementById('printerConnModal').style.display='flex';
+}
+function closePrinterConnModal(){document.getElementById('printerConnModal').style.display='none';}
+function savePrinterConn(){
+  const id=document.getElementById('printerConnId').value;
+  const ip=(document.getElementById('printerConnIp').value||'').trim();
+  const key=(document.getElementById('printerConnKey').value||'').trim();
+  if(ip)localStorage.setItem('printer_ip_'+id,ip);else localStorage.removeItem('printer_ip_'+id);
+  if(key)localStorage.setItem('printer_key_'+id,key);else localStorage.removeItem('printer_key_'+id);
+  closePrinterConnModal();
+  const m=MAQUINAS.find(x=>x.id===id);
+  toast(`Conexión guardada · ${m?.nombre} #${m?.numG}`,'success');
+  pollPrinters();
+}
+
 async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
+  const headers=getPrinterAuthHeaders(m.id);
   try{
-    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard`),{signal:AbortSignal.timeout(5000)});
+    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard`),{signal:AbortSignal.timeout(5000),headers});
     if(!r.ok)return{state:'offline'};
     const d=await r.json();const s=d.result?.status||{};
     const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{};
@@ -7965,7 +8022,7 @@ async function fetchPrinterStatus(m){
       if(_thumbCache[ck]!==undefined){thumbUrl=_thumbCache[ck];}
       else{
         try{
-          const tr=await fetch(printerUrl(ip,`/server/files/thumbnails?filename=${encodeURIComponent(filename+'.gcode')}`),{signal:AbortSignal.timeout(3000)});
+          const tr=await fetch(printerUrl(ip,`/server/files/thumbnails?filename=${encodeURIComponent(filename+'.gcode')}`),{signal:AbortSignal.timeout(3000),headers});
           if(tr.ok){const td=await tr.json();const best=(td.result||[]).sort((a,b)=>b.size-a.size)[0];thumbUrl=best?printerUrl(ip,`/server/files/gcodes/.thumbnails/${best.relative_path}`):null;}
         }catch(e){}
         _thumbCache[ck]=thumbUrl;
@@ -8048,9 +8105,13 @@ function renderMonitorGrid(){
 
     let body='';
     if(s.state==='noip'){
-      body=`<div style="margin-top:10px"><div style="font-size:10px;color:var(--text3);margin-bottom:5px">Ingresa la IP:</div>
-        <div style="display:flex;gap:6px"><input id="ipin_${m.id}" type="text" placeholder="192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
-        <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button></div></div>`;
+      body=`<div style="margin-top:10px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:600">Conexión OrcaSlicer / Moonraker</div>
+        <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ipin_${m.id}" type="text" placeholder="IP  192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
+        <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button></div>
+        <div style="display:flex;gap:6px"><input id="ipkey_${m.id}" type="password" placeholder="API Key (opcional)" value="${getPrinterApiKey(m.id)}" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
+        <button onclick="savePrinterApiKey('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;flex-shrink:0;color:var(--text3)">Key</button></div>
+      </div>`;
     } else if(s.state==='offline'){
       body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:11px;padding:8px 0">Sin respuesta<br><span style="font-family:monospace;font-size:10px">${ip}</span><br><span style="font-size:10px">Verifica que esté encendida</span></div>`;
     } else {
@@ -8090,8 +8151,9 @@ function renderMonitorGrid(){
           <img src="${localStorage.getItem('printer_cam_'+m.id)}" style="width:100%;display:block;max-height:160px;object-fit:cover" onerror="this.parentElement.innerHTML='<div style=\\'padding:12px;text-align:center;color:#666;font-size:10px\\'>Sin señal · verifica la URL</div>'">
         </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-          <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}</span>
+          <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">🔑</span>`:''}</span>
           <div style="display:flex;gap:4px">
+            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
             <button onclick="openWebcamModal('${m.id}')" style="background:${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${localStorage.getItem('printer_cam_'+m.id)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
             <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
           </div>
@@ -8123,8 +8185,9 @@ async function printerControl(id,action){
   const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return;}
   if(action==='cancel'&&!confirm(`¿Cancelar impresión en ${m.nombre} #${m.numG}?`))return;
   toast({pause:'⏸ Pausando',resume:'▶ Reanudando',cancel:'■ Cancelando'}[action]+` ${m.nombre} #${m.numG}`,'info');
+  const headers=getPrinterAuthHeaders(id);
   try{
-    const r=await fetch(printerUrl(ip,`/printer/print/${action}`),{method:'POST',signal:AbortSignal.timeout(6000)});
+    const r=await fetch(printerUrl(ip,`/printer/print/${action}`),{method:'POST',signal:AbortSignal.timeout(6000),headers});
     if(r.ok)setTimeout(pollPrinters,1500);else toast('Error: '+r.status,'error');
   }catch(e){toast('Sin conexión con la impresora','error');}
 }
@@ -10227,6 +10290,31 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn btn-primary btn-sm" onclick="saveAlertSettings()" style="flex:1">Guardar</button>
       <button class="btn btn-ghost btn-sm" onclick="closeAlertSettings()" style="flex:1">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINTER CONNECTION MODAL -->
+<div id="printerConnModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closePrinterConnModal()"></div>
+  <div class="modal-card" style="max-width:460px;width:95vw">
+    <div class="modal-title">⚙ Conexión · <span id="printerConnTitle"></span></div>
+    <input type="hidden" id="printerConnId">
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:14px">
+      <div>
+        <div class="field-label" style="margin-bottom:6px">IP de la impresora</div>
+        <input id="printerConnIp" type="text" placeholder="192.168.100.xxx" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">IP local de la impresora en tu red. El dashboard se conecta vía Moonraker (puerto 7125).</div>
+      </div>
+      <div>
+        <div class="field-label" style="margin-bottom:6px">API Key <span style="font-weight:400;color:var(--text3)">(opcional)</span></div>
+        <input id="printerConnKey" type="password" placeholder="Clave de autorización Moonraker" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">En OrcaSlicer: Preparar → Impresoras → ⚙ → IP/API Key. En Fluidd/Mainsail: Configuración → API Keys. Se envía como encabezado <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">X-Api-Key</code>.</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-primary btn-sm" onclick="savePrinterConn()" style="flex:1">Guardar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closePrinterConnModal()" style="flex:1">Cancelar</button>
     </div>
   </div>
 </div>
