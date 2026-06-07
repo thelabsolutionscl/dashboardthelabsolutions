@@ -1164,6 +1164,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="tab-btn" data-tab="web" onclick="switchTab('web')">🌐 Web</button>
     <button class="tab-btn" data-tab="finanzas" onclick="switchTab('finanzas')">💰 Finanzas</button>
     <button class="tab-btn" data-tab="visual" onclick="switchTab('visual')">🎨 Visual AI</button>
+    <button class="tab-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')">💵 Remuneraciones</button>
   </nav>
   <div id="nuevoDropdown" style="position:relative;display:inline-flex;align-items:center;flex-shrink:0">
     <button class="tab-btn" id="nuevoDropBtn" onclick="toggleNuevoMenu(event)" style="display:flex;align-items:center;gap:4px;background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);font-weight:700">
@@ -1276,6 +1277,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="web" onclick="switchTabMobile('web')"><span class="mobile-tab-icon">🌐</span>Web</button>
     <button class="mobile-tab-btn" data-tab="finanzas" onclick="switchTabMobile('finanzas')"><span class="mobile-tab-icon">💰</span>Finanzas</button>
     <button class="mobile-tab-btn" data-tab="visual" onclick="switchTabMobile('visual')"><span class="mobile-tab-icon">🎨</span>Visual AI</button>
+    <button class="mobile-tab-btn" data-tab="remuneraciones" onclick="switchTabMobile('remuneraciones')"><span class="mobile-tab-icon">💵</span>Remuneraciones</button>
   </nav>
   <div class="mobile-nav-footer">
     <div id="mobileUserSection" style="display:flex;align-items:center;gap:12px;padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid var(--border2)">
@@ -4800,6 +4802,7 @@ function switchTab(name){
   document.querySelector(`.mobile-tab-btn[data-tab="${name}"]`)?.classList.add('active');
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
+  if(name==='remuneraciones') renderRemuneraciones();
   if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsData();}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
@@ -7116,11 +7119,145 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
   </div>
 </div>
 
+<!-- ══════════════════ REMUNERACIONES (solo rol comercial) ═══ -->
+<div class="tab-panel" id="tab-remuneraciones">
+  <div class="section-header">
+    <div class="section-title">💵 Remuneraciones</div>
+    <div class="section-subtitle">Ventas completadas y comisiones acumuladas</div>
+  </div>
+  <!-- Filtro de período -->
+  <div id="remPeriodoBar" style="display:flex;gap:7px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+    <button class="btn btn-ghost btn-sm active-filter" onclick="setRemPeriodo('todo',this)">Todo el tiempo</button>
+    <button class="btn btn-ghost btn-sm" onclick="setRemPeriodo('mes',this)">Este mes</button>
+    <button class="btn btn-ghost btn-sm" onclick="setRemPeriodo('anterior',this)">Mes anterior</button>
+    <button class="btn btn-ghost btn-sm" onclick="setRemPeriodo('semana',this)">Esta semana</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportRemCSV()" style="margin-left:auto">⬇ Exportar CSV</button>
+  </div>
+  <!-- KPIs -->
+  <div id="remKpis" class="kpi-grid" style="margin-bottom:16px"></div>
+  <!-- Tabla detalle -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Detalle de Ventas Completadas</span>
+      <span class="card-badge" id="remBadge">—</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>N° Pedido</th>
+          <th>Cliente</th>
+          <th>F. Despacho</th>
+          <th>Monto Bruto</th>
+          <th>Monto Neto</th>
+          <th style="color:var(--accent)">Comisión 3.5%</th>
+        </tr></thead>
+        <tbody id="remTableBody"><tr><td colspan="6"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 </body></html>`;
   const blob=new Blob([html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const win=window.open(url,'_blank');if(!win) toast('Permite ventanas emergentes para descargar el PDF','error');setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
 // ── PEDIDOS ───────────────────────────────────────────────────
+// ── REMUNERACIONES (rol comercial) ───────────────────────────
+let _remPeriodo='todo';
+function setRemPeriodo(p,btn){
+  _remPeriodo=p;
+  document.querySelectorAll('#remPeriodoBar .btn').forEach(b=>b.classList.remove('active-filter'));
+  if(btn) btn.classList.add('active-filter');
+  renderRemuneraciones();
+}
+function _remFiltrarPorPeriodo(pedidos){
+  const now=new Date();now.setHours(0,0,0,0);
+  if(_remPeriodo==='todo') return pedidos;
+  if(_remPeriodo==='semana'){
+    const ws=new Date(now);ws.setDate(now.getDate()-now.getDay());
+    return pedidos.filter(p=>{const d=p.fields['Fecha entrega'];return d&&new Date(d+'T00:00:00')>=ws;});
+  }
+  if(_remPeriodo==='mes'){
+    const ms=new Date(now.getFullYear(),now.getMonth(),1);
+    return pedidos.filter(p=>{const d=p.fields['Fecha entrega'];return d&&new Date(d+'T00:00:00')>=ms;});
+  }
+  if(_remPeriodo==='anterior'){
+    const ms=new Date(now.getFullYear(),now.getMonth()-1,1);
+    const me=new Date(now.getFullYear(),now.getMonth(),1);
+    return pedidos.filter(p=>{const d=p.fields['Fecha entrega'];if(!d) return false;const fd=new Date(d+'T00:00:00');return fd>=ms&&fd<me;});
+  }
+  return pedidos;
+}
+function renderRemuneraciones(){
+  const tbody=document.getElementById('remTableBody');
+  const kpisEl=document.getElementById('remKpis');
+  const badge=document.getElementById('remBadge');
+  if(!tbody||!kpisEl) return;
+  const TASA=0.035;
+  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado');
+  const filtrados=_remFiltrarPorPeriodo(despachados);
+  const totalBruto=filtrados.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0),0);
+  const totalNeto=filtrados.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const totalComision=Math.round(totalNeto*TASA);
+  if(badge) badge.textContent=`${filtrados.length} pedido${filtrados.length!==1?'s':''}`;
+  // KPI cards
+  kpisEl.innerHTML=`
+    <div class="kpi-card green" style="cursor:default">
+      <div class="kpi-label">Pedidos Completados</div>
+      <div class="kpi-value">${filtrados.length}</div>
+      <div class="kpi-sub">total: ${despachados.length}</div>
+    </div>
+    <div class="kpi-card yellow" style="cursor:default">
+      <div class="kpi-label">Ventas Neto</div>
+      <div class="kpi-value" style="font-size:18px">${formatCLP(totalNeto)}</div>
+      <div class="kpi-sub">bruto: ${formatCLP(totalBruto)}</div>
+    </div>
+    <div class="kpi-card" style="cursor:default;border-color:rgba(0,212,204,0.4);background:rgba(0,212,204,0.06)">
+      <div class="kpi-label" style="color:var(--accent)">Comisión (3.5%)</div>
+      <div class="kpi-value" style="color:var(--accent);font-size:18px">${formatCLP(totalComision)}</div>
+      <div class="kpi-sub">sobre monto neto</div>
+    </div>`;
+  // Tabla
+  if(!filtrados.length){
+    tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">💵</div>Sin ventas completadas en este período</div></td></tr>';
+    return;
+  }
+  const sorted=[...filtrados].sort((a,b)=>{const da=a.fields['Fecha entrega']||'';const db=b.fields['Fecha entrega']||'';return db.localeCompare(da);});
+  tbody.innerHTML=sorted.map(p=>{
+    const f=p.fields;
+    const bruto=f['Monto total (CLP)']||0;
+    const neto=Math.round(bruto/1.19);
+    const comision=Math.round(neto*TASA);
+    return`<tr>
+      <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td>
+      <td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;white-space:nowrap">${escapeHtml(f['Fecha entrega']||'—')}</td>
+      <td class="clp">${formatCLP(bruto)}</td>
+      <td class="clp">${formatCLP(neto)}</td>
+      <td class="clp" style="color:var(--accent);font-weight:700">${formatCLP(comision)}</td>
+    </tr>`;
+  }).join('')+`<tr style="background:var(--surface2);font-weight:700;border-top:2px solid var(--border2)">
+    <td colspan="3" style="text-align:right;font-size:11px;color:var(--text2);padding:8px 12px">TOTAL PERÍODO</td>
+    <td class="clp">${formatCLP(totalBruto)}</td>
+    <td class="clp">${formatCLP(totalNeto)}</td>
+    <td class="clp" style="color:var(--accent)">${formatCLP(totalComision)}</td>
+  </tr>`;
+}
+function exportRemCSV(){
+  const TASA=0.035;
+  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado');
+  const filtrados=_remFiltrarPorPeriodo(despachados);
+  const rows=[['N° Pedido','Cliente','F. Despacho','Monto Bruto','Monto Neto','Comisión 3.5%']];
+  filtrados.forEach(p=>{
+    const f=p.fields;
+    const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
+    rows.push([f['N° Pedido']||'',resolveClienteName(f['Cliente']),f['Fecha entrega']||'',f['Monto total (CLP)']||0,neto,Math.round(neto*TASA)]);
+  });
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='remuneraciones.csv';a.click();
+}
+
 function renderComisiones(){
   const el=document.getElementById('comisionesContainer');
   const wrap=document.getElementById('comisionesVendedor');
@@ -9852,7 +9989,7 @@ const RBAC={
   tabs:{
     admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
     gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','remuneraciones','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
     produccion: ['overview','pedidos','maquinas','equipo','visual'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte'],
     marketing:  ['overview','web','agentes','reporte'],
