@@ -9793,6 +9793,9 @@ const DEMO_DATA={
     {id:'recP002',createdTime:'2026-05-14T10:00:00.000Z',fields:{'N° Pedido':'PED-048','Cliente':['recC004'],'Estado pedido':'Confirmado','Monto total (CLP)':780000,'Fecha entrega':'2026-05-30','Equipo responsable':'Gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':false,'QA':'Pendiente','Proveedor':'LED Masters Chile'}},
     {id:'recP003',createdTime:'2026-05-16T10:00:00.000Z',fields:{'N° Pedido':'PED-049','Cliente':['recC005'],'Estado pedido':'Listo para despacho','Monto total (CLP)':290000,'Fecha entrega':'2026-05-24','Equipo responsable':'Nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'Packaging Total SpA'}},
     {id:'recP004',createdTime:'2026-05-05T10:00:00.000Z',fields:{'N° Pedido':'PED-046','Cliente':['recC002'],'Estado pedido':'Despachado','Monto total (CLP)':1100000,'Fecha entrega':'2026-05-20','Equipo responsable':'Gustavo','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
+    {id:'recP005',createdTime:'2026-04-28T10:00:00.000Z',fields:{'N° Pedido':'PED-044','Cliente':['recC003'],'Estado pedido':'Despachado','Monto total (CLP)':650000,'Fecha entrega':'2026-05-05','Equipo responsable':'Nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
+    {id:'recP006',createdTime:'2026-04-15T10:00:00.000Z',fields:{'N° Pedido':'PED-042','Cliente':['recC006'],'Estado pedido':'Despachado','Monto total (CLP)':380000,'Fecha entrega':'2026-04-22','Equipo responsable':'Gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'LED Masters Chile'}},
+    {id:'recP007',createdTime:'2026-04-05T10:00:00.000Z',fields:{'N° Pedido':'PED-040','Cliente':['recC001'],'Estado pedido':'Despachado','Monto total (CLP)':920000,'Fecha entrega':'2026-04-12','Equipo responsable':'Nicanor','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
   ]},
   Reportes:{records:[
     {id:'recR001',createdTime:'2026-06-02T10:00:00.000Z',fields:{'Semana':'Sem. 23 / 2026','Revenue semana (CLP)':1820000,'Pedidos activos':4,'Pedidos despachados':2,'Margen promedio semana (%)':38.5,'Tasa conversión (%)':62,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana sólida. Revenue $1.82M (+12% vs sem. anterior). 2 pedidos despachados a tiempo (Tech Solutions y Retail Sur). Pipeline activo: 4 pedidos en producción. \n\nDestacado: K2 Plus completó lote de 18 piezas aeronáuticas para pedido PED-047 con QA aprobado. Margen de 38.5% impulsado por reducción de filamento desperdiciado (nuevo perfil de slicing).\n\nAtención: cotización 260519 ($1.2M) con Universidad de Chile vence en 2 días — seguimiento urgente. Florencia coordina reunión de cierre.'}},
@@ -9841,7 +9844,19 @@ function enableDemoMode(){
     {id:'recEQ14',fields:{persona_id:'florencia',fecha:_rd(1), tipo:'vacaciones',desc:'Vacaciones',hora_inicio:'',hora_fin:''}},
     {id:'recEQ15',fields:{persona_id:'florencia',fecha:_rd(2), tipo:'vacaciones',desc:'Vacaciones',hora_inicio:'',hora_fin:''}},
   ]};
-  // Interceptar fetch — devolver datos demo para Airtable, bloquear escrituras
+  // Datos WordPress ficticios para modo demo
+  const DEMO_WP_PAGES=[
+    {id:1,slug:'home',title:{rendered:'Inicio'},link:'https://thelab.solutions/',_type:'page',yoast_head_json:{title:'The Lab Solutions — Impresión 3D y Diseño en Santiago',description:'Somos expertos en impresión 3D, trofeos personalizados, neones y papelería corporativa en Santiago de Chile. Cotiza online, entrega rápida.'},meta:{}},
+    {id:2,slug:'impresion-3d',title:{rendered:'Impresión 3D'},link:'https://thelab.solutions/impresion-3d/',_type:'page',yoast_head_json:{title:'Impresión 3D en Santiago | The Lab Solutions',description:'Servicio profesional de impresión 3D en Santiago. FDM, resina, SLA. Piezas industriales, prototipos y arte. Entrega en 24–72 horas.'},meta:{}},
+    {id:3,slug:'trofeos-personalizados',title:{rendered:'Trofeos Personalizados'},link:'https://thelab.solutions/trofeos-personalizados/',_type:'page',yoast_head_json:{title:'Trofeos Personalizados Santiago | The Lab Solutions',description:'Diseñamos y fabricamos trofeos únicos para empresas, deportes y eventos. Materiales premium, grabado láser y acabados profesionales.'},meta:{}},
+    {id:4,slug:'neon-led',title:{rendered:'Neones LED'},link:'https://thelab.solutions/neon-led/',_type:'page',yoast_head_json:{title:'Neones LED Personalizados | The Lab Solutions Chile',description:'Neones LED a medida para locales, eventos y decoración. Cualquier forma y color. Instalación incluida en Santiago.'},meta:{}},
+    {id:5,slug:'contacto',title:{rendered:'Contacto'},link:'https://thelab.solutions/contacto/',_type:'page',yoast_head_json:{title:'Contacto | The Lab Solutions',description:'Contáctanos para cotizar tu proyecto. Atendemos por WhatsApp, email y visita a nuestro taller en Santiago de Chile.'},meta:{}},
+  ];
+  const DEMO_WP_POSTS=[
+    {id:101,slug:'guia-impresion-3d-piezas-industriales',title:{rendered:'Guía completa: impresión 3D para piezas industriales en Chile'},link:'https://thelab.solutions/blog/guia-impresion-3d/',_type:'post',yoast_head_json:{title:'Impresión 3D Piezas Industriales Chile | Blog The Lab Solutions',description:'Todo lo que necesitas saber sobre impresión 3D industrial en Chile: materiales, tolerancias, costos y plazos. Actualizado 2026.'},meta:{}},
+    {id:102,slug:'diferencias-pla-petg-abs',title:{rendered:'PLA vs PETG vs ABS: ¿qué material elegir para tu proyecto?'},link:'https://thelab.solutions/blog/pla-petg-abs/',_type:'post',yoast_head_json:{title:'PLA vs PETG vs ABS — Guía 2026 | The Lab Solutions',description:'Comparativa completa de los filamentos más usados en impresión 3D. Temperatura, resistencia, costo y aplicaciones recomendadas.'},meta:{}},
+  ];
+  // Interceptar fetch — devolver datos demo para Airtable y WordPress, bloquear escrituras
   const _fetch=window.fetch;
   window.fetch=async(url,opts={})=>{
     const u=typeof url==='string'?url:url.toString();
@@ -9860,6 +9875,16 @@ function enableDemoMode(){
       else if(dec.includes('Equipo_Eventos')) data=DEMO_DATA.Equipo_Eventos;
       else if(dec.includes('Clientes')) data=DEMO_DATA.Clientes;
       return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+    }
+    if(u.includes('wp-json')){
+      const method=(opts.method||'GET').toUpperCase();
+      if(method!=='GET'){
+        return new Response(JSON.stringify({id:Date.now(),slug:'demo-guardado',title:{rendered:'Demo guardado'},link:'#'}),{status:200,headers:{'Content-Type':'application/json'}});
+      }
+      if(u.includes('/users/me')) return new Response(JSON.stringify({name:'Demo User',slug:'demo'}),{status:200,headers:{'Content-Type':'application/json'}});
+      if(u.includes('/pages')) return new Response(JSON.stringify(DEMO_WP_PAGES),{status:200,headers:{'Content-Type':'application/json'}});
+      if(u.includes('/posts')) return new Response(JSON.stringify(DEMO_WP_POSTS),{status:200,headers:{'Content-Type':'application/json'}});
+      return new Response(JSON.stringify([]),{status:200,headers:{'Content-Type':'application/json'}});
     }
     return _fetch(url,opts);
   };
@@ -9937,7 +9962,7 @@ const RBAC={
     produccion: ['overview','pedidos','maquinas','equipo','visual'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte'],
     marketing:  ['overview','web','agentes','reporte'],
-    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte'],
+    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','remuneraciones'],
   },
   // Items del menú "Nuevo" visibles por rol
   nuevos:{
@@ -9947,11 +9972,11 @@ const RBAC={
     produccion: [],
     finanzas:   ['nueva-venta','libro-diario'],
     marketing:  [],
-    demo:       [],
+    demo:       ['nuevo-lead','nuevo-proveedor','nueva-cot','nueva-venta','libro-diario'],
   },
   // Permisos de operación
-  canWrite:  {admin:true,  gerencia:true,  comercial:true,  produccion:true,  finanzas:true,  marketing:false, demo:false},
-  canDelete: {admin:true,  gerencia:true,  comercial:false, produccion:false, finanzas:false, marketing:false, demo:false},
+  canWrite:  {admin:true,  gerencia:true,  comercial:true,  produccion:true,  finanzas:true,  marketing:false, demo:true},
+  canDelete: {admin:true,  gerencia:true,  comercial:false, produccion:false, finanzas:false, marketing:false, demo:true},
   canConfig: {admin:true,  gerencia:false, comercial:false, produccion:false, finanzas:false, marketing:false, demo:false},
 
   canWriteRole(role){return !!(this.canWrite[role]);},
