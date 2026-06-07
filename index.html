@@ -1501,8 +1501,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- PEDIDOS -->
 <div class="tab-panel" id="tab-pedidos">
   <div class="section-header"><div class="section-title">Pedidos en Producción</div></div>
-  <!-- Sección exclusiva rol comercial -->
-  <div id="comisionesVendedor" style="display:none;margin-bottom:16px"><div id="comisionesContainer"></div></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)">⚠ Atrasados</button>
@@ -4676,7 +4674,7 @@ async function loadAllData(){
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
     if(isFirst) slProgress(50,'Cargando cotizaciones y pedidos...');
     if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];renderCotizaciones();}
-    if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();}
+    if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();if(document.getElementById('tab-remuneraciones')?.classList.contains('active'))renderRemuneraciones();}
     if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
     if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
     if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();fillCatSelects();}
@@ -7258,61 +7256,7 @@ function exportRemCSV(){
   a.download='remuneraciones.csv';a.click();
 }
 
-function renderComisiones(){
-  const el=document.getElementById('comisionesContainer');
-  const wrap=document.getElementById('comisionesVendedor');
-  if(!el||!wrap) return;
-  const user=AUTH.getUser();
-  if(!user||user.role!=='comercial'){wrap.style.display='none';return;}
-  wrap.style.display='block';
-  const TASA=0.035;
-  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado');
-  const totalNeto=despachados.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-  const totalComision=Math.round(totalNeto*TASA);
-  const rows=despachados.map(p=>{
-    const f=p.fields;
-    const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
-    const comision=Math.round(neto*TASA);
-    return`<tr>
-      <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td>
-      <td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${escapeHtml(f['Fecha entrega']||'—')}</td>
-      <td class="clp">${formatCLP(neto)}</td>
-      <td class="clp" style="color:var(--accent);font-weight:700">${formatCLP(comision)}</td>
-    </tr>`;
-  }).join('');
-  el.innerHTML=`<div class="card">
-    <div class="card-header">
-      <span class="card-title">💰 Mis Ventas Completadas &amp; Comisiones</span>
-      <span class="card-badge">${despachados.length} despachado${despachados.length!==1?'s':''}</span>
-    </div>
-    <div style="display:flex;gap:12px;padding:12px 16px 8px;flex-wrap:wrap">
-      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 20px;flex:1;min-width:150px">
-        <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Total Ventas Neto</div>
-        <div style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace">${formatCLP(totalNeto)}</div>
-      </div>
-      <div style="background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.3);border-radius:10px;padding:12px 20px;flex:1;min-width:150px">
-        <div style="font-size:10px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Comisión Total (3.5%)</div>
-        <div style="font-size:20px;font-weight:700;color:var(--accent);font-family:'JetBrains Mono',monospace">${formatCLP(totalComision)}</div>
-      </div>
-    </div>
-    ${despachados.length?`<div class="table-wrap" style="margin-top:4px">
-      <table><thead><tr>
-        <th>N° Pedido</th><th>Cliente</th><th>F. Despacho</th><th>Venta Neta</th><th>Comisión 3.5%</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr style="background:var(--surface2)">
-        <td colspan="3" style="text-align:right;font-weight:700;font-size:11px;color:var(--text2);padding:8px 12px">TOTAL</td>
-        <td class="clp" style="font-weight:700">${formatCLP(totalNeto)}</td>
-        <td class="clp" style="font-weight:700;color:var(--accent)">${formatCLP(totalComision)}</td>
-      </tr></tfoot>
-      </table></div>`
-    :'<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Aún no hay pedidos despachados</div>'}
-  </div>`;
-}
-
 function renderPedidos(filter){
-  renderComisiones();
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
   let data=filter==='all'?state.pedidos:filter==='atrasados'?state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
@@ -10059,10 +10003,6 @@ function applyRBAC(role){
   const mPlusBtn = document.getElementById('mobilePlusBtn');
   if(mPlusBtn) mPlusBtn.style.display = allowedNuevos.length ? '' : 'none';
 
-  // Sección comisiones vendedor
-  const comWrap = document.getElementById('comisionesVendedor');
-  if(comWrap) comWrap.style.display = role==='comercial' ? 'block' : 'none';
-
   // Badge de rol en el chip de usuario
   const userChip = document.getElementById('userChip');
   if(userChip){
@@ -10103,7 +10043,13 @@ async function handleLogin(e){
 function initDashboard(){
   const user=AUTH.getUser();
   if(user) applyRBAC(user.role);
-  try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
+  // Restaurar tab previo solo si el rol actual tiene acceso (evita toast de error tras cambio de usuario)
+  try{
+    const s=sessionStorage.getItem('thelab_active_tab');
+    const allowed=user?[...(RBAC.tabs[user.role]||RBAC.tabs.demo),...(RBAC.nuevos[user.role]||[])]:null;
+    if(s&&(!allowed||allowed.includes(s))) switchTab(s);
+    else if(s) sessionStorage.removeItem('thelab_active_tab');
+  }catch(e){}
   if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));
   initDates();
   fillCatSelects();
@@ -10136,7 +10082,8 @@ function initDashboard(){
   document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
     if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}
-    const tabs=['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte'];
+    const _u=AUTH.getUser();
+    const tabs=(_u&&RBAC.tabs[_u.role]?RBAC.tabs[_u.role]:['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte']).filter(t=>!['nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'].includes(t));
     const n=parseInt(e.key);if(n>=1&&n<=tabs.length&&!e.ctrlKey&&!e.metaKey&&!e.altKey) switchTab(tabs[n-1]);
   });
 }
