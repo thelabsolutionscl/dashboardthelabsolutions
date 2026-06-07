@@ -1168,12 +1168,12 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       ➕ Nuevo <span id="nuevoDropArrow" style="font-size:9px;margin-left:2px;transition:transform .2s">▾</span>
     </button>
     <div id="nuevoDropPanel" style="display:none;position:fixed;min-width:210px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 10px 36px rgba(0,0,0,0.5);z-index:99999;overflow:hidden;padding:4px 0">
-      <button onclick="closeNuevoMenu();switchTab('nuevo-lead')" class="nuevo-item">👤 Nuevo Lead / Cliente</button>
-      <button onclick="closeNuevoMenu();switchTab('nuevo-proveedor')" class="nuevo-item">🏭 Nuevo Proveedor</button>
-      <button onclick="closeNuevoMenu();switchTab('nueva-cot')" class="nuevo-item">📋 Nueva Cotización</button>
-      <div style="height:1px;background:var(--border);margin:3px 0"></div>
-      <button onclick="closeNuevoMenu();irANuevaVenta()" class="nuevo-item">💰 Nueva Venta</button>
-      <button onclick="closeNuevoMenu();irALibroDiario()" class="nuevo-item">📒 Nuevo Registro (Diario)</button>
+      <button data-nuevo="nuevo-lead" onclick="closeNuevoMenu();switchTab('nuevo-lead')" class="nuevo-item">👤 Nuevo Lead / Cliente</button>
+      <button data-nuevo="nuevo-proveedor" onclick="closeNuevoMenu();switchTab('nuevo-proveedor')" class="nuevo-item">🏭 Nuevo Proveedor</button>
+      <button data-nuevo="nueva-cot" onclick="closeNuevoMenu();switchTab('nueva-cot')" class="nuevo-item">📋 Nueva Cotización</button>
+      <div data-nuevo-sep style="height:1px;background:var(--border);margin:3px 0"></div>
+      <button data-nuevo="nueva-venta" onclick="closeNuevoMenu();irANuevaVenta()" class="nuevo-item">💰 Nueva Venta</button>
+      <button data-nuevo="libro-diario" onclick="closeNuevoMenu();irALibroDiario()" class="nuevo-item">📒 Nuevo Registro (Diario)</button>
     </div>
   </div>
   <div class="topbar-right">
@@ -1255,11 +1255,11 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <span id="mobileNuevoChevron" style="font-size:11px;transition:transform .2s">▾</span>
       </button>
       <div id="mobileNuevoBody" style="display:none;background:rgba(0,0,0,0.18)">
-        <button onclick="closeMobileMenu();switchTab('nuevo-lead')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">👤</span>Nuevo Lead / Cliente</button>
-        <button onclick="closeMobileMenu();switchTab('nuevo-proveedor')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">🏭</span>Nuevo Proveedor</button>
-        <button onclick="closeMobileMenu();switchTab('nueva-cot')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📋</span>Nueva Cotización</button>
-        <button onclick="closeMobileMenu();irANuevaVenta()" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">💰</span>Nueva Venta</button>
-        <button onclick="closeMobileMenu();irALibroDiario()" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📒</span>Nuevo Registro (Diario)</button>
+        <button data-nuevo="nuevo-lead" onclick="closeMobileMenu();switchTab('nuevo-lead')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">👤</span>Nuevo Lead / Cliente</button>
+        <button data-nuevo="nuevo-proveedor" onclick="closeMobileMenu();switchTab('nuevo-proveedor')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">🏭</span>Nuevo Proveedor</button>
+        <button data-nuevo="nueva-cot" onclick="closeMobileMenu();switchTab('nueva-cot')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📋</span>Nueva Cotización</button>
+        <button data-nuevo="nueva-venta" onclick="closeMobileMenu();irANuevaVenta()" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">💰</span>Nueva Venta</button>
+        <button data-nuevo="libro-diario" onclick="closeMobileMenu();irALibroDiario()" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon">📒</span>Nuevo Registro (Diario)</button>
       </div>
     </div>
     <button class="mobile-tab-btn active" data-tab="overview" onclick="switchTabMobile('overview')"><span class="mobile-tab-icon">🏠</span>Overview</button>
@@ -1497,6 +1497,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- PEDIDOS -->
 <div class="tab-panel" id="tab-pedidos">
   <div class="section-header"><div class="section-title">Pedidos en Producción</div></div>
+  <!-- Sección exclusiva rol comercial -->
+  <div id="comisionesVendedor" style="display:none;margin-bottom:16px"><div id="comisionesContainer"></div></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)">⚠ Atrasados</button>
@@ -4265,6 +4267,8 @@ async function airtableHttp(url,opts,{retries=2,timeout=20000}={}){
   throw new Error('Error de red: '+(lastErr?.message||'sin conexión'));
 }
 async function airtableWrite(table,method,recordId,fields){
+  const _wu=AUTH.getUser();
+  if(_wu&&!RBAC.canWriteRole(_wu.role)){toast('Tu rol no tiene permiso de escritura','error');throw new Error('RBAC: escritura no permitida para rol '+_wu.role);}
   const cfg=_airtableConfig();
   const url=recordId?`${cfg.base}/${BASE_ID}/${encodeURIComponent(table)}/${recordId}`:`${cfg.base}/${BASE_ID}/${encodeURIComponent(table)}`;
   const r=await airtableHttp(url,{method,headers:{...cfg.headers,'Content-Type':'application/json'},body:JSON.stringify({fields,typecast:true})});
@@ -4290,6 +4294,8 @@ async function testAirtableWrite(){
   if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}
 }
 async function airtableDelete(table,recordId){
+  const _du=AUTH.getUser();
+  if(_du&&!RBAC.canDeleteRole(_du.role)){toast('Tu rol no tiene permiso para eliminar registros','error');throw new Error('RBAC: eliminación no permitida para rol '+_du.role);}
   const cfg=_airtableConfig();
   const r=await airtableHttp(`${cfg.base}/${BASE_ID}/${encodeURIComponent(table)}/${recordId}`,{method:'DELETE',headers:cfg.headers});
   if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${j.error?.message||j.error?.type||'No se pudo eliminar'}`);}
@@ -4779,6 +4785,11 @@ function sanitizeForRestore(fields){
   return out;
 }
 function switchTab(name){
+  const _su=AUTH.getUser();
+  if(_su){
+    const _allowed=[...(RBAC.tabs[_su.role]||RBAC.tabs.demo),...(RBAC.nuevos[_su.role]||[])];
+    if(!_allowed.includes(name)){toast('No tienes acceso a esta sección','error');return;}
+  }
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab-btn,.mobile-tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name)?.classList.add('active');
@@ -7107,7 +7118,61 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
 }
 
 // ── PEDIDOS ───────────────────────────────────────────────────
+function renderComisiones(){
+  const el=document.getElementById('comisionesContainer');
+  const wrap=document.getElementById('comisionesVendedor');
+  if(!el||!wrap) return;
+  const user=AUTH.getUser();
+  if(!user||user.role!=='comercial'){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  const TASA=0.035;
+  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado');
+  const totalNeto=despachados.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const totalComision=Math.round(totalNeto*TASA);
+  const rows=despachados.map(p=>{
+    const f=p.fields;
+    const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
+    const comision=Math.round(neto*TASA);
+    return`<tr>
+      <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td>
+      <td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${escapeHtml(f['Fecha entrega']||'—')}</td>
+      <td class="clp">${formatCLP(neto)}</td>
+      <td class="clp" style="color:var(--accent);font-weight:700">${formatCLP(comision)}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<div class="card">
+    <div class="card-header">
+      <span class="card-title">💰 Mis Ventas Completadas &amp; Comisiones</span>
+      <span class="card-badge">${despachados.length} despachado${despachados.length!==1?'s':''}</span>
+    </div>
+    <div style="display:flex;gap:12px;padding:12px 16px 8px;flex-wrap:wrap">
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 20px;flex:1;min-width:150px">
+        <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Total Ventas Neto</div>
+        <div style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace">${formatCLP(totalNeto)}</div>
+      </div>
+      <div style="background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.3);border-radius:10px;padding:12px 20px;flex:1;min-width:150px">
+        <div style="font-size:10px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Comisión Total (3.5%)</div>
+        <div style="font-size:20px;font-weight:700;color:var(--accent);font-family:'JetBrains Mono',monospace">${formatCLP(totalComision)}</div>
+      </div>
+    </div>
+    ${despachados.length?`<div class="table-wrap" style="margin-top:4px">
+      <table><thead><tr>
+        <th>N° Pedido</th><th>Cliente</th><th>F. Despacho</th><th>Venta Neta</th><th>Comisión 3.5%</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="background:var(--surface2)">
+        <td colspan="3" style="text-align:right;font-weight:700;font-size:11px;color:var(--text2);padding:8px 12px">TOTAL</td>
+        <td class="clp" style="font-weight:700">${formatCLP(totalNeto)}</td>
+        <td class="clp" style="font-weight:700;color:var(--accent)">${formatCLP(totalComision)}</td>
+      </tr></tfoot>
+      </table></div>`
+    :'<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Aún no hay pedidos despachados</div>'}
+  </div>`;
+}
+
 function renderPedidos(filter){
+  renderComisiones();
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
   let data=filter==='all'?state.pedidos:filter==='atrasados'?state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
@@ -9728,9 +9793,13 @@ const AUTH={
 
   // Usuarios fijos — mismos en todos los dispositivos
   USERS:[
-    {username:'nicanor@thelab.solutions', name:'Nicanor Marambio', role:'produccion',  pwd:[80,114,105,109,111,115,50,53,50,53,46]},
-    {username:'gustavo@thelab.solutions',  name:'Gustavo Kaiser',   role:'operaciones', pwd:[80,114,105,109,111,115,50,53,50,53,46]},
-    {username:'demo@thelab.solutions',     name:'Demo',             role:'demo',         pwd:[68,101,109,111,49,50,51]},
+    {username:'nicanor@thelab.solutions',   name:'Nicanor Marambio', role:'admin',      pwd:[80,114,105,109,111,115,50,53,50,53,46]},
+    {username:'gustavo@thelab.solutions',   name:'Gustavo Kaiser',   role:'gerencia',   pwd:[80,114,105,109,111,115,50,53,50,53,46]},
+    {username:'florencia@thelab.solutions',  name:'Florencia',        role:'comercial',  pwd:[70,97,108,115,111,112,105,114,97,116,97,52,50,48]},
+    {username:'tecnico@thelab.solutions',   name:'Técnico Máquinas', role:'produccion', pwd:[84,101,99,110,105,99,111,50,48,50,53,46]},
+    {username:'finanzas@thelab.solutions',  name:'Finanzas',         role:'finanzas',   pwd:[70,105,110,97,110,122,97,115,50,48,50,53,46]},
+    {username:'marketing@thelab.solutions', name:'Marketing',        role:'marketing',  pwd:[77,97,114,107,101,116,105,110,103,50,48,50,53,46]},
+    {username:'demo@thelab.solutions',      name:'Demo',             role:'demo',       pwd:[68,101,109,111,49,50,51]},
   ],
 
   async init(){},
@@ -9774,6 +9843,95 @@ const AUTH={
   logout(){localStorage.removeItem(AUTH.SESSION_KEY);location.reload();}
 };
 
+// ── RBAC — Control de acceso por rol ─────────────────────────
+const RBAC={
+  // Tabs de navegación visibles + tabs auxiliares accesibles por rol
+  tabs:{
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    produccion: ['overview','pedidos','maquinas','equipo','visual'],
+    finanzas:   ['overview','clientes','pedidos','finanzas','reporte'],
+    marketing:  ['overview','web','agentes','reporte'],
+    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte'],
+  },
+  // Items del menú "Nuevo" visibles por rol
+  nuevos:{
+    admin:      ['nuevo-lead','nuevo-proveedor','nueva-cot','nueva-venta','libro-diario'],
+    gerencia:   ['nuevo-lead','nuevo-proveedor','nueva-cot','nueva-venta','libro-diario'],
+    comercial:  ['nuevo-lead','nuevo-proveedor','nueva-cot'],
+    produccion: [],
+    finanzas:   ['nueva-venta','libro-diario'],
+    marketing:  [],
+    demo:       [],
+  },
+  // Permisos de operación
+  canWrite:  {admin:true,  gerencia:true,  comercial:true,  produccion:true,  finanzas:true,  marketing:false, demo:false},
+  canDelete: {admin:true,  gerencia:true,  comercial:false, produccion:false, finanzas:false, marketing:false, demo:false},
+  canConfig: {admin:true,  gerencia:false, comercial:false, produccion:false, finanzas:false, marketing:false, demo:false},
+
+  canWriteRole(role){return !!(this.canWrite[role]);},
+  canDeleteRole(role){return !!(this.canDelete[role]);},
+  canConfigRole(role){return !!(this.canConfig[role]);},
+
+  getUser(){return AUTH.getUser();},
+};
+
+function applyRBAC(role){
+  const allowedTabs   = RBAC.tabs[role]   || RBAC.tabs.demo;
+  const allowedNuevos = RBAC.nuevos[role] || [];
+
+  // Botones de navegación desktop
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>{
+    btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
+  });
+  // Botones de navegación móvil
+  document.querySelectorAll('.mobile-tab-btn[data-tab]').forEach(btn=>{
+    btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
+  });
+
+  // Items del menú "Nuevo"
+  document.querySelectorAll('[data-nuevo]').forEach(btn=>{
+    btn.style.display = allowedNuevos.includes(btn.dataset.nuevo) ? '' : 'none';
+  });
+  // Separador del menú Nuevo (visible solo si hay items de venta visibles)
+  const sep = document.querySelector('[data-nuevo-sep]');
+  if(sep){
+    const hasFinItems = allowedNuevos.some(n=>['nueva-venta','libro-diario'].includes(n));
+    const hasCrmItems = allowedNuevos.some(n=>['nuevo-lead','nuevo-proveedor','nueva-cot'].includes(n));
+    sep.style.display = (hasFinItems && hasCrmItems) ? '' : 'none';
+  }
+  // Ocultar botón "Nuevo" completo si el rol no tiene nada permitido
+  const nuevoDropdown = document.getElementById('nuevoDropdown');
+  if(nuevoDropdown) nuevoDropdown.style.display = allowedNuevos.length ? '' : 'none';
+  // Acordeón Nuevo en móvil
+  const mobileNuevoAccordion = document.querySelector('#mobileNuevoBody')?.closest('div[style*="border-bottom"]');
+  if(mobileNuevoAccordion) mobileNuevoAccordion.style.display = allowedNuevos.length ? '' : 'none';
+
+  // Ocultar sección de configuración de tokens para roles sin permiso
+  if(!RBAC.canConfigRole(role)){
+    document.querySelectorAll('.user-menu-token').forEach(el=>el.style.display='none');
+  }
+
+  // Sección comisiones vendedor
+  const comWrap = document.getElementById('comisionesVendedor');
+  if(comWrap) comWrap.style.display = role==='comercial' ? 'block' : 'none';
+
+  // Badge de rol en el chip de usuario
+  const userChip = document.getElementById('userChip');
+  if(userChip){
+    let badge = document.getElementById('roleBadge');
+    if(!badge){
+      badge = document.createElement('span');
+      badge.id = 'roleBadge';
+      badge.style.cssText = 'font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(0,212,204,0.12);color:var(--accent);letter-spacing:.5px;text-transform:uppercase;flex-shrink:0';
+      const arrow = userChip.querySelector('svg');
+      if(arrow) userChip.insertBefore(badge, arrow); else userChip.appendChild(badge);
+    }
+    badge.textContent = role;
+  }
+}
+
 async function handleLogin(e){
   e.preventDefault();
   const btn=document.getElementById('loginBtn');
@@ -9797,11 +9955,12 @@ async function handleLogin(e){
 }
 
 function initDashboard(){
+  const user=AUTH.getUser();
+  if(user) applyRBAC(user.role);
   try{const s=sessionStorage.getItem('thelab_active_tab');if(s) switchTab(s);}catch(e){}
   if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));
   initDates();
   fillCatSelects();
-  const user=AUTH.getUser();
   if(user&&user.role==='demo'){
     enableDemoMode();
     slProgress(5,'Cargando datos demo...');
