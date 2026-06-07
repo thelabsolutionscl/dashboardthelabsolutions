@@ -11,7 +11,7 @@
 <link rel="icon" type="image/png" href="https://thelab.solutions/wp-content/uploads/2024/05/faviconthelab.png">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root{--black:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;--border:#2a2a2a;--border2:#333;--accent:#00d4cc;--accent2:#ff6b35;--accent3:#00d4aa;--accent4:#a78bfa;--text:#f0f0f0;--text2:#888;--text3:#555;--danger:#ff4444;--warn:#ffaa00;--success:#00d4aa;}
+:root{--black:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;--border:#2a2a2a;--border2:#333;--accent:#00d4cc;--accent2:#ff6b35;--accent3:#00d4aa;--accent4:#a78bfa;--text:#f0f0f0;--text2:#9a9a9a;--text3:#777;--danger:#ff4444;--warn:#ffaa00;--success:#00d4aa;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--black);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,204,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,204,0.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
@@ -64,7 +64,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .kpi-card.red::before{background:var(--danger);}
 .kpi-label{font-size:10px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;font-weight:500;}
 .kpi-value{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:1px;line-height:1;}
-.kpi-sub{font-size:10px;color:var(--text3);margin-top:4px;font-family:'JetBrains Mono',monospace;}
+.kpi-sub{font-size:11px;color:var(--text2);margin-top:4px;font-family:'JetBrains Mono',monospace;}
 .kpi-skeleton{background:var(--surface3);border-radius:4px;height:34px;width:80%;animation:shimmer 1.5s infinite;}
 @keyframes shimmer{0%{opacity:0.4}50%{opacity:1}100%{opacity:0.4}}
 .data-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px;}
@@ -75,13 +75,13 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .card-badge{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);padding:2px 7px;border-radius:4px;}
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;}
-th{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text3);text-align:left;padding:9px 16px;border-bottom:1px solid var(--border);white-space:nowrap;}
+th{font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:var(--text2);text-align:left;padding:9px 16px;border-bottom:1px solid var(--border);white-space:nowrap;}
 td{padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
 tr:last-child td{border-bottom:none;}
 tr:hover td{background:rgba(255,255,255,0.02);}
 @keyframes rowFlash{0%{background:rgba(0,212,204,0.22)}60%{background:rgba(0,212,204,0.1)}100%{background:transparent}}
 .row-flash td{animation:rowFlash 1.6s ease-out;}
-.badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;text-transform:uppercase;white-space:nowrap;}
+.badge{display:inline-block;font-size:10px;font-weight:600;letter-spacing:0.4px;padding:3px 8px;border-radius:5px;text-transform:uppercase;white-space:nowrap;}
 .badge-green{background:rgba(0,212,170,0.15);color:var(--accent3);border:1px solid rgba(0,212,170,0.3);}
 .badge-yellow{background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);}
 .badge-orange{background:rgba(255,107,53,0.15);color:var(--accent2);border:1px solid rgba(255,107,53,0.3);}
@@ -1180,6 +1180,16 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           </div>
           <div id="umDriveStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">🔒 Proxy Worker <span style="font-size:9px;color:var(--text3);font-weight:400">(opcional)</span></div>
+          <input type="text" id="umProxyUrl" placeholder="https://airtable-proxy.xxx.workers.dev" autocomplete="off" style="font-size:9px">
+          <input type="password" id="umProxyKey" placeholder="clave-secreta" autocomplete="off" style="margin-top:4px">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuProxy()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuProxy()">Limpiar</button>
+          </div>
+          <div id="umProxyStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
+        </div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-item danger" onclick="AUTH.logout();closeUserMenu()">⏻ Cerrar sesión</div>
       </div>
@@ -1221,6 +1231,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="reporte" onclick="switchTabMobile('reporte')"><span class="mobile-tab-icon">📊</span>Reportes</button>
     <button class="mobile-tab-btn" data-tab="web" onclick="switchTabMobile('web')"><span class="mobile-tab-icon">🌐</span>Web</button>
     <button class="mobile-tab-btn" data-tab="finanzas" onclick="switchTabMobile('finanzas')"><span class="mobile-tab-icon">💰</span>Finanzas</button>
+    <button class="mobile-tab-btn" data-tab="visual" onclick="switchTabMobile('visual')"><span class="mobile-tab-icon">🎨</span>Visual AI</button>
   </nav>
   <div class="mobile-nav-footer">
     <button onclick="loadAllData();closeMobileMenu()">↺ Actualizar</button>
@@ -1453,9 +1464,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
     <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')" style="margin-left:auto">⬇ CSV</button>
     <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px">
-      <button id="btnVistaTabla" class="btn btn-ghost btn-sm active-filter" onclick="setPedidosView('tabla')" style="padding:4px 10px;font-size:10px">≡ Tabla</button>
-      <button id="btnVistaKanban" class="btn btn-ghost btn-sm" onclick="setPedidosView('kanban')" style="padding:4px 10px;font-size:10px">⬛ Kanban</button>
-      <button id="btnVistaCal" class="btn btn-ghost btn-sm" onclick="setPedidosView('calendario')" style="padding:4px 10px;font-size:10px">📅 Cal.</button>
+      <button id="btnVistaTabla" class="btn btn-ghost btn-sm active-filter" onclick="setPedidosView('tabla')" style="padding:4px 12px;font-size:10px">Tabla</button>
+      <button id="btnVistaKanban" class="btn btn-ghost btn-sm" onclick="setPedidosView('kanban')" style="padding:4px 12px;font-size:10px">Kanban</button>
+      <button id="btnVistaCal" class="btn btn-ghost btn-sm" onclick="setPedidosView('calendario')" style="padding:4px 12px;font-size:10px">Calendario</button>
     </div>
   </div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap">
@@ -4073,6 +4084,9 @@ function openUserMenu(){
   const oi=document.getElementById('umOpenaiKey');if(oi){const v=localStorage.getItem('fp_openai_key');oi.value=v?'••••••••'+v.slice(-4):'';oi.placeholder=v?'(guardado)':'sk-proj-...';}
   const gc=document.getElementById('umGoogleClientId');if(gc){const v=localStorage.getItem('google_drive_client_id')||'';gc.value=v?v.slice(0,12)+'…'+v.slice(-8):'';}
   const ds=document.getElementById('umDriveStatus');if(ds){const v=localStorage.getItem('google_drive_client_id');ds.textContent=v?'✓ Client ID configurado':'Sin configurar — necesitas un Client ID de Google Cloud';}
+  const pu=document.getElementById('umProxyUrl');if(pu){pu.value=localStorage.getItem('proxy_url')||'';}
+  const pk=document.getElementById('umProxyKey');if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
+  const ps=document.getElementById('umProxyStatus');if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo — token Airtable vive en el Worker':'Sin proxy — token guardado localmente';}
   setTimeout(()=>document.addEventListener('click',closeUserMenuOutside),10);
 }
 function closeUserMenu(){document.getElementById('userMenu')?.classList.remove('open');document.removeEventListener('click',closeUserMenuOutside);}
@@ -4110,15 +4124,49 @@ function saveGoogleClientId(){
   toast('Google Client ID guardado ✓','success');
 }
 function clearGoogleClientId(){localStorage.removeItem('google_drive_client_id');_driveTokenClient=null;_driveAccessToken=null;const inp=document.getElementById('umGoogleClientId');if(inp){inp.value='';}const ds=document.getElementById('umDriveStatus');if(ds) ds.textContent='Sin configurar — necesitas un Client ID de Google Cloud';toast('Google Client ID eliminado','info');}
+function saveUserMenuProxy(){
+  const urlInp=document.getElementById('umProxyUrl');
+  const keyInp=document.getElementById('umProxyKey');
+  const urlVal=(urlInp?.value||'').trim();
+  const keyVal=(keyInp?.value||'').trim();
+  if(!urlVal){toast('Ingresa la URL del Worker','error');urlInp?.focus();return;}
+  if(!urlVal.startsWith('http')){toast('La URL debe comenzar con https://','error');urlInp?.focus();return;}
+  localStorage.setItem('proxy_url',urlVal);
+  if(keyVal&&!keyVal.startsWith('••')){
+    localStorage.setItem('proxy_key',keyVal);
+    if(keyInp) keyInp.value='••••••••'+keyVal.slice(-4);
+  } else if(!keyVal&&!localStorage.getItem('proxy_key')){
+    toast('Ingresa la clave del proxy','error');keyInp?.focus();return;
+  }
+  const ps=document.getElementById('umProxyStatus');
+  if(ps) ps.textContent='✓ Proxy activo — token Airtable vive en el Worker';
+  toast('Proxy configurado ✓ — el token Airtable ya no viaja al browser','success');
+  loadAllData();
+}
+function clearUserMenuProxy(){
+  localStorage.removeItem('proxy_url');localStorage.removeItem('proxy_key');
+  const urlInp=document.getElementById('umProxyUrl');if(urlInp) urlInp.value='';
+  const keyInp=document.getElementById('umProxyKey');if(keyInp) keyInp.value='';
+  const ps=document.getElementById('umProxyStatus');if(ps) ps.textContent='Sin proxy — token guardado localmente';
+  toast('Proxy eliminado — usando token Airtable directo','info');
+}
 
 // ── AIRTABLE ──────────────────────────────────────────────────
-async function airtableFetch(table,max=100){
+// Returns {base, headers} — uses proxy when configured, direct PAT otherwise.
+function _airtableConfig(){
+  const proxyUrl=localStorage.getItem('proxy_url');
+  const proxyKey=localStorage.getItem('proxy_key');
+  if(proxyUrl&&proxyKey) return{base:proxyUrl.replace(/\/$/,''),headers:{'X-App-Key':proxyKey}};
   const t=getToken();if(!t) throw new Error('Sin token');
+  return{base:'https://api.airtable.com/v0',headers:{'Authorization':'Bearer '+t}};
+}
+async function airtableFetch(table,max=100){
+  const cfg=_airtableConfig();
   let all=[],offset=null;
   do{
-    let url=`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}?pageSize=${Math.min(max,100)}`;
+    let url=`${cfg.base}/${BASE_ID}/${encodeURIComponent(table)}?pageSize=${Math.min(max,100)}`;
     if(offset) url+=`&offset=${encodeURIComponent(offset)}`;
-    const r=await airtableHttp(url,{headers:{'Authorization':'Bearer '+t}});
+    const r=await airtableHttp(url,{headers:cfg.headers});
     if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`Airtable ${r.status}: ${j.error?.message||''}`);}
     const d=await r.json();all=[...all,...(d.records||[])];offset=d.offset||null;
     if(all.length>=max&&table!=='Clientes'&&table!=='Cotizaciones') break;
@@ -4145,9 +4193,9 @@ async function airtableHttp(url,opts,{retries=2,timeout=20000}={}){
   throw new Error('Error de red: '+(lastErr?.message||'sin conexión'));
 }
 async function airtableWrite(table,method,recordId,fields){
-  const t=getToken();if(!t) throw new Error('Sin token');
-  const url=recordId?`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}/${recordId}`:`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}`;
-  const r=await airtableHttp(url,{method,headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields,typecast:true})});
+  const cfg=_airtableConfig();
+  const url=recordId?`${cfg.base}/${BASE_ID}/${encodeURIComponent(table)}/${recordId}`:`${cfg.base}/${BASE_ID}/${encodeURIComponent(table)}`;
+  const r=await airtableHttp(url,{method,headers:{...cfg.headers,'Content-Type':'application/json'},body:JSON.stringify({fields,typecast:true})});
   if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${j.error?.message||j.error?.type||'Error desconocido'}`);}
   return await r.json();
 }
@@ -4170,8 +4218,8 @@ async function testAirtableWrite(){
   if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}
 }
 async function airtableDelete(table,recordId){
-  const t=getToken();if(!t) throw new Error('Sin token');
-  const r=await airtableHttp(`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}/${recordId}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});
+  const cfg=_airtableConfig();
+  const r=await airtableHttp(`${cfg.base}/${BASE_ID}/${encodeURIComponent(table)}/${recordId}`,{method:'DELETE',headers:cfg.headers});
   if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${j.error?.message||j.error?.type||'No se pudo eliminar'}`);}
 }
 
@@ -4531,10 +4579,16 @@ async function loadAllData(){
     // Detectar token inválido (401) — solo avisa, no bloquea el dashboard
     const tokenErr=msg=>/401|403|Sin token/.test(msg||'');
     if(cRes.status==='rejected'&&tokenErr(cRes.reason?.message)){
-      localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');
-      setStatus('token inválido',false);
-      toast('⚠ Token Airtable inválido o vencido — configura uno nuevo','error');
-      setTimeout(()=>showTokenModal(),1200);
+      const usingProxy=!!(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key'));
+      if(usingProxy){
+        setStatus('proxy error',false);
+        toast('⚠ Error de autenticación en el proxy — verifica la clave en Mi cuenta','error');
+      } else {
+        localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');
+        setStatus('token inválido',false);
+        toast('⚠ Token Airtable inválido o vencido — configura uno nuevo','error');
+        setTimeout(()=>showTokenModal(),1200);
+      }
     }
     if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
     if(isFirst) slProgress(50,'Cargando cotizaciones y pedidos...');
@@ -4563,7 +4617,8 @@ async function loadAllData(){
   }
 }
 async function loadAllDataSilent(){
-  if(!getToken()) return;
+  const hasAuth=!!(getToken()||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));
+  if(!hasAuth) return;
   try{
     const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),airtableFetch('Facturas',1000)]);
     if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
@@ -5069,7 +5124,7 @@ function buildClienteRow(c){
 }
 function renderClientes(){
   document.getElementById('clientesCount').textContent=`${state.clientes.length} clientes en CRM`;const tbody=document.getElementById('clientesTableBody');
-  if(!state.clientes.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">👥</div>Sin clientes</div></td></tr>';return;}
+  if(!state.clientes.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">👥</div>Aún no hay clientes<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div></td></tr>';return;}
   tbody.innerHTML=getSortedClientes().map(c=>buildClienteRow(c)).join('');if(document.getElementById('clienteSearch')?.value) filterClientes();
   renderClientesAnalytics();
 }
@@ -5566,7 +5621,7 @@ function getSortedCotizaciones(){
     if(typeof va==='number') return(va-vb)*cotizacionesSort.dir;return va.localeCompare(vb,'es')*cotizacionesSort.dir;
   });
 }
-function renderCotizaciones(){const tbody=document.getElementById('cotsTableBodyFull');if(!state.cotizaciones.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state">Sin cotizaciones</div></td></tr>';return;}tbody.innerHTML=getSortedCotizaciones().map(c=>buildCotRow(c)).join('');renderCotAnalytics();}
+function renderCotizaciones(){const tbody=document.getElementById('cotsTableBodyFull');if(!state.cotizaciones.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div>Aún no hay cotizaciones<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>';return;}tbody.innerHTML=getSortedCotizaciones().map(c=>buildCotRow(c)).join('');renderCotAnalytics();}
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const fpData=parseFichaPropData(f['Ficha Propuesta']);
@@ -6982,7 +7037,11 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
 function renderPedidos(filter){
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
   let data=filter==='all'?state.pedidos:filter==='atrasados'?state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
-  const tbody=document.getElementById('pedidosTableBody');if(!data.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty-state"><div class="empty-icon">📦</div>Sin pedidos</div></td></tr>';return;}
+  const tbody=document.getElementById('pedidosTableBody');if(!data.length){
+    const emptyHtml=state.pedidos.length
+      ?'<div class="empty-state"><div class="empty-icon">🔍</div>Ningún pedido coincide con este filtro<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="filterPedidos(\'all\',document.querySelector(\'#pedidosFilterBar>button\'))">Ver todos los pedidos</button></div>'
+      :'<div class="empty-state"><div class="empty-icon">📦</div>Aún no hay pedidos<br><span style="font-size:11px;color:var(--text3)">Los pedidos se generan al aprobar una cotización</span><br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'cotizaciones\')">📋 Ir a cotizaciones</button></div>';
+    tbody.innerHTML='<tr><td colspan="12">'+emptyHtml+'</td></tr>';return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
   tbody.innerHTML=data.map(p=>{
     const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
@@ -9524,7 +9583,8 @@ function initDashboard(){
     return;
   }
   slProgress(5,'Verificando credenciales...');
-  if(!getToken()){
+  const hasAuth=!!(getToken()||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));
+  if(!hasAuth){
     hideSysLoader();
     showTokenModal();
     toast('Configura tu token de Airtable para continuar','error');
