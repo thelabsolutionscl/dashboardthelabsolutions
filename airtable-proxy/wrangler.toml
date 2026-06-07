@@ -1,0 +1,14 @@
+name = "airtable-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-09-01"
+
+# Secrets — ejecutar una vez después del deploy:
+#   wrangler secret put AIRTABLE_TOKEN   ← tu PAT de Airtable (patXXX...)
+#   wrangler secret put APP_KEY          ← passphrase que elijas (mínimo 20 chars)
+#
+# Deploy:
+#   cd airtable-proxy && npx wrangler deploy
+#
+# Luego en el dashboard (Mi cuenta → Proxy Worker):
+#   URL:   https://airtable-proxy.<tu-subdominio>.workers.dev
+#   Clave: el mismo valor que pusiste en APP_KEY
