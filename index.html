@@ -679,10 +679,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .login-card{margin:16px;padding:28px 20px 24px;}
   .user-name{display:none;}
   .logout-btn{display:none!important;}
-  /* Mover chip al panel móvil: ocultarlo del topbar (sin display:none para que el menu siga funcionando) */
-  #userChip{width:0!important;overflow:hidden!important;padding:0!important;border:none!important;opacity:0!important;pointer-events:none!important;}
-  /* User menu se posiciona como sheet fija desde abajo en móvil */
-  .user-menu.open{position:fixed!important;inset:auto 12px 76px 12px!important;width:auto!important;max-height:78vh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;}
+  /* Mover chip al panel móvil: ocultarlo del topbar usando visibility (revertible en el hijo) en vez de opacity (que NO se puede revertir y dejaba el menú invisible) */
+  #userChip{width:0!important;overflow:hidden!important;padding:0!important;border:none!important;visibility:hidden!important;pointer-events:none!important;}
+  /* User menu se posiciona como sheet fija desde abajo en móvil — revierte visibility/pointer-events del padre */
+  .user-menu.open{position:fixed!important;inset:auto 12px 76px 12px!important;width:auto!important;max-height:78vh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
 }
 
 /* ══ Finanzas — Mobile UX ═══════════════════════════════════════ */
