@@ -4609,7 +4609,8 @@ async function loadAllData(){
   }
 }
 async function loadAllDataSilent(){
-  if(!getToken()) return;
+  const hasAuth=!!(getToken()||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));
+  if(!hasAuth) return;
   try{
     const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),airtableFetch('Facturas',1000)]);
     if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
@@ -9410,7 +9411,8 @@ function initDashboard(){
     return;
   }
   slProgress(5,'Verificando credenciales...');
-  if(!getToken()){
+  const hasAuth=!!(getToken()||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));
+  if(!hasAuth){
     hideSysLoader();
     showTokenModal();
     toast('Configura tu token de Airtable para continuar','error');
