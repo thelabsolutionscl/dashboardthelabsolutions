@@ -8145,7 +8145,7 @@ function getPrinterTunnel(){return(localStorage.getItem('printer_tunnel')||'http
 function printerUrl(ip,path){return`${getPrinterTunnel()}/${ip}${path}`;}
 const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
-const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={};
+const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={},_demoPrinterState={};
 
 const MONITOR_GRUPOS=[
   {key:'all',label:'Todas',color:'var(--accent)'},
@@ -8640,8 +8640,72 @@ function renderProductionAnalytics(){
     </div>`;
 }
 
+function initDemoPrinters(){
+  const files=['soporte_repisa_v2','pieza_engranaje_caja_v3','carcasa_iot_slim',
+    'base_macetero_espiral_lg','articulacion_robotica_v3','soporte_camara_tripode',
+    'organizador_cables_escritorio','cubierta_sensor_v2','tapa_contenedor_h80',
+    'pieza_personalizada_47b','frame_display_7in_v2','boquilla_riego_360deg',
+    'bisagra_mueble_oculta','soporte_pantalla_doble'];
+  const states=[
+    {state:'printing',pct:15,file:files[0]},
+    {state:'printing',pct:43,file:files[1]},
+    {state:'printing',pct:72,file:files[2]},
+    {state:'printing',pct:28,file:files[3]},
+    {state:'printing',pct:88,file:files[4]},
+    {state:'printing',pct:56,file:files[5]},
+    {state:'printing',pct:34,file:files[6]},
+    {state:'printing',pct:8, file:files[7]},
+    {state:'printing',pct:65,file:files[8]},
+    {state:'paused',  pct:48,file:files[9]},
+    {state:'paused',  pct:19,file:files[10]},
+    {state:'standby', pct:0, file:''},
+    {state:'standby', pct:0, file:''},
+    {state:'complete',pct:100,file:files[13]},
+  ];
+  MAQUINAS.forEach((m,i)=>{
+    const ds=states[i]||{state:'standby',pct:0,file:''};
+    _demoPrinterState[m.id]={...ds};
+    const ip=ds.state==='printing'||ds.state==='paused';
+    const hotend=ip?{actual:210+Math.floor(Math.random()*10),target:220}:{actual:24+Math.floor(Math.random()*4),target:0};
+    const bed=ip?{actual:57+Math.floor(Math.random()*4),target:60}:{actual:22,target:0};
+    const elapsed=ds.pct>0?Math.round(ds.pct*210):0;
+    const eta=ds.pct>0&&ds.pct<100?Math.round((100-ds.pct)*210):0;
+    _printerStatus[m.id]={state:ds.state,progress:ds.pct,filename:ds.file,thumbUrl:null,filamentMm:Math.round(ds.pct*3.2),hotend,bed,elapsed,eta,ip:getPrinterIp(m)||m.ip||'192.168.100.x'};
+    _tempHistory[m.id]=[];
+    for(let j=0;j<15;j++) _tempHistory[m.id].push({h:hotend.actual+(Math.random()*4-2)|0,b:bed.actual+(Math.random()*2-1)|0});
+  });
+}
+
+async function pollPrintersDemoTick(){
+  if(Object.keys(_demoPrinterState).length===0) initDemoPrinters();
+  MAQUINAS.forEach(m=>{
+    const ds=_demoPrinterState[m.id];if(!ds)return;
+    if(ds.state==='printing'){
+      ds.pct=Math.min(99,ds.pct+(Math.floor(Math.random()*2)+1));
+      if(ds.pct>=99){ds.state='complete';ds.pct=100;}
+    }
+    const ip=ds.state==='printing'||ds.state==='paused';
+    const hotend=ip?{actual:210+Math.floor(Math.random()*10),target:220}:{actual:24+Math.floor(Math.random()*4),target:0};
+    const bed=ip?{actual:57+Math.floor(Math.random()*4),target:60}:{actual:22,target:0};
+    const elapsed=ds.pct>0?Math.round(ds.pct*210):0;
+    const eta=ds.pct>0&&ds.pct<100?Math.round((100-ds.pct)*210):0;
+    _printerStatus[m.id]={state:ds.state,progress:ds.pct,filename:ds.file,thumbUrl:null,filamentMm:Math.round(ds.pct*3.2),hotend,bed,elapsed,eta,ip:getPrinterIp(m)||m.ip||'192.168.100.x'};
+    if(!_tempHistory[m.id])_tempHistory[m.id]=[];
+    _tempHistory[m.id].push({h:hotend.actual,b:bed.actual});
+    if(_tempHistory[m.id].length>20)_tempHistory[m.id].shift();
+  });
+  _pollCount++;
+  checkIdleAlerts();
+  renderMonitorKPIs();
+  renderMonitorGrid();
+  const lu=document.getElementById('monitorLastUpdate');
+  if(lu)lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(_pollCount%4===0){renderMaintenanceTable();renderProductionAnalytics();}
+}
+
 let _pollCount=0;
 async function pollPrinters(){
+  if(window._DEMO_MODE){await pollPrintersDemoTick();return;}
   await Promise.allSettled(MAQUINAS.map(async m=>{
     const s=await fetchPrinterStatus(m);
     checkTransitions(m,s);
@@ -9552,6 +9616,25 @@ function enableDemoMode(){
     b.style.cssText='font-size:8px;font-weight:700;background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.4);color:var(--accent2);border-radius:4px;padding:2px 6px;letter-spacing:1px;font-family:"JetBrains Mono",monospace;flex-shrink:0;';
     chip.appendChild(b);
   }
+  // Generar eventos de Equipo relativos a hoy
+  const _rd=(offset)=>{const d=new Date();d.setDate(d.getDate()+offset);return fmtDate(d);};
+  DEMO_DATA.Equipo_Eventos={records:[
+    {id:'recEQ01',fields:{persona_id:'nicanor',fecha:_rd(-2),tipo:'ocupado',desc:'Producción lote K1 × 40 uds.',hora_inicio:'08:00',hora_fin:'17:30'}},
+    {id:'recEQ02',fields:{persona_id:'nicanor',fecha:_rd(-1),tipo:'ocupado',desc:'QA pedidos PED-047 / PED-048',hora_inicio:'09:00',hora_fin:'16:00'}},
+    {id:'recEQ03',fields:{persona_id:'nicanor',fecha:_rd(0), tipo:'reunion',desc:'Reunión producción semanal',hora_inicio:'09:00',hora_fin:'10:00'}},
+    {id:'recEQ04',fields:{persona_id:'nicanor',fecha:_rd(1), tipo:'ocupado',desc:'Postproceso + empaque K2 Plus',hora_inicio:'08:00',hora_fin:'17:00'}},
+    {id:'recEQ05',fields:{persona_id:'nicanor',fecha:_rd(2), tipo:'ocupado',desc:'Slicing y preparación nuevos pedidos',hora_inicio:'09:00',hora_fin:'13:00'}},
+    {id:'recEQ06',fields:{persona_id:'gustavo',fecha:_rd(-2),tipo:'disponible',desc:'',hora_inicio:'',hora_fin:''}},
+    {id:'recEQ07',fields:{persona_id:'gustavo',fecha:_rd(-1),tipo:'reunion',desc:'Revisión operaciones + KPIs',hora_inicio:'10:00',hora_fin:'11:30'}},
+    {id:'recEQ08',fields:{persona_id:'gustavo',fecha:_rd(0), tipo:'remoto',desc:'Gestión proveedores (home office)',hora_inicio:'09:00',hora_fin:'18:00'}},
+    {id:'recEQ09',fields:{persona_id:'gustavo',fecha:_rd(1), tipo:'ocupado',desc:'Visita FilamentoCL — abastecimiento',hora_inicio:'10:00',hora_fin:'14:00'}},
+    {id:'recEQ10',fields:{persona_id:'gustavo',fecha:_rd(2), tipo:'disponible',desc:'',hora_inicio:'',hora_fin:''}},
+    {id:'recEQ11',fields:{persona_id:'florencia',fecha:_rd(-2),tipo:'ocupado',desc:'Seguimiento cotizaciones activas',hora_inicio:'09:00',hora_fin:'17:00'}},
+    {id:'recEQ12',fields:{persona_id:'florencia',fecha:_rd(-1),tipo:'reunion',desc:'Demo producto — Agencia DG',hora_inicio:'11:00',hora_fin:'12:30'}},
+    {id:'recEQ13',fields:{persona_id:'florencia',fecha:_rd(0), tipo:'ocupado',desc:'Propuestas clientes nuevos',hora_inicio:'09:00',hora_fin:'18:00'}},
+    {id:'recEQ14',fields:{persona_id:'florencia',fecha:_rd(1), tipo:'vacaciones',desc:'Vacaciones',hora_inicio:'',hora_fin:''}},
+    {id:'recEQ15',fields:{persona_id:'florencia',fecha:_rd(2), tipo:'vacaciones',desc:'Vacaciones',hora_inicio:'',hora_fin:''}},
+  ]};
   // Interceptar fetch — devolver datos demo para Airtable, bloquear escrituras
   const _fetch=window.fetch;
   window.fetch=async(url,opts={})=>{
@@ -9568,11 +9651,18 @@ function enableDemoMode(){
       else if(dec.includes('Reportes')) data=DEMO_DATA.Reportes;
       else if(dec.includes('Proveedores')) data=DEMO_DATA.Proveedores;
       else if(dec.includes('Monitor')) data=DEMO_DATA['Monitor Sistema'];
+      else if(dec.includes('Equipo_Eventos')) data=DEMO_DATA.Equipo_Eventos;
       else if(dec.includes('Clientes')) data=DEMO_DATA.Clientes;
       return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
     }
     return _fetch(url,opts);
   };
+  // Inicializar simulación de impresoras (diferido para que MAQUINAS cargue primero desde Airtable)
+  setTimeout(()=>{
+    initDemoPrinters();
+    if(_monitorInterval){clearInterval(_monitorInterval);_monitorInterval=null;}
+    _monitorInterval=setInterval(pollPrinters,4000);
+  },1200);
 }
 
 // ── AUTH ─────────────────────────────────────────────────────
