@@ -1149,6 +1149,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div class="topbar">
   <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
+  <button id="mobilePlusBtn" class="mobile-menu-btn" onclick="toggleNuevoMenuMobile(event)" style="display:none;font-size:20px;font-weight:300;padding:6px 12px">＋</button>
   <nav class="topbar-nav">
     <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button>
     <button class="tab-btn" data-tab="clientes" onclick="switchTab('clientes')">👥 Clientes</button>
@@ -9908,10 +9909,16 @@ function applyRBAC(role){
   const mobileNuevoAccordion = document.querySelector('#mobileNuevoBody')?.closest('div[style*="border-bottom"]');
   if(mobileNuevoAccordion) mobileNuevoAccordion.style.display = allowedNuevos.length ? '' : 'none';
 
-  // Ocultar sección de configuración de tokens para roles sin permiso
+  // Ocultar configuración avanzada para roles sin permiso (siempre dejar visible el token Airtable)
   if(!RBAC.canConfigRole(role)){
-    document.querySelectorAll('.user-menu-token').forEach(el=>el.style.display='none');
+    document.querySelectorAll('.user-menu-token').forEach((el,i)=>{
+      if(i>0) el.style.display='none'; // índice 0 = Token Airtable, siempre visible
+    });
   }
+
+  // Botón "+" móvil — visible solo si el rol tiene items en Nuevo
+  const mPlusBtn = document.getElementById('mobilePlusBtn');
+  if(mPlusBtn) mPlusBtn.style.display = allowedNuevos.length ? '' : 'none';
 
   // Sección comisiones vendedor
   const comWrap = document.getElementById('comisionesVendedor');
@@ -12225,6 +12232,21 @@ function toggleNuevoMenu(e){
     panel.style.left='auto';
     panel.style.display='block';
     if(arrow)arrow.style.transform='rotate(180deg)';
+  }
+}
+function toggleNuevoMenuMobile(e){
+  e.stopPropagation();
+  const panel=document.getElementById('nuevoDropPanel');
+  const btn=document.getElementById('mobilePlusBtn');
+  if(!panel||!btn) return;
+  const isOpen=panel.style.display!=='none';
+  if(isOpen){panel.style.display='none';}
+  else{
+    const rect=btn.getBoundingClientRect();
+    panel.style.top=(rect.bottom+6)+'px';
+    panel.style.left=Math.max(8,rect.left-100)+'px';
+    panel.style.right='auto';
+    panel.style.display='block';
   }
 }
 function closeNuevoMenu(){
