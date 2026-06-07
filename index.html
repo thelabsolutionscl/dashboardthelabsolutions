@@ -1274,6 +1274,64 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="web" onclick="switchTabMobile('web')"><span class="mobile-tab-icon">🌐</span>Web</button>
     <button class="mobile-tab-btn" data-tab="finanzas" onclick="switchTabMobile('finanzas')"><span class="mobile-tab-icon">💰</span>Finanzas</button>
     <button class="mobile-tab-btn" data-tab="visual" onclick="switchTabMobile('visual')"><span class="mobile-tab-icon">🎨</span>Visual AI</button>
+    <!-- Acordeón Configuración / Tokens -->
+    <div style="border-top:1px solid var(--border)">
+      <button onclick="toggleMobileConfig()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 18px;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.3px">
+        <span>⚙ Configuración</span>
+        <span id="mobileConfigChevron" style="font-size:11px;transition:transform .2s">▾</span>
+      </button>
+      <div id="mobileConfigBody" style="display:none;padding:0 16px 14px;flex-direction:column;gap:10px">
+        <!-- Token Airtable -->
+        <div style="padding-top:10px">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🔑 Token Airtable</div>
+          <input type="password" id="mbAirtableToken" placeholder="patXXX..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbAirtableToken()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbAirtableToken()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+        </div>
+        <!-- OpenAI Key -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🤖 OpenAI API Key</div>
+          <input type="password" id="mbOpenaiKey" placeholder="sk-proj-..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbOpenaiKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbOpenaiKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+        </div>
+        <!-- Google Drive Client ID -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">📁 Google Drive Client ID</div>
+          <input type="text" id="mbGoogleClientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbGoogleClientId()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbGoogleClientId()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbDriveStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+        <!-- Proxy Worker -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🔒 Proxy Worker <span style="font-weight:400;text-transform:none">(opcional)</span></div>
+          <input type="text" id="mbProxyUrl" placeholder="https://airtable-proxy.xxx.workers.dev" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <input type="password" id="mbProxyKey" placeholder="clave-secreta" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box;margin-top:4px">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbProxy()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbProxy()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbProxyStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+        <!-- Túnel Impresoras -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🖨 Túnel Impresoras <span style="font-weight:400;text-transform:none">(opcional)</span></div>
+          <input type="text" id="mbPrinterTunnel" placeholder="https://printers.thelab.solutions" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbPrinterTunnelStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+      </div>
+    </div>
   </nav>
   <div class="mobile-nav-footer">
     <div id="mobileUserSection" style="display:flex;align-items:center;gap:12px;padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid var(--border2)">
@@ -12080,6 +12138,96 @@ function toggleMobileNuevo(){
   const isOpen=body&&body.style.display!=='none';
   if(body)body.style.display=isOpen?'none':'block';
   if(chevron)chevron.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+}
+function toggleMobileConfig(){
+  const body=document.getElementById('mobileConfigBody');
+  const chevron=document.getElementById('mobileConfigChevron');
+  const isOpen=body&&body.style.display!=='none';
+  if(body)body.style.display=isOpen?'none':'flex';
+  if(chevron)chevron.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+  if(!isOpen) populateMobileConfig();
+}
+function populateMobileConfig(){
+  const at=document.getElementById('mbAirtableToken');
+  if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado)':'patXXX...';at.onfocus=()=>{if(at.value.startsWith('••')){at.value='';at.placeholder='patXXX...';}};at.onblur=()=>{if(!at.value){const vv=lsGet('airtable_token');at.value=vv?'••••••••'+vv.slice(-4):'';at.placeholder=vv?'(guardado)':'patXXX...';}}}
+  const oi=document.getElementById('mbOpenaiKey');
+  if(oi){const v=localStorage.getItem('fp_openai_key');oi.value=v?'••••••••'+v.slice(-4):'';oi.placeholder=v?'(guardado)':'sk-proj-...';}
+  const gc=document.getElementById('mbGoogleClientId');
+  if(gc){const v=localStorage.getItem('google_drive_client_id')||'';gc.value=v?v.slice(0,12)+'…'+v.slice(-8):'';}
+  const ds=document.getElementById('mbDriveStatus');
+  if(ds){const v=localStorage.getItem('google_drive_client_id');ds.textContent=v?'✓ Client ID configurado':'Sin configurar';}
+  const pu=document.getElementById('mbProxyUrl');if(pu) pu.value=localStorage.getItem('proxy_url')||'';
+  const pk=document.getElementById('mbProxyKey');
+  if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
+  const ps=document.getElementById('mbProxyStatus');
+  if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo':'Sin proxy — token local';}
+  const pt=document.getElementById('mbPrinterTunnel');if(pt) pt.value=localStorage.getItem('printer_tunnel')||'';
+  const pts=document.getElementById('mbPrinterTunnelStatus');
+  if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=v?'✓ '+v:'Default: https://printers.thelab.solutions';}
+}
+function saveMbAirtableToken(){
+  const inp=document.getElementById('mbAirtableToken');const v=(inp?.value||'').trim();
+  if(!v)return toast('Ingresa un token válido','error');
+  lsSet('airtable_token',v);inp.value='••••••••'+v.slice(-4);
+  toast('Token Airtable guardado ✓','success');loadAllData();
+}
+function clearMbAirtableToken(){
+  localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');
+  const inp=document.getElementById('mbAirtableToken');if(inp){inp.value='';inp.placeholder='patXXX...';}
+  toast('Token Airtable eliminado','info');
+}
+function saveMbOpenaiKey(){
+  const inp=document.getElementById('mbOpenaiKey');const v=(inp?.value||'').trim();
+  if(!v)return toast('Ingresa una API Key válida','error');
+  localStorage.setItem('fp_openai_key',v);inp.value='••••••••'+v.slice(-4);
+  toast('OpenAI Key guardada ✓','success');
+}
+function clearMbOpenaiKey(){
+  localStorage.removeItem('fp_openai_key');
+  const inp=document.getElementById('mbOpenaiKey');if(inp){inp.value='';inp.placeholder='sk-proj-...';}
+  toast('OpenAI Key eliminada','info');
+}
+function saveMbGoogleClientId(){
+  const inp=document.getElementById('mbGoogleClientId');const v=(inp?.value||'').trim();
+  if(!v)return toast('Ingresa un Client ID válido','error');
+  localStorage.setItem('google_drive_client_id',v);
+  const ds=document.getElementById('mbDriveStatus');if(ds) ds.textContent='✓ Client ID configurado';
+  toast('Google Drive Client ID guardado ✓','success');
+}
+function clearMbGoogleClientId(){
+  localStorage.removeItem('google_drive_client_id');_driveTokenClient=null;_driveAccessToken=null;
+  const inp=document.getElementById('mbGoogleClientId');if(inp) inp.value='';
+  const ds=document.getElementById('mbDriveStatus');if(ds) ds.textContent='Sin configurar';
+  toast('Google Client ID eliminado','info');
+}
+function saveMbProxy(){
+  const urlInp=document.getElementById('mbProxyUrl');const keyInp=document.getElementById('mbProxyKey');
+  const url=(urlInp?.value||'').trim();const key=(keyInp?.value||'').trim();
+  if(url) localStorage.setItem('proxy_url',url); else localStorage.removeItem('proxy_url');
+  if(key) localStorage.setItem('proxy_key',key); else localStorage.removeItem('proxy_key');
+  const ps=document.getElementById('mbProxyStatus');
+  if(ps) ps.textContent=url?'✓ Proxy activo':'Sin proxy — token local';
+  toast(url?'Proxy Worker guardado ✓':'Proxy eliminado','success');
+}
+function clearMbProxy(){
+  localStorage.removeItem('proxy_url');localStorage.removeItem('proxy_key');
+  const urlInp=document.getElementById('mbProxyUrl');if(urlInp) urlInp.value='';
+  const keyInp=document.getElementById('mbProxyKey');if(keyInp) keyInp.value='';
+  const ps=document.getElementById('mbProxyStatus');if(ps) ps.textContent='Sin proxy — token local';
+  toast('Proxy eliminado','info');
+}
+function saveMbPrinterTunnel(){
+  const inp=document.getElementById('mbPrinterTunnel');const v=(inp?.value||'').trim();
+  if(v) localStorage.setItem('printer_tunnel',v); else localStorage.removeItem('printer_tunnel');
+  const pts=document.getElementById('mbPrinterTunnelStatus');
+  if(pts) pts.textContent=v?'✓ '+v:'Default: https://printers.thelab.solutions';
+  toast(v?'Túnel guardado ✓':'Túnel restablecido al default','success');
+}
+function clearMbPrinterTunnel(){
+  localStorage.removeItem('printer_tunnel');
+  const inp=document.getElementById('mbPrinterTunnel');if(inp) inp.value='';
+  const pts=document.getElementById('mbPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
+  toast('Túnel restablecido al default','info');
 }
 document.addEventListener('click',function(e){
   const dd=document.getElementById('nuevoDropdown');
