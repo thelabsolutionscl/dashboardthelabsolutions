@@ -44,7 +44,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .mobile-tab-btn:hover{background:var(--surface2);color:var(--text);}
 .mobile-tab-btn.active{background:rgba(0,212,204,0.08);color:var(--accent);border-left-color:var(--accent);font-weight:700;}
 .mobile-tab-icon{font-size:16px;width:22px;text-align:center;flex-shrink:0;}
-.mobile-nav-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px;}
+.mobile-nav-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:0;}
+.mobile-nav-footer-actions{display:flex;gap:8px;}
 .mobile-nav-footer button{flex:1;background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:11px;padding:7px;border-radius:6px;cursor:pointer;}
 .mobile-nav-footer button:hover{border-color:var(--accent);color:var(--accent);}
 .mobile-status{display:flex;align-items:center;gap:6px;padding:10px 18px 4px;font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;}
@@ -669,6 +670,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .login-card{margin:16px;padding:28px 20px 24px;}
   .user-name{display:none;}
   .logout-btn{display:none!important;}
+  /* Mover chip al panel móvil: ocultarlo del topbar (sin display:none para que el menu siga funcionando) */
+  #userChip{width:0!important;overflow:hidden!important;padding:0!important;border:none!important;opacity:0!important;pointer-events:none!important;}
+  /* User menu se posiciona como sheet fija desde abajo en móvil */
+  .user-menu.open{position:fixed!important;inset:auto 12px 76px 12px!important;width:auto!important;max-height:78vh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;}
 }
 
 /* ══ Finanzas — Mobile UX ═══════════════════════════════════════ */
@@ -1263,8 +1268,18 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="visual" onclick="switchTabMobile('visual')"><span class="mobile-tab-icon">🎨</span>Visual AI</button>
   </nav>
   <div class="mobile-nav-footer">
-    <button onclick="loadAllData();closeMobileMenu()">↺ Actualizar</button>
-    <button onclick="AUTH.logout()" style="border-color:rgba(255,68,68,0.35);color:var(--danger);">⎋ Cerrar sesión</button>
+    <div id="mobileUserSection" style="display:flex;align-items:center;gap:12px;padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid var(--border2)">
+      <div id="mobileUserAv" style="width:38px;height:38px;border-radius:50%;background:var(--accent);color:#000;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:0">?</div>
+      <div style="flex:1;min-width:0">
+        <div id="mobileUserNm" style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+        <div style="font-size:10px;color:var(--text3)">The Lab Solutions</div>
+      </div>
+      <button onclick="closeMobileMenu();setTimeout(openUserMenu,180)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;padding:7px 11px;cursor:pointer;flex-shrink:0;line-height:1" title="Mi cuenta">⚙</button>
+    </div>
+    <div class="mobile-nav-footer-actions">
+      <button onclick="loadAllData();closeMobileMenu()">↺ Actualizar</button>
+      <button onclick="AUTH.logout()" style="border-color:rgba(255,68,68,0.35);color:var(--danger);">⎋ Cerrar sesión</button>
+    </div>
   </div>
 </div>
 
@@ -4121,7 +4136,11 @@ function openUserMenu(){
   setTimeout(()=>document.addEventListener('click',closeUserMenuOutside),10);
 }
 function closeUserMenu(){document.getElementById('userMenu')?.classList.remove('open');document.removeEventListener('click',closeUserMenuOutside);}
-function closeUserMenuOutside(e){if(!document.getElementById('userChip')?.contains(e.target)) closeUserMenu();}
+function closeUserMenuOutside(e){
+  const chip=document.getElementById('userChip');
+  const menu=document.getElementById('userMenu');
+  if(!chip?.contains(e.target)&&!menu?.contains(e.target)) closeUserMenu();
+}
 function saveUserMenuToken(){
   const inp=document.getElementById('umAirtableToken');const v=(inp?.value||'').trim();
   if(v.startsWith('••')){
@@ -9707,6 +9726,9 @@ const AUTH={
       document.getElementById('userName').textContent=u.name.split(' ')[0];
       chip.style.display='flex';
     }
+    // Chip del panel móvil
+    const mav=document.getElementById('mobileUserAv');if(mav) mav.textContent=initials;
+    const mnm=document.getElementById('mobileUserNm');if(mnm) mnm.textContent=u.name;
     const lb=document.getElementById('logoutBtn');
     if(lb) lb.style.display='flex';
   },
