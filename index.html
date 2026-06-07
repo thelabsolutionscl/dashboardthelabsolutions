@@ -273,7 +273,15 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .kpi-grid{grid-template-columns:repeat(2,1fr);}
   .form-grid{grid-template-columns:1fr;}
   .form-full{grid-column:1;}
+  /* Monitor grid: 1 column on mobile */
+  #maquinaMonGrid{grid-template-columns:1fr!important;}
+  /* Hide non-essential monitor filter tabs overflow */
+  #monitorFilterTabs{overflow-x:auto;scrollbar-width:none;padding-bottom:4px;flex-wrap:nowrap;}
   .modal-card.wide{max-width:calc(100% - 24px);}
+  /* Scroll hint fade on horizontally scrollable tables */
+  [style*="overflow-x:auto"]:not(.kpi-grid){position:relative;}
+  .scroll-x-wrap{position:relative;}
+  .scroll-x-wrap::after{content:'';position:absolute;top:0;right:0;bottom:0;width:32px;background:linear-gradient(to right,transparent,rgba(14,14,14,0.85));pointer-events:none;border-radius:0 8px 8px 0;}
   /* Tablas de datos → tarjetas apiladas en móvil */
   .table-wrap{overflow-x:visible;}
   .table-wrap table,.table-wrap tbody{display:block;width:100%;}
@@ -4902,7 +4910,7 @@ function renderKPIs(){
 function renderPipelineArea(){
   const todos=state.pedidos.filter(p=>p.fields['Estado pedido']!=='Cancelado');const activos=todos.filter(p=>p.fields['Estado pedido']!=='Despachado');
   document.getElementById('pedActivosBadge').textContent=activos.length;
-  if(!todos.length){document.getElementById('pipelineArea').innerHTML='<div class="empty-state"><div class="empty-icon">📦</div>Sin pedidos</div>';return;}
+  if(!todos.length){document.getElementById('pipelineArea').innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div>Sin pedidos activos</div><button onclick="switchTab(\'cotizaciones\')" style="margin-top:10px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ver cotizaciones</button></div>';return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'],colores={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
   const counts={};stages.forEach(s=>counts[s]=0);todos.forEach(p=>{const e=p.fields['Estado pedido']||'';if(counts[e]!==undefined) counts[e]++;});
   const resumen=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 16px;border-bottom:1px solid var(--border)">${stages.map(s=>`<div style="text-align:center;background:var(--surface2);border-radius:7px;padding:8px 4px;border:1px solid var(--border2)"><div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:${colores[s]}">${counts[s]}</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;line-height:1.3">${s}</div></div>`).join('')}</div>`;
@@ -4912,7 +4920,7 @@ function renderPipelineArea(){
 }
 function renderCotTable(){
   const recent=state.cotizaciones.slice(0,6);document.getElementById('cotsBadge').textContent=state.cotizaciones.length;
-  if(!recent.length){document.getElementById('cotTableBody').innerHTML='<tr><td colspan="5"><div class="empty-state">Sin cotizaciones</div></td></tr>';return;}
+  if(!recent.length){document.getElementById('cotTableBody').innerHTML='<tr><td colspan="5"><div class="empty-state" style="padding:20px"><div class="empty-icon">📋</div><div>Sin cotizaciones</div><button onclick="switchTab(\'nueva-cot\')" style="margin-top:10px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Nueva cotización</button></div></td></tr>';return;}
   document.getElementById('cotTableBody').innerHTML=recent.map(c=>{const f=c.fields,neto=Math.round((f['Total final (CLP)']||0)/1.19),m=getMargenCot(f),est=f['Estado cotización']||'Enviada';return`<tr><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td class="clp">${formatCLP(neto)}</td><td>${estadoBadge(est)}</td><td>${margenBadge(m)}</td></tr>`;}).join('');
 }
 function goToAlert(tab,id){
@@ -7630,7 +7638,7 @@ async function crearReporte(){
 }
 function renderReportes(){
   const tbody=document.getElementById('reportesTableBody');
-  if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state">Sin reportes</div></td></tr>';return;}
+  if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:28px"><div class="empty-icon">📊</div><div style="margin-bottom:8px">Sin reportes aún</div><div style="font-size:11px;color:var(--text3)">Los reportes se generan automáticamente cada semana con el Agente CEO</div><button onclick="switchTab(\'agentes\')" style="margin-top:12px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ir a Agentes IA</button></div></td></tr>';return;}
   tbody.innerHTML=state.reportes.map((r,i)=>{
     const f=r.fields;
     const mp=f['Margen promedio semana (%)']||0,m=mp<=1?mp*100:mp;
@@ -8693,6 +8701,31 @@ function initDemoPrinters(){
     _tempHistory[m.id]=[];
     for(let j=0;j<15;j++) _tempHistory[m.id].push({h:hotend.actual+(Math.random()*4-2)|0,b:bed.actual+(Math.random()*2-1)|0});
   });
+  // Pre-poblar historial de impresión para renderProductionAnalytics()
+  const _existingHist=[];try{const _eh=localStorage.getItem(HIST_KEY);if(_eh) _existingHist.push(...JSON.parse(_eh));}catch(e){}
+  if(!_existingHist.length){
+    const _hFiles=['soporte_repisa_v2','pieza_engranaje_v3','carcasa_iot_slim','base_macetero_lg','articulacion_robotica','soporte_camara','organizador_cables','cubierta_sensor','tapa_contenedor','pieza_custom_47','frame_display_7in','bisagra_mueble','soporte_pantalla_doble','boquilla_riego_360'];
+    const _now=Date.now();
+    const _demoHist=[];
+    // 7 días de historial: [impresiones, horasPromedio] por día
+    const _dayPlan=[
+      [8,2.5],[11,2.8],[6,3.1],[9,2.4],[12,2.6],[10,2.9],[5,2.2]
+    ];
+    _dayPlan.forEach((plan,dayOffset)=>{
+      const [count,avgH]=plan;
+      const dayBase=_now-(6-dayOffset)*86400000;
+      const mqList=MAQUINAS.filter(m=>m.modelo!=='Giga');
+      for(let j=0;j<count;j++){
+        const m=mqList[j%mqList.length];
+        const dur=Math.round((avgH+(Math.random()*0.8-0.4))*60);
+        const startT=dayBase+j*3600000*2;
+        const endT=startT+dur*60000;
+        const filMm=Math.round(dur*18+Math.random()*400);
+        _demoHist.push({id:m.id,nombre:m.nombre,numG:m.numG,file:_hFiles[j%_hFiles.length],start:startT,end:endT,dur,result:'Completado',filamentMm:filMm,ts:endT});
+      }
+    });
+    try{localStorage.setItem(HIST_KEY,JSON.stringify(_demoHist));}catch(e){}
+  }
 }
 
 async function pollPrintersDemoTick(){
@@ -9612,7 +9645,12 @@ const DEMO_DATA={
     {id:'recP003',createdTime:'2026-05-16T10:00:00.000Z',fields:{'N° Pedido':'PED-049','Cliente':['recC005'],'Estado pedido':'Listo para despacho','Monto total (CLP)':290000,'Fecha entrega':'2026-05-24','Equipo responsable':'Nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'Packaging Total SpA'}},
     {id:'recP004',createdTime:'2026-05-05T10:00:00.000Z',fields:{'N° Pedido':'PED-046','Cliente':['recC002'],'Estado pedido':'Despachado','Monto total (CLP)':1100000,'Fecha entrega':'2026-05-20','Equipo responsable':'Gustavo','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
   ]},
-  Reportes:{records:[]},
+  Reportes:{records:[
+    {id:'recR001',createdTime:'2026-06-02T10:00:00.000Z',fields:{'Semana':'Sem. 23 / 2026','Revenue semana (CLP)':1820000,'Pedidos activos':4,'Pedidos despachados':2,'Margen promedio semana (%)':38.5,'Tasa conversión (%)':62,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana sólida. Revenue $1.82M (+12% vs sem. anterior). 2 pedidos despachados a tiempo (Tech Solutions y Retail Sur). Pipeline activo: 4 pedidos en producción. \n\nDestacado: K2 Plus completó lote de 18 piezas aeronáuticas para pedido PED-047 con QA aprobado. Margen de 38.5% impulsado por reducción de filamento desperdiciado (nuevo perfil de slicing).\n\nAtención: cotización 260519 ($1.2M) con Universidad de Chile vence en 2 días — seguimiento urgente. Florencia coordina reunión de cierre.'}},
+    {id:'recR002',createdTime:'2026-05-26T10:00:00.000Z',fields:{'Semana':'Sem. 22 / 2026','Revenue semana (CLP)':1450000,'Pedidos activos':3,'Pedidos despachados':1,'Margen promedio semana (%)':34.2,'Tasa conversión (%)':55,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana normal. Revenue $1.45M. 1 despacho completado. Conversión 55% (3 de 5 cotizaciones cerradas).\n\nMáquinas: K1 #5 fuera de línea por mantenimiento de nozzle — impacto menor. Ender-5 Max #3 y #4 cubrieron la demanda con turnos extendidos.\n\nFilamento: stock para ~12 días de producción normal. Pedido a FilamentoCL ya generado.'}},
+    {id:'recR003',createdTime:'2026-05-19T10:00:00.000Z',fields:{'Semana':'Sem. 21 / 2026','Revenue semana (CLP)':2100000,'Pedidos activos':5,'Pedidos despachados':3,'Margen promedio semana (%)':41.8,'Tasa conversión (%)':70,'Estado reporte':'Publicado','Resumen ejecutivo':'Mejor semana del mes. Revenue $2.1M, record del trimestre. 3 despachos, 0 rechazos QA.\n\nLogros: K2 Plus trabajando 22h/día en pedido gran formato para Municipalidad Las Condes. Margen 41.8% — mejor desde Feb 2026, gracias a eficiencia en postproceso.\n\nNuevo cliente: Corporación Eventos XYZ firmó 2 pedidos por $480K. Origen: referido de Agencia DG.'}},
+    {id:'recR004',createdTime:'2026-05-12T10:00:00.000Z',fields:{'Semana':'Sem. 20 / 2026','Revenue semana (CLP)':980000,'Pedidos activos':2,'Pedidos despachados':1,'Margen promedio semana (%)':29.5,'Tasa conversión (%)':40,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana baja. Revenue $980K (-32% vs semana anterior). Conversión 40% — 2 cotizaciones rechazadas por precio.\n\nAnálisis: competidor regional bajó precios en accesorios PLA. Propuesta: agregar valor con postproceso incluido y garantía 30 días.\n\nAcciones tomadas: Florencia actualizó plantilla de cotización con nuevos diferenciadores. Gustavo negoció mejor precio con FilamentoCL (-8% por volumen).'}},
+  ]},
   Proveedores:{records:[
     {id:'recV001',createdTime:'2026-01-10T10:00:00.000Z',fields:{'Nombre / Empresa':'FilamentoCL','Categorías':['Filamentos 3D'],'Contacto':'Carlos Muñoz','Teléfono':'+56 9 8811 2233','Email':'ventas@filamentocl.cl','Estado':'Activo','Reputación':5,'Plazo entrega (días)':3,'Comuna':'Maipú','Región':'Región Metropolitana'}},
     {id:'recV002',createdTime:'2026-01-15T10:00:00.000Z',fields:{'Nombre / Empresa':'LED Masters Chile','Categorías':['Componentes LED / Neones'],'Contacto':'Ana Pérez','Teléfono':'+56 9 7722 3344','Email':'info@ledmasters.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':5,'Comuna':'Pudahuel','Región':'Región Metropolitana'}},
