@@ -3793,7 +3793,10 @@ const CHILE_COMUNAS={
 const _DEFAULTS={
   AIRTABLE_TOKEN:'%%AIRTABLE_TOKEN%%',
   OPENAI_KEY:'%%OPENAI_KEY%%',
-  GOOGLE_CLIENT_ID:'%%GOOGLE_CLIENT_ID%%'
+  GOOGLE_CLIENT_ID:'%%GOOGLE_CLIENT_ID%%',
+  PROXY_URL:'%%PROXY_URL%%',
+  PROXY_KEY:'%%PROXY_KEY%%',
+  PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%'
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
@@ -4180,7 +4183,7 @@ function getAnthropicKey(){return lsGet('anthropic_key');}
 function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=lsGet('anthropic_key');i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
-function getToken(){return lsGet('airtable_token');}
+function getToken(){return lsGet('airtable_token')||(_DEFAULTS.AIRTABLE_TOKEN.startsWith('%%')?'':_DEFAULTS.AIRTABLE_TOKEN);}
 function getOpenAIKey(){return localStorage.getItem('fp_openai_key')||_DEFAULTS.OPENAI_KEY;}
 function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
 function showTokenModal(){openUserMenu();const i=document.getElementById('umAirtableToken');if(i){i.type='text';i.focus();}}
@@ -4284,8 +4287,8 @@ function clearUserMenuProxy(){
 // ── AIRTABLE ──────────────────────────────────────────────────
 // Returns {base, headers} — uses proxy when configured, direct PAT otherwise.
 function _airtableConfig(){
-  const proxyUrl=localStorage.getItem('proxy_url');
-  const proxyKey=localStorage.getItem('proxy_key');
+  const proxyUrl=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
+  const proxyKey=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
   if(proxyUrl&&proxyKey) return{base:proxyUrl.replace(/\/$/,''),headers:{'X-App-Key':proxyKey}};
   const t=getToken();if(!t) throw new Error('Sin token');
   return{base:'https://api.airtable.com/v0',headers:{'Authorization':'Bearer '+t}};
@@ -8226,7 +8229,7 @@ async function initMaquinas(){
 
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
 const MOONRAKER_PORT=7125;
-function getPrinterTunnel(){return(localStorage.getItem('printer_tunnel')||'https://printers.thelab.solutions').replace(/\/$/,'');}
+function getPrinterTunnel(){const d=_DEFAULTS.PRINTER_TUNNEL.startsWith('%%')?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 function printerUrl(ip,path){return`${getPrinterTunnel()}/${ip}${path}`;}
 const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
@@ -9897,7 +9900,7 @@ function initDashboard(){
 document.addEventListener('DOMContentLoaded',()=>{
   // Fallback: muestra botón reintentar a los 8s y fuerza cierre a los 10s
   setTimeout(()=>{const r=document.getElementById('slRetry');if(r){const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')) r.style.display='block';}},8000);
-  setTimeout(()=>{const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')){sl.classList.add('hidden');const hasAuth=!!(localStorage.getItem('airtable_token')||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));if(!hasAuth) showTokenModal();}},10000);
+  setTimeout(()=>{const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')){sl.classList.add('hidden');try{_airtableConfig();}catch(e){showTokenModal();}}},10000);
   AUTH.init().then(()=>{
     if(!AUTH.isLoggedIn()){
       const lp=document.getElementById('loginPage');
