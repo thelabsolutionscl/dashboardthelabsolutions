@@ -1117,6 +1117,22 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
 </div>
+<script>
+/* Failsafe independiente: si el script principal falla al cargar (p.ej. un error
+   de sintaxis), este bloque separado igual oculta el loader y ofrece reintentar,
+   para que la pantalla nunca quede congelada de forma permanente. */
+(function(){
+  var shown=false;
+  setTimeout(function(){
+    var sl=document.getElementById('sysLoader');
+    if(sl&&!sl.classList.contains('hidden')&&!window.__dashboardReady){
+      var r=document.getElementById('slRetry');if(r) r.style.display='block';
+      var st=document.getElementById('slStatus');if(st) st.textContent='La carga está demorando…';
+      shown=true;
+    }
+  },9000);
+})();
+</script>
 <div class="topbar">
   <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
@@ -4676,6 +4692,7 @@ function slProgress(pct,msg){
   if(st){st.style.opacity='0';setTimeout(()=>{st.textContent=msg;st.style.opacity='1';},150);}
 }
 function hideSysLoader(){
+  window.__dashboardReady=true;
   const el=document.getElementById('sysLoader');if(!el) return;
   slProgress(100,'Sistema listo ✓');
   setTimeout(()=>{el.classList.add('hidden');setTimeout(()=>{el.style.display='none';},650);},500);

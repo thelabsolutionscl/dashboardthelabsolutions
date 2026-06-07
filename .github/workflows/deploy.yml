@@ -20,15 +20,27 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: |
           python3 - <<'EOF'
-          import os
+          import os, json
           with open('index.html', 'r', encoding='utf-8') as f:
               html = f.read()
-          html = html.replace('%%AIRTABLE_TOKEN%%',  os.environ['AIRTABLE_TOKEN'])
-          html = html.replace('%%OPENAI_KEY%%',      os.environ['OPENAI_KEY'])
-          html = html.replace('%%GOOGLE_CLIENT_ID%%', os.environ['GOOGLE_CLIENT_ID'])
+          # Strip whitespace/newlines and JSON-escape so a stray newline or quote
+          # in a secret can never break the JS string literal (which would crash
+          # the whole script and freeze the loading screen).
+          def safe(name):
+              val = (os.environ.get(name) or '').strip()
+              # json.dumps produces a valid double-quoted JS string literal incl. quotes
+              return json.dumps(val)
+          # Replace the quoted placeholder ('%%X%%') with a safe JS literal ("...").
+          html = html.replace("'%%AIRTABLE_TOKEN%%'",  safe('AIRTABLE_TOKEN'))
+          html = html.replace("'%%OPENAI_KEY%%'",      safe('OPENAI_KEY'))
+          html = html.replace("'%%GOOGLE_CLIENT_ID%%'", safe('GOOGLE_CLIENT_ID'))
+          # Fallback for any remaining bare placeholders (defensive)
+          html = html.replace('%%AIRTABLE_TOKEN%%',  (os.environ.get('AIRTABLE_TOKEN') or '').strip())
+          html = html.replace('%%OPENAI_KEY%%',      (os.environ.get('OPENAI_KEY') or '').strip())
+          html = html.replace('%%GOOGLE_CLIENT_ID%%', (os.environ.get('GOOGLE_CLIENT_ID') or '').strip())
           with open('index.html', 'w', encoding='utf-8') as f:
               f.write(html)
-          print('✓ Credentials injected')
+          print('✓ Credentials injected (sanitized)')
           EOF
 
       - name: Deploy to gh-pages branch
