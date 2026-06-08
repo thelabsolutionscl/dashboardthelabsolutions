@@ -8237,12 +8237,15 @@ function renderPedidosCalendario(){
 // ── ANALYTICS DE CLIENTES ─────────────────────────────────────────────
 function renderClientesAnalytics(){
   const el=document.getElementById('clientesAnalytics');if(!el||!state.clientes.length) return;
+  const _cli=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;
+  const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
   const revMap={};
-  state.pedidos.forEach(p=>{const f=p.fields,neto=Math.round((f['Monto total (CLP)']||0)/1.19);(Array.isArray(f['Cliente'])?f['Cliente']:[]).forEach(id=>{revMap[id]=(revMap[id]||0)+neto;});});
+  _ped.forEach(p=>{const f=p.fields,neto=Math.round((f['Monto total (CLP)']||0)/1.19);(Array.isArray(f['Cliente'])?f['Cliente']:[]).forEach(id=>{revMap[id]=(revMap[id]||0)+neto;});});
   const top5=Object.entries(revMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([id,rev])=>({nombre:state.clientesById[id]||'—',rev}));
-  const withCot=new Set(state.cotizaciones.flatMap(c=>Array.isArray(c.fields['Cliente'])?c.fields['Cliente']:[]));
-  const withPed=new Set(state.pedidos.flatMap(p=>Array.isArray(p.fields['Cliente'])?p.fields['Cliente']:[]));
-  const total=state.clientes.length;
+  const withCot=new Set(_cot.flatMap(c=>Array.isArray(c.fields['Cliente'])?c.fields['Cliente']:[]));
+  const withPed=new Set(_ped.flatMap(p=>Array.isArray(p.fields['Cliente'])?p.fields['Cliente']:[]));
+  const total=_cli.length;
   const maxRev=top5.length?top5[0].rev:1;
   const barsHtml=top5.map(c=>{const pct=Math.round((c.rev/maxRev)*100);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="font-size:10px;color:var(--text2);min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.nombre)}</div><div style="flex:1;height:14px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent);border-radius:4px"></div></div><div style="font-size:10px;color:var(--accent);font-family:'JetBrains Mono',monospace;min-width:72px;text-align:right">${formatCLP(c.rev)}</div></div>`;}).join('');
   const funnelSteps=[{l:'Total clientes',n:total,pct:100,col:'var(--accent4)'},{l:'Con cotización',n:withCot.size,pct:total?Math.round((withCot.size/total)*100):0,col:'var(--accent)'},{l:'Con pedido',n:withPed.size,pct:total?Math.round((withPed.size/total)*100):0,col:'var(--accent3)'}];
@@ -8253,28 +8256,30 @@ function renderClientesAnalytics(){
 // ── ANALYTICS DE COTIZACIONES ─────────────────────────────────────────
 function renderCotAnalytics(){
   const el=document.getElementById('cotAnalytics');if(!el) return;
+  const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
   const estados=['Solicitada','Enviada','Aprobada','Rechazada'];
   const colors={'Solicitada':'var(--accent)','Enviada':'var(--accent2)','Aprobada':'var(--accent3)','Rechazada':'var(--danger)'};
   const counts={};estados.forEach(e=>counts[e]=0);
   let revPipe=0;
-  state.cotizaciones.forEach(c=>{
+  _cot.forEach(c=>{
     const est=c.fields['Estado cotización']||'';
     if(counts[est]!==undefined) counts[est]++;
     if(['Enviada','Solicitada'].includes(est)) revPipe+=Math.round((c.fields['Total final (CLP)']||0)/1.19);
   });
-  const total=state.cotizaciones.length;
+  const total=_cot.length;
   const base=counts['Enviada']+counts['Aprobada'];
   const conv=base>0?Math.round((counts['Aprobada']/base)*100):0;
   const maxC=Math.max(...Object.values(counts),1);
   // Ticket promedio de cotizaciones aprobadas (neto)
-  const aprobadas=state.cotizaciones.filter(c=>(c.fields['Estado cotización']||'')==='Aprobada');
+  const aprobadas=_cot.filter(c=>(c.fields['Estado cotización']||'')==='Aprobada');
   const ticketProm=aprobadas.length?Math.round(aprobadas.reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0)/aprobadas.length):0;
   // Tiempo medio de cierre: días entre creación de cotización y del pedido vinculado
   const cierreDias=[];
-  state.pedidos.forEach(p=>{
+  _ped.forEach(p=>{
     const cotIds=p.fields['Cotizaciones'];
     if(cotIds&&cotIds.length&&p.createdTime){
-      const cot=state.cotizaciones.find(x=>x.id===cotIds[0]);
+      const cot=_cot.find(x=>x.id===cotIds[0]);
       if(cot&&cot.createdTime){
         const d=Math.round((new Date(p.createdTime)-new Date(cot.createdTime))/86400000);
         if(d>=0&&d<365) cierreDias.push(d);
@@ -10162,7 +10167,7 @@ const RBAC={
   tabs:{
     admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
     gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','remuneraciones','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','nuevo-lead','nueva-cot','cot3d'],
     produccion: ['overview','pedidos','maquinas','equipo','visual'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte'],
     marketing:  ['overview','web','agentes','reporte'],
@@ -10172,7 +10177,7 @@ const RBAC={
   nuevos:{
     admin:      ['nuevo-lead','nuevo-proveedor','nueva-cot','nueva-venta','libro-diario'],
     gerencia:   ['nuevo-lead','nuevo-proveedor','nueva-cot','nueva-venta','libro-diario'],
-    comercial:  ['nuevo-lead','nuevo-proveedor','nueva-cot'],
+    comercial:  ['nuevo-lead','nueva-cot'],
     produccion: [],
     finanzas:   ['nueva-venta','libro-diario'],
     marketing:  [],
@@ -10290,7 +10295,9 @@ function initDashboard(){
   if(_isPlaceholder(lsGet('anthropic_key'))) lsSet('anthropic_key',_DEFAULTS.ANTHROPIC_KEY);
   initDates();
   fillCatSelects();
-  if(user&&user.role==='demo'){
+  const _noRealToken=_isPlaceholder(lsGet('airtable_token'))&&!localStorage.getItem('proxy_url');
+  const _useDemoMode=user&&(user.role==='demo'||(user.role==='comercial'&&_noRealToken));
+  if(_useDemoMode){
     enableDemoMode();
     slProgress(5,'Cargando datos demo...');
     loadAllData().then(()=>{setStatus('modo demo',true);startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
@@ -10299,7 +10306,8 @@ function initDashboard(){
     document.addEventListener('keydown',e=>{
       if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
       if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}
-      const tabs=['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte'];
+      const _u2=AUTH.getUser();
+      const tabs=(_u2&&RBAC.tabs[_u2.role]?RBAC.tabs[_u2.role]:['overview','clientes','cotizaciones','pedidos','agentes','reporte']).filter(t=>!['nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'].includes(t));
       const n=parseInt(e.key);if(n>=1&&n<=tabs.length&&!e.ctrlKey&&!e.metaKey&&!e.altKey) switchTab(tabs[n-1]);
     });
     return;
