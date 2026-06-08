@@ -3833,6 +3833,7 @@ const _DEFAULTS={
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
+window.state=state;
 let cdCurrentId='',cdCurrentEmpresa='';
 let _importDtes=[];
 let _facFiltro='todas';
@@ -13086,18 +13087,42 @@ async function testSIIWorker(){
       const ped = s.pedidos || [];
       const cot = s.cotizaciones || [];
       const cli = s.clientes || [];
+      const cliById = s.clientesById || {};
       const today = new Date(); today.setHours(0,0,0,0);
 
-      const activos = ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields?.['Estado pedido']||'')).length;
-      const atrasados = ped.filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
-      const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||'')).length;
+      const resolveCli = f => {
+        if(!f) return '—';
+        if(typeof f==='string') return f;
+        if(Array.isArray(f)&&f.length) return cliById[f[0]]||'(cliente)';
+        return '—';
+      };
+
+      const activos = ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields?.['Estado pedido']||''));
+      const atrasados = ped.filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;});
+      const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||''));
       const revTotal = ped.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0);
 
+      const pedRows = activos.slice(0,10).map(p=>{
+        const f=p.fields||{};
+        return `  • ${f['N° Pedido']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado pedido']||'—'} | $${Math.round((f['Monto total (CLP)']||0)/1.19).toLocaleString('es-CL')} neto | Entrega: ${f['Fecha entrega']||'sin fecha'}`;
+      }).join('\n');
+
+      const cotRows = cotPend.slice(0,10).map(c=>{
+        const f=c.fields||{};
+        return `  • Cot ${f['N° Cotización']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado cotización']||'—'} | $${Math.round((f['Total final (CLP)']||0)/1.19).toLocaleString('es-CL')} neto`;
+      }).join('\n');
+
       return `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')}):
-- Pedidos totales: ${ped.length} | Activos: ${activos} | Atrasados: ${atrasados}
-- Cotizaciones totales: ${cot.length} | Pendientes: ${cotPend}
+- Pedidos totales: ${ped.length} | Activos: ${activos.length} | Atrasados: ${atrasados.length}
+- Cotizaciones totales: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
 - Clientes registrados: ${cli.length}
-- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP`;
+- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP
+
+PEDIDOS ACTIVOS:
+${pedRows||'  (ninguno)'}
+
+COTIZACIONES PENDIENTES:
+${cotRows||'  (ninguna)'}`;
     }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
   }
 
