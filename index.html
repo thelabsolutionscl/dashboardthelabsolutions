@@ -1246,6 +1246,15 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           </div>
           <div id="umAnthropicStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">🎙 ElevenLabs — Voz IA (KAI)</div>
+          <input type="password" id="umElevenLabsKey" placeholder="sk_..." autocomplete="off">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuElevenLabsKey()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuElevenLabsKey()">Limpiar</button>
+          </div>
+          <div id="umElevenLabsStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
+        </div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-item danger" onclick="AUTH.logout();closeUserMenu()">⏻ Cerrar sesión</div>
       </div>
@@ -1354,6 +1363,16 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <button onclick="clearMbAnthropicKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
           </div>
           <div id="mbAnthropicStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+        <!-- ElevenLabs Key -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🎙 ElevenLabs — Voz IA (KAI)</div>
+          <input type="password" id="mbElevenLabsKey" placeholder="sk_..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbElevenLabsKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbElevenLabsKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbElevenLabsStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
         </div>
       </div>
     </div>
@@ -4238,6 +4257,8 @@ function openUserMenu(){
   const pts=document.getElementById('umPrinterTunnelStatus');if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=v?`✓ Túnel personalizado: ${v}`:'Default: https://printers.thelab.solutions';}
   const ak=document.getElementById('umAnthropicKey');if(ak){const v=lsGet('anthropic_key');ak.value=v&&!v.startsWith('%%')?'••••••••'+v.slice(-4):'';ak.placeholder=v&&!v.startsWith('%%')?'(guardado — clic para cambiar)':'sk-ant-api03-...';ak.onfocus=()=>{if(ak.value.startsWith('••')){ak.value='';ak.placeholder='sk-ant-api03-...';}};ak.onblur=()=>{if(!ak.value){const vv=lsGet('anthropic_key');ak.value=vv&&!vv.startsWith('%%')?'••••••••'+vv.slice(-4):'';ak.placeholder=vv&&!vv.startsWith('%%')?'(guardado — clic para cambiar)':'sk-ant-api03-...';}};}
   const aks=document.getElementById('umAnthropicStatus');if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar — KAI no puede responder';}
+  const elk=document.getElementById('umElevenLabsKey');if(elk){const v=localStorage.getItem('elevenlabs_key');elk.value=v?'••••••••'+v.slice(-4):'';elk.placeholder=v?'(guardado — clic para cambiar)':'sk_...';elk.onfocus=()=>{if(elk.value.startsWith('••')){elk.value='';elk.placeholder='sk_...';}};elk.onblur=()=>{if(!elk.value){const vv=localStorage.getItem('elevenlabs_key');elk.value=vv?'••••••••'+vv.slice(-4):'';elk.placeholder=vv?'(guardado — clic para cambiar)':'sk_...';}};}
+  const elks=document.getElementById('umElevenLabsStatus');if(elks){const v=localStorage.getItem('elevenlabs_key');elks.textContent=v?'✓ Voz ElevenLabs activa — calidad premium':'Sin configurar — usando voz del navegador';}
   const _delay=window.innerWidth<=768?400:10;
   setTimeout(()=>document.addEventListener('click',closeUserMenuOutside),_delay);
 }
@@ -4328,6 +4349,22 @@ function clearUserMenuAnthropicKey(){
   const inp=document.getElementById('umAnthropicKey');if(inp){inp.value='';inp.placeholder='sk-ant-api03-...';}
   const aks=document.getElementById('umAnthropicStatus');if(aks)aks.textContent='Sin configurar — KAI no puede responder';
   toast('KAI API Key eliminada','info');
+}
+function saveUserMenuElevenLabsKey(){
+  const inp=document.getElementById('umElevenLabsKey');
+  const val=(inp?.value||'').trim();
+  if(!val){toast('Ingresa una API Key de ElevenLabs','error');return;}
+  localStorage.setItem('elevenlabs_key',val);
+  inp.value='••••••••'+val.slice(-4);
+  inp.placeholder='(guardado — clic para cambiar)';
+  const s=document.getElementById('umElevenLabsStatus');if(s)s.textContent='✓ Voz ElevenLabs activa — calidad premium';
+  toast('✓ ElevenLabs Key guardada — KAI hablará con voz premium','success');
+}
+function clearUserMenuElevenLabsKey(){
+  localStorage.removeItem('elevenlabs_key');
+  const inp=document.getElementById('umElevenLabsKey');if(inp){inp.value='';inp.placeholder='sk_...';}
+  const s=document.getElementById('umElevenLabsStatus');if(s)s.textContent='Sin configurar — usando voz del navegador';
+  toast('ElevenLabs Key eliminada — usando voz del navegador','info');
 }
 function clearUserMenuProxy(){
   localStorage.removeItem('proxy_url');localStorage.removeItem('proxy_key');
@@ -12536,6 +12573,10 @@ function populateMobileConfig(){
   if(ak){const v=lsGet('anthropic_key');ak.value=v&&!v.startsWith('%%')?'••••••••'+v.slice(-4):'';ak.placeholder=v&&!v.startsWith('%%')?'(guardado)':'sk-ant-api03-...';}
   const aks=document.getElementById('mbAnthropicStatus');
   if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar';}
+  const elk=document.getElementById('mbElevenLabsKey');
+  if(elk){const v=localStorage.getItem('elevenlabs_key');elk.value=v?'••••••••'+v.slice(-4):'';elk.placeholder=v?'(guardado)':'sk_...';}
+  const elks=document.getElementById('mbElevenLabsStatus');
+  if(elks){const v=localStorage.getItem('elevenlabs_key');elks.textContent=v?'✓ Voz ElevenLabs activa':'Sin configurar — voz del navegador';}
 }
 function saveMbAirtableToken(){
   const inp=document.getElementById('mbAirtableToken');const v=(inp?.value||'').trim();
@@ -12614,6 +12655,20 @@ function clearMbAnthropicKey(){
   const inp=document.getElementById('mbAnthropicKey');if(inp){inp.value='';inp.placeholder='sk-ant-api03-...';}
   const st=document.getElementById('mbAnthropicStatus');if(st) st.textContent='Sin configurar';
   toast('KAI API Key eliminada','info');
+}
+function saveMbElevenLabsKey(){
+  const inp=document.getElementById('mbElevenLabsKey');const v=(inp?.value||'').trim();
+  if(!v){toast('Ingresa una API Key de ElevenLabs','error');return;}
+  localStorage.setItem('elevenlabs_key',v);
+  if(inp){inp.value='••••••••'+v.slice(-4);}
+  const st=document.getElementById('mbElevenLabsStatus');if(st) st.textContent='✓ Voz ElevenLabs activa';
+  toast('✓ ElevenLabs Key guardada — KAI hablará con voz premium','success');
+}
+function clearMbElevenLabsKey(){
+  localStorage.removeItem('elevenlabs_key');
+  const inp=document.getElementById('mbElevenLabsKey');if(inp){inp.value='';inp.placeholder='sk_...';}
+  const st=document.getElementById('mbElevenLabsStatus');if(st) st.textContent='Sin configurar — voz del navegador';
+  toast('ElevenLabs Key eliminada — usando voz del navegador','info');
 }
 document.addEventListener('click',function(e){
   const dd=document.getElementById('nuevoDropdown');
@@ -13289,10 +13344,38 @@ CAPACIDADES Y REGLAS:
   }
 
   // ─── TTS ───
-  function speak(text){
-    if(!text||!JV.synth){ setState('idle'); maybeRelisten(); return; }
+  async function speak(text){
+    if(!text){ setState('idle'); maybeRelisten(); return; }
+    const clean=text.replace(/[*_#`]/g,'').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,'').trim();
+    if(!clean){ setState('idle'); maybeRelisten(); return; }
+
+    // ElevenLabs premium TTS
+    const elKey=localStorage.getItem('elevenlabs_key');
+    if(elKey){
+      try{
+        setState('speaking');
+        const voiceId=localStorage.getItem('elevenlabs_voice_id')||'pNInz6obpgDQGcFmaJgB';
+        const r=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,{
+          method:'POST',
+          headers:{'Accept':'audio/mpeg','Content-Type':'application/json','xi-api-key':elKey},
+          body:JSON.stringify({text:clean,model_id:'eleven_multilingual_v2',voice_settings:{stability:0.5,similarity_boost:0.75,style:0,use_speaker_boost:true}})
+        });
+        if(r.ok){
+          const blob=await r.blob();
+          const url=URL.createObjectURL(blob);
+          const audio=new Audio(url);
+          audio.onended=()=>{ URL.revokeObjectURL(url); setState('idle'); maybeRelisten(); };
+          audio.onerror=()=>{ URL.revokeObjectURL(url); setState('idle'); maybeRelisten(); };
+          audio.play();
+          return;
+        }
+      }catch(e){ /* fall through to browser TTS */ }
+    }
+
+    // Fallback: browser SpeechSynthesis
+    if(!JV.synth){ setState('idle'); maybeRelisten(); return; }
     JV.synth.cancel();
-    const u=new SpeechSynthesisUtterance(text.replace(/[*_#`]/g,'').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,''));
+    const u=new SpeechSynthesisUtterance(clean);
     u.lang='es-CL'; u.rate=1.06; u.pitch=.95;
     const vs=JV.synth.getVoices();
     const v=vs.find(x=>x.lang.startsWith('es')&&/google/i.test(x.name))||vs.find(x=>x.lang.startsWith('es'));
