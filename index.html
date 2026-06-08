@@ -1559,9 +1559,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <th class="sort-th" onclick="sortClientes('revenue')">Revenue</th>
           <th class="sort-th" onclick="sortClientes('val')">Val.</th>
           <th class="sort-th" onclick="sortClientes('estado')">Estado</th>
+          <th>Vendedor</th>
           <th>Acc.</th>
         </tr></thead>
-        <tbody id="clientesTableBody"><tr><td colspan="9"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody>
+        <tbody id="clientesTableBody"><tr><td colspan="10"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -1652,6 +1653,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </div>
         <div class="field-group"><label class="field-label">Equipo asignado</label><input class="field-input" id="editPedidoEquipo" placeholder="Gustavo, Florencia..."></div>
         <div class="field-group form-full"><label class="field-label">Proveedor</label><input class="field-input" id="editPedidoProveedor" placeholder="Nombre del proveedor"></div>
+        <div class="field-group" id="editPedidoVendedorWrap">
+          <label class="field-label">Vendedor asignado</label>
+          <select class="field-select" id="editPedidoVendedor"><option value="">— Sin asignar —</option></select>
+        </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
         <button class="btn btn-ghost btn-sm" onclick="closeEditPedidoModal()">Cancelar</button>
@@ -2001,6 +2006,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="nl-rut" placeholder="76.123.456-7"></div>
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="nl-web" placeholder="https://empresa.cl"></div>
       <div class="field-group form-full"><label class="field-label">Notas</label><textarea class="field-textarea" id="nl-notas"></textarea></div>
+      <div class="field-group" id="nl-vendedor-wrap" style="display:none">
+        <label class="field-label">Vendedor asignado</label>
+        <select class="field-select" id="nl-vendedor"><option value="">— Sin asignar —</option></select>
+      </div>
     </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="clearForm('lead')">Limpiar</button>
@@ -2549,6 +2558,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">Valoración (1-5)</label><input class="field-input" id="ecValoracion" type="number" min="1" max="5"></div>
       <div class="field-group"><label class="field-label">Facturas vencidas</label><input class="field-input" id="ecFactVenc" type="number" min="0"></div>
       <div class="field-group form-full"><label class="field-label">Notas</label><textarea class="field-textarea" id="ecNotas" rows="3"></textarea></div>
+      <div class="field-group" id="ec-vendedor-wrap" style="display:none">
+        <label class="field-label">Vendedor asignado</label>
+        <select class="field-select" id="ec-vendedor"><option value="">— Sin asignar —</option></select>
+      </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost btn-sm" onclick="closeEditCliente()">Cancelar</button><button class="btn btn-primary btn-sm" id="ecGuardarBtn" onclick="saveEditCliente()">💾 Guardar cambios</button></div>
   </div>
@@ -5365,6 +5378,7 @@ function buildClienteRow(c){
     <td class="td-revenue clp" data-label="Revenue">${formatCLP(f['Revenue total cliente (CLP)']||0)}</td>
     <td class="td-val" data-label="Val.">${'★'.repeat(val)}${'☆'.repeat(5-val)}</td>
     <td class="td-estado" data-label="Estado">${estadoBadge(f['Estado cuenta']||'Al día')}</td>
+    <td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(resolveVendedorName(f['Vendedor']||''))}</td>
     <td class="td-acc">
       <div class="act-drop">
         <button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cli-${c.id}')">⋯</button>
@@ -5385,7 +5399,7 @@ function renderClientes(){
     const emptyMsg=isVendorMode()&&state.clientes.length
       ?'<div class="empty-state"><div class="empty-icon">👥</div>Aún no tienes clientes asignados<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>'
       :'<div class="empty-state"><div class="empty-icon">👥</div>Aún no hay clientes<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>';
-    tbody.innerHTML='<tr><td colspan="9">'+emptyMsg+'</td></tr>';return;
+    tbody.innerHTML='<tr><td colspan="10">'+emptyMsg+'</td></tr>';return;
   }
   tbody.innerHTML=sorted.map(c=>buildClienteRow(c)).join('');if(document.getElementById('clienteSearch')?.value) filterClientes();
   renderClientesAnalytics();
@@ -5822,6 +5836,7 @@ async function confirmarImportarDtes(){
 function openEditCliente(id){
   const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields;
   document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Ciudad']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'Referido';document.getElementById('ecEtapa').value=f['Etapa venta']||'Lead nuevo';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
+  const _ecV=document.getElementById('ec-vendedor');if(_ecV) _ecV.value=f['Vendedor']||'';
   document.getElementById('editClienteModal').style.display='flex';
 }
 function closeEditCliente(){document.getElementById('editClienteModal').style.display='none';}
@@ -5837,6 +5852,7 @@ async function saveEditCliente(){
   const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('ecCargo').value,'Teléfono':document.getElementById('ecTelefono').value,'Email':document.getElementById('ecEmail').value,'Sitio web':document.getElementById('ecWeb').value,'RUT':document.getElementById('ecRut').value,'Industria / Rubro':document.getElementById('ecIndustria').value,'Origen lead':document.getElementById('ecOrigen').value,'Etapa venta':document.getElementById('ecEtapa').value,'Estado cuenta':document.getElementById('ecEstado').value,'Facturas vencidas':parseInt(document.getElementById('ecFactVenc').value)||0,'Notas internas':document.getElementById('ecNotas').value};
   if(document.getElementById('ecValoracion').value) fields['Valoración cliente']=parseInt(document.getElementById('ecValoracion').value);
   const ciudadVal=document.getElementById('ecCiudad').value.trim();if(ciudadVal) fields['Ciudad']=ciudadVal;
+  const _ecVv=document.getElementById('ec-vendedor')?.value||'';fields['Vendedor']=_ecVv||null;
   try{
     await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}
     toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();
@@ -5930,6 +5946,7 @@ async function crearPedidoDesdeCotizacion(cotId){
   const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0};
   if(Array.isArray(f['Cliente'])&&f['Cliente'].length>0) fields['Cliente']=f['Cliente'];
   if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
+  if(f['Vendedor']) fields['Vendedor']=f['Vendedor'];
   try{await airtableWrite('Pedidos','POST',null,fields);toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();}
   catch(e){if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('cliente')){try{await airtableWrite('Pedidos','POST',null,{'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']});toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');}}else{toast(`⚠ Error: ${e.message}`,'error');}}
 }
@@ -7764,6 +7781,7 @@ function openEditPedidoModal(id){
   document.getElementById('editPedidoFormaPago').value=f['Forma de pago']||'';
   document.getElementById('editPedidoEquipo').value=f['Equipo asignado']||'';
   document.getElementById('editPedidoProveedor').value=f['Proveedor']||'';
+  const _epV=document.getElementById('editPedidoVendedor');if(_epV) _epV.value=f['Vendedor']||'';
   document.getElementById('editPedidoModal').style.display='flex';
 }
 function closeEditPedidoModal(){document.getElementById('editPedidoModal').style.display='none';}
@@ -7773,6 +7791,7 @@ async function saveEditPedido(){
   try{
     const fields={'Estado pedido':document.getElementById('editPedidoEstado').value,'Fecha entrega':document.getElementById('editPedidoFecha').value||null,'Equipo asignado':document.getElementById('editPedidoEquipo').value,'Proveedor':document.getElementById('editPedidoProveedor').value};
     const fp=document.getElementById('editPedidoFormaPago').value;if(fp) fields['Forma de pago']=fp;
+    const _epVv=document.getElementById('editPedidoVendedor')?.value||'';fields['Vendedor']=_epVv||null;
     if(fields['Estado pedido']==='Despachado'&&!state.pedidos.find(x=>x.id===id)?.fields['Fecha despacho']) fields['Fecha despacho']=new Date().toISOString().split('T')[0];
     await airtableWrite('Pedidos','PATCH',id,fields);
     const p=state.pedidos.find(x=>x.id===id);if(p) Object.assign(p.fields,fields);
@@ -7957,7 +7976,7 @@ async function createLead(){
   const dirVal=document.getElementById('nl-direccion')?.value.trim();if(dirVal) fields['Dirección']=dirVal;
   const regVal=document.getElementById('nl-region')?.value;if(regVal) fields['Región']=regVal;
   const comVal=document.getElementById('nl-comuna')?.value;if(comVal) fields['Comuna']=comVal;
-  if(isVendorMode()) fields['Vendedor']=currentVendorId();
+  if(isVendorMode()){fields['Vendedor']=currentVendorId();}else{const nlV=document.getElementById('nl-vendedor')?.value;if(nlV) fields['Vendedor']=nlV;}
   // Pre-carga análisis del agente si existe
   if(_leadAgentResponse) fields['Respuesta SALES_AGENT']=_leadAgentResponse.substring(0,5000);
   const saveAndPatch=async(f)=>{
@@ -10354,6 +10373,20 @@ function applyRBAC(role){
       }
     }
   }
+  // Selector de vendedor en nuevo lead y editar cliente — solo visible para admin/gerencia
+  const _isAdminRole=['admin','gerencia'].includes(role);
+  const _vendedorOpts='<option value="">— Sin asignar —</option>'+PERSONAS.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+  ['nl-vendedor-wrap','ec-vendedor-wrap'].forEach(wrapId=>{
+    const wrap=document.getElementById(wrapId);if(!wrap) return;
+    wrap.style.display=_isAdminRole?'':'none';
+    const sel=wrap.querySelector('select');
+    if(sel&&!sel.dataset.populated){sel.innerHTML=_vendedorOpts;sel.dataset.populated='1';}
+  });
+  // Selector de vendedor en editar pedido — visible para admin; poblado siempre
+  const pedVendedorSel=document.getElementById('editPedidoVendedor');
+  if(pedVendedorSel&&!pedVendedorSel.dataset.populated){pedVendedorSel.innerHTML=_vendedorOpts;pedVendedorSel.dataset.populated='1';}
+  const pedVendedorWrap=document.getElementById('editPedidoVendedorWrap');
+  if(pedVendedorWrap) pedVendedorWrap.style.display=_isAdminRole?'':'none';
 }
 
 async function handleLogin(e){
