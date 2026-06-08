@@ -4280,7 +4280,15 @@ function getOpenAIKey(){return localStorage.getItem('fp_openai_key')||_DEFAULTS.
 // ── VENDOR LAYER ─────────────────────────────────────────────
 function currentVendorId(){const u=AUTH.getUser();return u?u.username.split('@')[0].toLowerCase():null;}
 function isVendorMode(){const u=AUTH.getUser();return!!(u&&u.role==='comercial');}
-function vendorOwnsRecord(r){if(!isVendorMode()) return true;const vid=currentVendorId();if(!vid) return false;return(r.fields['Vendedor']||'').toLowerCase().trim()===vid;}
+function vendorOwnsRecord(r){
+  if(!isVendorMode()) return true;
+  const vid=currentVendorId();if(!vid) return false;
+  if((r.fields['Vendedor']||'').toLowerCase().trim()===vid) return true;
+  // Fallback: check associated client's Vendedor (for records created before field existed)
+  const clienteId=Array.isArray(r.fields['Cliente'])?r.fields['Cliente'][0]:r.fields['Cliente'];
+  if(clienteId){const cli=state.clientes.find(x=>x.id===clienteId);if(cli&&(cli.fields['Vendedor']||'').toLowerCase().trim()===vid) return true;}
+  return false;
+}
 // ─────────────────────────────────────────────────────────────
 function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
 function showTokenModal(){openUserMenu();const i=document.getElementById('umAirtableToken');if(i){i.type='text';i.focus();}}
@@ -5000,9 +5008,22 @@ function switchTab(name){
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────
-function renderOverview(){renderKPIs();renderEquipoSnapshot();renderPipelineArea();renderCotTable();renderAlertas();renderCharts();}
+function renderOverview(){
+  renderKPIs();
+  renderEquipoSnapshot();
+  renderPipelineArea();
+  renderCotTable();
+  renderAlertas();
+  renderCharts();
+  // Hide finanzas/web/ads snapshot grid for vendor role
+  const vendor=isVendorMode();
+  const finCard=document.getElementById('overview-fin-card');
+  if(finCard&&finCard.parentElement) finCard.parentElement.style.display=vendor?'none':'';
+  // Equipo snapshot already handled in renderEquipoSnapshot
+}
 function renderEquipoSnapshot(){
   const el=document.getElementById('equipoSnapshot');if(!el) return;
+  if(isVendorMode()){el.style.display='none';return;}
   const today=new Date();today.setHours(0,0,0,0);
   const todayStr=fmtDate(today);
   const dayLabel=today.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
@@ -5107,11 +5128,29 @@ function renderKPIs(){
     :`<div style="font-size:9px;color:var(--text3);margin-top:4px;cursor:pointer" onclick="event.stopPropagation();openMetaModal()">+ definir meta semanal</div>`;
 
   const kpiStyle='cursor:pointer;transition:border-color .15s' ;
+
+  if(isVendorMode()){
+    const TASA=0.035;
+    const despachados=_ped.filter(p=>(p.fields['Estado pedido']||'')==='Despachado');
+    const revDespMes=despachados.filter(p=>p.createdTime&&new Date(p.createdTime)>=monthStart).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+    const comisionMes=Math.round(revDespMes*TASA);
+    const pipelineTotal=_cot.filter(c=>['Solicitada','Enviada'].includes(c.fields['Estado cotización']||'')).reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
+    const comisionPipeline=Math.round(pipelineTotal*TASA);
+    document.getElementById('kpiGrid').innerHTML=`
+      <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver mis pedidos"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">mis pedidos</div>${pctBadge(revSemana,revAnterior)}</div>
+      <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos activos"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'al día'}</div></div>
+      <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div></div>
+      <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver mis clientes"><div class="kpi-label">Mis Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">cartera asignada</div></div>
+      <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('remuneraciones')" title="Ver remuneraciones"><div class="kpi-label">Comisión Mes</div><div class="kpi-value" style="color:var(--accent3)">${formatCLP(comisionMes)}</div><div class="kpi-sub">3.5% de ${formatCLP(revDespMes)}</div></div>
+      <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('remuneraciones')" title="Ver remuneraciones"><div class="kpi-label">Pipeline Potencial</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(pipelineTotal)}</div><div class="kpi-sub">comisión pot.: ${formatCLP(comisionPipeline)}</div></div>`;
+    return;
+  }
+
   document.getElementById('kpiGrid').innerHTML=`
     <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${metaHtml}</div>
     <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
     <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
-    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">${isVendorMode()?'mis clientes':'en CRM'}</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
+    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
     <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas"><div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
     <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones"><div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
 }
@@ -5271,8 +5310,10 @@ function renderAlertas(){
 }
 
 function renderCharts(){
+  const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
   const estados=['Confirmado','En producción','Listo para despacho','Despachado'],colores={'Confirmado':'#00d4cc','En producción':'#ff6b35','Listo para despacho':'#00d4aa','Despachado':'#a78bfa'};
-  const counts={};estados.forEach(e=>counts[e]=0);state.pedidos.forEach(p=>{const e=p.fields['Estado pedido']||'';if(counts[e]!==undefined) counts[e]++;});
+  const counts={};estados.forEach(e=>counts[e]=0);_ped.forEach(p=>{const e=p.fields['Estado pedido']||'';if(counts[e]!==undefined) counts[e]++;});
   const total=Object.values(counts).reduce((a,b)=>a+b,0);const elE=document.getElementById('chartEstados');
   if(!total){elE.innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Sin datos</div>';}
   else{const size=130,r=46,sw=16,cx=65,cy=65,circ=2*Math.PI*r;let offset=0,segs='';estados.forEach(e=>{const c=counts[e];if(!c) return;const len=(c/total)*circ;segs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colores[e]}" stroke-width="${sw}" stroke-dasharray="${len} ${circ-len}" stroke-dashoffset="-${offset}" transform="rotate(-90 ${cx} ${cy})"></circle>`;offset+=len;});const legend=estados.filter(e=>counts[e]>0).map(e=>`<div class="donut-legend-item"><span class="donut-legend-dot" style="background:${colores[e]}"></span><span style="flex:1">${e}</span><span class="mono text-muted">${counts[e]}</span></div>`).join('');elE.innerHTML=`<div class="donut-wrap"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface3)" stroke-width="${sw}"></circle>${segs}<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" style="font-family:'Bebas Neue';font-size:22px;fill:var(--text)">${total}</text><text x="${cx}" y="${cy+16}" text-anchor="middle" dominant-baseline="middle" style="font-size:9px;fill:var(--text3)">PEDIDOS</text></svg><div class="donut-legend">${legend}</div></div>`;}
@@ -5281,8 +5322,8 @@ function renderCharts(){
     const s=new Date(today);s.setDate(today.getDate()-today.getDay()-(i*7));s.setHours(0,0,0,0);
     const e2=new Date(s);e2.setDate(s.getDate()+7);
     let rev=0;
-    state.pedidos.forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return;const monto=f['Monto total (CLP)']||0;if(!monto) return;const d=p.createdTime?new Date(p.createdTime):null;if(d&&d>=s&&d<e2) rev+=Math.round(monto/1.19);});
-    state.cotizaciones.forEach(c=>{const f=c.fields;if((f['Estado cotización']||'')==='Aprobada'){const monto=f['Total final (CLP)']||0;if(!monto) return;const d=c.createdTime?new Date(c.createdTime):null;if(d&&d>=s&&d<e2) rev+=Math.round(monto/1.19);}});
+    _ped.forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return;const monto=f['Monto total (CLP)']||0;if(!monto) return;const d=p.createdTime?new Date(p.createdTime):null;if(d&&d>=s&&d<e2) rev+=Math.round(monto/1.19);});
+    _cot.forEach(c=>{const f=c.fields;if((f['Estado cotización']||'')==='Aprobada'){const monto=f['Total final (CLP)']||0;if(!monto) return;const d=c.createdTime?new Date(c.createdTime):null;if(d&&d>=s&&d<e2) rev+=Math.round(monto/1.19);}});
     weeks.push({label:`${s.getDate()}/${s.getMonth()+1}`,rev,cur:i===0});
   }
   const maxR=Math.max(...weeks.map(w=>w.rev),1);const elR=document.getElementById('chartRevenue');
@@ -10158,6 +10199,7 @@ const DEMO_DATA={
     {id:'recP005',createdTime:'2026-04-28T10:00:00.000Z',fields:{'N° Pedido':'PED-044','Cliente':['recC003'],'Descripción del pedido':'50 trofeos golf corporativo. Base pino barnizado + figura jugador impresa 3D PLA dorado + placa acrílica grabada con nombre torneo.','Estado pedido':'Despachado','Monto total (CLP)':650000,'Fecha entrega':'2026-05-05','Fecha despacho':'2026-05-04','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
     {id:'recP006',createdTime:'2026-04-15T10:00:00.000Z',fields:{'N° Pedido':'PED-042','Cliente':['recC006'],'Descripción del pedido':'Neones decorativos para gala: letrero "AWARDS 2026" tubería flex rosa + 2 marcos rectangulares con iluminación. Estructura desmontable para alquiler.','Estado pedido':'Despachado','Monto total (CLP)':380000,'Fecha entrega':'2026-04-22','Fecha despacho':'2026-04-21','Equipo responsable':'Gustavo','Equipo asignado':'Gustavo Kaiser','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'LED Masters Chile','Vendedor':'florencia'}},
     {id:'recP007',createdTime:'2026-04-05T10:00:00.000Z',fields:{'N° Pedido':'PED-040','Cliente':['recC001'],'Descripción del pedido':'Lote especial 60 piezas PLA flex para componentes automotrices. Colores: negro + rojo cereza. Post-proceso: barniz mate anticorrosión.','Estado pedido':'Despachado','Monto total (CLP)':920000,'Fecha entrega':'2026-04-12','Fecha despacho':'2026-04-12','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
+    {id:'recP008',createdTime:'2026-06-03T10:00:00.000Z',fields:{'N° Pedido':'PED-050','Cliente':['recC005'],'Descripción del pedido':'Kit de prototipos IoT Serie B — 5 carcasas PETG negro + 2 soportes de pared con acabado premium.','Estado pedido':'Despachado','Monto total (CLP)':490000,'Fecha entrega':'2026-06-05','Fecha despacho':'2026-06-04','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'Saldo pagado (50%)':true,'QA':'QA aprobado','Vendedor':'florencia'}},
   ]},
   Reportes:{records:[
     {id:'recR001',createdTime:'2026-06-02T10:00:00.000Z',fields:{'Semana':'Sem. 23 / 2026','Revenue semana (CLP)':1820000,'Pedidos activos':4,'Pedidos despachados':2,'Margen promedio semana (%)':38.5,'Tasa conversión (%)':62,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana sólida. Revenue $1.82M (+12% vs sem. anterior). 2 pedidos despachados a tiempo (Tech Solutions y Retail Sur). Pipeline activo: 4 pedidos en producción. \n\nDestacado: K2 Plus completó lote de 18 piezas aeronáuticas para PED-047 con QA aprobado. Margen de 38.5% impulsado por reducción de filamento desperdiciado (nuevo perfil de slicing).\n\nAtención: cotización 260519 ($1.2M) con Universidad de Chile vence en 2 días — seguimiento urgente. Florencia coordina reunión de cierre.'}},
