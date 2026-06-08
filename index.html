@@ -55,6 +55,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .section-header{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;}
 .section-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;}
 .section-subtitle{font-size:12px;color:var(--text2);}
+.section-desc{font-size:11px;color:var(--text3);font-weight:400;line-height:1.5;margin-top:2px;max-width:640px;}
+.tab-icon{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle;flex-shrink:0;}
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:24px;}
 .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden;}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
@@ -1152,19 +1154,19 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
   <button id="mobilePlusBtn" class="mobile-menu-btn" onclick="toggleNuevoMenuMobile(event)" style="display:none;font-size:20px;font-weight:300;padding:6px 12px">＋</button>
   <nav class="topbar-nav">
-    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button>
-    <button class="tab-btn" data-tab="clientes" onclick="switchTab('clientes')">👥 Clientes</button>
-    <button class="tab-btn" data-tab="cotizaciones" onclick="switchTab('cotizaciones')">📋 Cotizaciones</button>
-    <button class="tab-btn" data-tab="pedidos" onclick="switchTab('pedidos')">📦 Pedidos</button>
-    <button class="tab-btn" data-tab="proveedores" onclick="switchTab('proveedores')">🏭 Proveedores</button>
-    <button class="tab-btn" data-tab="agentes" onclick="switchTab('agentes')">🤖 Agentes</button>
-    <button class="tab-btn" data-tab="maquinas" onclick="switchTab('maquinas')">🖨️ Máquinas</button>
-    <button class="tab-btn" data-tab="equipo" onclick="switchTab('equipo')">👤 Equipo</button>
-    <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')">📊 Reportes</button>
-    <button class="tab-btn" data-tab="web" onclick="switchTab('web')">🌐 Web</button>
-    <button class="tab-btn" data-tab="finanzas" onclick="switchTab('finanzas')">💰 Finanzas</button>
-    <button class="tab-btn" data-tab="visual" onclick="switchTab('visual')">🎨 Visual AI</button>
-    <button class="tab-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')">💵 Remuneraciones</button>
+    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')"><span class="tab-icon" style="background:#00d4cc"></span>🏠 Overview</button>
+    <button class="tab-btn" data-tab="clientes" onclick="switchTab('clientes')"><span class="tab-icon" style="background:#3b82f6"></span>👥 Clientes</button>
+    <button class="tab-btn" data-tab="cotizaciones" onclick="switchTab('cotizaciones')"><span class="tab-icon" style="background:#a78bfa"></span>📋 Cotizaciones</button>
+    <button class="tab-btn" data-tab="pedidos" onclick="switchTab('pedidos')"><span class="tab-icon" style="background:#ff6b35"></span>📦 Pedidos</button>
+    <button class="tab-btn" data-tab="proveedores" onclick="switchTab('proveedores')"><span class="tab-icon" style="background:#ffaa00"></span>🏭 Proveedores</button>
+    <button class="tab-btn" data-tab="agentes" onclick="switchTab('agentes')"><span class="tab-icon" style="background:#10b981"></span>🤖 Agentes</button>
+    <button class="tab-btn" data-tab="maquinas" onclick="switchTab('maquinas')"><span class="tab-icon" style="background:#ff4444"></span>🖨️ Máquinas</button>
+    <button class="tab-btn" data-tab="equipo" onclick="switchTab('equipo')"><span class="tab-icon" style="background:#f472b6"></span>👤 Equipo</button>
+    <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')"><span class="tab-icon" style="background:#14b8a6"></span>📊 Reportes</button>
+    <button class="tab-btn" data-tab="web" onclick="switchTab('web')"><span class="tab-icon" style="background:#6366f1"></span>🌐 Web</button>
+    <button class="tab-btn" data-tab="finanzas" onclick="switchTab('finanzas')"><span class="tab-icon" style="background:#22c55e"></span>💰 Finanzas</button>
+    <button class="tab-btn" data-tab="visual" onclick="switchTab('visual')"><span class="tab-icon" style="background:#8b5cf6"></span>🎨 Visual AI</button>
+    <button class="tab-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="tab-icon" style="background:#84cc16"></span>💵 Remuneraciones</button>
   </nav>
   <div id="nuevoDropdown" style="position:relative;display:inline-flex;align-items:center;flex-shrink:0">
     <button class="tab-btn" id="nuevoDropBtn" onclick="toggleNuevoMenu(event)" style="display:flex;align-items:center;gap:4px;background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);font-weight:700">
@@ -1298,7 +1300,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div class="main">
 <!-- OVERVIEW -->
 <div class="tab-panel active" id="tab-overview">
-  <div class="section-header"><div class="section-title">Centro de Comando</div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue">🎯 Meta</button></div></div>
+  <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue">🎯 Meta</button></div></div>
   <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana</div><div class="kpi-skeleton"></div></div>
     <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-skeleton"></div></div>
@@ -1430,7 +1432,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- CLIENTES -->
 <div class="tab-panel" id="tab-clientes">
-  <div class="section-header"><div class="section-title">Clientes</div><div class="section-subtitle" id="clientesCount">—</div></div>
+  <div class="section-header"><div><div class="section-title">Clientes</div><div class="section-desc">Gestiona tu cartera de clientes: historial de compras, estado de cuenta, cotizaciones activas y datos de contacto.</div></div><div class="section-subtitle" id="clientesCount">—</div></div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Base CRM</span>
@@ -1472,7 +1474,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- COTIZACIONES -->
 <div class="tab-panel" id="tab-cotizaciones">
-  <div class="section-header"><div class="section-title">Cotizaciones</div></div>
+  <div class="section-header"><div><div class="section-title">Cotizaciones</div><div class="section-desc">Crea y gestiona presupuestos para tus clientes. Controla estado, fechas de vencimiento y convierte cotizaciones aprobadas en pedidos con un clic.</div></div></div>
   <div class="card">
     <div class="card-header">
       <span class="card-title" id="cotTableTitle">Todas las Cotizaciones</span>
@@ -1500,7 +1502,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- PEDIDOS -->
 <div class="tab-panel" id="tab-pedidos">
-  <div class="section-header"><div class="section-title">Pedidos en Producción</div></div>
+  <div class="section-header"><div><div class="section-title">Pedidos en Producción</div><div class="section-desc">Seguimiento completo de cada orden: estado de producción, fecha de entrega comprometida, control de calidad (QA) y equipo responsable.</div></div></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)">⚠ Atrasados</button>
@@ -1741,7 +1743,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- PROVEEDORES -->
 <div class="tab-panel" id="tab-proveedores">
-  <div class="section-header"><div class="section-title">Proveedores</div><div class="section-subtitle" id="proveedoresCount">—</div></div>
+  <div class="section-header"><div><div class="section-title">Proveedores</div><div class="section-desc">Directorio de proveedores activos: filamentos, componentes LED, packaging y servicios. Gestiona contactos, evalúa reputación y controla plazos de entrega.</div></div><div class="section-subtitle" id="proveedoresCount">—</div></div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Directorio</span>
@@ -2145,7 +2147,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- AGENTES -->
 <div class="tab-panel" id="tab-agentes">
-  <div class="section-header"><div class="section-title">Centro de Agentes IA</div></div>
+  <div class="section-header"><div><div class="section-title">Centro de Agentes IA</div><div class="section-desc">Agentes inteligentes especializados que analizan tus datos en tiempo real y generan insights, reportes automáticos y propuestas de acción para tu negocio.</div></div></div>
 
   <!-- SUPPLIER SEARCH AGENT -->
   <div class="card" style="margin-bottom:20px;border-color:rgba(255,107,53,0.35);box-shadow:0 0 24px rgba(255,107,53,0.07)">
@@ -2215,7 +2217,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- MÁQUINAS -->
 <div class="tab-panel" id="tab-maquinas">
   <div class="section-header">
-    <div><div class="section-title">Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div></div>
+    <div><div class="section-title">Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div><div class="section-desc">Monitorea en tiempo real el estado de cada impresora 3D: disponible, imprimiendo o en mantención. Gestiona colas de trabajo y recibe alertas de fallos automáticamente.</div></div>
     <button class="btn btn-ghost btn-sm" onclick="openMaquinasManager()" style="font-size:11px">⚙ Gestionar máquinas</button>
   </div>
 
@@ -2298,7 +2300,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- EQUIPO -->
 <div class="tab-panel" id="tab-equipo">
-  <div class="section-header"><div class="section-title">Disponibilidad del Equipo</div><div class="section-subtitle" id="equipoSubtitle">—</div></div>
+  <div class="section-header"><div><div class="section-title">Disponibilidad del Equipo</div><div class="section-subtitle" id="equipoSubtitle">—</div><div class="section-desc">Vista semanal de disponibilidad de cada miembro del equipo. Registra ausencias, sincroniza con Google Calendar y planifica la carga de trabajo de la semana.</div></div></div>
   <div id="gcalEquipoConfig" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:14px 16px;margin-bottom:16px">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:10px">Google Calendar</div>
     <div id="gcalPersonasConfig"></div>
@@ -2521,7 +2523,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- REPORTES -->
 <div class="tab-panel" id="tab-reporte">
-  <div class="section-header"><div class="section-title">Reportes Ejecutivos</div></div>
+  <div class="section-header"><div><div class="section-title">Reportes Ejecutivos</div><div class="section-desc">Informes semanales de revenue, conversión y margen operativo. Historial completo para analizar tendencias y tomar decisiones estratégicas.</div></div></div>
   <div class="data-grid">
     <div class="card"><div class="card-header"><span class="card-title">Historial</span><span style="font-size:11px;color:var(--text3)">clic en fila para ver resumen</span></div><div class="table-wrap"><table><thead><tr><th>Semana</th><th>Revenue</th><th>Pedidos</th><th>Margen</th><th>Conv.</th><th>Estado</th><th style="width:28px"></th></tr></thead><tbody id="reportesTableBody"></tbody></table></div></div>
     <div class="card"><div class="card-header"><span class="card-title">📊 Generar Reporte</span></div>
@@ -2543,7 +2545,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- WEB TAB -->
 <div class="tab-panel" id="tab-web">
   <div class="section-header">
-    <div class="section-title">Web · thelab.solutions</div>
+    <div><div class="section-title">Web · thelab.solutions</div><div class="section-desc">Gestiona el SEO de tu sitio web: optimiza títulos, meta descriptions y campañas de Google Ads. Usa IA para mejorar el posicionamiento en Google.</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="toggleWPConfig()">⚙ Configurar WP</button>
       <button class="btn btn-ghost btn-sm" onclick="openSEODiag()">🔬 Diagnóstico SEO</button>
@@ -2883,7 +2885,7 @@ function main() {
 <!-- ══════════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="tab-finanzas">
   <div class="section-header">
-    <div class="section-title">💰 Finanzas</div>
+    <div><div class="section-title">💰 Finanzas</div><div class="section-desc">Control financiero completo: ventas anuales, facturas emitidas, cuentas por cobrar, préstamos activos y libro diario de ingresos y gastos.</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <span class="section-subtitle" id="finActualizadoEn">—</span>
       <button class="btn btn-ghost btn-sm" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
@@ -7097,7 +7099,7 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
 <!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
 <div class="tab-panel" id="tab-visual">
   <div class="section-header" style="margin-bottom:16px">
-    <div class="section-title">🎨 Herramientas Visuales</div>
+    <div><div class="section-title">🎨 Herramientas Visuales</div><div class="section-desc">Herramientas de diseño y visualización 3D integradas para crear mockups, renders y presentaciones profesionales para tus clientes.</div></div>
     <div class="section-subtitle">OpenGen Studio — Generación de imagen, video y audio con IA</div>
   </div>
   <div style="padding:0">
@@ -7129,6 +7131,7 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
   <div class="section-header">
     <div class="section-title">💵 Remuneraciones</div>
     <div class="section-subtitle">Ventas completadas y comisiones acumuladas</div>
+    <div class="section-desc">Historial de pedidos completados con valor de venta neto y cálculo automático de tu comisión (3.5%). Filtra por período para ver tus ganancias.</div>
   </div>
   <!-- Filtro de período -->
   <div id="remPeriodoBar" style="display:flex;gap:7px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
