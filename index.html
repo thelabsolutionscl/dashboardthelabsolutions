@@ -1237,6 +1237,15 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           </div>
           <div id="umPrinterTunnelStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">🤖 KAI — Anthropic API Key</div>
+          <input type="password" id="umAnthropicKey" placeholder="sk-ant-api03-..." autocomplete="off">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuAnthropicKey()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuAnthropicKey()">Limpiar</button>
+          </div>
+          <div id="umAnthropicStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
+        </div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-item danger" onclick="AUTH.logout();closeUserMenu()">⏻ Cerrar sesión</div>
       </div>
@@ -1335,6 +1344,16 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <button onclick="clearMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
           </div>
           <div id="mbPrinterTunnelStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+        <!-- KAI Anthropic Key -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🤖 KAI — Anthropic API Key</div>
+          <input type="password" id="mbAnthropicKey" placeholder="sk-ant-api03-..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbAnthropicKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbAnthropicKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbAnthropicStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
         </div>
       </div>
     </div>
@@ -4216,6 +4235,8 @@ function openUserMenu(){
   const ps=document.getElementById('umProxyStatus');if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo — token Airtable vive en el Worker':'Sin proxy — token guardado localmente';}
   const pt=document.getElementById('umPrinterTunnel');if(pt){pt.value=localStorage.getItem('printer_tunnel')||'';}
   const pts=document.getElementById('umPrinterTunnelStatus');if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=v?`✓ Túnel personalizado: ${v}`:'Default: https://printers.thelab.solutions';}
+  const ak=document.getElementById('umAnthropicKey');if(ak){const v=lsGet('anthropic_key');ak.value=v&&!v.startsWith('%%')?'••••••••'+v.slice(-4):'';ak.placeholder=v&&!v.startsWith('%%')?'(guardado — clic para cambiar)':'sk-ant-api03-...';ak.onfocus=()=>{if(ak.value.startsWith('••')){ak.value='';ak.placeholder='sk-ant-api03-...';}};ak.onblur=()=>{if(!ak.value){const vv=lsGet('anthropic_key');ak.value=vv&&!vv.startsWith('%%')?'••••••••'+vv.slice(-4):'';ak.placeholder=vv&&!vv.startsWith('%%')?'(guardado — clic para cambiar)':'sk-ant-api03-...';}};}
+  const aks=document.getElementById('umAnthropicStatus');if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar — KAI no puede responder';}
   const _delay=window.innerWidth<=768?400:10;
   setTimeout(()=>document.addEventListener('click',closeUserMenuOutside),_delay);
 }
@@ -4290,6 +4311,22 @@ function clearPrinterTunnel(){
   const inp=document.getElementById('umPrinterTunnel');if(inp) inp.value='';
   const pts=document.getElementById('umPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
   toast('Túnel restaurado al default','info');
+}
+function saveUserMenuAnthropicKey(){
+  const inp=document.getElementById('umAnthropicKey');
+  const val=(inp?.value||'').trim();
+  if(!val){toast('Ingresa una API Key de Anthropic','error');return;}
+  lsSet('anthropic_key',val);
+  inp.value='••••••••'+val.slice(-4);
+  inp.placeholder='(guardado — clic para cambiar)';
+  const aks=document.getElementById('umAnthropicStatus');if(aks)aks.textContent='✓ KAI conectado';
+  toast('✓ KAI API Key guardada','success');
+}
+function clearUserMenuAnthropicKey(){
+  lsSet('anthropic_key','');
+  const inp=document.getElementById('umAnthropicKey');if(inp){inp.value='';inp.placeholder='sk-ant-api03-...';}
+  const aks=document.getElementById('umAnthropicStatus');if(aks)aks.textContent='Sin configurar — KAI no puede responder';
+  toast('KAI API Key eliminada','info');
 }
 function clearUserMenuProxy(){
   localStorage.removeItem('proxy_url');localStorage.removeItem('proxy_key');
@@ -12480,6 +12517,10 @@ function populateMobileConfig(){
   const pt=document.getElementById('mbPrinterTunnel');if(pt) pt.value=localStorage.getItem('printer_tunnel')||'';
   const pts=document.getElementById('mbPrinterTunnelStatus');
   if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=v?'✓ '+v:'Default: https://printers.thelab.solutions';}
+  const ak=document.getElementById('mbAnthropicKey');
+  if(ak){const v=lsGet('anthropic_key');ak.value=v&&!v.startsWith('%%')?'••••••••'+v.slice(-4):'';ak.placeholder=v&&!v.startsWith('%%')?'(guardado)':'sk-ant-api03-...';}
+  const aks=document.getElementById('mbAnthropicStatus');
+  if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar';}
 }
 function saveMbAirtableToken(){
   const inp=document.getElementById('mbAirtableToken');const v=(inp?.value||'').trim();
@@ -12544,6 +12585,20 @@ function clearMbPrinterTunnel(){
   const inp=document.getElementById('mbPrinterTunnel');if(inp) inp.value='';
   const pts=document.getElementById('mbPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
   toast('Túnel restablecido al default','info');
+}
+function saveMbAnthropicKey(){
+  const inp=document.getElementById('mbAnthropicKey');const v=(inp?.value||'').trim();
+  if(!v){toast('Ingresa una API Key de Anthropic','error');return;}
+  lsSet('anthropic_key',v);
+  if(inp){inp.value='••••••••'+v.slice(-4);}
+  const st=document.getElementById('mbAnthropicStatus');if(st) st.textContent='✓ KAI conectado';
+  toast('✓ KAI API Key guardada','success');
+}
+function clearMbAnthropicKey(){
+  lsSet('anthropic_key','');
+  const inp=document.getElementById('mbAnthropicKey');if(inp){inp.value='';inp.placeholder='sk-ant-api03-...';}
+  const st=document.getElementById('mbAnthropicStatus');if(st) st.textContent='Sin configurar';
+  toast('KAI API Key eliminada','info');
 }
 document.addEventListener('click',function(e){
   const dd=document.getElementById('nuevoDropdown');
