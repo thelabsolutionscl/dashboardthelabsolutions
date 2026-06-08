@@ -3705,6 +3705,7 @@ function main() {
 <script>
 const BASE_ID='app1YtD74AqiPWQhy';
 let autoRefreshInterval=null;
+const MIN_REFRESH_MS=10*60*1000; // mínimo 10 min entre refreshes automáticos de Airtable
 // ── Red de seguridad global: captura errores no atrapados para que la UI no quede en estado inconsistente ──
 (function(){
   let _lastErr=0;
@@ -4704,6 +4705,7 @@ async function loadAllData(){
 async function loadAllDataSilent(){
   const hasAuth=!!(getToken()||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));
   if(!hasAuth) return;
+  if(Date.now()-(state.lastUpdateTs||0)<MIN_REFRESH_MS) return; // throttle
   try{
     const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),airtableFetch('Facturas',1000)]);
     if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
@@ -4716,7 +4718,7 @@ async function loadAllDataSilent(){
     state.lastUpdateTs=Date.now();document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;renderOverview();
   }catch(e){setStatus('error (auto)',false);}
 }
-function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},90000);}
+function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},1800000);} // 30 min
 
 // ── AI ────────────────────────────────────────────────────────
 async function callClaude(system,user){let k=getAnthropicKey();if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}return _callClaudeRaw(system,user,k);}
@@ -7960,7 +7962,8 @@ document.addEventListener('keydown',e=>{
 // ── AUTO-REFRESH INTELIGENTE (Page Visibility) ─────────────────────────
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
-    if(getToken()&&state.loaded) loadAllDataSilent();
+    const sinceLastUpdate=Date.now()-(state.lastUpdateTs||0);
+    if(getToken()&&state.loaded&&sinceLastUpdate>MIN_REFRESH_MS) loadAllDataSilent();
     startAutoRefresh();
   } else {
     if(autoRefreshInterval){clearInterval(autoRefreshInterval);autoRefreshInterval=null;}
