@@ -13126,14 +13126,17 @@ ${cotRows||'  (ninguna)'}`;
     }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
   }
 
-  const SYS = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresión 3D, letreros neón y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
+  const SYS = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
 
 ${buildContext()}
 
 CAPACIDADES Y REGLAS:
-- Responde SIEMPRE en español chileno, profesional y conciso (máx 3 oraciones para voz).
-- Para navegar entre módulos del dashboard incluye al final: [NAV:nombre]
-  Módulos válidos: overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones
+- Responde SIEMPRE en espanol chileno, profesional y conciso (maximo 3 oraciones, pensado para voz).
+- NUNCA uses emojis, asteriscos, numeral, comillas invertidas ni simbolos decorativos. Solo texto limpio.
+- Para navegar entre modulos del dashboard incluye al final: [NAV:nombre]
+  Modulos validos: overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones
+- Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
+  Tipos validos: cliente, cotizacion, proveedor, venta, diario
 - Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
 - Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
 
@@ -13163,16 +13166,31 @@ CAPACIDADES Y REGLAS:
   $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
   $close.addEventListener('click',closePanel);
 
-  // ─── Actions parser (navigation) ───
+  // ─── Actions parser (navigation + new records) ───
   function execActions(text){
-    const re=/\[NAV:\s*([a-záéíóúñ\-]+)\]/gi; let m;
-    const cleaned=text.replace(re,'').trim();
-    while((m=re.exec(text))!==null){
+    let m;
+    const reNav=/\[NAV:\s*([a-záéíóúñ\-]+)\]/gi;
+    let cleaned=text.replace(reNav,'').trim();
+    while((m=reNav.exec(text))!==null){
       const target=m[1].toLowerCase().trim();
       if(typeof window.switchTab==='function'){
-        try{ window.switchTab(target); addMsg('a',`→ Navegando a ${target.toUpperCase()}`); }
-        catch(e){ addMsg('a',`→ ${target.toUpperCase()}`); }
+        try{ window.switchTab(target); addMsg('a',`Navegando a ${target.toUpperCase()}`); }
+        catch(e){ addMsg('a',target.toUpperCase()); }
       }
+    }
+    const reNuevo=/\[NUEVO:\s*([a-záéíóúñ\-]+)\]/gi;
+    cleaned=cleaned.replace(reNuevo,'').trim();
+    while((m=reNuevo.exec(text))!==null){
+      const tipo=m[1].toLowerCase().trim();
+      const labels={cliente:'Nuevo Lead/Cliente',lead:'Nuevo Lead/Cliente',cotizacion:'Nueva Cotizacion',cot:'Nueva Cotizacion',proveedor:'Nuevo Proveedor',venta:'Nueva Venta',diario:'Libro Diario'};
+      addMsg('a',`Abriendo formulario: ${labels[tipo]||tipo}`);
+      try{
+        if(tipo==='cliente'||tipo==='lead') window.switchTab('nuevo-lead');
+        else if(tipo==='cotizacion'||tipo==='cot') window.switchTab('nueva-cot');
+        else if(tipo==='proveedor') window.switchTab('nuevo-proveedor');
+        else if(tipo==='venta'){ if(typeof irANuevaVenta==='function') irANuevaVenta(); }
+        else if(tipo==='diario'){ if(typeof irALibroDiario==='function') irALibroDiario(); }
+      }catch(e){}
     }
     return cleaned;
   }
@@ -13216,8 +13234,8 @@ CAPACIDADES Y REGLAS:
       $typ.classList.remove('jvs-cursor');
       const reader=r.body.getReader();
       const decoder=new TextDecoder();
-      // Oculta cualquier etiqueta [NAV:...] (completa o parcial al final) mientras llega texto
-      const stripNav=s=>s.replace(/\[NAV:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[NAV:[a-záéíóúñ\s\-]*$/i,'');
+      // Oculta etiquetas [NAV:...] y [NUEVO:...] mientras llega texto
+      const stripNav=s=>s.replace(/\[NAV:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[NUEVO:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[(NAV|NUEVO):[a-záéíóúñ\s\-]*$/i,'');
       let buf='', full='';
       while(true){
         const {done,value}=await reader.read();
@@ -13260,7 +13278,7 @@ CAPACIDADES Y REGLAS:
   function speak(text){
     if(!text||!JV.synth){ setState('idle'); maybeRelisten(); return; }
     JV.synth.cancel();
-    const u=new SpeechSynthesisUtterance(text.replace(/[*_#`]/g,''));
+    const u=new SpeechSynthesisUtterance(text.replace(/[*_#`]/g,'').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,''));
     u.lang='es-CL'; u.rate=1.06; u.pitch=.95;
     const vs=JV.synth.getVoices();
     const v=vs.find(x=>x.lang.startsWith('es')&&/google/i.test(x.name))||vs.find(x=>x.lang.startsWith('es'));
