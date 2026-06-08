@@ -1665,6 +1665,24 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
 
+  <!-- ABONO MODAL -->
+  <div id="abonoModal" class="modal-overlay" style="display:none">
+    <div class="modal-backdrop" onclick="closeAbonoModal()"></div>
+    <div class="modal-card" style="max-width:360px;width:95%">
+      <div class="modal-title">💰 Registrar Abono</div>
+      <input type="hidden" id="abonoModalPedidoId">
+      <p id="abonoModalInfo" style="font-size:12px;color:var(--text2);margin-bottom:14px">—</p>
+      <div class="field-group">
+        <label class="field-label">Monto abonado (CLP)</label>
+        <input class="field-input" id="abonoMonto" type="number" min="0" step="1" placeholder="Ej: 150000" onkeydown="if(event.key==='Enter') saveAbono()">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-ghost btn-sm" onclick="closeAbonoModal()">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="saveAbonoBtn" onclick="saveAbono()">✓ Confirmar abono</button>
+      </div>
+    </div>
+  </div>
+
   <!-- DTE / SII MODAL -->
   <div id="dteModal" class="modal-overlay" style="display:none">
     <div class="modal-backdrop" onclick="closeDTEModal()"></div>
@@ -7621,8 +7639,10 @@ function qaTextColor(r){if(r==='QA aprobado') return 'var(--accent3)';if(r==='Re
 function qaLabel(r){if(r==='QA aprobado') return '✓ Aprobado';if(r==='Rechazado') return '✕ Rechazado';return '— Pendiente';}
 function pagoChips(id,f){
   const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'],t=a&&s;
+  const monto=f['Monto abono (CLP)'];
   const btn=(label,on,fn)=>`<button onclick="${fn}" style="background:${on?'rgba(0,212,170,0.2)':'var(--surface3)'};border:1px solid ${on?'rgba(0,212,170,0.45)':'var(--border2)'};color:${on?'var(--accent3)':'var(--text3)'};border-radius:5px;padding:3px 7px;cursor:pointer;font-size:10px;font-weight:700;white-space:nowrap;transition:all 0.15s">${on?'✓ ':''} ${label}</button>`;
-  return`<div style="display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${btn('Abono',a,`toggleAnticipo('${id}',${a})`)}${btn('Saldo',s,`toggleSaldo('${id}',${s})`)}${btn('Total',t,`toggleTotal('${id}',${t})`)}</div>`;
+  const abonoLabel=a&&monto?`Abono ${formatCLP(monto)}`:'Abono';
+  return`<div style="display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${btn(abonoLabel,a,`toggleAnticipo('${id}',${a})`)}${btn('Saldo',s,`toggleSaldo('${id}',${s})`)}${btn('Total',t,`toggleTotal('${id}',${t})`)}</div>`;
 }
 function pvChipsHtml(arr){
   if(!arr.length) return'<span style="color:var(--text3);font-size:10px">— ninguno</span>';
@@ -7692,14 +7712,47 @@ function pedPagoEstado(f){const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo paga
 function pedPagado(f){return pedPagoEstado(f)===2;}
 async function toggleAnticipo(id,actual){
   const n=!actual;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
-  p.fields['Anticipo pagado (50%)']=n;
-  if(!n) p.fields['Saldo pagado (50%)']=false;// no puede haber saldo sin anticipo
+  if(n){
+    // Activando: pedir monto
+    openAbonoModal(id);
+    return;
+  }
+  // Desactivando: limpiar abono y saldo
+  p.fields['Anticipo pagado (50%)']=false;p.fields['Saldo pagado (50%)']=false;p.fields['Monto abono (CLP)']=null;
   renderPedidos();renderOverview();
   try{
-    const patch={'Anticipo pagado (50%)':n};if(!n) patch['Saldo pagado (50%)']=false;
-    await airtableWrite('Pedidos','PATCH',id,patch);
-    toast(`Anticipo (50%) ${n?'✓ recibido':'pendiente'}`,n?'success':'info');
+    await airtableWrite('Pedidos','PATCH',id,{'Anticipo pagado (50%)':false,'Saldo pagado (50%)':false,'Monto abono (CLP)':null});
+    toast('Abono revertido','info');
   }catch(e){p.fields['Anticipo pagado (50%)']=actual;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
+}
+function openAbonoModal(id){
+  const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const f=p.fields;
+  document.getElementById('abonoModalPedidoId').value=id;
+  const total=f['Monto total (CLP)']||0;
+  const sugerido=Math.round(total*0.5);
+  document.getElementById('abonoModalInfo').textContent=`Pedido ${f['N° Pedido']||'—'} · Total: ${formatCLP(total)} · Anticipo sugerido (50%): ${formatCLP(sugerido)}`;
+  const inp=document.getElementById('abonoMonto');
+  inp.value=f['Monto abono (CLP)']||sugerido||'';
+  document.getElementById('abonoModal').style.display='flex';
+  setTimeout(()=>inp.select(),80);
+}
+function closeAbonoModal(){document.getElementById('abonoModal').style.display='none';}
+async function saveAbono(){
+  const btn=document.getElementById('saveAbonoBtn');
+  const id=document.getElementById('abonoModalPedidoId').value;
+  const monto=parseFloat(document.getElementById('abonoMonto').value)||0;
+  if(!monto){toast('Ingresa el monto abonado','error');return;}
+  const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  btn.disabled=true;btn.textContent='Guardando...';
+  p.fields['Anticipo pagado (50%)']=true;p.fields['Monto abono (CLP)']=monto;
+  renderPedidos();renderOverview();
+  try{
+    await airtableWrite('Pedidos','PATCH',id,{'Anticipo pagado (50%)':true,'Monto abono (CLP)':monto});
+    toast(`✓ Abono ${formatCLP(monto)} registrado`,'success');
+    closeAbonoModal();
+  }catch(e){p.fields['Anticipo pagado (50%)']=false;p.fields['Monto abono (CLP)']=null;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
+  btn.disabled=false;btn.textContent='✓ Confirmar abono';
 }
 async function toggleSaldo(id,actual){
   const n=!actual;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
