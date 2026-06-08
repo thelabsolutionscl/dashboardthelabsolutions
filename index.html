@@ -3737,9 +3737,12 @@ const CHILE_COMUNAS={
 // ── Credenciales por defecto ────────────────────────────────
 // Los valores en localStorage tienen prioridad. Estos son el fallback.
 const _DEFAULTS={
-  AIRTABLE_TOKEN:'%%AIRTABLE_TOKEN%%',
-  OPENAI_KEY:'%%OPENAI_KEY%%',
-  GOOGLE_CLIENT_ID:'%%GOOGLE_CLIENT_ID%%'
+  AIRTABLE_TOKEN:'pat4Bgylpw7lWZpM5.aaaf37147d34355dc5bdf7c74d40a7356f14d0feb124f4dcea518814074f968f',
+  OPENAI_KEY:'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',
+  GOOGLE_CLIENT_ID:'472397009712-p3l4vaaei8v7km0kmiikq62ihjqc2sdp.apps.googleusercontent.com',
+  SII_WORKER_URL:'https://sii-dte-worker.wast3dspa.workers.dev',
+  SII_RUT_EMISOR:'77.499.554-4',
+  SII_RAZON_SOCIAL:'WAST3D SPA'
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
@@ -4126,7 +4129,7 @@ function getAnthropicKey(){return lsGet('anthropic_key');}
 function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=lsGet('anthropic_key');i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
-function getToken(){return lsGet('airtable_token');}
+function getToken(){return lsGet('airtable_token')||_DEFAULTS.AIRTABLE_TOKEN;}
 function getOpenAIKey(){return localStorage.getItem('fp_openai_key')||_DEFAULTS.OPENAI_KEY;}
 function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
 function showTokenModal(){openUserMenu();const i=document.getElementById('umAirtableToken');if(i){i.type='text';i.focus();}}
@@ -5277,7 +5280,7 @@ function siiEstadoBadge(estado){
   const cls=e.includes('acept')||e==='0'?'badge-green':e.includes('rechaz')||e.includes('error')?'badge-red':e==='epr'||e.includes('pendiente')||e.includes('proceso')||e==='1'?'badge-yellow':'badge-gray';
   return `<span class="badge ${cls}">${escapeHtml(estado)}</span>`;
 }
-function getSiiWorkerUrl(){return(localStorage.getItem('sii_worker_url')||'http://localhost:3000').replace(/\/$/,'');}
+function getSiiWorkerUrl(){return(localStorage.getItem('sii_worker_url')||_DEFAULTS.SII_WORKER_URL).replace(/\/$/,'');}
 function configurarSiiUrl(){
   const nueva=prompt('URL del servidor SII (ej: http://localhost:3000 o tu URL de ngrok):',getSiiWorkerUrl());
   if(nueva!==null){localStorage.setItem('sii_worker_url',nueva.trim().replace(/\/$/,''));toast('URL del servidor SII guardada','success');}
@@ -10076,6 +10079,12 @@ function initDashboard(){
     else if(s) sessionStorage.removeItem('thelab_active_tab');
   }catch(e){}
   if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));
+  // Auto-seed tokens si no están guardados aún
+  if(!lsGet('airtable_token')) lsSet('airtable_token',_DEFAULTS.AIRTABLE_TOKEN);
+  if(!localStorage.getItem('fp_openai_key')) localStorage.setItem('fp_openai_key',_DEFAULTS.OPENAI_KEY);
+  if(!localStorage.getItem('google_drive_client_id')) localStorage.setItem('google_drive_client_id',_DEFAULTS.GOOGLE_CLIENT_ID);
+  if(!localStorage.getItem('sii_cfg')) localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL}));
+  if(!localStorage.getItem('sii_worker_url')) localStorage.setItem('sii_worker_url',_DEFAULTS.SII_WORKER_URL);
   initDates();
   fillCatSelects();
   if(user&&user.role==='demo'){
@@ -12379,7 +12388,7 @@ document.addEventListener('click',function(e){
 });
 
 // ── SII / DTE ─────────────────────────────────────────────────
-function getSIICfg(){try{return JSON.parse(localStorage.getItem('sii_cfg')||'{}');}catch(e){return {};}}
+function getSIICfg(){try{const c=JSON.parse(localStorage.getItem('sii_cfg')||'{}');return{webhookUrl:c.webhookUrl||_DEFAULTS.SII_WORKER_URL,rutEmisor:c.rutEmisor||_DEFAULTS.SII_RUT_EMISOR,razonEmisor:c.razonEmisor||_DEFAULTS.SII_RAZON_SOCIAL};}catch(e){return{webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL};}}
 async function uploadCAF(tipo,input){
   const file=input.files[0];if(!file)return;
   const cfg=getSIICfg();
