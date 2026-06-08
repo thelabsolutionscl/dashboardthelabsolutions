@@ -1589,9 +1589,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <th class="sort-th" onclick="sortCotizaciones('urgente')">Urgente</th>
       <th class="sort-th" onclick="sortCotizaciones('estado')">Estado</th>
       <th class="sort-th" onclick="sortCotizaciones('vto')">Vto.</th>
+      <th>Vendedor</th>
       <th>Acciones</th>
     </tr></thead>
-    <tbody id="cotsTableBodyFull"><tr><td colspan="9"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div>
+    <tbody id="cotsTableBodyFull"><tr><td colspan="10"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div>
   </div>
   <div id="cotAnalytics"></div>
 </div>
@@ -2099,6 +2100,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           </div>
         </div>
         <div class="field-group form-full"><label class="field-label">Notas internas</label><textarea class="field-textarea" id="cot-notas" rows="2"></textarea></div>
+        <div class="field-group" id="cot-vendedor-wrap" style="display:none"><label class="field-label">Vendedor asignado</label><select class="field-select" id="cot-vendedor"><option value="">— Sin asignar —</option></select></div>
       </div>
       <div class="form-actions">
         <button class="btn btn-ghost" onclick="clearForm('cot')">Limpiar</button>
@@ -5386,7 +5388,7 @@ function filterClientes(){const q=document.getElementById('clienteSearch').value
 async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
-  setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`;return;}tbody.innerHTML=cots.map(c=>buildCotRow(c)).join('');},50);
+  setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`;return;}tbody.innerHTML=cots.map(c=>buildCotRow(c)).join('');},50);
 }
 function cotizarParaCliente(clienteId){const c=state.clientes.find(x=>x.id===clienteId);if(!c) return;switchTab('nueva-cot');setTimeout(()=>{selectCliente(clienteId);initDates();toast(`Cotizando para ${c.fields['Empresa']}`,'info');},100);}
 function openClienteDetalle(id){
@@ -5881,12 +5883,13 @@ function renderCotizaciones(){
   const sorted=getSortedCotizaciones();
   if(!sorted.length){
     const emptyMsg=isVendorMode()&&state.cotizaciones.length
-      ?'<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div>Aún no tienes cotizaciones asignadas<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>'
-      :'<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div>Aún no hay cotizaciones<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>';
+      ?'<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📋</div>Aún no tienes cotizaciones asignadas<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>'
+      :'<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📋</div>Aún no hay cotizaciones<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>';
     tbody.innerHTML=emptyMsg;return;
   }
   tbody.innerHTML=sorted.map(c=>buildCotRow(c)).join('');renderCotAnalytics();
 }
+function resolveVendedorName(vid){if(!vid) return '—';const p=PERSONAS.find(x=>x.id===vid.toLowerCase().trim());return p?p.nombre:vid;}
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const fpData=parseFichaPropData(f['Ficha Propuesta']);
@@ -5896,7 +5899,8 @@ function buildCotRow(c){
   const cotNotasN=_getNotas('cot',c.id).length;
   const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✅ &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">❌ &nbsp;Rechazar cotización</button><div class="act-sep"></div>`:'';
   const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}<button class="act-item" onclick="openEditCot('${c.id}')">✏️ &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')">👁 &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')">📄 &nbsp;Descargar PDF</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')">📋 &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')">📂 &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')">📝 &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')">🗑 &nbsp;Eliminar</button></div></div>`;
-  return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td>
+  const vendNom=resolveVendedorName(f['Vendedor']||'');
+  return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
   <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${actMenu}</div></td></tr>`;
 }
 async function updateCotizacionEstado(id,estado){
@@ -7936,7 +7940,7 @@ async function createCotizacion(){
     const tiempoVal=document.getElementById('cot-tiempo-prod')?.value||'';
     if(tiempoVal){fields['Tiempo de producción']=parseInt(tiempoVal);fields['Tipo días producción']=document.getElementById('cot-tipo-dias')?.value||'DÍAS HÁBILES';}
     if(clienteId) fields['Cliente']=[clienteId];
-    if(isVendorMode()) fields['Vendedor']=currentVendorId();
+    if(isVendorMode()){fields['Vendedor']=currentVendorId();}else{const vv=document.getElementById('cot-vendedor')?.value;if(vv) fields['Vendedor']=vv;}
     try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
     toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
@@ -10249,6 +10253,21 @@ function applyRBAC(role){
       if(arrow) userChip.insertBefore(badge, arrow); else userChip.appendChild(badge);
     }
     badge.textContent = role;
+  }
+
+  // Selector de vendedor en nueva cotización — solo visible para admin/gerencia
+  const cotVendedorWrap=document.getElementById('cot-vendedor-wrap');
+  if(cotVendedorWrap){
+    const isAdmin=['admin','gerencia'].includes(role);
+    cotVendedorWrap.style.display=isAdmin?'':'none';
+    if(isAdmin){
+      const sel=document.getElementById('cot-vendedor');
+      if(sel&&!sel.dataset.populated){
+        const vendedores=AUTH.USERS.filter(u=>u.role==='comercial');
+        sel.innerHTML='<option value="">— Sin asignar —</option>'+vendedores.map(u=>{const id=u.username.split('@')[0];const p=PERSONAS.find(x=>x.id===id);return`<option value="${id}">${p?p.nombre:u.name}</option>`;}).join('');
+        sel.dataset.populated='1';
+      }
+    }
   }
 }
 
