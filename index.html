@@ -12953,7 +12953,7 @@ CAPACIDADES Y REGLAS:
       // reuse dashboard's stored Anthropic key
       let key = (typeof window.getAnthropicKey==='function') ? window.getAnthropicKey() : null;
       if(!key){ key = localStorage.getItem('anthropic_key'); }
-      if(!key){
+      if(!key||key.startsWith('%%')||key==='undefined'){
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='No hay API Key configurada. Configúrala desde el dashboard (botón de ajustes) y vuelve a intentar.';
         $typ.parentElement.className='jvs-msg jvs-e';
