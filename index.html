@@ -4826,7 +4826,7 @@ function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInt
 
 // ── AI ────────────────────────────────────────────────────────
 async function callClaude(system,user){let k=getAnthropicKey();if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}return _callClaudeRaw(system,user,k);}
-async function _callClaudeRaw(system,user,k){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1500,system,messages:[{role:'user',content:user}]})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
+async function _callClaudeRaw(system,user,k){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,thinking:{type:'disabled'},output_config:{effort:'medium'},system,messages:[{role:'user',content:user}]})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
 
 // ── HELPERS ───────────────────────────────────────────────────
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
@@ -13199,30 +13199,54 @@ CAPACIDADES Y REGLAS:
       const r=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({ model:'claude-sonnet-4-5', max_tokens:500, system:SYS(), messages:JV.history.slice(-12) })
+        body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, thinking:{type:'disabled'}, output_config:{effort:'low'}, system:SYS(), messages:JV.history.slice(-12) })
       });
 
       if(!r.ok){
         const e=await r.json().catch(()=>({}));
+        if(r.status===401){ localStorage.removeItem('anthropic_key'); sessionStorage.removeItem('anthropic_key'); }
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='Error: '+(e.error?.message||('API '+r.status));
         $typ.parentElement.className='jvs-msg jvs-e';
         JV.thinking=false; setState('idle'); return;
       }
 
-      const data=await r.json();
-      const full=data.content?.find(b=>b.type==='text')?.text||'Sin respuesta.';
-      const clean=execActions(full);
+      // ── Stream tokens en vivo (SSE) ──
+      JV.thinking=false; setState('speaking');
+      $typ.classList.remove('jvs-cursor');
+      const reader=r.body.getReader();
+      const decoder=new TextDecoder();
+      // Oculta cualquier etiqueta [NAV:...] (completa o parcial al final) mientras llega texto
+      const stripNav=s=>s.replace(/\[NAV:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[NAV:[a-záéíóúñ\s\-]*$/i,'');
+      let buf='', full='';
+      while(true){
+        const {done,value}=await reader.read();
+        if(done) break;
+        buf+=decoder.decode(value,{stream:true});
+        const lines=buf.split('\n');
+        buf=lines.pop()||'';
+        for(const line of lines){
+          const t=line.trim();
+          if(!t.startsWith('data:')) continue;
+          const payload=t.slice(5).trim();
+          if(!payload||payload==='[DONE]') continue;
+          let ev; try{ ev=JSON.parse(payload); }catch(e){ continue; }
+          if(ev.type==='content_block_delta' && ev.delta?.type==='text_delta'){
+            full+=ev.delta.text;
+            $typ.textContent=stripNav(full);
+            $log.scrollTop=$log.scrollHeight;
+          } else if(ev.type==='error'){
+            throw new Error(ev.error?.message||'Error de stream');
+          }
+        }
+      }
+
+      const clean=execActions(full||'Sin respuesta.');
+      $typ.textContent=clean;
+      $log.scrollTop=$log.scrollHeight;
       JV.history.push({role:'assistant',content:full});
       if(JV.history.length>14) JV.history=JV.history.slice(-12);
-
-      // typewriter
-      $typ.classList.remove('jvs-cursor'); $typ.textContent='';
-      let i=0; JV.thinking=false; setState('speaking');
-      const iv=setInterval(()=>{
-        $typ.textContent+=clean[i]||''; i++; $log.scrollTop=$log.scrollHeight;
-        if(i>=clean.length){ clearInterval(iv); if($voiceToggle.checked) speak(clean); else { setState('idle'); maybeRelisten(); } }
-      },16);
+      if($voiceToggle.checked) speak(clean); else { setState('idle'); maybeRelisten(); }
 
     }catch(err){
       $typ.classList.remove('jvs-cursor');
