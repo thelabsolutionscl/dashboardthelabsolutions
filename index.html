@@ -13367,6 +13367,7 @@ CAPACIDADES Y REGLAS:
           audio.onended=()=>{ URL.revokeObjectURL(url); setState('idle'); maybeRelisten(); };
           audio.onerror=()=>{ URL.revokeObjectURL(url); setState('idle'); maybeRelisten(); };
           await audio.play().catch(()=>{});
+          toast('🎙 ElevenLabs activo','success');
           return;
         } else {
           const errData=await r.json().catch(()=>({}));
