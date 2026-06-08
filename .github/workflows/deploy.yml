@@ -32,6 +32,9 @@ jobs:
           SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
           ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_KEY: ${{ secrets.PROXY_KEY }}
+          PRINTER_TUNNEL: ${{ secrets.PRINTER_TUNNEL }}
         run: |
           sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
           sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
@@ -40,6 +43,9 @@ jobs:
           sed -i "s|%%SII_RUT_EMISOR%%|${SII_RUT_EMISOR}|g" index.html
           sed -i "s|%%SII_RAZON_SOCIAL%%|${SII_RAZON_SOCIAL}|g" index.html
           sed -i "s|%%ANTHROPIC_KEY%%|${ANTHROPIC_KEY}|g" index.html
+          sed -i "s|%%PROXY_URL%%|${PROXY_URL}|g" index.html
+          sed -i "s|%%PROXY_KEY%%|${PROXY_KEY}|g" index.html
+          sed -i "s|%%PRINTER_TUNNEL%%|${PRINTER_TUNNEL}|g" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
