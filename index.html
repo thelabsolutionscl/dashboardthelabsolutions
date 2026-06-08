@@ -4238,6 +4238,11 @@ function closeAnthropicModal(){document.getElementById('anthropicModal').style.d
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
 function getToken(){return lsGet('airtable_token')||(_DEFAULTS.AIRTABLE_TOKEN.startsWith('%%')?'':_DEFAULTS.AIRTABLE_TOKEN);}
 function getOpenAIKey(){return localStorage.getItem('fp_openai_key')||_DEFAULTS.OPENAI_KEY;}
+// ── VENDOR LAYER ─────────────────────────────────────────────
+function currentVendorId(){const u=AUTH.getUser();return u?u.username.split('@')[0].toLowerCase():null;}
+function isVendorMode(){const u=AUTH.getUser();return!!(u&&u.role==='comercial');}
+function vendorOwnsRecord(r){if(!isVendorMode()) return true;const vid=currentVendorId();if(!vid) return false;return(r.fields['Vendedor']||'').toLowerCase().trim()===vid;}
+// ─────────────────────────────────────────────────────────────
 function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
 function showTokenModal(){openUserMenu();const i=document.getElementById('umAirtableToken');if(i){i.type='text';i.focus();}}
 function closeTokenModal(){}
@@ -4992,40 +4997,43 @@ function renderKPIs(){
   const today=new Date();today.setHours(0,0,0,0);
   const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
   const prevWeekStart=new Date(weekStart);prevWeekStart.setDate(weekStart.getDate()-7);
+  const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  const _cli=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;
 
   // ── Revenue ──────────────────────────────────────────────────────────
-  const revSemana=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
-  const revAnterior=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
-  const revTotal=state.pedidos.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const revSemana=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const revAnterior=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const revTotal=_ped.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
 
   // ── Pedidos ───────────────────────────────────────────────────────────
-  const pedActivos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
-  const atrasados=state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
-  const pedNuevosSem=state.pedidos.filter(p=>p.createdTime&&new Date(p.createdTime)>=weekStart).length;
-  const pedNuevosPrev=state.pedidos.filter(p=>{const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
+  const pedActivos=_ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
+  const atrasados=_ped.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
+  const pedNuevosSem=_ped.filter(p=>p.createdTime&&new Date(p.createdTime)>=weekStart).length;
+  const pedNuevosPrev=_ped.filter(p=>{const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
 
   // ── Cotizaciones ──────────────────────────────────────────────────────
-  const cotPend=state.cotizaciones.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
-  const cotNuevosSem=state.cotizaciones.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
-  const cotNuevosPrev=state.cotizaciones.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
+  const cotPend=_cot.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
+  const cotNuevosSem=_cot.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
+  const cotNuevosPrev=_cot.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
 
   // ── Clientes ──────────────────────────────────────────────────────────
-  const clientesNuevos=state.clientes.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
-  const clientesPrev=state.clientes.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
+  const clientesNuevos=_cli.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
+  const clientesPrev=_cli.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
 
   // ── Alertas ───────────────────────────────────────────────────────────
   const in2days=new Date(today);in2days.setDate(today.getDate()+2);
   const ago48h=new Date(Date.now()-48*3600*1000);
-  const alertas=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length
-    +state.pedidos.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length
+  const alertas=_cli.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length
+    +_ped.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length
     +atrasados
-    +state.cotizaciones.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v+'T00:00:00')<today;}).length
-    +state.pedidos.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];if(!fe||['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;const d=new Date(fe+'T00:00:00');return d>=today&&d<=in2days;}).length
-    +state.cotizaciones.filter(c=>(c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h).length
-    +state.cotizaciones.filter(c=>{const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return false;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return false;const cl=state.clientes.find(x=>x.id===cid);return cl?.fields['Estado cuenta']==='Bloqueado';}).length;
+    +_cot.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v+'T00:00:00')<today;}).length
+    +_ped.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];if(!fe||['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;const d=new Date(fe+'T00:00:00');return d>=today&&d<=in2days;}).length
+    +_cot.filter(c=>(c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h).length
+    +_cot.filter(c=>{const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return false;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return false;const cl=_cli.find(x=>x.id===cid);return cl?.fields['Estado cuenta']==='Bloqueado';}).length;
 
   // ── Margen ────────────────────────────────────────────────────────────
-  const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);
+  const cotM=_cot.filter(c=>getMargenCot(c.fields)!==null);
   const avgM=cotM.length>0?cotM.reduce((sum,c)=>sum+getMargenCot(c.fields),0)/cotM.length:0;
 
   // ── Delta helpers ─────────────────────────────────────────────────────
@@ -5049,7 +5057,7 @@ function renderKPIs(){
   const revMeta=parseInt(localStorage.getItem('revMetaSemanal'))||0;
   const revMetaMensual=parseInt(localStorage.getItem('revMetaMensual'))||0;
   const monthStart=new Date(today.getFullYear(),today.getMonth(),1);
-  const revMes=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const revMes=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
   const metaPct=revMeta>0?Math.min(Math.round((revSemana/revMeta)*100),100):0;
   const metaColor=metaPct>=100?'var(--accent3)':metaPct>=70?'var(--accent)':'var(--warn)';
   const metaMPct=revMetaMensual>0?Math.min(Math.round((revMes/revMetaMensual)*100),100):0;
@@ -5064,12 +5072,13 @@ function renderKPIs(){
     <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${metaHtml}</div>
     <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
     <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
-    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${state.clientes.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
+    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">${isVendorMode()?'mis clientes':'en CRM'}</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
     <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas"><div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
     <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones"><div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
 }
 function renderPipelineArea(){
-  const todos=state.pedidos.filter(p=>p.fields['Estado pedido']!=='Cancelado');const activos=todos.filter(p=>p.fields['Estado pedido']!=='Despachado');
+  const _basePed=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const todos=_basePed.filter(p=>p.fields['Estado pedido']!=='Cancelado');const activos=todos.filter(p=>p.fields['Estado pedido']!=='Despachado');
   document.getElementById('pedActivosBadge').textContent=activos.length;
   if(!todos.length){document.getElementById('pipelineArea').innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div>Sin pedidos activos</div><button onclick="switchTab(\'cotizaciones\')" style="margin-top:10px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ver cotizaciones</button></div>';return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'],colores={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
@@ -5080,7 +5089,8 @@ function renderPipelineArea(){
   document.getElementById('pipelineArea').innerHTML=resumen+`<div style="max-height:300px;overflow-y:auto">${lista||'<div class="empty-state">Sin pedidos activos</div>'}</div>`;
 }
 function renderCotTable(){
-  const recent=state.cotizaciones.slice(0,6);document.getElementById('cotsBadge').textContent=state.cotizaciones.length;
+  const _c=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  const recent=_c.slice(0,6);document.getElementById('cotsBadge').textContent=_c.length;
   if(!recent.length){document.getElementById('cotTableBody').innerHTML='<tr><td colspan="5"><div class="empty-state" style="padding:20px"><div class="empty-icon">📋</div><div>Sin cotizaciones</div><button onclick="switchTab(\'nueva-cot\')" style="margin-top:10px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Nueva cotización</button></div></td></tr>';return;}
   document.getElementById('cotTableBody').innerHTML=recent.map(c=>{const f=c.fields,neto=Math.round((f['Total final (CLP)']||0)/1.19),m=getMargenCot(f),est=f['Estado cotización']||'Enviada';return`<tr><td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td class="clp">${formatCLP(neto)}</td><td>${estadoBadge(est)}</td><td>${margenBadge(m)}</td></tr>`;}).join('');
 }
@@ -5097,36 +5107,39 @@ function renderAlertas(){
   const today=new Date();today.setHours(0,0,0,0);
   const in2days=new Date(today);in2days.setDate(today.getDate()+2);
   const ago48h=new Date(Date.now()-48*3600*1000);
+  const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  const _cli=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;
 
   // sev 3 — crítico (rojo)
-  state.clientes.forEach(c=>{
+  _cli.forEach(c=>{
     const v=c.fields['Facturas vencidas']||0;
     if(v>=2) alertas.push({sev:3,icon:'🚫',type:'factura-vencida',msg:`<strong>${escapeHtml(c.fields['Empresa']||'—')}</strong>: ${v} facturas vencidas`,id:c.id,tab:'clientes'});
   });
-  state.pedidos.forEach(p=>{
+  _ped.forEach(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
     if(f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(est)){
       const d=Math.round((today-new Date(f['Fecha entrega']+'T00:00:00'))/86400000);
       alertas.push({sev:3,icon:'⏰',type:'pedido-atrasado',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): atrasado ${d}d`,id:p.id,tab:'pedidos'});
     }
   });
-  state.cotizaciones.forEach(c=>{
+  _cot.forEach(c=>{
     const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return;
     const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return;
-    const cl=state.clientes.find(x=>x.id===cid);
+    const cl=_cli.find(x=>x.id===cid)||state.clientes.find(x=>x.id===cid);
     if(cl?.fields['Estado cuenta']==='Bloqueado')
       alertas.push({sev:3,icon:'🔒',type:'cliente-bloqueado',msg:`<strong>${escapeHtml(cl.fields['Empresa']||'—')}</strong>: bloqueado con cot. activa <span style="color:var(--text3)">${escapeHtml(f['N° Cotización']||'—')}</span>`,id:c.id,tab:'cotizaciones'});
   });
 
   // sev 2 — advertencia (naranja)
-  state.pedidos.forEach(p=>{
+  _ped.forEach(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
     if(['Confirmado','En producción'].includes(est)&&!f['Anticipo pagado (50%)'])
       alertas.push({sev:2,icon:'💸',type:'pago-pendiente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): anticipo 50% pendiente`,id:p.id,tab:'pedidos'});
     else if(est==='Listo para despacho'&&!f['Saldo pagado (50%)'])
       alertas.push({sev:2,icon:'💸',type:'pago-pendiente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): saldo 50% pendiente antes de despachar`,id:p.id,tab:'pedidos'});
   });
-  state.pedidos.forEach(p=>{
+  _ped.forEach(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
     if(!f['Fecha entrega']||['Despachado','Cancelado'].includes(est)) return;
     const fe=new Date(f['Fecha entrega']+'T00:00:00');
@@ -5135,7 +5148,7 @@ function renderAlertas(){
       alertas.push({sev:2,icon:'🚀',type:'pedido-urgente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): entrega ${d===0?'hoy':d+'d'}`,id:p.id,tab:'pedidos'});
     }
   });
-  state.cotizaciones.forEach(c=>{
+  _cot.forEach(c=>{
     const f=c.fields,est=f['Estado cotización']||'',vto=f['Fecha vencimiento'];
     if(['Enviada','Solicitada'].includes(est)&&vto){
       const dias=Math.round((new Date(vto+'T00:00:00')-today)/86400000);
@@ -5144,27 +5157,27 @@ function renderAlertas(){
   });
 
   // sev 1 — info (amarillo)
-  state.cotizaciones.forEach(c=>{
+  _cot.forEach(c=>{
     const f=c.fields,est=f['Estado cotización']||'',vto=f['Fecha vencimiento'];
     if(['Enviada','Solicitada'].includes(est)&&vto){
       const dias=Math.round((new Date(vto+'T00:00:00')-today)/86400000);
       if(dias>=0&&dias<=3) alertas.push({sev:1,icon:'⏳',type:'cot-por-vencer',msg:`<strong>${escapeHtml(f['N° Cotización']||'—')}</strong>: vence en ${dias}d`,id:c.id,tab:'cotizaciones'});
     }
   });
-  state.cotizaciones.forEach(c=>{
+  _cot.forEach(c=>{
     if((c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h)
       alertas.push({sev:1,icon:'📋',type:'cot-sin-enviar',msg:`<strong>${escapeHtml(c.fields['N° Cotización']||'—')}</strong>: solicitada sin enviar por +48h`,id:c.id,tab:'cotizaciones'});
   });
   // sev 1 — clientes que se enfrían: cotizaron antes, pero nada en +90 días
   const ago90d=new Date(today);ago90d.setDate(today.getDate()-90);
   const ultCotCliente={};
-  state.cotizaciones.forEach(c=>{
+  _cot.forEach(c=>{
     const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
     if(!cid||!c.createdTime) return;
     const t=new Date(c.createdTime).getTime();
     if(!ultCotCliente[cid]||t>ultCotCliente[cid]) ultCotCliente[cid]=t;
   });
-  state.clientes.forEach(cl=>{
+  _cli.forEach(cl=>{
     const last=ultCotCliente[cl.id];if(!last) return;
     if(['Perdido','Cliente inactivo'].includes(cl.fields['Etapa venta']||'')) return;
     if(last<ago90d.getTime()){
@@ -5178,7 +5191,7 @@ function renderAlertas(){
     if((pv.fields['Estado']||'')!=='Bloqueado') return;
     const cat=pvCat(pv.fields);
     const nombre=pv.fields['Nombre']||'—';
-    const pedActivos=state.pedidos.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')).length;
+    const pedActivos=_ped.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')).length;
     if(pedActivos>0)
       alertas.push({sev:3,icon:'🏭',type:'proveedor-bloqueado',msg:`<strong>${escapeHtml(nombre)}</strong> bloqueado${cat?` (${escapeHtml(cat)})`:''} — revisar pedidos activos`,id:pv.id,tab:'proveedores'});
   });
@@ -5258,7 +5271,7 @@ async function deleteSelectedClientes(){
 }
 function sortClientes(key){if(clientesSort.key===key) clientesSort.dir*=-1;else{clientesSort.key=key;clientesSort.dir=1;}document.querySelectorAll('#tab-clientes .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(/sortClientes\('(\w+)'\)/)?.[1];th.classList.remove('asc','desc');if(k===key) th.classList.add(clientesSort.dir===1?'asc':'desc');});renderClientes();}
 function getSortValue(c,key){const f=c.fields;switch(key){case 'empresa':return(f['Empresa']||'').toLowerCase();case 'contacto':return(f['Contacto']||'').toLowerCase();case 'etapa':return(f['Etapa venta']||'').toLowerCase();case 'revenue':return f['Revenue total cliente (CLP)']||0;case 'val':return parseInt(f['Valoración cliente'])||0;case 'estado':return(f['Estado cuenta']||'').toLowerCase();case 'venc':return f['Facturas vencidas']||0;default:return '';}}
-function getSortedClientes(){if(!clientesSort.key) return state.clientes;return[...state.clientes].sort((a,b)=>{const va=getSortValue(a,clientesSort.key),vb=getSortValue(b,clientesSort.key);if(typeof va==='number') return(va-vb)*clientesSort.dir;return va.localeCompare(vb,'es')*clientesSort.dir;});}
+function getSortedClientes(){const base=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;if(!clientesSort.key) return base;return[...base].sort((a,b)=>{const va=getSortValue(a,clientesSort.key),vb=getSortValue(b,clientesSort.key);if(typeof va==='number') return(va-vb)*clientesSort.dir;return va.localeCompare(vb,'es')*clientesSort.dir;});}
 // ── NOTAS INTERNAS ──────────────────────────────────────────
 let _notasType='',_notasId='';
 function _notasKey(t,id){return'notas_'+t+'_'+id;}
@@ -5357,9 +5370,16 @@ function buildClienteRow(c){
   </tr>`;
 }
 function renderClientes(){
-  document.getElementById('clientesCount').textContent=`${state.clientes.length} clientes en CRM`;const tbody=document.getElementById('clientesTableBody');
-  if(!state.clientes.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">👥</div>Aún no hay clientes<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div></td></tr>';return;}
-  tbody.innerHTML=getSortedClientes().map(c=>buildClienteRow(c)).join('');if(document.getElementById('clienteSearch')?.value) filterClientes();
+  const sorted=getSortedClientes();
+  document.getElementById('clientesCount').textContent=isVendorMode()?`${sorted.length} mis clientes`:`${state.clientes.length} clientes en CRM`;
+  const tbody=document.getElementById('clientesTableBody');
+  if(!sorted.length){
+    const emptyMsg=isVendorMode()&&state.clientes.length
+      ?'<div class="empty-state"><div class="empty-icon">👥</div>Aún no tienes clientes asignados<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>'
+      :'<div class="empty-state"><div class="empty-icon">👥</div>Aún no hay clientes<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>';
+    tbody.innerHTML='<tr><td colspan="9">'+emptyMsg+'</td></tr>';return;
+  }
+  tbody.innerHTML=sorted.map(c=>buildClienteRow(c)).join('');if(document.getElementById('clienteSearch')?.value) filterClientes();
   renderClientesAnalytics();
 }
 function filterClientes(){const q=document.getElementById('clienteSearch').value.toLowerCase();document.querySelectorAll('#clientesTableBody tr').forEach(r=>{r.classList.toggle('cliente-hidden',!!(q&&!r.textContent.toLowerCase().includes(q)));});updateBulkBar();}
@@ -5838,8 +5858,9 @@ function sortCotizaciones(key){
   renderCotizaciones();
 }
 function getSortedCotizaciones(){
-  if(!cotizacionesSort.key) return state.cotizaciones;
-  return[...state.cotizaciones].sort((a,b)=>{
+  const base=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  if(!cotizacionesSort.key) return base;
+  return[...base].sort((a,b)=>{
     const fa=a.fields,fb=b.fields;let va,vb;
     switch(cotizacionesSort.key){
       case 'num':va=String(fa['N° Cotización']||'');vb=String(fb['N° Cotización']||'');break;
@@ -5855,7 +5876,17 @@ function getSortedCotizaciones(){
     if(typeof va==='number') return(va-vb)*cotizacionesSort.dir;return va.localeCompare(vb,'es')*cotizacionesSort.dir;
   });
 }
-function renderCotizaciones(){const tbody=document.getElementById('cotsTableBodyFull');if(!state.cotizaciones.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div>Aún no hay cotizaciones<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>';return;}tbody.innerHTML=getSortedCotizaciones().map(c=>buildCotRow(c)).join('');renderCotAnalytics();}
+function renderCotizaciones(){
+  const tbody=document.getElementById('cotsTableBodyFull');
+  const sorted=getSortedCotizaciones();
+  if(!sorted.length){
+    const emptyMsg=isVendorMode()&&state.cotizaciones.length
+      ?'<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div>Aún no tienes cotizaciones asignadas<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>'
+      :'<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div>Aún no hay cotizaciones<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>';
+    tbody.innerHTML=emptyMsg;return;
+  }
+  tbody.innerHTML=sorted.map(c=>buildCotRow(c)).join('');renderCotAnalytics();
+}
 function buildCotRow(c){
   const f=c.fields,isOpen=['Enviada','Solicitada'].includes(f['Estado cotización']||''),m=getMargenCot(f),neto=Math.round((f['Total final (CLP)']||0)/1.19);
   const fpData=parseFichaPropData(f['Ficha Propuesta']);
@@ -7352,7 +7383,7 @@ function renderRemuneraciones(){
   const badge=document.getElementById('remBadge');
   if(!tbody||!kpisEl) return;
   const TASA=0.035;
-  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado');
+  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado').filter(vendorOwnsRecord);
   const filtrados=_remFiltrarPorPeriodo(despachados);
   const totalBruto=filtrados.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0),0);
   const totalNeto=filtrados.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
@@ -7403,7 +7434,7 @@ function renderRemuneraciones(){
 }
 function exportRemCSV(){
   const TASA=0.035;
-  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado');
+  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado').filter(vendorOwnsRecord);
   const filtrados=_remFiltrarPorPeriodo(despachados);
   const rows=[['N° Pedido','Cliente','F. Despacho','Monto Bruto','Monto Neto','Comisión 3.5%']];
   filtrados.forEach(p=>{
@@ -7418,9 +7449,10 @@ function exportRemCSV(){
 
 function renderPedidos(filter){
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
-  let data=filter==='all'?state.pedidos:filter==='atrasados'?state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
+  const basePedidos=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  let data=filter==='all'?basePedidos:filter==='atrasados'?basePedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
-    const emptyHtml=state.pedidos.length
+    const emptyHtml=basePedidos.length
       ?'<div class="empty-state"><div class="empty-icon">🔍</div>Ningún pedido coincide con este filtro<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="filterPedidos(\'all\',document.querySelector(\'#pedidosFilterBar>button\'))">Ver todos los pedidos</button></div>'
       :'<div class="empty-state"><div class="empty-icon">📦</div>Aún no hay pedidos<br><span style="font-size:11px;color:var(--text3)">Los pedidos se generan al aprobar una cotización</span><br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'cotizaciones\')">📋 Ir a cotizaciones</button></div>';
     tbody.innerHTML='<tr><td colspan="12">'+emptyHtml+'</td></tr>';return;}
@@ -7835,6 +7867,7 @@ async function createLead(){
   const dirVal=document.getElementById('nl-direccion')?.value.trim();if(dirVal) fields['Dirección']=dirVal;
   const regVal=document.getElementById('nl-region')?.value;if(regVal) fields['Región']=regVal;
   const comVal=document.getElementById('nl-comuna')?.value;if(comVal) fields['Comuna']=comVal;
+  if(isVendorMode()) fields['Vendedor']=currentVendorId();
   // Pre-carga análisis del agente si existe
   if(_leadAgentResponse) fields['Respuesta SALES_AGENT']=_leadAgentResponse.substring(0,5000);
   const saveAndPatch=async(f)=>{
@@ -7903,6 +7936,7 @@ async function createCotizacion(){
     const tiempoVal=document.getElementById('cot-tiempo-prod')?.value||'';
     if(tiempoVal){fields['Tiempo de producción']=parseInt(tiempoVal);fields['Tipo días producción']=document.getElementById('cot-tipo-dias')?.value||'DÍAS HÁBILES';}
     if(clienteId) fields['Cliente']=[clienteId];
+    if(isVendorMode()) fields['Vendedor']=currentVendorId();
     try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
     toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
@@ -9933,29 +9967,29 @@ function exportToCSV(t){
 const DEMO_DATA={
   Clientes:{records:[
     {id:'recC001',createdTime:'2026-03-15T10:00:00.000Z',fields:{'Empresa':'Agencia Creativa DG','RUT':'76.123.456-7','Email':'contacto@agenciadg.cl','Contacto':'Diego González','Teléfono':'+56 9 8823 4411','Dirección':'Av. Providencia 1234 Of. 301','Ciudad':'Santiago','Comuna':'Providencia','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':2540000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Instagram','Notas':'Cliente premium. Pedidos recurrentes cada 6-8 semanas. Prefiere comunicación por WhatsApp.'}},
-    {id:'recC002',createdTime:'2026-04-02T10:00:00.000Z',fields:{'Empresa':'Universidad de Chile','RUT':'60.910.000-1','Email':'compras@uchile.cl','Contacto':'Patricia Vega','Teléfono':'+56 2 2978 2000','Dirección':'Av. Bello 2007 Piso 4','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Negociación','Revenue total cliente (CLP)':850000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Educación','Origen':'Contacto directo','Notas':'Licitación en proceso. Decisión estimada para julio 2026. Contactar a Patricia antes del 20/06.'}},
-    {id:'recC003',createdTime:'2026-05-10T10:00:00.000Z',fields:{'Empresa':'Corporación Eventos XYZ','RUT':'77.345.678-9','Email':'info@eventosxyz.cl','Contacto':'Rodrigo Méndez','Teléfono':'+56 9 7712 3344','Dirección':'Teatinos 120 Of. 805','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Lead nuevo','Revenue total cliente (CLP)':0,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Referido','Notas':'Referido por Diego González (Agencia DG). Necesita trofeos para torneo empresarial Q3.'}},
+    {id:'recC002',createdTime:'2026-04-02T10:00:00.000Z',fields:{'Empresa':'Universidad de Chile','RUT':'60.910.000-1','Email':'compras@uchile.cl','Contacto':'Patricia Vega','Teléfono':'+56 2 2978 2000','Dirección':'Av. Bello 2007 Piso 4','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Negociación','Revenue total cliente (CLP)':850000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Educación','Origen':'Contacto directo','Notas':'Licitación en proceso. Decisión estimada para julio 2026. Contactar a Patricia antes del 20/06.','Vendedor':'florencia'}},
+    {id:'recC003',createdTime:'2026-05-10T10:00:00.000Z',fields:{'Empresa':'Corporación Eventos XYZ','RUT':'77.345.678-9','Email':'info@eventosxyz.cl','Contacto':'Rodrigo Méndez','Teléfono':'+56 9 7712 3344','Dirección':'Teatinos 120 Of. 805','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Lead nuevo','Revenue total cliente (CLP)':0,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Referido','Notas':'Referido por Diego González (Agencia DG). Necesita trofeos para torneo empresarial Q3.','Vendedor':'florencia'}},
     {id:'recC004',createdTime:'2026-02-20T10:00:00.000Z',fields:{'Empresa':'Retail Sur SpA','RUT':'76.890.123-4','Email':'pedidos@retailsur.cl','Contacto':'Carmen López','Teléfono':'+56 9 9900 1122','Dirección':'Av. Las Industrias 4500','Ciudad':'San Bernardo','Comuna':'San Bernardo','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':1820000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Retail','Origen':'Google','Notas':'Cadena de tiendas retail. Encargos de señalética y letreros LED para sucursales. Paga con OC a 30 días.'}},
-    {id:'recC005',createdTime:'2026-04-18T10:00:00.000Z',fields:{'Empresa':'Tech Solutions Ltda','RUT':'76.456.789-0','Email':'compras@techsol.cl','Contacto':'Felipe Ríos','Teléfono':'+56 9 6688 9900','Dirección':'Isidora Goyenechea 3000 Of. 1102','Ciudad':'Santiago','Comuna':'Las Condes','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':3240000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Tecnología','Origen':'LinkedIn','Notas':'Empresa de tecnología con proyectos de prototipado mensual. Valora rapidez y tolerancias precisas.'}},
-    {id:'recC006',createdTime:'2026-05-05T10:00:00.000Z',fields:{'Empresa':'Eventos Santiago','RUT':'77.567.890-1','Email':'admin@eventossantiago.cl','Contacto':'Valentina Araya','Teléfono':'+56 9 5544 7788','Dirección':'Monjitas 565 Of. 302','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Propuesta enviada','Revenue total cliente (CLP)':450000,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Instagram','Notas':'Organizadora de eventos corporativos. Cotización enviada para neones decorativos para gala de fin de año.'}},
+    {id:'recC005',createdTime:'2026-04-18T10:00:00.000Z',fields:{'Empresa':'Tech Solutions Ltda','RUT':'76.456.789-0','Email':'compras@techsol.cl','Contacto':'Felipe Ríos','Teléfono':'+56 9 6688 9900','Dirección':'Isidora Goyenechea 3000 Of. 1102','Ciudad':'Santiago','Comuna':'Las Condes','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':3240000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Tecnología','Origen':'LinkedIn','Notas':'Empresa de tecnología con proyectos de prototipado mensual. Valora rapidez y tolerancias precisas.','Vendedor':'florencia'}},
+    {id:'recC006',createdTime:'2026-05-05T10:00:00.000Z',fields:{'Empresa':'Eventos Santiago','RUT':'77.567.890-1','Email':'admin@eventossantiago.cl','Contacto':'Valentina Araya','Teléfono':'+56 9 5544 7788','Dirección':'Monjitas 565 Of. 302','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Propuesta enviada','Revenue total cliente (CLP)':450000,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Instagram','Notas':'Organizadora de eventos corporativos. Cotización enviada para neones decorativos para gala de fin de año.','Vendedor':'florencia'}},
     {id:'recC007',createdTime:'2026-05-18T10:00:00.000Z',fields:{'Empresa':'Diseños & Co','RUT':'76.234.567-8','Email':'hola@disenosco.cl','Contacto':'Javiera Torres','Teléfono':'+56 9 3311 5566','Dirección':'Av. Italia 1560','Ciudad':'Santiago','Comuna':'Ñuñoa','Región':'Región Metropolitana','Etapa venta':'Contactado','Revenue total cliente (CLP)':0,'Valoración cliente':0,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Referido','Notas':'Agencia de diseño. Explorando opciones para packaging personalizado para cliente retail.'}},
     {id:'recC008',createdTime:'2026-01-10T10:00:00.000Z',fields:{'Empresa':'Municipalidad Las Condes','RUT':'69.071.100-6','Email':'licitaciones@lascondes.cl','Contacto':'Roberto Soto','Teléfono':'+56 2 2159 5000','Dirección':'Apoquindo 3400','Ciudad':'Santiago','Comuna':'Las Condes','Región':'Región Metropolitana','Etapa venta':'Cliente inactivo','Revenue total cliente (CLP)':320000,'Valoración cliente':3,'Estado cuenta':'Con deuda','Industria':'Otro','Origen':'Contacto directo','Facturas vencidas':1,'Notas':'Factura #998 vencida desde el 15/03. Contactar a Roberto urgente. Monto pendiente: $38.080.'}},
   ]},
   Cotizaciones:{records:[
     {id:'recQ001',createdTime:'2026-05-20T10:00:00.000Z',fields:{'N° Cotización':'260520','Cliente':['recC001'],'Canal solicitud':'WhatsApp','Solicitud / detalle':'30 trofeos acrílicos con grabado láser para premiación corporativa anual. Logo empresa + nombre ganador + cargo. Entrega urgente antes del 05/06.','Subtotal (CLP)':295000,'Total final (CLP)':450000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-03','Forma de pago':'Contado','Tiempo de producción':8,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':42}},
     {id:'recQ002',createdTime:'2026-05-15T10:00:00.000Z',fields:{'N° Cotización':'260515','Cliente':['recC004'],'Canal solicitud':'Email','Solicitud / detalle':'Letreros LED para 3 sucursales nuevas. Fondo negro con letras iluminadas en blanco frío. Medidas: 1.2m × 0.4m por letrero. Instalación incluida.','Subtotal (CLP)':470000,'Total final (CLP)':820000,'Estado cotización':'Aprobada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-05-29','Forma de pago':'Pago a 30 días desde OC','Tiempo de producción':10,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':38}},
-    {id:'recQ003',createdTime:'2026-05-22T10:00:00.000Z',fields:{'N° Cotización':'260522','Cliente':['recC006'],'Canal solicitud':'WhatsApp','Solicitud / detalle':'Neones decorativos para gala corporativa: texto "AWARDS 2026" en tubería flexible rosa neón + 2 marcos decorativos. Alquiler + instalación por 2 días.','Subtotal (CLP)':200000,'Total final (CLP)':280000,'Estado cotización':'Solicitada','Urgencia (+25%)':true,'Fecha vencimiento':'2026-06-05','Forma de pago':'Contado','Tiempo de producción':5,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':55}},
+    {id:'recQ003',createdTime:'2026-05-22T10:00:00.000Z',fields:{'N° Cotización':'260522','Cliente':['recC006'],'Canal solicitud':'WhatsApp','Solicitud / detalle':'Neones decorativos para gala corporativa: texto "AWARDS 2026" en tubería flexible rosa neón + 2 marcos decorativos. Alquiler + instalación por 2 días.','Subtotal (CLP)':200000,'Total final (CLP)':280000,'Estado cotización':'Solicitada','Urgencia (+25%)':true,'Fecha vencimiento':'2026-06-05','Forma de pago':'Contado','Tiempo de producción':5,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':55,'Vendedor':'florencia'}},
     {id:'recQ004',createdTime:'2026-05-08T10:00:00.000Z',fields:{'N° Cotización':'260508','Cliente':['recC005'],'Canal solicitud':'LinkedIn','Solicitud / detalle':'Prototipo funcional de carcasa para dispositivo IoT. Material PETG negro, tolerancia ±0.2mm. 3 iteraciones de diseño incluidas.','Subtotal (CLP)':105000,'Total final (CLP)':150000,'Estado cotización':'Rechazada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-05-22','Forma de pago':'Contado','Tiempo de producción':4,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':35,'Notas rechazo':'Cliente cotizó con competidor que ofrecía precio 20% menor. Reconsiderar precio en futuros prototipos PETG.'}},
-    {id:'recQ005',createdTime:'2026-05-19T10:00:00.000Z',fields:{'N° Cotización':'260519','Cliente':['recC002'],'Canal solicitud':'Email','Solicitud / detalle':'200 medallas para olimpiadas universitarias: oro, plata y bronce. Diseño personalizado con escudo U. de Chile. Cinta de tela incluida.','Subtotal (CLP)':728000,'Total final (CLP)':1200000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-02','Forma de pago':'Pago a 45 días desde OC','Tiempo de producción':15,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':40}},
-    {id:'recQ006',createdTime:'2026-05-23T10:00:00.000Z',fields:{'N° Cotización':'260523','Cliente':['recC003'],'Canal solicitud':'WhatsApp','Solicitud / detalle':'50 trofeos para torneo de golf empresarial. Base madera + figura impresa 3D + placa grabada. Colores corporativos del cliente.','Subtotal (CLP)':240000,'Total final (CLP)':320000,'Estado cotización':'Solicitada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-06','Forma de pago':'Contado','Tiempo de producción':12,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':44}},
+    {id:'recQ005',createdTime:'2026-05-19T10:00:00.000Z',fields:{'N° Cotización':'260519','Cliente':['recC002'],'Canal solicitud':'Email','Solicitud / detalle':'200 medallas para olimpiadas universitarias: oro, plata y bronce. Diseño personalizado con escudo U. de Chile. Cinta de tela incluida.','Subtotal (CLP)':728000,'Total final (CLP)':1200000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-02','Forma de pago':'Pago a 45 días desde OC','Tiempo de producción':15,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':40,'Vendedor':'florencia'}},
+    {id:'recQ006',createdTime:'2026-05-23T10:00:00.000Z',fields:{'N° Cotización':'260523','Cliente':['recC003'],'Canal solicitud':'WhatsApp','Solicitud / detalle':'50 trofeos para torneo de golf empresarial. Base madera + figura impresa 3D + placa grabada. Colores corporativos del cliente.','Subtotal (CLP)':240000,'Total final (CLP)':320000,'Estado cotización':'Solicitada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-06','Forma de pago':'Contado','Tiempo de producción':12,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':44,'Vendedor':'florencia'}},
   ]},
   Pedidos:{records:[
     {id:'recP001',createdTime:'2026-05-10T10:00:00.000Z',fields:{'N° Pedido':'PED-047','Cliente':['recC001'],'Descripción del pedido':'40 piezas aeronáuticas en PLA blanco. Tolerancia ±0.3mm. Post-proceso: lijado fino hasta grano 400, pintura base epóxica blanca.','Estado pedido':'En producción','Monto total (CLP)':420000,'Fecha entrega':'2026-06-10','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'60% inicial y 40% Contra entrega','Anticipo pagado (50%)':true,'QA':'Pendiente','Proveedor':'FilamentoCL','Notas':'K2 Plus asignada para este lote. Perfil de slicing revisado — reducción de desperdicio 18%.'}},
     {id:'recP002',createdTime:'2026-05-14T10:00:00.000Z',fields:{'N° Pedido':'PED-048','Cliente':['recC004'],'Descripción del pedido':'Letreros LED para 3 sucursales. Fondo negro, letras blanco frío 1.2×0.4m. Cableado interno + driver incluido. Instalación en sitio.','Estado pedido':'Confirmado','Monto total (CLP)':780000,'Fecha entrega':'2026-06-15','Equipo responsable':'Gustavo','Equipo asignado':'gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':false,'QA':'Pendiente','Proveedor':'LED Masters Chile','Notas':'Coordinar fecha de instalación con Carmen López. Confirmar dirección exacta de cada sucursal.'}},
-    {id:'recP003',createdTime:'2026-05-16T10:00:00.000Z',fields:{'N° Pedido':'PED-049','Cliente':['recC005'],'Descripción del pedido':'Prototipo carcasa IoT en PETG negro. 3 iteraciones de diseño. Dimensiones 120×80×45mm. Orificios para conectores USB-C y 3 botones.','Estado pedido':'Listo para despacho','Monto total (CLP)':290000,'Fecha entrega':'2026-05-28','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'Packaging Total SpA','Notas':'Empaque con espuma protectora. Felipe Ríos confirma retiro en taller.'}},
+    {id:'recP003',createdTime:'2026-05-16T10:00:00.000Z',fields:{'N° Pedido':'PED-049','Cliente':['recC005'],'Descripción del pedido':'Prototipo carcasa IoT en PETG negro. 3 iteraciones de diseño. Dimensiones 120×80×45mm. Orificios para conectores USB-C y 3 botones.','Estado pedido':'Listo para despacho','Monto total (CLP)':290000,'Fecha entrega':'2026-05-28','Equipo responsable':'Nicanor','Equipo asignado':'Nicanor Marambio','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'Packaging Total SpA','Notas':'Empaque con espuma protectora. Felipe Ríos confirma retiro en taller.','Vendedor':'florencia'}},
     {id:'recP004',createdTime:'2026-05-05T10:00:00.000Z',fields:{'N° Pedido':'PED-046','Cliente':['recC002'],'Descripción del pedalle del pedido':'200 medallas universitarias: 80 oro + 80 plata + 40 bronce. Aleación zamak, acabado satinado. Escudo U. de Chile grabado en relieve. Cintas tricolor incluidas.','Estado pedido':'Despachado','Monto total (CLP)':1100000,'Fecha entrega':'2026-05-20','Fecha despacho':'2026-05-20','Equipo responsable':'Gustavo','Equipo asignado':'gustavo','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
     {id:'recP005',createdTime:'2026-04-28T10:00:00.000Z',fields:{'N° Pedido':'PED-044','Cliente':['recC003'],'Descripción del pedido':'50 trofeos golf corporativo. Base pino barnizado + figura jugador impresa 3D PLA dorado + placa acrílica grabada con nombre torneo.','Estado pedido':'Despachado','Monto total (CLP)':650000,'Fecha entrega':'2026-05-05','Fecha despacho':'2026-05-04','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
-    {id:'recP006',createdTime:'2026-04-15T10:00:00.000Z',fields:{'N° Pedido':'PED-042','Cliente':['recC006'],'Descripción del pedido':'Neones decorativos para gala: letrero "AWARDS 2026" tubería flex rosa + 2 marcos rectangulares con iluminación. Estructura desmontable para alquiler.','Estado pedido':'Despachado','Monto total (CLP)':380000,'Fecha entrega':'2026-04-22','Fecha despacho':'2026-04-21','Equipo responsable':'Gustavo','Equipo asignado':'gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'LED Masters Chile'}},
+    {id:'recP006',createdTime:'2026-04-15T10:00:00.000Z',fields:{'N° Pedido':'PED-042','Cliente':['recC006'],'Descripción del pedido':'Neones decorativos para gala: letrero "AWARDS 2026" tubería flex rosa + 2 marcos rectangulares con iluminación. Estructura desmontable para alquiler.','Estado pedido':'Despachado','Monto total (CLP)':380000,'Fecha entrega':'2026-04-22','Fecha despacho':'2026-04-21','Equipo responsable':'Gustavo','Equipo asignado':'Gustavo Kaiser','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'LED Masters Chile','Vendedor':'florencia'}},
     {id:'recP007',createdTime:'2026-04-05T10:00:00.000Z',fields:{'N° Pedido':'PED-040','Cliente':['recC001'],'Descripción del pedido':'Lote especial 60 piezas PLA flex para componentes automotrices. Colores: negro + rojo cereza. Post-proceso: barniz mate anticorrosión.','Estado pedido':'Despachado','Monto total (CLP)':920000,'Fecha entrega':'2026-04-12','Fecha despacho':'2026-04-12','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
   ]},
   Reportes:{records:[
