@@ -3744,7 +3744,8 @@ const _DEFAULTS={
   GOOGLE_CLIENT_ID:'%%GOOGLE_CLIENT_ID%%',
   SII_WORKER_URL:'%%SII_WORKER_URL%%',
   SII_RUT_EMISOR:'%%SII_RUT_EMISOR%%',
-  SII_RAZON_SOCIAL:'%%SII_RAZON_SOCIAL%%'
+  SII_RAZON_SOCIAL:'%%SII_RAZON_SOCIAL%%',
+  ANTHROPIC_KEY:'%%ANTHROPIC_KEY%%'
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
@@ -4127,7 +4128,7 @@ function generarNumeroCotizacion(){
 // Migra automáticamente cualquier valor antiguo guardado en sessionStorage.
 function lsGet(k){return localStorage.getItem(k)||sessionStorage.getItem(k)||'';}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){toast('Sin espacio de almacenamiento local','error');}sessionStorage.removeItem(k);}
-function getAnthropicKey(){return lsGet('anthropic_key');}
+function getAnthropicKey(){return lsGet('anthropic_key')||_DEFAULTS.ANTHROPIC_KEY;}
 function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=lsGet('anthropic_key');i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
@@ -10089,6 +10090,7 @@ function initDashboard(){
   if(!localStorage.getItem('google_drive_client_id')) localStorage.setItem('google_drive_client_id',_DEFAULTS.GOOGLE_CLIENT_ID);
   if(!localStorage.getItem('sii_cfg')) localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL}));
   if(!localStorage.getItem('sii_worker_url')) localStorage.setItem('sii_worker_url',_DEFAULTS.SII_WORKER_URL);
+  if(!lsGet('anthropic_key')) lsSet('anthropic_key',_DEFAULTS.ANTHROPIC_KEY);
   initDates();
   fillCatSelects();
   if(user&&user.role==='demo'){
