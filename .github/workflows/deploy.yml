@@ -31,6 +31,7 @@ jobs:
           SII_WORKER_URL: ${{ secrets.SII_WORKER_URL }}
           SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
         run: |
           sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
           sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
@@ -38,6 +39,7 @@ jobs:
           sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
           sed -i "s|%%SII_RUT_EMISOR%%|${SII_RUT_EMISOR}|g" index.html
           sed -i "s|%%SII_RAZON_SOCIAL%%|${SII_RAZON_SOCIAL}|g" index.html
+          sed -i "s|%%ANTHROPIC_KEY%%|${ANTHROPIC_KEY}|g" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
