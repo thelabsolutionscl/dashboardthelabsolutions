@@ -7314,13 +7314,13 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
 <!-- ══════════════════ REMUNERACIONES (solo rol comercial) ═══ -->
 <div class="tab-panel" id="tab-remuneraciones">
   <div class="section-header">
-    <div class="section-title">💵 Remuneraciones</div>
-    <div class="section-subtitle">Ventas completadas y comisiones acumuladas</div>
-    <div class="section-desc">Historial de pedidos completados con valor de venta neto y cálculo automático de tu comisión (3.5%). Filtra por período para ver tus ganancias.</div>
+    <div class="section-title">💵 Mis Remuneraciones</div>
+    <div class="section-subtitle">Comisiones ganadas, pipeline activo y ventas en proceso</div>
   </div>
   <!-- Filtro de período -->
   <div id="remPeriodoBar" style="display:flex;gap:7px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-    <button class="btn btn-ghost btn-sm active-filter" onclick="setRemPeriodo('todo',this)">Todo el tiempo</button>
+    <button class="btn btn-ghost btn-sm active-filter" onclick="setRemPeriodo('todo',this)">Todo</button>
+    <button class="btn btn-ghost btn-sm" onclick="setRemPeriodo('anio',this)">Este año</button>
     <button class="btn btn-ghost btn-sm" onclick="setRemPeriodo('mes',this)">Este mes</button>
     <button class="btn btn-ghost btn-sm" onclick="setRemPeriodo('anterior',this)">Mes anterior</button>
     <button class="btn btn-ghost btn-sm" onclick="setRemPeriodo('semana',this)">Esta semana</button>
@@ -7328,10 +7328,30 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
   </div>
   <!-- KPIs -->
   <div id="remKpis" class="kpi-grid" style="margin-bottom:16px"></div>
-  <!-- Tabla detalle -->
+  <!-- Pipeline: cotizaciones activas -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <span class="card-title">📋 Pipeline — Cotizaciones Activas</span>
+      <span class="card-badge" id="remPipeBadge">—</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>N° Cot.</th>
+          <th>Cliente</th>
+          <th>Total Neto</th>
+          <th style="color:var(--accent)">Comisión est. 3.5%</th>
+          <th>Estado</th>
+          <th>Vto.</th>
+        </tr></thead>
+        <tbody id="remPipeBody"><tr><td colspan="6"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <!-- Tabla detalle ventas completadas -->
   <div class="card">
     <div class="card-header">
-      <span class="card-title">Detalle de Ventas Completadas</span>
+      <span class="card-title">✅ Ventas Completadas (Despachadas)</span>
       <span class="card-badge" id="remBadge">—</span>
     </div>
     <div class="table-wrap">
@@ -7366,6 +7386,10 @@ function setRemPeriodo(p,btn){
 function _remFiltrarPorPeriodo(pedidos){
   const now=new Date();now.setHours(0,0,0,0);
   if(_remPeriodo==='todo') return pedidos;
+  if(_remPeriodo==='anio'){
+    const ys=new Date(now.getFullYear(),0,1);
+    return pedidos.filter(p=>{const d=p.fields['Fecha entrega'];return d&&new Date(d+'T00:00:00')>=ys;});
+  }
   if(_remPeriodo==='semana'){
     const ws=new Date(now);ws.setDate(now.getDate()-now.getDay());
     return pedidos.filter(p=>{const d=p.fields['Fecha entrega'];return d&&new Date(d+'T00:00:00')>=ws;});
@@ -7385,18 +7409,34 @@ function renderRemuneraciones(){
   const tbody=document.getElementById('remTableBody');
   const kpisEl=document.getElementById('remKpis');
   const badge=document.getElementById('remBadge');
+  const pipeBody=document.getElementById('remPipeBody');
+  const pipeBadge=document.getElementById('remPipeBadge');
   if(!tbody||!kpisEl) return;
   const TASA=0.035;
+  const today=new Date();today.setHours(0,0,0,0);
+
+  // --- Completadas (Despachado) ---
   const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado').filter(vendorOwnsRecord);
   const filtrados=_remFiltrarPorPeriodo(despachados);
   const totalBruto=filtrados.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0),0);
   const totalNeto=filtrados.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
   const totalComision=Math.round(totalNeto*TASA);
+
+  // --- En proceso (pedidos no despachados, no cancelados) ---
+  const enProceso=state.pedidos.filter(p=>{const est=p.fields['Estado pedido']||'';return!['Despachado','Cancelado'].includes(est);}).filter(vendorOwnsRecord);
+
+  // --- Pipeline cotizaciones activas (Solicitada / Enviada) ---
+  const pipeline=(state.cotizaciones||[]).filter(c=>['Solicitada','Enviada'].includes(c.fields['Estado cotización']||'')).filter(vendorOwnsRecord);
+  const pipeNeto=pipeline.reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
+  const pipeComision=Math.round(pipeNeto*TASA);
+
   if(badge) badge.textContent=`${filtrados.length} pedido${filtrados.length!==1?'s':''}`;
-  // KPI cards
+  if(pipeBadge) pipeBadge.textContent=`${pipeline.length} cotización${pipeline.length!==1?'es':''}`;
+
+  // --- 5 KPI cards ---
   kpisEl.innerHTML=`
     <div class="kpi-card green" style="cursor:default">
-      <div class="kpi-label">Pedidos Completados</div>
+      <div class="kpi-label">Pedidos Despachados</div>
       <div class="kpi-value">${filtrados.length}</div>
       <div class="kpi-sub">total: ${despachados.length}</div>
     </div>
@@ -7406,11 +7446,49 @@ function renderRemuneraciones(){
       <div class="kpi-sub">bruto: ${formatCLP(totalBruto)}</div>
     </div>
     <div class="kpi-card" style="cursor:default;border-color:rgba(0,212,204,0.4);background:rgba(0,212,204,0.06)">
-      <div class="kpi-label" style="color:var(--accent)">Comisión (3.5%)</div>
+      <div class="kpi-label" style="color:var(--accent)">Comisión Ganada (3.5%)</div>
       <div class="kpi-value" style="color:var(--accent);font-size:18px">${formatCLP(totalComision)}</div>
       <div class="kpi-sub">sobre monto neto</div>
+    </div>
+    <div class="kpi-card" style="cursor:default;border-color:rgba(139,92,246,0.4);background:rgba(139,92,246,0.06)">
+      <div class="kpi-label" style="color:#a78bfa">Pipeline Potencial</div>
+      <div class="kpi-value" style="color:#a78bfa;font-size:18px">${formatCLP(pipeComision)}</div>
+      <div class="kpi-sub">${pipeline.length} cotiz. activas · neto ${formatCLP(pipeNeto)}</div>
+    </div>
+    <div class="kpi-card" style="cursor:default;border-color:rgba(251,146,60,0.4);background:rgba(251,146,60,0.06)">
+      <div class="kpi-label" style="color:#fb923c">Pedidos en Proceso</div>
+      <div class="kpi-value" style="color:#fb923c">${enProceso.length}</div>
+      <div class="kpi-sub">en producción / confirmados</div>
     </div>`;
-  // Tabla
+
+  // --- Pipeline table ---
+  if(pipeBody){
+    if(!pipeline.length){
+      pipeBody.innerHTML='<tr><td colspan="6"><div class="empty-state" style="padding:20px"><div class="empty-icon">📋</div>Sin cotizaciones activas</div></td></tr>';
+    } else {
+      const sortedPipe=[...pipeline].sort((a,b)=>{const da=a.fields['Fecha vencimiento']||'9999';const db=b.fields['Fecha vencimiento']||'9999';return da.localeCompare(db);});
+      pipeBody.innerHTML=sortedPipe.map(c=>{
+        const f=c.fields;
+        const bruto=f['Total final (CLP)']||0;
+        const neto=Math.round(bruto/1.19);
+        const com=Math.round(neto*TASA);
+        const vto=f['Fecha vencimiento']||'';
+        const vencido=vto&&new Date(vto+'T00:00:00')<today;
+        const vtoStyle=vencido?'color:#f87171;font-weight:700':'';
+        const vtoLabel=vencido?`${vto} ⚠`:vto||'—';
+        return`<tr>
+          <td class="mono">${escapeHtml(f['N° Cotización']||'—')}</td>
+          <td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td>
+          <td class="clp">${formatCLP(neto)}</td>
+          <td class="clp" style="color:#a78bfa;font-weight:700">${formatCLP(com)}</td>
+          <td>${estadoBadge(f['Estado cotización']||'Enviada')}</td>
+          <td style="font-family:'JetBrains Mono',monospace;font-size:11px;white-space:nowrap;${vtoStyle}">${escapeHtml(vtoLabel)}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // --- Completadas table ---
   if(!filtrados.length){
     tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">💵</div>Sin ventas completadas en este período</div></td></tr>';
     return;
