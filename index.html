@@ -12563,7 +12563,7 @@ function populateMobileConfig(){
   const at=document.getElementById('mbAirtableToken');
   if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado)':'patXXX...';at.onfocus=()=>{if(at.value.startsWith('••')){at.value='';at.placeholder='patXXX...';}};at.onblur=()=>{if(!at.value){const vv=lsGet('airtable_token');at.value=vv?'••••••••'+vv.slice(-4):'';at.placeholder=vv?'(guardado)':'patXXX...';}}}
   const oi=document.getElementById('mbOpenaiKey');
-  if(oi){const v=localStorage.getItem('fp_openai_key');oi.value=v?'••••••••'+v.slice(-4):'';oi.placeholder=v?'(guardado)':'sk-proj-...';}
+  if(oi){const v=localStorage.getItem('fp_openai_key');oi.value='';oi.placeholder=v?'(guardada — escribe nueva para cambiar)':'sk-proj-...';}
   const gc=document.getElementById('mbGoogleClientId');
   if(gc){const v=localStorage.getItem('google_drive_client_id')||'';gc.value=v?v.slice(0,12)+'…'+v.slice(-8):'';}
   const ds=document.getElementById('mbDriveStatus');
@@ -12577,7 +12577,7 @@ function populateMobileConfig(){
   const pts=document.getElementById('mbPrinterTunnelStatus');
   if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=v?'✓ '+v:'Default: https://printers.thelab.solutions';}
   const ak=document.getElementById('mbAnthropicKey');
-  if(ak){const v=lsGet('anthropic_key');ak.value=v&&!v.startsWith('%%')?'••••••••'+v.slice(-4):'';ak.placeholder=v&&!v.startsWith('%%')?'(guardado)':'sk-ant-api03-...';}
+  if(ak){const v=lsGet('anthropic_key');ak.value='';ak.placeholder=v&&!v.startsWith('%%')?'(guardada — escribe nueva para cambiar)':'sk-ant-api03-...';}
   const aks=document.getElementById('mbAnthropicStatus');
   if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar';}
 }
@@ -12594,8 +12594,13 @@ function clearMbAirtableToken(){
 }
 function saveMbOpenaiKey(){
   const inp=document.getElementById('mbOpenaiKey');const v=(inp?.value||'').trim();
-  if(!v)return toast('Ingresa una API Key válida','error');
-  localStorage.setItem('fp_openai_key',v);inp.value='••••••••'+v.slice(-4);
+  if(!v){
+    const existing=localStorage.getItem('fp_openai_key');
+    return toast(existing?'OpenAI Key ya está configurada':'Ingresa una API Key válida', existing?'info':'error');
+  }
+  if(v.startsWith('•'))return toast('Ingresa la key completa','error');
+  localStorage.setItem('fp_openai_key',v);
+  if(inp){inp.value='';inp.placeholder='(guardada — escribe nueva para cambiar)';}
   toast('OpenAI Key guardada ✓','success');
 }
 function clearMbOpenaiKey(){
@@ -12647,9 +12652,15 @@ function clearMbPrinterTunnel(){
 }
 function saveMbAnthropicKey(){
   const inp=document.getElementById('mbAnthropicKey');const v=(inp?.value||'').trim();
-  if(!v){toast('Ingresa una API Key de Anthropic','error');return;}
+  if(!v){
+    const existing=lsGet('anthropic_key');
+    if(existing&&!existing.startsWith('%%')) toast('KAI ya tiene una key configurada','info');
+    else toast('Ingresa una API Key de Anthropic','error');
+    return;
+  }
+  if(v.startsWith('•')){toast('Ingresa la key completa, no el valor enmascarado','error');return;}
   lsSet('anthropic_key',v);
-  if(inp){inp.value='••••••••'+v.slice(-4);}
+  if(inp){inp.value='';inp.placeholder='(guardada — escribe nueva para cambiar)';}
   const st=document.getElementById('mbAnthropicStatus');if(st) st.textContent='✓ KAI conectado';
   toast('✓ KAI API Key guardada','success');
 }
