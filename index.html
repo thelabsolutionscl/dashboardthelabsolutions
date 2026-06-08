@@ -10084,13 +10084,14 @@ function initDashboard(){
     else if(s) sessionStorage.removeItem('thelab_active_tab');
   }catch(e){}
   if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));
-  // Auto-seed tokens si no están guardados aún
-  if(!lsGet('airtable_token')) lsSet('airtable_token',_DEFAULTS.AIRTABLE_TOKEN);
-  if(!localStorage.getItem('fp_openai_key')) localStorage.setItem('fp_openai_key',_DEFAULTS.OPENAI_KEY);
-  if(!localStorage.getItem('google_drive_client_id')) localStorage.setItem('google_drive_client_id',_DEFAULTS.GOOGLE_CLIENT_ID);
-  if(!localStorage.getItem('sii_cfg')) localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL}));
-  if(!localStorage.getItem('sii_worker_url')) localStorage.setItem('sii_worker_url',_DEFAULTS.SII_WORKER_URL);
-  if(!lsGet('anthropic_key')) lsSet('anthropic_key',_DEFAULTS.ANTHROPIC_KEY);
+  // Auto-seed tokens — sobreescribe si el valor es un placeholder no reemplazado
+  const _isPlaceholder=v=>!v||v.startsWith('%%');
+  if(_isPlaceholder(lsGet('airtable_token'))) lsSet('airtable_token',_DEFAULTS.AIRTABLE_TOKEN);
+  if(_isPlaceholder(localStorage.getItem('fp_openai_key'))) localStorage.setItem('fp_openai_key',_DEFAULTS.OPENAI_KEY);
+  if(_isPlaceholder(localStorage.getItem('google_drive_client_id'))) localStorage.setItem('google_drive_client_id',_DEFAULTS.GOOGLE_CLIENT_ID);
+  if(_isPlaceholder(localStorage.getItem('sii_worker_url'))) localStorage.setItem('sii_worker_url',_DEFAULTS.SII_WORKER_URL);
+  if(_isPlaceholder(localStorage.getItem('sii_cfg'))) localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL}));
+  if(_isPlaceholder(lsGet('anthropic_key'))) lsSet('anthropic_key',_DEFAULTS.ANTHROPIC_KEY);
   initDates();
   fillCatSelects();
   if(user&&user.role==='demo'){
