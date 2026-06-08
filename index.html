@@ -12693,7 +12693,7 @@ async function testSIIWorker(){
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
-<!-- ══ JARVIS — Widget Flotante de Voz IA ════════════════════════════════════ -->
+<!-- ══ KAI — Widget Flotante de Voz IA ════════════════════════════════════ -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <style>
   /* ─── FAB (botón flotante) ─── */
@@ -12801,7 +12801,7 @@ async function testSIIWorker(){
 </style>
 
 <!-- FAB -->
-<button id="jvs-fab" title="Hablar con JARVIS">
+<button id="jvs-fab" title="Hablar con KAI">
   <div class="jvs-fab-ring"></div>
   <div class="jvs-mini-dot"></div>
   <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm6-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
@@ -12811,14 +12811,14 @@ async function testSIIWorker(){
 <div id="jvs-panel">
   <div id="jvs-head">
     <div class="jvs-orb"><div class="jvs-orb-ring"></div><div class="jvs-orb-ring"></div><div class="jvs-orb-core"></div></div>
-    <div class="jvs-title"><b>JARVIS</b><span>THE LAB SOLUTIONS · IA</span></div>
+    <div class="jvs-title"><b>KAI</b><span>THE LAB SOLUTIONS · IA</span></div>
     <div class="jvs-state" id="jvs-state">EN ESPERA</div>
     <button class="jvs-close" id="jvs-close">✕</button>
   </div>
 
   <div id="jvs-log">
     <div class="jvs-msg jvs-j">
-      <span class="jvs-lbl">JARVIS</span>
+      <span class="jvs-lbl">KAI</span>
       <span class="jvs-txt">Sistemas en línea. Puedo navegar el dashboard, consultar pedidos, cotizaciones, clientes y máquinas en tiempo real. ¿En qué le asisto?</span>
     </div>
   </div>
@@ -12887,7 +12887,7 @@ async function testSIIWorker(){
     }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
   }
 
-  const SYS = () => `Eres JARVIS, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresión 3D, letreros neón y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
+  const SYS = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresión 3D, letreros neón y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
 
 ${buildContext()}
 
@@ -12910,7 +12910,7 @@ CAPACIDADES Y REGLAS:
 
   function addMsg(role,text){
     const cls={u:'jvs-u',j:'jvs-j',a:'jvs-a',e:'jvs-e'}[role];
-    const lbl={u:'TÚ',j:'JARVIS',a:'ACCIÓN',e:'ERROR'}[role];
+    const lbl={u:'TÚ',j:'KAI',a:'ACCIÓN',e:'ERROR'}[role];
     const d=document.createElement('div');
     d.className='jvs-msg '+cls;
     d.innerHTML=`<span class="jvs-lbl">${lbl}</span><span class="jvs-txt">${text}</span>`;
@@ -13059,8 +13059,8 @@ CAPACIDADES Y REGLAS:
   // ─── Init ───
   JV.rec=initRec();
   window.speechSynthesis && (window.speechSynthesis.onvoiceschanged=()=>{});
-  // Expose a global to open JARVIS programmatically if needed
-  window.openJarvis=openPanel;
+  // Expose a global to open KAI programmatically if needed
+  window.openKai=openPanel;
 })();
 </script>
 
