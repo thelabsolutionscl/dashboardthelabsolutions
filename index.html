@@ -2481,6 +2481,12 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <input type="hidden" id="editCotDetalle">
       </div>
       <div class="field-group form-full"><label class="field-label">Notas internas</label><textarea class="field-textarea" id="editCotNotas" rows="2"></textarea></div>
+      <div class="field-group" id="editCotVendedorWrap">
+        <label class="field-label">Vendedor asignado</label>
+        <select class="field-select" id="editCotVendedor">
+          <option value="">— Sin asignar —</option>
+        </select>
+      </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost btn-sm" onclick="closeEditCot()">Cancelar</button><button class="btn btn-primary btn-sm" onclick="saveEditCot()" id="saveEditCotBtn">💾 Guardar</button></div>
   </div>
@@ -5935,6 +5941,7 @@ function openEditCot(id){
   const _etd=document.getElementById('editCotTipoDias');const _etdb=document.getElementById('editCotTipoDiasBtn');const _tdv=f['Tipo días producción']||'DÍAS HÁBILES';if(_etd) _etd.value=_tdv;if(_etdb){_etdb.textContent=_tdv;if(_tdv==='DÍAS NORMALES'){_etdb.style.background='rgba(255,170,0,0.15)';_etdb.style.borderColor='rgba(255,170,0,0.5)';_etdb.style.color='var(--accent2)';}else{_etdb.style.background='rgba(0,212,204,0.15)';_etdb.style.borderColor='rgba(0,212,204,0.5)';_etdb.style.color='var(--accent)';}}
   const clienteIdActual=Array.isArray(f['Cliente'])?f['Cliente'][0]:(f['Cliente']||'');const clienteRec=clienteIdActual?state.clientes.find(x=>x.id===clienteIdActual):null;
   document.getElementById('editCotClienteSearch').value=clienteRec?.fields['Empresa']||resolveClienteName(f['Cliente'])||'';document.getElementById('editCotClienteId').value=clienteIdActual||'';document.getElementById('editCotClienteInfo').textContent=clienteRec?'✓ Cliente cargado':'';document.getElementById('editCotClienteInfo').style.color='var(--text2)';
+  const _evSel=document.getElementById('editCotVendedor');if(_evSel&&!_evSel.dataset.populated){_evSel.innerHTML='<option value="">— Sin asignar —</option>'+PERSONAS.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');_evSel.dataset.populated='1';}if(_evSel) _evSel.value=f['Vendedor']||'';
   const container=document.getElementById('editItemsContainer');container.innerHTML='';document.getElementById('editItemsTotalRow').style.display='none';
   const detalle=f['Detalle productos']||'';const lineas=detalle.split('\n').filter(Boolean).map(l=>{const parts=l.split('|').map(s=>s.trim());const desc=parts[0]||'',undStr=(parts[1]||'').replace(/[^\d.]/g,''),und=parseFloat(undStr)||1;const costoRaw=(parts[2]||'').replace(/Costo:\s*/i,'').replace(/\./g,'').replace(/[^0-9]/g,'');const ventaRaw=(parts[3]||'').replace(/Venta:\s*/i,'').replace(/\./g,'').replace(/[^0-9]/g,'');return{desc,und,costoUnit:und>0?Math.round(parseFloat(costoRaw)||0)/und:0,ventaUnit:und>0?Math.round(parseFloat(ventaRaw)||0)/und:0};});
   if(lineas.length>0) lineas.forEach(l=>addEditItemRow(l));else addEditItemRow();
@@ -5973,6 +5980,7 @@ async function saveEditCot(){
     const _stp=document.getElementById('editCotTiempoProd')?.value||'';if(_stp) fields['Tiempo de producción']=parseInt(_stp);
     const _std=document.getElementById('editCotTipoDias')?.value||'';if(_std) fields['Tipo días producción']=_std;
     const editClienteId=document.getElementById('editCotClienteId').value;if(editClienteId) fields['Cliente']=[editClienteId];
+    const _evv=document.getElementById('editCotVendedor')?.value||'';fields['Vendedor']=_evv||null;
     const cotId=document.getElementById('editCotId').value;
     try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','PATCH',cotId,fields);ensureCotizacionFields();}
     toast('✓ Cotización actualizada','success');closeEditCot();await loadAllDataSilent();renderCotizaciones();renderOverview();
@@ -10341,8 +10349,7 @@ function applyRBAC(role){
     if(isAdmin){
       const sel=document.getElementById('cot-vendedor');
       if(sel&&!sel.dataset.populated){
-        const vendedores=AUTH.USERS.filter(u=>u.role==='comercial');
-        sel.innerHTML='<option value="">— Sin asignar —</option>'+vendedores.map(u=>{const id=u.username.split('@')[0];const p=PERSONAS.find(x=>x.id===id);return`<option value="${id}">${p?p.nombre:u.name}</option>`;}).join('');
+        sel.innerHTML='<option value="">— Sin asignar —</option>'+PERSONAS.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
         sel.dataset.populated='1';
       }
     }
