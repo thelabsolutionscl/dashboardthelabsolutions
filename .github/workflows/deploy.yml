@@ -1,52 +1,52 @@
-name: Deploy to GitHub Pages
+name: Deploy Dashboard
 
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Inject credentials from secrets
+      - name: Inject secrets into index.html
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          SII_WORKER_URL: ${{ secrets.SII_WORKER_URL }}
+          SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
+          SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
         run: |
-          python3 - <<'EOF'
-          import os, json
-          with open('index.html', 'r', encoding='utf-8') as f:
-              html = f.read()
-          # Strip whitespace/newlines and JSON-escape so a stray newline or quote
-          # in a secret can never break the JS string literal (which would crash
-          # the whole script and freeze the loading screen).
-          def safe(name):
-              val = (os.environ.get(name) or '').strip()
-              # json.dumps produces a valid double-quoted JS string literal incl. quotes
-              return json.dumps(val)
-          # Replace the quoted placeholder ('%%X%%') with a safe JS literal ("...").
-          html = html.replace("'%%AIRTABLE_TOKEN%%'",  safe('AIRTABLE_TOKEN'))
-          html = html.replace("'%%OPENAI_KEY%%'",      safe('OPENAI_KEY'))
-          html = html.replace("'%%GOOGLE_CLIENT_ID%%'", safe('GOOGLE_CLIENT_ID'))
-          # Fallback for any remaining bare placeholders (defensive)
-          html = html.replace('%%AIRTABLE_TOKEN%%',  (os.environ.get('AIRTABLE_TOKEN') or '').strip())
-          html = html.replace('%%OPENAI_KEY%%',      (os.environ.get('OPENAI_KEY') or '').strip())
-          html = html.replace('%%GOOGLE_CLIENT_ID%%', (os.environ.get('GOOGLE_CLIENT_ID') or '').strip())
-          with open('index.html', 'w', encoding='utf-8') as f:
-              f.write(html)
-          print('✓ Credentials injected (sanitized)')
-          EOF
+          sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
+          sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
+          sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
+          sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
+          sed -i "s|%%SII_RUT_EMISOR%%|${SII_RUT_EMISOR}|g" index.html
+          sed -i "s|%%SII_RAZON_SOCIAL%%|${SII_RAZON_SOCIAL}|g" index.html
 
-      - name: Deploy to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./
-          publish_branch: gh-pages
-          exclude_assets: '.github'
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

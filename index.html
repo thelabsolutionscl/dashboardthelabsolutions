@@ -3736,13 +3736,14 @@ const CHILE_COMUNAS={
 };
 // ── Credenciales por defecto ────────────────────────────────
 // Los valores en localStorage tienen prioridad. Estos son el fallback.
+// Los placeholders %%...%% son reemplazados por GitHub Actions al deployar.
 const _DEFAULTS={
-  AIRTABLE_TOKEN:'pat4Bgylpw7lWZpM5.aaaf37147d34355dc5bdf7c74d40a7356f14d0feb124f4dcea518814074f968f',
-  OPENAI_KEY:'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',
-  GOOGLE_CLIENT_ID:'472397009712-p3l4vaaei8v7km0kmiikq62ihjqc2sdp.apps.googleusercontent.com',
-  SII_WORKER_URL:'https://sii-dte-worker.wast3dspa.workers.dev',
-  SII_RUT_EMISOR:'77.499.554-4',
-  SII_RAZON_SOCIAL:'WAST3D SPA'
+  AIRTABLE_TOKEN:'%%AIRTABLE_TOKEN%%',
+  OPENAI_KEY:'%%OPENAI_KEY%%',
+  GOOGLE_CLIENT_ID:'%%GOOGLE_CLIENT_ID%%',
+  SII_WORKER_URL:'%%SII_WORKER_URL%%',
+  SII_RUT_EMISOR:'%%SII_RUT_EMISOR%%',
+  SII_RAZON_SOCIAL:'%%SII_RAZON_SOCIAL%%'
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
