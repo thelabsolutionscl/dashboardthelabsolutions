@@ -12689,6 +12689,378 @@ async function testSIIWorker(){
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- ══ JARVIS — Widget Flotante de Voz IA ════════════════════════════════════ -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<style>
+  /* ─── FAB (botón flotante) ─── */
+  #jvs-fab{
+    position:fixed; bottom:24px; right:24px; z-index:9000;
+    width:60px; height:60px; border-radius:50%; cursor:pointer; border:none;
+    background:radial-gradient(circle at 35% 30%, #00f5e9, #007d77);
+    box-shadow:0 6px 22px rgba(0,212,204,0.45), inset 0 0 18px rgba(255,255,255,0.18);
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .25s cubic-bezier(.34,1.56,.64,1), box-shadow .25s;
+  }
+  #jvs-fab:hover{ transform:scale(1.08); box-shadow:0 8px 30px rgba(0,212,204,0.65); }
+  #jvs-fab svg{ width:26px; height:26px; fill:#04201e; }
+  #jvs-fab .jvs-fab-ring{
+    position:absolute; inset:-6px; border-radius:50%;
+    border:2px solid rgba(0,245,233,0.5); opacity:0; pointer-events:none;
+  }
+  #jvs-fab.jvs-active{ background:radial-gradient(circle at 35% 30%, #ff7a5c, #c0341a); box-shadow:0 6px 26px rgba(255,107,53,0.6); }
+  #jvs-fab.jvs-active .jvs-fab-ring{ animation:jvs-ping 1.2s ease-out infinite; }
+  #jvs-fab.jvs-thinking{ background:radial-gradient(circle at 35% 30%, #ffc24d, #c08400); }
+  @keyframes jvs-ping{ 0%{opacity:.8;transform:scale(1)} 100%{opacity:0;transform:scale(1.5)} }
+
+  /* badge mic */
+  #jvs-fab .jvs-mini-dot{
+    position:absolute; top:2px; right:2px; width:12px; height:12px; border-radius:50%;
+    background:#00d4aa; border:2px solid #0a0a0a; display:none;
+  }
+  #jvs-fab.jvs-listening .jvs-mini-dot{ display:block; background:#ff4444; animation:jvs-blink .8s infinite; }
+  @keyframes jvs-blink{ 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ─── Panel ─── */
+  #jvs-panel{
+    position:fixed; bottom:96px; right:24px; z-index:9001;
+    width:380px; max-width:calc(100vw - 32px); height:540px; max-height:calc(100vh - 130px);
+    background:linear-gradient(180deg,#0d0d0d 0%,#080808 100%);
+    border:1px solid #1f3d3a; border-radius:18px;
+    box-shadow:0 20px 60px rgba(0,0,0,.65), 0 0 0 1px rgba(0,212,204,.08);
+    display:flex; flex-direction:column; overflow:hidden;
+    opacity:0; transform:translateY(20px) scale(.96); pointer-events:none;
+    transition:opacity .25s, transform .25s cubic-bezier(.34,1.4,.64,1);
+    font-family:'DM Sans',sans-serif;
+  }
+  #jvs-panel.jvs-open{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+
+  /* header */
+  #jvs-head{
+    display:flex; align-items:center; gap:11px; padding:14px 16px;
+    border-bottom:1px solid #16302d; background:rgba(0,212,204,.03);
+  }
+  #jvs-head .jvs-orb{ position:relative; width:36px; height:36px; flex-shrink:0; }
+  #jvs-head .jvs-orb-ring{ position:absolute; inset:0; border-radius:50%; border:1px solid rgba(0,212,204,.35); animation:jvs-spin 6s linear infinite; }
+  #jvs-head .jvs-orb-ring:nth-child(2){ inset:5px; animation:jvs-spin 4s linear infinite reverse; border-color:rgba(0,212,204,.2); }
+  #jvs-head .jvs-orb-core{ position:absolute; inset:11px; border-radius:50%; background:radial-gradient(circle,#00f5e9,#007d77); box-shadow:0 0 12px rgba(0,212,204,.6); }
+  @keyframes jvs-spin{ to{transform:rotate(360deg)} }
+  #jvs-head .jvs-title{ display:flex; flex-direction:column; line-height:1.15; flex:1; }
+  #jvs-head .jvs-title b{ font-size:15px; font-weight:700; letter-spacing:1.5px; color:#00d4cc; }
+  #jvs-head .jvs-title span{ font-size:9.5px; letter-spacing:1px; color:#5a8f8a; font-weight:500; }
+  #jvs-head .jvs-state{ font-size:9px; letter-spacing:1px; color:#5a8f8a; padding:3px 8px; border-radius:20px; background:rgba(0,212,204,.07); border:1px solid rgba(0,212,204,.15); white-space:nowrap; }
+  #jvs-head .jvs-close{ background:none; border:none; color:#666; font-size:20px; cursor:pointer; line-height:1; padding:2px 4px; transition:color .15s; }
+  #jvs-head .jvs-close:hover{ color:#ff4444; }
+
+  /* log */
+  #jvs-log{ flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+  #jvs-log::-webkit-scrollbar{ width:4px; }
+  #jvs-log::-webkit-scrollbar-thumb{ background:rgba(0,212,204,.2); border-radius:2px; }
+  .jvs-msg{ display:flex; flex-direction:column; gap:3px; animation:jvs-in .3s ease; max-width:92%; }
+  .jvs-msg.jvs-u{ align-self:flex-end; align-items:flex-end; }
+  .jvs-msg.jvs-j, .jvs-msg.jvs-a, .jvs-msg.jvs-e{ align-self:flex-start; }
+  .jvs-msg .jvs-lbl{ font-size:8.5px; letter-spacing:1.5px; opacity:.55; font-weight:600; }
+  .jvs-msg .jvs-txt{ font-size:13.5px; line-height:1.5; padding:9px 13px; border-radius:13px; }
+  .jvs-u .jvs-lbl{ color:#ff9a4d; } .jvs-u .jvs-txt{ background:rgba(255,107,53,.12); color:#ffd0b0; border-bottom-right-radius:4px; }
+  .jvs-j .jvs-lbl{ color:#00d4cc; } .jvs-j .jvs-txt{ background:rgba(0,212,204,.1); color:#cdeeec; border-bottom-left-radius:4px; }
+  .jvs-a .jvs-lbl{ color:#00d4aa; } .jvs-a .jvs-txt{ background:rgba(0,212,170,.08); color:#9ae8d4; font-size:11px; font-family:ui-monospace,monospace; letter-spacing:.5px; }
+  .jvs-e .jvs-lbl{ color:#ff4444; } .jvs-e .jvs-txt{ background:rgba(255,68,68,.1); color:#ffb0b0; }
+  @keyframes jvs-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .jvs-cursor::after{ content:'▌'; animation:jvs-blink .7s step-end infinite; color:#00d4cc; }
+
+  /* chips */
+  #jvs-chips{ display:flex; gap:6px; padding:0 16px 10px; flex-wrap:wrap; }
+  .jvs-chip{ font-size:10.5px; padding:5px 10px; border-radius:14px; background:rgba(0,212,204,.06); border:1px solid rgba(0,212,204,.18); color:#7fc5c0; cursor:pointer; transition:all .15s; white-space:nowrap; }
+  .jvs-chip:hover{ background:rgba(0,212,204,.16); border-color:#00d4cc; color:#00d4cc; }
+
+  /* footer input */
+  #jvs-foot{ display:flex; gap:8px; padding:12px 16px; border-top:1px solid #16302d; align-items:center; }
+  #jvs-mic{ width:40px; height:40px; flex-shrink:0; border-radius:50%; border:1px solid rgba(0,212,204,.3); background:rgba(0,212,204,.07); color:#00d4cc; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; }
+  #jvs-mic:hover{ background:rgba(0,212,204,.18); }
+  #jvs-mic.jvs-rec{ background:rgba(255,68,68,.18); border-color:#ff4444; color:#ff4444; animation:jvs-blink 1s infinite; }
+  #jvs-mic svg{ width:18px; height:18px; fill:currentColor; }
+  #jvs-input{ flex:1; background:#141414; border:1px solid #2a2a2a; border-radius:21px; padding:10px 15px; font-size:13px; color:#f0f0f0; outline:none; font-family:'DM Sans',sans-serif; transition:border-color .15s; }
+  #jvs-input::placeholder{ color:#555; }
+  #jvs-input:focus{ border-color:rgba(0,212,204,.5); }
+  #jvs-send{ width:40px; height:40px; flex-shrink:0; border-radius:50%; border:none; background:#00d4cc; color:#04201e; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; }
+  #jvs-send:hover{ background:#00f5e9; }
+  #jvs-send svg{ width:18px; height:18px; fill:currentColor; }
+
+  /* settings row */
+  #jvs-settings{ display:flex; gap:8px; padding:0 16px 12px; align-items:center; }
+  #jvs-settings label{ font-size:10px; color:#5a8f8a; display:flex; align-items:center; gap:5px; cursor:pointer; }
+  #jvs-settings input[type=checkbox]{ accent-color:#00d4cc; }
+
+  @media(max-width:480px){
+    #jvs-panel{ right:12px; left:12px; bottom:84px; width:auto; height:calc(100vh - 110px); }
+    #jvs-fab{ bottom:16px; right:16px; }
+  }
+</style>
+
+<!-- FAB -->
+<button id="jvs-fab" title="Hablar con JARVIS">
+  <div class="jvs-fab-ring"></div>
+  <div class="jvs-mini-dot"></div>
+  <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm6-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+</button>
+
+<!-- Panel -->
+<div id="jvs-panel">
+  <div id="jvs-head">
+    <div class="jvs-orb"><div class="jvs-orb-ring"></div><div class="jvs-orb-ring"></div><div class="jvs-orb-core"></div></div>
+    <div class="jvs-title"><b>JARVIS</b><span>THE LAB SOLUTIONS · IA</span></div>
+    <div class="jvs-state" id="jvs-state">EN ESPERA</div>
+    <button class="jvs-close" id="jvs-close">✕</button>
+  </div>
+
+  <div id="jvs-log">
+    <div class="jvs-msg jvs-j">
+      <span class="jvs-lbl">JARVIS</span>
+      <span class="jvs-txt">Sistemas en línea. Puedo navegar el dashboard, consultar pedidos, cotizaciones, clientes y máquinas en tiempo real. ¿En qué le asisto?</span>
+    </div>
+  </div>
+
+  <div id="jvs-chips">
+    <span class="jvs-chip" data-cmd="¿cuántos pedidos activos hay y cuántos están atrasados?">📦 Estado pedidos</span>
+    <span class="jvs-chip" data-cmd="resumen de cotizaciones pendientes">📋 Cotizaciones</span>
+    <span class="jvs-chip" data-cmd="abre el módulo de máquinas">🖨️ Máquinas</span>
+    <span class="jvs-chip" data-cmd="dame un resumen ejecutivo del negocio hoy">📊 Resumen CEO</span>
+  </div>
+
+  <div id="jvs-settings">
+    <label><input type="checkbox" id="jvs-voice-toggle" checked> 🔊 Respuesta por voz</label>
+    <label style="margin-left:auto"><input type="checkbox" id="jvs-auto-listen"> 🎤 Re-escuchar auto</label>
+  </div>
+
+  <div id="jvs-foot">
+    <button id="jvs-mic" title="Mantén presionado o haz clic para hablar">
+      <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm6-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+    </button>
+    <input id="jvs-input" type="text" placeholder="Escribe o habla un comando...">
+    <button id="jvs-send"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  const JV = {
+    open:false, listening:false, thinking:false, speaking:false,
+    rec:null, synth:window.speechSynthesis, history:[], autoListen:false,
+  };
+
+  // ─── Refs ───
+  const $fab   = document.getElementById('jvs-fab');
+  const $panel = document.getElementById('jvs-panel');
+  const $log   = document.getElementById('jvs-log');
+  const $state = document.getElementById('jvs-state');
+  const $input = document.getElementById('jvs-input');
+  const $send  = document.getElementById('jvs-send');
+  const $mic   = document.getElementById('jvs-mic');
+  const $close = document.getElementById('jvs-close');
+  const $voiceToggle = document.getElementById('jvs-voice-toggle');
+  const $autoListen  = document.getElementById('jvs-auto-listen');
+
+  // ─── Live dashboard context builder ───
+  function buildContext(){
+    try{
+      const s = window.state || {};
+      const ped = s.pedidos || [];
+      const cot = s.cotizaciones || [];
+      const cli = s.clientes || [];
+      const today = new Date(); today.setHours(0,0,0,0);
+
+      const activos = ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields?.['Estado pedido']||'')).length;
+      const atrasados = ped.filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
+      const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||'')).length;
+      const revTotal = ped.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0);
+
+      return `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')}):
+- Pedidos totales: ${ped.length} | Activos: ${activos} | Atrasados: ${atrasados}
+- Cotizaciones totales: ${cot.length} | Pendientes: ${cotPend}
+- Clientes registrados: ${cli.length}
+- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP`;
+    }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
+  }
+
+  const SYS = () => `Eres JARVIS, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresión 3D, letreros neón y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
+
+${buildContext()}
+
+CAPACIDADES Y REGLAS:
+- Responde SIEMPRE en español chileno, profesional y conciso (máx 3 oraciones para voz).
+- Para navegar entre módulos del dashboard incluye al final: [NAV:nombre]
+  Módulos válidos: overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones
+- Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
+- Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
+
+  // ─── UI helpers ───
+  function setState(mode){
+    $fab.className=''; $mic.classList.remove('jvs-rec');
+    const map={listening:'ESCUCHANDO...',thinking:'PROCESANDO...',speaking:'RESPONDIENDO...',idle:'EN ESPERA'};
+    $state.textContent=map[mode]||'EN ESPERA';
+    if(mode==='listening'){ $fab.classList.add('jvs-active','jvs-listening'); $mic.classList.add('jvs-rec'); }
+    else if(mode==='thinking'){ $fab.classList.add('jvs-thinking'); }
+    else if(mode==='speaking'){ $fab.classList.add('jvs-active'); }
+  }
+
+  function addMsg(role,text){
+    const cls={u:'jvs-u',j:'jvs-j',a:'jvs-a',e:'jvs-e'}[role];
+    const lbl={u:'TÚ',j:'JARVIS',a:'ACCIÓN',e:'ERROR'}[role];
+    const d=document.createElement('div');
+    d.className='jvs-msg '+cls;
+    d.innerHTML=`<span class="jvs-lbl">${lbl}</span><span class="jvs-txt">${text}</span>`;
+    $log.appendChild(d); $log.scrollTop=$log.scrollHeight;
+    return d.querySelector('.jvs-txt');
+  }
+
+  // ─── Panel open/close ───
+  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); setTimeout(()=>$input.focus(),200); }
+  function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); stopListen(); JV.synth.cancel(); setState('idle'); }
+  $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
+  $close.addEventListener('click',closePanel);
+
+  // ─── Actions parser (navigation) ───
+  function execActions(text){
+    const re=/\[NAV:\s*([a-záéíóúñ\-]+)\]/gi; let m;
+    const cleaned=text.replace(re,'').trim();
+    while((m=re.exec(text))!==null){
+      const target=m[1].toLowerCase().trim();
+      if(typeof window.switchTab==='function'){
+        try{ window.switchTab(target); addMsg('a',`→ Navegando a ${target.toUpperCase()}`); }
+        catch(e){ addMsg('a',`→ ${target.toUpperCase()}`); }
+      }
+    }
+    return cleaned;
+  }
+
+  // ─── Ask Claude (reuses dashboard's key + endpoint) ───
+  async function ask(userText){
+    if(JV.thinking) return;
+    JV.thinking=true; setState('thinking');
+    JV.history.push({role:'user',content:userText});
+
+    const $typ=addMsg('j',''); $typ.classList.add('jvs-cursor');
+
+    try{
+      // reuse dashboard's stored Anthropic key
+      let key = (typeof window.getAnthropicKey==='function') ? window.getAnthropicKey() : null;
+      if(!key){ key = localStorage.getItem('anthropic_key'); }
+      if(!key){
+        $typ.classList.remove('jvs-cursor');
+        $typ.textContent='No hay API Key configurada. Configúrala desde el dashboard (botón de ajustes) y vuelve a intentar.';
+        $typ.parentElement.className='jvs-msg jvs-e';
+        JV.thinking=false; setState('idle'); return;
+      }
+
+      const r=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({ model:'claude-sonnet-4-5', max_tokens:500, system:SYS(), messages:JV.history.slice(-12) })
+      });
+
+      if(!r.ok){
+        const e=await r.json().catch(()=>({}));
+        $typ.classList.remove('jvs-cursor');
+        $typ.textContent='Error: '+(e.error?.message||('API '+r.status));
+        $typ.parentElement.className='jvs-msg jvs-e';
+        JV.thinking=false; setState('idle'); return;
+      }
+
+      const data=await r.json();
+      const full=data.content?.find(b=>b.type==='text')?.text||'Sin respuesta.';
+      const clean=execActions(full);
+      JV.history.push({role:'assistant',content:full});
+      if(JV.history.length>14) JV.history=JV.history.slice(-12);
+
+      // typewriter
+      $typ.classList.remove('jvs-cursor'); $typ.textContent='';
+      let i=0; JV.thinking=false; setState('speaking');
+      const iv=setInterval(()=>{
+        $typ.textContent+=clean[i]||''; i++; $log.scrollTop=$log.scrollHeight;
+        if(i>=clean.length){ clearInterval(iv); if($voiceToggle.checked) speak(clean); else { setState('idle'); maybeRelisten(); } }
+      },16);
+
+    }catch(err){
+      $typ.classList.remove('jvs-cursor');
+      $typ.textContent='Error de conexión: '+err.message;
+      $typ.parentElement.className='jvs-msg jvs-e';
+      JV.thinking=false; setState('idle');
+    }
+  }
+
+  // ─── TTS ───
+  function speak(text){
+    if(!text||!JV.synth){ setState('idle'); maybeRelisten(); return; }
+    JV.synth.cancel();
+    const u=new SpeechSynthesisUtterance(text.replace(/[*_#`]/g,''));
+    u.lang='es-CL'; u.rate=1.06; u.pitch=.95;
+    const vs=JV.synth.getVoices();
+    const v=vs.find(x=>x.lang.startsWith('es')&&/google/i.test(x.name))||vs.find(x=>x.lang.startsWith('es'));
+    if(v) u.voice=v;
+    u.onstart=()=>setState('speaking');
+    u.onend=()=>{ setState('idle'); maybeRelisten(); };
+    u.onerror=()=>{ setState('idle'); maybeRelisten(); };
+    JV.synth.speak(u);
+  }
+
+  function maybeRelisten(){ if(JV.autoListen && JV.open && !JV.thinking){ setTimeout(startListen,400); } }
+
+  // ─── STT ───
+  function initRec(){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR) return null;
+    const rec=new SR();
+    rec.lang='es-CL'; rec.interimResults=true; rec.maxAlternatives=1; rec.continuous=false;
+    rec.onstart=()=>{ JV.listening=true; setState('listening'); };
+    rec.onresult=(ev)=>{
+      const interim=Array.from(ev.results).map(r=>r[0].transcript).join('');
+      $input.value=interim;
+      const last=ev.results[ev.results.length-1];
+      if(last.isFinal){
+        const t=last[0].transcript.trim();
+        $input.value='';
+        if(t){ addMsg('u',t); ask(t); }
+      }
+    };
+    rec.onerror=(ev)=>{ JV.listening=false; if(ev.error!=='aborted'&&ev.error!=='no-speech') addMsg('e','Micrófono: '+ev.error); if(!JV.thinking) setState('idle'); };
+    rec.onend=()=>{ JV.listening=false; if(!JV.thinking&&!JV.speaking) setState('idle'); };
+    return rec;
+  }
+
+  function startListen(){
+    if(JV.thinking||JV.speaking||JV.listening) return;
+    if(!JV.rec) JV.rec=initRec();
+    if(!JV.rec){ addMsg('e','Reconocimiento de voz no disponible. Usa Chrome o Edge.'); return; }
+    try{ JV.synth.cancel(); JV.rec.start(); }catch(e){}
+  }
+  function stopListen(){ if(JV.rec&&JV.listening){ try{JV.rec.stop();}catch(e){} } }
+
+  // mic: tap to toggle
+  $mic.addEventListener('click',()=>{ JV.listening?stopListen():startListen(); });
+
+  // ─── Text send ───
+  function send(){ const t=$input.value.trim(); if(!t)return; $input.value=''; addMsg('u',t); ask(t); }
+  $send.addEventListener('click',send);
+  $input.addEventListener('keydown',e=>{ if(e.key==='Enter') send(); });
+
+  // ─── Chips ───
+  document.querySelectorAll('.jvs-chip').forEach(c=>{
+    c.addEventListener('click',()=>{ const cmd=c.dataset.cmd; addMsg('u',cmd); ask(cmd); });
+  });
+
+  // ─── Settings ───
+  $autoListen.addEventListener('change',()=>{ JV.autoListen=$autoListen.checked; });
+
+  // ─── Init ───
+  JV.rec=initRec();
+  window.speechSynthesis && (window.speechSynthesis.onvoiceschanged=()=>{});
+  // Expose a global to open JARVIS programmatically if needed
+  window.openJarvis=openPanel;
+})();
+</script>
+
 <!-- ── MODAL NOTAS INTERNAS ── -->
 <div id="notasModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeNotasModal()">
   <div class="modal-box" style="max-width:500px;width:95%">
