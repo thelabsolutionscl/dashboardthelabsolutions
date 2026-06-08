@@ -1237,6 +1237,24 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           </div>
           <div id="umPrinterTunnelStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">🤖 KAI — Anthropic API Key</div>
+          <input type="password" id="umAnthropicKey" placeholder="sk-ant-api03-..." autocomplete="off">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuAnthropicKey()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuAnthropicKey()">Limpiar</button>
+          </div>
+          <div id="umAnthropicStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
+        </div>
+        <div class="user-menu-token">
+          <div class="user-menu-token-label">🎙 ElevenLabs — Voz KAI</div>
+          <input type="password" id="umElevenLabsKey" placeholder="sk_..." autocomplete="off">
+          <div class="user-menu-token-actions">
+            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuElevenLabsKey()">Guardar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuElevenLabsKey()">Limpiar</button>
+          </div>
+          <div id="umElevenLabsStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
+        </div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-item danger" onclick="AUTH.logout();closeUserMenu()">⏻ Cerrar sesión</div>
       </div>
@@ -1280,6 +1298,84 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="finanzas" onclick="switchTabMobile('finanzas')"><span class="mobile-tab-icon">💰</span>Finanzas</button>
     <button class="mobile-tab-btn" data-tab="visual" onclick="switchTabMobile('visual')"><span class="mobile-tab-icon">🎨</span>Visual AI</button>
     <button class="mobile-tab-btn" data-tab="remuneraciones" onclick="switchTabMobile('remuneraciones')"><span class="mobile-tab-icon">💵</span>Remuneraciones</button>
+    <!-- Acordeón Configuración / Tokens -->
+    <div style="border-top:1px solid var(--border)">
+      <button onclick="toggleMobileConfig()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 18px;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.3px">
+        <span>⚙ Configuración</span>
+        <span id="mobileConfigChevron" style="font-size:11px;transition:transform .2s">▾</span>
+      </button>
+      <div id="mobileConfigBody" style="display:none;padding:0 16px 14px;flex-direction:column;gap:10px">
+        <!-- Token Airtable -->
+        <div style="padding-top:10px">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🔑 Token Airtable</div>
+          <input type="password" id="mbAirtableToken" placeholder="patXXX..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbAirtableToken()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbAirtableToken()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+        </div>
+        <!-- OpenAI Key -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🤖 OpenAI API Key</div>
+          <input type="password" id="mbOpenaiKey" placeholder="sk-proj-..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbOpenaiKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbOpenaiKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+        </div>
+        <!-- Google Drive Client ID -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">📁 Google Drive Client ID</div>
+          <input type="text" id="mbGoogleClientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbGoogleClientId()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbGoogleClientId()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbDriveStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+        <!-- Proxy Worker -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🔒 Proxy Worker <span style="font-weight:400;text-transform:none">(opcional)</span></div>
+          <input type="text" id="mbProxyUrl" placeholder="https://airtable-proxy.xxx.workers.dev" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <input type="password" id="mbProxyKey" placeholder="clave-secreta" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box;margin-top:4px">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbProxy()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbProxy()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbProxyStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+        <!-- Túnel Impresoras -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🖨 Túnel Impresoras <span style="font-weight:400;text-transform:none">(opcional)</span></div>
+          <input type="text" id="mbPrinterTunnel" placeholder="https://printers.thelab.solutions" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbPrinterTunnelStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+        <!-- KAI Anthropic Key -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🤖 KAI — Anthropic API Key</div>
+          <input type="password" id="mbAnthropicKey" placeholder="sk-ant-api03-..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbAnthropicKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbAnthropicKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbAnthropicStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+        <!-- ElevenLabs Voz KAI -->
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">🎙 ElevenLabs — Voz KAI</div>
+          <input type="password" id="mbElevenLabsKey" placeholder="sk_..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="saveMbElevenLabsKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
+            <button onclick="clearMbElevenLabsKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div id="mbElevenLabsStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
+        </div>
+      </div>
+    </div>
   </nav>
   <div class="mobile-nav-footer">
     <div id="mobileUserSection" style="display:flex;align-items:center;gap:12px;padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid var(--border2)">
@@ -2231,6 +2327,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button id="btnSort" class="btn btn-ghost btn-sm" onclick="toggleSort()" style="font-size:11px" title="Ordenar por estado">↕ Estado</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleKiosk()" style="font-size:11px" title="Modo pantalla completa">⛶ Kiosko</button>
         <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:11px" title="Configurar alertas">⚙ Alertas</button>
+        <button id="btnLocalMode" class="btn btn-ghost btn-sm" onclick="toggleLocalMode()" style="font-size:11px">🌐 Remoto</button>
+        <button class="btn btn-ghost btn-sm" onclick="openOrcaConfigModal()" style="font-size:11px" title="Configurar OrcaSlicer">🦙 OrcaSlicer</button>
       </div>
     </div>
     <div id="monitorFilterTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
@@ -3747,10 +3845,14 @@ const _DEFAULTS={
   SII_WORKER_URL:'%%SII_WORKER_URL%%',
   SII_RUT_EMISOR:'%%SII_RUT_EMISOR%%',
   SII_RAZON_SOCIAL:'%%SII_RAZON_SOCIAL%%',
-  ANTHROPIC_KEY:'%%ANTHROPIC_KEY%%'
+  ANTHROPIC_KEY:'%%ANTHROPIC_KEY%%',
+  PROXY_URL:'%%PROXY_URL%%',
+  PROXY_KEY:'%%PROXY_KEY%%',
+  PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%'
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
+window.state=state;
 let cdCurrentId='',cdCurrentEmpresa='';
 let _importDtes=[];
 let _facFiltro='todas';
@@ -4134,7 +4236,7 @@ function getAnthropicKey(){return lsGet('anthropic_key')||_DEFAULTS.ANTHROPIC_KE
 function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=lsGet('anthropic_key');i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
-function getToken(){return lsGet('airtable_token')||_DEFAULTS.AIRTABLE_TOKEN;}
+function getToken(){return lsGet('airtable_token')||(_DEFAULTS.AIRTABLE_TOKEN.startsWith('%%')?'':_DEFAULTS.AIRTABLE_TOKEN);}
 function getOpenAIKey(){return localStorage.getItem('fp_openai_key')||_DEFAULTS.OPENAI_KEY;}
 function clearToken(){localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');toast('Token eliminado','info');showTokenModal();}
 function showTokenModal(){openUserMenu();const i=document.getElementById('umAirtableToken');if(i){i.type='text';i.focus();}}
@@ -4153,6 +4255,8 @@ function openUserMenu(){
   const ps=document.getElementById('umProxyStatus');if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo — token Airtable vive en el Worker':'Sin proxy — token guardado localmente';}
   const pt=document.getElementById('umPrinterTunnel');if(pt){pt.value=localStorage.getItem('printer_tunnel')||'';}
   const pts=document.getElementById('umPrinterTunnelStatus');if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=v?`✓ Túnel personalizado: ${v}`:'Default: https://printers.thelab.solutions';}
+  const ak=document.getElementById('umAnthropicKey');if(ak){const v=lsGet('anthropic_key');ak.value=v&&!v.startsWith('%%')?'••••••••'+v.slice(-4):'';ak.placeholder=v&&!v.startsWith('%%')?'(guardado — clic para cambiar)':'sk-ant-api03-...';ak.onfocus=()=>{if(ak.value.startsWith('••')){ak.value='';ak.placeholder='sk-ant-api03-...';}};ak.onblur=()=>{if(!ak.value){const vv=lsGet('anthropic_key');ak.value=vv&&!vv.startsWith('%%')?'••••••••'+vv.slice(-4):'';ak.placeholder=vv&&!vv.startsWith('%%')?'(guardado — clic para cambiar)':'sk-ant-api03-...';}};}
+  const aks=document.getElementById('umAnthropicStatus');if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar — KAI no puede responder';}
   const _delay=window.innerWidth<=768?400:10;
   setTimeout(()=>document.addEventListener('click',closeUserMenuOutside),_delay);
 }
@@ -4228,6 +4332,38 @@ function clearPrinterTunnel(){
   const pts=document.getElementById('umPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
   toast('Túnel restaurado al default','info');
 }
+function saveUserMenuAnthropicKey(){
+  const inp=document.getElementById('umAnthropicKey');
+  const val=(inp?.value||'').trim();
+  if(!val){toast('Ingresa una API Key de Anthropic','error');return;}
+  lsSet('anthropic_key',val);
+  inp.value='••••••••'+val.slice(-4);
+  inp.placeholder='(guardado — clic para cambiar)';
+  const aks=document.getElementById('umAnthropicStatus');if(aks)aks.textContent='✓ KAI conectado';
+  toast('✓ KAI API Key guardada','success');
+}
+function clearUserMenuAnthropicKey(){
+  lsSet('anthropic_key','');
+  const inp=document.getElementById('umAnthropicKey');if(inp){inp.value='';inp.placeholder='sk-ant-api03-...';}
+  const aks=document.getElementById('umAnthropicStatus');if(aks)aks.textContent='Sin configurar — KAI no puede responder';
+  toast('KAI API Key eliminada','info');
+}
+function saveUserMenuElevenLabsKey(){
+  const inp=document.getElementById('umElevenLabsKey');
+  const val=(inp?.value||'').trim();
+  if(!val){toast('Ingresa una API Key de ElevenLabs','error');return;}
+  localStorage.setItem('elevenlabs_key',val);
+  inp.value='••••••••'+val.slice(-4);
+  inp.placeholder='(guardado — clic para cambiar)';
+  const st=document.getElementById('umElevenLabsStatus');if(st)st.textContent='✓ Voz ElevenLabs activa';
+  toast('✓ ElevenLabs Key guardada','success');
+}
+function clearUserMenuElevenLabsKey(){
+  localStorage.removeItem('elevenlabs_key');
+  const inp=document.getElementById('umElevenLabsKey');if(inp){inp.value='';inp.placeholder='sk_...';}
+  const st=document.getElementById('umElevenLabsStatus');if(st)st.textContent='Sin configurar — voz del navegador';
+  toast('ElevenLabs Key eliminada','info');
+}
 function clearUserMenuProxy(){
   localStorage.removeItem('proxy_url');localStorage.removeItem('proxy_key');
   const urlInp=document.getElementById('umProxyUrl');if(urlInp) urlInp.value='';
@@ -4239,8 +4375,8 @@ function clearUserMenuProxy(){
 // ── AIRTABLE ──────────────────────────────────────────────────
 // Returns {base, headers} — uses proxy when configured, direct PAT otherwise.
 function _airtableConfig(){
-  const proxyUrl=localStorage.getItem('proxy_url');
-  const proxyKey=localStorage.getItem('proxy_key');
+  const proxyUrl=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
+  const proxyKey=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
   if(proxyUrl&&proxyKey) return{base:proxyUrl.replace(/\/$/,''),headers:{'X-App-Key':proxyKey}};
   const t=getToken();if(!t) throw new Error('Sin token');
   return{base:'https://api.airtable.com/v0',headers:{'Authorization':'Bearer '+t}};
@@ -4725,7 +4861,7 @@ function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInt
 
 // ── AI ────────────────────────────────────────────────────────
 async function callClaude(system,user){let k=getAnthropicKey();if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}return _callClaudeRaw(system,user,k);}
-async function _callClaudeRaw(system,user,k){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1500,system,messages:[{role:'user',content:user}]})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
+async function _callClaudeRaw(system,user,k){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,thinking:{type:'disabled'},output_config:{effort:'medium'},system,messages:[{role:'user',content:user}]})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
 
 // ── HELPERS ───────────────────────────────────────────────────
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
@@ -4811,6 +4947,7 @@ function switchTab(name){
   if(name==='agentes') renderAgentesGrid();
   if(name==='remuneraciones') renderRemuneraciones();
   if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsData();}
+  if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
   if(name==='equipo') initEquipo();
@@ -7104,9 +7241,9 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
   </div>
   <div style="padding:0">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
-        <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;"></div>
-        OpenGen Studio — Live
+      <div id="vaiStatus" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">
+        <div id="vaiDot" style="width:8px;height:8px;border-radius:50%;background:#facc15;"></div>
+        <span id="vaiStatusTxt">Cargando...</span>
       </div>
       <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
          style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
@@ -7115,12 +7252,25 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
       <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
     </div>
     <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
-      <iframe
-        src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
-        style="width:100%;height:100%;border:none;display:block;background:#06070a;"
-        loading="lazy"
+      <!-- Fallback visible hasta que el iframe confirme que cargó -->
+      <div id="vaiFallback" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--surface2);z-index:2;">
+        <div style="font-size:48px">🎨</div>
+        <div style="font-size:14px;color:var(--text2);text-align:center;max-width:380px;line-height:1.6">
+          Cargando OpenGen Studio...<br>
+          <span style="font-size:12px;color:var(--text3)">Si no carga en unos segundos, ábrelo directamente.</span>
+        </div>
+        <a href="https://thelabsolutionscl.github.io/Open-Generative-AI/" target="_blank"
+           style="background:var(--accent);color:#000;padding:10px 24px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+          ↗ Abrir OpenGen Studio
+        </a>
+      </div>
+      <iframe id="vaiFrame"
+        src="about:blank"
+        data-src="https://thelabsolutionscl.github.io/Open-Generative-AI/"
+        style="width:100%;height:100%;border:none;display:block;background:#06070a;position:relative;z-index:1;"
         allow="camera; microphone; clipboard-write; fullscreen"
-        title="OpenGen Studio">
+        title="OpenGen Studio"
+        onload="if(this.src!=='about:blank'){document.getElementById('vaiFallback').style.display='none';document.getElementById('vaiDot').style.background='var(--success)';document.getElementById('vaiDot').style.animation='pulse 2s infinite';document.getElementById('vaiStatusTxt').textContent='OpenGen Studio — Live';}">
       </iframe>
     </div>
   </div>
@@ -8328,7 +8478,7 @@ async function initMaquinas(){
 
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
 const MOONRAKER_PORT=7125;
-function getPrinterTunnel(){return(localStorage.getItem('printer_tunnel')||'https://printers.thelab.solutions').replace(/\/$/,'');}
+function getPrinterTunnel(){const d=_DEFAULTS.PRINTER_TUNNEL.startsWith('%%')?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 function printerUrl(ip,path){return`${getPrinterTunnel()}/${ip}${path}`;}
 const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
@@ -9782,44 +9932,52 @@ function exportToCSV(t){
 // ── DEMO DATA ────────────────────────────────────────────────
 const DEMO_DATA={
   Clientes:{records:[
-    {id:'recC001',createdTime:'2026-03-15T10:00:00.000Z',fields:{'Empresa':'Agencia Creativa DG','Email':'contacto@agenciadg.cl','Contacto':'Diego González','Teléfono':'+56 9 8823 4411','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':2540000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Instagram'}},
-    {id:'recC002',createdTime:'2026-04-02T10:00:00.000Z',fields:{'Empresa':'Universidad de Chile','Email':'compras@uchile.cl','Contacto':'Patricia Vega','Teléfono':'+56 2 2978 2000','Etapa venta':'Negociación','Revenue total cliente (CLP)':850000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Educación','Origen':'Contacto directo'}},
-    {id:'recC003',createdTime:'2026-05-10T10:00:00.000Z',fields:{'Empresa':'Corporación Eventos XYZ','Email':'info@eventosxyz.cl','Contacto':'Rodrigo Méndez','Teléfono':'+56 9 7712 3344','Etapa venta':'Lead nuevo','Revenue total cliente (CLP)':0,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Referido'}},
-    {id:'recC004',createdTime:'2026-02-20T10:00:00.000Z',fields:{'Empresa':'Retail Sur SpA','Email':'pedidos@retailsur.cl','Contacto':'Carmen López','Teléfono':'+56 9 9900 1122','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':1820000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Retail','Origen':'Google'}},
-    {id:'recC005',createdTime:'2026-04-18T10:00:00.000Z',fields:{'Empresa':'Tech Solutions Ltda','Email':'compras@techsol.cl','Contacto':'Felipe Ríos','Teléfono':'+56 9 6688 9900','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':3240000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Tecnología','Origen':'LinkedIn'}},
-    {id:'recC006',createdTime:'2026-05-05T10:00:00.000Z',fields:{'Empresa':'Eventos Santiago','Email':'admin@eventossantiago.cl','Contacto':'Valentina Araya','Teléfono':'+56 9 5544 7788','Etapa venta':'Propuesta enviada','Revenue total cliente (CLP)':450000,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Instagram'}},
-    {id:'recC007',createdTime:'2026-05-18T10:00:00.000Z',fields:{'Empresa':'Diseños & Co','Email':'hola@disenosco.cl','Contacto':'Javiera Torres','Teléfono':'+56 9 3311 5566','Etapa venta':'Contactado','Revenue total cliente (CLP)':0,'Valoración cliente':0,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Referido'}},
-    {id:'recC008',createdTime:'2026-01-10T10:00:00.000Z',fields:{'Empresa':'Municipalidad Las Condes','Email':'licitaciones@lascondes.cl','Contacto':'Roberto Soto','Teléfono':'+56 2 2159 5000','Etapa venta':'Cliente inactivo','Revenue total cliente (CLP)':320000,'Valoración cliente':3,'Estado cuenta':'Con deuda','Industria':'Otro','Origen':'Contacto directo','Facturas vencidas':1}},
+    {id:'recC001',createdTime:'2026-03-15T10:00:00.000Z',fields:{'Empresa':'Agencia Creativa DG','RUT':'76.123.456-7','Email':'contacto@agenciadg.cl','Contacto':'Diego González','Teléfono':'+56 9 8823 4411','Dirección':'Av. Providencia 1234 Of. 301','Ciudad':'Santiago','Comuna':'Providencia','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':2540000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Instagram','Notas':'Cliente premium. Pedidos recurrentes cada 6-8 semanas. Prefiere comunicación por WhatsApp.'}},
+    {id:'recC002',createdTime:'2026-04-02T10:00:00.000Z',fields:{'Empresa':'Universidad de Chile','RUT':'60.910.000-1','Email':'compras@uchile.cl','Contacto':'Patricia Vega','Teléfono':'+56 2 2978 2000','Dirección':'Av. Bello 2007 Piso 4','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Negociación','Revenue total cliente (CLP)':850000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Educación','Origen':'Contacto directo','Notas':'Licitación en proceso. Decisión estimada para julio 2026. Contactar a Patricia antes del 20/06.'}},
+    {id:'recC003',createdTime:'2026-05-10T10:00:00.000Z',fields:{'Empresa':'Corporación Eventos XYZ','RUT':'77.345.678-9','Email':'info@eventosxyz.cl','Contacto':'Rodrigo Méndez','Teléfono':'+56 9 7712 3344','Dirección':'Teatinos 120 Of. 805','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Lead nuevo','Revenue total cliente (CLP)':0,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Referido','Notas':'Referido por Diego González (Agencia DG). Necesita trofeos para torneo empresarial Q3.'}},
+    {id:'recC004',createdTime:'2026-02-20T10:00:00.000Z',fields:{'Empresa':'Retail Sur SpA','RUT':'76.890.123-4','Email':'pedidos@retailsur.cl','Contacto':'Carmen López','Teléfono':'+56 9 9900 1122','Dirección':'Av. Las Industrias 4500','Ciudad':'San Bernardo','Comuna':'San Bernardo','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':1820000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Retail','Origen':'Google','Notas':'Cadena de tiendas retail. Encargos de señalética y letreros LED para sucursales. Paga con OC a 30 días.'}},
+    {id:'recC005',createdTime:'2026-04-18T10:00:00.000Z',fields:{'Empresa':'Tech Solutions Ltda','RUT':'76.456.789-0','Email':'compras@techsol.cl','Contacto':'Felipe Ríos','Teléfono':'+56 9 6688 9900','Dirección':'Isidora Goyenechea 3000 Of. 1102','Ciudad':'Santiago','Comuna':'Las Condes','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':3240000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Tecnología','Origen':'LinkedIn','Notas':'Empresa de tecnología con proyectos de prototipado mensual. Valora rapidez y tolerancias precisas.'}},
+    {id:'recC006',createdTime:'2026-05-05T10:00:00.000Z',fields:{'Empresa':'Eventos Santiago','RUT':'77.567.890-1','Email':'admin@eventossantiago.cl','Contacto':'Valentina Araya','Teléfono':'+56 9 5544 7788','Dirección':'Monjitas 565 Of. 302','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Propuesta enviada','Revenue total cliente (CLP)':450000,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Instagram','Notas':'Organizadora de eventos corporativos. Cotización enviada para neones decorativos para gala de fin de año.'}},
+    {id:'recC007',createdTime:'2026-05-18T10:00:00.000Z',fields:{'Empresa':'Diseños & Co','RUT':'76.234.567-8','Email':'hola@disenosco.cl','Contacto':'Javiera Torres','Teléfono':'+56 9 3311 5566','Dirección':'Av. Italia 1560','Ciudad':'Santiago','Comuna':'Ñuñoa','Región':'Región Metropolitana','Etapa venta':'Contactado','Revenue total cliente (CLP)':0,'Valoración cliente':0,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Referido','Notas':'Agencia de diseño. Explorando opciones para packaging personalizado para cliente retail.'}},
+    {id:'recC008',createdTime:'2026-01-10T10:00:00.000Z',fields:{'Empresa':'Municipalidad Las Condes','RUT':'69.071.100-6','Email':'licitaciones@lascondes.cl','Contacto':'Roberto Soto','Teléfono':'+56 2 2159 5000','Dirección':'Apoquindo 3400','Ciudad':'Santiago','Comuna':'Las Condes','Región':'Región Metropolitana','Etapa venta':'Cliente inactivo','Revenue total cliente (CLP)':320000,'Valoración cliente':3,'Estado cuenta':'Con deuda','Industria':'Otro','Origen':'Contacto directo','Facturas vencidas':1,'Notas':'Factura #998 vencida desde el 15/03. Contactar a Roberto urgente. Monto pendiente: $38.080.'}},
   ]},
   Cotizaciones:{records:[
-    {id:'recQ001',createdTime:'2026-05-20T10:00:00.000Z',fields:{'N° Cotización':'260520','Cliente':['recC001'],'Canal solicitud':'WhatsApp','Subtotal (CLP)':295000,'Total final (CLP)':450000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-03','Forma de pago':'Contado'}},
-    {id:'recQ002',createdTime:'2026-05-15T10:00:00.000Z',fields:{'N° Cotización':'260515','Cliente':['recC004'],'Canal solicitud':'Email','Subtotal (CLP)':470000,'Total final (CLP)':820000,'Estado cotización':'Aprobada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-05-29','Forma de pago':'Pago a 30 días desde OC'}},
-    {id:'recQ003',createdTime:'2026-05-22T10:00:00.000Z',fields:{'N° Cotización':'260522','Cliente':['recC006'],'Canal solicitud':'WhatsApp','Subtotal (CLP)':200000,'Total final (CLP)':280000,'Estado cotización':'Solicitada','Urgencia (+25%)':true,'Fecha vencimiento':'2026-06-05','Forma de pago':'Contado'}},
-    {id:'recQ004',createdTime:'2026-05-08T10:00:00.000Z',fields:{'N° Cotización':'260508','Cliente':['recC005'],'Canal solicitud':'LinkedIn','Subtotal (CLP)':105000,'Total final (CLP)':150000,'Estado cotización':'Rechazada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-05-22','Forma de pago':'Contado'}},
-    {id:'recQ005',createdTime:'2026-05-19T10:00:00.000Z',fields:{'N° Cotización':'260519','Cliente':['recC002'],'Canal solicitud':'Email','Subtotal (CLP)':728000,'Total final (CLP)':1200000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-02','Forma de pago':'Pago a 45 días desde OC'}},
-    {id:'recQ006',createdTime:'2026-05-23T10:00:00.000Z',fields:{'N° Cotización':'260523','Cliente':['recC003'],'Canal solicitud':'WhatsApp','Subtotal (CLP)':240000,'Total final (CLP)':320000,'Estado cotización':'Solicitada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-06','Forma de pago':'Contado'}},
+    {id:'recQ001',createdTime:'2026-05-20T10:00:00.000Z',fields:{'N° Cotización':'260520','Cliente':['recC001'],'Canal solicitud':'WhatsApp','Solicitud / detalle':'30 trofeos acrílicos con grabado láser para premiación corporativa anual. Logo empresa + nombre ganador + cargo. Entrega urgente antes del 05/06.','Subtotal (CLP)':295000,'Total final (CLP)':450000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-03','Forma de pago':'Contado','Tiempo de producción':8,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':42}},
+    {id:'recQ002',createdTime:'2026-05-15T10:00:00.000Z',fields:{'N° Cotización':'260515','Cliente':['recC004'],'Canal solicitud':'Email','Solicitud / detalle':'Letreros LED para 3 sucursales nuevas. Fondo negro con letras iluminadas en blanco frío. Medidas: 1.2m × 0.4m por letrero. Instalación incluida.','Subtotal (CLP)':470000,'Total final (CLP)':820000,'Estado cotización':'Aprobada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-05-29','Forma de pago':'Pago a 30 días desde OC','Tiempo de producción':10,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':38}},
+    {id:'recQ003',createdTime:'2026-05-22T10:00:00.000Z',fields:{'N° Cotización':'260522','Cliente':['recC006'],'Canal solicitud':'WhatsApp','Solicitud / detalle':'Neones decorativos para gala corporativa: texto "AWARDS 2026" en tubería flexible rosa neón + 2 marcos decorativos. Alquiler + instalación por 2 días.','Subtotal (CLP)':200000,'Total final (CLP)':280000,'Estado cotización':'Solicitada','Urgencia (+25%)':true,'Fecha vencimiento':'2026-06-05','Forma de pago':'Contado','Tiempo de producción':5,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':55}},
+    {id:'recQ004',createdTime:'2026-05-08T10:00:00.000Z',fields:{'N° Cotización':'260508','Cliente':['recC005'],'Canal solicitud':'LinkedIn','Solicitud / detalle':'Prototipo funcional de carcasa para dispositivo IoT. Material PETG negro, tolerancia ±0.2mm. 3 iteraciones de diseño incluidas.','Subtotal (CLP)':105000,'Total final (CLP)':150000,'Estado cotización':'Rechazada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-05-22','Forma de pago':'Contado','Tiempo de producción':4,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':35,'Notas rechazo':'Cliente cotizó con competidor que ofrecía precio 20% menor. Reconsiderar precio en futuros prototipos PETG.'}},
+    {id:'recQ005',createdTime:'2026-05-19T10:00:00.000Z',fields:{'N° Cotización':'260519','Cliente':['recC002'],'Canal solicitud':'Email','Solicitud / detalle':'200 medallas para olimpiadas universitarias: oro, plata y bronce. Diseño personalizado con escudo U. de Chile. Cinta de tela incluida.','Subtotal (CLP)':728000,'Total final (CLP)':1200000,'Estado cotización':'Enviada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-02','Forma de pago':'Pago a 45 días desde OC','Tiempo de producción':15,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':40}},
+    {id:'recQ006',createdTime:'2026-05-23T10:00:00.000Z',fields:{'N° Cotización':'260523','Cliente':['recC003'],'Canal solicitud':'WhatsApp','Solicitud / detalle':'50 trofeos para torneo de golf empresarial. Base madera + figura impresa 3D + placa grabada. Colores corporativos del cliente.','Subtotal (CLP)':240000,'Total final (CLP)':320000,'Estado cotización':'Solicitada','Urgencia (+25%)':false,'Fecha vencimiento':'2026-06-06','Forma de pago':'Contado','Tiempo de producción':12,'Tipo días producción':'DÍAS HÁBILES','Margen estimado (%)':44}},
   ]},
   Pedidos:{records:[
-    {id:'recP001',createdTime:'2026-05-10T10:00:00.000Z',fields:{'N° Pedido':'PED-047','Cliente':['recC001'],'Estado pedido':'En producción','Monto total (CLP)':420000,'Fecha entrega':'2026-05-27','Equipo responsable':'Nicanor','Forma de pago':'60% inicial y 40% Contra entrega','Anticipo pagado (50%)':true,'QA':'Pendiente','Proveedor':'FilamentoCL'}},
-    {id:'recP002',createdTime:'2026-05-14T10:00:00.000Z',fields:{'N° Pedido':'PED-048','Cliente':['recC004'],'Estado pedido':'Confirmado','Monto total (CLP)':780000,'Fecha entrega':'2026-05-30','Equipo responsable':'Gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':false,'QA':'Pendiente','Proveedor':'LED Masters Chile'}},
-    {id:'recP003',createdTime:'2026-05-16T10:00:00.000Z',fields:{'N° Pedido':'PED-049','Cliente':['recC005'],'Estado pedido':'Listo para despacho','Monto total (CLP)':290000,'Fecha entrega':'2026-05-24','Equipo responsable':'Nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'Packaging Total SpA'}},
-    {id:'recP004',createdTime:'2026-05-05T10:00:00.000Z',fields:{'N° Pedido':'PED-046','Cliente':['recC002'],'Estado pedido':'Despachado','Monto total (CLP)':1100000,'Fecha entrega':'2026-05-20','Equipo responsable':'Gustavo','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
-    {id:'recP005',createdTime:'2026-04-28T10:00:00.000Z',fields:{'N° Pedido':'PED-044','Cliente':['recC003'],'Estado pedido':'Despachado','Monto total (CLP)':650000,'Fecha entrega':'2026-05-05','Equipo responsable':'Nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
-    {id:'recP006',createdTime:'2026-04-15T10:00:00.000Z',fields:{'N° Pedido':'PED-042','Cliente':['recC006'],'Estado pedido':'Despachado','Monto total (CLP)':380000,'Fecha entrega':'2026-04-22','Equipo responsable':'Gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'LED Masters Chile'}},
-    {id:'recP007',createdTime:'2026-04-05T10:00:00.000Z',fields:{'N° Pedido':'PED-040','Cliente':['recC001'],'Estado pedido':'Despachado','Monto total (CLP)':920000,'Fecha entrega':'2026-04-12','Equipo responsable':'Nicanor','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
+    {id:'recP001',createdTime:'2026-05-10T10:00:00.000Z',fields:{'N° Pedido':'PED-047','Cliente':['recC001'],'Descripción del pedido':'40 piezas aeronáuticas en PLA blanco. Tolerancia ±0.3mm. Post-proceso: lijado fino hasta grano 400, pintura base epóxica blanca.','Estado pedido':'En producción','Monto total (CLP)':420000,'Fecha entrega':'2026-06-10','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'60% inicial y 40% Contra entrega','Anticipo pagado (50%)':true,'QA':'Pendiente','Proveedor':'FilamentoCL','Notas':'K2 Plus asignada para este lote. Perfil de slicing revisado — reducción de desperdicio 18%.'}},
+    {id:'recP002',createdTime:'2026-05-14T10:00:00.000Z',fields:{'N° Pedido':'PED-048','Cliente':['recC004'],'Descripción del pedido':'Letreros LED para 3 sucursales. Fondo negro, letras blanco frío 1.2×0.4m. Cableado interno + driver incluido. Instalación en sitio.','Estado pedido':'Confirmado','Monto total (CLP)':780000,'Fecha entrega':'2026-06-15','Equipo responsable':'Gustavo','Equipo asignado':'gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':false,'QA':'Pendiente','Proveedor':'LED Masters Chile','Notas':'Coordinar fecha de instalación con Carmen López. Confirmar dirección exacta de cada sucursal.'}},
+    {id:'recP003',createdTime:'2026-05-16T10:00:00.000Z',fields:{'N° Pedido':'PED-049','Cliente':['recC005'],'Descripción del pedido':'Prototipo carcasa IoT en PETG negro. 3 iteraciones de diseño. Dimensiones 120×80×45mm. Orificios para conectores USB-C y 3 botones.','Estado pedido':'Listo para despacho','Monto total (CLP)':290000,'Fecha entrega':'2026-05-28','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'Packaging Total SpA','Notas':'Empaque con espuma protectora. Felipe Ríos confirma retiro en taller.'}},
+    {id:'recP004',createdTime:'2026-05-05T10:00:00.000Z',fields:{'N° Pedido':'PED-046','Cliente':['recC002'],'Descripción del pedalle del pedido':'200 medallas universitarias: 80 oro + 80 plata + 40 bronce. Aleación zamak, acabado satinado. Escudo U. de Chile grabado en relieve. Cintas tricolor incluidas.','Estado pedido':'Despachado','Monto total (CLP)':1100000,'Fecha entrega':'2026-05-20','Fecha despacho':'2026-05-20','Equipo responsable':'Gustavo','Equipo asignado':'gustavo','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
+    {id:'recP005',createdTime:'2026-04-28T10:00:00.000Z',fields:{'N° Pedido':'PED-044','Cliente':['recC003'],'Descripción del pedido':'50 trofeos golf corporativo. Base pino barnizado + figura jugador impresa 3D PLA dorado + placa acrílica grabada con nombre torneo.','Estado pedido':'Despachado','Monto total (CLP)':650000,'Fecha entrega':'2026-05-05','Fecha despacho':'2026-05-04','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
+    {id:'recP006',createdTime:'2026-04-15T10:00:00.000Z',fields:{'N° Pedido':'PED-042','Cliente':['recC006'],'Descripción del pedido':'Neones decorativos para gala: letrero "AWARDS 2026" tubería flex rosa + 2 marcos rectangulares con iluminación. Estructura desmontable para alquiler.','Estado pedido':'Despachado','Monto total (CLP)':380000,'Fecha entrega':'2026-04-22','Fecha despacho':'2026-04-21','Equipo responsable':'Gustavo','Equipo asignado':'gustavo','Forma de pago':'Contado','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'LED Masters Chile'}},
+    {id:'recP007',createdTime:'2026-04-05T10:00:00.000Z',fields:{'N° Pedido':'PED-040','Cliente':['recC001'],'Descripción del pedido':'Lote especial 60 piezas PLA flex para componentes automotrices. Colores: negro + rojo cereza. Post-proceso: barniz mate anticorrosión.','Estado pedido':'Despachado','Monto total (CLP)':920000,'Fecha entrega':'2026-04-12','Fecha despacho':'2026-04-12','Equipo responsable':'Nicanor','Equipo asignado':'nicanor','Forma de pago':'Pago a 30 días desde OC','Anticipo pagado (50%)':true,'QA':'QA aprobado','Proveedor':'FilamentoCL'}},
   ]},
   Reportes:{records:[
-    {id:'recR001',createdTime:'2026-06-02T10:00:00.000Z',fields:{'Semana':'Sem. 23 / 2026','Revenue semana (CLP)':1820000,'Pedidos activos':4,'Pedidos despachados':2,'Margen promedio semana (%)':38.5,'Tasa conversión (%)':62,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana sólida. Revenue $1.82M (+12% vs sem. anterior). 2 pedidos despachados a tiempo (Tech Solutions y Retail Sur). Pipeline activo: 4 pedidos en producción. \n\nDestacado: K2 Plus completó lote de 18 piezas aeronáuticas para pedido PED-047 con QA aprobado. Margen de 38.5% impulsado por reducción de filamento desperdiciado (nuevo perfil de slicing).\n\nAtención: cotización 260519 ($1.2M) con Universidad de Chile vence en 2 días — seguimiento urgente. Florencia coordina reunión de cierre.'}},
+    {id:'recR001',createdTime:'2026-06-02T10:00:00.000Z',fields:{'Semana':'Sem. 23 / 2026','Revenue semana (CLP)':1820000,'Pedidos activos':4,'Pedidos despachados':2,'Margen promedio semana (%)':38.5,'Tasa conversión (%)':62,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana sólida. Revenue $1.82M (+12% vs sem. anterior). 2 pedidos despachados a tiempo (Tech Solutions y Retail Sur). Pipeline activo: 4 pedidos en producción. \n\nDestacado: K2 Plus completó lote de 18 piezas aeronáuticas para PED-047 con QA aprobado. Margen de 38.5% impulsado por reducción de filamento desperdiciado (nuevo perfil de slicing).\n\nAtención: cotización 260519 ($1.2M) con Universidad de Chile vence en 2 días — seguimiento urgente. Florencia coordina reunión de cierre.'}},
     {id:'recR002',createdTime:'2026-05-26T10:00:00.000Z',fields:{'Semana':'Sem. 22 / 2026','Revenue semana (CLP)':1450000,'Pedidos activos':3,'Pedidos despachados':1,'Margen promedio semana (%)':34.2,'Tasa conversión (%)':55,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana normal. Revenue $1.45M. 1 despacho completado. Conversión 55% (3 de 5 cotizaciones cerradas).\n\nMáquinas: K1 #5 fuera de línea por mantenimiento de nozzle — impacto menor. Ender-5 Max #3 y #4 cubrieron la demanda con turnos extendidos.\n\nFilamento: stock para ~12 días de producción normal. Pedido a FilamentoCL ya generado.'}},
-    {id:'recR003',createdTime:'2026-05-19T10:00:00.000Z',fields:{'Semana':'Sem. 21 / 2026','Revenue semana (CLP)':2100000,'Pedidos activos':5,'Pedidos despachados':3,'Margen promedio semana (%)':41.8,'Tasa conversión (%)':70,'Estado reporte':'Publicado','Resumen ejecutivo':'Mejor semana del mes. Revenue $2.1M, record del trimestre. 3 despachos, 0 rechazos QA.\n\nLogros: K2 Plus trabajando 22h/día en pedido gran formato para Municipalidad Las Condes. Margen 41.8% — mejor desde Feb 2026, gracias a eficiencia en postproceso.\n\nNuevo cliente: Corporación Eventos XYZ firmó 2 pedidos por $480K. Origen: referido de Agencia DG.'}},
+    {id:'recR003',createdTime:'2026-05-19T10:00:00.000Z',fields:{'Semana':'Sem. 21 / 2026','Revenue semana (CLP)':2100000,'Pedidos activos':5,'Pedidos despachados':3,'Margen promedio semana (%)':41.8,'Tasa conversión (%)':70,'Estado reporte':'Publicado','Resumen ejecutivo':'Mejor semana del mes. Revenue $2.1M, récord del trimestre. 3 despachos, 0 rechazos QA.\n\nLogros: K2 Plus trabajando 22h/día en pedido gran formato para Municipalidad Las Condes. Margen 41.8% — mejor desde Feb 2026, gracias a eficiencia en postproceso.\n\nNuevo cliente: Corporación Eventos XYZ firmó 2 pedidos por $480K. Origen: referido de Agencia DG.'}},
     {id:'recR004',createdTime:'2026-05-12T10:00:00.000Z',fields:{'Semana':'Sem. 20 / 2026','Revenue semana (CLP)':980000,'Pedidos activos':2,'Pedidos despachados':1,'Margen promedio semana (%)':29.5,'Tasa conversión (%)':40,'Estado reporte':'Publicado','Resumen ejecutivo':'Semana baja. Revenue $980K (-32% vs semana anterior). Conversión 40% — 2 cotizaciones rechazadas por precio.\n\nAnálisis: competidor regional bajó precios en accesorios PLA. Propuesta: agregar valor con postproceso incluido y garantía 30 días.\n\nAcciones tomadas: Florencia actualizó plantilla de cotización con nuevos diferenciadores. Gustavo negoció mejor precio con FilamentoCL (-8% por volumen).'}},
   ]},
   Proveedores:{records:[
-    {id:'recV001',createdTime:'2026-01-10T10:00:00.000Z',fields:{'Nombre / Empresa':'FilamentoCL','Categorías':['Filamentos 3D'],'Contacto':'Carlos Muñoz','Teléfono':'+56 9 8811 2233','Email':'ventas@filamentocl.cl','Estado':'Activo','Reputación':5,'Plazo entrega (días)':3,'Comuna':'Maipú','Región':'Región Metropolitana'}},
-    {id:'recV002',createdTime:'2026-01-15T10:00:00.000Z',fields:{'Nombre / Empresa':'LED Masters Chile','Categorías':['Componentes LED / Neones'],'Contacto':'Ana Pérez','Teléfono':'+56 9 7722 3344','Email':'info@ledmasters.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':5,'Comuna':'Pudahuel','Región':'Región Metropolitana'}},
-    {id:'recV003',createdTime:'2026-02-01T10:00:00.000Z',fields:{'Nombre / Empresa':'Packaging Total SpA','Categorías':['Packaging / Embalaje'],'Contacto':'Luis Herrera','Teléfono':'+56 2 2234 5566','Email':'ventas@packagingtotal.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':7,'Comuna':'Santiago','Región':'Región Metropolitana'}},
-    {id:'recV004',createdTime:'2026-03-10T10:00:00.000Z',fields:{'Nombre / Empresa':'Acrílicos Express','Categorías':['Otro'],'Contacto':'María Soto','Teléfono':'+56 9 6633 4455','Email':'info@acrilicosex.cl','Estado':'En evaluación','Reputación':3,'Plazo entrega (días)':4,'Comuna':'Quilicura','Región':'Región Metropolitana'}},
-    {id:'recV005',createdTime:'2026-02-20T10:00:00.000Z',fields:{'Nombre / Empresa':'Distribuidora Industrial Norte','Categorías':['Otro'],'Contacto':'Jorge Castro','Teléfono':'+56 9 5544 6677','Email':'jcastro@dinorte.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':10,'Comuna':'Renca','Región':'Región Metropolitana'}},
+    {id:'recV001',createdTime:'2026-01-10T10:00:00.000Z',fields:{'Nombre / Empresa':'FilamentoCL','Categorías':['Filamentos 3D'],'Contacto':'Carlos Muñoz','Teléfono':'+56 9 8811 2233','Email':'ventas@filamentocl.cl','Estado':'Activo','Reputación':5,'Plazo entrega (días)':3,'Comuna':'Maipú','Región':'Región Metropolitana','Notas':'Proveedor principal de filamento PLA y PETG. Descuento 8% por volumen mensual mayor a 50 kg. Entrega en taller.'}},
+    {id:'recV002',createdTime:'2026-01-15T10:00:00.000Z',fields:{'Nombre / Empresa':'LED Masters Chile','Categorías':['Componentes LED / Neones'],'Contacto':'Ana Pérez','Teléfono':'+56 9 7722 3344','Email':'info@ledmasters.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':5,'Comuna':'Pudahuel','Región':'Región Metropolitana','Notas':'Tubería flex neón, drivers y fuentes. Amplio stock de colores. Despacho por Starken.'}},
+    {id:'recV003',createdTime:'2026-02-01T10:00:00.000Z',fields:{'Nombre / Empresa':'Packaging Total SpA','Categorías':['Packaging / Embalaje'],'Contacto':'Luis Herrera','Teléfono':'+56 2 2234 5566','Email':'ventas@packagingtotal.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':7,'Comuna':'Santiago','Región':'Región Metropolitana','Notas':'Cajas a medida, espumas protectoras y papel kraft. Descuento por pedidos mayores a 500 unidades.'}},
+    {id:'recV004',createdTime:'2026-03-10T10:00:00.000Z',fields:{'Nombre / Empresa':'Acrílicos Express','Categorías':['Otro'],'Contacto':'María Soto','Teléfono':'+56 9 6633 4455','Email':'info@acrilicosex.cl','Estado':'En evaluación','Reputación':3,'Plazo entrega (días)':4,'Comuna':'Quilicura','Región':'Región Metropolitana','Notas':'Planchas acrílicas para bases de trofeos. En evaluación: primer pedido recibido con 2 piezas dañadas. Seguimiento.'}},
+    {id:'recV005',createdTime:'2026-02-20T10:00:00.000Z',fields:{'Nombre / Empresa':'Distribuidora Industrial Norte','Categorías':['Otro'],'Contacto':'Jorge Castro','Teléfono':'+56 9 5544 6677','Email':'jcastro@dinorte.cl','Estado':'Activo','Reputación':4,'Plazo entrega (días)':10,'Comuna':'Renca','Región':'Región Metropolitana','Notas':'Resina UV y materiales SLA. Proveedor de respaldo. Precios estables, plazo largo.'}},
+  ]},
+  Facturas:{records:[
+    {id:'recF001',fields:{'Tipo DTE':'33 - Factura Electrónica','Folio':1001,'Fecha':'2026-04-12','Cliente':'Agencia Creativa DG','Cliente ID':'recC001','Neto':773109,'IVA':146891,'Total':920000,'Estado Pago':'Cobrada','Estado SII':'Aceptado'}},
+    {id:'recF002',fields:{'Tipo DTE':'33 - Factura Electrónica','Folio':1002,'Fecha':'2026-04-22','Cliente':'Eventos Santiago','Cliente ID':'recC006','Neto':319328,'IVA':60672,'Total':380000,'Estado Pago':'Cobrada','Estado SII':'Aceptado'}},
+    {id:'recF003',fields:{'Tipo DTE':'33 - Factura Electrónica','Folio':1003,'Fecha':'2026-05-05','Cliente':'Corporación Eventos XYZ','Cliente ID':'recC003','Neto':546218,'IVA':103782,'Total':650000,'Estado Pago':'Cobrada','Estado SII':'Aceptado'}},
+    {id:'recF004',fields:{'Tipo DTE':'33 - Factura Electrónica','Folio':1004,'Fecha':'2026-05-20','Cliente':'Universidad de Chile','Cliente ID':'recC002','Neto':924370,'IVA':175630,'Total':1100000,'Estado Pago':'Por cobrar','Estado SII':'Aceptado'}},
+    {id:'recF005',fields:{'Tipo DTE':'52 - Guía de Despacho','Folio':501,'Fecha':'2026-05-24','Cliente':'Tech Solutions Ltda','Cliente ID':'recC005','Neto':243697,'IVA':46303,'Total':290000,'Estado Pago':'Cobrada','Estado SII':'Aceptado'}},
+    {id:'recF006',fields:{'Tipo DTE':'33 - Factura Electrónica','Folio':998,'Fecha':'2026-03-10','Cliente':'Municipalidad Las Condes','Cliente ID':'recC008','Neto':268908,'IVA':51092,'Total':320000,'Estado Pago':'Vencida','Estado SII':'Aceptado'}},
   ]},
   'Monitor Sistema':{records:[]},
 };
@@ -9884,6 +10042,7 @@ function enableDemoMode(){
       else if(dec.includes('Proveedores')) data=DEMO_DATA.Proveedores;
       else if(dec.includes('Monitor')) data=DEMO_DATA['Monitor Sistema'];
       else if(dec.includes('Equipo_Eventos')) data=DEMO_DATA.Equipo_Eventos;
+      else if(dec.includes('Facturas')) data=DEMO_DATA.Facturas;
       else if(dec.includes('Clientes')) data=DEMO_DATA.Clientes;
       return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
     }
@@ -9914,7 +10073,7 @@ const AUTH={
   // Usuarios fijos — mismos en todos los dispositivos
   USERS:[
     {username:'nicanor@thelab.solutions',   name:'Nicanor Marambio', role:'admin',      pwd:[80,114,105,109,111,115,50,53,50,53,46]},
-    {username:'gustavo@thelab.solutions',   name:'Gustavo Kaiser',   role:'gerencia',   pwd:[80,114,105,109,111,115,50,53,50,53,46]},
+    {username:'gustavo@thelab.solutions',   name:'Gustavo Kaiser',   role:'admin',      pwd:[80,114,105,109,111,115,50,53,50,53,46]},
     {username:'florencia@thelab.solutions',  name:'Florencia',        role:'comercial',  pwd:[70,97,108,115,111,112,105,114,97,116,97,52,50,48]},
     {username:'tecnico@thelab.solutions',   name:'Técnico Máquinas', role:'produccion', pwd:[84,101,99,110,105,99,111,50,48,50,53,46]},
     {username:'finanzas@thelab.solutions',  name:'Finanzas',         role:'finanzas',   pwd:[70,105,110,97,110,122,97,115,50,48,50,53,46]},
@@ -10135,7 +10294,7 @@ function initDashboard(){
 document.addEventListener('DOMContentLoaded',()=>{
   // Fallback: muestra botón reintentar a los 8s y fuerza cierre a los 10s
   setTimeout(()=>{const r=document.getElementById('slRetry');if(r){const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')) r.style.display='block';}},8000);
-  setTimeout(()=>{const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')){sl.classList.add('hidden');const hasAuth=!!(localStorage.getItem('airtable_token')||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));if(!hasAuth) showTokenModal();}},10000);
+  setTimeout(()=>{const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')){sl.classList.add('hidden');try{_airtableConfig();}catch(e){showTokenModal();}}},10000);
   AUTH.init().then(()=>{
     if(!AUTH.isLoggedIn()){
       const lp=document.getElementById('loginPage');
@@ -12392,6 +12551,128 @@ function toggleMobileNuevo(){
   if(body)body.style.display=isOpen?'none':'block';
   if(chevron)chevron.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
 }
+function toggleMobileConfig(){
+  const body=document.getElementById('mobileConfigBody');
+  const chevron=document.getElementById('mobileConfigChevron');
+  const isOpen=body&&body.style.display!=='none';
+  if(body)body.style.display=isOpen?'none':'flex';
+  if(chevron)chevron.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+  if(!isOpen) populateMobileConfig();
+}
+function populateMobileConfig(){
+  const at=document.getElementById('mbAirtableToken');
+  if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado)':'patXXX...';at.onfocus=()=>{if(at.value.startsWith('••')){at.value='';at.placeholder='patXXX...';}};at.onblur=()=>{if(!at.value){const vv=lsGet('airtable_token');at.value=vv?'••••••••'+vv.slice(-4):'';at.placeholder=vv?'(guardado)':'patXXX...';}}}
+  const oi=document.getElementById('mbOpenaiKey');
+  if(oi){const v=localStorage.getItem('fp_openai_key');oi.value=v?'••••••••'+v.slice(-4):'';oi.placeholder=v?'(guardado)':'sk-proj-...';}
+  const gc=document.getElementById('mbGoogleClientId');
+  if(gc){const v=localStorage.getItem('google_drive_client_id')||'';gc.value=v?v.slice(0,12)+'…'+v.slice(-8):'';}
+  const ds=document.getElementById('mbDriveStatus');
+  if(ds){const v=localStorage.getItem('google_drive_client_id');ds.textContent=v?'✓ Client ID configurado':'Sin configurar';}
+  const pu=document.getElementById('mbProxyUrl');if(pu) pu.value=localStorage.getItem('proxy_url')||'';
+  const pk=document.getElementById('mbProxyKey');
+  if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
+  const ps=document.getElementById('mbProxyStatus');
+  if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo':'Sin proxy — token local';}
+  const pt=document.getElementById('mbPrinterTunnel');if(pt) pt.value=localStorage.getItem('printer_tunnel')||'';
+  const pts=document.getElementById('mbPrinterTunnelStatus');
+  if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=v?'✓ '+v:'Default: https://printers.thelab.solutions';}
+  const ak=document.getElementById('mbAnthropicKey');
+  if(ak){const v=lsGet('anthropic_key');ak.value=v&&!v.startsWith('%%')?'••••••••'+v.slice(-4):'';ak.placeholder=v&&!v.startsWith('%%')?'(guardado)':'sk-ant-api03-...';}
+  const aks=document.getElementById('mbAnthropicStatus');
+  if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar';}
+}
+function saveMbAirtableToken(){
+  const inp=document.getElementById('mbAirtableToken');const v=(inp?.value||'').trim();
+  if(!v)return toast('Ingresa un token válido','error');
+  lsSet('airtable_token',v);inp.value='••••••••'+v.slice(-4);
+  toast('Token Airtable guardado ✓','success');loadAllData();
+}
+function clearMbAirtableToken(){
+  localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');
+  const inp=document.getElementById('mbAirtableToken');if(inp){inp.value='';inp.placeholder='patXXX...';}
+  toast('Token Airtable eliminado','info');
+}
+function saveMbOpenaiKey(){
+  const inp=document.getElementById('mbOpenaiKey');const v=(inp?.value||'').trim();
+  if(!v)return toast('Ingresa una API Key válida','error');
+  localStorage.setItem('fp_openai_key',v);inp.value='••••••••'+v.slice(-4);
+  toast('OpenAI Key guardada ✓','success');
+}
+function clearMbOpenaiKey(){
+  localStorage.removeItem('fp_openai_key');
+  const inp=document.getElementById('mbOpenaiKey');if(inp){inp.value='';inp.placeholder='sk-proj-...';}
+  toast('OpenAI Key eliminada','info');
+}
+function saveMbGoogleClientId(){
+  const inp=document.getElementById('mbGoogleClientId');const v=(inp?.value||'').trim();
+  if(!v)return toast('Ingresa un Client ID válido','error');
+  localStorage.setItem('google_drive_client_id',v);
+  const ds=document.getElementById('mbDriveStatus');if(ds) ds.textContent='✓ Client ID configurado';
+  toast('Google Drive Client ID guardado ✓','success');
+}
+function clearMbGoogleClientId(){
+  localStorage.removeItem('google_drive_client_id');_driveTokenClient=null;_driveAccessToken=null;
+  const inp=document.getElementById('mbGoogleClientId');if(inp) inp.value='';
+  const ds=document.getElementById('mbDriveStatus');if(ds) ds.textContent='Sin configurar';
+  toast('Google Client ID eliminado','info');
+}
+function saveMbProxy(){
+  const urlInp=document.getElementById('mbProxyUrl');const keyInp=document.getElementById('mbProxyKey');
+  const url=(urlInp?.value||'').trim();const key=(keyInp?.value||'').trim();
+  if(url) localStorage.setItem('proxy_url',url); else localStorage.removeItem('proxy_url');
+  if(key) localStorage.setItem('proxy_key',key); else localStorage.removeItem('proxy_key');
+  const ps=document.getElementById('mbProxyStatus');
+  if(ps) ps.textContent=url?'✓ Proxy activo':'Sin proxy — token local';
+  toast(url?'Proxy Worker guardado ✓':'Proxy eliminado','success');
+}
+function clearMbProxy(){
+  localStorage.removeItem('proxy_url');localStorage.removeItem('proxy_key');
+  const urlInp=document.getElementById('mbProxyUrl');if(urlInp) urlInp.value='';
+  const keyInp=document.getElementById('mbProxyKey');if(keyInp) keyInp.value='';
+  const ps=document.getElementById('mbProxyStatus');if(ps) ps.textContent='Sin proxy — token local';
+  toast('Proxy eliminado','info');
+}
+function saveMbPrinterTunnel(){
+  const inp=document.getElementById('mbPrinterTunnel');const v=(inp?.value||'').trim();
+  if(v) localStorage.setItem('printer_tunnel',v); else localStorage.removeItem('printer_tunnel');
+  const pts=document.getElementById('mbPrinterTunnelStatus');
+  if(pts) pts.textContent=v?'✓ '+v:'Default: https://printers.thelab.solutions';
+  toast(v?'Túnel guardado ✓':'Túnel restablecido al default','success');
+}
+function clearMbPrinterTunnel(){
+  localStorage.removeItem('printer_tunnel');
+  const inp=document.getElementById('mbPrinterTunnel');if(inp) inp.value='';
+  const pts=document.getElementById('mbPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
+  toast('Túnel restablecido al default','info');
+}
+function saveMbAnthropicKey(){
+  const inp=document.getElementById('mbAnthropicKey');const v=(inp?.value||'').trim();
+  if(!v){toast('Ingresa una API Key de Anthropic','error');return;}
+  lsSet('anthropic_key',v);
+  if(inp){inp.value='••••••••'+v.slice(-4);}
+  const st=document.getElementById('mbAnthropicStatus');if(st) st.textContent='✓ KAI conectado';
+  toast('✓ KAI API Key guardada','success');
+}
+function clearMbAnthropicKey(){
+  lsSet('anthropic_key','');
+  const inp=document.getElementById('mbAnthropicKey');if(inp){inp.value='';inp.placeholder='sk-ant-api03-...';}
+  const st=document.getElementById('mbAnthropicStatus');if(st) st.textContent='Sin configurar';
+  toast('KAI API Key eliminada','info');
+}
+function saveMbElevenLabsKey(){
+  const inp=document.getElementById('mbElevenLabsKey');const v=(inp?.value||'').trim();
+  if(!v){toast('Ingresa una API Key de ElevenLabs','error');return;}
+  localStorage.setItem('elevenlabs_key',v);
+  if(inp){inp.value='';inp.placeholder='Guardada ✓';}
+  const st=document.getElementById('mbElevenLabsStatus');if(st) st.textContent='✓ Voz ElevenLabs activa';
+  toast('✓ ElevenLabs Key guardada','success');
+}
+function clearMbElevenLabsKey(){
+  localStorage.removeItem('elevenlabs_key');
+  const inp=document.getElementById('mbElevenLabsKey');if(inp){inp.value='';inp.placeholder='sk_...';}
+  const st=document.getElementById('mbElevenLabsStatus');if(st) st.textContent='Sin configurar';
+  toast('ElevenLabs Key eliminada','info');
+}
 document.addEventListener('click',function(e){
   const dd=document.getElementById('nuevoDropdown');
   if(dd&&!dd.contains(e.target))closeNuevoMenu();
@@ -12878,29 +13159,56 @@ async function testSIIWorker(){
       const ped = s.pedidos || [];
       const cot = s.cotizaciones || [];
       const cli = s.clientes || [];
+      const cliById = s.clientesById || {};
       const today = new Date(); today.setHours(0,0,0,0);
 
-      const activos = ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields?.['Estado pedido']||'')).length;
-      const atrasados = ped.filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
-      const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||'')).length;
+      const resolveCli = f => {
+        if(!f) return '—';
+        if(typeof f==='string') return f;
+        if(Array.isArray(f)&&f.length) return cliById[f[0]]||'(cliente)';
+        return '—';
+      };
+
+      const activos = ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields?.['Estado pedido']||''));
+      const atrasados = ped.filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;});
+      const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||''));
       const revTotal = ped.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0);
 
+      const pedRows = activos.slice(0,10).map(p=>{
+        const f=p.fields||{};
+        return `  • ${f['N° Pedido']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado pedido']||'—'} | $${Math.round((f['Monto total (CLP)']||0)/1.19).toLocaleString('es-CL')} neto | Entrega: ${f['Fecha entrega']||'sin fecha'}`;
+      }).join('\n');
+
+      const cotRows = cotPend.slice(0,10).map(c=>{
+        const f=c.fields||{};
+        return `  • Cot ${f['N° Cotización']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado cotización']||'—'} | $${Math.round((f['Total final (CLP)']||0)/1.19).toLocaleString('es-CL')} neto`;
+      }).join('\n');
+
       return `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')}):
-- Pedidos totales: ${ped.length} | Activos: ${activos} | Atrasados: ${atrasados}
-- Cotizaciones totales: ${cot.length} | Pendientes: ${cotPend}
+- Pedidos totales: ${ped.length} | Activos: ${activos.length} | Atrasados: ${atrasados.length}
+- Cotizaciones totales: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
 - Clientes registrados: ${cli.length}
-- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP`;
+- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP
+
+PEDIDOS ACTIVOS:
+${pedRows||'  (ninguno)'}
+
+COTIZACIONES PENDIENTES:
+${cotRows||'  (ninguna)'}`;
     }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
   }
 
-  const SYS = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresión 3D, letreros neón y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
+  const SYS = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
 
 ${buildContext()}
 
 CAPACIDADES Y REGLAS:
-- Responde SIEMPRE en español chileno, profesional y conciso (máx 3 oraciones para voz).
-- Para navegar entre módulos del dashboard incluye al final: [NAV:nombre]
-  Módulos válidos: overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones
+- Responde SIEMPRE en espanol chileno, profesional y conciso (maximo 3 oraciones, pensado para voz).
+- NUNCA uses emojis, asteriscos, numeral, comillas invertidas ni simbolos decorativos. Solo texto limpio.
+- Para navegar entre modulos del dashboard incluye al final: [NAV:nombre]
+  Modulos validos: overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones
+- Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
+  Tipos validos: cliente, cotizacion, proveedor, venta, diario
 - Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
 - Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
 
@@ -12930,16 +13238,31 @@ CAPACIDADES Y REGLAS:
   $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
   $close.addEventListener('click',closePanel);
 
-  // ─── Actions parser (navigation) ───
+  // ─── Actions parser (navigation + new records) ───
   function execActions(text){
-    const re=/\[NAV:\s*([a-záéíóúñ\-]+)\]/gi; let m;
-    const cleaned=text.replace(re,'').trim();
-    while((m=re.exec(text))!==null){
+    let m;
+    const reNav=/\[NAV:\s*([a-záéíóúñ\-]+)\]/gi;
+    let cleaned=text.replace(reNav,'').trim();
+    while((m=reNav.exec(text))!==null){
       const target=m[1].toLowerCase().trim();
       if(typeof window.switchTab==='function'){
-        try{ window.switchTab(target); addMsg('a',`→ Navegando a ${target.toUpperCase()}`); }
-        catch(e){ addMsg('a',`→ ${target.toUpperCase()}`); }
+        try{ window.switchTab(target); addMsg('a',`Navegando a ${target.toUpperCase()}`); }
+        catch(e){ addMsg('a',target.toUpperCase()); }
       }
+    }
+    const reNuevo=/\[NUEVO:\s*([a-záéíóúñ\-]+)\]/gi;
+    cleaned=cleaned.replace(reNuevo,'').trim();
+    while((m=reNuevo.exec(text))!==null){
+      const tipo=m[1].toLowerCase().trim();
+      const labels={cliente:'Nuevo Lead/Cliente',lead:'Nuevo Lead/Cliente',cotizacion:'Nueva Cotizacion',cot:'Nueva Cotizacion',proveedor:'Nuevo Proveedor',venta:'Nueva Venta',diario:'Libro Diario'};
+      addMsg('a',`Abriendo formulario: ${labels[tipo]||tipo}`);
+      try{
+        if(tipo==='cliente'||tipo==='lead') window.switchTab('nuevo-lead');
+        else if(tipo==='cotizacion'||tipo==='cot') window.switchTab('nueva-cot');
+        else if(tipo==='proveedor') window.switchTab('nuevo-proveedor');
+        else if(tipo==='venta'){ if(typeof irANuevaVenta==='function') irANuevaVenta(); }
+        else if(tipo==='diario'){ if(typeof irALibroDiario==='function') irALibroDiario(); }
+      }catch(e){}
     }
     return cleaned;
   }
@@ -12966,30 +13289,54 @@ CAPACIDADES Y REGLAS:
       const r=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({ model:'claude-sonnet-4-5', max_tokens:500, system:SYS(), messages:JV.history.slice(-12) })
+        body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, thinking:{type:'disabled'}, output_config:{effort:'low'}, system:SYS(), messages:JV.history.slice(-12) })
       });
 
       if(!r.ok){
         const e=await r.json().catch(()=>({}));
+        if(r.status===401){ localStorage.removeItem('anthropic_key'); sessionStorage.removeItem('anthropic_key'); }
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='Error: '+(e.error?.message||('API '+r.status));
         $typ.parentElement.className='jvs-msg jvs-e';
         JV.thinking=false; setState('idle'); return;
       }
 
-      const data=await r.json();
-      const full=data.content?.find(b=>b.type==='text')?.text||'Sin respuesta.';
-      const clean=execActions(full);
+      // ── Stream tokens en vivo (SSE) ──
+      JV.thinking=false; setState('speaking');
+      $typ.classList.remove('jvs-cursor');
+      const reader=r.body.getReader();
+      const decoder=new TextDecoder();
+      // Oculta etiquetas [NAV:...] y [NUEVO:...] mientras llega texto
+      const stripNav=s=>s.replace(/\[NAV:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[NUEVO:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[(NAV|NUEVO):[a-záéíóúñ\s\-]*$/i,'');
+      let buf='', full='';
+      while(true){
+        const {done,value}=await reader.read();
+        if(done) break;
+        buf+=decoder.decode(value,{stream:true});
+        const lines=buf.split('\n');
+        buf=lines.pop()||'';
+        for(const line of lines){
+          const t=line.trim();
+          if(!t.startsWith('data:')) continue;
+          const payload=t.slice(5).trim();
+          if(!payload||payload==='[DONE]') continue;
+          let ev; try{ ev=JSON.parse(payload); }catch(e){ continue; }
+          if(ev.type==='content_block_delta' && ev.delta?.type==='text_delta'){
+            full+=ev.delta.text;
+            $typ.textContent=stripNav(full);
+            $log.scrollTop=$log.scrollHeight;
+          } else if(ev.type==='error'){
+            throw new Error(ev.error?.message||'Error de stream');
+          }
+        }
+      }
+
+      const clean=execActions(full||'Sin respuesta.');
+      $typ.textContent=clean;
+      $log.scrollTop=$log.scrollHeight;
       JV.history.push({role:'assistant',content:full});
       if(JV.history.length>14) JV.history=JV.history.slice(-12);
-
-      // typewriter
-      $typ.classList.remove('jvs-cursor'); $typ.textContent='';
-      let i=0; JV.thinking=false; setState('speaking');
-      const iv=setInterval(()=>{
-        $typ.textContent+=clean[i]||''; i++; $log.scrollTop=$log.scrollHeight;
-        if(i>=clean.length){ clearInterval(iv); if($voiceToggle.checked) speak(clean); else { setState('idle'); maybeRelisten(); } }
-      },16);
+      if($voiceToggle.checked) speak(clean); else { setState('idle'); maybeRelisten(); }
 
     }catch(err){
       $typ.classList.remove('jvs-cursor');
@@ -13000,10 +13347,40 @@ CAPACIDADES Y REGLAS:
   }
 
   // ─── TTS ───
-  function speak(text){
-    if(!text||!JV.synth){ setState('idle'); maybeRelisten(); return; }
+  async function speak(text){
+    if(!text){ setState('idle'); maybeRelisten(); return; }
+    const clean=text.replace(/[*_#`]/g,'').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,'').trim();
+    if(!clean){ setState('idle'); maybeRelisten(); return; }
+    // ElevenLabs premium TTS
+    const elKey=localStorage.getItem('elevenlabs_key');
+    if(elKey){
+      try{
+        setState('speaking');
+        const voiceId=localStorage.getItem('elevenlabs_voice_id')||'0cheeVA5B3Cv6DGq65cT';
+        const r=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','xi-api-key':elKey},
+          body:JSON.stringify({text:clean,model_id:'eleven_multilingual_v2',voice_settings:{stability:0.5,similarity_boost:0.75}})
+        });
+        if(r.ok){
+          const blob=await r.blob();
+          const url=URL.createObjectURL(blob);
+          const audio=new Audio(url);
+          audio.onended=()=>{ URL.revokeObjectURL(url); setState('idle'); maybeRelisten(); };
+          audio.onerror=()=>{ URL.revokeObjectURL(url); setState('idle'); maybeRelisten(); };
+          await audio.play().catch(()=>{});
+          return;
+        } else {
+          const errData=await r.json().catch(()=>({}));
+          const msg=errData?.detail?.message||errData?.detail||('HTTP '+r.status);
+          if(typeof toast==='function') toast('ElevenLabs: '+msg,'error');
+        }
+      }catch(e){ if(typeof toast==='function') toast('ElevenLabs: '+e.message,'error'); }
+    }
+    // Fallback: voz del navegador
+    if(!JV.synth){ setState('idle'); maybeRelisten(); return; }
     JV.synth.cancel();
-    const u=new SpeechSynthesisUtterance(text.replace(/[*_#`]/g,''));
+    const u=new SpeechSynthesisUtterance(clean);
     u.lang='es-CL'; u.rate=1.06; u.pitch=.95;
     const vs=JV.synth.getVoices();
     const v=vs.find(x=>x.lang.startsWith('es')&&/google/i.test(x.name))||vs.find(x=>x.lang.startsWith('es'));
@@ -13069,6 +13446,20 @@ CAPACIDADES Y REGLAS:
   window.openKai=openPanel;
 })();
 </script>
+<script>
+// ── OrcaSlicer / G-code upload / Local mode ───────────────────────────
+let _uploadTargetId=null;
+function _isLocalMode(){return localStorage.getItem('printer_local_mode')==='1';}
+function renderLocalModeBtn(){const btn=document.getElementById('btnLocalMode');if(!btn)return;const local=_isLocalMode();btn.textContent=local?'📡 Local':'🌐 Remoto';btn.style.color=local?'var(--accent)':'var(--text3)';btn.title=local?'Conectado directo por IP (red local)':'Conectado vía tunnel remoto';}
+function toggleLocalMode(){const next=_isLocalMode()?'0':'1';localStorage.setItem('printer_local_mode',next);renderLocalModeBtn();pollPrinters();toast(next==='1'?'📡 Modo local — IPs directas':'🌐 Modo remoto — tunnel','info');if(next==='1'&&!localStorage.getItem('local_mode_seen')){localStorage.setItem('local_mode_seen','1');document.getElementById('localModeModal').style.display='flex';}}
+function openGcodeUpload(id){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada para esta impresora','error');return;}_uploadTargetId=id;const inp=document.getElementById('gcodeFileInput');inp.value='';inp.click();}
+async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}','${file.name.replace(/'/g,"\\'")}'" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
+async function startUploadedPrint(id,filename){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000)});if(r.ok){toast(`▶ Iniciando: ${filename}`,'success');closeGcodeUpload();setTimeout(pollPrinters,2000);}else{toast('Error al iniciar impresión: '+r.status,'error');}}catch(e){toast('Sin conexión con la impresora','error');}}
+function closeGcodeUpload(){document.getElementById('gcodeUploadModal').style.display='none';}
+function openOrcaConfigModal(){const rows=MAQUINAS.filter(m=>getPrinterIp(m)).map(m=>{const ip=getPrinterIp(m);return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--accent)">${escapeHtml(ip)}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text2)">7125</td><td style="padding:8px 10px"><span style="background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">Moonraker</span></td></tr>`;}).join('');document.getElementById('orcaTableBody').innerHTML=rows||`<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text3);font-size:11px">No hay IPs configuradas. Agrégalas en cada tarjeta de impresora primero.</td></tr>`;document.getElementById('orcaConfigModal').style.display='flex';}
+function closeOrcaConfigModal(){document.getElementById('orcaConfigModal').style.display='none';}
+document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
+</script>
 
 <!-- ── MODAL NOTAS INTERNAS ── -->
 <div id="notasModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeNotasModal()">
@@ -13086,6 +13477,79 @@ CAPACIDADES Y REGLAS:
       <!-- Lista notas -->
       <div id="notasList" style="max-height:380px;overflow-y:auto;padding-right:2px"></div>
     </div>
+  </div>
+</div>
+
+<!-- OrcaSlicer / G-code upload modals -->
+<input type="file" id="gcodeFileInput" accept=".gcode,.gc,.g" style="display:none" onchange="handleGcodeUpload(event)">
+
+<div id="localModeModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="document.getElementById('localModeModal').style.display='none'"></div>
+  <div class="modal-card" style="max-width:560px;width:95vw">
+    <div class="modal-title">📡 Modo local — Red del taller</div>
+    <div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.6">En modo local el dashboard conecta directo a <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:11px">http://IP:7125</code> sin pasar por el tunnel. Necesitas hacer esto <strong style="color:var(--text)">una sola vez</strong> en cada impresora:</div>
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 14px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--accent);text-transform:uppercase;margin-bottom:6px">1 · Edita moonraker.conf en cada impresora</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:6px">Accede vía SSH o Fluidd/Mainsail y abre <code style="background:var(--surface3);padding:1px 4px;border-radius:3px">~/printer_data/config/moonraker.conf</code></div>
+        <pre style="background:var(--surface3);border-radius:6px;padding:10px;font-size:11px;color:var(--accent3);margin-top:8px;overflow-x:auto;line-height:1.5">[authorization]
+cors_domains:
+  *
+trusted_clients:
+  127.0.0.1
+  192.168.100.0/24</pre>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 14px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--accent);text-transform:uppercase;margin-bottom:6px">2 · Reinicia Moonraker</div>
+        <pre style="background:var(--surface3);border-radius:6px;padding:10px;font-size:11px;color:var(--accent3);overflow-x:auto">sudo systemctl restart moonraker</pre>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 14px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--accent);text-transform:uppercase;margin-bottom:6px">3 · Abre el dashboard en el iMac del taller</div>
+        <div style="font-size:11px;color:var(--text2)">Con el botón <strong style="color:var(--text)">📡 Local</strong> activo, el dashboard llega directo a cada impresora sin tunnel.</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.25);border-radius:8px;padding:10px 14px;font-size:11px;color:#ffaa00;line-height:1.5">⚠ <strong>Solo usa modo local dentro de la red del taller.</strong> Fuera de ella, desactívalo y usa el tunnel remoto.</div>
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('localModeModal').style.display='none'" style="margin-top:16px;width:100%">Entendido</button>
+  </div>
+</div>
+
+<div id="gcodeUploadModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeGcodeUpload()"></div>
+  <div class="modal-card" style="max-width:440px;width:95vw">
+    <div class="modal-title">📤 Enviar G-code — <span id="gcodeUploadModalTitle" style="color:var(--accent);font-size:16px"></span></div>
+    <div style="margin-top:16px">
+      <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Archivo</div>
+      <div id="gcodeUploadLabel" style="font-size:12px;font-family:monospace;color:var(--text);background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:8px 12px;word-break:break-all"></div>
+    </div>
+    <div style="margin-top:14px">
+      <div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden;border:1px solid var(--border2)">
+        <div id="gcodeUploadProg" style="background:var(--accent);height:100%;width:0%;border-radius:6px;transition:width 0.2s ease"></div>
+      </div>
+    </div>
+    <div id="gcodeUploadStatus" style="margin-top:8px;font-size:11px;color:var(--text3);min-height:20px">Subiendo...</div>
+    <div id="gcodeUploadActions" style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button></div>
+  </div>
+</div>
+
+<div id="orcaConfigModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeOrcaConfigModal()"></div>
+  <div class="modal-card" style="max-width:620px;width:95vw">
+    <div class="modal-title">🦙 Configurar OrcaSlicer</div>
+    <div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.6">En OrcaSlicer ve a <strong style="color:var(--text)">Printer → Physical Printer → Add printer</strong> y usa estos datos para cada máquina:</div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;flex:1;min-width:140px"><div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Host type</div><div style="font-size:13px;font-weight:700;font-family:monospace;color:var(--accent)">Moonraker</div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;flex:1;min-width:140px"><div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Puerto</div><div style="font-size:13px;font-weight:700;font-family:monospace;color:var(--accent)">7125</div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;flex:1;min-width:140px"><div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">API Key</div><div style="font-size:13px;font-weight:700;font-family:monospace;color:var(--text3)">(dejar vacío)</div></div>
+    </div>
+    <div style="margin-top:18px;font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text2);text-transform:uppercase;margin-bottom:8px">IPs disponibles</div>
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border2);background:var(--surface2)"><th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Máquina</th><th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Hostname / IP</th><th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Puerto</th><th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Tipo</th></tr></thead>
+        <tbody id="orcaTableBody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;background:rgba(0,212,204,0.06);border:1px solid rgba(0,212,204,0.2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text2);line-height:1.5">💡 También puedes enviar G-code directamente desde el dashboard sin abrir OrcaSlicer — usa el botón <strong style="color:var(--text)">📤</strong> en cada tarjeta de impresora.</div>
+    <button class="btn btn-ghost btn-sm" onclick="closeOrcaConfigModal()" style="margin-top:16px;width:100%">Cerrar</button>
   </div>
 </div>
 </body>
