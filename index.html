@@ -1457,6 +1457,15 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pipeline Pedidos</span><span class="card-badge" id="pedActivosBadge">—</span></div><div id="pipelineArea"><div class="loading-state"><div class="spinner"></div> cargando...</div></div></div>
     <div class="card" onclick="switchTab('cotizaciones')" style="cursor:pointer"><div class="card-header"><span class="card-title">Cotizaciones Recientes</span><span class="card-badge" id="cotsBadge">—</span></div><div class="table-wrap"><table><thead><tr><th>N°</th><th>Cliente</th><th>Total Neto</th><th>Estado</th><th>Margen</th></tr></thead><tbody id="cotTableBody"><tr><td colspan="5"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div></div>
   </div>
+  <!-- Funnel de conversión -->
+  <div class="card" style="margin-bottom:24px" id="ovFunnelCard">
+    <div class="card-header">
+      <span class="card-title">🔄 Embudo de Conversión</span>
+      <span id="ovFunnelPeriodo" style="font-size:10px;color:var(--text3)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('cotizaciones')" style="margin-left:auto">Ver cotizaciones →</button>
+    </div>
+    <div id="ovFunnelBody" style="padding:16px"></div>
+  </div>
   <div class="card" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title">⚠ Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
   <div class="data-grid">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
@@ -3069,6 +3078,7 @@ function main() {
     <button class="btn btn-ghost btn-sm" id="fin-nav-nueva" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-diario" onclick="finSwitchTab('diario')">📒 Libro Diario</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-aging" onclick="finSwitchTab('aging')">⏰ Antigüedad</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-presupuesto" onclick="finSwitchTab('presupuesto')">🎯 Presupuesto</button>
   </div>
 
   <!-- ── RESUMEN ── -->
@@ -3662,6 +3672,35 @@ function main() {
     </div>
   </div>
 
+  <!-- ── PRESUPUESTO MENSUAL ── -->
+  <div id="fin-panel-presupuesto" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="pres-anio" class="field-select" style="width:auto;font-size:11px;padding:4px 8px" onchange="renderPresupuesto()"></select>
+        <select id="pres-mes" class="field-select" style="width:auto;font-size:11px;padding:4px 8px" onchange="renderPresupuesto()"></select>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="presExportCSV()">⬇ CSV</button>
+    </div>
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:16px" id="pres-kpis">
+      <div class="kpi-card yellow"><div class="kpi-label">Presupuesto Total</div><div class="kpi-value" id="pres-k-total" style="color:var(--warn)">—</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Ejecutado</div><div class="kpi-value" id="pres-k-ejec" style="color:var(--accent3)">—</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Disponible</div><div class="kpi-value" id="pres-k-disp" style="color:var(--accent2)">—</div></div>
+      <div class="kpi-card red"><div class="kpi-label">% Ejecución</div><div class="kpi-value" id="pres-k-pct" style="color:var(--accent)">—</div></div>
+    </div>
+    <!-- Categorías -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Categorías de gasto</span>
+        <button class="btn btn-ghost btn-sm" onclick="presAddCategoria()">+ Categoría</button>
+      </div>
+      <div id="pres-cats" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"></div>
+      <div style="padding:0 16px 14px;display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="presGuardar()">💾 Guardar presupuesto</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── ANTIGÜEDAD CUENTAS POR COBRAR ── -->
   <div id="fin-panel-aging" style="display:none">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:16px">
@@ -3951,6 +3990,22 @@ function main() {
   </div>
   <!-- KPIs -->
   <div id="remKpis" class="kpi-grid" style="margin-bottom:16px"></div>
+  <!-- Sueldo base & liquidación -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <span class="card-title">💼 Sueldo Base & Liquidación</span>
+      <button class="btn btn-ghost btn-sm" onclick="remToggleSueldos()" id="remSueldoToggle">⚙ Configurar sueldos</button>
+    </div>
+    <div id="remSueldoPanel" style="display:none;padding:14px 16px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Sueldo base mensual (CLP) por integrante. Se guarda localmente.</div>
+      <div id="remSueldoGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:12px"></div>
+      <button class="btn btn-primary btn-sm" onclick="remSaveSueldos()">💾 Guardar sueldos</button>
+    </div>
+    <div style="padding:12px 16px" id="remLiqResumen">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Liquidación del período seleccionado</div>
+      <div id="remLiqBody" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </div>
   <!-- Pipeline: cotizaciones activas -->
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">
@@ -5324,6 +5379,7 @@ function renderOverview(){
   renderEquipoSnapshot();
   renderPipelineArea();
   renderCotTable();
+  renderFunnel();
   renderAlertas();
   renderCharts();
   // Hide finanzas/web/ads snapshot grid for vendor role
@@ -5756,6 +5812,7 @@ function buildClienteRow(c){
           <button class="act-item" onclick="openClienteDetalle('${c.id}')">👁 &nbsp;Ver detalle</button>
           <button class="act-item act-item-yellow" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="verCotizacionesCliente('${c.id}',this.dataset.empresa)">📋 &nbsp;Ver cotizaciones</button>
           <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
+          <button class="act-item" onclick="compartirPortalCliente('${c.id}')">🔗 &nbsp;Portal cliente</button>
         </div>
       </div>
     </td>
@@ -5781,6 +5838,11 @@ function verCotizacionesCliente(clienteId,empresa){
   setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`;return;}tbody.innerHTML=cots.map(c=>buildCotRow(c)).join('');},50);
 }
 function cotizarParaCliente(clienteId){const c=state.clientes.find(x=>x.id===clienteId);if(!c) return;switchTab('nueva-cot');setTimeout(()=>{selectCliente(clienteId);initDates();toast(`Cotizando para ${c.fields['Empresa']}`,'info');},100);}
+function compartirPortalCliente(clienteId){
+  const url=`${location.origin}${location.pathname}?portal=${btoa(clienteId)}`;
+  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast('🔗 URL copiada al portapapeles','success')).catch(()=>{prompt('Copia esta URL para el cliente:',url);});}
+  else{prompt('Copia esta URL para el cliente:',url);}
+}
 function openClienteDetalle(id){
   const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Ciudad']||''}`:f['Ciudad']||'';
@@ -7752,6 +7814,8 @@ function renderRemuneraciones(){
       <div class="kpi-value" style="color:#fb923c">${enProceso.length}</div>
       <div class="kpi-sub">en producción / confirmados</div>
     </div>`;
+
+  remRenderLiquidacion(totalNeto,totalComision);
 
   // --- Pipeline table ---
   if(pipeBody){
@@ -10146,7 +10210,10 @@ function buildProveedorRow(p){
   const starsCell=`<div style="display:flex;gap:1px;align-items:center" id="stars-${id}">${starsHtml}</div>`;
   const nombre=f['Nombre']||'';
   const pedidosActivos=state.pedidos.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')&&(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
+  const pedidosTodos=state.pedidos.filter(x=>(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
   const pedCount=pedidosActivos.length;
+  const pvTotalValor=pedidosTodos.reduce((s,x)=>s+(x.fields['Monto total (CLP)']||0),0);
+  const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha pedido']||'').filter(Boolean).sort().reverse()[0]||null;
   const estado=f['Estado']||'Activo';
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
   return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}" class="${selectedProveedores.has(id)?'row-selected':''}">
@@ -10174,6 +10241,8 @@ function buildProveedorRow(p){
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
           ${f['Región']?`<div style="font-size:11px"><span style="color:var(--text3)">Región:</span> ${escapeHtml(f['Región'])}</div>`:''}
           ${f['Condiciones de pago']?`<div style="font-size:11px"><span style="color:var(--text3)">Pago:</span> ${escapeHtml(f['Condiciones de pago'])}</div>`:''}
+          ${pvTotalValor>0?`<div style="font-size:11px"><span style="color:var(--text3)">Total pedidos:</span> <strong>${formatCLP(pvTotalValor)}</strong> (${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''})</div>`:''}
+          ${pvLastOrder?`<div style="font-size:11px"><span style="color:var(--text3)">Último pedido:</span> ${escapeHtml(pvLastOrder)}</div>`:''}
           ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
           ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px;white-space:pre-wrap">${escapeHtml(f['Notas'])}</div>`:''}
         </div>
@@ -10810,6 +10879,7 @@ function initDashboard(){
     loadAllData().then(()=>{startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
   }
   initMobileTableLabels();
+  checkClientePortal();
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
   document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
@@ -12296,7 +12366,7 @@ function varPct(a,b){if(!a||!b)return null;return ((b-a)/a)*100;}
 /* ── Sub-tabs internos ── */
 function finSwitchTab(tab){
   finCurrentTab=tab;
-  ['resumen','facturas','cobrar','prestamos','deudas','nueva','diario','aging'].forEach(t=>{
+  ['resumen','facturas','cobrar','prestamos','deudas','nueva','diario','aging','presupuesto'].forEach(t=>{
     document.getElementById('fin-panel-'+t).style.display=(t===tab)?'':'none';
     const btn=document.getElementById('fin-nav-'+t);
     if(btn){
@@ -12310,6 +12380,7 @@ function finSwitchTab(tab){
   if(tab==='nueva'){finRenderNuevaLista();}
   if(tab==='diario'){ldInit();}
   if(tab==='aging'){finRenderAging();}
+  if(tab==='presupuesto'){renderPresupuesto();}
 }
 
 /* ── Tabla mensual comparativa ── */
@@ -14118,6 +14189,245 @@ async function testSIIWorker(){
     if(sb){sb.style.color='var(--danger)';sb.textContent='⛔ No se pudo conectar: '+e.message;}
     toast('Error de conexión: '+e.message,'error');
   }
+}
+
+// ── FUNNEL DE CONVERSIÓN ─────────────────────────────────────────────
+function renderFunnel(){
+  const el=document.getElementById('ovFunnelBody');if(!el)return;
+  const now=new Date();
+  const ms=new Date(now.getFullYear(),now.getMonth(),1);
+  const me=new Date(now.getFullYear(),now.getMonth()+1,0);
+  const periodoLabel=ms.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
+  const lbl=document.getElementById('ovFunnelPeriodo');if(lbl)lbl.textContent=periodoLabel;
+  const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const _cli=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;
+  const inMes=d=>d&&new Date(d)>=ms&&new Date(d)<=me;
+  // Stages
+  const leads=_cli.filter(c=>c.createdTime&&inMes(c.createdTime)).length;
+  const cots=_cot.filter(c=>c.createdTime&&inMes(c.createdTime)).length;
+  const peds=_ped.filter(p=>p.createdTime&&inMes(p.createdTime)&&(p.fields['Estado pedido']||'')!=='Cancelado').length;
+  const cerrados=_ped.filter(p=>p.fields['Estado pedido']==='Despachado'&&p.createdTime&&inMes(p.createdTime)).length;
+  const valCots=_cot.filter(c=>c.createdTime&&inMes(c.createdTime)).reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
+  const valPeds=_ped.filter(p=>p.createdTime&&inMes(p.createdTime)&&(p.fields['Estado pedido']||'')!=='Cancelado').reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const valCerr=_ped.filter(p=>p.fields['Estado pedido']==='Despachado'&&p.createdTime&&inMes(p.createdTime)).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const pct=(a,b)=>b>0?Math.round(a/b*100):0;
+  const stages=[
+    {icon:'👤',label:'Leads Nuevos',n:leads,val:null,color:'var(--accent4)',next:cots},
+    {icon:'📋',label:'Cotizaciones',n:cots,val:valCots,color:'var(--accent)',next:peds},
+    {icon:'📦',label:'Pedidos',n:peds,val:valPeds,color:'var(--accent2)',next:cerrados},
+    {icon:'✅',label:'Cerrados',n:cerrados,val:valCerr,color:'var(--accent3)',next:null},
+  ];
+  const cols=stages.map((s,i)=>{
+    const conv=i>0&&stages[i-1].n>0?`<div style="font-size:10px;color:var(--text3);margin-top:4px">${pct(s.n,stages[i-1].n)}% conv.</div>`:'';
+    const arrow=i<stages.length-1?`<div style="font-size:20px;color:var(--text3);align-self:center">→</div>`:'';
+    return`<div style="text-align:center;flex:1;min-width:90px">
+      <div style="font-size:22px;margin-bottom:2px">${s.icon}</div>
+      <div style="font-size:28px;font-weight:700;color:${s.color};font-family:'Bebas Neue',sans-serif">${s.n}</div>
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">${s.label}</div>
+      ${s.val!=null?`<div style="font-size:11px;color:var(--text2);font-weight:600">${formatCLP(s.val)}</div>`:''}
+      ${conv}
+    </div>${arrow}`;
+  }).join('');
+  // Bar visual
+  const max=Math.max(leads,cots,peds,cerrados,1);
+  const bars=stages.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <div style="width:80px;font-size:10px;color:var(--text3);text-align:right;flex-shrink:0">${s.label}</div>
+    <div style="flex:1;height:18px;background:var(--surface2);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:${pct(s.n,max)}%;background:${s.color};border-radius:4px;transition:width .4s;min-width:${s.n>0?'24px':'0'}"></div>
+    </div>
+    <div style="width:28px;font-size:11px;font-weight:700;color:${s.color};text-align:right;flex-shrink:0">${s.n}</div>
+  </div>`).join('');
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:0 4px">${cols}</div><div style="border-top:1px solid var(--border);padding-top:14px">${bars}</div>`;
+}
+
+// ── REMUNERACIONES SUELDOS & LIQUIDACIÓN ─────────────────────────────
+const REM_SUELDO_KEY='rem_sueldos_v1';
+function remToggleSueldos(){
+  const p=document.getElementById('remSueldoPanel');if(!p) return;
+  const vis=p.style.display==='none';p.style.display=vis?'':'none';
+  if(vis) remRenderSueldoGrid();
+}
+function remRenderSueldoGrid(){
+  const grid=document.getElementById('remSueldoGrid');if(!grid) return;
+  let sueldos;try{sueldos=JSON.parse(localStorage.getItem(REM_SUELDO_KEY)||'{}');}catch(e){sueldos={};}
+  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  if(!personas.length){grid.innerHTML='<div style="font-size:11px;color:var(--text3)">No hay integrantes configurados</div>';return;}
+  grid.innerHTML=personas.map(p=>`<div class="field-group" style="margin:0">
+    <label class="field-label" style="display:flex;align-items:center;gap:4px"><span>${p.avatar}</span> ${escapeHtml(p.nombre)}</label>
+    <input class="field-input" id="rem-sueldo-${p.nombre.replace(/\s/g,'_')}" type="number" min="0" step="10000" placeholder="0" value="${sueldos[p.nombre]||''}">
+  </div>`).join('');
+}
+function remSaveSueldos(){
+  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  const sueldos={};
+  personas.forEach(p=>{const id='rem-sueldo-'+p.nombre.replace(/\s/g,'_');const v=parseInt(document.getElementById(id)?.value)||0;if(v>0) sueldos[p.nombre]=v;});
+  localStorage.setItem(REM_SUELDO_KEY,JSON.stringify(sueldos));
+  toast('✓ Sueldos guardados','success');
+  renderRemuneraciones();
+}
+function remRenderLiquidacion(totalNeto,totalComision){
+  const liqBody=document.getElementById('remLiqBody');if(!liqBody) return;
+  let sueldos;try{sueldos=JSON.parse(localStorage.getItem(REM_SUELDO_KEY)||'{}');}catch(e){sueldos={};}
+  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  const items=personas.map(p=>{
+    const sueldo=sueldos[p.nombre]||0;
+    const afp=Math.round(sueldo*0.10);
+    const isapre=Math.round(sueldo*0.07);
+    const comision=typeof vendorOwnsRecord!=='undefined'?0:Math.round(sueldo>0?totalComision/personas.length:0);
+    const neto=sueldo-afp-isapre+comision;
+    return{nombre:p.nombre,avatar:p.avatar,sueldo,afp,isapre,comision,neto};
+  }).filter(x=>x.sueldo>0||x.comision>0);
+  if(!items.length){liqBody.innerHTML='<div style="font-size:11px;color:var(--text3)">Configura los sueldos base para ver la liquidación</div>';return;}
+  liqBody.innerHTML=items.map(x=>`<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:11px;border:1px solid var(--border2)">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-weight:700">${x.avatar} ${escapeHtml(x.nombre)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px">
+      <div><span style="color:var(--text3)">Sueldo bruto:</span> <span style="font-weight:600">${formatCLP(x.sueldo)}</span></div>
+      <div><span style="color:var(--text3)">AFP (10%):</span> <span style="color:var(--danger)">-${formatCLP(x.afp)}</span></div>
+      <div><span style="color:var(--text3)">Isapre (7%):</span> <span style="color:var(--danger)">-${formatCLP(x.isapre)}</span></div>
+      <div><span style="color:var(--text3)">Comisión:</span> <span style="color:var(--accent3)">+${formatCLP(x.comision)}</span></div>
+      <div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:4px;margin-top:2px"><span style="color:var(--text3)">Sueldo neto:</span> <span style="font-weight:700;color:var(--accent);font-size:13px">${formatCLP(x.neto)}</span></div>
+    </div>
+  </div>`).join('');
+}
+
+// ── PRESUPUESTO MENSUAL ───────────────────────────────────────────────
+const PRES_KEY='fin_presupuesto_v1';
+const PRES_CATS_DEFAULT=[
+  {id:'marketing',label:'Marketing & Ads',color:'#f59e0b',icon:'📢'},
+  {id:'proveedores',label:'Proveedores / Materiales',color:'#3b82f6',icon:'🏭'},
+  {id:'sueldos',label:'Sueldos & Honorarios',color:'#10b981',icon:'💵'},
+  {id:'arriendo',label:'Arriendo & Servicios',color:'#8b5cf6',icon:'🏢'},
+  {id:'equipos',label:'Equipos & Herramientas',color:'#ef4444',icon:'🔧'},
+  {id:'otros',label:'Otros gastos',color:'#6b7280',icon:'📦'},
+];
+function presGetData(){try{return JSON.parse(localStorage.getItem(PRES_KEY)||'{}');}catch(e){return{};}}
+function presSetData(d){localStorage.setItem(PRES_KEY,JSON.stringify(d));}
+function presKey(anio,mes){return`${anio}-${String(mes).padStart(2,'0')}`;}
+function renderPresupuesto(){
+  const anioSel=document.getElementById('pres-anio');
+  const mesSel=document.getElementById('pres-mes');
+  const now=new Date();
+  if(anioSel&&!anioSel.options.length){
+    [2024,2025,2026,2027].forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;if(y===now.getFullYear())o.selected=true;anioSel.appendChild(o);});
+  }
+  if(mesSel&&!mesSel.options.length){
+    ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].forEach((m,i)=>{const o=document.createElement('option');o.value=i+1;o.textContent=m;if(i===now.getMonth())o.selected=true;mesSel.appendChild(o);});
+  }
+  const anio=parseInt(document.getElementById('pres-anio')?.value||now.getFullYear());
+  const mes=parseInt(document.getElementById('pres-mes')?.value||now.getMonth()+1);
+  const key=presKey(anio,mes);
+  const data=presGetData();
+  const periodoData=data[key]||{};
+  const cats=periodoData.cats||PRES_CATS_DEFAULT.map(c=>({...c,budget:0,ejecutado:0}));
+  // Intentar poblar ejecutado desde libro diario
+  let ldData=[];try{ldData=JSON.parse(localStorage.getItem('ld_entries')||'[]');}catch(e){}
+  const totalBudget=cats.reduce((s,c)=>s+(c.budget||0),0);
+  const totalEjec=cats.reduce((s,c)=>s+(c.ejecutado||0),0);
+  const disp=totalBudget-totalEjec;
+  const pct=totalBudget>0?Math.round(totalEjec/totalBudget*100):0;
+  const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setText('pres-k-total',formatCLP(totalBudget));
+  setText('pres-k-ejec',formatCLP(totalEjec));
+  setText('pres-k-disp',formatCLP(disp));
+  setText('pres-k-pct',pct+'%');
+  const catsEl=document.getElementById('pres-cats');if(!catsEl) return;
+  catsEl.innerHTML=cats.map((c,i)=>{
+    const pctC=c.budget>0?Math.round(c.ejecutado/c.budget*100):0;
+    const barColor=pctC>=100?'var(--danger)':pctC>=80?'var(--warn)':c.color;
+    return`<div style="border:1px solid var(--border2);border-radius:8px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:16px">${c.icon}</span>
+        <span style="font-weight:600;font-size:12px;flex:1">${escapeHtml(c.label)}</span>
+        <span style="font-size:10px;color:${barColor};font-weight:700;background:${barColor}22;padding:2px 6px;border-radius:3px">${pctC}%</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="field-group" style="margin:0"><label class="field-label">Presupuesto (CLP)</label><input class="field-input" id="pres-cat-b-${i}" type="number" min="0" step="10000" value="${c.budget||''}" placeholder="0" oninput="presPreviewBar(${i})"></div>
+        <div class="field-group" style="margin:0"><label class="field-label">Ejecutado (CLP)</label><input class="field-input" id="pres-cat-e-${i}" type="number" min="0" step="10000" value="${c.ejecutado||''}" placeholder="0" oninput="presPreviewBar(${i})"></div>
+      </div>
+      <div style="margin-top:8px;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden" id="pres-bar-${i}">
+        <div style="height:100%;width:${Math.min(pctC,100)}%;background:${barColor};border-radius:3px;transition:width .3s"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function presPreviewBar(i){
+  const b=parseFloat(document.getElementById(`pres-cat-b-${i}`)?.value)||0;
+  const e=parseFloat(document.getElementById(`pres-cat-e-${i}`)?.value)||0;
+  const pct=b>0?Math.min(100,Math.round(e/b*100)):0;
+  const barEl=document.getElementById(`pres-bar-${i}`);
+  if(barEl){const inner=barEl.firstElementChild;if(inner)inner.style.width=pct+'%';}
+}
+function presGuardar(){
+  const anio=parseInt(document.getElementById('pres-anio')?.value||new Date().getFullYear());
+  const mes=parseInt(document.getElementById('pres-mes')?.value||new Date().getMonth()+1);
+  const key=presKey(anio,mes);
+  const data=presGetData();
+  const cats=PRES_CATS_DEFAULT.map((c,i)=>({...c,budget:parseFloat(document.getElementById(`pres-cat-b-${i}`)?.value)||0,ejecutado:parseFloat(document.getElementById(`pres-cat-e-${i}`)?.value)||0}));
+  data[key]={cats};presSetData(data);
+  renderPresupuesto();toast('✓ Presupuesto guardado','success');
+}
+function presAddCategoria(){
+  toast('Edita las categorías directamente en los campos — próximamente categorías custom','info');
+}
+function presExportCSV(){
+  const anio=parseInt(document.getElementById('pres-anio')?.value||new Date().getFullYear());
+  const mes=parseInt(document.getElementById('pres-mes')?.value||new Date().getMonth()+1);
+  const key=presKey(anio,mes);const data=presGetData();const periodoData=data[key]||{};
+  const cats=periodoData.cats||PRES_CATS_DEFAULT.map(c=>({...c,budget:0,ejecutado:0}));
+  const rows=[['Categoría','Presupuesto','Ejecutado','Disponible','% Ejecución'],...cats.map(c=>[c.label,c.budget,c.ejecutado,c.budget-c.ejecutado,c.budget>0?Math.round(c.ejecutado/c.budget*100)+'%':'—'])];
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);a.download=`presupuesto_${key}.csv`;a.click();
+}
+
+// ── PORTAL DE CLIENTE ─────────────────────────────────────────────────
+function checkClientePortal(){
+  const params=new URLSearchParams(window.location.search);
+  const portalToken=params.get('portal');
+  if(!portalToken) return;
+  let clienteId;
+  try{clienteId=atob(portalToken);}catch(e){return;}
+  if(!clienteId.startsWith('rec')) return;
+  document.body.style.overflow='hidden';
+  const overlay=document.createElement('div');
+  overlay.id='clientePortalOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:var(--black);z-index:9999;display:flex;flex-direction:column;overflow:hidden';
+  overlay.innerHTML=`<div style="padding:16px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+    <img src="https://thelab.solutions/wp-content/uploads/2023/10/Logo-The-Lab-Solutions-Blanco-Sinfondo.png" style="height:28px;object-fit:contain" onerror="this.style.display='none'">
+    <div><div style="font-size:14px;font-weight:700;color:var(--text)">The Lab Solutions</div><div style="font-size:11px;color:var(--text3)">Portal de seguimiento de pedidos</div></div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:20px;max-width:800px;margin:0 auto;width:100%">
+    <div id="portalContent"><div class="loading-state"><div class="spinner"></div> Cargando...</div></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  function renderPortal(){
+    const cliente=state.clientes.find(c=>c.id===clienteId);
+    if(!cliente){document.getElementById('portalContent').innerHTML='<div class="empty-state"><div class="empty-icon">👤</div>Cliente no encontrado</div>';return;}
+    const f=cliente.fields;
+    const nombre=f['Empresa']||f['Contacto']||'Cliente';
+    const pedidos=state.pedidos.filter(p=>{const cli=p.fields['Cliente'];return Array.isArray(cli)?cli.includes(clienteId):cli===clienteId;});
+    const cots=state.cotizaciones.filter(c=>{const cli=c.fields['Cliente'];return Array.isArray(cli)?cli.includes(clienteId):cli===clienteId;}).slice(0,10);
+    const stageColors={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
+    const pedHTML=pedidos.length?pedidos.sort((a,b)=>(b.createdTime||'').localeCompare(a.createdTime||'')).map(p=>{
+      const pf=p.fields,est=pf['Estado pedido']||'Confirmado',atras=pf['Fecha entrega']&&new Date(pf['Fecha entrega']+'T00:00:00')<new Date();
+      return`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:${stageColors[est]||'var(--text)'}">${escapeHtml(pf['N° Pedido']||'—')}</div>
+          <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;background:${stageColors[est]||'var(--surface3)'}22;color:${stageColors[est]||'var(--text3)'};">${est}</span>
+        </div>
+        ${pf['Fecha entrega']?`<div style="font-size:11px;color:${atras&&est!=='Despachado'?'var(--danger)':'var(--text3)'};margin-bottom:6px">📅 Entrega: ${pf['Fecha entrega']}${atras&&est!=='Despachado'?' ⚠ En proceso de despacho':''}</div>`:''}
+        ${pf['Notas']?`<div style="font-size:11px;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px;white-space:pre-wrap">${escapeHtml(pf['Notas']||'')}</div>`:''}
+      </div>`;
+    }).join(''):'<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px">Sin pedidos registrados</div>';
+    document.getElementById('portalContent').innerHTML=`
+      <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">${escapeHtml(nombre)}</h2>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:20px">${pedidos.length} pedido${pedidos.length!==1?'s':''} · ${cots.length} cotización${cots.length!==1?'es':''}</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin-bottom:10px">Pedidos</div>
+      ${pedHTML}
+      <div style="margin-top:16px;font-size:10px;color:var(--text3);text-align:center">The Lab Solutions — Portal de clientes · <a href="https://thelab.solutions" style="color:var(--accent)">thelab.solutions</a></div>`;
+  }
+  if(state.loaded){renderPortal();}
+  else{const orig=window.renderOverview||function(){};const intv=setInterval(()=>{if(state.loaded){clearInterval(intv);renderPortal();}},500);}
 }
 
 // ── CALCULADORA LÁSER / NEON ──────────────────────────────────────────
