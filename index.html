@@ -13282,7 +13282,8 @@ async function testSIIWorker(){
     transition:transform .25s cubic-bezier(.34,1.56,.64,1), box-shadow .25s;
   }
   #jvs-fab:hover{ transform:scale(1.08); box-shadow:0 8px 30px rgba(0,212,204,0.65); }
-  #jvs-fab svg{ width:26px; height:26px; fill:#04201e; }
+  #jvs-fab svg{ display:none; }
+  #jvs-fab .jvs-fab-label{ font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px; color:#04201e; line-height:1; pointer-events:none; }
   #jvs-fab .jvs-fab-ring{
     position:absolute; inset:-6px; border-radius:50%;
     border:2px solid rgba(0,245,233,0.5); opacity:0; pointer-events:none;
@@ -13380,7 +13381,7 @@ async function testSIIWorker(){
 <button id="jvs-fab" title="Hablar con KAI">
   <div class="jvs-fab-ring"></div>
   <div class="jvs-mini-dot"></div>
-  <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm6-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+  <span class="jvs-fab-label">KAI</span>
 </button>
 
 <!-- Panel -->
