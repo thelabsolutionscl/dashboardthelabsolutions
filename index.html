@@ -2709,6 +2709,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-ghost btn-sm" onclick="toggleAdsConfig()">⚙ Configurar</button>
         <button class="btn btn-ghost btn-sm" onclick="openCreateCampaign()" id="btnNuevaCampana">+ Nueva Campaña</button>
         <button class="btn btn-primary btn-sm" onclick="loadAdsData()">↺ Actualizar</button>
+        <span id="adsLastSyncLabel" style="font-size:10px;color:var(--text3);white-space:nowrap;align-self:center;padding-left:2px"></span>
       </div>
     </div>
 
@@ -2906,16 +2907,21 @@ function main() {
       </div>
     </div>
 
+    <!-- Alerta datos desactualizados -->
+    <div id="adsStaleWarning" style="display:none;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.3);border-radius:8px;padding:9px 14px;margin-bottom:12px;font-size:11px;color:#ffaa00;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">⚠</span>
+      <span>Datos desactualizados (más de 24 h). Ejecuta el Script 2 en Google Ads o haz clic en "↺ Actualizar".</span>
+    </div>
     <!-- KPIs Google Ads -->
     <div id="adsKPIs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px">
       <div class="stat-card"><div class="stat-label">Gasto Total</div><div class="stat-value" id="ads-kpi-gasto" style="color:var(--accent)">—</div><div class="stat-sub" id="ads-kpi-periodo"></div></div>
-      <div class="stat-card"><div class="stat-label">Impresiones</div><div class="stat-value" id="ads-kpi-imp">—</div></div>
-      <div class="stat-card"><div class="stat-label">Clics</div><div class="stat-value" id="ads-kpi-clics">—</div></div>
-      <div class="stat-card"><div class="stat-label">CTR</div><div class="stat-value" id="ads-kpi-ctr" style="color:var(--accent)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Impresiones</div><div class="stat-value" id="ads-kpi-imp">—</div><div class="stat-sub" id="ads-kpi-imp-trend"></div></div>
+      <div class="stat-card"><div class="stat-label">Clics</div><div class="stat-value" id="ads-kpi-clics">—</div><div class="stat-sub" id="ads-kpi-clics-trend"></div></div>
+      <div class="stat-card"><div class="stat-label">CTR</div><div class="stat-value" id="ads-kpi-ctr" style="color:var(--accent)">—</div><div class="stat-sub" id="ads-kpi-ctr-trend"></div></div>
       <div class="stat-card"><div class="stat-label">CPC Prom.</div><div class="stat-value" id="ads-kpi-cpc" style="color:var(--warn)">—</div></div>
-      <div class="stat-card"><div class="stat-label">Conversiones</div><div class="stat-value" id="ads-kpi-conv" style="color:var(--success)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Conversiones</div><div class="stat-value" id="ads-kpi-conv" style="color:var(--success)">—</div><div class="stat-sub" id="ads-kpi-conv-trend"></div></div>
       <div class="stat-card"><div class="stat-label">Costo/Conv.</div><div class="stat-value" id="ads-kpi-cpa" style="color:var(--text2)">—</div></div>
-      <div class="stat-card"><div class="stat-label">ROAS</div><div class="stat-value" id="ads-kpi-roas" style="color:var(--success)">—</div></div>
+      <div class="stat-card"><div class="stat-label">ROAS</div><div class="stat-value" id="ads-kpi-roas" style="color:var(--success)">—</div><div class="stat-sub" id="ads-kpi-roas-trend"></div></div>
     </div>
 
     <!-- Recomendaciones del Agente -->
@@ -10889,6 +10895,67 @@ function copySEODiagSnippet(){
 }
 async function testYoastWrite(){openSEODiag();await runSEODiag();}
 // ── GOOGLE ADS AGENT ─────────────────────────────────────
+// ── Snapshot histórico ──────────────────────────────────
+function adsSaveSnapshot(data,days){
+  const snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');
+  const today=new Date().toISOString().slice(0,10);
+  const imp=data.impresiones||0,clics=data.clics||0,gasto=data.gasto||0;
+  const conv=data.conversiones||0;
+  const ctr=imp>0?(clics/imp*100):0;
+  const roas=gasto>0&&(data.valor_conversion||0)>0?data.valor_conversion/gasto:0;
+  const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days};
+  const idx=snaps.findIndex(s=>s.date===today);
+  if(idx>=0) snaps[idx]=snap; else snaps.push(snap);
+  snaps.sort((a,b)=>a.date.localeCompare(b.date));
+  if(snaps.length>30) snaps.splice(0,snaps.length-30);
+  localStorage.setItem('ads_snapshots',JSON.stringify(snaps));
+  localStorage.setItem('ads_last_sync',new Date().toISOString());
+}
+function adsGetPrevSnapshot(){
+  const snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');
+  if(snaps.length<2) return null;
+  return snaps[snaps.length-2];
+}
+function adsLastSyncStr(){
+  const ts=localStorage.getItem('ads_last_sync');
+  if(!ts) return '';
+  const diff=Date.now()-new Date(ts).getTime();
+  const mins=Math.floor(diff/60000);
+  if(mins<1) return 'actualizado ahora';
+  if(mins<60) return 'hace '+mins+' min';
+  const hrs=Math.floor(diff/3600000);
+  if(hrs<24) return 'hace '+hrs+'h';
+  return 'hace '+Math.floor(diff/86400000)+'d';
+}
+// ── Health Score por campaña (0–100) ────────────────────
+function adsHealthScore(c){
+  if(!c.impresiones||c.impresiones===0) return{score:0,color:'var(--text3)',label:'Sin datos'};
+  const ctr=c.clics/c.impresiones*100;
+  const convRate=c.clics>0?c.conversiones/c.clics*100:0;
+  const roas=c.gasto>0&&(c.valor_conversion||0)>0?c.valor_conversion/c.gasto:0;
+  const s=Math.round(Math.min(ctr/5,1)*35+Math.min(convRate/3,1)*35+(roas>0?Math.min(roas/4,1)*30:0));
+  const color=s>=70?'var(--success)':s>=40?'var(--warn)':'var(--danger)';
+  return{score:s,color,label:s>=70?'Bueno':s>=40?'Regular':'Bajo'};
+}
+// ── Export CSV ───────────────────────────────────────────
+function adsExportCSV(){
+  const rows=document.querySelectorAll('#adsCampaignsArea table tr');
+  if(!rows.length){toast('No hay datos para exportar','error');return;}
+  const csv=[...rows].map(row=>{
+    const cells=[...row.querySelectorAll('th,td')].map(cell=>{
+      const clone=cell.cloneNode(true);
+      clone.querySelectorAll('button,span[style*="inline-flex"]').forEach(el=>el.remove());
+      return'"'+clone.textContent.trim().replace(/"/g,'""')+'"';
+    });
+    return cells.join(',');
+  }).join('\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='campanas_google_ads_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  toast('✓ CSV descargado','success');
+}
 function getAdsConfig(){return JSON.parse(localStorage.getItem('ads_config')||JSON.stringify({endpoint:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:'757-781-2099'}));}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
@@ -11111,6 +11178,35 @@ function renderAdsKPIs(data,days){
   document.getElementById('ads-kpi-cpa').textContent=conv>0?fmtMoney(cpa):'—';
   document.getElementById('ads-kpi-roas').textContent=valConv>0?roas.toFixed(2)+'x':'—';
   ovSyncAdsKPIs(data);
+  // — Snapshot, tendencias vs período anterior, sync label, stale warning
+  if(!data.demo) adsSaveSnapshot(data,days);
+  const prev=adsGetPrevSnapshot();
+  if(prev){
+    const trendHtml=(curr,old,higherGood)=>{
+      if(!old||old===0) return '';
+      const pct=(curr-old)/Math.abs(old)*100;
+      const up=pct>0;
+      const good=higherGood?up:!up;
+      return '<span style="color:'+(good?'var(--success)':'var(--danger)')+';font-size:9px">'+(up?'↑':'↓')+Math.abs(pct).toFixed(0)+'%</span>';
+    };
+    const setTrend=(id,curr,old,hg)=>{const el=document.getElementById(id);if(el)el.innerHTML=trendHtml(curr,old,hg);};
+    setTrend('ads-kpi-imp-trend',imp,prev.imp,true);
+    setTrend('ads-kpi-clics-trend',clics,prev.clics,true);
+    setTrend('ads-kpi-ctr-trend',ctr,prev.ctr,true);
+    setTrend('ads-kpi-conv-trend',conv,prev.conv,true);
+    setTrend('ads-kpi-roas-trend',roas,prev.roas,true);
+  }
+  // Stale warning (data.guardado = cuando el Script 2 corrió por última vez)
+  const staleEl=document.getElementById('adsStaleWarning');
+  if(staleEl){
+    if(data.guardado&&!data.demo){
+      const age=Date.now()-new Date(data.guardado).getTime();
+      staleEl.style.display=age>86400000?'flex':'none';
+    } else staleEl.style.display='none';
+  }
+  // Última sincronización
+  const lbl=document.getElementById('adsLastSyncLabel');
+  if(lbl) lbl.textContent=adsLastSyncStr();
 }
 function renderAdsCampaigns(data){
   const camps=data.campanas||[];
@@ -11128,6 +11224,8 @@ function renderAdsCampaigns(data){
       :'<span style="background:rgba(255,68,68,0.12);color:var(--danger);border:1px solid rgba(255,68,68,0.25);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Pausada</span>';
     const ctrColor=ctr>=5?'var(--success)':ctr>=2?'var(--text)':'var(--danger)';
     const safeNombre=JSON.stringify(c.nombre||'');
+    const hs=adsHealthScore(c);
+    const hsBadge=`<span style="display:inline-block;min-width:28px;text-align:center;color:${hs.color};border:1px solid ${hs.color};border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;opacity:0.9" title="Score de salud: ${hs.label} (CTR + Conv. + ROAS)">${hs.score}</span>`;
     const acciones=`<span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">
         <button onclick="event.stopPropagation();openEditCampaign('${c.id}',${safeNombre},'${c.estado}',${c.presupuesto||0})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
         <button onclick="event.stopPropagation();openDeleteCampaign('${c.id}',${safeNombre})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar">🗑</button>
@@ -11135,6 +11233,7 @@ function renderAdsCampaigns(data){
     return `<tr>
       <td style="white-space:nowrap"><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</span>${acciones}</td>
       <td>${estadoBadge}</td>
+      <td style="text-align:center">${hsBadge}</td>
       <td style="text-align:right">${fmtMoney(c.gasto)}</td>
       <td style="text-align:right">${fmtNum(c.impresiones)}</td>
       <td style="text-align:right">${fmtNum(c.clics)}</td>
@@ -11147,10 +11246,10 @@ function renderAdsCampaigns(data){
   const demoBanner=data.demo?`<div style="background:rgba(255,200,0,0.08);border-bottom:1px solid rgba(255,200,0,0.2);padding:7px 16px;font-size:10px;color:#ffc107;display:flex;align-items:center;gap:6px"><span>⚠</span><span>Datos de demostración — <button onclick="toggleAdsConfig()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">configura tu endpoint</button> para ver datos reales</span></div>`:'';
   document.getElementById('adsCampaignsArea').innerHTML=`
     <div class="card">
-      <div class="card-header"><span class="card-title">Campañas</span><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span><button onclick="openCreateCampaign()" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer;font-weight:600">+ Nueva</button></div></div>
+      <div class="card-header"><span class="card-title">Campañas</span><div style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span><button onclick="adsExportCSV()" style="background:rgba(0,212,204,0.06);border:1px solid rgba(0,212,204,0.2);color:var(--text2);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer" title="Descargar tabla como CSV">⬇ CSV</button><button onclick="openCreateCampaign()" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer;font-weight:600">+ Nueva</button></div></div>
       ${demoBanner}
       <div class="table-wrap"><table>
-        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th></tr></thead>
+        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:center" title="Score de salud 0–100 (CTR + Conv. + ROAS)">Score</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </div>`;
@@ -11182,6 +11281,27 @@ function renderAdsAgent(data){
     const bottom=activas.reduce((a,b)=>{const ctrA=a.impresiones>0?a.clics/a.impresiones:0;const ctrB=b.impresiones>0?b.clics/b.impresiones:0;return ctrB<ctrA?b:a;},activas[0]);
     if(top.conversiones>0) recs.push({tipo:'success',msg:`Mejor campaña: "${top.nombre}" con ${top.conversiones.toFixed(0)} conversiones. Considera aumentar su presupuesto.`});
     if(bottom!==top&&bottom.impresiones>200){const ctr=bottom.impresiones>0?(bottom.clics/bottom.impresiones*100):0;recs.push({tipo:'warn',msg:`Campaña de menor CTR: "${bottom.nombre}" (${fmtPct(ctr)}). Evalúa pausarla o reestructurar sus palabras clave.`});}
+  }
+  // Detección de presupuesto agotado (gasto diario vs presupuesto diario)
+  const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+  camps.forEach(c=>{
+    if(c.estado==='ENABLED'&&c.presupuesto>0&&c.gasto>0){
+      const dailyAvg=c.gasto/days;
+      const util=dailyAvg/c.presupuesto;
+      if(util>=0.9) recs.push({tipo:'warn',msg:`"${c.nombre}": gasto diario promedio (${fmtMoney(Math.round(dailyAvg))}) es el ${Math.round(util*100)}% del presupuesto diario. Considera aumentarlo para evitar cortes de visibilidad.`});
+    }
+  });
+  // Score bajo en campaña activa con gasto
+  camps.forEach(c=>{
+    if(c.estado==='ENABLED'&&c.gasto>0){
+      const hs=adsHealthScore(c);
+      if(hs.score>0&&hs.score<30) recs.push({tipo:'danger',msg:`"${c.nombre}": score de salud muy bajo (${hs.score}/100). CTR, conversiones y ROAS están por debajo del umbral — requiere atención urgente.`});
+    }
+  });
+  // Datos desactualizados del servidor
+  if(data.guardado&&!data.demo){
+    const age=Date.now()-new Date(data.guardado).getTime();
+    if(age>86400000) recs.unshift({tipo:'warn',msg:`Datos del servidor con ${Math.floor(age/3600000)}h de antigüedad (última sync: ${new Date(data.guardado).toLocaleString('es-CL')}). Ejecuta el Script 2 en Google Ads para actualizar.`});
   }
   if(!recs.length) recs.push({tipo:'success',msg:'Todo en orden — no hay alertas críticas en este período.'});
   const colorMap={success:'var(--success)',warn:'var(--warn)',danger:'var(--danger)',info:'var(--accent)'};
