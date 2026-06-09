@@ -77,6 +77,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .card-title{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;}
 .card-badge{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);padding:2px 7px;border-radius:4px;}
 .table-wrap{overflow-x:auto;}
+.sortable-th{cursor:pointer;user-select:none;white-space:nowrap;}
+.sortable-th:hover{color:var(--accent);}
+.sortable-th .sort-arrow{display:inline-block;margin-left:4px;font-size:9px;opacity:0.4;vertical-align:middle;}
+.sortable-th.sort-active{color:var(--accent);}
+.sortable-th.sort-active .sort-arrow{opacity:1;}
 table{width:100%;border-collapse:collapse;}
 th{font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:var(--text2);text-align:left;padding:9px 16px;border-bottom:1px solid var(--border);white-space:nowrap;}
 td{padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
@@ -292,6 +297,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .table-wrap tbody tr{display:block;margin-bottom:10px;border:1px solid var(--border2);border-radius:9px;padding:8px 12px;background:var(--surface2);}
   .table-wrap tbody tr td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;border:none;text-align:right;min-height:30px;}
   .table-wrap tbody tr td::before{content:attr(data-label);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);text-align:left;flex-shrink:0;}
+  #pedidosMobileSortBar{display:flex!important;}
   .table-wrap tbody tr td:last-child{padding-bottom:0;}
   .table-wrap tbody tr td select,.table-wrap tbody tr td input[type=date]{max-width:60% !important;width:auto !important;}
   .table-wrap tbody tr td.mono{font-weight:700;color:var(--accent);}
@@ -1604,10 +1610,34 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <button id="btnVistaCal" class="btn btn-ghost btn-sm" onclick="setPedidosView('calendario')" style="padding:4px 12px;font-size:10px">Calendario</button>
     </div>
   </div>
+  <div id="pedidosMobileSortBar" style="display:none;margin-bottom:10px;gap:6px;align-items:center">
+    <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">Ordenar:</span>
+    <select id="pedidosMobileSortSel" onchange="onMobilePedidosSort()" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
+      <option value="">— Sin orden —</option>
+      <option value="num">N° Pedido</option>
+      <option value="cliente">Cliente</option>
+      <option value="estado">Estado</option>
+      <option value="monto">Monto Neto</option>
+      <option value="entrega">Fecha Entrega</option>
+      <option value="qa">QA</option>
+      <option value="forma">Forma de Pago</option>
+    </select>
+    <button id="pedidosMobileSortDir" onclick="toggleMobilePedidosSortDir()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;color:var(--accent);font-size:13px;cursor:pointer;flex-shrink:0">↑</button>
+  </div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap">
-    <table><thead><tr>
+    <table><thead id="pedidosThead"><tr>
       <th style="width:36px;text-align:center"><input type="checkbox" id="pedidosSelectAll" onchange="toggleSelectAllPedidos(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
-      <th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th><th>Entrega</th><th>Acciones</th>
+      <th data-sort="num" class="sortable-th" onclick="sortPedidos('num')">N° Pedido</th>
+      <th data-sort="cliente" class="sortable-th" onclick="sortPedidos('cliente')">Cliente</th>
+      <th data-sort="estado" class="sortable-th" onclick="sortPedidos('estado')">Estado</th>
+      <th>Equipo</th>
+      <th>Proveedor</th>
+      <th data-sort="monto" class="sortable-th" onclick="sortPedidos('monto')">Monto Neto</th>
+      <th data-sort="forma" class="sortable-th" onclick="sortPedidos('forma')">Forma de Pago</th>
+      <th>Abono / Pago Total</th>
+      <th data-sort="qa" class="sortable-th" onclick="sortPedidos('qa')">QA</th>
+      <th data-sort="entrega" class="sortable-th" onclick="sortPedidos('entrega')">Entrega</th>
+      <th>Acciones</th>
     </tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
@@ -3843,6 +3873,7 @@ const maquinaState={semanaOffset:0,eventos:{},maintLog:[]};
 const equipoState={semanaOffset:0,eventos:{}};
 const selectedClientes=new Set();
 const selectedPedidos=new Set();
+let _pedidosSort={col:null,dir:'asc'};
 const selectedProveedores=new Set();
 const clientesSort={key:null,dir:1};
 const cotizacionesSort={key:null,dir:1};
@@ -4578,7 +4609,6 @@ function renderMaquinasManagerModal(){
       <td style="padding:6px 8px"><span style="font-size:11px;background:${m.color}22;color:${m.color};border-radius:4px;padding:2px 6px">${m.modelo}</span></td>
       <td style="padding:6px 8px;font-size:12px">${m.nombre} <span style="color:var(--text3)">#${m.num}</span></td>
       <td style="padding:6px 8px"><input id="mgr-ip-${m.id}" value="${m.ip||''}" placeholder="192.168.100.x" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text);width:130px"></td>
-      <td style="padding:6px 8px">${(()=>{const ps=_printerStatus[m.id];if(!ps||!getPrinterIp(m))return'<span style="font-size:10px;color:#ff6b35">⚠ sin IP</span>';const st=ps.state||'offline';if(st==='printing')return'<span style="font-size:10px;color:#00d4aa">🟢 ok</span>';if(st==='standby'||st==='complete')return'<span style="font-size:10px;color:#00d4aa">🟢 ok</span>';if(st==='paused')return'<span style="font-size:10px;color:#ffaa00">⏸ pausado</span>';if(st==='offline')return'<span style="font-size:10px;color:#888">⚫ offline</span>';return'<span style="font-size:10px;color:#888">⚫ —</span>';})()}</td>
       <td style="padding:6px 8px">
         <select id="mgr-estado-${m.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text)">
           <option value="disponible" ${m.estado!=='mantencion'?'selected':''}>✓ Disponible</option>
@@ -4586,7 +4616,6 @@ function renderMaquinasManagerModal(){
         </select>
       </td>
       <td style="padding:6px 8px;display:flex;gap:4px">
-        <button onclick="openPrinterConnModal('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" title="Configurar conexión Moonraker">🔌</button>
         <button onclick="saveMgrRow('${m.id}')" class="btn btn-primary btn-sm" style="font-size:10px;padding:3px 8px">💾</button>
         <button onclick="deleteMgrRow('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px;color:var(--danger)">✕</button>
       </td>
@@ -6046,25 +6075,9 @@ async function saveFichaModal(verPDF=false){
     updatedAt:new Date().toISOString().slice(0,10)
   };
   try{
-    const ftPayload={
-      'Ficha Tecnica':JSON.stringify(data),
-      'FT Material':data.material||null,
-      'FT Color':data.color||null,
-      'FT Acabado':data.acabado||null,
-      'FT Cantidad':data.cantidad?Number(data.cantidad)||null:null,
-      'FT Impresora':data.impresora||null,
-      'FT Altura capa':data.altaCapa||null,
-      'FT Relleno (%)':data.relleno?Number(data.relleno)||null:null,
-      'FT Soportes':data.soportes||null,
-      'FT Peso estimado (g)':data.peso?Number(data.peso)||null:null,
-      'FT Tiempo impresión':data.tiempo||null,
-      'FT Notas producción':data.notas||null,
-      'FT Aprobado por':data.aprobado||null,
-      'FT Actualizado':data.updatedAt||null
-    };
-    await airtableWrite('Pedidos','PATCH',pedidoId,ftPayload);
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(data)});
     const ped=state.pedidos.find(x=>x.id===pedidoId);
-    if(ped) Object.assign(ped.fields,ftPayload);
+    if(ped) ped.fields['Ficha Tecnica']=JSON.stringify(data);
     toast('Ficha técnica guardada ✓','success');
     renderPedidos();
     if(verPDF){closeFichaModal();descargarFichaTecnica(pedidoId);}
@@ -7399,9 +7412,67 @@ function exportRemCSV(){
   a.download='remuneraciones.csv';a.click();
 }
 
+function sortPedidos(col){
+  if(_pedidosSort.col===col){_pedidosSort.dir=_pedidosSort.dir==='asc'?'desc':'asc';}
+  else{_pedidosSort={col,dir:'asc'};}
+  // Sync mobile select
+  const sel=document.getElementById('pedidosMobileSortSel');
+  if(sel) sel.value=col;
+  const dirBtn=document.getElementById('pedidosMobileSortDir');
+  if(dirBtn) dirBtn.textContent=_pedidosSort.dir==='asc'?'↑':'↓';
+  renderPedidos();
+}
+function onMobilePedidosSort(){
+  const col=document.getElementById('pedidosMobileSortSel')?.value||'';
+  if(!col){_pedidosSort={col:null,dir:'asc'};renderPedidos();return;}
+  if(_pedidosSort.col===col) return renderPedidos();
+  _pedidosSort={col,dir:'asc'};
+  renderPedidos();
+}
+function toggleMobilePedidosSortDir(){
+  if(!_pedidosSort.col) return;
+  _pedidosSort.dir=_pedidosSort.dir==='asc'?'desc':'asc';
+  const dirBtn=document.getElementById('pedidosMobileSortDir');
+  if(dirBtn) dirBtn.textContent=_pedidosSort.dir==='asc'?'↑':'↓';
+  renderPedidos();
+}
+function _applyPedidosSort(arr){
+  const {col,dir}=_pedidosSort;
+  if(!col) return arr;
+  const STAGE_ORDER={'Confirmado':0,'En producción':1,'Listo para despacho':2,'Despachado':3,'Cancelado':4};
+  const QA_ORDER={'QA aprobado':0,'Pendiente':1,'Rechazado':2};
+  const mult=dir==='asc'?1:-1;
+  return [...arr].sort((a,b)=>{
+    const af=a.fields,bf=b.fields;
+    let av,bv;
+    if(col==='num'){
+      const na=parseInt((af['N° Pedido']||'').replace(/\D+/g,'')||'0');
+      const nb=parseInt((bf['N° Pedido']||'').replace(/\D+/g,'')||'0');
+      return (na-nb)*mult;
+    }
+    if(col==='cliente'){av=resolveClienteName(af['Cliente'])||'';bv=resolveClienteName(bf['Cliente'])||'';return av.localeCompare(bv,'es')*mult;}
+    if(col==='estado'){av=STAGE_ORDER[af['Estado pedido']]??99;bv=STAGE_ORDER[bf['Estado pedido']]??99;return (av-bv)*mult;}
+    if(col==='monto'){av=af['Monto total (CLP)']||0;bv=bf['Monto total (CLP)']||0;return (av-bv)*mult;}
+    if(col==='entrega'){av=af['Fecha entrega']||'9999';bv=bf['Fecha entrega']||'9999';return av.localeCompare(bv)*mult;}
+    if(col==='qa'){av=QA_ORDER[af['Resultado QA']]??1;bv=QA_ORDER[bf['Resultado QA']]??1;return (av-bv)*mult;}
+    if(col==='forma'){av=af['Forma de pago']||'';bv=bf['Forma de pago']||'';return av.localeCompare(bv,'es')*mult;}
+    return 0;
+  });
+}
+function _updatePedidosSortHeaders(){
+  document.querySelectorAll('#pedidosThead .sortable-th').forEach(th=>{
+    const col=th.dataset.sort;
+    th.classList.toggle('sort-active',col===_pedidosSort.col);
+    let arrow=th.querySelector('.sort-arrow');
+    if(!arrow){arrow=document.createElement('span');arrow.className='sort-arrow';th.appendChild(arrow);}
+    if(col===_pedidosSort.col){arrow.textContent=_pedidosSort.dir==='asc'?' ▲':' ▼';}
+    else{arrow.textContent=' ↕';}
+  });
+}
 function renderPedidos(filter){
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
   let data=filter==='all'?state.pedidos:filter==='atrasados'?state.pedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
+  data=_applyPedidosSort(data);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
     const emptyHtml=state.pedidos.length
       ?'<div class="empty-state"><div class="empty-icon">🔍</div>Ningún pedido coincide con este filtro<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="filterPedidos(\'all\',document.querySelector(\'#pedidosFilterBar>button\'))">Ver todos los pedidos</button></div>'
@@ -7422,15 +7493,16 @@ function renderPedidos(filter){
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
     return`<tr data-id="${p.id}" class="${sel?'row-selected':''}">
     <td style="text-align:center"><input type="checkbox" class="row-chk" data-id="${p.id}" ${sel?'checked':''} onchange="togglePedidoRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
-    <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td>${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
-    <td>${renderProveedorCell(p.id,f['Proveedor']||'')}</td>
-    <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
-    <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
-    <td style="text-align:center">${pagoChips(p.id,f)}</td>
-    <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
-    <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
-    <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
+    <td data-label="N° Pedido" class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td data-label="Cliente" class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Estado">${estadoBadge(estado)}</td><td data-label="Equipo">${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
+    <td data-label="Proveedor">${renderProveedorCell(p.id,f['Proveedor']||'')}</td>
+    <td data-label="Monto Neto" class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
+    <td data-label="Forma de Pago"><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
+    <td data-label="Abono/Pago" style="text-align:center">${pagoChips(p.id,f)}</td>
+    <td data-label="QA" style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
+    <td data-label="Entrega"><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
+    <td data-label="Acciones">${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
   }).join('');
+  _updatePedidosSortHeaders();
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
 function renderEquipoCell(pedidoId,equipoStr){
@@ -8462,7 +8534,7 @@ async function initMaquinas(){
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
 const MOONRAKER_PORT=7125;
 function getPrinterTunnel(){const d=_DEFAULTS.PRINTER_TUNNEL.startsWith('%%')?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
-function printerUrl(ip,path){if(typeof _isLocalMode==='function'&&_isLocalMode())return`http://${ip}:7125${path}`;return`${getPrinterTunnel()}/${ip}${path}`;}
+function printerUrl(ip,path){return`${getPrinterTunnel()}/${ip}${path}`;}
 const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={},_demoPrinterState={};
@@ -8501,7 +8573,6 @@ function openPrinterConnModal(id){
   document.getElementById('printerConnId').value=id;
   document.getElementById('printerConnIp').value=getPrinterIp(m)||'';
   document.getElementById('printerConnKey').value=getPrinterApiKey(id);
-  const res=document.getElementById('printerConnTestResult');if(res)res.style.display='none';
   document.getElementById('printerConnModal').style.display='flex';
 }
 function closePrinterConnModal(){document.getElementById('printerConnModal').style.display='none';}
@@ -8515,31 +8586,6 @@ function savePrinterConn(){
   const m=MAQUINAS.find(x=>x.id===id);
   toast(`Conexión guardada · ${m?.nombre} #${m?.numG}`,'success');
   pollPrinters();
-}
-async function testPrinterConn(){
-  const ip=(document.getElementById('printerConnIp').value||'').trim();
-  const key=(document.getElementById('printerConnKey').value||'').trim();
-  const res=document.getElementById('printerConnTestResult');
-  if(!ip){res.style.display='block';res.style.background='rgba(255,107,53,0.12)';res.style.color='#ff6b35';res.textContent='⚠ Ingresa una IP primero';return;}
-  res.style.display='block';res.style.background='rgba(0,212,204,0.06)';res.style.color='var(--text3)';res.textContent='⏳ Conectando a '+ip+'…';
-  const headers=key?{'X-Api-Key':key}:{};
-  const url=(typeof _isLocalMode==='function'&&_isLocalMode())?`http://${ip}:7125/printer/info`:`${getPrinterTunnel()}/${ip}/printer/info`;
-  try{
-    const r=await fetch(url,{signal:AbortSignal.timeout(6000),headers});
-    if(r.ok){
-      const d=await r.json();const si=d.result||{};
-      const state_=si.state||'ready';const version=si.software_version||'—';const host=si.hostname||ip;
-      res.style.background='rgba(0,212,170,0.1)';res.style.color='#00d4aa';
-      res.textContent=`✓ Conectado · ${host} · Klipper ${version} · ${state_}`;
-    }else{
-      res.style.background='rgba(255,68,68,0.1)';res.style.color='#ff4444';
-      res.textContent=`✗ HTTP ${r.status} — verifica IP y API Key`;
-    }
-  }catch(e){
-    res.style.background='rgba(255,68,68,0.1)';res.style.color='#ff4444';
-    const hint=(typeof _isLocalMode==='function'&&_isLocalMode())?'Modo local: verifica que estés en la misma red':'Modo remoto: verifica el tunnel';
-    res.textContent=`✗ Sin respuesta · ${hint}`;
-  }
 }
 
 async function fetchPrinterStatus(m){
@@ -11111,11 +11157,9 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
         <div style="font-size:10px;color:var(--text3);margin-top:4px">En OrcaSlicer: Preparar → Impresoras → ⚙ → IP/API Key. En Fluidd/Mainsail: Configuración → API Keys. Se envía como encabezado <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">X-Api-Key</code>.</div>
       </div>
     </div>
-    <div id="printerConnTestResult" style="display:none;margin-top:12px;padding:8px 12px;border-radius:7px;font-size:11px;font-family:monospace;line-height:1.5;word-break:break-all"></div>
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="btn btn-ghost btn-sm" onclick="testPrinterConn()" style="flex:1">🔌 Probar</button>
-      <button class="btn btn-primary btn-sm" onclick="savePrinterConn()" style="flex:1">💾 Guardar</button>
-      <button class="btn btn-ghost btn-sm" onclick="closePrinterConnModal()" style="padding:0 12px">✕</button>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-primary btn-sm" onclick="savePrinterConn()" style="flex:1">Guardar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closePrinterConnModal()" style="flex:1">Cancelar</button>
     </div>
   </div>
 </div>
@@ -11133,7 +11177,6 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
           <th style="padding:4px 8px;text-align:left;font-weight:600">Modelo</th>
           <th style="padding:4px 8px;text-align:left;font-weight:600">Nombre</th>
           <th style="padding:4px 8px;text-align:left;font-weight:600">IP</th>
-          <th style="padding:4px 8px;text-align:left;font-weight:600">Conexión</th>
           <th style="padding:4px 8px;text-align:left;font-weight:600">Estado</th>
           <th style="padding:4px 8px;text-align:left;font-weight:600">Acciones</th>
         </tr>
@@ -13145,27 +13188,11 @@ async function testSIIWorker(){
   function buildContext(){
     try{
       const s = window.state || {};
-      const allPed = s.pedidos || [];
-      const allCot = s.cotizaciones || [];
-      const allCli = s.clientes || [];
+      const ped = s.pedidos || [];
+      const cot = s.cotizaciones || [];
+      const cli = s.clientes || [];
       const cliById = s.clientesById || {};
       const today = new Date(); today.setHours(0,0,0,0);
-
-      // Vendor mode: filter everything to only this vendor's records
-      const vendorMode = typeof isVendorMode==='function' && isVendorMode();
-      const vendorId = vendorMode && typeof currentVendorId==='function' ? currentVendorId() : null;
-      const ownsRecord = typeof vendorOwnsRecord==='function' ? vendorOwnsRecord : ()=>true;
-
-      const ped = vendorMode ? allPed.filter(ownsRecord) : allPed;
-      const cot = vendorMode ? allCot.filter(ownsRecord) : allCot;
-      // Clientes: solo los que tienen al menos un pedido o cotización del vendedor
-      const cli = vendorMode
-        ? allCli.filter(c=>{
-            const cid=c.id;
-            return ped.some(p=>(Array.isArray(p.fields?.['Cliente'])?p.fields['Cliente'][0]:p.fields?.['Cliente'])===cid)
-                || cot.some(q=>(Array.isArray(q.fields?.['Cliente'])?q.fields['Cliente'][0]:q.fields?.['Cliente'])===cid);
-          })
-        : allCli;
 
       const resolveCli = f => {
         if(!f) return '—';
@@ -13179,14 +13206,6 @@ async function testSIIWorker(){
       const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||''));
       const revTotal = ped.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0);
 
-      const TASA_COM = 0.035;
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const despMes = vendorMode
-        ? ped.filter(p=>(p.fields?.['Estado pedido']||'')==='Despachado'&&p.createdTime&&new Date(p.createdTime)>=monthStart)
-        : [];
-      const comisionMes = Math.round(despMes.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0)*TASA_COM);
-      const pipelineTotal = cotPend.reduce((a,c)=>a+Math.round((c.fields?.['Total final (CLP)']||0)/1.19),0);
-
       const pedRows = activos.slice(0,10).map(p=>{
         const f=p.fields||{};
         return `  • ${f['N° Pedido']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado pedido']||'—'} | $${Math.round((f['Monto total (CLP)']||0)/1.19).toLocaleString('es-CL')} neto | Entrega: ${f['Fecha entrega']||'sin fecha'}`;
@@ -13197,38 +13216,21 @@ async function testSIIWorker(){
         return `  • Cot ${f['N° Cotización']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado cotización']||'—'} | $${Math.round((f['Total final (CLP)']||0)/1.19).toLocaleString('es-CL')} neto`;
       }).join('\n');
 
-      const header = vendorMode
-        ? `DATOS EN VIVO — VENDEDOR: ${vendorId||'—'} (${new Date().toLocaleString('es-CL')}):`
-        : `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')}):`;
+      return `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')}):
+- Pedidos totales: ${ped.length} | Activos: ${activos.length} | Atrasados: ${atrasados.length}
+- Cotizaciones totales: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
+- Clientes registrados: ${cli.length}
+- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP
 
-      const extraVendor = vendorMode ? `
-- Comisión del mes (3.5% sobre despachados): $${comisionMes.toLocaleString('es-CL')} CLP
-- Pipeline potencial (cotizaciones activas): $${pipelineTotal.toLocaleString('es-CL')} CLP` : '';
-
-      return `${header}
-- Pedidos${vendorMode?' (tuyos)':' totales'}: ${ped.length} | Activos: ${activos.length} | Atrasados: ${atrasados.length}
-- Cotizaciones${vendorMode?' (tuyas)':' totales'}: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
-- Clientes${vendorMode?' (tuyos)':' registrados'}: ${cli.length}
-- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP${extraVendor}
-
-PEDIDOS ACTIVOS${vendorMode?' (tuyos)':''}:
+PEDIDOS ACTIVOS:
 ${pedRows||'  (ninguno)'}
 
-COTIZACIONES PENDIENTES${vendorMode?' (tuyas)':''}:
+COTIZACIONES PENDIENTES:
 ${cotRows||'  (ninguna)'}`;
     }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
   }
 
-  const SYS = () => {
-    const vendorMode = typeof isVendorMode==='function' && isVendorMode();
-    const vendorId = vendorMode && typeof currentVendorId==='function' ? currentVendorId() : null;
-    const roleDesc = vendorMode
-      ? `Eres KAI, asistente personal de ${vendorId||'el vendedor'} en The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). SOLO tienes acceso a los datos de este vendedor, nunca al resto de la empresa.`
-      : `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.`;
-    const navModules = vendorMode
-      ? 'overview, clientes, cotizaciones, pedidos, remuneraciones'
-      : 'overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones';
-    return `${roleDesc} Moneda: CLP.
+  const SYS = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
 
 ${buildContext()}
 
@@ -13236,12 +13238,11 @@ CAPACIDADES Y REGLAS:
 - Responde SIEMPRE en espanol chileno, profesional y conciso (maximo 3 oraciones, pensado para voz).
 - NUNCA uses emojis, asteriscos, numeral, comillas invertidas ni simbolos decorativos. Solo texto limpio.
 - Para navegar entre modulos del dashboard incluye al final: [NAV:nombre]
-  Modulos validos: ${navModules}
+  Modulos validos: overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones
 - Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
   Tipos validos: cliente, cotizacion, proveedor, venta, diario
 - Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
-${vendorMode?'- IMPORTANTE: NUNCA menciones datos globales de la empresa, otros vendedores ni totales de equipo. Solo habla de lo que es de este vendedor.\n':''}- Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
-  };
+- Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
 
   // ─── UI helpers ───
   function setState(mode){
@@ -13264,26 +13265,7 @@ ${vendorMode?'- IMPORTANTE: NUNCA menciones datos globales de la empresa, otros 
   }
 
   // ─── Panel open/close ───
-  function openPanel(){
-    JV.open=true; $panel.classList.add('jvs-open'); setTimeout(()=>$input.focus(),200);
-    // Adapt greeting and chips to vendor vs admin context
-    const vendor = typeof isVendorMode==='function' && isVendorMode();
-    const greetEl = document.querySelector('#jvs-log .jvs-j .jvs-txt');
-    if(greetEl){
-      greetEl.textContent = vendor
-        ? 'Listo. Veo tus pedidos, cotizaciones y clientes. ¿En qué te ayudo?'
-        : 'Sistemas en línea. Puedo navegar el dashboard, consultar pedidos, cotizaciones, clientes y máquinas en tiempo real. ¿En qué le asisto?';
-    }
-    const chips = document.getElementById('jvs-chips');
-    if(chips && vendor){
-      chips.innerHTML=`
-        <span class="jvs-chip" data-cmd="cuántos pedidos activos tengo y cuántos están atrasados">📦 Mis pedidos</span>
-        <span class="jvs-chip" data-cmd="resumen de mis cotizaciones pendientes">📋 Mis cotizaciones</span>
-        <span class="jvs-chip" data-cmd="cuánta comisión llevo este mes">💰 Mi comisión</span>
-        <span class="jvs-chip" data-cmd="abre el módulo de remuneraciones">📊 Remuneraciones</span>`;
-      chips.querySelectorAll('.jvs-chip').forEach(c=>c.addEventListener('click',()=>{const t=c.dataset.cmd;if(t){addMsg('u',t);ask(t);}}));
-    }
-  }
+  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); setTimeout(()=>$input.focus(),200); }
   function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); stopListen(); JV.synth.cancel(); setState('idle'); }
   $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
   $close.addEventListener('click',closePanel);
@@ -13329,9 +13311,6 @@ ${vendorMode?'- IMPORTANTE: NUNCA menciones datos globales de la empresa, otros 
       // reuse dashboard's stored Anthropic key
       let key = (typeof window.getAnthropicKey==='function') ? window.getAnthropicKey() : null;
       if(!key){ key = localStorage.getItem('anthropic_key'); }
-      // Strip any non-printable-ASCII characters that would cause fetch to throw
-      // "String contains non ISO-8859-1 code point" when used in headers
-      if(key) key = key.replace(/[^\x20-\x7E]/g,'').trim();
       if(!key||key.startsWith('%%')||key==='undefined'){
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='No hay API Key configurada. Configúrala desde el dashboard (botón de ajustes) y vuelve a intentar.';
