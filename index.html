@@ -2812,13 +2812,13 @@ function json(obj) {
               <div style="font-size:10px;font-weight:600;color:#e6edf3;margin-bottom:6px">Script 2 — Google Ads Script (ads.google.com → Herramientas → Scripts)</div>
               <pre id="adsScriptCode2" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:9.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">// ── Script 2: Google Ads Script ────────────────────────────────────────
 // ads.google.com → Herramientas → Scripts → + Nuevo script
-// Actualiza ENDPOINT con la URL del Script 1. Programa ejecución: diaria.
+// Actualiza ENDPOINT con la URL del Script 1. Programa ejecución: cada hora.
 
 var ENDPOINT = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
 var SECRET   = 'thelab2025';
 
 function main() {
-  // 1. Sincronizar datos al Script 1
+  // 1. Leer campañas y enviar resumen al Script 1
   var report = AdsApp.report(
     'SELECT campaign.name, campaign.id, campaign.status, ' +
     'campaign_budget.amount_micros, metrics.impressions, metrics.clicks, ' +
@@ -2849,7 +2849,7 @@ function main() {
       conversiones:t.conversiones, valor_conversion:t.valor_conversion})
   });
 
-  // 2. Procesar mutaciones pendientes del dashboard
+  // 2. Leer y aplicar mutaciones pendientes del dashboard
   try {
     var mutResp = UrlFetchApp.fetch(ENDPOINT+'?action=mutations', {muteHttpExceptions:true});
     var mutData = JSON.parse(mutResp.getContentText());
@@ -2861,15 +2861,19 @@ function main() {
       if (m.status !== 'pending') continue;
       try {
         if (m.op === 'create') {
-          var budget = AdsApp.newCampaignBudgetBuilder()
+          // Presupuesto en CLP directamente (sin dividir por 1000)
+          var budgetOp = AdsApp.newCampaignBudgetBuilder()
             .withName('Budget_'+m.data.nombre)
-            .withAmount(m.data.presupuesto/1000)
-            .build().getResult();
-          AdsApp.newCampaignBuilder()
+            .withAmount(m.data.presupuesto)
+            .build();
+          if (!budgetOp.isSuccessful()) throw new Error(budgetOp.getErrors().join(', '));
+          var campOp = AdsApp.newCampaignBuilder()
             .withName(m.data.nombre)
-            .withBudget(budget)
             .withStatus(m.data.estado||'ENABLED')
-            .withSearchSettings().campaigns().build();
+            .withBudget(budgetOp.getResult())
+            .build();
+          if (!campOp.isSuccessful()) throw new Error(campOp.getErrors().join(', '));
+          campOp.getResult();
           muts[k].status = 'aplicado';
         } else if (m.op === 'edit') {
           var iter = AdsApp.campaigns().withIds([m.id]).get();
@@ -2877,18 +2881,22 @@ function main() {
             var camp = iter.next();
             if (m.data.nombre) camp.setName(m.data.nombre);
             if (m.data.estado === 'ENABLED') camp.enable();
-            if (m.data.estado === 'PAUSED') camp.pause();
-            if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto/1000);
+            if (m.data.estado === 'PAUSED')  camp.pause();
+            if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto);
             muts[k].status = 'aplicado';
+          } else {
+            muts[k].status = 'error';
+            muts[k].error = 'Campaña no encontrada: '+m.id;
           }
         } else if (m.op === 'delete') {
-          var iter = AdsApp.campaigns().withIds([m.id]).get();
-          if (iter.hasNext()) { iter.next().pause(); muts[k].status = 'aplicado'; }
+          var iter2 = AdsApp.campaigns().withIds([m.id]).get();
+          if (iter2.hasNext()) { iter2.next().pause(); muts[k].status = 'aplicado'; }
         }
         changed = true;
       } catch(e) {
         muts[k].status = 'error';
         muts[k].error = e.message;
+        Logger.log('[Error] op='+m.op+' "'+m.data.nombre+'": '+e.message);
         changed = true;
       }
     }
@@ -2898,7 +2906,10 @@ function main() {
         payload:JSON.stringify({secret:SECRET, type:'update_mutations', mutations:muts})
       });
     }
-  } catch(e) { Logger.log('Mutations error: '+e.message); }
+    var ok=muts.filter(function(x){return x.status==='aplicado';}).length;
+    var err=muts.filter(function(x){return x.status==='error';}).length;
+    Logger.log('Mutaciones: '+ok+' aplicadas, '+err+' errores');
+  } catch(e) { Logger.log('Error mutaciones: '+e.message); }
 }</pre>
               <button onclick="copyAdsScript('adsScriptCode2')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
             </div>
@@ -11350,6 +11361,29 @@ function sendAdsMutation(mutation){
     renderPendingMutations();
   }).catch(()=>{});
 }
+async function syncMutationStatuses(){
+  const cfg=getAdsConfig();
+  if(!cfg.endpoint||!_adsPendingMutations.length) return;
+  try{
+    const r=await fetch(cfg.endpoint+'?action=mutations&_t='+Date.now());
+    const d=await r.json();
+    if(!d.ok||!d.mutations) return;
+    let changed=false;
+    _adsPendingMutations.forEach(m=>{
+      const srv=d.mutations.find(s=>s.timestamp===m.timestamp);
+      if(srv&&srv.status!=='pending'&&m.status!==srv.status){m.status=srv.status;m.error=srv.error;changed=true;}
+    });
+    if(changed){
+      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
+      savePendingToStorage();
+      renderPendingMutations();
+      const aplicadas=d.mutations.filter(s=>s.status==='aplicado').length;
+      const errores=d.mutations.filter(s=>s.status==='error').length;
+      if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
+      if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa los logs del Script 2','warn');
+    }
+  }catch(e){}
+}
 
 function renderPendingMutations(){
   const panel=document.getElementById('adsPendingPanel');
@@ -11415,6 +11449,8 @@ async function loadAdsData(){
     if(btnNueva) btnNueva.style.display='inline-flex';
     // Sync a Airtable (no bloqueante)
     syncAdsToAirtable(data,days).then(()=>toast('✓ Google Ads sincronizado con Airtable','success')).catch(()=>{});
+    // Limpiar mutaciones ya aplicadas por Script 2
+    syncMutationStatuses();
   }catch(e){
     document.getElementById('adsCampaignsArea').innerHTML=`<div class="empty-state" style="padding:40px 0"><div class="empty-icon">⚠</div><div style="color:var(--danger)">${e.message}</div><div style="font-size:11px;color:var(--text3);margin-top:8px">Verifica que el Apps Script esté publicado como aplicación web con acceso público</div></div>`;
     ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='—';});
