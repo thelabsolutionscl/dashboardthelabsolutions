@@ -12803,6 +12803,9 @@ function toggleNuevoMenuMobile(e){
   const panel=document.getElementById('nuevoDropPanel');
   const btn=document.getElementById('mobilePlusBtn');
   if(!panel||!btn) return;
+  // #nuevoDropdown has display:none!important on mobile, which hides its children
+  // even when they have position:fixed. Move panel to <body> to escape that.
+  if(panel.parentElement!==document.body) document.body.appendChild(panel);
   const isOpen=panel.style.display!=='none';
   if(isOpen){panel.style.display='none';}
   else{
