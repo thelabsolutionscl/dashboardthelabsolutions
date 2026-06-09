@@ -13145,11 +13145,27 @@ async function testSIIWorker(){
   function buildContext(){
     try{
       const s = window.state || {};
-      const ped = s.pedidos || [];
-      const cot = s.cotizaciones || [];
-      const cli = s.clientes || [];
+      const allPed = s.pedidos || [];
+      const allCot = s.cotizaciones || [];
+      const allCli = s.clientes || [];
       const cliById = s.clientesById || {};
       const today = new Date(); today.setHours(0,0,0,0);
+
+      // Vendor mode: filter everything to only this vendor's records
+      const vendorMode = typeof isVendorMode==='function' && isVendorMode();
+      const vendorId = vendorMode && typeof currentVendorId==='function' ? currentVendorId() : null;
+      const ownsRecord = typeof vendorOwnsRecord==='function' ? vendorOwnsRecord : ()=>true;
+
+      const ped = vendorMode ? allPed.filter(ownsRecord) : allPed;
+      const cot = vendorMode ? allCot.filter(ownsRecord) : allCot;
+      // Clientes: solo los que tienen al menos un pedido o cotización del vendedor
+      const cli = vendorMode
+        ? allCli.filter(c=>{
+            const cid=c.id;
+            return ped.some(p=>(Array.isArray(p.fields?.['Cliente'])?p.fields['Cliente'][0]:p.fields?.['Cliente'])===cid)
+                || cot.some(q=>(Array.isArray(q.fields?.['Cliente'])?q.fields['Cliente'][0]:q.fields?.['Cliente'])===cid);
+          })
+        : allCli;
 
       const resolveCli = f => {
         if(!f) return '—';
@@ -13163,6 +13179,14 @@ async function testSIIWorker(){
       const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||''));
       const revTotal = ped.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0);
 
+      const TASA_COM = 0.035;
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const despMes = vendorMode
+        ? ped.filter(p=>(p.fields?.['Estado pedido']||'')==='Despachado'&&p.createdTime&&new Date(p.createdTime)>=monthStart)
+        : [];
+      const comisionMes = Math.round(despMes.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0)*TASA_COM);
+      const pipelineTotal = cotPend.reduce((a,c)=>a+Math.round((c.fields?.['Total final (CLP)']||0)/1.19),0);
+
       const pedRows = activos.slice(0,10).map(p=>{
         const f=p.fields||{};
         return `  • ${f['N° Pedido']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado pedido']||'—'} | $${Math.round((f['Monto total (CLP)']||0)/1.19).toLocaleString('es-CL')} neto | Entrega: ${f['Fecha entrega']||'sin fecha'}`;
@@ -13173,21 +13197,38 @@ async function testSIIWorker(){
         return `  • Cot ${f['N° Cotización']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado cotización']||'—'} | $${Math.round((f['Total final (CLP)']||0)/1.19).toLocaleString('es-CL')} neto`;
       }).join('\n');
 
-      return `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')}):
-- Pedidos totales: ${ped.length} | Activos: ${activos.length} | Atrasados: ${atrasados.length}
-- Cotizaciones totales: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
-- Clientes registrados: ${cli.length}
-- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP
+      const header = vendorMode
+        ? `DATOS EN VIVO — VENDEDOR: ${vendorId||'—'} (${new Date().toLocaleString('es-CL')}):`
+        : `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')}):`;
 
-PEDIDOS ACTIVOS:
+      const extraVendor = vendorMode ? `
+- Comisión del mes (3.5% sobre despachados): $${comisionMes.toLocaleString('es-CL')} CLP
+- Pipeline potencial (cotizaciones activas): $${pipelineTotal.toLocaleString('es-CL')} CLP` : '';
+
+      return `${header}
+- Pedidos${vendorMode?' (tuyos)':' totales'}: ${ped.length} | Activos: ${activos.length} | Atrasados: ${atrasados.length}
+- Cotizaciones${vendorMode?' (tuyas)':' totales'}: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
+- Clientes${vendorMode?' (tuyos)':' registrados'}: ${cli.length}
+- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP${extraVendor}
+
+PEDIDOS ACTIVOS${vendorMode?' (tuyos)':''}:
 ${pedRows||'  (ninguno)'}
 
-COTIZACIONES PENDIENTES:
+COTIZACIONES PENDIENTES${vendorMode?' (tuyas)':''}:
 ${cotRows||'  (ninguna)'}`;
     }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
   }
 
-  const SYS = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
+  const SYS = () => {
+    const vendorMode = typeof isVendorMode==='function' && isVendorMode();
+    const vendorId = vendorMode && typeof currentVendorId==='function' ? currentVendorId() : null;
+    const roleDesc = vendorMode
+      ? `Eres KAI, asistente personal de ${vendorId||'el vendedor'} en The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). SOLO tienes acceso a los datos de este vendedor, nunca al resto de la empresa.`
+      : `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.`;
+    const navModules = vendorMode
+      ? 'overview, clientes, cotizaciones, pedidos, remuneraciones'
+      : 'overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones';
+    return `${roleDesc} Moneda: CLP.
 
 ${buildContext()}
 
@@ -13195,11 +13236,12 @@ CAPACIDADES Y REGLAS:
 - Responde SIEMPRE en espanol chileno, profesional y conciso (maximo 3 oraciones, pensado para voz).
 - NUNCA uses emojis, asteriscos, numeral, comillas invertidas ni simbolos decorativos. Solo texto limpio.
 - Para navegar entre modulos del dashboard incluye al final: [NAV:nombre]
-  Modulos validos: overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones
+  Modulos validos: ${navModules}
 - Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
   Tipos validos: cliente, cotizacion, proveedor, venta, diario
 - Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
-- Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
+${vendorMode?'- IMPORTANTE: NUNCA menciones datos globales de la empresa, otros vendedores ni totales de equipo. Solo habla de lo que es de este vendedor.\n':''}- Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
+  };
 
   // ─── UI helpers ───
   function setState(mode){
