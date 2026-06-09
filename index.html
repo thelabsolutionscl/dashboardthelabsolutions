@@ -2760,14 +2760,33 @@ function json(obj) {
 // ads.google.com → Herramientas → Scripts → + Nuevo script
 // Actualiza ENDPOINT con la URL del Script 1. Programa ejecución: cada hora.
 
-var ENDPOINT = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
-var SECRET   = 'thelab2025';
+var ENDPOINT    = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
+var SECRET      = 'thelab2025';
+// Si ejecutas desde una cuenta Manager (MCC), pon aquí el ID de la cuenta cliente
+// (sin guiones, ej: 7577812099). Deja vacío si ejecutas desde la cuenta directa.
+var CUSTOMER_ID = 'PEGA_AQUI_EL_CUSTOMER_ID';
 
 function main() {
-  // Diagnóstico de entorno (útil para detectar problemas)
-  Logger.log('Entorno: AdsApp=' + (typeof AdsApp) +
+  // Si estamos en contexto MCC, seleccionamos la cuenta objetivo antes de operar
+  var _isMCC = typeof AdsManagerApp !== 'undefined';
+  if (_isMCC) {
+    if (!CUSTOMER_ID || CUSTOMER_ID === 'PEGA_AQUI_EL_CUSTOMER_ID') {
+      Logger.log('ERROR: Estás en una cuenta Manager (MCC). Configura CUSTOMER_ID al inicio del script.');
+      return;
+    }
+    var _accIt = AdsManagerApp.accounts().withIds([CUSTOMER_ID]).get();
+    if (!_accIt.hasNext()) {
+      Logger.log('ERROR: No se encontró la cuenta ' + CUSTOMER_ID + ' en este Manager. Verifica el ID.');
+      return;
+    }
+    AdsManagerApp.select(_accIt.next());
+    Logger.log('MCC: cuenta seleccionada ' + CUSTOMER_ID);
+  }
+
+  // Diagnóstico de entorno
+  Logger.log('AdsApp=' + (typeof AdsApp) +
     ' | newCampaignBuilder=' + (typeof (AdsApp||{}).newCampaignBuilder) +
-    ' | AdWordsApp=' + (typeof AdWordsApp));
+    ' | MCC=' + _isMCC);
 
   // 1. Leer campañas y enviar resumen al Script 1
   var campaigns = [], t = {gasto:0,impresiones:0,clics:0,conversiones:0,valor_conversion:0};
@@ -2819,12 +2838,8 @@ function main() {
       var m = muts[k];
       if (m.status !== 'pending') continue;
       try {
-        // Compatibilidad: algunos entornos usan AdWordsApp en vez de AdsApp
-        var _Ads = (typeof AdsApp !== 'undefined' &amp;&amp; typeof AdsApp.newCampaignBuilder === 'function') ? AdsApp
-                 : (typeof AdWordsApp !== 'undefined' ? AdWordsApp : null);
         if (m.op === 'create') {
-          if (!_Ads) throw new Error('AdsApp/AdWordsApp no disponible — ejecuta este script desde ads.google.com → Herramientas → Scripts');
-          var campOp = _Ads.newCampaignBuilder()
+          var campOp = AdsApp.newCampaignBuilder()
             .withName(m.data.nombre)
             .withStatus(m.data.estado||'ENABLED')
             .withBudget(m.data.presupuesto)
@@ -11650,8 +11665,11 @@ function toggleAdsConfig(){
   }
 }
 function copyAdsScript(id){
-  const code=document.getElementById(id||'adsScriptCode')?.textContent||'';
-  navigator.clipboard.writeText(code).then(()=>toast('✓ Script copiado','success')).catch(()=>{
+  let code=document.getElementById(id||'adsScriptCode')?.textContent||'';
+  const cfg=getAdsConfig();
+  if(cfg.endpoint) code=code.replace('PEGA_AQUI_LA_URL_DEL_SCRIPT_1',cfg.endpoint);
+  if(cfg.customerId) code=code.replace('PEGA_AQUI_EL_CUSTOMER_ID',cfg.customerId.replace(/-/g,''));
+  navigator.clipboard.writeText(code).then(()=>toast('✓ Script copiado (endpoint y customer ID pre-rellenados)','success')).catch(()=>{
     const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Script copiado','success');
   });
 }
