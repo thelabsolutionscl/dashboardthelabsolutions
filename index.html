@@ -2185,137 +2185,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
 </div>
 
-<!-- tab-cot3d removed — calculator integrated into Nueva Cotización -->
-<div class="tab-panel" id="tab-cot3d" style="display:none!important">
-  <div class="section-header"><div class="section-title">🖨️ Calculadora de Cotización — Impresión 3D</div></div>
-  <div style="display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start">
-
-    <!-- LEFT: INPUTS -->
-    <div style="display:flex;flex-direction:column;gap:14px">
-
-      <!-- Cliente + N° -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">Datos del Pedido</span></div>
-        <div class="form-grid">
-          <div class="field-group form-full"><label class="field-label">Cliente</label>
-            <div class="search-select-wrap">
-              <input class="field-input" id="c3d-cliente-search" placeholder="🔍 buscar cliente..." autocomplete="off" oninput="onC3dClienteSearch()" onfocus="onC3dClienteSearch()">
-              <input type="hidden" id="c3d-cliente-id">
-              <div class="search-select-dropdown" id="c3d-cliente-dropdown"></div>
-            </div>
-          </div>
-          <div class="field-group"><label class="field-label">N° Cotización</label><input class="field-input" id="c3d-num" placeholder="260507"></div>
-          <div class="field-group"><label class="field-label">Cantidad de piezas</label><input class="field-input" id="c3d-qty" type="number" min="1" value="1" oninput="calc3dUpdate()"></div>
-        </div>
-      </div>
-
-      <!-- Material -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">🧱 Material</span></div>
-        <div class="form-grid">
-          <div class="field-group"><label class="field-label">Tipo de Material</label>
-            <select class="field-select" id="c3d-mat" onchange="calc3dUpdate()">
-              <option value="PLA">PLA — $18/g</option>
-              <option value="PLA+" selected>PLA+ — $20/g</option>
-              <option value="PETG">PETG — $20/g</option>
-              <option value="Resina UV">Resina UV — $30/mL</option>
-            </select>
-          </div>
-          <div class="field-group"><label class="field-label" id="c3d-mat-lbl">Cantidad (gramos)</label>
-            <input class="field-input" id="c3d-mat-qty" type="number" min="0" value="0" placeholder="0" oninput="calc3dUpdate()">
-          </div>
-        </div>
-        <div style="margin-top:8px;padding:8px 12px;background:var(--surface3);border-radius:6px;font-size:11px;color:var(--text2)" id="c3d-mat-info">Incluye 20% de merma. Costo material: $0</div>
-      </div>
-
-      <!-- Máquinas -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">⚙️ Uso de Máquinas (horas)</span></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="c3d-maq-grid">
-          <!-- populated by JS -->
-        </div>
-      </div>
-
-      <!-- Extras -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">🔧 Extras / Insumos</span></div>
-        <div style="display:flex;flex-direction:column;gap:6px" id="c3d-extras-list">
-          <!-- populated by JS -->
-        </div>
-      </div>
-
-      <!-- Notas -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">📝 Notas</span></div>
-        <textarea class="field-textarea" id="c3d-notas" rows="2" placeholder="Descripción del trabajo, observaciones..."></textarea>
-      </div>
-    </div>
-
-    <!-- RIGHT: RESUMEN LIVE -->
-    <div style="position:sticky;top:72px;display:flex;flex-direction:column;gap:14px">
-      <div class="card" style="border-color:rgba(0,212,204,0.3)">
-        <div class="card-header" style="border-bottom-color:rgba(0,212,204,0.2)"><span class="card-title" style="color:var(--accent)">💰 Resumen de Precio</span></div>
-
-        <!-- Margen slider -->
-        <div style="margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <label class="field-label" style="margin:0">Margen de ganancia</label>
-            <span id="c3d-margen-label" style="font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent)">65%</span>
-          </div>
-          <input type="range" id="c3d-margen" min="10" max="90" value="65" oninput="calc3dUpdate()" style="width:100%;accent-color:var(--accent);cursor:pointer">
-        </div>
-
-        <!-- Filas de resumen -->
-        <div style="display:flex;flex-direction:column;gap:0">
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
-            <span style="color:var(--text3)">Costo total</span>
-            <span id="c3d-r-costo" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
-            <span style="color:var(--text3)">Precio neto (sin IVA)</span>
-            <span id="c3d-r-neto" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--text)">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
-            <span style="color:var(--text3)">IVA (19%)</span>
-            <span id="c3d-r-iva" style="font-family:'JetBrains Mono',monospace;color:var(--text2)">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border2)">
-            <span style="font-weight:700;font-size:13px">TOTAL con IVA</span>
-            <span id="c3d-r-total" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:var(--accent3)">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
-            <span style="color:var(--text3)">Utilidad</span>
-            <span id="c3d-r-util" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--success)">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;font-size:12px">
-            <span style="color:var(--text3)">Precio por pieza</span>
-            <span id="c3d-r-pieza" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent)">$0</span>
-          </div>
-        </div>
-
-        <!-- Desglose por categoría -->
-        <div style="margin-top:12px;padding:10px;background:var(--surface3);border-radius:7px;font-size:11px" id="c3d-breakdown">
-          <div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Desglose de costos</div>
-          <div id="c3d-breakdown-body" style="display:flex;flex-direction:column;gap:4px"></div>
-        </div>
-
-        <!-- Actions -->
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-          <button class="btn btn-primary" onclick="calc3dGuardar()" id="c3d-guardar-btn">✚ Guardar como Cotización</button>
-          <button class="btn btn-ghost btn-sm" onclick="calc3dCopiarACot()">📋 Copiar a Nueva Cotización</button>
-          <button class="btn btn-ghost btn-sm" onclick="calc3dLimpiar()">↺ Limpiar calculadora</button>
-        </div>
-      </div>
-
-      <!-- Historial rápido -->
-      <div class="card" id="c3d-hist-card" style="display:none">
-        <div class="card-header"><span class="card-title">🕓 Últimas cotizaciones 3D</span></div>
-        <div id="c3d-hist-body" style="display:flex;flex-direction:column;gap:6px;font-size:11px"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- AGENTES -->
 <div class="tab-panel" id="tab-agentes">
   <div class="section-header"><div><div class="section-title">Centro de Agentes IA</div><div class="section-desc">Agentes inteligentes especializados que analizan tus datos en tiempo real y generan insights, reportes automáticos y propuestas de acción para tu negocio.</div></div></div>
@@ -4651,7 +4520,7 @@ async function airtableFetch(table,max=100){
     const r=await airtableHttp(url,{headers:cfg.headers});
     if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`Airtable ${r.status}: ${j.error?.message||''}`);}
     const d=await r.json();all=[...all,...(d.records||[])];offset=d.offset||null;
-    if(all.length>=max&&table!=='Clientes'&&table!=='Cotizaciones') break;
+    if(all.length>=max) break;
   }while(offset);
   return{records:all};
 }
@@ -5056,8 +4925,8 @@ async function loadAllData(){
     if(isFirst) slProgress(20,'Cargando clientes...');
     const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([
       airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),
-      airtableFetch('Pedidos',50),airtableFetch('Reportes',20),
-      airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),
+      airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),
+      airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),
       airtableFetch('Facturas',1000)
     ]);
     // Facturas emitidas (tabla opcional; si no existe aún, queda vacía)
@@ -5107,9 +4976,9 @@ async function loadAllDataSilent(){
   if(!hasAuth) return;
   if(Date.now()-(state.lastUpdateTs||0)<MIN_REFRESH_MS) return; // throttle
   try{
-    const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),airtableFetch('Facturas',1000)]);
+    const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),airtableFetch('Facturas',1000)]);
     if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
-    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||'—';});}
+    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});}
     if(coRes.status==='fulfilled') state.cotizaciones=coRes.value.records||[];
     if(pRes.status==='fulfilled') state.pedidos=pRes.value.records||[];
     if(rRes.status==='fulfilled') state.reportes=rRes.value.records||[];
@@ -5654,7 +5523,7 @@ function buildClienteRow(c){
         <button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cli-${c.id}')">⋯</button>
         <div class="act-menu" id="actmenu-cli-${c.id}">
           <button class="act-item" onclick="openClienteDetalle('${c.id}')">👁 &nbsp;Ver detalle</button>
-          <button class="act-item act-item-yellow" onclick="verCotizacionesCliente('${c.id}','${escapeHtml(f['Empresa']||'')}')">📋 &nbsp;Ver cotizaciones</button>
+          <button class="act-item act-item-yellow" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="verCotizacionesCliente('${c.id}',this.dataset.empresa)">📋 &nbsp;Ver cotizaciones</button>
           <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
         </div>
       </div>
@@ -7750,7 +7619,7 @@ function renderPedidos(filter){
     <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
-    <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
+    <td style="text-align:center"><button data-pedido="${escapeHtml(f['N° Pedido']||'—')}" onclick="openQAModal('${p.id}',this.dataset.pedido)" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
     <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
   }).join('');
@@ -10625,7 +10494,7 @@ function initDashboard(){
     if(s&&(!allowed||allowed.includes(s))) switchTab(s);
     else if(s) sessionStorage.removeItem('thelab_active_tab');
   }catch(e){}
-  if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));
+  if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'',pass:''}));
   // Auto-seed tokens — sobreescribe si el valor es un placeholder no reemplazado
   const _isPlaceholder=v=>!v||v.startsWith('%%');
   if(_isPlaceholder(lsGet('airtable_token'))) lsSet('airtable_token',_DEFAULTS.AIRTABLE_TOKEN);
@@ -10693,7 +10562,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 // ── SEO WORDPRESS ─────────────────────────────────────────────
-function getWPConfig(){return JSON.parse(localStorage.getItem('wp_config')||JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));}
+function getWPConfig(){try{const s=localStorage.getItem('wp_config');if(s) return JSON.parse(s);}catch(e){}return{url:'https://thelab.solutions',user:'',pass:''};}
 function saveWPConfig(){
   const url=(document.getElementById('wp-url')?.value||'').trim().replace(/\/$/,'');
   const user=(document.getElementById('wp-user')?.value||'').trim();
@@ -10999,7 +10868,7 @@ async function testYoastWrite(){openSEODiag();await runSEODiag();}
 // ── GOOGLE ADS AGENT ─────────────────────────────────────
 // ── Snapshot histórico ──────────────────────────────────
 function adsSaveSnapshot(data,days){
-  const snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');
+  let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
   const today=new Date().toISOString().slice(0,10);
   const imp=data.impresiones||0,clics=data.clics||0,gasto=data.gasto||0;
   const conv=data.conversiones||0;
@@ -11014,7 +10883,7 @@ function adsSaveSnapshot(data,days){
   localStorage.setItem('ads_last_sync',new Date().toISOString());
 }
 function adsGetPrevSnapshot(){
-  const snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');
+  let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
   if(snaps.length<2) return null;
   return snaps[snaps.length-2];
 }
@@ -11311,7 +11180,7 @@ function adsExportCSV(){
   a.click();
   toast('✓ CSV descargado','success');
 }
-function getAdsConfig(){return JSON.parse(localStorage.getItem('ads_config')||JSON.stringify({endpoint:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:'757-781-2099'}));}
+function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s) return JSON.parse(s);}catch(e){}return{endpoint:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:'757-781-2099'};}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
@@ -11366,7 +11235,7 @@ function testAdsEndpoint(){
   window.open(testUrl,'_blank');
 }
 // ─── Ads Campaign Management ────────────────────────────────
-var _adsPendingMutations = JSON.parse(localStorage.getItem('ads_pending_mutations')||'[]');
+var _adsPendingMutations;try{_adsPendingMutations=JSON.parse(localStorage.getItem('ads_pending_mutations')||'[]');}catch(e){_adsPendingMutations=[];}
 
 function savePendingToStorage(){
   localStorage.setItem('ads_pending_mutations', JSON.stringify(_adsPendingMutations));
@@ -12292,13 +12161,14 @@ function finFacturasFromAirtable(){
     });
 }
 function finGetAllFacturas(){
-  const local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  let local;try{local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){local=[];}
   return [...FIN_FACTURAS_BASE,...local,...finFacturasFromAirtable()];
 }
 function finVentasMerged(){
   const m={};
   [2022,2023,2024,2025,2026].forEach(y=>{m[y]=[...FIN_VENTAS[y]];});
-  JSON.parse(localStorage.getItem('fin_ventas')||'[]').forEach(r=>{
+  let _fvLocal;try{_fvLocal=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){_fvLocal=[];}
+  _fvLocal.forEach(r=>{
     const y=parseInt(r.year,10),mi=(parseInt(r.mes,10)||1)-1;
     if(m[y])m[y][mi]=(m[y][mi]||0)+r.valor*r.cant;
   });
@@ -12487,7 +12357,7 @@ function nvGuardar(){
     fechaPago:document.getElementById('nv-fecha-pago').value,
     _manual:true
   };
-  const existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  let existing;try{existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){existing=[];}
   existing.push(rec);
   try{localStorage.setItem('fin_ventas',JSON.stringify(existing));}catch(e){toast('Sin espacio para guardar','error');return;}
   saveFinVentasAirtable();
@@ -12504,7 +12374,7 @@ function nvLimpiarTodas(){
   finInit();
 }
 function finRenderNuevaLista(){
-  const data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  let data;try{data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){data=[];}
   const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   let html='';
   data.forEach((r,idx)=>{
@@ -12527,7 +12397,7 @@ function finRenderNuevaLista(){
   if(tb)tb.innerHTML=html;
 }
 function nvEliminar(idx){
-  const data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  let data;try{data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){data=[];}
   data.splice(idx,1);
   localStorage.setItem('fin_ventas',JSON.stringify(data));
   saveFinVentasAirtable();
