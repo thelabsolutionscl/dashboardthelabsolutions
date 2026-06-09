@@ -2932,6 +2932,23 @@ function main() {
       </div>
     </div>
 
+    <!-- Capacidad de Producción vs Campañas -->
+    <div id="adsCapacidadBox" style="display:none;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">📊 Capacidad de Producción vs Campañas</span><span style="font-size:10px;color:var(--text3)">semana actual</span></div>
+        <div id="adsCapacidadList" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px"></div>
+        <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">Ocupación basada en el calendario semanal de máquinas y pedidos activos. Las acciones envían cambios a Google Ads vía la cola de mutaciones.</div>
+      </div>
+    </div>
+
+    <!-- Campañas Sugeridas por línea de producción -->
+    <div id="adsSuggestBox" style="display:none;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">💡 Campañas Sugeridas</span><span id="adsSuggestBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span></div>
+        <div id="adsSuggestList" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+
     <!-- Cambios pendientes -->
     <div id="adsPendingPanel" style="display:none;margin-bottom:16px">
       <div class="card">
@@ -10927,6 +10944,142 @@ function adsLastSyncStr(){
   if(hrs<24) return 'hace '+hrs+'h';
   return 'hace '+Math.floor(diff/86400000)+'d';
 }
+// ── Líneas de producción ↔ campañas Google Ads ───────────
+const ADS_LINEAS=[
+  {id:'3d_small',label:'Impresión 3D — K1/K2',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000},
+  {id:'3d_large',label:'Impresión 3D — Giga',campañaSugerida:'Búsqueda - Impresión 3D Grande',tipo:'SEARCH',presupuesto:5000},
+  {id:'laser',label:'Láser y Señalética',campañaSugerida:'Búsqueda - Señalética Acrílico',tipo:'SEARCH',presupuesto:6000},
+  {id:'neon',label:'Neon LED y Rótulos',campañaSugerida:'Búsqueda - Neon LED Personalizado',tipo:'SEARCH',presupuesto:5000},
+  {id:'trofeos',label:'Trofeos y Reconocimientos',campañaSugerida:'Búsqueda - Trofeos Corporativos',tipo:'SEARCH',presupuesto:4000},
+  {id:'papeleria',label:'Papelería Corporativa',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000},
+];
+function _adsMatchCampaign(campanas,linea){
+  if(!campanas||!campanas.length) return null;
+  const kws=linea.campañaSugerida.toLowerCase().replace(/[–\-]/g,' ').split(/\s+/).filter(w=>w.length>3);
+  return campanas.find(c=>kws.some(k=>c.nombre.toLowerCase().includes(k)))||null;
+}
+function getCapacidadLineas(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const dow=today.getDay();
+  const lunes=new Date(today);lunes.setDate(today.getDate()-(dow===0?6:dow-1));
+  const dias=Array.from({length:5},(_,i)=>{const d=new Date(lunes);d.setDate(lunes.getDate()+i);return d.toISOString().slice(0,10);});
+  const calcSlots=ids=>{
+    let total=0,enUso=0,enMant=0;
+    ids.forEach(id=>{
+      const gMant=getMaquinaEstadoGlobal(id)==='mantencion';
+      dias.forEach(ds=>{
+        total++;
+        const ev=(maquinaState.eventos||{})[`${id}_${ds}`];
+        if(gMant||ev?.tipo==='mantencion') enMant++;
+        else if(ev?.tipo==='uso') enUso++;
+      });
+    });
+    const disp=Math.max(total-enMant,1);
+    return{enUso,disp,pct:Math.min(Math.round(enUso/disp*100),100)};
+  };
+  let fdmSmallIds=[],fdmLargeIds=[];
+  try{
+    fdmSmallIds=MAQUINAS.filter(m=>['K1','K2','K2 Plus','Ender-5 Max'].includes(m.modelo)).map(m=>m.id);
+    fdmLargeIds=MAQUINAS.filter(m=>m.modelo==='Giga').map(m=>m.id);
+  }catch(e){}
+  const fdmS=calcSlots(fdmSmallIds);
+  const fdmL=calcSlots(fdmLargeIds);
+  const activos=(state.pedidos||[]).filter(p=>{const e=(p.fields||{})['Estado pedido']||'';return e!=='Despachado'&&e!=='Cancelado';}).length;
+  const pedPct=Math.min(Math.round(activos/20*100),100);
+  const sem=pct=>{
+    if(pct>=85) return{s:'🔴',a:'PAUSAR',m:'Línea saturada — considera pausar campañas para no colapsar producción',c:'var(--danger)'};
+    if(pct>=65) return{s:'🟡',a:'REDUCIR',m:'Carga alta — reduce el presupuesto ~30% para controlar el flujo de pedidos',c:'var(--warn)'};
+    if(pct<40)  return{s:'🟢',a:'ACTIVAR',m:'Capacidad disponible — activa o aumenta el presupuesto para captar más demanda',c:'var(--success)'};
+    return{s:'⚪',a:'MANTENER',m:'Carga moderada — mantén el presupuesto actual',c:'var(--accent)'};
+  };
+  const mkRow=(id,label,pct,info,lids)=>({id,label,pct,info,lineasIds:lids,...sem(pct)});
+  return[
+    mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['3d_small']),
+    mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['3d_large']),
+    mkRow('laser','Láser / Señalética',pedPct,activos+' pedidos activos en cola',['laser']),
+    mkRow('manual','Manual (Neon · Trofeos · Papelería)',pedPct,activos+' pedidos activos en cola',['neon','trofeos','papeleria']),
+  ];
+}
+function renderAdsCapacidad(data){
+  const box=document.getElementById('adsCapacidadBox');
+  const list=document.getElementById('adsCapacidadList');
+  if(!box||!list) return;
+  const filas=getCapacidadLineas();
+  const camps=data.campanas||[];
+  list.innerHTML=filas.map((f,fi)=>{
+    const matchedCamps=f.lineasIds.flatMap(lid=>{
+      const linea=ADS_LINEAS.find(l=>l.id===lid);
+      return linea?[_adsMatchCampaign(camps,linea)].filter(Boolean):[];
+    });
+    const unique=[...new Map(matchedCamps.map(c=>[c.id,c])).values()];
+    const firstActive=unique.find(c=>c.estado==='ENABLED');
+    const firstAny=unique[0]||null;
+    let btnHtml='';
+    if(f.a==='PAUSAR'&&firstActive){
+      btnHtml=`<button onclick="openEditCampaign('${firstActive.id}',${JSON.stringify(firstActive.nombre)},'PAUSED',${firstActive.presupuesto||0})" style="background:rgba(220,53,69,0.1);border:1px solid rgba(220,53,69,0.3);color:var(--danger);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">⏸ Pausar</button>`;
+    } else if(f.a==='REDUCIR'&&firstActive){
+      const nb=Math.round((firstActive.presupuesto||0)*0.7);
+      btnHtml=`<button onclick="openEditCampaign('${firstActive.id}',${JSON.stringify(firstActive.nombre)},'ENABLED',${nb})" style="background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.3);color:var(--warn);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">↓ -30%</button>`;
+    } else if(f.a==='ACTIVAR'){
+      if(firstAny&&firstAny.estado==='PAUSED'){
+        btnHtml=`<button onclick="openEditCampaign('${firstAny.id}',${JSON.stringify(firstAny.nombre)},'ENABLED',${firstAny.presupuesto||0})" style="background:rgba(40,199,111,0.1);border:1px solid rgba(40,199,111,0.3);color:var(--success);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">▶ Reactivar</button>`;
+      } else if(!firstAny){
+        const pl=ADS_LINEAS.find(l=>f.lineasIds.includes(l.id));
+        if(pl) btnHtml=`<button onclick="openCreateCampaignTemplate(${JSON.stringify(pl.campañaSugerida)},${pl.presupuesto},'${pl.tipo}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">+ Crear</button>`;
+      }
+    }
+    const pctBar=Math.max(f.pct,2);
+    return `${fi>0?'<hr style="border:none;border-top:1px solid var(--border2);margin:2px 0">':''}<div style="display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0">
+          <span style="font-size:14px">${f.s}</span>
+          <span style="font-size:11px;font-weight:600;color:var(--text)">${f.label}</span>
+          ${f.info?`<span style="font-size:9px;color:var(--text3);background:var(--surface3);border-radius:3px;padding:1px 5px;white-space:nowrap">${f.info}</span>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <span style="font-size:11px;font-weight:700;color:${f.c}">${f.pct}%</span>
+          ${btnHtml}
+        </div>
+      </div>
+      <div style="height:5px;background:var(--surface3);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pctBar}%;background:${f.c};border-radius:3px;transition:width 0.6s ease"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3)">${f.m}</div>
+    </div>`;
+  }).join('');
+  box.style.display='block';
+}
+function renderAdsSugerencias(data){
+  const box=document.getElementById('adsSuggestBox');
+  const list=document.getElementById('adsSuggestList');
+  const badge=document.getElementById('adsSuggestBadge');
+  if(!box||!list) return;
+  const camps=data.campanas||[];
+  const faltantes=ADS_LINEAS.filter(l=>!_adsMatchCampaign(camps,l));
+  if(badge) badge.textContent=faltantes.length+' sugerida'+(faltantes.length!==1?'s':'');
+  if(!faltantes.length){
+    list.innerHTML='<div style="font-size:11px;color:var(--success);padding:4px 0">✓ Ya tienes campañas para todas las líneas de producción activas.</div>';
+    box.style.display='block';return;
+  }
+  list.innerHTML=faltantes.map(l=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:7px;border-left:3px solid rgba(0,212,204,0.4)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px">${l.campañaSugerida}</div>
+        <div style="font-size:10px;color:var(--text3)">${l.label} · ${l.tipo} · Presupuesto sugerido: $${l.presupuesto.toLocaleString('es-CL')}/día</div>
+      </div>
+      <button onclick="openCreateCampaignTemplate(${JSON.stringify(l.campañaSugerida)},${l.presupuesto},'${l.tipo}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;white-space:nowrap;font-weight:600;flex-shrink:0">+ Crear</button>
+    </div>`).join('');
+  box.style.display='block';
+}
+function openCreateCampaignTemplate(nombre,presupuesto,tipo){
+  openCreateCampaign();
+  setTimeout(()=>{
+    const nm=document.getElementById('adsCampaignModalNombre');if(nm) nm.value=nombre;
+    const bd=document.getElementById('adsCampaignModalPresupuesto');if(bd) bd.value=presupuesto;
+    const st=document.getElementById('adsCampaignModalEstado');if(st) st.value='ENABLED';
+    const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
+  },80);
+}
 // ── Health Score por campaña (0–100) ────────────────────
 function adsHealthScore(c){
   if(!c.impresiones||c.impresiones===0) return{score:0,color:'var(--text3)',label:'Sin datos'};
@@ -11184,7 +11337,7 @@ function removePendingMutation(idx){
 async function loadAdsData(){
   const cfg=getAdsConfig();
   const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
-  document.getElementById('adsAgentBox').style.display='none';
+  ['adsAgentBox','adsCapacidadBox','adsSuggestBox'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
   ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='…';});
   if(!cfg.endpoint){
     // Modo demo
@@ -11194,6 +11347,8 @@ async function loadAdsData(){
     renderAdsKPIs(demo,days);
     renderAdsCampaigns(demo);
     renderAdsAgent(demo);
+    renderAdsCapacidad(demo);
+    renderAdsSugerencias(demo);
     renderPendingMutations();
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--warn)';dot.title='Modo demo — configura tu endpoint real';}
@@ -11210,6 +11365,8 @@ async function loadAdsData(){
     renderAdsKPIs(data,days);
     renderAdsCampaigns(data);
     renderAdsAgent(data);
+    renderAdsCapacidad(data);
+    renderAdsSugerencias(data);
     renderPendingMutations();
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
@@ -11320,6 +11477,15 @@ function renderAdsCampaigns(data){
 function renderAdsAgent(data){
   const camps=data.campanas||[];
   const recs=[];
+  // Capacity-based recommendations from production lines
+  try{
+    const caps=getCapacidadLineas();
+    caps.forEach(f=>{
+      if(f.a==='PAUSAR') recs.push({tipo:'danger',msg:`Producción "${f.label}" al ${f.pct}% de capacidad (${f.info}). ${f.m}.`});
+      else if(f.a==='REDUCIR') recs.push({tipo:'warn',msg:`Producción "${f.label}" al ${f.pct}% de capacidad. ${f.m}.`});
+      else if(f.a==='ACTIVAR'&&f.pct<20) recs.push({tipo:'info',msg:`Producción "${f.label}" con baja ocupación (${f.pct}%). ${f.m}.`});
+    });
+  }catch(e){}
   const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0,conv=data.conversiones||0;
   const ctrGlobal=imp>0?(clics/imp*100):0;
   const cpcGlobal=clics>0?(gasto/clics):0;
