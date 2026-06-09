@@ -2764,6 +2764,11 @@ var ENDPOINT = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
 var SECRET   = 'thelab2025';
 
 function main() {
+  // Diagnóstico de entorno (útil para detectar problemas)
+  Logger.log('Entorno: AdsApp=' + (typeof AdsApp) +
+    ' | newCampaignBuilder=' + (typeof (AdsApp||{}).newCampaignBuilder) +
+    ' | AdWordsApp=' + (typeof AdWordsApp));
+
   // 1. Leer campañas y enviar resumen al Script 1
   var campaigns = [], t = {gasto:0,impresiones:0,clics:0,conversiones:0,valor_conversion:0};
   try {
@@ -2814,8 +2819,12 @@ function main() {
       var m = muts[k];
       if (m.status !== 'pending') continue;
       try {
+        // Compatibilidad: algunos entornos usan AdWordsApp en vez de AdsApp
+        var _Ads = (typeof AdsApp !== 'undefined' &amp;&amp; typeof AdsApp.newCampaignBuilder === 'function') ? AdsApp
+                 : (typeof AdWordsApp !== 'undefined' ? AdWordsApp : null);
         if (m.op === 'create') {
-          var campOp = AdsApp.newCampaignBuilder()
+          if (!_Ads) throw new Error('AdsApp/AdWordsApp no disponible — ejecuta este script desde ads.google.com → Herramientas → Scripts');
+          var campOp = _Ads.newCampaignBuilder()
             .withName(m.data.nombre)
             .withStatus(m.data.estado||'ENABLED')
             .withBudget(m.data.presupuesto)
