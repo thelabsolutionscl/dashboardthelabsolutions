@@ -1306,6 +1306,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="dock-btn" data-tab="finanzas" onclick="switchTab('finanzas')"><span class="dock-icon" style="--c:#22c55e">💰</span><span class="dock-label">Finanzas</span></button>
     <button class="dock-btn" data-tab="visual" onclick="switchTab('visual')"><span class="dock-icon" style="--c:#8b5cf6">🎨</span><span class="dock-label">Visual AI</span></button>
     <button class="dock-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="dock-icon" style="--c:#84cc16">💵</span><span class="dock-label">Remuneraciones</span></button>
+    <button class="dock-btn" data-tab="calculadora" onclick="switchTab('calculadora')"><span class="dock-icon" style="--c:#f59e0b">⚡</span><span class="dock-label">Calculadora</span></button>
   </div>
 </div>
 
@@ -1455,6 +1456,15 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="data-grid">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pipeline Pedidos</span><span class="card-badge" id="pedActivosBadge">—</span></div><div id="pipelineArea"><div class="loading-state"><div class="spinner"></div> cargando...</div></div></div>
     <div class="card" onclick="switchTab('cotizaciones')" style="cursor:pointer"><div class="card-header"><span class="card-title">Cotizaciones Recientes</span><span class="card-badge" id="cotsBadge">—</span></div><div class="table-wrap"><table><thead><tr><th>N°</th><th>Cliente</th><th>Total Neto</th><th>Estado</th><th>Margen</th></tr></thead><tbody id="cotTableBody"><tr><td colspan="5"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div></div>
+  </div>
+  <!-- Funnel de conversión -->
+  <div class="card" style="margin-bottom:24px" id="ovFunnelCard">
+    <div class="card-header">
+      <span class="card-title">🔄 Embudo de Conversión</span>
+      <span id="ovFunnelPeriodo" style="font-size:10px;color:var(--text3)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('cotizaciones')" style="margin-left:auto">Ver cotizaciones →</button>
+    </div>
+    <div id="ovFunnelBody" style="padding:16px"></div>
   </div>
   <div class="card" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title">⚠ Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
   <div class="data-grid">
@@ -1669,8 +1679,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <button id="btnVistaTabla" class="btn btn-ghost btn-sm active-filter" onclick="setPedidosView('tabla')" style="padding:4px 12px;font-size:10px">Tabla</button>
       <button id="btnVistaKanban" class="btn btn-ghost btn-sm" onclick="setPedidosView('kanban')" style="padding:4px 12px;font-size:10px">Kanban</button>
       <button id="btnVistaCal" class="btn btn-ghost btn-sm" onclick="setPedidosView('calendario')" style="padding:4px 12px;font-size:10px">Calendario</button>
+      <button id="btnVistaPlan" class="btn btn-ghost btn-sm" onclick="setPedidosView('planificacion')" style="padding:4px 12px;font-size:10px">Planificación</button>
     </div>
   </div>
+  <div id="pedidosPlanificacion" style="display:none"></div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap">
     <table><thead><tr>
       <th style="width:36px;text-align:center"><input type="checkbox" id="pedidosSelectAll" onchange="toggleSelectAllPedidos(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
@@ -2181,137 +2193,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-primary" id="createCotBtn" onclick="createCotizacion()">✚ Guardar Cotización</button>
       </div>
     </div>
-    </div>
-  </div>
-</div>
-
-<!-- tab-cot3d removed — calculator integrated into Nueva Cotización -->
-<div class="tab-panel" id="tab-cot3d" style="display:none!important">
-  <div class="section-header"><div class="section-title">🖨️ Calculadora de Cotización — Impresión 3D</div></div>
-  <div style="display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start">
-
-    <!-- LEFT: INPUTS -->
-    <div style="display:flex;flex-direction:column;gap:14px">
-
-      <!-- Cliente + N° -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">Datos del Pedido</span></div>
-        <div class="form-grid">
-          <div class="field-group form-full"><label class="field-label">Cliente</label>
-            <div class="search-select-wrap">
-              <input class="field-input" id="c3d-cliente-search" placeholder="🔍 buscar cliente..." autocomplete="off" oninput="onC3dClienteSearch()" onfocus="onC3dClienteSearch()">
-              <input type="hidden" id="c3d-cliente-id">
-              <div class="search-select-dropdown" id="c3d-cliente-dropdown"></div>
-            </div>
-          </div>
-          <div class="field-group"><label class="field-label">N° Cotización</label><input class="field-input" id="c3d-num" placeholder="260507"></div>
-          <div class="field-group"><label class="field-label">Cantidad de piezas</label><input class="field-input" id="c3d-qty" type="number" min="1" value="1" oninput="calc3dUpdate()"></div>
-        </div>
-      </div>
-
-      <!-- Material -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">🧱 Material</span></div>
-        <div class="form-grid">
-          <div class="field-group"><label class="field-label">Tipo de Material</label>
-            <select class="field-select" id="c3d-mat" onchange="calc3dUpdate()">
-              <option value="PLA">PLA — $18/g</option>
-              <option value="PLA+" selected>PLA+ — $20/g</option>
-              <option value="PETG">PETG — $20/g</option>
-              <option value="Resina UV">Resina UV — $30/mL</option>
-            </select>
-          </div>
-          <div class="field-group"><label class="field-label" id="c3d-mat-lbl">Cantidad (gramos)</label>
-            <input class="field-input" id="c3d-mat-qty" type="number" min="0" value="0" placeholder="0" oninput="calc3dUpdate()">
-          </div>
-        </div>
-        <div style="margin-top:8px;padding:8px 12px;background:var(--surface3);border-radius:6px;font-size:11px;color:var(--text2)" id="c3d-mat-info">Incluye 20% de merma. Costo material: $0</div>
-      </div>
-
-      <!-- Máquinas -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">⚙️ Uso de Máquinas (horas)</span></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="c3d-maq-grid">
-          <!-- populated by JS -->
-        </div>
-      </div>
-
-      <!-- Extras -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">🔧 Extras / Insumos</span></div>
-        <div style="display:flex;flex-direction:column;gap:6px" id="c3d-extras-list">
-          <!-- populated by JS -->
-        </div>
-      </div>
-
-      <!-- Notas -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">📝 Notas</span></div>
-        <textarea class="field-textarea" id="c3d-notas" rows="2" placeholder="Descripción del trabajo, observaciones..."></textarea>
-      </div>
-    </div>
-
-    <!-- RIGHT: RESUMEN LIVE -->
-    <div style="position:sticky;top:72px;display:flex;flex-direction:column;gap:14px">
-      <div class="card" style="border-color:rgba(0,212,204,0.3)">
-        <div class="card-header" style="border-bottom-color:rgba(0,212,204,0.2)"><span class="card-title" style="color:var(--accent)">💰 Resumen de Precio</span></div>
-
-        <!-- Margen slider -->
-        <div style="margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <label class="field-label" style="margin:0">Margen de ganancia</label>
-            <span id="c3d-margen-label" style="font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent)">65%</span>
-          </div>
-          <input type="range" id="c3d-margen" min="10" max="90" value="65" oninput="calc3dUpdate()" style="width:100%;accent-color:var(--accent);cursor:pointer">
-        </div>
-
-        <!-- Filas de resumen -->
-        <div style="display:flex;flex-direction:column;gap:0">
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
-            <span style="color:var(--text3)">Costo total</span>
-            <span id="c3d-r-costo" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
-            <span style="color:var(--text3)">Precio neto (sin IVA)</span>
-            <span id="c3d-r-neto" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--text)">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
-            <span style="color:var(--text3)">IVA (19%)</span>
-            <span id="c3d-r-iva" style="font-family:'JetBrains Mono',monospace;color:var(--text2)">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border2)">
-            <span style="font-weight:700;font-size:13px">TOTAL con IVA</span>
-            <span id="c3d-r-total" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:var(--accent3)">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);font-size:12px">
-            <span style="color:var(--text3)">Utilidad</span>
-            <span id="c3d-r-util" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--success)">$0</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;font-size:12px">
-            <span style="color:var(--text3)">Precio por pieza</span>
-            <span id="c3d-r-pieza" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent)">$0</span>
-          </div>
-        </div>
-
-        <!-- Desglose por categoría -->
-        <div style="margin-top:12px;padding:10px;background:var(--surface3);border-radius:7px;font-size:11px" id="c3d-breakdown">
-          <div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Desglose de costos</div>
-          <div id="c3d-breakdown-body" style="display:flex;flex-direction:column;gap:4px"></div>
-        </div>
-
-        <!-- Actions -->
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-          <button class="btn btn-primary" onclick="calc3dGuardar()" id="c3d-guardar-btn">✚ Guardar como Cotización</button>
-          <button class="btn btn-ghost btn-sm" onclick="calc3dCopiarACot()">📋 Copiar a Nueva Cotización</button>
-          <button class="btn btn-ghost btn-sm" onclick="calc3dLimpiar()">↺ Limpiar calculadora</button>
-        </div>
-      </div>
-
-      <!-- Historial rápido -->
-      <div class="card" id="c3d-hist-card" style="display:none">
-        <div class="card-header"><span class="card-title">🕓 Últimas cotizaciones 3D</span></div>
-        <div id="c3d-hist-body" style="display:flex;flex-direction:column;gap:6px;font-size:11px"></div>
-      </div>
     </div>
   </div>
 </div>
@@ -2962,6 +2843,7 @@ function main() {
         } else if (m.op === 'delete') {
           var iter2 = AdsApp.campaigns().withIds([m.id]).get();
           if (iter2.hasNext()) { iter2.next().pause(); muts[k].status = 'aplicado'; }
+          else { muts[k].status = 'error'; muts[k].error = 'Campaña no encontrada: '+m.id; }
         }
         changed = true;
       } catch(e) {
@@ -3037,9 +2919,12 @@ function main() {
         <div class="card-header">
           <span class="card-title">⏳ Cambios pendientes</span>
           <span id="adsPendingBadge" style="font-size:10px;background:rgba(255,193,7,0.12);color:#ffc107;border:1px solid rgba(255,193,7,0.3);border-radius:4px;padding:2px 7px">0</span>
+          <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
+          <button onclick="adsDiagnostico()" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--warn)" title="Diagnóstico completo del pipeline de mutaciones">🔍 Diagnosticar</button>
         </div>
+        <div id="adsDiagOutput" style="display:none;padding:10px 16px;background:var(--surface3);border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace"></div>
         <div id="adsPendingList" style="padding:12px 16px;display:flex;flex-direction:column;gap:6px"></div>
-        <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">Los cambios se aplicarán la próxima vez que el Script 2 se ejecute en Google Ads. <button onclick="window.open('https://ads.google.com','_blank')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">Ir a Google Ads para ejecutarlo ahora →</button></div>
+        <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">Los cambios se aplicarán la próxima vez que el Script 2 se ejecute en Google Ads (cada hora si está programado). <button onclick="window.open('https://ads.google.com','_blank')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">Abrir Google Ads para ejecutarlo ahora →</button></div>
       </div>
     </div>
 
@@ -3196,6 +3081,8 @@ function main() {
     <button class="btn btn-ghost btn-sm" id="fin-nav-deudas" onclick="finSwitchTab('deudas')">⚠️ Deudas</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-nueva" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-diario" onclick="finSwitchTab('diario')">📒 Libro Diario</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-aging" onclick="finSwitchTab('aging')">⏰ Antigüedad</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-presupuesto" onclick="finSwitchTab('presupuesto')">🎯 Presupuesto</button>
   </div>
 
   <!-- ── RESUMEN ── -->
@@ -3789,6 +3676,262 @@ function main() {
     </div>
   </div>
 
+  <!-- ── PRESUPUESTO MENSUAL ── -->
+  <div id="fin-panel-presupuesto" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="pres-anio" class="field-select" style="width:auto;font-size:11px;padding:4px 8px" onchange="renderPresupuesto()"></select>
+        <select id="pres-mes" class="field-select" style="width:auto;font-size:11px;padding:4px 8px" onchange="renderPresupuesto()"></select>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="presExportCSV()">⬇ CSV</button>
+    </div>
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:16px" id="pres-kpis">
+      <div class="kpi-card yellow"><div class="kpi-label">Presupuesto Total</div><div class="kpi-value" id="pres-k-total" style="color:var(--warn)">—</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Ejecutado</div><div class="kpi-value" id="pres-k-ejec" style="color:var(--accent3)">—</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Disponible</div><div class="kpi-value" id="pres-k-disp" style="color:var(--accent2)">—</div></div>
+      <div class="kpi-card red"><div class="kpi-label">% Ejecución</div><div class="kpi-value" id="pres-k-pct" style="color:var(--accent)">—</div></div>
+    </div>
+    <!-- Categorías -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Categorías de gasto</span>
+        <button class="btn btn-ghost btn-sm" onclick="presAddCategoria()">+ Categoría</button>
+      </div>
+      <div id="pres-cats" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"></div>
+      <div style="padding:0 16px 14px;display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="presGuardar()">💾 Guardar presupuesto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ANTIGÜEDAD CUENTAS POR COBRAR ── -->
+  <div id="fin-panel-aging" style="display:none">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:16px">
+      <div class="kpi-card" style="border-color:rgba(255,68,68,0.35)"><div class="kpi-label">Total por cobrar</div><div class="kpi-value" id="fin-ag-total" style="color:var(--danger)">—</div><div class="kpi-sub" id="fin-ag-cnt">—</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Corriente (≤30 días)</div><div class="kpi-value" id="fin-ag-b0" style="color:var(--accent3)">—</div></div>
+      <div class="kpi-card yellow"><div class="kpi-label">31–60 días</div><div class="kpi-value" id="fin-ag-b30" style="color:var(--warn)">—</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">61–90 días</div><div class="kpi-value" id="fin-ag-b60" style="color:var(--accent2)">—</div></div>
+      <div class="kpi-card" style="border-color:rgba(255,68,68,0.5)"><div class="kpi-label">&gt;90 días crítico</div><div class="kpi-value" id="fin-ag-b90" style="color:var(--danger)">—</div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><span class="card-title">Distribución por antigüedad</span></div>
+      <div style="padding:12px 16px">
+        <div style="display:flex;height:22px;border-radius:8px;overflow:hidden;gap:2px" id="fin-ag-bar"></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:10px;color:var(--text3)">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--accent3);margin-right:4px"></span>Corriente</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warn);margin-right:4px"></span>31–60 días</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--accent2);margin-right:4px"></span>61–90 días</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--danger);margin-right:4px"></span>&gt;90 días</span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Detalle por cliente</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="fin-aging-filter" class="field-select" style="font-size:11px;padding:4px 8px;width:auto" onchange="finRenderAging()">
+            <option value="all">Todos los tramos</option>
+            <option value="0">Corriente (≤30 días)</option>
+            <option value="31">31–60 días</option>
+            <option value="61">61–90 días</option>
+            <option value="91">&gt;90 días</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="finExportAgingCSV()">⬇ CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Cliente / Empresa</th><th>Referencia</th>
+            <th style="text-align:right">Total c/IVA</th>
+            <th style="text-align:right">Por cobrar</th>
+            <th style="text-align:center">Días vencido</th>
+            <th style="text-align:center">Tramo</th>
+          </tr></thead>
+          <tbody id="fin-aging-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════ CALCULADORA LÁSER / NEON ══════════════ -->
+<div class="tab-panel" id="tab-calculadora">
+  <div class="section-header">
+    <div><div class="section-title">⚡ Calculadora de Cotización</div><div class="section-desc">Calcula costos y precios de venta para trabajos de corte láser, grabado y letrero neon/LED. Exporta directamente a cotización.</div></div>
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
+    <button class="btn btn-ghost btn-sm active-filter" id="calc-nav-laser" onclick="calcSwitchTab('laser')">🔆 Corte Láser</button>
+    <button class="btn btn-ghost btn-sm" id="calc-nav-neon" onclick="calcSwitchTab('neon')">💡 Neon / LED</button>
+  </div>
+
+  <!-- ── LÁSER ── -->
+  <div id="calc-panel-laser">
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Datos del trabajo</span></div>
+          <div class="form-grid" style="padding:14px 16px">
+            <div class="field-group form-full"><label class="field-label">Descripción</label><input class="field-input" id="lsr-desc" placeholder="ej. Corte logo acrílico 3mm"></div>
+            <div class="field-group"><label class="field-label">Cliente</label>
+              <div class="search-select-wrap">
+                <input class="field-input" id="lsr-cli-search" placeholder="🔍 buscar..." autocomplete="off" oninput="calcClienteSearch('lsr')" onfocus="calcClienteSearch('lsr')">
+                <input type="hidden" id="lsr-cli-id">
+                <div class="search-select-dropdown" id="lsr-cli-dropdown"></div>
+              </div>
+            </div>
+            <div class="field-group"><label class="field-label">Cantidad de copias</label><input class="field-input" id="lsr-qty" type="number" min="1" value="1" oninput="calcLaserUpdate()"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">🪵 Material</span></div>
+          <div class="form-grid" style="padding:14px 16px">
+            <div class="field-group"><label class="field-label">Tipo de material</label>
+              <select class="field-select" id="lsr-mat" onchange="calcLaserUpdate()">
+                <option value="2800">Acrílico 3mm — $2.800/cm²</option>
+                <option value="3500">Acrílico 5mm — $3.500/cm²</option>
+                <option value="480">MDF 3mm — $480/cm²</option>
+                <option value="750">MDF 6mm — $750/cm²</option>
+                <option value="120">Cartón corrugado — $120/cm²</option>
+                <option value="1200">Cuero / Simil — $1.200/cm²</option>
+                <option value="350">Tela / Fieltro — $350/cm²</option>
+              </select>
+            </div>
+            <div class="field-group"><label class="field-label">Área de corte (cm²)</label><input class="field-input" id="lsr-area" type="number" min="0" value="0" placeholder="0" oninput="calcLaserUpdate()"></div>
+            <div class="field-group"><label class="field-label">% Desperdicio material</label><input class="field-input" id="lsr-desp" type="number" min="0" max="60" value="15" oninput="calcLaserUpdate()"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">⚙️ Tiempo de máquina</span></div>
+          <div class="form-grid" style="padding:14px 16px">
+            <div class="field-group"><label class="field-label">Tiempo corte (min)</label><input class="field-input" id="lsr-t-corte" type="number" min="0" value="0" placeholder="0" oninput="calcLaserUpdate()"></div>
+            <div class="field-group"><label class="field-label">Tiempo grabado (min)</label><input class="field-input" id="lsr-t-grab" type="number" min="0" value="0" placeholder="0" oninput="calcLaserUpdate()"></div>
+            <div class="field-group"><label class="field-label">Tarifa máquina (CLP/hr)</label><input class="field-input" id="lsr-tarifa" type="number" min="0" value="8000" oninput="calcLaserUpdate()"></div>
+            <div class="field-group"><label class="field-label">Mano de obra (min)</label><input class="field-input" id="lsr-mdo" type="number" min="0" value="0" placeholder="0" oninput="calcLaserUpdate()"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">🔧 Extras</span><button class="btn-mini btn-mini-yellow" onclick="calcLaserAddExtra()">+ Extra</button></div>
+          <div id="lsr-extras" style="padding:8px 16px;display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+      <div style="position:sticky;top:72px">
+        <div class="card" style="border-color:rgba(245,158,11,0.3)">
+          <div class="card-header" style="border-bottom-color:rgba(245,158,11,0.2)"><span class="card-title" style="color:#f59e0b">💰 Precio Láser</span></div>
+          <div style="padding:14px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><label class="field-label" style="margin:0">Margen</label><span id="lsr-margen-lbl" style="font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#f59e0b">60%</span></div>
+            <input type="range" id="lsr-margen" min="10" max="90" value="60" oninput="calcLaserUpdate()" style="width:100%;accent-color:#f59e0b;cursor:pointer;margin-bottom:14px">
+            <div style="display:flex;flex-direction:column;gap:0">
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Costo material</span><span id="lsr-r-mat" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Costo máquina</span><span id="lsr-r-maq" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Mano de obra</span><span id="lsr-r-mdo" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Extras</span><span id="lsr-r-ext" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Costo total</span><span id="lsr-r-costo" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Precio neto</span><span id="lsr-r-neto" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">IVA (19%)</span><span id="lsr-r-iva" style="font-family:'JetBrains Mono',monospace;color:var(--text2)">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border2)"><span style="font-weight:700;font-size:13px">TOTAL c/IVA</span><span id="lsr-r-total" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:#f59e0b">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px"><span style="color:var(--text3)">Precio por copia</span><span id="lsr-r-pieza" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent)">$0</span></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:14px">
+              <button class="btn btn-primary" onclick="calcLaserGuardar()">✚ Guardar como Cotización</button>
+              <button class="btn btn-ghost btn-sm" onclick="calcLaserLimpiar()">↺ Limpiar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NEON / LED ── -->
+  <div id="calc-panel-neon" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Datos del trabajo</span></div>
+          <div class="form-grid" style="padding:14px 16px">
+            <div class="field-group form-full"><label class="field-label">Descripción</label><input class="field-input" id="neo-desc" placeholder="ej. Letrero Neon 'The Lab' rosa 80cm"></div>
+            <div class="field-group"><label class="field-label">Cliente</label>
+              <div class="search-select-wrap">
+                <input class="field-input" id="neo-cli-search" placeholder="🔍 buscar..." autocomplete="off" oninput="calcClienteSearch('neo')" onfocus="calcClienteSearch('neo')">
+                <input type="hidden" id="neo-cli-id">
+                <div class="search-select-dropdown" id="neo-cli-dropdown"></div>
+              </div>
+            </div>
+            <div class="field-group"><label class="field-label">Cantidad</label><input class="field-input" id="neo-qty" type="number" min="1" value="1" oninput="calcNeonUpdate()"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">💡 Tipo y dimensiones</span></div>
+          <div class="form-grid" style="padding:14px 16px">
+            <div class="field-group"><label class="field-label">Tecnología</label>
+              <select class="field-select" id="neo-tipo" onchange="calcNeonUpdate()">
+                <option value="4200">LED Flex Silicona — $4.200/m</option>
+                <option value="3100">LED Cuerda neon — $3.100/m</option>
+                <option value="12000">Neon gas (vidrio) — $12.000/m</option>
+              </select>
+            </div>
+            <div class="field-group"><label class="field-label">Longitud total tubo (m)</label><input class="field-input" id="neo-largo" type="number" min="0" step="0.1" value="0" placeholder="0" oninput="calcNeonUpdate()"></div>
+            <div class="field-group"><label class="field-label">N° de colores / cortes</label><input class="field-input" id="neo-colores" type="number" min="1" max="8" value="1" oninput="calcNeonUpdate()"></div>
+            <div class="field-group"><label class="field-label">Soporte / backing</label>
+              <select class="field-select" id="neo-soporte" onchange="calcNeonUpdate()">
+                <option value="0">Sin soporte</option>
+                <option value="15000">Acrílico transparente — $15.000</option>
+                <option value="22000">Acrílico negro — $22.000</option>
+                <option value="35000">MDF pintado — $35.000</option>
+                <option value="55000">Estructura metálica — $55.000</option>
+              </select>
+            </div>
+            <div class="field-group"><label class="field-label">Transformador / Fuente</label>
+              <select class="field-select" id="neo-trans" onchange="calcNeonUpdate()">
+                <option value="8500">Estándar 12V — $8.500</option>
+                <option value="15000">Potenciado 12V/24V — $15.000</option>
+                <option value="0">Sin transformador</option>
+              </select>
+            </div>
+            <div class="field-group"><label class="field-label">Control dimmer/remoto</label>
+              <select class="field-select" id="neo-dimmer" onchange="calcNeonUpdate()">
+                <option value="0">Sin control</option>
+                <option value="7500">Dimmer manual — $7.500</option>
+                <option value="14000">Control remoto RF — $14.000</option>
+                <option value="22000">App Bluetooth — $22.000</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">🔧 Extras</span><button class="btn-mini btn-mini-yellow" onclick="calcNeonAddExtra()">+ Extra</button></div>
+          <div id="neo-extras" style="padding:8px 16px;display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+      <div style="position:sticky;top:72px">
+        <div class="card" style="border-color:rgba(249,115,22,0.3)">
+          <div class="card-header" style="border-bottom-color:rgba(249,115,22,0.2)"><span class="card-title" style="color:#f97316">💰 Precio Neon/LED</span></div>
+          <div style="padding:14px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><label class="field-label" style="margin:0">Margen</label><span id="neo-margen-lbl" style="font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#f97316">65%</span></div>
+            <input type="range" id="neo-margen" min="10" max="90" value="65" oninput="calcNeonUpdate()" style="width:100%;accent-color:#f97316;cursor:pointer;margin-bottom:14px">
+            <div style="display:flex;flex-direction:column;gap:0">
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Tubo/LED</span><span id="neo-r-tubo" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Soporte</span><span id="neo-r-sop" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Transformador</span><span id="neo-r-trans" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Dimmer/Control</span><span id="neo-r-dim" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Extras</span><span id="neo-r-ext" style="font-family:'JetBrains Mono',monospace">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Costo total</span><span id="neo-r-costo" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Precio neto</span><span id="neo-r-neto" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">IVA (19%)</span><span id="neo-r-iva" style="font-family:'JetBrains Mono',monospace;color:var(--text2)">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border2)"><span style="font-weight:700;font-size:13px">TOTAL c/IVA</span><span id="neo-r-total" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:#f97316">$0</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px"><span style="color:var(--text3)">Precio por unidad</span><span id="neo-r-pieza" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent)">$0</span></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:14px">
+              <button class="btn btn-primary" onclick="calcNeonGuardar()">✚ Guardar como Cotización</button>
+              <button class="btn btn-ghost btn-sm" onclick="calcNeonLimpiar()">↺ Limpiar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
@@ -3851,6 +3994,22 @@ function main() {
   </div>
   <!-- KPIs -->
   <div id="remKpis" class="kpi-grid" style="margin-bottom:16px"></div>
+  <!-- Sueldo base & liquidación -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <span class="card-title">💼 Sueldo Base & Liquidación</span>
+      <button class="btn btn-ghost btn-sm" onclick="remToggleSueldos()" id="remSueldoToggle">⚙ Configurar sueldos</button>
+    </div>
+    <div id="remSueldoPanel" style="display:none;padding:14px 16px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Sueldo base mensual (CLP) por integrante. Se guarda localmente.</div>
+      <div id="remSueldoGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:12px"></div>
+      <button class="btn btn-primary btn-sm" onclick="remSaveSueldos()">💾 Guardar sueldos</button>
+    </div>
+    <div style="padding:12px 16px" id="remLiqResumen">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Liquidación del período seleccionado</div>
+      <div id="remLiqBody" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </div>
   <!-- Pipeline: cotizaciones activas -->
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">
@@ -4651,7 +4810,7 @@ async function airtableFetch(table,max=100){
     const r=await airtableHttp(url,{headers:cfg.headers});
     if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`Airtable ${r.status}: ${j.error?.message||''}`);}
     const d=await r.json();all=[...all,...(d.records||[])];offset=d.offset||null;
-    if(all.length>=max&&table!=='Clientes'&&table!=='Cotizaciones') break;
+    if(all.length>=max) break;
   }while(offset);
   return{records:all};
 }
@@ -5056,8 +5215,8 @@ async function loadAllData(){
     if(isFirst) slProgress(20,'Cargando clientes...');
     const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([
       airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),
-      airtableFetch('Pedidos',50),airtableFetch('Reportes',20),
-      airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),
+      airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),
+      airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),
       airtableFetch('Facturas',1000)
     ]);
     // Facturas emitidas (tabla opcional; si no existe aún, queda vacía)
@@ -5107,9 +5266,9 @@ async function loadAllDataSilent(){
   if(!hasAuth) return;
   if(Date.now()-(state.lastUpdateTs||0)<MIN_REFRESH_MS) return; // throttle
   try{
-    const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',50),airtableFetch('Reportes',20),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',50),airtableFetch('Facturas',1000)]);
+    const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),airtableFetch('Facturas',1000)]);
     if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
-    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||'—';});}
+    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});}
     if(coRes.status==='fulfilled') state.cotizaciones=coRes.value.records||[];
     if(pRes.status==='fulfilled') state.pedidos=pRes.value.records||[];
     if(rRes.status==='fulfilled') state.reportes=rRes.value.records||[];
@@ -5209,7 +5368,7 @@ function switchTab(name){
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
   if(name==='remuneraciones') renderRemuneraciones();
-  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());}
+  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
@@ -5224,6 +5383,7 @@ function renderOverview(){
   renderEquipoSnapshot();
   renderPipelineArea();
   renderCotTable();
+  renderFunnel();
   renderAlertas();
   renderCharts();
   // Hide finanzas/web/ads snapshot grid for vendor role
@@ -5654,8 +5814,9 @@ function buildClienteRow(c){
         <button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cli-${c.id}')">⋯</button>
         <div class="act-menu" id="actmenu-cli-${c.id}">
           <button class="act-item" onclick="openClienteDetalle('${c.id}')">👁 &nbsp;Ver detalle</button>
-          <button class="act-item act-item-yellow" onclick="verCotizacionesCliente('${c.id}','${escapeHtml(f['Empresa']||'')}')">📋 &nbsp;Ver cotizaciones</button>
+          <button class="act-item act-item-yellow" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="verCotizacionesCliente('${c.id}',this.dataset.empresa)">📋 &nbsp;Ver cotizaciones</button>
           <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
+          <button class="act-item" onclick="compartirPortalCliente('${c.id}')">🔗 &nbsp;Portal cliente</button>
         </div>
       </div>
     </td>
@@ -5681,6 +5842,11 @@ function verCotizacionesCliente(clienteId,empresa){
   setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`;return;}tbody.innerHTML=cots.map(c=>buildCotRow(c)).join('');},50);
 }
 function cotizarParaCliente(clienteId){const c=state.clientes.find(x=>x.id===clienteId);if(!c) return;switchTab('nueva-cot');setTimeout(()=>{selectCliente(clienteId);initDates();toast(`Cotizando para ${c.fields['Empresa']}`,'info');},100);}
+function compartirPortalCliente(clienteId){
+  const url=`${location.origin}${location.pathname}?portal=${btoa(clienteId)}`;
+  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast('🔗 URL copiada al portapapeles','success')).catch(()=>{prompt('Copia esta URL para el cliente:',url);});}
+  else{prompt('Copia esta URL para el cliente:',url);}
+}
 function openClienteDetalle(id){
   const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Ciudad']||''}`:f['Ciudad']||'';
@@ -7653,6 +7819,8 @@ function renderRemuneraciones(){
       <div class="kpi-sub">en producción / confirmados</div>
     </div>`;
 
+  remRenderLiquidacion(totalNeto,totalComision);
+
   // --- Pipeline table ---
   if(pipeBody){
     if(!pipeline.length){
@@ -7750,7 +7918,7 @@ function renderPedidos(filter){
     <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
-    <td style="text-align:center"><button onclick="openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
+    <td style="text-align:center"><button data-pedido="${escapeHtml(f['N° Pedido']||'—')}" onclick="openQAModal('${p.id}',this.dataset.pedido)" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
     <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
   }).join('');
@@ -8475,11 +8643,57 @@ function setPedidosView(mode){
   document.getElementById('pedidosTableWrap').style.display=mode==='tabla'?'':'none';
   document.getElementById('pedidosKanban').style.display=mode==='kanban'?'':'none';
   document.getElementById('pedidosCalendario').style.display=mode==='calendario'?'':'none';
+  document.getElementById('pedidosPlanificacion').style.display=mode==='planificacion'?'':'none';
   document.getElementById('btnVistaTabla').classList.toggle('active-filter',mode==='tabla');
   document.getElementById('btnVistaKanban').classList.toggle('active-filter',mode==='kanban');
   document.getElementById('btnVistaCal').classList.toggle('active-filter',mode==='calendario');
+  const btnPlan=document.getElementById('btnVistaPlan');if(btnPlan) btnPlan.classList.toggle('active-filter',mode==='planificacion');
   if(mode==='kanban') renderPedidosKanban();
   if(mode==='calendario') renderPedidosCalendario();
+  if(mode==='planificacion') renderPedidosPlanificacion();
+}
+
+// ── PLANIFICACIÓN DE PRODUCCIÓN ───────────────────────────────────────
+function renderPedidosPlanificacion(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const dias=14;
+  const fechas=Array.from({length:dias},(_,i)=>{const d=new Date(today);d.setDate(d.getDate()+i);return d;});
+  const activos=state.pedidos.filter(p=>!['Cancelado','Despachado'].includes(p.fields['Estado pedido']||''));
+  const atrasados=state.pedidos.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];return fe&&new Date(fe+'T00:00:00')<today&&!['Cancelado','Despachado'].includes(f['Estado pedido']||'');});
+  const enProd=activos.filter(p=>p.fields['Estado pedido']==='En producción').length;
+  const listos=activos.filter(p=>p.fields['Estado pedido']==='Listo para despacho').length;
+  const estaSemana=activos.filter(p=>{const fe=p.fields['Fecha entrega'];if(!fe)return false;const d=new Date(fe+'T00:00:00'),diff=Math.floor((d-today)/86400000);return diff>=0&&diff<=7;}).length;
+  const colEstado={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)'};
+  const fmtShort=d=>d.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+  const equipoSet=new Set();
+  activos.forEach(p=>{const eq=p.fields['Equipo asignado']||'';eq.split(',').map(x=>x.trim()).filter(Boolean).forEach(n=>equipoSet.add(n));});
+  const equipoList=[...equipoSet].sort();
+  if(!equipoList.length) equipoList.push('Sin asignar');
+  const rows=equipoList.map(miembro=>{
+    const cells=fechas.map(dia=>{
+      const ds=dia.toISOString().slice(0,10);
+      const peds=activos.filter(p=>{
+        const f=p.fields,fe=f['Fecha entrega']||'';
+        const eq=(f['Equipo asignado']||'').split(',').map(x=>x.trim());
+        const perteneceEq=miembro==='Sin asignar'?!eq.filter(Boolean).length:eq.includes(miembro);
+        return perteneceEq&&fe===ds;
+      });
+      if(!peds.length) return`<td style="border:1px solid var(--border);padding:4px;min-width:90px;min-height:40px;vertical-align:top"></td>`;
+      const chips=peds.map(p=>{const f=p.fields,est=f['Estado pedido']||'',atras=new Date((f['Fecha entrega']||'')+'T00:00:00')<today;
+        return`<div onclick="goToAlert('pedidos','${p.id}')" title="${escapeHtml(resolveClienteName(f['Cliente']))}" style="font-size:9px;font-weight:700;padding:2px 5px;border-radius:3px;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:88px;background:${atras?'rgba(255,68,68,0.15)':'var(--surface3)'};color:${atras?'var(--danger)':colEstado[est]||'var(--text2)'};border:1px solid ${atras?'rgba(255,68,68,0.35)':'var(--border2)'}">${escapeHtml(f['N° Pedido']||'—')}</div>`;
+      }).join('');
+      return`<td style="border:1px solid var(--border);padding:4px;min-width:90px;vertical-align:top">${chips}</td>`;
+    }).join('');
+    return`<tr><td style="border:1px solid var(--border);padding:6px 10px;font-size:11px;font-weight:600;white-space:nowrap;background:var(--surface2);position:sticky;left:0;z-index:1">${escapeHtml(miembro)}</td>${cells}</tr>`;
+  }).join('');
+  const headCols=fechas.map((d,i)=>{const isToday=i===0,isWknd=d.getDay()===0||d.getDay()===6;return`<th style="border:1px solid var(--border);padding:5px 7px;font-size:9px;font-weight:600;background:${isToday?'rgba(0,212,204,0.12)':'var(--surface2)'};color:${isToday?'var(--accent)':isWknd?'var(--text3)':'var(--text2)'};white-space:nowrap;min-width:90px">${fmtShort(d)}${isToday?' <span style="color:var(--accent)">●</span>':''}</th>`;}).join('');
+  const kpiBar=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    <div class="stat-card" style="flex:1;min-width:120px"><div class="stat-label">En producción</div><div class="stat-value" style="color:var(--accent2)">${enProd}</div></div>
+    <div class="stat-card" style="flex:1;min-width:120px"><div class="stat-label">Listos despacho</div><div class="stat-value" style="color:var(--accent3)">${listos}</div></div>
+    <div class="stat-card" style="flex:1;min-width:120px"><div class="stat-label">Entrega ≤7 días</div><div class="stat-value" style="color:var(--warn)">${estaSemana}</div></div>
+    <div class="stat-card" style="flex:1;min-width:120px"><div class="stat-label">Atrasados</div><div class="stat-value" style="color:var(--danger)">${atrasados.length}</div></div>
+  </div>`;
+  document.getElementById('pedidosPlanificacion').innerHTML=kpiBar+`<div class="card"><div class="card-header"><span class="card-title">🗓 Timeline 14 días — por integrante</span><span style="font-size:10px;color:var(--text3)">Pedidos activos ordenados por fecha de entrega</span></div><div style="overflow-x:auto;padding:12px 16px"><table style="border-collapse:collapse;width:100%"><thead><tr><th style="border:1px solid var(--border);padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;background:var(--surface2);position:sticky;left:0;z-index:2;min-width:110px">Integrante</th>${headCols}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 // ── CALENDARIO DE PEDIDOS ─────────────────────────────────────────────
@@ -10000,7 +10214,10 @@ function buildProveedorRow(p){
   const starsCell=`<div style="display:flex;gap:1px;align-items:center" id="stars-${id}">${starsHtml}</div>`;
   const nombre=f['Nombre']||'';
   const pedidosActivos=state.pedidos.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')&&(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
+  const pedidosTodos=state.pedidos.filter(x=>(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
   const pedCount=pedidosActivos.length;
+  const pvTotalValor=pedidosTodos.reduce((s,x)=>s+(x.fields['Monto total (CLP)']||0),0);
+  const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha pedido']||'').filter(Boolean).sort().reverse()[0]||null;
   const estado=f['Estado']||'Activo';
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
   return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}" class="${selectedProveedores.has(id)?'row-selected':''}">
@@ -10028,6 +10245,8 @@ function buildProveedorRow(p){
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
           ${f['Región']?`<div style="font-size:11px"><span style="color:var(--text3)">Región:</span> ${escapeHtml(f['Región'])}</div>`:''}
           ${f['Condiciones de pago']?`<div style="font-size:11px"><span style="color:var(--text3)">Pago:</span> ${escapeHtml(f['Condiciones de pago'])}</div>`:''}
+          ${pvTotalValor>0?`<div style="font-size:11px"><span style="color:var(--text3)">Total pedidos:</span> <strong>${formatCLP(pvTotalValor)}</strong> (${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''})</div>`:''}
+          ${pvLastOrder?`<div style="font-size:11px"><span style="color:var(--text3)">Último pedido:</span> ${escapeHtml(pvLastOrder)}</div>`:''}
           ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
           ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px;white-space:pre-wrap">${escapeHtml(f['Notas'])}</div>`:''}
         </div>
@@ -10477,13 +10696,13 @@ const AUTH={
 const RBAC={
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','nuevo-lead','nueva-cot','cot3d'],
-    produccion: ['overview','pedidos','maquinas','equipo','visual'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','calculadora','nuevo-lead','nueva-cot','cot3d'],
+    produccion: ['overview','pedidos','maquinas','equipo','visual','calculadora'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte'],
     marketing:  ['overview','web','agentes','reporte'],
-    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','remuneraciones'],
+    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','remuneraciones'],
   },
   // Items del menú "Nuevo" visibles por rol
   nuevos:{
@@ -10625,7 +10844,7 @@ function initDashboard(){
     if(s&&(!allowed||allowed.includes(s))) switchTab(s);
     else if(s) sessionStorage.removeItem('thelab_active_tab');
   }catch(e){}
-  if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));
+  if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'',pass:''}));
   // Auto-seed tokens — sobreescribe si el valor es un placeholder no reemplazado
   const _isPlaceholder=v=>!v||v.startsWith('%%');
   if(_isPlaceholder(lsGet('airtable_token'))) lsSet('airtable_token',_DEFAULTS.AIRTABLE_TOKEN);
@@ -10664,6 +10883,7 @@ function initDashboard(){
     loadAllData().then(()=>{startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
   }
   initMobileTableLabels();
+  checkClientePortal();
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
   document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
@@ -10693,7 +10913,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 // ── SEO WORDPRESS ─────────────────────────────────────────────
-function getWPConfig(){return JSON.parse(localStorage.getItem('wp_config')||JSON.stringify({url:'https://thelab.solutions',user:'Thelabsolu',pass:'oOF9 wOpK QbR9 Oli3 irqb Wjdt'}));}
+function getWPConfig(){try{const s=localStorage.getItem('wp_config');if(s) return JSON.parse(s);}catch(e){}return{url:'https://thelab.solutions',user:'',pass:''};}
 function saveWPConfig(){
   const url=(document.getElementById('wp-url')?.value||'').trim().replace(/\/$/,'');
   const user=(document.getElementById('wp-user')?.value||'').trim();
@@ -10999,7 +11219,7 @@ async function testYoastWrite(){openSEODiag();await runSEODiag();}
 // ── GOOGLE ADS AGENT ─────────────────────────────────────
 // ── Snapshot histórico ──────────────────────────────────
 function adsSaveSnapshot(data,days){
-  const snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');
+  let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
   const today=new Date().toISOString().slice(0,10);
   const imp=data.impresiones||0,clics=data.clics||0,gasto=data.gasto||0;
   const conv=data.conversiones||0;
@@ -11014,7 +11234,7 @@ function adsSaveSnapshot(data,days){
   localStorage.setItem('ads_last_sync',new Date().toISOString());
 }
 function adsGetPrevSnapshot(){
-  const snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');
+  let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
   if(snaps.length<2) return null;
   return snaps[snaps.length-2];
 }
@@ -11311,7 +11531,7 @@ function adsExportCSV(){
   a.click();
   toast('✓ CSV descargado','success');
 }
-function getAdsConfig(){return JSON.parse(localStorage.getItem('ads_config')||JSON.stringify({endpoint:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:'757-781-2099'}));}
+function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s) return JSON.parse(s);}catch(e){}return{endpoint:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:'757-781-2099'};}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
@@ -11366,7 +11586,7 @@ function testAdsEndpoint(){
   window.open(testUrl,'_blank');
 }
 // ─── Ads Campaign Management ────────────────────────────────
-var _adsPendingMutations = JSON.parse(localStorage.getItem('ads_pending_mutations')||'[]');
+var _adsPendingMutations;try{_adsPendingMutations=JSON.parse(localStorage.getItem('ads_pending_mutations')||'[]');}catch(e){_adsPendingMutations=[];}
 
 function savePendingToStorage(){
   localStorage.setItem('ads_pending_mutations', JSON.stringify(_adsPendingMutations));
@@ -11422,6 +11642,7 @@ function _adsQueueMutation(mutation){
   savePendingToStorage();
   sendAdsMutation(mutation);
   renderPendingMutations();
+  _startAdsMutationPoll();
 }
 
 function saveCampaignMutation(){
@@ -11448,12 +11669,56 @@ function confirmDeleteCampaign(){
   _adsQueueMutation(mutation);
 }
 
+async function adsDiagnostico(){
+  const cfg=getAdsConfig();
+  const out=document.getElementById('adsDiagOutput');
+  if(!out) return;
+  out.style.display='block';
+  out.innerHTML='<div style="color:var(--text3)">⏳ Diagnosticando...</div>';
+  const lines=[];
+  lines.push(`<b>Endpoint configurado:</b> <code style="font-size:9px;word-break:break-all">${escapeHtml(cfg.endpoint||'(ninguno)')}</code>`);
+  lines.push(`<b>Customer ID:</b> ${escapeHtml(cfg.customerId||'(no definido)')}`);
+  lines.push(`<b>Mutaciones locales (localStorage):</b> ${_adsPendingMutations.length} total`);
+  const byStatus={};_adsPendingMutations.forEach(m=>{byStatus[m.status]=(byStatus[m.status]||0)+1;});
+  Object.entries(byStatus).forEach(([s,n])=>lines.push(`  &nbsp;→ ${s}: ${n}`));
+  if(cfg.endpoint){
+    try{
+      const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now();
+      const r=await fetch(url);const d=await r.json();
+      if(d.ok&&Array.isArray(d.mutations)){
+        lines.push(`<b style="color:var(--success)">✓ Script 1 responde OK</b> — ${d.mutations.length} mutaciones almacenadas`);
+        const byS2={};d.mutations.forEach(m=>{byS2[m.status]=(byS2[m.status]||0)+1;});
+        Object.entries(byS2).forEach(([s,n])=>lines.push(`  &nbsp;→ <b>${s}</b>: ${n}`));
+        const pending=d.mutations.filter(m=>m.status==='pending'||m.status==='enviado');
+        if(pending.length){
+          const oldest=pending.sort((a,b)=>a.timestamp.localeCompare(b.timestamp))[0];
+          const mins=Math.round((Date.now()-new Date(oldest.timestamp).getTime())/60000);
+          lines.push(`<b style="color:var(--warn)">⚠ ${pending.length} mutación(es) sin aplicar</b> — la más antigua tiene ${mins} min`);
+          if(mins>60) lines.push(`<span style="color:var(--danger)">→ El Script 2 no ha corrido en más de 1 hora. Verifica que tenga un trigger horario configurado en Google Ads → Herramientas → Scripts → ⏱</span>`);
+          else lines.push(`→ El Script 2 debería procesarlas en la próxima ejecución (si tiene trigger horario).`);
+        } else if(d.mutations.length){
+          lines.push(`<span style="color:var(--success)">✓ Todas las mutaciones han sido aplicadas por Script 2</span>`);
+        }
+      } else {
+        lines.push(`<b style="color:var(--danger)">✗ Script 1 respondió con error:</b> ${escapeHtml((d&&d.error)||'respuesta inválida')}`);
+      }
+    }catch(e){
+      lines.push(`<b style="color:var(--danger)">✗ No se pudo conectar con Script 1:</b> ${escapeHtml(e.message)}`);
+      lines.push(`→ Verifica que el Script 1 esté publicado como <b>Aplicación web</b> con acceso <b>Todos (Anyone)</b>.`);
+    }
+  } else {
+    lines.push(`<b style="color:var(--danger)">✗ No hay endpoint configurado</b> — pega la URL del Script 1 arriba.`);
+  }
+  out.innerHTML=lines.map(l=>`<div style="margin-bottom:4px;font-size:11px">${l}</div>`).join('');
+}
+
 function sendAdsMutation(mutation){
   const cfg=getAdsConfig();
   if(!cfg.endpoint){mutation.status='error';mutation.error='No hay endpoint configurado';savePendingToStorage();renderPendingMutations();return;}
+  // text/plain evita el CORS preflight que bloquea los POSTs a Google Apps Script
   fetch(cfg.endpoint,{
-    method:'post',
-    headers:{'Content-Type':'application/json'},
+    method:'POST',
+    headers:{'Content-Type':'text/plain'},
     body:JSON.stringify({secret:'thelab2025',type:'mutation',...mutation})
   }).then(r=>r.json()).then(d=>{
     if(d&&d.ok){mutation.status='enviado';mutation.error='';}
@@ -11485,35 +11750,11 @@ async function syncMutationStatuses(){
       }
     });
     if(changed){
-      // Quita las aplicadas (los errores se conservan para que el usuario los vea/reintente)
       _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
       savePendingToStorage();
       renderPendingMutations();
       if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
       if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa el detalle en Cambios pendientes','error');
-    }
-  }catch(e){}
-}
-async function syncMutationStatuses(){
-  const cfg=getAdsConfig();
-  if(!cfg.endpoint||!_adsPendingMutations.length) return;
-  try{
-    const r=await fetch(cfg.endpoint+'?action=mutations&_t='+Date.now());
-    const d=await r.json();
-    if(!d.ok||!d.mutations) return;
-    let changed=false;
-    _adsPendingMutations.forEach(m=>{
-      const srv=d.mutations.find(s=>s.timestamp===m.timestamp);
-      if(srv&&srv.status!=='pending'&&m.status!==srv.status){m.status=srv.status;m.error=srv.error;changed=true;}
-    });
-    if(changed){
-      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
-      savePendingToStorage();
-      renderPendingMutations();
-      const aplicadas=d.mutations.filter(s=>s.status==='aplicado').length;
-      const errores=d.mutations.filter(s=>s.status==='error').length;
-      if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
-      if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa los logs del Script 2','warn');
     }
   }catch(e){}
 }
@@ -11557,6 +11798,19 @@ function removePendingMutationByTs(ts){
   savePendingToStorage();
   renderPendingMutations();
 }
+
+// Auto-poll: verifica estado de mutaciones cada 2 min si hay pendientes y el tab web está activo
+let _adsMutationPollInterval=null;
+function _startAdsMutationPoll(){
+  if(_adsMutationPollInterval) return;
+  _adsMutationPollInterval=setInterval(()=>{
+    const hasPending=_adsPendingMutations.some(m=>m.status==='enviado'||m.status==='pending');
+    const webActive=document.getElementById('tab-web')?.classList.contains('active');
+    if(hasPending&&webActive) syncMutationStatuses();
+    else if(!hasPending){clearInterval(_adsMutationPollInterval);_adsMutationPollInterval=null;}
+  },120000);
+}
+function _stopAdsMutationPoll(){if(_adsMutationPollInterval){clearInterval(_adsMutationPollInterval);_adsMutationPollInterval=null;}}
 
 function retryMutation(ts){
   const m=_adsPendingMutations.find(x=>x.timestamp===ts);
@@ -12150,7 +12404,7 @@ function varPct(a,b){if(!a||!b)return null;return ((b-a)/a)*100;}
 /* ── Sub-tabs internos ── */
 function finSwitchTab(tab){
   finCurrentTab=tab;
-  ['resumen','facturas','cobrar','prestamos','deudas','nueva','diario'].forEach(t=>{
+  ['resumen','facturas','cobrar','prestamos','deudas','nueva','diario','aging','presupuesto'].forEach(t=>{
     document.getElementById('fin-panel-'+t).style.display=(t===tab)?'':'none';
     const btn=document.getElementById('fin-nav-'+t);
     if(btn){
@@ -12163,6 +12417,8 @@ function finSwitchTab(tab){
   if(tab==='prestamos'){finRenderPrestamos();finDrawDeudaTimeline();}
   if(tab==='nueva'){finRenderNuevaLista();}
   if(tab==='diario'){ldInit();}
+  if(tab==='aging'){finRenderAging();}
+  if(tab==='presupuesto'){renderPresupuesto();}
 }
 
 /* ── Tabla mensual comparativa ── */
@@ -12292,13 +12548,14 @@ function finFacturasFromAirtable(){
     });
 }
 function finGetAllFacturas(){
-  const local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  let local;try{local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){local=[];}
   return [...FIN_FACTURAS_BASE,...local,...finFacturasFromAirtable()];
 }
 function finVentasMerged(){
   const m={};
   [2022,2023,2024,2025,2026].forEach(y=>{m[y]=[...FIN_VENTAS[y]];});
-  JSON.parse(localStorage.getItem('fin_ventas')||'[]').forEach(r=>{
+  let _fvLocal;try{_fvLocal=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){_fvLocal=[];}
+  _fvLocal.forEach(r=>{
     const y=parseInt(r.year,10),mi=(parseInt(r.mes,10)||1)-1;
     if(m[y])m[y][mi]=(m[y][mi]||0)+r.valor*r.cant;
   });
@@ -12420,6 +12677,80 @@ function finRenderCobrar(){
   document.getElementById('fin-cobrar-body').innerHTML=html;
 }
 
+/* ── Antigüedad de cuentas por cobrar ── */
+function finRenderAging(){
+  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const filterVal=document.getElementById('fin-aging-filter')?.value||'all';
+  const hoy=Date.now();
+  const buckets={b0:0,b30:0,b60:0,b90:0};
+  let sumTotal=0;
+  const rows=[];
+  data.forEach(r=>{
+    const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
+    const cobrar=r.porCobrar||tot;
+    sumTotal+=cobrar;
+    const fechaBase=`${r.year}-${r.mes}-01`;
+    const venc=new Date(new Date(fechaBase).getTime()+30*86400000);
+    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    let tramo,tramoLabel,tramoColor;
+    if(dias<=30){buckets.b0+=cobrar;tramo='0';tramoLabel='Corriente';tramoColor='var(--accent3)';}
+    else if(dias<=60){buckets.b30+=cobrar;tramo='31';tramoLabel='31–60 días';tramoColor='var(--warn)';}
+    else if(dias<=90){buckets.b60+=cobrar;tramo='61';tramoLabel='61–90 días';tramoColor='var(--accent2)';}
+    else{buckets.b90+=cobrar;tramo='91';tramoLabel='+90 días';tramoColor='var(--danger)';}
+    if(filterVal==='all'||filterVal===tramo) rows.push({r,tot,cobrar,dias,tramoLabel,tramoColor});
+  });
+  // KPIs
+  const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setText('fin-ag-total',clp(sumTotal));
+  setText('fin-ag-cnt',`${data.length} facturas`);
+  setText('fin-ag-b0',clp(buckets.b0));
+  setText('fin-ag-b30',clp(buckets.b30));
+  setText('fin-ag-b60',clp(buckets.b60));
+  setText('fin-ag-b90',clp(buckets.b90));
+  // Barra visual
+  const barEl=document.getElementById('fin-ag-bar');
+  if(barEl&&sumTotal>0){
+    const segs=[
+      {v:buckets.b0,c:'var(--accent3)'},
+      {v:buckets.b30,c:'var(--warn)'},
+      {v:buckets.b60,c:'var(--accent2)'},
+      {v:buckets.b90,c:'var(--danger)'}
+    ].filter(s=>s.v>0);
+    barEl.innerHTML=segs.map(s=>`<div style="flex:${s.v};background:${s.c};min-width:4px"></div>`).join('');
+  }
+  // Tabla
+  let html='';
+  rows.sort((a,b)=>b.dias-a.dias).forEach(({r,tot,cobrar,dias,tramoLabel,tramoColor})=>{
+    html+=`<tr>
+      <td><div style="font-weight:600">${escapeHtml(r.nombre||'—')}</div><div style="font-size:10px;color:var(--text3)">${escapeHtml(r.empresa||'')}</div></td>
+      <td style="font-size:11px">${escapeHtml(r.item||r.fact||'—')}</td>
+      <td style="text-align:right">${clp(tot)}</td>
+      <td style="text-align:right;color:var(--danger);font-weight:700">${clp(cobrar)}</td>
+      <td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;color:${tramoColor};font-weight:700">${dias}</td>
+      <td style="text-align:center"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${tramoColor}22;color:${tramoColor};border:1px solid ${tramoColor}44">${tramoLabel}</span></td>
+    </tr>`;
+  });
+  if(!html)html='<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro</td></tr>';
+  const tb=document.getElementById('fin-aging-body');if(tb)tb.innerHTML=html;
+}
+function finExportAgingCSV(){
+  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const hoy=Date.now();
+  const rows=[['Cliente','Empresa','Referencia','Total c/IVA','Por Cobrar','Días Vencido','Tramo']];
+  data.forEach(r=>{
+    const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
+    const cobrar=r.porCobrar||tot;
+    const fechaBase=`${r.year}-${r.mes}-01`;
+    const venc=new Date(new Date(fechaBase).getTime()+30*86400000);
+    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    const tramo=dias<=30?'Corriente':dias<=60?'31-60 días':dias<=90?'61-90 días':'+90 días';
+    rows.push([r.nombre||'',r.empresa||'',r.item||r.fact||'',tot,cobrar,dias,tramo]);
+  });
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);
+  a.download='antiguedad_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+
 /* ── Préstamos ── */
 function finRenderPrestamos(){
   const tb=document.getElementById('fin-prestamos-body');
@@ -12487,7 +12818,7 @@ function nvGuardar(){
     fechaPago:document.getElementById('nv-fecha-pago').value,
     _manual:true
   };
-  const existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  let existing;try{existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){existing=[];}
   existing.push(rec);
   try{localStorage.setItem('fin_ventas',JSON.stringify(existing));}catch(e){toast('Sin espacio para guardar','error');return;}
   saveFinVentasAirtable();
@@ -12504,7 +12835,7 @@ function nvLimpiarTodas(){
   finInit();
 }
 function finRenderNuevaLista(){
-  const data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  let data;try{data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){data=[];}
   const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   let html='';
   data.forEach((r,idx)=>{
@@ -12527,7 +12858,7 @@ function finRenderNuevaLista(){
   if(tb)tb.innerHTML=html;
 }
 function nvEliminar(idx){
-  const data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+  let data;try{data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){data=[];}
   data.splice(idx,1);
   localStorage.setItem('fin_ventas',JSON.stringify(data));
   saveFinVentasAirtable();
@@ -13896,6 +14227,420 @@ async function testSIIWorker(){
     if(sb){sb.style.color='var(--danger)';sb.textContent='⛔ No se pudo conectar: '+e.message;}
     toast('Error de conexión: '+e.message,'error');
   }
+}
+
+// ── FUNNEL DE CONVERSIÓN ─────────────────────────────────────────────
+function renderFunnel(){
+  const el=document.getElementById('ovFunnelBody');if(!el)return;
+  const now=new Date();
+  const ms=new Date(now.getFullYear(),now.getMonth(),1);
+  const me=new Date(now.getFullYear(),now.getMonth()+1,0);
+  const periodoLabel=ms.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
+  const lbl=document.getElementById('ovFunnelPeriodo');if(lbl)lbl.textContent=periodoLabel;
+  const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const _cli=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;
+  const inMes=d=>d&&new Date(d)>=ms&&new Date(d)<=me;
+  // Stages
+  const leads=_cli.filter(c=>c.createdTime&&inMes(c.createdTime)).length;
+  const cots=_cot.filter(c=>c.createdTime&&inMes(c.createdTime)).length;
+  const peds=_ped.filter(p=>p.createdTime&&inMes(p.createdTime)&&(p.fields['Estado pedido']||'')!=='Cancelado').length;
+  const cerrados=_ped.filter(p=>p.fields['Estado pedido']==='Despachado'&&p.createdTime&&inMes(p.createdTime)).length;
+  const valCots=_cot.filter(c=>c.createdTime&&inMes(c.createdTime)).reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
+  const valPeds=_ped.filter(p=>p.createdTime&&inMes(p.createdTime)&&(p.fields['Estado pedido']||'')!=='Cancelado').reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const valCerr=_ped.filter(p=>p.fields['Estado pedido']==='Despachado'&&p.createdTime&&inMes(p.createdTime)).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const pct=(a,b)=>b>0?Math.round(a/b*100):0;
+  const stages=[
+    {icon:'👤',label:'Leads Nuevos',n:leads,val:null,color:'var(--accent4)',next:cots},
+    {icon:'📋',label:'Cotizaciones',n:cots,val:valCots,color:'var(--accent)',next:peds},
+    {icon:'📦',label:'Pedidos',n:peds,val:valPeds,color:'var(--accent2)',next:cerrados},
+    {icon:'✅',label:'Cerrados',n:cerrados,val:valCerr,color:'var(--accent3)',next:null},
+  ];
+  const cols=stages.map((s,i)=>{
+    const conv=i>0&&stages[i-1].n>0?`<div style="font-size:10px;color:var(--text3);margin-top:4px">${pct(s.n,stages[i-1].n)}% conv.</div>`:'';
+    const arrow=i<stages.length-1?`<div style="font-size:20px;color:var(--text3);align-self:center">→</div>`:'';
+    return`<div style="text-align:center;flex:1;min-width:90px">
+      <div style="font-size:22px;margin-bottom:2px">${s.icon}</div>
+      <div style="font-size:28px;font-weight:700;color:${s.color};font-family:'Bebas Neue',sans-serif">${s.n}</div>
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">${s.label}</div>
+      ${s.val!=null?`<div style="font-size:11px;color:var(--text2);font-weight:600">${formatCLP(s.val)}</div>`:''}
+      ${conv}
+    </div>${arrow}`;
+  }).join('');
+  // Bar visual
+  const max=Math.max(leads,cots,peds,cerrados,1);
+  const bars=stages.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <div style="width:80px;font-size:10px;color:var(--text3);text-align:right;flex-shrink:0">${s.label}</div>
+    <div style="flex:1;height:18px;background:var(--surface2);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:${pct(s.n,max)}%;background:${s.color};border-radius:4px;transition:width .4s;min-width:${s.n>0?'24px':'0'}"></div>
+    </div>
+    <div style="width:28px;font-size:11px;font-weight:700;color:${s.color};text-align:right;flex-shrink:0">${s.n}</div>
+  </div>`).join('');
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:0 4px">${cols}</div><div style="border-top:1px solid var(--border);padding-top:14px">${bars}</div>`;
+}
+
+// ── REMUNERACIONES SUELDOS & LIQUIDACIÓN ─────────────────────────────
+const REM_SUELDO_KEY='rem_sueldos_v1';
+function remToggleSueldos(){
+  const p=document.getElementById('remSueldoPanel');if(!p) return;
+  const vis=p.style.display==='none';p.style.display=vis?'':'none';
+  if(vis) remRenderSueldoGrid();
+}
+function remRenderSueldoGrid(){
+  const grid=document.getElementById('remSueldoGrid');if(!grid) return;
+  let sueldos;try{sueldos=JSON.parse(localStorage.getItem(REM_SUELDO_KEY)||'{}');}catch(e){sueldos={};}
+  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  if(!personas.length){grid.innerHTML='<div style="font-size:11px;color:var(--text3)">No hay integrantes configurados</div>';return;}
+  grid.innerHTML=personas.map(p=>`<div class="field-group" style="margin:0">
+    <label class="field-label" style="display:flex;align-items:center;gap:4px"><span>${p.avatar}</span> ${escapeHtml(p.nombre)}</label>
+    <input class="field-input" id="rem-sueldo-${p.nombre.replace(/\s/g,'_')}" type="number" min="0" step="10000" placeholder="0" value="${sueldos[p.nombre]||''}">
+  </div>`).join('');
+}
+function remSaveSueldos(){
+  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  const sueldos={};
+  personas.forEach(p=>{const id='rem-sueldo-'+p.nombre.replace(/\s/g,'_');const v=parseInt(document.getElementById(id)?.value)||0;if(v>0) sueldos[p.nombre]=v;});
+  localStorage.setItem(REM_SUELDO_KEY,JSON.stringify(sueldos));
+  toast('✓ Sueldos guardados','success');
+  renderRemuneraciones();
+}
+function remRenderLiquidacion(totalNeto,totalComision){
+  const liqBody=document.getElementById('remLiqBody');if(!liqBody) return;
+  let sueldos;try{sueldos=JSON.parse(localStorage.getItem(REM_SUELDO_KEY)||'{}');}catch(e){sueldos={};}
+  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  const items=personas.map(p=>{
+    const sueldo=sueldos[p.nombre]||0;
+    const afp=Math.round(sueldo*0.10);
+    const isapre=Math.round(sueldo*0.07);
+    const comision=typeof vendorOwnsRecord!=='undefined'?0:Math.round(sueldo>0?totalComision/personas.length:0);
+    const neto=sueldo-afp-isapre+comision;
+    return{nombre:p.nombre,avatar:p.avatar,sueldo,afp,isapre,comision,neto};
+  }).filter(x=>x.sueldo>0||x.comision>0);
+  if(!items.length){liqBody.innerHTML='<div style="font-size:11px;color:var(--text3)">Configura los sueldos base para ver la liquidación</div>';return;}
+  liqBody.innerHTML=items.map(x=>`<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:11px;border:1px solid var(--border2)">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-weight:700">${x.avatar} ${escapeHtml(x.nombre)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px">
+      <div><span style="color:var(--text3)">Sueldo bruto:</span> <span style="font-weight:600">${formatCLP(x.sueldo)}</span></div>
+      <div><span style="color:var(--text3)">AFP (10%):</span> <span style="color:var(--danger)">-${formatCLP(x.afp)}</span></div>
+      <div><span style="color:var(--text3)">Isapre (7%):</span> <span style="color:var(--danger)">-${formatCLP(x.isapre)}</span></div>
+      <div><span style="color:var(--text3)">Comisión:</span> <span style="color:var(--accent3)">+${formatCLP(x.comision)}</span></div>
+      <div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:4px;margin-top:2px"><span style="color:var(--text3)">Sueldo neto:</span> <span style="font-weight:700;color:var(--accent);font-size:13px">${formatCLP(x.neto)}</span></div>
+    </div>
+  </div>`).join('');
+}
+
+// ── PRESUPUESTO MENSUAL ───────────────────────────────────────────────
+const PRES_KEY='fin_presupuesto_v1';
+const PRES_CATS_DEFAULT=[
+  {id:'marketing',label:'Marketing & Ads',color:'#f59e0b',icon:'📢'},
+  {id:'proveedores',label:'Proveedores / Materiales',color:'#3b82f6',icon:'🏭'},
+  {id:'sueldos',label:'Sueldos & Honorarios',color:'#10b981',icon:'💵'},
+  {id:'arriendo',label:'Arriendo & Servicios',color:'#8b5cf6',icon:'🏢'},
+  {id:'equipos',label:'Equipos & Herramientas',color:'#ef4444',icon:'🔧'},
+  {id:'otros',label:'Otros gastos',color:'#6b7280',icon:'📦'},
+];
+function presGetData(){try{return JSON.parse(localStorage.getItem(PRES_KEY)||'{}');}catch(e){return{};}}
+function presSetData(d){localStorage.setItem(PRES_KEY,JSON.stringify(d));}
+function presKey(anio,mes){return`${anio}-${String(mes).padStart(2,'0')}`;}
+function renderPresupuesto(){
+  const anioSel=document.getElementById('pres-anio');
+  const mesSel=document.getElementById('pres-mes');
+  const now=new Date();
+  if(anioSel&&!anioSel.options.length){
+    [2024,2025,2026,2027].forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;if(y===now.getFullYear())o.selected=true;anioSel.appendChild(o);});
+  }
+  if(mesSel&&!mesSel.options.length){
+    ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].forEach((m,i)=>{const o=document.createElement('option');o.value=i+1;o.textContent=m;if(i===now.getMonth())o.selected=true;mesSel.appendChild(o);});
+  }
+  const anio=parseInt(document.getElementById('pres-anio')?.value||now.getFullYear());
+  const mes=parseInt(document.getElementById('pres-mes')?.value||now.getMonth()+1);
+  const key=presKey(anio,mes);
+  const data=presGetData();
+  const periodoData=data[key]||{};
+  const cats=periodoData.cats||PRES_CATS_DEFAULT.map(c=>({...c,budget:0,ejecutado:0}));
+  // Intentar poblar ejecutado desde libro diario
+  let ldData=[];try{ldData=JSON.parse(localStorage.getItem('ld_entries')||'[]');}catch(e){}
+  const totalBudget=cats.reduce((s,c)=>s+(c.budget||0),0);
+  const totalEjec=cats.reduce((s,c)=>s+(c.ejecutado||0),0);
+  const disp=totalBudget-totalEjec;
+  const pct=totalBudget>0?Math.round(totalEjec/totalBudget*100):0;
+  const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setText('pres-k-total',formatCLP(totalBudget));
+  setText('pres-k-ejec',formatCLP(totalEjec));
+  setText('pres-k-disp',formatCLP(disp));
+  setText('pres-k-pct',pct+'%');
+  const catsEl=document.getElementById('pres-cats');if(!catsEl) return;
+  catsEl.innerHTML=cats.map((c,i)=>{
+    const pctC=c.budget>0?Math.round(c.ejecutado/c.budget*100):0;
+    const barColor=pctC>=100?'var(--danger)':pctC>=80?'var(--warn)':c.color;
+    return`<div style="border:1px solid var(--border2);border-radius:8px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:16px">${c.icon}</span>
+        <span style="font-weight:600;font-size:12px;flex:1">${escapeHtml(c.label)}</span>
+        <span style="font-size:10px;color:${barColor};font-weight:700;background:${barColor}22;padding:2px 6px;border-radius:3px">${pctC}%</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="field-group" style="margin:0"><label class="field-label">Presupuesto (CLP)</label><input class="field-input" id="pres-cat-b-${i}" type="number" min="0" step="10000" value="${c.budget||''}" placeholder="0" oninput="presPreviewBar(${i})"></div>
+        <div class="field-group" style="margin:0"><label class="field-label">Ejecutado (CLP)</label><input class="field-input" id="pres-cat-e-${i}" type="number" min="0" step="10000" value="${c.ejecutado||''}" placeholder="0" oninput="presPreviewBar(${i})"></div>
+      </div>
+      <div style="margin-top:8px;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden" id="pres-bar-${i}">
+        <div style="height:100%;width:${Math.min(pctC,100)}%;background:${barColor};border-radius:3px;transition:width .3s"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function presPreviewBar(i){
+  const b=parseFloat(document.getElementById(`pres-cat-b-${i}`)?.value)||0;
+  const e=parseFloat(document.getElementById(`pres-cat-e-${i}`)?.value)||0;
+  const pct=b>0?Math.min(100,Math.round(e/b*100)):0;
+  const barEl=document.getElementById(`pres-bar-${i}`);
+  if(barEl){const inner=barEl.firstElementChild;if(inner)inner.style.width=pct+'%';}
+}
+function presGuardar(){
+  const anio=parseInt(document.getElementById('pres-anio')?.value||new Date().getFullYear());
+  const mes=parseInt(document.getElementById('pres-mes')?.value||new Date().getMonth()+1);
+  const key=presKey(anio,mes);
+  const data=presGetData();
+  const cats=PRES_CATS_DEFAULT.map((c,i)=>({...c,budget:parseFloat(document.getElementById(`pres-cat-b-${i}`)?.value)||0,ejecutado:parseFloat(document.getElementById(`pres-cat-e-${i}`)?.value)||0}));
+  data[key]={cats};presSetData(data);
+  renderPresupuesto();toast('✓ Presupuesto guardado','success');
+}
+function presAddCategoria(){
+  toast('Edita las categorías directamente en los campos — próximamente categorías custom','info');
+}
+function presExportCSV(){
+  const anio=parseInt(document.getElementById('pres-anio')?.value||new Date().getFullYear());
+  const mes=parseInt(document.getElementById('pres-mes')?.value||new Date().getMonth()+1);
+  const key=presKey(anio,mes);const data=presGetData();const periodoData=data[key]||{};
+  const cats=periodoData.cats||PRES_CATS_DEFAULT.map(c=>({...c,budget:0,ejecutado:0}));
+  const rows=[['Categoría','Presupuesto','Ejecutado','Disponible','% Ejecución'],...cats.map(c=>[c.label,c.budget,c.ejecutado,c.budget-c.ejecutado,c.budget>0?Math.round(c.ejecutado/c.budget*100)+'%':'—'])];
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);a.download=`presupuesto_${key}.csv`;a.click();
+}
+
+// ── PORTAL DE CLIENTE ─────────────────────────────────────────────────
+function checkClientePortal(){
+  const params=new URLSearchParams(window.location.search);
+  const portalToken=params.get('portal');
+  if(!portalToken) return;
+  let clienteId;
+  try{clienteId=atob(portalToken);}catch(e){return;}
+  if(!clienteId.startsWith('rec')) return;
+  document.body.style.overflow='hidden';
+  const overlay=document.createElement('div');
+  overlay.id='clientePortalOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:var(--black);z-index:9999;display:flex;flex-direction:column;overflow:hidden';
+  overlay.innerHTML=`<div style="padding:16px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+    <img src="https://thelab.solutions/wp-content/uploads/2023/10/Logo-The-Lab-Solutions-Blanco-Sinfondo.png" style="height:28px;object-fit:contain" onerror="this.style.display='none'">
+    <div><div style="font-size:14px;font-weight:700;color:var(--text)">The Lab Solutions</div><div style="font-size:11px;color:var(--text3)">Portal de seguimiento de pedidos</div></div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:20px;max-width:800px;margin:0 auto;width:100%">
+    <div id="portalContent"><div class="loading-state"><div class="spinner"></div> Cargando...</div></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  function renderPortal(){
+    const cliente=state.clientes.find(c=>c.id===clienteId);
+    if(!cliente){document.getElementById('portalContent').innerHTML='<div class="empty-state"><div class="empty-icon">👤</div>Cliente no encontrado</div>';return;}
+    const f=cliente.fields;
+    const nombre=f['Empresa']||f['Contacto']||'Cliente';
+    const pedidos=state.pedidos.filter(p=>{const cli=p.fields['Cliente'];return Array.isArray(cli)?cli.includes(clienteId):cli===clienteId;});
+    const cots=state.cotizaciones.filter(c=>{const cli=c.fields['Cliente'];return Array.isArray(cli)?cli.includes(clienteId):cli===clienteId;}).slice(0,10);
+    const stageColors={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
+    const pedHTML=pedidos.length?pedidos.sort((a,b)=>(b.createdTime||'').localeCompare(a.createdTime||'')).map(p=>{
+      const pf=p.fields,est=pf['Estado pedido']||'Confirmado',atras=pf['Fecha entrega']&&new Date(pf['Fecha entrega']+'T00:00:00')<new Date();
+      return`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:${stageColors[est]||'var(--text)'}">${escapeHtml(pf['N° Pedido']||'—')}</div>
+          <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;background:${stageColors[est]||'var(--surface3)'}22;color:${stageColors[est]||'var(--text3)'};">${est}</span>
+        </div>
+        ${pf['Fecha entrega']?`<div style="font-size:11px;color:${atras&&est!=='Despachado'?'var(--danger)':'var(--text3)'};margin-bottom:6px">📅 Entrega: ${pf['Fecha entrega']}${atras&&est!=='Despachado'?' ⚠ En proceso de despacho':''}</div>`:''}
+        ${pf['Notas']?`<div style="font-size:11px;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px;white-space:pre-wrap">${escapeHtml(pf['Notas']||'')}</div>`:''}
+      </div>`;
+    }).join(''):'<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px">Sin pedidos registrados</div>';
+    document.getElementById('portalContent').innerHTML=`
+      <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">${escapeHtml(nombre)}</h2>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:20px">${pedidos.length} pedido${pedidos.length!==1?'s':''} · ${cots.length} cotización${cots.length!==1?'es':''}</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin-bottom:10px">Pedidos</div>
+      ${pedHTML}
+      <div style="margin-top:16px;font-size:10px;color:var(--text3);text-align:center">The Lab Solutions — Portal de clientes · <a href="https://thelab.solutions" style="color:var(--accent)">thelab.solutions</a></div>`;
+  }
+  if(state.loaded){renderPortal();}
+  else{const orig=window.renderOverview||function(){};const intv=setInterval(()=>{if(state.loaded){clearInterval(intv);renderPortal();}},500);}
+}
+
+// ── CALCULADORA LÁSER / NEON ──────────────────────────────────────────
+function calcSwitchTab(tab){
+  ['laser','neon'].forEach(t=>{
+    document.getElementById('calc-panel-'+t).style.display=t===tab?'':'none';
+    const btn=document.getElementById('calc-nav-'+t);if(btn) btn.classList.toggle('active-filter',t===tab);
+  });
+}
+// Cliente autocomplete compartido
+function calcClienteSearch(pfx){
+  const q=(document.getElementById(pfx+'-cli-search')?.value||'').toLowerCase();
+  const dd=document.getElementById(pfx+'-cli-dropdown');if(!dd)return;
+  if(!q){dd.style.display='none';return;}
+  const matches=state.clientes.filter(c=>{const f=c.fields;return(f['Empresa']||f['Contacto']||'').toLowerCase().includes(q);}).slice(0,8);
+  if(!matches.length){dd.style.display='none';return;}
+  dd.innerHTML=matches.map(c=>{const f=c.fields,name=f['Empresa']||f['Contacto']||'—';
+    return`<div class="search-select-item" onclick="calcClienteSelect('${pfx}','${c.id}','${escapeHtml(name)}')">${escapeHtml(name)}</div>`;
+  }).join('');
+  dd.style.display='block';
+}
+function calcClienteSelect(pfx,id,name){
+  const inp=document.getElementById(pfx+'-cli-search');const hid=document.getElementById(pfx+'-cli-id');
+  const dd=document.getElementById(pfx+'-cli-dropdown');
+  if(inp)inp.value=name;if(hid)hid.value=id;if(dd)dd.style.display='none';
+}
+// ── LÁSER ────────────────────────────────────────────────────────────
+let _lsrExtras=[];
+function calcLaserAddExtra(){
+  _lsrExtras.push({desc:'',valor:0});
+  calcLaserRenderExtras();
+}
+function calcLaserRenderExtras(){
+  const el=document.getElementById('lsr-extras');if(!el)return;
+  el.innerHTML=_lsrExtras.map((x,i)=>`<div style="display:flex;gap:8px;align-items:center">
+    <input class="field-input" style="flex:1" placeholder="Descripción extra" value="${escapeHtml(x.desc)}" oninput="_lsrExtras[${i}].desc=this.value">
+    <input class="field-input" style="width:120px" type="number" min="0" placeholder="Valor CLP" value="${x.valor||''}" oninput="_lsrExtras[${i}].valor=parseInt(this.value)||0;calcLaserUpdate()">
+    <button class="btn-mini btn-mini-red" onclick="_lsrExtras.splice(${i},1);calcLaserRenderExtras();calcLaserUpdate()">✕</button>
+  </div>`).join('');
+}
+function calcLaserUpdate(){
+  const qty=Math.max(1,parseInt(document.getElementById('lsr-qty')?.value)||1);
+  const matPrecio=parseFloat(document.getElementById('lsr-mat')?.value)||0;
+  const area=parseFloat(document.getElementById('lsr-area')?.value)||0;
+  const desp=parseFloat(document.getElementById('lsr-desp')?.value||15)/100;
+  const tCorte=parseFloat(document.getElementById('lsr-t-corte')?.value)||0;
+  const tGrab=parseFloat(document.getElementById('lsr-t-grab')?.value)||0;
+  const tarifa=parseFloat(document.getElementById('lsr-tarifa')?.value)||8000;
+  const mdo=parseFloat(document.getElementById('lsr-mdo')?.value)||0;
+  const margen=parseInt(document.getElementById('lsr-margen')?.value||60)/100;
+  const extrasSuma=_lsrExtras.reduce((s,x)=>s+(x.valor||0),0);
+  // Costos por unidad
+  const costoMat=Math.round(area*matPrecio*(1+desp));
+  const costoMaq=Math.round((tCorte+tGrab)/60*tarifa);
+  const costoMdo=Math.round(mdo/60*(tarifa*0.4));
+  const costoUnit=costoMat+costoMaq+costoMdo+extrasSuma;
+  const costoTotal=costoUnit*qty;
+  const neto=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
+  const iva=Math.round(neto*0.19);
+  const total=neto+iva;
+  const pieza=qty>0?Math.round(total/qty):0;
+  const fmt=v=>formatCLP(v);
+  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=fmt(v);};
+  const lbl=document.getElementById('lsr-margen-lbl');if(lbl)lbl.textContent=Math.round(margen*100)+'%';
+  s('lsr-r-mat',costoMat*qty);s('lsr-r-maq',costoMaq*qty);s('lsr-r-mdo',costoMdo*qty);
+  s('lsr-r-ext',extrasSuma*qty);s('lsr-r-costo',costoTotal);s('lsr-r-neto',neto);
+  s('lsr-r-iva',iva);s('lsr-r-total',total);s('lsr-r-pieza',pieza);
+}
+function calcLaserGuardar(){
+  const desc=(document.getElementById('lsr-desc')?.value||'').trim()||'Trabajo láser';
+  const cliId=document.getElementById('lsr-cli-id')?.value||'';
+  const qty=Math.max(1,parseInt(document.getElementById('lsr-qty')?.value)||1);
+  const margen=parseInt(document.getElementById('lsr-margen')?.value||60)/100;
+  const matPrecio=parseFloat(document.getElementById('lsr-mat')?.value)||0;
+  const area=parseFloat(document.getElementById('lsr-area')?.value)||0;
+  const desp=parseFloat(document.getElementById('lsr-desp')?.value||15)/100;
+  const tCorte=parseFloat(document.getElementById('lsr-t-corte')?.value)||0;
+  const tGrab=parseFloat(document.getElementById('lsr-t-grab')?.value)||0;
+  const tarifa=parseFloat(document.getElementById('lsr-tarifa')?.value)||8000;
+  const mdo=parseFloat(document.getElementById('lsr-mdo')?.value)||0;
+  const extrasSuma=_lsrExtras.reduce((s,x)=>s+(x.valor||0),0);
+  const costoMat=Math.round(area*matPrecio*(1+desp));
+  const costoMaq=Math.round((tCorte+tGrab)/60*tarifa);
+  const costoMdo=Math.round(mdo/60*(tarifa*0.4));
+  const costoUnit=costoMat+costoMaq+costoMdo+extrasSuma;
+  const costoTotal=costoUnit*qty;
+  const neto=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
+  const total=neto+Math.round(neto*0.19);
+  const notas=`Calculadora Láser\nMaterial: ${area}cm² × $${matPrecio}/cm² (+${Math.round(desp*100)}% desp)\nMáquina: ${tCorte+tGrab}min @ $${tarifa}/hr\nMano de obra: ${mdo}min\nExtras: $${extrasSuma}\nCosto: $${costoTotal} | Margen: ${Math.round(margen*100)}%`;
+  // Pre-fill nueva cotización
+  switchTab('nueva-cot');
+  setTimeout(()=>{
+    const desc_el=document.getElementById('cot-descripcion')||document.getElementById('cot-servicio');
+    if(desc_el) desc_el.value=desc;
+    const total_el=document.getElementById('cot-total')||document.getElementById('cot-price');
+    if(total_el) total_el.value=total;
+    const notas_el=document.getElementById('cot-notas');
+    if(notas_el) notas_el.value=notas;
+    toast('✓ Datos copiados a nueva cotización','success');
+  },200);
+}
+function calcLaserLimpiar(){
+  ['lsr-desc','lsr-qty','lsr-area','lsr-desp','lsr-t-corte','lsr-t-grab','lsr-mdo'].forEach(id=>{const el=document.getElementById(id);if(el){el.value=id==='lsr-qty'?'1':id==='lsr-desp'?'15':id==='lsr-tarifa'?'8000':'0';}});
+  document.getElementById('lsr-cli-search').value='';document.getElementById('lsr-cli-id').value='';
+  document.getElementById('lsr-margen').value=60;_lsrExtras=[];calcLaserRenderExtras();calcLaserUpdate();
+}
+// ── NEON/LED ──────────────────────────────────────────────────────────
+let _neoExtras=[];
+function calcNeonAddExtra(){
+  _neoExtras.push({desc:'',valor:0});
+  calcNeonRenderExtras();
+}
+function calcNeonRenderExtras(){
+  const el=document.getElementById('neo-extras');if(!el)return;
+  el.innerHTML=_neoExtras.map((x,i)=>`<div style="display:flex;gap:8px;align-items:center">
+    <input class="field-input" style="flex:1" placeholder="Descripción extra" value="${escapeHtml(x.desc)}" oninput="_neoExtras[${i}].desc=this.value">
+    <input class="field-input" style="width:120px" type="number" min="0" placeholder="Valor CLP" value="${x.valor||''}" oninput="_neoExtras[${i}].valor=parseInt(this.value)||0;calcNeonUpdate()">
+    <button class="btn-mini btn-mini-red" onclick="_neoExtras.splice(${i},1);calcNeonRenderExtras();calcNeonUpdate()">✕</button>
+  </div>`).join('');
+}
+function calcNeonUpdate(){
+  const qty=Math.max(1,parseInt(document.getElementById('neo-qty')?.value)||1);
+  const tarifaTubo=parseFloat(document.getElementById('neo-tipo')?.value)||4200;
+  const largo=parseFloat(document.getElementById('neo-largo')?.value)||0;
+  const colores=Math.max(1,parseInt(document.getElementById('neo-colores')?.value)||1);
+  const soporte=parseFloat(document.getElementById('neo-soporte')?.value)||0;
+  const trans=parseFloat(document.getElementById('neo-trans')?.value)||8500;
+  const dimmer=parseFloat(document.getElementById('neo-dimmer')?.value)||0;
+  const margen=parseInt(document.getElementById('neo-margen')?.value||65)/100;
+  const extrasSuma=_neoExtras.reduce((s,x)=>s+(x.valor||0),0);
+  const costoTubo=Math.round(largo*tarifaTubo*colores);
+  const costoUnit=costoTubo+soporte+trans+dimmer+extrasSuma;
+  const costoTotal=costoUnit*qty;
+  const neto=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
+  const iva=Math.round(neto*0.19);
+  const total=neto+iva;
+  const pieza=qty>0?Math.round(total/qty):0;
+  const fmt=v=>formatCLP(v);
+  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=fmt(v);};
+  const lbl=document.getElementById('neo-margen-lbl');if(lbl)lbl.textContent=Math.round(margen*100)+'%';
+  s('neo-r-tubo',costoTubo*qty);s('neo-r-sop',soporte*qty);s('neo-r-trans',trans*qty);
+  s('neo-r-dim',dimmer*qty);s('neo-r-ext',extrasSuma*qty);s('neo-r-costo',costoTotal);
+  s('neo-r-neto',neto);s('neo-r-iva',iva);s('neo-r-total',total);s('neo-r-pieza',pieza);
+}
+function calcNeonGuardar(){
+  const desc=(document.getElementById('neo-desc')?.value||'').trim()||'Letrero Neon/LED';
+  const qty=Math.max(1,parseInt(document.getElementById('neo-qty')?.value)||1);
+  const margen=parseInt(document.getElementById('neo-margen')?.value||65)/100;
+  const tarifaTubo=parseFloat(document.getElementById('neo-tipo')?.value)||4200;
+  const largo=parseFloat(document.getElementById('neo-largo')?.value)||0;
+  const colores=Math.max(1,parseInt(document.getElementById('neo-colores')?.value)||1);
+  const soporte=parseFloat(document.getElementById('neo-soporte')?.value)||0;
+  const trans=parseFloat(document.getElementById('neo-trans')?.value)||8500;
+  const dimmer=parseFloat(document.getElementById('neo-dimmer')?.value)||0;
+  const extrasSuma=_neoExtras.reduce((s,x)=>s+(x.valor||0),0);
+  const costoUnit=(largo*tarifaTubo*colores)+soporte+trans+dimmer+extrasSuma;
+  const costoTotal=costoUnit*qty;
+  const neto=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
+  const total=neto+Math.round(neto*0.19);
+  const notas=`Calculadora Neon/LED\nTubo: ${largo}m × ${colores} colores @ $${tarifaTubo}/m\nSoporte: $${soporte} | Transformador: $${trans} | Dimmer: $${dimmer}\nExtras: $${extrasSuma}\nCosto: $${costoTotal} | Margen: ${Math.round(margen*100)}%`;
+  switchTab('nueva-cot');
+  setTimeout(()=>{
+    const desc_el=document.getElementById('cot-descripcion')||document.getElementById('cot-servicio');
+    if(desc_el) desc_el.value=desc;
+    const total_el=document.getElementById('cot-total')||document.getElementById('cot-price');
+    if(total_el) total_el.value=total;
+    const notas_el=document.getElementById('cot-notas');
+    if(notas_el) notas_el.value=notas;
+    toast('✓ Datos copiados a nueva cotización','success');
+  },200);
+}
+function calcNeonLimpiar(){
+  ['neo-desc','neo-qty','neo-largo','neo-colores'].forEach(id=>{const el=document.getElementById(id);if(el){el.value=id==='neo-qty'?'1':id==='neo-colores'?'1':'0';}});
+  document.getElementById('neo-cli-search').value='';document.getElementById('neo-cli-id').value='';
+  document.getElementById('neo-margen').value=65;_neoExtras=[];calcNeonRenderExtras();calcNeonUpdate();
 }
 </script>
 
