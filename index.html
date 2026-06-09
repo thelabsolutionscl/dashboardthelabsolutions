@@ -11006,6 +11006,7 @@ function renderAdsCapacidad(data){
   if(!box||!list) return;
   const filas=getCapacidadLineas();
   const camps=data.campanas||[];
+  _adsCapBtnStore=[];
   list.innerHTML=filas.map((f,fi)=>{
     const matchedCamps=f.lineasIds.flatMap(lid=>{
       const linea=ADS_LINEAS.find(l=>l.id===lid);
@@ -11015,17 +11016,21 @@ function renderAdsCapacidad(data){
     const firstActive=unique.find(c=>c.estado==='ENABLED');
     const firstAny=unique[0]||null;
     let btnHtml='';
+    const mkBtn=(label,style)=>{const idx=_adsCapBtnStore.length-1;return`<button onclick="_adsCapBtn(${idx})" style="${style}">${label}</button>`;};
     if(f.a==='PAUSAR'&&firstActive){
-      btnHtml=`<button onclick="openEditCampaign('${firstActive.id}',${JSON.stringify(firstActive.nombre)},'PAUSED',${firstActive.presupuesto||0})" style="background:rgba(220,53,69,0.1);border:1px solid rgba(220,53,69,0.3);color:var(--danger);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">⏸ Pausar</button>`;
+      _adsCapBtnStore.push({type:'edit',id:firstActive.id,nombre:firstActive.nombre,estado:'PAUSED',presupuesto:firstActive.presupuesto||0});
+      btnHtml=mkBtn('⏸ Pausar','background:rgba(220,53,69,0.1);border:1px solid rgba(220,53,69,0.3);color:var(--danger);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0');
     } else if(f.a==='REDUCIR'&&firstActive){
       const nb=Math.round((firstActive.presupuesto||0)*0.7);
-      btnHtml=`<button onclick="openEditCampaign('${firstActive.id}',${JSON.stringify(firstActive.nombre)},'ENABLED',${nb})" style="background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.3);color:var(--warn);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">↓ -30%</button>`;
+      _adsCapBtnStore.push({type:'edit',id:firstActive.id,nombre:firstActive.nombre,estado:'ENABLED',presupuesto:nb});
+      btnHtml=mkBtn('↓ -30%','background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.3);color:var(--warn);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0');
     } else if(f.a==='ACTIVAR'){
       if(firstAny&&firstAny.estado==='PAUSED'){
-        btnHtml=`<button onclick="openEditCampaign('${firstAny.id}',${JSON.stringify(firstAny.nombre)},'ENABLED',${firstAny.presupuesto||0})" style="background:rgba(40,199,111,0.1);border:1px solid rgba(40,199,111,0.3);color:var(--success);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">▶ Reactivar</button>`;
+        _adsCapBtnStore.push({type:'edit',id:firstAny.id,nombre:firstAny.nombre,estado:'ENABLED',presupuesto:firstAny.presupuesto||0});
+        btnHtml=mkBtn('▶ Reactivar','background:rgba(40,199,111,0.1);border:1px solid rgba(40,199,111,0.3);color:var(--success);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0');
       } else if(!firstAny){
         const pl=ADS_LINEAS.find(l=>f.lineasIds.includes(l.id));
-        if(pl) btnHtml=`<button onclick="openCreateCampaignTemplate(${JSON.stringify(pl.campañaSugerida)},${pl.presupuesto},'${pl.tipo}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">+ Crear</button>`;
+        if(pl){_adsCapBtnStore.push({type:'create',lineaId:pl.id});btnHtml=mkBtn('+ Crear','background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0');}
       }
     }
     const pctBar=Math.max(f.pct,2);
@@ -11067,7 +11072,7 @@ function renderAdsSugerencias(data){
         <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px">${l.campañaSugerida}</div>
         <div style="font-size:10px;color:var(--text3)">${l.label} · ${l.tipo} · Presupuesto sugerido: $${l.presupuesto.toLocaleString('es-CL')}/día</div>
       </div>
-      <button onclick="openCreateCampaignTemplate(${JSON.stringify(l.campañaSugerida)},${l.presupuesto},'${l.tipo}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;white-space:nowrap;font-weight:600;flex-shrink:0">+ Crear</button>
+      <button onclick="openCreateCampaignByLineaId('${l.id}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;white-space:nowrap;font-weight:600;flex-shrink:0">+ Crear</button>
     </div>`).join('');
   box.style.display='block';
 }
@@ -11079,6 +11084,16 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo){
     const st=document.getElementById('adsCampaignModalEstado');if(st) st.value='ENABLED';
     const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
   },80);
+}
+function openCreateCampaignByLineaId(lineaId){
+  const l=ADS_LINEAS.find(x=>x.id===lineaId);
+  if(l) openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo);
+}
+let _adsCapBtnStore=[];
+function _adsCapBtn(idx){
+  const d=_adsCapBtnStore[idx];if(!d) return;
+  if(d.type==='edit') openEditCampaign(d.id,d.nombre,d.estado,d.presupuesto);
+  else openCreateCampaignByLineaId(d.lineaId);
 }
 // ── Health Score por campaña (0–100) ────────────────────
 function adsHealthScore(c){
