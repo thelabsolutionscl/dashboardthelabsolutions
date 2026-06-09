@@ -10946,17 +10946,35 @@ function adsLastSyncStr(){
 }
 // ── Líneas de producción ↔ campañas Google Ads ───────────
 const ADS_LINEAS=[
-  {id:'3d_small',label:'Impresión 3D — K1/K2',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000},
-  {id:'3d_large',label:'Impresión 3D — Giga',campañaSugerida:'Búsqueda - Impresión 3D Grande',tipo:'SEARCH',presupuesto:5000},
-  {id:'laser',label:'Láser y Señalética',campañaSugerida:'Búsqueda - Señalética Acrílico',tipo:'SEARCH',presupuesto:6000},
-  {id:'neon',label:'Neon LED y Rótulos',campañaSugerida:'Búsqueda - Neon LED Personalizado',tipo:'SEARCH',presupuesto:5000},
-  {id:'trofeos',label:'Trofeos y Reconocimientos',campañaSugerida:'Búsqueda - Trofeos Corporativos',tipo:'SEARCH',presupuesto:4000},
-  {id:'papeleria',label:'Papelería Corporativa',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000},
+  {id:'3d_small',label:'Impresión 3D — K1/K2',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
+   palabrasClave:['impresión 3d santiago','impresión 3d','impresora 3d','piezas 3d','prototipo 3d','fabricación 3d','figuras 3d','modelos 3d','carcasas 3d','carteles 3d']},
+  {id:'3d_large',label:'Impresión 3D — Giga',campañaSugerida:'Búsqueda - Impresión 3D Grande',tipo:'SEARCH',presupuesto:5000,
+   palabrasClave:['impresión 3d grande','maqueta arquitectura','modelos escala','pieza industrial grande','prototipo tamaño real','impresora giga']},
+  {id:'laser',label:'Láser y Señalética',campañaSugerida:'Búsqueda - Señalética Acrílico',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['señalética corporativa','señalética acrílico','corte láser','grabado láser','letrero acrílico','placa grabada','señalización empresa','rótulo acrílico']},
+  {id:'neon',label:'Neon LED y Rótulos',campañaSugerida:'Búsqueda - Neon LED Personalizado',tipo:'SEARCH',presupuesto:5000,
+   palabrasClave:['neon led personalizado','letrero neon','cartel neon','rótulo led','neon decorativo','letreros luminosos','neon para negocio','carteles de neon']},
+  {id:'trofeos',label:'Trofeos y Reconocimientos',campañaSugerida:'Búsqueda - Trofeos Corporativos',tipo:'SEARCH',presupuesto:4000,
+   palabrasClave:['trofeos personalizados','medallas empresa','reconocimiento corporativo','galvano personalizado','premio empresa','trofeos corporativos','placa reconocimiento']},
+  {id:'papeleria',label:'Papelería Corporativa',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000,
+   palabrasClave:['papelería corporativa','tarjetas presentación','sello empresa','membrete personalizado','carpetas corporativas','impresión corporativa']},
 ];
 function _adsMatchCampaign(campanas,linea){
   if(!campanas||!campanas.length) return null;
-  const kws=linea.campañaSugerida.toLowerCase().replace(/[–\-]/g,' ').split(/\s+/).filter(w=>w.length>3);
+  const kws=[
+    ...linea.campañaSugerida.toLowerCase().replace(/[–\-]/g,' ').split(/\s+/).filter(w=>w.length>3),
+    ...(linea.palabrasClave||[]).flatMap(k=>k.toLowerCase().split(/\s+/).filter(w=>w.length>3))
+  ];
   return campanas.find(c=>kws.some(k=>c.nombre.toLowerCase().includes(k)))||null;
+}
+function adsCopyKw(encoded){
+  const kw=decodeURIComponent(encoded);
+  navigator.clipboard.writeText(kw).then(()=>toast('✓ "'+kw+'" copiado','success')).catch(()=>{});
+}
+function adsCopyAllKw(lineaId){
+  const l=ADS_LINEAS.find(x=>x.id===lineaId);
+  if(!l||!l.palabrasClave) return;
+  navigator.clipboard.writeText(l.palabrasClave.join('\n')).then(()=>toast('✓ '+l.palabrasClave.length+' keywords copiados','success')).catch(()=>{});
 }
 function getCapacidadLineas(){
   const today=new Date();today.setHours(0,0,0,0);
@@ -11066,14 +11084,22 @@ function renderAdsSugerencias(data){
     list.innerHTML='<div style="font-size:11px;color:var(--success);padding:4px 0">✓ Ya tienes campañas para todas las líneas de producción activas.</div>';
     box.style.display='block';return;
   }
-  list.innerHTML=faltantes.map(l=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:7px;border-left:3px solid rgba(0,212,204,0.4)">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px">${l.campañaSugerida}</div>
-        <div style="font-size:10px;color:var(--text3)">${l.label} · ${l.tipo} · Presupuesto sugerido: $${l.presupuesto.toLocaleString('es-CL')}/día</div>
+  list.innerHTML=faltantes.map(l=>{
+    const chips=(l.palabrasClave||[]).map(kw=>`<span onclick="adsCopyKw('${encodeURIComponent(kw)}')" style="cursor:pointer;font-size:9px;background:var(--surface3);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--text3);white-space:nowrap;transition:border-color 0.1s" title="Clic para copiar" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">${kw}</span>`).join('');
+    return`<div style="padding:8px 10px;background:var(--surface2);border-radius:7px;border-left:3px solid rgba(0,212,204,0.4)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${chips?'6':'0'}px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px">${l.campañaSugerida}</div>
+          <div style="font-size:10px;color:var(--text3)">${l.label} · ${l.tipo} · $${l.presupuesto.toLocaleString('es-CL')}/día</div>
+        </div>
+        <div style="display:flex;gap:5px;flex-shrink:0">
+          ${chips?`<button onclick="adsCopyAllKw('${l.id}')" style="background:var(--surface3);border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 8px;font-size:9px;cursor:pointer;white-space:nowrap" title="Copiar todos los keywords">📋 Keywords</button>`:''}
+          <button onclick="openCreateCampaignByLineaId('${l.id}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;white-space:nowrap;font-weight:600">+ Crear</button>
+        </div>
       </div>
-      <button onclick="openCreateCampaignByLineaId('${l.id}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;white-space:nowrap;font-weight:600;flex-shrink:0">+ Crear</button>
-    </div>`).join('');
+      ${chips?`<div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>`:''}
+    </div>`;
+  }).join('');
   box.style.display='block';
 }
 function openCreateCampaignTemplate(nombre,presupuesto,tipo){
