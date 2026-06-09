@@ -32,6 +32,39 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 /* MOBILE */
 .mobile-menu-btn{display:none;background:none;border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;}
 .mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);}
+/* ── Búsqueda global ─────────────────────────────────────────── */
+.global-search{position:relative;flex:1;max-width:720px;display:flex;align-items:center;}
+.global-search .gs-icon{position:absolute;left:13px;color:var(--text3);pointer-events:none;}
+#globalSearchInput{width:100%;height:38px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:0 64px 0 38px;outline:none;transition:border-color .15s,box-shadow .15s,background .15s;}
+#globalSearchInput::placeholder{color:var(--text3);}
+#globalSearchInput:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px rgba(0,212,204,0.12);}
+.gs-kbd{position:absolute;right:11px;font-family:'DM Sans',sans-serif;font-size:10px;color:var(--text3);background:var(--surface3);border:1px solid var(--border2);border-radius:5px;padding:2px 6px;pointer-events:none;line-height:1.4;}
+.gs-clear{position:absolute;right:9px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.gs-clear:hover{color:var(--text);background:var(--surface3);}
+.global-search-results{position:absolute;top:46px;left:0;right:0;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.55);z-index:99998;max-height:min(70vh,520px);overflow-y:auto;display:none;padding:6px;}
+.global-search-results.open{display:block;}
+.gs-cat{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);padding:9px 10px 4px;}
+.gs-item{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--text);}
+.gs-item:hover,.gs-item.gs-active{background:var(--surface3);}
+.gs-item .gs-emoji{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;background:var(--surface3);}
+.gs-item .gs-txt{flex:1;min-width:0;}
+.gs-item .gs-title{display:block;font-size:13px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gs-item .gs-sub{display:block;font-size:11px;color:var(--text3);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gs-item .gs-go{font-size:11px;color:var(--text3);flex-shrink:0;opacity:0;transition:opacity .12s;}
+.gs-item:hover .gs-go,.gs-item.gs-active .gs-go{opacity:1;}
+.gs-item mark{background:rgba(0,212,204,0.22);color:var(--accent);border-radius:3px;padding:0 1px;}
+.gs-empty{padding:22px 14px;text-align:center;color:var(--text3);font-size:12px;}
+/* ── Dock de iconos estilo iPhone ────────────────────────────── */
+.icon-dock{position:sticky;top:60px;z-index:99;background:rgba(10,10,10,0.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);box-shadow:0 8px 24px rgba(0,0,0,0.35);padding:10px 20px;}
+.icon-dock-inner{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;max-width:1300px;margin:0 auto;}
+.dock-btn{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:4px 5px;border-radius:14px;width:78px;transition:transform .12s;}
+.dock-btn:hover{transform:translateY(-2px);}
+.dock-icon{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;background-color:var(--c,#333);background-image:linear-gradient(160deg,rgba(255,255,255,0.24),rgba(0,0,0,0.22));box-shadow:0 4px 12px rgba(0,0,0,0.38),inset 0 1px 1px rgba(255,255,255,0.20);transition:box-shadow .15s,transform .12s;}
+.dock-btn:active .dock-icon{transform:scale(0.92);}
+.dock-label{font-size:10.5px;font-weight:500;color:var(--text2);line-height:1.1;white-space:nowrap;letter-spacing:.1px;}
+.dock-btn.active .dock-label{color:var(--text);font-weight:700;}
+.dock-btn.active .dock-icon{box-shadow:0 0 0 2px var(--accent),0 4px 16px rgba(0,212,204,0.40),inset 0 1px 1px rgba(255,255,255,0.20);}
+body.kiosk .icon-dock{display:none!important;}
 .mobile-nav-overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);}
 .mobile-nav-overlay.open{display:block;}
 .mobile-nav-panel{position:fixed;top:0;left:0;bottom:0;width:280px;z-index:201;background:var(--surface);border-right:1px solid var(--border2);display:flex;flex-direction:column;transform:translateX(-100%);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);}
@@ -267,6 +300,8 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 @media(max-width:768px){
   .topbar{padding:0 14px;gap:10px;}
   .topbar-nav{display:none;}
+  .global-search{display:none;}
+  .icon-dock{display:none;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
   .mobile-menu-btn{display:flex;align-items:center;justify-content:center;}
   #nuevoDropdown{display:none!important;}
@@ -1153,21 +1188,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
   <button id="mobilePlusBtn" class="mobile-menu-btn" onclick="toggleNuevoMenuMobile(event)" style="display:none;font-size:20px;font-weight:300;padding:6px 12px">＋</button>
-  <nav class="topbar-nav">
-    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')"><span class="tab-icon" style="background:#00d4cc"></span>🏠 Overview</button>
-    <button class="tab-btn" data-tab="clientes" onclick="switchTab('clientes')"><span class="tab-icon" style="background:#3b82f6"></span>👥 Clientes</button>
-    <button class="tab-btn" data-tab="cotizaciones" onclick="switchTab('cotizaciones')"><span class="tab-icon" style="background:#a78bfa"></span>📋 Cotizaciones</button>
-    <button class="tab-btn" data-tab="pedidos" onclick="switchTab('pedidos')"><span class="tab-icon" style="background:#ff6b35"></span>📦 Pedidos</button>
-    <button class="tab-btn" data-tab="proveedores" onclick="switchTab('proveedores')"><span class="tab-icon" style="background:#ffaa00"></span>🏭 Proveedores</button>
-    <button class="tab-btn" data-tab="agentes" onclick="switchTab('agentes')"><span class="tab-icon" style="background:#10b981"></span>🤖 Agentes</button>
-    <button class="tab-btn" data-tab="maquinas" onclick="switchTab('maquinas')"><span class="tab-icon" style="background:#ff4444"></span>🖨️ Máquinas</button>
-    <button class="tab-btn" data-tab="equipo" onclick="switchTab('equipo')"><span class="tab-icon" style="background:#f472b6"></span>👤 Equipo</button>
-    <button class="tab-btn" data-tab="reporte" onclick="switchTab('reporte')"><span class="tab-icon" style="background:#14b8a6"></span>📊 Reportes</button>
-    <button class="tab-btn" data-tab="web" onclick="switchTab('web')"><span class="tab-icon" style="background:#6366f1"></span>🌐 Web</button>
-    <button class="tab-btn" data-tab="finanzas" onclick="switchTab('finanzas')"><span class="tab-icon" style="background:#22c55e"></span>💰 Finanzas</button>
-    <button class="tab-btn" data-tab="visual" onclick="switchTab('visual')"><span class="tab-icon" style="background:#8b5cf6"></span>🎨 Visual AI</button>
-    <button class="tab-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="tab-icon" style="background:#84cc16"></span>💵 Remuneraciones</button>
-  </nav>
+  <div class="global-search" id="globalSearch">
+    <svg class="gs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="globalSearchInput" type="text" autocomplete="off" spellcheck="false" placeholder="Buscar secciones, clientes, pedidos, cotizaciones…" oninput="globalSearchOnInput(this.value)" onkeydown="globalSearchOnKey(event)" onfocus="globalSearchOnInput(this.value)">
+    <kbd class="gs-kbd">⌘K</kbd>
+    <button class="gs-clear" id="gsClear" onclick="globalSearchClear()" title="Limpiar" style="display:none">✕</button>
+    <div class="global-search-results" id="globalSearchResults"></div>
+  </div>
   <div id="nuevoDropdown" style="position:relative;display:inline-flex;align-items:center;flex-shrink:0">
     <button class="tab-btn" id="nuevoDropBtn" onclick="toggleNuevoMenu(event)" style="display:flex;align-items:center;gap:4px;background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);font-weight:700">
       ➕ Nuevo <span id="nuevoDropArrow" style="font-size:9px;margin-left:2px;transition:transform .2s">▾</span>
@@ -1260,6 +1287,25 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       </div>
     </div>
     <button class="logout-btn" id="logoutBtn" onclick="AUTH.logout()">Salir</button>
+  </div>
+</div>
+
+<!-- Dock de navegación estilo iconos (escritorio) -->
+<div class="icon-dock" id="iconDock">
+  <div class="icon-dock-inner">
+    <button class="dock-btn active" data-tab="overview" onclick="switchTab('overview')"><span class="dock-icon" style="--c:#00d4cc">🏠</span><span class="dock-label">Overview</span></button>
+    <button class="dock-btn" data-tab="clientes" onclick="switchTab('clientes')"><span class="dock-icon" style="--c:#3b82f6">👥</span><span class="dock-label">Clientes</span></button>
+    <button class="dock-btn" data-tab="cotizaciones" onclick="switchTab('cotizaciones')"><span class="dock-icon" style="--c:#a78bfa">📋</span><span class="dock-label">Cotizaciones</span></button>
+    <button class="dock-btn" data-tab="pedidos" onclick="switchTab('pedidos')"><span class="dock-icon" style="--c:#ff6b35">📦</span><span class="dock-label">Pedidos</span></button>
+    <button class="dock-btn" data-tab="proveedores" onclick="switchTab('proveedores')"><span class="dock-icon" style="--c:#ffaa00">🏭</span><span class="dock-label">Proveedores</span></button>
+    <button class="dock-btn" data-tab="agentes" onclick="switchTab('agentes')"><span class="dock-icon" style="--c:#10b981">🤖</span><span class="dock-label">Agentes</span></button>
+    <button class="dock-btn" data-tab="maquinas" onclick="switchTab('maquinas')"><span class="dock-icon" style="--c:#ff4444">🖨️</span><span class="dock-label">Máquinas</span></button>
+    <button class="dock-btn" data-tab="equipo" onclick="switchTab('equipo')"><span class="dock-icon" style="--c:#f472b6">👤</span><span class="dock-label">Equipo</span></button>
+    <button class="dock-btn" data-tab="reporte" onclick="switchTab('reporte')"><span class="dock-icon" style="--c:#14b8a6">📊</span><span class="dock-label">Reportes</span></button>
+    <button class="dock-btn" data-tab="web" onclick="switchTab('web')"><span class="dock-icon" style="--c:#6366f1">🌐</span><span class="dock-label">Web</span></button>
+    <button class="dock-btn" data-tab="finanzas" onclick="switchTab('finanzas')"><span class="dock-icon" style="--c:#22c55e">💰</span><span class="dock-label">Finanzas</span></button>
+    <button class="dock-btn" data-tab="visual" onclick="switchTab('visual')"><span class="dock-icon" style="--c:#8b5cf6">🎨</span><span class="dock-label">Visual AI</span></button>
+    <button class="dock-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="dock-icon" style="--c:#84cc16">💵</span><span class="dock-label">Remuneraciones</span></button>
   </div>
 </div>
 
@@ -2819,41 +2865,49 @@ var SECRET   = 'thelab2025';
 
 function main() {
   // 1. Leer campañas y enviar resumen al Script 1
-  var report = AdsApp.report(
-    'SELECT campaign.name, campaign.id, campaign.status, ' +
-    'campaign_budget.amount_micros, metrics.impressions, metrics.clicks, ' +
-    'metrics.cost_micros, metrics.conversions, metrics.conversions_value ' +
-    'FROM campaign WHERE segments.date DURING LAST_30_DAYS ' +
-    'ORDER BY metrics.cost_micros DESC'
-  );
-  var rows = report.rows();
   var campaigns = [], t = {gasto:0,impresiones:0,clics:0,conversiones:0,valor_conversion:0};
-  while (rows.hasNext()) {
-    var row = rows.next();
-    var g  = Math.round(parseInt(row['metrics.cost_micros'])/1e6);
-    var i  = parseInt(row['metrics.impressions']);
-    var c  = parseInt(row['metrics.clicks']);
-    var cv = parseFloat(row['metrics.conversions']);
-    var vc = parseFloat(row['metrics.conversions_value']);
-    t.gasto+=g; t.impresiones+=i; t.clics+=c; t.conversiones+=cv; t.valor_conversion+=vc;
-    campaigns.push({
-      id:row['campaign.id'], nombre:row['campaign.name'], estado:row['campaign.status'],
-      presupuesto:Math.round(parseInt(row['campaign_budget.amount_micros']||0)/1e6),
-      gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
+  try {
+    var report = AdsApp.report(
+      'SELECT campaign.name, campaign.id, campaign.status, ' +
+      'campaign_budget.amount_micros, metrics.impressions, metrics.clicks, ' +
+      'metrics.cost_micros, metrics.conversions, metrics.conversions_value ' +
+      'FROM campaign WHERE segments.date DURING LAST_30_DAYS'
+    );
+    var rows = report.rows();
+    while (rows.hasNext()) {
+      var row = rows.next();
+      var g  = Math.round(parseInt(row['metrics.cost_micros']||0)/1e6);
+      var i  = parseInt(row['metrics.impressions']||0);
+      var c  = parseInt(row['metrics.clicks']||0);
+      var cv = parseFloat(row['metrics.conversions']||0);
+      var vc = parseFloat(row['metrics.conversions_value']||0);
+      t.gasto+=g; t.impresiones+=i; t.clics+=c; t.conversiones+=cv; t.valor_conversion+=vc;
+      campaigns.push({
+        id:row['campaign.id'], nombre:row['campaign.name'], estado:row['campaign.status'],
+        presupuesto:Math.round(parseInt(row['campaign_budget.amount_micros']||0)/1e6),
+        gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
+      });
+    }
+    Logger.log('Campañas leídas: '+campaigns.length);
+  } catch(e) { Logger.log('Error leyendo campañas: '+e.message); }
+
+  try {
+    UrlFetchApp.fetch(ENDPOINT, {
+      method:'post', contentType:'application/json', muteHttpExceptions:true,
+      payload:JSON.stringify({secret:SECRET, campanas:campaigns,
+        gasto:t.gasto, impresiones:t.impresiones, clics:t.clics,
+        conversiones:t.conversiones, valor_conversion:t.valor_conversion})
     });
-  }
-  UrlFetchApp.fetch(ENDPOINT, {
-    method:'post', contentType:'application/json', muteHttpExceptions:true,
-    payload:JSON.stringify({secret:SECRET, campanas:campaigns,
-      gasto:t.gasto, impresiones:t.impresiones, clics:t.clics,
-      conversiones:t.conversiones, valor_conversion:t.valor_conversion})
-  });
+  } catch(e) { Logger.log('Error enviando a Script 1: '+e.message); }
 
   // 2. Leer y aplicar mutaciones pendientes del dashboard
   try {
     var mutResp = UrlFetchApp.fetch(ENDPOINT+'?action=mutations', {muteHttpExceptions:true});
     var mutData = JSON.parse(mutResp.getContentText());
-    if (!mutData.ok || !mutData.mutations) return;
+    if (!mutData.ok || !mutData.mutations) {
+      Logger.log('Sin mutaciones: '+JSON.stringify(mutData));
+      return;
+    }
     var muts = mutData.mutations;
     var changed = false;
     for (var k=0; k&lt;muts.length; k++) {
@@ -2873,20 +2927,37 @@ function main() {
             .withBudget(budgetOp.getResult())
             .build();
           if (!campOp.isSuccessful()) throw new Error(campOp.getErrors().join(', '));
-          campOp.getResult();
+          var nuevaCamp = campOp.getResult();
+          // Grupo de anuncios + palabras clave (si el dashboard las envió). Aislado: si falla, la campaña igual queda creada.
+          if (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) {
+            try {
+              var agOp = nuevaCamp.newAdGroupBuilder()
+                .withName('Grupo 1 - '+m.data.nombre)
+                .withCpc(300)
+                .build();
+              if (agOp.isSuccessful()) {
+                var ag = agOp.getResult();
+                for (var kw=0; kw&lt;m.data.palabrasClave.length; kw++) {
+                  ag.newKeywordBuilder().withText(m.data.palabrasClave[kw]).build();
+                }
+                Logger.log('  + grupo con '+m.data.palabrasClave.length+' keywords');
+              }
+            } catch(eAg) { Logger.log('  Aviso grupo/keywords: '+eAg.message); }
+          }
           muts[k].status = 'aplicado';
+          Logger.log('OK creada: '+m.data.nombre);
         } else if (m.op === 'edit') {
           var iter = AdsApp.campaigns().withIds([m.id]).get();
           if (iter.hasNext()) {
             var camp = iter.next();
             if (m.data.nombre) camp.setName(m.data.nombre);
             if (m.data.estado === 'ENABLED') camp.enable();
-            if (m.data.estado === 'PAUSED')  camp.pause();
+            if (m.data.estado === 'PAUSED') camp.pause();
             if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto);
             muts[k].status = 'aplicado';
           } else {
             muts[k].status = 'error';
-            muts[k].error = 'Campaña no encontrada: '+m.id;
+            muts[k].error = 'Campana no encontrada: '+m.id;
           }
         } else if (m.op === 'delete') {
           var iter2 = AdsApp.campaigns().withIds([m.id]).get();
@@ -2896,7 +2967,7 @@ function main() {
       } catch(e) {
         muts[k].status = 'error';
         muts[k].error = e.message;
-        Logger.log('[Error] op='+m.op+' "'+m.data.nombre+'": '+e.message);
+        Logger.log('[Error] op='+m.op+' '+e.message);
         changed = true;
       }
     }
@@ -5129,10 +5200,12 @@ function switchTab(name){
     if(!_allowed.includes(name)){toast('No tienes acceso a esta sección','error');return;}
   }
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn,.mobile-tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-btn,.mobile-tab-btn,.dock-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
+  document.querySelector(`.dock-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.mobile-tab-btn[data-tab="${name}"]`)?.classList.add('active');
+  try{closeGlobalSearch();}catch(e){}
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
   if(name==='remuneraciones') renderRemuneraciones();
@@ -10438,8 +10511,8 @@ function applyRBAC(role){
   const allowedTabs   = RBAC.tabs[role]   || RBAC.tabs.demo;
   const allowedNuevos = RBAC.nuevos[role] || [];
 
-  // Botones de navegación desktop
-  document.querySelectorAll('.tab-btn[data-tab]').forEach(btn=>{
+  // Botones de navegación desktop (tabs antiguos + dock de iconos)
+  document.querySelectorAll('.tab-btn[data-tab],.dock-btn[data-tab]').forEach(btn=>{
     btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
   });
   // Botones de navegación móvil
@@ -10544,6 +10617,7 @@ async function handleLogin(e){
 function initDashboard(){
   const user=AUTH.getUser();
   if(user) applyRBAC(user.role);
+  initGlobalSearch();
   // Restaurar tab previo solo si el rol actual tiene acceso (evita toast de error tras cambio de usuario)
   try{
     const s=sessionStorage.getItem('thelab_active_tab');
@@ -10958,9 +11032,9 @@ function adsLastSyncStr(){
 // ── Líneas de producción ↔ campañas Google Ads ───────────
 const ADS_LINEAS=[
   {id:'3d_small',label:'Impresión 3D — K1/K2',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
-   palabrasClave:['impresión 3d santiago','impresión 3d','impresora 3d','piezas 3d','prototipo 3d','fabricación 3d','figuras 3d','modelos 3d','carcasas 3d','carteles 3d']},
+   palabrasClave:['impresión 3d santiago','impresión 3d','impresora 3d','piezas 3d','prototipo 3d','fabricación 3d','figuras 3d','modelos 3d','carcasas 3d','repuestos plásticos']},
   {id:'3d_large',label:'Impresión 3D — Giga',campañaSugerida:'Búsqueda - Impresión 3D Grande',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['impresión 3d grande','maqueta arquitectura','modelos escala','pieza industrial grande','prototipo tamaño real','impresora giga']},
+   palabrasClave:['impresión 3d grande','maqueta arquitectura','modelos a escala','pieza industrial grande','prototipo tamaño real','impresión gran formato']},
   {id:'laser',label:'Láser y Señalética',campañaSugerida:'Búsqueda - Señalética Acrílico',tipo:'SEARCH',presupuesto:6000,
    palabrasClave:['señalética corporativa','señalética acrílico','corte láser','grabado láser','letrero acrílico','placa grabada','señalización empresa','rótulo acrílico']},
   {id:'neon',label:'Neon LED y Rótulos',campañaSugerida:'Búsqueda - Neon LED Personalizado',tipo:'SEARCH',presupuesto:5000,
@@ -10976,7 +11050,7 @@ function _adsMatchCampaign(campanas,linea){
     ...linea.campañaSugerida.toLowerCase().replace(/[–\-]/g,' ').split(/\s+/).filter(w=>w.length>3),
     ...(linea.palabrasClave||[]).flatMap(k=>k.toLowerCase().split(/\s+/).filter(w=>w.length>3))
   ];
-  return campanas.find(c=>kws.some(k=>c.nombre.toLowerCase().includes(k)))||null;
+  return campanas.find(c=>kws.some(k=>(c.nombre||'').toLowerCase().includes(k)))||null;
 }
 function adsCopyKw(encoded){
   const kw=decodeURIComponent(encoded);
@@ -10985,7 +11059,7 @@ function adsCopyKw(encoded){
 function adsCopyAllKw(lineaId){
   const l=ADS_LINEAS.find(x=>x.id===lineaId);
   if(!l||!l.palabrasClave) return;
-  navigator.clipboard.writeText(l.palabrasClave.join('\n')).then(()=>toast('✓ '+l.palabrasClave.length+' keywords copiados','success')).catch(()=>{});
+  navigator.clipboard.writeText(l.palabrasClave.join('\n')).then(()=>toast('✓ '+l.palabrasClave.length+' palabras clave copiadas','success')).catch(()=>{});
 }
 function getCapacidadLineas(){
   const today=new Date();today.setHours(0,0,0,0);
@@ -11033,7 +11107,9 @@ function renderAdsCapacidad(data){
   const box=document.getElementById('adsCapacidadBox');
   const list=document.getElementById('adsCapacidadList');
   if(!box||!list) return;
-  const filas=getCapacidadLineas();
+  let filas;
+  try{ filas=getCapacidadLineas(); }
+  catch(e){ box.style.display='none'; return; }
   const camps=data.campanas||[];
   _adsCapBtnStore=[];
   list.innerHTML=filas.map((f,fi)=>{
@@ -11096,41 +11172,54 @@ function renderAdsSugerencias(data){
     box.style.display='block';return;
   }
   list.innerHTML=faltantes.map(l=>{
-    const chips=(l.palabrasClave||[]).map(kw=>`<span onclick="adsCopyKw('${encodeURIComponent(kw)}')" style="cursor:pointer;font-size:9px;background:var(--surface3);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--text3);white-space:nowrap;transition:border-color 0.1s" title="Clic para copiar" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">${kw}</span>`).join('');
-    return`<div style="padding:8px 10px;background:var(--surface2);border-radius:7px;border-left:3px solid rgba(0,212,204,0.4)">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${chips?'6':'0'}px">
+    const kws=(l.palabrasClave||[]).slice(0,6);
+    const kwChips=kws.length?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${kws.map(k=>`<span onclick="adsCopyKw('${encodeURIComponent(k)}')" title="Clic para copiar" style="font-size:9px;color:var(--text2);background:var(--surface3);border:1px solid var(--border2);border-radius:10px;padding:1px 7px;cursor:pointer;white-space:nowrap">${escapeHtml(k)}</span>`).join('')}${(l.palabrasClave||[]).length>6?`<span onclick="adsCopyAllKw('${l.id}')" title="Copiar todas las palabras clave" style="font-size:9px;color:var(--accent);background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);border-radius:10px;padding:1px 7px;cursor:pointer;white-space:nowrap">+${(l.palabrasClave||[]).length-6} · copiar todas</span>`:''}</div>`:'';
+    return `
+    <div style="padding:8px 10px;background:var(--surface2);border-radius:7px;border-left:3px solid rgba(0,212,204,0.4)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <div style="flex:1;min-width:0">
-          <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px">${l.campañaSugerida}</div>
-          <div style="font-size:10px;color:var(--text3)">${l.label} · ${l.tipo} · $${l.presupuesto.toLocaleString('es-CL')}/día</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px">${escapeHtml(l.campañaSugerida)}</div>
+          <div style="font-size:10px;color:var(--text3)">${escapeHtml(l.label)} · ${l.tipo} · Presupuesto sugerido: $${l.presupuesto.toLocaleString('es-CL')}/día</div>
         </div>
-        <div style="display:flex;gap:5px;flex-shrink:0">
-          ${chips?`<button onclick="adsCopyAllKw('${l.id}')" style="background:var(--surface3);border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 8px;font-size:9px;cursor:pointer;white-space:nowrap" title="Copiar todos los keywords">📋 Keywords</button>`:''}
-          <button onclick="openCreateCampaignByLineaId('${l.id}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;white-space:nowrap;font-weight:600">+ Crear</button>
-        </div>
+        <button onclick="openCreateCampaignByLineaId('${l.id}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;white-space:nowrap;font-weight:600;flex-shrink:0">+ Crear</button>
       </div>
-      ${chips?`<div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>`:''}
-    </div>`;
-  }).join('');
+      ${kwChips}
+    </div>`;}).join('');
   box.style.display='block';
 }
-function openCreateCampaignTemplate(nombre,presupuesto,tipo){
+// Palabras clave a incluir en la próxima campaña creada (Script 2 las usará para armar el grupo de anuncios)
+let _adsCreateKeywords=[];
+function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave){
   openCreateCampaign();
+  _adsCreateKeywords=Array.isArray(palabrasClave)?palabrasClave.slice():[];
   setTimeout(()=>{
     const nm=document.getElementById('adsCampaignModalNombre');if(nm) nm.value=nombre;
     const bd=document.getElementById('adsCampaignModalPresupuesto');if(bd) bd.value=presupuesto;
     const st=document.getElementById('adsCampaignModalEstado');if(st) st.value='ENABLED';
     const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
+    const hint=document.getElementById('adsCampaignModalKwHint');
+    if(hint){
+      if(_adsCreateKeywords.length){hint.style.display='block';hint.textContent='✓ Se incluirán '+_adsCreateKeywords.length+' palabras clave en el grupo de anuncios al crear la campaña.';}
+      else hint.style.display='none';
+    }
   },80);
 }
 function openCreateCampaignByLineaId(lineaId){
   const l=ADS_LINEAS.find(x=>x.id===lineaId);
-  if(l) openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo);
+  if(l) openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave);
 }
 let _adsCapBtnStore=[];
 function _adsCapBtn(idx){
   const d=_adsCapBtnStore[idx];if(!d) return;
   if(d.type==='edit') openEditCampaign(d.id,d.nombre,d.estado,d.presupuesto);
   else openCreateCampaignByLineaId(d.lineaId);
+}
+// Acciones de la tabla de campañas (editar/eliminar) por índice — evita escapes en onclick
+let _adsCampActions=[];
+function _adsCampAction(idx){
+  const d=_adsCampActions[idx];if(!d) return;
+  if(d.type==='edit') openEditCampaign(d.id,d.nombre,d.estado,d.presupuesto);
+  else if(d.type==='delete') openDeleteCampaign(d.id,d.nombre);
 }
 // ── Health Score por campaña (0–100) ────────────────────
 function adsHealthScore(c){
@@ -11284,6 +11373,7 @@ function savePendingToStorage(){
 }
 
 function openCreateCampaign(){
+  _adsCreateKeywords=[];
   document.getElementById('adsCampaignModalId').value='';
   document.getElementById('adsCampaignModalOp').value='create';
   document.getElementById('adsCampaignModalTitle').textContent='Nueva Campaña';
@@ -11292,6 +11382,7 @@ function openCreateCampaign(){
   document.getElementById('adsCampaignModalPresupuesto').value='';
   document.getElementById('adsCampaignModalEstado').value='ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='';
+  const hint=document.getElementById('adsCampaignModalKwHint');if(hint) hint.style.display='none';
   document.getElementById('adsCampaignModal').style.display='flex';
 }
 
@@ -11321,6 +11412,18 @@ function closeAdsDeleteModal(){
   document.getElementById('adsDeleteModal').style.display='none';
 }
 
+// Encola una mutación reemplazando cualquier mutación pendiente equivalente (evita duplicados)
+function _adsQueueMutation(mutation){
+  const keyOf=m=>m.op+'|'+(m.id||'')+'|'+(m.op==='create'?((m.data&&m.data.nombre)||''):'');
+  const k=keyOf(mutation);
+  // Conserva las ya aplicadas; descarta una pendiente/enviada/errónea equivalente
+  _adsPendingMutations=_adsPendingMutations.filter(m=>m.status==='aplicado'||keyOf(m)!==k);
+  _adsPendingMutations.push(mutation);
+  savePendingToStorage();
+  sendAdsMutation(mutation);
+  renderPendingMutations();
+}
+
 function saveCampaignMutation(){
   const op=document.getElementById('adsCampaignModalOp').value;
   const id=document.getElementById('adsCampaignModalId').value;
@@ -11330,36 +11433,66 @@ function saveCampaignMutation(){
   const tipo=document.getElementById('adsCampaignModalTipo').value;
   if(!nombre){alert('El nombre de la campaña es obligatorio.');return;}
   if(presupuesto<1000){alert('El presupuesto debe ser al menos $1.000 CLP.');return;}
-  const mutation={op,id,data:{nombre,presupuesto,estado,tipo},timestamp:new Date().toISOString(),status:'pending'};
-  _adsPendingMutations.push(mutation);
-  savePendingToStorage();
+  const data={nombre,presupuesto,estado,tipo};
+  if(op==='create'&&_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.slice();
+  const mutation={op,id,data,timestamp:new Date().toISOString(),status:'pending'};
   closeAdsCampaignModal();
-  sendAdsMutation(mutation);
-  renderPendingMutations();
+  _adsQueueMutation(mutation);
 }
 
 function confirmDeleteCampaign(){
   const id=document.getElementById('adsDeleteModalId').value;
   const nombre=document.getElementById('adsDeleteModalNombre').textContent.replace('Campaña: ','');
   const mutation={op:'delete',id,data:{nombre},timestamp:new Date().toISOString(),status:'pending'};
-  _adsPendingMutations.push(mutation);
-  savePendingToStorage();
   closeAdsDeleteModal();
-  sendAdsMutation(mutation);
-  renderPendingMutations();
+  _adsQueueMutation(mutation);
 }
 
 function sendAdsMutation(mutation){
   const cfg=getAdsConfig();
-  if(!cfg.endpoint) return;
+  if(!cfg.endpoint){mutation.status='error';mutation.error='No hay endpoint configurado';savePendingToStorage();renderPendingMutations();return;}
   fetch(cfg.endpoint,{
     method:'post',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({secret:'thelab2025',type:'mutation',...mutation})
   }).then(r=>r.json()).then(d=>{
-    if(d.ok) mutation.status='enviado';
+    if(d&&d.ok){mutation.status='enviado';mutation.error='';}
+    else{mutation.status='error';mutation.error=(d&&d.error)||'El servidor rechazó la mutación';}
+    savePendingToStorage();
     renderPendingMutations();
-  }).catch(()=>{});
+  }).catch(()=>{
+    mutation.status='error';mutation.error='Sin conexión con el endpoint (se reintentará al guardar de nuevo)';
+    savePendingToStorage();
+    renderPendingMutations();
+  });
+}
+
+// Sincroniza el estado de las mutaciones desde el servidor (Script 1) — refleja lo que el Script 2 aplicó
+async function syncMutationStatuses(){
+  const cfg=getAdsConfig();
+  if(!cfg.endpoint||!_adsPendingMutations.length) return;
+  try{
+    const r=await fetch(cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now());
+    const d=await r.json();
+    if(!d.ok||!Array.isArray(d.mutations)) return;
+    let aplicadas=0,errores=0,changed=false;
+    _adsPendingMutations.forEach(m=>{
+      const srv=d.mutations.find(s=>s.timestamp===m.timestamp);
+      if(srv&&srv.status&&srv.status!=='pending'&&m.status!==srv.status){
+        m.status=srv.status;m.error=srv.error||'';changed=true;
+        if(srv.status==='aplicado') aplicadas++;
+        if(srv.status==='error') errores++;
+      }
+    });
+    if(changed){
+      // Quita las aplicadas (los errores se conservan para que el usuario los vea/reintente)
+      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
+      savePendingToStorage();
+      renderPendingMutations();
+      if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
+      if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa el detalle en Cambios pendientes','error');
+    }
+  }catch(e){}
 }
 async function syncMutationStatuses(){
   const cfg=getAdsConfig();
@@ -11389,23 +11522,48 @@ function renderPendingMutations(){
   const panel=document.getElementById('adsPendingPanel');
   const list=document.getElementById('adsPendingList');
   const badge=document.getElementById('adsPendingBadge');
-  if(!_adsPendingMutations.length){panel.style.display='none';return;}
-  panel.style.display='block';
-  const pending=_adsPendingMutations.filter(m=>m.status!=='aplicado');
-  badge.textContent=pending.length+' pendiente'+(pending.length!==1?'s':'');
+  if(!_adsPendingMutations.length){if(panel)panel.style.display='none';return;}
+  if(panel)panel.style.display='block';
+  const visibles=_adsPendingMutations.filter(m=>m.status!=='aplicado');
+  if(!visibles.length){if(panel)panel.style.display='none';return;}
+  const nPend=visibles.filter(m=>m.status!=='error').length;
+  const nErr=visibles.filter(m=>m.status==='error').length;
+  if(badge) badge.textContent=nPend+' pendiente'+(nPend!==1?'s':'')+(nErr?' · '+nErr+' error'+(nErr!==1?'es':''):'');
   const opLabel={create:'Crear',edit:'Editar',delete:'Eliminar'};
-  list.innerHTML=pending.map((m,i)=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface2);border-radius:6px;font-size:11px">
-      <span style="color:${m.op==='delete'?'var(--danger)':m.op==='create'?'var(--success)':'var(--accent)'};font-weight:600">${opLabel[m.op]||m.op}</span>
-      <span style="color:var(--text2);flex:1">${m.data?.nombre||m.id}</span>
-      <span style="color:${m.status==='enviado'?'var(--accent3)':'var(--warn)'};font-size:10px">${m.status==='enviado'?'✓ Enviado':'⏳ Pendiente'}</span>
-      <button onclick="removePendingMutation(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0;line-height:1" title="Eliminar">×</button>
-    </div>`).join('');
+  const stMap={
+    pending:{c:'var(--warn)',t:'⏳ Pendiente'},
+    enviado:{c:'var(--accent3)',t:'✓ En cola — esperando Script 2'},
+    error:{c:'var(--danger)',t:'❌ Error'}
+  };
+  list.innerHTML=visibles.map(m=>{
+    const st=stMap[m.status]||stMap.pending;
+    const retry=m.status==='error'?`<button onclick="retryMutation('${m.timestamp}')" style="background:none;border:1px solid var(--border2);color:var(--accent);cursor:pointer;font-size:9px;padding:1px 6px;border-radius:4px;line-height:1.4" title="Reintentar">↻ Reintentar</button>`:'';
+    const errLine=m.status==='error'&&m.error?`<div style="font-size:9px;color:var(--danger);margin-top:3px;padding-left:2px">${escapeHtml(m.error)}</div>`:'';
+    return `
+    <div style="padding:7px 10px;background:var(--surface2);border-radius:6px;font-size:11px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="color:${m.op==='delete'?'var(--danger)':m.op==='create'?'var(--success)':'var(--accent)'};font-weight:600;flex-shrink:0">${opLabel[m.op]||m.op}</span>
+        <span style="color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((m.data&&m.data.nombre)||m.id||'')}</span>
+        <span style="color:${st.c};font-size:9px;white-space:nowrap;flex-shrink:0">${st.t}</span>
+        ${retry}
+        <button onclick="removePendingMutationByTs('${m.timestamp}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0;line-height:1;flex-shrink:0" title="Quitar de la cola">×</button>
+      </div>
+      ${errLine}
+    </div>`;}).join('');
 }
 
-function removePendingMutation(idx){
-  _adsPendingMutations.splice(idx,1);
+function removePendingMutationByTs(ts){
+  _adsPendingMutations=_adsPendingMutations.filter(m=>m.timestamp!==ts);
   savePendingToStorage();
+  renderPendingMutations();
+}
+
+function retryMutation(ts){
+  const m=_adsPendingMutations.find(x=>x.timestamp===ts);
+  if(!m) return;
+  m.status='pending';m.error='';
+  savePendingToStorage();
+  sendAdsMutation(m);
   renderPendingMutations();
 }
 
@@ -11437,20 +11595,21 @@ async function loadAdsData(){
     if(!r.ok) throw new Error('HTTP '+r.status);
     const data=await r.json();
     if(!data.ok) throw new Error(data.error||'Respuesta inválida del script');
-    renderAdsKPIs(data,days);
-    renderAdsCampaigns(data);
-    renderAdsAgent(data);
-    renderAdsCapacidad(data);
-    renderAdsSugerencias(data);
+    // Renders visuales aislados: un fallo en uno no debe bloquear la sincronización de mutaciones
+    try{ renderAdsKPIs(data,days); }catch(err){ console.error('renderAdsKPIs',err); }
+    try{ renderAdsCampaigns(data); }catch(err){ console.error('renderAdsCampaigns',err); }
+    try{ renderAdsAgent(data); }catch(err){ console.error('renderAdsAgent',err); }
+    try{ renderAdsCapacidad(data); }catch(err){ console.error('renderAdsCapacidad',err); }
+    try{ renderAdsSugerencias(data); }catch(err){ console.error('renderAdsSugerencias',err); }
     renderPendingMutations();
+    // Refleja en el dashboard lo que el Script 2 ya aplicó en Google Ads
+    syncMutationStatuses();
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
     const btnNueva=document.getElementById('btnNuevaCampana');
     if(btnNueva) btnNueva.style.display='inline-flex';
     // Sync a Airtable (no bloqueante)
     syncAdsToAirtable(data,days).then(()=>toast('✓ Google Ads sincronizado con Airtable','success')).catch(()=>{});
-    // Limpiar mutaciones ya aplicadas por Script 2
-    syncMutationStatuses();
   }catch(e){
     document.getElementById('adsCampaignsArea').innerHTML=`<div class="empty-state" style="padding:40px 0"><div class="empty-icon">⚠</div><div style="color:var(--danger)">${e.message}</div><div style="font-size:11px;color:var(--text3);margin-top:8px">Verifica que el Apps Script esté publicado como aplicación web con acceso público</div></div>`;
     ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='—';});
@@ -11511,6 +11670,7 @@ function renderAdsCampaigns(data){
     document.getElementById('adsCampaignsArea').innerHTML='<div class="empty-state" style="padding:30px 0"><div>No hay campañas en el período seleccionado</div></div>';
     return;
   }
+  _adsCampActions=[];
   const rows=camps.map(c=>{
     const ctr=c.impresiones>0?(c.clics/c.impresiones*100):0;
     const cpc=c.clics>0?(c.gasto/c.clics):0;
@@ -11520,12 +11680,14 @@ function renderAdsCampaigns(data){
       ?'<span style="background:rgba(0,212,170,0.15);color:var(--accent3);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Activa</span>'
       :'<span style="background:rgba(255,68,68,0.12);color:var(--danger);border:1px solid rgba(255,68,68,0.25);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Pausada</span>';
     const ctrColor=ctr>=5?'var(--success)':ctr>=2?'var(--text)':'var(--danger)';
-    const safeNombre=JSON.stringify(c.nombre||'');
     const hs=adsHealthScore(c);
     const hsBadge=`<span style="display:inline-block;min-width:28px;text-align:center;color:${hs.color};border:1px solid ${hs.color};border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;opacity:0.9" title="Score de salud: ${hs.label} (CTR + Conv. + ROAS)">${hs.score}</span>`;
+    // Índices a _adsCampActions para evitar problemas de escape de comillas en onclick
+    const ei=_adsCampActions.push({type:'edit',id:c.id,nombre:c.nombre||'',estado:c.estado,presupuesto:c.presupuesto||0})-1;
+    const di=_adsCampActions.push({type:'delete',id:c.id,nombre:c.nombre||''})-1;
     const acciones=`<span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">
-        <button onclick="event.stopPropagation();openEditCampaign('${c.id}',${safeNombre},'${c.estado}',${c.presupuesto||0})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
-        <button onclick="event.stopPropagation();openDeleteCampaign('${c.id}',${safeNombre})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar">🗑</button>
+        <button onclick="event.stopPropagation();_adsCampAction(${ei})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
+        <button onclick="event.stopPropagation();_adsCampAction(${di})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar">🗑</button>
       </span>`;
     return `<tr>
       <td style="white-space:nowrap"><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</span>${acciones}</td>
@@ -13393,6 +13555,177 @@ document.addEventListener('click',function(e){
   if(dd&&!dd.contains(e.target))closeNuevoMenu();
 });
 
+// ══════════════════════════════════════════════════════════════
+//  BÚSQUEDA GLOBAL  (command palette — secciones, acciones y datos)
+// ══════════════════════════════════════════════════════════════
+let _gsResults=[];   // funciones a ejecutar, indexadas (para teclado)
+let _gsActive=-1;    // índice activo (navegación con flechas)
+let _gsInited=false;
+
+const GS_SECTIONS=[
+  {tab:'overview',      emoji:'🏠',c:'#00d4cc',title:'Overview',        kw:'inicio resumen centro comando dashboard panel general home'},
+  {tab:'clientes',      emoji:'👥',c:'#3b82f6',title:'Clientes',        kw:'crm contactos empresas leads'},
+  {tab:'cotizaciones',  emoji:'📋',c:'#a78bfa',title:'Cotizaciones',    kw:'presupuestos cotizar ofertas quotes'},
+  {tab:'pedidos',       emoji:'📦',c:'#ff6b35',title:'Pedidos',         kw:'ordenes produccion despacho ventas'},
+  {tab:'proveedores',   emoji:'🏭',c:'#ffaa00',title:'Proveedores',     kw:'suppliers compras insumos'},
+  {tab:'agentes',       emoji:'🤖',c:'#10b981',title:'Agentes IA',      kw:'ia ai kai automatizacion bots asistentes'},
+  {tab:'maquinas',      emoji:'🖨️',c:'#ff4444',title:'Máquinas',        kw:'impresoras 3d printers monitor capacidad'},
+  {tab:'equipo',        emoji:'👤',c:'#f472b6',title:'Equipo',          kw:'personas staff calendario turnos rrhh'},
+  {tab:'reporte',       emoji:'📊',c:'#14b8a6',title:'Reportes',        kw:'analitica estadisticas metricas informes'},
+  {tab:'web',           emoji:'🌐',c:'#6366f1',title:'Web',             kw:'wordpress google ads seo sitio marketing'},
+  {tab:'finanzas',      emoji:'💰',c:'#22c55e',title:'Finanzas',        kw:'facturas dte sii caja flujo dinero contabilidad'},
+  {tab:'visual',        emoji:'🎨',c:'#8b5cf6',title:'Visual AI',       kw:'imagenes render diseno generador'},
+  {tab:'remuneraciones',emoji:'💵',c:'#84cc16',title:'Remuneraciones',  kw:'sueldos pagos nominas liquidaciones rrhh'},
+];
+const GS_ACTIONS=[
+  {nuevo:'nuevo-lead',     emoji:'👤',title:'Nuevo Lead / Cliente',    kw:'crear agregar nuevo cliente contacto lead',  run:()=>switchTab('nuevo-lead')},
+  {nuevo:'nuevo-proveedor',emoji:'🏭',title:'Nuevo Proveedor',         kw:'crear agregar proveedor',                    run:()=>switchTab('nuevo-proveedor')},
+  {nuevo:'nueva-cot',      emoji:'📋',title:'Nueva Cotización',         kw:'crear cotizar presupuesto',                  run:()=>switchTab('nueva-cot')},
+  {nuevo:'nueva-venta',    emoji:'💰',title:'Nueva Venta',             kw:'registrar venta ingreso',                    run:()=>{try{irANuevaVenta();}catch(e){}}},
+  {nuevo:'libro-diario',   emoji:'📒',title:'Nuevo Registro (Diario)', kw:'libro diario contabilidad asiento',          run:()=>{try{irALibroDiario();}catch(e){}}},
+  {emoji:'↺', title:'Actualizar datos',            kw:'refrescar recargar sync sincronizar update', run:()=>{try{loadAllData();}catch(e){}}},
+  {emoji:'⚙', title:'Mi cuenta / Configuración',   kw:'ajustes tokens api keys config cuenta',      run:()=>{try{openUserMenu();}catch(e){}}},
+];
+
+function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
+function _gsHi(text,q){
+  const t=(text||'').toString(); if(!q) return escapeHtml(t);
+  const i=_gsNorm(t).indexOf(_gsNorm(q)); if(i<0) return escapeHtml(t);
+  return escapeHtml(t.slice(0,i))+'<mark>'+escapeHtml(t.slice(i,i+q.length))+'</mark>'+escapeHtml(t.slice(i+q.length));
+}
+function _gsAllowed(tab){
+  const u=AUTH.getUser(); if(!u) return true;
+  const allowed=[...(RBAC.tabs[u.role]||RBAC.tabs.demo),...(RBAC.nuevos[u.role]||[])];
+  return allowed.includes(tab);
+}
+function _gsClienteNombre(rec){
+  const st=window.state||{}; const cf=rec.fields&&rec.fields['Cliente'];
+  const cid=Array.isArray(cf)?cf[0]:cf;
+  if(cid&&st.clientesById&&st.clientesById[cid]) return st.clientesById[cid];
+  return (typeof cf==='string')?cf:'';
+}
+function _gsFocusRow(id){
+  const row=document.querySelector('[data-id="'+id+'"]')||document.getElementById('row-'+id);
+  if(row&&row.scrollIntoView){row.scrollIntoView({behavior:'smooth',block:'center'});row.classList.add('row-selected');setTimeout(()=>row.classList.remove('row-selected'),2200);}
+}
+
+function globalSearchOnInput(raw){
+  const q=(raw||'').trim();
+  const clr=document.getElementById('gsClear'); if(clr) clr.style.display=q?'flex':'none';
+  const kbd=document.querySelector('.gs-kbd'); if(kbd) kbd.style.display=q?'none':'';
+  const box=document.getElementById('globalSearchResults'); if(!box) return;
+  const nq=_gsNorm(q);
+  const groups=[];
+
+  // 1. Secciones
+  const secs=GS_SECTIONS.filter(s=>_gsAllowed(s.tab)).filter(s=>!q||_gsNorm(s.title).includes(nq)||_gsNorm(s.kw).includes(nq));
+  if(secs.length) groups.push({cat:'Secciones',items:secs.map(s=>({emoji:s.emoji,bg:s.c,title:s.title,sub:'',go:'Ir →',run:()=>switchTab(s.tab)}))});
+
+  // 2. Acciones rápidas
+  const acts=GS_ACTIONS.filter(a=>!a.nuevo||_gsAllowed(a.nuevo)).filter(a=>!q||_gsNorm(a.title).includes(nq)||_gsNorm(a.kw).includes(nq));
+  if(acts.length) groups.push({cat:'Acciones',items:acts.map(a=>({emoji:a.emoji,bg:'',title:a.title,sub:'',go:'',run:a.run}))});
+
+  // 3. Datos (sólo con 2+ caracteres)
+  if(q.length>=2){
+    const st=window.state||{}; const byCat={};
+    const push=(cat,it)=>{(byCat[cat]=byCat[cat]||[]).push(it);};
+    if(_gsAllowed('clientes')) (st.clientes||[]).forEach(c=>{
+      const nom=c.fields['Empresa']||c.fields['Contacto']||'—';
+      if(_gsNorm(nom).includes(nq)||_gsNorm(c.fields['Contacto']||'').includes(nq))
+        push('Clientes',{emoji:'👥',bg:'#3b82f6',title:nom,sub:'Cliente',go:'Abrir →',run:()=>{switchTab('clientes');setTimeout(()=>_gsFocusRow(c.id),250);}});
+    });
+    if(_gsAllowed('pedidos')) (st.pedidos||[]).forEach(p=>{
+      const num=p.fields['N° Pedido']||p.id; const cli=_gsClienteNombre(p);
+      if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq))
+        push('Pedidos',{emoji:'📦',bg:'#ff6b35',title:num,sub:'Pedido'+(p.fields['Estado pedido']?' · '+p.fields['Estado pedido']:'')+(cli?' · '+cli:''),go:'Abrir →',run:()=>switchTab('pedidos')});
+    });
+    if(_gsAllowed('cotizaciones')) (st.cotizaciones||[]).forEach(co=>{
+      const num=co.fields['N° Cotización']||co.id; const cli=_gsClienteNombre(co);
+      if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq))
+        push('Cotizaciones',{emoji:'📋',bg:'#a78bfa',title:num,sub:'Cotización'+(cli?' · '+cli:''),go:'Abrir →',run:()=>switchTab('cotizaciones')});
+    });
+    if(_gsAllowed('proveedores')) (st.proveedores||[]).forEach(pv=>{
+      const nom=pv.fields['Nombre']||'—';
+      if(_gsNorm(nom).includes(nq))
+        push('Proveedores',{emoji:'🏭',bg:'#ffaa00',title:nom,sub:'Proveedor',go:'Abrir →',run:()=>switchTab('proveedores')});
+    });
+    ['Clientes','Pedidos','Cotizaciones','Proveedores'].forEach(cat=>{
+      if(byCat[cat]&&byCat[cat].length) groups.push({cat:cat,items:byCat[cat].slice(0,6)});
+    });
+  }
+
+  _gsResults=[]; _gsActive=-1;
+  if(!groups.length){
+    box.innerHTML='<div class="gs-empty">Sin resultados para “'+escapeHtml(q)+'”</div>';
+    box.classList.add('open'); return;
+  }
+  let html='';
+  groups.forEach(g=>{
+    html+='<div class="gs-cat">'+escapeHtml(g.cat)+'</div>';
+    g.items.forEach(it=>{
+      const idx=_gsResults.length; _gsResults.push(it.run);
+      const emojiStyle=it.bg?('background:'+it.bg+';color:#fff'):'';
+      html+='<div class="gs-item" data-gsi="'+idx+'" onmousedown="event.preventDefault();_gsRun('+idx+')" onmouseenter="_gsSetActive('+idx+')">'
+        +'<span class="gs-emoji" style="'+emojiStyle+'">'+it.emoji+'</span>'
+        +'<span class="gs-txt"><span class="gs-title">'+_gsHi(it.title,q)+'</span>'+(it.sub?'<span class="gs-sub">'+escapeHtml(it.sub)+'</span>':'')+'</span>'
+        +(it.go?'<span class="gs-go">'+escapeHtml(it.go)+'</span>':'')
+      +'</div>';
+    });
+  });
+  box.innerHTML=html;
+  box.classList.add('open');
+}
+function _gsRun(idx){
+  const fn=_gsResults[idx];
+  if(typeof fn==='function'){ globalSearchClear(true); fn(); }
+}
+function _gsSetActive(idx){
+  _gsActive=idx;
+  document.querySelectorAll('#globalSearchResults .gs-item').forEach(el=>{
+    el.classList.toggle('gs-active', parseInt(el.dataset.gsi)===idx);
+  });
+}
+function _gsScrollActive(){
+  const el=document.querySelector('#globalSearchResults .gs-item.gs-active');
+  if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'});
+}
+function globalSearchOnKey(e){
+  const box=document.getElementById('globalSearchResults');
+  if(e.key==='Escape'){ globalSearchClear(true); e.target.blur(); return; }
+  if(!box||!box.classList.contains('open')){ if(e.key==='ArrowDown') globalSearchOnInput(e.target.value); return; }
+  const n=_gsResults.length;
+  if(e.key==='ArrowDown'){ e.preventDefault(); if(n){_gsSetActive((_gsActive+1)%n);_gsScrollActive();} }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); if(n){_gsSetActive((_gsActive-1+n)%n);_gsScrollActive();} }
+  else if(e.key==='Enter'){ e.preventDefault(); if(_gsActive>=0)_gsRun(_gsActive); else if(n)_gsRun(0); }
+}
+function globalSearchClear(keepBlur){
+  const inp=document.getElementById('globalSearchInput');
+  if(inp) inp.value='';
+  const clr=document.getElementById('gsClear'); if(clr) clr.style.display='none';
+  const kbd=document.querySelector('.gs-kbd'); if(kbd) kbd.style.display='';
+  closeGlobalSearch();
+  if(!keepBlur&&inp) inp.focus();
+}
+function closeGlobalSearch(){
+  const box=document.getElementById('globalSearchResults');
+  if(box){box.classList.remove('open');box.innerHTML='';}
+  _gsResults=[]; _gsActive=-1;
+}
+function initGlobalSearch(){
+  if(_gsInited) return; _gsInited=true;
+  document.addEventListener('click',e=>{
+    const gs=document.getElementById('globalSearch');
+    if(gs&&!gs.contains(e.target)) closeGlobalSearch();
+  });
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){
+      e.preventDefault();
+      const inp=document.getElementById('globalSearchInput');
+      if(inp){inp.focus();inp.select();globalSearchOnInput(inp.value);}
+    }
+  });
+}
+
 // ── SII / DTE ─────────────────────────────────────────────────
 function getSIICfg(){try{const c=JSON.parse(localStorage.getItem('sii_cfg')||'{}');return{webhookUrl:c.webhookUrl||_DEFAULTS.SII_WORKER_URL,rutEmisor:c.rutEmisor||_DEFAULTS.SII_RUT_EMISOR,razonEmisor:c.razonEmisor||_DEFAULTS.SII_RAZON_SOCIAL};}catch(e){return{webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL};}}
 async function uploadCAF(tipo,input){
@@ -13600,6 +13933,7 @@ async function testSIIWorker(){
           <option value="PAUSED">Pausada</option>
         </select>
       </div>
+      <div id="adsCampaignModalKwHint" style="display:none;font-size:10px;color:var(--accent);background:rgba(0,212,204,0.07);border:1px solid rgba(0,212,204,0.2);border-radius:6px;padding:7px 10px;line-height:1.4"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
       <button class="btn btn-ghost btn-sm" onclick="closeAdsCampaignModal()">Cancelar</button>
