@@ -2919,8 +2919,10 @@ function main() {
         <div class="card-header">
           <span class="card-title">⏳ Cambios pendientes</span>
           <span id="adsPendingBadge" style="font-size:10px;background:rgba(255,193,7,0.12);color:#ffc107;border:1px solid rgba(255,193,7,0.3);border-radius:4px;padding:2px 7px">0</span>
-          <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar estado</button>
+          <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
+          <button onclick="adsDiagnostico()" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--warn)" title="Diagnóstico completo del pipeline de mutaciones">🔍 Diagnosticar</button>
         </div>
+        <div id="adsDiagOutput" style="display:none;padding:10px 16px;background:var(--surface3);border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace"></div>
         <div id="adsPendingList" style="padding:12px 16px;display:flex;flex-direction:column;gap:6px"></div>
         <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">Los cambios se aplicarán la próxima vez que el Script 2 se ejecute en Google Ads (cada hora si está programado). <button onclick="window.open('https://ads.google.com','_blank')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">Abrir Google Ads para ejecutarlo ahora →</button></div>
       </div>
@@ -11665,6 +11667,49 @@ function confirmDeleteCampaign(){
   const mutation={op:'delete',id,data:{nombre},timestamp:new Date().toISOString(),status:'pending'};
   closeAdsDeleteModal();
   _adsQueueMutation(mutation);
+}
+
+async function adsDiagnostico(){
+  const cfg=getAdsConfig();
+  const out=document.getElementById('adsDiagOutput');
+  if(!out) return;
+  out.style.display='block';
+  out.innerHTML='<div style="color:var(--text3)">⏳ Diagnosticando...</div>';
+  const lines=[];
+  lines.push(`<b>Endpoint configurado:</b> <code style="font-size:9px;word-break:break-all">${escapeHtml(cfg.endpoint||'(ninguno)')}</code>`);
+  lines.push(`<b>Customer ID:</b> ${escapeHtml(cfg.customerId||'(no definido)')}`);
+  lines.push(`<b>Mutaciones locales (localStorage):</b> ${_adsPendingMutations.length} total`);
+  const byStatus={};_adsPendingMutations.forEach(m=>{byStatus[m.status]=(byStatus[m.status]||0)+1;});
+  Object.entries(byStatus).forEach(([s,n])=>lines.push(`  &nbsp;→ ${s}: ${n}`));
+  if(cfg.endpoint){
+    try{
+      const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now();
+      const r=await fetch(url);const d=await r.json();
+      if(d.ok&&Array.isArray(d.mutations)){
+        lines.push(`<b style="color:var(--success)">✓ Script 1 responde OK</b> — ${d.mutations.length} mutaciones almacenadas`);
+        const byS2={};d.mutations.forEach(m=>{byS2[m.status]=(byS2[m.status]||0)+1;});
+        Object.entries(byS2).forEach(([s,n])=>lines.push(`  &nbsp;→ <b>${s}</b>: ${n}`));
+        const pending=d.mutations.filter(m=>m.status==='pending'||m.status==='enviado');
+        if(pending.length){
+          const oldest=pending.sort((a,b)=>a.timestamp.localeCompare(b.timestamp))[0];
+          const mins=Math.round((Date.now()-new Date(oldest.timestamp).getTime())/60000);
+          lines.push(`<b style="color:var(--warn)">⚠ ${pending.length} mutación(es) sin aplicar</b> — la más antigua tiene ${mins} min`);
+          if(mins>60) lines.push(`<span style="color:var(--danger)">→ El Script 2 no ha corrido en más de 1 hora. Verifica que tenga un trigger horario configurado en Google Ads → Herramientas → Scripts → ⏱</span>`);
+          else lines.push(`→ El Script 2 debería procesarlas en la próxima ejecución (si tiene trigger horario).`);
+        } else if(d.mutations.length){
+          lines.push(`<span style="color:var(--success)">✓ Todas las mutaciones han sido aplicadas por Script 2</span>`);
+        }
+      } else {
+        lines.push(`<b style="color:var(--danger)">✗ Script 1 respondió con error:</b> ${escapeHtml((d&&d.error)||'respuesta inválida')}`);
+      }
+    }catch(e){
+      lines.push(`<b style="color:var(--danger)">✗ No se pudo conectar con Script 1:</b> ${escapeHtml(e.message)}`);
+      lines.push(`→ Verifica que el Script 1 esté publicado como <b>Aplicación web</b> con acceso <b>Todos (Anyone)</b>.`);
+    }
+  } else {
+    lines.push(`<b style="color:var(--danger)">✗ No hay endpoint configurado</b> — pega la URL del Script 1 arriba.`);
+  }
+  out.innerHTML=lines.map(l=>`<div style="margin-bottom:4px;font-size:11px">${l}</div>`).join('');
 }
 
 function sendAdsMutation(mutation){
