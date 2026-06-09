@@ -2816,7 +2816,7 @@ function main() {
       try {
         if (m.op === 'create') {
           // Presupuesto en CLP directamente (sin dividir por 1000)
-          var budgetOp = AdsApp.newCampaignBudgetBuilder()
+          var budgetOp = AdsApp.budgets().newBudgetBuilder()
             .withName('Budget_'+m.data.nombre)
             .withAmount(m.data.presupuesto)
             .build();
