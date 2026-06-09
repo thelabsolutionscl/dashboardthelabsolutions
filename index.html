@@ -57,7 +57,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 /* ── Dock de iconos estilo iPhone ────────────────────────────── */
 .icon-dock{position:sticky;top:60px;z-index:99;background:rgba(10,10,10,0.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);box-shadow:0 8px 24px rgba(0,0,0,0.35);padding:10px 20px;}
 .icon-dock-inner{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;max-width:1300px;margin:0 auto;}
-.dock-btn{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:4px 5px;border-radius:14px;width:78px;transition:transform .12s;}
+.dock-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:4px 5px;border-radius:14px;width:78px;transition:transform .12s;}
+.dock-badge{position:absolute;top:-3px;right:-3px;background:var(--danger);color:#fff;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;pointer-events:none;line-height:1;}
 .dock-btn:hover{transform:translateY(-2px);}
 .dock-icon{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;background-color:var(--c,#333);background-image:linear-gradient(160deg,rgba(255,255,255,0.24),rgba(0,0,0,0.22));box-shadow:0 4px 12px rgba(0,0,0,0.38),inset 0 1px 1px rgba(255,255,255,0.20);transition:box-shadow .15s,transform .12s;}
 .dock-btn:active .dock-icon{transform:scale(0.92);}
@@ -316,6 +317,8 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   /* Hide non-essential monitor filter tabs overflow */
   #monitorFilterTabs{overflow-x:auto;scrollbar-width:none;padding-bottom:4px;flex-wrap:nowrap;}
   .modal-card.wide{max-width:calc(100% - 24px);}
+  .act-menu{position:fixed!important;bottom:0!important;left:0!important;right:0!important;top:auto!important;border-radius:14px 14px 0 0;min-width:unset;max-height:55vh;overflow-y:auto;z-index:2000;padding-bottom:env(safe-area-inset-bottom,8px);}
+  .act-menu.open::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:-1;border-radius:0;}
   /* Scroll hint fade on horizontally scrollable tables */
   [style*="overflow-x:auto"]:not(.kpi-grid){position:relative;}
   .scroll-x-wrap{position:relative;}
@@ -1296,14 +1299,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="dock-btn active" data-tab="overview" onclick="switchTab('overview')"><span class="dock-icon" style="--c:#00d4cc">🏠</span><span class="dock-label">Overview</span></button>
     <button class="dock-btn" data-tab="clientes" onclick="switchTab('clientes')"><span class="dock-icon" style="--c:#3b82f6">👥</span><span class="dock-label">Clientes</span></button>
     <button class="dock-btn" data-tab="cotizaciones" onclick="switchTab('cotizaciones')"><span class="dock-icon" style="--c:#a78bfa">📋</span><span class="dock-label">Cotizaciones</span></button>
-    <button class="dock-btn" data-tab="pedidos" onclick="switchTab('pedidos')"><span class="dock-icon" style="--c:#ff6b35">📦</span><span class="dock-label">Pedidos</span></button>
+    <button class="dock-btn" data-tab="pedidos" onclick="switchTab('pedidos')"><span class="dock-icon" style="--c:#ff6b35">📦</span><span class="dock-label">Pedidos</span><span class="dock-badge" id="badge-pedidos" style="display:none">0</span></button>
     <button class="dock-btn" data-tab="proveedores" onclick="switchTab('proveedores')"><span class="dock-icon" style="--c:#ffaa00">🏭</span><span class="dock-label">Proveedores</span></button>
     <button class="dock-btn" data-tab="agentes" onclick="switchTab('agentes')"><span class="dock-icon" style="--c:#10b981">🤖</span><span class="dock-label">Agentes</span></button>
     <button class="dock-btn" data-tab="maquinas" onclick="switchTab('maquinas')"><span class="dock-icon" style="--c:#ff4444">🖨️</span><span class="dock-label">Máquinas</span></button>
     <button class="dock-btn" data-tab="equipo" onclick="switchTab('equipo')"><span class="dock-icon" style="--c:#f472b6">👤</span><span class="dock-label">Equipo</span></button>
     <button class="dock-btn" data-tab="reporte" onclick="switchTab('reporte')"><span class="dock-icon" style="--c:#14b8a6">📊</span><span class="dock-label">Reportes</span></button>
     <button class="dock-btn" data-tab="web" onclick="switchTab('web')"><span class="dock-icon" style="--c:#6366f1">🌐</span><span class="dock-label">Web</span></button>
-    <button class="dock-btn" data-tab="finanzas" onclick="switchTab('finanzas')"><span class="dock-icon" style="--c:#22c55e">💰</span><span class="dock-label">Finanzas</span></button>
+    <button class="dock-btn" data-tab="finanzas" onclick="switchTab('finanzas')"><span class="dock-icon" style="--c:#22c55e">💰</span><span class="dock-label">Finanzas</span><span class="dock-badge" id="badge-finanzas" style="display:none">0</span></button>
     <button class="dock-btn" data-tab="visual" onclick="switchTab('visual')"><span class="dock-icon" style="--c:#8b5cf6">🎨</span><span class="dock-label">Visual AI</span></button>
     <button class="dock-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="dock-icon" style="--c:#84cc16">💵</span><span class="dock-label">Remuneraciones</span></button>
     <button class="dock-btn" data-tab="calculadora" onclick="switchTab('calculadora')"><span class="dock-icon" style="--c:#f59e0b">⚡</span><span class="dock-label">Calculadora</span></button>
@@ -2460,7 +2463,17 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">📊 CRM</div><div id="cdCRM" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
     </div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:8px">📝 Notas</div><div id="cdNotas" style="font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap"></div></div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">📋 Cotizaciones</div><div id="cdCotizaciones" style="font-size:12px"></div></div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">🕐 Historial</div>
+        <div style="display:flex;gap:4px">
+          <button onclick="cdTimelineFilter('todos')" id="cdTLbtnTodos" class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px;font-weight:700">Todo</button>
+          <button onclick="cdTimelineFilter('cotizaciones')" id="cdTLbtnCotizaciones" class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px">Cotiz.</button>
+          <button onclick="cdTimelineFilter('pedidos')" id="cdTLbtnPedidos" class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px">Pedidos</button>
+        </div>
+      </div>
+      <div id="cdTimeline" style="font-size:12px"></div>
+    </div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
       <div id="cdFacturasHeader" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:6px">
@@ -2887,6 +2900,26 @@ function main() {
       <div class="stat-card"><div class="stat-label">Conversiones</div><div class="stat-value" id="ads-kpi-conv" style="color:var(--success)">—</div><div class="stat-sub" id="ads-kpi-conv-trend"></div></div>
       <div class="stat-card"><div class="stat-label">Costo/Conv.</div><div class="stat-value" id="ads-kpi-cpa" style="color:var(--text2)">—</div></div>
       <div class="stat-card"><div class="stat-label">ROAS</div><div class="stat-value" id="ads-kpi-roas" style="color:var(--success)">—</div><div class="stat-sub" id="ads-kpi-roas-trend"></div></div>
+    </div>
+
+    <!-- Ads vs CRM -->
+    <div id="adsCRMPanel" style="display:none;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📊 Ads vs Ventas CRM</span>
+          <span id="adsCRMPeriodo" style="font-size:10px;color:var(--text3)"></span>
+        </div>
+        <div style="padding:14px 16px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px">
+            <div class="stat-card"><div class="stat-label">Gasto Ads</div><div class="stat-value" id="crm-ads-gasto" style="color:var(--danger)">—</div></div>
+            <div class="stat-card"><div class="stat-label">Ingresos CRM</div><div class="stat-value" id="crm-ads-ingresos" style="color:var(--success)">—</div><div class="stat-sub" id="crm-ads-ingresos-sub"></div></div>
+            <div class="stat-card"><div class="stat-label">ROAS Real</div><div class="stat-value" id="crm-ads-roas" style="color:var(--accent)">—</div><div class="stat-sub">ingresos / gasto</div></div>
+            <div class="stat-card"><div class="stat-label">Costo por Lead</div><div class="stat-value" id="crm-ads-cpl" style="color:var(--warn)">—</div><div class="stat-sub" id="crm-ads-cpl-sub"></div></div>
+          </div>
+          <div id="crm-ads-bar" style="height:8px;border-radius:4px;background:var(--surface3);overflow:hidden;margin-bottom:6px"></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)"><span>Gasto Ads</span><span id="crm-ads-bar-label"></span><span>Ingresos CRM</span></div>
+        </div>
+      </div>
     </div>
 
     <!-- Recomendaciones del Agente -->
@@ -5525,6 +5558,7 @@ function renderKPIs(){
     <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
     <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas"><div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
     <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones"><div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
+  updateDockBadges();
 }
 function renderPipelineArea(){
   const _basePed=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
@@ -5551,6 +5585,20 @@ function goToAlert(tab,id){
     const row=document.querySelector(`[data-id="${id}"]`);
     if(row){row.scrollIntoView({behavior:'smooth',block:'center'});row.classList.add('row-flash');setTimeout(()=>row.classList.remove('row-flash'),1700);}
   },160);
+}
+function updateDockBadges(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const atrasados=(state.pedidos||[]).filter(p=>{
+    const f=p.fields,est=f['Estado pedido']||'';
+    if(['Despachado','Cancelado'].includes(est)) return false;
+    return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;
+  }).length;
+  const bp=document.getElementById('badge-pedidos');
+  if(bp){bp.textContent=atrasados>9?'9+':String(atrasados);bp.style.display=atrasados?'flex':'none';}
+  let factVenc=0;
+  try{const allF=finGetAllFacturas();factVenc=allF.filter(r=>r.porCobrar>0).length;}catch(e){}
+  const bf=document.getElementById('badge-finanzas');
+  if(bf){bf.textContent=factVenc>9?'9+':String(factVenc);bf.style.display=factVenc?'flex':'none';}
 }
 function renderAlertas(){
   const alertas=[];
@@ -5858,9 +5906,8 @@ function openClienteDetalle(id){
   document.getElementById('cdFinanciero').innerHTML=[row('Revenue',formatCLP(f['Revenue total cliente (CLP)']||0)),row('Fact. venc.',String(venc)),row('Estado cta',f['Estado cuenta'])].filter(Boolean).join('');
   document.getElementById('cdCRM').innerHTML=[row('Etapa',f['Etapa venta']),row('Valoración','★'.repeat(val)+'☆'.repeat(5-val)),row('Industria',f['Industria / Rubro'])].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
   const notasEl=document.getElementById('cdNotas');notasEl.textContent=f['Notas internas']||'Sin notas';notasEl.style.color=f['Notas internas']?'var(--text2)':'var(--text3)';
-  const cots=state.cotizaciones.filter(co=>{const campo=co.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(id);return campo===(f['Empresa']||'');});
-  document.getElementById('cdCotizaciones').innerHTML=!cots.length?'<span style="color:var(--text3)">Sin cotizaciones</span>':`<table style="width:100%;border-collapse:collapse">${cots.map(co=>{const cf=co.fields;return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 4px" class="mono">${escapeHtml(cf['N° Cotización']||'—')}</td><td style="padding:6px 4px">${estadoBadge(cf['Estado cotización']||'—')}</td><td style="padding:6px 4px" class="clp">${formatCLP(cf['Total final (CLP)']||0)}</td></tr>`;}).join('')}</table>`;
-  cdCurrentId=id; cdCurrentEmpresa=f['Empresa']||'';
+  cdCurrentId=id;
+  renderClienteTimeline(id,f['Empresa']||''); cdCurrentEmpresa=f['Empresa']||'';
   _facFiltro='todas'; _facBuscar='';
   renderClienteFacturas(id,f['Empresa']||'');
   document.getElementById('cdAddFacturaBtn').onclick=()=>openFacturaModal(id);
@@ -6184,6 +6231,36 @@ async function deleteFactura(id,clienteId){
     renderClienteFacturas(clienteId,empresa);
     if(typeof finRenderFacturas==='function') finRenderFacturas();
   }catch(e){toast('Error: '+e.message,'error');}
+}
+let _cdTimelineData=[];
+let _cdTimelineMode='todos';
+function renderClienteTimeline(clienteId,empresaNombre){
+  const cots=(state.cotizaciones||[]).filter(c=>{const campo=c.fields['Cliente'];if(!campo)return false;if(Array.isArray(campo))return campo.includes(clienteId);return campo===empresaNombre;});
+  const peds=(state.pedidos||[]).filter(p=>{const campo=p.fields['Cliente'];if(!campo)return false;if(Array.isArray(campo))return campo.includes(clienteId);return campo===empresaNombre;});
+  _cdTimelineData=[
+    ...cots.map(c=>({type:'cot',date:c.fields['Fecha cotización']||c.createdTime?.slice(0,10)||'',label:c.fields['N° Cotización']||'—',sub:estadoBadge(c.fields['Estado cotización']||'—')+' · '+formatCLP(c.fields['Total final (CLP)']||0),color:'#a78bfa',icon:'📋',id:c.id})),
+    ...peds.map(p=>({type:'ped',date:p.fields['Fecha entrega']||p.createdTime?.slice(0,10)||'',label:p.fields['N° Pedido']||'—',sub:estadoBadge(p.fields['Estado pedido']||'—')+' · '+formatCLP(p.fields['Monto total (CLP)']||0),color:'#ff6b35',icon:'📦',id:p.id}))
+  ].sort((a,b)=>b.date.localeCompare(a.date));
+  cdTimelineFilter('todos');
+}
+function cdTimelineFilter(mode){
+  _cdTimelineMode=mode;
+  ['todos','cotizaciones','pedidos'].forEach(m=>{
+    const key=m.charAt(0).toUpperCase()+m.slice(1);
+    const btn=document.getElementById('cdTLbtn'+key);
+    if(btn){btn.style.fontWeight=m===mode?'700':'400';btn.style.background=m===mode?'var(--accent)':'';btn.style.color=m===mode?'#fff':'';}
+  });
+  const items=mode==='todos'?_cdTimelineData:_cdTimelineData.filter(i=>mode==='cotizaciones'?i.type==='cot':i.type==='ped');
+  const el=document.getElementById('cdTimeline');if(!el)return;
+  if(!items.length){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:8px 0">Sin historial</div>';return;}
+  el.innerHTML=items.map((it,i)=>`<div style="display:flex;gap:10px;padding:7px 0;${i<items.length-1?'border-bottom:1px solid var(--border);':''}align-items:flex-start">
+    <div style="min-width:28px;height:28px;border-radius:50%;background:${it.color}22;border:1.5px solid ${it.color};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${it.icon}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;color:var(--text1)">${escapeHtml(it.label)}</div>
+      <div style="color:var(--text3);font-size:11px;margin-top:2px">${it.sub}</div>
+    </div>
+    <div style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0">${it.date||'—'}</div>
+  </div>`).join('');
 }
 function closeClienteDetalle(){document.getElementById('clienteDetalleModal').style.display='none';}
 function copiarFolio(folio){navigator.clipboard.writeText(String(folio)).then(()=>toast('Folio '+folio+' copiado','success')).catch(()=>toast('No se pudo copiar','error'));}
@@ -11889,6 +11966,7 @@ function renderAdsKPIs(data,days){
   document.getElementById('ads-kpi-cpa').textContent=conv>0?fmtMoney(cpa):'—';
   document.getElementById('ads-kpi-roas').textContent=valConv>0?roas.toFixed(2)+'x':'—';
   ovSyncAdsKPIs(data);
+  renderAdsCRMPanel(data,days);
   // — Snapshot, tendencias vs período anterior, sync label, stale warning
   if(!data.demo) adsSaveSnapshot(data,days);
   const prev=adsGetPrevSnapshot();
@@ -11918,6 +11996,37 @@ function renderAdsKPIs(data,days){
   // Última sincronización
   const lbl=document.getElementById('adsLastSyncLabel');
   if(lbl) lbl.textContent=adsLastSyncStr();
+}
+function renderAdsCRMPanel(data,days){
+  const el=document.getElementById('adsCRMPanel');if(!el)return;
+  el.style.display='';
+  const gasto=data.gasto||0;
+  const cutoff=new Date(Date.now()-days*86400000);
+  const ingresoCRM=(state.pedidos||[]).filter(p=>{
+    const f=p.fields;
+    if((f['Estado pedido']||'')==='Cancelado') return false;
+    const d=p.createdTime?new Date(p.createdTime):null;
+    return d&&d>=cutoff;
+  }).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const pedCount=(state.pedidos||[]).filter(p=>{const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=cutoff&&(p.fields['Estado pedido']||'')!=='Cancelado';}).length;
+  const leads=(state.clientes||[]).filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=cutoff;}).length;
+  const roasReal=gasto>0?ingresoCRM/gasto:0;
+  const cpl=leads>0&&gasto>0?Math.round(gasto/leads):0;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  set('crm-ads-gasto',fmtMoney(gasto));
+  set('crm-ads-ingresos',fmtMoney(ingresoCRM));
+  set('crm-ads-ingresos-sub',`${pedCount} pedido${pedCount!==1?'s':''}`);
+  set('crm-ads-roas',roasReal>0?roasReal.toFixed(2)+'x':'—');
+  set('crm-ads-cpl',cpl>0?fmtMoney(cpl):'—');
+  set('crm-ads-cpl-sub',leads>0?`${leads} lead${leads!==1?'s':''} nuevos`:'sin leads');
+  set('adsCRMPeriodo',`últimos ${days} días`);
+  const bar=document.getElementById('crm-ads-bar');
+  if(bar){
+    const total=Math.max(gasto,ingresoCRM)||1;
+    const gp=Math.round(gasto/total*100),ip=Math.round(ingresoCRM/total*100);
+    bar.innerHTML=`<div style="height:100%;width:${gp}%;background:var(--danger);display:inline-block"></div><div style="height:100%;width:${ip}%;background:var(--success);display:inline-block"></div>`;
+  }
+  set('crm-ads-bar-label',roasReal>=1?`✓ ROAS ${roasReal.toFixed(1)}x — rentable`:`⚠ ROAS ${roasReal>0?roasReal.toFixed(2)+'x':'sin datos'}`);
 }
 function renderAdsCampaigns(data){
   const camps=data.campanas||[];
@@ -13981,7 +14090,15 @@ function globalSearchOnInput(raw){
       if(_gsNorm(nom).includes(nq))
         push('Proveedores',{emoji:'🏭',bg:'#ffaa00',title:nom,sub:'Proveedor',go:'Abrir →',run:()=>switchTab('proveedores')});
     });
-    ['Clientes','Pedidos','Cotizaciones','Proveedores'].forEach(cat=>{
+    if(_gsAllowed('finanzas')){
+      try{
+        const fv=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
+        fv.filter(v=>_gsNorm((v.nro||'')+(v.cliente||'')+(v.concepto||'')).includes(nq)).slice(0,4).forEach(v=>{
+          push('Facturas',{emoji:'🧾',bg:'#22c55e',title:v.nro||'Sin N°',sub:(v.cliente||'—')+' · '+formatCLP(v.monto||0),go:'Abrir →',run:()=>{switchTab('finanzas');setTimeout(()=>finSwitchTab('facturas'),300);}});
+        });
+      }catch(e){}
+    }
+    ['Clientes','Pedidos','Cotizaciones','Proveedores','Facturas'].forEach(cat=>{
       if(byCat[cat]&&byCat[cat].length) groups.push({cat:cat,items:byCat[cat].slice(0,6)});
     });
   }
