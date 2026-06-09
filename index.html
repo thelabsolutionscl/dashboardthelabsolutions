@@ -2843,6 +2843,7 @@ function main() {
         } else if (m.op === 'delete') {
           var iter2 = AdsApp.campaigns().withIds([m.id]).get();
           if (iter2.hasNext()) { iter2.next().pause(); muts[k].status = 'aplicado'; }
+          else { muts[k].status = 'error'; muts[k].error = 'Campaña no encontrada: '+m.id; }
         }
         changed = true;
       } catch(e) {
@@ -2918,9 +2919,10 @@ function main() {
         <div class="card-header">
           <span class="card-title">⏳ Cambios pendientes</span>
           <span id="adsPendingBadge" style="font-size:10px;background:rgba(255,193,7,0.12);color:#ffc107;border:1px solid rgba(255,193,7,0.3);border-radius:4px;padding:2px 7px">0</span>
+          <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar estado</button>
         </div>
         <div id="adsPendingList" style="padding:12px 16px;display:flex;flex-direction:column;gap:6px"></div>
-        <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">Los cambios se aplicarán la próxima vez que el Script 2 se ejecute en Google Ads. <button onclick="window.open('https://ads.google.com','_blank')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">Ir a Google Ads para ejecutarlo ahora →</button></div>
+        <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">Los cambios se aplicarán la próxima vez que el Script 2 se ejecute en Google Ads (cada hora si está programado). <button onclick="window.open('https://ads.google.com','_blank')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">Abrir Google Ads para ejecutarlo ahora →</button></div>
       </div>
     </div>
 
@@ -5364,7 +5366,7 @@ function switchTab(name){
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
   if(name==='remuneraciones') renderRemuneraciones();
-  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());}
+  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
@@ -11638,6 +11640,7 @@ function _adsQueueMutation(mutation){
   savePendingToStorage();
   sendAdsMutation(mutation);
   renderPendingMutations();
+  _startAdsMutationPoll();
 }
 
 function saveCampaignMutation(){
@@ -11701,35 +11704,11 @@ async function syncMutationStatuses(){
       }
     });
     if(changed){
-      // Quita las aplicadas (los errores se conservan para que el usuario los vea/reintente)
       _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
       savePendingToStorage();
       renderPendingMutations();
       if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
       if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa el detalle en Cambios pendientes','error');
-    }
-  }catch(e){}
-}
-async function syncMutationStatuses(){
-  const cfg=getAdsConfig();
-  if(!cfg.endpoint||!_adsPendingMutations.length) return;
-  try{
-    const r=await fetch(cfg.endpoint+'?action=mutations&_t='+Date.now());
-    const d=await r.json();
-    if(!d.ok||!d.mutations) return;
-    let changed=false;
-    _adsPendingMutations.forEach(m=>{
-      const srv=d.mutations.find(s=>s.timestamp===m.timestamp);
-      if(srv&&srv.status!=='pending'&&m.status!==srv.status){m.status=srv.status;m.error=srv.error;changed=true;}
-    });
-    if(changed){
-      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
-      savePendingToStorage();
-      renderPendingMutations();
-      const aplicadas=d.mutations.filter(s=>s.status==='aplicado').length;
-      const errores=d.mutations.filter(s=>s.status==='error').length;
-      if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
-      if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa los logs del Script 2','warn');
     }
   }catch(e){}
 }
@@ -11773,6 +11752,19 @@ function removePendingMutationByTs(ts){
   savePendingToStorage();
   renderPendingMutations();
 }
+
+// Auto-poll: verifica estado de mutaciones cada 2 min si hay pendientes y el tab web está activo
+let _adsMutationPollInterval=null;
+function _startAdsMutationPoll(){
+  if(_adsMutationPollInterval) return;
+  _adsMutationPollInterval=setInterval(()=>{
+    const hasPending=_adsPendingMutations.some(m=>m.status==='enviado'||m.status==='pending');
+    const webActive=document.getElementById('tab-web')?.classList.contains('active');
+    if(hasPending&&webActive) syncMutationStatuses();
+    else if(!hasPending){clearInterval(_adsMutationPollInterval);_adsMutationPollInterval=null;}
+  },120000);
+}
+function _stopAdsMutationPoll(){if(_adsMutationPollInterval){clearInterval(_adsMutationPollInterval);_adsMutationPollInterval=null;}}
 
 function retryMutation(ts){
   const m=_adsPendingMutations.find(x=>x.timestamp===ts);
