@@ -5108,7 +5108,7 @@ function switchTab(name){
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
   if(name==='remuneraciones') renderRemuneraciones();
-  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsData();}
+  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
@@ -10937,6 +10937,67 @@ function adsHealthScore(c){
   const color=s>=70?'var(--success)':s>=40?'var(--warn)':'var(--danger)';
   return{score:s,color,label:s>=70?'Bueno':s>=40?'Regular':'Bajo'};
 }
+// ── Airtable sync ────────────────────────────────────────
+async function syncAdsToAirtable(data,days){
+  let cfg;try{cfg=_airtableConfig();}catch(e){return;}
+  const today=new Date().toISOString().slice(0,10);
+  const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
+  const conv=data.conversiones||0,valConv=data.valor_conversion||0;
+  const ctr=imp>0?clics/imp:0;
+  const cpc=clics>0?Math.round(gasto/clics):0;
+  const cpa=conv>0?Math.round(gasto/conv):0;
+  const roas=gasto>0?Math.round(valConv/gasto*100)/100:0;
+  const adsCfg=getAdsConfig();
+  const base=cfg.base+'/'+BASE_ID;
+  const headers={...cfg.headers,'Content-Type':'application/json'};
+  // KPI record
+  await airtableHttp(base+'/Google_Ads_KPIs',{method:'POST',headers,body:JSON.stringify({records:[{fields:{
+    'Período':today+' · '+days+'d',
+    'Fecha':today,'Días período':days,
+    'Gasto (CLP)':gasto,'Impresiones':imp,'Clics':clics,
+    'CTR (%)':ctr,'CPC Promedio (CLP)':cpc,
+    'Conversiones':conv,'Valor Conversiones (CLP)':valConv,
+    'CPA (CLP)':cpa,'ROAS':roas,
+    'Customer ID':adsCfg.customerId||'','Fuente':'real'
+  }}],typecast:true})});
+  // Campaign records (batch 10)
+  const camps=data.campanas||[];
+  if(camps.length){
+    const recs=camps.map(c=>{
+      const ct=c.impresiones>0?c.clics/c.impresiones:0;
+      const cp=c.clics>0?Math.round(c.gasto/c.clics):0;
+      const ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0;
+      const ro=c.gasto>0&&(c.valor_conversion||0)>0?Math.round(c.valor_conversion/c.gasto*100)/100:0;
+      return{fields:{
+        'Campaña':c.nombre||String(c.id),
+        'Campaign ID':String(c.id||''),
+        'Fecha snapshot':today,'Estado':c.estado||'ENABLED',
+        'Presupuesto diario (CLP)':c.presupuesto||0,'Gasto (CLP)':c.gasto||0,
+        'Impresiones':c.impresiones||0,'Clics':c.clics||0,
+        'CTR (%)':ct,'CPC (CLP)':cp,
+        'Conversiones':c.conversiones||0,'CPA (CLP)':ca,'ROAS':ro,
+        'Score salud':adsHealthScore(c).score,'Período (días)':days
+      }};
+    });
+    for(let i=0;i<recs.length;i+=10){
+      await airtableHttp(base+'/Google_Ads_Campanas',{method:'POST',headers,body:JSON.stringify({records:recs.slice(i,i+10),typecast:true})});
+    }
+  }
+}
+async function loadAdsSnapshotsFromAirtable(){
+  let cfg;try{cfg=_airtableConfig();}catch(e){return;}
+  const res=await airtableFetch('Google_Ads_KPIs',60);
+  const records=res.records||[];if(!records.length) return;
+  records.sort((a,b)=>(b.fields['Fecha']||'').localeCompare(a.fields['Fecha']||''));
+  const seen=new Set();
+  const deduped=records.filter(r=>{const d=r.fields['Fecha']||'';if(seen.has(d)) return false;seen.add(d);return true;});
+  const snaps=deduped.reverse().map(r=>{const f=r.fields;return{
+    date:f['Fecha']||'',ts:f['Fecha']||'',
+    gasto:f['Gasto (CLP)']||0,clics:f['Clics']||0,conv:f['Conversiones']||0,
+    roas:f['ROAS']||0,imp:f['Impresiones']||0,ctr:f['CTR (%)']||0,days:f['Días período']||30
+  };});
+  localStorage.setItem('ads_snapshots',JSON.stringify(snaps));
+}
 // ── Export CSV ───────────────────────────────────────────
 function adsExportCSV(){
   const rows=document.querySelectorAll('#adsCampaignsArea table tr');
@@ -11154,6 +11215,8 @@ async function loadAdsData(){
     if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
     const btnNueva=document.getElementById('btnNuevaCampana');
     if(btnNueva) btnNueva.style.display='inline-flex';
+    // Sync a Airtable (no bloqueante)
+    syncAdsToAirtable(data,days).then(()=>toast('✓ Google Ads sincronizado con Airtable','success')).catch(()=>{});
   }catch(e){
     document.getElementById('adsCampaignsArea').innerHTML=`<div class="empty-state" style="padding:40px 0"><div class="empty-icon">⚠</div><div style="color:var(--danger)">${e.message}</div><div style="font-size:11px;color:var(--text3);margin-top:8px">Verifica que el Apps Script esté publicado como aplicación web con acceso público</div></div>`;
     ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='—';});
