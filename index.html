@@ -4578,6 +4578,7 @@ function renderMaquinasManagerModal(){
       <td style="padding:6px 8px"><span style="font-size:11px;background:${m.color}22;color:${m.color};border-radius:4px;padding:2px 6px">${m.modelo}</span></td>
       <td style="padding:6px 8px;font-size:12px">${m.nombre} <span style="color:var(--text3)">#${m.num}</span></td>
       <td style="padding:6px 8px"><input id="mgr-ip-${m.id}" value="${m.ip||''}" placeholder="192.168.100.x" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text);width:130px"></td>
+      <td style="padding:6px 8px">${(()=>{const ps=_printerStatus[m.id];if(!ps||!getPrinterIp(m))return'<span style="font-size:10px;color:#ff6b35">⚠ sin IP</span>';const st=ps.state||'offline';if(st==='printing')return'<span style="font-size:10px;color:#00d4aa">🟢 ok</span>';if(st==='standby'||st==='complete')return'<span style="font-size:10px;color:#00d4aa">🟢 ok</span>';if(st==='paused')return'<span style="font-size:10px;color:#ffaa00">⏸ pausado</span>';if(st==='offline')return'<span style="font-size:10px;color:#888">⚫ offline</span>';return'<span style="font-size:10px;color:#888">⚫ —</span>';})()}</td>
       <td style="padding:6px 8px">
         <select id="mgr-estado-${m.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text)">
           <option value="disponible" ${m.estado!=='mantencion'?'selected':''}>✓ Disponible</option>
@@ -4585,6 +4586,7 @@ function renderMaquinasManagerModal(){
         </select>
       </td>
       <td style="padding:6px 8px;display:flex;gap:4px">
+        <button onclick="openPrinterConnModal('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" title="Configurar conexión Moonraker">🔌</button>
         <button onclick="saveMgrRow('${m.id}')" class="btn btn-primary btn-sm" style="font-size:10px;padding:3px 8px">💾</button>
         <button onclick="deleteMgrRow('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px;color:var(--danger)">✕</button>
       </td>
@@ -8460,7 +8462,7 @@ async function initMaquinas(){
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
 const MOONRAKER_PORT=7125;
 function getPrinterTunnel(){const d=_DEFAULTS.PRINTER_TUNNEL.startsWith('%%')?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
-function printerUrl(ip,path){return`${getPrinterTunnel()}/${ip}${path}`;}
+function printerUrl(ip,path){if(typeof _isLocalMode==='function'&&_isLocalMode())return`http://${ip}:7125${path}`;return`${getPrinterTunnel()}/${ip}${path}`;}
 const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={},_demoPrinterState={};
@@ -8499,6 +8501,7 @@ function openPrinterConnModal(id){
   document.getElementById('printerConnId').value=id;
   document.getElementById('printerConnIp').value=getPrinterIp(m)||'';
   document.getElementById('printerConnKey').value=getPrinterApiKey(id);
+  const res=document.getElementById('printerConnTestResult');if(res)res.style.display='none';
   document.getElementById('printerConnModal').style.display='flex';
 }
 function closePrinterConnModal(){document.getElementById('printerConnModal').style.display='none';}
@@ -8512,6 +8515,31 @@ function savePrinterConn(){
   const m=MAQUINAS.find(x=>x.id===id);
   toast(`Conexión guardada · ${m?.nombre} #${m?.numG}`,'success');
   pollPrinters();
+}
+async function testPrinterConn(){
+  const ip=(document.getElementById('printerConnIp').value||'').trim();
+  const key=(document.getElementById('printerConnKey').value||'').trim();
+  const res=document.getElementById('printerConnTestResult');
+  if(!ip){res.style.display='block';res.style.background='rgba(255,107,53,0.12)';res.style.color='#ff6b35';res.textContent='⚠ Ingresa una IP primero';return;}
+  res.style.display='block';res.style.background='rgba(0,212,204,0.06)';res.style.color='var(--text3)';res.textContent='⏳ Conectando a '+ip+'…';
+  const headers=key?{'X-Api-Key':key}:{};
+  const url=(typeof _isLocalMode==='function'&&_isLocalMode())?`http://${ip}:7125/printer/info`:`${getPrinterTunnel()}/${ip}/printer/info`;
+  try{
+    const r=await fetch(url,{signal:AbortSignal.timeout(6000),headers});
+    if(r.ok){
+      const d=await r.json();const si=d.result||{};
+      const state_=si.state||'ready';const version=si.software_version||'—';const host=si.hostname||ip;
+      res.style.background='rgba(0,212,170,0.1)';res.style.color='#00d4aa';
+      res.textContent=`✓ Conectado · ${host} · Klipper ${version} · ${state_}`;
+    }else{
+      res.style.background='rgba(255,68,68,0.1)';res.style.color='#ff4444';
+      res.textContent=`✗ HTTP ${r.status} — verifica IP y API Key`;
+    }
+  }catch(e){
+    res.style.background='rgba(255,68,68,0.1)';res.style.color='#ff4444';
+    const hint=(typeof _isLocalMode==='function'&&_isLocalMode())?'Modo local: verifica que estés en la misma red':'Modo remoto: verifica el tunnel';
+    res.textContent=`✗ Sin respuesta · ${hint}`;
+  }
 }
 
 async function fetchPrinterStatus(m){
@@ -11083,9 +11111,11 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
         <div style="font-size:10px;color:var(--text3);margin-top:4px">En OrcaSlicer: Preparar → Impresoras → ⚙ → IP/API Key. En Fluidd/Mainsail: Configuración → API Keys. Se envía como encabezado <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">X-Api-Key</code>.</div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:18px">
-      <button class="btn btn-primary btn-sm" onclick="savePrinterConn()" style="flex:1">Guardar</button>
-      <button class="btn btn-ghost btn-sm" onclick="closePrinterConnModal()" style="flex:1">Cancelar</button>
+    <div id="printerConnTestResult" style="display:none;margin-top:12px;padding:8px 12px;border-radius:7px;font-size:11px;font-family:monospace;line-height:1.5;word-break:break-all"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-ghost btn-sm" onclick="testPrinterConn()" style="flex:1">🔌 Probar</button>
+      <button class="btn btn-primary btn-sm" onclick="savePrinterConn()" style="flex:1">💾 Guardar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closePrinterConnModal()" style="padding:0 12px">✕</button>
     </div>
   </div>
 </div>
@@ -11103,6 +11133,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
           <th style="padding:4px 8px;text-align:left;font-weight:600">Modelo</th>
           <th style="padding:4px 8px;text-align:left;font-weight:600">Nombre</th>
           <th style="padding:4px 8px;text-align:left;font-weight:600">IP</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:600">Conexión</th>
           <th style="padding:4px 8px;text-align:left;font-weight:600">Estado</th>
           <th style="padding:4px 8px;text-align:left;font-weight:600">Acciones</th>
         </tr>
