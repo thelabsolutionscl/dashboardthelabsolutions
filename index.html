@@ -2958,7 +2958,8 @@ function main() {
         <div class="card-header">
           <span class="card-title">⏳ Cambios pendientes</span>
           <span id="adsPendingBadge" style="font-size:10px;background:rgba(255,193,7,0.12);color:#ffc107;border:1px solid rgba(255,193,7,0.3);border-radius:4px;padding:2px 7px">0</span>
-          <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
+          <button onclick="retryAllErrors()" id="adsRetryAllBtn" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px;color:var(--danger);display:none" title="Reintentar todas las mutaciones con error">↻ Reintentar errores</button>
+          <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
           <button onclick="adsDiagnostico()" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--warn)" title="Diagnóstico completo del pipeline de mutaciones">🔍 Diagnosticar</button>
         </div>
         <div id="adsDiagOutput" style="display:none;padding:10px 16px;background:var(--surface3);border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace"></div>
@@ -11863,6 +11864,8 @@ function renderPendingMutations(){
   const nPend=visibles.filter(m=>m.status!=='error').length;
   const nErr=visibles.filter(m=>m.status==='error').length;
   if(badge) badge.textContent=nPend+' pendiente'+(nPend!==1?'s':'')+(nErr?' · '+nErr+' error'+(nErr!==1?'es':''):'');
+  const retryBtn=document.getElementById('adsRetryAllBtn');
+  if(retryBtn) retryBtn.style.display=nErr?'':'none';
   const opLabel={create:'Crear',edit:'Editar',delete:'Eliminar'};
   const stMap={
     pending:{c:'var(--warn)',t:'⏳ Pendiente'},
@@ -11912,6 +11915,15 @@ function retryMutation(ts){
   savePendingToStorage();
   sendAdsMutation(m);
   renderPendingMutations();
+}
+function retryAllErrors(){
+  const errors=_adsPendingMutations.filter(m=>m.status==='error');
+  if(!errors.length){toast('Sin errores que reintentar','info');return;}
+  errors.forEach(m=>{m.status='pending';m.error='';});
+  savePendingToStorage();
+  renderPendingMutations();
+  errors.forEach(m=>sendAdsMutation(m));
+  toast(`↻ Reintentando ${errors.length} mutación${errors.length>1?'es':''}...`,'info');
 }
 
 async function loadAdsData(){
