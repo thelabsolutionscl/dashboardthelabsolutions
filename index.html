@@ -13264,7 +13264,26 @@ ${vendorMode?'- IMPORTANTE: NUNCA menciones datos globales de la empresa, otros 
   }
 
   // ─── Panel open/close ───
-  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); setTimeout(()=>$input.focus(),200); }
+  function openPanel(){
+    JV.open=true; $panel.classList.add('jvs-open'); setTimeout(()=>$input.focus(),200);
+    // Adapt greeting and chips to vendor vs admin context
+    const vendor = typeof isVendorMode==='function' && isVendorMode();
+    const greetEl = document.querySelector('#jvs-log .jvs-j .jvs-txt');
+    if(greetEl){
+      greetEl.textContent = vendor
+        ? 'Listo. Veo tus pedidos, cotizaciones y clientes. ¿En qué te ayudo?'
+        : 'Sistemas en línea. Puedo navegar el dashboard, consultar pedidos, cotizaciones, clientes y máquinas en tiempo real. ¿En qué le asisto?';
+    }
+    const chips = document.getElementById('jvs-chips');
+    if(chips && vendor){
+      chips.innerHTML=`
+        <span class="jvs-chip" data-cmd="cuántos pedidos activos tengo y cuántos están atrasados">📦 Mis pedidos</span>
+        <span class="jvs-chip" data-cmd="resumen de mis cotizaciones pendientes">📋 Mis cotizaciones</span>
+        <span class="jvs-chip" data-cmd="cuánta comisión llevo este mes">💰 Mi comisión</span>
+        <span class="jvs-chip" data-cmd="abre el módulo de remuneraciones">📊 Remuneraciones</span>`;
+      chips.querySelectorAll('.jvs-chip').forEach(c=>c.addEventListener('click',()=>{const t=c.dataset.cmd;if(t){addMsg('u',t);ask(t);}}));
+    }
+  }
   function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); stopListen(); JV.synth.cancel(); setState('idle'); }
   $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
   $close.addEventListener('click',closePanel);
@@ -13310,6 +13329,9 @@ ${vendorMode?'- IMPORTANTE: NUNCA menciones datos globales de la empresa, otros 
       // reuse dashboard's stored Anthropic key
       let key = (typeof window.getAnthropicKey==='function') ? window.getAnthropicKey() : null;
       if(!key){ key = localStorage.getItem('anthropic_key'); }
+      // Strip any non-printable-ASCII characters that would cause fetch to throw
+      // "String contains non ISO-8859-1 code point" when used in headers
+      if(key) key = key.replace(/[^\x20-\x7E]/g,'').trim();
       if(!key||key.startsWith('%%')||key==='undefined'){
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='No hay API Key configurada. Configúrala desde el dashboard (botón de ajustes) y vuelve a intentar.';
