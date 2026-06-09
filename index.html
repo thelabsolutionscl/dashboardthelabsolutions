@@ -6044,9 +6044,25 @@ async function saveFichaModal(verPDF=false){
     updatedAt:new Date().toISOString().slice(0,10)
   };
   try{
-    await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(data)});
+    const ftPayload={
+      'Ficha Tecnica':JSON.stringify(data),
+      'FT Material':data.material||null,
+      'FT Color':data.color||null,
+      'FT Acabado':data.acabado||null,
+      'FT Cantidad':data.cantidad?Number(data.cantidad)||null:null,
+      'FT Impresora':data.impresora||null,
+      'FT Altura capa':data.altaCapa||null,
+      'FT Relleno (%)':data.relleno?Number(data.relleno)||null:null,
+      'FT Soportes':data.soportes||null,
+      'FT Peso estimado (g)':data.peso?Number(data.peso)||null:null,
+      'FT Tiempo impresión':data.tiempo||null,
+      'FT Notas producción':data.notas||null,
+      'FT Aprobado por':data.aprobado||null,
+      'FT Actualizado':data.updatedAt||null
+    };
+    await airtableWrite('Pedidos','PATCH',pedidoId,ftPayload);
     const ped=state.pedidos.find(x=>x.id===pedidoId);
-    if(ped) ped.fields['Ficha Tecnica']=JSON.stringify(data);
+    if(ped) Object.assign(ped.fields,ftPayload);
     toast('Ficha técnica guardada ✓','success');
     renderPedidos();
     if(verPDF){closeFichaModal();descargarFichaTecnica(pedidoId);}
