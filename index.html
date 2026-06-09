@@ -2900,7 +2900,7 @@ function main() {
     });
   } catch(e) { Logger.log('Error enviando a Script 1: '+e.message); }
 
-  // 2. Procesar mutaciones pendientes del dashboard
+  // 2. Leer y aplicar mutaciones pendientes del dashboard
   try {
     var mutResp = UrlFetchApp.fetch(ENDPOINT+'?action=mutations', {muteHttpExceptions:true});
     var mutData = JSON.parse(mutResp.getContentText());
@@ -11491,6 +11491,29 @@ async function syncMutationStatuses(){
       renderPendingMutations();
       if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
       if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa el detalle en Cambios pendientes','error');
+    }
+  }catch(e){}
+}
+async function syncMutationStatuses(){
+  const cfg=getAdsConfig();
+  if(!cfg.endpoint||!_adsPendingMutations.length) return;
+  try{
+    const r=await fetch(cfg.endpoint+'?action=mutations&_t='+Date.now());
+    const d=await r.json();
+    if(!d.ok||!d.mutations) return;
+    let changed=false;
+    _adsPendingMutations.forEach(m=>{
+      const srv=d.mutations.find(s=>s.timestamp===m.timestamp);
+      if(srv&&srv.status!=='pending'&&m.status!==srv.status){m.status=srv.status;m.error=srv.error;changed=true;}
+    });
+    if(changed){
+      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
+      savePendingToStorage();
+      renderPendingMutations();
+      const aplicadas=d.mutations.filter(s=>s.status==='aplicado').length;
+      const errores=d.mutations.filter(s=>s.status==='error').length;
+      if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
+      if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa los logs del Script 2','warn');
     }
   }catch(e){}
 }
