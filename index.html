@@ -5017,7 +5017,7 @@ function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInt
 
 // ── AI ────────────────────────────────────────────────────────
 async function callClaude(system,user){let k=getAnthropicKey();if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}return _callClaudeRaw(system,user,k);}
-async function _callClaudeRaw(system,user,k){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,thinking:{type:'disabled'},output_config:{effort:'medium'},system,messages:[{role:'user',content:user}]})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
+async function _callClaudeRaw(system,user,k){const sk=k.replace(/[^\x20-\x7E]/g,'').trim();const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':sk,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:new Blob([JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system,messages:[{role:'user',content:user}]})],{type:'application/json'})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
 
 // ── HELPERS ───────────────────────────────────────────────────
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
@@ -13565,6 +13565,8 @@ CAPACIDADES Y REGLAS:
       // reuse dashboard's stored Anthropic key
       let key = (typeof window.getAnthropicKey==='function') ? window.getAnthropicKey() : null;
       if(!key){ key = localStorage.getItem('anthropic_key'); }
+      // Strip non-printable-ASCII chars that break fetch headers (ISO-8859-1 enforcement)
+      if(key) key = key.replace(/[^\x20-\x7E]/g,'').trim();
       if(!key||key.startsWith('%%')||key==='undefined'){
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='No hay API Key configurada. Configúrala desde el dashboard (botón de ajustes) y vuelve a intentar.';
@@ -13572,10 +13574,12 @@ CAPACIDADES Y REGLAS:
         JV.thinking=false; setState('idle'); return;
       }
 
+      // Use Blob body (not string) so Unicode chars in context (•, —, emojis from
+      // Airtable data) never trigger "non ISO-8859-1 code point" fetch errors
       const r=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, thinking:{type:'disabled'}, output_config:{effort:'low'}, system:SYS(), messages:JV.history.slice(-12) })
+        body:new Blob([JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, system:SYS(), messages:JV.history.slice(-12) })],{type:'application/json'})
       });
 
       if(!r.ok){
