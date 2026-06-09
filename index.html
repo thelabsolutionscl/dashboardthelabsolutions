@@ -11715,9 +11715,10 @@ async function adsDiagnostico(){
 function sendAdsMutation(mutation){
   const cfg=getAdsConfig();
   if(!cfg.endpoint){mutation.status='error';mutation.error='No hay endpoint configurado';savePendingToStorage();renderPendingMutations();return;}
+  // text/plain evita el CORS preflight que bloquea los POSTs a Google Apps Script
   fetch(cfg.endpoint,{
-    method:'post',
-    headers:{'Content-Type':'application/json'},
+    method:'POST',
+    headers:{'Content-Type':'text/plain'},
     body:JSON.stringify({secret:'thelab2025',type:'mutation',...mutation})
   }).then(r=>r.json()).then(d=>{
     if(d&&d.ok){mutation.status='enviado';mutation.error='';}
