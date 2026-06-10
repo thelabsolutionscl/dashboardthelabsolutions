@@ -4814,9 +4814,9 @@ function openMobileGrid(){
     const u=AUTH.getUser();
     if(u){
       document.getElementById('mobileGridUser').innerHTML=`
-        <div style="width:42px;height:42px;border-radius:50%;background:var(--accent);color:#000;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(u.username||'?')[0].toUpperCase()}</div>
-        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text)">${escapeHtml(u.username||'Usuario')}</div><div style="font-size:10px;color:var(--text3);margin-top:1px">${escapeHtml(u.role||'')} · The Lab Solutions</div></div>
-        <button onclick="closeMobileGrid();setTimeout(openUserMenu,200)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text2);font-size:13px;padding:8px 12px;cursor:pointer;line-height:1" title="Ajustes">⚙</button>`;
+        <div style="width:42px;height:42px;border-radius:50%;background:var(--accent);color:#000;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(u.name||u.username||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text)">${escapeHtml(u.name||u.username||'Usuario')}</div><div style="font-size:10px;color:var(--text3);margin-top:1px">${escapeHtml((u.role||'').charAt(0).toUpperCase()+(u.role||'').slice(1))}</div></div>
+        <button onclick="closeMobileGrid();setTimeout(toggleMobileMenu,200)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text2);font-size:13px;padding:8px 12px;cursor:pointer;line-height:1" title="Tokens y configuración">⚙</button>`;
     }
     appsEl.dataset.built='1';
   } else {
@@ -4834,16 +4834,23 @@ function closeMobileGrid(){
 }
 function initMobileDockSwipe(){
   const handle=document.getElementById('mbdHandleRow');
+  const pill=handle?.querySelector('.mbd-handle-pill');
   if(!handle) return;
-  let sy=0,dy=0,swiped=false;
+  let sy=0,dy=0,swiped=false,lastTouch=0;
   handle.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;dy=0;swiped=false;},{passive:true});
-  handle.addEventListener('touchmove',e=>{dy=sy-e.touches[0].clientY;if(Math.abs(dy)>8)swiped=true;},{passive:true});
+  handle.addEventListener('touchmove',e=>{
+    dy=sy-e.touches[0].clientY;
+    if(Math.abs(dy)>6) swiped=true;
+    if(pill){const p=Math.min(1,Math.abs(dy)/40);pill.style.width=(38+p*18)+'px';pill.style.background=`rgba(0,212,204,${.22+p*.55})`;}
+  },{passive:true});
   handle.addEventListener('touchend',()=>{
-    if(dy>25){openMobileGrid();return;}
-    if(dy<-25){closeMobileGrid();return;}
+    lastTouch=Date.now();
+    if(pill){pill.style.width='';pill.style.background='';}
+    if(dy>15){openMobileGrid();return;}
+    if(dy<-15){closeMobileGrid();return;}
     if(!swiped) toggleMobileGrid();
   },{passive:true});
-  handle.addEventListener('click',()=>{ if(!swiped) toggleMobileGrid(); });
+  handle.addEventListener('click',()=>{if(Date.now()-lastTouch<600)return;toggleMobileGrid();});
 }
 
 // ── NUMERACIÓN COT ────────────────────────────────────────────
