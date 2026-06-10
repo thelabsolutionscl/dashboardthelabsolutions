@@ -2795,7 +2795,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
               <strong style="color:#e6edf3">Script 1 — Apps Script</strong> (script.google.com) = el endpoint web:<br>
               Crea un proyecto nuevo → pega el código → <em>Desplegar → App Web → Ejecutar como: Yo → Acceso: Cualquier persona</em> → copia la URL al campo Endpoint arriba.<br><br>
               <strong style="color:#e6edf3">Script 2 — Google Ads Script</strong> (ads.google.com → Herramientas → Scripts):<br>
-              Crea un nuevo script → pega el 2° bloque → actualiza <code>ENDPOINT</code> con la URL del Script 1 → ejecútalo manualmente una vez y programa diario.
+              Crea un nuevo script → pega el 2° bloque → actualiza <code>ENDPOINT</code> con la URL del Script 1 → ejecútalo manualmente una vez y programa ejecución cada hora.
             </div>
             <div style="position:relative">
               <div style="font-size:10px;font-weight:600;color:#e6edf3;margin-bottom:6px">Script 1 — Apps Script (script.google.com) — el endpoint web</div>
@@ -2810,26 +2810,45 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
     if (body.secret !== SECRET) return json({ok:false, error:'No autorizado'});
 
+    var props = PropertiesService.getScriptProperties();
+
     if (body.type === 'mutation') {
-      var muts = JSON.parse(PropertiesService.getScriptProperties().getProperty('ads_mutations') || '[]');
+      var muts = JSON.parse(props.getProperty('ads_mutations') || '[]');
       muts.push({op:body.op, id:body.id||'', data:body.data, timestamp:body.timestamp||new Date().toISOString(), status:'pending'});
-      PropertiesService.getScriptProperties().setProperty('ads_mutations', JSON.stringify(muts));
+      props.setProperty('ads_mutations', JSON.stringify(prune(muts)));
       return json({ok:true, queued:true, pending:muts.filter(function(m){return m.status==='pending';}).length});
     }
 
     if (body.type === 'update_mutations') {
-      PropertiesService.getScriptProperties().setProperty('ads_mutations', JSON.stringify(body.mutations));
+      // Merge: conserva mutaciones pendientes encoladas mientras el Script 2 corría
+      var actuales = JSON.parse(props.getProperty('ads_mutations') || '[]');
+      var resultado = body.mutations || [];
+      var vistos = {};
+      resultado.forEach(function(m){ vistos[m.timestamp+'|'+m.op] = true; });
+      actuales.forEach(function(m){
+        if (m.status === 'pending' &amp;&amp; !vistos[m.timestamp+'|'+m.op]) resultado.push(m);
+      });
+      props.setProperty('ads_mutations', JSON.stringify(prune(resultado)));
       return json({ok:true});
     }
 
-    PropertiesService.getScriptProperties().setProperty('ads_cache', JSON.stringify({
+    props.setProperty('ads_cache', JSON.stringify({
       guardado: new Date().toISOString(),
       gasto: body.gasto, impresiones: body.impresiones, clics: body.clics,
       conversiones: body.conversiones, valor_conversion: body.valor_conversion,
-      campanas: body.campanas
+      campanas: body.campanas,
+      periodos: body.periodos || null  // {p7:{...}, p30:{...}, p90:{...}} si Script 2 es v2
     }));
     return json({ok:true, saved:true});
   } catch(err) { return json({ok:false, error:err.message}); }
+}
+
+// Limita el historial para no superar el límite de Script Properties (~9KB/valor)
+function prune(muts) {
+  var pendientes = muts.filter(function(m){return m.status==='pending';});
+  var resto = muts.filter(function(m){return m.status!=='pending';});
+  if (resto.length > 50) resto = resto.slice(resto.length - 50);
+  return resto.concat(pendientes);
 }
 
 function doGet(e) {
@@ -2843,8 +2862,18 @@ function doGet(e) {
     var raw = PropertiesService.getScriptProperties().getProperty('ads_cache');
     if (!raw) return json({ok:false, error:'Sin datos aún — ejecuta el Script 2 en Google Ads primero'});
     var data = JSON.parse(raw);
+    // Si el Script 2 (v2) envió datos por período, responde con el período pedido;
+    // si no, los datos son de 30 días y se etiquetan como tales.
+    var p = data.periodos &amp;&amp; data.periodos['p'+days];
+    if (p) {
+      data.gasto=p.gasto; data.impresiones=p.impresiones; data.clics=p.clics;
+      data.conversiones=p.conversiones; data.valor_conversion=p.valor_conversion;
+      data.campanas=p.campanas;
+    }
+    delete data.periodos;
     data.ok = true;
-    data.periodo = days + ' días';
+    data.dias = p ? days : 30;
+    data.periodo = data.dias + ' días';
     return json(data);
   } catch(err) { return json({ok:false, error:err.message}); }
 }
@@ -2884,42 +2913,17 @@ function main() {
     Logger.log('MCC: cuenta seleccionada ' + CUSTOMER_ID);
   }
 
-  // Diagnóstico de entorno
-  Logger.log('AdsApp=' + (typeof AdsApp) +
-    ' | newCampaignBuilder=' + (typeof (AdsApp||{}).newCampaignBuilder) +
-    ' | MCC=' + _isMCC);
-
-  // 1. Leer campañas y enviar resumen al Script 1
-  var campaigns = [], t = {gasto:0,impresiones:0,clics:0,conversiones:0,valor_conversion:0};
-  try {
-    var report = AdsApp.report(
-      'SELECT campaign.name, campaign.id, campaign.status, ' +
-      'campaign_budget.amount_micros, metrics.impressions, metrics.clicks, ' +
-      'metrics.cost_micros, metrics.conversions, metrics.conversions_value ' +
-      'FROM campaign WHERE segments.date DURING LAST_30_DAYS'
-    );
-    var rows = report.rows();
-    while (rows.hasNext()) {
-      var row = rows.next();
-      var g  = Math.round(parseInt(row['metrics.cost_micros']||0)/1e6);
-      var i  = parseInt(row['metrics.impressions']||0);
-      var c  = parseInt(row['metrics.clicks']||0);
-      var cv = parseFloat(row['metrics.conversions']||0);
-      var vc = parseFloat(row['metrics.conversions_value']||0);
-      t.gasto+=g; t.impresiones+=i; t.clics+=c; t.conversiones+=cv; t.valor_conversion+=vc;
-      campaigns.push({
-        id:row['campaign.id'], nombre:row['campaign.name'], estado:row['campaign.status'],
-        presupuesto:Math.round(parseInt(row['campaign_budget.amount_micros']||0)/1e6),
-        gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
-      });
-    }
-    Logger.log('Campañas leídas: '+campaigns.length);
-  } catch(e) { Logger.log('Error leyendo campañas: '+e.message); }
+  // 1. Leer métricas por período (7/30/90 días) y enviarlas al Script 1.
+  // Se mantienen los campos planos (30 días) por compatibilidad con Script 1 v1.
+  var periodos = {};
+  [7,30,90].forEach(function(n){ periodos['p'+n] = leerPeriodo(n); });
+  var t = periodos.p30;
+  Logger.log('Campañas leídas (30d): '+t.campanas.length+' | MCC='+_isMCC);
 
   try {
     UrlFetchApp.fetch(ENDPOINT, {
       method:'post', contentType:'application/json', muteHttpExceptions:true,
-      payload:JSON.stringify({secret:SECRET, campanas:campaigns,
+      payload:JSON.stringify({secret:SECRET, periodos:periodos, campanas:t.campanas,
         gasto:t.gasto, impresiones:t.impresiones, clics:t.clics,
         conversiones:t.conversiones, valor_conversion:t.valor_conversion})
     });
@@ -2940,34 +2944,29 @@ function main() {
       if (m.status !== 'pending') continue;
       try {
         if (m.op === 'create') {
-          var campOp = AdsApp.newCampaignBuilder()
-            .withName(m.data.nombre)
-            .withStatus(m.data.estado||'ENABLED')
-            .withBudget(m.data.presupuesto)
-            .forSearchNetwork()
-            .build();
-          if (!campOp.isSuccessful()) throw new Error(campOp.getErrors().join(', '));
-          var nuevaCamp = campOp.getResult();
-          // Grupo de anuncios + palabras clave (si el dashboard las envió). Aislado: si falla, la campaña igual queda creada.
-          if (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) {
-            try {
-              var agOp = nuevaCamp.newAdGroupBuilder()
-                .withName('Grupo 1 - '+m.data.nombre)
-                .withCpc(300)
-                .build();
-              if (agOp.isSuccessful()) {
-                var ag = agOp.getResult();
-                for (var kw=0; kw&lt;m.data.palabrasClave.length; kw++) {
-                  ag.newKeywordBuilder().withText(m.data.palabrasClave[kw]).build();
-                }
-                Logger.log('  + grupo con '+m.data.palabrasClave.length+' keywords');
-              }
-            } catch(eAg) { Logger.log('  Aviso grupo/keywords: '+eAg.message); }
+          // Google Ads Scripts NO permite crear campañas con builders (AdsApp.newCampaignBuilder
+          // no existe). La única vía soportada es Bulk Upload (formato CSV de Google Ads Editor).
+          var columnas = ['Campaign','Budget','Bid Strategy type','Campaign type','Status',
+                          'Ad Group','Max CPC','Keyword','Criterion Type'];
+          var subida = AdsApp.bulkUploads().newCsvUpload(columnas, {moneyInMicros:false});
+          var estadoCsv = (m.data.estado === 'PAUSED') ? 'Paused' : 'Enabled';
+          subida.append({'Campaign':m.data.nombre, 'Budget':m.data.presupuesto,
+            'Bid Strategy type':'cpc', 'Campaign type':'Search Only', 'Status':estadoCsv});
+          var kws = m.data.palabrasClave || [];
+          if (kws.length) {
+            var grupo = 'Grupo 1 - ' + m.data.nombre;
+            subida.append({'Campaign':m.data.nombre, 'Ad Group':grupo, 'Max CPC':300, 'Status':'Enabled'});
+            for (var kw=0; kw&lt;kws.length; kw++) {
+              subida.append({'Campaign':m.data.nombre, 'Ad Group':grupo,
+                'Keyword':kws[kw], 'Criterion Type':'Broad'});
+            }
           }
+          subida.forCampaignManagement();
+          subida.apply();
           muts[k].status = 'aplicado';
-          Logger.log('OK creada: '+m.data.nombre);
+          Logger.log('OK creada vía bulk upload: '+m.data.nombre+(kws.length?' (+'+kws.length+' keywords)':''));
         } else if (m.op === 'edit') {
-          var iter = AdsApp.campaigns().withIds([m.id]).get();
+          var iter = AdsApp.campaigns().withIds([Number(m.id)]).get();
           if (iter.hasNext()) {
             var camp = iter.next();
             if (m.data.nombre) camp.setName(m.data.nombre);
@@ -2980,7 +2979,7 @@ function main() {
             muts[k].error = 'Campana no encontrada: '+m.id;
           }
         } else if (m.op === 'delete') {
-          var iter2 = AdsApp.campaigns().withIds([m.id]).get();
+          var iter2 = AdsApp.campaigns().withIds([Number(m.id)]).get();
           if (iter2.hasNext()) { iter2.next().pause(); muts[k].status = 'aplicado'; }
           else { muts[k].status = 'error'; muts[k].error = 'Campaña no encontrada: '+m.id; }
         }
@@ -3002,6 +3001,39 @@ function main() {
     var err=muts.filter(function(x){return x.status==='error';}).length;
     Logger.log('Mutaciones: '+ok+' aplicadas, '+err+' errores');
   } catch(e) { Logger.log('Error mutaciones: '+e.message); }
+}
+
+// Lee totales y campañas de los últimos nDias días
+function leerPeriodo(nDias) {
+  var t = {gasto:0,impresiones:0,clics:0,conversiones:0,valor_conversion:0,campanas:[]};
+  try {
+    var tz = AdsApp.currentAccount().getTimeZone();
+    var fmt = function(d){ return Utilities.formatDate(d, tz, 'yyyy-MM-dd'); };
+    var hoy = new Date();
+    var desde = new Date(hoy.getTime() - nDias*86400000);
+    var report = AdsApp.report(
+      'SELECT campaign.name, campaign.id, campaign.status, ' +
+      'campaign_budget.amount_micros, metrics.impressions, metrics.clicks, ' +
+      'metrics.cost_micros, metrics.conversions, metrics.conversions_value ' +
+      'FROM campaign WHERE segments.date BETWEEN "' + fmt(desde) + '" AND "' + fmt(hoy) + '"'
+    );
+    var rows = report.rows();
+    while (rows.hasNext()) {
+      var row = rows.next();
+      var g  = Math.round(parseInt(row['metrics.cost_micros']||0)/1e6);
+      var i  = parseInt(row['metrics.impressions']||0);
+      var c  = parseInt(row['metrics.clicks']||0);
+      var cv = parseFloat(row['metrics.conversions']||0);
+      var vc = parseFloat(row['metrics.conversions_value']||0);
+      t.gasto+=g; t.impresiones+=i; t.clics+=c; t.conversiones+=cv; t.valor_conversion+=vc;
+      t.campanas.push({
+        id:row['campaign.id'], nombre:row['campaign.name'], estado:row['campaign.status'],
+        presupuesto:Math.round(parseInt(row['campaign_budget.amount_micros']||0)/1e6),
+        gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
+      });
+    }
+  } catch(e) { Logger.log('Error leyendo período '+nDias+'d: '+e.message); }
+  return t;
 }</pre>
               <button onclick="copyAdsScript('adsScriptCode2')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
             </div>
@@ -5624,6 +5656,7 @@ function switchTab(name){
   if(name==='agentes') renderAgentesGrid();
   if(name==='remuneraciones') renderRemuneraciones();
   if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
+  else if(typeof _stopAdsMutationPoll==='function') _stopAdsMutationPoll();
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
@@ -11536,17 +11569,19 @@ function adsSaveSnapshot(data,days){
   const ctr=imp>0?(clics/imp*100):0;
   const roas=gasto>0&&(data.valor_conversion||0)>0?data.valor_conversion/gasto:0;
   const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days};
-  const idx=snaps.findIndex(s=>s.date===today);
+  // Un snapshot por fecha Y período: comparar 7d contra 30d daba tendencias sin sentido
+  const idx=snaps.findIndex(s=>s.date===today&&(s.days||30)===days);
   if(idx>=0) snaps[idx]=snap; else snaps.push(snap);
   snaps.sort((a,b)=>a.date.localeCompare(b.date));
-  if(snaps.length>30) snaps.splice(0,snaps.length-30);
+  if(snaps.length>60) snaps.splice(0,snaps.length-60);
   localStorage.setItem('ads_snapshots',JSON.stringify(snaps));
   localStorage.setItem('ads_last_sync',new Date().toISOString());
 }
-function adsGetPrevSnapshot(){
+function adsGetPrevSnapshot(days){
   let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
-  if(snaps.length<2) return null;
-  return snaps[snaps.length-2];
+  const today=new Date().toISOString().slice(0,10);
+  const same=snaps.filter(s=>(s.days||30)===days&&s.date<today);
+  return same.length?same[same.length-1]:null;
 }
 function adsLastSyncStr(){
   const ts=localStorage.getItem('ads_last_sync');
@@ -11576,11 +11611,23 @@ const ADS_LINEAS=[
 ];
 function _adsMatchCampaign(campanas,linea){
   if(!campanas||!campanas.length) return null;
-  const kws=[
-    ...linea.campañaSugerida.toLowerCase().replace(/[–\-]/g,' ').split(/\s+/).filter(w=>w.length>3),
-    ...(linea.palabrasClave||[]).flatMap(k=>k.toLowerCase().split(/\s+/).filter(w=>w.length>3))
-  ];
-  return campanas.find(c=>kws.some(k=>(c.nombre||'').toLowerCase().includes(k)))||null;
+  const sugerida=linea.campañaSugerida.toLowerCase();
+  // 1) Coincidencia directa con el nombre sugerido (campaña creada desde el dashboard)
+  const exacta=campanas.find(c=>{const n=(c.nombre||'').toLowerCase();return n.includes(sugerida)||sugerida.includes(n);});
+  if(exacta) return exacta;
+  // 2) Por tokens: se exigen ≥2 coincidencias distintas — con 1 sola, palabras genéricas
+  // ("impresión", "santiago") asociaban la línea a campañas de otra línea
+  const kws=[...new Set([
+    ...sugerida.replace(/[–\-]/g,' ').split(/\s+/),
+    ...(linea.palabrasClave||[]).flatMap(k=>k.toLowerCase().split(/\s+/))
+  ].filter(w=>w.length>3&&w!=='búsqueda'))];
+  let best=null,bestHits=0;
+  campanas.forEach(c=>{
+    const n=(c.nombre||'').toLowerCase();
+    const hits=kws.filter(k=>n.includes(k)).length;
+    if(hits>bestHits){bestHits=hits;best=c;}
+  });
+  return bestHits>=2?best:null;
 }
 function adsCopyKw(encoded){
   const kw=decodeURIComponent(encoded);
@@ -11763,8 +11810,12 @@ function adsHealthScore(c){
 }
 // ── Airtable sync ────────────────────────────────────────
 async function syncAdsToAirtable(data,days){
-  let cfg;try{cfg=_airtableConfig();}catch(e){return;}
+  if(data.demo) return false;
+  let cfg;try{cfg=_airtableConfig();}catch(e){return false;}
   const today=new Date().toISOString().slice(0,10);
+  // Máximo una sincronización por día y período: cada refresh creaba registros duplicados
+  const syncKey=today+'|'+days;
+  if(localStorage.getItem('ads_airtable_synced')===syncKey) return false;
   const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
   const conv=data.conversiones||0,valConv=data.valor_conversion||0;
   const ctr=imp>0?clics/imp:0;
@@ -11807,6 +11858,8 @@ async function syncAdsToAirtable(data,days){
       await airtableHttp(base+'/Google_Ads_Campanas',{method:'POST',headers,body:JSON.stringify({records:recs.slice(i,i+10),typecast:true})});
     }
   }
+  localStorage.setItem('ads_airtable_synced',syncKey);
+  return true;
 }
 async function loadAdsSnapshotsFromAirtable(){
   let cfg;try{cfg=_airtableConfig();}catch(e){return;}
@@ -11814,7 +11867,8 @@ async function loadAdsSnapshotsFromAirtable(){
   const records=res.records||[];if(!records.length) return;
   records.sort((a,b)=>(b.fields['Fecha']||'').localeCompare(a.fields['Fecha']||''));
   const seen=new Set();
-  const deduped=records.filter(r=>{const d=r.fields['Fecha']||'';if(seen.has(d)) return false;seen.add(d);return true;});
+  // Dedupe por fecha + período: mezclar snapshots de 7/30/90 días corrompía las tendencias
+  const deduped=records.filter(r=>{const k=(r.fields['Fecha']||'')+'|'+(r.fields['Días período']||30);if(seen.has(k)) return false;seen.add(k);return true;});
   const snaps=deduped.reverse().map(r=>{const f=r.fields;return{
     date:f['Fecha']||'',ts:f['Fecha']||'',
     gasto:f['Gasto (CLP)']||0,clics:f['Clics']||0,conv:f['Conversiones']||0,
@@ -12118,6 +12172,7 @@ function removePendingMutationByTs(ts){
 let _adsMutationPollInterval=null;
 function _startAdsMutationPoll(){
   if(_adsMutationPollInterval) return;
+  if(!_adsPendingMutations.some(m=>m.status==='enviado'||m.status==='pending')) return;
   _adsMutationPollInterval=setInterval(()=>{
     const hasPending=_adsPendingMutations.some(m=>m.status==='enviado'||m.status==='pending');
     const webActive=document.getElementById('tab-web')?.classList.contains('active');
@@ -12130,6 +12185,9 @@ function _stopAdsMutationPoll(){if(_adsMutationPollInterval){clearInterval(_adsM
 function retryMutation(ts){
   const m=_adsPendingMutations.find(x=>x.timestamp===ts);
   if(!m) return;
+  // Timestamp nuevo: el servidor identifica mutaciones por timestamp y reusar el anterior
+  // hacía que la verificación de estado encontrara la copia errónea vieja
+  m.timestamp=new Date().toISOString();
   m.status='pending';m.error='';
   savePendingToStorage();
   sendAdsMutation(m);
@@ -12138,7 +12196,7 @@ function retryMutation(ts){
 function retryAllErrors(){
   const errors=_adsPendingMutations.filter(m=>m.status==='error');
   if(!errors.length){toast('Sin errores que reintentar','info');return;}
-  errors.forEach(m=>{m.status='pending';m.error='';});
+  errors.forEach((m,i)=>{m.timestamp=new Date(Date.now()+i).toISOString();m.status='pending';m.error='';});
   savePendingToStorage();
   renderPendingMutations();
   errors.forEach(m=>sendAdsMutation(m));
@@ -12186,11 +12244,12 @@ async function loadAdsData(){
     if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
     const btnNueva=document.getElementById('btnNuevaCampana');
     if(btnNueva) btnNueva.style.display='inline-flex';
-    // Sync a Airtable (no bloqueante)
-    syncAdsToAirtable(data,days).then(()=>toast('✓ Google Ads sincronizado con Airtable','success')).catch(()=>{});
+    // Sync a Airtable (no bloqueante, máx. 1 vez/día por período)
+    syncAdsToAirtable(data,days).then(did=>{if(did)toast('✓ Google Ads sincronizado con Airtable','success');}).catch(()=>{});
   }catch(e){
     document.getElementById('adsCampaignsArea').innerHTML=`<div class="empty-state" style="padding:40px 0"><div class="empty-icon">⚠</div><div style="color:var(--danger)">${e.message}</div><div style="font-size:11px;color:var(--text3);margin-top:8px">Verifica que el Apps Script esté publicado como aplicación web con acceso público</div></div>`;
     ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='—';});
+    ['adsCRMPanel','adsStaleWarning'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--danger)';dot.title='Error: '+e.message;}
   }
@@ -12215,22 +12274,21 @@ function renderAdsKPIs(data,days){
   renderAdsCRMPanel(data,days);
   // — Snapshot, tendencias vs período anterior, sync label, stale warning
   if(!data.demo) adsSaveSnapshot(data,days);
-  const prev=adsGetPrevSnapshot();
-  if(prev){
-    const trendHtml=(curr,old,higherGood)=>{
-      if(!old||old===0) return '';
-      const pct=(curr-old)/Math.abs(old)*100;
-      const up=pct>0;
-      const good=higherGood?up:!up;
-      return '<span style="color:'+(good?'var(--success)':'var(--danger)')+';font-size:9px">'+(up?'↑':'↓')+Math.abs(pct).toFixed(0)+'%</span>';
-    };
-    const setTrend=(id,curr,old,hg)=>{const el=document.getElementById(id);if(el)el.innerHTML=trendHtml(curr,old,hg);};
-    setTrend('ads-kpi-imp-trend',imp,prev.imp,true);
-    setTrend('ads-kpi-clics-trend',clics,prev.clics,true);
-    setTrend('ads-kpi-ctr-trend',ctr,prev.ctr,true);
-    setTrend('ads-kpi-conv-trend',conv,prev.conv,true);
-    setTrend('ads-kpi-roas-trend',roas,prev.roas,true);
-  }
+  const prev=data.demo?null:adsGetPrevSnapshot(days);
+  const trendHtml=(curr,old,higherGood)=>{
+    if(!prev||!old) return '';
+    const pct=(curr-old)/Math.abs(old)*100;
+    const up=pct>0;
+    const good=higherGood?up:!up;
+    return '<span style="color:'+(good?'var(--success)':'var(--danger)')+';font-size:9px">'+(up?'↑':'↓')+Math.abs(pct).toFixed(0)+'%</span>';
+  };
+  // Siempre se asignan (aunque sea '') para no arrastrar tendencias de otro período
+  const setTrend=(id,curr,old,hg)=>{const el=document.getElementById(id);if(el)el.innerHTML=trendHtml(curr,old,hg);};
+  setTrend('ads-kpi-imp-trend',imp,prev?.imp,true);
+  setTrend('ads-kpi-clics-trend',clics,prev?.clics,true);
+  setTrend('ads-kpi-ctr-trend',ctr,prev?.ctr,true);
+  setTrend('ads-kpi-conv-trend',conv,prev?.conv,true);
+  setTrend('ads-kpi-roas-trend',roas,prev?.roas,true);
   // Stale warning (data.guardado = cuando el Script 2 corrió por última vez)
   const staleEl=document.getElementById('adsStaleWarning');
   if(staleEl){
@@ -12344,36 +12402,37 @@ function renderAdsAgent(data){
   if(conv===0&&gasto>0) recs.push({tipo:'danger',msg:`Sin conversiones en el período con $${gasto.toLocaleString('es-CL')} gastados. Verifica el tracking de conversiones y las landing pages.`});
   const valConv=data.valor_conversion||0;
   if(valConv>0&&gasto>0){const roas=valConv/gasto;if(roas<2) recs.push({tipo:'warn',msg:`ROAS bajo (${roas.toFixed(2)}x). Por cada $1 invertido se generan $${roas.toFixed(2)}. Objetivo recomendado: >3x.`});}
-  // Análisis por campaña
+  // Análisis por campaña (nombres escapados: vienen del servidor y se insertan vía innerHTML)
   camps.forEach(c=>{
+    const nm=escapeHtml(c.nombre);
     const ctr=c.impresiones>0?(c.clics/c.impresiones*100):0;
-    const cpc=c.clics>0?(c.gasto/c.clics):0;
-    if(c.estado==='ENABLED'&&c.impresiones>500&&ctr<1) recs.push({tipo:'danger',msg:`"${c.nombre}": CTR muy bajo (${fmtPct(ctr)}). Revisa la relevancia de palabras clave y el copy del anuncio.`});
-    if(c.estado==='PAUSED'&&c.gasto>0) recs.push({tipo:'info',msg:`"${c.nombre}" está pausada pero registró gasto (${fmtMoney(c.gasto)}). Verifica que sea intencional.`});
-    if(c.estado==='ENABLED'&&c.clics===0&&c.impresiones>0) recs.push({tipo:'warn',msg:`"${c.nombre}": tiene ${fmtNum(c.impresiones)} impresiones pero 0 clics. El anuncio no está atrayendo tráfico.`});
+    if(c.estado==='ENABLED'&&c.impresiones>500&&ctr<1) recs.push({tipo:'danger',msg:`"${nm}": CTR muy bajo (${fmtPct(ctr)}). Revisa la relevancia de palabras clave y el copy del anuncio.`});
+    if(c.estado==='PAUSED'&&c.gasto>0) recs.push({tipo:'info',msg:`"${nm}" está pausada pero registró gasto (${fmtMoney(c.gasto)}). Verifica que sea intencional.`});
+    if(c.estado==='ENABLED'&&c.clics===0&&c.impresiones>0) recs.push({tipo:'warn',msg:`"${nm}": tiene ${fmtNum(c.impresiones)} impresiones pero 0 clics. El anuncio no está atrayendo tráfico.`});
   });
   // Campaña top y bajo rendimiento
   const activas=camps.filter(c=>c.estado==='ENABLED'&&c.gasto>0);
   if(activas.length>1){
     const top=activas.reduce((a,b)=>(b.conversiones>a.conversiones?b:a),activas[0]);
     const bottom=activas.reduce((a,b)=>{const ctrA=a.impresiones>0?a.clics/a.impresiones:0;const ctrB=b.impresiones>0?b.clics/b.impresiones:0;return ctrB<ctrA?b:a;},activas[0]);
-    if(top.conversiones>0) recs.push({tipo:'success',msg:`Mejor campaña: "${top.nombre}" con ${top.conversiones.toFixed(0)} conversiones. Considera aumentar su presupuesto.`});
-    if(bottom!==top&&bottom.impresiones>200){const ctr=bottom.impresiones>0?(bottom.clics/bottom.impresiones*100):0;recs.push({tipo:'warn',msg:`Campaña de menor CTR: "${bottom.nombre}" (${fmtPct(ctr)}). Evalúa pausarla o reestructurar sus palabras clave.`});}
+    if(top.conversiones>0) recs.push({tipo:'success',msg:`Mejor campaña: "${escapeHtml(top.nombre)}" con ${top.conversiones.toFixed(0)} conversiones. Considera aumentar su presupuesto.`});
+    if(bottom!==top&&bottom.impresiones>200){const ctr=bottom.impresiones>0?(bottom.clics/bottom.impresiones*100):0;recs.push({tipo:'warn',msg:`Campaña de menor CTR: "${escapeHtml(bottom.nombre)}" (${fmtPct(ctr)}). Evalúa pausarla o reestructurar sus palabras clave.`});}
   }
-  // Detección de presupuesto agotado (gasto diario vs presupuesto diario)
-  const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+  // Detección de presupuesto agotado (gasto diario vs presupuesto diario).
+  // data.dias = días reales de los datos (Script 1 v2); el selector puede no coincidir con scripts antiguos.
+  const days=data.dias||parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
   camps.forEach(c=>{
     if(c.estado==='ENABLED'&&c.presupuesto>0&&c.gasto>0){
       const dailyAvg=c.gasto/days;
       const util=dailyAvg/c.presupuesto;
-      if(util>=0.9) recs.push({tipo:'warn',msg:`"${c.nombre}": gasto diario promedio (${fmtMoney(Math.round(dailyAvg))}) es el ${Math.round(util*100)}% del presupuesto diario. Considera aumentarlo para evitar cortes de visibilidad.`});
+      if(util>=0.9) recs.push({tipo:'warn',msg:`"${escapeHtml(c.nombre)}": gasto diario promedio (${fmtMoney(Math.round(dailyAvg))}) es el ${Math.round(util*100)}% del presupuesto diario. Considera aumentarlo para evitar cortes de visibilidad.`});
     }
   });
   // Score bajo en campaña activa con gasto
   camps.forEach(c=>{
     if(c.estado==='ENABLED'&&c.gasto>0){
       const hs=adsHealthScore(c);
-      if(hs.score>0&&hs.score<30) recs.push({tipo:'danger',msg:`"${c.nombre}": score de salud muy bajo (${hs.score}/100). CTR, conversiones y ROAS están por debajo del umbral — requiere atención urgente.`});
+      if(hs.score>0&&hs.score<30) recs.push({tipo:'danger',msg:`"${escapeHtml(c.nombre)}": score de salud muy bajo (${hs.score}/100). CTR, conversiones y ROAS están por debajo del umbral — requiere atención urgente.`});
     }
   });
   // Datos desactualizados del servidor
