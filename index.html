@@ -342,7 +342,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 #selectAllChk,.row-chk{width:14px;height:14px;}
 @media(max-width:768px){
   body{padding-left:0!important;}
-  .topbar{padding:0 14px;gap:10px;}
+  .topbar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;padding:0 14px;gap:0;}
   .topbar-nav{display:none;}
   .global-search{display:none;}
   .icon-dock{display:none;}
@@ -353,7 +353,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .main{padding:14px;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));}
   .mobile-bottom-dock{display:flex;animation:mbd-in .42s cubic-bezier(0.32,0.72,0,1) both;}
   #jvs-fab{display:none!important;}
-  .topbar-kai-btn{position:absolute;left:50%;transform:translateX(-50%);z-index:5;}
+  .topbar-kai-btn{position:static;transform:none;justify-self:center;}
   .data-grid,.data-grid-3{grid-template-columns:1fr;}
   .kpi-grid{grid-template-columns:repeat(2,1fr);}
   .form-grid{grid-template-columns:1fr;}
@@ -1493,7 +1493,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- ── Mobile Bottom Dock ──────────────────────────────────── -->
 <div class="mobile-bottom-dock" id="mobileBottomDock">
-  <div class="mbd-handle-row" onclick="toggleMobileGrid()">
+  <div class="mbd-handle-row" id="mbdHandleRow">
     <div class="mbd-handle-pill"></div>
   </div>
   <div class="mbd-icons-row">
@@ -4831,6 +4831,19 @@ function closeMobileGrid(){
   document.getElementById('mobileGridOverlay').classList.remove('open');
   document.getElementById('mobileBottomDock')?.classList.remove('mbd-grid-open');
   document.body.style.overflow='';
+}
+function initMobileDockSwipe(){
+  const handle=document.getElementById('mbdHandleRow');
+  if(!handle) return;
+  let sy=0,dy=0,swiped=false;
+  handle.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;dy=0;swiped=false;},{passive:true});
+  handle.addEventListener('touchmove',e=>{dy=sy-e.touches[0].clientY;if(Math.abs(dy)>8)swiped=true;},{passive:true});
+  handle.addEventListener('touchend',()=>{
+    if(dy>25){openMobileGrid();return;}
+    if(dy<-25){closeMobileGrid();return;}
+    if(!swiped) toggleMobileGrid();
+  },{passive:true});
+  handle.addEventListener('click',()=>{ if(!swiped) toggleMobileGrid(); });
 }
 
 // ── NUMERACIÓN COT ────────────────────────────────────────────
@@ -11157,6 +11170,7 @@ function initSidebarTooltips(){
 
 document.addEventListener('DOMContentLoaded',()=>{
   initSidebarTooltips();
+  initMobileDockSwipe();
   // Fallback: muestra botón reintentar a los 8s y fuerza cierre a los 10s
   setTimeout(()=>{const r=document.getElementById('slRetry');if(r){const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')) r.style.display='block';}},8000);
   setTimeout(()=>{const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')){sl.classList.add('hidden');try{_airtableConfig();}catch(e){showTokenModal();}}},10000);
