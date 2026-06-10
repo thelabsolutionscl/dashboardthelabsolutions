@@ -22,6 +22,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .tab-btn:hover{color:var(--text);border-color:var(--border2);}
 .tab-btn.active{background:var(--accent);color:var(--black);border-color:var(--accent);font-weight:700;}
 .topbar-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;}
+.topbar-kai-btn{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#00d4cc 0%,#0891b2 100%);color:#04201e;font-weight:800;font-size:12px;letter-spacing:1.5px;font-family:'DM Sans',sans-serif;border:none;border-radius:20px;padding:5px 13px;cursor:pointer;box-shadow:0 2px 14px rgba(0,212,204,0.38);transition:transform .15s,box-shadow .15s;flex-shrink:0;line-height:1;}
+.topbar-kai-btn:hover{transform:scale(1.07);box-shadow:0 4px 22px rgba(0,212,204,0.65);}
+.topbar-kai-btn:active{transform:scale(0.94);}
+.topbar-kai-btn .kai-ring{width:8px;height:8px;border-radius:50%;background:#04201e;opacity:.6;animation:pulse 1.8s infinite;}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--danger);animation:pulse 2s infinite;}
 .status-dot.live{background:var(--success);}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
@@ -68,6 +72,41 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .dock-btn:hover .dock-label{opacity:1;transform:translateY(-50%) translateX(0);}
 .dock-btn.active .dock-icon{box-shadow:0 0 0 2px var(--accent),0 4px 16px rgba(0,212,204,0.40),inset 0 1px 1px rgba(255,255,255,0.20);}
 body.kiosk .icon-dock{display:none!important;}
+/* ── Mobile Bottom Dock (visible solo en móvil) ────────────────── */
+@keyframes mbd-in{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.mobile-bottom-dock{display:none;position:fixed;bottom:0;left:0;right:0;z-index:190;background:rgba(8,8,8,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,0.1);box-shadow:0 -4px 32px rgba(0,0,0,0.6);flex-direction:column;align-items:center;transition:transform .32s cubic-bezier(0.32,0.72,0,1);}
+.mbd-handle-row{width:100%;display:flex;justify-content:center;align-items:center;padding:9px 0 6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.mbd-handle-pill{width:38px;height:5px;border-radius:3px;background:rgba(255,255,255,0.22);transition:background .2s,width .18s;pointer-events:none;}
+.mbd-handle-row:active .mbd-handle-pill{background:var(--accent);width:56px;}
+.mobile-bottom-dock.mbd-grid-open .mbd-handle-pill{background:rgba(0,212,204,0.55);}
+.mbd-icons-row{display:flex;width:100%;justify-content:space-around;align-items:flex-start;padding:2px 8px calc(8px + env(safe-area-inset-bottom,0px));}
+.mbd-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;cursor:pointer;padding:4px 2px;border-radius:14px;min-width:56px;transition:transform .12s ease;overflow:visible;-webkit-tap-highlight-color:transparent;}
+.mbd-btn:active{transform:scale(0.88);}
+.mbd-btn .dock-icon{width:44px;height:44px;border-radius:12px;font-size:22px;transition:box-shadow .15s,transform .12s;}
+.mbd-btn.active .dock-icon{box-shadow:0 0 0 2.5px var(--accent),0 4px 18px rgba(0,212,204,0.45),inset 0 1px 1px rgba(255,255,255,0.20);}
+.mbd-btn .dock-badge{top:-2px;right:calc(50% - 26px);}
+.mbd-label{font-size:9.5px;font-weight:500;color:var(--text3);white-space:nowrap;line-height:1;transition:color .12s;}
+.mbd-btn.active .mbd-label{color:var(--accent);font-weight:700;}
+/* ── Mobile Grid Overlay ───────────────────────────────────────── */
+.mobile-grid-overlay{display:none;position:fixed;inset:0;z-index:300;}
+.mobile-grid-overlay.open{display:block;}
+.mobile-grid-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
+.mobile-grid-sheet{position:absolute;left:0;right:0;bottom:0;background:rgba(12,12,12,0.98);border-radius:24px 24px 0 0;box-shadow:0 -8px 48px rgba(0,0,0,0.7);transform:translateY(100%);transition:transform .32s cubic-bezier(0.32,0.72,0,1);max-height:92vh;max-height:92dvh;display:flex;flex-direction:column;overflow:hidden;}
+.mobile-grid-overlay.open .mobile-grid-sheet{transform:translateY(0);}
+.mobile-grid-handle{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,0.22);margin:12px auto 0;}
+.mobile-grid-user{display:flex;align-items:center;gap:12px;padding:14px 20px 10px;}
+.mobile-grid-apps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 12px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;}
+.mg-item{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:10px 4px;border-radius:16px;transition:background .12s;-webkit-tap-highlight-color:transparent;}
+.mg-item:active{background:rgba(255,255,255,0.07);}
+.mg-item .dock-icon{width:52px;height:52px;border-radius:14px;font-size:26px;}
+.mg-item.active .dock-icon{box-shadow:0 0 0 2.5px var(--accent),0 4px 18px rgba(0,212,204,0.4),inset 0 1px 1px rgba(255,255,255,0.20);}
+.mg-label{font-size:10px;font-weight:500;color:var(--text2);text-align:center;line-height:1.2;white-space:nowrap;}
+.mg-item.active .mg-label{color:var(--accent);font-weight:700;}
+.mobile-grid-nuevo{padding:10px 14px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid rgba(255,255,255,0.08);}
+.mobile-grid-nuevo-title{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;}
+.mobile-grid-nuevo-btns{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+.mgn-btn{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:var(--text2);-webkit-tap-highlight-color:transparent;transition:background .12s;}
+.mgn-btn:active{background:rgba(0,212,204,0.12);border-color:var(--accent);color:var(--accent);}
 body.kiosk{padding-left:0!important;}
 @media(min-width:769px){body{padding-left:64px;}}
 .mobile-nav-overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);}
@@ -304,15 +343,18 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 #selectAllChk,.row-chk{width:14px;height:14px;}
 @media(max-width:768px){
   body{padding-left:0!important;}
-  .topbar{padding:0 14px;gap:10px;}
+  .topbar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;padding:0 14px;gap:0;}
   .topbar-nav{display:none;}
   .global-search{display:none;}
   .icon-dock{display:none;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
-  .mobile-menu-btn{display:flex;align-items:center;justify-content:center;}
+  .mobile-menu-btn{display:none;}
   #nuevoDropdown{display:none!important;}
   .logo img{height:21px;}
-  .main{padding:14px;}
+  .main{padding:14px;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));}
+  .mobile-bottom-dock{display:flex;animation:mbd-in .42s cubic-bezier(0.32,0.72,0,1) both;}
+  #jvs-fab{display:none!important;}
+  .topbar-kai-btn{position:static;transform:none;justify-self:center;}
   .data-grid,.data-grid-3{grid-template-columns:1fr;}
   .kpi-grid{grid-template-columns:repeat(2,1fr);}
   .form-grid{grid-template-columns:1fr;}
@@ -439,6 +481,8 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 #clientesTableBody tr.cliente-hidden{display:none!important;}
 body.kiosk .topbar{display:none!important;}
 body.kiosk .mobile-nav-overlay{display:none!important;}
+body.kiosk .mobile-bottom-dock{display:none!important;}
+body.kiosk .main{padding-bottom:12px!important;}
 body.kiosk .maquina-section{display:none!important;}
 body.kiosk #tab-maquinas .section-header{display:none!important;}
 body.kiosk #maquinaMonGrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;}
@@ -727,7 +771,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* Mover chip al panel móvil: ocultarlo del topbar usando visibility (revertible en el hijo) en vez de opacity (que NO se puede revertir y dejaba el menú invisible) */
   #userChip{width:0!important;overflow:hidden!important;padding:0!important;border:none!important;visibility:hidden!important;pointer-events:none!important;}
   /* User menu se posiciona como sheet fija desde abajo en móvil — revierte visibility/pointer-events del padre */
-  .user-menu.open{position:fixed!important;inset:auto 12px 76px 12px!important;width:auto!important;max-height:78vh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
+  .user-menu.open{position:fixed!important;inset:auto 12px calc(104px + env(safe-area-inset-bottom,0px)) 12px!important;width:auto!important;max-height:70vh;max-height:70dvh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
 }
 
 /* ══ Finanzas — Mobile UX ═══════════════════════════════════════ */
@@ -837,7 +881,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     padding-right:max(14px,env(safe-area-inset-right))!important;
   }
   .main{
-    padding:12px max(12px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+    padding:12px max(12px,env(safe-area-inset-right)) calc(104px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left));
   }
   .mobile-nav-panel{
     width:min(280px,85vw);
@@ -1081,10 +1125,16 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   }
   .main{
     padding-top:8px!important;
-    padding-bottom:max(8px,env(safe-area-inset-bottom))!important;
+    padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;
     padding-left:max(12px,env(safe-area-inset-left))!important;
     padding-right:max(12px,env(safe-area-inset-right))!important;
   }
+
+  /* Dock compacto en landscape: sin labels, iconos chicos */
+  .mbd-label{display:none!important;}
+  .mbd-btn .dock-icon{width:36px!important;height:36px!important;font-size:18px!important;}
+  .mbd-handle-row{padding:4px 0 2px!important;}
+  .mbd-icons-row{padding:0 8px calc(4px + env(safe-area-inset-bottom,0px))!important;}
 
   /* Títulos más compactos */
   .section-title{font-size:17px!important;letter-spacing:0.5px!important;}
@@ -1194,6 +1244,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 </script>
 <div class="topbar">
   <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
+  <button class="topbar-kai-btn" onclick="openKai()" title="Hablar con KAI"><span class="kai-ring"></span>KAI</button>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
   <button id="mobilePlusBtn" class="mobile-menu-btn" onclick="toggleNuevoMenuMobile(event)" style="display:none;font-size:20px;font-weight:300;padding:6px 12px">＋</button>
   <div class="global-search" id="globalSearch">
@@ -1445,6 +1496,56 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="mobile-nav-footer-actions">
       <button onclick="loadAllData();closeMobileMenu()">↺ Actualizar</button>
       <button onclick="AUTH.logout()" style="border-color:rgba(255,68,68,0.35);color:var(--danger);">⎋ Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Mobile Bottom Dock ──────────────────────────────────── -->
+<div class="mobile-bottom-dock" id="mobileBottomDock">
+  <div class="mbd-handle-row" id="mbdHandleRow">
+    <div class="mbd-handle-pill"></div>
+  </div>
+  <div class="mbd-icons-row">
+    <button class="mbd-btn active" data-tab="overview" onclick="switchTab('overview')">
+      <span class="dock-icon" style="--c:#00d4cc">🏠</span>
+      <span class="mbd-label">Overview</span>
+    </button>
+    <button class="mbd-btn" data-tab="pedidos" onclick="switchTab('pedidos')">
+      <span class="dock-icon" style="--c:#ff6b35">📦</span>
+      <span class="mbd-label">Pedidos</span>
+      <span class="dock-badge" id="badge-pedidos-m" style="display:none">0</span>
+    </button>
+    <button class="mbd-btn" data-tab="clientes" onclick="switchTab('clientes')">
+      <span class="dock-icon" style="--c:#3b82f6">👥</span>
+      <span class="mbd-label">Clientes</span>
+    </button>
+    <button class="mbd-btn" data-tab="finanzas" onclick="switchTab('finanzas')">
+      <span class="dock-icon" style="--c:#22c55e">💰</span>
+      <span class="mbd-label">Finanzas</span>
+      <span class="dock-badge" id="badge-finanzas-m" style="display:none">0</span>
+    </button>
+    <button class="mbd-btn" data-tab="cotizaciones" onclick="switchTab('cotizaciones')">
+      <span class="dock-icon" style="--c:#a78bfa">📋</span>
+      <span class="mbd-label">Cotizaciones</span>
+    </button>
+  </div>
+</div>
+
+<!-- ── Mobile Icon Grid Overlay ────────────────────────────── -->
+<div class="mobile-grid-overlay" id="mobileGridOverlay">
+  <div class="mobile-grid-backdrop" onclick="closeMobileGrid()"></div>
+  <div class="mobile-grid-sheet">
+    <div class="mobile-grid-handle"></div>
+    <div class="mobile-grid-user" id="mobileGridUser"></div>
+    <div class="mobile-grid-apps" id="mobileGridApps"></div>
+    <div class="mobile-grid-nuevo">
+      <div class="mobile-grid-nuevo-title">Crear nuevo</div>
+      <div class="mobile-grid-nuevo-btns">
+        <button class="mgn-btn" data-mgn="nuevo-lead" onclick="closeMobileGrid();switchTab('nuevo-lead')">👤 Lead / Cliente</button>
+        <button class="mgn-btn" data-mgn="nueva-cot" onclick="closeMobileGrid();switchTab('nueva-cot')">📋 Cotización</button>
+        <button class="mgn-btn" data-mgn="nueva-venta" onclick="closeMobileGrid();irANuevaVenta()">💰 Venta</button>
+        <button class="mgn-btn" data-mgn="nuevo-proveedor" onclick="closeMobileGrid();switchTab('nuevo-proveedor')">🏭 Proveedor</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2759,13 +2860,55 @@ function json(obj) {
               <pre id="adsScriptCode2" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:9.5px;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #30363d;margin:0;line-height:1.6;white-space:pre">// ── Script 2: Google Ads Script ────────────────────────────────────────
 // ads.google.com → Herramientas → Scripts → + Nuevo script
 // Actualiza ENDPOINT con la URL del Script 1. Programa ejecución: cada hora.
+// IMPORTANTE: usa executeInParallel para crear campañas desde MCC.
 
-var ENDPOINT = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
-var SECRET   = 'thelab2025';
+var ENDPOINT    = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
+var SECRET      = 'thelab2025';
+// ID de la cuenta cliente SIN guiones (ej: 7577812099)
+var CUSTOMER_ID = 'PEGA_AQUI_EL_CUSTOMER_ID';
 
 function main() {
-  // 1. Leer campañas y enviar resumen al Script 1
-  var campaigns = [], t = {gasto:0,impresiones:0,clics:0,conversiones:0,valor_conversion:0};
+  var isMCC = typeof AdsManagerApp !== 'undefined';
+  Logger.log('Contexto: ' + (isMCC ? 'MCC' : 'cuenta directa'));
+
+  if (isMCC) {
+    if (!CUSTOMER_ID || CUSTOMER_ID === 'PEGA_AQUI_EL_CUSTOMER_ID') {
+      Logger.log('ERROR: Configura CUSTOMER_ID al inicio del script.');
+      return;
+    }
+    var accIt = AdsManagerApp.accounts().withIds([CUSTOMER_ID]).get();
+    if (!accIt.hasNext()) {
+      Logger.log('ERROR: Cuenta ' + CUSTOMER_ID + ' no encontrada en este Manager.');
+      return;
+    }
+    // select() permite lectura; las mutaciones van por executeInParallel
+    AdsManagerApp.select(accIt.next());
+    Logger.log('MCC: cuenta seleccionada ' + CUSTOMER_ID);
+  }
+
+  // 1. Enviar estadísticas de campañas al Script 1
+  _enviarStats();
+
+  // 2. Obtener mutaciones pendientes
+  var muts = _fetchMutaciones();
+  if (!muts) return;
+
+  // 3. Aplicar mutaciones
+  if (isMCC) {
+    // executeInParallel da contexto nativo: AdsApp.newCampaignBuilder() funciona aquí
+    AdsManagerApp.accounts()
+      .withIds([CUSTOMER_ID])
+      .executeInParallel('_aplicarMutaciones', '_finalizarMutaciones', JSON.stringify(muts));
+  } else {
+    // Cuenta directa: llamada inmediata
+    var result = _aplicarMutaciones(JSON.stringify(muts));
+    _reportarResultados(JSON.parse(result));
+  }
+}
+
+function _enviarStats() {
+  var campaigns = [];
+  var t = {gasto:0, impresiones:0, clics:0, conversiones:0, valor_conversion:0};
   try {
     var report = AdsApp.report(
       'SELECT campaign.name, campaign.id, campaign.status, ' +
@@ -2788,100 +2931,127 @@ function main() {
         gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
       });
     }
-    Logger.log('Campañas leídas: '+campaigns.length);
-  } catch(e) { Logger.log('Error leyendo campañas: '+e.message); }
-
+    Logger.log('Campañas leídas: ' + campaigns.length);
+  } catch(e) { Logger.log('Error leyendo campañas: ' + e.message); return; }
   try {
     UrlFetchApp.fetch(ENDPOINT, {
       method:'post', contentType:'application/json', muteHttpExceptions:true,
-      payload:JSON.stringify({secret:SECRET, campanas:campaigns,
+      payload:JSON.stringify({
+        secret:SECRET, campanas:campaigns,
         gasto:t.gasto, impresiones:t.impresiones, clics:t.clics,
-        conversiones:t.conversiones, valor_conversion:t.valor_conversion})
+        conversiones:t.conversiones, valor_conversion:t.valor_conversion
+      })
     });
-  } catch(e) { Logger.log('Error enviando a Script 1: '+e.message); }
+    Logger.log('Stats enviadas OK.');
+  } catch(e) { Logger.log('Error enviando stats: ' + e.message); }
+}
 
-  // 2. Leer y aplicar mutaciones pendientes del dashboard
+function _fetchMutaciones() {
   try {
-    var mutResp = UrlFetchApp.fetch(ENDPOINT+'?action=mutations', {muteHttpExceptions:true});
-    var mutData = JSON.parse(mutResp.getContentText());
-    if (!mutData.ok || !mutData.mutations) {
-      Logger.log('Sin mutaciones: '+JSON.stringify(mutData));
-      return;
+    var resp = UrlFetchApp.fetch(ENDPOINT + '?action=mutations', {muteHttpExceptions:true});
+    var data = JSON.parse(resp.getContentText());
+    if (!data.ok || !data.mutations || !data.mutations.length) {
+      Logger.log('Sin mutaciones pendientes.');
+      return null;
     }
-    var muts = mutData.mutations;
-    var changed = false;
-    for (var k=0; k&lt;muts.length; k++) {
-      var m = muts[k];
-      if (m.status !== 'pending') continue;
-      try {
-        if (m.op === 'create') {
-          // Presupuesto en CLP directamente (sin dividir por 1000)
-          var budgetOp = AdsApp.newCampaignBudgetBuilder()
-            .withName('Budget_'+m.data.nombre)
-            .withAmount(m.data.presupuesto)
-            .build();
-          if (!budgetOp.isSuccessful()) throw new Error(budgetOp.getErrors().join(', '));
-          var campOp = AdsApp.newCampaignBuilder()
-            .withName(m.data.nombre)
-            .withStatus(m.data.estado||'ENABLED')
-            .withBudget(budgetOp.getResult())
-            .build();
-          if (!campOp.isSuccessful()) throw new Error(campOp.getErrors().join(', '));
-          var nuevaCamp = campOp.getResult();
-          // Grupo de anuncios + palabras clave (si el dashboard las envió). Aislado: si falla, la campaña igual queda creada.
-          if (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) {
-            try {
-              var agOp = nuevaCamp.newAdGroupBuilder()
-                .withName('Grupo 1 - '+m.data.nombre)
-                .withCpc(300)
-                .build();
-              if (agOp.isSuccessful()) {
-                var ag = agOp.getResult();
-                for (var kw=0; kw&lt;m.data.palabrasClave.length; kw++) {
-                  ag.newKeywordBuilder().withText(m.data.palabrasClave[kw]).build();
-                }
-                Logger.log('  + grupo con '+m.data.palabrasClave.length+' keywords');
+    Logger.log('Mutaciones a procesar: ' + data.mutations.length);
+    return data.mutations;
+  } catch(e) { Logger.log('Error obteniendo mutaciones: ' + e.message); return null; }
+}
+
+// Corre en contexto nativo de cuenta (via executeInParallel o directamente)
+// Recibe y devuelve JSON string
+function _aplicarMutaciones(mutsJson) {
+  var muts = JSON.parse(mutsJson);
+  for (var k = 0; k &lt; muts.length; k++) {
+    var m = muts[k];
+    if (m.status !== 'pending') continue;
+    try {
+      if (m.op === 'create') {
+        var campOp = AdsApp.newCampaignBuilder()
+          .withName(m.data.nombre)
+          .withStatus(m.data.estado || 'ENABLED')
+          .withBudget(m.data.presupuesto)
+          .forSearchNetwork()
+          .build();
+        if (!campOp.isSuccessful()) throw new Error(campOp.getErrors().join(', '));
+        var nuevaCamp = campOp.getResult();
+        if (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) {
+          try {
+            var agOp = nuevaCamp.newAdGroupBuilder()
+              .withName('Grupo 1 - ' + m.data.nombre)
+              .withCpc(300)
+              .build();
+            if (agOp.isSuccessful()) {
+              var ag = agOp.getResult();
+              for (var kw = 0; kw &lt; m.data.palabrasClave.length; kw++) {
+                ag.newKeywordBuilder().withText(m.data.palabrasClave[kw]).build();
               }
-            } catch(eAg) { Logger.log('  Aviso grupo/keywords: '+eAg.message); }
-          }
-          muts[k].status = 'aplicado';
-          Logger.log('OK creada: '+m.data.nombre);
-        } else if (m.op === 'edit') {
-          var iter = AdsApp.campaigns().withIds([m.id]).get();
-          if (iter.hasNext()) {
-            var camp = iter.next();
-            if (m.data.nombre) camp.setName(m.data.nombre);
-            if (m.data.estado === 'ENABLED') camp.enable();
-            if (m.data.estado === 'PAUSED') camp.pause();
-            if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto);
-            muts[k].status = 'aplicado';
-          } else {
-            muts[k].status = 'error';
-            muts[k].error = 'Campana no encontrada: '+m.id;
-          }
-        } else if (m.op === 'delete') {
-          var iter2 = AdsApp.campaigns().withIds([m.id]).get();
-          if (iter2.hasNext()) { iter2.next().pause(); muts[k].status = 'aplicado'; }
-          else { muts[k].status = 'error'; muts[k].error = 'Campaña no encontrada: '+m.id; }
+              Logger.log('  + grupo con ' + m.data.palabrasClave.length + ' keywords');
+            }
+          } catch(eAg) { Logger.log('  Aviso grupo/keywords: ' + eAg.message); }
         }
-        changed = true;
-      } catch(e) {
-        muts[k].status = 'error';
-        muts[k].error = e.message;
-        Logger.log('[Error] op='+m.op+' '+e.message);
-        changed = true;
+        muts[k].status = 'aplicado';
+        Logger.log('OK creada: ' + m.data.nombre);
+
+      } else if (m.op === 'edit') {
+        var iter = AdsApp.campaigns().withIds([m.id]).get();
+        if (iter.hasNext()) {
+          var camp = iter.next();
+          if (m.data.nombre) camp.setName(m.data.nombre);
+          if (m.data.estado === 'ENABLED') camp.enable();
+          if (m.data.estado === 'PAUSED') camp.pause();
+          if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto);
+          muts[k].status = 'aplicado';
+          Logger.log('OK editada: ' + m.id);
+        } else {
+          muts[k].status = 'error';
+          muts[k].error = 'Campaña no encontrada: ' + m.id;
+        }
+
+      } else if (m.op === 'delete') {
+        var iter2 = AdsApp.campaigns().withIds([m.id]).get();
+        if (iter2.hasNext()) {
+          iter2.next().pause();
+          muts[k].status = 'aplicado';
+          Logger.log('OK pausada: ' + m.id);
+        } else {
+          muts[k].status = 'error';
+          muts[k].error = 'Campaña no encontrada: ' + m.id;
+        }
       }
+    } catch(e) {
+      muts[k].status = 'error';
+      muts[k].error = e.message;
+      Logger.log('[Error] op=' + m.op + ' → ' + e.message);
     }
-    if (changed) {
-      UrlFetchApp.fetch(ENDPOINT, {
-        method:'post', contentType:'application/json', muteHttpExceptions:true,
-        payload:JSON.stringify({secret:SECRET, type:'update_mutations', mutations:muts})
-      });
+  }
+  return JSON.stringify(muts);
+}
+
+// Callback de executeInParallel: recibe array de ManagedAccountStats
+function _finalizarMutaciones(results) {
+  for (var i = 0; i &lt; results.length; i++) {
+    var r = results[i];
+    Logger.log('Cuenta ' + r.getCustomerId() + ' → ' + r.getStatus());
+    if (r.getStatus() === 'OK') {
+      _reportarResultados(JSON.parse(r.getReturnValue()));
+    } else {
+      Logger.log('Error en cuenta: ' + r.getError());
     }
-    var ok=muts.filter(function(x){return x.status==='aplicado';}).length;
-    var err=muts.filter(function(x){return x.status==='error';}).length;
-    Logger.log('Mutaciones: '+ok+' aplicadas, '+err+' errores');
-  } catch(e) { Logger.log('Error mutaciones: '+e.message); }
+  }
+}
+
+function _reportarResultados(muts) {
+  try {
+    UrlFetchApp.fetch(ENDPOINT, {
+      method:'post', contentType:'application/json', muteHttpExceptions:true,
+      payload:JSON.stringify({secret:SECRET, type:'update_mutations', mutations:muts})
+    });
+    var ok  = muts.filter(function(x){return x.status==='aplicado';}).length;
+    var err = muts.filter(function(x){return x.status==='error';}).length;
+    Logger.log('Resultado: ' + ok + ' aplicadas, ' + err + ' errores');
+  } catch(e) { Logger.log('Error reportando resultados: ' + e.message); }
 }</pre>
               <button onclick="copyAdsScript('adsScriptCode2')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
             </div>
@@ -2958,7 +3128,8 @@ function main() {
         <div class="card-header">
           <span class="card-title">⏳ Cambios pendientes</span>
           <span id="adsPendingBadge" style="font-size:10px;background:rgba(255,193,7,0.12);color:#ffc107;border:1px solid rgba(255,193,7,0.3);border-radius:4px;padding:2px 7px">0</span>
-          <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
+          <button onclick="retryAllErrors()" id="adsRetryAllBtn" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px;color:var(--danger);display:none" title="Reintentar todas las mutaciones con error">↻ Reintentar errores</button>
+          <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
           <button onclick="adsDiagnostico()" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--warn)" title="Diagnóstico completo del pipeline de mutaciones">🔍 Diagnosticar</button>
         </div>
         <div id="adsDiagOutput" style="display:none;padding:10px 16px;background:var(--surface3);border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace"></div>
@@ -4666,6 +4837,99 @@ function toggleMobileMenu(){const p=document.getElementById('mobileNavPanel'),o=
 function closeMobileMenu(){document.getElementById('mobileNavPanel').classList.remove('open');document.getElementById('mobileOverlay').classList.remove('open');document.body.style.overflow='';}
 function switchTabMobile(name){switchTab(name);closeMobileMenu();}
 
+function toggleMobileGrid(){
+  const ov=document.getElementById('mobileGridOverlay');
+  ov.classList.contains('open')?closeMobileGrid():openMobileGrid();
+}
+function openMobileGrid(){
+  document.getElementById('mobileBottomDock')?.classList.add('mbd-grid-open');
+  const overlay=document.getElementById('mobileGridOverlay');
+  const appsEl=document.getElementById('mobileGridApps');
+  // Rebuild en cada apertura: respeta RBAC y evita caché stale tras logout/login
+  const tabs=[
+    {tab:'overview',icon:'🏠',color:'#00d4cc',label:'Overview'},
+    {tab:'clientes',icon:'👥',color:'#3b82f6',label:'Clientes'},
+    {tab:'cotizaciones',icon:'📋',color:'#a78bfa',label:'Cotizaciones'},
+    {tab:'pedidos',icon:'📦',color:'#ff6b35',label:'Pedidos'},
+    {tab:'proveedores',icon:'🏭',color:'#ffaa00',label:'Proveedores'},
+    {tab:'agentes',icon:'🤖',color:'#10b981',label:'Agentes IA'},
+    {tab:'maquinas',icon:'🖨️',color:'#ff4444',label:'Máquinas'},
+    {tab:'equipo',icon:'👤',color:'#f472b6',label:'Equipo'},
+    {tab:'reporte',icon:'📊',color:'#14b8a6',label:'Reportes'},
+    {tab:'web',icon:'🌐',color:'#6366f1',label:'Web'},
+    {tab:'finanzas',icon:'💰',color:'#22c55e',label:'Finanzas'},
+    {tab:'visual',icon:'🎨',color:'#8b5cf6',label:'Visual AI'},
+    {tab:'remuneraciones',icon:'💵',color:'#84cc16',label:'Remuner.'},
+    {tab:'calculadora',icon:'⚡',color:'#f59e0b',label:'Calculadora'},
+  ];
+  const u=AUTH.getUser();
+  const allowed=(typeof RBAC!=='undefined'&&u)?(RBAC.tabs[u.role]||RBAC.tabs.demo):null;
+  const visibles=allowed?tabs.filter(t=>allowed.includes(t.tab)):tabs;
+  const active=sessionStorage.getItem('thelab_active_tab')||'overview';
+  appsEl.innerHTML=visibles.map(t=>`
+    <button class="mg-item${t.tab===active?' active':''}" data-tab="${t.tab}" onclick="switchTab('${t.tab}');closeMobileGrid()">
+      <span class="dock-icon" style="--c:${t.color}">${t.icon}</span>
+      <span class="mg-label">${t.label}</span>
+    </button>`).join('');
+  // User info
+  if(u){
+    document.getElementById('mobileGridUser').innerHTML=`
+      <div style="width:42px;height:42px;border-radius:50%;background:var(--accent);color:#000;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(u.name||u.username||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text)">${escapeHtml(u.name||u.username||'Usuario')}</div><div style="font-size:10px;color:var(--text3);margin-top:1px">${escapeHtml((u.role||'').charAt(0).toUpperCase()+(u.role||'').slice(1))}</div></div>
+      <button onclick="closeMobileGrid();setTimeout(toggleMobileMenu,200)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text2);font-size:13px;padding:8px 12px;cursor:pointer;line-height:1" title="Tokens y configuración">⚙</button>`;
+  }
+  // "Crear nuevo": filtra botones por RBAC y oculta la sección si no hay ninguno
+  const nuevos=(typeof RBAC!=='undefined'&&u)?(RBAC.nuevos[u.role]||[]):null;
+  let anyNuevo=false;
+  document.querySelectorAll('#mobileGridOverlay .mgn-btn[data-mgn]').forEach(b=>{
+    const ok=!nuevos||nuevos.includes(b.dataset.mgn);
+    b.style.display=ok?'':'none';
+    if(ok) anyNuevo=true;
+  });
+  const nuevoSec=document.querySelector('#mobileGridOverlay .mobile-grid-nuevo');
+  if(nuevoSec) nuevoSec.style.display=anyNuevo?'':'none';
+  overlay.classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeMobileGrid(){
+  document.getElementById('mobileGridOverlay').classList.remove('open');
+  document.getElementById('mobileBottomDock')?.classList.remove('mbd-grid-open');
+  document.body.style.overflow='';
+}
+function initMobileDockSwipe(){
+  const dock=document.getElementById('mobileBottomDock');
+  const handle=document.getElementById('mbdHandleRow');
+  const pill=handle?.querySelector('.mbd-handle-pill');
+  if(!dock||!handle) return;
+  let sy=0,dy=0,swiped=false,lastTouch=0;
+  // Swipe vertical sobre TODO el dock (no solo el handle)
+  dock.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;dy=0;swiped=false;},{passive:true});
+  dock.addEventListener('touchmove',e=>{
+    dy=sy-e.touches[0].clientY;
+    if(Math.abs(dy)>6) swiped=true;
+    if(pill){const p=Math.min(1,Math.abs(dy)/40);pill.style.width=(38+p*18)+'px';pill.style.background=`rgba(0,212,204,${.22+p*.55})`;}
+  },{passive:true});
+  dock.addEventListener('touchend',e=>{
+    lastTouch=Date.now();
+    if(pill){pill.style.width='';pill.style.background='';}
+    if(dy>15){openMobileGrid();return;}
+    if(dy<-15){closeMobileGrid();return;}
+    if(!swiped&&e.target.closest('.mbd-handle-row')) toggleMobileGrid();
+  },{passive:true});
+  handle.addEventListener('click',()=>{if(Date.now()-lastTouch<600)return;toggleMobileGrid();});
+  // Swipe-down en la cabecera del sheet para cerrarlo
+  const sheet=document.querySelector('#mobileGridOverlay .mobile-grid-sheet');
+  if(sheet){
+    let ssy=0,sdy=0,fromTop=false;
+    sheet.addEventListener('touchstart',e=>{
+      ssy=e.touches[0].clientY;sdy=0;
+      fromTop=!!e.target.closest('.mobile-grid-handle,.mobile-grid-user')||e.target===sheet;
+    },{passive:true});
+    sheet.addEventListener('touchmove',e=>{sdy=e.touches[0].clientY-ssy;},{passive:true});
+    sheet.addEventListener('touchend',()=>{if(fromTop&&sdy>40) closeMobileGrid();},{passive:true});
+  }
+}
+
 // ── NUMERACIÓN COT ────────────────────────────────────────────
 function generarNumeroCotizacion(){
   const now=new Date();const yy=String(now.getFullYear()).slice(2);const mm=String(now.getMonth()+1).padStart(2,'0');const prefix=yy+mm;
@@ -5398,11 +5662,13 @@ function switchTab(name){
     if(!_allowed.includes(name)){toast('No tienes acceso a esta sección','error');return;}
   }
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn,.mobile-tab-btn,.dock-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-btn,.mobile-tab-btn,.dock-btn,.mbd-btn,.mg-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.dock-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.mobile-tab-btn[data-tab="${name}"]`)?.classList.add('active');
+  document.querySelector(`.mbd-btn[data-tab="${name}"]`)?.classList.add('active');
+  document.querySelector(`.mg-item[data-tab="${name}"]`)?.classList.add('active');
   try{closeGlobalSearch();}catch(e){}
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes') renderAgentesGrid();
@@ -5598,12 +5864,12 @@ function updateDockBadges(){
     if(['Despachado','Cancelado'].includes(est)) return false;
     return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;
   }).length;
-  const bp=document.getElementById('badge-pedidos');
-  if(bp){bp.textContent=atrasados>9?'9+':String(atrasados);bp.style.display=atrasados?'flex':'none';}
+  const ptxt=atrasados>9?'9+':String(atrasados);
+  ['badge-pedidos','badge-pedidos-m'].forEach(id=>{const b=document.getElementById(id);if(b){b.textContent=ptxt;b.style.display=atrasados?'flex':'none';}});
   let factVenc=0;
   try{const allF=finGetAllFacturas();factVenc=allF.filter(r=>r.porCobrar>0).length;}catch(e){}
-  const bf=document.getElementById('badge-finanzas');
-  if(bf){bf.textContent=factVenc>9?'9+':String(factVenc);bf.style.display=factVenc?'flex':'none';}
+  const ftxt=factVenc>9?'9+':String(factVenc);
+  ['badge-finanzas','badge-finanzas-m'].forEach(id=>{const b=document.getElementById(id);if(b){b.textContent=ftxt;b.style.display=factVenc?'flex':'none';}});
 }
 function renderAlertas(){
   const alertas=[];
@@ -10817,8 +11083,8 @@ function applyRBAC(role){
   document.querySelectorAll('.tab-btn[data-tab],.dock-btn[data-tab]').forEach(btn=>{
     btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
   });
-  // Botones de navegación móvil
-  document.querySelectorAll('.mobile-tab-btn[data-tab]').forEach(btn=>{
+  // Botones de navegación móvil (panel + bottom dock)
+  document.querySelectorAll('.mobile-tab-btn[data-tab],.mbd-btn[data-tab]').forEach(btn=>{
     btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
   });
 
@@ -10988,6 +11254,7 @@ function initSidebarTooltips(){
 
 document.addEventListener('DOMContentLoaded',()=>{
   initSidebarTooltips();
+  initMobileDockSwipe();
   // Fallback: muestra botón reintentar a los 8s y fuerza cierre a los 10s
   setTimeout(()=>{const r=document.getElementById('slRetry');if(r){const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')) r.style.display='block';}},8000);
   setTimeout(()=>{const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')){sl.classList.add('hidden');try{_airtableConfig();}catch(e){showTokenModal();}}},10000);
@@ -11645,8 +11912,11 @@ function toggleAdsConfig(){
   }
 }
 function copyAdsScript(id){
-  const code=document.getElementById(id||'adsScriptCode')?.textContent||'';
-  navigator.clipboard.writeText(code).then(()=>toast('✓ Script copiado','success')).catch(()=>{
+  let code=document.getElementById(id||'adsScriptCode')?.textContent||'';
+  const cfg=getAdsConfig();
+  if(cfg.endpoint) code=code.replace('PEGA_AQUI_LA_URL_DEL_SCRIPT_1',cfg.endpoint);
+  if(cfg.customerId) code=code.replace('PEGA_AQUI_EL_CUSTOMER_ID',cfg.customerId.replace(/-/g,''));
+  navigator.clipboard.writeText(code).then(()=>toast('✓ Script copiado (endpoint y customer ID pre-rellenados)','success')).catch(()=>{
     const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Script copiado','success');
   });
 }
@@ -11863,6 +12133,8 @@ function renderPendingMutations(){
   const nPend=visibles.filter(m=>m.status!=='error').length;
   const nErr=visibles.filter(m=>m.status==='error').length;
   if(badge) badge.textContent=nPend+' pendiente'+(nPend!==1?'s':'')+(nErr?' · '+nErr+' error'+(nErr!==1?'es':''):'');
+  const retryBtn=document.getElementById('adsRetryAllBtn');
+  if(retryBtn) retryBtn.style.display=nErr?'':'none';
   const opLabel={create:'Crear',edit:'Editar',delete:'Eliminar'};
   const stMap={
     pending:{c:'var(--warn)',t:'⏳ Pendiente'},
@@ -11912,6 +12184,15 @@ function retryMutation(ts){
   savePendingToStorage();
   sendAdsMutation(m);
   renderPendingMutations();
+}
+function retryAllErrors(){
+  const errors=_adsPendingMutations.filter(m=>m.status==='error');
+  if(!errors.length){toast('Sin errores que reintentar','info');return;}
+  errors.forEach(m=>{m.status='pending';m.error='';});
+  savePendingToStorage();
+  renderPendingMutations();
+  errors.forEach(m=>sendAdsMutation(m));
+  toast(`↻ Reintentando ${errors.length} mutación${errors.length>1?'es':''}...`,'info');
 }
 
 async function loadAdsData(){
@@ -15009,8 +15290,9 @@ function calcNeonLimpiar(){
   #jvs-settings label{ font-size:10px; color:#5a8f8a; display:flex; align-items:center; gap:5px; cursor:pointer; }
   #jvs-settings input[type=checkbox]{ accent-color:#00d4cc; }
 
-  @media(max-width:480px){
-    #jvs-panel{ right:12px; left:12px; bottom:84px; width:auto; height:calc(100vh - 110px); }
+  @media(max-width:768px){
+    #jvs-panel{ right:12px; left:12px; top:66px; bottom:calc(104px + env(safe-area-inset-bottom,0px)); width:auto; height:auto; max-height:none; }
+    #jvs-input{ font-size:16px; }
     #jvs-fab{ bottom:16px; right:16px; }
   }
 </style>
