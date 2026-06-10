@@ -75,7 +75,7 @@ body.kiosk .icon-dock{display:none!important;}
 /* ── Mobile Bottom Dock (visible solo en móvil) ────────────────── */
 @keyframes mbd-in{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .mobile-bottom-dock{display:none;position:fixed;bottom:0;left:0;right:0;z-index:190;background:rgba(8,8,8,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,0.1);box-shadow:0 -4px 32px rgba(0,0,0,0.6);flex-direction:column;align-items:center;transition:transform .32s cubic-bezier(0.32,0.72,0,1);}
-.mbd-handle-row{width:100%;display:flex;justify-content:center;align-items:center;padding:6px 0 4px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.mbd-handle-row{width:100%;display:flex;justify-content:center;align-items:center;padding:9px 0 6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .mbd-handle-pill{width:38px;height:5px;border-radius:3px;background:rgba(255,255,255,0.22);transition:background .2s,width .18s;pointer-events:none;}
 .mbd-handle-row:active .mbd-handle-pill{background:var(--accent);width:56px;}
 .mobile-bottom-dock.mbd-grid-open .mbd-handle-pill{background:rgba(0,212,204,0.55);}
@@ -84,13 +84,14 @@ body.kiosk .icon-dock{display:none!important;}
 .mbd-btn:active{transform:scale(0.88);}
 .mbd-btn .dock-icon{width:44px;height:44px;border-radius:12px;font-size:22px;transition:box-shadow .15s,transform .12s;}
 .mbd-btn.active .dock-icon{box-shadow:0 0 0 2.5px var(--accent),0 4px 18px rgba(0,212,204,0.45),inset 0 1px 1px rgba(255,255,255,0.20);}
+.mbd-btn .dock-badge{top:-2px;right:calc(50% - 26px);}
 .mbd-label{font-size:9.5px;font-weight:500;color:var(--text3);white-space:nowrap;line-height:1;transition:color .12s;}
 .mbd-btn.active .mbd-label{color:var(--accent);font-weight:700;}
 /* ── Mobile Grid Overlay ───────────────────────────────────────── */
 .mobile-grid-overlay{display:none;position:fixed;inset:0;z-index:300;}
 .mobile-grid-overlay.open{display:block;}
 .mobile-grid-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
-.mobile-grid-sheet{position:absolute;left:0;right:0;bottom:0;background:rgba(12,12,12,0.98);border-radius:24px 24px 0 0;box-shadow:0 -8px 48px rgba(0,0,0,0.7);transform:translateY(100%);transition:transform .32s cubic-bezier(0.32,0.72,0,1);max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
+.mobile-grid-sheet{position:absolute;left:0;right:0;bottom:0;background:rgba(12,12,12,0.98);border-radius:24px 24px 0 0;box-shadow:0 -8px 48px rgba(0,0,0,0.7);transform:translateY(100%);transition:transform .32s cubic-bezier(0.32,0.72,0,1);max-height:92vh;max-height:92dvh;display:flex;flex-direction:column;overflow:hidden;}
 .mobile-grid-overlay.open .mobile-grid-sheet{transform:translateY(0);}
 .mobile-grid-handle{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,0.22);margin:12px auto 0;}
 .mobile-grid-user{display:flex;align-items:center;gap:12px;padding:14px 20px 10px;}
@@ -480,6 +481,8 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 #clientesTableBody tr.cliente-hidden{display:none!important;}
 body.kiosk .topbar{display:none!important;}
 body.kiosk .mobile-nav-overlay{display:none!important;}
+body.kiosk .mobile-bottom-dock{display:none!important;}
+body.kiosk .main{padding-bottom:12px!important;}
 body.kiosk .maquina-section{display:none!important;}
 body.kiosk #tab-maquinas .section-header{display:none!important;}
 body.kiosk #maquinaMonGrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;}
@@ -768,7 +771,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* Mover chip al panel móvil: ocultarlo del topbar usando visibility (revertible en el hijo) en vez de opacity (que NO se puede revertir y dejaba el menú invisible) */
   #userChip{width:0!important;overflow:hidden!important;padding:0!important;border:none!important;visibility:hidden!important;pointer-events:none!important;}
   /* User menu se posiciona como sheet fija desde abajo en móvil — revierte visibility/pointer-events del padre */
-  .user-menu.open{position:fixed!important;inset:auto 12px 76px 12px!important;width:auto!important;max-height:78vh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
+  .user-menu.open{position:fixed!important;inset:auto 12px calc(104px + env(safe-area-inset-bottom,0px)) 12px!important;width:auto!important;max-height:70vh;max-height:70dvh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
 }
 
 /* ══ Finanzas — Mobile UX ═══════════════════════════════════════ */
@@ -878,7 +881,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     padding-right:max(14px,env(safe-area-inset-right))!important;
   }
   .main{
-    padding:12px max(12px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+    padding:12px max(12px,env(safe-area-inset-right)) calc(104px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left));
   }
   .mobile-nav-panel{
     width:min(280px,85vw);
@@ -1122,10 +1125,16 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   }
   .main{
     padding-top:8px!important;
-    padding-bottom:max(8px,env(safe-area-inset-bottom))!important;
+    padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;
     padding-left:max(12px,env(safe-area-inset-left))!important;
     padding-right:max(12px,env(safe-area-inset-right))!important;
   }
+
+  /* Dock compacto en landscape: sin labels, iconos chicos */
+  .mbd-label{display:none!important;}
+  .mbd-btn .dock-icon{width:36px!important;height:36px!important;font-size:18px!important;}
+  .mbd-handle-row{padding:4px 0 2px!important;}
+  .mbd-icons-row{padding:0 8px calc(4px + env(safe-area-inset-bottom,0px))!important;}
 
   /* Títulos más compactos */
   .section-title{font-size:17px!important;letter-spacing:0.5px!important;}
@@ -1532,10 +1541,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="mobile-grid-nuevo">
       <div class="mobile-grid-nuevo-title">Crear nuevo</div>
       <div class="mobile-grid-nuevo-btns">
-        <button class="mgn-btn" onclick="closeMobileGrid();switchTab('nuevo-lead')">👤 Lead / Cliente</button>
-        <button class="mgn-btn" onclick="closeMobileGrid();switchTab('nueva-cot')">📋 Cotización</button>
-        <button class="mgn-btn" onclick="closeMobileGrid();irANuevaVenta()">💰 Venta</button>
-        <button class="mgn-btn" onclick="closeMobileGrid();switchTab('nuevo-proveedor')">🏭 Proveedor</button>
+        <button class="mgn-btn" data-mgn="nuevo-lead" onclick="closeMobileGrid();switchTab('nuevo-lead')">👤 Lead / Cliente</button>
+        <button class="mgn-btn" data-mgn="nueva-cot" onclick="closeMobileGrid();switchTab('nueva-cot')">📋 Cotización</button>
+        <button class="mgn-btn" data-mgn="nueva-venta" onclick="closeMobileGrid();irANuevaVenta()">💰 Venta</button>
+        <button class="mgn-btn" data-mgn="nuevo-proveedor" onclick="closeMobileGrid();switchTab('nuevo-proveedor')">🏭 Proveedor</button>
       </div>
     </div>
   </div>
@@ -4786,44 +4795,49 @@ function openMobileGrid(){
   document.getElementById('mobileBottomDock')?.classList.add('mbd-grid-open');
   const overlay=document.getElementById('mobileGridOverlay');
   const appsEl=document.getElementById('mobileGridApps');
-  // Build grid from desktop dock data (only once)
-  if(!appsEl.dataset.built){
-    const tabs=[
-      {tab:'overview',icon:'🏠',color:'#00d4cc',label:'Overview'},
-      {tab:'clientes',icon:'👥',color:'#3b82f6',label:'Clientes'},
-      {tab:'cotizaciones',icon:'📋',color:'#a78bfa',label:'Cotizaciones'},
-      {tab:'pedidos',icon:'📦',color:'#ff6b35',label:'Pedidos'},
-      {tab:'proveedores',icon:'🏭',color:'#ffaa00',label:'Proveedores'},
-      {tab:'agentes',icon:'🤖',color:'#10b981',label:'Agentes IA'},
-      {tab:'maquinas',icon:'🖨️',color:'#ff4444',label:'Máquinas'},
-      {tab:'equipo',icon:'👤',color:'#f472b6',label:'Equipo'},
-      {tab:'reporte',icon:'📊',color:'#14b8a6',label:'Reportes'},
-      {tab:'web',icon:'🌐',color:'#6366f1',label:'Web'},
-      {tab:'finanzas',icon:'💰',color:'#22c55e',label:'Finanzas'},
-      {tab:'visual',icon:'🎨',color:'#8b5cf6',label:'Visual AI'},
-      {tab:'remuneraciones',icon:'💵',color:'#84cc16',label:'Remuner.'},
-      {tab:'calculadora',icon:'⚡',color:'#f59e0b',label:'Calculadora'},
-    ];
-    const active=sessionStorage.getItem('thelab_active_tab')||'overview';
-    appsEl.innerHTML=tabs.map(t=>`
-      <button class="mg-item${t.tab===active?' active':''}" data-tab="${t.tab}" onclick="switchTab('${t.tab}');closeMobileGrid()">
-        <span class="dock-icon" style="--c:${t.color}">${t.icon}</span>
-        <span class="mg-label">${t.label}</span>
-      </button>`).join('');
-    // User info
-    const u=AUTH.getUser();
-    if(u){
-      document.getElementById('mobileGridUser').innerHTML=`
-        <div style="width:42px;height:42px;border-radius:50%;background:var(--accent);color:#000;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(u.name||u.username||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
-        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text)">${escapeHtml(u.name||u.username||'Usuario')}</div><div style="font-size:10px;color:var(--text3);margin-top:1px">${escapeHtml((u.role||'').charAt(0).toUpperCase()+(u.role||'').slice(1))}</div></div>
-        <button onclick="closeMobileGrid();setTimeout(toggleMobileMenu,200)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text2);font-size:13px;padding:8px 12px;cursor:pointer;line-height:1" title="Tokens y configuración">⚙</button>`;
-    }
-    appsEl.dataset.built='1';
-  } else {
-    // Update active state from current session
-    const active=sessionStorage.getItem('thelab_active_tab')||'overview';
-    appsEl.querySelectorAll('.mg-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===active));
+  // Rebuild en cada apertura: respeta RBAC y evita caché stale tras logout/login
+  const tabs=[
+    {tab:'overview',icon:'🏠',color:'#00d4cc',label:'Overview'},
+    {tab:'clientes',icon:'👥',color:'#3b82f6',label:'Clientes'},
+    {tab:'cotizaciones',icon:'📋',color:'#a78bfa',label:'Cotizaciones'},
+    {tab:'pedidos',icon:'📦',color:'#ff6b35',label:'Pedidos'},
+    {tab:'proveedores',icon:'🏭',color:'#ffaa00',label:'Proveedores'},
+    {tab:'agentes',icon:'🤖',color:'#10b981',label:'Agentes IA'},
+    {tab:'maquinas',icon:'🖨️',color:'#ff4444',label:'Máquinas'},
+    {tab:'equipo',icon:'👤',color:'#f472b6',label:'Equipo'},
+    {tab:'reporte',icon:'📊',color:'#14b8a6',label:'Reportes'},
+    {tab:'web',icon:'🌐',color:'#6366f1',label:'Web'},
+    {tab:'finanzas',icon:'💰',color:'#22c55e',label:'Finanzas'},
+    {tab:'visual',icon:'🎨',color:'#8b5cf6',label:'Visual AI'},
+    {tab:'remuneraciones',icon:'💵',color:'#84cc16',label:'Remuner.'},
+    {tab:'calculadora',icon:'⚡',color:'#f59e0b',label:'Calculadora'},
+  ];
+  const u=AUTH.getUser();
+  const allowed=(typeof RBAC!=='undefined'&&u)?(RBAC.tabs[u.role]||RBAC.tabs.demo):null;
+  const visibles=allowed?tabs.filter(t=>allowed.includes(t.tab)):tabs;
+  const active=sessionStorage.getItem('thelab_active_tab')||'overview';
+  appsEl.innerHTML=visibles.map(t=>`
+    <button class="mg-item${t.tab===active?' active':''}" data-tab="${t.tab}" onclick="switchTab('${t.tab}');closeMobileGrid()">
+      <span class="dock-icon" style="--c:${t.color}">${t.icon}</span>
+      <span class="mg-label">${t.label}</span>
+    </button>`).join('');
+  // User info
+  if(u){
+    document.getElementById('mobileGridUser').innerHTML=`
+      <div style="width:42px;height:42px;border-radius:50%;background:var(--accent);color:#000;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(u.name||u.username||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text)">${escapeHtml(u.name||u.username||'Usuario')}</div><div style="font-size:10px;color:var(--text3);margin-top:1px">${escapeHtml((u.role||'').charAt(0).toUpperCase()+(u.role||'').slice(1))}</div></div>
+      <button onclick="closeMobileGrid();setTimeout(toggleMobileMenu,200)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text2);font-size:13px;padding:8px 12px;cursor:pointer;line-height:1" title="Tokens y configuración">⚙</button>`;
   }
+  // "Crear nuevo": filtra botones por RBAC y oculta la sección si no hay ninguno
+  const nuevos=(typeof RBAC!=='undefined'&&u)?(RBAC.nuevos[u.role]||[]):null;
+  let anyNuevo=false;
+  document.querySelectorAll('#mobileGridOverlay .mgn-btn[data-mgn]').forEach(b=>{
+    const ok=!nuevos||nuevos.includes(b.dataset.mgn);
+    b.style.display=ok?'':'none';
+    if(ok) anyNuevo=true;
+  });
+  const nuevoSec=document.querySelector('#mobileGridOverlay .mobile-grid-nuevo');
+  if(nuevoSec) nuevoSec.style.display=anyNuevo?'':'none';
   overlay.classList.add('open');
   document.body.style.overflow='hidden';
 }
@@ -4833,24 +4847,37 @@ function closeMobileGrid(){
   document.body.style.overflow='';
 }
 function initMobileDockSwipe(){
+  const dock=document.getElementById('mobileBottomDock');
   const handle=document.getElementById('mbdHandleRow');
   const pill=handle?.querySelector('.mbd-handle-pill');
-  if(!handle) return;
+  if(!dock||!handle) return;
   let sy=0,dy=0,swiped=false,lastTouch=0;
-  handle.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;dy=0;swiped=false;},{passive:true});
-  handle.addEventListener('touchmove',e=>{
+  // Swipe vertical sobre TODO el dock (no solo el handle)
+  dock.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;dy=0;swiped=false;},{passive:true});
+  dock.addEventListener('touchmove',e=>{
     dy=sy-e.touches[0].clientY;
     if(Math.abs(dy)>6) swiped=true;
     if(pill){const p=Math.min(1,Math.abs(dy)/40);pill.style.width=(38+p*18)+'px';pill.style.background=`rgba(0,212,204,${.22+p*.55})`;}
   },{passive:true});
-  handle.addEventListener('touchend',()=>{
+  dock.addEventListener('touchend',e=>{
     lastTouch=Date.now();
     if(pill){pill.style.width='';pill.style.background='';}
     if(dy>15){openMobileGrid();return;}
     if(dy<-15){closeMobileGrid();return;}
-    if(!swiped) toggleMobileGrid();
+    if(!swiped&&e.target.closest('.mbd-handle-row')) toggleMobileGrid();
   },{passive:true});
   handle.addEventListener('click',()=>{if(Date.now()-lastTouch<600)return;toggleMobileGrid();});
+  // Swipe-down en la cabecera del sheet para cerrarlo
+  const sheet=document.querySelector('#mobileGridOverlay .mobile-grid-sheet');
+  if(sheet){
+    let ssy=0,sdy=0,fromTop=false;
+    sheet.addEventListener('touchstart',e=>{
+      ssy=e.touches[0].clientY;sdy=0;
+      fromTop=!!e.target.closest('.mobile-grid-handle,.mobile-grid-user')||e.target===sheet;
+    },{passive:true});
+    sheet.addEventListener('touchmove',e=>{sdy=e.touches[0].clientY-ssy;},{passive:true});
+    sheet.addEventListener('touchend',()=>{if(fromTop&&sdy>40) closeMobileGrid();},{passive:true});
+  }
 }
 
 // ── NUMERACIÓN COT ────────────────────────────────────────────
@@ -15213,8 +15240,9 @@ function calcNeonLimpiar(){
   #jvs-settings label{ font-size:10px; color:#5a8f8a; display:flex; align-items:center; gap:5px; cursor:pointer; }
   #jvs-settings input[type=checkbox]{ accent-color:#00d4cc; }
 
-  @media(max-width:480px){
-    #jvs-panel{ right:12px; left:12px; bottom:84px; width:auto; height:calc(100vh - 110px); }
+  @media(max-width:768px){
+    #jvs-panel{ right:12px; left:12px; top:66px; bottom:calc(104px + env(safe-area-inset-bottom,0px)); width:auto; height:auto; max-height:none; }
+    #jvs-input{ font-size:16px; }
     #jvs-fab{ bottom:16px; right:16px; }
   }
 </style>
