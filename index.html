@@ -73,6 +73,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .dock-btn.active .dock-icon{background:rgba(0,243,255,0.12);border-color:rgba(0,243,255,0.4);}
 .dock-btn.active .dock-icon .dashboard-icon{filter:drop-shadow(0px 0px 12px rgba(0,243,255,1));stroke:#ffffff;}
 .dashboard-icon{stroke:#00f3ff;fill:none;filter:drop-shadow(0px 0px 8px rgba(0,243,255,0.6));transition:filter .3s ease,stroke .3s ease;overflow:visible;}
+.dashboard-icon-sm{stroke:#00f3ff;fill:none;vertical-align:middle;overflow:visible;}
 .dock-btn:hover .dashboard-icon,.mbd-btn:hover .dashboard-icon,.mg-item:hover .dashboard-icon{filter:drop-shadow(0px 0px 15px rgba(0,243,255,1));stroke:#ffffff;}
 body.kiosk .icon-dock{display:none!important;}
 /* ── Mobile Bottom Dock (visible solo en móvil) ────────────────── */
@@ -1615,10 +1616,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="mobile-grid-nuevo">
       <div class="mobile-grid-nuevo-title">Crear nuevo</div>
       <div class="mobile-grid-nuevo-btns">
-        <button class="mgn-btn" data-mgn="nuevo-lead" onclick="closeMobileGrid();switchTab('nuevo-lead')">👤 Lead / Cliente</button>
-        <button class="mgn-btn" data-mgn="nueva-cot" onclick="closeMobileGrid();switchTab('nueva-cot')">📋 Cotización</button>
-        <button class="mgn-btn" data-mgn="nueva-venta" onclick="closeMobileGrid();irANuevaVenta()">💰 Venta</button>
-        <button class="mgn-btn" data-mgn="nuevo-proveedor" onclick="closeMobileGrid();switchTab('nuevo-proveedor')">🏭 Proveedor</button>
+        <button class="mgn-btn" data-mgn="nuevo-lead" onclick="closeMobileGrid();switchTab('nuevo-lead')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-user-plus"/></svg> Lead / Cliente</button>
+        <button class="mgn-btn" data-mgn="nueva-cot" onclick="closeMobileGrid();switchTab('nueva-cot')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Cotización</button>
+        <button class="mgn-btn" data-mgn="nueva-venta" onclick="closeMobileGrid();irANuevaVenta()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trending"/></svg> Venta</button>
+        <button class="mgn-btn" data-mgn="nuevo-proveedor" onclick="closeMobileGrid();switchTab('nuevo-proveedor')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-proveedores"/></svg> Proveedor</button>
       </div>
     </div>
   </div>
@@ -1627,7 +1628,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div class="main">
 <!-- OVERVIEW -->
 <div class="tab-panel active" id="tab-overview">
-  <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue">🎯 Meta</button></div></div>
+  <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Meta</button></div></div>
   <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana</div><div class="kpi-skeleton"></div></div>
     <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-skeleton"></div></div>
@@ -1724,9 +1725,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="padding:8px 16px 12px">
         <div style="font-size:10px;color:var(--text3);margin-bottom:10px;font-style:italic" id="ov-web-status">Abre la sección Web y haz clic en Actualizar para ver datos SEO</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <a href="https://search.google.com/search-console" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()">🔍 Search Console</a>
-          <a href="https://ads.google.com" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()">📢 Google Ads</a>
-          <a href="https://thelab.solutions/wp-admin" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()">⚙ WP Admin</a>
+          <a href="https://search.google.com/search-console" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Search Console</a>
+          <a href="https://ads.google.com" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-megaphone"/></svg> Google Ads</a>
+          <a href="https://thelab.solutions/wp-admin" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> WP Admin</a>
         </div>
       </div>
     </div>
@@ -1782,7 +1783,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <option>Lead nuevo</option><option>Contactado</option><option>Propuesta enviada</option><option>Negociación</option><option>Cliente activo</option><option>Cliente inactivo</option><option>Perdido</option>
           </select>
           <button id="bulkApplyBtn" class="btn btn-sm" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.3);color:var(--accent)" onclick="bulkChangeEtapa()">✓ Aplicar etapa</button>
-          <button id="bulkDelBtn" class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="deleteSelectedClientes()">🗑 Eliminar</button>
+          <button id="bulkDelBtn" class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="deleteSelectedClientes()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
           <button class="btn btn-ghost btn-sm" onclick="clearSelection()">✕ Cancelar</button>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('clientes')">⬇ CSV</button>
@@ -1816,8 +1817,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="card-header">
       <span class="card-title" id="cotTableTitle">Todas las Cotizaciones</span>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" onclick="openIAConfigModal()" title="Configurar API keys para generación IA">🔑 Config IA</button>
-        <button class="btn btn-primary btn-sm" onclick="switchTab('nueva-cot')">📝 Nueva Cot.</button>
+        <button class="btn btn-ghost btn-sm" onclick="openIAConfigModal()" title="Configurar API keys para generación IA"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Config IA</button>
+        <button class="btn btn-primary btn-sm" onclick="switchTab('nueva-cot')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> Nueva Cot.</button>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('cotizaciones')">⬇ CSV</button>
       </div>
     </div>
@@ -1843,7 +1844,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="section-header"><div><div class="section-title">Pedidos en Producción</div><div class="section-desc">Seguimiento completo de cada orden: estado de producción, fecha de entrega comprometida, control de calidad (QA) y equipo responsable.</div></div></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
-    <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)">⚠ Atrasados</button>
+    <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Atrasados</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Confirmado',this)">Confirmados</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('En producción',this)">En Prod.</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Listo para despacho',this)">Listos</button>
@@ -1855,7 +1856,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <option>Confirmado</option><option>En producción</option><option>Listo para despacho</option><option>Despachado</option><option>Cancelado</option>
       </select>
       <button class="btn btn-sm" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.3);color:var(--accent)" onclick="bulkEditPedidoEstado()">✓ Aplicar estado</button>
-      <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeletePedidos()">🗑 Eliminar</button>
+      <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeletePedidos()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
       <button class="btn btn-ghost btn-sm" onclick="clearPedidosSelection()">✕ Cancelar</button>
     </div>
     <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')" style="margin-left:auto">⬇ CSV</button>
@@ -1878,7 +1879,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div id="editPedidoModal" class="modal-overlay" style="display:none">
     <div class="modal-backdrop" onclick="closeEditPedidoModal()"></div>
     <div class="modal-card">
-      <div class="modal-title">✏️ Editar Pedido</div>
+      <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar Pedido</div>
       <input type="hidden" id="editPedidoId">
       <div class="form-grid" style="padding:10px 0 0">
         <div class="field-group"><label class="field-label">Estado</label>
@@ -1911,7 +1912,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div id="abonoModal" class="modal-overlay" style="display:none">
     <div class="modal-backdrop" onclick="closeAbonoModal()"></div>
     <div class="modal-card" style="max-width:360px;width:95%">
-      <div class="modal-title">💰 Registrar Abono</div>
+      <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-dollar"/></svg> Registrar Abono</div>
       <input type="hidden" id="abonoModalPedidoId">
       <p id="abonoModalInfo" style="font-size:12px;color:var(--text2);margin-bottom:14px">—</p>
       <div class="field-group">
@@ -1930,7 +1931,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="modal-backdrop" onclick="closeDTEModal()"></div>
     <div class="modal-card" style="max-width:540px;width:95%">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div class="modal-title">📄 Emitir DTE — SII Chile</div>
+        <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-file"/></svg> Emitir DTE — SII Chile</div>
         <button onclick="closeDTEModal()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button>
       </div>
       <input type="hidden" id="dtePedidoId">
@@ -1987,9 +1988,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="openSIIConfigModal()" style="margin-right:auto;font-size:10px;opacity:0.75">⚙ Worker SII</button>
+        <button class="btn btn-ghost btn-sm" onclick="openSIIConfigModal()" style="margin-right:auto;font-size:10px;opacity:0.75"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Worker SII</button>
         <button class="btn btn-ghost btn-sm" onclick="closeDTEModal()">Cancelar</button>
-        <button class="btn btn-primary btn-sm" onclick="emitirDTE()" id="dteSubmitBtn">📤 Emitir DTE</button>
+        <button class="btn btn-primary btn-sm" onclick="emitirDTE()" id="dteSubmitBtn"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> Emitir DTE</button>
       </div>
     </div>
   </div>
@@ -1999,7 +2000,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div id="qaModal" class="modal-overlay" style="display:none">
     <div class="modal-backdrop" onclick="closeQAModal()"></div>
     <div class="modal-card">
-      <div class="modal-title">✅ Checklist QA</div>
+      <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg> Checklist QA</div>
       <input type="hidden" id="qaModalPedidoId">
       <div style="font-size:11px;color:var(--text2);margin-bottom:14px" id="qaModalPedidoNum"></div>
       <div id="qaChecklist" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
@@ -2027,7 +2028,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="fichaModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeFichaModal()">
   <div class="modal-box" style="max-width:560px;width:95%">
     <div class="modal-header">
-      <span class="modal-title">📋 Ficha Técnica</span>
+      <span class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Ficha Técnica</span>
       <button class="modal-close" onclick="closeFichaModal()">✕</button>
     </div>
     <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -2098,7 +2099,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeFichaModal()">Cancelar</button>
       <button class="btn btn-ghost" onclick="saveFichaModal(false)">💾 Guardar</button>
-      <button class="btn btn-primary" onclick="saveFichaModal(true)">📄 Guardar y ver PDF</button>
+      <button class="btn btn-primary" onclick="saveFichaModal(true)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> Guardar y ver PDF</button>
     </div>
   </div>
 </div>
@@ -2115,7 +2116,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <select class="field-select" id="proveedorCatFilter" style="font-size:11px;padding:5px 8px;width:auto" onchange="filterProveedores()">
           <option value="">Todas las categorías</option>
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="openCatManager()" title="Gestionar categorías de proveedores">⚙ Categorías</button>
+        <button class="btn btn-ghost btn-sm" onclick="openCatManager()" title="Gestionar categorías de proveedores"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Categorías</button>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('proveedores')">⬇ CSV</button>
         <div id="proveedoresBulkBar" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
           <span id="proveedoresBulkCount" style="font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace"></span>
@@ -2124,7 +2125,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <option>Activo</option><option>En evaluación</option><option>Inactivo</option><option>Bloqueado</option>
           </select>
           <button class="btn btn-sm" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.3);color:var(--accent)" onclick="bulkEditProveedorEstado()">✓ Aplicar</button>
-          <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeleteProveedores()">🗑 Eliminar</button>
+          <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeleteProveedores()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
           <button class="btn btn-ghost btn-sm" onclick="clearProveedoresSelection()">✕ Cancelar</button>
         </div>
       </div>
@@ -2208,7 +2209,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <button onclick="ssQuick('Cajas de cartón para packaging personalizado','Packaging / Embalaje','pvss')" class="btn-mini">Packaging</button>
           <button onclick="ssQuick('Acrílico transparente 3mm en plancha','Otro','pvss')" class="btn-mini">Acrílico</button>
         </div>
-        <button class="btn btn-primary" id="pvssSearchBtn" onclick="runSupplierSearch('pvss')" style="background:var(--accent2)">🔍 Buscar Proveedores</button>
+        <button class="btn btn-primary" id="pvssSearchBtn" onclick="runSupplierSearch('pvss')" style="background:var(--accent2)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Buscar Proveedores</button>
       </div>
       <div id="pvssResults" style="padding:14px 16px"></div>
     </div>
@@ -2273,7 +2274,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="clearForm('lead')">Limpiar</button>
-      <button class="btn btn-ghost" id="leadAgentBtn" onclick="runLeadAgent()" style="color:var(--accent2);border-color:rgba(255,107,53,0.4)">🤖 Analizar con IA</button>
+      <button class="btn btn-ghost" id="leadAgentBtn" onclick="runLeadAgent()" style="color:var(--accent2);border-color:rgba(255,107,53,0.4)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Analizar con IA</button>
       <button class="btn btn-primary" id="createLeadBtn" onclick="createLead()">✚ Crear en Airtable</button>
     </div>
   </div>
@@ -2345,12 +2346,12 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             </div>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" onclick="addItemRow()">+ Agregar ítem</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="c3d-toggle-btn" onclick="toggleC3dInline()" style="border-color:rgba(0,212,204,0.4);color:var(--accent)">🖨️ Calculadora 3D</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="c3d-toggle-btn" onclick="toggleC3dInline()" style="border-color:rgba(0,212,204,0.4);color:var(--accent)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Calculadora 3D</button>
           <input type="hidden" id="cot-detalle">
           <!-- CALCULADORA 3D INLINE -->
           <div id="c3d-inline-panel" style="display:none;margin-top:10px;border:1px solid rgba(0,212,204,0.35);border-radius:10px;overflow:hidden;background:var(--surface2)">
             <div style="background:rgba(0,212,204,0.08);padding:10px 14px;border-bottom:1px solid rgba(0,212,204,0.2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-              <span style="font-weight:700;font-size:13px;color:var(--accent)">🖨️ Calculadora Impresión 3D</span>
+              <span style="font-weight:700;font-size:13px;color:var(--accent)"><svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Calculadora Impresión 3D</span>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                 <label style="font-size:11px;color:var(--text3);margin:0">Margen</label>
                 <span id="c3d-i-margen-lbl" style="font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent);min-width:38px;text-align:right">65%</span>
@@ -2373,7 +2374,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       </div>
       <div class="form-actions">
         <button class="btn btn-ghost" onclick="clearForm('cot')">Limpiar</button>
-        <button class="btn btn-ghost btn-sm" onclick="crearCamposItemsAirtable()" style="font-size:10px;border-color:rgba(167,139,250,0.4);color:var(--accent4)">⚙ Crear campos</button>
+        <button class="btn btn-ghost btn-sm" onclick="crearCamposItemsAirtable()" style="font-size:10px;border-color:rgba(167,139,250,0.4);color:var(--accent4)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Crear campos</button>
         <button class="btn btn-primary" id="createCotBtn" onclick="createCotizacion()">✚ Guardar Cotización</button>
       </div>
     </div>
@@ -2442,7 +2443,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button onclick="ssQuick('Cajas de cartón para packaging personalizado','Packaging / Embalaje')" class="btn-mini">Packaging</button>
         <button onclick="ssQuick('Acrílico transparente 3mm en plancha, A3','Otro')" class="btn-mini">Acrílico</button>
       </div>
-      <button class="btn btn-primary" id="ssSearchBtn" onclick="runSupplierSearch()" style="background:var(--accent2);color:#fff">🔍 Buscar Proveedores</button>
+      <button class="btn btn-primary" id="ssSearchBtn" onclick="runSupplierSearch()" style="background:var(--accent2);color:#fff"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Buscar Proveedores</button>
     </div>
     <div id="ssResults" style="padding:14px 16px"></div>
   </div>
@@ -2454,7 +2455,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div class="tab-panel" id="tab-maquinas">
   <div class="section-header">
     <div><div class="section-title">Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div><div class="section-desc">Monitorea en tiempo real el estado de cada impresora 3D: disponible, imprimiendo o en mantención. Gestiona colas de trabajo y recibe alertas de fallos automáticamente.</div></div>
-    <button class="btn btn-ghost btn-sm" onclick="openMaquinasManager()" style="font-size:11px">⚙ Gestionar máquinas</button>
+    <button class="btn btn-ghost btn-sm" onclick="openMaquinasManager()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Gestionar máquinas</button>
   </div>
 
   <!-- ── MONITOR EN VIVO ── -->
@@ -2466,8 +2467,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:11px">Actualizar</button>
         <button id="btnSort" class="btn btn-ghost btn-sm" onclick="toggleSort()" style="font-size:11px" title="Ordenar por estado">↕ Estado</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleKiosk()" style="font-size:11px" title="Modo pantalla completa">⛶ Kiosko</button>
-        <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:11px" title="Configurar alertas">⚙ Alertas</button>
-        <button id="btnLocalMode" class="btn btn-ghost btn-sm" onclick="toggleLocalMode()" style="font-size:11px">🌐 Remoto</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:11px" title="Configurar alertas"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-bell"/></svg> Alertas</button>
+        <button id="btnLocalMode" class="btn btn-ghost btn-sm" onclick="toggleLocalMode()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Remoto</button>
         <button class="btn btn-ghost btn-sm" onclick="openOrcaConfigModal()" style="font-size:11px" title="Configurar OrcaSlicer">🦙 OrcaSlicer</button>
       </div>
     </div>
@@ -2493,9 +2494,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <!-- ── MANTENIMIENTO PREVENTIVO ── -->
   <div id="maquinaMaintView" class="maquina-section" style="margin-top:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🔧 Mantenimiento preventivo</span>
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mantenimiento preventivo</span>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="openMaintConfig()" style="font-size:11px">⚙ Configurar umbrales</button>
+        <button class="btn btn-ghost btn-sm" onclick="openMaintConfig()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar umbrales</button>
         <button class="btn btn-ghost btn-sm" onclick="renderMaintenanceTable()" style="font-size:11px">↻ Actualizar</button>
       </div>
     </div>
@@ -2504,7 +2505,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
   <!-- ── ANALÍTICA ── -->
   <div id="maquinaAnalyticsView" class="maquina-section" style="margin-top:28px">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:14px">📊 Analítica de producción</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:14px"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chart"/></svg> Analítica de producción</div>
     <div id="analyticsContent"></div>
   </div>
 </div>
@@ -2512,7 +2513,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="maquinaEventModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeMaquinaModal()"></div>
   <div class="modal-card">
-    <div class="modal-title" id="maquinaModalTitle">📅 Evento</div>
+    <div class="modal-title" id="maquinaModalTitle"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-calendar"/></svg> Evento</div>
     <input type="hidden" id="maquinaModalId"><input type="hidden" id="maquinaModalDate">
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
       <div class="field-group"><label class="field-label">Tipo</label><select class="field-select" id="maquinaModalTipo" onchange="onMaquinaModalTipoChange()"><option value="uso">🟠 En uso</option><option value="mantencion">🔴 Mantención</option><option value="disponible">🟢 Disponible</option></select></div>
@@ -2551,7 +2552,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="btn btn-ghost btn-sm" onclick="goEquipoToday()">Hoy</button>
     <div style="margin-left:auto;display:flex;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="toggleGcalEquipoConfig()">📅 Config</button>
-      <button class="btn btn-ghost btn-sm" id="gcalEquipoSyncBtn" onclick="syncGcalEquipo()" style="display:none">🔄 Sync</button>
+      <button class="btn btn-ghost btn-sm" id="gcalEquipoSyncBtn" onclick="syncGcalEquipo()" style="display:none"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-refresh"/></svg> Sync</button>
     </div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px" id="equipoResumenHoy"></div>
@@ -2562,7 +2563,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="equipoEventModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeEquipoModal()"></div>
   <div class="modal-card">
-    <div class="modal-title" id="equipoModalTitle">📅 Evento</div>
+    <div class="modal-title" id="equipoModalTitle"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-calendar"/></svg> Evento</div>
     <input type="hidden" id="equipoModalPersonaId"><input type="hidden" id="equipoModalDate">
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
       <div class="field-group"><label class="field-label">Tipo</label><select class="field-select" id="equipoModalTipo" onchange="onEquipoModalTipoChange()"><option value="disponible">🟢 Disponible</option><option value="ocupado">🟠 Ocupado</option><option value="vacaciones">🟣 Vacaciones</option><option value="ausente">🔴 Ausente</option><option value="remoto">🔵 Remoto</option><option value="reunion">🟡 Reunión</option></select></div>
@@ -2581,7 +2582,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="editCotModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeEditCot()"></div>
   <div class="modal-card wide">
-    <div class="modal-title">✏️ Editar Cotización</div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar Cotización</div>
     <input type="hidden" id="editCotId">
     <div class="form-grid" style="padding:12px 0 0">
       <div class="field-group form-full"><label class="field-label">Cliente</label>
@@ -2639,10 +2640,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="cdInfoGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">📞 Contacto</div><div id="cdContacto" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">🏢 Empresa</div><div id="cdEmpresa" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">💰 Financiero</div><div id="cdFinanciero" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">📊 CRM</div><div id="cdCRM" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-finanzas"/></svg> Financiero</div><div id="cdFinanciero" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> CRM</div><div id="cdCRM" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
     </div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:8px">📝 Notas</div><div id="cdNotas" style="font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap"></div></div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:8px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> Notas</div><div id="cdNotas" style="font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap"></div></div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">🕐 Historial</div>
@@ -2657,11 +2658,11 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
       <div id="cdFacturasHeader" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:6px">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">🧾 Facturas emitidas</div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> Facturas emitidas</div>
           <button onclick="configurarSiiUrl()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:1px 4px;border-radius:4px" title="Configurar URL servidor SII">⚙</button>
         </div>
         <div style="display:flex;gap:4px">
-          <button class="btn btn-ghost btn-sm" onclick="actualizarTodosEstadosSII()" style="font-size:10px;padding:4px 8px" title="Consultar estado SII de todas las facturas pendientes">🔄 SII</button>
+          <button class="btn btn-ghost btn-sm" onclick="actualizarTodosEstadosSII()" style="font-size:10px;padding:4px 8px" title="Consultar estado SII de todas las facturas pendientes"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-refresh"/></svg> SII</button>
           <button class="btn btn-ghost btn-sm" onclick="exportarFacturasCSV()" style="font-size:10px;padding:4px 8px" title="Exportar a CSV">⬇ CSV</button>
           <button class="btn btn-ghost btn-sm" onclick="abrirImportarDtes()" style="font-size:10px;padding:4px 8px" title="Importar DTEs del servidor SII">⬆ DTE</button>
           <button class="btn btn-ghost btn-sm" id="cdAddFacturaBtn" style="font-size:10px;padding:4px 8px">➕ Nueva</button>
@@ -2670,8 +2671,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div id="cdFacturas" style="font-size:12px"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap">
-      <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" id="cdEliminarBtn">🗑 Eliminar</button>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="closeClienteDetalle()">Cerrar</button><button class="btn btn-ghost btn-sm" id="cdEditarBtn">✏️ Editar</button><button class="btn btn-primary btn-sm" id="cdCotizarBtn">+ Nueva Cotización</button></div>
+      <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" id="cdEliminarBtn"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="closeClienteDetalle()">Cerrar</button><button class="btn btn-ghost btn-sm" id="cdEditarBtn"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar</button><button class="btn btn-primary btn-sm" id="cdCotizarBtn">+ Nueva Cotización</button></div>
     </div>
   </div>
 </div>
@@ -2679,7 +2680,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="editClienteModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeEditCliente()"></div>
   <div class="modal-card wide">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="modal-title">✏️ Editar Cliente</div><button onclick="closeEditCliente()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar Cliente</div><button onclick="closeEditCliente()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>
     <input type="hidden" id="ecId">
     <div class="form-grid" style="padding:0">
       <div class="field-group"><label class="field-label">Empresa *</label><input class="field-input" id="ecEmpresa"></div>
@@ -2709,7 +2710,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="facturaModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeFacturaModal()"></div>
   <div class="modal-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="modal-title">🧾 Registrar Factura</div><button onclick="closeFacturaModal()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-invoice"/></svg> Registrar Factura</div><button onclick="closeFacturaModal()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>
     <p class="modal-desc" id="facClienteLabel" style="margin-bottom:12px">—</p>
     <input type="hidden" id="facId">
     <input type="hidden" id="facClienteId">
@@ -2746,7 +2747,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="editProveedorModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeEditProveedor()"></div>
   <div class="modal-card wide">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="modal-title">✏️ Editar Proveedor</div><button onclick="closeEditProveedor()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar Proveedor</div><button onclick="closeEditProveedor()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>
     <input type="hidden" id="epId">
     <div class="form-grid" style="padding:0">
       <div class="field-group"><label class="field-label">Nombre / Empresa *</label><input class="field-input" id="epNombre"></div>
@@ -2768,7 +2769,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group form-full"><label class="field-label">Notas internas</label><textarea class="field-textarea" id="epNotas" rows="2"></textarea></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:16px">
-      <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="deleteProveedor(document.getElementById('epId').value,document.getElementById('epNombre').value)">🗑 Eliminar</button>
+      <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="deleteProveedor(document.getElementById('epId').value,document.getElementById('epNombre').value)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
       <div style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm" onclick="closeEditProveedor()">Cancelar</button><button class="btn btn-primary btn-sm" id="epGuardarBtn" onclick="saveEditProveedor()">💾 Guardar cambios</button></div>
     </div>
   </div>
@@ -2776,7 +2777,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <div id="tokenModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeTokenModal()"></div>
-  <div class="modal-card"><div class="modal-title">🔑 Configurar Airtable</div><p class="modal-desc">Pega tu Personal Access Token de Airtable. Necesita scopes: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:read</code> + <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:write</code></p><input class="field-input" id="modalTokenInput" type="password" placeholder="patXXXXXXX..." style="margin-top:12px"><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeTokenModal()">Cancelar</button><button class="btn btn-ghost btn-sm" id="testWriteBtn" onclick="testAirtableWrite()">🔍 Probar escritura</button><button class="btn btn-primary btn-sm" onclick="saveToken()">Guardar y Conectar</button></div></div>
+  <div class="modal-card"><div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-key"/></svg> Configurar Airtable</div><p class="modal-desc">Pega tu Personal Access Token de Airtable. Necesita scopes: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:read</code> + <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:write</code></p><input class="field-input" id="modalTokenInput" type="password" placeholder="patXXXXXXX..." style="margin-top:12px"><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeTokenModal()">Cancelar</button><button class="btn btn-ghost btn-sm" id="testWriteBtn" onclick="testAirtableWrite()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Probar escritura</button><button class="btn btn-primary btn-sm" onclick="saveToken()">Guardar y Conectar</button></div></div>
 </div>
 
 <!-- REPORTES -->
@@ -2792,7 +2793,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <div class="field-group"><label class="field-label">Cotizaciones enviadas / aprobadas</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><input class="field-input" id="rep-cot-env" type="number" placeholder="enviadas"><input class="field-input" id="rep-cot-apr" type="number" placeholder="aprobadas"></div></div>
         <div class="field-group"><label class="field-label">Pedidos activos / despachados esta sem.</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><input class="field-input" id="rep-ped-act" type="number" placeholder="activos"><input class="field-input" id="rep-ped-des" type="number" placeholder="despachados"></div></div>
         <div class="field-group"><label class="field-label">Notas adicionales</label><textarea class="field-textarea" id="rep-notas" rows="2"></textarea></div>
-        <button class="btn btn-primary" onclick="crearReporte()" id="createReporteBtn">📊 Generar y Guardar</button>
+        <button class="btn btn-primary" onclick="crearReporte()" id="createReporteBtn"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar y Guardar</button>
       </div>
       <div style="padding:0 16px 16px"><div class="ai-response empty" id="reporteOutput">CEO_AGENT generará el resumen...</div></div>
     </div>
@@ -2805,7 +2806,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="section-header">
     <div><div class="section-title">Web · thelab.solutions</div><div class="section-desc">Gestiona el SEO de tu sitio web: optimiza títulos, meta descriptions y campañas de Google Ads. Usa IA para mejorar el posicionamiento en Google.</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="toggleWPConfig()">⚙ Configurar WP</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleWPConfig()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar WP</button>
       <button class="btn btn-ghost btn-sm" onclick="openSEODiag()">🔬 Diagnóstico SEO</button>
       <button class="btn btn-primary btn-sm" onclick="loadWPPages()">↺ Actualizar</button>
     </div>
@@ -2827,7 +2828,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <option value="30" selected>Últimos 30 días</option>
           <option value="90">Últimos 90 días</option>
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="toggleAdsConfig()">⚙ Configurar</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleAdsConfig()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar</button>
         <button class="btn btn-ghost btn-sm" onclick="openCreateCampaign()" id="btnNuevaCampana">+ Nueva Campaña</button>
         <button class="btn btn-primary btn-sm" onclick="loadAdsData()">↺ Actualizar</button>
         <span id="adsLastSyncLabel" style="font-size:10px;color:var(--text3);white-space:nowrap;align-self:center;padding-left:2px"></span>
@@ -2836,9 +2837,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
     <!-- Quick links -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-      <a href="https://ads.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:15px">📢</span>Google Ads</a>
-      <a href="https://ads.google.com/aw/keywordplanner/home" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:15px">🔑</span>Keyword Planner</a>
-      <a href="https://lookerstudio.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:15px">📊</span>Looker Studio</a>
+      <a href="https://ads.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-megaphone"/></svg>Google Ads</a>
+      <a href="https://ads.google.com/aw/keywordplanner/home" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-key"/></svg>Keyword Planner</a>
+      <a href="https://lookerstudio.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-chart"/></svg>Looker Studio</a>
     </div>
 
     <!-- Config panel (colapsable) -->
@@ -2857,8 +2858,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </div>
         <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" onclick="saveAdsConfig()">💾 Guardar</button>
-          <button class="btn btn-ghost btn-sm" onclick="testAdsEndpoint()">🔗 Probar URL</button>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('adsScriptBox').style.display=document.getElementById('adsScriptBox').style.display==='none'?'block':'none'">📋 Ver Apps Script</button>
+          <button class="btn btn-ghost btn-sm" onclick="testAdsEndpoint()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-link"/></svg> Probar URL</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('adsScriptBox').style.display=document.getElementById('adsScriptBox').style.display==='none'?'block':'none'"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Ver Apps Script</button>
         </div>
         <!-- Apps Script instructions -->
         <div id="adsScriptBox" style="display:none;padding:0 16px 16px">
@@ -2927,7 +2928,7 @@ function json(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }</pre>
-              <button onclick="copyAdsScript('adsScriptCode')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
+              <button onclick="copyAdsScript('adsScriptCode')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-copy"/></svg> Copiar</button>
             </div>
             <div style="margin-top:12px;position:relative">
               <div style="font-size:10px;font-weight:600;color:#e6edf3;margin-bottom:6px">Script 2 — Google Ads Script (ads.google.com → Herramientas → Scripts)</div>
@@ -3127,7 +3128,7 @@ function _reportarResultados(muts) {
     Logger.log('Resultado: ' + ok + ' aplicadas, ' + err + ' errores');
   } catch(e) { Logger.log('Error reportando resultados: ' + e.message); }
 }</pre>
-              <button onclick="copyAdsScript('adsScriptCode2')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
+              <button onclick="copyAdsScript('adsScriptCode2')" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-copy"/></svg> Copiar</button>
             </div>
           </div>
         </div>
@@ -3204,7 +3205,7 @@ function _reportarResultados(muts) {
           <span id="adsPendingBadge" style="font-size:10px;background:rgba(255,193,7,0.12);color:#ffc107;border:1px solid rgba(255,193,7,0.3);border-radius:4px;padding:2px 7px">0</span>
           <button onclick="retryAllErrors()" id="adsRetryAllBtn" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px;color:var(--danger);display:none" title="Reintentar todas las mutaciones con error">↻ Reintentar errores</button>
           <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
-          <button onclick="adsDiagnostico()" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--warn)" title="Diagnóstico completo del pipeline de mutaciones">🔍 Diagnosticar</button>
+          <button onclick="adsDiagnostico()" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--warn)" title="Diagnóstico completo del pipeline de mutaciones"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Diagnosticar</button>
         </div>
         <div id="adsDiagOutput" style="display:none;padding:10px 16px;background:var(--surface3);border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace"></div>
         <div id="adsPendingList" style="padding:12px 16px;display:flex;flex-direction:column;gap:6px"></div>
@@ -3224,9 +3225,9 @@ function _reportarResultados(muts) {
   <!-- Accesos rápidos -->
   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
     <a href="https://search.google.com/search-console" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">🔍</span>Search Console</a>
-    <a href="https://analytics.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">📊</span>Google Analytics</a>
+    <a href="https://analytics.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-chart"/></svg>Google Analytics</a>
     <a href="https://thelab.solutions/wp-admin" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">⚙️</span>WordPress Admin</a>
-    <a href="https://thelab.solutions" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">🌐</span>Ver sitio</a>
+    <a href="https://thelab.solutions" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-web"/></svg>Ver sitio</a>
   </div>
 
   <!-- KPIs -->
@@ -3257,7 +3258,7 @@ function _reportarResultados(muts) {
     </div>
     <div class="card" id="phpSnippetCard" style="display:none">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
-        <span class="card-title">⚠ Requerido: activar escritura SEO en WordPress</span>
+        <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Requerido: activar escritura SEO en WordPress</span>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('phpSnippetCard').style.display='none'">✕</button>
       </div>
       <div style="padding:12px 16px">
@@ -3279,7 +3280,7 @@ function _reportarResultados(muts) {
         ] );
     }
 } );</pre>
-          <button onclick="copyPhpSnippet()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.08)">📋 Copiar</button>
+          <button onclick="copyPhpSnippet()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.08)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-copy"/></svg> Copiar</button>
         </div>
         <p style="font-size:11px;color:var(--text3);margin-top:8px">Después de agregar el código, haz clic en "Verificar guardado SEO" para confirmar que funciona.</p>
       </div>
@@ -3296,7 +3297,7 @@ function _reportarResultados(muts) {
 <!-- ══════════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="tab-finanzas">
   <div class="section-header">
-    <div><div class="section-title">💰 Finanzas</div><div class="section-desc">Control financiero completo: ventas anuales, facturas emitidas, cuentas por cobrar, préstamos activos y libro diario de ingresos y gastos.</div></div>
+    <div><div class="section-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-finanzas"/></svg> Finanzas</div><div class="section-desc">Control financiero completo: ventas anuales, facturas emitidas, cuentas por cobrar, préstamos activos y libro diario de ingresos y gastos.</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <span class="section-subtitle" id="finActualizadoEn">—</span>
       <button class="btn btn-ghost btn-sm" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
@@ -3358,15 +3359,15 @@ function _reportarResultados(muts) {
 
   <!-- Sub-navegación interna -->
   <div id="fin-subnav" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
-    <button class="btn btn-ghost btn-sm active-filter" id="fin-nav-resumen" onclick="finSwitchTab('resumen')">📊 Resumen</button>
-    <button class="btn btn-ghost btn-sm" id="fin-nav-facturas" onclick="finSwitchTab('facturas')">📄 Facturas</button>
-    <button class="btn btn-ghost btn-sm" id="fin-nav-cobrar" onclick="finSwitchTab('cobrar')">💸 Por Cobrar</button>
+    <button class="btn btn-ghost btn-sm active-filter" id="fin-nav-resumen" onclick="finSwitchTab('resumen')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Resumen</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-facturas" onclick="finSwitchTab('facturas')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> Facturas</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-cobrar" onclick="finSwitchTab('cobrar')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> Por Cobrar</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-prestamos" onclick="finSwitchTab('prestamos')">🏦 Préstamos</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-deudas" onclick="finSwitchTab('deudas')">⚠️ Deudas</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-nueva" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
-    <button class="btn btn-ghost btn-sm" id="fin-nav-diario" onclick="finSwitchTab('diario')">📒 Libro Diario</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-diario" onclick="finSwitchTab('diario')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-book"/></svg> Libro Diario</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-aging" onclick="finSwitchTab('aging')">⏰ Antigüedad</button>
-    <button class="btn btn-ghost btn-sm" id="fin-nav-presupuesto" onclick="finSwitchTab('presupuesto')">🎯 Presupuesto</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-presupuesto" onclick="finSwitchTab('presupuesto')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Presupuesto</button>
   </div>
 
   <!-- ── RESUMEN ── -->
@@ -3501,7 +3502,7 @@ function _reportarResultados(muts) {
           </select>
           <input class="field-input" id="fin-filtro-buscar" placeholder="Buscar cliente / ítem..." style="width:180px;padding:4px 10px;font-size:11px" oninput="finRenderFacturas()">
           <span id="fin-fact-count" style="font-size:11px;color:var(--text3);white-space:nowrap"></span>
-          <button class="btn btn-ghost btn-sm" onclick="exportarLibroVentas()" style="font-size:10px;padding:4px 8px;white-space:nowrap" title="Exportar Libro de Ventas DTE en formato CSV">📋 Libro Ventas</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportarLibroVentas()" style="font-size:10px;padding:4px 8px;white-space:nowrap" title="Exportar Libro de Ventas DTE en formato CSV"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> Libro Ventas</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -3823,7 +3824,7 @@ function _reportarResultados(muts) {
 
     <!-- Ventas ingresadas manualmente -->
     <div class="card" style="margin-top:20px" id="fin-nueva-lista-card">
-      <div class="card-header"><span class="card-title">Ventas Ingresadas Manualmente</span><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="nvLimpiarTodas()">🗑 Borrar todas</button></div>
+      <div class="card-header"><span class="card-title">Ventas Ingresadas Manualmente</span><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="nvLimpiarTodas()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Borrar todas</button></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Mes/Año</th><th>Nombre</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Canal</th><th>Acción</th></tr></thead>
@@ -3882,8 +3883,8 @@ function _reportarResultados(muts) {
         <div class="field-group">
           <label class="field-label">Tipo</label>
           <select class="field-select" id="ld-tipo" onchange="ldSwitchTipo()">
-            <option value="gasto">💸 Gasto</option>
-            <option value="ingreso">💰 Ingreso</option>
+            <option value="gasto">Gasto</option>
+            <option value="ingreso">Ingreso</option>
           </select>
         </div>
         <div class="field-group">
@@ -3923,7 +3924,7 @@ function _reportarResultados(muts) {
     <!-- Filtros + tabla cronológica -->
     <div class="card">
       <div class="card-header" style="flex-wrap:wrap;gap:8px">
-        <span class="card-title">📒 Registro Cronológico</span>
+        <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-book"/></svg> Registro Cronológico</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-left:auto">
           <input class="field-input" id="ld-f-desde" type="date" style="width:130px;font-size:11px;padding:4px 8px" onchange="ldFiltrar()">
           <span style="color:var(--text3);font-size:11px">→</span>
@@ -4048,7 +4049,7 @@ function _reportarResultados(muts) {
   </div>
   <div style="display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
     <button class="btn btn-ghost btn-sm active-filter" id="calc-nav-laser" onclick="calcSwitchTab('laser')">🔆 Corte Láser</button>
-    <button class="btn btn-ghost btn-sm" id="calc-nav-neon" onclick="calcSwitchTab('neon')">💡 Neon / LED</button>
+    <button class="btn btn-ghost btn-sm" id="calc-nav-neon" onclick="calcSwitchTab('neon')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-sun"/></svg> Neon / LED</button>
   </div>
 
   <!-- ── LÁSER ── -->
@@ -4070,7 +4071,7 @@ function _reportarResultados(muts) {
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><span class="card-title">🪵 Material</span></div>
+          <div class="card-header"><span class="card-title">Material</span></div>
           <div class="form-grid" style="padding:14px 16px">
             <div class="field-group"><label class="field-label">Tipo de material</label>
               <select class="field-select" id="lsr-mat" onchange="calcLaserUpdate()">
@@ -4097,7 +4098,7 @@ function _reportarResultados(muts) {
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><span class="card-title">🔧 Extras</span><button class="btn-mini btn-mini-yellow" onclick="calcLaserAddExtra()">+ Extra</button></div>
+          <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> Extras</span><button class="btn-mini btn-mini-yellow" onclick="calcLaserAddExtra()">+ Extra</button></div>
           <div id="lsr-extras" style="padding:8px 16px;display:flex;flex-direction:column;gap:6px"></div>
         </div>
       </div>
@@ -4185,7 +4186,7 @@ function _reportarResultados(muts) {
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><span class="card-title">🔧 Extras</span><button class="btn-mini btn-mini-yellow" onclick="calcNeonAddExtra()">+ Extra</button></div>
+          <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> Extras</span><button class="btn-mini btn-mini-yellow" onclick="calcNeonAddExtra()">+ Extra</button></div>
           <div id="neo-extras" style="padding:8px 16px;display:flex;flex-direction:column;gap:6px"></div>
         </div>
       </div>
@@ -4282,7 +4283,7 @@ function _reportarResultados(muts) {
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">
       <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> Sueldo Base & Liquidación</span>
-      <button class="btn btn-ghost btn-sm" onclick="remToggleSueldos()" id="remSueldoToggle">⚙ Configurar sueldos</button>
+      <button class="btn btn-ghost btn-sm" onclick="remToggleSueldos()" id="remSueldoToggle"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar sueldos</button>
     </div>
     <div id="remSueldoPanel" style="display:none;padding:14px 16px">
       <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Sueldo base mensual (CLP) por integrante. Se guarda localmente.</div>
@@ -4377,7 +4378,7 @@ function _reportarResultados(muts) {
         ] );
     }
 } );</pre>
-            <button onclick="copySEODiagSnippet()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)">📋 Copiar</button>
+            <button onclick="copySEODiagSnippet()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.1)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-copy"/></svg> Copiar</button>
           </div>
           <p style="font-size:10px;color:var(--text3);margin:8px 0 0">Tras guardar el archivo, vuelve a hacer clic en <strong>"Diagnóstico SEO"</strong> para verificar.</p>
         </div>
@@ -4400,8 +4401,8 @@ function _reportarResultados(muts) {
     </div>
     <div id="globalSearchResults" style="max-height:430px;overflow-y:auto;padding:6px 0"><div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Escribe para buscar en todo el dashboard…</div></div>
     <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:14px">
-      <span style="font-size:10px;color:var(--text3)">👤 Clientes</span>
-      <span style="font-size:10px;color:var(--text3)">📋 Cotizaciones</span>
+      <span style="font-size:10px;color:var(--text3)"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-equipo"/></svg> Clientes</span>
+      <span style="font-size:10px;color:var(--text3)"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Cotizaciones</span>
       <span style="font-size:10px;color:var(--text3)">📦 Pedidos</span>
       <kbd style="margin-left:auto;font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border2);padding:2px 7px;border-radius:4px">⌘K</kbd>
     </div>
@@ -4420,7 +4421,7 @@ function _reportarResultados(muts) {
       <div style="font-size:11px;color:var(--text3)">Guardado en Airtable — disponible en todos los dispositivos.</div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn btn-ghost btn-sm" onclick="clearRevenueMeta()">🗑 Borrar todo</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearRevenueMeta()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Borrar todo</button>
       <button class="btn btn-primary" id="metaSaveBtn" onclick="saveRevenueMeta()">✓ Guardar metas</button>
     </div>
   </div>
@@ -4440,28 +4441,28 @@ function _reportarResultados(muts) {
     </div>
     <!-- CAF Section -->
     <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
-      <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">📂 CAF — Certificados de Autorización de Folios</div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> CAF — Certificados de Autorización de Folios</div>
       <div style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.5">Sube los archivos XML que te entrega el SII para cada tipo de documento. Sin CAF no se pueden emitir documentos.</div>
       <div style="display:flex;flex-direction:column;gap:7px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span style="font-size:11px;color:var(--text2);min-width:170px">Factura Electrónica (33)</span>
           <input type="file" id="cafFile33" accept=".xml" style="display:none" onchange="uploadCAF('33',this)">
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile33').click()" style="font-size:10px">📁 Subir CAF</button>
-          <button class="btn btn-ghost btn-sm" onclick="checkFolios('33')" style="font-size:10px">📊 Folios</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile33').click()" style="font-size:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> Subir CAF</button>
+          <button class="btn btn-ghost btn-sm" onclick="checkFolios('33')" style="font-size:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Folios</button>
           <span id="cafStatus33" style="font-size:10px;color:var(--text3)">—</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span style="font-size:11px;color:var(--text2);min-width:170px">Boleta Electrónica (39)</span>
           <input type="file" id="cafFile39" accept=".xml" style="display:none" onchange="uploadCAF('39',this)">
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile39').click()" style="font-size:10px">📁 Subir CAF</button>
-          <button class="btn btn-ghost btn-sm" onclick="checkFolios('39')" style="font-size:10px">📊 Folios</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile39').click()" style="font-size:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> Subir CAF</button>
+          <button class="btn btn-ghost btn-sm" onclick="checkFolios('39')" style="font-size:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Folios</button>
           <span id="cafStatus39" style="font-size:10px;color:var(--text3)">—</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span style="font-size:11px;color:var(--text2);min-width:170px">Nota de Crédito (61)</span>
           <input type="file" id="cafFile61" accept=".xml" style="display:none" onchange="uploadCAF('61',this)">
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile61').click()" style="font-size:10px">📁 Subir CAF</button>
-          <button class="btn btn-ghost btn-sm" onclick="checkFolios('61')" style="font-size:10px">📊 Folios</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cafFile61').click()" style="font-size:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> Subir CAF</button>
+          <button class="btn btn-ghost btn-sm" onclick="checkFolios('61')" style="font-size:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Folios</button>
           <span id="cafStatus61" style="font-size:10px;color:var(--text3)">—</span>
         </div>
       </div>
@@ -4478,7 +4479,7 @@ function _reportarResultados(muts) {
 <div id="watiModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeWatiModal()"></div>
   <div class="modal-card" style="max-width:430px">
-    <div class="modal-title">💬 Configuración WATI</div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chat"/></svg> Configuración WATI</div>
     <div style="padding:0 0 16px;display:flex;flex-direction:column;gap:10px">
       <div id="watiStatusBox" style="font-size:11px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:7px 11px;line-height:1.6">Sin configurar</div>
       <div class="field-group"><label class="field-label">URL del servidor WATI</label><input class="field-input" id="watiUrlInput" placeholder="https://live-server-XXXXX.wati.io"></div>
@@ -4692,7 +4693,7 @@ function renderSupplierResults(raw,producto,prefix='ss'){
     const contrasHtml=p.contras.map(c=>`<div style="font-size:10px;color:var(--danger)">✕ ${escapeHtml(c)}</div>`).join('');
     const telOk=p.telefono&&!['—','Consultar','N/A'].includes(p.telefono.trim());
     const telBtn=telOk?`<a href="tel:${escapeHtml(p.telefono.replace(/\s/g,''))}" class="ss-btn-tel">📞 ${escapeHtml(p.telefono)}</a>`:'';
-    const webBtn=webHref?`<a href="${webHref}" target="_blank" rel="noopener" class="ss-btn-web">🌐 Visitar</a>`:'';
+    const webBtn=webHref?`<a href="${webHref}" target="_blank" rel="noopener" class="ss-btn-web"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-web"/></svg> Visitar</a>`:'';
     const addBtn=`<button onclick='addSupplierFromSearch(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="ss-btn-add">+ Agregar →</button>`;
     return`<div class="ss-card">
       <div class="ss-card-hdr">
@@ -5413,7 +5414,7 @@ function renderMaquinasManagerModal(){
       <td style="padding:6px 8px">
         <select id="mgr-estado-${m.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text)">
           <option value="disponible" ${m.estado!=='mantencion'?'selected':''}>✓ Disponible</option>
-          <option value="mantencion" ${m.estado==='mantencion'?'selected':''}>🔧 Mantención</option>
+          <option value="mantencion" ${m.estado==='mantencion'?'selected':''}>Mantención</option>
         </select>
       </td>
       <td style="padding:6px 8px;display:flex;gap:4px">
@@ -6145,7 +6146,7 @@ async function _saveNotas(t,id,arr){
 }
 function openNotasModal(type,id,label){
   _notasType=type;_notasId=id;
-  document.getElementById('notasModalTitle').textContent='📝 Notas — '+label;
+  document.getElementById('notasModalTitle').innerHTML='<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-note"/></svg> Notas — '+label;
   renderNotasList();
   document.getElementById('notasInput').value='';
   document.getElementById('notasModal').style.display='flex';
@@ -6208,10 +6209,10 @@ function buildClienteRow(c){
       <div class="act-drop">
         <button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cli-${c.id}')">⋯</button>
         <div class="act-menu" id="actmenu-cli-${c.id}">
-          <button class="act-item" onclick="openClienteDetalle('${c.id}')">👁 &nbsp;Ver detalle</button>
-          <button class="act-item act-item-yellow" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="verCotizacionesCliente('${c.id}',this.dataset.empresa)">📋 &nbsp;Ver cotizaciones</button>
+          <button class="act-item" onclick="openClienteDetalle('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver detalle</button>
+          <button class="act-item act-item-yellow" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="verCotizacionesCliente('${c.id}',this.dataset.empresa)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ver cotizaciones</button>
           <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
-          <button class="act-item" onclick="compartirPortalCliente('${c.id}')">🔗 &nbsp;Portal cliente</button>
+          <button class="act-item" onclick="compartirPortalCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-link"/></svg> &nbsp;Portal cliente</button>
         </div>
       </div>
     </td>
@@ -6388,21 +6389,21 @@ function renderClienteFacturas(clienteId,empresa){
           <strong style="color:var(--accent)">${escapeHtml(tipoNum2)}</strong>
           ${tipoNombre?`<span style="color:var(--text3);font-size:10px;font-weight:400"> ${escapeHtml(tipoNombre)}</span>`:''}
           <span class="mono" style="font-size:12px;font-weight:700"> #${escapeHtml(String(folio??'—'))}</span>
-          <button class="btn-mini" onclick="copiarFolio(${folio})" title="Copiar folio" style="font-size:9px;padding:0 3px;opacity:.7">📋</button>
+          <button class="btn-mini" onclick="copiarFolio(${folio})" title="Copiar folio" style="font-size:9px;padding:0 3px;opacity:.7"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-copy"/></svg></button>
         </td>
         <td style="padding:6px 4px;font-size:11px;color:var(--text2)">${escapeHtml(f['Fecha']||'—')}</td>
         <td style="padding:6px 4px;text-align:right;font-weight:700;font-size:13px" class="clp">${formatCLP(f['Total']||0)}</td>
         <td style="padding:6px 4px">${siiEstadoBadge(f['Estado SII'])}</td>
         <td style="padding:6px 4px">${estadoPagoBadge(f['Estado Pago'],f['Fecha'],f['Fecha Vencimiento'])}</td>
         <td style="padding:6px 4px;text-align:right;white-space:nowrap">
-          ${pdfHref?`<a href="${pdfHref}" target="_blank" class="btn-mini" title="Ver PDF">📄</a>`:''}
+          ${pdfHref?`<a href="${pdfHref}" target="_blank" class="btn-mini" title="Ver PDF"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg></a>`:''}
           ${waMsg?`<a href="https://wa.me/${clienteTel}?text=${waMsg}" target="_blank" class="btn-mini" title="Recordatorio WhatsApp" style="background:rgba(37,211,102,0.15);border-color:rgba(37,211,102,0.4);color:#25d366">📱</a>`:''}
-          ${!r._readonly&&f['Track ID']?`<button class="btn-mini" title="Consultar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}',cdCurrentEmpresa)">🔄</button>`:''}
+          ${!r._readonly&&f['Track ID']?`<button class="btn-mini" title="Consultar estado SII" onclick="consultarEstadoSII('${escapeHtml(f['Track ID'])}','${rid}',cdCurrentEmpresa)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-refresh"/></svg></button>`:''}
           ${r._readonly
             ?`<span class="badge badge-gray" style="font-size:8px" title="Registro de Finanzas (solo lectura)">FIN</span>`
             :`${f['Estado Pago']!=='Cobrada'?`<button class="btn-mini fac-btn-cobrar" title="Marcar como cobrada" onclick="marcarFacturaCobrada('${rid}',cdCurrentId,cdCurrentEmpresa)">✓</button>`:''}
-             <button class="btn-mini" title="Editar" onclick="openFacturaModal(cdCurrentId,'${rid}')">✏️</button>
-             <button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}',cdCurrentId)">🗑</button>`}
+             <button class="btn-mini" title="Editar" onclick="openFacturaModal(cdCurrentId,'${rid}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg></button>
+             <button class="btn-mini" title="Eliminar" onclick="deleteFactura('${rid}',cdCurrentId)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg></button>`}
         </td></tr>`;}).join('')}
     </tbody></table></div>`}
   <div class="fac-summary" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px">
@@ -6489,12 +6490,12 @@ function openFacturaModal(clienteId,facturaId){
     set('facTrackId',f['Track ID']||'');set('facEstado',f['Estado SII']||'');
     set('facEstadoPago',f['Estado Pago']||'Pendiente');set('facFechaVenc',f['Fecha Vencimiento']||'');
     set('facNotas',f['Notas']||'');
-    document.querySelector('#facturaModal .modal-title').textContent='🧾 Editar Factura';
+    document.querySelector('#facturaModal .modal-title').innerHTML='<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-invoice"/></svg> Editar Factura';
   }else{
     ['facId','facFolio','facNeto','facIva','facExento','facTotal','facTrackId','facEstado','facFechaVenc','facNotas'].forEach(id=>set(id,''));
     set('facTipo','33 - Factura Electrónica');set('facFecha',new Date().toISOString().slice(0,10));
     set('facEstadoPago','Pendiente');
-    document.querySelector('#facturaModal .modal-title').textContent='🧾 Registrar Factura';
+    document.querySelector('#facturaModal .modal-title').innerHTML='<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-invoice"/></svg> Registrar Factura';
   }
   document.getElementById('facturaModal').style.display='flex';
 }
@@ -6779,8 +6780,8 @@ function buildCotRow(c){
   const numCotEsc=escapeHtml(f['N° Cotización']||'');
   const cliNomEsc=escapeHtml(resolveClienteName(f['Cliente']));
   const cotNotasN=_getNotas('cot',c.id).length;
-  const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')">✅ &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')">❌ &nbsp;Rechazar cotización</button><div class="act-sep"></div>`:'';
-  const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}<button class="act-item" onclick="openEditCot('${c.id}')">✏️ &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')">👁 &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')">📄 &nbsp;Descargar PDF</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')">📋 &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')">📂 &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')">📝 &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')">🗑 &nbsp;Eliminar</button></div></div>`;
+  const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-x-circle"/></svg> &nbsp;Rechazar cotización</button><div class="act-sep"></div>`:'';
+  const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}<button class="act-item" onclick="openEditCot('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> &nbsp;Descargar PDF</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Propuesta${fpData?' ✓':''</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar</button></div></div>`;
   const vendNom=resolveVendedorName(f['Vendedor']||'');
   return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
   <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${actMenu}</div></td></tr>`;
@@ -7554,7 +7555,7 @@ function renderFPItems(){
               <label style="cursor:pointer;display:block;border:2px dashed #00c8cc;border-radius:8px;overflow:hidden;background:var(--surface)">
                 <img id="fpRaw-${idx}" src="${_fpRawImages[idx]?.dataUrl||''}" style="width:100%;height:100px;object-fit:contain;display:${_fpRawImages[idx]?'block':'none'}">
                 <div id="fpRawPh-${idx}" style="display:${_fpRawImages[idx]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100px;gap:6px;color:#0097a7">
-                  <span style="font-size:28px">📸</span>
+                  <svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-camera"/></svg>
                   <span style="font-size:9px;font-weight:700">Subir foto del producto</span>
                 </div>
                 <input type="file" accept="image/*" style="display:none" onchange="handleFPRawImage(event,${idx})">
@@ -8331,7 +8332,7 @@ function renderPedidos(filter){
     const pedDriveLink=pedDriveCotId?localStorage.getItem('fp_drive_folder_'+pedDriveCotId):localStorage.getItem('fp_drive_folder_ped_'+p.id);
     const pedNotasN=_getNotas('ped',p.id).length;
     const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item act-item-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ &nbsp;Avanzar a "${stages[idx+1]}"</button><div class="act-sep"></div>`:(estado==='Despachado'?'':'');
-    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')">✏️ &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')">🧾 ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')">🧾 &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')">📋 &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')">📂 &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')">📝 &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')">🗑 &nbsp;Eliminar pedido</button></div></div>`;
+    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -8730,7 +8731,7 @@ PASOS:
     _leadAgentResponse=raw;
     renderLeadAgentResult(raw);
   }catch(e){toast('Error IA: '+e.message,'error');}
-  btn.disabled=false;btn.textContent='🤖 Analizar con IA';
+  btn.disabled=false;btn.innerHTML='<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Analizar con IA';
 }
 function renderLeadAgentResult(raw){
   const get=(key)=>{const m=raw.match(new RegExp(`^${key}:\\s*(.+)`,'m'));return m?m[1].trim():'';};
@@ -8747,7 +8748,7 @@ function renderLeadAgentResult(raw){
     ${cal?`<div style="display:flex;align-items:flex-start;gap:10px;background:var(--surface2);border-radius:8px;padding:10px 12px"><span style="font-size:13px;font-weight:700;color:${calColor};white-space:nowrap">${escapeHtml(cal.split('—')[0].trim())}</span>${necesidad?`<span style="font-size:11px;color:var(--text2);line-height:1.4">${escapeHtml(cal.split('—').slice(1).join('—').trim())} · ${escapeHtml(necesidad)}</span>`:''}</div>`:''}
     ${wa?`<div style="background:rgba(37,211,102,0.06);border:1px solid rgba(37,211,102,0.2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#25d366;margin-bottom:6px">💬 WhatsApp</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6">${escapeHtml(wa)}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${cpBtn(wa,'Copiar mensaje')}<button id="watiSendBtn" onclick="sendLeadViaWati()" style="background:rgba(37,211,102,0.12);border:1px solid rgba(37,211,102,0.4);color:#25d366;border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer">📤 Enviar por WATI</button></div></div>`:''}
     ${emailBody?`<div style="background:rgba(129,140,248,0.06);border:1px solid rgba(129,140,248,0.2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#818cf8;margin-bottom:6px">✉ Email${asunto?` — <span style="font-weight:400;opacity:.8">${escapeHtml(asunto)}</span>`:''}</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.6">${escapeHtml(emailBody)}</div>${cpBtn(emailBody,'Copiar cuerpo')}</div>`:''}
-    ${pasos?`<div style="background:var(--surface2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:6px">📋 Próximos pasos</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.7">${escapeHtml(pasos)}</div></div>`:''}
+    ${pasos?`<div style="background:var(--surface2);border-radius:8px;padding:10px 12px"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:6px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Próximos pasos</div><div style="font-size:12px;color:var(--text);white-space:pre-line;line-height:1.7">${escapeHtml(pasos)}</div></div>`:''}
     <button onclick="document.getElementById('nl-notas').value+=(_leadAgentResponse?'\n\n--- LEAD_AGENT ---\n'+_leadAgentResponse.substring(0,1500):'')" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:6px;padding:5px 12px;font-size:10px;cursor:pointer;align-self:flex-start">↓ Añadir análisis a Notas</button>
   </div>`;
   document.getElementById('leadAgentPanel').style.display='block';
@@ -8880,7 +8881,7 @@ async function crearReporte(){
   const btn=document.getElementById('createReporteBtn');btn.disabled=true;btn.textContent='Generando...';const out=document.getElementById('reporteOutput');out.classList.remove('empty');out.textContent='⏳ CEO_AGENT procesando...';
   try{const s=document.getElementById('rep-semana').value,rev=document.getElementById('rep-revenue').value,ce=document.getElementById('rep-cot-env').value,ca=document.getElementById('rep-cot-apr').value,pa=document.getElementById('rep-ped-act').value,pd=document.getElementById('rep-ped-des').value,n=document.getElementById('rep-notas').value;const conv=parseFloat(ce)>0?parseFloat(ca)/parseFloat(ce):0;const response=await callClaude('Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES',`Semana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);out.textContent=response;const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':new Date().toISOString().split('T')[0],'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
   catch(e){toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;}
-  btn.disabled=false;btn.textContent='📊 Generar y Guardar';
+  btn.disabled=false;btn.innerHTML='<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar y Guardar';
 }
 function renderReportes(){
   const tbody=document.getElementById('reportesTableBody');
@@ -9391,7 +9392,7 @@ function showAgentCtx(id,btn){
 
 function renderAgentesGrid(){
   document.getElementById('agentesGrid').innerHTML=AGENTES_CFG.map(a=>{
-    const ctxBadge=state.loaded?`<span class="badge badge-green" style="font-size:8px;letter-spacing:0">📊 datos vivos</span>`:`<span class="badge badge-gray" style="font-size:8px">sin datos</span>`;
+    const ctxBadge=state.loaded?`<span class="badge badge-green" style="font-size:8px;letter-spacing:0"><svg class="dashboard-icon" width="10" height="10" stroke-width="1.5"><use href="#icon-chart"/></svg> datos vivos</span>`:`<span class="badge badge-gray" style="font-size:8px">sin datos</span>`;
     return`<div class="card" style="padding:0">
       <div class="card-header">
         <span class="card-title">${a.icon} ${a.label}</span>
@@ -9410,7 +9411,7 @@ function renderAgentesGrid(){
         <button class="btn btn-primary btn-sm" onclick="runAgent('${a.id}')">▶ Ejecutar</button>
       </div>
       <div style="padding:0 14px 14px">
-        <div class="ai-response-wrap"><button class="copy-btn" onclick="copyOut('out_${a.id}',this)">📋</button><div class="ai-response empty" id="out_${a.id}">Ejecuta el agente...</div></div>
+        <div class="ai-response-wrap"><button class="copy-btn" onclick="copyOut('out_${a.id}',this)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-copy"/></svg></button><div class="ai-response empty" id="out_${a.id}">Ejecuta el agente...</div></div>
       </div>
     </div>`;
   }).join('');
@@ -10158,7 +10159,7 @@ function renderMaquinasCalendar(){
       </div>
     </td></tr>`:'' ;
     const enMant=getMaquinaEstadoGlobal(m.id)==='mantencion';
-    const estadoBtn=enMant?`<button class="btn-mini btn-mini-red" onclick="toggleMaquinaEstado('${m.id}')">🔧 Mant.</button>`:`<button class="btn-mini btn-mini-green" onclick="toggleMaquinaEstado('${m.id}')">✓ Disp.</button>`;
+    const estadoBtn=enMant?`<button class="btn-mini btn-mini-red" onclick="toggleMaquinaEstado('${m.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mant.</button>`:`<button class="btn-mini btn-mini-green" onclick="toggleMaquinaEstado('${m.id}')">✓ Disp.</button>`;
     const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key],isH=ds===today;let bg='',content='';if(ev){if(ev.tipo==='mantencion'){bg='rgba(255,68,68,0.2)';content=`<div style="font-size:9px;font-weight:700;color:var(--danger)">🔧 MANT.</div>`;}else if(ev.tipo==='uso'){bg='rgba(255,107,53,0.2)';const pedLabel=ev.pedidoId?state.pedidos.find(p=>p.id===ev.pedidoId)?.fields['N° Pedido']||null:null;const descLabel=pedLabel?`🔗 ${pedLabel}`:(ev.desc||'En uso');content=`<div style="font-size:9px;color:${pedLabel?'var(--accent)':'var(--accent2)'};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85px" title="${escapeHtml(ev.desc||'')}">${escapeHtml(descLabel)}</div>${ev.tiempo?`<div style="font-size:8px;color:var(--text3)">${ev.tiempo}h</div>`:''}`;}else{bg='rgba(0,212,170,0.12)';content=`<div style="font-size:9px;color:var(--accent3);font-weight:600">✓ Libre</div>`;}}return`<td onclick="openMaquinaModal('${m.id}','${m.nombre} #${m.num}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg||'transparent'};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.5)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content||`<span style="color:var(--text3);font-size:10px">+</span>`}${ev?`<button onclick="event.stopPropagation();deleteMaquinaEvento('${m.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:8px;padding:0">✕</button>`:''}</div></td>`;}).join('');
     return`${groupRow}<tr><td style="padding:9px 14px;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:0;z-index:2"><span style="width:7px;height:7px;border-radius:50%;background:${m.color};display:inline-block;margin-right:6px"></span>${escapeHtml(m.nombre)} <span style="color:var(--text3)">#${m.num}</span></td><td style="padding:4px 6px;text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:2">${estadoBtn}</td>${celdas}</tr>`;
   }).join('');
@@ -10655,7 +10656,7 @@ function buildProveedorRow(p){
     <td class="pv-rep">${starsCell}</td>
     <td class="pv-estado">${estadoPvBadge(estado)}</td>
     <td class="pv-plazo" style="font-family:'JetBrains Mono',monospace;font-size:11px">${plazo}</td>
-    <td class="pv-acc" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')">✏️</button></td>
+    <td class="pv-acc" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg></button></td>
   </tr>
   <tr id="pv-ficha-${id}" style="display:none">
     <td colspan="11" style="padding:0;background:var(--surface2)">
@@ -10663,8 +10664,8 @@ function buildProveedorRow(p){
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           ${(()=>{const wa=(f['WhatsApp']||'').replace(/\s/g,'')||tel;return wa?`<a href="https://wa.me/${wa.replace(/^\+/,'').replace(/^56/,'56')}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="color:#25d366;border-color:rgba(37,211,102,0.3);font-size:11px">💬 WhatsApp</a>`:'';})()}
           ${email?`<a href="mailto:${escapeHtml(email)}" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px">✉ Email</a>`:''}
-          ${web?`<a href="${escapeHtml(web.startsWith('http')?web:'https://'+web)}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px">🌐 Sitio web</a>`:''}
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditProveedor('${id}')" style="font-size:11px;margin-left:auto">✏️ Editar ficha completa</button>
+          ${web?`<a href="${escapeHtml(web.startsWith('http')?web:'https://'+web)}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Sitio web</a>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditProveedor('${id}')" style="font-size:11px;margin-left:auto"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar ficha completa</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
           ${f['Región']?`<div style="font-size:11px"><span style="color:var(--text3)">Región:</span> ${escapeHtml(f['Región'])}</div>`:''}
@@ -11437,7 +11438,7 @@ function renderSEOList(pages){
         <div style="display:flex;flex-direction:column;gap:5px">
           <button onclick="optimizarSEOPage('${p.id}','${escapeHtml(pageTitle)}','${p._type}')" class="btn btn-ghost btn-sm" style="font-size:10px;white-space:nowrap">✨ Optimizar IA</button>
           <button onclick="saveYoastFields('${p.id}','${p._type}','${escapeHtml(p.link||'')}')" class="btn btn-primary btn-sm" style="font-size:10px">💾 Guardar</button>
-          <button id="idx-btn-${p.id}" onclick="solicitarIndexacion('${escapeHtml(p.link||'')}')" class="btn btn-ghost btn-sm" style="font-size:10px;display:none;border-color:rgba(0,212,204,0.5);color:var(--accent)">🔍 Indexar en Google</button>
+          <button id="idx-btn-${p.id}" onclick="solicitarIndexacion('${escapeHtml(p.link||'')}')" class="btn btn-ghost btn-sm" style="font-size:10px;display:none;border-color:rgba(0,212,204,0.5);color:var(--accent)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Indexar en Google</button>
         </div>
       </td>
     </tr>`;
@@ -12422,7 +12423,7 @@ function renderAdsCampaigns(data){
     const di=_adsCampActions.push({type:'delete',id:c.id,nombre:c.nombre||''})-1;
     const acciones=`<span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">
         <button onclick="event.stopPropagation();_adsCampAction(${ei})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
-        <button onclick="event.stopPropagation();_adsCampAction(${di})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar">🗑</button>
+        <button onclick="event.stopPropagation();_adsCampAction(${di})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-trash"/></svg></button>
       </span>`;
     return `<tr>
       <td style="white-space:nowrap"><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</span>${acciones}</td>
@@ -12572,7 +12573,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <div id="catManagerModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeCatManager()"></div>
   <div class="modal-card" style="max-width:400px">
-    <div class="modal-title">⚙ Categorías de Proveedores</div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-settings"/></svg> Categorías de Proveedores</div>
     <p class="modal-desc" style="margin-bottom:16px">Agrega o elimina categorías. Los cambios aplican en todos los formularios al instante.</p>
     <div id="catManagerList" style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:320px;overflow-y:auto"></div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -12594,7 +12595,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <div id="maintModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeMaintModal()"></div>
   <div class="modal-card" style="max-width:440px;width:95vw">
-    <div class="modal-title">🔧 Registrar mantención</div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-wrench"/></svg> Registrar mantención</div>
     <input type="hidden" id="maintModalId">
     <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
       <div><div class="field-label">Máquina</div><div id="maintModalNombre" style="font-size:13px;font-weight:700;color:var(--accent);margin-top:4px"></div></div>
@@ -12619,14 +12620,14 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <div id="maintConfigModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeMaintConfig()"></div>
   <div class="modal-card" style="max-width:420px;width:95vw">
-    <div class="modal-title">⚙ Umbrales de mantención (horas)</div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-settings"/></svg> Umbrales de mantención (horas)</div>
     <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🔩 Cambio de Nozzle</label><input id="cfgNozzle" type="number" min="10" max="2000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
       <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🛢️ Lubricación de ejes</label><input id="cfgLubrication" type="number" min="10" max="2000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
       <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">⚙️ Ajuste/cambio de correa</label><input id="cfgBelt" type="number" min="10" max="5000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
       <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🔧 Mantención general</label><input id="cfgGeneral" type="number" min="10" max="2000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
       <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border2);padding-top:10px"><label style="font-size:12px;color:var(--text)">💤 Alerta idle (horario laboral)</label><input id="cfgIdle" type="number" min="1" max="24" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
-      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">💰 Costo filamento (CLP/kg)</label><input id="cfgFilamentCost" type="number" min="0" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> Costo filamento (CLP/kg)</label><input id="cfgFilamentCost" type="number" min="0" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn btn-primary btn-sm" onclick="saveMaintConfig()" style="flex:1">Guardar</button>
@@ -12639,7 +12640,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <div id="webcamModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeWebcamModal()"></div>
   <div class="modal-card" style="max-width:700px;width:95vw">
-    <div class="modal-title">📷 <span id="webcamModalTitle">Webcam</span></div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-camera"/></svg> <span id="webcamModalTitle">Webcam</span></div>
     <div style="margin-top:12px;background:#000;border-radius:10px;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center">
       <img id="webcamModalImg" src="" style="max-width:100%;max-height:60vh;display:block" onerror="this.style.display='none';document.getElementById('webcamNoFeed').style.display='flex'" onload="document.getElementById('webcamNoFeed').style.display='none';this.style.display='block'">
       <div id="webcamNoFeed" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px;color:#666">
@@ -12661,7 +12662,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <div id="histModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeHistoryModal()"></div>
   <div class="modal-card" style="max-width:500px;width:95vw">
-    <div class="modal-title">📋 <span id="histModalTitle">Historial</span></div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-book"/></svg> <span id="histModalTitle">Historial</span></div>
     <div id="histModalBody" style="margin-top:14px;max-height:400px;overflow-y:auto"></div>
     <button class="btn btn-ghost btn-sm" onclick="closeHistoryModal()" style="margin-top:14px;width:100%">Cerrar</button>
   </div>
@@ -12671,7 +12672,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <div id="alertSettingsModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeAlertSettings()"></div>
   <div class="modal-card" style="max-width:480px;width:95vw">
-    <div class="modal-title">⚙ Configurar alertas</div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-bell"/></svg> Configurar alertas</div>
     <div style="margin-top:16px;display:flex;flex-direction:column;gap:14px">
       <div>
         <div class="field-label" style="margin-bottom:6px">Notificaciones del navegador</div>
@@ -12695,7 +12696,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <div id="printerConnModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closePrinterConnModal()"></div>
   <div class="modal-card" style="max-width:460px;width:95vw">
-    <div class="modal-title">⚙ Conexión · <span id="printerConnTitle"></span></div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-settings"/></svg> Conexión · <span id="printerConnTitle"></span></div>
     <input type="hidden" id="printerConnId">
     <div style="margin-top:16px;display:flex;flex-direction:column;gap:14px">
       <div>
@@ -12720,7 +12721,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <div id="modalMaquinasManager" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeMaquinasManager()"></div>
   <div class="modal-card" style="max-width:780px;width:96vw;max-height:85vh;overflow-y:auto">
-    <div class="modal-title" style="margin-bottom:16px">⚙ Gestionar máquinas</div>
+    <div class="modal-title" style="margin-bottom:16px"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-settings"/></svg> Gestionar máquinas</div>
 
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead>
@@ -14740,8 +14741,8 @@ function renderFunnel(){
   const valCerr=_ped.filter(p=>p.fields['Estado pedido']==='Despachado'&&p.createdTime&&inMes(p.createdTime)).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
   const pct=(a,b)=>b>0?Math.round(a/b*100):0;
   const stages=[
-    {icon:'👤',label:'Leads Nuevos',n:leads,val:null,color:'var(--accent4)',next:cots},
-    {icon:'📋',label:'Cotizaciones',n:cots,val:valCots,color:'var(--accent)',next:peds},
+    {icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-clientes"/></svg>',label:'Leads Nuevos',n:leads,val:null,color:'var(--accent4)',next:cots},
+    {icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg>',label:'Cotizaciones',n:cots,val:valCots,color:'var(--accent)',next:peds},
     {icon:'📦',label:'Pedidos',n:peds,val:valPeds,color:'var(--accent2)',next:cerrados},
     {icon:'✅',label:'Cerrados',n:cerrados,val:valCerr,color:'var(--accent3)',next:null},
   ];
@@ -15179,7 +15180,7 @@ function calcNeonLimpiar(){
 <div id="adsDeleteModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeAdsDeleteModal()"></div>
   <div class="modal-card">
-    <div class="modal-title">⚠ Eliminar campaña</div>
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-warning"/></svg> Eliminar campaña</div>
     <div class="modal-desc">Esta acción pausará la campaña en Google Ads. Esta operación se aplicará en la próxima ejecución del Script 2.</div>
     <input type="hidden" id="adsDeleteModalId">
     <div style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.25);border-radius:8px;padding:12px;margin:16px 0;font-size:12px;color:var(--text)" id="adsDeleteModalNombre"></div>
@@ -15194,7 +15195,7 @@ function calcNeonLimpiar(){
 <div id="iaConfigModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeIAConfigModal()">
   <div class="modal-box" style="max-width:480px;width:95%">
     <div class="modal-header">
-      <span class="modal-title">🔑 Configuración IA — API Keys</span>
+      <span class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-settings"/></svg> Configuración IA — API Keys</span>
       <button class="modal-close" onclick="closeIAConfigModal()">✕</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
@@ -15211,7 +15212,7 @@ function calcNeonLimpiar(){
       <div id="iaTestResult" style="display:none;font-size:11px;border-radius:6px;padding:8px 10px;line-height:1.6"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="testIAKey()">🔍 Probar key</button>
+      <button class="btn btn-ghost" onclick="testIAKey()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Probar key</button>
       <button class="btn btn-ghost" onclick="closeIAConfigModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveIAConfig()">💾 Guardar</button>
     </div>
@@ -15222,7 +15223,7 @@ function calcNeonLimpiar(){
 <div id="fichaPropModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeFichaPropModal()">
   <div class="modal-box" style="max-width:640px;width:95%">
     <div class="modal-header">
-      <span class="modal-title">📋 Ficha Técnica — Propuesta Cliente</span>
+      <span class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Ficha Técnica — Propuesta Cliente</span>
       <button class="modal-close" onclick="closeFichaPropModal()">✕</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
@@ -15255,9 +15256,9 @@ function calcNeonLimpiar(){
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeFichaPropModal()">Cancelar</button>
-      <button id="fpDriveBtn" class="btn btn-ghost" style="color:#1a73e8;border-color:#1a73e8" onclick="guardarFichaEnDrive(_fpCotId)" title="Sube fotos, vistas IA y ficha a Google Drive organizado por contacto y cotización">📁 Guardar en Drive</button>
+      <button id="fpDriveBtn" class="btn btn-ghost" style="color:#1a73e8;border-color:#1a73e8" onclick="guardarFichaEnDrive(_fpCotId)" title="Sube fotos, vistas IA y ficha a Google Drive organizado por contacto y cotización"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> Guardar en Drive</button>
       <button class="btn btn-ghost" onclick="saveFichaPropModal(false)">💾 Guardar</button>
-      <button class="btn btn-primary" onclick="saveFichaPropModal(true)">📄 Guardar y ver PDF</button>
+      <button class="btn btn-primary" onclick="saveFichaPropModal(true)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> Guardar y ver PDF</button>
     </div>
   </div>
 </div>
@@ -15397,9 +15398,9 @@ function calcNeonLimpiar(){
 
   <div id="jvs-chips">
     <span class="jvs-chip" data-cmd="¿cuántos pedidos activos hay y cuántos están atrasados?">📦 Estado pedidos</span>
-    <span class="jvs-chip" data-cmd="resumen de cotizaciones pendientes">📋 Cotizaciones</span>
-    <span class="jvs-chip" data-cmd="abre el módulo de máquinas">🖨️ Máquinas</span>
-    <span class="jvs-chip" data-cmd="dame un resumen ejecutivo del negocio hoy">📊 Resumen CEO</span>
+    <span class="jvs-chip" data-cmd="resumen de cotizaciones pendientes"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Cotizaciones</span>
+    <span class="jvs-chip" data-cmd="abre el módulo de máquinas"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Máquinas</span>
+    <span class="jvs-chip" data-cmd="dame un resumen ejecutivo del negocio hoy"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-chart"/></svg> Resumen CEO</span>
   </div>
 
   <div id="jvs-settings">
@@ -15754,7 +15755,7 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
 <div id="notasModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeNotasModal()">
   <div class="modal-box" style="max-width:500px;width:95%">
     <div class="modal-header">
-      <span class="modal-title" id="notasModalTitle">📝 Notas internas</span>
+      <span class="modal-title" id="notasModalTitle"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-note"/></svg> Notas internas</span>
       <button class="modal-close" onclick="closeNotasModal()">✕</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:0;padding:16px 20px">
