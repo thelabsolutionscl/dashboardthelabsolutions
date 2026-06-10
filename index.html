@@ -583,6 +583,9 @@ body.kiosk .tab-content{padding-top:12px!important;}
 .kpi-card.orange:hover::before{filter:drop-shadow(0 0 4px rgba(255,107,53,0.7));}
 .kpi-card.purple:hover::before{filter:drop-shadow(0 0 4px rgba(167,139,250,0.7));}
 .kpi-card.red:hover::before{filter:drop-shadow(0 0 4px rgba(255,68,68,0.7));}
+.kpi-icon{position:absolute;top:12px;right:12px;opacity:0.3;pointer-events:none;transition:opacity .25s;}
+.kpi-card:hover .kpi-icon{opacity:0.85;}
+.kpi-card:hover .kpi-icon .dashboard-icon{stroke:#fff;filter:drop-shadow(0 0 8px rgba(0,243,255,0.9));}
 
 /* Better shimmer — gradient sweep instead of opacity pulse */
 @keyframes shimmer{
@@ -1195,6 +1198,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <symbol id="icon-visual" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
 <symbol id="icon-remuneraciones" viewBox="0 0 24 24" fill="none"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></symbol>
 <symbol id="icon-calculadora" viewBox="0 0 24 24" fill="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+<symbol id="icon-trending" viewBox="0 0 24 24" fill="none"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 6 23 6 23 12" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="icon-warning" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13" stroke-linecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-linecap="round"/></symbol>
+<symbol id="icon-message" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></symbol>
+<symbol id="icon-refresh" viewBox="0 0 24 24" fill="none"><polyline points="1 4 1 10 7 10" stroke-linecap="round" stroke-linejoin="round"/><polyline points="23 20 23 14 17 14" stroke-linecap="round" stroke-linejoin="round"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></symbol>
 </defs></svg>
 <!-- ── LOGIN PAGE ── -->
 <div id="loginPage">
@@ -1591,13 +1598,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <!-- Funnel de conversión -->
   <div class="card" style="margin-bottom:24px" id="ovFunnelCard">
     <div class="card-header">
-      <span class="card-title">🔄 Embudo de Conversión</span>
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-refresh"/></svg>Embudo de Conversión</span>
       <span id="ovFunnelPeriodo" style="font-size:10px;color:var(--text3)"></span>
       <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('cotizaciones')" style="margin-left:auto">Ver cotizaciones →</button>
     </div>
     <div id="ovFunnelBody" style="padding:16px"></div>
   </div>
-  <div class="card" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title">⚠ Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
+  <div class="card" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-warning"/></svg>Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
   <div class="data-grid">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Revenue últimas 4 semanas</span></div><div id="chartRevenue" style="padding:16px"></div></div>
@@ -5748,7 +5755,7 @@ function renderEquipoSnapshot(){
       </div>
     </div>`;
   }).join('');
-  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">👥 Equipo Hoy</span><span style="font-size:11px;color:var(--text3);text-transform:capitalize">${dayLabel}</span><button class="btn btn-ghost btn-sm" onclick="switchTab('equipo')" style="margin-left:auto">Ver detalle →</button></div><div style="display:flex;gap:10px;padding:12px 16px;flex-wrap:wrap">${chips}</div></div>`;
+  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-equipo"/></svg>Equipo Hoy</span><span style="font-size:11px;color:var(--text3);text-transform:capitalize">${dayLabel}</span><button class="btn btn-ghost btn-sm" onclick="switchTab('equipo')" style="margin-left:auto">Ver detalle →</button></div><div style="display:flex;gap:10px;padding:12px 16px;flex-wrap:wrap">${chips}</div></div>`;
 }
 function renderKPIs(){
   const today=new Date();today.setHours(0,0,0,0);
@@ -5843,13 +5850,14 @@ function renderKPIs(){
     return;
   }
 
+  const _ki=(id)=>`<div class="kpi-icon"><svg class="dashboard-icon" width="20" height="20" stroke-width="1.5"><use href="#${id}"/></svg></div>`;
   document.getElementById('kpiGrid').innerHTML=`
-    <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${metaHtml}</div>
-    <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
-    <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
-    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes"><div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
-    <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas"><div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
-    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones"><div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
+    <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos">${_ki('icon-trending')}<div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${metaHtml}</div>
+    <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}">` + _ki('icon-pedidos') + `<div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
+    <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes">${_ki('icon-message')}<div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
+    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes">${_ki('icon-clientes')}<div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
+    <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas">${_ki('icon-warning')}<div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
+    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
   updateDockBadges();
 }
 function renderPipelineArea(){
