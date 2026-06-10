@@ -73,9 +73,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .dock-btn.active .dock-icon{box-shadow:0 0 0 2px var(--accent),0 4px 16px rgba(0,212,204,0.40),inset 0 1px 1px rgba(255,255,255,0.20);}
 body.kiosk .icon-dock{display:none!important;}
 /* ── Mobile Bottom Dock (visible solo en móvil) ────────────────── */
-.mobile-bottom-dock{display:none;position:fixed;bottom:0;left:0;right:0;z-index:190;background:rgba(8,8,8,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,0.1);box-shadow:0 -4px 32px rgba(0,0,0,0.6);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));align-items:flex-start;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;gap:4px;}
-.mobile-bottom-dock::-webkit-scrollbar{display:none;}
-.mbd-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:14px;min-width:62px;flex-shrink:0;scroll-snap-align:center;transition:transform .12s ease;overflow:visible;-webkit-tap-highlight-color:transparent;}
+.mobile-bottom-dock{display:none;position:fixed;bottom:0;left:0;right:0;z-index:190;background:rgba(8,8,8,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,0.1);box-shadow:0 -4px 32px rgba(0,0,0,0.6);padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px));align-items:flex-start;justify-content:space-around;}
+.mbd-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;cursor:pointer;padding:4px 2px;border-radius:14px;min-width:56px;transition:transform .12s ease;overflow:visible;-webkit-tap-highlight-color:transparent;}
 .mbd-btn:active{transform:scale(0.88);}
 .mbd-btn .dock-icon{width:44px;height:44px;border-radius:12px;font-size:22px;transition:box-shadow .15s,transform .12s;}
 .mbd-btn.active .dock-icon{box-shadow:0 0 0 2.5px var(--accent),0 4px 18px rgba(0,212,204,0.45),inset 0 1px 1px rgba(255,255,255,0.20);}
@@ -1492,59 +1491,23 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <span class="dock-icon" style="--c:#00d4cc">🏠</span>
     <span class="mbd-label">Overview</span>
   </button>
-  <button class="mbd-btn" data-tab="clientes" onclick="switchTab('clientes')">
-    <span class="dock-icon" style="--c:#3b82f6">👥</span>
-    <span class="mbd-label">Clientes</span>
-  </button>
-  <button class="mbd-btn" data-tab="cotizaciones" onclick="switchTab('cotizaciones')">
-    <span class="dock-icon" style="--c:#a78bfa">📋</span>
-    <span class="mbd-label">Cotizaciones</span>
-  </button>
   <button class="mbd-btn" data-tab="pedidos" onclick="switchTab('pedidos')">
     <span class="dock-icon" style="--c:#ff6b35">📦</span>
     <span class="mbd-label">Pedidos</span>
     <span class="dock-badge" id="badge-pedidos-m" style="display:none">0</span>
+  </button>
+  <button class="mbd-btn" data-tab="clientes" onclick="switchTab('clientes')">
+    <span class="dock-icon" style="--c:#3b82f6">👥</span>
+    <span class="mbd-label">Clientes</span>
   </button>
   <button class="mbd-btn" data-tab="finanzas" onclick="switchTab('finanzas')">
     <span class="dock-icon" style="--c:#22c55e">💰</span>
     <span class="mbd-label">Finanzas</span>
     <span class="dock-badge" id="badge-finanzas-m" style="display:none">0</span>
   </button>
-  <button class="mbd-btn" data-tab="proveedores" onclick="switchTab('proveedores')">
-    <span class="dock-icon" style="--c:#ffaa00">🏭</span>
-    <span class="mbd-label">Proveedores</span>
-  </button>
-  <button class="mbd-btn" data-tab="agentes" onclick="switchTab('agentes')">
-    <span class="dock-icon" style="--c:#10b981">🤖</span>
-    <span class="mbd-label">Agentes IA</span>
-  </button>
-  <button class="mbd-btn" data-tab="maquinas" onclick="switchTab('maquinas')">
-    <span class="dock-icon" style="--c:#ff4444">🖨️</span>
-    <span class="mbd-label">Máquinas</span>
-  </button>
-  <button class="mbd-btn" data-tab="equipo" onclick="switchTab('equipo')">
-    <span class="dock-icon" style="--c:#f472b6">👤</span>
-    <span class="mbd-label">Equipo</span>
-  </button>
-  <button class="mbd-btn" data-tab="reporte" onclick="switchTab('reporte')">
-    <span class="dock-icon" style="--c:#14b8a6">📊</span>
-    <span class="mbd-label">Reportes</span>
-  </button>
-  <button class="mbd-btn" data-tab="web" onclick="switchTab('web')">
-    <span class="dock-icon" style="--c:#6366f1">🌐</span>
-    <span class="mbd-label">Web</span>
-  </button>
-  <button class="mbd-btn" data-tab="visual" onclick="switchTab('visual')">
-    <span class="dock-icon" style="--c:#8b5cf6">🎨</span>
-    <span class="mbd-label">Visual AI</span>
-  </button>
-  <button class="mbd-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')">
-    <span class="dock-icon" style="--c:#84cc16">💵</span>
-    <span class="mbd-label">Remuner.</span>
-  </button>
-  <button class="mbd-btn" data-tab="calculadora" onclick="switchTab('calculadora')">
-    <span class="dock-icon" style="--c:#f59e0b">⚡</span>
-    <span class="mbd-label">Calculadora</span>
+  <button class="mbd-btn" onclick="openMobileGrid()">
+    <span class="mbd-dots"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
+    <span class="mbd-label">Más</span>
   </button>
 </div>
 
