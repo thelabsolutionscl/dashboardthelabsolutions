@@ -1249,6 +1249,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <symbol id="icon-moon" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></symbol>
 <symbol id="icon-invoice" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13" stroke-linecap="round"/><line x1="16" y1="17" x2="8" y2="17" stroke-linecap="round"/><polyline points="10 9 9 9 8 9"/></symbol>
 <symbol id="icon-printer" viewBox="0 0 24 24" fill="none"><polyline points="6 9 6 2 18 2 18 9"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
+
+<symbol id="icon-correo" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="2 7 12 13 22 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </defs></svg>
 <!-- ── LOGIN PAGE ── -->
 <div id="loginPage">
@@ -1441,6 +1443,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="dock-btn" data-tab="visual" onclick="switchTab('visual')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-visual"/></svg></span><span class="dock-label">Visual AI</span></button>
     <button class="dock-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-remuneraciones"/></svg></span><span class="dock-label">Remuneraciones</span></button>
     <button class="dock-btn" data-tab="calculadora" onclick="switchTab('calculadora')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-calculadora"/></svg></span><span class="dock-label">Calculadora</span></button>
+    <button class="dock-btn" data-tab="correo" onclick="switchTab('correo')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-correo"/></svg></span><span class="dock-label">Correo</span></button>
   </div>
 </div>
 
@@ -1480,6 +1483,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="visual" onclick="switchTabMobile('visual')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-visual"/></svg></span>Visual AI</button>
     <button class="mobile-tab-btn" data-tab="remuneraciones" onclick="switchTabMobile('remuneraciones')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-remuneraciones"/></svg></span>Remuneraciones</button>
     <button class="mobile-tab-btn" data-tab="calculadora" onclick="switchTabMobile('calculadora')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-calculadora"/></svg></span>Calculadora</button>
+    <button class="mobile-tab-btn" data-tab="correo" onclick="switchTabMobile('correo')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-correo"/></svg></span>Correo</button>
     <!-- Acordeón Configuración / Tokens -->
     <div style="border-top:1px solid var(--border)">
       <button onclick="toggleMobileConfig()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 18px;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.3px">
@@ -4335,6 +4339,54 @@ function _reportarResultados(muts) {
   </div>
 </div>
 
+<!-- ══════════════════ CORREO ══════════════════════════════════ -->
+<div class="tab-panel" id="tab-correo">
+  <div class="section-header" style="margin-bottom:16px">
+    <div>
+      <div class="section-title">✉️ Correo Corporativo</div>
+      <div class="section-desc">Accede a tu bandeja de entrada, redacta y envía correos @thelab.solutions · Roundcube Webmail</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)">
+        <div id="correoDot" style="width:8px;height:8px;border-radius:50%;background:#facc15"></div>
+        <span id="correoStatusTxt">Conectando...</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="reloadCorreo()"><svg class="dashboard-icon" width="13" height="13" stroke-width="1.5"><use href="#icon-refresh"/></svg> Recargar</button>
+      <a href="https://webmail.thelab.solutions" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">↗ Nueva pestaña</a>
+    </div>
+  </div>
+
+  <!-- Formulario oculto para auto-login en Roundcube -->
+  <form id="rcLoginForm" method="POST" action="https://webmail.thelab.solutions/?_task=login&_action=login" target="correoIframe" style="display:none">
+    <input type="hidden" name="_timezone" value="America/Santiago">
+    <input type="hidden" name="_url" value="">
+    <input type="hidden" name="_task" value="login">
+    <input type="hidden" name="_action" value="login">
+    <input type="hidden" id="rc_user" name="_user" value="">
+    <input type="hidden" id="rc_pass" name="_pass" value="">
+  </form>
+
+  <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+    <div id="correoFallback" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--surface2);z-index:2;">
+      <div style="font-size:48px">✉️</div>
+      <div style="font-size:14px;color:var(--text2);text-align:center;max-width:400px;line-height:1.7">
+        Cargando Roundcube Webmail...<br>
+        <span style="font-size:12px;color:var(--text3)">Iniciando sesión automáticamente con tus credenciales del dashboard.<br>Si no carga, ábrelo directamente o recarga.</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+        <a href="https://webmail.thelab.solutions" target="_blank" style="background:var(--accent);color:#000;padding:10px 24px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">↗ Abrir Roundcube</a>
+        <button class="btn btn-ghost" onclick="reloadCorreo()">↺ Reintentar</button>
+      </div>
+    </div>
+    <iframe id="correoIframe" name="correoIframe" src="about:blank"
+      style="width:100%;height:100%;border:none;display:block;background:#111;position:relative;z-index:1;"
+      allow="clipboard-write; fullscreen"
+      title="Correo Corporativo — Roundcube"
+      onload="correoFrameOnLoad()">
+    </iframe>
+  </div>
+</div>
+
 </div>
 
 
@@ -5750,6 +5802,7 @@ function switchTab(name){
   if(name==='remuneraciones') renderRemuneraciones();
   if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
+  if(name==='correo') initCorreoTab();
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
   if(name==='equipo') initEquipo();
@@ -11061,6 +11114,39 @@ function enableDemoMode(){
   },1200);
 }
 
+// ── CORREO ────────────────────────────────────────────────────
+let _correoLoaded=false;
+function initCorreoTab(){
+  if(_correoLoaded) return;
+  const u=AUTH.getUser(); if(!u) return;
+  const au=AUTH.USERS.find(x=>x.username===u.username);
+  const pwd=au?au.pwd.map(c=>String.fromCharCode(c)).join(''):'';
+  const frm=document.getElementById('rcLoginForm'); if(!frm) return;
+  document.getElementById('rc_user').value=u.username;
+  document.getElementById('rc_pass').value=pwd;
+  _correoLoaded=true;
+  frm.submit();
+}
+function correoFrameOnLoad(){
+  if(!_correoLoaded) return;
+  const fb=document.getElementById('correoFallback');
+  if(fb) fb.style.display='none';
+  const dot=document.getElementById('correoDot');
+  const txt=document.getElementById('correoStatusTxt');
+  if(dot){dot.style.background='var(--success)';dot.style.animation='pulse 2s infinite';}
+  if(txt) txt.textContent='Roundcube — Conectado';
+}
+function reloadCorreo(){
+  _correoLoaded=false;
+  const fb=document.getElementById('correoFallback');
+  const dot=document.getElementById('correoDot');
+  const txt=document.getElementById('correoStatusTxt');
+  if(fb){fb.style.display='flex';}
+  if(dot){dot.style.background='#facc15';dot.style.animation='';}
+  if(txt) txt.textContent='Conectando...';
+  initCorreoTab();
+}
+
 // ── AUTH ─────────────────────────────────────────────────────
 const AUTH={
   SESSION_KEY:'thelab_session_v2',
@@ -11121,12 +11207,12 @@ const AUTH={
 const RBAC={
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','calculadora','nuevo-lead','nueva-cot','cot3d'],
-    produccion: ['overview','pedidos','maquinas','equipo','visual','calculadora'],
-    finanzas:   ['overview','clientes','pedidos','finanzas','reporte'],
-    marketing:  ['overview','web','agentes','reporte'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','correo','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','correo','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','calculadora','correo','nuevo-lead','nueva-cot','cot3d'],
+    produccion: ['overview','pedidos','maquinas','equipo','visual','calculadora','correo'],
+    finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo'],
+    marketing:  ['overview','web','agentes','reporte','correo'],
     demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','remuneraciones'],
   },
   // Items del menú "Nuevo" visibles por rol
