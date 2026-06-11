@@ -630,6 +630,16 @@ body.kiosk .tab-content{padding-top:12px!important;}
 .mail-sig-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:580px;max-width:94vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);}
 .mail-sig-editor{flex:1;overflow-y:auto;padding:14px;font-size:13px;color:#e8e8e8;background:var(--surface2);outline:none;line-height:1.65;min-height:180px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
 .mail-sig-editor img{max-width:100%;height:auto;max-height:120px;}
+.mail-item-snippet{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;}
+.mail-item-star{color:#facc15;font-size:11px;flex-shrink:0;}
+.mail-att-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11.5px;color:var(--text2);cursor:pointer;transition:all .12s;max-width:220px;}
+.mail-att-chip:hover{border-color:var(--accent);color:var(--accent);}
+.mail-att-chip .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mail-att-chip .att-x{color:var(--danger);cursor:pointer;font-size:13px;line-height:1;flex-shrink:0;}
+.mail-cmp-atts{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 6px;}
+.mail-tpl-menu{position:absolute;bottom:100%;left:0;margin-bottom:4px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.5);min-width:220px;max-height:260px;overflow-y:auto;z-index:10;}
+.mail-tpl-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-size:12px;color:var(--text2);cursor:pointer;gap:8px;}
+.mail-tpl-item:hover{background:rgba(255,255,255,.05);color:var(--text);}
 .mail-compose-footer{padding:9px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-shrink:0;}
 @media(max-width:900px){
   .mail-client{grid-template-columns:1fr;height:calc(100vh - 230px);}
@@ -4519,8 +4529,11 @@ function _reportarResultados(muts) {
           <div class="mail-reader-actions">
             <button class="btn btn-ghost btn-sm" onclick="MAIL.reply()"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-send"/></svg> Responder</button>
             <button class="btn btn-ghost btn-sm" onclick="MAIL.forward()"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-repeat"/></svg> Reenviar</button>
+            <button class="btn btn-ghost btn-sm" id="mailFlagBtn" onclick="MAIL.toggleFlag()">☆ Destacar</button>
+            <button class="btn btn-ghost btn-sm" onclick="MAIL.markUnread()">● No leído</button>
             <button class="btn btn-ghost btn-sm" onclick="MAIL.trashCurrent()" style="color:var(--danger);border-color:rgba(255,68,68,.25)"><svg class="dashboard-icon" style="stroke:var(--danger)" width="12" height="12" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
           </div>
+          <div id="mailRdrAtts" style="display:none;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
         </div>
         <div class="mail-reader-body" id="mailRdrBody"></div>
       </div>
@@ -4557,7 +4570,8 @@ function _reportarResultados(muts) {
     </div>
     <div class="mail-compose-field">
       <span class="mail-compose-lbl">Para</span>
-      <input id="mailCmpTo" type="email" placeholder="destinatario@ejemplo.com" multiple>
+      <input id="mailCmpTo" type="text" placeholder="destinatario@ejemplo.com" list="mailContactsList" autocomplete="off">
+      <datalist id="mailContactsList"></datalist>
     </div>
     <div class="mail-compose-field" id="mailCcRow" style="display:none">
       <span class="mail-compose-lbl">CC</span>
@@ -4578,7 +4592,15 @@ function _reportarResultados(muts) {
       </button>
       <div class="mail-cmp-tool-sep"></div>
       <button class="mail-cmp-tool" onclick="MAIL.insertSignature()" title="Insertar firma">✍ Firma</button>
+      <div class="mail-cmp-tool-sep"></div>
+      <button class="mail-cmp-tool" onclick="document.getElementById('mailFileInput').click()" title="Adjuntar archivo">📎 Adjuntar</button>
+      <input type="file" id="mailFileInput" multiple style="display:none" onchange="MAIL.addFiles(this.files);this.value=''">
+      <div style="position:relative">
+        <button class="mail-cmp-tool" onclick="MAIL.toggleTplMenu(event)" title="Plantillas">📋 Plantillas</button>
+        <div class="mail-tpl-menu" id="mailTplMenu" style="display:none"></div>
+      </div>
     </div>
+    <div class="mail-cmp-atts" id="mailCmpAtts"></div>
     <div class="mail-compose-body-area" id="mailCmpBody" contenteditable="true" spellcheck="true"
       placeholder="Escribe tu mensaje aquí..."></div>
     <div class="mail-compose-footer">
@@ -7066,7 +7088,7 @@ function buildCotRow(c){
   const cliNomEsc=escapeHtml(resolveClienteName(f['Cliente']));
   const cotNotasN=_getNotas('cot',c.id).length;
   const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-x-circle"/></svg> &nbsp;Rechazar cotización</button><div class="act-sep"></div>`:'';
-  const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}<button class="act-item" onclick="openEditCot('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> &nbsp;Descargar PDF</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar</button></div></div>`;
+  const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}<button class="act-item" onclick="openEditCot('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> &nbsp;Descargar PDF</button><button class="act-item act-item-green" onclick="MAIL.sendCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-correo"/></svg> &nbsp;Enviar por correo</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar</button></div></div>`;
   const vendNom=resolveVendedorName(f['Vendedor']||'');
   return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
   <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${actMenu}</div></td></tr>`;
@@ -11482,6 +11504,24 @@ function updateTabTitle(unseen){
   document.title = unseen>0 ? `(${unseen}) ${_BASE_TITLE}` : _BASE_TITLE;
 }
 
+// Tono sutil de dos notas con Web Audio (sin archivos externos)
+function playMailSound(){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const play=(freq,start,dur)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.frequency.value=freq;o.type='sine';
+      g.gain.setValueAtTime(0.001,ctx.currentTime+start);
+      g.gain.exponentialRampToValueAtTime(0.12,ctx.currentTime+start+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+start+dur);
+      o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+dur+0.05);
+    };
+    play(880,0,0.18);play(1174.66,0.15,0.22);
+    setTimeout(()=>ctx.close(),800);
+  }catch(e){}
+}
+
 async function _mailCheck(){
   if(!MAIL.getMailPass || !MAIL.getMailPass()) return;
   try{
@@ -11493,6 +11533,7 @@ async function _mailCheck(){
       const n = unseen - _mailLastUnseen;
       const title = `${n} correo${n>1?'s':''} nuevo${n>1?'s':''}`;
       NOTIFY.add('mail', title, 'Bandeja de entrada', 'correo');
+      playMailSound();
       showOsNotif(`✉️ ${title}`, 'Haz clic para abrir el correo', ()=>switchTab('correo'));
       const active = sessionStorage.getItem('thelab_active_tab');
       if(active==='correo'){ MAIL.loadMessages(); MAIL.loadFolders(); }
@@ -11672,10 +11713,11 @@ const MAIL={
       const sel=m.uid===this.selUid?'selected':'';
       return `<div class="mail-item ${unread} ${sel}" data-uid="${m.uid}" onclick="MAIL.readMsg(${m.uid})">
         <div class="mail-item-row1">
-          <span class="mail-item-from">${this.esc(from)}</span>
+          <span class="mail-item-from">${m.flagged?'<span class="mail-item-star">★</span> ':''}${this.esc(from)}</span>
           <span class="mail-item-date">${date}</span>
         </div>
         <div class="mail-item-subject">${this.esc(m.subject)}</div>
+        ${m.snippet?`<div class="mail-item-snippet">${this.esc(m.snippet)}</div>`:''}
       </div>`;
     }).join('');
   },
@@ -11717,9 +11759,71 @@ const MAIL={
     } else {
       bodyDiv.innerHTML=`<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;color:var(--text2);line-height:1.65">${this.esc(data.body_text||'(Sin contenido)')}</pre>`;
     }
+    // Adjuntos del mensaje
+    const attsDiv=document.getElementById('mailRdrAtts');
+    if(data.attachments&&data.attachments.length){
+      attsDiv.style.display='flex';
+      attsDiv.innerHTML=data.attachments.map(a=>
+        `<span class="mail-att-chip" onclick="MAIL.downloadAtt('${this.esc(a.part)}','${this.esc(a.name).replace(/'/g,"\\'")}')">📎 <span class="att-name">${this.esc(a.name)}</span></span>`
+      ).join('');
+    }else{attsDiv.style.display='none';attsDiv.innerHTML='';}
+    // Estado del botón destacar
+    const listItem=this.msgs.find(x=>x.uid===uid);
+    this._updateFlagBtn(listItem?!!listItem.flagged:false);
     // Mark read in list
     const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
     if(item) item.classList.remove('unread');
+  },
+
+  _updateFlagBtn(flagged){
+    const b=document.getElementById('mailFlagBtn');
+    if(!b) return;
+    b.textContent=flagged?'★ Destacado':'☆ Destacar';
+    b.style.color=flagged?'#facc15':'';
+    b.style.borderColor=flagged?'rgba(250,204,21,.4)':'';
+  },
+
+  async toggleFlag(){
+    if(!this.selUid) return;
+    const m=this.msgs.find(x=>x.uid===this.selUid);
+    const newVal=m?(m.flagged?0:1):1;
+    const data=await this.post({action:'mark',folder:this.folder,uid:this.selUid,flagged:newVal});
+    if(data.error){toast(data.error,'error');return;}
+    if(m) m.flagged=newVal;
+    this._updateFlagBtn(!!newVal);
+    this.renderMsgList(this.msgs);
+    toast(newVal?'Mensaje destacado':'Destacado removido','success');
+  },
+
+  async markUnread(){
+    if(!this.selUid) return;
+    const data=await this.post({action:'mark',folder:this.folder,uid:this.selUid,seen:0});
+    if(data.error){toast(data.error,'error');return;}
+    const m=this.msgs.find(x=>x.uid===this.selUid);
+    if(m) m.seen=0;
+    this.selUid=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    this.renderMsgList(this.msgs);
+    this.mobGo('list');
+    toast('Marcado como no leído','success');
+  },
+
+  async downloadAtt(part,name){
+    toast('Descargando '+name+'...','info');
+    const data=await this.post({action:'attachment',folder:this.folder,uid:this.selUid,part});
+    if(data.error){toast(data.error,'error');return;}
+    try{
+      const bin=atob(data.data);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+      const blob=new Blob([bytes],{type:data.mime||'application/octet-stream'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=data.name||name;
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+    }catch(e){toast('Error al decodificar adjunto','error');}
   },
 
   async selectFolder(name){
@@ -11774,7 +11878,127 @@ const MAIL={
     this.renderMsgList(data.messages);
   },
 
+  _cmpAtts:[],
+
+  addFiles(files){
+    const MAX=15*1024*1024;
+    for(const f of files){
+      const cur=this._cmpAtts.reduce((s,a)=>s+a.size,0);
+      if(cur+f.size>MAX){toast('Límite 15 MB de adjuntos','error');break;}
+      const reader=new FileReader();
+      reader.onload=()=>{
+        this._cmpAtts.push({name:f.name,type:f.type||'application/octet-stream',size:f.size,data:reader.result.split(',')[1]});
+        this.renderCmpAtts();
+      };
+      reader.readAsDataURL(f);
+    }
+  },
+
+  removeAtt(i){this._cmpAtts.splice(i,1);this.renderCmpAtts();},
+
+  renderCmpAtts(){
+    const div=document.getElementById('mailCmpAtts');
+    if(!div) return;
+    div.innerHTML=this._cmpAtts.map((a,i)=>
+      `<span class="mail-att-chip"><span class="att-name">📎 ${this.esc(a.name)}</span> <span style="color:var(--text3);font-size:10px">${(a.size/1024).toFixed(0)} KB</span> <span class="att-x" onclick="MAIL.removeAtt(${i})">✕</span></span>`
+    ).join('');
+  },
+
+  fillContactsDatalist(){
+    const dl=document.getElementById('mailContactsList');
+    if(!dl||typeof state==='undefined'||!state.clientes) return;
+    const opts=state.clientes
+      .filter(c=>c.fields['Email'])
+      .map(c=>`<option value="${this.esc(c.fields['Email'])}">${this.esc(c.fields['Empresa']||c.fields['Contacto']||'')}</option>`);
+    dl.innerHTML=opts.join('');
+  },
+
+  // ── Plantillas ──
+  _tplKey(){const u=AUTH.getUser();return u?'thelab_mail_tpl_'+u.username:null;},
+  getTpls(){try{const k=this._tplKey();return k?JSON.parse(localStorage.getItem(k)||'[]'):[];}catch(e){return[];}},
+  setTpls(t){const k=this._tplKey();if(k) localStorage.setItem(k,JSON.stringify(t));},
+
+  toggleTplMenu(e){
+    e.stopPropagation();
+    const menu=document.getElementById('mailTplMenu');
+    if(menu.style.display!=='none'){menu.style.display='none';return;}
+    const tpls=this.getTpls();
+    let html=tpls.map((t,i)=>
+      `<div class="mail-tpl-item"><span style="flex:1" onclick="MAIL.useTpl(${i})">${this.esc(t.name)}</span><span class="att-x" onclick="event.stopPropagation();MAIL.delTpl(${i})">✕</span></div>`
+    ).join('');
+    html+=`<div class="mail-tpl-item" style="border-top:1px solid var(--border);color:var(--accent)" onclick="MAIL.saveAsTpl()">+ Guardar borrador actual como plantilla</div>`;
+    menu.innerHTML=html;
+    menu.style.display='block';
+    const close=ev=>{if(!menu.contains(ev.target)){menu.style.display='none';document.removeEventListener('click',close);}};
+    setTimeout(()=>document.addEventListener('click',close),50);
+  },
+
+  useTpl(i){
+    const t=this.getTpls()[i];
+    if(!t) return;
+    if(t.subject&&!document.getElementById('mailCmpSubject').value) document.getElementById('mailCmpSubject').value=t.subject;
+    document.getElementById('mailCmpBody').focus();
+    document.execCommand('insertHTML',false,t.body);
+    document.getElementById('mailTplMenu').style.display='none';
+  },
+
+  delTpl(i){
+    const tpls=this.getTpls();
+    if(!confirm(`¿Eliminar plantilla "${tpls[i]?.name}"?`)) return;
+    tpls.splice(i,1);this.setTpls(tpls);
+    document.getElementById('mailTplMenu').style.display='none';
+    toast('Plantilla eliminada','success');
+  },
+
+  saveAsTpl(){
+    const name=prompt('Nombre de la plantilla:');
+    if(!name) return;
+    const tpls=this.getTpls();
+    tpls.push({name,subject:document.getElementById('mailCmpSubject').value,body:document.getElementById('mailCmpBody').innerHTML});
+    this.setTpls(tpls);
+    document.getElementById('mailTplMenu').style.display='none';
+    toast('Plantilla guardada','success');
+  },
+
+  // ── Enviar cotización por correo ──
+  sendCotizacion(cotId){
+    const c=state.cotizaciones.find(x=>x.id===cotId);
+    if(!c){toast('Cotización no encontrada','error');return;}
+    const f=c.fields;
+    const numCot=f['N° Cotización']||'—';
+    // Email del cliente
+    let email='',empresa='';
+    const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;
+    if(cid){
+      const cli=state.clientes.find(x=>x.id===cid);
+      if(cli){email=cli.fields['Email']||'';empresa=cli.fields['Empresa']||'';}
+    }
+    // Documento HTML de la cotización como adjunto
+    this._cmpAtts=[];
+    try{
+      const res=buildCotizacionDoc(cotId);
+      if(res&&res.html){
+        const b64=btoa(unescape(encodeURIComponent(res.html)));
+        this._cmpAtts.push({name:`Cotizacion_${numCot.replace(/[^\w-]/g,'_')}.html`,type:'text/html',size:res.html.length,data:b64});
+      }
+    }catch(e){}
+    switchTab('correo');
+    setTimeout(()=>{
+      this.init();
+      this.openCompose({
+        _keepAtts:true,
+        title:'Enviar cotización',
+        to:email,
+        subject:`Cotización ${numCot} — The Lab Solutions`,
+        body:`<p>Estimado${empresa?' equipo de '+this.esc(empresa):''},</p><p>Adjuntamos la cotización <strong>${this.esc(numCot)}</strong> solicitada. Quedamos atentos a sus comentarios.</p><p>Saludos cordiales,</p>`
+      });
+      this.renderCmpAtts();
+    },300);
+  },
+
   openCompose(opts={}){
+    if(!opts._keepAtts){this._cmpAtts=[];this.renderCmpAtts();}
+    this.fillContactsDatalist();
     document.getElementById('mailCmpTo').value=opts.to||'';
     document.getElementById('mailCmpCc').value=opts.cc||'';
     document.getElementById('mailCmpSubject').value=opts.subject||'';
@@ -11880,11 +12104,14 @@ const MAIL={
     status.textContent='Enviando...';status.style.color='var(--text3)';
     try{
       const a=this.auth();
-      const data=await this.post({action:'send',to,cc,subject,body,from_name:a.from_name});
+      const params={action:'send',to,cc,subject,body,from_name:a.from_name};
+      if(this._cmpAtts.length) params.atts=JSON.stringify(this._cmpAtts.map(x=>({name:x.name,type:x.type,data:x.data})));
+      const data=await this.post(params);
       if(data.error) err(data.error);
       else{
         status.textContent='✓ Enviado';status.style.color='var(--success)';
         NOTIFY.add('sent','Correo enviado',to,'correo');
+        this._cmpAtts=[];this.renderCmpAtts();
         setTimeout(()=>this.closeCompose(),1500);
       }
     }finally{

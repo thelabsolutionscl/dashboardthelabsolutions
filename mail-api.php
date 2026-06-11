@@ -132,7 +132,7 @@ function parse_part($conn, $msgno, $structure, $partno, &$html, &$text, &$atts) 
 }
 
 // ── Envío SMTP ────────────────────────────────────────────────
-function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html) {
+function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments = []) {
     $sock = @fsockopen('ssl://' . SMTP_HOST, SMTP_PORT, $errno, $errstr, 15);
     if (!$sock) return "No se pudo conectar al servidor SMTP ($errstr)";
 
@@ -181,23 +181,49 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html) {
         $boundary = 'bound_' . bin2hex(random_bytes(8));
         $date     = date('r');
         $subj_enc = '=?UTF-8?B?' . base64_encode($subject) . '?=';
-        $msg      = "Date: $date\r\n"
-                  . "From: $from_header\r\n"
-                  . "To: $to\r\n"
-                  . ($cc ? "Cc: $cc\r\n" : '')
-                  . "Subject: $subj_enc\r\n"
-                  . "MIME-Version: 1.0\r\n"
-                  . "Content-Type: multipart/alternative; boundary=\"$boundary\"\r\n"
-                  . "\r\n"
-                  . "--$boundary\r\n"
+
+        // Parte alternativa: texto plano + HTML
+        $alt_boundary = 'alt_' . bin2hex(random_bytes(8));
+        $alt_part = "--$alt_boundary\r\n"
                   . "Content-Type: text/plain; charset=UTF-8\r\n"
                   . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
                   . quoted_printable_encode(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $body_html))) . "\r\n"
-                  . "--$boundary\r\n"
+                  . "--$alt_boundary\r\n"
                   . "Content-Type: text/html; charset=UTF-8\r\n"
                   . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
                   . quoted_printable_encode($body_html) . "\r\n"
-                  . "--$boundary--";
+                  . "--$alt_boundary--";
+
+        $headers = "Date: $date\r\n"
+                 . "From: $from_header\r\n"
+                 . "To: $to\r\n"
+                 . ($cc ? "Cc: $cc\r\n" : '')
+                 . "Subject: $subj_enc\r\n"
+                 . "MIME-Version: 1.0\r\n";
+
+        if (empty($attachments)) {
+            $msg = $headers
+                 . "Content-Type: multipart/alternative; boundary=\"$alt_boundary\"\r\n\r\n"
+                 . $alt_part;
+        } else {
+            // multipart/mixed: cuerpo alternativo + adjuntos
+            $msg = $headers
+                 . "Content-Type: multipart/mixed; boundary=\"$boundary\"\r\n\r\n"
+                 . "--$boundary\r\n"
+                 . "Content-Type: multipart/alternative; boundary=\"$alt_boundary\"\r\n\r\n"
+                 . $alt_part . "\r\n";
+            foreach ($attachments as $att) {
+                $fname = preg_replace('/[\r\n"]/', '', $att['name'] ?? 'archivo');
+                $mime  = preg_replace('/[\r\n]/', '', $att['type'] ?? 'application/octet-stream');
+                $fname_enc = '=?UTF-8?B?' . base64_encode($fname) . '?=';
+                $msg .= "--$boundary\r\n"
+                      . "Content-Type: $mime; name=\"$fname_enc\"\r\n"
+                      . "Content-Disposition: attachment; filename=\"$fname_enc\"\r\n"
+                      . "Content-Transfer-Encoding: base64\r\n\r\n"
+                      . chunk_split($att['data'] ?? '', 76, "\r\n");
+            }
+            $msg .= "--$boundary--";
+        }
 
         // Escape lines starting with a dot
         $msg = preg_replace('/^\.$/m', '..', $msg);
@@ -256,6 +282,18 @@ case 'list':
 
     $result = [];
     foreach ($msgs as $m) {
+        // Snippet: primeras palabras del cuerpo en texto plano
+        $snippet = '';
+        $struct = @imap_fetchstructure($conn, $m->msgno);
+        if ($struct) {
+            $part_no = ((int)$struct->type === 1) ? '1' : '';
+            $raw = @imap_fetchbody($conn, $m->msgno, $part_no ?: '1', FT_PEEK);
+            if ($raw === false || $raw === '') $raw = @imap_body($conn, $m->msgno, FT_PEEK);
+            $enc = $part_no && isset($struct->parts[0]) ? $struct->parts[0]->encoding : ($struct->encoding ?? 0);
+            $cs  = get_charset(($part_no && isset($struct->parts[0]) ? $struct->parts[0]->parameters : $struct->parameters) ?? []);
+            $decoded = decode_body($raw, $enc, $cs);
+            $snippet = mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($decoded))), 0, 140);
+        }
         $result[] = [
             'uid'      => (int)$m->uid,
             'msgno'    => (int)$m->msgno,
@@ -265,6 +303,7 @@ case 'list':
             'seen'     => (int)($m->seen     ?? 0),
             'answered' => (int)($m->answered ?? 0),
             'flagged'  => (int)($m->flagged  ?? 0),
+            'snippet'  => $snippet,
         ];
     }
     imap_close($conn);
@@ -341,7 +380,22 @@ case 'send':
     if (!$to)      { echo json_encode(['error' => 'Destinatario requerido']); exit; }
     if (!$subject) { echo json_encode(['error' => 'Asunto requerido']); exit; }
 
-    $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html);
+    // Adjuntos: JSON [{name, type, data(base64)}] — máx 20 MB decodificado
+    $attachments = [];
+    if (!empty($_POST['atts'])) {
+        $parsed = json_decode($_POST['atts'], true);
+        if (is_array($parsed)) {
+            $total = 0;
+            foreach ($parsed as $a) {
+                if (empty($a['data']) || empty($a['name'])) continue;
+                $total += strlen($a['data']) * 0.75;
+                if ($total > 20 * 1024 * 1024) { echo json_encode(['error' => 'Adjuntos superan 20 MB']); exit; }
+                $attachments[] = $a;
+            }
+        }
+    }
+
+    $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments);
     if ($err) { echo json_encode(['error' => $err]); exit; }
 
     // Guardar en carpeta Enviados via IMAP APPEND
@@ -407,8 +461,13 @@ case 'mark':
     $msgno = imap_msgno($conn, $uid);
     if (!$msgno) { echo json_encode(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
 
-    if ($seen) imap_setflag_full($conn,   (string)$msgno, '\\Seen');
-    else       imap_clearflag_full($conn, (string)$msgno, '\\Seen');
+    if (isset($_POST['flagged'])) {
+        if ((int)$_POST['flagged']) imap_setflag_full($conn,   (string)$msgno, '\\Flagged');
+        else                        imap_clearflag_full($conn, (string)$msgno, '\\Flagged');
+    } else {
+        if ($seen) imap_setflag_full($conn,   (string)$msgno, '\\Seen');
+        else       imap_clearflag_full($conn, (string)$msgno, '\\Seen');
+    }
 
     imap_close($conn);
     echo json_encode(['ok' => true]);
@@ -444,6 +503,56 @@ case 'search':
     }
     imap_close($conn);
     echo json_encode(['messages' => $result, 'total' => count($result)]);
+    break;
+
+// ── attachment ────────────────────────────────────────────────
+// Descarga un adjunto: devuelve base64 + nombre + mime
+case 'attachment':
+    $folder = $_POST['folder'] ?? 'INBOX';
+    $uid    = (int)($_POST['uid'] ?? 0);
+    $part   = $_POST['part'] ?? '';
+
+    if (!$part) { echo json_encode(['error' => 'Parte requerida']); exit; }
+
+    $conn = open_imap($user, $pass, $folder);
+    if (is_array($conn)) { echo json_encode($conn); exit; }
+
+    $msgno = imap_msgno($conn, $uid);
+    if (!$msgno) { echo json_encode(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
+
+    // Localizar la estructura de la parte pedida para conocer encoding y nombre
+    $structure = imap_fetchstructure($conn, $msgno);
+    $target = $structure;
+    foreach (explode('.', $part) as $idx) {
+        $i = (int)$idx - 1;
+        if (!isset($target->parts[$i])) { echo json_encode(['error' => 'Parte no encontrada']); imap_close($conn); exit; }
+        $target = $target->parts[$i];
+    }
+
+    $raw = imap_fetchbody($conn, $msgno, $part, FT_PEEK);
+    imap_close($conn);
+
+    // Decodificar según encoding original y re-codificar a base64 limpio
+    switch ((int)$target->encoding) {
+        case 3: $bin = base64_decode($raw); break;
+        case 4: $bin = quoted_printable_decode($raw); break;
+        default: $bin = $raw;
+    }
+
+    $fname = 'archivo';
+    foreach (($target->dparameters ?? []) as $p) {
+        if (strtolower($p->attribute) === 'filename') { $fname = decode_str($p->value); break; }
+    }
+    if ($fname === 'archivo') {
+        foreach (($target->parameters ?? []) as $p) {
+            if (strtolower($p->attribute) === 'name') { $fname = decode_str($p->value); break; }
+        }
+    }
+
+    $type_names = [0=>'text',1=>'multipart',2=>'message',3=>'application',4=>'audio',5=>'image',6=>'video',7=>'other'];
+    $mime = ($type_names[(int)$target->type] ?? 'application') . '/' . strtolower($target->subtype ?? 'octet-stream');
+
+    echo json_encode(['name' => $fname, 'mime' => $mime, 'data' => base64_encode($bin)]);
     break;
 
 // ── check ─────────────────────────────────────────────────────
