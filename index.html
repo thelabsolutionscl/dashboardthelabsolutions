@@ -6987,8 +6987,9 @@ async function crearPedidoDesdeCotizacion(cotId){
   if(Array.isArray(f['Cliente'])&&f['Cliente'].length>0) fields['Cliente']=f['Cliente'];
   if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
   if(f['Vendedor']) fields['Vendedor']=f['Vendedor'];
-  try{await airtableWrite('Pedidos','POST',null,fields);toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();}
-  catch(e){if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('cliente')){try{await airtableWrite('Pedidos','POST',null,{'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']});toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');}}else{toast(`⚠ Error: ${e.message}`,'error');}}
+  const solicitudCot=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';
+  try{await airtableWrite('Pedidos','POST',null,fields);toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();_offerAgentChain(numPedido,solicitudCot);}
+  catch(e){if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('cliente')){try{await airtableWrite('Pedidos','POST',null,{'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']});toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();_offerAgentChain(numPedido,solicitudCot);}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');}}else{toast(`⚠ Error: ${e.message}`,'error');}}
 }
 function openEditCot(id){
   const c=state.cotizaciones.find(x=>x.id===id);if(!c) return;const f=c.fields;
@@ -8514,7 +8515,7 @@ function renderPedidos(filter){
     const pedDriveLink=pedDriveCotId?localStorage.getItem('fp_drive_folder_'+pedDriveCotId):localStorage.getItem('fp_drive_folder_ped_'+p.id);
     const pedNotasN=_getNotas('ped',p.id).length;
     const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item act-item-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ &nbsp;Avanzar a "${stages[idx+1]}"</button><div class="act-sep"></div>`:(estado==='Despachado'?'':'');
-    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
+    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button><button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -9766,6 +9767,85 @@ async function saveQAFromAgent(pedidoId,resultado){
     toast(`✓ QA ${resultado}`,'success');
     closeAgentInlineModal();renderPedidos();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── CADENA DE AGENTES (PRODUCTION → QA) ────────────────────────
+function _parseQAChecklist(text){
+  const items=[];
+  text.split('\n').forEach(l=>{
+    const m=l.match(/^\s*(?:[-*]\s*)?\[([ xX])\]\s*(.+)/);
+    if(m) items.push({texto:m[2].trim(),checked:m[1]!==' '});
+  });
+  return items.length>=3?items:null;
+}
+
+async function runAgentChain(pedidoId,solicitudOverride){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
+  const f=p.fields;
+  const num=f['N° Pedido']||'—';
+  const solicitud=(solicitudOverride||f['Solicitud cliente (texto libre)']||f['Detalle productos']||'').substring(0,300);
+  const resultEl=document.getElementById('agentInlineResult');
+  const actionsEl=document.getElementById('agentInlineActions');
+  document.getElementById('agentInlineTitle').textContent='⚡ Cadena IA — '+num;
+  resultEl.className='agent-modal-result';
+  resultEl.style.whiteSpace='pre-wrap';
+  actionsEl.innerHTML='';
+  _agentInlineText='';
+  document.getElementById('agentInlineModal').style.display='flex';
+  const baseCtx=`Pedido: ${num} | Cliente: ${resolveClienteName(f['Cliente'])}\nEntrega: ${f['Fecha entrega']||'—'} | Equipo: ${f['Equipo asignado']||'Sin asignar'}\nSolicitud/Producto: ${solicitud||'Sin detalle'}`;
+  const steps={prod:'⏳ Generando Ficha Técnica (PRODUCTION_AGENT)...',qa:'· Checklist QA — en espera'};
+  const paint=()=>{resultEl.textContent=steps.prod+'\n'+steps.qa;};
+  paint();
+  let ficha='',checklist='';
+  // Paso 1: PRODUCTION
+  try{
+    const cfg=AGENTES_CFG.find(a=>a.id==='PRODUCTION');
+    const ctx=state.loaded?buildAgentContext('PRODUCTION'):'';
+    ficha=await callClaude(cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
+    try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,ficha);}catch(e){}
+    const existing=parseFichaData(f['Ficha Tecnica'])||{};
+    existing.instrucciones=ficha;
+    existing.generadoIA=new Date().toISOString().substring(0,10);
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(existing)});
+    p.fields['Ficha Tecnica']=JSON.stringify(existing);
+    steps.prod='✅ Ficha Técnica generada y guardada';
+    steps.qa='⏳ Generando Checklist QA (QA_AGENT)...';
+    paint();
+  }catch(e){
+    steps.prod='❌ Ficha Técnica: '+e.message;
+    steps.qa='· Checklist QA — cancelado';
+    paint();
+    actionsEl.innerHTML='<button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal()">Cerrar</button>';
+    return;
+  }
+  // Paso 2: QA
+  try{
+    const cfg=AGENTES_CFG.find(a=>a.id==='QA');
+    const ctx=state.loaded?buildAgentContext('QA'):'';
+    checklist=await callClaude(cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
+    try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,checklist);}catch(e){}
+    const qaItems=_parseQAChecklist(checklist);
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Notas QA':qaItems?JSON.stringify(qaItems):checklist});
+    p.fields['Notas QA']=qaItems?JSON.stringify(qaItems):checklist;
+    steps.qa='✅ Checklist QA generado y guardado'+(qaItems?` (${qaItems.length} ítems)`:'');
+  }catch(e){
+    steps.qa='❌ Checklist QA: '+e.message;
+  }
+  paint();
+  renderPedidos();
+  _agentInlineText='═══ FICHA TÉCNICA ═══\n'+ficha+(checklist?'\n\n═══ CHECKLIST QA ═══\n'+checklist:'');
+  resultEl.textContent=steps.prod+'\n'+steps.qa+'\n\n'+_agentInlineText;
+  actionsEl.innerHTML=`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();openFichaModal('${pedidoId}')">📋 Ver Ficha Técnica</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();openQAModal('${pedidoId}','${escapeHtml(num)}')">✓ Ver Checklist QA</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+}
+
+function _offerAgentChain(numPedido,solicitud){
+  try{
+    const k=typeof getAnthropicKey==='function'?getAnthropicKey():null;
+    if(!k||k.startsWith('%%')) return;
+    const nuevo=state.pedidos.find(x=>x.fields['N° Pedido']===numPedido);
+    if(!nuevo) return;
+    if(confirm(`⚡ ¿Generar Ficha Técnica + Checklist QA con IA para ${numPedido}?`)) runAgentChain(nuevo.id,solicitud);
+  }catch(e){}
 }
 
 // ── HISTORIAL DE EJECUCIONES DE AGENTES ────────────────────────
