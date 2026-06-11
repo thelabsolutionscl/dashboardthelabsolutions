@@ -1587,7 +1587,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="dock-btn" data-tab="finanzas" onclick="switchTab('finanzas')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-finanzas"/></svg></span><span class="dock-label">Finanzas</span><span class="dock-badge" id="badge-finanzas" style="display:none">0</span></button>
     <button class="dock-btn" data-tab="visual" onclick="switchTab('visual')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-visual"/></svg></span><span class="dock-label">Visual AI</span></button>
     <button class="dock-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-remuneraciones"/></svg></span><span class="dock-label">Remuneraciones</span></button>
-    <button class="dock-btn" data-tab="calculadora" onclick="switchTab('calculadora')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-calculadora"/></svg></span><span class="dock-label">Calculadora</span></button>
     <button class="dock-btn" data-tab="correo" onclick="switchTab('correo')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-correo"/></svg></span><span class="dock-label">Correo</span></button>
   </div>
 </div>
@@ -1627,7 +1626,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="finanzas" onclick="switchTabMobile('finanzas')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-finanzas"/></svg></span>Finanzas</button>
     <button class="mobile-tab-btn" data-tab="visual" onclick="switchTabMobile('visual')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-visual"/></svg></span>Visual AI</button>
     <button class="mobile-tab-btn" data-tab="remuneraciones" onclick="switchTabMobile('remuneraciones')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-remuneraciones"/></svg></span>Remuneraciones</button>
-    <button class="mobile-tab-btn" data-tab="calculadora" onclick="switchTabMobile('calculadora')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-calculadora"/></svg></span>Calculadora</button>
     <button class="mobile-tab-btn" data-tab="correo" onclick="switchTabMobile('correo')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-correo"/></svg></span>Correo</button>
     <!-- Acordeón Configuración / Tokens -->
     <div style="border-top:1px solid var(--border)">
@@ -2495,7 +2493,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             </div>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" onclick="addItemRow()">+ Agregar ítem</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="c3d-toggle-btn" onclick="toggleC3dInline()" style="border-color:rgba(0,212,204,0.4);color:var(--accent)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Calculadora 3D</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="c3d-toggle-btn" onclick="toggleC3dInline('n')" style="border-color:rgba(0,212,204,0.4);color:var(--accent)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Calculadora 3D</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="lsr-btn-n" onclick="qcalcToggle('lsr','n')" style="border-color:rgba(245,158,11,0.4);color:#f59e0b">🔆 Calculadora Láser</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="neo-btn-n" onclick="qcalcToggle('neo','n')" style="border-color:rgba(249,115,22,0.4);color:#f97316">💡 Calculadora Neón</button>
           <input type="hidden" id="cot-detalle">
           <!-- CALCULADORA 3D INLINE -->
           <div id="c3d-inline-panel" style="display:none;margin-top:10px;border:1px solid rgba(0,212,204,0.35);border-radius:10px;overflow:hidden;background:var(--surface2)">
@@ -2517,6 +2517,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
               </div>
             </div>
           </div>
+          <div id="calc-host-n"></div>
         </div>
         <div class="field-group form-full"><label class="field-label">Notas internas</label><textarea class="field-textarea" id="cot-notas" rows="2"></textarea></div>
         <div class="field-group" id="cot-vendedor-wrap" style="display:none"><label class="field-label">Vendedor asignado</label><select class="field-select" id="cot-vendedor"><option value="">— Sin asignar —</option></select></div>
@@ -2765,6 +2766,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           </div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="addEditItemRow()">+ Agregar ítem</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="c3d-btn-e" onclick="toggleC3dInline('e')" style="border-color:rgba(0,212,204,0.4);color:var(--accent)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Calculadora 3D</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="lsr-btn-e" onclick="qcalcToggle('lsr','e')" style="border-color:rgba(245,158,11,0.4);color:#f59e0b">🔆 Calculadora Láser</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="neo-btn-e" onclick="qcalcToggle('neo','e')" style="border-color:rgba(249,115,22,0.4);color:#f97316">💡 Calculadora Neón</button>
+        <div id="calc-host-e"></div>
         <input type="hidden" id="editCotDetalle">
       </div>
       <div class="field-group form-full"><label class="field-label">Notas internas</label><textarea class="field-textarea" id="editCotNotas" rows="2"></textarea></div>
@@ -4189,183 +4194,6 @@ function _reportarResultados(muts) {
 
 </div>
 
-<!-- ══════════════════ CALCULADORA LÁSER / NEON ══════════════ -->
-<div class="tab-panel" id="tab-calculadora">
-  <div class="section-header">
-    <div><div class="section-title">⚡ Calculadora de Cotización</div><div class="section-desc">Calcula costos y precios de venta para trabajos de corte láser, grabado y letrero neon/LED. Exporta directamente a cotización.</div></div>
-  </div>
-  <div style="display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
-    <button class="btn btn-ghost btn-sm active-filter" id="calc-nav-laser" onclick="calcSwitchTab('laser')">🔆 Corte Láser</button>
-    <button class="btn btn-ghost btn-sm" id="calc-nav-neon" onclick="calcSwitchTab('neon')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-sun"/></svg> Neon / LED</button>
-  </div>
-
-  <!-- ── LÁSER ── -->
-  <div id="calc-panel-laser">
-    <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div class="card">
-          <div class="card-header"><span class="card-title">Datos del trabajo</span></div>
-          <div class="form-grid" style="padding:14px 16px">
-            <div class="field-group form-full"><label class="field-label">Descripción</label><input class="field-input" id="lsr-desc" placeholder="ej. Corte logo acrílico 3mm"></div>
-            <div class="field-group"><label class="field-label">Cliente</label>
-              <div class="search-select-wrap">
-                <input class="field-input" id="lsr-cli-search" placeholder="🔍 buscar..." autocomplete="off" oninput="calcClienteSearch('lsr')" onfocus="calcClienteSearch('lsr')">
-                <input type="hidden" id="lsr-cli-id">
-                <div class="search-select-dropdown" id="lsr-cli-dropdown"></div>
-              </div>
-            </div>
-            <div class="field-group"><label class="field-label">Cantidad de copias</label><input class="field-input" id="lsr-qty" type="number" min="1" value="1" oninput="calcLaserUpdate()"></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Material</span></div>
-          <div class="form-grid" style="padding:14px 16px">
-            <div class="field-group"><label class="field-label">Tipo de material</label>
-              <select class="field-select" id="lsr-mat" onchange="calcLaserUpdate()">
-                <option value="2800">Acrílico 3mm — $2.800/cm²</option>
-                <option value="3500">Acrílico 5mm — $3.500/cm²</option>
-                <option value="480">MDF 3mm — $480/cm²</option>
-                <option value="750">MDF 6mm — $750/cm²</option>
-                <option value="120">Cartón corrugado — $120/cm²</option>
-                <option value="1200">Cuero / Simil — $1.200/cm²</option>
-                <option value="350">Tela / Fieltro — $350/cm²</option>
-              </select>
-            </div>
-            <div class="field-group"><label class="field-label">Área de corte (cm²)</label><input class="field-input" id="lsr-area" type="number" min="0" value="0" placeholder="0" oninput="calcLaserUpdate()"></div>
-            <div class="field-group"><label class="field-label">% Desperdicio material</label><input class="field-input" id="lsr-desp" type="number" min="0" max="60" value="15" oninput="calcLaserUpdate()"></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Tiempo de máquina</span></div>
-          <div class="form-grid" style="padding:14px 16px">
-            <div class="field-group"><label class="field-label">Tiempo corte (min)</label><input class="field-input" id="lsr-t-corte" type="number" min="0" value="0" placeholder="0" oninput="calcLaserUpdate()"></div>
-            <div class="field-group"><label class="field-label">Tiempo grabado (min)</label><input class="field-input" id="lsr-t-grab" type="number" min="0" value="0" placeholder="0" oninput="calcLaserUpdate()"></div>
-            <div class="field-group"><label class="field-label">Tarifa máquina (CLP/hr)</label><input class="field-input" id="lsr-tarifa" type="number" min="0" value="8000" oninput="calcLaserUpdate()"></div>
-            <div class="field-group"><label class="field-label">Mano de obra (min)</label><input class="field-input" id="lsr-mdo" type="number" min="0" value="0" placeholder="0" oninput="calcLaserUpdate()"></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> Extras</span><button class="btn-mini btn-mini-yellow" onclick="calcLaserAddExtra()">+ Extra</button></div>
-          <div id="lsr-extras" style="padding:8px 16px;display:flex;flex-direction:column;gap:6px"></div>
-        </div>
-      </div>
-      <div style="position:sticky;top:72px">
-        <div class="card" style="border-color:rgba(245,158,11,0.3)">
-          <div class="card-header" style="border-bottom-color:rgba(245,158,11,0.2)"><span class="card-title" style="color:#f59e0b"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> Precio Láser</span></div>
-          <div style="padding:14px 16px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><label class="field-label" style="margin:0">Margen</label><span id="lsr-margen-lbl" style="font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#f59e0b">60%</span></div>
-            <input type="range" id="lsr-margen" min="10" max="90" value="60" oninput="calcLaserUpdate()" style="width:100%;accent-color:#f59e0b;cursor:pointer;margin-bottom:14px">
-            <div style="display:flex;flex-direction:column;gap:0">
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Costo material</span><span id="lsr-r-mat" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Costo máquina</span><span id="lsr-r-maq" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Mano de obra</span><span id="lsr-r-mdo" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Extras</span><span id="lsr-r-ext" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Costo total</span><span id="lsr-r-costo" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Precio neto</span><span id="lsr-r-neto" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">IVA (19%)</span><span id="lsr-r-iva" style="font-family:'JetBrains Mono',monospace;color:var(--text2)">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border2)"><span style="font-weight:700;font-size:13px">TOTAL c/IVA</span><span id="lsr-r-total" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:#f59e0b">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px"><span style="color:var(--text3)">Precio por copia</span><span id="lsr-r-pieza" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent)">$0</span></div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:6px;margin-top:14px">
-              <button class="btn btn-primary" onclick="calcLaserGuardar()">✚ Guardar como Cotización</button>
-              <button class="btn btn-ghost btn-sm" onclick="calcLaserLimpiar()">↺ Limpiar</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── NEON / LED ── -->
-  <div id="calc-panel-neon" style="display:none">
-    <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div class="card">
-          <div class="card-header"><span class="card-title">Datos del trabajo</span></div>
-          <div class="form-grid" style="padding:14px 16px">
-            <div class="field-group form-full"><label class="field-label">Descripción</label><input class="field-input" id="neo-desc" placeholder="ej. Letrero Neon 'The Lab' rosa 80cm"></div>
-            <div class="field-group"><label class="field-label">Cliente</label>
-              <div class="search-select-wrap">
-                <input class="field-input" id="neo-cli-search" placeholder="🔍 buscar..." autocomplete="off" oninput="calcClienteSearch('neo')" onfocus="calcClienteSearch('neo')">
-                <input type="hidden" id="neo-cli-id">
-                <div class="search-select-dropdown" id="neo-cli-dropdown"></div>
-              </div>
-            </div>
-            <div class="field-group"><label class="field-label">Cantidad</label><input class="field-input" id="neo-qty" type="number" min="1" value="1" oninput="calcNeonUpdate()"></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Tipo y dimensiones</span></div>
-          <div class="form-grid" style="padding:14px 16px">
-            <div class="field-group"><label class="field-label">Tecnología</label>
-              <select class="field-select" id="neo-tipo" onchange="calcNeonUpdate()">
-                <option value="4200">LED Flex Silicona — $4.200/m</option>
-                <option value="3100">LED Cuerda neon — $3.100/m</option>
-                <option value="12000">Neon gas (vidrio) — $12.000/m</option>
-              </select>
-            </div>
-            <div class="field-group"><label class="field-label">Longitud total tubo (m)</label><input class="field-input" id="neo-largo" type="number" min="0" step="0.1" value="0" placeholder="0" oninput="calcNeonUpdate()"></div>
-            <div class="field-group"><label class="field-label">N° de colores / cortes</label><input class="field-input" id="neo-colores" type="number" min="1" max="8" value="1" oninput="calcNeonUpdate()"></div>
-            <div class="field-group"><label class="field-label">Soporte / backing</label>
-              <select class="field-select" id="neo-soporte" onchange="calcNeonUpdate()">
-                <option value="0">Sin soporte</option>
-                <option value="15000">Acrílico transparente — $15.000</option>
-                <option value="22000">Acrílico negro — $22.000</option>
-                <option value="35000">MDF pintado — $35.000</option>
-                <option value="55000">Estructura metálica — $55.000</option>
-              </select>
-            </div>
-            <div class="field-group"><label class="field-label">Transformador / Fuente</label>
-              <select class="field-select" id="neo-trans" onchange="calcNeonUpdate()">
-                <option value="8500">Estándar 12V — $8.500</option>
-                <option value="15000">Potenciado 12V/24V — $15.000</option>
-                <option value="0">Sin transformador</option>
-              </select>
-            </div>
-            <div class="field-group"><label class="field-label">Control dimmer/remoto</label>
-              <select class="field-select" id="neo-dimmer" onchange="calcNeonUpdate()">
-                <option value="0">Sin control</option>
-                <option value="7500">Dimmer manual — $7.500</option>
-                <option value="14000">Control remoto RF — $14.000</option>
-                <option value="22000">App Bluetooth — $22.000</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> Extras</span><button class="btn-mini btn-mini-yellow" onclick="calcNeonAddExtra()">+ Extra</button></div>
-          <div id="neo-extras" style="padding:8px 16px;display:flex;flex-direction:column;gap:6px"></div>
-        </div>
-      </div>
-      <div style="position:sticky;top:72px">
-        <div class="card" style="border-color:rgba(249,115,22,0.3)">
-          <div class="card-header" style="border-bottom-color:rgba(249,115,22,0.2)"><span class="card-title" style="color:#f97316"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> Precio Neon/LED</span></div>
-          <div style="padding:14px 16px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><label class="field-label" style="margin:0">Margen</label><span id="neo-margen-lbl" style="font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#f97316">65%</span></div>
-            <input type="range" id="neo-margen" min="10" max="90" value="65" oninput="calcNeonUpdate()" style="width:100%;accent-color:#f97316;cursor:pointer;margin-bottom:14px">
-            <div style="display:flex;flex-direction:column;gap:0">
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Tubo/LED</span><span id="neo-r-tubo" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Soporte</span><span id="neo-r-sop" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Transformador</span><span id="neo-r-trans" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Dimmer/Control</span><span id="neo-r-dim" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Extras</span><span id="neo-r-ext" style="font-family:'JetBrains Mono',monospace">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Costo total</span><span id="neo-r-costo" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">Precio neto</span><span id="neo-r-neto" style="font-family:'JetBrains Mono',monospace;font-weight:600">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px"><span style="color:var(--text3)">IVA (19%)</span><span id="neo-r-iva" style="font-family:'JetBrains Mono',monospace;color:var(--text2)">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border2)"><span style="font-weight:700;font-size:13px">TOTAL c/IVA</span><span id="neo-r-total" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:#f97316">$0</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px"><span style="color:var(--text3)">Precio por unidad</span><span id="neo-r-pieza" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent)">$0</span></div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:6px;margin-top:14px">
-              <button class="btn btn-primary" onclick="calcNeonGuardar()">✚ Guardar como Cotización</button>
-              <button class="btn btn-ghost btn-sm" onclick="calcNeonLimpiar()">↺ Limpiar</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- ══════════════════ VISUAL AI ══════════════════════════════ -->
 <div class="tab-panel" id="tab-visual">
   <div class="section-header" style="margin-bottom:16px">
@@ -5267,7 +5095,6 @@ function openMobileGrid(){
     {tab:'finanzas',label:'Finanzas'},
     {tab:'visual',label:'Visual AI'},
     {tab:'remuneraciones',label:'Remuner.'},
-    {tab:'calculadora',label:'Calculadora'},
     {tab:'correo',label:'Correo'},
   ];
   const u=AUTH.getUser();
@@ -7160,6 +6987,9 @@ function openEditCot(id){
   const container=document.getElementById('editItemsContainer');container.innerHTML='';document.getElementById('editItemsTotalRow').style.display='none';
   const detalle=f['Detalle productos']||'';const lineas=detalle.split('\n').filter(Boolean).map(l=>{const parts=l.split('|').map(s=>s.trim());const desc=parts[0]||'',undStr=(parts[1]||'').replace(/[^\d.]/g,''),und=parseFloat(undStr)||1;const costoRaw=(parts[2]||'').replace(/Costo:\s*/i,'').replace(/\./g,'').replace(/[^0-9]/g,'');const ventaRaw=(parts[3]||'').replace(/Venta:\s*/i,'').replace(/\./g,'').replace(/[^0-9]/g,'');return{desc,und,costoUnit:und>0?Math.round(parseFloat(costoRaw)||0)/und:0,ventaUnit:und>0?Math.round(parseFloat(ventaRaw)||0)/und:0};});
   if(lineas.length>0) lineas.forEach(l=>addEditItemRow(l));else addEditItemRow();
+  // Ocultar calculadoras inline de una edición anterior
+  ['c3d','lsr','neo'].forEach(k=>{const p=document.getElementById(k+'-inline-panel');if(p)p.style.display='none';});
+  ['c3d-btn-e','lsr-btn-e','neo-btn-e'].forEach(id=>{const b=document.getElementById(id);if(b)b.style.background='';});
   document.getElementById('editCotModal').style.display='flex';
 }
 function closeEditCot(){document.getElementById('editCotModal').style.display='none';}
@@ -10750,7 +10580,7 @@ function selectClienteNew(){document.getElementById('cot-cliente-id').value='';d
 document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap')) document.querySelectorAll('.search-select-dropdown').forEach(d=>d.classList.remove('open'));});
 function clearForm(type){
   if(type==='lead'){['nl-empresa','nl-contacto','nl-cargo','nl-telefono','nl-email','nl-rut','nl-web','nl-notas','nl-ciudad','nl-direccion'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});document.getElementById('nl-origen').value='Referido';document.getElementById('nl-industria').value='';const nr=document.getElementById('nl-region');if(nr) nr.value='';const nc=document.getElementById('nl-comuna');if(nc){nc.innerHTML='<option value="">— Seleccionar región primero —</option>';nc.disabled=true;}}
-  if(type==='cot'){['cot-num','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id','cot-tiempo-prod'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';const cu=document.getElementById('cot-urgente');if(cu) cu.value='false';const td=document.getElementById('cot-tipo-dias');if(td) td.value='DÍAS HÁBILES';const tdb=document.getElementById('cot-tipo-dias-btn');if(tdb){tdb.textContent='DÍAS HÁBILES';tdb.style.background='rgba(0,212,204,0.15)';tdb.style.borderColor='rgba(0,212,204,0.5)';tdb.style.color='var(--accent)';};document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();const c3dp=document.getElementById('c3d-inline-panel');if(c3dp) c3dp.style.display='none';const c3db=document.getElementById('c3d-toggle-btn');if(c3db) c3db.style.background='';const c3dl=document.getElementById('c3d-i-piezas');if(c3dl) c3dl.innerHTML='';c3dPiezasActivas=[];c3dPiezaCounter=0;}
+  if(type==='cot'){['cot-num','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id','cot-tiempo-prod'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';const cu=document.getElementById('cot-urgente');if(cu) cu.value='false';const td=document.getElementById('cot-tipo-dias');if(td) td.value='DÍAS HÁBILES';const tdb=document.getElementById('cot-tipo-dias-btn');if(tdb){tdb.textContent='DÍAS HÁBILES';tdb.style.background='rgba(0,212,204,0.15)';tdb.style.borderColor='rgba(0,212,204,0.5)';tdb.style.color='var(--accent)';};document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();const c3dp=document.getElementById('c3d-inline-panel');if(c3dp) c3dp.style.display='none';Object.values(_c3dBtns()).forEach(b=>{if(b)b.style.background='';});const c3dl=document.getElementById('c3d-i-piezas');if(c3dl) c3dl.innerHTML='';c3dPiezasActivas=[];c3dPiezaCounter=0;['lsr','neo'].forEach(k=>{const p=document.getElementById(k+'-inline-panel');if(p)p.style.display='none';Object.values(_qcalcBtns(k)).forEach(b=>{if(b)b.style.background='';});});}
   if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-whatsapp','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});setPvSelectedCats('np',[]);const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
 }
 // ── PROVEEDORES ───────────────────────────────────────────────
@@ -12502,13 +12332,13 @@ const AUTH={
 const RBAC={
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','correo','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','correo','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','calculadora','correo','nuevo-lead','nueva-cot','cot3d'],
-    produccion: ['overview','pedidos','maquinas','equipo','visual','calculadora','correo'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','correo','nuevo-lead','nueva-cot','cot3d'],
+    produccion: ['overview','pedidos','maquinas','equipo','visual','correo'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo'],
     marketing:  ['overview','web','agentes','reporte','correo'],
-    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','calculadora','remuneraciones'],
+    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','remuneraciones'],
   },
   // Items del menú "Nuevo" visibles por rol
   nuevos:{
@@ -15426,21 +15256,28 @@ const C3D_EXTRAS=[
 // ── CALCULADORA 3D INLINE (dentro de Nueva Cotización) ────────────────────
 let c3dPiezaCounter=0;
 let c3dPiezasActivas=[];
+let c3dTarget='n'; // 'n' = nueva cotización, 'e' = editar cotización
 
-function toggleC3dInline(){
+function _c3dBtns(){return{n:document.getElementById('c3d-toggle-btn'),e:document.getElementById('c3d-btn-e')};}
+function toggleC3dInline(ctx){
+  ctx=ctx||'n';
   const panel=document.getElementById('c3d-inline-panel');
   if(!panel) return;
+  const btns=_c3dBtns();
   const isOpen=panel.style.display!=='none';
-  const btn=document.getElementById('c3d-toggle-btn');
-  if(isOpen){
+  if(isOpen&&c3dTarget===ctx){
     panel.style.display='none';
-    if(btn){btn.style.background='';btn.style.borderColor='rgba(0,212,204,0.4)';}
-  } else {
-    panel.style.display='block';
-    if(btn) btn.style.background='rgba(0,212,204,0.15)';
-    if(!c3dPiezasActivas.length) c3dAddPieza();
-    c3dUpdateAll();
+    Object.values(btns).forEach(b=>{if(b)b.style.background='';});
+    return;
   }
+  // El panel es único: se mueve al host del contexto activo
+  c3dTarget=ctx;
+  const host=document.getElementById('calc-host-'+ctx);
+  if(host) host.appendChild(panel);
+  panel.style.display='block';
+  Object.entries(btns).forEach(([k,b])=>{if(b)b.style.background=k===ctx?'rgba(0,212,204,0.15)':'';});
+  if(!c3dPiezasActivas.length) c3dAddPieza();
+  c3dUpdateAll();
 }
 
 function c3dAddPieza(){
@@ -15543,28 +15380,17 @@ function c3dUpdateAll(){
 
 function c3dAplicarACot(){
   if(!c3dPiezasActivas.length){toast('Agrega al menos una pieza','error');return;}
-  const container=document.getElementById('itemsContainer');
-  if(!container){toast('Error: formulario de cotización no encontrado','error');return;}
   c3dPiezasActivas.forEach(id=>{
     const desc=(document.getElementById('c3d-p-desc-'+id)?.value||'').trim()||'Pieza impresión 3D';
     const{costoUnit,netoUnit,qty}=c3dCalcPieza(id);
-    addItemRow();
-    const rows=container.querySelectorAll('.item-row');
-    const last=rows[rows.length-1];
-    if(last){
-      last.querySelector('.item-desc').value=desc;
-      last.querySelector('.item-und').value=qty;
-      last.querySelector('.item-costo').value=costoUnit;
-      last.querySelector('.item-venta').value=netoUnit;
-    }
+    qcalcInsertRow(c3dTarget,{desc,und:qty,costoUnit,ventaUnit:netoUnit});
   });
-  updateItemTotal();
   const count=c3dPiezasActivas.length;
   c3dPiezasActivas=[];c3dPiezaCounter=0;
   const plist=document.getElementById('c3d-i-piezas');if(plist) plist.innerHTML='';
   const tel=document.getElementById('c3d-i-total');if(tel) tel.textContent='$0';
   const panel=document.getElementById('c3d-inline-panel');if(panel) panel.style.display='none';
-  const btn=document.getElementById('c3d-toggle-btn');if(btn) btn.style.background='';
+  Object.values(_c3dBtns()).forEach(b=>{if(b)b.style.background='';});
   toast(count+' pieza'+(count!==1?'s':'')+' agregada'+(count!==1?'s':'')+' a la cotización ✓','success');
 }
 
@@ -16348,179 +16174,230 @@ function checkClientePortal(){
   else{const orig=window.renderOverview||function(){};const intv=setInterval(()=>{if(state.loaded){clearInterval(intv);renderPortal();}},500);}
 }
 
-// ── CALCULADORA LÁSER / NEON ──────────────────────────────────────────
-function calcSwitchTab(tab){
-  ['laser','neon'].forEach(t=>{
-    document.getElementById('calc-panel-'+t).style.display=t===tab?'':'none';
-    const btn=document.getElementById('calc-nav-'+t);if(btn) btn.classList.toggle('active-filter',t===tab);
-  });
+// ── CALCULADORAS LÁSER / NEÓN (inline en Nueva/Editar Cotización) ──────
+// Paneles únicos generados por JS; se mueven al host del contexto activo
+// ('n' = nueva cotización, 'e' = modal editar) igual que la Calculadora 3D.
+let _lsrExtras=[],_neoExtras=[];
+const _qcalcTarget={lsr:'n',neo:'n'};
+
+// Inserta una fila de ítem en el formulario del contexto indicado
+function qcalcInsertRow(ctx,{desc,und,costoUnit,ventaUnit}){
+  if(ctx==='e'){
+    addEditItemRow({desc,und,costoUnit,ventaUnit});
+    return;
+  }
+  const container=document.getElementById('itemsContainer');
+  if(!container){toast('Formulario de cotización no encontrado','error');return;}
+  addItemRow();
+  const rows=container.querySelectorAll('.item-row');
+  const last=rows[rows.length-1];
+  if(last){
+    last.querySelector('.item-desc').value=desc;
+    last.querySelector('.item-und').value=und;
+    last.querySelector('.item-costo').value=costoUnit;
+    last.querySelector('.item-venta').value=ventaUnit;
+  }
+  updateItemTotal();
 }
-// Cliente autocomplete compartido
-function calcClienteSearch(pfx){
-  const q=(document.getElementById(pfx+'-cli-search')?.value||'').toLowerCase();
-  const dd=document.getElementById(pfx+'-cli-dropdown');if(!dd)return;
-  if(!q){dd.style.display='none';return;}
-  const matches=state.clientes.filter(c=>{const f=c.fields;return(f['Empresa']||f['Contacto']||'').toLowerCase().includes(q);}).slice(0,8);
-  if(!matches.length){dd.style.display='none';return;}
-  dd.innerHTML=matches.map(c=>{const f=c.fields,name=f['Empresa']||f['Contacto']||'—';
-    return`<div class="search-select-item" onclick="calcClienteSelect('${pfx}','${c.id}','${escapeHtml(name)}')">${escapeHtml(name)}</div>`;
-  }).join('');
-  dd.style.display='block';
+
+const _QCALC={
+  lsr:{color:'#f59e0b',rgba:'245,158,11',title:'🔆 Calculadora Corte Láser',defMargen:60},
+  neo:{color:'#f97316',rgba:'249,115,22',title:'💡 Calculadora Neón / LED',defMargen:65}
+};
+
+function qcalcPanelHtml(kind){
+  const q=_QCALC[kind];
+  const hdr=`<div style="background:rgba(${q.rgba},0.08);padding:10px 14px;border-bottom:1px solid rgba(${q.rgba},0.2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <span style="font-weight:700;font-size:13px;color:${q.color}">${q.title}</span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="font-size:11px;color:var(--text3);margin:0">Margen</label>
+      <span id="${kind}-margen-lbl" style="font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;color:${q.color};min-width:38px;text-align:right">${q.defMargen}%</span>
+      <input type="range" id="${kind}-margen" min="10" max="90" value="${q.defMargen}" oninput="qcalcUpdate('${kind}')" style="width:130px;accent-color:${q.color};cursor:pointer">
+    </div>
+  </div>`;
+  const fields=kind==='lsr'
+    ?`<div class="field-group" style="grid-column:1/-1"><label class="field-label">Descripción</label><input class="field-input" id="lsr-desc" placeholder="ej. Corte logo acrílico 3mm"></div>
+      <div class="field-group"><label class="field-label">Material</label>
+        <select class="field-select" id="lsr-mat" onchange="qcalcUpdate('lsr')">
+          <option value="2800">Acrílico 3mm — $2.800/cm²</option>
+          <option value="3500">Acrílico 5mm — $3.500/cm²</option>
+          <option value="480">MDF 3mm — $480/cm²</option>
+          <option value="750">MDF 6mm — $750/cm²</option>
+          <option value="120">Cartón corrugado — $120/cm²</option>
+          <option value="1200">Cuero / Simil — $1.200/cm²</option>
+          <option value="350">Tela / Fieltro — $350/cm²</option>
+        </select></div>
+      <div class="field-group"><label class="field-label">Área corte (cm²)</label><input class="field-input" id="lsr-area" type="number" min="0" value="0" oninput="qcalcUpdate('lsr')"></div>
+      <div class="field-group"><label class="field-label">% Desperdicio</label><input class="field-input" id="lsr-desp" type="number" min="0" max="60" value="15" oninput="qcalcUpdate('lsr')"></div>
+      <div class="field-group"><label class="field-label">Cantidad copias</label><input class="field-input" id="lsr-qty" type="number" min="1" value="1" oninput="qcalcUpdate('lsr')"></div>
+      <div class="field-group"><label class="field-label">T. corte (min)</label><input class="field-input" id="lsr-t-corte" type="number" min="0" value="0" oninput="qcalcUpdate('lsr')"></div>
+      <div class="field-group"><label class="field-label">T. grabado (min)</label><input class="field-input" id="lsr-t-grab" type="number" min="0" value="0" oninput="qcalcUpdate('lsr')"></div>
+      <div class="field-group"><label class="field-label">Tarifa máquina ($/hr)</label><input class="field-input" id="lsr-tarifa" type="number" min="0" value="8000" oninput="qcalcUpdate('lsr')"></div>
+      <div class="field-group"><label class="field-label">Mano de obra (min)</label><input class="field-input" id="lsr-mdo" type="number" min="0" value="0" oninput="qcalcUpdate('lsr')"></div>`
+    :`<div class="field-group" style="grid-column:1/-1"><label class="field-label">Descripción</label><input class="field-input" id="neo-desc" placeholder="ej. Letrero Neon 'The Lab' rosa 80cm"></div>
+      <div class="field-group"><label class="field-label">Tecnología</label>
+        <select class="field-select" id="neo-tipo" onchange="qcalcUpdate('neo')">
+          <option value="4200">LED Flex Silicona — $4.200/m</option>
+          <option value="3100">LED Cuerda neon — $3.100/m</option>
+          <option value="12000">Neon gas (vidrio) — $12.000/m</option>
+        </select></div>
+      <div class="field-group"><label class="field-label">Longitud tubo (m)</label><input class="field-input" id="neo-largo" type="number" min="0" step="0.1" value="0" oninput="qcalcUpdate('neo')"></div>
+      <div class="field-group"><label class="field-label">N° colores / cortes</label><input class="field-input" id="neo-colores" type="number" min="1" max="8" value="1" oninput="qcalcUpdate('neo')"></div>
+      <div class="field-group"><label class="field-label">Cantidad</label><input class="field-input" id="neo-qty" type="number" min="1" value="1" oninput="qcalcUpdate('neo')"></div>
+      <div class="field-group"><label class="field-label">Soporte / backing</label>
+        <select class="field-select" id="neo-soporte" onchange="qcalcUpdate('neo')">
+          <option value="0">Sin soporte</option>
+          <option value="15000">Acrílico transparente — $15.000</option>
+          <option value="22000">Acrílico negro — $22.000</option>
+          <option value="35000">MDF pintado — $35.000</option>
+          <option value="55000">Estructura metálica — $55.000</option>
+        </select></div>
+      <div class="field-group"><label class="field-label">Transformador</label>
+        <select class="field-select" id="neo-trans" onchange="qcalcUpdate('neo')">
+          <option value="8500">Estándar 12V — $8.500</option>
+          <option value="15000">Potenciado 12V/24V — $15.000</option>
+          <option value="0">Sin transformador</option>
+        </select></div>
+      <div class="field-group"><label class="field-label">Control dimmer/remoto</label>
+        <select class="field-select" id="neo-dimmer" onchange="qcalcUpdate('neo')">
+          <option value="0">Sin control</option>
+          <option value="7500">Dimmer manual — $7.500</option>
+          <option value="14000">Control remoto RF — $14.000</option>
+          <option value="22000">App Bluetooth — $22.000</option>
+        </select></div>`;
+  return `${hdr}
+  <div style="padding:10px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">${fields}</div>
+  <div style="padding:0 14px 10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--text3)">Extras / Insumos</span><button type="button" class="btn-mini btn-mini-yellow" onclick="qcalcAddExtra('${kind}')">+ Extra</button></div>
+    <div id="${kind}-extras" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+  <div id="${kind}-desglose" style="padding:6px 14px;border-top:1px solid rgba(${q.rgba},0.15);font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace"></div>
+  <div style="padding:10px 14px;border-top:1px solid rgba(${q.rgba},0.15);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;align-items:center">
+      <span style="color:var(--text3)">Costo <strong id="${kind}-r-costo" style="font-family:'JetBrains Mono',monospace;color:var(--text2)">$0</strong></span>
+      <span style="color:var(--text3)">Neto <strong id="${kind}-r-neto" style="font-family:'JetBrains Mono',monospace;color:var(--text)">$0</strong></span>
+      <span style="color:var(--text3)">c/IVA <strong id="${kind}-r-total" style="font-family:'JetBrains Mono',monospace;color:${q.color};font-size:13px">$0</strong></span>
+      <span style="color:var(--text3)">por unidad <strong id="${kind}-r-pieza" style="font-family:'JetBrains Mono',monospace;color:var(--accent)">$0</strong></span>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="qcalcClear('${kind}')" title="Limpiar">↺</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="qcalcApply('${kind}')">✓ Agregar a cotización</button>
+    </div>
+  </div>`;
 }
-function calcClienteSelect(pfx,id,name){
-  const inp=document.getElementById(pfx+'-cli-search');const hid=document.getElementById(pfx+'-cli-id');
-  const dd=document.getElementById(pfx+'-cli-dropdown');
-  if(inp)inp.value=name;if(hid)hid.value=id;if(dd)dd.style.display='none';
+
+function qcalcEnsure(kind){
+  let panel=document.getElementById(kind+'-inline-panel');
+  if(panel) return panel;
+  const q=_QCALC[kind];
+  panel=document.createElement('div');
+  panel.id=kind+'-inline-panel';
+  panel.style.cssText=`display:none;margin-top:10px;border:1px solid rgba(${q.rgba},0.35);border-radius:10px;overflow:hidden;background:var(--surface2)`;
+  panel.innerHTML=qcalcPanelHtml(kind);
+  return panel;
 }
-// ── LÁSER ────────────────────────────────────────────────────────────
-let _lsrExtras=[];
-function calcLaserAddExtra(){
-  _lsrExtras.push({desc:'',valor:0});
-  calcLaserRenderExtras();
+
+function _qcalcBtns(kind){return{n:document.getElementById(kind+'-btn-n'),e:document.getElementById(kind+'-btn-e')};}
+
+function qcalcToggle(kind,ctx){
+  const panel=qcalcEnsure(kind);
+  const btns=_qcalcBtns(kind);
+  const q=_QCALC[kind];
+  const isOpen=panel.style.display!=='none';
+  if(isOpen&&_qcalcTarget[kind]===ctx){
+    panel.style.display='none';
+    Object.values(btns).forEach(b=>{if(b)b.style.background='';});
+    return;
+  }
+  _qcalcTarget[kind]=ctx;
+  const host=document.getElementById('calc-host-'+ctx);
+  if(host) host.appendChild(panel);
+  panel.style.display='block';
+  Object.entries(btns).forEach(([k,b])=>{if(b)b.style.background=k===ctx?`rgba(${q.rgba},0.15)`:'';});
+  qcalcUpdate(kind);
 }
-function calcLaserRenderExtras(){
-  const el=document.getElementById('lsr-extras');if(!el)return;
-  el.innerHTML=_lsrExtras.map((x,i)=>`<div style="display:flex;gap:8px;align-items:center">
-    <input class="field-input" style="flex:1" placeholder="Descripción extra" value="${escapeHtml(x.desc)}" oninput="_lsrExtras[${i}].desc=this.value">
-    <input class="field-input" style="width:120px" type="number" min="0" placeholder="Valor CLP" value="${x.valor||''}" oninput="_lsrExtras[${i}].valor=parseInt(this.value)||0;calcLaserUpdate()">
-    <button class="btn-mini btn-mini-red" onclick="_lsrExtras.splice(${i},1);calcLaserRenderExtras();calcLaserUpdate()">✕</button>
+
+function qcalcAddExtra(kind){
+  (kind==='lsr'?_lsrExtras:_neoExtras).push({desc:'',valor:0});
+  qcalcExtrasRender(kind);
+}
+function qcalcExtrasRender(kind){
+  const arr=kind==='lsr'?_lsrExtras:_neoExtras;
+  const el=document.getElementById(kind+'-extras');if(!el)return;
+  const ref=kind==='lsr'?'_lsrExtras':'_neoExtras';
+  el.innerHTML=arr.map((x,i)=>`<div style="display:flex;gap:8px;align-items:center">
+    <input class="field-input" style="flex:1" placeholder="Descripción extra" value="${escapeHtml(x.desc)}" oninput="${ref}[${i}].desc=this.value">
+    <input class="field-input" style="width:120px" type="number" min="0" placeholder="Valor CLP" value="${x.valor||''}" oninput="${ref}[${i}].valor=parseInt(this.value)||0;qcalcUpdate('${kind}')">
+    <button type="button" class="btn-mini btn-mini-red" onclick="${ref}.splice(${i},1);qcalcExtrasRender('${kind}');qcalcUpdate('${kind}')">✕</button>
   </div>`).join('');
 }
-function calcLaserUpdate(){
-  const qty=Math.max(1,parseInt(document.getElementById('lsr-qty')?.value)||1);
-  const matPrecio=parseFloat(document.getElementById('lsr-mat')?.value)||0;
-  const area=parseFloat(document.getElementById('lsr-area')?.value)||0;
-  const desp=parseFloat(document.getElementById('lsr-desp')?.value||15)/100;
-  const tCorte=parseFloat(document.getElementById('lsr-t-corte')?.value)||0;
-  const tGrab=parseFloat(document.getElementById('lsr-t-grab')?.value)||0;
-  const tarifa=parseFloat(document.getElementById('lsr-tarifa')?.value)||8000;
-  const mdo=parseFloat(document.getElementById('lsr-mdo')?.value)||0;
-  const margen=parseInt(document.getElementById('lsr-margen')?.value||60)/100;
-  const extrasSuma=_lsrExtras.reduce((s,x)=>s+(x.valor||0),0);
-  // Costos por unidad
-  const costoMat=Math.round(area*matPrecio*(1+desp));
-  const costoMaq=Math.round((tCorte+tGrab)/60*tarifa);
-  const costoMdo=Math.round(mdo/60*(tarifa*0.4));
-  const costoUnit=costoMat+costoMaq+costoMdo+extrasSuma;
-  const costoTotal=costoUnit*qty;
-  const neto=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
-  const iva=Math.round(neto*0.19);
-  const total=neto+iva;
-  const pieza=qty>0?Math.round(total/qty):0;
-  const fmt=v=>formatCLP(v);
-  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=fmt(v);};
-  const lbl=document.getElementById('lsr-margen-lbl');if(lbl)lbl.textContent=Math.round(margen*100)+'%';
-  s('lsr-r-mat',costoMat*qty);s('lsr-r-maq',costoMaq*qty);s('lsr-r-mdo',costoMdo*qty);
-  s('lsr-r-ext',extrasSuma*qty);s('lsr-r-costo',costoTotal);s('lsr-r-neto',neto);
-  s('lsr-r-iva',iva);s('lsr-r-total',total);s('lsr-r-pieza',pieza);
-}
-function calcLaserGuardar(){
-  const desc=(document.getElementById('lsr-desc')?.value||'').trim()||'Trabajo láser';
-  const cliId=document.getElementById('lsr-cli-id')?.value||'';
-  const qty=Math.max(1,parseInt(document.getElementById('lsr-qty')?.value)||1);
-  const margen=parseInt(document.getElementById('lsr-margen')?.value||60)/100;
-  const matPrecio=parseFloat(document.getElementById('lsr-mat')?.value)||0;
-  const area=parseFloat(document.getElementById('lsr-area')?.value)||0;
-  const desp=parseFloat(document.getElementById('lsr-desp')?.value||15)/100;
-  const tCorte=parseFloat(document.getElementById('lsr-t-corte')?.value)||0;
-  const tGrab=parseFloat(document.getElementById('lsr-t-grab')?.value)||0;
-  const tarifa=parseFloat(document.getElementById('lsr-tarifa')?.value)||8000;
-  const mdo=parseFloat(document.getElementById('lsr-mdo')?.value)||0;
-  const extrasSuma=_lsrExtras.reduce((s,x)=>s+(x.valor||0),0);
-  const costoMat=Math.round(area*matPrecio*(1+desp));
-  const costoMaq=Math.round((tCorte+tGrab)/60*tarifa);
-  const costoMdo=Math.round(mdo/60*(tarifa*0.4));
-  const costoUnit=costoMat+costoMaq+costoMdo+extrasSuma;
-  const costoTotal=costoUnit*qty;
-  const neto=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
-  const total=neto+Math.round(neto*0.19);
-  const notas=`Calculadora Láser\nMaterial: ${area}cm² × $${matPrecio}/cm² (+${Math.round(desp*100)}% desp)\nMáquina: ${tCorte+tGrab}min @ $${tarifa}/hr\nMano de obra: ${mdo}min\nExtras: $${extrasSuma}\nCosto: $${costoTotal} | Margen: ${Math.round(margen*100)}%`;
-  // Pre-fill nueva cotización
-  switchTab('nueva-cot');
-  setTimeout(()=>{
-    const desc_el=document.getElementById('cot-descripcion')||document.getElementById('cot-servicio');
-    if(desc_el) desc_el.value=desc;
-    const total_el=document.getElementById('cot-total')||document.getElementById('cot-price');
-    if(total_el) total_el.value=total;
-    const notas_el=document.getElementById('cot-notas');
-    if(notas_el) notas_el.value=notas;
-    toast('✓ Datos copiados a nueva cotización','success');
-  },200);
-}
-function calcLaserLimpiar(){
-  ['lsr-desc','lsr-qty','lsr-area','lsr-desp','lsr-t-corte','lsr-t-grab','lsr-mdo'].forEach(id=>{const el=document.getElementById(id);if(el){el.value=id==='lsr-qty'?'1':id==='lsr-desp'?'15':id==='lsr-tarifa'?'8000':'0';}});
-  document.getElementById('lsr-cli-search').value='';document.getElementById('lsr-cli-id').value='';
-  document.getElementById('lsr-margen').value=60;_lsrExtras=[];calcLaserRenderExtras();calcLaserUpdate();
-}
-// ── NEON/LED ──────────────────────────────────────────────────────────
-let _neoExtras=[];
-function calcNeonAddExtra(){
-  _neoExtras.push({desc:'',valor:0});
-  calcNeonRenderExtras();
-}
-function calcNeonRenderExtras(){
-  const el=document.getElementById('neo-extras');if(!el)return;
-  el.innerHTML=_neoExtras.map((x,i)=>`<div style="display:flex;gap:8px;align-items:center">
-    <input class="field-input" style="flex:1" placeholder="Descripción extra" value="${escapeHtml(x.desc)}" oninput="_neoExtras[${i}].desc=this.value">
-    <input class="field-input" style="width:120px" type="number" min="0" placeholder="Valor CLP" value="${x.valor||''}" oninput="_neoExtras[${i}].valor=parseInt(this.value)||0;calcNeonUpdate()">
-    <button class="btn-mini btn-mini-red" onclick="_neoExtras.splice(${i},1);calcNeonRenderExtras();calcNeonUpdate()">✕</button>
-  </div>`).join('');
-}
-function calcNeonUpdate(){
+
+// Cálculo de costos — devuelve costo/neto por unidad y desglose
+function qcalcCompute(kind){
+  const v=id=>parseFloat(document.getElementById(id)?.value)||0;
+  if(kind==='lsr'){
+    const qty=Math.max(1,parseInt(document.getElementById('lsr-qty')?.value)||1);
+    const desp=v('lsr-desp')/100;
+    const tarifa=v('lsr-tarifa');
+    const costoMat=Math.round(v('lsr-area')*v('lsr-mat')*(1+desp));
+    const costoMaq=Math.round((v('lsr-t-corte')+v('lsr-t-grab'))/60*tarifa);
+    const costoMdo=Math.round(v('lsr-mdo')/60*(tarifa*0.4));
+    const extras=_lsrExtras.reduce((s,x)=>s+(x.valor||0),0);
+    const margen=Math.min(90,Math.max(10,parseInt(document.getElementById('lsr-margen')?.value)||60))/100;
+    const costoUnit=costoMat+costoMaq+costoMdo+extras;
+    const netoUnit=Math.round(costoUnit/(1-margen));
+    return{qty,margen,costoUnit,netoUnit,desglose:`Mat $${costoMat.toLocaleString('es-CL')} · Máq $${costoMaq.toLocaleString('es-CL')} · MDO $${costoMdo.toLocaleString('es-CL')} · Extras $${extras.toLocaleString('es-CL')} (por unidad)`,
+      desc:(document.getElementById('lsr-desc')?.value||'').trim()||'Trabajo corte láser'};
+  }
   const qty=Math.max(1,parseInt(document.getElementById('neo-qty')?.value)||1);
-  const tarifaTubo=parseFloat(document.getElementById('neo-tipo')?.value)||4200;
-  const largo=parseFloat(document.getElementById('neo-largo')?.value)||0;
   const colores=Math.max(1,parseInt(document.getElementById('neo-colores')?.value)||1);
-  const soporte=parseFloat(document.getElementById('neo-soporte')?.value)||0;
-  const trans=parseFloat(document.getElementById('neo-trans')?.value)||8500;
-  const dimmer=parseFloat(document.getElementById('neo-dimmer')?.value)||0;
-  const margen=parseInt(document.getElementById('neo-margen')?.value||65)/100;
-  const extrasSuma=_neoExtras.reduce((s,x)=>s+(x.valor||0),0);
-  const costoTubo=Math.round(largo*tarifaTubo*colores);
-  const costoUnit=costoTubo+soporte+trans+dimmer+extrasSuma;
-  const costoTotal=costoUnit*qty;
-  const neto=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
-  const iva=Math.round(neto*0.19);
-  const total=neto+iva;
-  const pieza=qty>0?Math.round(total/qty):0;
-  const fmt=v=>formatCLP(v);
-  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=fmt(v);};
-  const lbl=document.getElementById('neo-margen-lbl');if(lbl)lbl.textContent=Math.round(margen*100)+'%';
-  s('neo-r-tubo',costoTubo*qty);s('neo-r-sop',soporte*qty);s('neo-r-trans',trans*qty);
-  s('neo-r-dim',dimmer*qty);s('neo-r-ext',extrasSuma*qty);s('neo-r-costo',costoTotal);
-  s('neo-r-neto',neto);s('neo-r-iva',iva);s('neo-r-total',total);s('neo-r-pieza',pieza);
+  const costoTubo=Math.round(v('neo-largo')*v('neo-tipo')*colores);
+  const soporte=v('neo-soporte'),trans=v('neo-trans'),dimmer=v('neo-dimmer');
+  const extras=_neoExtras.reduce((s,x)=>s+(x.valor||0),0);
+  const margen=Math.min(90,Math.max(10,parseInt(document.getElementById('neo-margen')?.value)||65))/100;
+  const costoUnit=costoTubo+soporte+trans+dimmer+extras;
+  const netoUnit=Math.round(costoUnit/(1-margen));
+  return{qty,margen,costoUnit,netoUnit,desglose:`Tubo $${costoTubo.toLocaleString('es-CL')} · Sop $${soporte.toLocaleString('es-CL')} · Trafo $${trans.toLocaleString('es-CL')} · Ctrl $${dimmer.toLocaleString('es-CL')} · Extras $${extras.toLocaleString('es-CL')} (por unidad)`,
+    desc:(document.getElementById('neo-desc')?.value||'').trim()||'Letrero Neón/LED'};
 }
-function calcNeonGuardar(){
-  const desc=(document.getElementById('neo-desc')?.value||'').trim()||'Letrero Neon/LED';
-  const qty=Math.max(1,parseInt(document.getElementById('neo-qty')?.value)||1);
-  const margen=parseInt(document.getElementById('neo-margen')?.value||65)/100;
-  const tarifaTubo=parseFloat(document.getElementById('neo-tipo')?.value)||4200;
-  const largo=parseFloat(document.getElementById('neo-largo')?.value)||0;
-  const colores=Math.max(1,parseInt(document.getElementById('neo-colores')?.value)||1);
-  const soporte=parseFloat(document.getElementById('neo-soporte')?.value)||0;
-  const trans=parseFloat(document.getElementById('neo-trans')?.value)||8500;
-  const dimmer=parseFloat(document.getElementById('neo-dimmer')?.value)||0;
-  const extrasSuma=_neoExtras.reduce((s,x)=>s+(x.valor||0),0);
-  const costoUnit=(largo*tarifaTubo*colores)+soporte+trans+dimmer+extrasSuma;
-  const costoTotal=costoUnit*qty;
-  const neto=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
-  const total=neto+Math.round(neto*0.19);
-  const notas=`Calculadora Neon/LED\nTubo: ${largo}m × ${colores} colores @ $${tarifaTubo}/m\nSoporte: $${soporte} | Transformador: $${trans} | Dimmer: $${dimmer}\nExtras: $${extrasSuma}\nCosto: $${costoTotal} | Margen: ${Math.round(margen*100)}%`;
-  switchTab('nueva-cot');
-  setTimeout(()=>{
-    const desc_el=document.getElementById('cot-descripcion')||document.getElementById('cot-servicio');
-    if(desc_el) desc_el.value=desc;
-    const total_el=document.getElementById('cot-total')||document.getElementById('cot-price');
-    if(total_el) total_el.value=total;
-    const notas_el=document.getElementById('cot-notas');
-    if(notas_el) notas_el.value=notas;
-    toast('✓ Datos copiados a nueva cotización','success');
-  },200);
+
+function qcalcUpdate(kind){
+  const panel=document.getElementById(kind+'-inline-panel');
+  if(!panel||panel.style.display==='none') return;
+  const r=qcalcCompute(kind);
+  const lbl=document.getElementById(kind+'-margen-lbl');if(lbl)lbl.textContent=Math.round(r.margen*100)+'%';
+  const netoTotal=r.netoUnit*r.qty;
+  const totalIva=Math.round(netoTotal*1.19);
+  const s=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=formatCLP(val);};
+  s(kind+'-r-costo',r.costoUnit*r.qty);
+  s(kind+'-r-neto',netoTotal);
+  s(kind+'-r-total',totalIva);
+  s(kind+'-r-pieza',r.qty>0?Math.round(totalIva/r.qty):0);
+  const dg=document.getElementById(kind+'-desglose');if(dg)dg.textContent=r.desglose;
 }
-function calcNeonLimpiar(){
-  ['neo-desc','neo-qty','neo-largo','neo-colores'].forEach(id=>{const el=document.getElementById(id);if(el){el.value=id==='neo-qty'?'1':id==='neo-colores'?'1':'0';}});
-  document.getElementById('neo-cli-search').value='';document.getElementById('neo-cli-id').value='';
-  document.getElementById('neo-margen').value=65;_neoExtras=[];calcNeonRenderExtras();calcNeonUpdate();
+
+function qcalcApply(kind){
+  const r=qcalcCompute(kind);
+  if(r.costoUnit<=0){toast('Ingresa los datos del trabajo primero','error');return;}
+  qcalcInsertRow(_qcalcTarget[kind],{desc:r.desc,und:r.qty,costoUnit:r.costoUnit,ventaUnit:r.netoUnit});
+  qcalcClear(kind);
+  const panel=document.getElementById(kind+'-inline-panel');if(panel)panel.style.display='none';
+  Object.values(_qcalcBtns(kind)).forEach(b=>{if(b)b.style.background='';});
+  toast('Ítem agregado a la cotización ✓','success');
+}
+
+function qcalcClear(kind){
+  const q=_QCALC[kind];
+  const defaults=kind==='lsr'
+    ?{'lsr-desc':'','lsr-qty':'1','lsr-area':'0','lsr-desp':'15','lsr-t-corte':'0','lsr-t-grab':'0','lsr-tarifa':'8000','lsr-mdo':'0'}
+    :{'neo-desc':'','neo-qty':'1','neo-largo':'0','neo-colores':'1'};
+  Object.entries(defaults).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.value=val;});
+  const sel=kind==='lsr'?['lsr-mat']:['neo-tipo','neo-soporte','neo-trans','neo-dimmer'];
+  sel.forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=0;});
+  const m=document.getElementById(kind+'-margen');if(m)m.value=q.defMargen;
+  if(kind==='lsr')_lsrExtras=[];else _neoExtras=[];
+  qcalcExtrasRender(kind);
+  qcalcUpdate(kind);
 }
 </script>
 
