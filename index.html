@@ -2951,7 +2951,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="card"><div class="card-header"><span class="card-title">Historial</span><span style="font-size:11px;color:var(--text3)">clic en fila para ver resumen</span></div><div class="table-wrap"><table><thead><tr><th>Semana</th><th>Revenue</th><th>Pedidos</th><th>Margen</th><th>Conv.</th><th>Estado</th><th style="width:28px"></th></tr></thead><tbody id="reportesTableBody"></tbody></table></div></div>
     <div class="card"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar Reporte</span></div>
       <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
-        <button class="btn btn-ghost btn-sm" onclick="prefillReporte()" style="align-self:flex-start">⚡ Rellenar desde datos actuales</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="crearReporteAuto()">⚡ Reporte 1-clic (CEO_AGENT)</button>
+          <button class="btn btn-ghost btn-sm" onclick="prefillReporte()">Rellenar campos</button>
+        </div>
         <div class="field-group"><label class="field-label">Semana</label><input class="field-input" id="rep-semana" placeholder="Semana 20 — mayo 2026"></div>
         <div class="field-group"><label class="field-label">Revenue neto (CLP)</label><input class="field-input" id="rep-revenue" type="number"></div>
         <div class="field-group"><label class="field-label">Cotizaciones enviadas / aprobadas</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><input class="field-input" id="rep-cot-env" type="number" placeholder="enviadas"><input class="field-input" id="rep-cot-apr" type="number" placeholder="aprobadas"></div></div>
@@ -4949,7 +4952,8 @@ FORMATO DE COTIZACIÓN:
 1. Desglose por ítem: cantidad · descripción · precio unit · subtotal
 2. Subtotal neto → IVA 19% → Total con IVA
 3. Condiciones de pago y plazo de entrega estimado
-Redacta en tono profesional. Incluye nota de validez (10 días hábiles por defecto).`,
+Redacta en tono profesional. Incluye nota de validez (10 días hábiles por defecto).
+AL FINAL incluye SIEMPRE un bloque entre las etiquetas [ITEMS] y [/ITEMS] con un JSON array de los ítems cotizados, formato exacto: [{"desc":"descripción corta","qty":cantidad,"costo":costo_unitario_neto,"venta":precio_unitario_neto}]. Solo JSON válido dentro del bloque, sin comentarios.`,
    pre:'Cotizar: ',
    qs:['80 trofeos acrílico con logo grabado, entrega en 7 días hábiles','Neón con texto "LA FIRMA" en tipografía script, aprox 1.2 metros','30 medallas bicolor con cinta para torneo de fútbol escolar','Señalética para oficina: logo + 3 letreros de sección, material premium']},
 
@@ -6371,6 +6375,9 @@ document.addEventListener('click',()=>document.querySelectorAll('.act-menu.open'
 function buildClienteRow(c){
   const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0));
   const tel=f['Teléfono']||'';
+  const esLead=['Lead nuevo','Contactado'].includes(f['Etapa venta']||'');
+  const tieneDeuda=(f['Facturas vencidas']||0)>=1;
+  const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
   return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}">
     <td class="td-chk" style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="td-empresa"><strong>${escapeHtml(f['Empresa']||'—')}</strong><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
@@ -6389,6 +6396,7 @@ function buildClienteRow(c){
           <button class="act-item act-item-yellow" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="verCotizacionesCliente('${c.id}',this.dataset.empresa)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ver cotizaciones</button>
           <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
           <button class="act-item" onclick="compartirPortalCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-link"/></svg> &nbsp;Portal cliente</button>
+          ${iaItems}
         </div>
       </div>
     </td>
@@ -9062,9 +9070,20 @@ function prefillReporte(){
 }
 async function crearReporte(){
   const btn=document.getElementById('createReporteBtn');btn.disabled=true;btn.textContent='Generando...';const out=document.getElementById('reporteOutput');out.classList.remove('empty');out.textContent='⏳ CEO_AGENT procesando...';
-  try{const s=document.getElementById('rep-semana').value,rev=document.getElementById('rep-revenue').value,ce=document.getElementById('rep-cot-env').value,ca=document.getElementById('rep-cot-apr').value,pa=document.getElementById('rep-ped-act').value,pd=document.getElementById('rep-ped-des').value,n=document.getElementById('rep-notas').value;const conv=parseFloat(ce)>0?parseFloat(ca)/parseFloat(ce):0;const response=await callClaude('Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES',`Semana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);out.textContent=response;const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':new Date().toISOString().split('T')[0],'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
+  try{const s=document.getElementById('rep-semana').value,rev=document.getElementById('rep-revenue').value,ce=document.getElementById('rep-cot-env').value,ca=document.getElementById('rep-cot-apr').value,pa=document.getElementById('rep-ped-act').value,pd=document.getElementById('rep-ped-des').value,n=document.getElementById('rep-notas').value;const conv=parseFloat(ce)>0?parseFloat(ca)/parseFloat(ce):0;
+  const ceoCfg=typeof AGENTES_CFG!=='undefined'?AGENTES_CFG.find(a=>a.id==='CEO'):null;
+  const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
+  const liveCtx=(ceoCfg&&state.loaded)?buildAgentContext('CEO')+'\n\n':'';
+  const response=await callClaude(sys,`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
+  out.textContent=response;
+  try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response);}catch(e){}
+  const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':new Date().toISOString().split('T')[0],'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
   catch(e){toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;}
   btn.disabled=false;btn.innerHTML='<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar y Guardar';
+}
+async function crearReporteAuto(){
+  prefillReporte();
+  await crearReporte();
 }
 function renderReportes(){
   const tbody=document.getElementById('reportesTableBody');
@@ -9611,7 +9630,22 @@ async function runAgent(id){
   if(btn) btn.disabled=true;
   const ctx=state.loaded?buildAgentContext(id):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
-  try{const _r=await callClaude(cfg.sys,fullInput);out.textContent=_r;try{AGENT_LOG.add(cfg.label,input,_r);}catch(e){}}
+  try{
+    let _r=await callClaude(cfg.sys,fullInput);
+    try{AGENT_LOG.add(cfg.label,input,_r);}catch(e){}
+    const _oldIns=document.getElementById('qins_QUOTE');if(_oldIns) _oldIns.remove();
+    if(id==='QUOTE'){
+      const qm=_r.match(/\[ITEMS\]([\s\S]*?)\[\/ITEMS\]/i);
+      if(qm){
+        try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
+        _r=_r.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
+        if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length){
+          out.insertAdjacentHTML('afterend',`<div id="qins_QUOTE" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="quoteInsertItems()">→ Insertar ${_quoteParsedItems.length} ítem${_quoteParsedItems.length>1?'s':''} en Nueva Cotización</button></div>`);
+        }
+      }
+    }
+    out.textContent=_r;
+  }
   catch(e){out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
   if(btn) btn.disabled=false;
 }
@@ -9718,6 +9752,66 @@ async function _sendFollowupEmail(cotId,toEmail){
     else throw new Error(r?.error||'Error desconocido');
   }catch(e){toast('Error: '+e.message,'error');}
   finally{if(btnEl){btnEl.disabled=false;btnEl.textContent='📧 Enviar por correo';}}
+}
+
+// — QUOTE: insertar ítems parseados en Nueva Cotización
+let _quoteParsedItems=null;
+function quoteInsertItems(){
+  if(!Array.isArray(_quoteParsedItems)||!_quoteParsedItems.length){toast('Sin ítems para insertar','error');return;}
+  const items=_quoteParsedItems;
+  switchTab('nueva-cot');
+  setTimeout(()=>{
+    let n=0;
+    items.forEach(it=>{
+      try{
+        qcalcInsertRow('n',{desc:String(it.desc||'Ítem').substring(0,120),und:Math.max(1,parseInt(it.qty)||1),costoUnit:Math.max(0,Math.round(it.costo)||0),ventaUnit:Math.max(0,Math.round(it.venta)||0)});
+        n++;
+      }catch(e){}
+    });
+    toast(`✓ ${n} ítem${n!==1?'s':''} insertado${n!==1?'s':''} en la cotización`,'success');
+  },150);
+}
+
+// — Envío genérico de correo desde resultado de agente
+async function _sendAgentEmail(toEmail,subject,btnEl){
+  if(!_agentInlineText){toast('Sin contenido','error');return;}
+  const emailText=_extractEmailPart(_agentInlineText)||_agentInlineText;
+  const u=AUTH.getUser();
+  if(btnEl){btnEl.disabled=true;btnEl.dataset.orig=btnEl.textContent;btnEl.textContent='Enviando...';}
+  try{
+    const r=await MAIL.post({action:'send',to:toEmail,subject,body:emailText,from_name:u?.name||'The Lab Solutions'});
+    if(r&&!r.error){toast('✓ Correo enviado','success');closeAgentInlineModal();}
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btnEl){btnEl.disabled=false;btnEl.textContent=btnEl.dataset.orig||'📧 Enviar';}}
+}
+
+// — ONBOARDING desde cliente (leads nuevos)
+function runOnboardingAgent(cliId){
+  const c=state.clientes.find(x=>x.id===cliId);if(!c) return;
+  const f=c.fields;
+  const waPhone=_getClienteWAPhone(c);
+  const email=f['Email']||'';
+  const ctx=`Cliente nuevo: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'}${f['Notas']?'\nNotas: '+String(f['Notas']).substring(0,150):''}`;
+  runAgentInline('ONBOARDING',ctx,()=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Bienvenido a The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+
+// — FINANCE desde cliente (facturas vencidas)
+function runFinanceAgent(cliId){
+  const c=state.clientes.find(x=>x.id===cliId);if(!c) return;
+  const f=c.fields;
+  const waPhone=_getClienteWAPhone(c);
+  const email=f['Email']||'';
+  const ctx=`Cliente con deuda: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nFacturas vencidas: ${f['Facturas vencidas']||0} | Estado cuenta: ${f['Estado cuenta']||'—'}\nTAREA: redacta un recordatorio de pago para este cliente. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (formal con firma The Lab Solutions).`;
+  runAgentInline('FINANCE',ctx,()=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Recordatorio de pago — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
 }
 
 // — PRODUCTION desde pedido
