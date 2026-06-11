@@ -434,6 +434,19 @@ case 'search':
     echo json_encode(['messages' => $result, 'total' => count($result)]);
     break;
 
+// ── check ─────────────────────────────────────────────────────
+// Endpoint liviano: solo devuelve el conteo de no leídos en INBOX
+case 'check':
+    $conn = open_imap($user, $pass, 'INBOX');
+    if (is_array($conn)) { echo json_encode($conn); exit; }
+    $status = @imap_status($conn, imap_str('INBOX'), SA_ALL);
+    imap_close($conn);
+    echo json_encode([
+        'unseen'   => $status ? (int)$status->unseen   : 0,
+        'messages' => $status ? (int)$status->messages : 0,
+    ]);
+    break;
+
 default:
     echo json_encode(['error' => 'Acción desconocida: ' . htmlspecialchars($action)]);
 }

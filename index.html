@@ -11447,27 +11447,75 @@ const NOTIFY={
 };
 
 // ── POLLING DE CORREO ──────────────────────────────────────────
-let _mailPollTimer=null;
-let _mailLastUnseen=-1;
+let _mailPollTimer = null;
+let _mailLastUnseen = -1;
+let _notifPermission = false;
+const _POLL_INTERVAL = 30000; // 30 segundos
+const _BASE_TITLE = document.title;
+
+// Solicita permiso para notificaciones del sistema operativo
+async function requestWebNotifPermission(){
+  if(!('Notification' in window)) return;
+  if(Notification.permission==='granted'){ _notifPermission=true; return; }
+  if(Notification.permission==='denied') return;
+  const p=await Notification.requestPermission();
+  _notifPermission=(p==='granted');
+}
+
+// Muestra notificación nativa del SO (visible aunque el navegador esté minimizado)
+function showOsNotif(title, body, onClick){
+  if(!_notifPermission || Notification.permission!=='granted') return;
+  try{
+    const n=new Notification(title,{
+      body,
+      icon:'https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png',
+      tag:'thelab-mail',
+      renotify:true,
+    });
+    n.onclick=()=>{ window.focus(); if(onClick) onClick(); n.close(); };
+    setTimeout(()=>n.close(), 8000);
+  }catch(e){}
+}
+
+// Actualiza el título de la pestaña con el contador de no leídos
+function updateTabTitle(unseen){
+  document.title = unseen>0 ? `(${unseen}) ${_BASE_TITLE}` : _BASE_TITLE;
+}
+
+async function _mailCheck(){
+  if(!MAIL.getMailPass || !MAIL.getMailPass()) return;
+  try{
+    const data = await MAIL.post({action:'check'});
+    if(data.error) return;
+    const unseen = data.unseen ?? 0;
+    updateTabTitle(unseen);
+    if(_mailLastUnseen >= 0 && unseen > _mailLastUnseen){
+      const n = unseen - _mailLastUnseen;
+      const title = `${n} correo${n>1?'s':''} nuevo${n>1?'s':''}`;
+      NOTIFY.add('mail', title, 'Bandeja de entrada', 'correo');
+      showOsNotif(`✉️ ${title}`, 'Haz clic para abrir el correo', ()=>switchTab('correo'));
+      const active = sessionStorage.getItem('thelab_active_tab');
+      if(active==='correo'){ MAIL.loadMessages(); MAIL.loadFolders(); }
+    }
+    _mailLastUnseen = unseen;
+  }catch(e){}
+}
 
 function startMailPolling(){
   if(_mailPollTimer) return;
-  _mailPollTimer=setInterval(async()=>{
-    if(!MAIL.getMailPass||!MAIL.getMailPass()) return;
+  // Establece el baseline inmediatamente (sin notificar), luego empieza el polling
+  setTimeout(async()=>{
+    if(!MAIL.getMailPass || !MAIL.getMailPass()) return;
     try{
-      const data=await MAIL.post({action:'folders'});
-      if(data.error) return;
-      const inbox=data.folders.find(f=>f.name.toUpperCase()==='INBOX');
-      if(!inbox) return;
-      if(_mailLastUnseen>=0 && inbox.unseen>_mailLastUnseen){
-        const n=inbox.unseen-_mailLastUnseen;
-        NOTIFY.add('mail',`${n} correo${n>1?'s':''} nuevo${n>1?'s':''}`,`Bandeja de entrada`,'correo');
-        const active=sessionStorage.getItem('thelab_active_tab');
-        if(active==='correo'){MAIL.loadMessages();MAIL.loadFolders();}
-      }
-      _mailLastUnseen=inbox.unseen;
+      const data = await MAIL.post({action:'check'});
+      if(!data.error) _mailLastUnseen = data.unseen ?? 0;
+      updateTabTitle(_mailLastUnseen);
     }catch(e){}
-  },90000); // cada 90 segundos
+    // Ahora sí arranca el intervalo de detección
+    _mailPollTimer = setInterval(_mailCheck, _POLL_INTERVAL);
+  }, 4000); // espera 4s a que cargue la bandeja inicial
+  // Solicita permiso para notificaciones del SO
+  requestWebNotifPermission();
 }
 
 // ── CORREO ────────────────────────────────────────────────────
