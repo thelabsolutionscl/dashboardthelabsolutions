@@ -385,18 +385,23 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 #selectAllChk,.row-chk{width:14px;height:14px;}
 @media(max-width:768px){
   body{padding-left:0!important;}
-  .topbar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;padding:0 14px;gap:0;}
+  .topbar{display:flex;align-items:center;padding:0 14px;gap:0;}
   .topbar-nav{display:none;}
   .global-search{display:none;}
   .icon-dock{display:none;}
+  .topbar-right{display:contents;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
+  .user-chip{display:none!important;}
   .mobile-menu-btn{display:none;}
   #nuevoDropdown{display:none!important;}
   .logo img{height:21px;}
+  .logo{flex:0 0 auto;}
+  .topbar-kai-btn{margin-left:auto;margin-right:10px;}
+  #notifBtnWrap{margin-right:auto;}
   .main{padding:14px;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));}
   .mobile-bottom-dock{display:flex;animation:mbd-in .42s cubic-bezier(0.32,0.72,0,1) both;}
   #jvs-fab{display:none!important;}
-  .topbar-kai-btn{position:static;transform:none;justify-self:center;}
+  .topbar-kai-btn{position:static;transform:none;}
   .data-grid,.data-grid-3{grid-template-columns:1fr;}
   .kpi-grid{grid-template-columns:repeat(2,1fr);}
   .form-grid{grid-template-columns:1fr;}
@@ -1465,7 +1470,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <span class="status-text" id="statusText">iniciando...</span>
     <button class="refresh-btn" id="refreshBtn" onclick="loadAllData()">↺ Actualizar</button>
     <!-- Campana de notificaciones -->
-    <div style="position:relative">
+    <div id="notifBtnWrap" style="position:relative">
       <button class="notif-btn" id="notifBtn" onclick="NOTIFY.toggle(event)" title="Notificaciones">
         <svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-bell"/></svg>
         <span class="notif-badge" id="notifBadge" style="display:none">0</span>
