@@ -389,19 +389,19 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .topbar-nav{display:none;}
   .global-search{display:none;}
   .icon-dock{display:none;}
-  .topbar-right{display:contents;}
+  .topbar-right{flex:1;display:flex;align-items:center;justify-content:center;gap:14px;margin-left:0;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
   .user-chip{display:none!important;}
   .mobile-menu-btn{display:none;}
   #nuevoDropdown{display:none!important;}
   .logo img{height:21px;}
   .logo{flex:0 0 auto;}
-  .topbar-kai-btn{margin-left:auto;margin-right:10px;}
-  #notifBtnWrap{margin-right:auto;}
+  .topbar-kai-btn{margin-left:0;margin-right:0;}
+  #notifBtnWrap{margin-right:0;}
   .main{padding:14px;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));}
   .mobile-bottom-dock{display:flex;animation:mbd-in .42s cubic-bezier(0.32,0.72,0,1) both;}
   #jvs-fab{display:none!important;}
-  .topbar-kai-btn{position:static;transform:none;}
+  .topbar-kai-btn{position:static;transform:none;flex-shrink:0;}
   .data-grid,.data-grid-3{grid-template-columns:1fr;}
   .kpi-grid{grid-template-columns:repeat(2,1fr);}
   .form-grid{grid-template-columns:1fr;}
@@ -1442,7 +1442,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 </script>
 <div class="topbar">
   <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
-  <button class="topbar-kai-btn" onclick="openKai()" title="Hablar con KAI"><span class="kai-ring"></span>KAI</button>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
   <button id="mobilePlusBtn" class="mobile-menu-btn" onclick="toggleNuevoMenuMobile(event)" style="display:none;font-size:20px;font-weight:300;padding:6px 12px">＋</button>
   <div class="global-search" id="globalSearch">
@@ -1466,6 +1465,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
   <div class="topbar-right">
+    <button class="topbar-kai-btn" onclick="openKai()" title="Hablar con KAI"><span class="kai-ring"></span>KAI</button>
     <div class="status-dot" id="statusDot"></div>
     <span class="status-text" id="statusText">iniciando...</span>
     <button class="refresh-btn" id="refreshBtn" onclick="loadAllData()">↺ Actualizar</button>
