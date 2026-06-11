@@ -11322,13 +11322,29 @@ const MAIL={
       }
       document.getElementById('mailFolderList').innerHTML=`<div style="padding:8px;font-size:11px;color:var(--danger)">${data.error}</div>`;return;
     }
-    const folderIcons={'inbox':'📥','sent':'📤','drafts':'📝','junk':'⚠️','spam':'⚠️','trash':'🗑️','deleted':'🗑️'};
+    const folderMeta={
+      inbox:     {label:'Bandeja de entrada', icon:'icon-correo'},
+      sent:      {label:'Enviados',           icon:'icon-send'},
+      drafts:    {label:'Borradores',         icon:'icon-file'},
+      draft:     {label:'Borradores',         icon:'icon-file'},
+      junk:      {label:'Spam',               icon:'icon-ban'},
+      spam:      {label:'Spam',               icon:'icon-ban'},
+      trash:     {label:'Papelera',           icon:'icon-trash'},
+      deleted:   {label:'Eliminados',         icon:'icon-trash'},
+      archive:   {label:'Archivo',            icon:'icon-folder'},
+    };
+    const svgIcon=id=>`<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#${id}"/></svg>`;
+    const labelFor=name=>{
+      const raw=name.replace(/^INBOX\./i,'');
+      const key=raw.toLowerCase();
+      const match=Object.entries(folderMeta).find(([k])=>key===k||key.includes(k));
+      return match?match[1]:{label:raw,icon:'icon-folder'};
+    };
     const html=data.folders.map(f=>{
-      const key=f.name.toLowerCase();
-      const icon=Object.entries(folderIcons).find(([k])=>key.includes(k))?.[1]||'📁';
       const isActive=f.name===this.folder;
-      return `<button class="mail-folder-item${isActive?' active':''}" onclick="MAIL.selectFolder('${f.name.replace(/'/g,"\'")}')">
-        <span class="mail-folder-name">${icon} ${f.name}</span>
+      const meta=labelFor(f.name);
+      return `<button class="mail-folder-item${isActive?' active':''}" onclick="MAIL.selectFolder('${f.name.replace(/'/g,"\\'")}')">
+        <span class="mail-folder-name">${svgIcon(meta.icon)} ${meta.label}</span>
         ${f.unseen>0?`<span class="mail-unseen-badge">${f.unseen}</span>`:''}
       </button>`;
     }).join('');
@@ -11340,7 +11356,7 @@ const MAIL={
     if(page)   this.page=page;
     const list=document.getElementById('mailList');
     list.innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
-    document.getElementById('mailFolderTitle').textContent=this.folder;
+    document.getElementById('mailFolderTitle').textContent=this.folder.replace(/^INBOX\./i,'').replace(/^INBOX$/i,'Bandeja de entrada');
     document.getElementById('mailListFooter').style.display='none';
     const data=await this.post({action:'list',folder:this.folder,page:this.page});
     if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${data.error}</div>`;return;}
