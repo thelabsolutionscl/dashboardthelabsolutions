@@ -16791,7 +16791,7 @@ CAPACIDADES Y REGLAS:
   }
 
   // ─── Panel open/close ───
-  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); setTimeout(()=>$input.focus(),200); }
+  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); if(window.innerWidth>768) setTimeout(()=>$input.focus(),200); }
   function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); stopListen(); JV.synth.cancel(); setState('idle'); }
   $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
   $close.addEventListener('click',closePanel);
@@ -17005,7 +17005,7 @@ CAPACIDADES Y REGLAS:
   JV.rec=initRec();
   window.speechSynthesis && (window.speechSynthesis.onvoiceschanged=()=>{});
   // Expose a global to open KAI programmatically if needed
-  window.openKai=openPanel;
+  window.openKai=()=>{ JV.open?closePanel():openPanel(); };
 })();
 </script>
 <script>
