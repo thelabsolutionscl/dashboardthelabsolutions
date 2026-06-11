@@ -2544,7 +2544,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- AGENTES -->
 <div class="tab-panel" id="tab-agentes">
-  <div class="section-header"><div><div class="section-title">Centro de Agentes IA</div><div class="section-desc">Agentes inteligentes especializados que analizan tus datos en tiempo real y generan insights, reportes automáticos y propuestas de acción para tu negocio.</div></div></div>
+  <div class="section-header"><div><div class="section-title">Centro de Agentes IA</div><div class="section-desc">Agentes inteligentes especializados que analizan tus datos en tiempo real y generan insights, reportes automáticos y propuestas de acción para tu negocio.</div></div><button class="btn btn-ghost btn-sm" onclick="AGENT_LOG.open()" style="flex-shrink:0">📜 Historial</button></div>
 
   <!-- SUPPLIER SEARCH AGENT -->
   <div class="card" style="margin-bottom:20px;border-color:rgba(255,107,53,0.35);box-shadow:0 0 24px rgba(255,107,53,0.07)">
@@ -6226,6 +6226,7 @@ function renderAlertas(){
 
   // Sincronizar con la campana de notificaciones (solo alertas nuevas)
   try{NOTIFY.syncAlertas(alertas);}catch(e){}
+  try{checkAgentSuggestions();}catch(e){}
 
   // agrupación: >=3 del mismo tipo → una sola fila
   const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
@@ -9609,7 +9610,7 @@ async function runAgent(id){
   if(btn) btn.disabled=true;
   const ctx=state.loaded?buildAgentContext(id):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
-  try{out.textContent=await callClaude(cfg.sys,fullInput);}
+  try{const _r=await callClaude(cfg.sys,fullInput);out.textContent=_r;try{AGENT_LOG.add(cfg.label,input,_r);}catch(e){}}
   catch(e){out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
   if(btn) btn.disabled=false;
 }
@@ -9655,6 +9656,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
   const actionsEl=document.getElementById('agentInlineActions');
   document.getElementById('agentInlineTitle').textContent='🤖 '+cfg.label;
   resultEl.className='agent-modal-result loading';
+  resultEl.style.whiteSpace='';
   resultEl.textContent='⏳ Procesando...';
   actionsEl.innerHTML='';
   _agentInlineText='';
@@ -9667,6 +9669,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
     resultEl.className='agent-modal-result';
     resultEl.textContent=result;
     if(actionsFn) actionsEl.innerHTML=actionsFn(result);
+    try{AGENT_LOG.add(cfg.label,contextText,result);}catch(e){}
   }catch(e){
     resultEl.className='agent-modal-result';
     resultEl.textContent='❌ Error: '+e.message;
@@ -9763,6 +9766,115 @@ async function saveQAFromAgent(pedidoId,resultado){
     toast(`✓ QA ${resultado}`,'success');
     closeAgentInlineModal();renderPedidos();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── HISTORIAL DE EJECUCIONES DE AGENTES ────────────────────────
+const AGENT_LOG={
+  _key:'thelab_agent_runs_v1',
+  _runs:null,
+  _load(){if(this._runs) return;try{this._runs=JSON.parse(localStorage.getItem(this._key)||'[]');}catch(e){this._runs=[];}},
+  add(agent,input,output){
+    this._load();
+    const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
+    this._runs.unshift({id:Date.now(),agent,input:(input||'').substring(0,300),output:output||'',time:new Date().toISOString(),user:u?.name||u?.username||'—'});
+    if(this._runs.length>100) this._runs=this._runs.slice(0,100);
+    try{localStorage.setItem(this._key,JSON.stringify(this._runs));}catch(e){}
+  },
+  open(){
+    this._load();
+    const m=document.getElementById('agentLogModal');if(!m) return;
+    m.style.display='flex';
+    this.render();
+  },
+  close(){const m=document.getElementById('agentLogModal');if(m) m.style.display='none';},
+  render(){
+    const list=document.getElementById('agentLogList');if(!list) return;
+    if(!this._runs.length){list.innerHTML='<div class="notif-empty">Aún no hay ejecuciones registradas</div>';return;}
+    list.innerHTML=this._runs.map(r=>`
+      <div class="notif-item" onclick="AGENT_LOG.view(${r.id})" style="cursor:pointer">
+        <div class="notif-body">
+          <div class="notif-title">🤖 ${escapeHtml(r.agent)} <span style="font-weight:400;color:var(--text3)">· ${escapeHtml(r.user)}</span></div>
+          <div class="notif-sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((r.input||r.output).substring(0,90))}</div>
+        </div>
+        <div class="notif-time" style="white-space:nowrap;font-size:10px">${NOTIFY._fmtFull(r.time)}</div>
+      </div>`).join('');
+  },
+  view(id){
+    this._load();
+    const r=this._runs.find(x=>x.id===id);if(!r) return;
+    this.close();
+    document.getElementById('agentInlineTitle').textContent='📜 '+r.agent+' — '+NOTIFY._fmtFull(r.time);
+    const resultEl=document.getElementById('agentInlineResult');
+    resultEl.className='agent-modal-result';
+    resultEl.style.whiteSpace='';
+    resultEl.textContent=(r.input?'▸ CONSULTA:\n'+r.input+'\n\n':'')+r.output;
+    _agentInlineText=r.output;
+    document.getElementById('agentInlineActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();AGENT_LOG.open()">← Volver al historial</button>';
+    document.getElementById('agentInlineModal').style.display='flex';
+  },
+  clear(){if(!confirm('¿Borrar todo el historial de agentes?')) return;this._runs=[];try{localStorage.removeItem(this._key);}catch(e){}this.render();}
+};
+
+// ── SUGERENCIAS PROACTIVAS DE AGENTES ──────────────────────────
+const _agentSuggestKey='thelab_agent_suggest_v1';
+function checkAgentSuggestions(){
+  let seen;try{seen=JSON.parse(localStorage.getItem(_agentSuggestKey)||'{}');}catch(e){seen={};}
+  const todayStr=new Date().toISOString().slice(0,10);
+  const _t=new Date();_t.setHours(0,0,0,0);
+  // FOLLOWUP: cotizaciones Enviada +5 días
+  const pendFU=state.cotizaciones.filter(c=>{
+    const f=c.fields;if(f['Estado cotización']!=='Enviada'||!f['Fecha cotización']) return false;
+    return Math.round((_t-new Date(f['Fecha cotización']+'T00:00:00'))/86400000)>=5;
+  });
+  if(pendFU.length&&seen.followup!==todayStr){
+    NOTIFY.add('info',`✍ FOLLOWUP: ${pendFU.length} seguimiento${pendFU.length>1?'s':''} pendiente${pendFU.length>1?'s':''}`,'Toca para redactar con IA','@openFollowupPicker',{silent:true});
+    seen.followup=todayStr;
+  }
+  // QA: pedidos listos para despacho sin QA
+  const pendQA=state.pedidos.filter(p=>p.fields['Estado pedido']==='Listo para despacho'&&!p.fields['Resultado QA']);
+  if(pendQA.length&&seen.qa!==todayStr){
+    NOTIFY.add('info',`🤖 QA: ${pendQA.length} pedido${pendQA.length>1?'s':''} listo${pendQA.length>1?'s':''} sin checklist QA`,'Toca para generar con IA','@openQAPicker',{silent:true});
+    seen.qa=todayStr;
+  }
+  try{localStorage.setItem(_agentSuggestKey,JSON.stringify(seen));}catch(e){}
+}
+
+function _openAgentPicker(title,rows){
+  document.getElementById('agentInlineTitle').textContent=title;
+  const resultEl=document.getElementById('agentInlineResult');
+  resultEl.className='agent-modal-result';
+  resultEl.style.whiteSpace='normal';
+  resultEl.innerHTML=rows.length?rows.join(''):'<div class="notif-empty">Nada pendiente ✓</div>';
+  document.getElementById('agentInlineActions').innerHTML='';
+  _agentInlineText='';
+  document.getElementById('agentInlineModal').style.display='flex';
+}
+
+function openFollowupPicker(){
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const pend=state.cotizaciones.filter(c=>{
+    const f=c.fields;if(f['Estado cotización']!=='Enviada'||!f['Fecha cotización']) return false;
+    return Math.round((_t-new Date(f['Fecha cotización']+'T00:00:00'))/86400000)>=5;
+  });
+  _openAgentPicker('✍ Seguimientos pendientes',pend.map(c=>{
+    const f=c.fields;
+    const dias=Math.round((_t-new Date(f['Fecha cotización']+'T00:00:00'))/86400000);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Cotización']||'—')}</span> · ${escapeHtml(resolveClienteName(f['Cliente']))} <span style="color:var(--text3);font-size:11px">(${dias}d sin respuesta)</span></div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runFollowupAgent('${c.id}')">✍ Redactar</button>
+    </div>`;
+  }));
+}
+
+function openQAPicker(){
+  const pend=state.pedidos.filter(p=>p.fields['Estado pedido']==='Listo para despacho'&&!p.fields['Resultado QA']);
+  _openAgentPicker('🤖 Pedidos sin checklist QA',pend.map(p=>{
+    const f=p.fields;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Pedido']||'—')}</span> · ${escapeHtml(resolveClienteName(f['Cliente']))} <span style="color:var(--text3);font-size:11px">Entrega: ${escapeHtml(f['Fecha entrega']||'—')}</span></div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runQAAgent('${p.id}')">🤖 Generar</button>
+    </div>`;
+  }));
 }
 
 // ── MÁQUINAS ──────────────────────────────────────────────────
@@ -11425,7 +11537,7 @@ const NOTIFY={
   },
 
   // ── PREFERENCES ──────────────────────────────────────────────
-  _prefs:{mail:true,sent:true,warning:true,info:true,dailySummaryEnabled:false,dailySummaryHour:9,waWebhook:'',waPhone:''},
+  _prefs:{mail:true,sent:true,warning:true,info:true,dailySummaryEnabled:false,dailySummaryHour:9,dailySummaryCEO:false,waWebhook:'',waPhone:''},
   _prefsKey(){const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;return u?'thelab_notif_prefs_'+u.username:'thelab_notif_prefs_guest';},
   loadPrefs(){
     try{const p=JSON.parse(localStorage.getItem(this._prefsKey())||'{}');this._prefs=Object.assign({mail:true,sent:true,warning:true,info:true,dailySummaryEnabled:false,dailySummaryHour:9,waWebhook:'',waPhone:''},p);}
@@ -11555,7 +11667,9 @@ const NOTIFY={
     const item=this.items.find(i=>i.id===id);
     if(!item) return;
     item.read=true;this.save();this.updateBadge();this.close();
-    if(item.action) switchTab(item.action);
+    if(!item.action) return;
+    if(item.action.startsWith('@')){const fn=window[item.action.slice(1)];if(typeof fn==='function') fn();return;}
+    switchTab(item.action);
   },
   _fmt(iso){
     try{
@@ -11642,7 +11756,9 @@ const NOTIFY={
     item.read=true;
     const p=this.items.find(i=>i.id===id);if(p) p.read=true;
     this.save();this.updateBadge();this.closeHistory();
-    if(item.action) switchTab(item.action);
+    if(!item.action) return;
+    if(item.action.startsWith('@')){const fn=window[item.action.slice(1)];if(typeof fn==='function') fn();return;}
+    switchTab(item.action);
   },
 
   // ── PREFERENCIAS ─────────────────────────────────────────────
@@ -11658,6 +11774,7 @@ const NOTIFY={
     document.getElementById('npInfo').checked=this._prefs.info!==false;
     document.getElementById('npDailySummary').checked=!!this._prefs.dailySummaryEnabled;
     document.getElementById('npDailySummaryHour').value=this._prefs.dailySummaryHour||9;
+    const ceoChk=document.getElementById('npDailyCEO');if(ceoChk) ceoChk.checked=!!this._prefs.dailySummaryCEO;
     document.getElementById('npWaWebhook').value=this._prefs.waWebhook||'';
     document.getElementById('npWaPhone').value=this._prefs.waPhone||'';
     this._toggleDailySummaryHour();
@@ -11674,6 +11791,7 @@ const NOTIFY={
     this._prefs.info=document.getElementById('npInfo').checked;
     this._prefs.dailySummaryEnabled=document.getElementById('npDailySummary').checked;
     this._prefs.dailySummaryHour=parseInt(document.getElementById('npDailySummaryHour').value)||9;
+    const ceoChk=document.getElementById('npDailyCEO');if(ceoChk) this._prefs.dailySummaryCEO=ceoChk.checked;
     this._prefs.waWebhook=document.getElementById('npWaWebhook').value.trim();
     this._prefs.waPhone=document.getElementById('npWaPhone').value.trim();
     this.savePrefs();
@@ -11703,6 +11821,23 @@ const NOTIFY={
     if(!admins.includes(u.username)){toast('Solo los admin pueden enviar el resumen diario','error');return;}
     const criticas=this._hist.filter(i=>i.type==='warning'&&i.sub==='Crítico').slice(0,30);
     const rows=criticas.map(i=>`<tr><td style="padding:5px 10px;border-bottom:1px solid #2a2a2a;font-size:12px;white-space:nowrap">${this._fmtFull(i.time)}</td><td style="padding:5px 10px;border-bottom:1px solid #2a2a2a;font-size:12px">${this.esc(i.title)}</td></tr>`).join('');
+    let ceoHtml='';
+    if(this._prefs.dailySummaryCEO){
+      try{
+        const k=typeof getAnthropicKey==='function'?getAnthropicKey():null;
+        if(k&&!k.startsWith('%%')&&typeof AGENTES_CFG!=='undefined'){
+          const ceoCfg=AGENTES_CFG.find(a=>a.id==='CEO');
+          if(ceoCfg){
+            const ctx=state.loaded?buildAgentContext('CEO'):'';
+            const analysis=await callClaude(ceoCfg.sys,ctx+'\n\nCONSULTA: Genera el reporte ejecutivo del día.');
+            try{AGENT_LOG.add(ceoCfg.label,'Resumen diario automático',analysis);}catch(e){}
+            ceoHtml=`<div style="margin-top:20px;background:#1a1a1a;border-radius:8px;padding:16px">
+<h3 style="color:#00f3ff;margin:0 0 10px;font-size:14px">📊 Análisis CEO_AGENT</h3>
+<pre style="white-space:pre-wrap;font-family:Arial,sans-serif;font-size:12px;color:#ccc;margin:0;line-height:1.6">${this.esc(analysis)}</pre></div>`;
+          }
+        }
+      }catch(e){/* el resumen se envía igual sin análisis CEO */}
+    }
     const body=`<div style="font-family:Arial,sans-serif;background:#0d0d0d;color:#fff;padding:24px;max-width:600px;margin:0 auto">
 <div style="border-left:4px solid #00f3ff;padding-left:16px;margin-bottom:20px">
 <h2 style="color:#00f3ff;margin:0 0 4px;font-size:18px">⚠️ Resumen de Alertas Críticas</h2>
@@ -11713,6 +11848,7 @@ ${criticas.length
 <thead><tr style="background:#1f1f1f"><th style="text-align:left;padding:8px 10px;font-size:11px;color:#00f3ff;font-weight:600;letter-spacing:.5px;text-transform:uppercase">Hora</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#00f3ff;font-weight:600;letter-spacing:.5px;text-transform:uppercase">Alerta</th></tr></thead>
 <tbody>${rows}</tbody></table>`
   :'<div style="background:#1a2a1a;border:1px solid #1a3a1a;border-radius:8px;padding:16px;text-align:center;color:#4caf50;font-size:14px">✔ Sin alertas críticas hoy</div>'}
+${ceoHtml}
 <p style="margin-top:24px;font-size:11px;color:#444;text-align:center">Dashboard The Lab Solutions — resumen automático</p></div>`;
     try{
       const r=await MAIL.post({action:'send',to:u.username,subject:`⚠ Resumen diario alertas — ${todayStr}`,body});
@@ -16926,6 +17062,10 @@ CAPACIDADES Y REGLAS:
   Modulos validos: overview, clientes, cotizaciones, pedidos, proveedores, agentes, maquinas, equipo, reporte, web, finanzas, visual, remuneraciones
 - Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
   Tipos validos: cliente, cotizacion, proveedor, venta, diario
+- Para delegar una tarea a un agente especializado incluye al final: [AGENTE:ID|instruccion detallada]
+  IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), FINANCE (cobranza), ONBOARDING (bienvenida clientes), CONTENT (contenido redes).
+  Ejemplo: [AGENTE:FOLLOWUP|Cotizacion COT-123 de Maria, 8 dias sin respuesta, trofeos por 250000]
+  Usa esto cuando el usuario pida redactar, cotizar, generar checklist, reporte o analisis. Anuncia brevemente que estas delegando.
 - Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
 - Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
 
@@ -16981,7 +17121,34 @@ CAPACIDADES Y REGLAS:
         else if(tipo==='diario'){ if(typeof irALibroDiario==='function') irALibroDiario(); }
       }catch(e){}
     }
+    const reAgente=/\[AGENTE:\s*([A-Z_]+)\s*\|\s*([^\]]+)\]/gi;
+    cleaned=cleaned.replace(reAgente,'').trim();
+    while((m=reAgente.exec(text))!==null){
+      delegateToAgent(m[1].toUpperCase().trim(),m[2].trim());
+    }
     return cleaned;
+  }
+
+  // ─── Delegación a agentes especializados ───
+  async function delegateToAgent(agentId,consulta){
+    if(typeof AGENTES_CFG==='undefined'||typeof callClaude!=='function') return;
+    const cfg=AGENTES_CFG.find(a=>a.id===agentId);
+    if(!cfg){ addMsg('e',`Agente ${agentId} no existe`); return; }
+    addMsg('a',`Delegando a ${cfg.label}...`);
+    const $res=addMsg('j',''); $res.classList.add('jvs-cursor');
+    try{
+      const ctx=(typeof buildAgentContext==='function'&&typeof state!=='undefined'&&state.loaded)?buildAgentContext(agentId):'';
+      const fullInput=ctx?`${ctx}\n\nCONSULTA: ${consulta}`:consulta;
+      const result=await callClaude(cfg.sys,fullInput);
+      $res.classList.remove('jvs-cursor');
+      $res.textContent=`[${cfg.label}]\n${result}`;
+      $log.scrollTop=$log.scrollHeight;
+      try{ if(typeof AGENT_LOG!=='undefined') AGENT_LOG.add(cfg.label,'KAI: '+consulta,result); }catch(e){}
+    }catch(e){
+      $res.classList.remove('jvs-cursor');
+      $res.textContent='Error al consultar '+cfg.label+': '+e.message;
+      $res.parentElement.className='jvs-msg jvs-e';
+    }
   }
 
   // ─── Ask Claude (reuses dashboard's key + endpoint) ───
@@ -17028,7 +17195,7 @@ CAPACIDADES Y REGLAS:
       const reader=r.body.getReader();
       const decoder=new TextDecoder();
       // Oculta etiquetas [NAV:...] y [NUEVO:...] mientras llega texto
-      const stripNav=s=>s.replace(/\[NAV:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[NUEVO:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[(NAV|NUEVO):[a-záéíóúñ\s\-]*$/i,'');
+      const stripNav=s=>s.replace(/\[NAV:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[NUEVO:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[AGENTE:[^\]]*\]/gi,'').replace(/\[(NAV|NUEVO|AGENTE):[^\]]*$/i,'');
       let buf='', full='';
       while(true){
         const {done,value}=await reader.read();
@@ -17338,6 +17505,10 @@ trusted_clients:
       </select>
     </div>
     <div class="notif-prefs-row">
+      <div><div class="notif-prefs-label">📊 Incluir análisis CEO_AGENT</div><div class="notif-prefs-sub">Agrega reporte ejecutivo IA al resumen (1 llamada API/día)</div></div>
+      <label class="notif-toggle"><input type="checkbox" id="npDailyCEO"><span class="notif-toggle-slider"></span></label>
+    </div>
+    <div class="notif-prefs-row">
       <div><div class="notif-prefs-label">Enviar resumen ahora</div><div class="notif-prefs-sub">Envía un resumen inmediato a tu correo</div></div>
       <button class="btn btn-ghost btn-sm" onclick="NOTIFY.sendDailySummary(true)" style="font-size:11px;flex-shrink:0">Enviar</button>
     </div>
@@ -17356,6 +17527,20 @@ trusted_clients:
       <button class="btn btn-ghost btn-sm" onclick="NOTIFY.closePrefs()">Cancelar</button>
       <button class="btn btn-primary btn-sm" onclick="NOTIFY.applyPrefs()">Guardar preferencias</button>
     </div>
+  </div>
+</div>
+
+<!-- ══ HISTORIAL DE AGENTES MODAL ═══════════════════════════════ -->
+<div class="modal-overlay" id="agentLogModal" style="display:none" onclick="if(event.target===this)AGENT_LOG.close()">
+  <div class="modal-card" style="max-width:680px;width:calc(100% - 24px);display:flex;flex-direction:column;max-height:85vh" onclick="event.stopPropagation()">
+    <div class="modal-header" style="flex-shrink:0">
+      <span class="modal-title">📜 Historial de Agentes IA</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="AGENT_LOG.clear()" style="font-size:11px">Borrar todo</button>
+        <button class="modal-close" onclick="AGENT_LOG.close()">✕</button>
+      </div>
+    </div>
+    <div id="agentLogList" style="flex:1;overflow-y:auto;padding:6px 10px"></div>
   </div>
 </div>
 
