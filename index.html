@@ -281,6 +281,9 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .notif-time{font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0;margin-top:3px;}
 .notif-empty{padding:32px;text-align:center;color:var(--text3);font-size:13px;}
 .notif-panel-ftr{padding:9px 14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.notif-filter-btn{background:none;border:1px solid var(--border);border-radius:14px;color:var(--text3);padding:3px 11px;font-size:11px;font-family:inherit;cursor:pointer;transition:all .12s;}
+.notif-filter-btn:hover{color:var(--text);}
+.notif-filter-btn.active{background:rgba(0,243,255,.1);border-color:rgba(0,243,255,.35);color:var(--accent);}
 .toast.success{border-color:var(--accent3);}
 .toast.error{border-color:var(--danger);}
 .toast.info{border-color:var(--accent);}
@@ -1456,6 +1459,11 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <div class="notif-panel-hdr">
           <span class="notif-panel-title">Notificaciones</span>
           <button class="btn btn-ghost btn-sm" onclick="NOTIFY.markAllRead()" style="font-size:11px">Marcar leídas</button>
+        </div>
+        <div style="display:flex;gap:4px;padding:7px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
+          <button class="notif-filter-btn active" data-nf="todas" onclick="NOTIFY.setFilter('todas')">Todas</button>
+          <button class="notif-filter-btn" data-nf="correo" onclick="NOTIFY.setFilter('correo')">✉ Correo</button>
+          <button class="notif-filter-btn" data-nf="alertas" onclick="NOTIFY.setFilter('alertas')">⚠ Alertas</button>
         </div>
         <div class="notif-list" id="notifList">
           <div class="notif-empty">Sin notificaciones</div>
@@ -6358,6 +6366,9 @@ function renderAlertas(){
   });
 
   alertas.sort((a,b)=>b.sev-a.sev);
+
+  // Sincronizar con la campana de notificaciones (solo alertas nuevas)
+  try{NOTIFY.syncAlertas(alertas);}catch(e){}
 
   // agrupación: >=3 del mismo tipo → una sola fila
   const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
@@ -11371,27 +11382,64 @@ function enableDemoMode(){
 // ── NOTIFICACIONES ────────────────────────────────────────────
 const NOTIFY={
   _key:'thelab_notifications_v1',
+  _alertKeysKey:'thelab_alert_keys_v1',
   items:[],
+  _seq:0,
+  _filter:'todas', // todas | correo | alertas
 
   load(){
     try{this.items=JSON.parse(localStorage.getItem(this._key)||'[]');}catch(e){this.items=[];}
     this.updateBadge();
+    // Sincronización entre pestañas abiertas del dashboard
+    window.addEventListener('storage',ev=>{
+      if(ev.key===this._key){
+        try{this.items=JSON.parse(ev.newValue||'[]');}catch(e){return;}
+        this.render();this.updateBadge();
+      }
+    });
   },
   save(){
     try{localStorage.setItem(this._key,JSON.stringify(this.items.slice(0,60)));}catch(e){}
   },
 
-  add(type,title,sub,action){
-    const item={id:Date.now()+(Math.random()*100|0),type,title,sub:sub||'',action:action||null,time:new Date().toISOString(),read:false};
+  esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');},
+
+  add(type,title,sub,action,opts={}){
+    const item={id:Date.now()*100+(++this._seq%100),type,title,sub:sub||'',action:action||null,time:new Date().toISOString(),read:false,key:opts.key||null};
     this.items.unshift(item);
     if(this.items.length>60) this.items=this.items.slice(0,60);
     this.save();
     this.render();
     this.updateBadge();
-    // Toast asociado
-    const toastType=type==='mail'?'info':type==='sent'?'success':type==='warning'?'error':'success';
-    const msg=sub?`${title}: ${sub}`:title;
-    toast(msg,toastType);
+    if(!opts.silent){
+      const toastType=type==='mail'?'info':type==='sent'?'success':type==='warning'?'error':'success';
+      const msg=sub?`${title}: ${sub}`:title;
+      toast(msg,toastType);
+    }
+  },
+
+  // Sincroniza las alertas de negocio (renderAlertas) con la campana.
+  // Solo notifica alertas NUEVAS (clave estable type:id) — sin spam de toasts.
+  syncAlertas(alertas){
+    let known;
+    try{known=new Set(JSON.parse(localStorage.getItem(this._alertKeysKey)||'[]'));}catch(e){known=new Set();}
+    const current=new Set();
+    const tabMap={'pedido-atrasado':'pedidos','pago-pendiente':'pedidos','pedido-urgente':'pedidos','cot-vencida':'cotizaciones','cot-por-vencer':'cotizaciones','cot-sin-enviar':'cotizaciones','cliente-bloqueado':'cotizaciones','factura-vencida':'clientes','cliente-inactivo':'clientes','proveedor-bloqueado':'proveedores','proveedor-sin-cobertura':'proveedores'};
+    let nuevasCriticas=0;
+    alertas.forEach(a=>{
+      const key=a.type+':'+a.id;
+      current.add(key);
+      if(known.has(key)) return;
+      // Alerta nueva → notificación silenciosa en la campana
+      const plain=String(a.msg||'').replace(/<[^>]*>/g,'');
+      this.add('warning',plain.length>70?plain.slice(0,70)+'…':plain,
+        a.sev===3?'Crítico':a.sev===2?'Advertencia':'Info',
+        tabMap[a.type]||a.tab||'overview',{silent:true,key});
+      if(a.sev===3) nuevasCriticas++;
+    });
+    // Las alertas resueltas salen del registro para poder re-alertar si reaparecen
+    try{localStorage.setItem(this._alertKeysKey,JSON.stringify([...current]));}catch(e){}
+    if(nuevasCriticas>0) toast(`⚠ ${nuevasCriticas} alerta${nuevasCriticas>1?'s':''} crítica${nuevasCriticas>1?'s':''} nueva${nuevasCriticas>1?'s':''}`,'error');
   },
 
   markAllRead(){
@@ -11422,28 +11470,45 @@ const NOTIFY={
     if(!p) return;
     const open=p.style.display!=='none';
     p.style.display=open?'none':'flex';
-    if(!open) this.render();
+    if(!open){
+      this.render();
+      // Gesto de usuario: momento válido para pedir permiso de notificaciones del SO
+      try{requestWebNotifPermission();}catch(e){}
+    }
   },
 
   close(){const p=document.getElementById('notifPanel');if(p) p.style.display='none';},
 
+  setFilter(f){
+    this._filter=f;
+    document.querySelectorAll('.notif-filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.nf===f));
+    this.render();
+  },
+
+  _filtered(){
+    if(this._filter==='correo') return this.items.filter(i=>i.type==='mail'||i.type==='sent');
+    if(this._filter==='alertas') return this.items.filter(i=>i.type==='warning');
+    return this.items;
+  },
+
   render(){
     const list=document.getElementById('notifList');
     if(!list) return;
-    if(!this.items.length){
+    const items=this._filtered();
+    if(!items.length){
       list.innerHTML='<div class="notif-empty">Sin notificaciones</div>';
       return;
     }
     const iconMap={mail:'#icon-correo',sent:'#icon-send',success:'#icon-check-circle',warning:'#icon-warning',info:'#icon-bell'};
     const colorMap={mail:'rgba(0,243,255,.12)',sent:'rgba(0,212,170,.12)',success:'rgba(0,212,170,.12)',warning:'rgba(250,204,21,.12)',info:'rgba(0,243,255,.08)'};
-    list.innerHTML=this.items.map(item=>`
+    list.innerHTML=items.map(item=>`
       <div class="notif-item${item.read?'':' unread'}" onclick="NOTIFY._click(${item.id})">
         <div class="notif-icon" style="background:${colorMap[item.type]||colorMap.info}">
           <svg class="dashboard-icon" width="13" height="13" stroke-width="1.5"><use href="${iconMap[item.type]||iconMap.info}"/></svg>
         </div>
         <div class="notif-body">
-          <div class="notif-title">${item.title}</div>
-          ${item.sub?`<div class="notif-sub">${item.sub}</div>`:''}
+          <div class="notif-title">${this.esc(item.title)}</div>
+          ${item.sub?`<div class="notif-sub">${this.esc(item.sub)}</div>`:''}
         </div>
         <div class="notif-time">${this._fmt(item.time)}</div>
       </div>`).join('');
@@ -11522,11 +11587,21 @@ function playMailSound(){
   }catch(e){}
 }
 
+let _mailPollErrors = 0;
 async function _mailCheck(){
   if(!MAIL.getMailPass || !MAIL.getMailPass()) return;
   try{
     const data = await MAIL.post({action:'check'});
-    if(data.error) return;
+    if(data.error){
+      // Backoff: tras 10 errores consecutivos (clave inválida, server caído)
+      // se detiene el polling para no martillar el servidor
+      if(++_mailPollErrors>=10){
+        clearInterval(_mailPollTimer);_mailPollTimer=null;
+        console.warn('Polling de correo detenido tras errores repetidos:',data.error);
+      }
+      return;
+    }
+    _mailPollErrors=0;
     const unseen = data.unseen ?? 0;
     updateTabTitle(unseen);
     if(_mailLastUnseen >= 0 && unseen > _mailLastUnseen){
@@ -11615,6 +11690,7 @@ const MAIL={
       await this.loadFolders();
       await this.loadMessages();
       document.getElementById('mailConnStatus').textContent='';
+      _mailPollErrors=0;
       startMailPolling();
     }catch(e){
       this._init=false;
