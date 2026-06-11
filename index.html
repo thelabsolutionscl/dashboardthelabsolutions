@@ -223,6 +223,12 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .act-item-blue:hover{background:rgba(59,130,246,0.1)!important;}
 .act-item-purple{color:#c084fc!important;}
 .act-item-purple:hover{background:rgba(192,132,252,0.1)!important;}
+.act-item-cyan{color:#00d4cc!important;}
+.act-item-cyan:hover{background:rgba(0,212,204,0.1)!important;}
+/* Agent inline modal */
+.agent-modal-result{white-space:pre-wrap;font-size:12px;line-height:1.68;color:var(--text2);min-height:80px;}
+.agent-modal-result.loading{color:var(--text3);font-style:italic;}
+.agent-modal-actions{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;}
 /* ── NOTAS INTERNAS ── */
 .nota-item{background:var(--surface3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:8px;}
 .nota-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
@@ -6949,7 +6955,10 @@ function buildCotRow(c){
   const numCotEsc=escapeHtml(f['N° Cotización']||'');
   const cliNomEsc=escapeHtml(resolveClienteName(f['Cliente']));
   const cotNotasN=_getNotas('cot',c.id).length;
-  const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-x-circle"/></svg> &nbsp;Rechazar cotización</button><div class="act-sep"></div>`:'';
+  const _ctToday=new Date();_ctToday.setHours(0,0,0,0);
+  const _diasEnviada=(f['Estado cotización']==='Enviada'&&f['Fecha cotización'])?Math.round((_ctToday-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):0;
+  const followupItem=_diasEnviada>=5?`<button class="act-item act-item-cyan" onclick="runFollowupAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;✍ Seguimiento IA <span style="font-size:10px;opacity:.65">(${_diasEnviada}d)</span></button>`:'';
+  const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-x-circle"/></svg> &nbsp;Rechazar cotización</button>${followupItem}<div class="act-sep"></div>`:'';
   const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}<button class="act-item" onclick="openEditCot('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> &nbsp;Descargar PDF</button><button class="act-item act-item-green" onclick="MAIL.sendCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-correo"/></svg> &nbsp;Enviar por correo</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar</button></div></div>`;
   const vendNom=resolveVendedorName(f['Vendedor']||'');
   return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
@@ -8504,7 +8513,7 @@ function renderPedidos(filter){
     const pedDriveLink=pedDriveCotId?localStorage.getItem('fp_drive_folder_'+pedDriveCotId):localStorage.getItem('fp_drive_folder_ped_'+p.id);
     const pedNotasN=_getNotas('ped',p.id).length;
     const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item act-item-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ &nbsp;Avanzar a "${stages[idx+1]}"</button><div class="act-sep"></div>`:(estado==='Despachado'?'':'');
-    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
+    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -9605,6 +9614,156 @@ async function runAgent(id){
   if(btn) btn.disabled=false;
 }
 function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
+
+// ── AGENTES INLINE ─────────────────────────────────────────────
+let _agentInlineText='';
+
+function closeAgentInlineModal(){document.getElementById('agentInlineModal').style.display='none';_agentInlineText='';}
+
+function copyAgentResult(){if(!_agentInlineText){toast('Sin contenido','error');return;}navigator.clipboard.writeText(_agentInlineText).then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error'));}
+
+function _getClienteRecFromField(field){
+  if(!field) return null;
+  if(Array.isArray(field)&&field.length) return state.clientes.find(c=>c.id===field[0])||null;
+  if(typeof field==='string') return state.clientes.find(c=>c.fields['Empresa']===field)||null;
+  return null;
+}
+
+function _getClienteWAPhone(cliRec){
+  if(!cliRec) return '';
+  const wa=(cliRec.fields['WhatsApp']||'').replace(/\D/g,'');
+  const tel=(cliRec.fields['Teléfono']||'').replace(/\D/g,'');
+  const num=wa||tel;
+  if(!num) return '';
+  return num.startsWith('56')?num:'56'+num;
+}
+
+function _extractWAPart(text){
+  const m=text.match(/(?:^|\n)1[\.\)][^\n]*\n([\s\S]+?)(?=\n2[\.\)]|\n*$)/i);
+  return m?m[1].trim():text.substring(0,400).trim();
+}
+
+function _extractEmailPart(text){
+  const m=text.match(/(?:^|\n)2[\.\)][^\n]*\n([\s\S]+?)$/i);
+  return m?m[1].trim():text;
+}
+
+async function runAgentInline(agentId,contextText,actionsFn){
+  const cfg=AGENTES_CFG.find(a=>a.id===agentId);if(!cfg) return;
+  const modal=document.getElementById('agentInlineModal');
+  const resultEl=document.getElementById('agentInlineResult');
+  const actionsEl=document.getElementById('agentInlineActions');
+  document.getElementById('agentInlineTitle').textContent='🤖 '+cfg.label;
+  resultEl.className='agent-modal-result loading';
+  resultEl.textContent='⏳ Procesando...';
+  actionsEl.innerHTML='';
+  _agentInlineText='';
+  modal.style.display='flex';
+  const ctx=state.loaded?buildAgentContext(agentId):'';
+  const fullInput=ctx?`${ctx}\n\nCONSULTA: ${contextText}`:contextText;
+  try{
+    const result=await callClaude(cfg.sys,fullInput);
+    _agentInlineText=result;
+    resultEl.className='agent-modal-result';
+    resultEl.textContent=result;
+    if(actionsFn) actionsEl.innerHTML=actionsFn(result);
+  }catch(e){
+    resultEl.className='agent-modal-result';
+    resultEl.textContent='❌ Error: '+e.message;
+    toast('Error agente: '+e.message,'error');
+  }
+}
+
+// — FOLLOWUP desde cotización
+function runFollowupAgent(cotId){
+  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const f=c.fields;
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const cliRec=_getClienteRecFromField(f['Cliente']);
+  const nombre=resolveClienteName(f['Cliente']);
+  const dias=f['Fecha cotización']?Math.round((_t-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):'—';
+  const vto=f['Fecha vencimiento']?Math.round((new Date(f['Fecha vencimiento']+'T00:00:00')-_t)/86400000):null;
+  const sol=(f['Solicitud cliente (texto libre)']||f['Detalle productos']||'').substring(0,150);
+  const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'';
+  const waPhone=_getClienteWAPhone(cliRec);
+  const email=cliRec?.fields['Email']||'';
+  const ctx=`Cliente: ${nombre}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nCotización: ${f['N° Cotización']||'—'}${monto?' | Monto neto: '+monto:''}\nDías sin respuesta: ${dias}${vto!=null?' | Vence en: '+vto+'d':''}\nProducto/Servicio: ${sol||'No especificado'}`;
+  runAgentInline('FOLLOWUP',ctx,(result)=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendFollowupEmail('${cotId}','${email.replace(/'/g,'')}')">📧 Enviar por correo</button>`:'';
+    return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar todo</button>`;
+  });
+}
+
+function openFollowupWA(phone){
+  const waPart=_extractWAPart(_agentInlineText)||_agentInlineText;
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(waPart),'_blank');
+}
+
+async function _sendFollowupEmail(cotId,toEmail){
+  if(!_agentInlineText){toast('Sin contenido','error');return;}
+  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const emailText=_extractEmailPart(_agentInlineText)||_agentInlineText;
+  const u=AUTH.getUser();
+  const from_name=u?.name||'The Lab Solutions';
+  const btnEl=document.querySelector('#agentInlineActions button:nth-child(2)');
+  if(btnEl){btnEl.disabled=true;btnEl.textContent='Enviando...';}
+  try{
+    const r=await MAIL.post({action:'send',to:toEmail,subject:`Seguimiento — Cotización ${c.fields['N° Cotización']||''}`,body:emailText,from_name});
+    if(r&&!r.error){toast('✓ Correo enviado','success');closeAgentInlineModal();}
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btnEl){btnEl.disabled=false;btnEl.textContent='📧 Enviar por correo';}}
+}
+
+// — PRODUCTION desde pedido
+function runProductionAgent(pedidoId){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const f=p.fields;
+  const ctx=`Pedido: ${f['N° Pedido']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])}\nEstado: ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'} | Equipo: ${f['Equipo asignado']||'Sin asignar'}\nSolicitud: ${(f['Solicitud cliente (texto libre)']||f['Detalle productos']||'Sin detalle').substring(0,300)}`;
+  runAgentInline('PRODUCTION',ctx,()=>{
+    const hasFicha=!!parseFichaData(p.fields['Ficha Tecnica']);
+    return `<button class="btn btn-primary btn-sm" onclick="saveProductionFicha('${pedidoId}')">${hasFicha?'🔄 Reemplazar':'💾 Guardar'} Ficha Técnica</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+
+async function saveProductionFicha(pedidoId){
+  if(!_agentInlineText){toast('Sin contenido','error');return;}
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const existing=parseFichaData(p.fields['Ficha Tecnica'])||{};
+  existing.instrucciones=_agentInlineText;
+  existing.generadoIA=new Date().toISOString().substring(0,10);
+  const btnEl=document.querySelector('#agentInlineActions .btn-primary');
+  if(btnEl){btnEl.disabled=true;btnEl.textContent='Guardando...';}
+  try{
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(existing)});
+    p.fields['Ficha Tecnica']=JSON.stringify(existing);
+    toast('✓ Ficha Técnica guardada','success');
+    closeAgentInlineModal();renderPedidos();
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btnEl){btnEl.disabled=false;btnEl.textContent='💾 Guardar Ficha Técnica';}}
+}
+
+// — QA desde pedido
+function runQAAgent(pedidoId){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const f=p.fields;
+  const ctx=`Pedido: ${f['N° Pedido']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])}\nEntrega: ${f['Fecha entrega']||'—'}\nSolicitud/Producto: ${(f['Solicitud cliente (texto libre)']||f['Detalle productos']||'Sin detalle').substring(0,300)}`;
+  runAgentInline('QA',ctx,()=>
+    `<button class="btn btn-sm" style="background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);color:#10b981;border-radius:7px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:700" onclick="saveQAFromAgent('${pedidoId}','QA aprobado')">✅ Guardar: Aprobado</button><button class="btn btn-sm" style="background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.4);color:#ef4444;border-radius:7px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:700" onclick="saveQAFromAgent('${pedidoId}','Rechazado')">❌ Guardar: Rechazado</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`
+  );
+}
+
+async function saveQAFromAgent(pedidoId,resultado){
+  if(!_agentInlineText){toast('Sin contenido','error');return;}
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  try{
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Resultado QA':resultado,'Notas QA':_agentInlineText});
+    p.fields['Resultado QA']=resultado;p.fields['Notas QA']=_agentInlineText;
+    toast(`✓ QA ${resultado}`,'success');
+    closeAgentInlineModal();renderPedidos();renderOverview();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
 
 // ── MÁQUINAS ──────────────────────────────────────────────────
 function fmtDate(d){return d.toISOString().split('T')[0];}
@@ -17197,6 +17356,23 @@ trusted_clients:
       <button class="btn btn-ghost btn-sm" onclick="NOTIFY.closePrefs()">Cancelar</button>
       <button class="btn btn-primary btn-sm" onclick="NOTIFY.applyPrefs()">Guardar preferencias</button>
     </div>
+  </div>
+</div>
+
+<!-- ══ AGENTE INLINE MODAL ══════════════════════════════════════ -->
+<div class="modal-overlay" id="agentInlineModal" style="display:none" onclick="if(event.target===this)closeAgentInlineModal()">
+  <div class="modal-card" style="max-width:620px;width:calc(100% - 24px);display:flex;flex-direction:column;max-height:85vh" onclick="event.stopPropagation()">
+    <div class="modal-header" style="flex-shrink:0">
+      <span class="modal-title" id="agentInlineTitle">🤖 Agente IA</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="copyAgentResult()" title="Copiar resultado" style="font-size:13px;padding:2px 8px">📋</button>
+        <button class="modal-close" onclick="closeAgentInlineModal()">✕</button>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:16px">
+      <div class="agent-modal-result loading" id="agentInlineResult">Iniciando agente...</div>
+    </div>
+    <div class="agent-modal-actions" id="agentInlineActions"></div>
   </div>
 </div>
 </body>
