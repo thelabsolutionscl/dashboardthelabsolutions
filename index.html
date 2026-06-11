@@ -4582,7 +4582,7 @@ function _reportarResultados(muts) {
     <div class="mail-compose-body-area" id="mailCmpBody" contenteditable="true" spellcheck="true"
       placeholder="Escribe tu mensaje aquí..."></div>
     <div class="mail-compose-footer">
-      <button class="btn btn-primary btn-sm" onclick="MAIL.sendCompose()">
+      <button class="btn btn-primary btn-sm" id="mailSendBtn" onclick="MAIL.sendCompose()">
         <svg class="dashboard-icon" style="stroke:#000" width="13" height="13" stroke-width="2"><use href="#icon-send"/></svg> Enviar
       </button>
       <span id="mailSendStatus" style="font-size:12px;color:var(--text3)"></span>
@@ -11531,6 +11531,8 @@ const MAIL={
   _searchTimer:null,
   _init:false,
   _currentMsg:null,
+  _readSeq:0,
+  _sending:false,
 
   _mailPassKey(){const u=AUTH.getUser();return u?'thelab_mail_pass_'+u.username:null;},
   getMailPass(){const k=this._mailPassKey();return k?localStorage.getItem(k)||'':null;},
@@ -11551,8 +11553,16 @@ const MAIL={
     const a=this.auth();
     fd.append('user',a.user); fd.append('pass',a.pass);
     for(const[k,v] of Object.entries(params)) fd.append(k,v);
-    const r=await fetch(this.API,{method:'POST',body:fd});
-    return r.json();
+    const ctrl=new AbortController();
+    const timeout=setTimeout(()=>ctrl.abort(),30000);
+    try{
+      const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
+      const text=await r.text();
+      try{return JSON.parse(text);}
+      catch(e){return{error:'Respuesta inválida del servidor ('+r.status+')'};}
+    }catch(e){
+      return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
+    }finally{clearTimeout(timeout);}
   },
 
   async init(){
@@ -11598,7 +11608,7 @@ const MAIL={
         this.showPassModal('Contraseña incorrecta. Inténtalo de nuevo.');
         return;
       }
-      document.getElementById('mailFolderList').innerHTML=`<div style="padding:8px;font-size:11px;color:var(--danger)">${data.error}</div>`;return;
+      document.getElementById('mailFolderList').innerHTML=`<div style="padding:8px;font-size:11px;color:var(--danger)">${this.esc(data.error)}</div>`;return;
     }
     const folderMeta={
       inbox:     {label:'Bandeja de entrada', icon:'icon-correo'},
@@ -11621,7 +11631,7 @@ const MAIL={
     const html=data.folders.map(f=>{
       const isActive=f.name===this.folder;
       const meta=labelFor(f.name);
-      return `<button class="mail-folder-item${isActive?' active':''}" onclick="MAIL.selectFolder('${f.name.replace(/'/g,"\\'")}')">
+      return `<button class="mail-folder-item${isActive?' active':''}" data-folder="${this.esc(f.name)}" onclick="MAIL.selectFolder(this.dataset.folder)">
         <span class="mail-folder-name">${svgIcon(meta.icon)} ${meta.label}</span>
         ${f.unseen>0?`<span class="mail-unseen-badge">${f.unseen}</span>`:''}
       </button>`;
@@ -11637,7 +11647,7 @@ const MAIL={
     document.getElementById('mailFolderTitle').textContent=this.folder.replace(/^INBOX\./i,'').replace(/^INBOX$/i,'Bandeja de entrada');
     document.getElementById('mailListFooter').style.display='none';
     const data=await this.post({action:'list',folder:this.folder,page:this.page});
-    if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${data.error}</div>`;return;}
+    if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${this.esc(data.error)}</div>`;return;}
     this.msgs=data.messages;
     this.pages=data.pages;
     this.total=data.total;
@@ -11672,6 +11682,7 @@ const MAIL={
 
   async readMsg(uid){
     this.selUid=uid;
+    const seq=++this._readSeq;
     this.mobGo('reader');
     document.querySelectorAll('.mail-item').forEach(el=>{el.classList.remove('selected');});
     document.querySelector(`.mail-item[data-uid="${uid}"]`)?.classList.add('selected');
@@ -11682,7 +11693,8 @@ const MAIL={
     document.getElementById('mailRdrSubject').textContent='Cargando...';
     document.getElementById('mailRdrMeta').textContent='';
     const data=await this.post({action:'read',folder:this.folder,uid});
-    if(data.error){document.getElementById('mailRdrBody').innerHTML=`<div style="color:var(--danger)">${data.error}</div>`;return;}
+    if(seq!==this._readSeq) return; // llegó tarde: el usuario ya abrió otro mensaje
+    if(data.error){this._currentMsg=null;document.getElementById('mailRdrBody').innerHTML=`<div style="color:var(--danger)">${this.esc(data.error)}</div>`;return;}
     this._currentMsg=data;
     document.getElementById('mailRdrSubject').textContent=data.subject;
     document.getElementById('mailRdrMeta').innerHTML=
@@ -11717,7 +11729,7 @@ const MAIL={
     document.getElementById('mailReaderEmpty').style.display='flex';
     document.getElementById('mailReaderContent').style.display='none';
     document.querySelectorAll('.mail-folder-item').forEach(b=>{
-      b.classList.toggle('active',b.textContent.includes(name));
+      b.classList.toggle('active',b.dataset.folder===name);
     });
     document.getElementById('mailSearchInput').value='';
     await this.loadMessages();
@@ -11758,7 +11770,7 @@ const MAIL={
     list.innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
     document.getElementById('mailListFooter').style.display='none';
     const data=await this.post({action:'search',folder:this.folder,query:q});
-    if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${data.error}</div>`;return;}
+    if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${this.esc(data.error)}</div>`;return;}
     this.renderMsgList(data.messages);
   },
 
@@ -11845,22 +11857,39 @@ const MAIL={
     });
   },
 
+  _validEmails(str){
+    return str.split(',').map(s=>s.trim()).filter(Boolean)
+      .every(e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.match(/<(.+)>/)?.[1]||e));
+  },
+
   async sendCompose(){
+    if(this._sending) return;
     const to=document.getElementById('mailCmpTo').value.trim();
     const cc=document.getElementById('mailCmpCc').value.trim();
     const subject=document.getElementById('mailCmpSubject').value.trim();
     const body=document.getElementById('mailCmpBody').innerHTML;
     const status=document.getElementById('mailSendStatus');
-    if(!to){status.textContent='Falta el destinatario';status.style.color='var(--danger)';return;}
-    if(!subject){status.textContent='Falta el asunto';status.style.color='var(--danger)';return;}
+    const err=m=>{status.textContent=m;status.style.color='var(--danger)';};
+    if(!to) return err('Falta el destinatario');
+    if(!this._validEmails(to)) return err('Email de destinatario inválido');
+    if(cc&&!this._validEmails(cc)) return err('Email en CC inválido');
+    if(!subject) return err('Falta el asunto');
+    this._sending=true;
+    const btn=document.getElementById('mailSendBtn');
+    if(btn) btn.disabled=true;
     status.textContent='Enviando...';status.style.color='var(--text3)';
-    const a=this.auth();
-    const data=await this.post({action:'send',to,cc,subject,body,from_name:a.from_name});
-    if(data.error){status.textContent=data.error;status.style.color='var(--danger)';}
-    else{
-      status.textContent='✓ Enviado';status.style.color='var(--success)';
-      NOTIFY.add('sent','Correo enviado',to,'correo');
-      setTimeout(()=>this.closeCompose(),1500);
+    try{
+      const a=this.auth();
+      const data=await this.post({action:'send',to,cc,subject,body,from_name:a.from_name});
+      if(data.error) err(data.error);
+      else{
+        status.textContent='✓ Enviado';status.style.color='var(--success)';
+        NOTIFY.add('sent','Correo enviado',to,'correo');
+        setTimeout(()=>this.closeCompose(),1500);
+      }
+    }finally{
+      this._sending=false;
+      if(btn) btn.disabled=false;
     }
   },
 
@@ -12106,6 +12135,9 @@ function initDashboard(){
     const p=document.getElementById('notifPanel');
     if(p&&p.style.display!=='none'&&!p.contains(e.target)&&!document.getElementById('notifBtn')?.contains(e.target)) NOTIFY.close();
   });
+  // Si el usuario ya configuró su clave de correo, vigilar la bandeja
+  // desde el inicio — sin necesidad de abrir el tab Correo
+  if(MAIL.getMailPass&&MAIL.getMailPass()) startMailPolling();
   initGlobalSearch();
   // Restaurar tab previo solo si el rol actual tiene acceso (evita toast de error tras cambio de usuario)
   try{

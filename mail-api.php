@@ -27,6 +27,18 @@ if (!$user || !$pass) {
     exit;
 }
 
+// ── Polyfills PHP 7.4 ─────────────────────────────────────────
+if (!function_exists('str_starts_with')) {
+    function str_starts_with($haystack, $needle) {
+        return strncmp($haystack, $needle, strlen($needle)) === 0;
+    }
+}
+if (!function_exists('str_contains')) {
+    function str_contains($haystack, $needle) {
+        return $needle === '' || strpos($haystack, $needle) !== false;
+    }
+}
+
 // ── Configuración ─────────────────────────────────────────────
 define('IMAP_HOST', 'mail.thelab.solutions');
 define('IMAP_PORT', 993);
@@ -124,7 +136,7 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html) {
     $sock = @fsockopen('ssl://' . SMTP_HOST, SMTP_PORT, $errno, $errstr, 15);
     if (!$sock) return "No se pudo conectar al servidor SMTP ($errstr)";
 
-    function smtp_read($sock) {
+    $smtp_read = function() use ($sock) {
         $r = '';
         while (!feof($sock)) {
             $line = fgets($sock, 512);
@@ -132,25 +144,25 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html) {
             if (isset($line[3]) && $line[3] === ' ') break;
         }
         return $r;
-    }
-    function smtp_cmd($sock, $cmd) {
+    };
+    $smtp_cmd = function($cmd) use ($sock, $smtp_read) {
         fwrite($sock, $cmd . "\r\n");
-        return smtp_read($sock);
-    }
+        return $smtp_read();
+    };
 
     try {
-        smtp_read($sock); // greeting
-        $r = smtp_cmd($sock, 'EHLO ' . SMTP_HOST);
+        $smtp_read(); // greeting
+        $r = $smtp_cmd('EHLO ' . SMTP_HOST);
         if (!str_starts_with($r, '250')) throw new Exception("EHLO: $r");
-        $r = smtp_cmd($sock, 'AUTH LOGIN');
+        $r = $smtp_cmd('AUTH LOGIN');
         if (!str_starts_with($r, '334')) throw new Exception("AUTH LOGIN: $r");
-        $r = smtp_cmd($sock, base64_encode($user));
+        $r = $smtp_cmd(base64_encode($user));
         if (!str_starts_with($r, '334')) throw new Exception("User: $r");
-        $r = smtp_cmd($sock, base64_encode($pass));
+        $r = $smtp_cmd(base64_encode($pass));
         if (!str_starts_with($r, '235')) throw new Exception("Pass: $r");
 
         $from_header = $from_name ? "\"$from_name\" <$user>" : $user;
-        $r = smtp_cmd($sock, "MAIL FROM:<$user>");
+        $r = $smtp_cmd("MAIL FROM:<$user>");
         if (!str_starts_with($r, '250')) throw new Exception("MAIL FROM: $r");
 
         $recipients = array_filter(array_map('trim', array_merge(
@@ -159,11 +171,11 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html) {
         )));
         foreach ($recipients as $rcpt) {
             $addr = preg_match('/<(.+)>/', $rcpt, $m) ? $m[1] : $rcpt;
-            $r = smtp_cmd($sock, "RCPT TO:<$addr>");
+            $r = $smtp_cmd("RCPT TO:<$addr>");
             if (!str_starts_with($r, '250')) throw new Exception("RCPT TO $addr: $r");
         }
 
-        $r = smtp_cmd($sock, 'DATA');
+        $r = $smtp_cmd('DATA');
         if (!str_starts_with($r, '354')) throw new Exception("DATA: $r");
 
         $boundary = 'bound_' . bin2hex(random_bytes(8));
@@ -190,10 +202,10 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html) {
         // Escape lines starting with a dot
         $msg = preg_replace('/^\.$/m', '..', $msg);
         fwrite($sock, $msg . "\r\n.\r\n");
-        $r = smtp_read($sock);
+        $r = $smtp_read();
         if (!str_starts_with($r, '250')) throw new Exception("Send: $r");
 
-        smtp_cmd($sock, 'QUIT');
+        $smtp_cmd('QUIT');
         fclose($sock);
         return null; // success
 
