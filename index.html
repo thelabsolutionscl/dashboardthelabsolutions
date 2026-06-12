@@ -8547,7 +8547,9 @@ function renderPedidos(filter){
     const pedDriveLink=pedDriveCotId?localStorage.getItem('fp_drive_folder_'+pedDriveCotId):localStorage.getItem('fp_drive_folder_ped_'+p.id);
     const pedNotasN=_getNotas('ped',p.id).length;
     const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item act-item-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ &nbsp;Avanzar a "${stages[idx+1]}"</button><div class="act-sep"></div>`:(estado==='Despachado'?'':'');
-    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button><button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
+    const repClienteItem=estado!=='Despachado'?`<button class="act-item act-item-cyan" onclick="runRepClienteAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> &nbsp;📢 Update cliente IA</button>`:'';
+    const contentItem=estado==='Despachado'?`<button class="act-item act-item-cyan" onclick="runContentAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> &nbsp;🎬 Contenido IA</button>`:'';
+    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}<button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -9873,6 +9875,41 @@ function runAdsAgent(){
   if(!window._adsLastData){toast('Carga primero los datos de Google Ads','error');return;}
   const ctx=buildAgentContext('ADS');
   runAgentInline('ADS',ctx,()=>`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar recomendaciones</button>`);
+}
+
+// — ADS copy generator para campaña específica
+function runAdsCopyAgent(d){
+  const ctx=`Genera 3 variaciones de anuncio de texto para Google Ads para la siguiente campaña de The Lab Solutions.\n\nCampaña: "${d.nombre}"\nEstado: ${d.estado==='ENABLED'?'Activa':'Pausada'} | Gasto: ${fmtMoney(d.gasto)} | CTR: ${d.ctr}% | CPC: ${fmtMoney(d.cpc)} | Conversiones: ${d.conv}\n\nEmpresa: fabricación digital premium en Santiago — trofeos personalizados, medallas, neones LED, impresión 3D, señalética acrílico.\n\nPara cada variación:\n- Título 1 (máx 30 car.)\n- Título 2 (máx 30 car.)\n- Título 3 (máx 30 car.)\n- Descripción 1 (máx 90 car.)\n- Descripción 2 (máx 90 car.)\n- Ruta de pantalla: thelab.solutions/[algo relevante]\n\nEnfoca en el beneficio del cliente. CTA claro. Sin inventar premios ni certificaciones.`;
+  runAgentInline('ADS',ctx,()=>`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar copy</button>`);
+}
+
+// — REPCLIENTE: update de estado al cliente desde pedido
+function runRepClienteAgent(pedidoId){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const f=p.fields;
+  const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;
+  const cl=cid?state.clientes.find(x=>x.id===cid):null;
+  const waPhone=cl?_getClienteWAPhone(cl):'';
+  const email=cl?.fields['Email']||'';
+  const today=new Date();today.setHours(0,0,0,0);
+  const atrasado=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;
+  const sol=(f['Solicitud cliente (texto libre)']||f['Descripción del pedido']||f['Detalle productos']||'Sin detalle').substring(0,200);
+  const ctx=`Pedido: ${f['N° Pedido']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Estado: ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atrasado?' ⚠ ATRASADO':''}\nProducto: ${sol}\nQA: ${f['Resultado QA']||'Pendiente'}\nTAREA: genera el update de estado para el cliente. Entrega DOS versiones:\n1. WhatsApp (max 8 líneas, emoji sutil)\n2. Email (más detallado con firma "The Lab Solutions").`;
+  runAgentInline('REPCLIENTE',ctx,()=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 WhatsApp cliente</button>`:'';
+    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Update de tu pedido — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    return`${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+
+// — CONTENT: generar post de redes para pedido despachado
+function runContentAgent(pedidoId){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const f=p.fields;
+  const sol=(f['Solicitud cliente (texto libre)']||f['Descripción del pedido']||f['Detalle productos']||'Sin detalle').substring(0,300);
+  const montoNeto=f['Monto total (CLP)']?'$'+Math.round(f['Monto total (CLP)']/1.19).toLocaleString('es-CL')+' neto':'—';
+  const ctx=`Proyecto entregado:\nN° Pedido: ${f['N° Pedido']||'—'} | Fecha despacho: ${f['Fecha despacho']||f['Fecha entrega']||'—'} | Monto: ${montoNeto}\nProducto: ${sol}\nQA: ${f['Resultado QA']||'Aprobado'}\nGenera contenido para los 3 formatos con el máximo impacto visual y de conversión.`;
+  runAgentInline('CONTENT',ctx,()=>`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar contenido</button>`);
 }
 
 // — PRODUCTION desde pedido
@@ -13631,6 +13668,7 @@ function _adsCampAction(idx){
   const d=_adsCampActions[idx];if(!d) return;
   if(d.type==='edit') openEditCampaign(d.id,d.nombre,d.estado,d.presupuesto);
   else if(d.type==='delete') openDeleteCampaign(d.id,d.nombre);
+  else if(d.type==='copy') runAdsCopyAgent(d);
 }
 // ── Health Score por campaña (0–100) ────────────────────
 function adsHealthScore(c){
@@ -14178,9 +14216,11 @@ function renderAdsCampaigns(data){
     // Índices a _adsCampActions para evitar problemas de escape de comillas en onclick
     const ei=_adsCampActions.push({type:'edit',id:c.id,nombre:c.nombre||'',estado:c.estado,presupuesto:c.presupuesto||0})-1;
     const di=_adsCampActions.push({type:'delete',id:c.id,nombre:c.nombre||''})-1;
+    const ci=_adsCampActions.push({type:'copy',nombre:c.nombre||'',estado:c.estado||'',gasto:c.gasto||0,clics:c.clics||0,conv:c.conversiones||0,ctr:ctr.toFixed(2),cpc:c.clics>0?Math.round(c.gasto/c.clics):0})-1;
     const acciones=`<span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">
         <button onclick="event.stopPropagation();_adsCampAction(${ei})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
         <button onclick="event.stopPropagation();_adsCampAction(${di})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-trash"/></svg></button>
+        <button onclick="event.stopPropagation();_adsCampAction(${ci})" style="background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Generar copy IA">✍</button>
       </span>`;
     return `<tr>
       <td style="white-space:nowrap"><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</span>${acciones}</td>
@@ -17300,7 +17340,7 @@ CAPACIDADES Y REGLAS:
 - Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
   Tipos validos: cliente, cotizacion, proveedor, venta, diario
 - Para delegar una tarea a un agente especializado incluye al final: [AGENTE:ID|instruccion detallada]
-  IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), FINANCE (cobranza), ONBOARDING (bienvenida clientes), CONTENT (contenido redes), ADS (optimizacion Google Ads).
+  IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), FINANCE (cobranza), ONBOARDING (bienvenida clientes), REPCLIENTE (update estado pedido al cliente), CONTENT (contenido redes), ADS (optimizacion Google Ads).
   Ejemplo: [AGENTE:FOLLOWUP|Cotizacion COT-123 de Maria, 8 dias sin respuesta, trofeos por 250000]
   Usa esto cuando el usuario pida redactar, cotizar, generar checklist, reporte o analisis. Anuncia brevemente que estas delegando.
 - Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
