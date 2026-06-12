@@ -13317,14 +13317,20 @@ const AUTH={
   showUser(){
     const u=AUTH.getUser();if(!u) return;
     const initials=u.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const uId=u.username.split('@')[0];
+    const persona=typeof PERSONAS!=='undefined'?PERSONAS.find(p=>p.id===uId):null;
+    const photo=persona?.photo||null;
     const chip=document.getElementById('userChip');
     if(chip){
-      document.getElementById('userAvatar').textContent=initials;
+      const av=document.getElementById('userAvatar');
+      if(photo){av.innerHTML=`<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;object-position:center 15%">`;av.style.background='transparent';av.style.overflow='hidden';}
+      else{av.textContent=initials;av.style.background='';av.style.overflow='';}
       document.getElementById('userName').textContent=u.name.split(' ')[0];
       chip.style.display='flex';
     }
     // Chip del panel móvil
-    const mav=document.getElementById('mobileUserAv');if(mav) mav.textContent=initials;
+    const mav=document.getElementById('mobileUserAv');
+    if(mav){if(photo){mav.innerHTML=`<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;object-position:center 15%">`;mav.style.background='transparent';mav.style.overflow='hidden';}else{mav.textContent=initials;mav.style.background='';mav.style.overflow='';}}
     const mnm=document.getElementById('mobileUserNm');if(mnm) mnm.textContent=u.name;
     const lb=document.getElementById('logoutBtn');
     if(lb) lb.style.display='flex';
