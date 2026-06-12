@@ -11,8 +11,8 @@
        · server.js: ruta donde clonaste el repositorio -->
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/node</string>
-    <string>/Users/thelab/printer-bridge/server.js</string>
+    <string>/Users/thelabsolutions/.nvm/versions/node/v22.22.0/bin/node</string>
+    <string>/dashboardthelabsolutions/printer-bridge/server.js</string>
   </array>
 
   <key>RunAtLoad</key>
