@@ -4768,7 +4768,7 @@ let MAQUINAS=[
   {id:'k1-4',nombre:'Creality K1',num:4,numG:4,modelo:'K1',color:'#00d4cc',ip:'192.168.100.68'},
   {id:'k1-5',nombre:'Creality K1',num:5,numG:5,modelo:'K1',color:'#00d4cc',ip:null},
   {id:'k2-1',nombre:'Creality K2',num:1,numG:12,modelo:'K2',color:'#a78bfa',ip:'192.168.100.71'},
-  {id:'k2-2',nombre:'Creality K2',num:2,numG:13,modelo:'K2',color:'#a78bfa',ip:'192.168.100.128'},
+  {id:'k2-2',nombre:'Creality K2',num:2,numG:13,modelo:'K2',color:'#a78bfa',ip:'192.168.100.70'},
   {id:'k2p-1',nombre:'Creality K2 Plus',num:1,numG:11,modelo:'K2 Plus',color:'#ff6b35',ip:'192.168.100.75'},
   {id:'e5-1',nombre:'Creality Ender-5 Max',num:1,numG:6,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.67'},
   {id:'e5-2',nombre:'Creality Ender-5 Max',num:2,numG:7,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.162'},
@@ -5538,7 +5538,7 @@ const MAQUINAS_HARDCODED=[
   {id:'k1-4',nombre:'Creality K1',num:4,numG:4,modelo:'K1',color:'#00d4cc',ip:'192.168.100.68'},
   {id:'k1-5',nombre:'Creality K1',num:5,numG:5,modelo:'K1',color:'#00d4cc',ip:null},
   {id:'k2-1',nombre:'Creality K2',num:1,numG:12,modelo:'K2',color:'#a78bfa',ip:'192.168.100.71'},
-  {id:'k2-2',nombre:'Creality K2',num:2,numG:13,modelo:'K2',color:'#a78bfa',ip:'192.168.100.128'},
+  {id:'k2-2',nombre:'Creality K2',num:2,numG:13,modelo:'K2',color:'#a78bfa',ip:'192.168.100.70'},
   {id:'k2p-1',nombre:'Creality K2 Plus',num:1,numG:11,modelo:'K2 Plus',color:'#ff6b35',ip:'192.168.100.75'},
   {id:'e5-1',nombre:'Creality Ender-5 Max',num:1,numG:6,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.67'},
   {id:'e5-2',nombre:'Creality Ender-5 Max',num:2,numG:7,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.162'},
@@ -5598,6 +5598,10 @@ async function loadMaquinasAirtable(){
         ip:r.fields.ip||null,
         estado:r.fields.estado||'disponible',
       })).sort((a,b)=>a.numG-b.numG);
+      // Aplica correcciones de IP del código sobre datos viejos de Airtable
+      // (localStorage tiene prioridad si el usuario lo configuró manualmente)
+      const _hcIp=Object.fromEntries(MAQUINAS_HARDCODED.filter(m=>m.ip).map(m=>[m.id,m.ip]));
+      MAQUINAS=MAQUINAS.map(m=>({...m,ip:localStorage.getItem('printer_ip_'+m.id)||_hcIp[m.id]||m.ip}));
     }
   }catch(e){
     if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')){
