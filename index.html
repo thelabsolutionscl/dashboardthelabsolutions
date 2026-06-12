@@ -1934,6 +1934,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="switchTab('nuevo-lead')">➕ Nuevo Lead / Cliente</button>
         <button class="btn btn-ghost btn-sm" onclick="runLeadGenAgent()" style="color:var(--accent);border-color:rgba(0,212,204,0.3)">🎯 Prospección IA</button>
+        <button class="btn btn-ghost btn-sm" onclick="runLeadRankingAgent()" style="color:var(--accent);border-color:rgba(0,212,204,0.3)">📊 Ranking leads IA</button>
         <input class="field-input" style="width:180px;font-size:11px;padding:5px 10px" id="clienteSearch" placeholder="🔍 buscar..." oninput="filterClientes()">
         <div id="bulkBar" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
           <span id="bulkCount" style="font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace"></span>
@@ -6402,8 +6403,9 @@ function buildClienteRow(c){
   const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0));
   const tel=f['Teléfono']||'';
   const esLead=['Lead nuevo','Contactado'].includes(f['Etapa venta']||'');
+  const esInactivo=['Cliente inactivo','Perdido'].includes(f['Etapa venta']||'');
   const tieneDeuda=(f['Facturas vencidas']||0)>=1;
-  const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
+  const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(esInactivo?`<button class="act-item act-item-cyan" onclick="runClienteWinbackAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reconectar IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
   return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}">
     <td class="td-chk" style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="td-empresa"><strong>${escapeHtml(f['Empresa']||'—')}</strong><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
@@ -9978,6 +9980,43 @@ function runLeadGenAgent(){
   runAgentInline('LEADGEN',ctx,()=>`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();switchTab('nuevo-lead')">➕ Crear lead</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`);
 }
 
+// — SALES: ranking diario de prioridad de leads
+function runLeadRankingAgent(){
+  if(!state.loaded){toast('Carga los datos primero (↺ Actualizar)','error');return;}
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const etapasLead=['Lead nuevo','Contactado','Propuesta enviada','Negociación'];
+  const leads=state.clientes.filter(c=>etapasLead.includes(c.fields['Etapa venta']||''));
+  if(!leads.length){toast('No hay leads en el pipeline','info');return;}
+  const lineas=leads.map(c=>{
+    const f=c.fields;
+    const dias=c.createdTime?Math.round((_t-new Date(c.createdTime))/86400000):'—';
+    const cotsCli=state.cotizaciones.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(c.id));
+    const abiertas=cotsCli.filter(x=>['Enviada','Solicitada'].includes(x.fields['Estado cotización']||''));
+    const montoAbierto=abiertas.reduce((s,x)=>s+Math.round((x.fields['Total final (CLP)']||0)/1.19),0);
+    return `  • ${f['Empresa']||'—'} | ${f['Etapa venta']} | ${dias}d en pipeline | Industria: ${f['Industria']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)} | Cotizaciones abiertas: ${abiertas.length}${montoAbierto?' por '+formatCLP(montoAbierto)+' neto':''}`;
+  });
+  const ctx=`MIS LEADS EN PIPELINE (${leads.length}):\n${lineas.join('\n')}\n\nTAREA: rankea TODOS estos leads de mayor a menor prioridad de contacto HOY. Criterios: monto en juego, días sin avance (más días = más urgente hasta los 14d, después baja probabilidad), etapa (Negociación > Propuesta enviada > Contactado > Lead nuevo) e industria con historial de conversión. Para cada uno: posición, empresa, score 1-10, POR QUÉ, y la acción concreta de hoy (1 línea).`;
+  runAgentInline('SALES',ctx,()=>`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();switchTab('clientes')">👥 Ir a Clientes</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`);
+}
+
+// — SALES: win-back de cliente inactivo o perdido
+function runClienteWinbackAgent(cliId){
+  const c=state.clientes.find(x=>x.id===cliId);if(!c) return;
+  const f=c.fields;
+  const waPhone=_getClienteWAPhone(c);
+  const email=f['Email']||'';
+  const cotsCli=state.cotizaciones.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
+  const ultCot=cotsCli.length?cotsCli[cotsCli.length-1]:null;
+  const pedsCli=state.pedidos.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
+  const ultPed=pedsCli.length?pedsCli[pedsCli.length-1]:null;
+  const ctx=`Cliente ${f['Etapa venta']==='Perdido'?'PERDIDO':'INACTIVO'}: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nIndustria: ${f['Industria']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}\n${ultPed?'Último pedido: '+(ultPed.fields['Descripción del pedido']||ultPed.fields['Solicitud cliente (texto libre)']||'—').substring(0,120):''}${ultCot?'\nÚltima cotización: '+(ultCot.fields['N° Cotización']||'—')+' ('+(ultCot.fields['Estado cotización']||'—')+')':''}${f['Notas']?'\nNotas: '+String(f['Notas']).substring(0,150):''}\nTAREA: redacta un mensaje de RECONEXIÓN para recuperar a este cliente. Referencia lo que compró antes, ofrece algo concreto (novedad de producto o revisión de precios), sin sonar desesperado. DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`;
+  runAgentInline('SALES',ctx,()=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Tenemos novedades para ti — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+
 // — ONBOARDING desde cliente (leads nuevos)
 function runOnboardingAgent(cliId){
   const c=state.clientes.find(x=>x.id===cliId);if(!c) return;
@@ -10180,28 +10219,49 @@ function _offerAgentChain(numPedido,solicitud){
 const AGENT_LOG={
   _key:'thelab_agent_runs_v1',
   _runs:null,
+  _merged:null,
   _load(){if(this._runs) return;try{this._runs=JSON.parse(localStorage.getItem(this._key)||'[]');}catch(e){this._runs=[];}},
   add(agent,input,output){
     this._load();
     const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
-    this._runs.unshift({id:Date.now(),agent,input:(input||'').substring(0,300),output:output||'',time:new Date().toISOString(),user:u?.name||u?.username||'—'});
+    const entry={id:Date.now(),agent,input:(input||'').substring(0,300),output:output||'',time:new Date().toISOString(),user:u?.name||u?.username||'—'};
+    this._runs.unshift(entry);
     if(this._runs.length>100) this._runs=this._runs.slice(0,100);
     try{localStorage.setItem(this._key,JSON.stringify(this._runs));}catch(e){}
+    this._merged=null;
+    // Write-behind a Airtable (silencioso: la tabla puede no existir o el rol no escribir)
+    try{
+      if(u&&typeof RBAC!=='undefined'&&RBAC.canWriteRole(u.role)){
+        airtableWrite('Agent_Log','POST',null,{'Agente':entry.agent,'Consulta':entry.input,'Resultado':entry.output.substring(0,5000),'Usuario':entry.user,'Fecha':entry.time}).catch(()=>{});
+      }
+    }catch(e){}
   },
+  _dedupKey(r){return r.agent+'|'+(r.time||'').substring(0,16)+'|'+(r.input||'').substring(0,40);},
   open(){
     this._load();
     const m=document.getElementById('agentLogModal');if(!m) return;
     m.style.display='flex';
+    this._merged=this._runs;
     this.render();
+    // Merge con el historial compartido de Airtable (si la tabla existe)
+    airtableFetch('Agent_Log',100).then(res=>{
+      const remote=(res.records||[]).map(rec=>({id:'at_'+rec.id,agent:rec.fields['Agente']||'—',input:rec.fields['Consulta']||'',output:rec.fields['Resultado']||'',time:rec.fields['Fecha']||rec.createdTime||'',user:rec.fields['Usuario']||'—',remote:true}));
+      const seen=new Set();
+      const all=[...this._runs,...remote].filter(r=>{const k=this._dedupKey(r);if(seen.has(k)) return false;seen.add(k);return true;});
+      all.sort((a,b)=>(b.time||'').localeCompare(a.time||''));
+      this._merged=all.slice(0,100);
+      this.render();
+    }).catch(()=>{});
   },
   close(){const m=document.getElementById('agentLogModal');if(m) m.style.display='none';},
   render(){
     const list=document.getElementById('agentLogList');if(!list) return;
-    if(!this._runs.length){list.innerHTML='<div class="notif-empty">Aún no hay ejecuciones registradas</div>';return;}
-    list.innerHTML=this._runs.map(r=>`
-      <div class="notif-item" onclick="AGENT_LOG.view(${r.id})" style="cursor:pointer">
+    const rows=this._merged||this._runs;
+    if(!rows.length){list.innerHTML='<div class="notif-empty">Aún no hay ejecuciones registradas</div>';return;}
+    list.innerHTML=rows.map(r=>`
+      <div class="notif-item" onclick="AGENT_LOG.view('${r.id}')" style="cursor:pointer">
         <div class="notif-body">
-          <div class="notif-title">🤖 ${escapeHtml(r.agent)} <span style="font-weight:400;color:var(--text3)">· ${escapeHtml(r.user)}</span></div>
+          <div class="notif-title">🤖 ${escapeHtml(r.agent)} <span style="font-weight:400;color:var(--text3)">· ${escapeHtml(r.user)}${r.remote?' ☁':''}</span></div>
           <div class="notif-sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((r.input||r.output).substring(0,90))}</div>
         </div>
         <div class="notif-time" style="white-space:nowrap;font-size:10px">${NOTIFY._fmtFull(r.time)}</div>
@@ -10209,7 +10269,8 @@ const AGENT_LOG={
   },
   view(id){
     this._load();
-    const r=this._runs.find(x=>x.id===id);if(!r) return;
+    const rows=this._merged||this._runs;
+    const r=rows.find(x=>String(x.id)===String(id));if(!r) return;
     this.close();
     document.getElementById('agentInlineTitle').textContent='📜 '+r.agent+' — '+NOTIFY._fmtFull(r.time);
     const resultEl=document.getElementById('agentInlineResult');
@@ -10220,7 +10281,7 @@ const AGENT_LOG={
     document.getElementById('agentInlineActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();AGENT_LOG.open()">← Volver al historial</button>';
     document.getElementById('agentInlineModal').style.display='flex';
   },
-  clear(){if(!confirm('¿Borrar todo el historial de agentes?')) return;this._runs=[];try{localStorage.removeItem(this._key);}catch(e){}this.render();}
+  clear(){if(!confirm('¿Borrar el historial local de agentes? (el historial compartido en Airtable no se borra)')) return;this._runs=[];this._merged=null;try{localStorage.removeItem(this._key);}catch(e){}this.render();}
 };
 
 // ── SUGERENCIAS PROACTIVAS DE AGENTES ──────────────────────────
@@ -10280,6 +10341,19 @@ function checkAgentSuggestions(){
   if(pendWB.length&&seen.winback!==todayStr){
     NOTIFY.add('info',`♻ Win-back: ${pendWB.length} cotización${pendWB.length>1?'es':''} vencida${pendWB.length>1?'s':''} recuperable${pendWB.length>1?'s':''}`,'Toca para redactar la reactivación con IA','@openWinbackPicker',{silent:true});
     seen.winback=todayStr;
+  }
+  // SALES: ranking diario de leads (si hay al menos 2 en pipeline)
+  const _leadsRank=state.clientes.filter(c=>['Lead nuevo','Contactado','Propuesta enviada','Negociación'].includes(c.fields['Etapa venta']||''));
+  if(_leadsRank.length>=2&&seen.salesrank!==todayStr){
+    NOTIFY.add('info',`📊 SALES: ${_leadsRank.length} leads en pipeline`,'Toca para ver el ranking de prioridad de hoy','@runLeadRankingAgent',{silent:true});
+    seen.salesrank=todayStr;
+  }
+  // SALES: win-back semanal de clientes inactivos/perdidos
+  const _inactivos=state.clientes.filter(c=>['Cliente inactivo','Perdido'].includes(c.fields['Etapa venta']||''));
+  const _diasDesdeWB=seen.clientwb?Math.round((_t-new Date(seen.clientwb+'T00:00:00'))/86400000):999;
+  if(_inactivos.length&&_diasDesdeWB>=7){
+    NOTIFY.add('info',`♻ ${_inactivos.length} cliente${_inactivos.length>1?'s':''} inactivo${_inactivos.length>1?'s':''}/perdido${_inactivos.length>1?'s':''} — ¿reconectamos?`,'Toca para redactar mensajes de reconexión con IA','@openClienteWinbackPicker',{silent:true});
+    seen.clientwb=todayStr;
   }
   try{localStorage.setItem(_agentSuggestKey,JSON.stringify(seen));}catch(e){}
 }
@@ -10377,6 +10451,17 @@ function openWinbackPicker(){
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
       <div style="flex:1;min-width:0"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Cotización']||'—')}</span> · ${escapeHtml(resolveClienteName(f['Cliente']))} <span style="color:var(--text3);font-size:11px">${neto} · venció ${escapeHtml(f['Fecha vencimiento']||'—')}</span></div>
       <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runWinbackAgent('${c.id}')">♻ Reactivar</button>
+    </div>`;
+  }));
+}
+
+function openClienteWinbackPicker(){
+  const inactivos=state.clientes.filter(c=>['Cliente inactivo','Perdido'].includes(c.fields['Etapa venta']||''));
+  _openAgentPicker('♻ Clientes para reconectar',inactivos.map(c=>{
+    const f=c.fields;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><strong>${escapeHtml(f['Empresa']||'—')}</strong> <span style="color:var(--text3);font-size:11px">${escapeHtml(f['Etapa venta']||'—')} · Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}</span></div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runClienteWinbackAgent('${c.id}')">♻ Reconectar</button>
     </div>`;
   }));
 }
