@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.thelab.printer-bridge</string>
+
+  <!-- AJUSTA estas dos rutas a tu equipo:
+       · node:  `which node` te dice la ruta (Apple Silicon: /opt/homebrew/bin/node,
+                Intel: /usr/local/bin/node)
+       · server.js: ruta donde clonaste el repositorio -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/thelab/printer-bridge/server.js</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/printer-bridge.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/printer-bridge.err</string>
+</dict>
+</plist>
