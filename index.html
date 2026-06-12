@@ -6959,7 +6959,13 @@ function sortCotizaciones(key){
 }
 function getSortedCotizaciones(){
   const base=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
-  if(!cotizacionesSort.key) return base;
+  if(!cotizacionesSort.key){
+    return[...base].sort((a,b)=>{
+      const da=a.fields['Fecha cotización']||a.createdTime||'';
+      const db=b.fields['Fecha cotización']||b.createdTime||'';
+      return db.localeCompare(da);
+    });
+  }
   return[...base].sort((a,b)=>{
     const fa=a.fields,fb=b.fields;let va,vb;
     switch(cotizacionesSort.key){
