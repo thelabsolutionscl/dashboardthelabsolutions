@@ -1933,6 +1933,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <span class="card-title">Base CRM</span>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="switchTab('nuevo-lead')">➕ Nuevo Lead / Cliente</button>
+        <button class="btn btn-ghost btn-sm" onclick="runLeadGenAgent()" style="color:var(--accent);border-color:rgba(0,212,204,0.3)">🎯 Prospección IA</button>
         <input class="field-input" style="width:180px;font-size:11px;padding:5px 10px" id="clienteSearch" placeholder="🔍 buscar..." oninput="filterClientes()">
         <div id="bulkBar" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
           <span id="bulkCount" style="font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace"></span>
@@ -2504,6 +2505,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             </div>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" onclick="addItemRow()">+ Agregar ítem</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="runQuoteFormAgent()" title="Genera los ítems con IA a partir de la solicitud escrita en Observaciones">⚡ Cotizar con IA</button>
           <button type="button" class="btn btn-ghost btn-sm" id="c3d-toggle-btn" onclick="toggleC3dInline('n')" style="border-color:rgba(0,212,204,0.4);color:var(--accent)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Calculadora 3D</button>
           <button type="button" class="btn btn-ghost btn-sm" id="lsr-btn-n" onclick="qcalcToggle('lsr','n')" style="border-color:rgba(245,158,11,0.4);color:#f59e0b">🔆 Calculadora Láser</button>
           <button type="button" class="btn btn-ghost btn-sm" id="neo-btn-n" onclick="qcalcToggle('neo','n')" style="border-color:rgba(249,115,22,0.4);color:#f97316">💡 Calculadora Neón</button>
@@ -6401,7 +6403,7 @@ function buildClienteRow(c){
   const tel=f['Teléfono']||'';
   const esLead=['Lead nuevo','Contactado'].includes(f['Etapa venta']||'');
   const tieneDeuda=(f['Facturas vencidas']||0)>=1;
-  const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
+  const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
   return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}">
     <td class="td-chk" style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="td-empresa"><strong>${escapeHtml(f['Empresa']||'—')}</strong><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
@@ -9828,6 +9830,28 @@ function quoteInsertItems(){
   },150);
 }
 
+// — QUOTE desde el formulario de Nueva Cotización
+function runQuoteFormAgent(){
+  const sol=(document.getElementById('cot-solicitud')?.value||'').trim();
+  if(!sol){toast('Escribe primero la solicitud del cliente en Observaciones','error');return;}
+  const cliNombre=(document.getElementById('cot-cliente-search')?.value||'').trim();
+  const urgente=document.getElementById('cot-urgente')?.value==='true';
+  const ctx=`${cliNombre?'Cliente: '+cliNombre+'\n':''}Solicitud: ${sol}${urgente?'\nURGENTE: aplicar recargo +25%':''}`;
+  runAgentInline('QUOTE',ctx,(result)=>{
+    let insBtn='';
+    const qm=result.match(/\[ITEMS\]([\s\S]*?)\[\/ITEMS\]/i);
+    if(qm){
+      try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
+      const stripped=result.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
+      document.getElementById('agentInlineResult').textContent=stripped;
+      _agentInlineText=stripped;
+      if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length)
+        insBtn=`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();quoteInsertItems()">→ Insertar ${_quoteParsedItems.length} ítem${_quoteParsedItems.length>1?'s':''} en el formulario</button>`;
+    }
+    return `${insBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+
 // — Envío genérico de correo desde resultado de agente
 async function _sendAgentEmail(toEmail,subject,btnEl){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
@@ -9840,6 +9864,28 @@ async function _sendAgentEmail(toEmail,subject,btnEl){
     else throw new Error(r?.error||'Error desconocido');
   }catch(e){toast('Error: '+e.message,'error');}
   finally{if(btnEl){btnEl.disabled=false;btnEl.textContent=btnEl.dataset.orig||'📧 Enviar';}}
+}
+
+// — SALES: estrategia de venta para un lead específico
+function runSalesAgent(cliId){
+  const c=state.clientes.find(x=>x.id===cliId);if(!c) return;
+  const f=c.fields;
+  const waPhone=_getClienteWAPhone(c);
+  const email=f['Email']||'';
+  const cotsCli=state.cotizaciones.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
+  const cotsTxt=cotsCli.length?cotsCli.slice(-3).map(x=>`${x.fields['N° Cotización']||'—'} (${x.fields['Estado cotización']||'—'})`).join(', '):'ninguna aún';
+  const ctx=`Lead: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'} | Origen: ${f['Origen']||'—'} | Industria: ${f['Industria']||'—'}\nCotizaciones previas: ${cotsTxt}${f['Notas']?'\nNotas: '+String(f['Notas']).substring(0,200):''}\nTAREA: dame la estrategia para avanzar este lead a la siguiente etapa: cómo abordarlo, qué producto ofrecerle según su industria, posibles objeciones y cómo responderlas, y un mensaje de apertura listo para WhatsApp (máx 4 líneas).`;
+  runAgentInline('SALES',ctx,()=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
+    return `${waBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+
+// — LEADGEN: prospección de nichos desde el header de Clientes
+function runLeadGenAgent(){
+  if(!state.loaded){toast('Carga los datos primero (↺ Actualizar)','error');return;}
+  const ctx='En base a mi cartera actual (ver contexto), propón 3 nichos nuevos con potencial alto que aún no estoy atacando, con el formato completo por nicho.';
+  runAgentInline('LEADGEN',ctx,()=>`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();switchTab('nuevo-lead')">➕ Crear lead</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`);
 }
 
 // — ONBOARDING desde cliente (leads nuevos)
@@ -10108,6 +10154,23 @@ function checkAgentSuggestions(){
     NOTIFY.add('info',`🤖 QA: ${pendQA.length} pedido${pendQA.length>1?'s':''} listo${pendQA.length>1?'s':''} sin checklist QA`,'Toca para generar con IA','@openQAPicker',{silent:true});
     seen.qa=todayStr;
   }
+  // FINANCE: clientes con facturas vencidas
+  const deudores=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
+  if(deudores.length&&seen.finance!==todayStr){
+    NOTIFY.add('warning',`💰 FINANCE: ${deudores.length} cliente${deudores.length>1?'s':''} con facturas vencidas`,'Toca para redactar recordatorios con IA','@openFinancePicker',{silent:true});
+    seen.finance=todayStr;
+  }
+  // ONBOARDING: cotizaciones aprobadas de clientes aún no activados
+  const pendOB=state.cotizaciones.filter(c=>{
+    if(c.fields['Estado cotización']!=='Aprobada') return false;
+    const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
+    const cl=cid?state.clientes.find(x=>x.id===cid):null;
+    return cl&&!['Cliente activo','Cliente inactivo'].includes(cl.fields['Etapa venta']||'');
+  });
+  if(pendOB.length&&seen.onboarding!==todayStr){
+    NOTIFY.add('info',`📨 ONBOARDING: ${pendOB.length} cliente${pendOB.length>1?'s':''} nuevo${pendOB.length>1?'s':''} sin bienvenida`,'Toca para generar la bienvenida con IA','@openOnboardingPicker',{silent:true});
+    seen.onboarding=todayStr;
+  }
   try{localStorage.setItem(_agentSuggestKey,JSON.stringify(seen));}catch(e){}
 }
 
@@ -10145,6 +10208,34 @@ function openQAPicker(){
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
       <div style="flex:1;min-width:0"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Pedido']||'—')}</span> · ${escapeHtml(resolveClienteName(f['Cliente']))} <span style="color:var(--text3);font-size:11px">Entrega: ${escapeHtml(f['Fecha entrega']||'—')}</span></div>
       <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runQAAgent('${p.id}')">🤖 Generar</button>
+    </div>`;
+  }));
+}
+
+function openFinancePicker(){
+  const deudores=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
+  _openAgentPicker('💰 Clientes con facturas vencidas',deudores.map(c=>{
+    const f=c.fields;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><strong>${escapeHtml(f['Empresa']||'—')}</strong> <span style="color:var(--danger);font-size:11px">${f['Facturas vencidas']||0} fact. vencida${(f['Facturas vencidas']||0)>1?'s':''}</span> <span style="color:var(--text3);font-size:11px">· ${escapeHtml(f['Estado cuenta']||'—')}</span></div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runFinanceAgent('${c.id}')">💰 Redactar</button>
+    </div>`;
+  }));
+}
+
+function openOnboardingPicker(){
+  const pend=state.cotizaciones.filter(c=>{
+    if(c.fields['Estado cotización']!=='Aprobada') return false;
+    const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
+    const cl=cid?state.clientes.find(x=>x.id===cid):null;
+    return cl&&!['Cliente activo','Cliente inactivo'].includes(cl.fields['Etapa venta']||'');
+  });
+  _openAgentPicker('📨 Clientes nuevos sin bienvenida',pend.map(c=>{
+    const f=c.fields;
+    const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:'';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Cotización']||'—')}</span> · ${escapeHtml(resolveClienteName(f['Cliente']))} <span style="color:var(--text3);font-size:11px">(cotización aprobada)</span></div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runOnboardingAgent('${cid}')">📨 Bienvenida</button>
     </div>`;
   }));
 }
@@ -17340,7 +17431,7 @@ CAPACIDADES Y REGLAS:
 - Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
   Tipos validos: cliente, cotizacion, proveedor, venta, diario
 - Para delegar una tarea a un agente especializado incluye al final: [AGENTE:ID|instruccion detallada]
-  IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), FINANCE (cobranza), ONBOARDING (bienvenida clientes), REPCLIENTE (update estado pedido al cliente), CONTENT (contenido redes), ADS (optimizacion Google Ads).
+  IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), LEADGEN (prospeccion de nichos), FINANCE (cobranza), ONBOARDING (bienvenida clientes), REPCLIENTE (update estado pedido al cliente), CONTENT (contenido redes), ADS (optimizacion Google Ads).
   Ejemplo: [AGENTE:FOLLOWUP|Cotizacion COT-123 de Maria, 8 dias sin respuesta, trofeos por 250000]
   Usa esto cuando el usuario pida redactar, cotizar, generar checklist, reporte o analisis. Anuncia brevemente que estas delegando.
 - Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
