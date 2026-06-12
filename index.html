@@ -727,13 +727,14 @@ body.kiosk .tab-content{padding-top:12px!important;}
   border-radius:4px;height:34px;width:80%;
 }
 
-/* Tab panel smooth fade-in */
+/* Tab panel smooth fade-in — sin "forwards": un transform persistente
+   convertiría al panel en containing block de los .act-menu position:fixed (móvil) */
 .tab-panel.active{
-  animation:tabIn 0.22s ease forwards;
+  animation:tabIn 0.22s ease;
 }
 @keyframes tabIn{
-  from{opacity:0;transform:translateY(7px)}
-  to{opacity:1;transform:translateY(0)}
+  from{opacity:0}
+  to{opacity:1}
 }
 
 /* Button primary — glow & lift */
@@ -8585,7 +8586,7 @@ function renderPedidos(filter){
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
     return`<tr data-id="${p.id}" class="${sel?'row-selected':''}">
     <td style="text-align:center"><input type="checkbox" class="row-chk" data-id="${p.id}" ${sel?'checked':''} onchange="togglePedidoRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
-    <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td>${estadoBadge(estado)}</td><td>${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
+    <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Estado">${estadoBadge(estado)}</td><td class="td-equipo" data-label="Equipo">${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
     <td>${renderProveedorCell(p.id,f['Proveedor']||'')}</td>
     <td class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</td>
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
@@ -8613,12 +8614,13 @@ async function toggleEquipoPedido(pedidoId,personaNombre,evt){
   const nuevo=arr.join(', ');
   ped.fields['Equipo asignado']=nuevo;
   const row=document.querySelector(`tr[data-id="${pedidoId}"]`);
-  if(row&&row.cells[3]) row.cells[3].innerHTML=renderEquipoCell(pedidoId,nuevo);
+  const equipoCell=row?row.querySelector('td.td-equipo'):null;
+  if(equipoCell) equipoCell.innerHTML=renderEquipoCell(pedidoId,nuevo);
   try{
     await airtableWrite('Pedidos','PATCH',pedidoId,{'Equipo asignado':nuevo});
   }catch(e){
     ped.fields['Equipo asignado']=old;
-    if(row&&row.cells[3]) row.cells[3].innerHTML=renderEquipoCell(pedidoId,old);
+    if(equipoCell) equipoCell.innerHTML=renderEquipoCell(pedidoId,old);
     toast('Error: '+e.message,'error');
   }
 }
