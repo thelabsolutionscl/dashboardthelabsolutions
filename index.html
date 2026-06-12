@@ -7127,9 +7127,10 @@ function openCopyCotPicker(target){
     const neto=Math.round(total/1.19);
     const items=(f['Detalle productos']||'').split('\n').filter(Boolean).length;
     const estadoColor={'Aprobada':'var(--accent3)','Enviada':'var(--text2)','Rechazada':'var(--danger)','Vencida':'var(--warn)','Solicitada':'var(--text3)'}[estado]||'var(--text3)';
+    const aliasStr=escapeHtml(f['Alias / Título']||'');
     return`<div onclick="applyCopyCot('${c.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='rgba(167,139,250,0.5)'" onmouseout="this.style.borderColor='var(--border2)'">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:13px;color:var(--accent4)">${escapeHtml(f['N° Cotización']||'—')}</div>
+        <div style="font-weight:700;font-size:13px;color:var(--accent4)">${escapeHtml(f['N° Cotización']||'—')}${aliasStr?` <span style="font-weight:400;font-size:11px;color:var(--accent4);opacity:.8">· ${aliasStr}</span>`:''}</div>
         <div style="font-size:11px;color:var(--text3);margin-top:2px">${fecha} · <span style="color:${estadoColor}">${estado}</span>${items?` · ${items} ítem${items>1?'s':''}`:''}${f['Descuento (%)']?` · ${f['Descuento (%)']}% desc.`:''}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
@@ -13476,6 +13477,7 @@ function initDashboard(){
   const user=AUTH.getUser();
   if(user) applyRBAC(user.role);
   if(typeof applyNavOrder==='function') applyNavOrder();
+  else if(typeof loadNavOrderFromAirtable==='function') loadNavOrderFromAirtable();
   if(typeof initNavDrag==='function') initNavDrag();
   NOTIFY.load();
   // Cerrar panel de notificaciones al click fuera
@@ -18077,25 +18079,91 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
 <script>
 // ── Nav Drag/Reorder ─────────────────────────────────────────────────
 (function(){
-  function navOrderKey(){
+  const UP_TABLE='User Preferences'; // Airtable table
+  const UP_RECORD_KEY='thelab_up_record_'; // localStorage cache of record ID
+
+  function navUser(){
     const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
-    return u?'thelab_nav_order_'+u.username:null;
+    return u?u.username:null;
+  }
+  function navOrderKey(){
+    const u=navUser();return u?'thelab_nav_order_'+u:null;
+  }
+
+  // ── Airtable write-behind ─────────────────────────────────────
+  async function _atFetch(filterFormula){
+    try{
+      const t=typeof getToken==='function'?getToken():'';if(!t) return null;
+      const base=typeof BASE_ID!=='undefined'?BASE_ID:'app1YtD74AqiPWQhy';
+      const url=`https://api.airtable.com/v0/${base}/${encodeURIComponent(UP_TABLE)}?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=1`;
+      const r=await fetch(url,{headers:{'Authorization':'Bearer '+t}});
+      if(!r.ok) return null;
+      const d=await r.json();
+      return d.records?.[0]||null;
+    }catch(e){return null;}
+  }
+  async function _atUpsert(username,orderJson){
+    try{
+      const t=typeof getToken==='function'?getToken():'';if(!t) return;
+      const base=typeof BASE_ID!=='undefined'?BASE_ID:'app1YtD74AqiPWQhy';
+      const cacheKey=UP_RECORD_KEY+username;
+      let recId=localStorage.getItem(cacheKey);
+      const fields={'Usuario':username,'Orden Menú':orderJson,'Actualizado':new Date().toISOString()};
+      if(!recId){
+        // try to find existing record first
+        const existing=await _atFetch(`{Usuario}="${username}"`);
+        if(existing) recId=existing.id;
+      }
+      const url=recId
+        ?`https://api.airtable.com/v0/${base}/${encodeURIComponent(UP_TABLE)}/${recId}`
+        :`https://api.airtable.com/v0/${base}/${encodeURIComponent(UP_TABLE)}`;
+      const method=recId?'PATCH':'POST';
+      const r=await fetch(url,{method,headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields})});
+      if(r.ok){const d=await r.json();if(d.id) localStorage.setItem(cacheKey,d.id);}
+    }catch(e){}
   }
 
   function saveNavOrder(orderArr){
     const k=navOrderKey();if(!k) return;
-    try{localStorage.setItem(k,JSON.stringify(orderArr));}catch(e){}
+    const json=JSON.stringify(orderArr);
+    try{localStorage.setItem(k,json);}catch(e){}
+    // write-behind to Airtable (fire-and-forget)
+    const u=navUser();if(u) _atUpsert(u,json);
+  }
+
+  // Load order from Airtable on login; update localStorage + DOM if found
+  window.loadNavOrderFromAirtable=async function(){
+    const u=navUser();if(!u) return;
+    const rec=await _atFetch(`{Usuario}="${u}"`);
+    if(!rec) return;
+    // Cache record ID
+    localStorage.setItem(UP_RECORD_KEY+u, rec.id);
+    const serverJson=rec.fields['Orden Menú']||'';
+    if(!serverJson) return;
+    let order;
+    try{order=JSON.parse(serverJson);}catch(e){return;}
+    if(!Array.isArray(order)||!order.length) return;
+    // Update localStorage and apply to DOM
+    const k=navOrderKey();
+    try{localStorage.setItem(k,serverJson);}catch(e){}
+    _applyOrderToDOM(order);
+  };
+
+  function _applyOrderToDOM(order){
+    const dockInner=document.querySelector('.icon-dock-inner');
+    const mobileNav=document.querySelector('.mobile-nav-body');
+    if(dockInner) order.forEach(tab=>{const b=dockInner.querySelector(`.dock-btn[data-tab="${tab}"]`);if(b) dockInner.appendChild(b);});
+    if(mobileNav) order.forEach(tab=>{const b=mobileNav.querySelector(`.mobile-tab-btn[data-tab="${tab}"]`);if(b) mobileNav.appendChild(b);});
   }
 
   window.applyNavOrder=function(){
     const k=navOrderKey();if(!k) return;
     let order;
-    try{order=JSON.parse(localStorage.getItem(k)||'null');}catch(e){return;}
-    if(!Array.isArray(order)||!order.length) return;
-    const dockInner=document.querySelector('.icon-dock-inner');
-    const mobileNav=document.querySelector('.mobile-nav-body');
-    if(dockInner) order.forEach(tab=>{const b=dockInner.querySelector(`.dock-btn[data-tab="${tab}"]`);if(b) dockInner.appendChild(b);});
-    if(mobileNav) order.forEach(tab=>{const b=mobileNav.querySelector(`.mobile-tab-btn[data-tab="${tab}"]`);if(b) mobileNav.appendChild(b);});
+    try{order=JSON.parse(localStorage.getItem(k)||'null');}catch(e){}
+    // Apply local order immediately (fast)
+    if(Array.isArray(order)&&order.length) _applyOrderToDOM(order);
+    // Always sync from Airtable in background (first login / cross-device)
+    if(typeof loadNavOrderFromAirtable==='function') loadNavOrderFromAirtable();
   };
 
   function syncOppositeNav(order, fromMobile){
