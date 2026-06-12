@@ -3341,7 +3341,7 @@ function _reportarResultados(muts) {
     <!-- Recomendaciones del Agente -->
     <div id="adsAgentBox" style="display:none;margin-bottom:16px">
       <div class="card">
-        <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Recomendaciones del Agente</span><span id="adsAgentBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span></div>
+        <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Recomendaciones del Agente</span><div style="display:flex;align-items:center;gap:8px"><span id="adsAgentBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span><button class="btn btn-ghost btn-sm act-item-cyan" onclick="runAdsAgent()" style="font-size:10px;padding:2px 10px">⚡ Análisis IA</button></div></div>
         <div id="adsAgentList" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
       </div>
     </div>
@@ -5080,6 +5080,30 @@ FÓRMULA: muestra el producto → historia del cliente o proceso → CTA claro.
 Siempre genera los 3 formatos. Emojis solo en Instagram y TikTok.`,
    pre:'Proyecto o producto: ',
    qs:['Neón "OPEN" recién entregado a restaurant en Vitacura, foto de ambiente nocturno','50 trofeos personalizados para gala corporativa de empresa tecnológica','Time-lapse del proceso de impresión 3D de medallas para torneo de fútbol','Campaña fin de año: trofeos y medallas para empresas, temporada alta']},
+
+  {id:'ADS',label:'ADS_AGENT',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-megaphone"/></svg>',badge:'badge-yellow',
+   sys:`Eres el ADS_AGENT de The Lab Solutions, empresa de fabricación digital premium en Santiago, Chile.
+PRODUCTOS: trofeos y medallas personalizadas, señalética acrílico, neones LED, impresión 3D, packaging.
+CLIENTES IDEALES: empresas corporativas, eventos, colegios, gimnasios, restaurants, marcas retail.
+ROL: analizar el rendimiento de campañas Google Ads y dar recomendaciones de optimización concretas y priorizadas.
+
+MÉTRICAS OBJETIVO (contexto chileno, industria fabricación personalizada):
+- CTR búsqueda: >3% | CTR display: >0.5%
+- CPC búsqueda: <$1.200 CLP | ROAS objetivo: >3x
+- Tasa conversión: >2% | CPA objetivo: <$8.000 CLP
+- Presupuesto bien distribuido: ninguna campaña >50% del total
+
+ESTRUCTURA DE RESPUESTA (siempre usar esta):
+1. DIAGNÓSTICO RÁPIDO (2–3 líneas: qué está funcionando y qué no)
+2. ALERTAS CRÍTICAS (máx 3, con impacto estimado en revenue)
+3. ACCIONES INMEDIATAS (esta semana, ordenadas por impacto):
+   • Cada acción con: QUÉ hacer + DÓNDE en Google Ads + resultado esperado
+4. OPTIMIZACIONES A MEDIANO PLAZO (próximas 2–4 semanas)
+5. DISTRIBUCIÓN DE PRESUPUESTO RECOMENDADA (tabla con % por campaña)
+
+Sé específico con números y campañas concretas. Sin relleno. CLP con puntos de miles.`,
+   pre:'',
+   qs:['Analiza el rendimiento actual y dame las 3 acciones más urgentes','¿En qué campaña debo aumentar el presupuesto y por qué?','El ROAS está bajo — ¿qué cambios concretos hago esta semana?','¿Cómo redistribuyo el presupuesto para maximizar conversiones?']},
 ];
 
 // ── MOBILE ────────────────────────────────────────────────────
@@ -9568,6 +9592,36 @@ function buildAgentContext(id){
     if(recientes.length){recientes.forEach(p=>{const f=p.fields;const sol=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';lines.push(`  • ${resolveClienteName(f['Cliente'])} | ${f['Fecha despacho']||f['Fecha entrega']||'—'} | ${fmtCLP((f['Monto total (CLP)']||0)/1.19)}${sol?' | '+sol.substring(0,60):''}`);});}else lines.push('  Sin proyectos despachados recientes');
   }
 
+  if(id==='ADS'){
+    const d=window._adsLastData;
+    if(d){
+      const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+      const gasto=d.gasto||0,imp=d.impresiones||0,clics=d.clics||0,conv=d.conversiones||0,valConv=d.valor_conversion||0;
+      const ctr=imp>0?(clics/imp*100).toFixed(2):0;
+      const cpc=clics>0?Math.round(gasto/clics):0;
+      const cpa=conv>0?Math.round(gasto/conv):0;
+      const roas=gasto>0?(valConv/gasto).toFixed(2):0;
+      lines.push(`\nGOOGLE ADS — PERÍODO: ${d.periodo||days+' días'}${d.demo?' (DEMO)':''}`);
+      lines.push(`TOTALES: Gasto ${fmtCLP(gasto)} | Imp. ${(imp||0).toLocaleString('es-CL')} | Clics ${(clics||0).toLocaleString('es-CL')} | CTR ${ctr}% | CPC ${fmtCLP(cpc)} | Conv. ${conv} | CPA ${conv>0?fmtCLP(cpa):'—'} | ROAS ${valConv>0?roas+'x':'—'}`);
+      const camps=d.campanas||[];
+      if(camps.length){
+        lines.push('\nCAMPAÑAS:');
+        camps.forEach(c=>{
+          const ct=c.impresiones>0?(c.clics/c.impresiones*100).toFixed(2):0;
+          const cp=c.clics>0?Math.round(c.gasto/c.clics):0;
+          const ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0;
+          const ro=c.gasto>0&&(c.valor_conversion||0)>0?(c.valor_conversion/c.gasto).toFixed(2):0;
+          const dailyUtil=c.presupuesto>0?Math.round(c.gasto/days/c.presupuesto*100):0;
+          lines.push(`  • [${c.estado||'?'}] "${c.nombre||c.id}" | Ppto ${fmtCLP(c.presupuesto||0)}/día (${dailyUtil}% uso) | Gasto ${fmtCLP(c.gasto||0)} | CTR ${ct}% | CPC ${fmtCLP(cp)} | Conv ${c.conversiones||0} | CPA ${c.conversiones>0?fmtCLP(ca):'—'} | ROAS ${(c.valor_conversion||0)>0?ro+'x':'—'}`);
+        });
+      }
+      lines.push('\nCONTEXTO NEGOCIO:');
+      lines.push(`  Pedidos activos: ${pedActivos.length} | Atrasados: ${pedAtrasados.length} | Revenue semana: ${fmtCLP(revSemana)}`);
+    } else {
+      lines.push('\nGOOGLE ADS: sin datos cargados (carga primero los datos en la sección Web → Google Ads)');
+    }
+  }
+
   if(id==='ONBOARDING'){
     const recienAprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-3);
     lines.push('\nCOTIZACIONES RECIENTEMENTE APROBADAS (nuevos clientes):');
@@ -9812,6 +9866,13 @@ function runFinanceAgent(cliId){
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Recordatorio de pago — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
+}
+
+// — ADS analysis desde sección Web → Google Ads
+function runAdsAgent(){
+  if(!window._adsLastData){toast('Carga primero los datos de Google Ads','error');return;}
+  const ctx=buildAgentContext('ADS');
+  runAgentInline('ADS',ctx,()=>`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar recomendaciones</button>`);
 }
 
 // — PRODUCTION desde pedido
@@ -13975,6 +14036,7 @@ async function loadAdsData(){
     document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div></div>';
     await new Promise(r=>setTimeout(r,600));
     const demo=getAdsDemoData(days);
+    window._adsLastData=demo;
     renderAdsKPIs(demo,days);
     renderAdsCampaigns(demo);
     renderAdsAgent(demo);
@@ -13994,6 +14056,7 @@ async function loadAdsData(){
     const data=await r.json();
     if(!data.ok) throw new Error(data.error||'Respuesta inválida del script');
     // Renders visuales aislados: un fallo en uno no debe bloquear la sincronización de mutaciones
+    window._adsLastData=data;
     try{ renderAdsKPIs(data,days); }catch(err){ console.error('renderAdsKPIs',err); }
     try{ renderAdsCampaigns(data); }catch(err){ console.error('renderAdsCampaigns',err); }
     try{ renderAdsAgent(data); }catch(err){ console.error('renderAdsAgent',err); }
@@ -17237,7 +17300,7 @@ CAPACIDADES Y REGLAS:
 - Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
   Tipos validos: cliente, cotizacion, proveedor, venta, diario
 - Para delegar una tarea a un agente especializado incluye al final: [AGENTE:ID|instruccion detallada]
-  IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), FINANCE (cobranza), ONBOARDING (bienvenida clientes), CONTENT (contenido redes).
+  IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), FINANCE (cobranza), ONBOARDING (bienvenida clientes), CONTENT (contenido redes), ADS (optimizacion Google Ads).
   Ejemplo: [AGENTE:FOLLOWUP|Cotizacion COT-123 de Maria, 8 dias sin respuesta, trofeos por 250000]
   Usa esto cuando el usuario pida redactar, cotizar, generar checklist, reporte o analisis. Anuncia brevemente que estas delegando.
 - Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
