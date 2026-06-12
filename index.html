@@ -6993,15 +6993,41 @@ function buildCotRow(c){
   const _ctToday=new Date();_ctToday.setHours(0,0,0,0);
   const _diasEnviada=(f['Estado cotización']==='Enviada'&&f['Fecha cotización'])?Math.round((_ctToday-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):0;
   const followupItem=_diasEnviada>=5?`<button class="act-item act-item-cyan" onclick="runFollowupAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;✍ Seguimiento IA <span style="font-size:10px;opacity:.65">(${_diasEnviada}d)</span></button>`:'';
-  const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-x-circle"/></svg> &nbsp;Rechazar cotización</button>${followupItem}<div class="act-sep"></div>`:'';
-  const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}<button class="act-item" onclick="openEditCot('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> &nbsp;Descargar PDF</button><button class="act-item act-item-green" onclick="MAIL.sendCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-correo"/></svg> &nbsp;Enviar por correo</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar</button></div></div>`;
+  const _fechaSol=f['Fecha cotización']||(c.createdTime||'').slice(0,10);
+  const _diasSolicitada=(f['Estado cotización']==='Solicitada'&&_fechaSol)?Math.round((_ctToday-new Date(_fechaSol+'T00:00:00'))/86400000):0;
+  const quoteItem=f['Estado cotización']==='Solicitada'?`<button class="act-item act-item-cyan" onclick="runQuoteCotAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;⚡ Cotizar IA${_diasSolicitada>=1?` <span style="font-size:10px;opacity:.65">(${_diasSolicitada}d esperando)</span>`:''}</button>`:'';
+  const _esVencida=f['Estado cotización']==='Vencida'||(f['Estado cotización']==='Enviada'&&f['Fecha vencimiento']&&new Date(f['Fecha vencimiento']+'T00:00:00')<_ctToday);
+  const winbackItem=(_esVencida||f['Estado cotización']==='Rechazada')?`<button class="act-item act-item-cyan" onclick="runWinbackAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reactivar IA</button>`:'';
+  const approveItems=isOpen?`<button class="act-item act-item-green" onclick="updateCotizacionEstado('${c.id}','Aprobada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;Aprobar cotización</button><button class="act-item act-item-red" onclick="updateCotizacionEstado('${c.id}','Rechazada')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-x-circle"/></svg> &nbsp;Rechazar cotización</button>${quoteItem}${followupItem}<div class="act-sep"></div>`:'';
+  const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}${winbackItem}<button class="act-item" onclick="openEditCot('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> &nbsp;Descargar PDF</button><button class="act-item act-item-green" onclick="MAIL.sendCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-correo"/></svg> &nbsp;Enviar por correo</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar</button></div></div>`;
   const vendNom=resolveVendedorName(f['Vendedor']||'');
   return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
   <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${actMenu}</div></td></tr>`;
 }
+// Avanza la etapa del cliente solo si su etapa actual está en la lista `desde` (no retrocede etapas)
+async function _advanceEtapaCliente(clienteId,nuevaEtapa,desde){
+  if(!clienteId) return;
+  const c=state.clientes.find(x=>x.id===clienteId);if(!c) return;
+  const actual=c.fields['Etapa venta']||'';
+  if(actual===nuevaEtapa||!desde.includes(actual)) return;
+  try{
+    await airtableWrite('Clientes','PATCH',clienteId,{'Etapa venta':nuevaEtapa});
+    c.fields['Etapa venta']=nuevaEtapa;
+    toast(`Etapa cliente → ${nuevaEtapa}`,'info');
+  }catch(e){}
+}
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
-  try{await airtableWrite('Cotizaciones','PATCH',id,{'Estado cotización':estado});toast(`Cotización ${estado}`,'success');if(estado==='Aprobada') await crearPedidoDesdeCotizacion(id);await loadAllDataSilent();renderCotizaciones();renderOverview();}
+  try{
+    await airtableWrite('Cotizaciones','PATCH',id,{'Estado cotización':estado});toast(`Cotización ${estado}`,'success');
+    if(estado==='Aprobada'){
+      const _cot=state.cotizaciones.find(x=>x.id===id);
+      const _cid=Array.isArray(_cot?.fields['Cliente'])?_cot.fields['Cliente'][0]:null;
+      await _advanceEtapaCliente(_cid,'Cliente activo',['Lead nuevo','Contactado','Propuesta enviada','Negociación']);
+      await crearPedidoDesdeCotizacion(id);
+    }
+    await loadAllDataSilent();renderCotizaciones();renderOverview();
+  }
   catch(e){toast('Error: '+e.message,'error');}
 }
 async function toggleUrgenciaCotizacion(id){
@@ -9061,7 +9087,9 @@ async function createCotizacion(){
     if(clienteId) fields['Cliente']=[clienteId];
     if(isVendorMode()){fields['Vendedor']=currentVendorId();}else{const vv=document.getElementById('cot-vendedor')?.value;if(vv) fields['Vendedor']=vv;}
     try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
-    toast(`✓ Cotización ${num} guardada`,'success');clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
+    toast(`✓ Cotización ${num} guardada`,'success');
+    await _advanceEtapaCliente(clienteId,'Propuesta enviada',['Lead nuevo','Contactado']);
+    clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='✚ Guardar Cotización';
 }
@@ -9574,6 +9602,11 @@ function buildAgentContext(id){
     lines.push('\nCOST BASE (referencia interna):');
     lines.push('  Trofeo $18.000/und | Medalla $4.500/und | Neón $18.000–25.000/m | PLA $24/g+$1.200/h');
     lines.push('  Margen objetivo: 35–45%');
+    const rech=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Rechazada'&&c.fields['Notas rechazo']).slice(-5);
+    if(rech.length){
+      lines.push('\nCOTIZACIONES RECHAZADAS RECIENTES (considera estos motivos al fijar precios):');
+      rech.forEach(c=>{const f=c.fields;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Neto: ${fmtCLP(Math.round((f['Total final (CLP)']||0)/1.19))} | Motivo: ${String(f['Notas rechazo']).substring(0,100)}`);});
+    }
   }
 
   if(id==='REPCLIENTE'){
@@ -9849,6 +9882,63 @@ function runQuoteFormAgent(){
         insBtn=`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();quoteInsertItems()">→ Insertar ${_quoteParsedItems.length} ítem${_quoteParsedItems.length>1?'s':''} en el formulario</button>`;
     }
     return `${insBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+
+// — QUOTE para una cotización existente en estado Solicitada
+function runQuoteCotAgent(cotId){
+  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const f=c.fields;
+  const sol=(f['Solicitud cliente (texto libre)']||f['Solicitud / detalle']||'').trim();
+  if(!sol){toast('La cotización no tiene solicitud del cliente registrada — edítala primero','error');return;}
+  const ctx=`Cliente: ${resolveClienteName(f['Cliente'])}\nSolicitud: ${sol}${f['Urgencia (+25%)']?'\nURGENTE: aplicar recargo +25%':''}`;
+  runAgentInline('QUOTE',ctx,(result)=>{
+    let insBtn='';
+    const qm=result.match(/\[ITEMS\]([\s\S]*?)\[\/ITEMS\]/i);
+    if(qm){
+      try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
+      const stripped=result.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
+      document.getElementById('agentInlineResult').textContent=stripped;
+      _agentInlineText=stripped;
+      if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length)
+        insBtn=`<button class="btn btn-primary btn-sm" onclick="quoteInsertItemsToEdit('${cotId}')">→ Insertar ${_quoteParsedItems.length} ítem${_quoteParsedItems.length>1?'s':''} y editar</button>`;
+    }
+    return `${insBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+function quoteInsertItemsToEdit(cotId){
+  if(!Array.isArray(_quoteParsedItems)||!_quoteParsedItems.length){toast('Sin ítems para insertar','error');return;}
+  const items=_quoteParsedItems;
+  closeAgentInlineModal();
+  openEditCot(cotId);
+  setTimeout(()=>{
+    document.querySelectorAll('#editItemsContainer .edit-item-row').forEach(r=>{
+      const d=(r.querySelector('.edit-item-desc')?.value||'').trim();
+      const v=parseFloat(r.querySelector('.edit-item-venta')?.value)||0;
+      if(!d&&!v) r.remove();
+    });
+    items.forEach(it=>addEditItemRow({desc:String(it.desc||'Ítem').substring(0,120),und:Math.max(1,parseInt(it.qty)||1),costoUnit:Math.max(0,Math.round(it.costo)||0),ventaUnit:Math.max(0,Math.round(it.venta)||0)}));
+    updateEditItemTotal();
+    toast(`✓ ${items.length} ítem${items.length>1?'s':''} insertado${items.length>1?'s':''} — revisa y guarda`,'success');
+  },200);
+}
+
+// — WIN-BACK: reactivar cotización vencida o rechazada
+function runWinbackAgent(cotId){
+  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const f=c.fields;
+  const cliRec=_getClienteRecFromField(f['Cliente']);
+  const waPhone=_getClienteWAPhone(cliRec);
+  const email=cliRec?.fields['Email']||'';
+  const estado=f['Estado cotización'];
+  const sol=(f['Solicitud cliente (texto libre)']||'').substring(0,150);
+  const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'—';
+  const motivo=estado==='Rechazada'?`\nMotivo de rechazo: ${String(f['Notas rechazo']||'no registrado').substring(0,150)}`:'';
+  const ctx=`Cotización ${estado==='Rechazada'?'RECHAZADA':'VENCIDA'}: ${f['N° Cotización']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Monto neto: ${monto} | Vencía: ${f['Fecha vencimiento']||'—'}${motivo}\nProducto: ${sol}\nTAREA: redacta un mensaje de REACTIVACIÓN (win-back): ofrecer actualizar la cotización${estado==='Rechazada'?', abordando con tacto el motivo del rechazo si ayuda a recuperar la venta':''}, sin presionar. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`;
+  runAgentInline('FOLLOWUP',ctx,()=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Retomemos tu cotización — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
 
@@ -10171,6 +10261,26 @@ function checkAgentSuggestions(){
     NOTIFY.add('info',`📨 ONBOARDING: ${pendOB.length} cliente${pendOB.length>1?'s':''} nuevo${pendOB.length>1?'s':''} sin bienvenida`,'Toca para generar la bienvenida con IA','@openOnboardingPicker',{silent:true});
     seen.onboarding=todayStr;
   }
+  // QUOTE: solicitudes sin cotizar +2 días
+  const pendSol=state.cotizaciones.filter(c=>{
+    const f=c.fields;if(f['Estado cotización']!=='Solicitada') return false;
+    const d=f['Fecha cotización']||(c.createdTime||'').slice(0,10);if(!d) return false;
+    return Math.round((_t-new Date(d+'T00:00:00'))/86400000)>=2;
+  });
+  if(pendSol.length&&seen.quote!==todayStr){
+    NOTIFY.add('warning',`⚡ QUOTE: ${pendSol.length} solicitud${pendSol.length>1?'es':''} sin cotizar hace +2 días`,'Clientes esperando precio — toca para cotizar con IA','@openSolicitadasPicker',{silent:true});
+    seen.quote=todayStr;
+  }
+  // WIN-BACK: cotizaciones vencidas o enviadas con vencimiento pasado
+  const pendWB=state.cotizaciones.filter(c=>{
+    const f=c.fields;
+    if(f['Estado cotización']==='Vencida') return true;
+    return f['Estado cotización']==='Enviada'&&f['Fecha vencimiento']&&new Date(f['Fecha vencimiento']+'T00:00:00')<_t;
+  });
+  if(pendWB.length&&seen.winback!==todayStr){
+    NOTIFY.add('info',`♻ Win-back: ${pendWB.length} cotización${pendWB.length>1?'es':''} vencida${pendWB.length>1?'s':''} recuperable${pendWB.length>1?'s':''}`,'Toca para redactar la reactivación con IA','@openWinbackPicker',{silent:true});
+    seen.winback=todayStr;
+  }
   try{localStorage.setItem(_agentSuggestKey,JSON.stringify(seen));}catch(e){}
 }
 
@@ -10236,6 +10346,37 @@ function openOnboardingPicker(){
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
       <div style="flex:1;min-width:0"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Cotización']||'—')}</span> · ${escapeHtml(resolveClienteName(f['Cliente']))} <span style="color:var(--text3);font-size:11px">(cotización aprobada)</span></div>
       <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runOnboardingAgent('${cid}')">📨 Bienvenida</button>
+    </div>`;
+  }));
+}
+
+function openSolicitadasPicker(){
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const pend=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Solicitada');
+  _openAgentPicker('⚡ Solicitudes sin cotizar',pend.map(c=>{
+    const f=c.fields;
+    const d=f['Fecha cotización']||(c.createdTime||'').slice(0,10);
+    const dias=d?Math.round((_t-new Date(d+'T00:00:00'))/86400000):'—';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Cotización']||'—')}</span> · ${escapeHtml(resolveClienteName(f['Cliente']))} <span style="color:var(--warn);font-size:11px">(${dias}d esperando precio)</span></div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runQuoteCotAgent('${c.id}')">⚡ Cotizar</button>
+    </div>`;
+  }));
+}
+
+function openWinbackPicker(){
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const pend=state.cotizaciones.filter(c=>{
+    const f=c.fields;
+    if(f['Estado cotización']==='Vencida') return true;
+    return f['Estado cotización']==='Enviada'&&f['Fecha vencimiento']&&new Date(f['Fecha vencimiento']+'T00:00:00')<_t;
+  });
+  _openAgentPicker('♻ Cotizaciones recuperables',pend.map(c=>{
+    const f=c.fields;
+    const neto=formatCLP(Math.round((f['Total final (CLP)']||0)/1.19));
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Cotización']||'—')}</span> · ${escapeHtml(resolveClienteName(f['Cliente']))} <span style="color:var(--text3);font-size:11px">${neto} · venció ${escapeHtml(f['Fecha vencimiento']||'—')}</span></div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runWinbackAgent('${c.id}')">♻ Reactivar</button>
     </div>`;
   }));
 }
