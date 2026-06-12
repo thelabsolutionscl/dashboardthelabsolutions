@@ -126,6 +126,12 @@ body.kiosk{padding-left:0!important;}
 .mobile-tab-btn{display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:12px 18px;cursor:pointer;transition:all 0.15s;text-align:left;border-left:3px solid transparent;}
 .mobile-tab-btn:hover{background:var(--surface2);color:var(--text);}
 .mobile-tab-btn.active{background:rgba(0,212,204,0.08);color:var(--accent);border-left-color:var(--accent);font-weight:700;}
+/* ── Nav drag/reorder ── */
+.dock-btn.nav-dragging{opacity:0.3;filter:brightness(0.6);}
+.dock-btn.nav-drag-over::before{content:'';position:absolute;top:-3px;left:4px;right:4px;height:2px;background:var(--accent);border-radius:2px;box-shadow:0 0 6px var(--accent);}
+.mobile-tab-btn.nav-dragging{opacity:0.3;background:rgba(0,212,204,0.04);}
+.mobile-tab-btn.nav-drag-over{border-top:2px solid var(--accent);background:rgba(0,212,204,0.05);}
+.nav-drag-hint{position:absolute;top:-1px;right:-1px;width:10px;height:10px;background:rgba(0,212,204,0.5);border-radius:50%;pointer-events:none;animation:navhint 1.2s ease-in-out infinite;}
 .mobile-tab-icon{width:22px;height:22px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .mobile-nav-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:0;}
 .mobile-nav-footer-actions{display:flex;gap:8px;}
@@ -13462,6 +13468,8 @@ async function handleLogin(e){
 function initDashboard(){
   const user=AUTH.getUser();
   if(user) applyRBAC(user.role);
+  if(typeof applyNavOrder==='function') applyNavOrder();
+  if(typeof initNavDrag==='function') initNavDrag();
   NOTIFY.load();
   // Cerrar panel de notificaciones al click fuera
   document.addEventListener('click',e=>{
@@ -18057,6 +18065,155 @@ function closeGcodeUpload(){document.getElementById('gcodeUploadModal').style.di
 function openOrcaConfigModal(){const rows=MAQUINAS.filter(m=>getPrinterIp(m)).map(m=>{const ip=getPrinterIp(m);return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--accent)">${escapeHtml(ip)}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text2)">7125</td><td style="padding:8px 10px"><span style="background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">Moonraker</span></td></tr>`;}).join('');document.getElementById('orcaTableBody').innerHTML=rows||`<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text3);font-size:11px">No hay IPs configuradas. Agrégalas en cada tarjeta de impresora primero.</td></tr>`;document.getElementById('orcaConfigModal').style.display='flex';}
 function closeOrcaConfigModal(){document.getElementById('orcaConfigModal').style.display='none';}
 document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
+</script>
+
+<script>
+// ── Nav Drag/Reorder ─────────────────────────────────────────────────
+(function(){
+  function navOrderKey(){
+    const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
+    return u?'thelab_nav_order_'+u.username:null;
+  }
+
+  function saveNavOrder(orderArr){
+    const k=navOrderKey();if(!k) return;
+    try{localStorage.setItem(k,JSON.stringify(orderArr));}catch(e){}
+  }
+
+  window.applyNavOrder=function(){
+    const k=navOrderKey();if(!k) return;
+    let order;
+    try{order=JSON.parse(localStorage.getItem(k)||'null');}catch(e){return;}
+    if(!Array.isArray(order)||!order.length) return;
+    const dockInner=document.querySelector('.icon-dock-inner');
+    const mobileNav=document.querySelector('.mobile-nav-body');
+    if(dockInner) order.forEach(tab=>{const b=dockInner.querySelector(`.dock-btn[data-tab="${tab}"]`);if(b) dockInner.appendChild(b);});
+    if(mobileNav) order.forEach(tab=>{const b=mobileNav.querySelector(`.mobile-tab-btn[data-tab="${tab}"]`);if(b) mobileNav.appendChild(b);});
+  };
+
+  function syncOppositeNav(order, fromMobile){
+    if(fromMobile){
+      const dockInner=document.querySelector('.icon-dock-inner');
+      if(dockInner) order.forEach(tab=>{const b=dockInner.querySelector(`.dock-btn[data-tab="${tab}"]`);if(b) dockInner.appendChild(b);});
+    } else {
+      const mobileNav=document.querySelector('.mobile-nav-body');
+      if(mobileNav) order.forEach(tab=>{const b=mobileNav.querySelector(`.mobile-tab-btn[data-tab="${tab}"]`);if(b) mobileNav.appendChild(b);});
+    }
+  }
+
+  // ── Desktop HTML5 drag ──────────────────────────────────────────
+  function initDockDrag(){
+    const container=document.querySelector('.icon-dock-inner');
+    if(!container) return;
+    let dragSrc=null;
+
+    container.querySelectorAll('.dock-btn[data-tab]').forEach(btn=>{
+      btn.draggable=true;
+
+      btn.addEventListener('dragstart',e=>{
+        dragSrc=btn;
+        e.dataTransfer.effectAllowed='move';
+        e.dataTransfer.setData('text/plain',btn.dataset.tab);
+        setTimeout(()=>btn.classList.add('nav-dragging'),0);
+      });
+
+      btn.addEventListener('dragend',()=>{
+        btn.classList.remove('nav-dragging');
+        container.querySelectorAll('.dock-btn').forEach(b=>b.classList.remove('nav-drag-over'));
+        dragSrc=null;
+      });
+
+      btn.addEventListener('dragover',e=>{
+        if(!dragSrc||dragSrc===btn) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect='move';
+        container.querySelectorAll('.dock-btn').forEach(b=>b.classList.remove('nav-drag-over'));
+        btn.classList.add('nav-drag-over');
+      });
+
+      btn.addEventListener('dragleave',()=>btn.classList.remove('nav-drag-over'));
+
+      btn.addEventListener('drop',e=>{
+        e.preventDefault();
+        if(!dragSrc||dragSrc===btn) return;
+        btn.classList.remove('nav-drag-over');
+        const btns=[...container.querySelectorAll('.dock-btn[data-tab]')];
+        const si=btns.indexOf(dragSrc), ti=btns.indexOf(btn);
+        container.insertBefore(dragSrc, si<ti?btn.nextSibling:btn);
+        const order=[...container.querySelectorAll('.dock-btn[data-tab]')].map(b=>b.dataset.tab);
+        saveNavOrder(order);
+        syncOppositeNav(order, false);
+      });
+    });
+  }
+
+  // ── Mobile touch drag ──────────────────────────────────────────
+  function initMobileDrag(){
+    const container=document.querySelector('.mobile-nav-body');
+    if(!container) return;
+    let dragBtn=null, holdTimer=null, overBtn=null, startY=0, startX=0;
+    const HOLD_MS=500;
+
+    function cancelHold(){
+      clearTimeout(holdTimer);holdTimer=null;
+    }
+    function endDrag(commitDrop){
+      cancelHold();
+      if(dragBtn) dragBtn.classList.remove('nav-dragging');
+      if(overBtn) overBtn.classList.remove('nav-drag-over');
+      if(commitDrop&&dragBtn&&overBtn&&overBtn!==dragBtn){
+        const btns=[...container.querySelectorAll('.mobile-tab-btn[data-tab]')];
+        const si=btns.indexOf(dragBtn), ti=btns.indexOf(overBtn);
+        container.insertBefore(dragBtn, si<ti?overBtn.nextSibling:overBtn);
+        const order=[...container.querySelectorAll('.mobile-tab-btn[data-tab]')].map(b=>b.dataset.tab);
+        saveNavOrder(order);
+        syncOppositeNav(order, true);
+        navigator.vibrate&&navigator.vibrate(30);
+      }
+      dragBtn=null;overBtn=null;
+    }
+
+    container.querySelectorAll('.mobile-tab-btn[data-tab]').forEach(btn=>{
+      btn.addEventListener('touchstart',e=>{
+        if(e.touches.length!==1) return;
+        startY=e.touches[0].clientY;
+        startX=e.touches[0].clientX;
+        holdTimer=setTimeout(()=>{
+          dragBtn=btn;
+          btn.classList.add('nav-dragging');
+          navigator.vibrate&&navigator.vibrate(50);
+        }, HOLD_MS);
+      },{passive:true});
+
+      btn.addEventListener('touchmove',e=>{
+        const dy=Math.abs(e.touches[0].clientY-startY);
+        const dx=Math.abs(e.touches[0].clientX-startX);
+        if(!dragBtn){
+          if(dy>8||dx>8) cancelHold();
+          return;
+        }
+        e.preventDefault();
+        const ty=e.touches[0].clientY;
+        const btns=[...container.querySelectorAll('.mobile-tab-btn[data-tab]')];
+        const hit=btns.find(b=>{
+          const r=b.getBoundingClientRect();
+          return ty>=r.top&&ty<=r.bottom&&b!==dragBtn;
+        });
+        if(overBtn) overBtn.classList.remove('nav-drag-over');
+        overBtn=hit||null;
+        if(overBtn) overBtn.classList.add('nav-drag-over');
+      },{passive:false});
+
+      btn.addEventListener('touchend',()=>endDrag(true));
+      btn.addEventListener('touchcancel',()=>endDrag(false));
+    });
+  }
+
+  window.initNavDrag=function(){
+    initDockDrag();
+    initMobileDrag();
+  };
+})();
 </script>
 
 <!-- ── MODAL NOTAS INTERNAS ── -->
