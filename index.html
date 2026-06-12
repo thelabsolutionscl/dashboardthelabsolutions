@@ -7122,7 +7122,7 @@ async function saveEditCot(){
     const _evv=document.getElementById('editCotVendedor')?.value||'';fields['Vendedor']=_evv||null;
     const cotId=document.getElementById('editCotId').value;
     try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','PATCH',cotId,fields);ensureCotizacionFields();}
-    toast('✓ Cotización actualizada','success');closeEditCot();await loadAllDataSilent();renderCotizaciones();renderOverview();
+    toast('✓ Cotización actualizada','success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='💾 Guardar';
 }
@@ -9114,7 +9114,7 @@ async function createCotizacion(){
     try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
     toast(`✓ Cotización ${num} guardada`,'success');
     await _advanceEtapaCliente(clienteId,'Propuesta enviada',['Lead nuevo','Contactado']);
-    clearForm('cot');await loadAllDataSilent();renderCotizaciones();renderOverview();
+    clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='✚ Guardar Cotización';
 }
