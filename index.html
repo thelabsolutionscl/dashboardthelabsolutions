@@ -16619,28 +16619,28 @@ let _gsActive=-1;    // índice activo (navegación con flechas)
 let _gsInited=false;
 
 const GS_SECTIONS=[
-  {tab:'overview',      emoji:'🏠',c:'#00d4cc',title:'Overview',        kw:'inicio resumen centro comando dashboard panel general home'},
-  {tab:'clientes',      emoji:'👥',c:'#3b82f6',title:'Clientes',        kw:'crm contactos empresas leads'},
-  {tab:'cotizaciones',  emoji:'📋',c:'#a78bfa',title:'Cotizaciones',    kw:'presupuestos cotizar ofertas quotes'},
-  {tab:'pedidos',       emoji:'📦',c:'#ff6b35',title:'Pedidos',         kw:'ordenes produccion despacho ventas'},
-  {tab:'proveedores',   emoji:'🏭',c:'#ffaa00',title:'Proveedores',     kw:'suppliers compras insumos'},
-  {tab:'agentes',       emoji:'🤖',c:'#10b981',title:'Agentes IA',      kw:'ia ai kai automatizacion bots asistentes'},
-  {tab:'maquinas',      emoji:'🖨️',c:'#ff4444',title:'Máquinas',        kw:'impresoras 3d printers monitor capacidad'},
-  {tab:'equipo',        emoji:'👤',c:'#f472b6',title:'Equipo',          kw:'personas staff calendario turnos rrhh'},
-  {tab:'reporte',       emoji:'📊',c:'#14b8a6',title:'Reportes',        kw:'analitica estadisticas metricas informes'},
-  {tab:'web',           emoji:'🌐',c:'#6366f1',title:'Web',             kw:'wordpress google ads seo sitio marketing'},
-  {tab:'finanzas',      emoji:'💰',c:'#22c55e',title:'Finanzas',        kw:'facturas dte sii caja flujo dinero contabilidad'},
-  {tab:'visual',        emoji:'🎨',c:'#8b5cf6',title:'Visual AI',       kw:'imagenes render diseno generador'},
-  {tab:'remuneraciones',emoji:'💵',c:'#84cc16',title:'Remuneraciones',  kw:'sueldos pagos nominas liquidaciones rrhh'},
+  {tab:'overview',      icon:'icon-overview',      c:'#00d4cc',title:'Overview',        kw:'inicio resumen centro comando dashboard panel general home'},
+  {tab:'clientes',      icon:'icon-clientes',       c:'#3b82f6',title:'Clientes',        kw:'crm contactos empresas leads'},
+  {tab:'cotizaciones',  icon:'icon-cotizaciones',   c:'#a78bfa',title:'Cotizaciones',    kw:'presupuestos cotizar ofertas quotes'},
+  {tab:'pedidos',       icon:'icon-pedidos',        c:'#ff6b35',title:'Pedidos',         kw:'ordenes produccion despacho ventas'},
+  {tab:'proveedores',   icon:'icon-proveedores',    c:'#ffaa00',title:'Proveedores',     kw:'suppliers compras insumos'},
+  {tab:'agentes',       icon:'icon-agentes',        c:'#10b981',title:'Agentes IA',      kw:'ia ai kai automatizacion bots asistentes'},
+  {tab:'maquinas',      icon:'icon-maquinas',       c:'#ff4444',title:'Máquinas',        kw:'impresoras 3d printers monitor capacidad'},
+  {tab:'equipo',        icon:'icon-equipo',         c:'#f472b6',title:'Equipo',          kw:'personas staff calendario turnos rrhh'},
+  {tab:'reporte',       icon:'icon-reporte',        c:'#14b8a6',title:'Reportes',        kw:'analitica estadisticas metricas informes'},
+  {tab:'web',           icon:'icon-web',            c:'#6366f1',title:'Web',             kw:'wordpress google ads seo sitio marketing'},
+  {tab:'finanzas',      icon:'icon-finanzas',       c:'#22c55e',title:'Finanzas',        kw:'facturas dte sii caja flujo dinero contabilidad'},
+  {tab:'visual',        icon:'icon-visual',         c:'#8b5cf6',title:'Visual AI',       kw:'imagenes render diseno generador'},
+  {tab:'remuneraciones',icon:'icon-remuneraciones', c:'#84cc16',title:'Remuneraciones',  kw:'sueldos pagos nominas liquidaciones rrhh'},
 ];
 const GS_ACTIONS=[
-  {nuevo:'nuevo-lead',     emoji:'👤',title:'Nuevo Lead / Cliente',    kw:'crear agregar nuevo cliente contacto lead',  run:()=>switchTab('nuevo-lead')},
-  {nuevo:'nuevo-proveedor',emoji:'🏭',title:'Nuevo Proveedor',         kw:'crear agregar proveedor',                    run:()=>switchTab('nuevo-proveedor')},
-  {nuevo:'nueva-cot',      emoji:'📋',title:'Nueva Cotización',         kw:'crear cotizar presupuesto',                  run:()=>switchTab('nueva-cot')},
-  {nuevo:'nueva-venta',    emoji:'💰',title:'Nueva Venta',             kw:'registrar venta ingreso',                    run:()=>{try{irANuevaVenta();}catch(e){}}},
-  {nuevo:'libro-diario',   emoji:'📒',title:'Nuevo Registro (Diario)', kw:'libro diario contabilidad asiento',          run:()=>{try{irALibroDiario();}catch(e){}}},
-  {emoji:'↺', title:'Actualizar datos',            kw:'refrescar recargar sync sincronizar update', run:()=>{try{loadAllData();}catch(e){}}},
-  {emoji:'⚙', title:'Mi cuenta / Configuración',   kw:'ajustes tokens api keys config cuenta',      run:()=>{try{openUserMenu();}catch(e){}}},
+  {nuevo:'nuevo-lead',     icon:'icon-user-plus',    title:'Nuevo Lead / Cliente',    kw:'crear agregar nuevo cliente contacto lead',  run:()=>switchTab('nuevo-lead')},
+  {nuevo:'nuevo-proveedor',icon:'icon-proveedores',  title:'Nuevo Proveedor',         kw:'crear agregar proveedor',                    run:()=>switchTab('nuevo-proveedor')},
+  {nuevo:'nueva-cot',      icon:'icon-cotizaciones', title:'Nueva Cotización',        kw:'crear cotizar presupuesto',                  run:()=>switchTab('nueva-cot')},
+  {nuevo:'nueva-venta',    icon:'icon-trending',     title:'Nueva Venta',             kw:'registrar venta ingreso',                    run:()=>{try{irANuevaVenta();}catch(e){}}},
+  {nuevo:'libro-diario',   icon:'icon-book',         title:'Nuevo Registro (Diario)', kw:'libro diario contabilidad asiento',          run:()=>{try{irALibroDiario();}catch(e){}}},
+  {icon:'icon-refresh',    title:'Actualizar datos',           kw:'refrescar recargar sync sincronizar update', run:()=>{try{loadAllData();}catch(e){}}},
+  {icon:'icon-settings',   title:'Mi cuenta / Configuración',  kw:'ajustes tokens api keys config cuenta',      run:()=>{try{openUserMenu();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
@@ -16675,11 +16675,11 @@ function globalSearchOnInput(raw){
 
   // 1. Secciones
   const secs=GS_SECTIONS.filter(s=>_gsAllowed(s.tab)).filter(s=>!q||_gsNorm(s.title).includes(nq)||_gsNorm(s.kw).includes(nq));
-  if(secs.length) groups.push({cat:'Secciones',items:secs.map(s=>({emoji:s.emoji,bg:s.c,title:s.title,sub:'',go:'Ir →',run:()=>switchTab(s.tab)}))});
+  if(secs.length) groups.push({cat:'Secciones',items:secs.map(s=>({icon:s.icon,bg:s.c,title:s.title,sub:'',go:'Ir →',run:()=>switchTab(s.tab)}))});
 
   // 2. Acciones rápidas
   const acts=GS_ACTIONS.filter(a=>!a.nuevo||_gsAllowed(a.nuevo)).filter(a=>!q||_gsNorm(a.title).includes(nq)||_gsNorm(a.kw).includes(nq));
-  if(acts.length) groups.push({cat:'Acciones',items:acts.map(a=>({emoji:a.emoji,bg:'',title:a.title,sub:'',go:'',run:a.run}))});
+  if(acts.length) groups.push({cat:'Acciones',items:acts.map(a=>({icon:a.icon,bg:'',title:a.title,sub:'',go:'',run:a.run}))});
 
   // 3. Datos (sólo con 2+ caracteres)
   if(q.length>=2){
@@ -16688,28 +16688,28 @@ function globalSearchOnInput(raw){
     if(_gsAllowed('clientes')) (st.clientes||[]).forEach(c=>{
       const nom=c.fields['Empresa']||c.fields['Contacto']||'—';
       if(_gsNorm(nom).includes(nq)||_gsNorm(c.fields['Contacto']||'').includes(nq))
-        push('Clientes',{emoji:'👥',bg:'#3b82f6',title:nom,sub:'Cliente',go:'Abrir →',run:()=>{switchTab('clientes');setTimeout(()=>_gsFocusRow(c.id),250);}});
+        push('Clientes',{icon:'icon-clientes',bg:'#3b82f6',title:nom,sub:'Cliente',go:'Abrir →',run:()=>{switchTab('clientes');setTimeout(()=>_gsFocusRow(c.id),250);}});
     });
     if(_gsAllowed('pedidos')) (st.pedidos||[]).forEach(p=>{
       const num=p.fields['N° Pedido']||p.id; const cli=_gsClienteNombre(p);
       if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq))
-        push('Pedidos',{emoji:'📦',bg:'#ff6b35',title:num,sub:'Pedido'+(p.fields['Estado pedido']?' · '+p.fields['Estado pedido']:'')+(cli?' · '+cli:''),go:'Abrir →',run:()=>switchTab('pedidos')});
+        push('Pedidos',{icon:'icon-pedidos',bg:'#ff6b35',title:num,sub:'Pedido'+(p.fields['Estado pedido']?' · '+p.fields['Estado pedido']:'')+(cli?' · '+cli:''),go:'Abrir →',run:()=>switchTab('pedidos')});
     });
     if(_gsAllowed('cotizaciones')) (st.cotizaciones||[]).forEach(co=>{
       const num=co.fields['N° Cotización']||co.id; const cli=_gsClienteNombre(co);
       if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq))
-        push('Cotizaciones',{emoji:'📋',bg:'#a78bfa',title:num,sub:'Cotización'+(cli?' · '+cli:''),go:'Abrir →',run:()=>switchTab('cotizaciones')});
+        push('Cotizaciones',{icon:'icon-cotizaciones',bg:'#a78bfa',title:num,sub:'Cotización'+(cli?' · '+cli:''),go:'Abrir →',run:()=>switchTab('cotizaciones')});
     });
     if(_gsAllowed('proveedores')) (st.proveedores||[]).forEach(pv=>{
       const nom=pv.fields['Nombre']||'—';
       if(_gsNorm(nom).includes(nq))
-        push('Proveedores',{emoji:'🏭',bg:'#ffaa00',title:nom,sub:'Proveedor',go:'Abrir →',run:()=>switchTab('proveedores')});
+        push('Proveedores',{icon:'icon-proveedores',bg:'#ffaa00',title:nom,sub:'Proveedor',go:'Abrir →',run:()=>switchTab('proveedores')});
     });
     if(_gsAllowed('finanzas')){
       try{
         const fv=JSON.parse(localStorage.getItem('fin_ventas')||'[]');
         fv.filter(v=>_gsNorm((v.nro||'')+(v.cliente||'')+(v.concepto||'')).includes(nq)).slice(0,4).forEach(v=>{
-          push('Facturas',{emoji:'🧾',bg:'#22c55e',title:v.nro||'Sin N°',sub:(v.cliente||'—')+' · '+formatCLP(v.monto||0),go:'Abrir →',run:()=>{switchTab('finanzas');setTimeout(()=>finSwitchTab('facturas'),300);}});
+          push('Facturas',{icon:'icon-finanzas',bg:'#22c55e',title:v.nro||'Sin N°',sub:(v.cliente||'—')+' · '+formatCLP(v.monto||0),go:'Abrir →',run:()=>{switchTab('finanzas');setTimeout(()=>finSwitchTab('facturas'),300);}});
         });
       }catch(e){}
     }
@@ -16728,9 +16728,10 @@ function globalSearchOnInput(raw){
     html+='<div class="gs-cat">'+escapeHtml(g.cat)+'</div>';
     g.items.forEach(it=>{
       const idx=_gsResults.length; _gsResults.push(it.run);
-      const emojiStyle=it.bg?('background:'+it.bg+';color:#fff'):'';
+      const emojiStyle=it.bg?('background:'+it.bg):'';
+      const iconSvg=it.icon?'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+(it.bg?'#fff':'var(--accent)')+'" stroke-width="1.5" style="overflow:visible;flex-shrink:0"><use href="#'+it.icon+'"/></svg>':'';
       html+='<div class="gs-item" data-gsi="'+idx+'" onmousedown="event.preventDefault();_gsRun('+idx+')" onmouseenter="_gsSetActive('+idx+')">'
-        +'<span class="gs-emoji" style="'+emojiStyle+'">'+it.emoji+'</span>'
+        +'<span class="gs-emoji" style="'+emojiStyle+'">'+iconSvg+'</span>'
         +'<span class="gs-txt"><span class="gs-title">'+_gsHi(it.title,q)+'</span>'+(it.sub?'<span class="gs-sub">'+escapeHtml(it.sub)+'</span>':'')+'</span>'
         +(it.go?'<span class="gs-go">'+escapeHtml(it.go)+'</span>':'')
       +'</div>';
