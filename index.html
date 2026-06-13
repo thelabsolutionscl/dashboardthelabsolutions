@@ -5669,9 +5669,18 @@ async function loadMaquinasAirtable(){
       // Aplica correcciones de IP del código sobre datos viejos de Airtable
       // (localStorage tiene prioridad si el usuario lo configuró manualmente)
       const _hcIp=Object.fromEntries(MAQUINAS_HARDCODED.filter(m=>m.ip).map(m=>[m.id,m.ip]));
-      MAQUINAS=MAQUINAS.map(m=>({...m,ip:localStorage.getItem('printer_ip_'+m.id)||_hcIp[m.id]||m.ip}));
-      // Sincroniza cam URLs desde Airtable a localStorage (Airtable es fuente de verdad)
-      MAQUINAS.forEach(m=>{if(m.cam){localStorage.setItem('printer_cam_'+m.id,m.cam);}});
+      const _t=getToken();
+      MAQUINAS=MAQUINAS.map(m=>{
+        const finalIp=localStorage.getItem('printer_ip_'+m.id)||_hcIp[m.id]||m.ip;
+        if(finalIp&&finalIp!==m.ip&&m._airtableId&&_t)
+          fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+_t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:finalIp}})});
+        return {...m,ip:finalIp};
+      });
+      // Sincroniza IPs y cam desde Airtable/código a localStorage
+      MAQUINAS.forEach(m=>{
+        if(m.ip) localStorage.setItem('printer_ip_'+m.id,m.ip);
+        if(m.cam) localStorage.setItem('printer_cam_'+m.id,m.cam);
+      });
     }
   }catch(e){
     if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')){
@@ -10736,6 +10745,7 @@ function savePrinterIp(id){
   const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
   localStorage.setItem('printer_ip_'+id,val);
   const m=MAQUINAS.find(x=>x.id===id);
+  if(m){m.ip=val;if(m._airtableId){const t=getToken();if(t)fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:val}})});}}
   toast(`IP guardada · ${m?.nombre} #${m?.numG}`,'success');pollPrinters();
 }
 
@@ -10762,8 +10772,9 @@ function savePrinterConn(){
   const key=(document.getElementById('printerConnKey').value||'').trim();
   if(ip)localStorage.setItem('printer_ip_'+id,ip);else localStorage.removeItem('printer_ip_'+id);
   if(key)localStorage.setItem('printer_key_'+id,key);else localStorage.removeItem('printer_key_'+id);
-  closePrinterConnModal();
   const m=MAQUINAS.find(x=>x.id===id);
+  if(m&&m._airtableId){m.ip=ip||m.ip;const t=getToken();if(t)fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
+  closePrinterConnModal();
   toast(`Conexión guardada · ${m?.nombre} #${m?.numG}`,'success');
   pollPrinters();
 }
