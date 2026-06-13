@@ -18482,6 +18482,9 @@ const SL3D=(function(){
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
     {k:'supports',l:'Soportes',sel:['no','sí']},{k:'treeSupports',l:'Soporte árbol',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
     {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
+    {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
+    {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},
+    {k:'elephantFoot',l:'Pie de elefante (mm)',s:0.05},{k:'xyCompensation',l:'Compensación XY (mm)',s:0.02},
     {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
@@ -18634,8 +18637,9 @@ MATERIAL: ${mat} · OBJETIVO: ${obj}${notas?'\nNOTAS DEL OPERADOR: '+notas:''}`;
   const IA_SYS=`Eres KAI-SLICER, ingeniero experto en impresión 3D FDM de The Lab Solutions (Santiago, Chile).
 Eliges parámetros de laminado óptimos según geometría de la pieza, material, impresora y objetivo.
 REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). treeSupports=true cuando haya voladizos complejos o múltiples: genera ramas que se fusionan en troncos, mucho más fáciles de retirar. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno disponibles: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), linear (rápido).
+COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético, recomendado para piezas vistosas), "agudo" la esconde en esquinas agudas, "cercano" minimiza viaje (rápido). outerWallLast=true imprime la pared exterior al final → mejor acabado y precisión dimensional (recomendado para piezas vistosas o de precisión). bridgeDetect=true detecta puentes/voladizos horizontales y los imprime sólidos, lentos y con ventilador máximo (úsalo si hay voladizos). elephantFoot (mm, 0-0.3): encoge la 1ª capa para evitar que la base se abombe (típico 0.1-0.2 para piezas de precisión). xyCompensation (mm, -0.3 a 0.3): expansión/contracción horizontal global para calibrar tolerancias; negativo agranda agujeros. arcFitting déjalo en false salvo que se indique (requiere [gcode_arcs] en Klipper).
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo","outerWallLast":false,"bridgeDetect":false,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
     if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
@@ -18669,6 +18673,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
       supports:st.ovPct>8,treeSupports:st.ovPct>8&&obj==='calidad',supportAngle:50,
       adaptiveLayerHeight:obj==='calidad',
+      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
+      bridgeDetect:st.ovPct>8,arcFitting:false,
+      elephantFoot:obj==='calidad'?0.15:0,xyCompensation:0,
       brim:st.hr>3?8:0,raft:false,ironing:obj==='calidad',
       retractDist:mat===MATS.TPU?0.5:0.8,retractSpeed:mat===MATS.TPU?20:35,zHop:0.2,
       };
@@ -18693,6 +18700,11 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
+      seamMode:['cercano','alineado','agudo'].includes(p.seamMode)?p.seamMode:'cercano',
+      outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
+      bridgeDetect:!!p.bridgeDetect&&p.bridgeDetect!=='no',
+      arcFitting:!!p.arcFitting&&p.arcFitting!=='no',
+      elephantFoot:cl(p.elephantFoot,0,0.6,0),xyCompensation:cl(p.xyCompensation,-0.3,0.3,0),
       brim:Math.round(cl(p.brim,0,20,0)),raft:!!p.raft&&p.raft!=='no',ironing:!!p.ironing&&p.ironing!=='no',
       retractDist:cl(p.retractDist,0,8,0.8),retractSpeed:Math.round(cl(p.retractSpeed,5,80,35)),
       zHop:cl(p.zHop,0,2,0.2),
@@ -18835,6 +18847,165 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return segs;
   }
+  // ── Relleno consciente de agujeros (regla even-odd sobre todos los loops) ──
+  function _inSolid(x,y,loops){let c=0;for(const L of loops)if(_pointInPoly(x,y,L))c++;return c%2===1;}
+  function _scanfillAll(loops,spacing,angle){
+    const r=angle*Math.PI/180,cos=Math.cos(-r),sin=Math.sin(-r);
+    const rot=([x,y])=>[x*cos-y*sin,x*sin+y*cos],unrot=([x,y])=>[x*cos+y*sin,-x*sin+y*cos];
+    const rls=loops.map(L=>L.map(rot));
+    let mnY=1e9,mxY=-1e9;for(const rp of rls)for(const[,y]of rp){if(y<mnY)mnY=y;if(y>mxY)mxY=y;}
+    const lines=[];
+    for(let y=mnY+spacing/2;y<mxY;y+=spacing){
+      const xs=[];
+      for(const rp of rls){const n=rp.length;
+        for(let i=0;i<n;i++){const j=(i+1)%n;const[ax,ay]=rp[i],[bx,by]=rp[j];
+          if((ay<=y&&by>y)||(by<=y&&ay>y))xs.push(ax+(y-ay)/(by-ay)*(bx-ax));}}
+      xs.sort((a,b)=>a-b);
+      for(let i=0;i+1<xs.length;i+=2)lines.push([unrot([xs[i],y]),unrot([xs[i+1],y])]);
+    }
+    for(let i=1;i<lines.length;i+=2)lines[i].reverse();
+    return lines;
+  }
+  function _gyroidFillMulti(loops,spacing,z){
+    let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
+    for(const L of loops)for(const[x,y]of L){if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;}
+    const period=Math.max(spacing*1.7,3),k=2*Math.PI/period,amp=spacing*0.5,step=Math.max(0.7,period/10);
+    const segs=[];let row=0;
+    for(let y0=mny+spacing/2;y0<mxy;y0+=spacing,row++){
+      const ph=k*z*0.6+(row%2?Math.PI:0);let prev=null;
+      for(let x=mnx;x<=mxx;x+=step){
+        const y=y0+amp*Math.sin(k*x+ph);
+        const ins=_inSolid(x,y,loops);
+        if(ins&&prev)segs.push([prev,[x,y]]);
+        prev=ins?[x,y]:null;
+      }
+    }
+    return segs;
+  }
+  function _infillMulti(loops,spacing,pattern,li,z){
+    if(pattern==='gyroid')return _gyroidFillMulti(loops,spacing,z);
+    if(pattern==='grid')return _scanfillAll(loops,spacing*2,45).concat(_scanfillAll(loops,spacing*2,135));
+    if(pattern==='triangle'||pattern==='hex')return _scanfillAll(loops,spacing*3,0).concat(_scanfillAll(loops,spacing*3,60),_scanfillAll(loops,spacing*3,120));
+    return _scanfillAll(loops,spacing,li%2?135:45); // linear
+  }
+  // Profundidad de anidamiento (cuántos contornos contienen a éste) → par=exterior, impar=agujero.
+  // Usa un punto sobre el borde del contorno (no el centroide, que puede caer dentro de un agujero concéntrico).
+  function _depth(contour,all){
+    const n=contour.length,a=contour[0],b=contour[1%n];
+    let mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,dx=b[0]-a[0],dy=b[1]-a[1],ln=Math.hypot(dx,dy)||1;
+    mx+=(-dy/ln)*0.01;my+=(dx/ln)*0.01; // empuje mínimo hacia el interior del loop (CCW)
+    let d=0;for(const o of all){if(o===contour)continue;if(_pointInPoly(mx,my,o))d++;}
+    return d;
+  }
+  // Detección de puentes: cobertura del área sólida por la capa inferior + orientación de span
+  function _bridgeInfoMulti(loops,prev){
+    let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
+    for(const L of loops)for(const[x,y]of L){if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;}
+    const angle=(mxx-mnx)<=(mxy-mny)?0:90; // líneas a lo largo de la dimensión corta (vanos más cortos)
+    if(!prev||!prev.length)return{cov:0,angle};
+    const N=7;let inP=0,cov=0;
+    for(let i=0;i<=N;i++)for(let j=0;j<=N;j++){
+      const x=mnx+(mxx-mnx)*i/N,y=mny+(mxy-mny)*j/N;
+      if(!_inSolid(x,y,loops))continue;inP++;
+      let c=0;for(const pp of prev)if(_pointInPoly(x,y,pp))c++;
+      if(c%2===1)cov++;
+    }
+    return{cov:inP?cov/inP:1,angle};
+  }
+  // Punto de inicio de costura según modo (cercano / alineado atrás / esquina aguda)
+  function _seamStart(poly,mode,cX,cY,ox,oy){
+    const n=poly.length;
+    if(mode==='alineado'){
+      let bi=0,bv=-1e9;
+      for(let i=0;i<n;i++){const yy=poly[i][1];if(yy>bv+1e-6||(Math.abs(yy-bv)<=1e-6&&poly[i][0]<poly[bi][0])){bv=yy;bi=i;}}
+      return bi;
+    }
+    if(mode==='agudo'){
+      let bi=-1,bs=2;
+      for(let i=0;i<n;i++){
+        const pr=poly[(i-1+n)%n],cu=poly[i],ne=poly[(i+1)%n];
+        let ax=cu[0]-pr[0],ay=cu[1]-pr[1],bx=ne[0]-cu[0],by=ne[1]-cu[1];
+        const la=Math.hypot(ax,ay),lb=Math.hypot(bx,by);if(!la||!lb)continue;
+        ax/=la;ay/=la;bx/=lb;by/=lb;
+        if(ax*by-ay*bx<=0)continue; // sólo esquinas convexas (poly CCW)
+        const dot=ax*bx+ay*by;
+        if(dot<bs){bs=dot;bi=i;}
+      }
+      if(bi>=0)return bi;
+    }
+    // 'cercano' (por defecto)
+    let bi=0,bd=1e9;
+    for(let i=0;i<n;i++){const d=Math.hypot(poly[i][0]+ox-cX,poly[i][1]+oy-cY);if(d<bd){bd=d;bi=i;}}
+    return bi;
+  }
+  // ── Arc welding: convierte tramos rectos en arcos G2/G3 (archivos más livianos) ──
+  function _circ(a,b,c){
+    const ax=a[0],ay=a[1],bx=b[0],by=b[1],cx=c[0],cy=c[1];
+    const d=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+    if(Math.abs(d)<1e-9)return null;
+    const a2=ax*ax+ay*ay,b2=bx*bx+by*by,c2=cx*cx+cy*cy;
+    return[(a2*(by-cy)+b2*(cy-ay)+c2*(ay-by))/d,(a2*(cx-bx)+b2*(ax-cx)+c2*(bx-ax))/d];
+  }
+  function _arcWeld(src){
+    const TOL=0.04,MINR=0.6,MAXR=300,MINSEG=4,MAXSWEEP=5.7;
+    const inL=src.split('\n'),out=[];
+    let px=0,py=0,pe=0,lastF=0,run=[],anchor=null;
+    const fx=v=>(+v).toFixed(3),fe=v=>(+v).toFixed(4);
+    function emitRun(){
+      if(!run.length)return;
+      if(run.length<MINSEG){for(const m of run)out.push(`G1 X${fx(m.x)} Y${fx(m.y)} E${fe(m.e)} F${m.f}`);run=[];anchor=null;return;}
+      const pts=[anchor,...run.map(m=>[m.x,m.y])];
+      let i=0;
+      while(i<pts.length-1){
+        let bestJ=-1,bestC=null,bestDir=0,j=i+2;
+        while(j<pts.length){
+          const mid=(i+j)>>1,C=_circ(pts[i],pts[mid],pts[j]);
+          if(!C)break;
+          const R=Math.hypot(pts[i][0]-C[0],pts[i][1]-C[1]);
+          if(R<MINR||R>MAXR)break;
+          let ok=true,dir=0,cum=0,prevAng=Math.atan2(pts[i][1]-C[1],pts[i][0]-C[0]);
+          for(let k=i+1;k<=j;k++){
+            const rr=Math.hypot(pts[k][0]-C[0],pts[k][1]-C[1]);
+            if(Math.abs(rr-R)>TOL){ok=false;break;}
+            let ang=Math.atan2(pts[k][1]-C[1],pts[k][0]-C[0]),dA=ang-prevAng;
+            while(dA>Math.PI)dA-=2*Math.PI;while(dA<-Math.PI)dA+=2*Math.PI;
+            if(Math.abs(dA)<1e-6||Math.abs(dA)>2.6){ok=false;break;}
+            const s=dA>0?1:-1;if(dir===0)dir=s;else if(s!==dir){ok=false;break;}
+            cum+=dA;if(Math.abs(cum)>MAXSWEEP){ok=false;break;}
+            prevAng=ang;
+          }
+          if(ok){bestJ=j;bestC=C;bestDir=dir;j++;}else break;
+        }
+        if(bestJ>=i+3){
+          const C=bestC,g=bestDir<0?'G2':'G3',I=C[0]-pts[i][0],J=C[1]-pts[i][1],m=run[bestJ-1];
+          out.push(`${g} X${fx(pts[bestJ][0])} Y${fx(pts[bestJ][1])} I${fx(I)} J${fx(J)} E${fe(m.e)} F${m.f}`);
+          i=bestJ;
+        }else{const m=run[i];out.push(`G1 X${fx(pts[i+1][0])} Y${fx(pts[i+1][1])} E${fe(m.e)} F${m.f}`);i++;}
+      }
+      run=[];anchor=null;
+    }
+    for(const raw of inL){
+      const c=raw.trim();
+      let nx=px,ny=py,ne=pe,nf=null,hasX=false,hasY=false,hasZ=false,hasE=false,isG=false;
+      if(c.startsWith('G1')||c.startsWith('G0')){
+        isG=true;
+        for(const w of c.split(/\s+/)){if(!w)continue;const v=+w.slice(1);if(!isFinite(v))continue;
+          if(w[0]==='X'){nx=v;hasX=true;}else if(w[0]==='Y'){ny=v;hasY=true;}else if(w[0]==='Z'){hasZ=true;}else if(w[0]==='E'){ne=v;hasE=true;}else if(w[0]==='F'){nf=v;}}
+      }
+      const extruding=isG&&c.startsWith('G1')&&hasX&&hasY&&hasE&&!hasZ&&ne>pe+1e-9;
+      if(extruding){
+        if(!run.length)anchor=[px,py];
+        run.push({x:nx,y:ny,e:ne,f:nf!=null?nf:lastF});
+        px=nx;py=ny;pe=ne;if(nf!=null)lastF=nf;
+      }else{
+        emitRun();out.push(raw);
+        if(isG){px=nx;py=ny;if(hasE)pe=ne;if(nf!=null)lastF=nf;}
+        else if(c.startsWith('G92')){const m=/E([-\d.]+)/.exec(c);if(m)pe=+m[1];}
+      }
+    }
+    emitRun();
+    return out.join('\n');
+  }
   // Despacho de patrón de relleno disperso
   function _infill(poly,spacing,pattern,li,z){
     if(pattern==='gyroid')return _gyroidFill(poly,spacing,z);
@@ -18931,8 +19102,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     return lhs;
   }
   function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p){
-    let bi=0,bd=1e9;
-    for(let i=0;i<poly.length;i++){const d=Math.hypot(poly[i][0]+ox-cX,poly[i][1]+oy-cY);if(d<bd){bd=d;bi=i;}}
+    const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     const ord=[...poly.slice(bi),...poly.slice(0,bi)];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy;
     // Solo retraer/z-hop si el salto es real — evita retracciones inútiles entre paredes concéntricas
@@ -19070,23 +19240,55 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       }
       const contours=layerPolys[li];
       if(!contours.length)continue;
-      for(const poly of contours){
-        if(poly.length<3)continue;
-        const shells=[poly];
-        for(let s=1;s<p.shells;s++){const ins=_inset(shells[s-1],extW);if(ins&&ins.length>=3)shells.push(ins);else break;}
-        for(let s=0;s<shells.length;s++)
+      const parity=contours.map(ct=>_depth(ct,contours)%2===1); // true = agujero (anidamiento impar)
+      // Compensación dimensional: pie de elefante (sólo capa 0) + expansión XY uniforme
+      let comp=(p.xyCompensation||0)-((li===0&&p.elephantFoot>0)?p.elephantFoot:0);
+      let baseC=contours;
+      if(Math.abs(comp)>0.001){
+        baseC=contours.map((ct,ci)=>{const off=parity[ci]?comp:-comp;const r=_insetRaw(ct,off);return(r&&r.length>=3)?r:ct;});
+      }
+      // Paredes por contorno: exterior crece hacia adentro, agujero crece hacia afuera (más material alrededor)
+      const fillLoops=[];
+      for(let ci=0;ci<baseC.length;ci++){
+        const ct=baseC[ci];if(ct.length<3)continue;
+        const hole=parity[ci];
+        const shells=[ct];
+        for(let s=1;s<p.shells;s++){
+          const ins=hole?_insetRaw(shells[s-1],-extW):_inset(shells[s-1],extW);
+          if(ins&&ins.length>=3)shells.push(ins);else break;
+        }
+        const idxs=[...shells.keys()];if(p.outerWallLast)idxs.reverse(); // pared exterior al final → mejor acabado
+        for(const s of idxs)
           [E,cX,cY]=_printPoly(gc,shells[s],curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*(s===0?1:0.9))*60,p);
-        const fillPoly=shells[shells.length-1];
+        fillLoops.push(shells[shells.length-1]);
+      }
+      // Relleno: regla even-odd sobre todos los loops → excluye agujeros automáticamente
+      if(fillLoops.length){
         if(isSolid){
-          const lines=_scanfill(fillPoly,infillSpacing,li%2?135:45);
+          const lines=_scanfillAll(fillLoops,infillSpacing,li%2?135:45);
           [E,cX,cY]=_printLines(gc,lines,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.1)*60,p);
         }else if(p.infillPct>0){
-          const lines=_infill(fillPoly,infillSpacing,p.infillType,li,curZ);
-          [E,cX,cY]=_printLines(gc,lines,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.1)*60,p);
+          let bridged=false;
+          if(p.bridgeDetect&&li>0){
+            const bi=_bridgeInfoMulti(fillLoops,layerPolys[li-1]);
+            if(bi.cov<0.5){ // zona mayormente sin apoyo abajo → puente
+              bridged=true;
+              gc.push('; puente (bridge) — relleno sólido orientado al vano');
+              if(p.fanPct<100)gc.push('M106 S255 ; ventilador máx para puente');
+              const blines=_scanfillAll(fillLoops,extW*1.02,bi.angle);
+              const bspd=Math.max(15,Math.min(30,Math.round(spd*0.6)));
+              [E,cX,cY]=_printLines(gc,blines,curZ,offX,offY,cX,cY,E,lh,extW,bspd*60,p);
+              if(p.fanPct<100)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; restaurar ventilador`);
+            }
+          }
+          if(!bridged){
+            const lines=_infillMulti(fillLoops,infillSpacing,p.infillType,li,curZ);
+            [E,cX,cY]=_printLines(gc,lines,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.1)*60,p);
+          }
         }
         // Ironing: planchar la cara superior en la última capa
         if(p.ironing&&li===totalL-1){
-          const ir=_scanfill(fillPoly,extW*0.5,li%2?45:135);
+          const ir=_scanfillAll(fillLoops,extW*0.5,li%2?45:135);
           if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,curZ,offX,offY,cX,cY,E,lh*0.12,extW,Math.round(Math.min(spd,40))*60,p);}
         }
       }
@@ -19132,11 +19334,13 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       setProg(2,'Iniciando slicer nativo…');
       await new Promise(r=>setTimeout(r,0));
       const nozD=+el('slNozzle').value,matName=el('slMaterial').value;
-      const gcode=await _nativeSlice(S.tris,p,spec,nozD,matName,model);
+      let gcode=await _nativeSlice(S.tris,p,spec,nozD,matName,model);
       if(!gcode.includes('G1'))throw new Error('slicer produjo G-code vacío');
+      // Estimación sobre G-code recto (preciso); arc welding sólo afecta la salida
+      const _est=estimate(gcode,MATS[matName],model);
+      if(p.arcFitting){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
       S.gcode=gcode;
       setProg(100,'✓ G-code listo');
-      const _est=estimate(gcode,MATS[matName],model);
       localStorage.setItem('sl_last_est_secs',_est.secs.toFixed(1));
       renderResult(_est);
     }catch(e){
@@ -19193,18 +19397,26 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   // ── Vista previa del G-code por capas ───────────────────────
   function _parseGcodeLayers(){
     const layers=[];let cur=null,x=0,y=0,z=0,le=0,abs=true;
+    const pushSeg=(ax,ay,bx,by,nz)=>{if(!cur||Math.abs(nz-cur.z)>0.001){cur={z:nz,segs:[]};layers.push(cur);}cur.segs.push([ax,ay,bx,by]);};
     for(const raw of S.gcode.split('\n')){
       const c=raw.trim();if(!c||c[0]===';')continue;
       if(c.startsWith('M82')){abs=true;continue;}
       if(c.startsWith('M83')){abs=false;continue;}
       if(c.startsWith('G92')){const m=/E([-\d.]+)/.exec(c);if(m)le=+m[1];continue;}
-      if(!(c.startsWith('G1')||c.startsWith('G0')))continue;
-      let nx=x,ny=y,nz=z,ne=null;
-      for(const w of c.split(' ')){const v=+w.slice(1);if(!isFinite(v))continue;if(w[0]==='X')nx=v;else if(w[0]==='Y')ny=v;else if(w[0]==='Z')nz=v;else if(w[0]==='E')ne=v;}
+      const isArc=c.startsWith('G2')||c.startsWith('G3');
+      if(!(c.startsWith('G1')||c.startsWith('G0')||isArc))continue;
+      let nx=x,ny=y,nz=z,ne=null,I=null,J=null;
+      for(const w of c.split(' ')){const v=+w.slice(1);if(!isFinite(v))continue;if(w[0]==='X')nx=v;else if(w[0]==='Y')ny=v;else if(w[0]==='Z')nz=v;else if(w[0]==='E')ne=v;else if(w[0]==='I')I=v;else if(w[0]==='J')J=v;}
       let ext=0;if(ne!==null){ext=abs?ne-le:ne;if(abs)le=ne;}
-      if(ext>0.0001&&(nx!==x||ny!==y)){
-        if(!cur||Math.abs(nz-cur.z)>0.001){cur={z:nz,segs:[]};layers.push(cur);}
-        cur.segs.push([x,y,nx,ny]);
+      if(ext>0.0001){
+        if(isArc&&I!==null&&J!==null){ // teselar arco en segmentos para la vista previa
+          const cx=x+I,cy=y+J,r=Math.hypot(I,J),cw=c.startsWith('G2');
+          let a0=Math.atan2(y-cy,x-cx),a1=Math.atan2(ny-cy,nx-cx);
+          if(cw){while(a1>=a0)a1-=2*Math.PI;}else{while(a1<=a0)a1+=2*Math.PI;}
+          const steps=Math.max(2,Math.ceil(Math.abs(a1-a0)/0.2));
+          let pxx=x,pyy=y;
+          for(let s=1;s<=steps;s++){const a=a0+(a1-a0)*s/steps,qx=cx+r*Math.cos(a),qy=cy+r*Math.sin(a);pushSeg(pxx,pyy,qx,qy,nz);pxx=qx;pyy=qy;}
+        }else if(nx!==x||ny!==y){pushSeg(x,y,nx,ny,nz);}
       }
       x=nx;y=ny;z=nz;
     }
@@ -19275,8 +19487,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const kb=Math.round(S.gcode.length/1024);
     const pk=localStorage.getItem('sl_price_kg')||'15000',rh=localStorage.getItem('sl_rate_h')||'1500';
     const warns=[];
-    if(S.params.supports)warns.push('<b>Soportes activados</b>: columnas básicas en rejilla bajo los voladizos, pensadas para retirarse a mano. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
+    if(S.params.supports)warns.push('<b>Soportes activados</b>: '+(S.params.treeSupports?'tipo árbol (ramas que se fusionan en troncos, fáciles de retirar)':'columnas en rejilla bajo los voladizos, retirar a mano')+'. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
     if(S.params.raft)warns.push('Se pidió <b>raft</b>: no está soportado — se imprime brim como adhesión alternativa.');
+    if(S.params.arcFitting)warns.push('<b>Arcos G2/G3 activados</b>: el archivo es más liviano, pero tu Klipper debe tener <code>[gcode_arcs]</code> habilitado (las K1/K2 modernas lo traen). Si la impresora rechaza G2/G3, vuelve a desactivar esta opción.');
     const suggHint=suggested?`<div style="font-size:10px;color:var(--accent);margin-bottom:8px">💡 Impresora sugerida: <b>${escapeHtml(suggested.nombre)} #${suggested.numG}</b> — ${((_printerStatus[suggested.id]||{}).state||'offline')}</div>`:'';
     el('slResult').style.display='block';
     el('slResult').innerHTML=`
