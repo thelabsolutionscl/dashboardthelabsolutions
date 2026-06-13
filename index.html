@@ -5616,21 +5616,36 @@ async function crearTablaMaquinas(){
       {name:'modelo',type:'singleLineText'},
       {name:'color',type:'singleLineText'},
       {name:'ip',type:'singleLineText'},
+      {name:'cam',type:'singleLineText'},
       {name:'estado',type:'singleLineText'},
     ]})});
     return cr.ok;
   }catch(e){return false;}
 }
 
+async function ensureCamFieldMaquinas(){
+  const t=getToken();if(!t) return;
+  try{
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    if(!r.ok) return;
+    const d=await r.json();
+    const tbl=d.tables?.find(x=>x.name==='Maquinas');
+    if(!tbl) return;
+    if(tbl.fields?.find(f=>f.name==='cam')) return;
+    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'cam',type:'singleLineText'})});
+  }catch(e){}
+}
+
 async function loadMaquinasAirtable(){
   const t=getToken();if(!t){MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));return;}
   try{
+    await ensureCamFieldMaquinas();
     const res=await airtableFetch('Maquinas',200);
     const recs=res.records||[];
     if(recs.length===0){
       // Primera vez: crear tabla y poblar con la lista hardcodeada
       await crearTablaMaquinas();
-      const batch=MAQUINAS_HARDCODED.map(m=>({fields:{id:m.id,nombre:m.nombre,num:m.num,numG:m.numG,modelo:m.modelo,color:m.color,ip:m.ip||'',estado:'disponible'}}));
+      const batch=MAQUINAS_HARDCODED.map(m=>({fields:{id:m.id,nombre:m.nombre,num:m.num,numG:m.numG,modelo:m.modelo,color:m.color,ip:m.ip||'',cam:localStorage.getItem('printer_cam_'+m.id)||'',estado:'disponible'}}));
       for(let i=0;i<batch.length;i+=10){
         await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:batch.slice(i,i+10),typecast:true})});
       }
@@ -5648,12 +5663,15 @@ async function loadMaquinasAirtable(){
         modelo:r.fields.modelo||'K1',
         color:r.fields.color||'#00d4cc',
         ip:r.fields.ip||null,
+        cam:r.fields.cam||null,
         estado:r.fields.estado||'disponible',
       })).sort((a,b)=>a.numG-b.numG);
       // Aplica correcciones de IP del código sobre datos viejos de Airtable
       // (localStorage tiene prioridad si el usuario lo configuró manualmente)
       const _hcIp=Object.fromEntries(MAQUINAS_HARDCODED.filter(m=>m.ip).map(m=>[m.id,m.ip]));
       MAQUINAS=MAQUINAS.map(m=>({...m,ip:localStorage.getItem('printer_ip_'+m.id)||_hcIp[m.id]||m.ip}));
+      // Sincroniza cam URLs desde Airtable a localStorage (Airtable es fuente de verdad)
+      MAQUINAS.forEach(m=>{if(m.cam){localStorage.setItem('printer_cam_'+m.id,m.cam);}});
     }
   }catch(e){
     if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')){
@@ -10981,7 +10999,7 @@ function openWebcamModal(id){
   if(url){img.src=printerCamUrl(id);img.style.display='block';nf.style.display='none';}else{img.src='';img.style.display='none';nf.style.display='flex';}
   document.getElementById('webcamModal').style.display='flex';
 }
-function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);closeWebcamModal();renderMonitorGrid();toast(url?'📷 Webcam configurada — feed visible en la tarjeta':'Webcam eliminada','success');}
+function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);const m=MAQUINAS.find(x=>x.id===id);if(m){m.cam=url||null;if(m._airtableId){const t=getToken();if(t)fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{cam:url||''}})});}}closeWebcamModal();renderMonitorGrid();toast(url?'📷 Webcam configurada — guardada en Airtable':'Webcam eliminada','success');}
 function closeWebcamModal(){document.getElementById('webcamModal').style.display='none';document.getElementById('webcamModalImg').src='';}
 
 function openHistoryModal(id){
