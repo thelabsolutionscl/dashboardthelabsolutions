@@ -18371,7 +18371,7 @@ const SL3D=(function(){
     {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
     {k:'supports',l:'Soportes',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
-    {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},
+    {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
   const S={tris:null,prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null};
@@ -18521,9 +18521,9 @@ MATERIAL: ${mat} · OBJETIVO: ${obj}${notas?'\nNOTAS DEL OPERADOR: '+notas:''}`;
   }
   const IA_SYS=`Eres KAI-SLICER, ingeniero experto en impresión 3D FDM de The Lab Solutions (Santiago, Chile).
 Eliges parámetros de laminado óptimos según geometría de la pieza, material, impresora y objetivo.
-REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada.
+REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas básicas bajo voladizos flotantes). Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno disponibles: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), linear (rápido).
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"supportAngle":50,"brim":0,"raft":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"supportAngle":50,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
     if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
@@ -18556,7 +18556,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       speed:Math.round(vbase),firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
       supports:st.ovPct>8,supportAngle:50,
-      brim:st.hr>3?8:0,raft:false,
+      brim:st.hr>3?8:0,raft:false,ironing:obj==='calidad',
       retractDist:mat===MATS.TPU?0.5:0.8,retractSpeed:mat===MATS.TPU?20:35,zHop:0.2,
       };
     S.params=clampParams(p);
@@ -18579,7 +18579,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
       supports:!!p.supports&&p.supports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
-      brim:Math.round(cl(p.brim,0,20,0)),raft:!!p.raft&&p.raft!=='no',
+      brim:Math.round(cl(p.brim,0,20,0)),raft:!!p.raft&&p.raft!=='no',ironing:!!p.ironing&&p.ironing!=='no',
       retractDist:cl(p.retractDist,0,8,0.8),retractSpeed:Math.round(cl(p.retractSpeed,5,80,35)),
       zHop:cl(p.zHop,0,2,0.2),
     };
@@ -18695,6 +18695,56 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     for(let i=1;i<lines.length;i+=2)lines[i].reverse();
     return lines;
   }
+  // Punto dentro de polígono (ray casting) — para gyroid y soportes
+  function _pointInPoly(x,y,poly){
+    let inside=false,n=poly.length;
+    for(let i=0,j=n-1;i<n;j=i++){
+      const xi=poly[i][0],yi=poly[i][1],xj=poly[j][0],yj=poly[j][1];
+      if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;
+    }
+    return inside;
+  }
+  // Relleno giroide aproximado: ondas senoidales con fase que gira con Z (se entrelazan capa a capa)
+  function _gyroidFill(poly,spacing,z){
+    let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
+    for(const[x,y]of poly){if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;}
+    const period=Math.max(spacing*1.7,3),k=2*Math.PI/period,amp=spacing*0.5,step=Math.max(0.7,period/10);
+    const segs=[];let row=0;
+    for(let y0=mny+spacing/2;y0<mxy;y0+=spacing,row++){
+      const ph=k*z*0.6+(row%2?Math.PI:0);let prev=null;
+      for(let x=mnx;x<=mxx;x+=step){
+        const y=y0+amp*Math.sin(k*x+ph);
+        const ins=_pointInPoly(x,y,poly);
+        if(ins&&prev)segs.push([prev,[x,y]]);
+        prev=ins?[x,y]:null;
+      }
+    }
+    return segs;
+  }
+  // Despacho de patrón de relleno disperso
+  function _infill(poly,spacing,pattern,li,z){
+    if(pattern==='gyroid')return _gyroidFill(poly,spacing,z);
+    if(pattern==='grid')return _scanfill(poly,spacing*2,45).concat(_scanfill(poly,spacing*2,135));
+    if(pattern==='triangle'||pattern==='hex')return _scanfill(poly,spacing*3,0).concat(_scanfill(poly,spacing*3,60),_scanfill(poly,spacing*3,120));
+    return _scanfill(poly,spacing,li%2?135:45); // linear
+  }
+  // Líneas de soporte activas en una capa: agrupa columnas por fila y conecta tramos contiguos
+  function _supportLinesAtLayer(cols,li,gs){
+    const active=cols.filter(c=>c.top>=li&&c.bot<=li);
+    if(!active.length)return[];
+    const rows=new Map();
+    for(const c of active){const key=Math.round(c.y/gs);(rows.get(key)||rows.set(key,[]).get(key)).push(c);}
+    const lines=[];
+    for(const arr of rows.values()){
+      arr.sort((a,b)=>a.x-b.x);let rs=arr[0],prev=arr[0];
+      for(let i=1;i<arr.length;i++){
+        if(arr[i].x-prev.x<=gs*1.6){prev=arr[i];}
+        else{lines.push([[rs.x,rs.y],[prev.x,prev.y]]);rs=arr[i];prev=arr[i];}
+      }
+      lines.push([[rs.x,rs.y],[prev.x,prev.y]]);
+    }
+    return lines;
+  }
   function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p){
     let bi=0,bd=1e9;
     for(let i=0;i<poly.length;i++){const d=Math.hypot(poly[i][0]+ox-cX,poly[i][1]+oy-cY);if(d<bd){bd=d;bi=i;}}
@@ -18742,8 +18792,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     // ── Header ───────────────────────────────────
     gc.push('; The Lab Solutions — Native AI Slicer');
     gc.push(`; ${S.name} | ${modelName} | ${matName} | boquilla:${nozD}mm capa:${p.layerHeight}mm relleno:${p.infillPct}%`);
-    if(p.supports)gc.push('; ⚠ ADVERTENCIA: la pieza fue marcada con SOPORTES pero este slicer nativo aún NO los genera. Reorienta la pieza o usa un slicer con soportes si tiene voladizos pronunciados.');
-    if(p.raft)gc.push('; ⚠ ADVERTENCIA: RAFT solicitado pero no soportado por este slicer — se usa brim/skirt como adhesión.');
+    if(p.supports)gc.push('; soportes activados — columnas en rejilla bajo voladizos (básicos, retirar a mano)');
+    if(p.raft)gc.push('; nota: RAFT no soportado por este slicer — usa brim como adhesión alternativa');
     gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');
     gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
@@ -18773,6 +18823,22 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     const sortedIdx=Array.from({length:triCnt},(_,i)=>i).sort((a,b)=>triZmin[a]-triZmin[b]);
     const sliceZ=(z)=>_sliceIdx(tris,sortedIdx,triZmin,triZmax,z);
+    // ── Precomputar contornos por capa (una pasada, reusado por capas y soportes) ──
+    const layerTopZ=[],layerPolys=[];
+    {let z=0;for(let li=0;li<totalL;li++){z+=lhs[li];layerTopZ.push(z);let cs=sliceZ(z-lhs[li]/2).filter(c=>c.length>=3).map(c=>_polyArea(c)<0?[...c].reverse():c);cs.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)));layerPolys.push(cs);}}
+    // ── Soportes: columnas bajo voladizos flotantes (rejilla, crecen desde la cama) ──
+    let supCols=null;const SUP_GS=4;
+    if(p.supports){
+      setProg(3.5,'Calculando soportes…');await new Promise(r=>setTimeout(r,0));
+      const dx=S.stats.dx,dy=S.stats.dy,minZ=Math.max(0.8,lhs[0]+0.4),cols=[];
+      for(let gx=-dx/2+SUP_GS/2;gx<dx/2;gx+=SUP_GS)for(let gy=-dy/2+SUP_GS/2;gy<dy/2;gy+=SUP_GS){
+        let first=-1;
+        for(let li=0;li<totalL;li++){if(layerPolys[li].some(pl=>_pointInPoly(gx,gy,pl))){first=li;break;}}
+        if(first>0&&layerTopZ[first]>minZ)cols.push({x:gx,y:gy,bot:0,top:first-1}); // hasta 1 capa antes del voladizo (air gap)
+      }
+      supCols=cols.length?cols:null;
+      if(supCols)gc.push(`; soportes: ${supCols.length} columnas · rejilla ${SUP_GS}mm`);
+    }
     // ── Brim en capa 1 (antes del modelo) ────────
     let curZ=lhs[0],cX=3,cY=purgeY1;
     if(p.brim>0){
@@ -18797,23 +18863,34 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       const spd=li===0?p.firstLayerSpeed:p.speed;
       const isSolid=li<p.bottomLayers||li>=totalL-p.topLayers;
       const infillSpacing=isSolid?extW*1.02:p.infillPct>0?extW/(p.infillPct/100):999;
-      const angle=li%2===0?45:135;
       if(li===1&&p.fanPct>0)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; ventilador`);
       gc.push('');gc.push(`; === Capa ${li+1}/${totalL}  Z=${curZ.toFixed(3)}mm ===`);
       gc.push(`G1 Z${curZ.toFixed(3)} F600`);
-      const contours=sliceZ(curZ-lh/2);
+      // Soporte (antes del modelo de esta capa)
+      if(supCols){
+        const sl=_supportLinesAtLayer(supCols,li,SUP_GS);
+        if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p);}
+      }
+      const contours=layerPolys[li];
       if(!contours.length)continue;
-      contours.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)));
-      for(const raw of contours){
-        if(raw.length<3)continue;
-        const poly=_polyArea(raw)<0?[...raw].reverse():raw;
+      for(const poly of contours){
+        if(poly.length<3)continue;
         const shells=[poly];
         for(let s=1;s<p.shells;s++){const ins=_inset(shells[s-1],extW);if(ins&&ins.length>=3)shells.push(ins);else break;}
         for(let s=0;s<shells.length;s++)
           [E,cX,cY]=_printPoly(gc,shells[s],curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*(s===0?1:0.9))*60,p);
-        if(p.infillPct>0){
-          const lines=_scanfill(shells[shells.length-1],infillSpacing,angle);
+        const fillPoly=shells[shells.length-1];
+        if(isSolid){
+          const lines=_scanfill(fillPoly,infillSpacing,li%2?135:45);
           [E,cX,cY]=_printLines(gc,lines,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.1)*60,p);
+        }else if(p.infillPct>0){
+          const lines=_infill(fillPoly,infillSpacing,p.infillType,li,curZ);
+          [E,cX,cY]=_printLines(gc,lines,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.1)*60,p);
+        }
+        // Ironing: planchar la cara superior en la última capa
+        if(p.ironing&&li===totalL-1){
+          const ir=_scanfill(fillPoly,extW*0.5,li%2?45:135);
+          if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,curZ,offX,offY,cX,cY,E,lh*0.12,extW,Math.round(Math.min(spd,40))*60,p);}
         }
       }
       if(li%8===0){setProg(4+li/totalL*92,`Laminando capa ${li+1}/${totalL}…`);await new Promise(r=>setTimeout(r,0));}
@@ -18901,7 +18978,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const opts=machines.map(m=>`<option value="${m.id}" ${m.modelo===model?'selected':''}>${escapeHtml(m.nombre)} #${m.numG}</option>`).join('');
     const kb=Math.round(S.gcode.length/1024);
     const warns=[];
-    if(S.params.supports)warns.push('Esta pieza fue marcada con <b>soportes</b>, pero el slicer nativo todavía no los genera. Si tiene voladizos pronunciados, reorienta la pieza o lamínala en un slicer con soportes antes de imprimir.');
+    if(S.params.supports)warns.push('<b>Soportes activados</b>: columnas básicas en rejilla bajo los voladizos, pensadas para retirarse a mano. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
     if(S.params.raft)warns.push('Se pidió <b>raft</b>: no está soportado — se imprime brim como adhesión alternativa.');
     el('slResult').style.display='block';
     el('slResult').innerHTML=`
