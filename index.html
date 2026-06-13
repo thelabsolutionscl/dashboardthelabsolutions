@@ -18353,6 +18353,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
 {"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"supportAngle":50,"brim":0,"raft":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
+    if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
     const btn=el('slBtnIA');btn.disabled=true;btn.textContent='⏳ Analizando…';
     try{
       const out=await callClaude(IA_SYS,resumen());
@@ -18933,6 +18934,22 @@ trusted_clients:
     </div>
     <div id="gcodeUploadStatus" style="margin-top:8px;font-size:11px;color:var(--text3);min-height:20px">Subiendo...</div>
     <div id="gcodeUploadActions" style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button></div>
+  </div>
+</div>
+
+<div id="anthropicModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeAnthropicModal()"></div>
+  <div class="modal-card" style="max-width:440px;width:95vw">
+    <div class="modal-title">🔑 API Key de Anthropic</div>
+    <div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.6">Los agentes IA necesitan una API key de Anthropic (Claude). Pégala aquí — se guarda solo en este navegador. Puedes crearla en <strong style="color:var(--text)">console.anthropic.com</strong>.</div>
+    <div class="field-group" style="margin-top:14px">
+      <label class="field-label">API Key</label>
+      <input class="field-input" id="anthropicKeyInput" type="password" placeholder="sk-ant-..." autocomplete="off">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeAnthropicModal()" style="flex:1">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveAnthropicKey()" style="flex:1">Guardar y continuar</button>
+    </div>
   </div>
 </div>
 
