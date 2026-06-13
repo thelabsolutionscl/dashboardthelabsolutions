@@ -11184,6 +11184,10 @@ function checkTransitions(m,s){
       saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,st==='complete'?'Completado':'Cancelado',filamentMm);
       delete _sessions[m.id];
       if(st==='complete'){
+        // Auto-calibrar estimación de tiempo por modelo de impresora
+        const estKey='sl_last_est_secs';const estSecs=parseFloat(localStorage.getItem(estKey));
+        if(estSecs>0&&dur>0){const ratio=(dur*60)/estSecs;if(ratio>0.4&&ratio<4){const calKey='sl_time_cal_'+(m.modelo||'default');const prev=parseFloat(localStorage.getItem(calKey))||1;localStorage.setItem(calKey,(prev*0.75+ratio*0.25).toFixed(4));}}
+        localStorage.removeItem(estKey);
         const title=`✅ ${m.nombre} #${m.numG} completado`;
         sendBrowserNotification(title,`${sess.file} · ${dur}m`);
         _sendWaAlertIfEnabled(title,`Archivo: ${sess.file} | Duración: ${dur} min`);
@@ -18476,7 +18480,8 @@ const SL3D=(function(){
     {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','linear']},
     {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
-    {k:'supports',l:'Soportes',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
+    {k:'supports',l:'Soportes',sel:['no','sí']},{k:'treeSupports',l:'Soporte árbol',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
+    {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
     {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
@@ -18628,9 +18633,9 @@ MATERIAL: ${mat} · OBJETIVO: ${obj}${notas?'\nNOTAS DEL OPERADOR: '+notas:''}`;
   }
   const IA_SYS=`Eres KAI-SLICER, ingeniero experto en impresión 3D FDM de The Lab Solutions (Santiago, Chile).
 Eliges parámetros de laminado óptimos según geometría de la pieza, material, impresora y objetivo.
-REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas básicas bajo voladizos flotantes). Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno disponibles: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), linear (rápido).
+REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). treeSupports=true cuando haya voladizos complejos o múltiples: genera ramas que se fusionan en troncos, mucho más fáciles de retirar. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno disponibles: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), linear (rápido).
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"supportAngle":50,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
     if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
@@ -18662,7 +18667,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       infillType:obj==='resistente'?'gyroid':'grid',
       speed:Math.round(vbase),firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
-      supports:st.ovPct>8,supportAngle:50,
+      supports:st.ovPct>8,treeSupports:st.ovPct>8&&obj==='calidad',supportAngle:50,
+      adaptiveLayerHeight:obj==='calidad',
       brim:st.hr>3?8:0,raft:false,ironing:obj==='calidad',
       retractDist:mat===MATS.TPU?0.5:0.8,retractSpeed:mat===MATS.TPU?20:35,zHop:0.2,
       };
@@ -18685,7 +18691,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),
       nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
-      supports:!!p.supports&&p.supports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
+      supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
+      adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
       brim:Math.round(cl(p.brim,0,20,0)),raft:!!p.raft&&p.raft!=='no',ironing:!!p.ironing&&p.ironing!=='no',
       retractDist:cl(p.retractDist,0,8,0.8),retractSpeed:Math.round(cl(p.retractSpeed,5,80,35)),
       zHop:cl(p.zHop,0,2,0.2),
@@ -18852,6 +18859,77 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return lines;
   }
+  // ── Soportes tipo árbol ─────────────────────────────────────
+  function _buildTreeSupport(cols){
+    if(!cols||!cols.length)return[];
+    const n=cols.length,parent=Array.from({length:n},(_,i)=>i);
+    const MERGE_R=9;
+    function find(i){return parent[i]===i?i:(parent[i]=find(parent[i]));}
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)
+      if(Math.hypot(cols[i].x-cols[j].x,cols[i].y-cols[j].y)<MERGE_R)parent[find(i)]=find(j);
+    const map=new Map();
+    for(let i=0;i<n;i++){const r=find(i);(map.get(r)||map.set(r,[]).get(r)).push(cols[i]);}
+    return Array.from(map.values()).map(mem=>{
+      const cx=mem.reduce((s,c)=>s+c.x,0)/mem.length;
+      const cy=mem.reduce((s,c)=>s+c.y,0)/mem.length;
+      const topLi=Math.max(...mem.map(c=>c.top));
+      return{mem,cx,cy,topLi};
+    });
+  }
+  function _treeSupportAtLayer(trees,li,extW){
+    if(!trees||!trees.length)return[];
+    const lines=[];
+    for(const tree of trees){
+      const{mem,cx,cy,topLi}=tree;
+      const active=mem.filter(c=>c.top>=li&&c.bot<=li);
+      if(!active.length)continue;
+      const BRANCH=5;// layers of branching zone
+      if(li>=topLi-BRANCH){
+        // Branch zone: thin lines from trunk point toward each contact
+        const prog=Math.max(0,(li-(topLi-BRANCH))/BRANCH);
+        for(const c of active){
+          const bx=cx+(c.x-cx)*prog,by=cy+(c.y-cy)*prog;
+          lines.push([[cx+(c.x-cx)*Math.max(0,prog-0.4),cy+(c.y-cy)*Math.max(0,prog-0.4)],[bx,by]]);
+          if(li===c.top){// contact pad: cross at overhang point
+            const r=extW*1.2;
+            lines.push([[c.x-r,c.y],[c.x+r,c.y]]);
+          }
+        }
+      }else{
+        // Trunk: thin cross, alternates direction each layer for bonding
+        const r=Math.min(2.5,1+active.length*0.15);
+        lines.push([[cx-r,cy],[cx+r,cy]]);
+        if(li%2===0)lines.push([[cx,cy-r],[cx,cy+r]]);
+      }
+    }
+    return lines;
+  }
+  // ── Adaptive layer heights ──────────────────────────────────
+  async function _buildAdaptiveLayers(sliceZFn,p,zMax){
+    const minLH=Math.max(0.05,+(p.layerHeight*0.45).toFixed(2));
+    const maxLH=Math.min(+(p.layerHeight*1.4).toFixed(2),0.4);
+    const STEP=maxLH;
+    const samples=[];
+    for(let z=STEP;z<=zMax+STEP;z+=STEP){
+      const cs=sliceZFn(Math.min(z,zMax)).filter(c=>c.length>=3);
+      samples.push(cs.reduce((s,c)=>s+Math.abs(_polyArea(c)),0));
+    }
+    // Normalise slope
+    const slopes=samples.map((a,i)=>i===0||i===samples.length-1?0:Math.abs(samples[i+1]-samples[i-1])/(2*STEP));
+    const maxSlope=Math.max(...slopes,1);
+    const lhs=[p.firstLayerHeight];
+    let zSum=p.firstLayerHeight,si=0;
+    while(zSum<zMax-0.001){
+      while(si<slopes.length-1&&(si+1)*STEP<=zSum)si++;
+      const sn=Math.min(1,slopes[si]/maxSlope);
+      let lh=+(maxLH-(maxLH-minLH)*sn).toFixed(2);
+      lh=Math.round(lh/0.05)*0.05;
+      lh=Math.max(minLH,Math.min(maxLH,Math.min(lh,zMax-zSum)));
+      if(lh<minLH*0.15)break;
+      lhs.push(lh);zSum+=lh;
+    }
+    return lhs;
+  }
   function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p){
     let bi=0,bd=1e9;
     for(let i=0;i<poly.length;i++){const d=Math.hypot(poly[i][0]+ox-cX,poly[i][1]+oy-cY);if(d<bd){bd=d;bi=i;}}
@@ -18912,14 +18990,20 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     gc.push('G92 E0');E=0;gc.push('G1 Z2 F900');
     // ── Calcular capas ───────────────────────────
     const zMax=S.stats.dz;
-    const lhs=[p.firstLayerHeight];let zSum=p.firstLayerHeight;
-    while(zSum<zMax-0.001){
-      const lh=Math.min(p.layerHeight,zMax-zSum);
-      if(lh<p.layerHeight*0.15)break;
-      lhs.push(lh);zSum+=lh;
+    let lhs;
+    if(p.adaptiveLayerHeight){
+      setProg(2.5,'Calculando alturas de capa adaptativas…');await new Promise(r=>setTimeout(r,0));
+      const triCntPre=tris.length/9;
+      const tzmin=new Float32Array(triCntPre),tzmax=new Float32Array(triCntPre);
+      for(let i=0;i<triCntPre;i++){const b=i*9,z0=tris[b+2],z1=tris[b+5],z2=tris[b+8];tzmin[i]=Math.min(z0,z1,z2);tzmax[i]=Math.max(z0,z1,z2);}
+      const sidxPre=Array.from({length:triCntPre},(_,i)=>i).sort((a,b)=>tzmin[a]-tzmin[b]);
+      lhs=await _buildAdaptiveLayers(z=>_sliceIdx(tris,sidxPre,tzmin,tzmax,z),p,zMax);
+    }else{
+      lhs=[p.firstLayerHeight];let zSum=p.firstLayerHeight;
+      while(zSum<zMax-0.001){const lh=Math.min(p.layerHeight,zMax-zSum);if(lh<p.layerHeight*0.15)break;lhs.push(lh);zSum+=lh;}
     }
     const totalL=lhs.length;
-    setProg(3,`${totalL} capas para ${zMax.toFixed(1)}mm de modelo…`);
+    setProg(3,`${totalL} capas para ${zMax.toFixed(1)}mm${p.adaptiveLayerHeight?' (adaptativas)':''}…`);
     await new Promise(r=>setTimeout(r,0));
     // ── Índice de triángulos ordenado por Zmin (sweep line) ───
     const triCnt=tris.length/9;
@@ -18933,18 +19017,20 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     // ── Precomputar contornos por capa (una pasada, reusado por capas y soportes) ──
     const layerTopZ=[],layerPolys=[];
     {let z=0;for(let li=0;li<totalL;li++){z+=lhs[li];layerTopZ.push(z);let cs=sliceZ(z-lhs[li]/2).filter(c=>c.length>=3).map(c=>_polyArea(c)<0?[...c].reverse():c);cs.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)));layerPolys.push(cs);}}
-    // ── Soportes: columnas bajo voladizos flotantes (rejilla, crecen desde la cama) ──
-    let supCols=null;const SUP_GS=4;
+    // ── Soportes: columnas bajo voladizos (rejilla o árbol) ──
+    let supCols=null,supTrees=null;const SUP_GS=4;
     if(p.supports){
       setProg(3.5,'Calculando soportes…');await new Promise(r=>setTimeout(r,0));
       const dx=S.stats.dx,dy=S.stats.dy,minZ=Math.max(0.8,lhs[0]+0.4),cols=[];
       for(let gx=-dx/2+SUP_GS/2;gx<dx/2;gx+=SUP_GS)for(let gy=-dy/2+SUP_GS/2;gy<dy/2;gy+=SUP_GS){
         let first=-1;
         for(let li=0;li<totalL;li++){if(layerPolys[li].some(pl=>_pointInPoly(gx,gy,pl))){first=li;break;}}
-        if(first>0&&layerTopZ[first]>minZ)cols.push({x:gx,y:gy,bot:0,top:first-1}); // hasta 1 capa antes del voladizo (air gap)
+        if(first>0&&layerTopZ[first]>minZ)cols.push({x:gx,y:gy,bot:0,top:first-1});
       }
-      supCols=cols.length?cols:null;
-      if(supCols)gc.push(`; soportes: ${supCols.length} columnas · rejilla ${SUP_GS}mm`);
+      if(cols.length){
+        if(p.treeSupports){supTrees=_buildTreeSupport(cols);gc.push(`; soportes árbol: ${supTrees.length} ramas · ${cols.length} puntos contacto`);}
+        else{supCols=cols;gc.push(`; soportes: ${cols.length} columnas · rejilla ${SUP_GS}mm`);}
+      }
     }
     // ── Brim en capa 1 (antes del modelo) ────────
     let curZ=lhs[0],cX=3,cY=purgeY1;
@@ -18977,6 +19063,10 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       if(supCols){
         const sl=_supportLinesAtLayer(supCols,li,SUP_GS);
         if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p);}
+      }
+      if(supTrees){
+        const sl=_treeSupportAtLayer(supTrees,li,extW);
+        if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p);}
       }
       const contours=layerPolys[li];
       if(!contours.length)continue;
@@ -19046,13 +19136,24 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       if(!gcode.includes('G1'))throw new Error('slicer produjo G-code vacío');
       S.gcode=gcode;
       setProg(100,'✓ G-code listo');
-      renderResult(estimate(gcode,MATS[matName]));
+      const _est=estimate(gcode,MATS[matName],model);
+      localStorage.setItem('sl_last_est_secs',_est.secs.toFixed(1));
+      renderResult(_est);
     }catch(e){
       setProg(0,'✕ Error');
       toast('Error al laminar: '+e.message,'error');
     }finally{btn.disabled=false;}
   }
-  function estimate(gc,mat){
+  // Perfil de velocidad trapezoidal — tiempo real por segmento
+  const _ACCELS={'K1':18000,'K2':18000,'K2 Plus':15000,'Ender-5 Max':5000,'Giga':2000};
+  function _moveTime(d,v,accel){
+    if(d<0.001)return 0;
+    const da=v*v/(2*accel);// dist para alcanzar v desde 0
+    if(d>=2*da)return 2*v/accel+(d-2*da)/v;
+    return 2*Math.sqrt(d/accel);
+  }
+  function estimate(gc,mat,printerModel){
+    const accel=_ACCELS[printerModel]||8000;
     let t=0,e=0,x=0,y=0,z=0,le=0,f=3000,abs=true;
     for(const raw of gc.split('\n')){
       const c=raw.trim();if(!c||c[0]===';')continue;
@@ -19066,13 +19167,14 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         if(w[0]==='X')nx=v;else if(w[0]==='Y')ny=v;else if(w[0]==='Z')nz=v;else if(w[0]==='E')ne=v;else if(w[0]==='F')f=v;
       }
       const d=Math.hypot(nx-x,ny-y,nz-z);
-      let ext=0;
-      if(ne!==null){ext=abs?ne-le:ne;if(abs)le=ne;if(ext>0)e+=ext;}
-      t+=Math.max(d,Math.abs(ext))/(f/60);
+      if(d>0.001)t+=_moveTime(d,f/60,accel);
+      if(ne!==null){const ext=abs?ne-le:ne;if(abs)le=ne;if(ext>0)e+=ext;}
       x=nx;y=ny;z=nz;
     }
-    t*=1.08; // margen por aceleraciones
-    const volMm3=e*Math.PI*0.765625; // área filamento 1.75mm
+    // Auto-calibración por impresora desde historial Moonraker
+    const cal=parseFloat(localStorage.getItem('sl_time_cal_'+(printerModel||'default')))||1.0;
+    t*=cal;
+    const volMm3=e*Math.PI*0.765625;
     return{secs:t,filM:e/1000,grams:volMm3/1000*mat.dens};
   }
   function fmtTime(s){const h=Math.floor(s/3600),m=Math.round(s%3600/60);return h?`${h}h ${m}min`:`${m}min`;}
