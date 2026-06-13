@@ -2656,7 +2656,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div id="maquinaSlicerView" class="maquina-section" style="margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🧠 Agente de impresión 3D</span>
-      <span class="badge badge-purple">STL / OBJ → G-code · IA + Kiri:Moto</span>
+      <span class="badge badge-purple">STL / OBJ → G-code · IA + slicer nativo</span>
     </div>
     <div class="card" style="padding:18px">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px">
@@ -18347,9 +18347,9 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
 </script>
 
 <script>
-// ── AGENTE DE IMPRESIÓN 3D — STL/OBJ → G-code con IA + Kiri:Moto ─────
+// ── AGENTE DE IMPRESIÓN 3D — STL/OBJ → G-code con IA + slicer nativo ─────
 // Flujo: cargar STL/OBJ → análisis geométrico local → Claude elige parámetros
-// → laminado real en el navegador (motor Kiri:Moto) → descarga o envío Moonraker.
+// → laminado nativo en el navegador (sin dependencias) → descarga o envío Moonraker.
 const SL3D=(function(){
   const SPECS={
     'K1':{x:220,y:220,z:250,vmax:300},
@@ -18565,6 +18565,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   function clampParams(p){
     const noz=+el('slNozzle').value,spec=SPECS[el('slPrinter').value];
+    const mat=MATS[el('slMaterial').value]||{};
+    const vmax=Math.min(spec.vmax,mat.vcap||spec.vmax); // tope de velocidad por impresora Y material (TPU 35mm/s)
     const cl=(v,a,b,d)=>{v=+v;return isFinite(v)?Math.min(b,Math.max(a,v)):d;};
     return{
       layerHeight:cl(p.layerHeight,0.05,noz*0.8,noz*0.5),
@@ -18572,7 +18574,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       shells:Math.round(cl(p.shells,1,8,2)),topLayers:Math.round(cl(p.topLayers,0,10,4)),bottomLayers:Math.round(cl(p.bottomLayers,0,10,3)),
       infillPct:Math.round(cl(p.infillPct,0,100,15)),
       infillType:['grid','gyroid','triangle','hex','linear'].includes(p.infillType)?p.infillType:'grid',
-      speed:Math.round(cl(p.speed,10,spec.vmax,60)),firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,80,30)),
+      speed:Math.round(cl(p.speed,10,vmax,60)),firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
       travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),
       nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
@@ -18698,11 +18700,17 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     for(let i=0;i<poly.length;i++){const d=Math.hypot(poly[i][0]+ox-cX,poly[i][1]+oy-cY);if(d<bd){bd=d;bi=i;}}
     const ord=[...poly.slice(bi),...poly.slice(0,bi)];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy;
-    E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
-    if(p.zHop>0)gc.push(`G1 Z${(z+p.zHop).toFixed(3)} F600`);
-    gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
-    if(p.zHop>0)gc.push(`G1 Z${z.toFixed(3)} F600`);
-    E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+    // Solo retraer/z-hop si el salto es real — evita retracciones inútiles entre paredes concéntricas
+    const td=Math.hypot(sx-cX,sy-cY),doRet=td>extW*3;
+    if(doRet){
+      E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+      if(p.zHop>0&&td>5)gc.push(`G1 Z${(z+p.zHop).toFixed(3)} F600`);
+      gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
+      if(p.zHop>0&&td>5)gc.push(`G1 Z${z.toFixed(3)} F600`);
+      E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+    }else{
+      gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
+    }
     cX=sx;cY=sy;
     for(let i=1;i<=ord.length;i++){
       const pt=ord[i%ord.length];const px=pt[0]+ox,py=pt[1]+oy;
@@ -18734,6 +18742,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     // ── Header ───────────────────────────────────
     gc.push('; The Lab Solutions — Native AI Slicer');
     gc.push(`; ${S.name} | ${modelName} | ${matName} | boquilla:${nozD}mm capa:${p.layerHeight}mm relleno:${p.infillPct}%`);
+    if(p.supports)gc.push('; ⚠ ADVERTENCIA: la pieza fue marcada con SOPORTES pero este slicer nativo aún NO los genera. Reorienta la pieza o usa un slicer con soportes si tiene voladizos pronunciados.');
+    if(p.raft)gc.push('; ⚠ ADVERTENCIA: RAFT solicitado pero no soportado por este slicer — se usa brim/skirt como adhesión.');
     gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');
     gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
@@ -18890,8 +18900,12 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const machines=MAQUINAS.filter(m=>getPrinterIp(m));
     const opts=machines.map(m=>`<option value="${m.id}" ${m.modelo===model?'selected':''}>${escapeHtml(m.nombre)} #${m.numG}</option>`).join('');
     const kb=Math.round(S.gcode.length/1024);
+    const warns=[];
+    if(S.params.supports)warns.push('Esta pieza fue marcada con <b>soportes</b>, pero el slicer nativo todavía no los genera. Si tiene voladizos pronunciados, reorienta la pieza o lamínala en un slicer con soportes antes de imprimir.');
+    if(S.params.raft)warns.push('Se pidió <b>raft</b>: no está soportado — se imprime brim como adhesión alternativa.');
     el('slResult').style.display='block';
     el('slResult').innerHTML=`
+      ${warns.length?`<div style="padding:11px 13px;margin-bottom:12px;background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:10px;font-size:11px;color:#ffaa00;line-height:1.5">⚠ ${warns.join('<br>⚠ ')}</div>`:''}
       <div style="padding:14px;background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.3);border-radius:10px">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
           <span class="badge badge-green">⏱ ~${fmtTime(est.secs)}</span>
