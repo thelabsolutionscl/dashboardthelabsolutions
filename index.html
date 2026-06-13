@@ -18445,21 +18445,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   // ── Slicer nativo (sin dependencias externas) ────────────────
   // Algoritmos: intersección triángulo-plano → contornos → shells (inset miter) → infill scanline
   const FILA_AREA=Math.PI*0.765625; // sección filamento 1.75mm = π·0.875²
-  function sliceAtZ(t,z){
-    const segs=[];
-    for(let i=0;i<t.length;i+=9){
-      const A=[t[i],t[i+1],t[i+2]],B=[t[i+3],t[i+4],t[i+5]],C=[t[i+6],t[i+7],t[i+8]];
-      const pts=[A,B,C];const cr=[];
-      for(let a=0;a<3;a++){const pa=pts[a],pb=pts[(a+1)%3];
-        if((pa[2]>z)!==(pb[2]>z)){const tt=(z-pa[2])/(pb[2]-pa[2]);cr.push([pa[0]+tt*(pb[0]-pa[0]),pa[1]+tt*(pb[1]-pa[1])]);}
-      }
-      if(cr.length===2)segs.push(cr);
-    }
-    return _buildContours(segs);
-  }
   function _buildContours(segs){
     if(!segs.length)return[];
-    const EPS=0.01,round=v=>Math.round(v/EPS),K=(p)=>`${round(p[0])},${round(p[1])}`;
+    const EPS=0.05,round=v=>Math.round(v/EPS),K=(p)=>`${round(p[0])},${round(p[1])}`;
     const map=new Map();
     for(let i=0;i<segs.length;i++){
       const k0=K(segs[i][0]),k1=K(segs[i][1]);
@@ -18480,6 +18468,23 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return contours;
   }
+  // Slicea el mesh en Z dado usando solo los triángulos del índice ordenado
+  function _sliceIdx(tris,sortedIdx,triZmin,triZmax,z){
+    const segs=[];
+    for(const i of sortedIdx){
+      if(triZmin[i]>z)break; // todos los siguientes están por encima
+      if(triZmax[i]<=z)continue; // este triángulo está completamente abajo
+      const b=i*9;
+      const pts=[[tris[b],tris[b+1],tris[b+2]],[tris[b+3],tris[b+4],tris[b+5]],[tris[b+6],tris[b+7],tris[b+8]]];
+      const cr=[];
+      for(let a=0;a<3;a++){const pa=pts[a],pb=pts[(a+1)%3];
+        if((pa[2]>z)!==(pb[2]>z)){const tt=(z-pa[2])/(pb[2]-pa[2]);cr.push([pa[0]+tt*(pb[0]-pa[0]),pa[1]+tt*(pb[1]-pa[1])]);}
+      }
+      if(cr.length===2)segs.push(cr);
+    }
+    return _buildContours(segs);
+  }
+  function sliceAtZ(t,z){return _sliceIdx(t,Array.from({length:t.length/9},(_,i)=>i),new Float32Array(t.length/9),new Float32Array(t.length/9).fill(Infinity),z);}
   function _polyArea(p){let a=0;const n=p.length;for(let i=0;i<n;i++){const j=(i+1)%n;a+=p[i][0]*p[j][1]-p[j][0]*p[i][1];}return a/2;}
   function _inset(poly,d){
     const n=poly.length;if(n<3||d<=0)return poly;
@@ -18551,7 +18556,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   async function _nativeSlice(tris,p,spec,nozD,matName,modelName){
     const extW=nozD*1.05;
-    const offX=spec.x/2,offY=spec.y/2; // centro del modelo en la cama
+    const offX=spec.x/2,offY=spec.y/2;
     const gc=[];let E=0;
     // ── Header ───────────────────────────────────
     gc.push('; The Lab Solutions — Native AI Slicer');
@@ -18559,67 +18564,101 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');
     gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
-    // Línea de purga (borde izquierdo de la cama)
+    // Línea de purga
     const purgeY0=5,purgeY1=Math.min(spec.y-5,55);
-    gc.push(`G1 Z${p.firstLayerHeight} F600`);gc.push(`G1 X3 Y${purgeY0} F3000`);
-    const purgeLen=purgeY1-purgeY0;
-    E+=purgeLen*extW*p.firstLayerHeight/FILA_AREA;
+    gc.push(`G1 Z${p.firstLayerHeight.toFixed(3)} F600`);gc.push(`G1 X3 Y${purgeY0} F3000`);
+    E+=(purgeY1-purgeY0)*extW*p.firstLayerHeight/FILA_AREA;
     gc.push(`G1 X3 Y${purgeY1} E${E.toFixed(4)} F${p.firstLayerSpeed*60}`);
     gc.push('G92 E0');E=0;gc.push('G1 Z2 F900');
     // ── Calcular capas ───────────────────────────
-    const zMax=S.stats.dz;const lhs=[p.firstLayerHeight];let zSum=p.firstLayerHeight;
-    while(zSum<zMax-0.001){const lh=Math.min(p.layerHeight,zMax-zSum);if(lh<p.layerHeight*0.2)break;lhs.push(lh);zSum+=lh;}
-    const totalL=lhs.length;let curZ=0,cX=3,cY=purgeY1;
+    const zMax=S.stats.dz;
+    const lhs=[p.firstLayerHeight];let zSum=p.firstLayerHeight;
+    while(zSum<zMax-0.001){
+      const lh=Math.min(p.layerHeight,zMax-zSum);
+      if(lh<p.layerHeight*0.15)break;
+      lhs.push(lh);zSum+=lh;
+    }
+    const totalL=lhs.length;
+    setProg(3,`${totalL} capas para ${zMax.toFixed(1)}mm de modelo…`);
+    await new Promise(r=>setTimeout(r,0));
+    // ── Índice de triángulos ordenado por Zmin (sweep line) ───
+    const triCnt=tris.length/9;
+    const triZmin=new Float32Array(triCnt),triZmax=new Float32Array(triCnt);
+    for(let i=0;i<triCnt;i++){
+      const b=i*9,z0=tris[b+2],z1=tris[b+5],z2=tris[b+8];
+      triZmin[i]=Math.min(z0,z1,z2);triZmax[i]=Math.max(z0,z1,z2);
+    }
+    const sortedIdx=Array.from({length:triCnt},(_,i)=>i).sort((a,b)=>triZmin[a]-triZmin[b]);
+    const sliceZ=(z)=>_sliceIdx(tris,sortedIdx,triZmin,triZmax,z);
+    // ── Brim en capa 1 (antes del modelo) ────────
+    let curZ=lhs[0],cX=3,cY=purgeY1;
+    if(p.brim>0){
+      gc.push(`\n; === Brim (capa 1) ===`);
+      gc.push(`G1 Z${curZ.toFixed(3)} F600`);
+      const brimContours=sliceZ(curZ*0.5);
+      if(brimContours.length){
+        const bigPoly=brimContours.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)))[0];
+        let ring=bigPoly;
+        for(let b=0;b<p.brim;b++){
+          // expandir hacia afuera (d negativo)
+          const outer=_insetRaw(ring,-extW*(b+1));
+          if(!outer||outer.length<3)break;
+          [E,cX,cY]=_printPoly(gc,outer,curZ,offX,offY,cX,cY,E,lhs[0],extW,p.firstLayerSpeed*60,p);
+        }
+      }
+    }
     // ── Capas ────────────────────────────────────
+    curZ=0;
     for(let li=0;li<totalL;li++){
       const lh=lhs[li];curZ+=lh;
       const spd=li===0?p.firstLayerSpeed:p.speed;
       const isSolid=li<p.bottomLayers||li>=totalL-p.topLayers;
-      const spacing=isSolid?extW*1.02:(extW/(p.infillPct/100));
-      const angle=(li%2===0?45:135);
+      const infillSpacing=isSolid?extW*1.02:p.infillPct>0?extW/(p.infillPct/100):999;
+      const angle=li%2===0?45:135;
       if(li===1&&p.fanPct>0)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; ventilador`);
       gc.push('');gc.push(`; === Capa ${li+1}/${totalL}  Z=${curZ.toFixed(3)}mm ===`);
       gc.push(`G1 Z${curZ.toFixed(3)} F600`);
-      const sampleZ=curZ-lh/2;
-      const contours=sliceAtZ(tris,sampleZ);
+      const contours=sliceZ(curZ-lh/2);
       if(!contours.length)continue;
       contours.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)));
       for(const raw of contours){
         if(raw.length<3)continue;
-        const area=_polyArea(raw);
-        const poly=area<0?[...raw].reverse():raw;
+        const poly=_polyArea(raw)<0?[...raw].reverse():raw;
         const shells=[poly];
         for(let s=1;s<p.shells;s++){const ins=_inset(shells[s-1],extW);if(ins&&ins.length>=3)shells.push(ins);else break;}
-        for(let s=0;s<shells.length;s++){
-          const feed=Math.round(spd*(s===0?1:0.9))*60;
-          [E,cX,cY]=_printPoly(gc,shells[s],curZ,offX,offY,cX,cY,E,lh,extW,feed,p);
-        }
+        for(let s=0;s<shells.length;s++)
+          [E,cX,cY]=_printPoly(gc,shells[s],curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*(s===0?1:0.9))*60,p);
         if(p.infillPct>0){
-          const inner=shells[shells.length-1];
-          const lines=_scanfill(inner,spacing,angle);
+          const lines=_scanfill(shells[shells.length-1],infillSpacing,angle);
           [E,cX,cY]=_printLines(gc,lines,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.1)*60,p);
         }
       }
       if(li%8===0){setProg(4+li/totalL*92,`Laminando capa ${li+1}/${totalL}…`);await new Promise(r=>setTimeout(r,0));}
     }
-    // ── Brim ─────────────────────────────────────
-    if(p.brim>0){
-      const brimZ=lhs[0];const baseContours=sliceAtZ(tris,brimZ/2);
-      if(baseContours.length){
-        gc.push('\n; === Brim ===');
-        const bigPoly=baseContours.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)))[0];
-        let ring=bigPoly;
-        for(let b=0;b<p.brim;b++){
-          const outer=_inset(ring,-extW);if(!outer)break;
-          [E,cX,cY]=_printPoly(gc,outer,brimZ,offX,offY,cX,cY,E,brimZ,extW,p.firstLayerSpeed*60,p);ring=outer;
-        }
-      }
-    }
     // ── Footer ───────────────────────────────────
-    gc.push('\nM107 ; ventilador off');gc.push('M104 S0 ; hotend off');gc.push('M140 S0 ; cama off');
-    gc.push('G92 E0');gc.push('G91 ; relativo');gc.push('G1 Z5 F900');gc.push('G90 ; absoluto');
-    gc.push(`G1 X0 Y${Math.min(spec.y-10,spec.y-10).toFixed(0)} F3000 ; aparcar`);gc.push('M84 ; motores off');
+    gc.push('\nM107');gc.push('M104 S0');gc.push('M140 S0');
+    gc.push('G92 E0');gc.push('G91');gc.push('G1 Z5 F900');gc.push('G90');
+    gc.push(`G1 X0 Y${(spec.y-10).toFixed(0)} F3000`);gc.push('M84');
     return gc.join('\n');
+  }
+  // Versión de _inset sin validación de área (para expansiones del brim)
+  function _insetRaw(poly,d){
+    const n=poly.length;if(n<3)return null;
+    const res=[];
+    for(let i=0;i<n;i++){
+      const prev=poly[(i-1+n)%n],curr=poly[i],next=poly[(i+1)%n];
+      let e1x=curr[0]-prev[0],e1y=curr[1]-prev[1];let e2x=next[0]-curr[0],e2y=next[1]-curr[1];
+      const l1=Math.hypot(e1x,e1y),l2=Math.hypot(e2x,e2y);
+      if(!l1||!l2){res.push(curr);continue;}
+      e1x/=l1;e1y/=l1;e2x/=l2;e2y/=l2;
+      const n1x=-e1y,n1y=e1x,n2x=-e2y,n2y=e2x;
+      const mx=n1x+n2x,my=n1y+n2y,ml=Math.hypot(mx,my);
+      if(!ml){res.push([curr[0]+n1x*d,curr[1]+n1y*d]);continue;}
+      const dot=n1x*n2x+n1y*n2y,ms=d/Math.max(0.25,Math.sqrt((1+dot)/2));
+      const clamp=Math.min(Math.abs(ms),Math.abs(d)*5)*Math.sign(ms);
+      res.push([curr[0]+(mx/ml)*clamp,curr[1]+(my/ml)*clamp]);
+    }
+    return res.length>=3?res:null;
   }
   function setProg(pct,msg){
     el('slProgWrap').style.display='block';
