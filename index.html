@@ -18972,11 +18972,72 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   function gcodeFileName(){
     return(S.name||'pieza').replace(/[^\w\-]+/g,'_')+'_'+el('slMaterial').value+'_'+S.params.layerHeight+'mm.gcode';
   }
+  function _money(n){return '$'+Math.round(n||0).toLocaleString('es-CL');}
+  function costRecalc(){
+    const pk=+(el('slPriceKg')?.value)||0,rh=+(el('slRateH')?.value)||0;
+    try{localStorage.setItem('sl_price_kg',pk);localStorage.setItem('sl_rate_h',rh);}catch(e){}
+    const est=S.est;if(!est)return;
+    const fc=est.grams/1000*pk,tc=est.secs/3600*rh,tot=fc+tc;
+    const out=el('slCostOut');
+    if(out)out.innerHTML=`<b style="color:var(--accent3);font-size:16px">${_money(tot)}</b> <span style="color:var(--text3);font-size:10px">= filamento ${_money(fc)} + máquina ${_money(tc)}</span>`;
+  }
+  // ── Vista previa del G-code por capas ───────────────────────
+  function _parseGcodeLayers(){
+    const layers=[];let cur=null,x=0,y=0,z=0,le=0,abs=true;
+    for(const raw of S.gcode.split('\n')){
+      const c=raw.trim();if(!c||c[0]===';')continue;
+      if(c.startsWith('M82')){abs=true;continue;}
+      if(c.startsWith('M83')){abs=false;continue;}
+      if(c.startsWith('G92')){const m=/E([-\d.]+)/.exec(c);if(m)le=+m[1];continue;}
+      if(!(c.startsWith('G1')||c.startsWith('G0')))continue;
+      let nx=x,ny=y,nz=z,ne=null;
+      for(const w of c.split(' ')){const v=+w.slice(1);if(!isFinite(v))continue;if(w[0]==='X')nx=v;else if(w[0]==='Y')ny=v;else if(w[0]==='Z')nz=v;else if(w[0]==='E')ne=v;}
+      let ext=0;if(ne!==null){ext=abs?ne-le:ne;if(abs)le=ne;}
+      if(ext>0.0001&&(nx!==x||ny!==y)){
+        if(!cur||Math.abs(nz-cur.z)>0.001){cur={z:nz,segs:[]};layers.push(cur);}
+        cur.segs.push([x,y,nx,ny]);
+      }
+      x=nx;y=ny;z=nz;
+    }
+    return layers;
+  }
+  function _drawGcodeLayer(idx){
+    const layers=S.gcodeLayers;if(!layers||!layers.length)return;
+    idx=Math.max(0,Math.min(layers.length-1,idx));S.previewIdx=idx;
+    const cv=el('slGcodeCanvas');if(!cv)return;
+    const w=cv.clientWidth||420,h=320,dpr=window.devicePixelRatio||1;
+    cv.width=w*dpr;cv.height=h*dpr;const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+    const b=S.previewBounds,sc=0.88*Math.min(w,h)/Math.max(b.dx,b.dy,1);
+    const tx=X=>w/2+(X-b.cx)*sc,ty=Y=>h/2-(Y-b.cy)*sc;
+    // capa anterior tenue para contexto
+    if(idx>0){ctx.globalAlpha=0.18;ctx.strokeStyle='#5a6';ctx.lineWidth=0.7;ctx.beginPath();for(const s of layers[idx-1].segs){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}ctx.stroke();}
+    ctx.globalAlpha=0.95;ctx.strokeStyle='#00d4aa';ctx.lineWidth=0.9;ctx.beginPath();
+    for(const s of layers[idx].segs){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}
+    ctx.stroke();
+    const info=el('slPreviewInfo');if(info)info.textContent=`Capa ${idx+1}/${layers.length} · Z=${layers[idx].z.toFixed(2)}mm · ${layers[idx].segs.length} trazos`;
+  }
+  function preview(){
+    if(!S.gcode){toast('Genera primero el G-code','error');return;}
+    S.gcodeLayers=_parseGcodeLayers();
+    if(!S.gcodeLayers.length){toast('Sin capas para previsualizar','error');return;}
+    let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
+    for(const L of S.gcodeLayers)for(const s of L.segs){
+      if(s[0]<mnx)mnx=s[0];if(s[2]<mnx)mnx=s[2];if(s[0]>mxx)mxx=s[0];if(s[2]>mxx)mxx=s[2];
+      if(s[1]<mny)mny=s[1];if(s[3]<mny)mny=s[3];if(s[1]>mxy)mxy=s[1];if(s[3]>mxy)mxy=s[3];
+    }
+    S.previewBounds={cx:(mnx+mxx)/2,cy:(mny+mxy)/2,dx:mxx-mnx,dy:mxy-mny};
+    el('slPreviewWrap').style.display='block';
+    const sld=el('slPreviewSlider');sld.max=S.gcodeLayers.length-1;sld.value=S.gcodeLayers.length-1;
+    _drawGcodeLayer(S.gcodeLayers.length-1);
+  }
+  function previewSlide(v){_drawGcodeLayer(+v);}
   function renderResult(est){
+    S.est=est;
     const model=el('slPrinter').value;
     const machines=MAQUINAS.filter(m=>getPrinterIp(m));
     const opts=machines.map(m=>`<option value="${m.id}" ${m.modelo===model?'selected':''}>${escapeHtml(m.nombre)} #${m.numG}</option>`).join('');
     const kb=Math.round(S.gcode.length/1024);
+    const pk=localStorage.getItem('sl_price_kg')||'15000',rh=localStorage.getItem('sl_rate_h')||'1500';
     const warns=[];
     if(S.params.supports)warns.push('<b>Soportes activados</b>: columnas básicas en rejilla bajo los voladizos, pensadas para retirarse a mano. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
     if(S.params.raft)warns.push('Se pidió <b>raft</b>: no está soportado — se imprime brim como adhesión alternativa.');
@@ -18990,15 +19051,33 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
           <span class="badge badge-green">⚖ ~${est.grams.toFixed(0)} g</span>
           <span class="badge badge-gray">📄 ${kb.toLocaleString('es-CL')} KB</span>
         </div>
+        <!-- COSTO -->
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px">
+          <span style="font-size:10px;color:var(--text3)">Filamento $/kg</span>
+          <input id="slPriceKg" type="number" value="${pk}" oninput="SL3D.costRecalc()" style="width:80px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 7px;color:var(--text);font-size:11px">
+          <span style="font-size:10px;color:var(--text3)">Máquina $/h</span>
+          <input id="slRateH" type="number" value="${rh}" oninput="SL3D.costRecalc()" style="width:70px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 7px;color:var(--text);font-size:11px">
+          <span style="margin-left:auto;font-size:10px;color:var(--text3)">Costo estimado:&nbsp;</span><span id="slCostOut"></span>
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" onclick="SL3D.descargar()">⬇ Descargar .gcode</button>
+          <button class="btn btn-ghost" onclick="SL3D.preview()">👁 Vista previa por capas</button>
           ${machines.length?`
           <select class="field-select" id="slTarget" style="width:auto;min-width:170px">${opts}</select>
           <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Iniciar al subir</label>
           <button class="btn btn-ghost" id="slBtnSend" onclick="SL3D.enviar()">📤 Enviar a impresora</button>
           `:'<span style="font-size:10px;color:var(--text3)">Configura la IP de una impresora para enviar directo</span>'}
         </div>
+        <!-- VISTA PREVIA -->
+        <div id="slPreviewWrap" style="display:none;margin-top:12px">
+          <canvas id="slGcodeCanvas" height="320" style="width:100%;border-radius:8px;background:#0d0d0d;border:1px solid var(--border);display:block"></canvas>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <input id="slPreviewSlider" type="range" min="0" max="1" value="0" oninput="SL3D.previewSlide(this.value)" style="flex:1">
+            <span id="slPreviewInfo" style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;white-space:nowrap"></span>
+          </div>
+        </div>
       </div>`;
+    costRecalc();
   }
   function descargar(){
     const a=document.createElement('a');
@@ -19050,7 +19129,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     cv.addEventListener('pointermove',e=>{if(!S.drag)return;S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
     cv.addEventListener('pointerup',()=>{S.drag=null;cv.style.cursor='grab';});
   });
-  return{loadFile,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,onPrinterChange};
+  return{loadFile,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,onPrinterChange,costRecalc,preview,previewSlide};
 })();
 </script>
 
