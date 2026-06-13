@@ -2691,7 +2691,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <div id="slParamsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:8px;margin-bottom:14px"></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <button class="btn btn-primary" id="slBtnGcode" onclick="SL3D.generarGcode()">⚙ Generar G-code</button>
-              <span style="font-size:10px;color:var(--text3)">Laminado real en tu navegador (motor Kiri:Moto)</span>
+              <span style="font-size:10px;color:var(--text3)">Slicer nativo · sin dependencias externas</span>
             </div>
           </div>
           <div id="slProgWrap" style="display:none;margin-top:12px">
@@ -18442,33 +18442,184 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
 
   // ── Laminado con Kiri:Moto ──────────────────────────────────
-  function loadEngine(){
-    if(window.kiri&&window.kiri.newEngine)return Promise.resolve();
-    if(S.enginePromise)return S.enginePromise;
-    S.enginePromise=new Promise((res,rej)=>{
-      const s=document.createElement('script');
-      s.src='https://grid.space/code/engine.js';
-      s.onload=()=>{const t0=Date.now();(function w(){
-        if(window.kiri&&window.kiri.newEngine)return res();
-        if(Date.now()-t0>25000)return rej(new Error('el motor Kiri:Moto no inicializó'));
-        setTimeout(w,200);})();};
-      s.onerror=()=>{S.enginePromise=null;rej(new Error('sin conexión a grid.space — revisa tu internet'));};
-      document.head.appendChild(s);
-    });
-    return S.enginePromise;
-  }
-  function toBinarySTL(t){
-    const n=t.length/9,buf=new ArrayBuffer(84+n*50),dv=new DataView(buf);
-    dv.setUint32(80,n,true);let o=84;
+  // ── Slicer nativo (sin dependencias externas) ────────────────
+  // Algoritmos: intersección triángulo-plano → contornos → shells (inset miter) → infill scanline
+  const FILA_AREA=Math.PI*0.765625; // sección filamento 1.75mm = π·0.875²
+  function sliceAtZ(t,z){
+    const segs=[];
     for(let i=0;i<t.length;i+=9){
-      const ux=t[i+3]-t[i],uy=t[i+4]-t[i+1],uz=t[i+5]-t[i+2],vx=t[i+6]-t[i],vy=t[i+7]-t[i+1],vz=t[i+8]-t[i+2];
-      let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
-      const l=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;nx/=l;ny/=l;nz/=l;
-      dv.setFloat32(o,nx,true);dv.setFloat32(o+4,ny,true);dv.setFloat32(o+8,nz,true);o+=12;
-      for(let j=0;j<9;j++){dv.setFloat32(o,t[i+j],true);o+=4;}
-      dv.setUint16(o,0,true);o+=2;
+      const A=[t[i],t[i+1],t[i+2]],B=[t[i+3],t[i+4],t[i+5]],C=[t[i+6],t[i+7],t[i+8]];
+      const pts=[A,B,C];const cr=[];
+      for(let a=0;a<3;a++){const pa=pts[a],pb=pts[(a+1)%3];
+        if((pa[2]>z)!==(pb[2]>z)){const tt=(z-pa[2])/(pb[2]-pa[2]);cr.push([pa[0]+tt*(pb[0]-pa[0]),pa[1]+tt*(pb[1]-pa[1])]);}
+      }
+      if(cr.length===2)segs.push(cr);
     }
-    return buf;
+    return _buildContours(segs);
+  }
+  function _buildContours(segs){
+    if(!segs.length)return[];
+    const EPS=0.01,round=v=>Math.round(v/EPS),K=(p)=>`${round(p[0])},${round(p[1])}`;
+    const map=new Map();
+    for(let i=0;i<segs.length;i++){
+      const k0=K(segs[i][0]),k1=K(segs[i][1]);
+      (map.get(k0)||map.set(k0,[]).get(k0)).push({idx:i,side:0});
+      (map.get(k1)||map.set(k1,[]).get(k1)).push({idx:i,side:1});
+    }
+    const used=new Uint8Array(segs.length);const contours=[];
+    for(let start=0;start<segs.length;start++){
+      if(used[start])continue;used[start]=1;
+      const c=[segs[start][0],segs[start][1]];
+      for(let _=0;_<segs.length;_++){
+        const last=c[c.length-1];const nb=map.get(K(last))||[];let found=false;
+        for(const{idx,side}of nb){if(used[idx])continue;used[idx]=1;c.push(side===0?segs[idx][1]:segs[idx][0]);found=true;break;}
+        if(!found)break;
+        if(K(c[c.length-1])===K(c[0]))break;
+      }
+      if(c.length>=3)contours.push(c);
+    }
+    return contours;
+  }
+  function _polyArea(p){let a=0;const n=p.length;for(let i=0;i<n;i++){const j=(i+1)%n;a+=p[i][0]*p[j][1]-p[j][0]*p[i][1];}return a/2;}
+  function _inset(poly,d){
+    const n=poly.length;if(n<3||d<=0)return poly;
+    const res=[];
+    for(let i=0;i<n;i++){
+      const prev=poly[(i-1+n)%n],curr=poly[i],next=poly[(i+1)%n];
+      let e1x=curr[0]-prev[0],e1y=curr[1]-prev[1];let e2x=next[0]-curr[0],e2y=next[1]-curr[1];
+      const l1=Math.hypot(e1x,e1y),l2=Math.hypot(e2x,e2y);
+      if(!l1||!l2){res.push(curr);continue;}
+      e1x/=l1;e1y/=l1;e2x/=l2;e2y/=l2;
+      const n1x=-e1y,n1y=e1x,n2x=-e2y,n2y=e2x;
+      const mx=n1x+n2x,my=n1y+n2y,ml=Math.hypot(mx,my);
+      if(!ml){res.push([curr[0]+n1x*d,curr[1]+n1y*d]);continue;}
+      const dot=n1x*n2x+n1y*n2y,ms=d/Math.max(0.25,Math.sqrt((1+dot)/2));
+      res.push([curr[0]+(mx/ml)*Math.min(ms,d*5),curr[1]+(my/ml)*Math.min(ms,d*5)]);
+    }
+    const oa=Math.abs(_polyArea(poly)),ia=Math.abs(_polyArea(res));
+    return(ia<0.05||ia>oa*1.15)?null:res;
+  }
+  function _scanfill(poly,spacing,angle){
+    const r=angle*Math.PI/180,cos=Math.cos(-r),sin=Math.sin(-r);
+    const rot=([x,y])=>[x*cos-y*sin,x*sin+y*cos],unrot=([x,y])=>[x*cos+y*sin,-x*sin+y*cos];
+    const rp=poly.map(rot);
+    let mnY=1e9,mxY=-1e9;for(const[,y]of rp){if(y<mnY)mnY=y;if(y>mxY)mxY=y;}
+    const lines=[],n=rp.length;
+    for(let y=mnY+spacing/2;y<mxY;y+=spacing){
+      const xs=[];
+      for(let i=0;i<n;i++){const j=(i+1)%n;const[ax,ay]=rp[i],[bx,by]=rp[j];
+        if((ay<=y&&by>y)||(by<=y&&ay>y))xs.push(ax+(y-ay)/(by-ay)*(bx-ax));}
+      xs.sort((a,b)=>a-b);
+      for(let i=0;i+1<xs.length;i+=2)lines.push([unrot([xs[i],y]),unrot([xs[i+1],y])]);
+    }
+    for(let i=1;i<lines.length;i+=2)lines[i].reverse();
+    return lines;
+  }
+  function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p){
+    let bi=0,bd=1e9;
+    for(let i=0;i<poly.length;i++){const d=Math.hypot(poly[i][0]+ox-cX,poly[i][1]+oy-cY);if(d<bd){bd=d;bi=i;}}
+    const ord=[...poly.slice(bi),...poly.slice(0,bi)];
+    const sx=ord[0][0]+ox,sy=ord[0][1]+oy;
+    E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+    if(p.zHop>0)gc.push(`G1 Z${(z+p.zHop).toFixed(3)} F600`);
+    gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
+    if(p.zHop>0)gc.push(`G1 Z${z.toFixed(3)} F600`);
+    E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+    cX=sx;cY=sy;
+    for(let i=1;i<=ord.length;i++){
+      const pt=ord[i%ord.length];const px=pt[0]+ox,py=pt[1]+oy;
+      E+=(Math.hypot(px-cX,py-cY)*extW*lh)/FILA_AREA;
+      gc.push(`G1 X${px.toFixed(3)} Y${py.toFixed(3)} E${E.toFixed(4)} F${feed}`);cX=px;cY=py;
+    }
+    return[E,cX,cY];
+  }
+  function _printLines(gc,lines,z,ox,oy,cX,cY,E,lh,extW,feed,p){
+    for(const[p1,p2]of lines){
+      const sx=p1[0]+ox,sy=p1[1]+oy,ex=p2[0]+ox,ey=p2[1]+oy;
+      const td=Math.hypot(sx-cX,sy-cY);
+      if(td>extW*3){
+        E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+        if(p.zHop>0&&td>5)gc.push(`G1 Z${(z+p.zHop).toFixed(3)} F600`);
+        gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
+        if(p.zHop>0&&td>5)gc.push(`G1 Z${z.toFixed(3)} F600`);
+        E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+      }else{gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);}
+      E+=(Math.hypot(ex-sx,ey-sy)*extW*lh)/FILA_AREA;
+      gc.push(`G1 X${ex.toFixed(3)} Y${ey.toFixed(3)} E${E.toFixed(4)} F${feed}`);cX=ex;cY=ey;
+    }
+    return[E,cX,cY];
+  }
+  async function _nativeSlice(tris,p,spec,nozD,matName,modelName){
+    const extW=nozD*1.05;
+    const offX=spec.x/2,offY=spec.y/2; // centro del modelo en la cama
+    const gc=[];let E=0;
+    // ── Header ───────────────────────────────────
+    gc.push('; The Lab Solutions — Native AI Slicer');
+    gc.push(`; ${S.name} | ${modelName} | ${matName} | boquilla:${nozD}mm capa:${p.layerHeight}mm relleno:${p.infillPct}%`);
+    gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');
+    gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);
+    gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
+    // Línea de purga (borde izquierdo de la cama)
+    const purgeY0=5,purgeY1=Math.min(spec.y-5,55);
+    gc.push(`G1 Z${p.firstLayerHeight} F600`);gc.push(`G1 X3 Y${purgeY0} F3000`);
+    const purgeLen=purgeY1-purgeY0;
+    E+=purgeLen*extW*p.firstLayerHeight/FILA_AREA;
+    gc.push(`G1 X3 Y${purgeY1} E${E.toFixed(4)} F${p.firstLayerSpeed*60}`);
+    gc.push('G92 E0');E=0;gc.push('G1 Z2 F900');
+    // ── Calcular capas ───────────────────────────
+    const zMax=S.stats.dz;const lhs=[p.firstLayerHeight];let zSum=p.firstLayerHeight;
+    while(zSum<zMax-0.001){const lh=Math.min(p.layerHeight,zMax-zSum);if(lh<p.layerHeight*0.2)break;lhs.push(lh);zSum+=lh;}
+    const totalL=lhs.length;let curZ=0,cX=3,cY=purgeY1;
+    // ── Capas ────────────────────────────────────
+    for(let li=0;li<totalL;li++){
+      const lh=lhs[li];curZ+=lh;
+      const spd=li===0?p.firstLayerSpeed:p.speed;
+      const isSolid=li<p.bottomLayers||li>=totalL-p.topLayers;
+      const spacing=isSolid?extW*1.02:(extW/(p.infillPct/100));
+      const angle=(li%2===0?45:135);
+      if(li===1&&p.fanPct>0)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; ventilador`);
+      gc.push('');gc.push(`; === Capa ${li+1}/${totalL}  Z=${curZ.toFixed(3)}mm ===`);
+      gc.push(`G1 Z${curZ.toFixed(3)} F600`);
+      const sampleZ=curZ-lh/2;
+      const contours=sliceAtZ(tris,sampleZ);
+      if(!contours.length)continue;
+      contours.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)));
+      for(const raw of contours){
+        if(raw.length<3)continue;
+        const area=_polyArea(raw);
+        const poly=area<0?[...raw].reverse():raw;
+        const shells=[poly];
+        for(let s=1;s<p.shells;s++){const ins=_inset(shells[s-1],extW);if(ins&&ins.length>=3)shells.push(ins);else break;}
+        for(let s=0;s<shells.length;s++){
+          const feed=Math.round(spd*(s===0?1:0.9))*60;
+          [E,cX,cY]=_printPoly(gc,shells[s],curZ,offX,offY,cX,cY,E,lh,extW,feed,p);
+        }
+        if(p.infillPct>0){
+          const inner=shells[shells.length-1];
+          const lines=_scanfill(inner,spacing,angle);
+          [E,cX,cY]=_printLines(gc,lines,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.1)*60,p);
+        }
+      }
+      if(li%8===0){setProg(4+li/totalL*92,`Laminando capa ${li+1}/${totalL}…`);await new Promise(r=>setTimeout(r,0));}
+    }
+    // ── Brim ─────────────────────────────────────
+    if(p.brim>0){
+      const brimZ=lhs[0];const baseContours=sliceAtZ(tris,brimZ/2);
+      if(baseContours.length){
+        gc.push('\n; === Brim ===');
+        const bigPoly=baseContours.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)))[0];
+        let ring=bigPoly;
+        for(let b=0;b<p.brim;b++){
+          const outer=_inset(ring,-extW);if(!outer)break;
+          [E,cX,cY]=_printPoly(gc,outer,brimZ,offX,offY,cX,cY,E,brimZ,extW,p.firstLayerSpeed*60,p);ring=outer;
+        }
+      }
+    }
+    // ── Footer ───────────────────────────────────
+    gc.push('\nM107 ; ventilador off');gc.push('M104 S0 ; hotend off');gc.push('M140 S0 ; cama off');
+    gc.push('G92 E0');gc.push('G91 ; relativo');gc.push('G1 Z5 F900');gc.push('G90 ; absoluto');
+    gc.push(`G1 X0 Y${Math.min(spec.y-10,spec.y-10).toFixed(0)} F3000 ; aparcar`);gc.push('M84 ; motores off');
+    return gc.join('\n');
   }
   function setProg(pct,msg){
     el('slProgWrap').style.display='block';
@@ -18482,62 +18633,14 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     if(!fitsIn(spec)){toast(`La pieza (${S.stats.dx.toFixed(0)}×${S.stats.dy.toFixed(0)}×${S.stats.dz.toFixed(0)}mm) no cabe en ${model} — elige otra impresora o escala el modelo`,'error');return;}
     const btn=el('slBtnGcode');btn.disabled=true;el('slResult').style.display='none';
     try{
-      setProg(2,'Cargando motor de laminado…');
-      await loadEngine();
-      setProg(8,'Preparando modelo…');
-      const dev={
-        mode:'FDM',deviceName:'TheLab '+model,
-        bedWidth:spec.x,bedDepth:spec.y,maxHeight:spec.z,
-        originCenter:false,extrudeAbs:true,
-        extruders:[{extFilament:1.75,extNozzle:+el('slNozzle').value,extOffsetX:0,extOffsetY:0}],
-        gcodePre:[';; The Lab Solutions — AI Slicer · '+model+' · '+el('slMaterial').value,
-          'M140 S'+p.bedTemp,'M104 S'+p.nozzleTemp,'G28','M190 S'+p.bedTemp,'M109 S'+p.nozzleTemp,
-          'G21','G90','M82','G92 E0','G1 Z2 F900'],
-        gcodePost:['M107','M104 S0','M140 S0','G92 E0','G91','G1 Z5 F900','G90','M84'],
-        gcodeFan:['M106 S{fan_speed}'],
-      };
-      const proc={
-        processName:'TheLab-AI',
-        sliceHeight:p.layerHeight,firstSliceHeight:p.firstLayerHeight,
-        sliceShells:p.shells,sliceTopLayers:p.topLayers,sliceBottomLayers:p.bottomLayers,
-        sliceFillSparse:p.infillPct/100,sliceFillType:p.infillType,sliceFillAngle:45,sliceFillOverlap:0.3,
-        sliceSupportEnable:p.supports,sliceSupportAngle:p.supportAngle,sliceSupportDensity:0.25,
-        sliceSupportSize:6,sliceSupportArea:1,sliceSupportSpan:5,sliceSupportGap:1,sliceSupportNozzle:0,
-        firstLayerRate:p.firstLayerSpeed,firstLayerFillRate:Math.round(p.firstLayerSpeed*1.2),firstLayerPrintMult:1.15,
-        outputTemp:p.nozzleTemp,outputBedTemp:p.bedTemp,
-        outputFeedrate:p.speed,outputFinishrate:Math.max(15,Math.round(p.speed*0.5)),outputSeekrate:p.travelSpeed,
-        outputFanMax:Math.round(p.fanPct*2.55),outputFanSpeed:Math.round(p.fanPct*2.55),outputFanLayer:1,
-        outputShellMult:1,outputFillMult:1,outputSparseMult:1,
-        outputRetractDist:p.retractDist,outputRetractSpeed:Math.round(p.retractSpeed),
-        zHopDistance:p.zHop,
-        outputBrimCount:p.brim,outputBrimOffset:0,outputRaft:p.raft,
-        detectThinWalls:true,sliceMinHeight:0,
-      };
-      const eng=window.kiri.newEngine();
-      eng.setListener(m=>{
-        if(m.slice)setProg(12+(m.slice.update||0)*48,'Laminando capas… '+(m.slice.updateStatus||''));
-        else if(m.prepare)setProg(60+(m.prepare.update||0)*28,'Generando trayectorias…');
-        else if(m.export)setProg(88+(m.export.update||0)*10,'Exportando G-code…');
-      });
-      await eng.parse(toBinarySTL(S.tris));
-      await eng.setDevice(dev);
-      await eng.setProcess(proc);
-      await eng.slice();
-      await eng.prepare();
-      let gcode=await eng.export();
-      if(typeof gcode!=='string')gcode=String(gcode||'');
-      if(!gcode.includes('G1'))throw new Error('el motor devolvió un G-code vacío');
-      // red de seguridad: asegurar comando de ventilador
-      if(p.fanPct>0&&!/M106/.test(gcode)){
-        const lines=gcode.split('\n');let layer=0;
-        for(let i=0;i<lines.length;i++){
-          if(/^;.*layer/i.test(lines[i])&&++layer===2){lines.splice(i+1,0,'M106 S'+Math.round(p.fanPct*2.55));break;}
-        }
-        gcode=lines.join('\n');
-      }
+      setProg(2,'Iniciando slicer nativo…');
+      await new Promise(r=>setTimeout(r,0));
+      const nozD=+el('slNozzle').value,matName=el('slMaterial').value;
+      const gcode=await _nativeSlice(S.tris,p,spec,nozD,matName,model);
+      if(!gcode.includes('G1'))throw new Error('slicer produjo G-code vacío');
       S.gcode=gcode;
       setProg(100,'✓ G-code listo');
-      renderResult(estimate(gcode,MATS[el('slMaterial').value]));
+      renderResult(estimate(gcode,MATS[matName]));
     }catch(e){
       setProg(0,'✕ Error');
       toast('Error al laminar: '+e.message,'error');
