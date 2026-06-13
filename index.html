@@ -2652,6 +2652,58 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="maquinaMonGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
   </div>
 
+  <!-- ── AGENTE DE IMPRESIÓN 3D — STL/OBJ → G-CODE CON IA ── -->
+  <div id="maquinaSlicerView" class="maquina-section" style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🧠 Agente de impresión 3D</span>
+      <span class="badge badge-purple">STL / OBJ → G-code · IA + Kiri:Moto</span>
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px">
+        <!-- Columna modelo -->
+        <div>
+          <div id="slDrop" style="border:2px dashed var(--border2);border-radius:10px;padding:26px 14px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s" onclick="document.getElementById('slFileInput').click()">
+            <div style="font-size:26px;margin-bottom:6px">📦</div>
+            <div style="font-size:12px;color:var(--text2);font-weight:600">Arrastra un archivo <span style="color:var(--accent)">STL</span> u <span style="color:var(--accent)">OBJ</span> aquí</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">o haz clic para seleccionar · el archivo no sale de tu navegador</div>
+            <div id="slFileName" style="font-size:11px;color:var(--accent);margin-top:8px;font-weight:700;display:none"></div>
+          </div>
+          <input type="file" id="slFileInput" accept=".stl,.obj" style="display:none" onchange="SL3D.loadFile(this.files[0])">
+          <canvas id="slCanvas" height="300" style="width:100%;border-radius:10px;background:#0d0d0d;border:1px solid var(--border);margin-top:12px;display:none;cursor:grab;touch-action:none"></canvas>
+          <div id="slStats" style="display:none;margin-top:10px"></div>
+        </div>
+        <!-- Columna parámetros -->
+        <div>
+          <div class="data-grid" style="gap:10px;margin-bottom:10px">
+            <div class="field-group"><label class="field-label">Impresora</label><select class="field-select" id="slPrinter" onchange="SL3D.onPrinterChange()"></select></div>
+            <div class="field-group"><label class="field-label">Material</label><select class="field-select" id="slMaterial"><option>PLA</option><option>PETG</option><option>ABS</option><option>TPU</option></select></div>
+            <div class="field-group"><label class="field-label">Objetivo</label><select class="field-select" id="slObjetivo"><option value="equilibrado">Equilibrado</option><option value="calidad">Máxima calidad</option><option value="rapido">Rápido</option><option value="resistente">Resistente / funcional</option></select></div>
+            <div class="field-group"><label class="field-label">Boquilla (mm)</label><select class="field-select" id="slNozzle"><option>0.4</option><option>0.6</option><option>0.8</option></select></div>
+          </div>
+          <div class="field-group" style="margin-bottom:12px"><label class="field-label">Notas para el agente (opcional)</label><input class="field-input" id="slNotas" placeholder="Ej: pieza funcional con tornillos M3, cara superior visible…"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <button class="btn btn-primary" id="slBtnIA" onclick="SL3D.analizarIA()" disabled>✨ Analizar con IA</button>
+            <button class="btn btn-ghost" id="slBtnBase" onclick="SL3D.usarPerfilBase()" disabled>Perfil base (sin IA)</button>
+          </div>
+          <div id="slRazon" style="display:none;margin:12px 0;padding:12px 14px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);border-radius:9px;font-size:11.5px;color:var(--text2);line-height:1.55"></div>
+          <div id="slParamsWrap" style="display:none">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin:10px 0 8px">Parámetros de laminado <span style="color:var(--text3);font-weight:400;text-transform:none">(editables)</span></div>
+            <div id="slParamsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:8px;margin-bottom:14px"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-primary" id="slBtnGcode" onclick="SL3D.generarGcode()">⚙ Generar G-code</button>
+              <span style="font-size:10px;color:var(--text3)">Laminado real en tu navegador (motor Kiri:Moto)</span>
+            </div>
+          </div>
+          <div id="slProgWrap" style="display:none;margin-top:12px">
+            <div style="height:6px;background:var(--surface3);border-radius:3px;overflow:hidden"><div id="slProgBar" style="height:100%;width:0%;background:var(--accent);transition:width .3s"></div></div>
+            <div id="slProgTxt" style="font-size:10px;color:var(--text3);margin-top:4px">—</div>
+          </div>
+          <div id="slResult" style="display:none;margin-top:14px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── CALENDARIO ── -->
   <div id="maquinaCalView" class="maquina-section">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">📅 Disponibilidad semanal</div>
@@ -18119,6 +18171,480 @@ function closeGcodeUpload(){document.getElementById('gcodeUploadModal').style.di
 function openOrcaConfigModal(){const rows=MAQUINAS.filter(m=>getPrinterIp(m)).map(m=>{const ip=getPrinterIp(m);return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--accent)">${escapeHtml(ip)}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text2)">7125</td><td style="padding:8px 10px"><span style="background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">Moonraker</span></td></tr>`;}).join('');document.getElementById('orcaTableBody').innerHTML=rows||`<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text3);font-size:11px">No hay IPs configuradas. Agrégalas en cada tarjeta de impresora primero.</td></tr>`;document.getElementById('orcaConfigModal').style.display='flex';}
 function closeOrcaConfigModal(){document.getElementById('orcaConfigModal').style.display='none';}
 document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
+</script>
+
+<script>
+// ── AGENTE DE IMPRESIÓN 3D — STL/OBJ → G-code con IA + Kiri:Moto ─────
+// Flujo: cargar STL/OBJ → análisis geométrico local → Claude elige parámetros
+// → laminado real en el navegador (motor Kiri:Moto) → descarga o envío Moonraker.
+const SL3D=(function(){
+  const SPECS={
+    'K1':{x:220,y:220,z:250,vmax:300},
+    'K2':{x:350,y:350,z:350,vmax:300},
+    'K2 Plus':{x:500,y:500,z:500,vmax:300},
+    'Ender-5 Max':{x:400,y:400,z:600,vmax:250},
+    'Giga':{x:800,y:800,z:800,vmax:150},
+  };
+  const MATS={
+    PLA:{noz:210,bed:60,fan:100,dens:1.24},
+    PETG:{noz:240,bed:80,fan:40,dens:1.27},
+    ABS:{noz:250,bed:100,fan:25,dens:1.04},
+    TPU:{noz:225,bed:50,fan:60,dens:1.21,vcap:35},
+  };
+  const FIELDS=[
+    {k:'layerHeight',l:'Altura capa (mm)',s:0.04},{k:'firstLayerHeight',l:'1ª capa (mm)',s:0.04},
+    {k:'shells',l:'Perímetros',s:1},{k:'topLayers',l:'Capas sup.',s:1},{k:'bottomLayers',l:'Capas inf.',s:1},
+    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','linear']},
+    {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},
+    {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
+    {k:'supports',l:'Soportes',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
+    {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},
+    {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
+  ];
+  const S={tris:null,prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null};
+  const el=id=>document.getElementById(id);
+
+  // ── Parsers ─────────────────────────────────────────────────
+  function parseSTL(buf){
+    const head=new TextDecoder().decode(buf.slice(0,Math.min(600,buf.byteLength)));
+    if(/^\s*solid[\s\S]*?facet/i.test(head)){
+      const txt=new TextDecoder().decode(buf);
+      const re=/vertex\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)/g;const v=[];let m;
+      while((m=re.exec(txt)))v.push(+m[1],+m[2],+m[3]);
+      const n=Math.floor(v.length/9)*9;
+      if(!n)throw new Error('STL ASCII sin triángulos');
+      return new Float32Array(v.slice(0,n));
+    }
+    if(buf.byteLength<84)throw new Error('STL inválido (muy corto)');
+    const dv=new DataView(buf);
+    const n=Math.min(dv.getUint32(80,true),Math.floor((buf.byteLength-84)/50));
+    if(!n)throw new Error('STL binario sin triángulos');
+    const out=new Float32Array(n*9);let o=84;
+    for(let i=0;i<n;i++){o+=12;for(let j=0;j<9;j++){out[i*9+j]=dv.getFloat32(o,true);o+=4;}o+=2;}
+    return out;
+  }
+  function parseOBJ(txt){
+    const vs=[],out=[];
+    for(const line of txt.split('\n')){
+      if(line[0]==='v'&&line[1]===' '){const p=line.trim().split(/\s+/);vs.push(+p[1],+p[2],+p[3]);}
+      else if(line[0]==='f'&&line[1]===' '){
+        const idx=line.trim().split(/\s+/).slice(1).map(t=>{let i=parseInt(t.split('/')[0],10);if(i<0)i=vs.length/3+i+1;return i-1;});
+        for(let i=1;i<idx.length-1;i++)for(const k of[idx[0],idx[i],idx[i+1]])out.push(vs[k*3],vs[k*3+1],vs[k*3+2]);
+      }
+    }
+    if(!out.length)throw new Error('OBJ sin caras');
+    return new Float32Array(out);
+  }
+
+  // ── Análisis geométrico ─────────────────────────────────────
+  function analyze(t){
+    let mnx=1e9,mny=1e9,mnz=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;
+    for(let i=0;i<t.length;i+=3){const x=t[i],y=t[i+1],z=t[i+2];
+      if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;if(z<mnz)mnz=z;if(z>mxz)mxz=z;}
+    // centrar XY en 0 y apoyar en Z=0 (sistema interno de Kiri:Moto)
+    const cx=(mnx+mxx)/2,cy=(mny+mxy)/2;
+    for(let i=0;i<t.length;i+=3){t[i]-=cx;t[i+1]-=cy;t[i+2]-=mnz;}
+    const dx=mxx-mnx,dy=mxy-mny,dz=mxz-mnz;
+    let vol=0,area=0,ovArea=0;
+    for(let i=0;i<t.length;i+=9){
+      const ax=t[i],ay=t[i+1],az=t[i+2],bx=t[i+3],by=t[i+4],bz=t[i+5],cxx=t[i+6],cyy=t[i+7],cz=t[i+8];
+      const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cxx-ax,vy=cyy-ay,vz=cz-az;
+      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+      const ln=Math.sqrt(nx*nx+ny*ny+nz*nz),a2=ln/2;
+      area+=a2;
+      vol+=(ax*(by*cz-bz*cyy)+bx*(cyy*az-cz*ay)+cxx*(ay*bz-az*by))/6;
+      // voladizo: cara hacia abajo >55° de la vertical, no apoyada en cama
+      if(ln>0&&nz/ln<-0.57&&Math.min(az,bz,cz)>0.5)ovArea+=a2;
+    }
+    vol=Math.abs(vol);
+    S.stats={dx,dy,dz,vol:vol/1000,area:area/100,tris:t.length/9,
+      ovPct:area?ovArea/area*100:0,hr:dz/Math.max(5,Math.min(dx,dy))};
+  }
+
+  // ── Preview 3D (canvas, sin librerías) ──────────────────────
+  function buildPreview(){
+    const n=S.tris.length/9,cap=12000;
+    if(n<=cap){S.prev=S.tris;return;}
+    const stride=Math.ceil(n/cap),out=new Float32Array(Math.ceil(n/stride)*9);let o=0;
+    for(let i=0;i<n;i+=stride){out.set(S.tris.subarray(i*9,i*9+9),o);o+=9;}
+    S.prev=out;
+  }
+  function render(){
+    const cv=el('slCanvas');if(!S.prev||cv.style.display==='none')return;
+    const dpr=window.devicePixelRatio||1,w=cv.clientWidth||420,h=300;
+    cv.width=w*dpr;cv.height=h*dpr;
+    const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+    const st=S.stats,zm=st.dz/2,ca=Math.cos(S.rot.a),sa=Math.sin(S.rot.a),cb=Math.cos(S.rot.b),sb=Math.sin(S.rot.b);
+    const rad=Math.sqrt(st.dx*st.dx+st.dy*st.dy+st.dz*st.dz)/2||1,sc=0.42*Math.min(w,h)/rad;
+    const t=S.prev,m=t.length/9,list=new Array(m);
+    for(let i=0;i<m;i++){
+      const o=i*9,P=[];let dsum=0;
+      for(let j=0;j<3;j++){
+        const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
+        const x1=x*ca-y*sa,y1=x*sa+y*ca;
+        const y2=y1*cb-z*sb,z2=y1*sb+z*cb;
+        P.push(w/2+x1*sc,h/2-z2*sc);dsum+=y2;
+      }
+      // sombreado plano según normal proyectada
+      const ux=P[2]-P[0],uy=P[3]-P[1],vx=P[4]-P[0],vy=P[5]-P[1];
+      const facing=ux*vy-uy*vx;
+      const sh=Math.max(0.18,Math.min(1,0.3+Math.abs(facing)/( (Math.hypot(ux,uy)*Math.hypot(vx,vy))||1)*0.75));
+      list[i]={d:dsum,P,sh};
+    }
+    list.sort((p,q)=>q.d-p.d);
+    for(const f of list){
+      ctx.beginPath();ctx.moveTo(f.P[0],f.P[1]);ctx.lineTo(f.P[2],f.P[3]);ctx.lineTo(f.P[4],f.P[5]);ctx.closePath();
+      ctx.fillStyle=`rgb(${Math.round(f.sh*90)},${Math.round(f.sh*200)},${Math.round(f.sh*192)})`;ctx.fill();
+    }
+    ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='10px JetBrains Mono,monospace';
+    ctx.fillText('arrastra para rotar',10,h-10);
+  }
+
+  // ── Carga de archivo ────────────────────────────────────────
+  async function loadFile(file){
+    if(!file)return;
+    const ext=(file.name.split('.').pop()||'').toLowerCase();
+    if(!['stl','obj'].includes(ext)){toast('Formato no soportado — usa STL u OBJ','error');return;}
+    try{
+      const buf=await file.arrayBuffer();
+      S.tris=ext==='obj'?parseOBJ(new TextDecoder().decode(buf)):parseSTL(buf);
+      S.name=file.name.replace(/\.(stl|obj)$/i,'');
+      analyze(S.tris);buildPreview();
+      const fn=el('slFileName');fn.style.display='block';fn.textContent='✓ '+file.name;
+      el('slCanvas').style.display='block';render();renderStats();
+      el('slBtnIA').disabled=false;el('slBtnBase').disabled=false;
+      el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
+      S.params=null;S.gcode='';
+      toast(`Modelo cargado: ${S.stats.tris.toLocaleString('es-CL')} triángulos`,'success');
+    }catch(e){toast('Error al leer el modelo: '+e.message,'error');}
+  }
+  function fitsIn(spec){const st=S.stats;return st.dx<=spec.x-2&&st.dy<=spec.y-2&&st.dz<=spec.z-2;}
+  function renderStats(){
+    const st=S.stats,spec=SPECS[el('slPrinter').value]||SPECS.K1;
+    const fits=fitsIn(spec);
+    el('slStats').style.display='block';
+    el('slStats').innerHTML=`
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span class="badge badge-gray">📐 ${st.dx.toFixed(1)} × ${st.dy.toFixed(1)} × ${st.dz.toFixed(1)} mm</span>
+        <span class="badge badge-gray">🧊 ${st.vol.toFixed(1)} cm³</span>
+        <span class="badge badge-gray">▲ ${st.tris.toLocaleString('es-CL')} tris</span>
+        <span class="badge ${st.ovPct>8?'badge-yellow':'badge-green'}">⛰ voladizos ${st.ovPct.toFixed(1)}%</span>
+        ${st.hr>3?'<span class="badge badge-yellow">⚠ pieza alta y delgada</span>':''}
+        <span class="badge ${fits?'badge-green':'badge-red'}">${fits?'✓ cabe en '+el('slPrinter').value:'✕ NO cabe en '+el('slPrinter').value}</span>
+      </div>`;
+  }
+
+  // ── IA: selección de parámetros ─────────────────────────────
+  function resumen(){
+    const st=S.stats,model=el('slPrinter').value,spec=SPECS[model],mat=el('slMaterial').value;
+    const obj=el('slObjetivo').selectedOptions[0].textContent,noz=el('slNozzle').value,notas=el('slNotas').value.trim();
+    return`PIEZA: ${S.name}
+- Dimensiones (X×Y×Z): ${st.dx.toFixed(1)} × ${st.dy.toFixed(1)} × ${st.dz.toFixed(1)} mm
+- Volumen sólido: ${st.vol.toFixed(1)} cm³ · Área: ${st.area.toFixed(0)} cm² · ${st.tris} triángulos
+- Voladizos >55° sin apoyo: ${st.ovPct.toFixed(1)}% del área
+- Relación altura/base: ${st.hr.toFixed(1)} ${st.hr>3?'(riesgo de volcarse — considerar brim)':'(estable)'}
+IMPRESORA: ${model} — volumen ${spec.x}×${spec.y}×${spec.z}mm, velocidad máx ${spec.vmax}mm/s, boquilla ${noz}mm
+MATERIAL: ${mat} · OBJETIVO: ${obj}${notas?'\nNOTAS DEL OPERADOR: '+notas:''}`;
+  }
+  const IA_SYS=`Eres KAI-SLICER, ingeniero experto en impresión 3D FDM de The Lab Solutions (Santiago, Chile).
+Eliges parámetros de laminado óptimos según geometría de la pieza, material, impresora y objetivo.
+REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada.
+RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"supportAngle":50,"brim":0,"raft":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+  async function analizarIA(){
+    if(!S.stats)return;
+    const btn=el('slBtnIA');btn.disabled=true;btn.textContent='⏳ Analizando…';
+    try{
+      const out=await callClaude(IA_SYS,resumen());
+      const a=out.indexOf('{'),b=out.lastIndexOf('}');
+      if(a<0||b<=a)throw new Error('respuesta sin JSON');
+      const p=JSON.parse(out.slice(a,b+1));
+      S.params=clampParams(p);
+      showRazon((p.razonamiento||'Parámetros calculados por IA.'),p.advertencias||[]);
+      renderParams();
+    }catch(e){
+      toast('IA no disponible ('+e.message+') — usando perfil base','error');
+      usarPerfilBase();
+    }finally{btn.disabled=false;btn.textContent='✨ Analizar con IA';}
+  }
+  function usarPerfilBase(){
+    if(!S.stats)return;
+    const st=S.stats,mat=MATS[el('slMaterial').value],spec=SPECS[el('slPrinter').value];
+    const obj=el('slObjetivo').value,noz=+el('slNozzle').value;
+    const vbase=Math.min(spec.vmax*(obj==='rapido'?0.85:obj==='calidad'?0.4:0.6),mat.vcap||999);
+    const p={
+      layerHeight:+(noz*(obj==='calidad'?0.3:obj==='rapido'?0.7:0.5)).toFixed(2),
+      firstLayerHeight:+(noz*0.6).toFixed(2),
+      shells:obj==='resistente'?4:obj==='calidad'?3:2,
+      topLayers:obj==='rapido'?3:4,bottomLayers:3,
+      infillPct:obj==='resistente'?40:obj==='rapido'?10:15,
+      infillType:obj==='resistente'?'gyroid':'grid',
+      speed:Math.round(vbase),firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),
+      nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
+      supports:st.ovPct>8,supportAngle:50,
+      brim:st.hr>3?8:0,raft:false,
+      retractDist:mat===MATS.TPU?0.5:0.8,retractSpeed:mat===MATS.TPU?20:35,zHop:0.2,
+      };
+    S.params=clampParams(p);
+    showRazon('Perfil heurístico local (sin IA): calculado según material, objetivo y geometría. Puedes editar cualquier parámetro antes de generar el G-code.',[]);
+    renderParams();
+  }
+  function clampParams(p){
+    const noz=+el('slNozzle').value,spec=SPECS[el('slPrinter').value];
+    const cl=(v,a,b,d)=>{v=+v;return isFinite(v)?Math.min(b,Math.max(a,v)):d;};
+    return{
+      layerHeight:cl(p.layerHeight,0.05,noz*0.8,noz*0.5),
+      firstLayerHeight:cl(p.firstLayerHeight,0.1,noz*0.9,noz*0.6),
+      shells:Math.round(cl(p.shells,1,8,2)),topLayers:Math.round(cl(p.topLayers,0,10,4)),bottomLayers:Math.round(cl(p.bottomLayers,0,10,3)),
+      infillPct:Math.round(cl(p.infillPct,0,100,15)),
+      infillType:['grid','gyroid','triangle','hex','linear'].includes(p.infillType)?p.infillType:'grid',
+      speed:Math.round(cl(p.speed,10,spec.vmax,60)),firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,80,30)),
+      travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),
+      nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
+      fanPct:Math.round(cl(p.fanPct,0,100,100)),
+      supports:!!p.supports&&p.supports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
+      brim:Math.round(cl(p.brim,0,20,0)),raft:!!p.raft&&p.raft!=='no',
+      retractDist:cl(p.retractDist,0,8,0.8),retractSpeed:Math.round(cl(p.retractSpeed,5,80,35)),
+      zHop:cl(p.zHop,0,2,0.2),
+    };
+  }
+  function showRazon(txt,adv){
+    const box=el('slRazon');box.style.display='block';
+    box.innerHTML='<b style="color:var(--accent4)">🧠 Razonamiento del agente</b><br>'+escapeHtml(txt)+
+      (adv&&adv.length?'<br><br><b style="color:var(--warn)">⚠ Advertencias</b><br>'+adv.map(a=>'• '+escapeHtml(a)).join('<br>'):'');
+  }
+  function renderParams(){
+    const g=el('slParamsGrid');g.innerHTML='';
+    for(const f of FIELDS){
+      const v=S.params[f.k];
+      const div=document.createElement('div');
+      if(f.sel){
+        const isBool=f.sel[0]==='no';
+        const cur=isBool?(v?'sí':'no'):v;
+        div.innerHTML=`<label class="field-label" style="font-size:9px">${f.l}</label>
+          <select class="field-select" id="sl_f_${f.k}" style="padding:6px 8px;font-size:11px">${f.sel.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join('')}</select>`;
+      }else{
+        div.innerHTML=`<label class="field-label" style="font-size:9px">${f.l}</label>
+          <input class="field-input" id="sl_f_${f.k}" type="number" step="${f.s}" value="${v}" style="padding:6px 8px;font-size:11px">`;
+      }
+      g.appendChild(div);
+    }
+    el('slParamsWrap').style.display='block';
+  }
+  function readParams(){
+    const p={};
+    for(const f of FIELDS){
+      const elv=el('sl_f_'+f.k);if(!elv)continue;
+      p[f.k]=f.sel?(f.sel[0]==='no'?elv.value==='sí':elv.value):+elv.value;
+    }
+    return clampParams(p);
+  }
+
+  // ── Laminado con Kiri:Moto ──────────────────────────────────
+  function loadEngine(){
+    if(window.kiri&&window.kiri.newEngine)return Promise.resolve();
+    if(S.enginePromise)return S.enginePromise;
+    S.enginePromise=new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://grid.space/code/engine.js';
+      s.onload=()=>{const t0=Date.now();(function w(){
+        if(window.kiri&&window.kiri.newEngine)return res();
+        if(Date.now()-t0>25000)return rej(new Error('el motor Kiri:Moto no inicializó'));
+        setTimeout(w,200);})();};
+      s.onerror=()=>{S.enginePromise=null;rej(new Error('sin conexión a grid.space — revisa tu internet'));};
+      document.head.appendChild(s);
+    });
+    return S.enginePromise;
+  }
+  function toBinarySTL(t){
+    const n=t.length/9,buf=new ArrayBuffer(84+n*50),dv=new DataView(buf);
+    dv.setUint32(80,n,true);let o=84;
+    for(let i=0;i<t.length;i+=9){
+      const ux=t[i+3]-t[i],uy=t[i+4]-t[i+1],uz=t[i+5]-t[i+2],vx=t[i+6]-t[i],vy=t[i+7]-t[i+1],vz=t[i+8]-t[i+2];
+      let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+      const l=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;nx/=l;ny/=l;nz/=l;
+      dv.setFloat32(o,nx,true);dv.setFloat32(o+4,ny,true);dv.setFloat32(o+8,nz,true);o+=12;
+      for(let j=0;j<9;j++){dv.setFloat32(o,t[i+j],true);o+=4;}
+      dv.setUint16(o,0,true);o+=2;
+    }
+    return buf;
+  }
+  function setProg(pct,msg){
+    el('slProgWrap').style.display='block';
+    el('slProgBar').style.width=Math.min(100,Math.round(pct))+'%';
+    el('slProgTxt').textContent=msg;
+  }
+  async function generarGcode(){
+    if(!S.stats)return;
+    const p=readParams();S.params=p;
+    const model=el('slPrinter').value,spec=SPECS[model];
+    if(!fitsIn(spec)){toast(`La pieza (${S.stats.dx.toFixed(0)}×${S.stats.dy.toFixed(0)}×${S.stats.dz.toFixed(0)}mm) no cabe en ${model} — elige otra impresora o escala el modelo`,'error');return;}
+    const btn=el('slBtnGcode');btn.disabled=true;el('slResult').style.display='none';
+    try{
+      setProg(2,'Cargando motor de laminado…');
+      await loadEngine();
+      setProg(8,'Preparando modelo…');
+      const dev={
+        mode:'FDM',deviceName:'TheLab '+model,
+        bedWidth:spec.x,bedDepth:spec.y,maxHeight:spec.z,
+        originCenter:false,extrudeAbs:true,
+        extruders:[{extFilament:1.75,extNozzle:+el('slNozzle').value,extOffsetX:0,extOffsetY:0}],
+        gcodePre:[';; The Lab Solutions — AI Slicer · '+model+' · '+el('slMaterial').value,
+          'M140 S'+p.bedTemp,'M104 S'+p.nozzleTemp,'G28','M190 S'+p.bedTemp,'M109 S'+p.nozzleTemp,
+          'G21','G90','M82','G92 E0','G1 Z2 F900'],
+        gcodePost:['M107','M104 S0','M140 S0','G92 E0','G91','G1 Z5 F900','G90','M84'],
+        gcodeFan:['M106 S{fan_speed}'],
+      };
+      const proc={
+        processName:'TheLab-AI',
+        sliceHeight:p.layerHeight,firstSliceHeight:p.firstLayerHeight,
+        sliceShells:p.shells,sliceTopLayers:p.topLayers,sliceBottomLayers:p.bottomLayers,
+        sliceFillSparse:p.infillPct/100,sliceFillType:p.infillType,sliceFillAngle:45,sliceFillOverlap:0.3,
+        sliceSupportEnable:p.supports,sliceSupportAngle:p.supportAngle,sliceSupportDensity:0.25,
+        sliceSupportSize:6,sliceSupportArea:1,sliceSupportSpan:5,sliceSupportGap:1,sliceSupportNozzle:0,
+        firstLayerRate:p.firstLayerSpeed,firstLayerFillRate:Math.round(p.firstLayerSpeed*1.2),firstLayerPrintMult:1.15,
+        outputTemp:p.nozzleTemp,outputBedTemp:p.bedTemp,
+        outputFeedrate:p.speed,outputFinishrate:Math.max(15,Math.round(p.speed*0.5)),outputSeekrate:p.travelSpeed,
+        outputFanMax:Math.round(p.fanPct*2.55),outputFanSpeed:Math.round(p.fanPct*2.55),outputFanLayer:1,
+        outputShellMult:1,outputFillMult:1,outputSparseMult:1,
+        outputRetractDist:p.retractDist,outputRetractSpeed:Math.round(p.retractSpeed),
+        zHopDistance:p.zHop,
+        outputBrimCount:p.brim,outputBrimOffset:0,outputRaft:p.raft,
+        detectThinWalls:true,sliceMinHeight:0,
+      };
+      const eng=window.kiri.newEngine();
+      eng.setListener(m=>{
+        if(m.slice)setProg(12+(m.slice.update||0)*48,'Laminando capas… '+(m.slice.updateStatus||''));
+        else if(m.prepare)setProg(60+(m.prepare.update||0)*28,'Generando trayectorias…');
+        else if(m.export)setProg(88+(m.export.update||0)*10,'Exportando G-code…');
+      });
+      await eng.parse(toBinarySTL(S.tris));
+      await eng.setDevice(dev);
+      await eng.setProcess(proc);
+      await eng.slice();
+      await eng.prepare();
+      let gcode=await eng.export();
+      if(typeof gcode!=='string')gcode=String(gcode||'');
+      if(!gcode.includes('G1'))throw new Error('el motor devolvió un G-code vacío');
+      // red de seguridad: asegurar comando de ventilador
+      if(p.fanPct>0&&!/M106/.test(gcode)){
+        const lines=gcode.split('\n');let layer=0;
+        for(let i=0;i<lines.length;i++){
+          if(/^;.*layer/i.test(lines[i])&&++layer===2){lines.splice(i+1,0,'M106 S'+Math.round(p.fanPct*2.55));break;}
+        }
+        gcode=lines.join('\n');
+      }
+      S.gcode=gcode;
+      setProg(100,'✓ G-code listo');
+      renderResult(estimate(gcode,MATS[el('slMaterial').value]));
+    }catch(e){
+      setProg(0,'✕ Error');
+      toast('Error al laminar: '+e.message,'error');
+    }finally{btn.disabled=false;}
+  }
+  function estimate(gc,mat){
+    let t=0,e=0,x=0,y=0,z=0,le=0,f=3000,abs=true;
+    for(const raw of gc.split('\n')){
+      const c=raw.trim();if(!c||c[0]===';')continue;
+      if(c.startsWith('M82')){abs=true;continue;}
+      if(c.startsWith('M83')){abs=false;continue;}
+      if(c.startsWith('G92')){const m=/E([-\d.]+)/.exec(c);if(m)le=+m[1];continue;}
+      if(!(c.startsWith('G1')||c.startsWith('G0')))continue;
+      let nx=x,ny=y,nz=z,ne=null;
+      for(const w of c.split(' ')){
+        const v=+w.slice(1);if(!isFinite(v))continue;
+        if(w[0]==='X')nx=v;else if(w[0]==='Y')ny=v;else if(w[0]==='Z')nz=v;else if(w[0]==='E')ne=v;else if(w[0]==='F')f=v;
+      }
+      const d=Math.hypot(nx-x,ny-y,nz-z);
+      let ext=0;
+      if(ne!==null){ext=abs?ne-le:ne;if(abs)le=ne;if(ext>0)e+=ext;}
+      t+=Math.max(d,Math.abs(ext))/(f/60);
+      x=nx;y=ny;z=nz;
+    }
+    t*=1.08; // margen por aceleraciones
+    const volMm3=e*Math.PI*0.765625; // área filamento 1.75mm
+    return{secs:t,filM:e/1000,grams:volMm3/1000*mat.dens};
+  }
+  function fmtTime(s){const h=Math.floor(s/3600),m=Math.round(s%3600/60);return h?`${h}h ${m}min`:`${m}min`;}
+  function gcodeFileName(){
+    return(S.name||'pieza').replace(/[^\w\-]+/g,'_')+'_'+el('slMaterial').value+'_'+S.params.layerHeight+'mm.gcode';
+  }
+  function renderResult(est){
+    const model=el('slPrinter').value;
+    const machines=MAQUINAS.filter(m=>getPrinterIp(m));
+    const opts=machines.map(m=>`<option value="${m.id}" ${m.modelo===model?'selected':''}>${escapeHtml(m.nombre)} #${m.numG}</option>`).join('');
+    const kb=Math.round(S.gcode.length/1024);
+    el('slResult').style.display='block';
+    el('slResult').innerHTML=`
+      <div style="padding:14px;background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.3);border-radius:10px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          <span class="badge badge-green">⏱ ~${fmtTime(est.secs)}</span>
+          <span class="badge badge-green">🧵 ${est.filM.toFixed(1)} m</span>
+          <span class="badge badge-green">⚖ ~${est.grams.toFixed(0)} g</span>
+          <span class="badge badge-gray">📄 ${kb.toLocaleString('es-CL')} KB</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary" onclick="SL3D.descargar()">⬇ Descargar .gcode</button>
+          ${machines.length?`
+          <select class="field-select" id="slTarget" style="width:auto;min-width:170px">${opts}</select>
+          <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Iniciar al subir</label>
+          <button class="btn btn-ghost" id="slBtnSend" onclick="SL3D.enviar()">📤 Enviar a impresora</button>
+          `:'<span style="font-size:10px;color:var(--text3)">Configura la IP de una impresora para enviar directo</span>'}
+        </div>
+      </div>`;
+  }
+  function descargar(){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([S.gcode],{type:'text/plain'}));
+    a.download=gcodeFileName();a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  }
+  function enviar(){
+    const id=el('slTarget')?.value;if(!id||!S.gcode)return;
+    const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);
+    if(!ip){toast('Esa impresora no tiene IP configurada','error');return;}
+    const fname=gcodeFileName(),autoStart=el('slAutoStart')?.checked;
+    const btn=el('slBtnSend');btn.disabled=true;btn.textContent='⏳ Subiendo…';
+    const fd=new FormData();
+    fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);
+    fd.append('root','gcodes');
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST',printerUrl(ip,'/server/files/upload'));
+    const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
+    xhr.upload.onprogress=ev=>{if(ev.lengthComputable)btn.textContent='⏳ '+Math.round(ev.loaded/ev.total*100)+'%';};
+    xhr.onload=async()=>{
+      btn.disabled=false;btn.textContent='📤 Enviar a impresora';
+      if(xhr.status>=200&&xhr.status<300){
+        toast(`✓ ${fname} subido a ${m.nombre} #${m.numG}`,'success');
+        if(autoStart){
+          try{
+            const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(fname)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
+            toast(r.ok?`▶ Imprimiendo en ${m.nombre} #${m.numG}`:'No se pudo iniciar la impresión',r.ok?'success':'error');
+            if(typeof pollPrinters==='function')pollPrinters();
+          }catch(e){toast('No se pudo iniciar: '+e.message,'error');}
+        }
+      }else toast('Error al subir ('+xhr.status+')','error');
+    };
+    xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Enviar a impresora';toast('Impresora inaccesible — revisa modo Local/Remoto y el túnel','error');};
+    xhr.send(fd);
+  }
+
+  // ── Init ────────────────────────────────────────────────────
+  function onPrinterChange(){if(S.stats)renderStats();}
+  document.addEventListener('DOMContentLoaded',()=>{
+    const sel=el('slPrinter');if(!sel)return;
+    sel.innerHTML=Object.keys(SPECS).map(k=>`<option value="${k}">${k} — ${SPECS[k].x}×${SPECS[k].y}×${SPECS[k].z}mm</option>`).join('');
+    const drop=el('slDrop');
+    ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--accent)';drop.style.background='rgba(0,212,204,0.05)';}));
+    ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--border2)';drop.style.background='';}));
+    drop.addEventListener('drop',e=>loadFile(e.dataTransfer.files[0]));
+    const cv=el('slCanvas');
+    cv.addEventListener('pointerdown',e=>{S.drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing';});
+    cv.addEventListener('pointermove',e=>{if(!S.drag)return;S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
+    cv.addEventListener('pointerup',()=>{S.drag=null;cv.style.cursor='grab';});
+  });
+  return{loadFile,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,onPrinterChange};
+})();
 </script>
 
 <script>
