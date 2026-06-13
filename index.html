@@ -13355,7 +13355,7 @@ const MAIL={
   },
 
   // ── Enviar cotización por correo ──
-  sendCotizacion(cotId){
+  async sendCotizacion(cotId){
     const c=state.cotizaciones.find(x=>x.id===cotId);
     if(!c){toast('Cotización no encontrada','error');return;}
     const f=c.fields;
@@ -13367,15 +13367,23 @@ const MAIL={
       const cli=state.clientes.find(x=>x.id===cid);
       if(cli){email=cli.fields['Email']||'';empresa=cli.fields['Empresa']||'';}
     }
-    // Documento HTML de la cotización como adjunto
+    // Generar PDF de la cotización como adjunto
     this._cmpAtts=[];
     try{
       const res=buildCotizacionDoc(cotId);
       if(res&&res.html){
-        const b64=btoa(unescape(encodeURIComponent(res.html)));
-        this._cmpAtts.push({name:`Cotizacion_${numCot.replace(/[^\w-]/g,'_')}.html`,type:'text/html',size:res.html.length,data:b64});
+        toast('Generando PDF…','info');
+        const pdfBlob=await _fichaHTMLtoPdfBlob(res.html);
+        const b64=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();
+          reader.onload=()=>resolve(reader.result.split(',')[1]);
+          reader.onerror=reject;
+          reader.readAsDataURL(pdfBlob);
+        });
+        const fname=`Cotizacion_${numCot.replace(/[^\w-]/g,'_')}.pdf`;
+        this._cmpAtts.push({name:fname,type:'application/pdf',size:pdfBlob.size,data:b64});
       }
-    }catch(e){}
+    }catch(e){toast('Error generando PDF','error');}
     switchTab('correo');
     setTimeout(()=>{
       this.init();
