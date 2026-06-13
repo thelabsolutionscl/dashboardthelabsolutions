@@ -10700,6 +10700,37 @@ function printerCamUrl(id){
 const HIST_KEY='printer_history_v1';
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={},_demoPrinterState={};
+// ── Print queue ──────────────────────────────────────────────
+const _printQueue={};// { [printerId]: [{gcode,filename,secs,grams},...] }
+function _queueGet(id){return _printQueue[id]||(_printQueue[id]=[]);}
+function _queueCount(id){return(_printQueue[id]||[]).length;}
+function _queueAdd(id,gcode,filename,secs,grams){
+  _queueGet(id).push({gcode,filename,secs,grams,added:Date.now()});
+  toast(`📋 Encolado en ${(MAQUINAS.find(m=>m.id===id)||{}).nombre||id} (#${_queueCount(id)} en cola)`,'success');
+  renderMonitorGrid();
+}
+async function _queueStartNext(id){
+  const q=_printQueue[id];if(!q||!q.length)return;
+  const job=q.shift();renderMonitorGrid();
+  const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);if(!ip)return;
+  try{
+    const fd=new FormData();
+    fd.append('file',new Blob([job.gcode],{type:'text/plain'}),job.filename);
+    fd.append('root','gcodes');
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST',printerUrl(ip,'/server/files/upload'));
+    const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
+    xhr.onload=async()=>{
+      if(xhr.status>=200&&xhr.status<300){
+        await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
+        toast(`▶ Cola: iniciando ${job.filename} en ${m?.nombre||id}`,'success');
+        if(typeof pollPrinters==='function')pollPrinters();
+      }else toast('Cola: error al subir siguiente trabajo','error');
+    };
+    xhr.onerror=()=>toast('Cola: impresora inaccesible','error');
+    xhr.send(fd);
+  }catch(e){toast('Cola: '+e.message,'error');}
+}
 
 const MONITOR_GRUPOS=[
   {key:'all',label:'Todas',color:'var(--accent)'},
@@ -10905,6 +10936,7 @@ function renderMonitorGrid(){
             <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
             <button onclick="openWebcamModal('${m.id}')" style="background:${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${localStorage.getItem('printer_cam_'+m.id)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
             <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
+            ${_queueCount(m.id)>0?`<button onclick="openQueueModal('${m.id}')" style="background:rgba(255,170,0,0.12);border:1px solid rgba(255,170,0,0.4);border-radius:6px;color:#ffaa00;font-size:10px;padding:3px 7px;cursor:pointer" title="${_queueCount(m.id)} trabajo(s) en cola">🔁 ${_queueCount(m.id)}</button>`:''}
           </div>
         </div>`;
     }
@@ -11102,14 +11134,62 @@ function openPrinterControl(id){
 }
 function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';}
 
+// ── Queue modal ───────────────────────────────────────────────
+function openQueueModal(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const q=_queueGet(id);
+  const fmtTime=s=>{const h=Math.floor(s/3600),mn=Math.floor((s%3600)/60);return h?`${h}h ${mn}m`:`${mn}m`;};
+  const rows=q.map((j,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);min-width:18px">#${i+1}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(j.filename)}</div>
+        <div style="font-size:10px;color:var(--text3)">⏱ ~${j.secs?fmtTime(j.secs):'—'} · ⚖ ~${j.grams?j.grams.toFixed(0):'—'}g</div>
+      </div>
+      <button onclick="_queueRemove('${id}',${i})" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.3);border-radius:6px;color:#ff4444;font-size:10px;padding:3px 8px;cursor:pointer">✕</button>
+    </div>`).join('');
+  const body=q.length?`<div style="display:flex;flex-direction:column;gap:6px">${rows}</div>`:`<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Cola vacía</div>`;
+  document.getElementById('queueModalTitle').textContent=`Cola de impresión — ${m.nombre} #${m.numG}`;
+  document.getElementById('queueModalBody').innerHTML=body;
+  document.getElementById('queueModal').style.display='flex';
+}
+function closeQueueModal(){document.getElementById('queueModal').style.display='none';}
+function _queueRemove(id,idx){
+  const q=_printQueue[id];if(!q)return;
+  q.splice(idx,1);
+  renderMonitorGrid();
+  if(q.length>0)openQueueModal(id);else closeQueueModal();
+  toast('Trabajo eliminado de la cola','success');
+}
 
+function _sendWaAlertIfEnabled(title,body){
+  if(localStorage.getItem('monitor_wa_enabled')!=='1')return;
+  const phone=localStorage.getItem('monitor_wa_phone');if(!phone)return;
+  sendWatiMessage(phone,`${title}\n${body}`).catch(()=>{});
+}
 function checkTransitions(m,s){
   const prev=_prevState[m.id];const st=s.state;
-  if(st==='error'&&prev!=='error'){sendBrowserNotification(`⚠ Error en ${m.nombre} #${m.numG}`,'Requiere atención');sendWebhookAlert(m,'error');}
+  if(st==='error'&&prev!=='error'){
+    const title=`⚠ Error en ${m.nombre} #${m.numG}`;
+    sendBrowserNotification(title,'Requiere atención');
+    sendWebhookAlert(m,'error');
+    _sendWaAlertIfEnabled(title,'Requiere atención inmediata.');
+  }
   if(st==='printing'&&prev!=='printing')_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
   if(prev==='printing'&&st!=='printing'){
     const sess=_sessions[m.id];
-    if(sess){const dur=Math.round((Date.now()-sess.start)/60000);const filamentMm=Math.max(0,(s.filamentMm||0)-sess.filamentStart);saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,st==='complete'?'Completado':'Cancelado',filamentMm);delete _sessions[m.id];if(st==='complete'){sendBrowserNotification(`✅ ${m.nombre} #${m.numG} completado`,`${sess.file} · ${dur}m`);}}
+    if(sess){
+      const dur=Math.round((Date.now()-sess.start)/60000);
+      const filamentMm=Math.max(0,(s.filamentMm||0)-sess.filamentStart);
+      saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,st==='complete'?'Completado':'Cancelado',filamentMm);
+      delete _sessions[m.id];
+      if(st==='complete'){
+        const title=`✅ ${m.nombre} #${m.numG} completado`;
+        sendBrowserNotification(title,`${sess.file} · ${dur}m`);
+        _sendWaAlertIfEnabled(title,`Archivo: ${sess.file} | Duración: ${dur} min`);
+        if(_queueCount(m.id)>0)setTimeout(()=>_queueStartNext(m.id),2000);
+      }
+    }
   }
   _prevState[m.id]=st;
 }
@@ -11163,9 +11243,19 @@ function closeHistoryModal(){document.getElementById('histModal').style.display=
 
 function openAlertSettings(){
   document.getElementById('alertWebhookUrl').value=localStorage.getItem('monitor_webhook_url')||'';
+  const wp=document.getElementById('alertWaPhone');const wc=document.getElementById('alertWaEnabled');
+  if(wp)wp.value=localStorage.getItem('monitor_wa_phone')||'';
+  if(wc)wc.checked=localStorage.getItem('monitor_wa_enabled')==='1';
   document.getElementById('alertSettingsModal').style.display='flex';
 }
-function saveAlertSettings(){const url=document.getElementById('alertWebhookUrl').value.trim();if(url)localStorage.setItem('monitor_webhook_url',url);else localStorage.removeItem('monitor_webhook_url');toast(url?'Webhook configurado ✓':'Webhook eliminado','success');closeAlertSettings();}
+function saveAlertSettings(){
+  const url=document.getElementById('alertWebhookUrl').value.trim();
+  if(url)localStorage.setItem('monitor_webhook_url',url);else localStorage.removeItem('monitor_webhook_url');
+  const wp=document.getElementById('alertWaPhone');const wc=document.getElementById('alertWaEnabled');
+  if(wp){const ph=wp.value.trim();if(ph)localStorage.setItem('monitor_wa_phone',ph);else localStorage.removeItem('monitor_wa_phone');}
+  if(wc)localStorage.setItem('monitor_wa_enabled',wc.checked?'1':'0');
+  toast('Alertas guardadas ✓','success');closeAlertSettings();
+}
 function closeAlertSettings(){document.getElementById('alertSettingsModal').style.display='none';}
 
 // ── SORT & KIOSK ──────────────────────────────────────────────
@@ -15166,6 +15256,16 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
   </div>
 </div>
 
+<!-- QUEUE MODAL -->
+<div id="queueModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeQueueModal()"></div>
+  <div class="modal-card" style="max-width:480px;width:95vw">
+    <div class="modal-title">🔁 <span id="queueModalTitle">Cola de impresión</span></div>
+    <div id="queueModalBody" style="margin-top:14px;max-height:400px;overflow-y:auto"></div>
+    <button class="btn btn-ghost btn-sm" onclick="closeQueueModal()" style="margin-top:14px;width:100%">Cerrar</button>
+  </div>
+</div>
+
 <!-- HISTORIAL MODAL -->
 <div id="histModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeHistoryModal()"></div>
@@ -15191,6 +15291,12 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
         <div class="field-label" style="margin-bottom:6px">Webhook (Make.com / Zapier)</div>
         <input id="alertWebhookUrl" type="text" placeholder="https://hook.make.com/..." style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
         <div style="font-size:10px;color:var(--text3);margin-top:4px">Se enviará un POST con la info de la impresora cuando ocurra un error</div>
+      </div>
+      <div>
+        <div class="field-label" style="margin-bottom:6px">📲 Alertas por WhatsApp (vía WATI)</div>
+        <input id="alertWaPhone" type="text" placeholder="+56912345678" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+        <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11px;color:var(--text2);cursor:pointer"><input type="checkbox" id="alertWaEnabled"> Avisar al completar o fallar una impresión</label>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">Usa la conexión WATI ya configurada. Deja el número con código de país.</div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:18px">
@@ -18432,6 +18538,7 @@ const SL3D=(function(){
     vol=Math.abs(vol);
     S.stats={dx,dy,dz,vol:vol/1000,area:area/100,tris:t.length/9,
       ovPct:area?ovArea/area*100:0,hr:dz/Math.max(5,Math.min(dx,dy))};
+    S.bounds={dx,dy,dz};
   }
 
   // ── Preview 3D (canvas, sin librerías) ──────────────────────
@@ -19031,16 +19138,44 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     _drawGcodeLayer(S.gcodeLayers.length-1);
   }
   function previewSlide(v){_drawGcodeLayer(+v);}
+  function _suggestPrinter(machines,est){
+    // Score each machine: idle>standby>other; model match bonus; queue empty bonus
+    const model=el('slPrinter').value;
+    const scores=machines.map(m=>{
+      const st=(_printerStatus[m.id]||{}).state||'offline';
+      const busy=st==='printing'||st==='paused';
+      const idle=st==='idle'||st==='standby'||st==='ready';
+      const spec=SPECS[m.modelo]||SPECS[model]||{};
+      const fits=S.bounds?(S.bounds.dx<=(spec.x||300)&&S.bounds.dy<=(spec.y||300)&&S.bounds.dz<=(spec.z||300)):true;
+      let score=0;
+      if(busy)score-=100;
+      if(idle)score+=10;
+      if(m.modelo===model)score+=5;
+      if(fits)score+=8;
+      if(!_queueCount(m.id))score+=3;
+      return{m,score,idle,busy,fits};
+    });
+    scores.sort((a,b)=>b.score-a.score);
+    return scores[0]?.m||null;
+  }
   function renderResult(est){
     S.est=est;
     const model=el('slPrinter').value;
     const machines=MAQUINAS.filter(m=>getPrinterIp(m));
-    const opts=machines.map(m=>`<option value="${m.id}" ${m.modelo===model?'selected':''}>${escapeHtml(m.nombre)} #${m.numG}</option>`).join('');
+    const suggested=_suggestPrinter(machines,est);
+    const opts=machines.map(m=>{
+      const isSugg=suggested&&m.id===suggested.id;
+      const st=(_printerStatus[m.id]||{}).state||'offline';
+      const q=_queueCount(m.id);
+      const label=`${escapeHtml(m.nombre)} #${m.numG}${isSugg?' ★':''}${q?' ('+q+' en cola)':''}${st==='printing'?' [imprimiendo]':''}`;
+      return`<option value="${m.id}" ${isSugg?'selected':m.modelo===model?'selected':''}>${label}</option>`;
+    }).join('');
     const kb=Math.round(S.gcode.length/1024);
     const pk=localStorage.getItem('sl_price_kg')||'15000',rh=localStorage.getItem('sl_rate_h')||'1500';
     const warns=[];
     if(S.params.supports)warns.push('<b>Soportes activados</b>: columnas básicas en rejilla bajo los voladizos, pensadas para retirarse a mano. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
     if(S.params.raft)warns.push('Se pidió <b>raft</b>: no está soportado — se imprime brim como adhesión alternativa.');
+    const suggHint=suggested?`<div style="font-size:10px;color:var(--accent);margin-bottom:8px">💡 Impresora sugerida: <b>${escapeHtml(suggested.nombre)} #${suggested.numG}</b> — ${((_printerStatus[suggested.id]||{}).state||'offline')}</div>`:'';
     el('slResult').style.display='block';
     el('slResult').innerHTML=`
       ${warns.length?`<div style="padding:11px 13px;margin-bottom:12px;background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:10px;font-size:11px;color:#ffaa00;line-height:1.5">⚠ ${warns.join('<br>⚠ ')}</div>`:''}
@@ -19063,9 +19198,15 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
           <button class="btn btn-primary" onclick="SL3D.descargar()">⬇ Descargar .gcode</button>
           <button class="btn btn-ghost" onclick="SL3D.preview()">👁 Vista previa por capas</button>
           ${machines.length?`
-          <select class="field-select" id="slTarget" style="width:auto;min-width:170px">${opts}</select>
-          <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Iniciar al subir</label>
-          <button class="btn btn-ghost" id="slBtnSend" onclick="SL3D.enviar()">📤 Enviar a impresora</button>
+          <div style="display:flex;flex-direction:column;gap:6px;width:100%;margin-top:4px">
+            ${suggHint}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <select class="field-select" id="slTarget" style="width:auto;min-width:180px">${opts}</select>
+              <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Iniciar al subir</label>
+              <button class="btn btn-ghost" id="slBtnSend" onclick="SL3D.enviar()">📤 Enviar</button>
+              <button class="btn btn-ghost" id="slBtnQueue" onclick="SL3D.encolar()" title="Encolar: el trabajo se iniciará automáticamente cuando la impresora quede libre">🔁 Encolar</button>
+            </div>
+          </div>
           `:'<span style="font-size:10px;color:var(--text3)">Configura la IP de una impresora para enviar directo</span>'}
         </div>
         <!-- VISTA PREVIA -->
@@ -19114,6 +19255,19 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Enviar a impresora';toast('Impresora inaccesible — revisa modo Local/Remoto y el túnel','error');};
     xhr.send(fd);
   }
+  function encolar(){
+    const id=el('slTarget')?.value;if(!id||!S.gcode)return;
+    const m=MAQUINAS.find(x=>x.id===id);if(!m){toast('Impresora no encontrada','error');return;}
+    const st=(_printerStatus[id]||{}).state||'offline';
+    const busy=st==='printing'||st==='paused';
+    if(!busy){
+      // printer is free: just send + auto-start
+      const autoOld=el('slAutoStart');if(autoOld)autoOld.checked=true;
+      enviar();return;
+    }
+    const fname=gcodeFileName();
+    _queueAdd(id,S.gcode,fname,S.est?.secs,S.est?.grams);
+  }
 
   // ── Init ────────────────────────────────────────────────────
   function onPrinterChange(){if(S.stats)renderStats();}
@@ -19129,7 +19283,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     cv.addEventListener('pointermove',e=>{if(!S.drag)return;S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
     cv.addEventListener('pointerup',()=>{S.drag=null;cv.style.cursor='grab';});
   });
-  return{loadFile,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,onPrinterChange,costRecalc,preview,previewSlide};
+  return{loadFile,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide};
 })();
 </script>
 
