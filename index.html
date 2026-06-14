@@ -5559,9 +5559,8 @@ async function processAgentQueueItem(recordId){
     if((agentId==='LEAD_AGENT'||agentId==='LINKEDIN_AGENT')&&f.Entidad==='Cliente'&&f['ID entidad']){
       await updateClienteFromLead(f['ID entidad'],ex,agentId);
     }
-    if(typeof AGENT_LOG!=='undefined'&&AGENT_LOG&&typeof AGENT_LOG.add==='function'){
-      try{AGENT_LOG.add({agente:agentId,entidad:f.Entidad,output:out});}catch(_){}
-    }
+    // Log en la tabla Agent_Log (best-effort)
+    try{await airtableWriteTolerant('Agent_Log','POST',null,{'Agente':agentId,'Consulta':String(userMsg).slice(0,5000),'Resultado':String(out).slice(0,95000),'Usuario':'Cola de Agentes','Fecha':new Date().toISOString()});}catch(_){}
     toast('✓ '+agentId+' procesado','success');renderAgentQueue();
   }catch(e){
     try{await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,{'Estado':'Error','Error':String(e.message).slice(0,1000),'Fecha ejecución':new Date().toISOString()});}catch(_){}
