@@ -2699,6 +2699,21 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <div id="slProgTxt" style="font-size:10px;color:var(--text3);margin-top:4px">—</div>
           </div>
           <div id="slResult" style="display:none;margin-top:14px"></div>
+          <!-- ── Suite de calibración ── -->
+          <div style="margin-top:16px;border-top:1px solid var(--border2);padding-top:12px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:8px">🔧 Calibración <span style="color:var(--text3);font-weight:400;text-transform:none">(no necesita modelo)</span></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <select class="field-select" id="slCalType" style="width:auto;min-width:180px">
+                <option value="temp">🌡 Torre de temperatura</option>
+                <option value="flow">📏 Test de flujo (pared simple)</option>
+                <option value="pa">🎯 Torre Pressure Advance (Klipper)</option>
+                <option value="retract">🧵 Torre de retracción</option>
+                <option value="firstlayer">🔲 Parche 1ª capa</option>
+              </select>
+              <button class="btn btn-ghost" id="slBtnCal" onclick="SL3D.calibrar()">Generar test</button>
+            </div>
+            <div id="slCalResult" style="display:none;margin-top:12px"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -19487,7 +19502,73 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   function fmtTime(s){const h=Math.floor(s/3600),m=Math.round(s%3600/60);return h?`${h}h ${m}min`:`${m}min`;}
   function gcodeFileName(){
-    return(S.name||'pieza').replace(/[^\w\-]+/g,'_')+'_'+el('slMaterial').value+'_'+S.params.layerHeight+'mm.gcode';
+    const lh=S.params?('_'+S.params.layerHeight+'mm'):'';
+    return(S.name||'pieza').replace(/[^\w\-]+/g,'_')+'_'+el('slMaterial').value+lh+'.gcode';
+  }
+  // ── Suite de calibración (genera G-code de test sin necesidad de modelo) ──
+  function _calGen(type){
+    const matName=el('slMaterial').value,mat=MATS[matName],noz=+el('slNozzle').value,spec=SPECS[el('slPrinter').value];
+    const extW=noz*1.05,lh=0.2,bed=mat.bed,cx=spec.x/2,cy=spec.y/2;
+    const gc=[],st={x:0,y:0,E:0};
+    const EXT=(x,y,w,h,f)=>{const d=Math.hypot(x-st.x,y-st.y);st.E+=d*(w||extW)*(h||lh)/FILA_AREA;gc.push(`G1 X${x.toFixed(3)} Y${y.toFixed(3)} E${st.E.toFixed(4)} F${f}`);st.x=x;st.y=y;};
+    const TRV=(x,y,f)=>{gc.push(`G1 X${x.toFixed(3)} Y${y.toFixed(3)} F${f||3000}`);st.x=x;st.y=y;};
+    function header(top){
+      gc.push('; The Lab Solutions — Calibración: '+type+' · '+matName);
+      gc.push('M140 S'+bed);gc.push('M104 S'+top);gc.push('G28');gc.push('M190 S'+bed);gc.push('M109 S'+top);
+      gc.push('G21');gc.push('G90');gc.push('M82');gc.push('G92 E0');gc.push('M106 S'+Math.round((mat.fan||100)*2.55));
+      gc.push('G1 Z0.24 F600');TRV(5,5);st.E+=40*extW*0.24/FILA_AREA;gc.push(`G1 X5 Y45 E${st.E.toFixed(4)} F1200`);st.x=5;st.y=45;gc.push('G92 E0');st.E=0;
+    }
+    function box(li,z,w,d,feed){const x0=cx-w/2,x1=cx+w/2,y0=cy-d/2,y1=cy+d/2;gc.push(`G1 Z${z.toFixed(3)} F600`);TRV(x0,y0);const f=li===0?Math.round(feed*0.5):feed;EXT(x1,y0,0,0,f);EXT(x1,y1,0,0,f);EXT(x0,y1,0,0,f);EXT(x0,y0,0,0,f);}
+    function footer(){gc.push('M107');gc.push('M104 S0');gc.push('M140 S0');if(st.E)gc.push(`G1 E${(st.E-0.8).toFixed(4)} F2100`);gc.push('G91');gc.push('G1 Z10 F900');gc.push('G90');gc.push('M84');}
+    if(type==='temp'){
+      const t0=Math.min(300,mat.noz+15),bands=5,bl=30;header(t0);
+      for(let li=0;li<bands*bl;li++){if(li%bl===0){const t=t0-5*(li/bl);gc.push(`M104 S${t}`);gc.push(`; --- ${t}°C ---`);}box(li,(li+1)*lh,25,12,1500);}
+      footer();return{gcode:gc.join('\n'),name:`temp_${matName}_${t0}-${t0-20}`,info:`<b>Torre de temperatura</b> ${t0}°C → ${t0-20}°C (caliente abajo, frío arriba), 5 bandas de 6mm. Elige la banda con mejor brillo/capa, sin stringing ni burbujas, y usá esa temperatura de boquilla.`};
+    }
+    if(type==='flow'){header(mat.noz);for(let li=0;li<25;li++)box(li,(li+1)*lh,30,30,1200);footer();
+      return{gcode:gc.join('\n'),name:`flujo_${matName}`,info:`<b>Cubo de pared simple</b> 30×30mm. Mide el grosor de la pared con calibre: debería dar <b>${extW.toFixed(2)}mm</b>. Flujo nuevo = flujo actual × (${extW.toFixed(2)} / medido).`};}
+    if(type==='pa'){const bands=8,bl=12;header(mat.noz);
+      for(let li=0;li<bands*bl;li++){if(li%bl===0){const pa=(li/bl)*0.01;gc.push(`SET_PRESSURE_ADVANCE ADVANCE=${pa.toFixed(3)}`);gc.push(`; --- PA ${pa.toFixed(3)} ---`);}box(li,(li+1)*lh,30,30,3000);}
+      footer();return{gcode:gc.join('\n'),name:`pa_${matName}`,info:`<b>Torre Pressure Advance</b> 0 → 0.07 (Klipper, requiere SET_PRESSURE_ADVANCE). Impresa rápido para exagerar el efecto. Mide la altura donde las esquinas dejan de abultarse: PA = (altura_mm / 2.4) × 0.01 ≈ banda × 0.01.`};}
+    if(type==='retract'){const bands=6,bl=15,ax=cx-25,bx=cx+25;header(mat.noz);
+      for(let li=0;li<bands*bl;li++){const z=(li+1)*lh,rd=0.4+0.4*Math.floor(li/bl);if(li%bl===0)gc.push(`; --- retracción ${rd.toFixed(1)}mm ---`);gc.push(`G1 Z${z.toFixed(3)} F600`);
+        for(const bc of[ax,bx]){st.E-=rd;gc.push(`G1 E${st.E.toFixed(4)} F2100`);TRV(bc-5,cy-5,6000);st.E+=rd;gc.push(`G1 E${st.E.toFixed(4)} F2100`);const f=li===0?700:1600;EXT(bc+5,cy-5,0,0,f);EXT(bc+5,cy+5,0,0,f);EXT(bc-5,cy+5,0,0,f);EXT(bc-5,cy-5,0,0,f);}}
+      footer();return{gcode:gc.join('\n'),name:`retract_${matName}`,info:`<b>Torres de retracción</b>: dos postes con un viaje entre ellos en cada capa. La retracción sube 0.4mm por banda (0.4→2.4mm). Elige la banda con menos hilos entre las torres y usá esa distancia de retracción.`};}
+    // firstlayer: parche sólido de una capa
+    header(mat.noz);const w=40,x0=cx-w/2,x1=cx+w/2,y0=cy-w/2,y1=cy+w/2;gc.push(`G1 Z${lh.toFixed(3)} F600`);TRV(x0,y0);
+    EXT(x1,y0,0,0,1000);EXT(x1,y1,0,0,1000);EXT(x0,y1,0,0,1000);EXT(x0,y0,0,0,1000);
+    let yy=y0+extW,toRight=true;TRV(x0+extW,yy,3000);
+    while(yy<y1-extW){const tx=toRight?x1-extW:x0+extW;EXT(tx,yy,0,0,1500);yy+=extW;if(yy<y1-extW)EXT(tx,yy,0,0,1500);toRight=!toRight;}
+    footer();return{gcode:gc.join('\n'),name:`primeracapa_${matName}`,info:`<b>Parche sólido 40×40</b> de una capa. Las líneas deben tocarse sin huecos ni sobre-aplastado. Ajustá el Z-offset / nivelación de la cama hasta que quede uniforme.`};
+  }
+  function calibrar(){
+    let res;try{res=_calGen(el('slCalType').value);}catch(e){toast('Error generando test: '+e.message,'error');return;}
+    S.gcode=res.gcode;S.name=res.name;S.params=null;
+    const machines=MAQUINAS.filter(m=>getPrinterIp(m));
+    const opts=machines.map(m=>`<option value="${m.id}">${escapeHtml(m.nombre)} #${m.numG}</option>`).join('');
+    const kb=Math.round(res.gcode.length/1024);
+    const box=el('slCalResult');box.style.display='block';
+    box.innerHTML=`<div style="padding:12px;background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.3);border-radius:10px">
+      <div style="font-size:11px;color:var(--text2);line-height:1.55;margin-bottom:10px">${res.info}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary" onclick="SL3D.descargar()">⬇ Descargar .gcode</button>
+        <span class="badge badge-gray">${kb} KB</span>
+        ${machines.length?`<select class="field-select" id="slCalTarget" style="width:auto;min-width:150px">${opts}</select><button class="btn btn-ghost" id="slBtnCalSend" onclick="SL3D.enviarCal()">📤 Enviar e imprimir</button>`:''}
+      </div></div>`;
+    toast('Test de calibración generado ✓','success');
+  }
+  function enviarCal(){
+    const id=el('slCalTarget')?.value;if(!id||!S.gcode)return;
+    const m=MAQUINAS.find(x=>x.id===id),ip=getPrinterIp(m);if(!ip){toast('Esa impresora no tiene IP','error');return;}
+    if(typeof _isPrinterBusy==='function'&&_isPrinterBusy((_printerStatus[id]||{}).state)){toast('🔒 La impresora está ocupada — no se interrumpe','error');return;}
+    const fname=gcodeFileName(),btn=el('slBtnCalSend');btn.disabled=true;btn.textContent='⏳ Subiendo…';
+    const fd=new FormData();fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);fd.append('root','gcodes');
+    const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));
+    const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
+    xhr.onload=async()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';
+      if(xhr.status>=200&&xhr.status<300){try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(fname)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});toast(r.ok?`▶ Calibrando en ${m.nombre} #${m.numG}`:'Subido, no se pudo iniciar',r.ok?'success':'error');if(typeof pollPrinters==='function')pollPrinters();}catch(e){toast('Subido, no se pudo iniciar: '+e.message,'error');}}else toast('Error al subir ('+xhr.status+')','error');};
+    xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';toast('Impresora inaccesible','error');};
+    xhr.send(fd);
   }
   function _money(n){return '$'+Math.round(n||0).toLocaleString('es-CL');}
   function costRecalc(){
@@ -19702,7 +19783,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     cv.addEventListener('pointermove',e=>{if(!S.drag)return;S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
     cv.addEventListener('pointerup',()=>{S.drag=null;cv.style.cursor='grab';});
   });
-  return{loadFile,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide};
+  return{loadFile,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal};
 })();
 </script>
 
