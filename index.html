@@ -18477,14 +18477,17 @@ const SL3D=(function(){
   const FIELDS=[
     {k:'layerHeight',l:'Altura capa (mm)',s:0.04},{k:'firstLayerHeight',l:'1ª capa (mm)',s:0.04},
     {k:'shells',l:'Perímetros',s:1},{k:'topLayers',l:'Capas sup.',s:1},{k:'bottomLayers',l:'Capas inf.',s:1},
-    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','linear']},
-    {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},
+    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','cubic','concentric','linear']},
+    {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'outerSpeed',l:'Vel. pared ext.',s:5},{k:'infillSpeed',l:'Vel. relleno',s:10},
+    {k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},{k:'accel',l:'Aceleración (mm/s²)',s:500},
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
     {k:'supports',l:'Soportes',sel:['no','sí']},{k:'treeSupports',l:'Soporte árbol',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
     {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
     {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},
+    {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
     {k:'elephantFoot',l:'Pie de elefante (mm)',s:0.05},{k:'xyCompensation',l:'Compensación XY (mm)',s:0.02},
+    {k:'skirt',l:'Skirt (líneas)',s:1},{k:'skirtGap',l:'Skirt sep. (mm)',s:0.5},
     {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
@@ -18636,10 +18639,11 @@ MATERIAL: ${mat} · OBJETIVO: ${obj}${notas?'\nNOTAS DEL OPERADOR: '+notas:''}`;
   }
   const IA_SYS=`Eres KAI-SLICER, ingeniero experto en impresión 3D FDM de The Lab Solutions (Santiago, Chile).
 Eliges parámetros de laminado óptimos según geometría de la pieza, material, impresora y objetivo.
-REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). treeSupports=true cuando haya voladizos complejos o múltiples: genera ramas que se fusionan en troncos, mucho más fáciles de retirar. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno disponibles: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), linear (rápido).
-COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético, recomendado para piezas vistosas), "agudo" la esconde en esquinas agudas, "cercano" minimiza viaje (rápido). outerWallLast=true imprime la pared exterior al final → mejor acabado y precisión dimensional (recomendado para piezas vistosas o de precisión). bridgeDetect=true detecta puentes/voladizos horizontales y los imprime sólidos, lentos y con ventilador máximo (úsalo si hay voladizos). elephantFoot (mm, 0-0.3): encoge la 1ª capa para evitar que la base se abombe (típico 0.1-0.2 para piezas de precisión). xyCompensation (mm, -0.3 a 0.3): expansión/contracción horizontal global para calibrar tolerancias; negativo agranda agujeros. arcFitting déjalo en false salvo que se indique (requiere [gcode_arcs] en Klipper).
+REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). treeSupports=true cuando haya voladizos complejos o múltiples: genera ramas que se fusionan en troncos, mucho más fáciles de retirar. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), cubic (3D resistente), concentric (sigue el contorno, bueno para flexibles/sellos), linear (rápido).
+COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético), "agudo" en esquinas, "cercano" minimiza viaje. outerWallLast=true imprime la pared exterior al final → mejor acabado. bridgeDetect=true para voladizos horizontales. elephantFoot (mm, 0-0.3): encoge la 1ª capa. xyCompensation (mm, -0.3 a 0.3): negativo agranda agujeros. arcFitting=false salvo que se indique (requiere [gcode_arcs] en Klipper).
+VELOCIDAD: outerSpeed (mm/s, 0=auto) baja la pared exterior para mejor acabado (60% de speed en piezas vistosas). infillSpeed (0=auto) sube el relleno. accel (mm/s², 0=no tocar) limita aceleración para reducir ringing en piezas finas. ADHESIÓN: skirt (líneas, ceba el filamento sin pegarse a la pieza), brim (pegado, para piezas altas o ABS), raft=true (base completa bajo la pieza, para superficies difíciles o ABS — encarece). DETALLE: gapFill=true rellena paredes finas sin huecos. fuzzySkin (mm, 0.1-0.3) da textura rugosa mate a la pared exterior. coasting (mm, 0.1-0.3) corta la extrusión antes del fin del perímetro para evitar el blob de costura.
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|linear","speed":120,"firstLayerSpeed":30,"travelSpeed":200,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo","outerWallLast":false,"bridgeDetect":false,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
     if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
@@ -18669,13 +18673,16 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       topLayers:obj==='rapido'?3:4,bottomLayers:3,
       infillPct:obj==='resistente'?40:obj==='rapido'?10:15,
       infillType:obj==='resistente'?'gyroid':'grid',
-      speed:Math.round(vbase),firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),
+      speed:Math.round(vbase),outerSpeed:obj==='calidad'?Math.round(vbase*0.6):0,infillSpeed:obj==='rapido'?0:Math.round(vbase*1.1),
+      firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
       supports:st.ovPct>8,treeSupports:st.ovPct>8&&obj==='calidad',supportAngle:50,
       adaptiveLayerHeight:obj==='calidad',
       seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
       bridgeDetect:st.ovPct>8,arcFitting:false,
+      gapFill:obj!=='rapido',fuzzySkin:0,coasting:obj==='calidad'?0.2:0,
       elephantFoot:obj==='calidad'?0.15:0,xyCompensation:0,
+      skirt:st.hr>3?0:2,skirtGap:2,
       brim:st.hr>3?8:0,raft:false,ironing:obj==='calidad',
       retractDist:mat===MATS.TPU?0.5:0.8,retractSpeed:mat===MATS.TPU?20:35,zHop:0.2,
       };
@@ -18693,9 +18700,11 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       firstLayerHeight:cl(p.firstLayerHeight,0.1,noz*0.9,noz*0.6),
       shells:Math.round(cl(p.shells,1,8,2)),topLayers:Math.round(cl(p.topLayers,0,10,4)),bottomLayers:Math.round(cl(p.bottomLayers,0,10,3)),
       infillPct:Math.round(cl(p.infillPct,0,100,15)),
-      infillType:['grid','gyroid','triangle','hex','linear'].includes(p.infillType)?p.infillType:'grid',
-      speed:Math.round(cl(p.speed,10,vmax,60)),firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
-      travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),
+      infillType:['grid','gyroid','triangle','hex','cubic','concentric','linear'].includes(p.infillType)?p.infillType:'grid',
+      speed:Math.round(cl(p.speed,10,vmax,60)),
+      outerSpeed:Math.round(cl(p.outerSpeed,0,vmax,0)),infillSpeed:Math.round(cl(p.infillSpeed,0,vmax,0)),
+      firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
+      travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),accel:Math.round(cl(p.accel,0,30000,0)),
       nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
@@ -18704,7 +18713,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
       bridgeDetect:!!p.bridgeDetect&&p.bridgeDetect!=='no',
       arcFitting:!!p.arcFitting&&p.arcFitting!=='no',
+      gapFill:!!p.gapFill&&p.gapFill!=='no',fuzzySkin:cl(p.fuzzySkin,0,0.6,0),coasting:cl(p.coasting,0,2,0),
       elephantFoot:cl(p.elephantFoot,0,0.6,0),xyCompensation:cl(p.xyCompensation,-0.3,0.3,0),
+      skirt:Math.round(cl(p.skirt,0,5,0)),skirtGap:cl(p.skirtGap,0.5,10,2),
       brim:Math.round(cl(p.brim,0,20,0)),raft:!!p.raft&&p.raft!=='no',ironing:!!p.ironing&&p.ironing!=='no',
       retractDist:cl(p.retractDist,0,8,0.8),retractSpeed:Math.round(cl(p.retractSpeed,5,80,35)),
       zHop:cl(p.zHop,0,2,0.2),
@@ -18897,9 +18908,23 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return segs;
   }
+  // Relleno concéntrico: anillos que siguen el contorno hacia adentro (recortados a la región sólida)
+  function _concentricFill(loops,spacing){
+    let outer=loops[0];for(const L of loops)if(Math.abs(_polyArea(L))>Math.abs(_polyArea(outer)))outer=L;
+    const out=[];let ring=outer;
+    for(let k=0;k<300;k++){
+      ring=_inset(ring,spacing);
+      if(!ring||ring.length<3)break;
+      const segs=[];for(let i=0;i<ring.length;i++)segs.push([ring[i],ring[(i+1)%ring.length]]);
+      for(const s of _clipLines(segs,(x,y)=>_inSolid(x,y,loops),spacing*0.5))out.push(s);
+    }
+    return out;
+  }
   function _infillMulti(loops,spacing,pattern,li,z){
     if(pattern==='gyroid')return _gyroidFillMulti(loops,spacing,z);
+    if(pattern==='concentric')return _concentricFill(loops,spacing);
     if(pattern==='grid')return _scanfillAll(loops,spacing*2,45).concat(_scanfillAll(loops,spacing*2,135));
+    if(pattern==='cubic'){const r=(z*18)%120;return _scanfillAll(loops,spacing*3,r).concat(_scanfillAll(loops,spacing*3,r+60),_scanfillAll(loops,spacing*3,r+120));}
     if(pattern==='triangle'||pattern==='hex')return _scanfillAll(loops,spacing*3,0).concat(_scanfillAll(loops,spacing*3,60),_scanfillAll(loops,spacing*3,120));
     return _scanfillAll(loops,spacing,li%2?135:45); // linear
   }
@@ -19116,9 +19141,14 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return lhs;
   }
-  function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p){
+  function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p,fuzzy){
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
-    const ord=[...poly.slice(bi),...poly.slice(0,bi)];
+    let ord=[...poly.slice(bi),...poly.slice(0,bi)];
+    // Piel rugosa (fuzzy skin): perturba los vértices de la pared exterior a lo largo de su normal
+    if(fuzzy&&p&&p.fuzzySkin>0){
+      const n=ord.length;
+      ord=ord.map((pt,i)=>{const pr=ord[(i-1+n)%n],ne=ord[(i+1)%n];let nx=pr[1]-ne[1],ny=ne[0]-pr[0];const l=Math.hypot(nx,ny)||1;const r=(Math.random()*2-1)*p.fuzzySkin;return[pt[0]+nx/l*r,pt[1]+ny/l*r];});
+    }
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy;
     // Solo retraer/z-hop si el salto es real — evita retracciones inútiles entre paredes concéntricas
     const td=Math.hypot(sx-cX,sy-cY),doRet=td>extW*3;
@@ -19132,10 +19162,23 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
     }
     cX=sx;cY=sy;
-    for(let i=1;i<=ord.length;i++){
-      const pt=ord[i%ord.length];const px=pt[0]+ox,py=pt[1]+oy;
-      E+=(Math.hypot(px-cX,py-cY)*extW*lh)/FILA_AREA;
-      gc.push(`G1 X${px.toFixed(3)} Y${py.toFixed(3)} E${E.toFixed(4)} F${feed}`);cX=px;cY=py;
+    // Recorrido absoluto cerrado + coasting (deja de extruir en los últimos `coast` mm para evitar blob de costura)
+    const pts=[];for(let i=0;i<=ord.length;i++){const pt=ord[i%ord.length];pts.push([pt[0]+ox,pt[1]+oy]);}
+    let total=0;for(let i=1;i<pts.length;i++)total+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);
+    const coast=(p&&p.coasting)||0,coastStart=total-coast;
+    let acc=0;
+    for(let i=1;i<pts.length;i++){
+      const qx=pts[i][0],qy=pts[i][1],seg=Math.hypot(qx-cX,qy-cY);
+      if(coast>0&&acc<coastStart&&acc+seg>coastStart){
+        const tt=(coastStart-acc)/seg,mx=cX+(qx-cX)*tt,my=cY+(qy-cY)*tt;
+        E+=(Math.hypot(mx-cX,my-cY)*extW*lh)/FILA_AREA;gc.push(`G1 X${mx.toFixed(3)} Y${my.toFixed(3)} E${E.toFixed(4)} F${feed}`);
+        gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} F${feed}`);
+      }else if(coast>0&&acc>=coastStart){
+        gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} F${feed}`);
+      }else{
+        E+=(seg*extW*lh)/FILA_AREA;gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} E${E.toFixed(4)} F${feed}`);
+      }
+      acc+=seg;cX=qx;cY=qy;
     }
     return[E,cX,cY];
   }
@@ -19164,10 +19207,10 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     gc.push('; The Lab Solutions — Native AI Slicer');
     gc.push(`; ${S.name} | ${modelName} | ${matName} | boquilla:${nozD}mm capa:${p.layerHeight}mm relleno:${p.infillPct}%`);
     if(p.supports)gc.push('; soportes activados — columnas en rejilla bajo voladizos (básicos, retirar a mano)');
-    if(p.raft)gc.push('; nota: RAFT no soportado por este slicer — usa brim como adhesión alternativa');
     gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');
     gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
+    if(p.accel>0)gc.push('M204 S'+p.accel+' ; aceleración');
     // Línea de purga
     const purgeY0=5,purgeY1=Math.min(spec.y-5,55);
     gc.push(`G1 Z${p.firstLayerHeight.toFixed(3)} F600`);gc.push(`G1 X3 Y${purgeY0} F3000`);
@@ -19228,39 +19271,51 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         else{supCols=cols;gc.push(`; soportes: ${cols.length} columnas · rejilla ${SUP_GS}mm`);}
       }
     }
-    // ── Brim en capa 1 (antes del modelo) ────────
+    // ── Adhesión: skirt / brim / raft (capa 1, antes del modelo) ────────
     let curZ=lhs[0],cX=3,cY=purgeY1;
-    if(p.brim>0){
-      gc.push(`\n; === Brim (capa 1) ===`);
-      gc.push(`G1 Z${curZ.toFixed(3)} F600`);
-      const brimContours=sliceZ(curZ*0.5);
-      if(brimContours.length){
-        const bigPoly=brimContours.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)))[0];
-        let ring=bigPoly;
-        for(let b=0;b<p.brim;b++){
-          // expandir hacia afuera (d negativo)
-          const outer=_insetRaw(ring,-extW*(b+1));
-          if(!outer||outer.length<3)break;
-          [E,cX,cY]=_printPoly(gc,outer,curZ,offX,offY,cX,cY,E,lhs[0],extW,p.firstLayerSpeed*60,p);
-        }
+    const RAFT_GAP=0.25,raftBaseLH=0.3;
+    const zBase=p.raft?(raftBaseLH+lhs[0]+RAFT_GAP):0; // el modelo se eleva sobre el raft
+    const adhBig=(()=>{const c0=sliceZ(lhs[0]*0.5);return c0.length?c0.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)))[0]:null;})();
+    if(p.raft&&adhBig){
+      const pad=_insetRaw(adhBig,-4); // 4mm de margen alrededor de la pieza
+      if(pad&&pad.length>=3){
+        gc.push('\n; === Raft (base) ===');gc.push(`G1 Z${raftBaseLH.toFixed(3)} F600`);
+        const baseLines=_scanfillAll([pad],extW*2.5,0);
+        [E,cX,cY]=_printLines(gc,baseLines,raftBaseLH,offX,offY,cX,cY,E,raftBaseLH,extW*1.6,Math.round(p.firstLayerSpeed*0.8)*60,p);
+        gc.push('; === Raft (interfaz) ===');gc.push(`G1 Z${(raftBaseLH+lhs[0]).toFixed(3)} F600`);
+        const ifaceLines=_scanfillAll([pad],extW*1.05,90);
+        [E,cX,cY]=_printLines(gc,ifaceLines,raftBaseLH+lhs[0],offX,offY,cX,cY,E,lhs[0],extW,Math.round(p.firstLayerSpeed)*60,p);
+      }
+    }else{
+      // Skirt (cebado del filamento, separado de la pieza)
+      if(p.skirt>0&&adhBig){
+        gc.push('\n; === Skirt ===');gc.push(`G1 Z${curZ.toFixed(3)} F600`);
+        for(let k=0;k<p.skirt;k++){const r=_insetRaw(adhBig,-(p.skirtGap+(k+1)*extW));if(!r||r.length<3)break;[E,cX,cY]=_printPoly(gc,r,curZ,offX,offY,cX,cY,E,lhs[0],extW,p.firstLayerSpeed*60,p);}
+      }
+      // Brim (adhesión pegada a la pieza)
+      if(p.brim>0&&adhBig){
+        gc.push(`\n; === Brim (capa 1) ===`);gc.push(`G1 Z${curZ.toFixed(3)} F600`);
+        for(let b=0;b<p.brim;b++){const outer=_insetRaw(adhBig,-extW*(b+1));if(!outer||outer.length<3)break;[E,cX,cY]=_printPoly(gc,outer,curZ,offX,offY,cX,cY,E,lhs[0],extW,p.firstLayerSpeed*60,p);}
       }
     }
     // ── Capas ────────────────────────────────────
     curZ=0;
     for(let li=0;li<totalL;li++){
-      const lh=lhs[li];curZ+=lh;
+      const lh=lhs[li];curZ+=lh;const zOut=curZ+zBase; // zOut = altura física (sube sobre el raft)
       const spd=li===0?p.firstLayerSpeed:p.speed;
+      const outerF=(li>0&&p.outerSpeed>0?p.outerSpeed:spd)*60; // velocidad pared exterior
+      const innerF=Math.round(spd*0.9)*60;
       if(li===1&&p.fanPct>0)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; ventilador`);
       gc.push('');gc.push(`; === Capa ${li+1}/${totalL}  Z=${curZ.toFixed(3)}mm ===`);
-      gc.push(`G1 Z${curZ.toFixed(3)} F600`);
+      gc.push(`G1 Z${zOut.toFixed(3)} F600`);
       // Soporte (antes del modelo de esta capa)
       if(supCols){
         const sl=_supportLinesAtLayer(supCols,li,SUP_GS);
-        if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p);}
+        if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p);}
       }
       if(supTrees){
         const sl=_treeSupportAtLayer(supTrees,li,extW);
-        if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p);}
+        if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p);}
       }
       const contours=layerPolys[li];
       if(!contours.length)continue;
@@ -19272,7 +19327,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         baseC=contours.map((ct,ci)=>{const off=parity[ci]?comp:-comp;const r=_insetRaw(ct,off);return(r&&r.length>=3)?r:ct;});
       }
       // Paredes por contorno: exterior crece hacia adentro, agujero crece hacia afuera (más material alrededor)
-      const fillLoops=[];
+      const fillLoops=[],gapLoops=[];
       for(let ci=0;ci<baseC.length;ci++){
         const ct=baseC[ci];if(ct.length<3)continue;
         const hole=parity[ci];
@@ -19283,12 +19338,14 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         }
         const idxs=[...shells.keys()];if(p.outerWallLast)idxs.reverse(); // pared exterior al final → mejor acabado
         for(const s of idxs)
-          [E,cX,cY]=_printPoly(gc,shells[s],curZ,offX,offY,cX,cY,E,lh,extW,Math.round(spd*(s===0?1:0.9))*60,p);
+          [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,extW,s===0?outerF:innerF,p,s===0&&li>0);
         fillLoops.push(shells[shells.length-1]);
+        // Gap fill: pared fina donde no cupieron 2 perímetros → cordón central sólido para no dejar hueco
+        if(p.gapFill&&p.shells>=2&&shells.length<2&&!hole)gapLoops.push(ct);
       }
       // ── Relleno con detección de superficies por región (even-odd excluye agujeros) ──
       if(fillLoops.length){
-        const solidFeed=Math.round(spd*1.1)*60,solidAngle=li%2?135:45,COMB=Math.max(extW*3,2);
+        const solidFeed=(li>0&&p.infillSpeed>0?p.infillSpeed:Math.round(spd*1.1))*60,solidAngle=li%2?135:45,COMB=Math.max(extW*3,2);
         const aLi=layerNetArea[li],aTop=layerNetArea[li+p.topLayers],aBot=layerNetArea[li-p.bottomLayers];
         // ¿Hay alguna cara expuesta? Sólo si arriba/abajo (N capas) la sección encoge (o no existe = global)
         const exposed=(aTop===undefined||aTop<aLi*0.98)||(aBot===undefined||aBot<aLi*0.98);
@@ -19296,7 +19353,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
           if(p.infillPct>0){
             const sp=_infillMulti(fillLoops,extW/(p.infillPct/100),p.infillType,li,curZ);
-            if(sp.length)[E,cX,cY]=_printLines(gc,sp,curZ,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
+            if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
           }
         }else{
           const above=layerPolys[li+p.topLayers]||[],below=layerPolys[li-p.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
@@ -19305,7 +19362,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
           const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolid(x,y,below1);
           // 1) Superficies sólidas (top/bottom) que no son puente
           const surf=_clipLines(_scanfillAll(fillLoops,extW*1.02,solidAngle),(x,y)=>isSurf(x,y)&&!isBridge(x,y),extW);
-          if(surf.length)[E,cX,cY]=_printLines(gc,surf,curZ,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
+          if(surf.length)[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
           // 2) Puentes (cara inferior sobre aire) — sólido, lento, ventilador máximo, orientado al vano
           if(p.bridgeDetect){
             const bAng=_bridgeInfoMulti(fillLoops,below1).angle;
@@ -19313,21 +19370,26 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
             if(br.length){
               gc.push('; puente (bridge) — relleno sólido orientado al vano');
               if(p.fanPct<100)gc.push('M106 S255 ; ventilador máx para puente');
-              [E,cX,cY]=_printLines(gc,br,curZ,offX,offY,cX,cY,E,lh,extW,Math.max(15,Math.min(30,Math.round(spd*0.6)))*60,p,COMB);
+              [E,cX,cY]=_printLines(gc,br,zOut,offX,offY,cX,cY,E,lh,extW,Math.max(15,Math.min(30,Math.round(spd*0.6)))*60,p,COMB);
               if(p.fanPct<100)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; restaurar ventilador`);
             }
           }
           // 3) Relleno disperso en el interior (ni superficie)
           if(p.infillPct>0){
             const sp=_clipLines(_infillMulti(fillLoops,extW/(p.infillPct/100),p.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
-            if(sp.length)[E,cX,cY]=_printLines(gc,sp,curZ,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
+            if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
           }
+        }
+        // Gap fill: cordón central en paredes finas (un sólo paso de scanline ≈ línea central)
+        if(gapLoops.length){
+          const gl=_scanfillAll(gapLoops,extW,solidAngle);
+          if(gl.length){gc.push('; gap-fill');[E,cX,cY]=_printLines(gc,gl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.8)*60,p,COMB);}
         }
         // Ironing: plancha TODAS las caras top-expuestas (no sólo la última capa)
         if(p.ironing){
           const above1=layerPolys[li+1]||[];
           const ir=_clipLines(_scanfillAll(fillLoops,extW*0.5,li%2?45:135),(x,y)=>!_inSolid(x,y,above1),extW*0.5);
-          if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,curZ,offX,offY,cX,cY,E,lh*0.12,extW,Math.round(Math.min(spd,40))*60,p,COMB);}
+          if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,zOut,offX,offY,cX,cY,E,lh*0.12,extW,Math.round(Math.min(spd,40))*60,p,COMB);}
         }
       }
       if(li%8===0){setProg(4+li/totalL*92,`Laminando capa ${li+1}/${totalL}…`);await new Promise(r=>setTimeout(r,0));}
