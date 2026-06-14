@@ -19571,7 +19571,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const coast=(p&&p.coasting)||0,coastStart=total-coast;
     let acc=0;
     for(let i=1;i<pts.length;i++){
-      const qx=pts[i][0],qy=pts[i][1],seg=Math.hypot(qx-cX,qy-cY);
+      const qx=pts[i][0],qy=pts[i][1];
+      if(!isFinite(qx)||!isFinite(qy))continue;
+      const seg=Math.hypot(qx-cX,qy-cY);
       if(coast>0&&acc<coastStart&&acc+seg>coastStart){
         const tt=(coastStart-acc)/seg,mx=cX+(qx-cX)*tt,my=cY+(qy-cY)*tt;
         E+=(Math.hypot(mx-cX,my-cY)*extW*lh)/FILA_AREA;gc.push(`G1 X${mx.toFixed(3)} Y${my.toFixed(3)} E${E.toFixed(4)} F${feed}`);
@@ -19600,7 +19602,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     cX=sx;cY=sy;
     const pts=[];for(let i=0;i<=ord.length;i++){const pt=ord[i%ord.length];pts.push([pt[0]+ox,pt[1]+oy]);}
     for(let i=1;i<pts.length;i++){
-      const qx=pts[i][0],qy=pts[i][1],seg=Math.hypot(qx-cX,qy-cY);
+      const qx=pts[i][0],qy=pts[i][1];
+      if(!isFinite(qx)||!isFinite(qy))continue;
+      const seg=Math.hypot(qx-cX,qy-cY);
       E+=(seg*extW*lh*wRatio)/FILA_AREA;gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} E${E.toFixed(4)} F${feed}`);
       cX=qx;cY=qy;
     }
@@ -19622,7 +19626,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     let totalLen=0;for(let i=1;i<pts.length;i++)totalLen+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);
     let acc=0;
     for(let i=1;i<pts.length;i++){
-      const qx=pts[i][0],qy=pts[i][1],seg=Math.hypot(qx-cX,qy-cY);
+      const qx=pts[i][0],qy=pts[i][1];
+      if(!isFinite(qx)||!isFinite(qy))continue;
+      const seg=Math.hypot(qx-cX,qy-cY);
       acc+=seg;
       const zz=totalLen>0?zStart+(acc/totalLen)*(zEnd-zStart):zEnd;
       E+=(seg*extW*lh)/FILA_AREA;gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} Z${zz.toFixed(3)} E${E.toFixed(4)} F${feed}`);
@@ -19634,6 +19640,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const rt=retractThresh||extW*3; // combing: umbral mayor en relleno interno → menos retracciones
     for(const[p1,p2]of lines){
       const sx=p1[0]+ox,sy=p1[1]+oy,ex=p2[0]+ox,ey=p2[1]+oy;
+      if(!isFinite(sx)||!isFinite(sy)||!isFinite(ex)||!isFinite(ey))continue;
       const td=Math.hypot(sx-cX,sy-cY);
       if(td>rt){
         E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
@@ -19999,9 +20006,11 @@ self.onmessage=function(ev){
       const n1x=-e1y,n1y=e1x,n2x=-e2y,n2y=e2x;
       const mx=n1x+n2x,my=n1y+n2y,ml=Math.hypot(mx,my);
       if(!ml){res.push([curr[0]+n1x*d,curr[1]+n1y*d]);continue;}
-      const dot=n1x*n2x+n1y*n2y,ms=d/Math.max(0.25,Math.sqrt((1+dot)/2));
+      const dot=n1x*n2x+n1y*n2y,ms=d/Math.max(0.25,Math.sqrt(Math.max(0,(1+dot)/2)));
       const clamp=Math.min(Math.abs(ms),Math.abs(d)*5)*Math.sign(ms);
-      res.push([curr[0]+(mx/ml)*clamp,curr[1]+(my/ml)*clamp]);
+      const rx=curr[0]+(mx/ml)*clamp,ry=curr[1]+(my/ml)*clamp;
+      if(!isFinite(rx)||!isFinite(ry)){res.push([curr[0]+n1x*d,curr[1]+n1y*d]);continue;}
+      res.push([rx,ry]);
     }
     return res.length>=3?res:null;
   }
