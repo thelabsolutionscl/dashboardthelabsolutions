@@ -10955,6 +10955,7 @@ function renderMonitorGrid(){
             <button onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Enviar G-code">📤</button>
             <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
             <button onclick="openWebcamModal('${m.id}')" style="background:${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${localStorage.getItem('printer_cam_'+m.id)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
+            <button onclick="openBedMesh('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Bed mesh (mapa de nivelación de cama)">🗺️</button>
             <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
             ${_queueCount(m.id)>0?`<button onclick="openQueueModal('${m.id}')" style="background:rgba(255,170,0,0.12);border:1px solid rgba(255,170,0,0.4);border-radius:6px;color:#ffaa00;font-size:10px;padding:3px 7px;cursor:pointer" title="${_queueCount(m.id)} trabajo(s) en cola">🔁 ${_queueCount(m.id)}</button>`:''}
           </div>
@@ -11237,6 +11238,48 @@ async function sendWebhookAlert(m,event){
   try{await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({maquina:m.nombre,num:m.numG,evento:event,timestamp:new Date().toISOString()})});}catch(e){}
 }
 
+async function openBedMesh(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return;}
+  toast('Consultando bed mesh…','info');
+  try{
+    const data=await _moonrakerGet(id,'/printer/objects/query?bed_mesh');
+    const mesh=data?.result?.status?.bed_mesh;
+    if(!mesh||!mesh.probed_matrix){toast('Sin datos de bed mesh — ejecuta BED_MESH_CALIBRATE primero','error');return;}
+    const matrix=mesh.probed_matrix;
+    const rows=matrix.length,cols=matrix[0].length;
+    let mn=1e9,mx=-1e9;
+    matrix.forEach(r=>r.forEach(v=>{if(v<mn)mn=v;if(v>mx)mx=v;}));
+    const range=mx-mn||0.001;
+    const cell=Math.min(44,Math.floor(320/Math.max(rows,cols)));
+    const svgCells=matrix.map((row,ri)=>row.map((v,ci)=>{
+      const t=(v-mn)/range;
+      const rr=Math.round(t*220),gg=Math.round((1-Math.abs(t-0.5)*2)*180),bb=Math.round((1-t)*220);
+      return`<rect x="${ci*cell}" y="${ri*cell}" width="${cell-1}" height="${cell-1}" fill="rgb(${rr},${gg},${bb})" rx="3"/>
+<text x="${ci*cell+cell/2}" y="${ri*cell+cell/2+4}" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="${Math.max(7,cell/4)}" font-family="monospace">${v.toFixed(2)}</text>`;
+    }).join('')).join('');
+    const W=cols*cell,H=rows*cell;
+    const modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9999;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML=`<div style="background:var(--surface);border-radius:14px;padding:20px;max-width:95vw;max-height:90vh;overflow:auto;min-width:320px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:16px">
+        <div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px">🗺️ Bed Mesh — ${escapeHtml(m.nombre)} #${m.numG}</div>
+          <div style="font-size:10px;color:var(--text3)">Desviación: ${mn.toFixed(3)}mm … ${mx.toFixed(3)}mm &nbsp;·&nbsp; rango: <b>${(range*1000).toFixed(0)}µm</b> &nbsp;·&nbsp; ${rows}×${cols} puntos</div>
+        </div>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;flex-shrink:0;line-height:1">✕</button>
+      </div>
+      <svg width="${W}" height="${H}" style="display:block;border-radius:8px;overflow:hidden">${svgCells}</svg>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;font-size:10px;color:var(--text3)">
+        <div style="width:80px;height:10px;background:linear-gradient(to right,rgb(0,120,220),rgb(0,180,0),rgb(220,0,0));border-radius:3px;flex-shrink:0"></div>
+        <span>plano/bajo (azul) → promedio (verde) → alto (rojo)</span>
+      </div>
+      ${range>0.4?`<div style="margin-top:8px;padding:8px 10px;background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:8px;font-size:10px;color:#ffaa00">⚠ Rango &gt;400µm — la cama puede necesitar nivelación manual antes de usar mesh compensation</div>`:''}
+    </div>`;
+    modal.onclick=e=>{if(e.target===modal)modal.remove();};
+    document.body.appendChild(modal);
+  }catch(e){toast('Error consultando bed mesh: '+e.message,'error');}
+}
 function openWebcamModal(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   const url=localStorage.getItem('printer_cam_'+id)||'';
@@ -18507,14 +18550,14 @@ const SL3D=(function(){
   const FIELDS=[
     {k:'layerHeight',l:'Altura capa (mm)',s:0.04},{k:'firstLayerHeight',l:'1ª capa (mm)',s:0.04},
     {k:'shells',l:'Perímetros',s:1},{k:'topLayers',l:'Capas sup.',s:1},{k:'bottomLayers',l:'Capas inf.',s:1},
-    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','cubic','concentric','linear']},
+    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','linear']},
     {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'outerSpeed',l:'Vel. pared ext.',s:5},{k:'infillSpeed',l:'Vel. relleno',s:10},
     {k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},{k:'accel',l:'Aceleración (mm/s²)',s:500},
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
     {k:'supports',l:'Soportes',sel:['no','sí']},{k:'treeSupports',l:'Soporte árbol',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
     {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
     {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
-    {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},
+    {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
     {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
     {k:'spiralize',l:'Modo jarrón',sel:['no','sí']},{k:'monotonic',l:'Relleno monot.',sel:['no','sí']},{k:'arachne',l:'Arachne (pared var.)',sel:['no','sí']},
     {k:'elephantFoot',l:'Pie de elefante (mm)',s:0.05},{k:'xyCompensation',l:'Compensación XY (mm)',s:0.02},
@@ -18814,7 +18857,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       supports:st.ovPct>8,treeSupports:st.ovPct>8&&obj==='calidad',supportAngle:50,
       adaptiveLayerHeight:obj==='calidad',
       seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
-      bridgeDetect:st.ovPct>8,arcFitting:false,
+      bridgeDetect:st.ovPct>8,arcFitting:false,gradualTemp: obj!=='rapido',
       spiralize:false,monotonic:obj==='calidad',arachne:obj==='calidad',
       gapFill:obj!=='rapido',fuzzySkin:0,coasting:obj==='calidad'?0.2:0,
       elephantFoot:obj==='calidad'?0.15:0,xyCompensation:0,
@@ -18836,7 +18879,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       firstLayerHeight:cl(p.firstLayerHeight,0.1,noz*0.9,noz*0.6),
       shells:Math.round(cl(p.shells,1,8,2)),topLayers:Math.round(cl(p.topLayers,0,10,4)),bottomLayers:Math.round(cl(p.bottomLayers,0,10,3)),
       infillPct:Math.round(cl(p.infillPct,0,100,15)),
-      infillType:['grid','gyroid','triangle','hex','cubic','concentric','linear'].includes(p.infillType)?p.infillType:'grid',
+      infillType:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','linear'].includes(p.infillType)?p.infillType:'grid',
       speed:Math.round(cl(p.speed,10,vmax,60)),
       outerSpeed:Math.round(cl(p.outerSpeed,0,vmax,0)),infillSpeed:Math.round(cl(p.infillSpeed,0,vmax,0)),
       firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
@@ -18849,6 +18892,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
       bridgeDetect:!!p.bridgeDetect&&p.bridgeDetect!=='no',
       arcFitting:!!p.arcFitting&&p.arcFitting!=='no',
+      gradualTemp:!!p.gradualTemp&&p.gradualTemp!=='no',
       gapFill:!!p.gapFill&&p.gapFill!=='no',fuzzySkin:cl(p.fuzzySkin,0,0.6,0),coasting:cl(p.coasting,0,2,0),
       spiralize:!!p.spiralize&&p.spiralize!=='no',monotonic:!!p.monotonic&&p.monotonic!=='no',arachne:!!p.arachne&&p.arachne!=='no',
       elephantFoot:cl(p.elephantFoot,0,0.6,0),xyCompensation:cl(p.xyCompensation,-0.3,0.3,0),
@@ -19093,6 +19137,29 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   function _infillMulti(loops,spacing,pattern,li,z){
     if(pattern==='gyroid')return _gyroidFillMulti(loops,spacing,z);
+    if(pattern==='honeycomb'){
+      // Verdadero patrón hexagonal: celdas hexagonales con filas offset
+      const bbs=loops.map(_bbOf);
+      let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
+      for(const b of bbs){if(b[0]<mnx)mnx=b[0];if(b[2]>mxx)mxx=b[2];if(b[1]<mny)mny=b[1];if(b[3]>mxy)mxy=b[3];}
+      const s=spacing,h=s*Math.sqrt(3)/2;
+      const segs=[];
+      for(let row=0;(mny+row*h)<mxy+h;row++){
+        const yOff=row%2?s/2:0,yc=mny+row*h;
+        for(let col=0;(mnx+col*s*1.5-s)<mxx+s;col++){
+          const xc=mnx+col*s*1.5+yOff;
+          // 6 vértices del hexágono
+          const pts=Array.from({length:6},(_,i)=>[xc+s*Math.cos(i*Math.PI/3),yc+s*Math.sin(i*Math.PI/3)]);
+          // Sólo los lados que no se duplican (lados 0-2 del hexágono, los otros son compartidos)
+          for(let i=0;i<6;i++){
+            const a=pts[i],b=pts[(i+1)%6];
+            const cx2=(a[0]+b[0])/2,cy2=(a[1]+b[1])/2;
+            if(_inSolidBB(cx2,cy2,loops,bbs))segs.push([a,b]);
+          }
+        }
+      }
+      return segs;
+    }
     if(pattern==='concentric')return _concentricFill(loops,spacing);
     if(pattern==='grid')return _scanfillAll(loops,spacing*2,45).concat(_scanfillAll(loops,spacing*2,135));
     if(pattern==='cubic'){const r=(z*18)%120;return _scanfillAll(loops,spacing*3,r).concat(_scanfillAll(loops,spacing*3,r+60),_scanfillAll(loops,spacing*3,r+120));}
@@ -19532,6 +19599,12 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       const outerF=(li>0&&p.outerSpeed>0?p.outerSpeed:spd)*60; // velocidad pared exterior
       const innerF=Math.round(spd*0.9)*60;
       if(li===1&&p.fanPct>0)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; ventilador`);
+      // Temperatura gradual: reduce 5°C a 50% y 10°C a 80% de altura → menos stringing en las capas superiores
+      if(p.gradualTemp&&li>0&&p.nozzleTemp>175){
+        const pct=li/totalL;
+        if(Math.abs(pct-0.5)<0.5/totalL+0.01)gc.push(`M104 S${Math.round(p.nozzleTemp*0.975)} ; temp gradual 50%`);
+        else if(Math.abs(pct-0.8)<0.5/totalL+0.01)gc.push(`M104 S${Math.round(p.nozzleTemp*0.95)} ; temp gradual 80%`);
+      }
       gc.push('');gc.push(`; === Capa ${li+1}/${totalL}  Z=${curZ.toFixed(3)}mm ===`);
       // ── Modo jarrón / spiralize: base sólida + espiral continuo sin costura ──
       if(p.spiralize && li>=p.bottomLayers){
@@ -19557,6 +19630,22 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       if(supTrees){
         const sl=_treeSupportAtLayer(supTrees,li,extW);
         if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p);}
+      }
+      // Interfaz de soporte: relleno denso en las últimas 2 capas (facilita desprendimiento)
+      if(supCols){
+        const IFCL=2,IGS=SUP_GS;
+        const ifcCols=supCols.filter(c=>c.top>=li&&c.top-li<IFCL&&c.bot<=li);
+        if(ifcCols.length){
+          const rows=new Map();
+          for(const c of ifcCols){const ky=Math.round(c.y/IGS);(rows.get(ky)||rows.set(ky,[]).get(ky)).push(c);}
+          const ifcLines=[];
+          for(const arr of rows.values()){
+            arr.sort((a,b)=>a.x-b.x);
+            const x0=arr[0].x-IGS/2,x1=arr[arr.length-1].x+IGS/2,cy=arr[0].y;
+            for(let x=x0+extW/2;x<x1;x+=extW*1.1)ifcLines.push([[x,cy-IGS/2],[x,cy+IGS/2]]);
+          }
+          if(ifcLines.length){gc.push('; interfaz soporte (densa)');[E,cX,cY]=_printLines(gc,ifcLines,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.75)*60,p);}
+        }
       }
       const contours=layerPolys[li];
       if(!contours.length)continue;
@@ -19937,6 +20026,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" onclick="SL3D.descargar()">⬇ Descargar .gcode</button>
           <button class="btn btn-ghost" onclick="SL3D.preview()">👁 Vista previa por capas</button>
+          <button onclick="SL3D.slicerToCot()" class="btn btn-ghost btn-sm" style="flex:1" title="Pre-llenar cotización con los datos de esta pieza">📋 Cotizar</button>
           ${machines.length?`
           <div style="display:flex;flex-direction:column;gap:6px;width:100%;margin-top:4px">
             ${suggHint}
@@ -19945,6 +20035,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
               <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Iniciar al subir</label>
               <button class="btn btn-ghost" id="slBtnSend" onclick="SL3D.enviar()">📤 Enviar</button>
               <button class="btn btn-ghost" id="slBtnQueue" onclick="SL3D.encolar()" title="Encolar: el trabajo se iniciará automáticamente cuando la impresora quede libre">🔁 Encolar</button>
+              <button class="btn btn-ghost" onclick="SL3D.enviarATodas()" title="Enviar a todas las impresoras libres simultáneamente">📤 Todas las libres</button>
             </div>
           </div>
           `:'<span style="font-size:10px;color:var(--text3)">Configura la IP de una impresora para enviar directo</span>'}
@@ -20009,6 +20100,34 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     _queueAdd(id,S.gcode,fname,S.est?.secs,S.est?.grams);
   }
 
+  // ── Cotizar desde slicer: transfiere datos a la pestaña de cotización ──
+  function slicerToCot(){
+    if(!S.est||!S.params){toast('Genera el G-code primero','error');return;}
+    const matName=el('slMaterial').value,grams=S.est.grams.toFixed(0),secs=S.est.secs,nom=S.name||'Pieza 3D';
+    if(typeof switchTab==='function')switchTab('nueva-cot');
+    setTimeout(()=>{
+      const obs=document.getElementById('cotObs')||document.querySelector('textarea[id*="obs"],textarea[placeholder*="observ" i]');
+      if(obs)obs.value=`Impresión 3D: ${nom} — Material: ${matName}, ~${grams}g, ~${typeof fmtTime==='function'?fmtTime(secs):Math.round(secs/60)+'min'}`;
+      toast('Datos del slicer copiados a cotización','success');
+    },300);
+  }
+  // ── Enviar a todas las impresoras libres ──
+  function enviarATodas(){
+    if(!S.gcode){toast('Genera el G-code primero','error');return;}
+    const libres=MAQUINAS.filter(m=>{
+      const st=(typeof _printerStatus!=='undefined'&&_printerStatus[m.id]||{}).state||'offline';
+      return(st==='idle'||st==='ready'||st==='standby')&&(typeof getPrinterIp==='function'&&getPrinterIp(m));
+    });
+    if(!libres.length){toast('No hay impresoras libres con IP configurada','error');return;}
+    if(!confirm(`¿Enviar a ${libres.length} impresora(s) libre(s)?\n${libres.map(m=>m.nombre+' #'+m.numG).join(', ')}`))return;
+    libres.forEach(m=>{
+      // Reusa la función enviar() cambiando temporalmente el select
+      const sel=el('slPrinter');const prev=sel.value;
+      const slSel=document.getElementById('slSendTo');if(slSend)slSend.value=m.id;
+      enviar(m.id);
+    });
+    toast(`Enviando a ${libres.length} impresora(s)…`,'success');
+  }
   // ── Init ────────────────────────────────────────────────────
   function onPrinterChange(){if(S.stats)renderStats();}
   document.addEventListener('DOMContentLoaded',()=>{
@@ -20023,7 +20142,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     cv.addEventListener('pointermove',e=>{if(!S.drag)return;S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
     cv.addEventListener('pointerup',()=>{S.drag=null;cv.style.cursor='grab';});
   });
-  return{loadFile,loadFiles,addObject,autoOrient,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal};
+  return{loadFile,loadFiles,addObject,autoOrient,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas};
 })();
 </script>
 
