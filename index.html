@@ -18550,7 +18550,7 @@ const SL3D=(function(){
   const FIELDS=[
     {k:'layerHeight',l:'Altura capa (mm)',s:0.04},{k:'firstLayerHeight',l:'1ª capa (mm)',s:0.04},
     {k:'shells',l:'Perímetros',s:1},{k:'topLayers',l:'Capas sup.',s:1},{k:'bottomLayers',l:'Capas inf.',s:1},
-    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','linear']},
+    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','linear']},
     {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'outerSpeed',l:'Vel. pared ext.',s:5},{k:'infillSpeed',l:'Vel. relleno',s:10},
     {k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},{k:'accel',l:'Aceleración (mm/s²)',s:500},
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
@@ -18756,6 +18756,29 @@ const SL3D=(function(){
     el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     S.params=null;S.gcode='';
   }
+  // ── Reparación de malla: descarta triángulos inválidos (NaN/Inf) y degenerados (área ~0),
+  //    suelda vértices casi-coincidentes a una rejilla fina (cierra micro-huecos de ruido de coma flotante).
+  //    Conservadora: una malla sana pasa intacta. Devuelve {tris, removed, welded}.
+  function _repairMesh(t){
+    if(!t||!t.length)return{tris:t,removed:0,welded:0};
+    const triCnt=t.length/9,out=new Float32Array(t.length);
+    // Rejilla de soldadura: 1µm — por debajo de la resolución de impresión, no altera la geometría real
+    const SNAP=0.001,snap=v=>Math.round(v/SNAP)*SNAP;
+    let o=0,removed=0,welded=0;
+    for(let i=0;i<triCnt;i++){
+      const b=i*9;
+      let ok=true;for(let j=0;j<9;j++){if(!isFinite(t[b+j])){ok=false;break;}}
+      if(!ok){removed++;continue;}
+      // Soldadura a rejilla
+      const v=[];for(let j=0;j<9;j++){const s=snap(t[b+j]);if(s!==t[b+j])welded++;v.push(s);}
+      // Descarta degenerados: dos vértices iguales o área ~0 (colineales)
+      const ux=v[3]-v[0],uy=v[4]-v[1],uz=v[5]-v[2],vx=v[6]-v[0],vy=v[7]-v[1],vz=v[8]-v[2];
+      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+      if(Math.sqrt(nx*nx+ny*ny+nz*nz)/2<1e-7){removed++;continue;}
+      for(let j=0;j<9;j++)out[o++]=v[j];
+    }
+    return{tris:out.subarray(0,o),removed,welded:Math.round(welded/3)};
+  }
   async function _parseFile(file){
     const ext=(file.name.split('.').pop()||'').toLowerCase();
     const buf=await file.arrayBuffer();
@@ -18767,10 +18790,12 @@ const SL3D=(function(){
     const files=Array.from(fileList||[]).filter(f=>/\.(stl|obj|3mf)$/i.test(f.name));
     if(!files.length){toast('Formato no soportado — usa STL, OBJ o 3MF','error');return;}
     try{
-      const parsed=[];for(const f of files){parsed.push(_centerTris(await _parseFile(f)));}
+      const parsed=[];let totRemoved=0,totWelded=0;
+      for(const f of files){const r=_repairMesh(await _parseFile(f));totRemoved+=r.removed;totWelded+=r.welded;parsed.push(_centerTris(r.tris));}
       S.objects=parsed;S.name=files[0].name.replace(/\.(stl|obj|3mf)$/i,'')+(files.length>1?` +${files.length-1}`:'');
       _replate();
-      toast(files.length>1?`${files.length} piezas cargadas y acomodadas en el plato`:`Modelo cargado: ${S.stats.tris.toLocaleString('es-CL')} triángulos`,'success');
+      const repMsg=totRemoved>0?` · reparado: ${totRemoved} triángulo(s) inválido(s) descartado(s)`:'';
+      toast((files.length>1?`${files.length} piezas cargadas y acomodadas en el plato`:`Modelo cargado: ${S.stats.tris.toLocaleString('es-CL')} triángulos`)+repMsg,'success');
     }catch(e){toast('Error al leer el modelo: '+e.message,'error');}
   }
   async function addObject(fileList){
@@ -18778,7 +18803,7 @@ const SL3D=(function(){
     if(!files.length)return;
     if(!S.objects.length){return loadFiles(files);}
     try{
-      for(const f of files)S.objects.push(_centerTris(await _parseFile(f)));
+      for(const f of files)S.objects.push(_centerTris(_repairMesh(await _parseFile(f)).tris));
       S.name=S.name.replace(/ \+\d+$/,'')+` +${S.objects.length-1}`;
       _replate();
       toast(`Pieza agregada — ${S.objects.length} en el plato`,'success');
@@ -18879,7 +18904,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       firstLayerHeight:cl(p.firstLayerHeight,0.1,noz*0.9,noz*0.6),
       shells:Math.round(cl(p.shells,1,8,2)),topLayers:Math.round(cl(p.topLayers,0,10,4)),bottomLayers:Math.round(cl(p.bottomLayers,0,10,3)),
       infillPct:Math.round(cl(p.infillPct,0,100,15)),
-      infillType:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','linear'].includes(p.infillType)?p.infillType:'grid',
+      infillType:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','linear'].includes(p.infillType)?p.infillType:'grid',
       speed:Math.round(cl(p.speed,10,vmax,60)),
       outerSpeed:Math.round(cl(p.outerSpeed,0,vmax,0)),infillSpeed:Math.round(cl(p.infillSpeed,0,vmax,0)),
       firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
@@ -19490,6 +19515,70 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return[E,cX,cY];
   }
+  // ── Web Worker para el precompute de contornos (la etapa más pesada) ──
+  // Se construye desde el .toString() de las funciones puras reales → sin duplicar código.
+  // El worker recibe la malla y devuelve las capas; el hilo principal queda libre (UI fluida).
+  let _slWorkerURL=null;
+  function _slWorkerURLGet(){
+    if(_slWorkerURL)return _slWorkerURL;
+    const kernel=[_polyArea,_bbOf,_pointInPoly,_depthBB,_buildContours,_activeSweeper].map(f=>f.toString()).join('\n');
+    const body=kernel+`
+self.onmessage=function(ev){
+  try{
+    var d=ev.data,tris=d.tris,sortedIdx=d.sortedIdx,triZmin=d.triZmin,triZmax=d.triZmax,lhs=d.lhs;
+    var totalL=lhs.length;
+    var layerTopZ=[],layerPolys=[],layerParity=[],layerNetArea=[],layerBB=[];
+    var sweep=_activeSweeper(tris,sortedIdx,triZmin,triZmax),z=0;
+    for(var li=0;li<totalL;li++){
+      z+=lhs[li];layerTopZ.push(z);
+      var cs=sweep(z-lhs[li]/2).filter(function(c){return c.length>=3;}).map(function(c){return _polyArea(c)<0?c.slice().reverse():c;});
+      cs.sort(function(a,b){return Math.abs(_polyArea(b))-Math.abs(_polyArea(a));});
+      var bbs=cs.map(_bbOf),areas=cs.map(function(c){return Math.abs(_polyArea(c));});
+      layerPolys.push(cs);layerBB.push(bbs);
+      var par=cs.map(function(ct,ci){return _depthBB(ci,cs,bbs)%2===1;});layerParity.push(par);
+      layerNetArea.push(cs.reduce(function(s,_,ci){return s+(par[ci]?-1:1)*areas[ci];},0));
+      if(li%16===0)self.postMessage({progress:li/totalL});
+    }
+    self.postMessage({done:true,layerTopZ:layerTopZ,layerPolys:layerPolys,layerParity:layerParity,layerNetArea:layerNetArea,layerBB:layerBB});
+  }catch(e){self.postMessage({error:String(e&&e.message||e)});}
+};`;
+    _slWorkerURL=URL.createObjectURL(new Blob([body],{type:'application/javascript'}));
+    return _slWorkerURL;
+  }
+  // Calcula las capas en un worker; ante cualquier fallo cae al cálculo en hilo principal (idéntico resultado).
+  function _precomputeLayers(tris,sortedIdx,triZmin,triZmax,lhs,totalL,onProg){
+    const inline=()=>{
+      const layerTopZ=[],layerPolys=[],layerParity=[],layerNetArea=[],layerBB=[];
+      const sweep=_activeSweeper(tris,sortedIdx,triZmin,triZmax);let z=0;
+      for(let li=0;li<totalL;li++){
+        z+=lhs[li];layerTopZ.push(z);
+        let cs=sweep(z-lhs[li]/2).filter(c=>c.length>=3).map(c=>_polyArea(c)<0?[...c].reverse():c);
+        cs.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)));
+        const bbs=cs.map(_bbOf),areas=cs.map(c=>Math.abs(_polyArea(c)));
+        layerPolys.push(cs);layerBB.push(bbs);
+        const par=cs.map((ct,ci)=>_depthBB(ci,cs,bbs)%2===1);layerParity.push(par);
+        layerNetArea.push(cs.reduce((s,_,ci)=>s+(par[ci]?-1:1)*areas[ci],0));
+      }
+      return{layerTopZ,layerPolys,layerParity,layerNetArea,layerBB};
+    };
+    return new Promise(resolve=>{
+      if(typeof Worker==='undefined'||typeof URL==='undefined'||typeof Blob==='undefined'){resolve(inline());return;}
+      let w=null,settled=false;
+      const done=v=>{if(settled)return;settled=true;try{w&&w.terminate();}catch(e){}resolve(v);};
+      try{
+        w=new Worker(_slWorkerURLGet());
+        w.onerror=()=>done(inline()); // fallback transparente
+        w.onmessage=ev=>{
+          const m=ev.data;
+          if(m.progress!=null){if(onProg)onProg(m.progress);return;}
+          if(m.error){done(inline());return;}
+          if(m.done)done({layerTopZ:m.layerTopZ,layerPolys:m.layerPolys,layerParity:m.layerParity,layerNetArea:m.layerNetArea,layerBB:m.layerBB});
+        };
+        // Copias estructuradas (no transferibles: tris/índices se reutilizan en el hilo principal)
+        w.postMessage({tris,sortedIdx,triZmin,triZmax,lhs});
+      }catch(e){done(inline());}
+    });
+  }
   async function _nativeSlice(tris,p,spec,nozD,matName,modelName){
     const extW=nozD*1.05;
     const offX=spec.x/2,offY=spec.y/2;
@@ -19531,16 +19620,10 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     setProg(3,`${totalL} capas para ${zMax.toFixed(1)}mm${p.adaptiveLayerHeight?' (adaptativas)':''}…`);
     await new Promise(r=>setTimeout(r,0));
     // ── Precomputar contornos por capa (sweep activo: O(triángulos que cruzan) por capa, no O(todos)) ──
-    const layerTopZ=[],layerPolys=[],layerParity=[],layerNetArea=[],layerBB=[];
-    {const sweep=_activeSweeper(tris,sortedIdx,triZmin,triZmax);let z=0;for(let li=0;li<totalL;li++){
-      z+=lhs[li];layerTopZ.push(z);
-      let cs=sweep(z-lhs[li]/2).filter(c=>c.length>=3).map(c=>_polyArea(c)<0?[...c].reverse():c);
-      cs.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)));
-      const bbs=cs.map(_bbOf),areas=cs.map(c=>Math.abs(_polyArea(c)));
-      layerPolys.push(cs);layerBB.push(bbs);
-      const par=cs.map((ct,ci)=>_depthBB(ci,cs,bbs)%2===1);layerParity.push(par);
-      layerNetArea.push(cs.reduce((s,_,ci)=>s+(par[ci]?-1:1)*areas[ci],0)); // área sólida (exterior − agujeros)
-    }}
+    //    Se ejecuta en un Web Worker (UI fluida); si no hay soporte cae al hilo principal con resultado idéntico.
+    const _pre=await _precomputeLayers(tris,sortedIdx,triZmin,triZmax,lhs,totalL,
+      f=>setProg(3+f*1.5,`Calculando contornos… ${Math.round(f*100)}%`));
+    const layerTopZ=_pre.layerTopZ,layerPolys=_pre.layerPolys,layerParity=_pre.layerParity,layerNetArea=_pre.layerNetArea,layerBB=_pre.layerBB;
     // ── Soportes: columnas bajo voladizos (rejilla o árbol) ──
     let supCols=null,supTrees=null;const SUP_GS=4;
     if(p.supports){
@@ -19691,7 +19774,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         const solidFeed=(li>0&&p.infillSpeed>0?p.infillSpeed:Math.round(spd*1.1))*60,solidAngle=li%2?135:45,COMB=Math.max(extW*3,2);
         const aLi=layerNetArea[li],aTop=layerNetArea[li+p.topLayers],aBot=layerNetArea[li-p.bottomLayers];
         // ¿Hay alguna cara expuesta? Sólo si arriba/abajo (N capas) la sección encoge (o no existe = global)
-        const exposed=(aTop===undefined||aTop<aLi*0.98)||(aBot===undefined||aBot<aLi*0.98);
+        // Lightning siempre usa el camino muestreado: necesita escanear hacia arriba para hallar techos.
+        const exposed=(p.infillType==='lightning')||(aTop===undefined||aTop<aLi*0.98)||(aBot===undefined||aBot<aLi*0.98);
         if(!exposed){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
           if(p.infillPct>0){
@@ -19719,7 +19803,20 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
             }
           }
           // 3) Relleno disperso en el interior (ni superficie)
-          if(p.infillPct>0){
+          if(p.infillType==='lightning'){
+            // Lightning: estructura mínima tipo árbol — sólo soporta techos dentro del alcance vertical,
+            // dejando el resto del interior hueco. Gran ahorro de material y tiempo.
+            const reach=Math.max(4,p.topLayers+3);
+            const isAirAt=(x,y,L)=>{const pp=layerPolys[L];if(!pp||!pp.length)return true;return !_inSolidBB(x,y,pp,layerBB[L]);};
+            const needsLight=(x,y)=>{
+              if(isSurf(x,y))return false;
+              for(let d=1;d<=reach;d++){const L=li+d;if(L>=totalL)return false;if(isAirAt(x,y,L))return true;}
+              return false; // techo lejano → sin relleno (ahorro)
+            };
+            const lspac=Math.max(extW*2,extW/Math.max(0.05,p.infillPct/100)*1.4);
+            const sp=_clipLines(_scanfillAll(fillLoops,lspac,li%2?135:45),needsLight,extW);
+            if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);}
+          }else if(p.infillPct>0){
             const sp=_clipLines(_infillMulti(fillLoops,extW/(p.infillPct/100),p.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
             if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
           }
