@@ -1,0 +1,32 @@
+# thelab-leads-worker — endpoint público de captación de leads
+# Despliegue:  cd lead-worker && npx wrangler deploy
+# Dev local:   npx wrangler dev   (usa .dev.vars para secretos locales)
+
+name = "thelab-leads-worker"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# ── Variables NO secretas ──────────────────────────────────────────────
+# El Base ID de Airtable NO es secreto (aparece en URLs), por eso va aquí.
+[vars]
+AIRTABLE_BASE_ID = "app1YtD74AqiPWQhy"
+# Orígenes permitidos para CORS (coma-separado). Sin wildcard.
+ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,http://localhost:3000"
+# "true" para que el Worker llame a Claude y deje el lead pre-scoreado.
+AUTO_PROCESS_LEADS = "false"
+
+# ── KV opcional para rate-limiting ─────────────────────────────────────
+# Crear con:  npx wrangler kv namespace create LEADS_RL
+# y luego descomentar y pegar el id:
+# [[kv_namespaces]]
+# binding = "RL"
+# id = "PEGAR_ID_AQUI"
+
+# ── SECRETOS (NO escribir valores aquí) ────────────────────────────────
+# Configurar con:  npx wrangler secret put NOMBRE
+#   AIRTABLE_TOKEN          (PAT de Airtable con scope data.records:write)
+#   PUBLIC_LEAD_KEY         (clave compartida con la web — anti-bot básico)
+#   GOOGLE_ADS_WEBHOOK_KEY  (clave del webhook de Google Lead Form)
+#   LINKEDIN_WEBHOOK_KEY    (clave del webhook de LinkedIn vía Make/Zapier)
+#   TURNSTILE_SECRET        (opcional — verificación Cloudflare Turnstile)
+#   ANTHROPIC_API_KEY       (opcional — solo si AUTO_PROCESS_LEADS=true)

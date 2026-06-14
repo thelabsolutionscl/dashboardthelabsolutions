@@ -1,0 +1,15 @@
+{
+  "name": "thelab-leads-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Endpoint público de captación de leads para The Lab Solutions (web, Google Ads, LinkedIn) → Airtable + Agent_Queue",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}
