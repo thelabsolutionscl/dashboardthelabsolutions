@@ -5651,21 +5651,36 @@ async function crearTablaMaquinas(){
       {name:'modelo',type:'singleLineText'},
       {name:'color',type:'singleLineText'},
       {name:'ip',type:'singleLineText'},
+      {name:'cam',type:'singleLineText'},
       {name:'estado',type:'singleLineText'},
     ]})});
     return cr.ok;
   }catch(e){return false;}
 }
 
+async function ensureCamFieldMaquinas(){
+  const t=getToken();if(!t) return;
+  try{
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    if(!r.ok) return;
+    const d=await r.json();
+    const tbl=d.tables?.find(x=>x.name==='Maquinas');
+    if(!tbl) return;
+    if(tbl.fields?.find(f=>f.name==='cam')) return;
+    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'cam',type:'singleLineText'})});
+  }catch(e){}
+}
+
 async function loadMaquinasAirtable(){
   const t=getToken();if(!t){MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));return;}
   try{
+    await ensureCamFieldMaquinas();
     const res=await airtableFetch('Maquinas',200);
     const recs=res.records||[];
     if(recs.length===0){
       // Primera vez: crear tabla y poblar con la lista hardcodeada
       await crearTablaMaquinas();
-      const batch=MAQUINAS_HARDCODED.map(m=>({fields:{id:m.id,nombre:m.nombre,num:m.num,numG:m.numG,modelo:m.modelo,color:m.color,ip:m.ip||'',estado:'disponible'}}));
+      const batch=MAQUINAS_HARDCODED.map(m=>({fields:{id:m.id,nombre:m.nombre,num:m.num,numG:m.numG,modelo:m.modelo,color:m.color,ip:m.ip||'',cam:localStorage.getItem('printer_cam_'+m.id)||'',estado:'disponible'}}));
       for(let i=0;i<batch.length;i+=10){
         await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:batch.slice(i,i+10),typecast:true})});
       }
@@ -5683,12 +5698,24 @@ async function loadMaquinasAirtable(){
         modelo:r.fields.modelo||'K1',
         color:r.fields.color||'#00d4cc',
         ip:r.fields.ip||null,
+        cam:r.fields.cam||null,
         estado:r.fields.estado||'disponible',
       })).sort((a,b)=>a.numG-b.numG);
       // Aplica correcciones de IP del código sobre datos viejos de Airtable
       // (localStorage tiene prioridad si el usuario lo configuró manualmente)
       const _hcIp=Object.fromEntries(MAQUINAS_HARDCODED.filter(m=>m.ip).map(m=>[m.id,m.ip]));
-      MAQUINAS=MAQUINAS.map(m=>({...m,ip:localStorage.getItem('printer_ip_'+m.id)||_hcIp[m.id]||m.ip}));
+      const _t=getToken();
+      MAQUINAS=MAQUINAS.map(m=>{
+        const finalIp=localStorage.getItem('printer_ip_'+m.id)||_hcIp[m.id]||m.ip;
+        if(finalIp&&finalIp!==m.ip&&m._airtableId&&_t)
+          fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+_t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:finalIp}})});
+        return {...m,ip:finalIp};
+      });
+      // Sincroniza IPs y cam desde Airtable/código a localStorage
+      MAQUINAS.forEach(m=>{
+        if(m.ip) localStorage.setItem('printer_ip_'+m.id,m.ip);
+        if(m.cam) localStorage.setItem('printer_cam_'+m.id,m.cam);
+      });
     }
   }catch(e){
     if(e.message?.includes('404')||e.message?.includes('NOT_FOUND')){
@@ -10784,6 +10811,7 @@ function savePrinterIp(id){
   const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
   localStorage.setItem('printer_ip_'+id,val);
   const m=MAQUINAS.find(x=>x.id===id);
+  if(m){m.ip=val;if(m._airtableId){const t=getToken();if(t)fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:val}})});}}
   toast(`IP guardada · ${m?.nombre} #${m?.numG}`,'success');pollPrinters();
 }
 
@@ -10810,8 +10838,9 @@ function savePrinterConn(){
   const key=(document.getElementById('printerConnKey').value||'').trim();
   if(ip)localStorage.setItem('printer_ip_'+id,ip);else localStorage.removeItem('printer_ip_'+id);
   if(key)localStorage.setItem('printer_key_'+id,key);else localStorage.removeItem('printer_key_'+id);
-  closePrinterConnModal();
   const m=MAQUINAS.find(x=>x.id===id);
+  if(m&&m._airtableId){m.ip=ip||m.ip;const t=getToken();if(t)fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
+  closePrinterConnModal();
   toast(`Conexión guardada · ${m?.nombre} #${m?.numG}`,'success');
   pollPrinters();
 }
@@ -11306,7 +11335,7 @@ function openWebcamModal(id){
   if(url){img.src=printerCamUrl(id);img.style.display='block';nf.style.display='none';}else{img.src='';img.style.display='none';nf.style.display='flex';}
   document.getElementById('webcamModal').style.display='flex';
 }
-function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);closeWebcamModal();renderMonitorGrid();toast(url?'📷 Webcam configurada — feed visible en la tarjeta':'Webcam eliminada','success');}
+function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);const m=MAQUINAS.find(x=>x.id===id);if(m){m.cam=url||null;if(m._airtableId){const t=getToken();if(t)fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{cam:url||''}})});}}closeWebcamModal();renderMonitorGrid();toast(url?'📷 Webcam configurada — guardada en Airtable':'Webcam eliminada','success');}
 function closeWebcamModal(){document.getElementById('webcamModal').style.display='none';document.getElementById('webcamModalImg').src='';}
 
 function openHistoryModal(id){
@@ -13498,7 +13527,7 @@ const MAIL={
   },
 
   // ── Enviar cotización por correo ──
-  sendCotizacion(cotId){
+  async sendCotizacion(cotId){
     const c=state.cotizaciones.find(x=>x.id===cotId);
     if(!c){toast('Cotización no encontrada','error');return;}
     const f=c.fields;
@@ -13510,15 +13539,23 @@ const MAIL={
       const cli=state.clientes.find(x=>x.id===cid);
       if(cli){email=cli.fields['Email']||'';empresa=cli.fields['Empresa']||'';}
     }
-    // Documento HTML de la cotización como adjunto
+    // Generar PDF de la cotización como adjunto
     this._cmpAtts=[];
     try{
       const res=buildCotizacionDoc(cotId);
       if(res&&res.html){
-        const b64=btoa(unescape(encodeURIComponent(res.html)));
-        this._cmpAtts.push({name:`Cotizacion_${numCot.replace(/[^\w-]/g,'_')}.html`,type:'text/html',size:res.html.length,data:b64});
+        toast('Generando PDF…','info');
+        const pdfBlob=await _fichaHTMLtoPdfBlob(res.html);
+        const b64=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();
+          reader.onload=()=>resolve(reader.result.split(',')[1]);
+          reader.onerror=reject;
+          reader.readAsDataURL(pdfBlob);
+        });
+        const fname=`Cotizacion_${numCot.replace(/[^\w-]/g,'_')}.pdf`;
+        this._cmpAtts.push({name:fname,type:'application/pdf',size:pdfBlob.size,data:b64});
       }
-    }catch(e){}
+    }catch(e){toast('Error generando PDF','error');}
     switchTab('correo');
     setTimeout(()=>{
       this.init();

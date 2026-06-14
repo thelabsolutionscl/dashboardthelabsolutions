@@ -104,6 +104,14 @@ const server = http.createServer((req, res) => {
   delete headers['x-bridge-token'];
   delete headers.origin;
   delete headers.referer;
+  // Eliminar headers de Cloudflare/proxy para que Moonraker vea la IP del bridge
+  delete headers['x-forwarded-for'];
+  delete headers['x-forwarded-proto'];
+  delete headers['x-real-ip'];
+  delete headers['cf-connecting-ip'];
+  delete headers['cf-ray'];
+  delete headers['cf-ipcountry'];
+  delete headers['cf-visitor'];
 
   const preq = http.request({ host: ip, port, path: targetPath, method: req.method, headers, timeout: 15000 }, pres => {
     const h = { ...pres.headers };
