@@ -2694,6 +2694,21 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div id="slParamsWrap" style="display:none">
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin:10px 0 8px">Parámetros de laminado <span style="color:var(--text3);font-weight:400;text-transform:none">(editables)</span></div>
             <div id="slParamsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:8px;margin-bottom:14px"></div>
+            <!-- ── Modificadores por altura y regiones de soporte (opcional) ── -->
+            <div style="border-top:1px solid var(--border2);padding-top:10px;margin-bottom:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="SL3D.toggleAdvanced()">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2)">⚙ Avanzado <span style="color:var(--text3);font-weight:400;text-transform:none">— modificadores por altura · regiones de soporte</span></div>
+                <span id="slAdvCaret" style="color:var(--text3);font-size:12px">▾</span>
+              </div>
+              <div id="slAdvBody" style="display:none;margin-top:10px">
+                <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">MODIFICADORES POR ALTURA <span style="font-weight:400">(distintos parámetros en un rango de Z)</span></div>
+                <div id="slModList"></div>
+                <button class="btn btn-ghost btn-sm" onclick="SL3D.addModifier()" style="margin:4px 0 12px">+ Agregar modificador</button>
+                <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">REGIONES DE SOPORTE <span style="font-weight:400">(forzar o bloquear soporte en una caja XY·Z)</span></div>
+                <div id="slSupRegList"></div>
+                <button class="btn btn-ghost btn-sm" onclick="SL3D.addSupRegion()" style="margin:4px 0 4px">+ Agregar región</button>
+              </div>
+            </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <button class="btn btn-primary" id="slBtnGcode" onclick="SL3D.generarGcode()">⚙ Generar G-code</button>
               <span style="font-size:10px;color:var(--text3)">Slicer nativo · sin dependencias externas</span>
@@ -18565,7 +18580,7 @@ const SL3D=(function(){
     {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
-  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null};
+  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[]};
   const el=id=>document.getElementById(id);
 
   // ── Parsers ─────────────────────────────────────────────────
@@ -18726,7 +18741,7 @@ const SL3D=(function(){
     let best=S.tris,bestScore=1e18,bestI=0;
     cands.forEach(([rx,ry],i)=>{const tt=_rotTris(S.tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
     S.tris=best;analyze(S.tris);buildPreview();render();renderStats();
-    S.params=null;S.gcode='';el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
+    S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     toast(bestI===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
   }
   // ── Plating multi-objeto: centra cada pieza y las acomoda en rejilla ──
@@ -18793,6 +18808,7 @@ const SL3D=(function(){
       const parsed=[];let totRemoved=0,totWelded=0;
       for(const f of files){const r=_repairMesh(await _parseFile(f));totRemoved+=r.removed;totWelded+=r.welded;parsed.push(_centerTris(r.tris));}
       S.objects=parsed;S.name=files[0].name.replace(/\.(stl|obj|3mf)$/i,'')+(files.length>1?` +${files.length-1}`:'');
+      S.modifiers=[];S.supRegions=[]; // nuevos rangos de Z dependen del modelo → limpiar al cargar uno nuevo
       _replate();
       const repMsg=totRemoved>0?` · reparado: ${totRemoved} triángulo(s) inválido(s) descartado(s)`:'';
       toast((files.length>1?`${files.length} piezas cargadas y acomodadas en el plato`:`Modelo cargado: ${S.stats.tris.toLocaleString('es-CL')} triángulos`)+repMsg,'success');
@@ -18949,6 +18965,85 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       g.appendChild(div);
     }
     el('slParamsWrap').style.display='block';
+    renderModifiers();renderSupRegions();
+  }
+  // ── Modificadores por altura y regiones de soporte ──────────
+  function toggleAdvanced(){
+    const b=el('slAdvBody'),c=el('slAdvCaret');
+    const open=b.style.display==='none';
+    b.style.display=open?'block':'none';c.textContent=open?'▴':'▾';
+  }
+  const _MOD_FIELDS=['infillPct','infillType','shells','topLayers','bottomLayers'];
+  function addModifier(){
+    const zMax=S.stats?+S.stats.dz.toFixed(1):20;
+    S.modifiers.push({zMin:0,zMax,infillPct:'',infillType:'',shells:'',topLayers:'',bottomLayers:''});
+    renderModifiers();
+  }
+  function removeModifier(i){S.modifiers.splice(i,1);renderModifiers();}
+  function updModifier(i,k,v){if(S.modifiers[i])S.modifiers[i][k]=v;}
+  function renderModifiers(){
+    const c=el('slModList');if(!c)return;
+    if(!S.modifiers.length){c.innerHTML='<div style="font-size:10px;color:var(--text3);padding:2px 0 8px">Sin modificadores — todo el modelo usa los parámetros de arriba.</div>';return;}
+    const patOpts=['','grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','linear'];
+    c.innerHTML=S.modifiers.map((m,i)=>`
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px;margin-bottom:6px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text3)">
+          <span>Z desde</span><input type="number" step="0.5" value="${m.zMin}" onchange="SL3D.updModifier(${i},'zMin',+this.value)" style="width:56px;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;font-family:monospace">
+          <span>hasta</span><input type="number" step="0.5" value="${m.zMax}" onchange="SL3D.updModifier(${i},'zMax',+this.value)" style="width:56px;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;font-family:monospace"><span>mm</span>
+          <button onclick="SL3D.removeModifier(${i})" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px" title="Quitar">✕</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+          <label style="font-size:9px;color:var(--text3)">Relleno %<br><input type="number" step="5" placeholder="—" value="${m.infillPct}" onchange="SL3D.updModifier(${i},'infillPct',this.value)" style="width:60px;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;font-family:monospace"></label>
+          <label style="font-size:9px;color:var(--text3)">Patrón<br><select onchange="SL3D.updModifier(${i},'infillType',this.value)" style="background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px">${patOpts.map(o=>`<option value="${o}" ${o===m.infillType?'selected':''}>${o||'—'}</option>`).join('')}</select></label>
+          <label style="font-size:9px;color:var(--text3)">Perímetros<br><input type="number" step="1" placeholder="—" value="${m.shells}" onchange="SL3D.updModifier(${i},'shells',this.value)" style="width:60px;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;font-family:monospace"></label>
+          <label style="font-size:9px;color:var(--text3)">Capas sup.<br><input type="number" step="1" placeholder="—" value="${m.topLayers}" onchange="SL3D.updModifier(${i},'topLayers',this.value)" style="width:60px;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;font-family:monospace"></label>
+          <label style="font-size:9px;color:var(--text3)">Capas inf.<br><input type="number" step="1" placeholder="—" value="${m.bottomLayers}" onchange="SL3D.updModifier(${i},'bottomLayers',this.value)" style="width:60px;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;font-family:monospace"></label>
+        </div>
+      </div>`).join('');
+  }
+  function addSupRegion(){
+    const dx=S.stats?S.stats.dx:40,dy=S.stats?S.stats.dy:40,dz=S.stats?+S.stats.dz.toFixed(1):20;
+    S.supRegions.push({mode:'block',x0:+(-dx/4).toFixed(1),y0:+(-dy/4).toFixed(1),x1:+(dx/4).toFixed(1),y1:+(dy/4).toFixed(1),zMin:0,zMax:dz});
+    renderSupRegions();
+  }
+  function removeSupRegion(i){S.supRegions.splice(i,1);renderSupRegions();}
+  function updSupRegion(i,k,v){if(S.supRegions[i])S.supRegions[i][k]=v;}
+  function renderSupRegions(){
+    const c=el('slSupRegList');if(!c)return;
+    if(!S.supRegions.length){c.innerHTML='<div style="font-size:10px;color:var(--text3);padding:2px 0 8px">Sin regiones — el soporte se calcula automáticamente por ángulo.</div>';return;}
+    c.innerHTML=S.supRegions.map((r,i)=>`
+      <div style="background:var(--surface2);border:1px solid ${r.mode==='enforce'?'rgba(0,212,170,0.4)':'rgba(255,107,53,0.4)'};border-radius:8px;padding:8px;margin-bottom:6px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text3)">
+          <select onchange="SL3D.updSupRegion(${i},'mode',this.value)" style="background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px">
+            <option value="block" ${r.mode==='block'?'selected':''}>🚫 Bloquear soporte</option>
+            <option value="enforce" ${r.mode==='enforce'?'selected':''}>✅ Forzar soporte</option>
+          </select>
+          <button onclick="SL3D.removeSupRegion(${i})" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px" title="Quitar">✕</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:9px;color:var(--text3)">
+          ${['x0','y0','x1','y1','zMin','zMax'].map(k=>`<label>${k}<br><input type="number" step="1" value="${r[k]}" onchange="SL3D.updSupRegion(${i},'${k}',+this.value)" style="width:54px;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;font-family:monospace"></label>`).join('')}
+        </div>
+      </div>`).join('');
+  }
+  // Parámetros efectivos para una capa a altura curZ (aplica modificadores que cubran ese Z).
+  // Sin modificadores activos → devuelve el mismo objeto p (cero cambios en la salida).
+  function _layerParams(p,curZ){
+    if(!S.modifiers||!S.modifiers.length)return p;
+    const cli=(v,a,b)=>Math.max(a,Math.min(b,Math.round(+v)));
+    const PATS=['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','linear'];
+    let pe=null;
+    for(const m of S.modifiers){
+      if(curZ<m.zMin-1e-6||curZ>m.zMax+1e-6)continue;
+      for(const k of _MOD_FIELDS){
+        const raw=m[k];if(raw===''||raw===null||raw===undefined)continue;
+        if(!pe)pe=Object.assign({},p);
+        if(k==='infillType'){if(PATS.includes(raw))pe.infillType=raw;}
+        else if(k==='infillPct')pe.infillPct=cli(raw,0,100);
+        else if(k==='shells')pe.shells=cli(raw,1,8);
+        else pe[k]=cli(raw,0,10); // topLayers / bottomLayers
+      }
+    }
+    return pe||p;
   }
   function readParams(){
     const p={};
@@ -19626,20 +19721,31 @@ self.onmessage=function(ev){
     const layerTopZ=_pre.layerTopZ,layerPolys=_pre.layerPolys,layerParity=_pre.layerParity,layerNetArea=_pre.layerNetArea,layerBB=_pre.layerBB;
     // ── Soportes: columnas bajo voladizos (rejilla o árbol) ──
     let supCols=null,supTrees=null;const SUP_GS=4;
-    if(p.supports){
+    const _hasEnforce=(S.supRegions||[]).some(r=>r.mode==='enforce');
+    if(p.supports||_hasEnforce){
       setProg(3.5,'Calculando soportes…');await new Promise(r=>setTimeout(r,0));
       const dx=S.stats.dx,dy=S.stats.dy,minZ=Math.max(0.8,lhs[0]+0.4),cols=[];
       const hit=(x,y,li)=>{const ps=layerPolys[li],bbs=layerBB[li];for(let k=0;k<ps.length;k++){const b=bbs[k];if(x<b[0]||x>b[2]||y<b[1]||y>b[3])continue;if(_pointInPoly(x,y,ps[k]))return true;}return false;};
+      // Regiones de soporte (opcional): bloquear o forzar soporte en cajas XY·Z. Sin regiones → sin efecto.
+      const regs=S.supRegions||[];
+      const inRegXY=(r,x,y)=>x>=Math.min(r.x0,r.x1)&&x<=Math.max(r.x0,r.x1)&&y>=Math.min(r.y0,r.y1)&&y<=Math.max(r.y0,r.y1);
+      const inRegZ=(r,z)=>z>=r.zMin-1e-6&&z<=r.zMax+1e-6;
+      const blocked=(x,y,z)=>regs.some(r=>r.mode==='block'&&inRegXY(r,x,y)&&inRegZ(r,z));
+      const enforced=(x,y,z)=>regs.some(r=>r.mode==='enforce'&&inRegXY(r,x,y)&&inRegZ(r,z));
       for(let gx=-dx/2+SUP_GS/2;gx<dx/2;gx+=SUP_GS)for(let gy=-dy/2+SUP_GS/2;gy<dy/2;gy+=SUP_GS){
         let first=-1;
         for(let li=0;li<totalL;li++){if(hit(gx,gy,li)){first=li;break;}}
         if(first>0&&layerTopZ[first]>minZ){
+          const cz=layerTopZ[first];
+          if(blocked(gx,gy,cz))continue; // región bloquea soporte aquí
           // Auto-soporte por ángulo: si la capa de abajo tiene material a ≤ tol (= altura·tan(ángulo)),
           // el voladizo es suave y se sostiene solo → no necesita soporte. Honra p.supportAngle.
           const tol=Math.max(0.1,lhs[first]*Math.tan((p.supportAngle||50)*Math.PI/180));
           let selfSup=false;
           for(let a=0;a<8&&!selfSup;a++){const an=a*Math.PI/4;if(hit(gx+tol*Math.cos(an),gy+tol*Math.sin(an),first-1))selfSup=true;}
-          if(!selfSup)cols.push({x:gx,y:gy,bot:0,top:first-1});
+          // Si el soporte global está activo: añade por ángulo (salvo bloqueo) + forzados. Si está apagado: sólo forzados.
+          const want=p.supports?(!selfSup||enforced(gx,gy,cz)):enforced(gx,gy,cz);
+          if(want)cols.push({x:gx,y:gy,bot:0,top:first-1});
         }
       }
       if(cols.length){
@@ -19678,6 +19784,7 @@ self.onmessage=function(ev){
     curZ=0;
     for(let li=0;li<totalL;li++){
       const lh=lhs[li];curZ+=lh;const zOut=curZ+zBase; // zOut = altura física (sube sobre el raft)
+      const pe=_layerParams(p,curZ); // parámetros efectivos: aplica modificadores por altura (pe===p si no hay)
       const spd=li===0?p.firstLayerSpeed:p.speed;
       const outerF=(li>0&&p.outerSpeed>0?p.outerSpeed:spd)*60; // velocidad pared exterior
       const innerF=Math.round(spd*0.9)*60;
@@ -19745,7 +19852,7 @@ self.onmessage=function(ev){
         const ct=baseC[ci];if(ct.length<3)continue;
         const hole=parity[ci];
         const shells=[ct];
-        for(let s=1;s<p.shells;s++){
+        for(let s=1;s<pe.shells;s++){
           const ins=hole?_insetRaw(shells[s-1],-extW):_inset(shells[s-1],extW);
           if(ins&&ins.length>=3)shells.push(ins);else break;
         }
@@ -19754,9 +19861,9 @@ self.onmessage=function(ev){
           [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,extW,s===0?outerF:innerF,p,s===0&&li>0);
         fillLoops.push(shells[shells.length-1]);
         // Gap fill: pared fina donde no cupieron 2 perímetros → cordón central sólido para no dejar hueco
-        if(p.gapFill&&p.shells>=2&&shells.length<2&&!hole)gapLoops.push(ct);
+        if(p.gapFill&&pe.shells>=2&&shells.length<2&&!hole)gapLoops.push(ct);
         // Arachne: si la pared es más delgada que 2×extW, rellenar con una pared central de ancho variable
-        if(p.arachne&&!hole&&p.shells>=2&&shells.length===1){
+        if(p.arachne&&!hole&&pe.shells>=2&&shells.length===1){
           const inner=_insetRaw(ct,extW);
           if(inner&&inner.length>=3){
             // El inset cabe → la pared es ≥ extW pero falta la segunda pared
@@ -19772,19 +19879,19 @@ self.onmessage=function(ev){
       // ── Relleno con detección de superficies por región (even-odd excluye agujeros) ──
       if(fillLoops.length){
         const solidFeed=(li>0&&p.infillSpeed>0?p.infillSpeed:Math.round(spd*1.1))*60,solidAngle=li%2?135:45,COMB=Math.max(extW*3,2);
-        const aLi=layerNetArea[li],aTop=layerNetArea[li+p.topLayers],aBot=layerNetArea[li-p.bottomLayers];
+        const aLi=layerNetArea[li],aTop=layerNetArea[li+pe.topLayers],aBot=layerNetArea[li-pe.bottomLayers];
         // ¿Hay alguna cara expuesta? Sólo si arriba/abajo (N capas) la sección encoge (o no existe = global)
         // Lightning siempre usa el camino muestreado: necesita escanear hacia arriba para hallar techos.
-        const exposed=(p.infillType==='lightning')||(aTop===undefined||aTop<aLi*0.98)||(aBot===undefined||aBot<aLi*0.98);
+        const exposed=(pe.infillType==='lightning')||(aTop===undefined||aTop<aLi*0.98)||(aBot===undefined||aBot<aLi*0.98);
         if(!exposed){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
-          if(p.infillPct>0){
-            const sp=_infillMulti(fillLoops,extW/(p.infillPct/100),p.infillType,li,curZ);
+          if(pe.infillPct>0){
+            const sp=_infillMulti(fillLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ);
             if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
           }
         }else{
-          const above=layerPolys[li+p.topLayers]||[],below=layerPolys[li-p.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
-          const aboveBB=layerBB[li+p.topLayers]||[],belowBB=layerBB[li-p.bottomLayers]||[],below1BB=li>0?(layerBB[li-1]||[]):[];
+          const above=layerPolys[li+pe.topLayers]||[],below=layerPolys[li-pe.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
+          const aboveBB=layerBB[li+pe.topLayers]||[],belowBB=layerBB[li-pe.bottomLayers]||[],below1BB=li>0?(layerBB[li-1]||[]):[];
           const isTop=(x,y)=>!_inSolidBB(x,y,above,aboveBB),isBot=(x,y)=>!_inSolidBB(x,y,below,belowBB);
           const isSurf=(x,y)=>isTop(x,y)||isBot(x,y);
           const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolidBB(x,y,below1,below1BB);
@@ -19803,21 +19910,21 @@ self.onmessage=function(ev){
             }
           }
           // 3) Relleno disperso en el interior (ni superficie)
-          if(p.infillType==='lightning'){
+          if(pe.infillType==='lightning'){
             // Lightning: estructura mínima tipo árbol — sólo soporta techos dentro del alcance vertical,
             // dejando el resto del interior hueco. Gran ahorro de material y tiempo.
-            const reach=Math.max(4,p.topLayers+3);
+            const reach=Math.max(4,pe.topLayers+3);
             const isAirAt=(x,y,L)=>{const pp=layerPolys[L];if(!pp||!pp.length)return true;return !_inSolidBB(x,y,pp,layerBB[L]);};
             const needsLight=(x,y)=>{
               if(isSurf(x,y))return false;
               for(let d=1;d<=reach;d++){const L=li+d;if(L>=totalL)return false;if(isAirAt(x,y,L))return true;}
               return false; // techo lejano → sin relleno (ahorro)
             };
-            const lspac=Math.max(extW*2,extW/Math.max(0.05,p.infillPct/100)*1.4);
+            const lspac=Math.max(extW*2,extW/Math.max(0.05,pe.infillPct/100)*1.4);
             const sp=_clipLines(_scanfillAll(fillLoops,lspac,li%2?135:45),needsLight,extW);
             if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);}
-          }else if(p.infillPct>0){
-            const sp=_clipLines(_infillMulti(fillLoops,extW/(p.infillPct/100),p.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
+          }else if(pe.infillPct>0){
+            const sp=_clipLines(_infillMulti(fillLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
             if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
           }
         }
@@ -20239,7 +20346,7 @@ self.onmessage=function(ev){
     cv.addEventListener('pointermove',e=>{if(!S.drag)return;S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
     cv.addEventListener('pointerup',()=>{S.drag=null;cv.style.cursor='grab';});
   });
-  return{loadFile,loadFiles,addObject,autoOrient,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas};
+  return{loadFile,loadFiles,addObject,autoOrient,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion};
 })();
 </script>
 
