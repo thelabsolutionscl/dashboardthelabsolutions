@@ -18883,7 +18883,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   const FILA_AREA=Math.PI*0.765625; // sección filamento 1.75mm = π·0.875²
   function _buildContours(segs){
     if(!segs.length)return[];
-    const EPS=0.05,round=v=>Math.round(v/EPS),K=(p)=>`${round(p[0])},${round(p[1])}`;
+    // Clave numérica (sin allocación de string) → mismo redondeo EPS, mucho más rápido por capa
+    const EPS=0.05,round=v=>Math.round(v/EPS),K=(p)=>(round(p[0])+1e6)*4000001+(round(p[1])+1e6);
     const map=new Map();
     for(let i=0;i<segs.length;i++){
       const k0=K(segs[i][0]),k1=K(segs[i][1]);
@@ -18993,6 +18994,27 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   // ── Relleno consciente de agujeros (regla even-odd sobre todos los loops) ──
   function _inSolid(x,y,loops){let c=0;for(const L of loops)if(_pointInPoly(x,y,L))c++;return c%2===1;}
+  // ── Optimización: bounding-box por loop para descartar point-in-poly sin overlap ──
+  function _bbOf(poly){let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;for(const p of poly){if(p[0]<mnx)mnx=p[0];if(p[0]>mxx)mxx=p[0];if(p[1]<mny)mny=p[1];if(p[1]>mxy)mxy=p[1];}return[mnx,mny,mxx,mxy];}
+  function _inSolidBB(x,y,loops,bbs){let c=0;for(let i=0;i<loops.length;i++){const b=bbs[i];if(x<b[0]||x>b[2]||y<b[1]||y>b[3])continue;if(_pointInPoly(x,y,loops[i]))c++;}return c%2===1;}
+  // Slicer con lista activa: para z CRECIENTE sólo evalúa triángulos que cruzan el plano (no re-escanea todo)
+  function _activeSweeper(tris,sortedIdx,triZmin,triZmax){
+    let addPtr=0,active=[];const triCnt=sortedIdx.length;
+    return function(zc){
+      while(addPtr<triCnt&&triZmin[sortedIdx[addPtr]]<=zc){active.push(sortedIdx[addPtr]);addPtr++;}
+      const segs=[],keep=[];
+      for(const i of active){
+        if(triZmax[i]<=zc)continue;
+        keep.push(i);
+        const b=i*9,za=tris[b+2],zb=tris[b+5],zcc=tris[b+8];
+        const pts=[[tris[b],tris[b+1],za],[tris[b+3],tris[b+4],zb],[tris[b+6],tris[b+7],zcc]],cr=[];
+        for(let a=0;a<3;a++){const pa=pts[a],pb=pts[(a+1)%3];if((pa[2]>zc)!==(pb[2]>zc)){const tt=(zc-pa[2])/(pb[2]-pa[2]);cr.push([pa[0]+tt*(pb[0]-pa[0]),pa[1]+tt*(pb[1]-pa[1])]);}}
+        if(cr.length===2)segs.push(cr);
+      }
+      active=keep;
+      return _buildContours(segs);
+    };
+  }
   // Recorta líneas a los sub-tramos donde pred(x,y) es verdadero (muestreo cada `step`).
   // Sirve para imprimir superficies sólidas (top/bottom) sólo donde toca y dejar el resto disperso.
   function _clipLines(lines,pred,step){
@@ -19026,15 +19048,16 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     return lines;
   }
   function _gyroidFillMulti(loops,spacing,z){
+    const bbs=loops.map(_bbOf);
     let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
-    for(const L of loops)for(const[x,y]of L){if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;}
+    for(const b of bbs){if(b[0]<mnx)mnx=b[0];if(b[2]>mxx)mxx=b[2];if(b[1]<mny)mny=b[1];if(b[3]>mxy)mxy=b[3];}
     const period=Math.max(spacing*1.7,3),k=2*Math.PI/period,amp=spacing*0.5,step=Math.max(0.7,period/10);
     const segs=[];let row=0;
     for(let y0=mny+spacing/2;y0<mxy;y0+=spacing,row++){
       const ph=k*z*0.6+(row%2?Math.PI:0);let prev=null;
       for(let x=mnx;x<=mxx;x+=step){
         const y=y0+amp*Math.sin(k*x+ph);
-        const ins=_inSolid(x,y,loops);
+        const ins=_inSolidBB(x,y,loops,bbs);
         if(ins&&prev)segs.push([prev,[x,y]]);
         prev=ins?[x,y]:null;
       }
@@ -19070,18 +19093,26 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     let d=0;for(const o of all){if(o===contour)continue;if(_pointInPoly(mx,my,o))d++;}
     return d;
   }
+  // Igual que _depth pero con prefiltro por bounding-box (descarta loops sin overlap antes del ray-cast)
+  function _depthBB(ci,all,bbs){
+    const contour=all[ci],n=contour.length,a=contour[0],b=contour[1%n];
+    let mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,dx=b[0]-a[0],dy=b[1]-a[1],ln=Math.hypot(dx,dy)||1;
+    mx+=(-dy/ln)*0.01;my+=(dx/ln)*0.01;
+    let d=0;for(let i=0;i<all.length;i++){if(i===ci)continue;const bb=bbs[i];if(mx<bb[0]||mx>bb[2]||my<bb[1]||my>bb[3])continue;if(_pointInPoly(mx,my,all[i]))d++;}
+    return d;
+  }
   // Detección de puentes: cobertura del área sólida por la capa inferior + orientación de span
   function _bridgeInfoMulti(loops,prev){
+    const bbs=loops.map(_bbOf);
     let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
-    for(const L of loops)for(const[x,y]of L){if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;}
+    for(const b of bbs){if(b[0]<mnx)mnx=b[0];if(b[2]>mxx)mxx=b[2];if(b[1]<mny)mny=b[1];if(b[3]>mxy)mxy=b[3];}
     const angle=(mxx-mnx)<=(mxy-mny)?0:90; // líneas a lo largo de la dimensión corta (vanos más cortos)
     if(!prev||!prev.length)return{cov:0,angle};
-    const N=7;let inP=0,cov=0;
+    const pbbs=prev.map(_bbOf),N=7;let inP=0,cov=0;
     for(let i=0;i<=N;i++)for(let j=0;j<=N;j++){
       const x=mnx+(mxx-mnx)*i/N,y=mny+(mxy-mny)*j/N;
-      if(!_inSolid(x,y,loops))continue;inP++;
-      let c=0;for(const pp of prev)if(_pointInPoly(x,y,pp))c++;
-      if(c%2===1)cov++;
+      if(!_inSolidBB(x,y,loops,bbs))continue;inP++;
+      if(_inSolidBB(x,y,prev,pbbs))cov++;
     }
     return{cov:inP?cov/inP:1,angle};
   }
@@ -19372,30 +19403,32 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const totalL=lhs.length;
     setProg(3,`${totalL} capas para ${zMax.toFixed(1)}mm${p.adaptiveLayerHeight?' (adaptativas)':''}…`);
     await new Promise(r=>setTimeout(r,0));
-    // ── Precomputar contornos por capa (una pasada, reusado por capas, soportes y superficies) ──
-    const layerTopZ=[],layerPolys=[],layerParity=[],layerNetArea=[];
-    {let z=0;for(let li=0;li<totalL;li++){
+    // ── Precomputar contornos por capa (sweep activo: O(triángulos que cruzan) por capa, no O(todos)) ──
+    const layerTopZ=[],layerPolys=[],layerParity=[],layerNetArea=[],layerBB=[];
+    {const sweep=_activeSweeper(tris,sortedIdx,triZmin,triZmax);let z=0;for(let li=0;li<totalL;li++){
       z+=lhs[li];layerTopZ.push(z);
-      let cs=sliceZ(z-lhs[li]/2).filter(c=>c.length>=3).map(c=>_polyArea(c)<0?[...c].reverse():c);
+      let cs=sweep(z-lhs[li]/2).filter(c=>c.length>=3).map(c=>_polyArea(c)<0?[...c].reverse():c);
       cs.sort((a,b)=>Math.abs(_polyArea(b))-Math.abs(_polyArea(a)));
-      layerPolys.push(cs);
-      const par=cs.map(ct=>_depth(ct,cs)%2===1);layerParity.push(par);
-      layerNetArea.push(cs.reduce((s,ct,ci)=>s+(par[ci]?-1:1)*Math.abs(_polyArea(ct)),0)); // área sólida (exterior − agujeros)
+      const bbs=cs.map(_bbOf),areas=cs.map(c=>Math.abs(_polyArea(c)));
+      layerPolys.push(cs);layerBB.push(bbs);
+      const par=cs.map((ct,ci)=>_depthBB(ci,cs,bbs)%2===1);layerParity.push(par);
+      layerNetArea.push(cs.reduce((s,_,ci)=>s+(par[ci]?-1:1)*areas[ci],0)); // área sólida (exterior − agujeros)
     }}
     // ── Soportes: columnas bajo voladizos (rejilla o árbol) ──
     let supCols=null,supTrees=null;const SUP_GS=4;
     if(p.supports){
       setProg(3.5,'Calculando soportes…');await new Promise(r=>setTimeout(r,0));
       const dx=S.stats.dx,dy=S.stats.dy,minZ=Math.max(0.8,lhs[0]+0.4),cols=[];
+      const hit=(x,y,li)=>{const ps=layerPolys[li],bbs=layerBB[li];for(let k=0;k<ps.length;k++){const b=bbs[k];if(x<b[0]||x>b[2]||y<b[1]||y>b[3])continue;if(_pointInPoly(x,y,ps[k]))return true;}return false;};
       for(let gx=-dx/2+SUP_GS/2;gx<dx/2;gx+=SUP_GS)for(let gy=-dy/2+SUP_GS/2;gy<dy/2;gy+=SUP_GS){
         let first=-1;
-        for(let li=0;li<totalL;li++){if(layerPolys[li].some(pl=>_pointInPoly(gx,gy,pl))){first=li;break;}}
+        for(let li=0;li<totalL;li++){if(hit(gx,gy,li)){first=li;break;}}
         if(first>0&&layerTopZ[first]>minZ){
           // Auto-soporte por ángulo: si la capa de abajo tiene material a ≤ tol (= altura·tan(ángulo)),
           // el voladizo es suave y se sostiene solo → no necesita soporte. Honra p.supportAngle.
-          const tol=Math.max(0.1,lhs[first]*Math.tan((p.supportAngle||50)*Math.PI/180)),bp=layerPolys[first-1];
+          const tol=Math.max(0.1,lhs[first]*Math.tan((p.supportAngle||50)*Math.PI/180));
           let selfSup=false;
-          for(let a=0;a<8&&!selfSup;a++){const an=a*Math.PI/4;if(bp.some(pl=>_pointInPoly(gx+tol*Math.cos(an),gy+tol*Math.sin(an),pl)))selfSup=true;}
+          for(let a=0;a<8&&!selfSup;a++){const an=a*Math.PI/4;if(hit(gx+tol*Math.cos(an),gy+tol*Math.sin(an),first-1))selfSup=true;}
           if(!selfSup)cols.push({x:gx,y:gy,bot:0,top:first-1});
         }
       }
@@ -19490,9 +19523,10 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
           }
         }else{
           const above=layerPolys[li+p.topLayers]||[],below=layerPolys[li-p.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
-          const isTop=(x,y)=>!_inSolid(x,y,above),isBot=(x,y)=>!_inSolid(x,y,below);
+          const aboveBB=layerBB[li+p.topLayers]||[],belowBB=layerBB[li-p.bottomLayers]||[],below1BB=li>0?(layerBB[li-1]||[]):[];
+          const isTop=(x,y)=>!_inSolidBB(x,y,above,aboveBB),isBot=(x,y)=>!_inSolidBB(x,y,below,belowBB);
           const isSurf=(x,y)=>isTop(x,y)||isBot(x,y);
-          const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolid(x,y,below1);
+          const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolidBB(x,y,below1,below1BB);
           // 1) Superficies sólidas (top/bottom) que no son puente
           const surf=_clipLines(_scanfillAll(fillLoops,extW*1.02,solidAngle),(x,y)=>isSurf(x,y)&&!isBridge(x,y),extW);
           if(surf.length)[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
@@ -19520,8 +19554,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         }
         // Ironing: plancha TODAS las caras top-expuestas (no sólo la última capa)
         if(p.ironing){
-          const above1=layerPolys[li+1]||[];
-          const ir=_clipLines(_scanfillAll(fillLoops,extW*0.5,li%2?45:135),(x,y)=>!_inSolid(x,y,above1),extW*0.5);
+          const above1=layerPolys[li+1]||[],above1BB=layerBB[li+1]||[];
+          const ir=_clipLines(_scanfillAll(fillLoops,extW*0.5,li%2?45:135),(x,y)=>!_inSolidBB(x,y,above1,above1BB),extW*0.5);
           if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,zOut,offX,offY,cX,cY,E,lh*0.12,extW,Math.round(Math.min(spd,40))*60,p,COMB);}
         }
       }
