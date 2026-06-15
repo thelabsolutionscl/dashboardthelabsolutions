@@ -11169,10 +11169,18 @@ async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   const headers=getPrinterAuthHeaders(m.id);
   try{
-    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard`),{signal:AbortSignal.timeout(5000),headers});
+    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard&webhooks`),{signal:AbortSignal.timeout(5000),headers});
     if(!r.ok)return{state:'offline'};
     const d=await r.json();const s=d.result?.status||{};
-    const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{};
+    const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{},wh=s.webhooks||{};
+    // Estado real del firmware Klipper. Si está "shutdown"/"error" la impresora
+    // dejó de imprimir y NO reporta sensores (todo 0) → hay que reiniciar el firmware.
+    const klState=wh.state||'ready';
+    let klMsg='';
+    if(wh.state_message){
+      try{const j=JSON.parse(wh.state_message);klMsg=j.msg||wh.state_message;}catch(_){klMsg=wh.state_message;}
+      klMsg=String(klMsg).split('\n').map(x=>x.trim()).filter(Boolean)[0]||'';
+    }
     const progress=Math.round((vs.progress||0)*100);
     const elapsed=ps.print_duration||0;
     const eta=progress>0&&progress<100?Math.round(elapsed/progress*(100-progress)):0;
@@ -11191,7 +11199,11 @@ async function fetchPrinterStatus(m){
       }
     }
     const filamentMm=Math.round(ps.filament_used||0);
-    return{state:ps.state||'standby',progress,filename,thumbUrl,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
+    // Klipper caído o iniciando manda sobre el estado del print
+    let state=ps.state||'standby';
+    if(klState==='shutdown'||klState==='error')state='shutdown';
+    else if(klState==='startup')state='startup';
+    return{state,klState,klMsg,progress,filename,thumbUrl,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
   }catch(e){return{state:'offline',ip};}
 }
 
@@ -11204,6 +11216,8 @@ function printerStateMeta(state){
     error:{label:'Error',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
     complete:{label:'Completado',color:'#a78bfa',bg:'rgba(167,139,250,0.15)'},
     standby:{label:'Idle',color:'var(--text3)',bg:'var(--surface2)'},
+    shutdown:{label:'⚠ Detenida',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
+    startup:{label:'Iniciando…',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
     offline:{label:'Offline',color:'#888',bg:'rgba(120,120,120,0.12)'},
     noip:{label:'Sin IP',color:'#ff6b35',bg:'rgba(255,107,53,0.12)'},
   }[state])||{label:state,color:'var(--text3)',bg:'var(--surface2)'};
@@ -11232,14 +11246,15 @@ function filterMonitor(grupo){_monitorFilter=grupo;renderMonitorFilterTabs();ren
 function renderMonitorKPIs(){
   const el=document.getElementById('monitorKPIs');if(!el)return;
   const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
-  let printing=0,paused=0,idle=0,error=0,offline=0,noip=0;
-  lista.forEach(m=>{const st=(_printerStatus[m.id]||{}).state||'offline';if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='noip')noip++;else if(st==='offline')offline++;else idle++;});
+  let printing=0,paused=0,idle=0,error=0,down=0,offline=0,noip=0;
+  lista.forEach(m=>{const st=(_printerStatus[m.id]||{}).state||'offline';if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='offline')offline++;else idle++;});
   const total=lista.length,utilPct=total>0?Math.round((printing+paused)/total*100):0;
   el.innerHTML=`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:11px">
     ${printing>0?`<span style="color:#00d4aa;font-weight:700">🟢 ${printing} Imprimiendo</span>`:''}
     ${paused>0?`<span style="color:#ffaa00;font-weight:700">⏸ ${paused} Pausado</span>`:''}
     ${idle>0?`<span style="color:var(--text3)">⚪ ${idle} Idle</span>`:''}
     ${error>0?`<span style="color:#ff4444;font-weight:700">🔴 ${error} Error</span>`:''}
+    ${down>0?`<span style="color:#ff4444;font-weight:700">⚠ ${down} Detenida${down>1?'s':''} (Klipper)</span>`:''}
     ${offline>0?`<span style="color:#888">⚫ ${offline} Offline</span>`:''}
     ${noip>0?`<span style="color:#ff6b35">❓ ${noip} Sin IP</span>`:''}
     <span style="margin-left:auto;font-weight:700;color:${utilPct>0?'#00d4aa':'var(--text3)'}">Utilización ${utilPct}%</span>
@@ -11276,6 +11291,20 @@ function renderMonitorGrid(){
       </div>`;
     } else if(s.state==='offline'){
       body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:11px;padding:8px 0">Sin respuesta<br><span style="font-family:monospace;font-size:10px">${ip}</span><br><span style="font-size:10px">Verifica que esté encendida</span></div>`;
+    } else if(s.state==='shutdown'){
+      body=`<div style="margin-top:10px;padding:10px;background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);border-radius:8px">
+        <div style="font-size:11px;color:#ff6b6b;font-weight:700;margin-bottom:4px">⚠ Klipper detenido</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:9px;line-height:1.4">${escapeHtml(s.klMsg||'La impresora reportó un error y se detuvo. La impresión en curso se interrumpió.')}</div>
+        <button onclick="printerFirmwareRestart('${m.id}')" style="width:100%;background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.45);color:#ff6b6b;border-radius:7px;padding:7px;font-size:11px;font-weight:700;cursor:pointer">🔄 Reiniciar firmware</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}</span>
+          <div style="display:flex;gap:4px">
+            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
+            <button onclick="openWebcamModal('${m.id}')" style="background:${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${localStorage.getItem('printer_cam_'+m.id)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
+            <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}</button>
+          </div>
+        </div>
+      </div>`;
     } else {
       body=`
         ${isActive?`<div style="margin:10px 0 6px;display:flex;gap:8px;align-items:flex-start">
@@ -11356,6 +11385,22 @@ async function printerControl(id,action){
     const r=await fetch(printerUrl(ip,`/printer/print/${action}`),{method:'POST',signal:AbortSignal.timeout(6000),headers});
     if(r.ok)setTimeout(pollPrinters,1500);else toast('Error: '+r.status,'error');
   }catch(e){toast('Sin conexión con la impresora','error');}
+}
+
+// Reinicia el firmware Klipper (saca la impresora del estado "shutdown").
+// Moonraker mantiene la petición abierta hasta reconectar; si tarda y caduca
+// el timeout lo tratamos igual como "reiniciándose" (no es un error real).
+async function printerFirmwareRestart(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return;}
+  if(!confirm(`🔄 Reiniciar el firmware de ${m.nombre} #${m.numG}?\n\nSaca a Klipper del estado "detenido". Si la causa fue puntual, volverá a funcionar; si es un fallo de hardware (termistor/MCU) se detendrá otra vez — revisa la impresora.`))return;
+  toast(`🔄 Reiniciando firmware de ${m.nombre} #${m.numG}…`,'info');
+  try{
+    const r=await fetch(printerUrl(ip,'/printer/firmware_restart'),{method:'POST',signal:AbortSignal.timeout(15000),headers:getPrinterAuthHeaders(id)});
+    if(r.ok)toast('✅ Firmware reiniciado','success');
+    else toast('Error: '+r.status,'error');
+  }catch(e){toast('🔄 Comando enviado — la conexión se reinicia…','info');}
+  setTimeout(pollPrinters,4000);
 }
 
 // ── CONTROL MOONRAKER (temperatura · máquina · archivos · historial) ──
@@ -11559,6 +11604,13 @@ function checkTransitions(m,s){
     sendBrowserNotification(title,'Requiere atención');
     sendWebhookAlert(m,'error');
     _sendWaAlertIfEnabled(title,'Requiere atención inmediata.');
+  }
+  if(st==='shutdown'&&prev!=='shutdown'&&prev!==undefined&&prev!=='offline'){
+    const title=`⚠ ${m.nombre} #${m.numG} se detuvo (Klipper)`;
+    const detail=s.klMsg||'El firmware entró en shutdown. Revisa la impresora y reinicia el firmware.';
+    sendBrowserNotification(title,detail);
+    sendWebhookAlert(m,'shutdown');
+    _sendWaAlertIfEnabled(title,detail);
   }
   if(st==='printing'&&prev!=='printing')_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
   if(prev==='printing'&&st!=='printing'){
