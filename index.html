@@ -2735,6 +2735,12 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div id="slRazon" style="display:none;margin:12px 0;padding:12px 14px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);border-radius:9px;font-size:11.5px;color:var(--text2);line-height:1.55"></div>
           <div id="slParamsWrap" style="display:none">
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin:10px 0 8px">Parámetros de laminado <span style="color:var(--text3);font-weight:400;text-transform:none">(editables)</span></div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px">
+              <span style="font-size:10px;font-weight:700;color:var(--text3)">PERFIL</span>
+              <select id="slProfileSel" class="field-select" style="font-size:11px;padding:5px 8px;flex:1;min-width:120px" onchange="SL3D.loadProfile(this.value)"><option value="">— elegir perfil guardado —</option></select>
+              <button class="btn btn-ghost btn-sm" onclick="SL3D.saveProfile()" style="font-size:10px;padding:5px 10px">💾 Guardar</button>
+              <button class="btn btn-ghost btn-sm" onclick="SL3D.deleteProfile()" style="font-size:10px;padding:5px 10px;color:var(--danger)">✕</button>
+            </div>
             <div id="slParamsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:8px;margin-bottom:14px"></div>
             <!-- ── Modificadores por altura y regiones de soporte (opcional) ── -->
             <div style="border-top:1px solid var(--border2);padding-top:10px;margin-bottom:12px">
@@ -19050,6 +19056,7 @@ const SL3D=(function(){
     {k:'widthOuter',l:'Ancho pared ext. (mm)',s:0.02},{k:'widthInfill',l:'Ancho relleno (mm)',s:0.02},
     {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo','aleatorio']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
+    {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},
     {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
     {k:'spiralize',l:'Modo jarrón',sel:['no','sí']},{k:'monotonic',l:'Relleno monot.',sel:['no','sí']},{k:'arachne',l:'Arachne (pared var.)',sel:['no','sí']},
     {k:'elephantFoot',l:'Pie de elefante (mm)',s:0.05},{k:'xyCompensation',l:'Compensación XY (mm)',s:0.02},
@@ -19289,7 +19296,7 @@ const SL3D=(function(){
     const cands=[[0,0],[Math.PI,0],[Math.PI/2,0],[-Math.PI/2,0],[0,Math.PI/2],[0,-Math.PI/2]];
     let best=S.tris,bestScore=1e18,bestI=0;
     cands.forEach(([rx,ry],i)=>{const tt=_rotTris(S.tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
-    S.tris=best;analyze(S.tris);buildPreview();S.supSticks=null;render();renderStats();
+    S.tris=best;S.objBBs=null;analyze(S.tris);buildPreview();S.supSticks=null;render();renderStats();
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     toast(bestI===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
   }
@@ -19345,7 +19352,7 @@ const SL3D=(function(){
       }
     }
     if(!bestN){toast('No se detectó cara ahí — haz clic sobre la figura','error');return;}
-    S.tris=_alignTris(S.tris,bestN);
+    S.tris=_alignTris(S.tris,bestN);S.objBBs=null;
     analyze(S.tris);buildPreview();S.supSticks=null;
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];
     el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
@@ -19386,13 +19393,19 @@ const SL3D=(function(){
     const GAP=6,bedW=Math.max(...items.map(it=>it.w))+ Math.sqrt(items.length)*60;
     items.sort((a,b)=>b.d-a.d);
     let curX=0,curY=0,rowH=0;const placed=[];
-    for(const it of items){if(curX>0&&curX+it.w>bedW){curX=0;curY+=rowH+GAP;rowH=0;}placed.push({t:it.t,ox:curX+it.w/2,oy:curY+it.d/2});curX+=it.w+GAP;rowH=Math.max(rowH,it.d);}
+    for(const it of items){if(curX>0&&curX+it.w>bedW){curX=0;curY+=rowH+GAP;rowH=0;}placed.push({t:it.t,ox:curX+it.w/2,oy:curY+it.d/2,w:it.w,d:it.d});curX+=it.w+GAP;rowH=Math.max(rowH,it.d);}
+    // Cajas por objeto en coords centradas (= como queda la malla tras analyze) → para EXCLUDE_OBJECT
+    let MX0=1e9,MY0=1e9,MX1=-1e9,MY1=-1e9;
+    for(const pl of placed){MX0=Math.min(MX0,pl.ox-pl.w/2);MX1=Math.max(MX1,pl.ox+pl.w/2);MY0=Math.min(MY0,pl.oy-pl.d/2);MY1=Math.max(MY1,pl.oy+pl.d/2);}
+    const ccx=(MX0+MX1)/2,ccy=(MY0+MY1)/2;
+    S._plateBBs=placed.map((pl,i)=>({name:'obj_'+(i+1),x0:pl.ox-pl.w/2-ccx,y0:pl.oy-pl.d/2-ccy,x1:pl.ox+pl.w/2-ccx,y1:pl.oy+pl.d/2-ccy}));
     let len=0;for(const t of objs)len+=t.length;const out=new Float32Array(len);let o=0;
     for(const pl of placed){const t=pl.t;for(let i=0;i<t.length;i+=3){out[o++]=t[i]+pl.ox;out[o++]=t[i+1]+pl.oy;out[o++]=t[i+2];}}
     return out;
   }
   function _replate(){
     S.tris=S.objects.length>1?_plate(S.objects):S.objects[0];
+    S.objBBs=S.objects.length>1?S._plateBBs:null; // EXCLUDE_OBJECT sólo con 2+ piezas
     analyze(S.tris);buildPreview();
     const fn=el('slFileName');fn.style.display='block';fn.textContent=S.objects.length>1?`✓ ${S.objects.length} piezas en el plato`:'✓ '+S.name;
     el('slCanvas').style.display='block';render();renderStats();
@@ -19562,6 +19575,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
       minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
+      excludeObject:!!p.excludeObject&&p.excludeObject!=='no',
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
       seamMode:['cercano','alineado','agudo'].includes(p.seamMode)?p.seamMode:'cercano',
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
@@ -19599,7 +19613,32 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       g.appendChild(div);
     }
     el('slParamsWrap').style.display='block';
+    renderProfileSel();
     renderModifiers();renderSupRegions();
+  }
+  // ── Perfiles de laminado (guardar/cargar conjuntos de parámetros) ──
+  function _slProfiles(){try{return JSON.parse(localStorage.getItem('sl_profiles')||'{}');}catch(e){return{};}}
+  function _slProfilesSave(m){localStorage.setItem('sl_profiles',JSON.stringify(m));}
+  function renderProfileSel(){
+    const sel=el('slProfileSel');if(!sel)return;
+    const m=_slProfiles(),names=Object.keys(m).sort();
+    sel.innerHTML='<option value="">— elegir perfil guardado —</option>'+names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  }
+  function saveProfile(){
+    if(!el('sl_f_layerHeight')){toast('Genera o carga parámetros primero','error');return;}
+    const name=(prompt('Nombre del perfil:','')||'').trim();if(!name)return;
+    const vals={};for(const f of FIELDS){const e=el('sl_f_'+f.k);if(e)vals[f.k]=e.value;}
+    const m=_slProfiles();m[name]=vals;_slProfilesSave(m);renderProfileSel();
+    el('slProfileSel').value=name;toast(`✓ Perfil "${name}" guardado`,'success');
+  }
+  function loadProfile(name){
+    if(!name)return;const m=_slProfiles(),vals=m[name];if(!vals)return;
+    for(const f of FIELDS){const e=el('sl_f_'+f.k);if(e&&vals[f.k]!==undefined)e.value=vals[f.k];}
+    toast(`Perfil "${name}" cargado — revisa y genera`,'success');
+  }
+  function deleteProfile(){
+    const name=el('slProfileSel').value;if(!name){toast('Elige un perfil para borrar','error');return;}
+    const m=_slProfiles();delete m[name];_slProfilesSave(m);renderProfileSel();toast(`Perfil "${name}" borrado`,'info');
   }
   // ── Modificadores por altura y regiones de soporte ──────────
   function toggleAdvanced(){
@@ -20073,6 +20112,27 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       }
     }
     emitRun();
+    return out.join('\n');
+  }
+  // ── EXCLUDE_OBJECT (Klipper): etiqueta cada pieza para poder cancelarla sin abortar la placa ──
+  // Post-proceso: envuelve las extrusiones de cada objeto según su caja XY (las piezas no se solapan).
+  function _wrapExcludeObject(gcode,objBBs,offX,offY){
+    if(!objBBs||objBBs.length<2)return gcode;
+    const M=1.0; // margen alrededor de cada caja
+    const bbs=objBBs.map(b=>({name:b.name,x0:b.x0+offX-M,y0:b.y0+offY-M,x1:b.x1+offX+M,y1:b.y1+offY+M,cx:(b.x0+b.x1)/2+offX,cy:(b.y0+b.y1)/2+offY}));
+    const which=(x,y)=>{for(let i=0;i<bbs.length;i++){const b=bbs[i];if(x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1)return i;}return -1;};
+    const lines=gcode.split('\n'),out=[];let x=0,y=0,cur=-1,injected=false;
+    for(const ln of lines){
+      if(!injected&&/^G92 E0/.test(ln)){out.push(ln);for(const b of bbs)out.push(`EXCLUDE_OBJECT_DEFINE NAME=${b.name} CENTER=${b.cx.toFixed(2)},${b.cy.toFixed(2)} POLYGON=[[${b.x0.toFixed(1)},${b.y0.toFixed(1)}],[${b.x1.toFixed(1)},${b.y0.toFixed(1)}],[${b.x1.toFixed(1)},${b.y1.toFixed(1)}],[${b.x0.toFixed(1)},${b.y1.toFixed(1)}]]`);injected=true;continue;}
+      if(ln.charCodeAt(0)===71&&ln.startsWith('G1 ')){
+        const mx=/X(-?[\d.]+)/.exec(ln),my=/Y(-?[\d.]+)/.exec(ln);
+        const nx=mx?+mx[1]:x,ny=my?+my[1]:y;
+        const isE=/E-?[\d.]/.test(ln)&&(nx!==x||ny!==y);
+        if(isE){const w=which((nx+x)/2,(ny+y)/2);if(w!==cur){if(cur>=0)out.push(`EXCLUDE_OBJECT_END NAME=${bbs[cur].name}`);if(w>=0)out.push(`EXCLUDE_OBJECT_START NAME=${bbs[w].name}`);cur=w;}}
+        out.push(ln);x=nx;y=ny;
+      }else out.push(ln);
+    }
+    if(cur>=0)out.push(`EXCLUDE_OBJECT_END NAME=${bbs[cur].name}`);
     return out.join('\n');
   }
   // Despacho de patrón de relleno disperso
@@ -20762,6 +20822,8 @@ self.onmessage=function(ev){
       if(!gcode.includes('G1'))throw new Error('slicer produjo G-code vacío');
       // Estimación sobre G-code recto (preciso); arc welding sólo afecta la salida
       const _est=estimate(gcode,MATS[matName],model);
+      // EXCLUDE_OBJECT (Klipper): etiqueta cada pieza del plato para cancelarla sin abortar la placa
+      if(p.excludeObject&&S.objBBs&&S.objBBs.length>1){gcode=_wrapExcludeObject(gcode,S.objBBs,spec.x/2,spec.y/2);}
       if(p.arcFitting){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
       S.gcode=gcode;
       setProg(100,'✓ G-code listo');
@@ -21125,7 +21187,7 @@ self.onmessage=function(ev){
       if(wasClick&&S.layFlatMode){const r=cv.getBoundingClientRect();_layFlatAt(e.clientX-r.left,e.clientY-r.top);}
     });
   });
-  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,gcodePreset,saveMachineGcode};
+  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile};
 })();
 </script>
 
