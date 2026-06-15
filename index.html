@@ -19028,6 +19028,7 @@ const SL3D=(function(){
     {k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},{k:'accel',l:'Aceleración (mm/s²)',s:500},
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
     {k:'supports',l:'Soportes',sel:['no','sí']},{k:'treeSupports',l:'Soporte árbol',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
+    {k:'supGrid',l:'Soporte: rejilla (mm)',s:0.5},{k:'supZGap',l:'Soporte: sep. Z (mm)',s:0.05},{k:'supDensity',l:'Soporte: densidad (%)',s:5},
     {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
     {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
@@ -19506,7 +19507,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       speed:Math.round(vbase),outerSpeed:obj==='calidad'?Math.round(vbase*0.6):0,infillSpeed:obj==='rapido'?0:Math.round(vbase*1.1),
       firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
-      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,
+      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,
       adaptiveLayerHeight:obj==='calidad',
       seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
       bridgeDetect:st.ovPct>8,arcFitting:false,gradualTemp: obj!=='rapido',
@@ -19539,6 +19540,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
+      supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
       seamMode:['cercano','alineado','agudo'].includes(p.seamMode)?p.seamMode:'cercano',
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
@@ -20031,7 +20033,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     return _scanfill(poly,spacing,li%2?135:45); // linear
   }
   // Líneas de soporte activas en una capa: conecta columnas por fila y da cuerpo a cada una (cruz + zócalo)
-  function _supportLinesAtLayer(cols,li,gs){
+  function _supportLinesAtLayer(cols,li,gs,p){
     const active=cols.filter(c=>c.top>=li&&c.bot<=li);
     if(!active.length)return[];
     const lines=[];
@@ -20056,7 +20058,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     return lines;
   }
   // ── Soportes tipo árbol ─────────────────────────────────────
-  function _buildTreeSupport(cols){
+  // hitFn(x,y,li) = ¿hay modelo ahí? → se usa para inclinar el tronco y esquivar la pieza
+  function _buildTreeSupport(cols,hitFn,totalL){
     if(!cols||!cols.length)return[];
     const n=cols.length,parent=Array.from({length:n},(_,i)=>i);
     const MERGE_R=11;
@@ -20065,46 +20068,63 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       if(Math.hypot(cols[i].x-cols[j].x,cols[i].y-cols[j].y)<MERGE_R)parent[find(i)]=find(j);
     const map=new Map();
     for(let i=0;i<n;i++){const r=find(i);(map.get(r)||map.set(r,[]).get(r)).push(cols[i]);}
+    const MAXSTEP=0.45; // desplazamiento horizontal máximo por capa (imprimible)
     return Array.from(map.values()).map(mem=>{
       const cx=mem.reduce((s,c)=>s+c.x,0)/mem.length;
       const cy=mem.reduce((s,c)=>s+c.y,0)/mem.length;
       const topLi=Math.max(...mem.map(c=>c.top));
       const baseLi=Math.min(...mem.map(c=>c.bot));
-      return{mem,cx,cy,topLi,baseLi};
+      // Camino del tronco (de arriba hacia abajo): si entra en la pieza, se desvía gradualmente; si está libre, vuelve bajo el contacto
+      const path=new Array(topLi+1);let x=cx,y=cy;
+      for(let li=topLi;li>=baseLi;li--){
+        if(hitFn&&hitFn(x,y,li)){
+          // buscar la salida libre más cercana (anillos crecientes) y avanzar hacia ella, capado por capa
+          let best=null;
+          for(let rad=1;rad<=16&&!best;rad+=1.5)for(let a=0;a<12&&!best;a++){const an=a*Math.PI/6,nx=x+Math.cos(an)*rad,ny=y+Math.sin(an)*rad;if(!hitFn(nx,ny,li))best={nx,ny};}
+          if(best){const dx=best.nx-x,dy=best.ny-y,d=Math.hypot(dx,dy)||1,s=Math.min(d,MAXSTEP);x+=dx/d*s;y+=dy/d*s;}
+        }else{
+          const dx=cx-x,dy=cy-y,d=Math.hypot(dx,dy);
+          if(d>0.01){const s=Math.min(d,MAXSTEP*0.5);x+=dx/d*s;y+=dy/d*s;}
+        }
+        if(!isFinite(x)||!isFinite(y)){x=cx;y=cy;}
+        path[li]={x,y};
+      }
+      return{mem,cx,cy,topLi,baseLi,path};
     });
   }
-  function _treeSupportAtLayer(trees,li,extW){
+  function _treeSupportAtLayer(trees,li,extW,p){
     if(!trees||!trees.length)return[];
-    const lines=[],step=Math.max(extW*2.6,1.1);
+    const lines=[];
+    const dens=Math.max(10,Math.min(90,(p&&p.supDensity)||25))/100;
+    const step=Math.max(extW*1.4,extW/dens*0.9); // menor densidad → mayor separación de la celosía
     for(const tree of trees){
-      const{mem,cx,cy,topLi,baseLi}=tree;
+      const{mem,cx,cy,topLi,baseLi,path}=tree;
       const active=mem.filter(c=>c.top>=li&&c.bot<=li);
       if(!active.length)continue;
-      const BRANCH=6; // capas de la zona de ramificación bajo cada contacto
+      const tc=(path&&path[li])||{x:cx,y:cy}; // centro del tronco en esta capa (camino que esquiva la pieza)
+      const BRANCH=6;
       if(li>=topLi-BRANCH){
-        // Zona de ramas: del tronco hacia cada contacto, con doble línea (más fuerte) + pad de contacto
-        const prog=Math.max(0,(li-(topLi-BRANCH))/BRANCH);
+        // Zona de ramas: del tronco hacia cada contacto + puntas cónicas (snap-off fácil)
+        const prog=Math.max(0,(li-(topLi-BRANCH))/BRANCH); // 0 = tronco, 1 = contacto
         for(const c of active){
-          const bx=cx+(c.x-cx)*prog,by=cy+(c.y-cy)*prog;
-          const ax=cx+(c.x-cx)*Math.max(0,prog-0.5),ay=cy+(c.y-cy)*Math.max(0,prog-0.5);
+          const bx=tc.x+(c.x-tc.x)*prog,by=tc.y+(c.y-tc.y)*prog;
+          const ax=tc.x+(c.x-tc.x)*Math.max(0,prog-0.5),ay=tc.y+(c.y-tc.y)*Math.max(0,prog-0.5);
           lines.push([[ax,ay],[bx,by]]);
           const dx=bx-ax,dy=by-ay,L=Math.hypot(dx,dy)||1,nx=-dy/L*extW,ny=dx/L*extW;
           lines.push([[ax+nx,ay+ny],[bx+nx,by+ny]]);
-          if(li===c.top){const r=extW*1.4;lines.push([[c.x-r,c.y],[c.x+r,c.y]]);lines.push([[c.x,c.y-r],[c.x,c.y+r]]);}
+          if(li>=c.top-1){const r=li>=c.top?extW*0.8:extW*1.6;lines.push([[c.x-r,c.y],[c.x+r,c.y]]);if(li<c.top)lines.push([[c.x,c.y-r],[c.x,c.y+r]]);}
         }
       }else{
-        // Tronco: pilar de celosía (contorno + relleno disperso) con base ensanchada → estable y retirable
+        // Tronco: pilar de celosía con base ensanchada → estable y retirable, centrado en tc
         const fromBot=li-baseLi;
         let R=Math.min(4.5,1.6+mem.length*0.3);
         if(fromBot<10)R+=(10-fromBot)*0.18; // zócalo anti-vuelco en las primeras capas
-        // contorno del pilar (cohesión entre capas)
-        lines.push([[cx-R,cy-R],[cx+R,cy-R]]);lines.push([[cx+R,cy-R],[cx+R,cy+R]]);
-        lines.push([[cx+R,cy+R],[cx-R,cy+R]]);lines.push([[cx-R,cy+R],[cx-R,cy-R]]);
-        // relleno disperso, alternando dirección por capa
+        lines.push([[tc.x-R,tc.y-R],[tc.x+R,tc.y-R]]);lines.push([[tc.x+R,tc.y-R],[tc.x+R,tc.y+R]]);
+        lines.push([[tc.x+R,tc.y+R],[tc.x-R,tc.y+R]]);lines.push([[tc.x-R,tc.y+R],[tc.x-R,tc.y-R]]);
         const dir=li%2===0;
         for(let o=-R+step;o<R-1e-6;o+=step){
-          if(dir)lines.push([[cx-R,cy+o],[cx+R,cy+o]]);
-          else lines.push([[cx+o,cy-R],[cx+o,cy+R]]);
+          if(dir)lines.push([[tc.x-R,tc.y+o],[tc.x+R,tc.y+o]]);
+          else lines.push([[tc.x+o,tc.y-R],[tc.x+o,tc.y+R]]);
         }
       }
     }
@@ -20356,7 +20376,9 @@ self.onmessage=function(ev){
       f=>setProg(3+f*1.5,`Calculando contornos… ${Math.round(f*100)}%`));
     const layerTopZ=_pre.layerTopZ,layerPolys=_pre.layerPolys,layerParity=_pre.layerParity,layerNetArea=_pre.layerNetArea,layerBB=_pre.layerBB;
     // ── Soportes: columnas bajo voladizos (rejilla o árbol) ──
-    let supCols=null,supTrees=null;const SUP_GS=4;
+    let supCols=null,supTrees=null;const SUP_GS=p.supGrid||3;
+    const gapLayers=Math.max(0,Math.round((p.supZGap||0)/p.layerHeight)); // separación de aire (capas) entre soporte y pieza
+    const ifaceLayers=2; // capas de interfaz densa justo bajo la pieza
     const _hasEnforce=(S.supRegions||[]).some(r=>r.mode==='enforce');
     if(p.supports||_hasEnforce){
       setProg(3.5,'Calculando soportes…');await new Promise(r=>setTimeout(r,0));
@@ -20391,12 +20413,15 @@ self.onmessage=function(ev){
           // Base de la columna: baja hasta el modelo de abajo (deja de poner soporte ahí) o la cama.
           let bot=0;
           for(let b=li-2;b>=0;b--){if(sol[b]){bot=b+1;break;}}
-          cols.push({x:gx,y:gy,bot,top:li-1});
+          // Separación de aire: el soporte se detiene `gapLayers` por debajo del voladizo → retiro limpio
+          const top=li-1-gapLayers;
+          if(top<bot)continue; // el hueco consume la columna: el voladizo bridgeará solo
+          cols.push({x:gx,y:gy,bot,top,contactLi:li});
         }
       }
       if(cols.length){
-        if(p.treeSupports){supTrees=_buildTreeSupport(cols);gc.push(`; soportes árbol: ${supTrees.length} ramas · ${cols.length} puntos contacto`);}
-        else{supCols=cols;gc.push(`; soportes: ${cols.length} columnas · rejilla ${SUP_GS}mm`);}
+        if(p.treeSupports){supTrees=_buildTreeSupport(cols,hit,totalL);gc.push(`; soportes árbol: ${supTrees.length} troncos · ${cols.length} contactos · sep.Z ${(p.supZGap||0).toFixed(2)}mm · dens ${p.supDensity}%`);}
+        else{supCols=cols;gc.push(`; soportes: ${cols.length} columnas · rejilla ${SUP_GS}mm · sep.Z ${(p.supZGap||0).toFixed(2)}mm`);}
       }
     }
     // ── Adhesión: skirt / brim / raft (capa 1, antes del modelo) ────────
@@ -20460,17 +20485,17 @@ self.onmessage=function(ev){
       gc.push(`G1 Z${zOut.toFixed(3)} F600`);
       // Soporte (antes del modelo de esta capa)
       if(supCols){
-        const sl=_supportLinesAtLayer(supCols,li,SUP_GS);
+        const sl=_supportLinesAtLayer(supCols,li,SUP_GS,p);
         if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p);}
       }
       if(supTrees){
-        const sl=_treeSupportAtLayer(supTrees,li,extW);
+        const sl=_treeSupportAtLayer(supTrees,li,extW,p);
         if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p);}
       }
-      // Interfaz de soporte: relleno denso en las últimas 2 capas (facilita desprendimiento)
+      // Interfaz de soporte: relleno denso en las capas justo bajo la pieza (facilita el desprendimiento)
       if(supCols){
-        const IFCL=2,IGS=SUP_GS;
-        const ifcCols=supCols.filter(c=>c.top>=li&&c.top-li<IFCL&&c.bot<=li);
+        const IGS=SUP_GS;
+        const ifcCols=supCols.filter(c=>c.top>=li&&c.top-li<ifaceLayers&&c.bot<=li);
         if(ifcCols.length){
           const rows=new Map();
           for(const c of ifcCols){const ky=Math.round(c.y/IGS);(rows.get(ky)||rows.set(ky,[]).get(ky)).push(c);}
@@ -20478,7 +20503,7 @@ self.onmessage=function(ev){
           for(const arr of rows.values()){
             arr.sort((a,b)=>a.x-b.x);
             const x0=arr[0].x-IGS/2,x1=arr[arr.length-1].x+IGS/2,cy=arr[0].y;
-            for(let x=x0+extW/2;x<x1;x+=extW*1.1)ifcLines.push([[x,cy-IGS/2],[x,cy+IGS/2]]);
+            for(let x=x0+extW/2;x<x1;x+=extW*1.05)ifcLines.push([[x,cy-IGS/2],[x,cy+IGS/2]]);
           }
           if(ifcLines.length){gc.push('; interfaz soporte (densa)');[E,cX,cY]=_printLines(gc,ifcLines,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.75)*60,p);}
         }
