@@ -4822,16 +4822,31 @@ function _reportarResultados(muts) {
 const BASE_ID='app1YtD74AqiPWQhy';
 let autoRefreshInterval=null;
 const MIN_REFRESH_MS=10*60*1000; // mínimo 10 min entre refreshes automáticos de Airtable
+// ── Log central de errores: anillo en memoria + persistencia ligera para diagnosticar fallos silenciosos ──
+const ERRLOG={
+  _ring:[],MAX:80,
+  add(ctx,err){
+    const e={t:new Date().toISOString(),ctx:String(ctx||''),msg:(err&&(err.message||err.toString()))||String(err||''),stack:err&&err.stack?String(err.stack).split('\n').slice(0,4).join(' | '):''};
+    this._ring.push(e);if(this._ring.length>this.MAX)this._ring.shift();
+    try{localStorage.setItem('thelab_errlog',JSON.stringify(this._ring.slice(-25)));}catch(_){}
+    if(window.console)console.error('[dashboard]'+(ctx?' '+ctx:''),err);
+    return e;
+  },
+  dump(){return this._ring.slice();}
+};
+window.ERRLOG=ERRLOG;
+// Helper para usar en catch en vez de tragarse el error: catch(e){logErr('contexto',e);}
+function logErr(ctx,err){return ERRLOG.add(ctx,err);}
 // ── Red de seguridad global: captura errores no atrapados para que la UI no quede en estado inconsistente ──
 (function(){
   let _lastErr=0;
-  const notify=msg=>{
-    const now=Date.now();if(now-_lastErr<2000) return;_lastErr=now; // anti-spam
+  const notify=(msg,err)=>{
+    ERRLOG.add('global',err||msg);
+    const now=Date.now();if(now-_lastErr<2000) return;_lastErr=now; // anti-spam en la UI
     try{if(typeof toast==='function') toast('Ocurrió un error inesperado. La acción puede no haberse completado.','error');}catch(e){}
-    if(window.console) console.error('[dashboard]',msg);
   };
-  window.addEventListener('error',e=>{ if(e?.message) notify(e.message); });
-  window.addEventListener('unhandledrejection',e=>{ notify(e?.reason?.message||e?.reason||'promesa rechazada'); });
+  window.addEventListener('error',e=>{ if(e?.message) notify(e.message,e.error); });
+  window.addEventListener('unhandledrejection',e=>{ notify(e?.reason?.message||e?.reason||'promesa rechazada',e?.reason); });
 })();
 const CHILE_COMUNAS={
   'Arica y Parinacota':['Arica','Camarones','Putre','General Lagos'],
@@ -5970,6 +5985,26 @@ async function loadEquipoEventosAirtable(){
 
 // ── LOAD DATA ─────────────────────────────────────────────────
 let isLoadingData=false;
+// Chequeo de salud del esquema: avisa (consola/ERRLOG) si faltan campos que la app escribe,
+// para no perder datos en silencio cuando un campo no existe en Airtable. Solo diagnóstico, sin UI.
+function _schemaHealthCheck(){
+  const checks=[
+    ['Pedidos',state.pedidos,['Resultado QA','Notas QA','Ficha Tecnica']],
+    ['Clientes',state.clientes,['Etapa venta','Notas internas']],
+  ];
+  const faltantes=[];
+  for(const [tabla,recs,campos] of checks){
+    if(!recs||!recs.length)continue;
+    const presentes=new Set();
+    recs.slice(0,50).forEach(r=>Object.keys(r.fields||{}).forEach(k=>presentes.add(k)));
+    campos.forEach(c=>{if(!presentes.has(c))faltantes.push(`${tabla}.${c}`);});
+  }
+  if(faltantes.length){
+    const msg='Campos ausentes en Airtable (datos podrían no guardarse): '+faltantes.join(', ');
+    logErr('schema',msg);
+    if(window.console)console.warn('[schema] '+msg);
+  }
+}
 async function loadAllData(){
   if(isLoadingData)return;
   isLoadingData=true;
@@ -6018,7 +6053,7 @@ async function loadAllData(){
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
-    if(isFirst)setTimeout(ceoAutoWeeklyCheck,1500);
+    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}}
   }catch(e){
     setStatus('error',false);
     console.error('loadAllData error:',e);
@@ -13958,18 +13993,24 @@ const MAIL={
 };
 
 // ── AUTH ─────────────────────────────────────────────────────
+// SHA-256 hex (Web Crypto) — para no almacenar contraseñas en texto plano en el código fuente
+async function _sha256Hex(s){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
 const AUTH={
   SESSION_KEY:'thelab_session_v2',
+  PWD_SALT:'thelab.v2:',
 
-  // Usuarios fijos — mismos en todos los dispositivos
+  // Usuarios fijos — mismos en todos los dispositivos. Contraseñas guardadas como hash SHA-256 (no texto plano).
   USERS:[
-    {username:'nicanor@thelab.solutions',   name:'Nicanor Marambio', role:'admin',      pwd:[80,114,105,109,111,115,50,53,50,53,46]},
-    {username:'gustavo@thelab.solutions',   name:'Gustavo Kaiser',   role:'admin',      pwd:[80,114,105,109,111,115,50,53,50,53,46]},
-    {username:'florencia@thelab.solutions',  name:'Florencia',        role:'comercial',  pwd:[70,97,108,115,111,112,105,114,97,116,97,52,50,48]},
-    {username:'tecnico@thelab.solutions',   name:'Técnico Máquinas', role:'produccion', pwd:[84,101,99,110,105,99,111,50,48,50,53,46]},
-    {username:'finanzas@thelab.solutions',  name:'Finanzas',         role:'finanzas',   pwd:[70,105,110,97,110,122,97,115,50,48,50,53,46]},
-    {username:'marketing@thelab.solutions', name:'Marketing',        role:'marketing',  pwd:[77,97,114,107,101,116,105,110,103,50,48,50,53,46]},
-    {username:'demo@thelab.solutions',      name:'Demo',             role:'demo',       pwd:[68,101,109,111,49,50,51]},
+    {username:'nicanor@thelab.solutions',   name:'Nicanor Marambio', role:'admin',      hash:'d2d89ce42accb47543de786fc208e2527ab2c504bec80ca161770cc41aea8138'},
+    {username:'gustavo@thelab.solutions',   name:'Gustavo Kaiser',   role:'admin',      hash:'d2d89ce42accb47543de786fc208e2527ab2c504bec80ca161770cc41aea8138'},
+    {username:'florencia@thelab.solutions',  name:'Florencia',        role:'comercial',  hash:'aa4a368785e22ecabbe6d9a05fca5cdb54f8b33fb31a415db5c5cac212e93e2b'},
+    {username:'tecnico@thelab.solutions',   name:'Técnico Máquinas', role:'produccion', hash:'0f574774e55415404d24d63128ff56b07999bdd61f4dedadaf7b8032572bd31b'},
+    {username:'finanzas@thelab.solutions',  name:'Finanzas',         role:'finanzas',   hash:'a9e6ed2c42ce48f70e84db828c2f50fa10a90053e4a20acfe462d37079bff6c5'},
+    {username:'marketing@thelab.solutions', name:'Marketing',        role:'marketing',  hash:'96320bdd37f2de47d3aa97e5212f004d13c384bcdd889ccb872cdeff6bebfff2'},
+    {username:'demo@thelab.solutions',      name:'Demo',             role:'demo',       hash:'d8f2d9fb5929640357f39d8e6014acd369baa012107f90867bc000f752fd9079'},
   ],
 
   async init(){},
@@ -13977,8 +14018,9 @@ const AUTH={
   async login(username,password,remember){
     const user=AUTH.USERS.find(u=>u.username===username.trim().toLowerCase());
     if(!user) return false;
-    const expected=user.pwd.map(c=>String.fromCharCode(c)).join('');
-    if(password!==expected) return false;
+    let ok=false;
+    try{ok=(await _sha256Hex(AUTH.PWD_SALT+password))===user.hash;}catch(e){ok=false;}
+    if(!ok) return false;
     const hours=remember?720:8;
     const session={username:user.username,name:user.name,role:user.role,expires:Date.now()+hours*3600000,remember:!!remember};
     localStorage.setItem(AUTH.SESSION_KEY,JSON.stringify(session));
