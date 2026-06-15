@@ -1819,6 +1819,17 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="ovFunnelBody" style="padding:16px"></div>
   </div>
   <div class="card" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-warning"/></svg>Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
+  <!-- ── Reporte ejecutivo CEO (IA) ── -->
+  <div class="card" style="margin-bottom:24px" id="ovCeoCard">
+    <div class="card-header">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-chart"/></svg>Reporte Ejecutivo Semanal (CEO IA)</span>
+      <div style="display:flex;gap:7px;margin-left:auto">
+        <button class="btn btn-ghost btn-sm" onclick="switchTab('agentes')">Ver en Agentes →</button>
+        <button class="btn btn-primary btn-sm" id="ovCeoBtn" onclick="ovGenerarReporteCEO()">⚡ Generar con datos de la semana</button>
+      </div>
+    </div>
+    <div id="ovCeoBody" style="padding:16px;font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.6">Genera un resumen ejecutivo (revenue, márgenes, pedidos atrasados, prioridades) con los datos reales de esta semana.</div>
+  </div>
   <div class="data-grid">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Revenue últimas 4 semanas</span></div><div id="chartRevenue" style="padding:16px"></div></div>
@@ -2181,9 +2192,17 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <textarea id="qaIADesc" class="field-input" rows="2" placeholder="Ej: 50 trofeos PLA blanco con base 3D y placa grabada, entrega mañana..." style="width:100%;resize:vertical;font-size:12px"></textarea>
       </div>
       <div id="qaChecklist" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
         <input class="field-input" id="qaNewItem" placeholder="Agregar ítem..." style="flex:1" onkeydown="if(event.key==='Enter') addQAItem()">
         <button class="btn btn-ghost btn-sm" onclick="addQAItem()">+ Agregar</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('qaFotoInput').click()">📷 Foto evidencia</button>
+        <input type="file" id="qaFotoInput" accept="image/*" capture="environment" style="display:none" onchange="qaAddFoto(this.files[0])">
+        <div id="qaFotoWrap" style="display:none;align-items:center;gap:8px">
+          <img id="qaFotoThumb" alt="evidencia QA" style="height:44px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;object-fit:cover" onclick="qaVerFoto()">
+          <button class="btn btn-ghost btn-sm" onclick="qaRemoveFoto()" style="color:var(--danger)">Quitar</button>
+        </div>
       </div>
       <div style="background:var(--surface2);border-radius:7px;padding:10px 12px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <span style="font-size:12px;color:var(--text2)">Resultado QA</span>
@@ -2265,7 +2284,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <input class="field-input" id="fichaTiempo" placeholder="ej. 4h 30min">
       </div>
       <div class="field-group" style="grid-column:1/-1">
-        <label class="field-label">Notas de producción</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <label class="field-label">Notas de producción</label>
+          <button type="button" class="btn btn-ghost btn-sm" id="fichaIABtn" onclick="rellenarFichaNotasIA()" style="padding:3px 10px">✨ Notas IA</button>
+        </div>
         <textarea class="field-input" id="fichaNotas" rows="3" placeholder="Observaciones, instrucciones especiales, post-procesado..."></textarea>
       </div>
       <div class="field-group">
@@ -2681,6 +2703,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('slAddInput').click()">➕ Agregar pieza</button>
             <button class="btn btn-ghost btn-sm" onclick="SL3D.autoOrient()">🔄 Auto-orientar</button>
             <button class="btn btn-ghost btn-sm" id="slLayFlatBtn" onclick="SL3D.toggleLayFlat()">📐 Apoyar cara</button>
+            <button class="btn btn-ghost btn-sm" id="slSupPrevBtn" onclick="SL3D.toggleSupportPreview()">⛰ Ver voladizos</button>
           </div>
           <canvas id="slCanvas" height="300" style="width:100%;border-radius:10px;background:#0d0d0d;border:1px solid var(--border);margin-top:12px;display:none;cursor:grab;touch-action:none"></canvas>
           <div id="slStats" style="display:none;margin-top:10px"></div>
@@ -6129,6 +6152,7 @@ function renderOverview(){
   renderFunnel();
   renderAlertas();
   renderCharts();
+  ovRenderUltimoReporteCEO();
   // Hide finanzas/web/ads snapshot grid for vendor role
   const vendor=isVendorMode();
   const finCard=document.getElementById('overview-fin-card');
@@ -9010,12 +9034,38 @@ async function toggleTotal(id,actual){
 async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
 let qaItems=[],qaResultadoActual='Pendiente';
-function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidos.find(x=>x.id===pedidoId);const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}const descEl=document.getElementById('qaIADesc');if(descEl)descEl.value=f['Detalle productos']||f['Solicitud cliente (texto libre)']||'';renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
+function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidos.find(x=>x.id===pedidoId);const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}const descEl=document.getElementById('qaIADesc');if(descEl)descEl.value=f['Detalle productos']||f['Solicitud cliente (texto libre)']||'';qaFotoData=localStorage.getItem('qa_foto_'+pedidoId)||null;renderQAFoto();renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
 function closeQAModal(){document.getElementById('qaModal').style.display='none';}
 function renderQAChecklist(){const el=document.getElementById('qaChecklist');if(!qaItems.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">Sin ítems</div>';return;}el.innerHTML=qaItems.map((item,i)=>`<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:8px 12px"><input type="checkbox" ${item.checked?'checked':''} onchange="toggleQAItem(${i})" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent3);flex-shrink:0"><span style="flex:1;font-size:12px;color:${item.checked?'var(--accent3)':'var(--text)'};text-decoration:${item.checked?'line-through':'none'}">${escapeHtml(item.texto)}</span><button onclick="removeQAItem(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button></div>`).join('');}
-function toggleQAItem(i){qaItems[i].checked=!qaItems[i].checked;renderQAChecklist();}
-function removeQAItem(i){qaItems.splice(i,1);renderQAChecklist();}
-function addQAItem(){const inp=document.getElementById('qaNewItem');const val=inp.value.trim();if(!val){inp.focus();return;}qaItems.push({texto:val,checked:false});inp.value='';renderQAChecklist();inp.focus();}
+function toggleQAItem(i){qaItems[i].checked=!qaItems[i].checked;_qaAutoResult();renderQAChecklist();}
+function removeQAItem(i){qaItems.splice(i,1);_qaAutoResult();renderQAChecklist();}
+// Cierra el loop: aprueba solo cuando TODOS los ítems están marcados; un rechazo manual es persistente
+function _qaAutoResult(){
+  if(!qaItems.length||qaResultadoActual==='Rechazado')return;
+  const next=qaItems.every(x=>x.checked)?'QA aprobado':'Pendiente';
+  if(next!==qaResultadoActual){qaResultadoActual=next;updateQAResultadoBtns();}
+}
+// ── Foto de evidencia QA (se guarda comprimida en localStorage por pedido) ──
+let qaFotoData=null;
+function _qaFotoKey(){const id=document.getElementById('qaModalPedidoId').value;return id?'qa_foto_'+id:null;}
+function renderQAFoto(){
+  const wrap=document.getElementById('qaFotoWrap'),thumb=document.getElementById('qaFotoThumb');
+  if(!wrap||!thumb)return;
+  if(qaFotoData){thumb.src=qaFotoData;wrap.style.display='flex';}else{wrap.style.display='none';thumb.removeAttribute('src');}
+}
+async function qaAddFoto(file){
+  if(!file)return;
+  try{
+    const dataUrl=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(file);});
+    qaFotoData=await _fpImgCompress(dataUrl,700);
+    const k=_qaFotoKey();if(k&&qaFotoData)try{localStorage.setItem(k,qaFotoData);}catch(e){toast('Foto muy pesada para guardar localmente','error');}
+    renderQAFoto();toast('✓ Foto de evidencia adjuntada','success');
+  }catch(e){toast('No se pudo leer la imagen','error');}
+  const inp=document.getElementById('qaFotoInput');if(inp)inp.value='';
+}
+function qaRemoveFoto(){qaFotoData=null;const k=_qaFotoKey();if(k)localStorage.removeItem(k);renderQAFoto();}
+function qaVerFoto(){if(!qaFotoData)return;const w=window.open('','_blank');if(w)w.document.write('<title>Evidencia QA</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="'+qaFotoData+'" style="max-width:100%;max-height:100vh"></body>');}
+function addQAItem(){const inp=document.getElementById('qaNewItem');const val=inp.value.trim();if(!val){inp.focus();return;}qaItems.push({texto:val,checked:false});inp.value='';_qaAutoResult();renderQAChecklist();inp.focus();}
 // Convierte la respuesta markdown del QA_AGENT en ítems de checklist + resultado
 function _parseQAIAResponse(text){
   const items=[];let resultado=null;
@@ -9438,6 +9488,25 @@ async function crearReporte(){
 async function crearReporteAuto(){
   prefillReporte();
   await crearReporte();
+}
+// ── Reporte CEO surtido en el Overview ──
+function ovRenderUltimoReporteCEO(){
+  const body=document.getElementById('ovCeoBody');if(!body)return;
+  const reps=(state.reportes||[]).slice().sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')));
+  const r=reps[0];
+  if(r&&r.fields['Resumen ejecutivo']){
+    const fecha=r.fields['Fecha generación']||r.fields['Semana']||'';
+    body.innerHTML=(fecha?`<div style="font-size:10px;color:var(--text3);margin-bottom:8px">Último reporte · ${escapeHtml(String(fecha))}</div>`:'')+`<div style="white-space:pre-wrap">${escapeHtml(r.fields['Resumen ejecutivo'])}</div>`;
+  }
+}
+async function ovGenerarReporteCEO(){
+  if(!state.loaded){toast('Pulsa ↺ Actualizar para cargar los datos primero','error');return;}
+  const btn=document.getElementById('ovCeoBtn'),body=document.getElementById('ovCeoBody');
+  const prev=btn.innerHTML;btn.disabled=true;btn.innerHTML='⏳ Generando…';
+  if(body)body.textContent='⏳ CEO_AGENT procesando con los datos de esta semana…';
+  try{await crearReporteAuto();ovRenderUltimoReporteCEO();}
+  catch(e){if(body)body.textContent='Error: '+e.message;}
+  finally{btn.disabled=false;btn.innerHTML=prev;}
 }
 function renderReportes(){
   const tbody=document.getElementById('reportesTableBody');
@@ -10409,6 +10478,30 @@ async function saveProductionFicha(pedidoId){
     closeAgentInlineModal();renderPedidos();
   }catch(e){toast('Error: '+e.message,'error');}
   finally{if(btnEl){btnEl.disabled=false;btnEl.textContent='💾 Guardar Ficha Técnica';}}
+}
+
+// — Rellena las notas de producción del modal Ficha con el PRODUCTION_AGENT (inline, sin abrir otro modal)
+async function rellenarFichaNotasIA(){
+  const id=document.getElementById('fichaPedidoId').value;
+  const p=state.pedidos.find(x=>x.id===id);const f=p?.fields||{};
+  const mat=document.getElementById('fichaMaterial').value,col=document.getElementById('fichaColor').value,cant=document.getElementById('fichaCantidad').value,acab=document.getElementById('fichaAcabado').value;
+  const sol=(f['Solicitud cliente (texto libre)']||f['Detalle productos']||'').trim();
+  if(!sol&&!mat&&!col){toast('Indica al menos material o la solicitud del pedido','error');return;}
+  const btn=document.getElementById('fichaIABtn');const prev=btn.innerHTML;btn.disabled=true;btn.innerHTML='⏳…';
+  try{
+    const cfg=AGENTES_CFG.find(a=>a.id==='PRODUCTION');
+    const ctx=[
+      f['N° Pedido']?`Pedido: ${f['N° Pedido']}`:'',
+      sol?`Solicitud: ${sol}`:'',
+      mat?`Material: ${mat}`:'',col?`Color: ${col}`:'',cant?`Cantidad: ${cant}`:'',acab?`Acabado: ${acab}`:'',
+      'TAREA: redacta SOLO las notas de producción (instrucciones concretas para el operador). Sin encabezados, conciso, en viñetas o párrafos cortos.'
+    ].filter(Boolean).join('\n');
+    const raw=await callClaude(cfg.sys,ctx);
+    const ta=document.getElementById('fichaNotas');
+    ta.value=(ta.value.trim()?ta.value.trim()+'\n\n':'')+raw.trim();
+    toast('✓ Notas generadas con IA','success');
+  }catch(e){toast('Error IA: '+e.message,'error');}
+  finally{btn.disabled=false;btn.innerHTML=prev;}
 }
 
 // — QA desde pedido
@@ -18668,7 +18761,7 @@ const SL3D=(function(){
     {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
-  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[],layFlatMode:false};
+  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[],layFlatMode:false,showSupports:false};
   const el=id=>document.getElementById(id);
 
   // ── Parsers ─────────────────────────────────────────────────
@@ -18798,8 +18891,14 @@ const SL3D=(function(){
       ctx.fillText('Z↑',z1[0]+3,z1[1]+3);
     })();
     const t=S.prev,m=t.length/9,list=new Array(m);
+    const ovAng=S.params?-(Math.cos((90-(S.params.supportAngle||50))*Math.PI/180)):-0.57; // criterio según ángulo
     for(let i=0;i<m;i++){
       const o=i*9,P=[];let dsum=0;
+      // normal en espacio-modelo → para detectar voladizo (cara hacia abajo no apoyada en la cama)
+      const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx2=t[o+6],cy2=t[o+7],cz2=t[o+8];
+      const Ux=bx-ax,Uy=by-ay,Uz=bz-az,Vx=cx2-ax,Vy=cy2-ay,Vz=cz2-az;
+      const Nx=Uy*Vz-Uz*Vy,Ny=Uz*Vx-Ux*Vz,Nz=Ux*Vy-Uy*Vx,Nl=Math.hypot(Nx,Ny,Nz)||1;
+      const over=S.showSupports&&(Nz/Nl< (ovAng<-0.2?ovAng:-0.57))&&Math.min(az,bz,cz2)>0.5;
       for(let j=0;j<3;j++){
         const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
         const x1=x*ca-y*sa,y1=x*sa+y*ca;
@@ -18810,15 +18909,16 @@ const SL3D=(function(){
       const ux=P[2]-P[0],uy=P[3]-P[1],vx=P[4]-P[0],vy=P[5]-P[1];
       const facing=ux*vy-uy*vx;
       const sh=Math.max(0.18,Math.min(1,0.3+Math.abs(facing)/( (Math.hypot(ux,uy)*Math.hypot(vx,vy))||1)*0.75));
-      list[i]={d:dsum,P,sh};
+      list[i]={d:dsum,P,sh,over};
     }
     list.sort((p,q)=>q.d-p.d);
     for(const f of list){
       ctx.beginPath();ctx.moveTo(f.P[0],f.P[1]);ctx.lineTo(f.P[2],f.P[3]);ctx.lineTo(f.P[4],f.P[5]);ctx.closePath();
-      ctx.fillStyle=`rgb(${Math.round(f.sh*90)},${Math.round(f.sh*200)},${Math.round(f.sh*192)})`;ctx.fill();
+      // Voladizos en naranja (necesitan soporte); resto en teal
+      ctx.fillStyle=f.over?`rgb(${Math.round(120+f.sh*135)},${Math.round(50+f.sh*90)},${Math.round(20+f.sh*30)})`:`rgb(${Math.round(f.sh*90)},${Math.round(f.sh*200)},${Math.round(f.sh*192)})`;ctx.fill();
     }
     ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='10px JetBrains Mono,monospace';
-    ctx.fillText(S.layFlatMode?'haz clic en una cara para apoyarla en la cama':'arrastra para rotar · la rejilla es la cama',10,h-10);
+    ctx.fillText(S.layFlatMode?'haz clic en una cara para apoyarla en la cama':(S.showSupports?'naranja = voladizos que necesitan soporte':'arrastra para rotar · la rejilla es la cama'),10,h-10);
   }
 
   // ── Auto-orientación: prueba orientaciones y elige la de menos voladizos ──
@@ -18921,6 +19021,15 @@ const SL3D=(function(){
     if(!S.tris){toast('Carga un modelo primero','error');return;}
     S.layFlatMode=!S.layFlatMode;_updLayFlatBtn();render();
     if(S.layFlatMode)toast('Haz clic en la cara que quieres apoyar en la cama','success');
+  }
+  // Vista previa de soportes: pinta de naranja las caras con voladizo (las que necesitarán soporte)
+  function toggleSupportPreview(){
+    if(!S.tris){toast('Carga un modelo primero','error');return;}
+    S.showSupports=!S.showSupports;
+    const b=el('slSupPrevBtn');
+    if(b){if(S.showSupports){b.classList.add('btn-primary');b.classList.remove('btn-ghost');}else{b.classList.remove('btn-primary');b.classList.add('btn-ghost');}}
+    render();
+    if(S.showSupports)toast(`Voladizos en naranja${S.stats?` — ${S.stats.ovPct.toFixed(1)}% del área`:''}`,'success');
   }
   // ── Plating multi-objeto: centra cada pieza y las acomoda en rejilla ──
   function _centerTris(t){
@@ -20548,7 +20657,7 @@ self.onmessage=function(ev){
       if(wasClick&&S.layFlatMode){const r=cv.getBoundingClientRect();_layFlatAt(e.clientX-r.left,e.clientY-r.top);}
     });
   });
-  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion};
+  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion};
 })();
 </script>
 
