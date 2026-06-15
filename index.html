@@ -19049,6 +19049,7 @@ const SL3D=(function(){
     {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','adaptive','linear']},
     {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'outerSpeed',l:'Vel. pared ext.',s:5},{k:'infillSpeed',l:'Vel. relleno',s:10},
     {k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},{k:'accel',l:'Aceleración (mm/s²)',s:500},
+    {k:'accelOuter',l:'Accel pared ext. (0=auto)',s:500},{k:'accelInfill',l:'Accel relleno (0=auto)',s:500},{k:'jerk',l:'Jerk (mm/s, 0=off)',s:1},{k:'bridgeFlow',l:'Flujo puente (%)',s:5},
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
     {k:'supports',l:'Soportes',sel:['no','sí']},{k:'treeSupports',l:'Soporte árbol',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
     {k:'supGrid',l:'Soporte: rejilla (mm)',s:0.5},{k:'supZGap',l:'Soporte: sep. Z (mm)',s:0.05},{k:'supDensity',l:'Soporte: densidad (%)',s:5},
@@ -19549,7 +19550,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,brimGap:0,ironingFlow:12,retractMinTravel:1,fuzzyAll:false,fuzzyPointDist:0.4,draftShield:false,
       minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
       adaptiveLayerHeight:obj==='calidad',
-      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',seamScarf:false,scarfLen:5,
+      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',seamScarf:false,scarfLen:5,accelOuter:0,accelInfill:0,jerk:0,bridgeFlow:100,
       bridgeDetect:st.ovPct>8,arcFitting:false,gradualTemp: obj!=='rapido',
       spiralize:false,monotonic:obj==='calidad',arachne:obj==='calidad',
       gapFill:obj!=='rapido',fuzzySkin:0,coasting:obj==='calidad'?0.2:0,
@@ -19577,6 +19578,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       outerSpeed:Math.round(cl(p.outerSpeed,0,vmax,0)),infillSpeed:Math.round(cl(p.infillSpeed,0,vmax,0)),
       firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
       travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),accel:Math.round(cl(p.accel,0,30000,0)),
+      accelOuter:Math.round(cl(p.accelOuter,0,30000,0)),accelInfill:Math.round(cl(p.accelInfill,0,30000,0)),jerk:cl(p.jerk,0,40,0),bridgeFlow:Math.round(cl(p.bridgeFlow,40,150,100)),
       nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
@@ -20521,6 +20523,7 @@ self.onmessage=function(ev){
     else{gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);}
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
     if(p.accel>0)gc.push('M204 S'+p.accel+' ; aceleración');
+    if(p.jerk>0)gc.push('M205 X'+(+p.jerk).toFixed(1)+' Y'+(+p.jerk).toFixed(1)+' ; jerk (Marlin)');
     if(p.flowRatio&&Math.round(p.flowRatio)!==100)gc.push('M221 S'+Math.round(p.flowRatio)+' ; flujo %');
     if(p.pressureAdvance>0)gc.push('SET_PRESSURE_ADVANCE ADVANCE='+(+p.pressureAdvance).toFixed(4)+' ; pressure advance (Klipper)');
     // Línea de purga
@@ -20636,6 +20639,9 @@ self.onmessage=function(ev){
     }
     // ── Capas ────────────────────────────────────
     curZ=0;let _pausedAtZ=false;
+    // Aceleración por feature: emite M204 sólo al cambiar (pared ext. más lenta, relleno más rápido)
+    const gAccel=p.accel||0;let _accelCur=gAccel;
+    const setAccel=t=>{const eff=t>0?t:gAccel;if(eff>0&&eff!==_accelCur){gc.push('M204 S'+Math.round(eff));_accelCur=eff;}};
     for(let li=0;li<totalL;li++){
       const lh=lhs[li];curZ+=lh;const zOut=curZ+zBase; // zOut = altura física (sube sobre el raft)
       const pe=_layerParams(p,curZ); // parámetros efectivos: aplica modificadores por altura (pe===p si no hay)
@@ -20729,6 +20735,7 @@ self.onmessage=function(ev){
         const _scarf=(p.seamScarf&&li>0)?(p.scarfLen||5):0;
         for(const s of idxs){
           gc.push(s===0?'; pared exterior':'; pared interior');
+          setAccel(s===0?p.accelOuter:0);
           [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,s===0?wOuter:wInner,s===0?outerF:innerF,p,(p.fuzzyAll||s===0)&&li>0,s===0?ohTest:null,ohFeed,s===0?_scarf:0);
         }
         fillLoops.push(shells[shells.length-1]);
@@ -20750,6 +20757,7 @@ self.onmessage=function(ev){
       }
       // ── Relleno con detección de superficies por región (even-odd excluye agujeros) ──
       if(fillLoops.length){
+        setAccel(p.accelInfill); // aceleración de relleno (si está configurada)
         const solidFeed=(li>0&&p.infillSpeed>0?p.infillSpeed:Math.round(spd*1.1))*60,solidAngle=li%2?135:45,COMB=Math.max(extW*3,2);
         // Solape relleno↔pared: expande los lazos de relleno hacia la pared → sin hueco entre relleno y perímetro
         const _ovl=extW*((p.infillOverlap||0)/100);
@@ -20780,7 +20788,7 @@ self.onmessage=function(ev){
             if(br.length){
               gc.push('; puente (bridge) — relleno sólido orientado al vano');
               if(p.fanPct<100)gc.push('M106 S255 ; ventilador máx para puente');
-              [E,cX,cY]=_printLines(gc,br,zOut,offX,offY,cX,cY,E,lh,extW,Math.max(15,Math.min(30,Math.round(spd*0.6)))*60,p,COMB);
+              [E,cX,cY]=_printLines(gc,br,zOut,offX,offY,cX,cY,E,lh,extW*((p.bridgeFlow||100)/100),Math.max(15,Math.min(30,Math.round(spd*0.6)))*60,p,COMB);
               if(p.fanPct<100)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; restaurar ventilador`);
             }
           }
