@@ -2768,6 +2768,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
                   <textarea id="slStartGcode" rows="3" placeholder="vacío = secuencia Marlin por defecto (M140/M104/G28/M190/M109)" style="width:100%;resize:vertical;font-size:11px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 8px" oninput="SL3D.saveMachineGcode()"></textarea>
                   <label style="font-size:9px;color:var(--text3)">Fin (reemplaza el apagado). Vacío = footer Marlin por defecto.</label>
                   <textarea id="slEndGcode" rows="2" placeholder="vacío = footer por defecto (M104 S0 / M140 S0 / M84…)" style="width:100%;resize:vertical;font-size:11px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 4px" oninput="SL3D.saveMachineGcode()"></textarea>
+                  <label style="font-size:9px;color:var(--text3)">Por cada capa (timelapse/macros). Placeholders extra: {layer} {z}</label>
+                  <textarea id="slLayerGcode" rows="1" placeholder="ej: TIMELAPSE_TAKE_FRAME" style="width:100%;resize:vertical;font-size:11px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 4px" oninput="SL3D.saveMachineGcode()"></textarea>
                   <div style="font-size:9px;color:var(--text3);line-height:1.5">El preset <b>Klipper</b> usa <code>PRINT_START</code>/<code>PRINT_END</code> — funciona solo si esas macros existen en tu <code>printer.cfg</code>. Se guarda por impresora.</div>
                 </div>
               </div>
@@ -19060,6 +19062,7 @@ const SL3D=(function(){
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
     {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},{k:'sequential',l:'Impresión secuencial',sel:['no','sí']},
     {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
+    {k:'fuzzyAll',l:'Piel rugosa: todas paredes',sel:['no','sí']},{k:'fuzzyPointDist',l:'Piel rugosa: paso (mm)',s:0.1},{k:'draftShield',l:'Pantalla anti-corriente',sel:['no','sí']},
     {k:'spiralize',l:'Modo jarrón',sel:['no','sí']},{k:'monotonic',l:'Relleno monot.',sel:['no','sí']},{k:'arachne',l:'Arachne (pared var.)',sel:['no','sí']},
     {k:'elephantFoot',l:'Pie de elefante (mm)',s:0.05},{k:'xyCompensation',l:'Compensación XY (mm)',s:0.02},
     {k:'skirt',l:'Skirt (líneas)',s:1},{k:'skirtGap',l:'Skirt sep. (mm)',s:0.5},
@@ -19542,7 +19545,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       speed:Math.round(vbase),outerSpeed:obj==='calidad'?Math.round(vbase*0.6):0,infillSpeed:obj==='rapido'?0:Math.round(vbase*1.1),
       firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
-      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,brimGap:0,ironingFlow:12,retractMinTravel:1,
+      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,brimGap:0,ironingFlow:12,retractMinTravel:1,fuzzyAll:false,fuzzyPointDist:0.4,draftShield:false,
       minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
       adaptiveLayerHeight:obj==='calidad',
       seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
@@ -19579,6 +19582,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
       supInterface:Math.round(cl(p.supInterface,0,5,2)),supOnPlate:!!p.supOnPlate&&p.supOnPlate!=='no',infillOverlap:Math.round(cl(p.infillOverlap,0,40,15)),pauseAtZ:cl(p.pauseAtZ,0,1000,0),
       brimGap:cl(p.brimGap,0,1,0),ironingFlow:Math.round(cl(p.ironingFlow,5,30,12)),retractMinTravel:cl(p.retractMinTravel,0,10,1),
+      fuzzyAll:!!p.fuzzyAll&&p.fuzzyAll!=='no',fuzzyPointDist:cl(p.fuzzyPointDist,0.2,2,0.4),draftShield:!!p.draftShield&&p.draftShield!=='no',
       minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
       excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
@@ -19658,14 +19662,16 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   function loadMachineGcode(){
     const m=_gcMachine();
     const nm=el('slGcMachineName');if(nm)nm.textContent=m;
-    const s=el('slStartGcode'),e=el('slEndGcode');
+    const s=el('slStartGcode'),e=el('slEndGcode'),lg=el('slLayerGcode');
     if(s)s.value=localStorage.getItem('sl_startgcode_'+m)||'';
     if(e)e.value=localStorage.getItem('sl_endgcode_'+m)||'';
+    if(lg)lg.value=localStorage.getItem('sl_layergcode_'+m)||'';
   }
   function saveMachineGcode(){
-    const m=_gcMachine(),s=el('slStartGcode'),e=el('slEndGcode');
+    const m=_gcMachine(),s=el('slStartGcode'),e=el('slEndGcode'),lg=el('slLayerGcode');
     if(s)localStorage.setItem('sl_startgcode_'+m,s.value);
     if(e)localStorage.setItem('sl_endgcode_'+m,e.value);
+    if(lg)localStorage.setItem('sl_layergcode_'+m,lg.value);
   }
   function gcodePreset(flavor){
     const s=el('slStartGcode'),e=el('slEndGcode');if(!s||!e)return;
@@ -20293,10 +20299,12 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p,fuzzy,ohTest,ohFeed){
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     let ord=[...poly.slice(bi),...poly.slice(0,bi)];
-    // Piel rugosa (fuzzy skin): perturba los vértices de la pared exterior a lo largo de su normal
+    // Piel rugosa (fuzzy skin): resamplea el contorno al paso indicado y perturba cada punto a lo largo de su normal
     if(fuzzy&&p&&p.fuzzySkin>0){
-      const n=ord.length;
-      ord=ord.map((pt,i)=>{const pr=ord[(i-1+n)%n],ne=ord[(i+1)%n];let nx=pr[1]-ne[1],ny=ne[0]-pr[0];const l=Math.hypot(nx,ny)||1;const r=(Math.random()*2-1)*p.fuzzySkin;return[pt[0]+nx/l*r,pt[1]+ny/l*r];});
+      const pd=Math.max(0.2,p.fuzzyPointDist||0.4),rs=[];
+      for(let i=0;i<ord.length;i++){const a=ord[i],b=ord[(i+1)%ord.length];rs.push(a);const d=Math.hypot(b[0]-a[0],b[1]-a[1]),steps=Math.floor(d/pd);for(let k=1;k<steps;k++){const t=k/steps;rs.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]);}}
+      const n=rs.length;
+      ord=rs.map((pt,i)=>{const pr=rs[(i-1+n)%n],ne=rs[(i+1)%n];let nx=pr[1]-ne[1],ny=ne[0]-pr[0];const l=Math.hypot(nx,ny)||1;const r=(Math.random()*2-1)*p.fuzzySkin;return[pt[0]+nx/l*r,pt[1]+ny/l*r];});
     }
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy;
     // Solo retraer/z-hop si el salto es real — evita retracciones inútiles entre paredes concéntricas
@@ -20482,6 +20490,7 @@ self.onmessage=function(ev){
     // G-code de inicio: plantilla por impresora (Klipper PRINT_START / Marlin) o secuencia por defecto
     const _gcVars={nozzle:p.nozzleTemp,bed:p.bedTemp,accel:p.accel||0,flow:Math.round(p.flowRatio||100),pa:(+p.pressureAdvance||0).toFixed(4),first_layer_height:p.firstLayerHeight,material:matName,model:modelName};
     const _startTpl=(localStorage.getItem('sl_startgcode_'+modelName)||'').trim();
+    const _layerTpl=(localStorage.getItem('sl_layergcode_'+modelName)||'').trim();
     if(_startTpl)_sub(_startTpl,_gcVars).split('\n').forEach(l=>gc.push(l));
     else{gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);}
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
@@ -20642,6 +20651,10 @@ self.onmessage=function(ev){
       // Pausa programada por altura (inserto de tuerca / cambio de color manual) — PAUSE de Klipper
       if(p.pauseAtZ>0&&!_pausedAtZ&&curZ>=p.pauseAtZ){_pausedAtZ=true;gc.push(`; === PAUSA programada a Z=${(+p.pauseAtZ).toFixed(2)}mm (inserto/cambio de color) ===`);gc.push('PAUSE');}
       const _layerStartIdx=gc.length; // para el tiempo mínimo de capa (ralentiza extrusión si la capa es muy corta)
+      // G-code por cambio de capa (timelapse/macros) — placeholders {layer} {z} + los del header
+      if(_layerTpl)_sub(_layerTpl,Object.assign({layer:li+1,z:zOut.toFixed(3)},_gcVars)).split('\n').forEach(l=>{if(l.trim())gc.push(l);});
+      // Pantalla anti-corriente (draft shield): pared sacrificial alrededor de la pieza (ABS/TPU)
+      if(p.draftShield&&adhBig){const ds=_insetRaw(adhBig,-(3+extW));if(ds&&ds.length>=3){gc.push('; draft shield');[E,cX,cY]=_printPoly(gc,ds,zOut,offX,offY,cX,cY,E,lh,extW,(li===0?p.firstLayerSpeed:p.speed)*60,p);}}
       // Soporte (antes del modelo de esta capa)
       if(supCols){
         const sl=_supportLinesAtLayer(supCols,li,SUP_GS,p);
@@ -20689,7 +20702,7 @@ self.onmessage=function(ev){
         const idxs=[...shells.keys()];if(p.outerWallLast)idxs.reverse(); // pared exterior al final → mejor acabado
         for(const s of idxs){
           gc.push(s===0?'; pared exterior':'; pared interior');
-          [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,s===0?wOuter:wInner,s===0?outerF:innerF,p,s===0&&li>0,s===0?ohTest:null,ohFeed);
+          [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,s===0?wOuter:wInner,s===0?outerF:innerF,p,(p.fuzzyAll||s===0)&&li>0,s===0?ohTest:null,ohFeed);
         }
         fillLoops.push(shells[shells.length-1]);
         // Gap fill: pared fina donde no cupieron 2 perímetros → cordón central sólido para no dejar hueco
