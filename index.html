@@ -19044,7 +19044,7 @@ const SL3D=(function(){
   const FIELDS=[
     {k:'layerHeight',l:'Altura capa (mm)',s:0.04},{k:'firstLayerHeight',l:'1ª capa (mm)',s:0.04},
     {k:'shells',l:'Perímetros',s:1},{k:'topLayers',l:'Capas sup.',s:1},{k:'bottomLayers',l:'Capas inf.',s:1},
-    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','linear']},
+    {k:'infillPct',l:'Relleno (%)',s:5},{k:'infillType',l:'Patrón',sel:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','adaptive','linear']},
     {k:'speed',l:'Velocidad (mm/s)',s:10},{k:'outerSpeed',l:'Vel. pared ext.',s:5},{k:'infillSpeed',l:'Vel. relleno',s:10},
     {k:'firstLayerSpeed',l:'Vel. 1ª capa',s:5},{k:'travelSpeed',l:'Vel. viaje',s:10},{k:'accel',l:'Aceleración (mm/s²)',s:500},
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
@@ -19058,7 +19058,7 @@ const SL3D=(function(){
     {k:'widthOuter',l:'Ancho pared ext. (mm)',s:0.02},{k:'widthInfill',l:'Ancho relleno (mm)',s:0.02},
     {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo','aleatorio']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
-    {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},
+    {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},{k:'sequential',l:'Impresión secuencial',sel:['no','sí']},
     {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
     {k:'spiralize',l:'Modo jarrón',sel:['no','sí']},{k:'monotonic',l:'Relleno monot.',sel:['no','sí']},{k:'arachne',l:'Arachne (pared var.)',sel:['no','sí']},
     {k:'elephantFoot',l:'Pie de elefante (mm)',s:0.05},{k:'xyCompensation',l:'Compensación XY (mm)',s:0.02},
@@ -19508,7 +19508,7 @@ COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético),
 VELOCIDAD: outerSpeed (mm/s, 0=auto) baja la pared exterior para mejor acabado (60% de speed en piezas vistosas). infillSpeed (0=auto) sube el relleno. accel (mm/s², 0=no tocar) limita aceleración para reducir ringing en piezas finas. ADHESIÓN: skirt (líneas, ceba el filamento sin pegarse a la pieza), brim (pegado, para piezas altas o ABS), raft=true (base completa bajo la pieza, para superficies difíciles o ABS — encarece). DETALLE: gapFill=true rellena paredes finas sin huecos. fuzzySkin (mm, 0.1-0.3) da textura rugosa mate a la pared exterior. coasting (mm, 0.1-0.3) corta la extrusión antes del fin del perímetro para evitar el blob de costura.
 CALIDAD (estilo OrcaSlicer): minLayerTime (s, 5-12) ralentiza capas chicas para que enfríen → mejor en piezas pequeñas/torres. overhangSpeed (mm/s, 0=off) baja la velocidad de la pared exterior sobre voladizos. flowRatio (%, 95-105) ajusta extrusión. pressureAdvance (mm, 0=off; típico 0.02-0.05 en Klipper) reduce blobbing en esquinas — déjalo en 0 salvo que conozcas el valor de la impresora. wipeDist (mm, 0.5-1.5) limpia la boquilla al retraer → menos stringing. widthOuter/widthInfill (mm, 0=auto) anchos de línea por feature (outer un poco más fino = más nítido). seamMode también acepta "aleatorio" (costura dispersa).
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|lightning|adaptive|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
     if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
@@ -19567,7 +19567,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       firstLayerHeight:cl(p.firstLayerHeight,0.1,noz*0.9,noz*0.6),
       shells:Math.round(cl(p.shells,1,8,2)),topLayers:Math.round(cl(p.topLayers,0,10,4)),bottomLayers:Math.round(cl(p.bottomLayers,0,10,3)),
       infillPct:Math.round(cl(p.infillPct,0,100,15)),
-      infillType:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','linear'].includes(p.infillType)?p.infillType:'grid',
+      infillType:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','adaptive','linear'].includes(p.infillType)?p.infillType:'grid',
       speed:Math.round(cl(p.speed,10,vmax,60)),
       outerSpeed:Math.round(cl(p.outerSpeed,0,vmax,0)),infillSpeed:Math.round(cl(p.infillSpeed,0,vmax,0)),
       firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
@@ -19578,7 +19578,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
       supInterface:Math.round(cl(p.supInterface,0,5,2)),supOnPlate:!!p.supOnPlate&&p.supOnPlate!=='no',infillOverlap:Math.round(cl(p.infillOverlap,0,40,15)),pauseAtZ:cl(p.pauseAtZ,0,1000,0),
       minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
-      excludeObject:!!p.excludeObject&&p.excludeObject!=='no',
+      excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
       seamMode:['cercano','alineado','agudo'].includes(p.seamMode)?p.seamMode:'cercano',
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
@@ -19688,7 +19688,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   function renderModifiers(){
     const c=el('slModList');if(!c)return;
     if(!S.modifiers.length){c.innerHTML='<div style="font-size:10px;color:var(--text3);padding:2px 0 8px">Sin modificadores — todo el modelo usa los parámetros de arriba.</div>';return;}
-    const patOpts=['','grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','linear'];
+    const patOpts=['','grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','adaptive','linear'];
     c.innerHTML=S.modifiers.map((m,i)=>`
       <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px;margin-bottom:6px">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text3)">
@@ -19734,7 +19734,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   function _layerParams(p,curZ){
     if(!S.modifiers||!S.modifiers.length)return p;
     const cli=(v,a,b)=>Math.max(a,Math.min(b,Math.round(+v)));
-    const PATS=['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','linear'];
+    const PATS=['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','adaptive','linear'];
     let pe=null;
     for(const m of S.modifiers){
       if(curZ<m.zMin-1e-6||curZ>m.zMax+1e-6)continue;
@@ -20492,6 +20492,7 @@ self.onmessage=function(ev){
     E+=(purgeY1-purgeY0)*extW*p.firstLayerHeight/FILA_AREA;
     gc.push(`G1 X3 Y${purgeY1} E${E.toFixed(4)} F${p.firstLayerSpeed*60}`);
     gc.push('G92 E0');E=0;gc.push('G1 Z2 F900');
+    gc.push('; <<<BODY_START>>>'); // marcador para impresión secuencial (separar prólogo/cuerpo/epílogo)
     // ── Índice de triángulos ordenado por Zmin (sweep line) — construido una sola vez ───
     const zMax=S.stats.dz;
     const triCnt=tris.length/9;
@@ -20716,7 +20717,7 @@ self.onmessage=function(ev){
         if(!exposed){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
           if(pe.infillPct>0){
-            const sp=_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ);
+            const sp=_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType==='adaptive'?'cubic':pe.infillType,li,curZ);
             if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
           }
         }else{
@@ -20753,6 +20754,15 @@ self.onmessage=function(ev){
             const lspac=Math.max(extW*2,extW/Math.max(0.05,pe.infillPct/100)*1.4);
             const sp=_clipLines(_scanfillAll(infLoops,lspac,li%2?135:45),needsLight,extW);
             if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);}
+          }else if(pe.infillType==='adaptive'&&pe.infillPct>0){
+            // Relleno adaptativo: base disperso cúbico en todo el interior + pasada extra densa cerca de los techos
+            const baseSp=_clipLines(_infillMulti(infLoops,extW/(pe.infillPct/100),'cubic',li,curZ),(x,y)=>!isSurf(x,y),extW);
+            if(baseSp.length){gc.push('; relleno adaptativo (base)');[E,cX,cY]=_printLines(gc,baseSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            const reach=Math.max(4,pe.topLayers+4);
+            const isAirAt=(x,y,L)=>{const pp=layerPolys[L];if(!pp||!pp.length)return true;return !_inSolidBB(x,y,pp,layerBB[L]);};
+            const nearCeil=(x,y)=>{if(isSurf(x,y))return false;for(let d=1;d<=reach;d++){const L=li+d;if(L>=totalL)return false;if(isAirAt(x,y,L))return true;}return false;};
+            const densSp=_clipLines(_scanfillAll(infLoops,extW/Math.max(0.05,pe.infillPct/100)*0.7,li%2?45:135),nearCeil,extW);
+            if(densSp.length){gc.push('; relleno adaptativo (densificado bajo techos)');[E,cX,cY]=_printLines(gc,densSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
           }else if(pe.infillPct>0){
             const sp=_clipLines(_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
             if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
@@ -20777,6 +20787,7 @@ self.onmessage=function(ev){
       }
       if(li%8===0){setProg(4+li/totalL*92,`Laminando capa ${li+1}/${totalL}…`);await new Promise(r=>setTimeout(r,0));}
     }
+    gc.push('; <<<BODY_END>>>'); // marcador fin de cuerpo (impresión secuencial)
     // ── Footer ───────────────────────────────────
     const _endTpl=(localStorage.getItem('sl_endgcode_'+modelName)||'').trim();
     if(_endTpl){
@@ -20817,6 +20828,55 @@ self.onmessage=function(ev){
     el('slProgBar').style.width=Math.min(100,Math.round(pct))+'%';
     el('slProgTxt').textContent=msg;
   }
+  // Desplaza X/Y de una línea G0/G1 (para reposicionar el cuerpo de una pieza en impresión secuencial)
+  function _shiftXY(ln,shX,shY){
+    if(ln.charCodeAt(0)!==71||!(ln.startsWith('G1 ')||ln.startsWith('G0 ')))return ln;
+    return ln.replace(/X(-?[\d.]+)/,(m,v)=>'X'+(+v+shX).toFixed(3)).replace(/Y(-?[\d.]+)/,(m,v)=>'Y'+(+v+shY).toFixed(3));
+  }
+  // Impresión secuencial: lamina cada pieza por separado y la imprime completa antes de la siguiente.
+  // Seguridad: sube a Z libre sobre lo ya impreso antes de viajar a la pieza siguiente; aborta si no caben con separación.
+  async function _sliceSequential(p,spec,nozD,matName,model){
+    const objs=S.objects,CLR=18; // separación generosa entre piezas (clearance del cabezal)
+    const items=objs.map((t)=>{let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;for(let i=0;i<t.length;i+=3){if(t[i]<mnx)mnx=t[i];if(t[i]>mxx)mxx=t[i];if(t[i+1]<mny)mny=t[i+1];if(t[i+1]>mxy)mxy=t[i+1];if(t[i+2]>mxz)mxz=t[i+2];}return{t,w:mxx-mnx,d:mxy-mny,h:mxz};});
+    items.sort((a,b)=>a.h-b.h); // bajas primero
+    const usableW=spec.x-20;let curX=10,curY=10,rowH=0;
+    for(const it of items){if(curX>10&&curX+it.w>usableW){curX=10;curY+=rowH+CLR;rowH=0;}it.ox=curX+it.w/2;it.oy=curY+it.d/2;curX+=it.w+CLR;rowH=Math.max(rowH,it.d);}
+    const maxY=Math.max(...items.map(it=>it.oy+it.d/2));
+    if(maxY>spec.y-10)throw new Error('secuencial: las piezas no caben con separación segura — reduce la cantidad o usa impresión normal');
+    items.sort((a,b)=>a.oy-b.oy||a.h-b.h); // imprimir de adelante hacia atrás
+    const _tris=S.tris,_stats=S.stats,_sup=S.supRegions,_mod=S.modifiers,_bb=S.objBBs;
+    S.supRegions=[];S.modifiers=[];S.objBBs=null;
+    let prologue=null,epilogue=null;const bodies=[];
+    try{
+      for(let k=0;k<items.length;k++){
+        const it=items[k];
+        setProg(4,`Secuencial: pieza ${k+1}/${items.length}…`);await new Promise(r=>setTimeout(r,0));
+        S.tris=it.t.slice();analyze(S.tris);
+        const lines=(await _nativeSlice(S.tris,p,spec,nozD,matName,model)).split('\n');
+        const bs=lines.indexOf('; <<<BODY_START>>>'),be=lines.indexOf('; <<<BODY_END>>>');
+        if(bs<0||be<0)throw new Error('marcadores de cuerpo no encontrados');
+        if(!prologue){prologue=lines.slice(0,bs+1).join('\n');epilogue=lines.slice(be).join('\n');}
+        const shX=it.ox-spec.x/2,shY=it.oy-spec.y/2;
+        bodies.push({body:lines.slice(bs+1,be).map(l=>_shiftXY(l,shX,shY)),it});
+      }
+    }finally{S.tris=_tris;S.stats=_stats;S.supRegions=_sup;S.modifiers=_mod;S.objBBs=_bb;}
+    const out=[prologue];let printedH=0;
+    for(let k=0;k<bodies.length;k++){
+      const{body,it}=bodies[k];
+      if(k>0){
+        out.push(`\n; ===== Pieza secuencial ${k+1}/${bodies.length} =====`);
+        out.push('G92 E0');
+        if(p.retractDist>0)out.push(`G1 E${(-p.retractDist).toFixed(4)} F${p.retractSpeed*60}`);
+        out.push(`G1 Z${(printedH+5).toFixed(2)} F600 ; subir para librar piezas ya impresas`);
+        out.push(`G1 X${it.ox.toFixed(2)} Y${it.oy.toFixed(2)} F${p.travelSpeed*60} ; ir sobre la siguiente pieza`);
+        if(p.retractDist>0)out.push(`G1 E0 F${p.retractSpeed*60}`);
+      }
+      out.push(body.join('\n'));
+      printedH=Math.max(printedH,it.h);
+    }
+    out.push(epilogue);
+    return out.join('\n');
+  }
   async function generarGcode(){
     if(!S.stats)return;
     const p=readParams();S.params=p;
@@ -20827,12 +20887,14 @@ self.onmessage=function(ev){
       setProg(2,'Iniciando slicer nativo…');
       await new Promise(r=>setTimeout(r,0));
       const nozD=+el('slNozzle').value,matName=el('slMaterial').value;
-      let gcode=await _nativeSlice(S.tris,p,spec,nozD,matName,model);
+      const _seq=p.sequential&&S.objects&&S.objects.length>1;
+      let gcode=_seq?await _sliceSequential(p,spec,nozD,matName,model):await _nativeSlice(S.tris,p,spec,nozD,matName,model);
+      if(_seq)toast('⚠ Secuencial: verifica que el cabezal libre las piezas ya impresas. Probar primero en piezas bajas/separadas.','info');
       if(!gcode.includes('G1'))throw new Error('slicer produjo G-code vacío');
       // Estimación sobre G-code recto (preciso); arc welding sólo afecta la salida
       const _est=estimate(gcode,MATS[matName],model);
       // EXCLUDE_OBJECT (Klipper): etiqueta cada pieza del plato para cancelarla sin abortar la placa
-      if(p.excludeObject&&S.objBBs&&S.objBBs.length>1){gcode=_wrapExcludeObject(gcode,S.objBBs,spec.x/2,spec.y/2);}
+      if(p.excludeObject&&!_seq&&S.objBBs&&S.objBBs.length>1){gcode=_wrapExcludeObject(gcode,S.objBBs,spec.x/2,spec.y/2);}
       if(p.arcFitting){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
       S.gcode=gcode;
       setProg(100,'✓ G-code listo');
