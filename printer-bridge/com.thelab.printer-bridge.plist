@@ -5,20 +5,29 @@
   <key>Label</key>
   <string>com.thelab.printer-bridge</string>
 
-  <!-- AJUSTA estas dos rutas a tu equipo:
-       · node:  `which node` te dice la ruta (Apple Silicon: /opt/homebrew/bin/node,
-                Intel: /usr/local/bin/node)
-       · server.js: ruta donde clonaste el repositorio -->
+  <!-- RECOMENDADO: no edites esto a mano. Corre  ./install-launchd.sh  y se
+       genera con las rutas correctas de tu equipo automáticamente.
+       Si lo editas a mano, AJUSTA las dos rutas:
+       · node:  `which node` te da la ruta (con nvm cambia al actualizar node;
+                Apple Silicon sin nvm: /opt/homebrew/bin/node, Intel: /usr/local/bin/node)
+       · server.js: ruta donde clonaste el repositorio
+       · WorkingDirectory: la carpeta printer-bridge (ahí se guarda .bridge-token) -->
   <key>ProgramArguments</key>
   <array>
     <string>/Users/thelabsolutions/.nvm/versions/node/v22.22.0/bin/node</string>
     <string>/Users/thelabsolutions/dashboardthelabsolutions/printer-bridge/server.js</string>
   </array>
 
+  <key>WorkingDirectory</key>
+  <string>/Users/thelabsolutions/dashboardthelabsolutions/printer-bridge</string>
+
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <!-- Espera 10s entre reinicios para no entrar en bucle si algo falla -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
 
   <key>StandardOutPath</key>
   <string>/tmp/printer-bridge.log</string>

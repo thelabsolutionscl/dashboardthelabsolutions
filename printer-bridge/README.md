@@ -57,18 +57,32 @@ curl 'http://localhost:8347/healthz'
 curl 'http://localhost:8347/192.168.100.51/printer/info?bt=TOKEN'
 ```
 
-### Autoarranque (launchd)
-
-1. Edita `com.thelab.printer-bridge.plist`: ajusta la ruta de `node` (`which node`) y la de `server.js`.
-2. Instálalo:
+### Autoarranque (launchd) — un solo comando
 
 ```bash
-cp com.thelab.printer-bridge.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.thelab.printer-bridge.plist
+cd ~/dashboardthelabsolutions/printer-bridge
+./install-launchd.sh
 ```
 
-El bridge ahora arranca solo al encender el iMac y se reinicia si se cae.
-Logs en `/tmp/printer-bridge.log`.
+El script detecta solo la ruta de `node` y de `server.js`, genera el LaunchAgent
+en `~/Library/LaunchAgents/`, lo carga, verifica que `/healthz` responde y te
+muestra el **token** para pegarlo en el dashboard. Es **idempotente**: vuelve a
+correrlo cuando quieras (p. ej. tras actualizar Node con nvm, que cambia su ruta)
+y se reconfigura solo.
+
+El bridge ahora arranca al encender el iMac y se reinicia si se cae.
+Logs en `/tmp/printer-bridge.log` y `/tmp/printer-bridge.err`.
+
+```bash
+# estado / reiniciar / quitar autoarranque
+launchctl list | grep printer-bridge
+launchctl unload ~/Library/LaunchAgents/com.thelab.printer-bridge.plist && \
+  launchctl load -w ~/Library/LaunchAgents/com.thelab.printer-bridge.plist
+./install-launchd.sh --uninstall
+```
+
+> Edición manual del `.plist` (alternativa): ajusta a mano `node`, `server.js` y
+> `WorkingDirectory`, cópialo a `~/Library/LaunchAgents/` y haz `launchctl load -w`.
 
 ---
 
