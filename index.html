@@ -9017,21 +9017,17 @@ function toggleQAItem(i){qaItems[i].checked=!qaItems[i].checked;renderQAChecklis
 function removeQAItem(i){qaItems.splice(i,1);renderQAChecklist();}
 function addQAItem(){const inp=document.getElementById('qaNewItem');const val=inp.value.trim();if(!val){inp.focus();return;}qaItems.push({texto:val,checked:false});inp.value='';renderQAChecklist();inp.focus();}
 // Convierte la respuesta markdown del QA_AGENT en ítems de checklist + resultado
-function _parseQAChecklist(text){
+function _parseQAIAResponse(text){
   const items=[];let resultado=null;
   for(const raw of String(text||'').split('\n')){
     const line=raw.trim();if(!line)continue;
     const clean=s=>s.replace(/\*\*/g,'').replace(/`/g,'').trim();
-    // Resultado final del agente
     if(/RECHAZAD/i.test(line))resultado='Rechazado';
     else if(/APROBAD/i.test(line))resultado='QA aprobado';
-    // Ítem con checkbox: - [ ] texto  |  - [x] texto
     let m=line.match(/^[-*•]\s*\[([ xX])\]\s*(.+)$/);
     if(m){items.push({texto:clean(m[2]),checked:m[1].toLowerCase()==='x'});continue;}
-    // Viñeta simple (ignora líneas de motivo/resultado/nota)
     m=line.match(/^[-*•]\s+(.+)$/);
     if(m&&!/^(motivo|resultado|nota|conclusi)/i.test(m[1])){items.push({texto:clean(m[1]),checked:false});continue;}
-    // Lista numerada
     m=line.match(/^\d+[.)]\s+(.+)$/);
     if(m){items.push({texto:clean(m[1]),checked:false});continue;}
   }
@@ -9054,7 +9050,7 @@ async function rellenarQAconIA(){
       f['Fecha entrega']?`Entrega: ${f['Fecha entrega']}`:'',
     ].filter(Boolean).join('\n');
     const raw=await callClaude(sys,ctx);
-    const parsed=_parseQAChecklist(raw);
+    const parsed=_parseQAIAResponse(raw);
     if(!parsed.items.length){toast('La IA no devolvió ítems — añade más detalle','error');return;}
     qaItems=parsed.items;
     if(parsed.resultado){qaResultadoActual=parsed.resultado;updateQAResultadoBtns();}
