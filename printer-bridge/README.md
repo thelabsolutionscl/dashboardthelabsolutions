@@ -108,17 +108,24 @@ ingress:
   - service: http_status:404
 ```
 
-Corre el túnel (y déjalo como servicio):
+Corre el túnel (y déjalo como **servicio que arranca solo** al encender el iMac,
+igual que el bridge):
 
 ```bash
-cloudflared tunnel run printers                # probar
+cloudflared tunnel run printers                # probar a mano (Ctrl-C para parar)
 sudo cloudflared service install               # instalar como servicio permanente
 ```
 
-Verifica desde cualquier red:
+> Importante: instala el túnel **como servicio** (`service install`). Si no, al
+> reiniciar el iMac el bridge volverá (launchd) pero el túnel no, y el modo
+> 🌐 Remoto quedará caído. Con el servicio, ambos sobreviven al reinicio.
+
+Verifica que está activo y que sobrevive reinicios:
 
 ```bash
-curl https://printers.thelab.solutions/healthz
+curl https://printers.thelab.solutions/healthz   # desde cualquier red → {"ok":true,...}
+sudo launchctl list | grep cloudflared           # el servicio del túnel
+launchctl list | grep printer-bridge             # el bridge
 ```
 
 > **Alternativa rápida sin dominio:** `cloudflared tunnel --url http://localhost:8347`
@@ -133,8 +140,15 @@ curl https://printers.thelab.solutions/healthz
 2. En **Túnel Impresoras**:
    - URL: déjala vacía (usa el default `https://printers.thelab.solutions`) o pega tu URL
    - **Token del bridge**: pega el token del Paso 1
-3. Guardar. En la sección **Máquinas**, con el botón en `🌐 Remoto`, las impresoras
+   - Pulsa **Guardar**.
+3. Pulsa **Probar**: te dice al instante si el túnel responde y si el token es válido
+   (✅ / ✗). Si algo falla, el mensaje indica qué arreglar. El botón **Reiniciar bridge**
+   lo reinicia en remoto sin tocar el iMac (launchd lo levanta de nuevo).
+4. En la sección **Máquinas**, con el botón en `🌐 Remoto`, las impresoras
    encendidas deben pasar de "Offline" a su estado real en ~15 segundos.
+
+> El token y la URL se guardan **por equipo** (en el navegador). Repite el Paso 3
+> en cada dispositivo desde el que uses el dashboard (iMac, MacBook, etc.).
 
 ---
 

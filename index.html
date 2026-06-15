@@ -1562,6 +1562,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <button style="background:var(--accent);color:var(--black)" onclick="savePrinterTunnel()">Guardar</button>
             <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearPrinterTunnel()">Limpiar</button>
           </div>
+          <div class="user-menu-token-actions" style="margin-top:4px">
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="testPrinterBridge('umPrinterTunnelStatus')">Probar</button>
+            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="restartPrinterBridge('umPrinterTunnelStatus')">Reiniciar bridge</button>
+          </div>
           <div id="umPrinterTunnelStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
         <div class="user-menu-token">
@@ -1700,6 +1704,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div style="display:flex;gap:6px;margin-top:5px">
             <button onclick="saveMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
             <button onclick="clearMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button onclick="testPrinterBridge('mbPrinterTunnelStatus')" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Probar</button>
+            <button onclick="restartPrinterBridge('mbPrinterTunnelStatus')" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Reiniciar bridge</button>
           </div>
           <div id="mbPrinterTunnelStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
         </div>
@@ -11031,6 +11039,34 @@ const MOONRAKER_PORT=7125;
 function getPrinterTunnel(){const d=_DEFAULTS.PRINTER_TUNNEL.startsWith('%%')?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 function getPrinterTunnelToken(){return localStorage.getItem('printer_tunnel_token')||'';}
 function _appendBridgeToken(u){const tk=getPrinterTunnelToken();return tk?u+(u.includes('?')?'&':'?')+'bt='+encodeURIComponent(tk):u;}
+// Diagnóstico del túnel/bridge desde el propio dashboard (Mi cuenta → Túnel Impresoras)
+async function testPrinterBridge(statusId){
+  const el=document.getElementById(statusId);
+  const url=getPrinterTunnel(),tk=getPrinterTunnelToken();
+  const set=(c,t)=>{if(el){el.style.color=c;el.textContent=t;}};
+  set('var(--text3)',`Probando ${url} …`);
+  try{const r=await fetch(url+'/healthz',{signal:AbortSignal.timeout(7000)});if(!r.ok)throw 0;}
+  catch(e){set('var(--danger)',`✗ No se alcanza ${url}. Revisa que el bridge y el túnel estén corriendo en el iMac.`);return;}
+  if(!tk){set('var(--warn)','⚠ Túnel OK, pero falta el token del bridge. Pégalo y pulsa Guardar.');return;}
+  try{
+    const r=await fetch(url+'/authcheck?bt='+encodeURIComponent(tk),{signal:AbortSignal.timeout(7000)});
+    if(r.status===401){set('var(--danger)','✗ Token incorrecto. Copia el token actual del bridge (lo imprime al arrancar / lo da install-launchd.sh).');return;}
+    if(!r.ok)throw 0;
+    set('var(--accent3)','✅ Bridge OK y token válido. Pon Máquinas en 🌐 Remoto.');
+  }catch(e){set('var(--warn)','⚠ Túnel alcanzable pero no pude validar el token. ¿El bridge está actualizado?');}
+}
+async function restartPrinterBridge(statusId){
+  const el=document.getElementById(statusId);
+  const url=getPrinterTunnel(),tk=getPrinterTunnelToken();
+  const set=(c,t)=>{if(el){el.style.color=c;el.textContent=t;}};
+  if(!tk){set('var(--warn)','Necesitas el token guardado para reiniciar el bridge.');return;}
+  if(!confirm('¿Reiniciar el bridge del iMac? Se reconecta en unos segundos.'))return;
+  set('var(--text3)','Reiniciando bridge…');
+  try{await fetch(url+'/restart?bt='+encodeURIComponent(tk),{method:'POST',signal:AbortSignal.timeout(7000)});}
+  catch(e){/* la conexión se corta al salir el proceso: es esperado */}
+  set('var(--text3)','Bridge reiniciándose… reprobando en unos segundos.');
+  setTimeout(()=>testPrinterBridge(statusId),4500);
+}
 function printerUrl(ip,path){
   if(typeof _isLocalMode==='function'&&_isLocalMode())return`http://${ip}:${MOONRAKER_PORT}${path}`;
   return _appendBridgeToken(`${getPrinterTunnel()}/${ip}${path}`);

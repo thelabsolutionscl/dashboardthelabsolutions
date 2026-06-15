@@ -10,6 +10,8 @@
 //
 // Rutas:
 //   GET  /healthz                  → estado del bridge (sin token)
+//   GET  /authcheck                → 200 si el token es válido (para "Probar" en el dashboard)
+//   POST /restart                  → reinicia el bridge (sale; launchd lo levanta de nuevo)
 //   *    /{IP}/{ruta...}           → http://{IP}:7125/{ruta...}   (Moonraker)
 //   *    /{IP}:{puerto}/{ruta...}  → http://{IP}:{puerto}/{ruta...} (webcam, etc.)
 //
@@ -84,6 +86,20 @@ const server = http.createServer((req, res) => {
   const btPart = qParts.find(p => p.startsWith('bt='));
   const given = req.headers['x-bridge-token'] || (btPart ? decodeURIComponent(btPart.slice(3)) : '');
   if (given !== TOKEN) { jsonError(res, 401, 'unauthorized'); return; }
+
+  // Token válido — endpoints de diagnóstico/control (no son proxy a impresora)
+  if (rawPath === '/authcheck') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, ports: ALLOWED_PORTS }));
+    return;
+  }
+  if (rawPath === '/restart') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, restarting: true }));
+    console.log('Reinicio solicitado vía /restart — saliendo (launchd lo levanta de nuevo).');
+    setTimeout(() => process.exit(0), 250);
+    return;
+  }
 
   // Ruta: /{IP}[:puerto]/resto
   const m = rawPath.match(/^\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::(\d{1,5}))?(\/.*)?$/);
