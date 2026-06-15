@@ -11073,7 +11073,7 @@ function printerUrl(ip,path){
 }
 // Webcam: en modo remoto reescribe http://IP_LAN:PUERTO/ruta → túnel /{ip}:{puerto}/ruta
 function printerCamUrl(id){
-  const raw=localStorage.getItem('printer_cam_'+id)||'';if(!raw)return'';
+  const raw=localStorage.getItem('printer_cam_'+id)||(typeof MAQUINAS!=='undefined'?(MAQUINAS.find(x=>x.id===id)||{}).cam:'')||'';if(!raw)return'';
   if(typeof _isLocalMode==='function'&&_isLocalMode())return raw;
   const mm=raw.match(/^http:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?(\/.*)?$/);
   if(!mm)return raw;
@@ -11300,7 +11300,7 @@ function renderMonitorGrid(){
           <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}</span>
           <div style="display:flex;gap:4px">
             <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
-            <button onclick="openWebcamModal('${m.id}')" style="background:${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${localStorage.getItem('printer_cam_'+m.id)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
+            <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
             <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}</button>
           </div>
         </div>
@@ -11338,7 +11338,7 @@ function renderMonitorGrid(){
           <div style="font-size:9px;color:var(--text3);margin-bottom:3px">Temperatura hotend</div>
           ${renderSparkline(th,'h','#ff6b35')}
         </div>`:''}
-        ${localStorage.getItem('printer_cam_'+m.id)?`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative">
+        ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative">
           <img src="${printerCamUrl(m.id)}" style="width:100%;display:block;max-height:160px;object-fit:cover" onerror="this.parentElement.innerHTML='<div style=\\'padding:12px;text-align:center;color:#666;font-size:10px\\'>Sin señal · verifica la URL</div>'">
         </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
@@ -11347,7 +11347,7 @@ function renderMonitorGrid(){
             <button onclick="openPrinterControl('${m.id}')" style="background:${isActive?'rgba(0,212,170,0.12)':'var(--surface2)'};border:1px solid ${isActive?'rgba(0,212,170,0.35)':'var(--border2)'};border-radius:6px;color:${isActive?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Control de impresora">🎛️</button>
             <button onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Enviar G-code">📤</button>
             <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
-            <button onclick="openWebcamModal('${m.id}')" style="background:${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${localStorage.getItem('printer_cam_'+m.id)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${localStorage.getItem('printer_cam_'+m.id)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
+            <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
             <button onclick="openBedMesh('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Bed mesh (mapa de nivelación de cama)">🗺️</button>
             <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
             ${_queueCount(m.id)>0?`<button onclick="openQueueModal('${m.id}')" style="background:rgba(255,170,0,0.12);border:1px solid rgba(255,170,0,0.4);border-radius:6px;color:#ffaa00;font-size:10px;padding:3px 7px;cursor:pointer" title="${_queueCount(m.id)} trabajo(s) en cola">🔁 ${_queueCount(m.id)}</button>`:''}
