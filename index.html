@@ -19063,7 +19063,8 @@ const SL3D=(function(){
     {k:'spiralize',l:'Modo jarrón',sel:['no','sí']},{k:'monotonic',l:'Relleno monot.',sel:['no','sí']},{k:'arachne',l:'Arachne (pared var.)',sel:['no','sí']},
     {k:'elephantFoot',l:'Pie de elefante (mm)',s:0.05},{k:'xyCompensation',l:'Compensación XY (mm)',s:0.02},
     {k:'skirt',l:'Skirt (líneas)',s:1},{k:'skirtGap',l:'Skirt sep. (mm)',s:0.5},
-    {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
+    {k:'brim',l:'Brim (líneas)',s:1},{k:'brimGap',l:'Brim: separación (mm)',s:0.05},{k:'raft',l:'Raft',sel:['no','sí']},
+    {k:'ironing',l:'Planchado',sel:['no','sí']},{k:'ironingFlow',l:'Planchado: flujo (%)',s:1},{k:'retractMinTravel',l:'Retrac. mín. viaje (mm)',s:0.2},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
   const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[],layFlatMode:false,showSupports:false,supSticks:null};
@@ -19541,7 +19542,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       speed:Math.round(vbase),outerSpeed:obj==='calidad'?Math.round(vbase*0.6):0,infillSpeed:obj==='rapido'?0:Math.round(vbase*1.1),
       firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
-      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,
+      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,brimGap:0,ironingFlow:12,retractMinTravel:1,
       minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
       adaptiveLayerHeight:obj==='calidad',
       seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
@@ -19577,6 +19578,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
       supInterface:Math.round(cl(p.supInterface,0,5,2)),supOnPlate:!!p.supOnPlate&&p.supOnPlate!=='no',infillOverlap:Math.round(cl(p.infillOverlap,0,40,15)),pauseAtZ:cl(p.pauseAtZ,0,1000,0),
+      brimGap:cl(p.brimGap,0,1,0),ironingFlow:Math.round(cl(p.ironingFlow,5,30,12)),retractMinTravel:cl(p.retractMinTravel,0,10,1),
       minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
       excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
@@ -20298,7 +20300,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy;
     // Solo retraer/z-hop si el salto es real — evita retracciones inútiles entre paredes concéntricas
-    const td=Math.hypot(sx-cX,sy-cY),doRet=td>extW*3;
+    const td=Math.hypot(sx-cX,sy-cY),doRet=td>Math.max(extW*3,(p.retractMinTravel||0));
     if(doRet){[E,cX,cY]=_retractTravel(gc,cX,cY,sx,sy,z,E,p,td);}
     else{gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);cX=sx;cY=sy;}
     // Recorrido absoluto cerrado + coasting (deja de extruir en los últimos `coast` mm para evitar blob de costura)
@@ -20331,7 +20333,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     const ord=[...poly.slice(bi),...poly.slice(0,bi)];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy,td=Math.hypot(sx-cX,sy-cY);
-    if(td>extW*3){[E,cX,cY]=_retractTravel(gc,cX,cY,sx,sy,z,E,p,td);}
+    if(td>Math.max(extW*3,(p.retractMinTravel||0))){[E,cX,cY]=_retractTravel(gc,cX,cY,sx,sy,z,E,p,td);}
     else{gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);cX=sx;cY=sy;}
     const pts=[];for(let i=0;i<=ord.length;i++){const pt=ord[i%ord.length];pts.push([pt[0]+ox,pt[1]+oy]);}
     for(let i=1;i<pts.length;i++){
@@ -20371,7 +20373,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     return[E,cX,cY];
   }
   function _printLines(gc,lines,z,ox,oy,cX,cY,E,lh,extW,feed,p,retractThresh){
-    const rt=retractThresh||extW*3; // combing: umbral mayor en relleno interno → menos retracciones
+    const rt=Math.max(retractThresh||extW*3,(p.retractMinTravel||0)); // combing + viaje mínimo: menos retracciones
     for(const[p1,p2]of lines){
       const sx=p1[0]+ox,sy=p1[1]+oy,ex=p2[0]+ox,ey=p2[1]+oy;
       if(!isFinite(sx)||!isFinite(sy)||!isFinite(ex)||!isFinite(ey))continue;
@@ -20594,7 +20596,7 @@ self.onmessage=function(ev){
       // Brim (adhesión pegada a la pieza)
       if(p.brim>0&&adhBig){
         gc.push(`\n; === Brim (capa 1) ===`);gc.push(`G1 Z${curZ.toFixed(3)} F600`);
-        for(let b=0;b<p.brim;b++){const outer=_insetRaw(adhBig,-extW*(b+1));if(!outer||outer.length<3)break;[E,cX,cY]=_printPoly(gc,outer,curZ,offX,offY,cX,cY,E,lhs[0],extW,p.firstLayerSpeed*60,p);}
+        for(let b=0;b<p.brim;b++){const outer=_insetRaw(adhBig,-((p.brimGap||0)+extW*(b+1)));if(!outer||outer.length<3)break;[E,cX,cY]=_printPoly(gc,outer,curZ,offX,offY,cX,cY,E,lhs[0],extW,p.firstLayerSpeed*60,p);}
       }
     }
     // ── Capas ────────────────────────────────────
@@ -20777,7 +20779,7 @@ self.onmessage=function(ev){
         if(p.ironing){
           const above1=layerPolys[li+1]||[],above1BB=layerBB[li+1]||[];
           const ir=_clipLines(_scanfillAll(fillLoops,extW*0.5,li%2?45:135),(x,y)=>!_inSolidBB(x,y,above1,above1BB),extW*0.5);
-          if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,zOut,offX,offY,cX,cY,E,lh*0.12,extW,Math.round(Math.min(spd,40))*60,p,COMB);}
+          if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,zOut,offX,offY,cX,cY,E,lh*((p.ironingFlow||12)/100),extW,Math.round(Math.min(spd,40))*60,p,COMB);}
         }
       }
       // Tiempo mínimo de capa: ralentiza la extrusión de esta capa si imprime muy rápido (enfría mejor)
@@ -21022,10 +21024,17 @@ self.onmessage=function(ev){
   }
   // ── Vista previa del G-code por capas ───────────────────────
   function _parseGcodeLayers(){
-    const layers=[];let cur=null,x=0,y=0,z=0,le=0,abs=true;
-    const pushSeg=(ax,ay,bx,by,nz)=>{if(!cur||Math.abs(nz-cur.z)>0.001){cur={z:nz,segs:[]};layers.push(cur);}cur.segs.push([ax,ay,bx,by]);};
+    const layers=[];let cur=null,x=0,y=0,z=0,le=0,abs=true,feat=0; // feat: 0 modelo,1 soporte,2 puente,3 adhesión
+    const ensure=(nz)=>{if(!cur||Math.abs(nz-cur.z)>0.001){cur={z:nz,segs:[],travels:[]};layers.push(cur);}return cur;};
     for(const raw of S.gcode.split('\n')){
-      const c=raw.trim();if(!c||c[0]===';')continue;
+      const c=raw.trim();if(!c)continue;
+      if(c[0]===';'){
+        if(/=== Capa/.test(c))feat=0;
+        else if(/soporte/i.test(c))feat=1;
+        else if(/puente/i.test(c))feat=2;
+        else if(/skirt|brim|raft/i.test(c))feat=3;
+        continue;
+      }
       if(c.startsWith('M82')){abs=true;continue;}
       if(c.startsWith('M83')){abs=false;continue;}
       if(c.startsWith('G92')){const m=/E([-\d.]+)/.exec(c);if(m)le=+m[1];continue;}
@@ -21035,15 +21044,16 @@ self.onmessage=function(ev){
       for(const w of c.split(' ')){const v=+w.slice(1);if(!isFinite(v))continue;if(w[0]==='X')nx=v;else if(w[0]==='Y')ny=v;else if(w[0]==='Z')nz=v;else if(w[0]==='E')ne=v;else if(w[0]==='I')I=v;else if(w[0]==='J')J=v;}
       let ext=0;if(ne!==null){ext=abs?ne-le:ne;if(abs)le=ne;}
       if(ext>0.0001){
+        const L=ensure(nz);
         if(isArc&&I!==null&&J!==null){ // teselar arco en segmentos para la vista previa
           const cx=x+I,cy=y+J,r=Math.hypot(I,J),cw=c.startsWith('G2');
           let a0=Math.atan2(y-cy,x-cx),a1=Math.atan2(ny-cy,nx-cx);
           if(cw){while(a1>=a0)a1-=2*Math.PI;}else{while(a1<=a0)a1+=2*Math.PI;}
           const steps=Math.max(2,Math.ceil(Math.abs(a1-a0)/0.2));
           let pxx=x,pyy=y;
-          for(let s=1;s<=steps;s++){const a=a0+(a1-a0)*s/steps,qx=cx+r*Math.cos(a),qy=cy+r*Math.sin(a);pushSeg(pxx,pyy,qx,qy,nz);pxx=qx;pyy=qy;}
-        }else if(nx!==x||ny!==y){pushSeg(x,y,nx,ny,nz);}
-      }
+          for(let s=1;s<=steps;s++){const a=a0+(a1-a0)*s/steps,qx=cx+r*Math.cos(a),qy=cy+r*Math.sin(a);L.segs.push([pxx,pyy,qx,qy,feat]);pxx=qx;pyy=qy;}
+        }else if(nx!==x||ny!==y){L.segs.push([x,y,nx,ny,feat]);}
+      }else if(nx!==x||ny!==y){ensure(nz).travels.push([x,y,nx,ny]);} // viaje (sin extrusión)
       x=nx;y=ny;z=nz;
     }
     return layers;
@@ -21056,11 +21066,14 @@ self.onmessage=function(ev){
     cv.width=w*dpr;cv.height=h*dpr;const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
     const b=S.previewBounds,sc=0.88*Math.min(w,h)/Math.max(b.dx,b.dy,1);
     const tx=X=>w/2+(X-b.cx)*sc,ty=Y=>h/2-(Y-b.cy)*sc;
+    const COL=['#00d4aa','#ff9633','#3aa0ff','#a78bfa']; // modelo, soporte, puente, adhesión
     // capa anterior tenue para contexto
-    if(idx>0){ctx.globalAlpha=0.18;ctx.strokeStyle='#5a6';ctx.lineWidth=0.7;ctx.beginPath();for(const s of layers[idx-1].segs){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}ctx.stroke();}
-    ctx.globalAlpha=0.95;ctx.strokeStyle='#00d4aa';ctx.lineWidth=0.9;ctx.beginPath();
-    for(const s of layers[idx].segs){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}
-    ctx.stroke();
+    if(idx>0){ctx.globalAlpha=0.15;ctx.strokeStyle='#456';ctx.lineWidth=0.7;ctx.beginPath();for(const s of layers[idx-1].segs){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}ctx.stroke();}
+    // viajes (opcional)
+    if(S.showTravel&&layers[idx].travels){ctx.globalAlpha=0.55;ctx.strokeStyle='#8893a0';ctx.lineWidth=0.4;ctx.setLineDash([2,2]);ctx.beginPath();for(const s of layers[idx].travels){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}ctx.stroke();ctx.setLineDash([]);}
+    // extrusiones coloreadas por tipo
+    ctx.globalAlpha=0.95;ctx.lineWidth=1.0;
+    for(let t=0;t<4;t++){ctx.strokeStyle=COL[t];ctx.beginPath();for(const s of layers[idx].segs){if((s[4]||0)===t){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}}ctx.stroke();}
     const info=el('slPreviewInfo');if(info)info.textContent=`Capa ${idx+1}/${layers.length} · Z=${layers[idx].z.toFixed(2)}mm · ${layers[idx].segs.length} trazos`;
   }
   function preview(){
@@ -21078,6 +21091,7 @@ self.onmessage=function(ev){
     _drawGcodeLayer(S.gcodeLayers.length-1);
   }
   function previewSlide(v){_drawGcodeLayer(+v);}
+  function toggleTravel(on){S.showTravel=on;_drawGcodeLayer(S.previewIdx||0);}
   function _suggestPrinter(machines,est){
     // Score each machine: idle>standby>other; model match bonus; queue empty bonus
     const model=el('slPrinter').value;
@@ -21158,6 +21172,10 @@ self.onmessage=function(ev){
           <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
             <input id="slPreviewSlider" type="range" min="0" max="1" value="0" oninput="SL3D.previewSlide(this.value)" style="flex:1">
             <span id="slPreviewInfo" style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;white-space:nowrap"></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap;font-size:10px;color:var(--text3)">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slPreviewTravel" onchange="SL3D.toggleTravel(this.checked)" style="cursor:pointer">viajes</label>
+            <span style="color:#00d4aa">━ modelo</span><span style="color:#ff9633">━ soporte</span><span style="color:#3aa0ff">━ puente</span><span style="color:#a78bfa">━ adhesión</span>
           </div>
         </div>
       </div>`;
@@ -21258,7 +21276,7 @@ self.onmessage=function(ev){
       if(wasClick&&S.layFlatMode){const r=cv.getBoundingClientRect();_layFlatAt(e.clientX-r.left,e.clientY-r.top);}
     });
   });
-  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile};
+  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel};
 })();
 </script>
 
