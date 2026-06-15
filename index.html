@@ -20687,8 +20687,10 @@ self.onmessage=function(ev){
           if(ins&&ins.length>=3)shells.push(ins);else break;
         }
         const idxs=[...shells.keys()];if(p.outerWallLast)idxs.reverse(); // pared exterior al final → mejor acabado
-        for(const s of idxs)
+        for(const s of idxs){
+          gc.push(s===0?'; pared exterior':'; pared interior');
           [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,s===0?wOuter:wInner,s===0?outerF:innerF,p,s===0&&li>0,s===0?ohTest:null,ohFeed);
+        }
         fillLoops.push(shells[shells.length-1]);
         // Gap fill: pared fina donde no cupieron 2 perímetros → cordón central sólido para no dejar hueco
         if(p.gapFill&&pe.shells>=2&&shells.length<2&&!hole)gapLoops.push(ct);
@@ -20720,7 +20722,7 @@ self.onmessage=function(ev){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
           if(pe.infillPct>0){
             const sp=_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType==='adaptive'?'cubic':pe.infillType,li,curZ);
-            if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
+            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
           }
         }else{
           const above=layerPolys[li+pe.topLayers]||[],below=layerPolys[li-pe.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
@@ -20730,7 +20732,7 @@ self.onmessage=function(ev){
           const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolidBB(x,y,below1,below1BB);
           // 1) Superficies sólidas (top/bottom) que no son puente
           const surf=_clipLines(_scanfillAll(infLoops,extW*1.02,solidAngle,p.monotonic),(x,y)=>isSurf(x,y)&&!isBridge(x,y),extW);
-          if(surf.length)[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
+          if(surf.length){gc.push('; superficie');[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
           // 2) Puentes (cara inferior sobre aire) — sólido, lento, ventilador máximo, orientado al vano
           if(p.bridgeDetect){
             const bAng=_bridgeInfoMulti(fillLoops,below1).angle;
@@ -20767,7 +20769,7 @@ self.onmessage=function(ev){
             if(densSp.length){gc.push('; relleno adaptativo (densificado bajo techos)');[E,cX,cY]=_printLines(gc,densSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
           }else if(pe.infillPct>0){
             const sp=_clipLines(_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
-            if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
+            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
           }
         }
         // Gap fill: cordón central en paredes finas (un sólo paso de scanline ≈ línea central)
@@ -21029,10 +21031,14 @@ self.onmessage=function(ev){
     for(const raw of S.gcode.split('\n')){
       const c=raw.trim();if(!c)continue;
       if(c[0]===';'){
-        if(/=== Capa/.test(c))feat=0;
-        else if(/soporte/i.test(c))feat=1;
-        else if(/puente/i.test(c))feat=2;
-        else if(/skirt|brim|raft/i.test(c))feat=3;
+        if(/pared exterior/i.test(c))feat=0;
+        else if(/pared interior/i.test(c))feat=1;
+        else if(/relleno|lightning|gap-fill|adaptativo/i.test(c))feat=2;
+        else if(/superficie/i.test(c))feat=3;
+        else if(/soporte/i.test(c))feat=4;
+        else if(/puente/i.test(c))feat=5;
+        else if(/skirt|brim|raft/i.test(c))feat=6;
+        else if(/=== Capa/.test(c))feat=1;
         continue;
       }
       if(c.startsWith('M82')){abs=true;continue;}
@@ -21058,7 +21064,10 @@ self.onmessage=function(ev){
     }
     return layers;
   }
+  // pared ext, pared int, relleno, superficie, soporte, puente, adhesión
+  const _GCOL=['#ff5a5a','#ffb13a','#c9a227','#00d4aa','#7a8a99','#3aa0ff','#a78bfa'];
   function _drawGcodeLayer(idx){
+    if(S.gcode3D)return _drawGcode3D(idx);
     const layers=S.gcodeLayers;if(!layers||!layers.length)return;
     idx=Math.max(0,Math.min(layers.length-1,idx));S.previewIdx=idx;
     const cv=el('slGcodeCanvas');if(!cv)return;
@@ -21066,16 +21075,35 @@ self.onmessage=function(ev){
     cv.width=w*dpr;cv.height=h*dpr;const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
     const b=S.previewBounds,sc=0.88*Math.min(w,h)/Math.max(b.dx,b.dy,1);
     const tx=X=>w/2+(X-b.cx)*sc,ty=Y=>h/2-(Y-b.cy)*sc;
-    const COL=['#00d4aa','#ff9633','#3aa0ff','#a78bfa']; // modelo, soporte, puente, adhesión
-    // capa anterior tenue para contexto
     if(idx>0){ctx.globalAlpha=0.15;ctx.strokeStyle='#456';ctx.lineWidth=0.7;ctx.beginPath();for(const s of layers[idx-1].segs){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}ctx.stroke();}
-    // viajes (opcional)
     if(S.showTravel&&layers[idx].travels){ctx.globalAlpha=0.55;ctx.strokeStyle='#8893a0';ctx.lineWidth=0.4;ctx.setLineDash([2,2]);ctx.beginPath();for(const s of layers[idx].travels){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}ctx.stroke();ctx.setLineDash([]);}
-    // extrusiones coloreadas por tipo
     ctx.globalAlpha=0.95;ctx.lineWidth=1.0;
-    for(let t=0;t<4;t++){ctx.strokeStyle=COL[t];ctx.beginPath();for(const s of layers[idx].segs){if((s[4]||0)===t){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}}ctx.stroke();}
+    for(let t=0;t<7;t++){ctx.strokeStyle=_GCOL[t];ctx.beginPath();for(const s of layers[idx].segs){if((s[4]||0)===t){ctx.moveTo(tx(s[0]),ty(s[1]));ctx.lineTo(tx(s[2]),ty(s[3]));}}ctx.stroke();}
     const info=el('slPreviewInfo');if(info)info.textContent=`Capa ${idx+1}/${layers.length} · Z=${layers[idx].z.toFixed(2)}mm · ${layers[idx].segs.length} trazos`;
   }
+  // Vista 3D de trayectorias (todas las capas hasta idx, rotable) — estilo OrcaSlicer
+  function _drawGcode3D(idx){
+    const layers=S.gcodeLayers;if(!layers||!layers.length)return;
+    idx=Math.max(0,Math.min(layers.length-1,idx));S.previewIdx=idx;
+    const cv=el('slGcodeCanvas');if(!cv)return;
+    const w=cv.clientWidth||420,h=320,dpr=window.devicePixelRatio||1;
+    cv.width=w*dpr;cv.height=h*dpr;const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+    const b=S.previewBounds,zmax=layers[idx].z,zmid=zmax/2;
+    const rad=Math.max(Math.hypot(b.dx,b.dy)/2,zmax/2,1),sc=0.42*Math.min(w,h)/rad;
+    const r=S.gcodeRot||(S.gcodeRot={a:0.6,b:-1.0});
+    const ca=Math.cos(r.a),sa=Math.sin(r.a),cb=Math.cos(r.b),sb=Math.sin(r.b);
+    const proj=(x,y,z)=>{const X=x-b.cx,Y=y-b.cy,Z=z-zmid;const x1=X*ca-Y*sa,y1=X*sa+Y*ca;const z2=y1*sb+Z*cb;return[w/2+x1*sc,h/2-z2*sc];};
+    let total=0;for(let L=0;L<=idx;L++)total+=layers[L].segs.length;
+    const stride=total>45000?Math.ceil(total/45000):1;
+    ctx.lineWidth=0.6;ctx.globalAlpha=0.9;
+    for(let t=0;t<7;t++){
+      ctx.strokeStyle=_GCOL[t];ctx.beginPath();
+      for(let L=0;L<=idx;L++){const z=layers[L].z,segs=layers[L].segs;for(let i=0;i<segs.length;i+=stride){const s=segs[i];if((s[4]||0)!==t)continue;const a=proj(s[0],s[1],z),bb=proj(s[2],s[3],z);ctx.moveTo(a[0],a[1]);ctx.lineTo(bb[0],bb[1]);}}
+      ctx.stroke();
+    }
+    const info=el('slPreviewInfo');if(info)info.textContent=`3D · capas 1–${idx+1}/${layers.length} · Z=${zmax.toFixed(2)}mm${stride>1?' · vista simplificada':''} · arrastra para rotar`;
+  }
+  function toggleGcode3D(on){S.gcode3D=on;_drawGcodeLayer(S.previewIdx||0);}
   function preview(){
     if(!S.gcode){toast('Genera primero el G-code','error');return;}
     S.gcodeLayers=_parseGcodeLayers();
@@ -21174,8 +21202,9 @@ self.onmessage=function(ev){
             <span id="slPreviewInfo" style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;white-space:nowrap"></span>
           </div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap;font-size:10px;color:var(--text3)">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slPreview3D" onchange="SL3D.toggleGcode3D(this.checked)" style="cursor:pointer">3D</label>
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slPreviewTravel" onchange="SL3D.toggleTravel(this.checked)" style="cursor:pointer">viajes</label>
-            <span style="color:#00d4aa">━ modelo</span><span style="color:#ff9633">━ soporte</span><span style="color:#3aa0ff">━ puente</span><span style="color:#a78bfa">━ adhesión</span>
+            <span style="color:#ff5a5a">━ pared ext</span><span style="color:#ffb13a">━ pared int</span><span style="color:#c9a227">━ relleno</span><span style="color:#00d4aa">━ superficie</span><span style="color:#7a8a99">━ soporte</span><span style="color:#3aa0ff">━ puente</span><span style="color:#a78bfa">━ adhesión</span>
           </div>
         </div>
       </div>`;
@@ -21275,8 +21304,15 @@ self.onmessage=function(ev){
       cv.style.cursor=S.layFlatMode?'crosshair':'grab';
       if(wasClick&&S.layFlatMode){const r=cv.getBoundingClientRect();_layFlatAt(e.clientX-r.left,e.clientY-r.top);}
     });
+    // Arrastrar para rotar el preview 3D de trayectorias
+    const gcv=el('slGcodeCanvas');
+    if(gcv){gcv.style.touchAction='none';let gd=null;
+      gcv.addEventListener('pointerdown',e=>{if(!S.gcode3D)return;gd={x:e.clientX,y:e.clientY};gcv.setPointerCapture(e.pointerId);gcv.style.cursor='grabbing';});
+      gcv.addEventListener('pointermove',e=>{if(!gd)return;S.gcodeRot=S.gcodeRot||{a:0.6,b:-1.0};S.gcodeRot.a+=(e.clientX-gd.x)*0.01;S.gcodeRot.b+=(e.clientY-gd.y)*0.01;gd={x:e.clientX,y:e.clientY};_drawGcode3D(S.previewIdx||0);});
+      gcv.addEventListener('pointerup',()=>{gd=null;gcv.style.cursor='grab';});
+    }
   });
-  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel};
+  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel,toggleGcode3D};
 })();
 </script>
 
