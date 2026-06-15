@@ -9177,7 +9177,7 @@ function _parseQAIAResponse(text){
   const items=[];let resultado=null;
   for(const raw of String(text||'').split('\n')){
     const line=raw.trim();if(!line)continue;
-    const clean=s=>s.replace(/\*\*/g,'').replace(/`/g,'').trim();
+    const clean=s=>s.replace(/\*\*/g,'').replace(/`/g,'').replace(/_{2,}/g,'').replace(/\s{2,}/g,' ').replace(/[\s/→:·.-]+$/,'').trim();
     if(/RECHAZAD/i.test(line))resultado='Rechazado';
     else if(/APROBAD/i.test(line))resultado='QA aprobado';
     let m=line.match(/^[-*•]\s*\[([ xX])\]\s*(.+)$/);
@@ -9204,10 +9204,12 @@ async function rellenarQAconIA(){
       f['Detalle productos']&&f['Detalle productos']!==desc?`Detalle: ${f['Detalle productos']}`:'',
       f['Solicitud cliente (texto libre)']&&f['Solicitud cliente (texto libre)']!==desc?`Solicitud cliente: ${f['Solicitud cliente (texto libre)']}`:'',
       f['Fecha entrega']?`Entrega: ${f['Fecha entrega']}`:'',
+      'FORMATO: máximo 8 ítems, los más importantes. Cada ítem = UNA afirmación corta verificable a simple vista (marcable sí/no). NO incluyas espacios para rellenar (nada de "______" ni "Medida: ___ mm"), ni medidas numéricas a completar, ni secciones, ni encabezados.',
     ].filter(Boolean).join('\n');
     const raw=await callClaude(sys,ctx);
     const parsed=_parseQAIAResponse(raw);
     if(!parsed.items.length){toast('La IA no devolvió ítems — añade más detalle','error');return;}
+    if(parsed.items.length>10)parsed.items=parsed.items.slice(0,10); // tope de seguridad: lista concisa
     qaItems=parsed.items;
     if(parsed.resultado){qaResultadoActual=parsed.resultado;updateQAResultadoBtns();}
     renderQAChecklist();
@@ -19365,7 +19367,7 @@ MATERIAL: ${mat} · OBJETIVO: ${obj}${notas?'\nNOTAS DEL OPERADOR: '+notas:''}`;
   }
   const IA_SYS=`Eres KAI-SLICER, ingeniero experto en impresión 3D FDM de The Lab Solutions (Santiago, Chile).
 Eliges parámetros de laminado óptimos según geometría de la pieza, material, impresora y objetivo.
-REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). treeSupports=true cuando haya voladizos complejos o múltiples: genera ramas que se fusionan en troncos, mucho más fáciles de retirar. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), cubic (3D resistente), concentric (sigue el contorno, bueno para flexibles/sellos), linear (rápido).
+REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). Si activas soportes (supports=true), pon SIEMPRE treeSupports=true por defecto (troncos de celosía con base ancha, estables y fáciles de retirar); usa treeSupports=false solo si el voladizo es una superficie plana grande y continua que necesita interfaz densa. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), cubic (3D resistente), concentric (sigue el contorno, bueno para flexibles/sellos), linear (rápido).
 COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético), "agudo" en esquinas, "cercano" minimiza viaje. outerWallLast=true imprime la pared exterior al final → mejor acabado. bridgeDetect=true para voladizos horizontales. elephantFoot (mm, 0-0.3): encoge la 1ª capa. xyCompensation (mm, -0.3 a 0.3): negativo agranda agujeros. arcFitting=false salvo que se indique (requiere [gcode_arcs] en Klipper).
 VELOCIDAD: outerSpeed (mm/s, 0=auto) baja la pared exterior para mejor acabado (60% de speed en piezas vistosas). infillSpeed (0=auto) sube el relleno. accel (mm/s², 0=no tocar) limita aceleración para reducir ringing en piezas finas. ADHESIÓN: skirt (líneas, ceba el filamento sin pegarse a la pieza), brim (pegado, para piezas altas o ABS), raft=true (base completa bajo la pieza, para superficies difíciles o ABS — encarece). DETALLE: gapFill=true rellena paredes finas sin huecos. fuzzySkin (mm, 0.1-0.3) da textura rugosa mate a la pared exterior. coasting (mm, 0.1-0.3) corta la extrusión antes del fin del perímetro para evitar el blob de costura.
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
@@ -19402,7 +19404,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       speed:Math.round(vbase),outerSpeed:obj==='calidad'?Math.round(vbase*0.6):0,infillSpeed:obj==='rapido'?0:Math.round(vbase*1.1),
       firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
-      supports:st.ovPct>8,treeSupports:st.ovPct>8&&obj==='calidad',supportAngle:50,
+      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,
       adaptiveLayerHeight:obj==='calidad',
       seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
       bridgeDetect:st.ovPct>8,arcFitting:false,gradualTemp: obj!=='rapido',
@@ -19926,20 +19928,28 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     if(pattern==='triangle'||pattern==='hex')return _scanfill(poly,spacing*3,0).concat(_scanfill(poly,spacing*3,60),_scanfill(poly,spacing*3,120));
     return _scanfill(poly,spacing,li%2?135:45); // linear
   }
-  // Líneas de soporte activas en una capa: agrupa columnas por fila y conecta tramos contiguos
+  // Líneas de soporte activas en una capa: conecta columnas por fila y da cuerpo a cada una (cruz + zócalo)
   function _supportLinesAtLayer(cols,li,gs){
     const active=cols.filter(c=>c.top>=li&&c.bot<=li);
     if(!active.length)return[];
+    const lines=[];
+    // Conexión por filas (tramos contiguos) — evita columnas sueltas
     const rows=new Map();
     for(const c of active){const key=Math.round(c.y/gs);(rows.get(key)||rows.set(key,[]).get(key)).push(c);}
-    const lines=[];
     for(const arr of rows.values()){
       arr.sort((a,b)=>a.x-b.x);let rs=arr[0],prev=arr[0];
       for(let i=1;i<arr.length;i++){
         if(arr[i].x-prev.x<=gs*1.6){prev=arr[i];}
-        else{lines.push([[rs.x,rs.y],[prev.x,prev.y]]);rs=arr[i];prev=arr[i];}
+        else{if(prev.x>rs.x)lines.push([[rs.x,rs.y],[prev.x,prev.y]]);rs=arr[i];prev=arr[i];}
       }
-      lines.push([[rs.x,rs.y],[prev.x,prev.y]]);
+      if(prev.x>rs.x)lines.push([[rs.x,rs.y],[prev.x,prev.y]]);
+    }
+    // Cuerpo por columna: cruz (da grosor real, no un hilo) + base ensanchada en las primeras capas
+    for(const c of active){
+      const fromBot=c.bot!=null?li-c.bot:li;
+      const r=gs*0.42+(fromBot<8?(8-fromBot)*0.05*gs:0);
+      lines.push([[c.x-r,c.y],[c.x+r,c.y]]);
+      lines.push([[c.x,c.y-r],[c.x,c.y+r]]);
     }
     return lines;
   }
@@ -19947,7 +19957,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   function _buildTreeSupport(cols){
     if(!cols||!cols.length)return[];
     const n=cols.length,parent=Array.from({length:n},(_,i)=>i);
-    const MERGE_R=9;
+    const MERGE_R=11;
     function find(i){return parent[i]===i?i:(parent[i]=find(parent[i]));}
     for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)
       if(Math.hypot(cols[i].x-cols[j].x,cols[i].y-cols[j].y)<MERGE_R)parent[find(i)]=find(j);
@@ -19957,33 +19967,43 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       const cx=mem.reduce((s,c)=>s+c.x,0)/mem.length;
       const cy=mem.reduce((s,c)=>s+c.y,0)/mem.length;
       const topLi=Math.max(...mem.map(c=>c.top));
-      return{mem,cx,cy,topLi};
+      const baseLi=Math.min(...mem.map(c=>c.bot));
+      return{mem,cx,cy,topLi,baseLi};
     });
   }
   function _treeSupportAtLayer(trees,li,extW){
     if(!trees||!trees.length)return[];
-    const lines=[];
+    const lines=[],step=Math.max(extW*2.6,1.1);
     for(const tree of trees){
-      const{mem,cx,cy,topLi}=tree;
+      const{mem,cx,cy,topLi,baseLi}=tree;
       const active=mem.filter(c=>c.top>=li&&c.bot<=li);
       if(!active.length)continue;
-      const BRANCH=5;// layers of branching zone
+      const BRANCH=6; // capas de la zona de ramificación bajo cada contacto
       if(li>=topLi-BRANCH){
-        // Branch zone: thin lines from trunk point toward each contact
+        // Zona de ramas: del tronco hacia cada contacto, con doble línea (más fuerte) + pad de contacto
         const prog=Math.max(0,(li-(topLi-BRANCH))/BRANCH);
         for(const c of active){
           const bx=cx+(c.x-cx)*prog,by=cy+(c.y-cy)*prog;
-          lines.push([[cx+(c.x-cx)*Math.max(0,prog-0.4),cy+(c.y-cy)*Math.max(0,prog-0.4)],[bx,by]]);
-          if(li===c.top){// contact pad: cross at overhang point
-            const r=extW*1.2;
-            lines.push([[c.x-r,c.y],[c.x+r,c.y]]);
-          }
+          const ax=cx+(c.x-cx)*Math.max(0,prog-0.5),ay=cy+(c.y-cy)*Math.max(0,prog-0.5);
+          lines.push([[ax,ay],[bx,by]]);
+          const dx=bx-ax,dy=by-ay,L=Math.hypot(dx,dy)||1,nx=-dy/L*extW,ny=dx/L*extW;
+          lines.push([[ax+nx,ay+ny],[bx+nx,by+ny]]);
+          if(li===c.top){const r=extW*1.4;lines.push([[c.x-r,c.y],[c.x+r,c.y]]);lines.push([[c.x,c.y-r],[c.x,c.y+r]]);}
         }
       }else{
-        // Trunk: thin cross, alternates direction each layer for bonding
-        const r=Math.min(2.5,1+active.length*0.15);
-        lines.push([[cx-r,cy],[cx+r,cy]]);
-        if(li%2===0)lines.push([[cx,cy-r],[cx,cy+r]]);
+        // Tronco: pilar de celosía (contorno + relleno disperso) con base ensanchada → estable y retirable
+        const fromBot=li-baseLi;
+        let R=Math.min(4.5,1.6+mem.length*0.3);
+        if(fromBot<10)R+=(10-fromBot)*0.18; // zócalo anti-vuelco en las primeras capas
+        // contorno del pilar (cohesión entre capas)
+        lines.push([[cx-R,cy-R],[cx+R,cy-R]]);lines.push([[cx+R,cy-R],[cx+R,cy+R]]);
+        lines.push([[cx+R,cy+R],[cx-R,cy+R]]);lines.push([[cx-R,cy+R],[cx-R,cy-R]]);
+        // relleno disperso, alternando dirección por capa
+        const dir=li%2===0;
+        for(let o=-R+step;o<R-1e-6;o+=step){
+          if(dir)lines.push([[cx-R,cy+o],[cx+R,cy+o]]);
+          else lines.push([[cx+o,cy-R],[cx+o,cy+R]]);
+        }
       }
     }
     return lines;
