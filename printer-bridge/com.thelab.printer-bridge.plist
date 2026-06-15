@@ -12,7 +12,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/Users/thelabsolutions/.nvm/versions/node/v22.22.0/bin/node</string>
-    <string>/dashboardthelabsolutions/printer-bridge/server.js</string>
+    <string>/Users/thelabsolutions/dashboardthelabsolutions/printer-bridge/server.js</string>
   </array>
 
   <key>RunAtLoad</key>

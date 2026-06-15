@@ -11932,14 +11932,28 @@ async function pollPrintersDemoTick(){
 }
 
 let _pollCount=0;
+let _pollInFlight=false;
+// Recorre los items con concurrencia limitada para no disparar todas las
+// impresoras a la vez: en modo remoto esa ráfaga simultánea satura el único
+// túnel/bridge (timeouts → "Offline") y es más amable con el host Moonraker.
+async function _mapLimit(items,limit,fn){
+  let i=0;
+  const run=async()=>{while(i<items.length){const idx=i++;try{await fn(items[idx]);}catch(e){}}};
+  await Promise.all(Array.from({length:Math.min(limit,items.length)},run));
+}
 async function pollPrinters(){
   if(window._DEMO_MODE){await pollPrintersDemoTick();return;}
-  await Promise.allSettled(MAQUINAS.map(async m=>{
-    const s=await fetchPrinterStatus(m);
-    checkTransitions(m,s);
-    _printerStatus[m.id]=s;
-    if(s.hotend){if(!_tempHistory[m.id])_tempHistory[m.id]=[];_tempHistory[m.id].push({h:s.hotend.actual,b:s.bed?.actual||0});if(_tempHistory[m.id].length>20)_tempHistory[m.id].shift();}
-  }));
+  if(_pollInFlight)return;            // no solapar ciclos lentos (timeouts de 5s)
+  if(document.hidden)return;          // no machacar bridge/impresoras con la pestaña oculta
+  _pollInFlight=true;
+  try{
+    await _mapLimit(MAQUINAS,4,async m=>{
+      const s=await fetchPrinterStatus(m);
+      checkTransitions(m,s);
+      _printerStatus[m.id]=s;
+      if(s.hotend){if(!_tempHistory[m.id])_tempHistory[m.id]=[];_tempHistory[m.id].push({h:s.hotend.actual,b:s.bed?.actual||0});if(_tempHistory[m.id].length>20)_tempHistory[m.id].shift();}
+    });
+  }finally{_pollInFlight=false;}
   _pollCount++;
   checkIdleAlerts();
   renderMonitorKPIs();
