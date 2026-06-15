@@ -1829,7 +1829,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-primary btn-sm" id="ovCeoBtn" onclick="ovGenerarReporteCEO()">⚡ Generar con datos de la semana</button>
       </div>
     </div>
-    <div id="ovCeoBody" style="padding:16px;font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.6">Genera un resumen ejecutivo (revenue, márgenes, pedidos atrasados, prioridades) con los datos reales de esta semana.</div>
+    <div id="ovCeoBody" style="padding:16px;font-size:12px;color:var(--text2);white-space:pre-wrap;word-break:break-word;overflow-x:auto;line-height:1.6">Genera un resumen ejecutivo (revenue, márgenes, pedidos atrasados, prioridades) con los datos reales de esta semana.</div>
   </div>
   <div class="data-grid">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
@@ -3898,7 +3898,8 @@ function _reportarResultados(muts) {
 
     <!-- Cuentas por cobrar generales -->
     <div class="card">
-      <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro</span></div>
+      <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro</span><button class="btn btn-primary btn-sm" id="finCobranzaIABtn" onclick="finPlanCobranzaIA()" style="margin-left:auto">📋 Plan de cobranza IA</button></div>
+      <div id="finCobranzaIAout" style="display:none;margin:12px 16px 0;padding:14px;background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.22);border-radius:9px;font-size:12px;color:var(--text2);white-space:pre-wrap;word-break:break-word;overflow-x:auto;line-height:1.6"></div>
       <div style="padding:12px 16px 0">
         <div id="fin-cobrar-aging"></div>
       </div>
@@ -6442,6 +6443,16 @@ function renderAlertas(){
       alertas.push({sev:2,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-warning"/></svg>',type:'proveedor-sin-cobertura',msg:`Sin proveedor activo en <strong>${escapeHtml(cat)}</strong> — <strong>${escapeHtml(pv.fields['Nombre']||'—')}</strong> inactivo`,id:pv.id,tab:'proveedores'});
   });
 
+  // sev 2/3 — mantenimiento preventivo de impresoras (horas desde la última mantención)
+  try{
+    (typeof MAQUINAS!=='undefined'?MAQUINAS:[]).forEach(m=>{
+      getMaintAlerts(m).forEach(a=>{
+        const over=a.hours>=a.threshold;
+        alertas.push({sev:over?3:2,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-wrench"/></svg>',type:'maquina-mant',msg:`<strong>${escapeHtml(m.nombre||'Impresora')} #${escapeHtml(String(m.num||''))}</strong>: ${escapeHtml(a.label)} ${Math.round(a.hours)}h / ${a.threshold}h${over?' ⚠ vencido':''}`,id:m.id,tab:'maquinas'});
+      });
+    });
+  }catch(e){}
+
   alertas.sort((a,b)=>b.sev-a.sev);
 
   // Sincronizar con la campana de notificaciones (solo alertas nuevas)
@@ -6450,8 +6461,8 @@ function renderAlertas(){
 
   // agrupación: >=3 del mismo tipo → una sola fila
   const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
-  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa','cliente-inactivo':'clientes sin cotizar +90 días','proveedor-bloqueado':'proveedores bloqueados con pedidos activos','proveedor-sin-cobertura':'categorías sin proveedor activo'};
-  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`,'cliente-inactivo':`goToAlert('clientes')`,'proveedor-bloqueado':`goToAlert('proveedores')`,'proveedor-sin-cobertura':`goToAlert('proveedores')`};
+  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa','cliente-inactivo':'clientes sin cotizar +90 días','proveedor-bloqueado':'proveedores bloqueados con pedidos activos','proveedor-sin-cobertura':'categorías sin proveedor activo','maquina-mant':'impresoras requieren mantención'};
+  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`,'cliente-inactivo':`goToAlert('clientes')`,'proveedor-bloqueado':`goToAlert('proveedores')`,'proveedor-sin-cobertura':`goToAlert('proveedores')`,'maquina-mant':`goToAlert('maquinas')`};
   const sevBorder=s=>s===3?'rgba(255,68,68,0.3)':s===2?'rgba(255,107,53,0.3)':'rgba(255,170,0,0.22)';
 
   const seen=new Set();const rows=[];
@@ -16107,6 +16118,34 @@ function finRenderCobrar(){
   if(!html)html='<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro registradas</td></tr>';
   document.getElementById('fin-cobrar-body').innerHTML=html;
 }
+// Plan de cobranza con IA: prioriza toda la cartera por mora y monto (FINANCE_AGENT)
+async function finPlanCobranzaIA(){
+  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  if(!data.length){toast('No hay facturas pendientes de cobro','info');return;}
+  const hoy=Date.now(),byCli=new Map();
+  data.forEach(r=>{
+    const venc=new Date(new Date(`${r.year}-${r.mes}-01`).getTime()+30*86400000);
+    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    const k=r.empresa||r.nombre||'—';
+    const e=byCli.get(k)||{empresa:k,total:0,maxDias:0,n:0};
+    e.total+=r.porCobrar;e.maxDias=Math.max(e.maxDias,dias);e.n++;byCli.set(k,e);
+  });
+  const lista=[...byCli.values()].sort((a,b)=>b.maxDias-a.maxDias||b.total-a.total);
+  const total=lista.reduce((s,e)=>s+e.total,0);
+  const ctx=`CARTERA POR COBRAR (total ${formatCLP(total)}, ${lista.length} clientes):\n`+
+    lista.map(e=>`- ${e.empresa}: ${formatCLP(e.total)} · ${e.n} factura(s) · mora máx ${e.maxDias} días`).join('\n')+
+    `\n\nTAREA: prioriza la cobranza de esta semana. Para los 5–8 casos más urgentes indica en orden: prioridad, canal recomendado (WhatsApp → email → llamada → carta según mora) y la acción concreta. Cierra con el monto total recuperable priorizado.`;
+  const out=document.getElementById('finCobranzaIAout'),btn=document.getElementById('finCobranzaIABtn'),prev=btn.innerHTML;
+  btn.disabled=true;btn.innerHTML='⏳ Analizando…';
+  if(out){out.style.display='block';out.textContent='⏳ FINANCE_AGENT priorizando la cobranza…';}
+  try{
+    const cfg=AGENTES_CFG.find(a=>a.id==='FINANCE');
+    const resp=await callClaude(cfg.sys,ctx);
+    if(out)out.textContent=resp;
+    try{AGENT_LOG.add('FINANCE_AGENT','Plan de cobranza ('+lista.length+' clientes)',resp);}catch(e){}
+  }catch(e){if(out)out.textContent='Error: '+e.message;}
+  finally{btn.disabled=false;btn.innerHTML=prev;}
+}
 
 /* ── Antigüedad de cuentas por cobrar ── */
 function finRenderAging(){
@@ -18948,7 +18987,8 @@ const SL3D=(function(){
   // Se calcula una vez (cacheado en S.supSticks) y se reproyecta en cada frame.
   function _computeSupportSticks(){
     if(!S.tris){S.supSticks=[];return;}
-    const t=S.tris,m=t.length/9;
+    // En mallas enormes usa la versión decimada para no congelar la UI (raycast O(reps×triángulos))
+    const t=(S.tris.length/9>60000&&S.prev)?S.prev:S.tris,m=t.length/9;
     const ovAng=S.params?-(Math.cos((90-(S.params.supportAngle||50))*Math.PI/180)):-0.57;
     const thr=ovAng<-0.2?ovAng:-0.57,GS=4,buckets=new Map();
     for(let i=0;i<m;i++){
