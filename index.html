@@ -2985,7 +2985,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
     <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" id="cdEliminarBtn"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="closeClienteDetalle()">Cerrar</button><button class="btn btn-ghost btn-sm" id="cdEditarBtn"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar</button><button class="btn btn-primary btn-sm" id="cdCotizarBtn">+ Nueva Cotización</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="closeClienteDetalle()">Cerrar</button><button class="btn btn-ghost btn-sm" id="cdWhatsappBtn" style="display:none;color:#25D366">💬 WhatsApp</button><button class="btn btn-ghost btn-sm" id="cdSalesIABtn" style="color:var(--accent)">✨ Estrategia IA</button><button class="btn btn-ghost btn-sm" id="cdEditarBtn"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar</button><button class="btn btn-primary btn-sm" id="cdCotizarBtn">+ Nueva Cotización</button></div>
     </div>
   </div>
 </div>
@@ -6647,12 +6647,21 @@ function compartirPortalCliente(clienteId){
 function openClienteDetalle(id){
   const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Ciudad']||''}`:f['Ciudad']||'';
-  document.getElementById('cdBadges').innerHTML=`${f['Etapa venta']?estadoBadge(f['Etapa venta']):''}${f['Estado cuenta']?estadoBadge(f['Estado cuenta']):''}${venc>0?`<span class="badge ${venc>=2?'badge-red':'badge-yellow'}">⚠ ${venc} fact. vencida${venc>1?'s':''}</span>`:''}`;
+  // Última actividad: fecha más reciente entre cotizaciones, pedidos y primer contacto
+  const _cliCots=(state.cotizaciones||[]).filter(x=>{const ca=x.fields['Cliente'];return Array.isArray(ca)?ca.includes(id):ca===f['Empresa'];});
+  const _cliPeds=(state.pedidos||[]).filter(x=>{const ca=x.fields['Cliente'];return Array.isArray(ca)?ca.includes(id):ca===f['Empresa'];});
+  const _actDates=[..._cliCots.map(x=>x.fields['Fecha cotización']),..._cliPeds.map(x=>x.fields['Fecha entrega']),f['Fecha primer contacto']].filter(Boolean).sort();
+  const _lastStr=_actDates.length?_actDates[_actDates.length-1]:'';
+  const _diasAct=_lastStr?Math.floor((Date.now()-new Date(_lastStr+'T00:00:00').getTime())/86400000):null;
+  const _etapaActiva=!['Perdido','Cliente inactivo'].includes(f['Etapa venta']||'');
+  const _frio=_diasAct!==null&&_diasAct>=30&&_etapaActiva;
+  document.getElementById('cdBadges').innerHTML=`${f['Etapa venta']?estadoBadge(f['Etapa venta']):''}${f['Estado cuenta']?estadoBadge(f['Estado cuenta']):''}${venc>0?`<span class="badge ${venc>=2?'badge-red':'badge-yellow'}">⚠ ${venc} fact. vencida${venc>1?'s':''}</span>`:''}${_frio?`<span class="badge badge-yellow">❄ sin actividad ${_diasAct}d</span>`:''}`;
   const row=(label,v,href)=>{if(!v)return '';const sh=href?safeHref(href):'';return `<div style="display:flex;gap:8px"><span style="color:var(--text3);min-width:72px">${label}</span><span>${sh?`<a href="${sh}" style="color:var(--accent);text-decoration:none">${escapeHtml(v)}</a>`:escapeHtml(v)}</span></div>`;}
   document.getElementById('cdContacto').innerHTML=[row('Contacto',f['Contacto']),row('Cargo',f['Cargo contacto']),row('Teléfono',f['Teléfono'],f['Teléfono']?`tel:${f['Teléfono']}`:''),row('Email',f['Email'],f['Email']?`mailto:${f['Email']}`:'')].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
   document.getElementById('cdEmpresa').innerHTML=[row('RUT',f['RUT']),row('Dirección',f['Dirección']),row('Región',f['Región']),row('Comuna',f['Comuna']),row('Ciudad',f['Ciudad']),row('Sitio web',f['Sitio web'],f['Sitio web']?f['Sitio web']:''),row('Origen',f['Origen lead']),row('1er cont.',f['Fecha primer contacto'])].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
   document.getElementById('cdFinanciero').innerHTML=[row('Revenue',formatCLP(f['Revenue total cliente (CLP)']||0)),row('Fact. venc.',String(venc)),row('Estado cta',f['Estado cuenta'])].filter(Boolean).join('');
-  document.getElementById('cdCRM').innerHTML=[row('Etapa',f['Etapa venta']),row('Valoración','★'.repeat(val)+'☆'.repeat(5-val)),row('Industria',f['Industria / Rubro'])].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
+  const _actTxt=_lastStr?`hace ${_diasAct} día${_diasAct===1?'':'s'}`:'sin registro';
+  document.getElementById('cdCRM').innerHTML=[row('Etapa',f['Etapa venta']),row('Valoración','★'.repeat(val)+'☆'.repeat(5-val)),row('Industria',f['Industria / Rubro']),row('Últ. activ.',_actTxt+(_lastStr?` · ${_lastStr}`:'')),row('Cotiz./Ped.',`${_cliCots.length} / ${_cliPeds.length}`)].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
   const notasEl=document.getElementById('cdNotas');notasEl.textContent=f['Notas internas']||'Sin notas';notasEl.style.color=f['Notas internas']?'var(--text2)':'var(--text3)';
   cdCurrentId=id;
   renderClienteTimeline(id,f['Empresa']||''); cdCurrentEmpresa=f['Empresa']||'';
@@ -6662,6 +6671,9 @@ function openClienteDetalle(id){
   document.getElementById('cdEditarBtn').onclick=()=>{closeClienteDetalle();openEditCliente(id);};
   document.getElementById('cdEliminarBtn').onclick=()=>deleteCliente(id,f['Empresa']||'este cliente');
   document.getElementById('cdCotizarBtn').onclick=()=>{closeClienteDetalle();cotizarParaCliente(id);};
+  const _waPhone=_getClienteWAPhone(c),_waBtn=document.getElementById('cdWhatsappBtn');
+  if(_waPhone){_waBtn.style.display='';_waBtn.onclick=()=>openFollowupWA(_waPhone);}else{_waBtn.style.display='none';}
+  document.getElementById('cdSalesIABtn').onclick=()=>{closeClienteDetalle();runSalesAgent(id);};
   document.getElementById('clienteDetalleModal').style.display='flex';
 }
 // ── Facturas por cliente: Airtable + base Finanzas ────────────────────
