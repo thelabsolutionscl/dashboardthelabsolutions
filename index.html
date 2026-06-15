@@ -2749,6 +2749,21 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
                 <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">REGIONES DE SOPORTE <span style="font-weight:400">(forzar o bloquear soporte en una caja XY·Z)</span></div>
                 <div id="slSupRegList"></div>
                 <button class="btn btn-ghost btn-sm" onclick="SL3D.addSupRegion()" style="margin:4px 0 4px">+ Agregar región</button>
+                <!-- ── G-code de máquina (inicio/fin) por impresora ── -->
+                <div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+                    <div style="font-size:10px;font-weight:700;color:var(--text3)">G-CODE MÁQUINA <span style="font-weight:400">(inicio/fin para <span id="slGcMachineName">la impresora</span>)</span></div>
+                    <div style="display:flex;gap:5px">
+                      <button class="btn btn-ghost btn-sm" onclick="SL3D.gcodePreset('marlin')" style="font-size:10px;padding:3px 8px">Marlin</button>
+                      <button class="btn btn-ghost btn-sm" onclick="SL3D.gcodePreset('klipper')" style="font-size:10px;padding:3px 8px">Klipper</button>
+                    </div>
+                  </div>
+                  <label style="font-size:9px;color:var(--text3)">Inicio (reemplaza homing/calentado). Placeholders: {nozzle} {bed} {accel} {flow} {pa} {first_layer_height} {material} {model}</label>
+                  <textarea id="slStartGcode" rows="3" placeholder="vacío = secuencia Marlin por defecto (M140/M104/G28/M190/M109)" style="width:100%;resize:vertical;font-size:11px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 8px" oninput="SL3D.saveMachineGcode()"></textarea>
+                  <label style="font-size:9px;color:var(--text3)">Fin (reemplaza el apagado). Vacío = footer Marlin por defecto.</label>
+                  <textarea id="slEndGcode" rows="2" placeholder="vacío = footer por defecto (M104 S0 / M140 S0 / M84…)" style="width:100%;resize:vertical;font-size:11px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 4px" oninput="SL3D.saveMachineGcode()"></textarea>
+                  <div style="font-size:9px;color:var(--text3);line-height:1.5">El preset <b>Klipper</b> usa <code>PRINT_START</code>/<code>PRINT_END</code> — funciona solo si esas macros existen en tu <code>printer.cfg</code>. Se guarda por impresora.</div>
+                </div>
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -19591,6 +19606,34 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const b=el('slAdvBody'),c=el('slAdvCaret');
     const open=b.style.display==='none';
     b.style.display=open?'block':'none';c.textContent=open?'▴':'▾';
+    if(open)loadMachineGcode();
+  }
+  // ── G-code de máquina (inicio/fin) por impresora ──
+  function _sub(tpl,vars){return tpl.replace(/\{(\w+)\}/g,(m,k)=>k in vars?vars[k]:m);}
+  function _gcMachine(){return el('slPrinter')?el('slPrinter').value:'default';}
+  function loadMachineGcode(){
+    const m=_gcMachine();
+    const nm=el('slGcMachineName');if(nm)nm.textContent=m;
+    const s=el('slStartGcode'),e=el('slEndGcode');
+    if(s)s.value=localStorage.getItem('sl_startgcode_'+m)||'';
+    if(e)e.value=localStorage.getItem('sl_endgcode_'+m)||'';
+  }
+  function saveMachineGcode(){
+    const m=_gcMachine(),s=el('slStartGcode'),e=el('slEndGcode');
+    if(s)localStorage.setItem('sl_startgcode_'+m,s.value);
+    if(e)localStorage.setItem('sl_endgcode_'+m,e.value);
+  }
+  function gcodePreset(flavor){
+    const s=el('slStartGcode'),e=el('slEndGcode');if(!s||!e)return;
+    if(flavor==='klipper'){
+      s.value='PRINT_START BED_TEMP={bed} EXTRUDER_TEMP={nozzle}';
+      e.value='PRINT_END';
+    }else{
+      s.value='M140 S{bed}\nM104 S{nozzle}\nG28\nM190 S{bed}\nM109 S{nozzle}';
+      e.value='M107\nM104 S0\nM140 S0\nM84';
+    }
+    saveMachineGcode();
+    toast(flavor==='klipper'?'Preset Klipper cargado — requiere macros PRINT_START/PRINT_END en tu printer.cfg':'Preset Marlin cargado','success');
   }
   const _MOD_FIELDS=['infillPct','infillType','shells','topLayers','bottomLayers'];
   function addModifier(){
@@ -20371,8 +20414,11 @@ self.onmessage=function(ev){
     gc.push('; The Lab Solutions — Native AI Slicer');
     gc.push(`; ${S.name} | ${modelName} | ${matName} | boquilla:${nozD}mm capa:${p.layerHeight}mm relleno:${p.infillPct}%`);
     if(p.supports)gc.push('; soportes activados — columnas en rejilla bajo voladizos (básicos, retirar a mano)');
-    gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');
-    gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);
+    // G-code de inicio: plantilla por impresora (Klipper PRINT_START / Marlin) o secuencia por defecto
+    const _gcVars={nozzle:p.nozzleTemp,bed:p.bedTemp,accel:p.accel||0,flow:Math.round(p.flowRatio||100),pa:(+p.pressureAdvance||0).toFixed(4),first_layer_height:p.firstLayerHeight,material:matName,model:modelName};
+    const _startTpl=(localStorage.getItem('sl_startgcode_'+modelName)||'').trim();
+    if(_startTpl)_sub(_startTpl,_gcVars).split('\n').forEach(l=>gc.push(l));
+    else{gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);}
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
     if(p.accel>0)gc.push('M204 S'+p.accel+' ; aceleración');
     if(p.flowRatio&&Math.round(p.flowRatio)!==100)gc.push('M221 S'+Math.round(p.flowRatio)+' ; flujo %');
@@ -20663,10 +20709,17 @@ self.onmessage=function(ev){
       if(li%8===0){setProg(4+li/totalL*92,`Laminando capa ${li+1}/${totalL}…`);await new Promise(r=>setTimeout(r,0));}
     }
     // ── Footer ───────────────────────────────────
-    gc.push('\nM107');gc.push('M104 S0');gc.push('M140 S0');
-    if(p.retractDist>0)gc.push(`G1 E${(E-p.retractDist).toFixed(4)} F${p.retractSpeed*60} ; retracción final (anti-ooze)`);
-    gc.push('G92 E0');gc.push('G91');gc.push('G1 Z5 F900');gc.push('G90');
-    gc.push(`G1 X0 Y${(spec.y-10).toFixed(0)} F3000`);gc.push('M84');
+    const _endTpl=(localStorage.getItem('sl_endgcode_'+modelName)||'').trim();
+    if(_endTpl){
+      gc.push('');
+      if(p.retractDist>0)gc.push(`G1 E${(E-p.retractDist).toFixed(4)} F${p.retractSpeed*60} ; retracción final (anti-ooze)`);
+      _sub(_endTpl,_gcVars).split('\n').forEach(l=>gc.push(l));
+    }else{
+      gc.push('\nM107');gc.push('M104 S0');gc.push('M140 S0');
+      if(p.retractDist>0)gc.push(`G1 E${(E-p.retractDist).toFixed(4)} F${p.retractSpeed*60} ; retracción final (anti-ooze)`);
+      gc.push('G92 E0');gc.push('G91');gc.push('G1 Z5 F900');gc.push('G90');
+      gc.push(`G1 X0 Y${(spec.y-10).toFixed(0)} F3000`);gc.push('M84');
+    }
     return gc.join('\n');
   }
   // Versión de _inset sin validación de área (para expansiones del brim)
@@ -21055,7 +21108,7 @@ self.onmessage=function(ev){
     toast(`Enviando a ${libres.length} impresora(s)…`,'success');
   }
   // ── Init ────────────────────────────────────────────────────
-  function onPrinterChange(){if(S.stats)renderStats();}
+  function onPrinterChange(){if(S.stats)renderStats();loadMachineGcode();}
   document.addEventListener('DOMContentLoaded',()=>{
     const sel=el('slPrinter');if(!sel)return;
     sel.innerHTML=Object.keys(SPECS).map(k=>`<option value="${k}">${k} — ${SPECS[k].x}×${SPECS[k].y}×${SPECS[k].z}mm</option>`).join('');
@@ -21072,7 +21125,7 @@ self.onmessage=function(ev){
       if(wasClick&&S.layFlatMode){const r=cv.getBoundingClientRect();_layFlatAt(e.clientX-r.left,e.clientY-r.top);}
     });
   });
-  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion};
+  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,gcodePreset,saveMachineGcode};
 })();
 </script>
 
