@@ -5414,7 +5414,7 @@ function openUserMenu(){
   const ds=document.getElementById('umDriveStatus');if(ds){const v=localStorage.getItem('google_drive_client_id');ds.textContent=v?'✓ Client ID configurado':'Sin configurar — necesitas un Client ID de Google Cloud';}
   const pu=document.getElementById('umProxyUrl');if(pu){pu.value=localStorage.getItem('proxy_url')||'';}
   const pk=document.getElementById('umProxyKey');if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
-  const ps=document.getElementById('umProxyStatus');if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo — token Airtable vive en el Worker':'Sin proxy — token guardado localmente';}
+  const ps=document.getElementById('umProxyStatus');if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo — Airtable y Claude viven en el Worker':'Sin proxy — claves guardadas localmente en el navegador';}
   const pt=document.getElementById('umPrinterTunnel');if(pt){pt.value=localStorage.getItem('printer_tunnel')||'';}
   const ptk=document.getElementById('umPrinterToken');if(ptk){const v=localStorage.getItem('printer_tunnel_token');ptk.value=v?'••••••••'+v.slice(-4):'';ptk.onfocus=()=>{if(ptk.value.startsWith('••')){ptk.value='';}};ptk.onblur=()=>{if(!ptk.value){const vv=localStorage.getItem('printer_tunnel_token');ptk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const pts=document.getElementById('umPrinterTunnelStatus');if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=(v?`✓ Túnel personalizado: ${v}`:'Default: https://printers.thelab.solutions')+(localStorage.getItem('printer_tunnel_token')?' · 🔑 token':'');}
@@ -6083,8 +6083,28 @@ async function loadAllDataSilent(){
 function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},1800000);} // 30 min
 
 // ── AI ────────────────────────────────────────────────────────
-async function callClaude(system,user){let k=getAnthropicKey();if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}return _callClaudeRaw(system,user,k);}
-async function _callClaudeRaw(system,user,k){const sk=k.replace(/[^\x20-\x7E]/g,'').trim();const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':sk,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:new Blob([JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system,messages:[{role:'user',content:user}]})],{type:'application/json'})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return(await r.json()).content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
+// Config del proxy Worker (si está) — guarda los secretos en el servidor, no en el navegador
+function _proxyCfg(){
+  const url=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
+  const key=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
+  return(url&&key)?{url:url.replace(/\/$/,''),key}:null;
+}
+async function callClaude(system,user){
+  // Con proxy: la API key de Anthropic vive en el Worker, no en el navegador
+  const px=_proxyCfg();
+  if(px)return _callClaudeViaProxy(system,user,px);
+  let k=getAnthropicKey();
+  if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}
+  return _callClaudeRaw(system,user,k);
+}
+const _CLAUDE_BODY=(system,user)=>JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system,messages:[{role:'user',content:user}]});
+function _claudeText(j){return j.content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
+async function _callClaudeViaProxy(system,user,px){
+  const r=await fetch(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key,'anthropic-version':'2023-06-01'},body:_CLAUDE_BODY(system,user)});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`Proxy IA error ${r.status}`);}
+  return _claudeText(await r.json());
+}
+async function _callClaudeRaw(system,user,k){const sk=k.replace(/[^\x20-\x7E]/g,'').trim();const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':sk,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:new Blob([_CLAUDE_BODY(system,user)],{type:'application/json'})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return _claudeText(await r.json());}
 
 // ── HELPERS ───────────────────────────────────────────────────
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
