@@ -2173,6 +2173,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg> Checklist QA</div>
       <input type="hidden" id="qaModalPedidoId">
       <div style="font-size:11px;color:var(--text2);margin-bottom:14px" id="qaModalPedidoNum"></div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--text2)">✨ Checklist IA <span style="font-weight:400;color:var(--text3)">— describe el producto y genera el QA</span></span>
+          <button id="qaIABtn" class="btn btn-sm btn-primary" onclick="rellenarQAconIA()">✨ Rellenar con IA</button>
+        </div>
+        <textarea id="qaIADesc" class="field-input" rows="2" placeholder="Ej: 50 trofeos PLA blanco con base 3D y placa grabada, entrega mañana..." style="width:100%;resize:vertical;font-size:12px"></textarea>
+      </div>
       <div id="qaChecklist" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
         <input class="field-input" id="qaNewItem" placeholder="Agregar ítem..." style="flex:1" onkeydown="if(event.key==='Enter') addQAItem()">
@@ -9003,12 +9010,59 @@ async function toggleTotal(id,actual){
 async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
 let qaItems=[],qaResultadoActual='Pendiente';
-function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidos.find(x=>x.id===pedidoId);const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
+function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidos.find(x=>x.id===pedidoId);const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}const descEl=document.getElementById('qaIADesc');if(descEl)descEl.value=f['Detalle productos']||f['Solicitud cliente (texto libre)']||'';renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
 function closeQAModal(){document.getElementById('qaModal').style.display='none';}
 function renderQAChecklist(){const el=document.getElementById('qaChecklist');if(!qaItems.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">Sin ítems</div>';return;}el.innerHTML=qaItems.map((item,i)=>`<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:8px 12px"><input type="checkbox" ${item.checked?'checked':''} onchange="toggleQAItem(${i})" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent3);flex-shrink:0"><span style="flex:1;font-size:12px;color:${item.checked?'var(--accent3)':'var(--text)'};text-decoration:${item.checked?'line-through':'none'}">${escapeHtml(item.texto)}</span><button onclick="removeQAItem(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button></div>`).join('');}
 function toggleQAItem(i){qaItems[i].checked=!qaItems[i].checked;renderQAChecklist();}
 function removeQAItem(i){qaItems.splice(i,1);renderQAChecklist();}
 function addQAItem(){const inp=document.getElementById('qaNewItem');const val=inp.value.trim();if(!val){inp.focus();return;}qaItems.push({texto:val,checked:false});inp.value='';renderQAChecklist();inp.focus();}
+// Convierte la respuesta markdown del QA_AGENT en ítems de checklist + resultado
+function _parseQAChecklist(text){
+  const items=[];let resultado=null;
+  for(const raw of String(text||'').split('\n')){
+    const line=raw.trim();if(!line)continue;
+    const clean=s=>s.replace(/\*\*/g,'').replace(/`/g,'').trim();
+    // Resultado final del agente
+    if(/RECHAZAD/i.test(line))resultado='Rechazado';
+    else if(/APROBAD/i.test(line))resultado='QA aprobado';
+    // Ítem con checkbox: - [ ] texto  |  - [x] texto
+    let m=line.match(/^[-*•]\s*\[([ xX])\]\s*(.+)$/);
+    if(m){items.push({texto:clean(m[2]),checked:m[1].toLowerCase()==='x'});continue;}
+    // Viñeta simple (ignora líneas de motivo/resultado/nota)
+    m=line.match(/^[-*•]\s+(.+)$/);
+    if(m&&!/^(motivo|resultado|nota|conclusi)/i.test(m[1])){items.push({texto:clean(m[1]),checked:false});continue;}
+    // Lista numerada
+    m=line.match(/^\d+[.)]\s+(.+)$/);
+    if(m){items.push({texto:clean(m[1]),checked:false});continue;}
+  }
+  return{items,resultado};
+}
+async function rellenarQAconIA(){
+  const descEl=document.getElementById('qaIADesc'),desc=(descEl?.value||'').trim();
+  const id=document.getElementById('qaModalPedidoId').value;
+  const p=state.pedidos.find(x=>x.id===id);const f=p?.fields||{};
+  if(!desc&&!f['Detalle productos']&&!f['Solicitud cliente (texto libre)']){toast('Describe el producto a revisar','error');descEl?.focus();return;}
+  const btn=document.getElementById('qaIABtn');const prev=btn.innerHTML;btn.disabled=true;btn.innerHTML='⏳ Generando…';
+  try{
+    const sys=AGENTES_CFG.find(a=>a.id==='QA').sys;
+    const ctx=[
+      desc?`Producto a revisar: ${desc}`:'',
+      f['N° Pedido']?`N° Pedido: ${f['N° Pedido']}`:'',
+      f['Cliente']?`Cliente: ${resolveClienteName(f['Cliente'])}`:'',
+      f['Detalle productos']&&f['Detalle productos']!==desc?`Detalle: ${f['Detalle productos']}`:'',
+      f['Solicitud cliente (texto libre)']&&f['Solicitud cliente (texto libre)']!==desc?`Solicitud cliente: ${f['Solicitud cliente (texto libre)']}`:'',
+      f['Fecha entrega']?`Entrega: ${f['Fecha entrega']}`:'',
+    ].filter(Boolean).join('\n');
+    const raw=await callClaude(sys,ctx);
+    const parsed=_parseQAChecklist(raw);
+    if(!parsed.items.length){toast('La IA no devolvió ítems — añade más detalle','error');return;}
+    qaItems=parsed.items;
+    if(parsed.resultado){qaResultadoActual=parsed.resultado;updateQAResultadoBtns();}
+    renderQAChecklist();
+    toast(`✓ Checklist IA: ${parsed.items.length} ítems${parsed.resultado?' · '+parsed.resultado:''}`,'success');
+  }catch(e){toast('Error IA: '+e.message,'error');}
+  finally{btn.disabled=false;btn.innerHTML=prev;}
+}
 function setQAResultado(r){qaResultadoActual=r;updateQAResultadoBtns();}
 function updateQAResultadoBtns(){document.getElementById('qaAprobadoBtn').style.opacity=qaResultadoActual==='QA aprobado'?'1':'0.4';document.getElementById('qaRechazadoBtn').style.opacity=qaResultadoActual==='Rechazado'?'1':'0.4';document.getElementById('qaPendienteBtn').style.opacity=qaResultadoActual==='Pendiente'?'1':'0.4';}
 async function saveQAModal(){
