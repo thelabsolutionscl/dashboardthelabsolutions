@@ -20925,7 +20925,9 @@ self.onmessage=function(ev){
     if(!S.stats)return;
     const p=readParams();S.params=p;
     const model=el('slPrinter').value,spec=SPECS[model];
-    if(!fitsIn(spec)){toast(`La pieza (${S.stats.dx.toFixed(0)}×${S.stats.dy.toFixed(0)}×${S.stats.dz.toFixed(0)}mm) no cabe en ${model} — elige otra impresora o escala el modelo`,'error');return;}
+    // En secuencial cada pieza se reempaqueta y _sliceSequential hace su propio chequeo de espacio → no aplica el límite del plato combinado
+    const _seqMode=p.sequential&&S.objects&&S.objects.length>1;
+    if(!_seqMode&&!fitsIn(spec)){toast(`La pieza (${S.stats.dx.toFixed(0)}×${S.stats.dy.toFixed(0)}×${S.stats.dz.toFixed(0)}mm) no cabe en ${model} — elige otra impresora o escala el modelo`,'error');return;}
     const btn=el('slBtnGcode');btn.disabled=true;el('slResult').style.display='none';
     try{
       setProg(2,'Iniciando slicer nativo…');
