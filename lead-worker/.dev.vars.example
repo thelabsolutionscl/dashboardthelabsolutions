@@ -1,0 +1,13 @@
+# Copia este archivo a .dev.vars (NO se commitea) para desarrollo local con wrangler dev.
+# En producción usar:  npx wrangler secret put NOMBRE
+
+AIRTABLE_TOKEN=patXXXXXXXXXXXXXX.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+AIRTABLE_BASE_ID=app1YtD74AqiPWQhy
+PUBLIC_LEAD_KEY=genera-una-clave-larga-aleatoria
+GOOGLE_ADS_WEBHOOK_KEY=otra-clave-larga-aleatoria
+LINKEDIN_WEBHOOK_KEY=otra-clave-larga-aleatoria
+
+# Opcionales
+TURNSTILE_SECRET=
+ANTHROPIC_API_KEY=
+AUTO_PROCESS_LEADS=false

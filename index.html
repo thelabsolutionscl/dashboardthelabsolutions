@@ -2623,6 +2623,21 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="ssResults" style="padding:14px 16px"></div>
   </div>
 
+  <!-- COLA DE AGENTES -->
+  <div class="card" id="agentQueueCard" style="margin-bottom:20px;border-color:rgba(0,191,223,0.30)">
+    <div class="card-header">
+      <span class="card-title">🗂️ Cola de Agentes</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span class="badge badge-gray" id="agentQueueCount">—</span>
+        <button class="btn btn-ghost btn-sm" onclick="refreshAgentQueue()">↻ Cargar cola</button>
+        <button class="btn btn-primary btn-sm" onclick="processAllPendingAgentQueue()">⚡ Procesar pendientes</button>
+      </div>
+    </div>
+    <div id="agentQueueList" style="padding:8px 0">
+      <div style="padding:16px;color:var(--text3);font-size:12px">Presiona “Cargar cola” para ver los leads y tareas pendientes (tabla Agent_Queue).</div>
+    </div>
+  </div>
+
   <div class="data-grid-3" id="agentesGrid"></div>
 </div>
 
@@ -5220,6 +5235,30 @@ ESTRUCTURA DE RESPUESTA (siempre usar esta):
 Sé específico con números y campañas concretas. Sin relleno. CLP con puntos de miles.`,
    pre:'',
    qs:['Analiza el rendimiento actual y dame las 3 acciones más urgentes','¿En qué campaña debo aumentar el presupuesto y por qué?','El ROAS está bajo — ¿qué cambios concretos hago esta semana?','¿Cómo redistribuyo el presupuesto para maximizar conversiones?']},
+
+  {id:'LINKEDIN',label:'LINKEDIN_AGENT',icon:'🔗',badge:'badge-purple',
+   sys:`Eres el LINKEDIN_AGENT de The Lab Solutions, empresa de fabricación digital B2B en Santiago, Chile.
+ROL: analizar leads B2B provenientes de LinkedIn Ads, LinkedIn Lead Gen Forms o prospección comercial.
+SERVICIOS: Activaciones, Premiaciones, Merchandising, Impresión 3D, Volumétricos, Cartelería, Papelería, Chip The Lab.
+EVALÚA: cargo del contacto, industria, empresa, probabilidad de compra, servicio más adecuado, mensaje de apertura, objeciones probables y siguiente paso.
+TONO: profesional, chileno, B2B, directo, sin sonar robótico.
+RESPONDE SIEMPRE EN ESTE FORMATO EXACTO:
+SCORE_B2B:
+<número 1 a 10>
+SERVICIO_RECOMENDADO:
+<uno de los servicios de The Lab>
+DECISOR:
+<Alto, Medio o Bajo>
+MENSAJE_LINKEDIN:
+<mensaje corto para LinkedIn>
+MENSAJE_EMAIL:
+<asunto y cuerpo>
+OBJECIONES_PROBABLES:
+<lista breve>
+PROXIMA_ACCION:
+<acción recomendada>`,
+   pre:'Lead B2B de LinkedIn: ',
+   qs:['Gerente de Marketing de retail, empresa 200 empleados, interesado en merchandising corporativo','Jefe de RRHH busca kit de onboarding para nuevos colaboradores','Productora de eventos quiere activaciones y volumétricos para feria','Dueño de cadena de restaurantes pregunta por cartelería y neones para 5 locales']},
 ];
 
 // ── MOBILE ────────────────────────────────────────────────────
@@ -6101,7 +6140,7 @@ function switchTab(name){
   document.querySelector(`.mg-item[data-tab="${name}"]`)?.classList.add('active');
   try{closeGlobalSearch();}catch(e){}
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
-  if(name==='agentes') renderAgentesGrid();
+  if(name==='agentes'){renderAgentesGrid();if(getToken()&&!_agentQueue.length) refreshAgentQueue();}
   if(name==='remuneraciones') renderRemuneraciones();
   if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
@@ -9097,10 +9136,164 @@ async function advancePedido(id,estado){
 // ── NUEVO LEAD + LEAD_AGENT ───────────────────────────────────
 let _leadAgentResponse=null;
 const LEAD_AGENT_SYS=`Eres el LEAD_AGENT de The Lab Solutions, empresa de fabricación digital premium en Santiago, Chile.
-PRODUCTOS: trofeos y medallas personalizadas, neones LED, impresión 3D (PLA/PETG/Resina), señalética, packaging personalizado.
-CLIENTES IDEALES: empresas con necesidad recurrente de reconocimientos, branding físico o regalos corporativos.
-ROL: calificar el lead, identificar su necesidad probable y generar mensajes de primer contacto que generen respuesta.
-TONO: profesional pero cálido, español chileno natural, directo y sin tecnicismos.`;
+SERVICIOS: Activaciones, Premiaciones, Merchandising, Impresión 3D, Volumétricos, Cartelería, Papelería, Chip The Lab.
+CLIENTES IDEALES: empresas con necesidad recurrente de reconocimientos, branding físico, señalética o regalos corporativos.
+ROL: calificar el lead, detectar el servicio más probable y generar el primer contacto.
+REGLAS POR CANAL (campo source del input):
+- google_ads: intención alta, prioriza velocidad de respuesta.
+- linkedin: tono B2B consultivo (evalúa cargo, empresa e industria).
+- web: orienta y educa sin extenderte.
+- whatsapp: directo y orientado a cotización.
+Detecta datos faltantes clave (cantidad, fecha, comuna, medidas, material, archivo, presupuesto). NO inventes precios finales si faltan datos.
+TONO: profesional pero cálido, español chileno natural, directo y sin tecnicismos.
+RESPONDE SIEMPRE EN ESTE FORMATO EXACTO (respeta las etiquetas en MAYÚSCULAS):
+LEAD_SCORE:
+<número del 1 al 10>
+SERVICIO_DETECTADO:
+<Activaciones | Premiaciones | Merchandising | Impresión 3D | Volumétricos | Cartelería | Papelería | Chip The Lab | Otro>
+URGENCIA:
+<Alta | Media | Baja>
+FALTAN_DATOS:
+<lista breve de datos faltantes para cotizar>
+PROXIMA_ACCION:
+<acción concreta recomendada>
+MENSAJE_WA:
+<mensaje breve listo para WhatsApp, máximo 4 líneas>
+EMAIL:
+<asunto y cuerpo corto>
+RESUMEN_CRM:
+<resumen interno para guardar en el cliente>`;
+
+// ── AGENT_QUEUE (cola de agentes) ─────────────────────────────
+const AGENT_QUEUE_TABLE='Agent_Queue';
+let _agentQueue=[];
+
+// Escritura tolerante: si Airtable rechaza un campo inexistente, lo quita y reintenta.
+async function airtableWriteTolerant(table,method,recordId,fields,maxTries=10){
+  let f={...fields};
+  for(let i=0;i<maxTries;i++){
+    try{return await airtableWrite(table,method,recordId,f);}
+    catch(e){
+      const m=String(e.message||'').match(/Unknown field name:?\s*"?([^"]+)"?/i);
+      if(m&&m[1] in f){delete f[m[1]];if(method==='PATCH'&&Object.keys(f).length===0)return null;continue;}
+      throw e;
+    }
+  }
+  throw new Error('Demasiados campos desconocidos en '+table);
+}
+
+function _aqNum(v){const n=Number(v);return Number.isFinite(n)?n:null;}
+function _aqTryJson(t){if(!t)return null;try{return JSON.parse(t);}catch(_){}const m=String(t).match(/\{[\s\S]*\}/);if(m){try{return JSON.parse(m[0]);}catch(_){}}return null;}
+// Extrae campos clave tanto de JSON como del formato etiquetado (LEAD_SCORE:, etc.)
+function extractLeadFields(out){
+  const j=_aqTryJson(out);
+  if(j){return{score:_aqNum(j.lead_score??j.score_b2b),servicio:j.servicio_detectado||j.servicio_recomendado||'',proxima:j.proxima_accion||'',resumen:j.resumen_crm||j.resumen||''};}
+  const grab=(label)=>{const m=String(out).match(new RegExp(label+':\\s*\\n?([\\s\\S]*?)(?=\\n[A-ZÁÉÍÓÚÑ_]+:|$)','m'));return m?m[1].trim():'';};
+  const scoreRaw=grab('LEAD_SCORE')||grab('SCORE_B2B');
+  return{score:_aqNum((scoreRaw.match(/\d+/)||[])[0]),servicio:grab('SERVICIO_DETECTADO')||grab('SERVICIO_RECOMENDADO'),proxima:grab('PROXIMA_ACCION'),resumen:grab('RESUMEN_CRM')||grab('RESUMEN')};
+}
+
+function resolveAgentSys(agentId){
+  if(agentId==='LEAD_AGENT')return LEAD_AGENT_SYS;
+  const a=AGENTES_CFG.find(x=>x.label===agentId||x.id===agentId);
+  return a?a.sys:null;
+}
+
+// Crea una tarea en Agent_Queue (Estado inicial: Pendiente).
+async function createAgentQueueItem({evento,entidad,entidadId,agente,prioridad,input,source,campaign}){
+  const fields={
+    'Evento':evento||'',
+    'Entidad':entidad||'',
+    'ID entidad':entidadId||'',
+    'Agente':agente||'',
+    'Estado':'Pendiente',
+    'Prioridad':prioridad||'Media',
+    'Input JSON':typeof input==='string'?input:JSON.stringify(input||{}),
+    'Source':source||'',
+    'Campaign':campaign||'',
+    'Fecha creación':new Date().toISOString()
+  };
+  return await airtableWriteTolerant(AGENT_QUEUE_TABLE,'POST',null,fields);
+}
+
+async function loadAgentQueue(){
+  try{const res=await airtableFetch(AGENT_QUEUE_TABLE,200);_agentQueue=res.records||[];return _agentQueue;}
+  catch(e){_agentQueue=[];toast('No se pudo cargar Agent_Queue: '+e.message,'error');throw e;}
+}
+
+function renderAgentQueue(){
+  const el=document.getElementById('agentQueueList');if(!el)return;
+  const cnt=document.getElementById('agentQueueCount');
+  const pend=_agentQueue.filter(r=>(r.fields.Estado||'Pendiente')==='Pendiente').length;
+  if(cnt)cnt.textContent=_agentQueue.length?`${_agentQueue.length} · ${pend} pendientes`:'—';
+  if(!_agentQueue.length){el.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Sin tareas. Crea un lead desde la web o presiona “Cargar cola”.</div>';return;}
+  const order={Pendiente:0,Procesando:1,Error:2,Completado:3};
+  const badge={Pendiente:'badge-yellow',Procesando:'badge-orange',Completado:'badge-green',Error:'badge-red'};
+  const rows=[..._agentQueue].sort((a,b)=>(order[a.fields.Estado]??9)-(order[b.fields.Estado]??9));
+  el.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Evento</th><th>Entidad</th><th>Agente</th><th>Estado</th><th>Prioridad</th><th>Source</th><th>Campaign</th><th>Score</th><th></th></tr></thead><tbody>${rows.map(r=>{const f=r.fields;const est=f.Estado||'Pendiente';return `<tr><td>${escapeHtml(f.Evento||'')}</td><td>${escapeHtml([f.Entidad,f['ID entidad']].filter(Boolean).join(' '))}</td><td>${escapeHtml(f.Agente||'')}</td><td><span class="badge ${badge[est]||'badge-gray'}">${escapeHtml(est)}</span></td><td>${escapeHtml(f.Prioridad||'')}</td><td>${escapeHtml(f.Source||'')}</td><td>${escapeHtml(f.Campaign||'')}</td><td>${f['Lead Score']??''}</td><td><button class="btn btn-ghost btn-sm" onclick="processAgentQueueItem('${r.id}')" ${est==='Procesando'?'disabled':''}>▶ Procesar</button></td></tr>`;}).join('')}</tbody></table></div>`;
+}
+
+async function refreshAgentQueue(){try{await loadAgentQueue();renderAgentQueue();toast('Cola actualizada','success');}catch(e){}}
+
+async function updateClienteFromLead(clienteId,fieldsParsed,agentId){
+  const fields={
+    'Lead Score IA':fieldsParsed.score,
+    'Servicio interés':fieldsParsed.servicio,
+    'Próxima acción IA':fieldsParsed.proxima,
+    'Último agente ejecutado':agentId,
+    'Resumen IA':fieldsParsed.resumen
+  };
+  Object.keys(fields).forEach(k=>{if(fields[k]===''||fields[k]==null)delete fields[k];});
+  if(!Object.keys(fields).length)return;
+  try{await airtableWriteTolerant('Clientes','PATCH',clienteId,fields);}
+  catch(e){console.warn('updateClienteFromLead:',e.message);}
+}
+
+// Procesa UNA tarea: lee agente → callClaude → guarda Output/estado → actualiza Cliente si aplica.
+async function processAgentQueueItem(recordId){
+  let rec=_agentQueue.find(r=>r.id===recordId);
+  if(!rec){try{await loadAgentQueue();rec=_agentQueue.find(r=>r.id===recordId);}catch(_){}}
+  if(!rec){toast('Tarea no encontrada en la cola','error');return;}
+  const f=rec.fields;const agentId=f.Agente||'';
+  try{
+    const sys=resolveAgentSys(agentId);
+    if(!sys)throw new Error('Agente no encontrado: '+(agentId||'(vacío)'));
+    await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,{'Estado':'Procesando'});
+    rec.fields.Estado='Procesando';renderAgentQueue();
+
+    let inputObj;try{inputObj=JSON.parse(f['Input JSON']||'{}');}catch(_){inputObj=f['Input JSON']||'';}
+    const userMsg='Datos de entrada del lead (JSON):\n'+(typeof inputObj==='string'?inputObj:JSON.stringify(inputObj,null,2))+'\n\nResponde según tu formato.';
+    const out=await callClaude(sys,userMsg);
+
+    const ex=extractLeadFields(out);
+    const patch={'Estado':'Completado','Output':String(out).slice(0,95000),'Fecha ejecución':new Date().toISOString()};
+    if(ex.score!=null)patch['Lead Score']=ex.score;
+    if(ex.proxima)patch['Accion sugerida']=ex.proxima;
+    await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,patch);
+    Object.assign(rec.fields,patch);
+
+    if((agentId==='LEAD_AGENT'||agentId==='LINKEDIN_AGENT')&&f.Entidad==='Cliente'&&f['ID entidad']){
+      await updateClienteFromLead(f['ID entidad'],ex,agentId);
+    }
+    // Log en la tabla Agent_Log (best-effort)
+    try{await airtableWriteTolerant('Agent_Log','POST',null,{'Agente':agentId,'Consulta':String(userMsg).slice(0,5000),'Resultado':String(out).slice(0,95000),'Usuario':'Cola de Agentes','Fecha':new Date().toISOString()});}catch(_){}
+
+    toast('✓ '+agentId+' procesado','success');renderAgentQueue();
+  }catch(e){
+    try{await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,{'Estado':'Error','Error':String(e.message).slice(0,1000),'Fecha ejecución':new Date().toISOString()});}catch(_){}
+    if(rec){rec.fields.Estado='Error';rec.fields.Error=e.message;}
+    toast('Error procesando '+agentId+': '+e.message,'error');renderAgentQueue();
+  }
+}
+
+async function processAllPendingAgentQueue(){
+  try{await loadAgentQueue();}catch(e){return;}
+  const pend=_agentQueue.filter(r=>(r.fields.Estado||'Pendiente')==='Pendiente');
+  if(!pend.length){renderAgentQueue();toast('No hay tareas pendientes','info');return;}
+  toast('Procesando '+pend.length+' tarea(s)...','info');
+  for(const r of pend){await processAgentQueueItem(r.id);}
+  toast('✓ Cola procesada','success');
+}
 
 // ── WATI WhatsApp API ─────────────────────────────────────────
 function getWatiCfg(){try{return JSON.parse(localStorage.getItem('wati_cfg')||'{}');}catch(e){return {};}}
