@@ -1823,7 +1823,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="card" style="margin-bottom:24px" id="ovCeoCard">
     <div class="card-header">
       <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-chart"/></svg>Reporte Ejecutivo Semanal (CEO IA)</span>
-      <div style="display:flex;gap:7px;margin-left:auto">
+      <div style="display:flex;gap:7px;margin-left:auto;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text3);cursor:pointer" title="Genera y envía el reporte por correo una vez por semana, al abrir el dashboard"><input type="checkbox" id="ovCeoAuto" onchange="ovToggleCeoAuto(this.checked)" style="cursor:pointer">Auto-semanal por email</label>
         <button class="btn btn-ghost btn-sm" onclick="switchTab('agentes')">Ver en Agentes →</button>
         <button class="btn btn-primary btn-sm" id="ovCeoBtn" onclick="ovGenerarReporteCEO()">⚡ Generar con datos de la semana</button>
       </div>
@@ -2199,8 +2200,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('qaFotoInput').click()">📷 Foto evidencia</button>
         <input type="file" id="qaFotoInput" accept="image/*" capture="environment" style="display:none" onchange="qaAddFoto(this.files[0])">
-        <div id="qaFotoWrap" style="display:none;align-items:center;gap:8px">
+        <div id="qaFotoWrap" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
           <img id="qaFotoThumb" alt="evidencia QA" style="height:44px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;object-fit:cover" onclick="qaVerFoto()">
+          <button class="btn btn-ghost btn-sm" id="qaFotoDriveBtn" onclick="qaUploadFotoDrive(false)" style="display:none">☁ Subir a Drive</button>
+          <a id="qaFotoLink" href="#" target="_blank" style="display:none;font-size:11px;color:var(--accent);text-decoration:none">☁ Ver en Drive</a>
           <button class="btn btn-ghost btn-sm" onclick="qaRemoveFoto()" style="color:var(--danger)">Quitar</button>
         </div>
       </div>
@@ -2703,7 +2706,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('slAddInput').click()">➕ Agregar pieza</button>
             <button class="btn btn-ghost btn-sm" onclick="SL3D.autoOrient()">🔄 Auto-orientar</button>
             <button class="btn btn-ghost btn-sm" id="slLayFlatBtn" onclick="SL3D.toggleLayFlat()">📐 Apoyar cara</button>
-            <button class="btn btn-ghost btn-sm" id="slSupPrevBtn" onclick="SL3D.toggleSupportPreview()">⛰ Ver voladizos</button>
+            <button class="btn btn-ghost btn-sm" id="slSupPrevBtn" onclick="SL3D.toggleSupportPreview()">⛰ Ver soportes</button>
           </div>
           <canvas id="slCanvas" height="300" style="width:100%;border-radius:10px;background:#0d0d0d;border:1px solid var(--border);margin-top:12px;display:none;cursor:grab;touch-action:none"></canvas>
           <div id="slStats" style="display:none;margin-top:10px"></div>
@@ -6014,6 +6017,7 @@ async function loadAllData(){
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
+    if(isFirst)setTimeout(ceoAutoWeeklyCheck,1500);
   }catch(e){
     setStatus('error',false);
     console.error('loadAllData error:',e);
@@ -9034,7 +9038,7 @@ async function toggleTotal(id,actual){
 async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
 let qaItems=[],qaResultadoActual='Pendiente';
-function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidos.find(x=>x.id===pedidoId);const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}const descEl=document.getElementById('qaIADesc');if(descEl)descEl.value=f['Detalle productos']||f['Solicitud cliente (texto libre)']||'';qaFotoData=localStorage.getItem('qa_foto_'+pedidoId)||null;renderQAFoto();renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
+function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidos.find(x=>x.id===pedidoId);const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}const descEl=document.getElementById('qaIADesc');if(descEl)descEl.value=f['Detalle productos']||f['Solicitud cliente (texto libre)']||'';qaFotoData=localStorage.getItem('qa_foto_'+pedidoId)||null;qaFotoLink=localStorage.getItem('qa_foto_link_'+pedidoId)||f['Foto QA URL']||null;renderQAFoto();renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
 function closeQAModal(){document.getElementById('qaModal').style.display='none';}
 function renderQAChecklist(){const el=document.getElementById('qaChecklist');if(!qaItems.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">Sin ítems</div>';return;}el.innerHTML=qaItems.map((item,i)=>`<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:8px 12px"><input type="checkbox" ${item.checked?'checked':''} onchange="toggleQAItem(${i})" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent3);flex-shrink:0"><span style="flex:1;font-size:12px;color:${item.checked?'var(--accent3)':'var(--text)'};text-decoration:${item.checked?'line-through':'none'}">${escapeHtml(item.texto)}</span><button onclick="removeQAItem(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button></div>`).join('');}
 function toggleQAItem(i){qaItems[i].checked=!qaItems[i].checked;_qaAutoResult();renderQAChecklist();}
@@ -9045,26 +9049,50 @@ function _qaAutoResult(){
   const next=qaItems.every(x=>x.checked)?'QA aprobado':'Pendiente';
   if(next!==qaResultadoActual){qaResultadoActual=next;updateQAResultadoBtns();}
 }
-// ── Foto de evidencia QA (se guarda comprimida en localStorage por pedido) ──
-let qaFotoData=null;
+// ── Foto de evidencia QA (miniatura local + copia permanente en Google Drive) ──
+let qaFotoData=null,qaFotoLink=null;
 function _qaFotoKey(){const id=document.getElementById('qaModalPedidoId').value;return id?'qa_foto_'+id:null;}
+function _qaFotoLinkKey(){const id=document.getElementById('qaModalPedidoId').value;return id?'qa_foto_link_'+id:null;}
+function _driveConnected(){return _driveAccessToken&&_driveTokenExpiry>Date.now()+5000;}
 function renderQAFoto(){
-  const wrap=document.getElementById('qaFotoWrap'),thumb=document.getElementById('qaFotoThumb');
+  const wrap=document.getElementById('qaFotoWrap'),thumb=document.getElementById('qaFotoThumb'),link=document.getElementById('qaFotoLink'),drvBtn=document.getElementById('qaFotoDriveBtn');
   if(!wrap||!thumb)return;
   if(qaFotoData){thumb.src=qaFotoData;wrap.style.display='flex';}else{wrap.style.display='none';thumb.removeAttribute('src');}
+  if(link){if(qaFotoLink){link.href=qaFotoLink;link.style.display='inline';}else{link.style.display='none';}}
+  if(drvBtn)drvBtn.style.display=(qaFotoData&&!qaFotoLink)?'inline-block':'none';
 }
 async function qaAddFoto(file){
   if(!file)return;
   try{
     const dataUrl=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(file);});
-    qaFotoData=await _fpImgCompress(dataUrl,700);
+    qaFotoData=await _fpImgCompress(dataUrl,700);qaFotoLink=null;
     const k=_qaFotoKey();if(k&&qaFotoData)try{localStorage.setItem(k,qaFotoData);}catch(e){toast('Foto muy pesada para guardar localmente','error');}
-    renderQAFoto();toast('✓ Foto de evidencia adjuntada','success');
+    const lk=_qaFotoLinkKey();if(lk)localStorage.removeItem(lk);
+    renderQAFoto();toast('✓ Foto adjuntada','success');
+    // Si Drive ya está autorizado, sube la copia permanente en silencio (sin popup)
+    if(_driveConnected())qaUploadFotoDrive(true);
   }catch(e){toast('No se pudo leer la imagen','error');}
   const inp=document.getElementById('qaFotoInput');if(inp)inp.value='';
 }
-function qaRemoveFoto(){qaFotoData=null;const k=_qaFotoKey();if(k)localStorage.removeItem(k);renderQAFoto();}
-function qaVerFoto(){if(!qaFotoData)return;const w=window.open('','_blank');if(w)w.document.write('<title>Evidencia QA</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="'+qaFotoData+'" style="max-width:100%;max-height:100vh"></body>');}
+async function qaUploadFotoDrive(silent){
+  if(!qaFotoData){if(!silent)toast('Adjunta una foto primero','error');return;}
+  const id=document.getElementById('qaModalPedidoId').value;
+  const p=state.pedidos.find(x=>x.id===id);const num=(p?.fields?.['N° Pedido'])||id;
+  const btn=document.getElementById('qaFotoDriveBtn');const prev=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.innerHTML='⏳ Subiendo…';}
+  try{
+    const rootId=await _driveGetOrCreateFolder('Evidencia QA');
+    const folderId=await _driveGetOrCreateFolder(String(num),rootId);
+    const res=await _driveUploadDataUrl(`QA_${num}_${Date.now()}.jpg`,qaFotoData,folderId);
+    qaFotoLink=res.webViewLink||null;
+    const lk=_qaFotoLinkKey();if(lk&&qaFotoLink)localStorage.setItem(lk,qaFotoLink);
+    try{if(qaFotoLink)await airtableWrite('Pedidos','PATCH',id,{'Foto QA URL':qaFotoLink});}catch(e){}
+    renderQAFoto();toast('✓ Evidencia guardada en Drive','success');
+  }catch(e){if(!silent)toast('Error Drive: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
+}
+function qaRemoveFoto(){qaFotoData=null;qaFotoLink=null;const k=_qaFotoKey(),lk=_qaFotoLinkKey();if(k)localStorage.removeItem(k);if(lk)localStorage.removeItem(lk);renderQAFoto();}
+function qaVerFoto(){const src=qaFotoData||qaFotoLink;if(!src)return;if(qaFotoLink&&!qaFotoData){window.open(qaFotoLink,'_blank');return;}const w=window.open('','_blank');if(w)w.document.write('<title>Evidencia QA</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="'+qaFotoData+'" style="max-width:100%;max-height:100vh"></body>');}
 function addQAItem(){const inp=document.getElementById('qaNewItem');const val=inp.value.trim();if(!val){inp.focus();return;}qaItems.push({texto:val,checked:false});inp.value='';_qaAutoResult();renderQAChecklist();inp.focus();}
 // Convierte la respuesta markdown del QA_AGENT en ítems de checklist + resultado
 function _parseQAIAResponse(text){
@@ -9491,6 +9519,7 @@ async function crearReporteAuto(){
 }
 // ── Reporte CEO surtido en el Overview ──
 function ovRenderUltimoReporteCEO(){
+  const chk=document.getElementById('ovCeoAuto');if(chk)chk.checked=localStorage.getItem('ceo_auto_weekly')==='1';
   const body=document.getElementById('ovCeoBody');if(!body)return;
   const reps=(state.reportes||[]).slice().sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')));
   const r=reps[0];
@@ -9507,6 +9536,37 @@ async function ovGenerarReporteCEO(){
   try{await crearReporteAuto();ovRenderUltimoReporteCEO();}
   catch(e){if(body)body.textContent='Error: '+e.message;}
   finally{btn.disabled=false;btn.innerHTML=prev;}
+}
+// ── Reporte CEO automático: 1 vez por semana al abrir el dashboard, con envío por email ──
+function _isoWeekKey(d){
+  d=d?new Date(d):new Date();const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);
+  const ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  const wk=Math.ceil((((t-ys)/86400000)+1)/7);
+  return t.getUTCFullYear()+'-W'+String(wk).padStart(2,'0');
+}
+function ovToggleCeoAuto(on){
+  localStorage.setItem('ceo_auto_weekly',on?'1':'0');
+  if(on){const def=(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser()?.email)||'';const to=prompt('¿A qué correo enviar el reporte ejecutivo semanal?',localStorage.getItem('ceo_auto_email')||def||'');if(to&&validEmail(to.trim())){localStorage.setItem('ceo_auto_email',to.trim());toast('✓ Reporte semanal automático activado','success');}else if(to!==null){toast('Correo inválido — se generará igual pero sin envío','info');}}
+  else toast('Reporte semanal automático desactivado','info');
+}
+let _ceoAutoRunning=false;
+async function ceoAutoWeeklyCheck(){
+  if(localStorage.getItem('ceo_auto_weekly')!=='1'||!state.loaded||_ceoAutoRunning)return;
+  const wk=_isoWeekKey();
+  if(localStorage.getItem('ceo_auto_last_week')===wk)return;
+  _ceoAutoRunning=true;
+  try{
+    await crearReporteAuto();
+    ovRenderUltimoReporteCEO();
+    localStorage.setItem('ceo_auto_last_week',wk);
+    const to=localStorage.getItem('ceo_auto_email')||'';
+    const reps=(state.reportes||[]).slice().sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')));
+    const body=reps[0]?.fields['Resumen ejecutivo']||'';
+    if(to&&body&&typeof MAIL!=='undefined'){try{await MAIL.post({action:'send',to,subject:`Reporte ejecutivo ${wk} — The Lab Solutions`,body,from_name:'The Lab Solutions'});toast('✓ Reporte semanal generado y enviado','success');}catch(e){toast('Reporte generado (no se pudo enviar el correo)','info');}}
+    else toast('✓ Reporte semanal generado automáticamente','success');
+  }catch(e){console.error('ceoAutoWeeklyCheck:',e);}
+  finally{_ceoAutoRunning=false;}
 }
 function renderReportes(){
   const tbody=document.getElementById('reportesTableBody');
@@ -18761,7 +18821,7 @@ const SL3D=(function(){
     {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
-  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[],layFlatMode:false,showSupports:false};
+  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[],layFlatMode:false,showSupports:false,supSticks:null};
   const el=id=>document.getElementById(id);
 
   // ── Parsers ─────────────────────────────────────────────────
@@ -18864,6 +18924,41 @@ const SL3D=(function(){
     for(let i=0;i<n;i+=stride){out.set(S.tris.subarray(i*9,i*9+9),o);o+=9;}
     S.prev=out;
   }
+  // Z donde la vertical (x,y) cruza el triángulo o → null si fuera del triángulo
+  function _triZatXY(t,o,x,y){
+    const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx=t[o+6],cy=t[o+7],cz=t[o+8];
+    const d=(by-cy)*(ax-cx)+(cx-bx)*(ay-cy);if(Math.abs(d)<1e-9)return null;
+    const wa=((by-cy)*(x-cx)+(cx-bx)*(y-cy))/d,wb=((cy-ay)*(x-cx)+(ax-cx)*(y-cy))/d,wc=1-wa-wb;
+    if(wa<-0.001||wb<-0.001||wc<-0.001)return null;
+    return wa*az+wb*bz+wc*cz;
+  }
+  // Columnas de soporte aproximadas: bajo cada voladizo, palito vertical hasta el modelo de abajo o la cama.
+  // Se calcula una vez (cacheado en S.supSticks) y se reproyecta en cada frame.
+  function _computeSupportSticks(){
+    if(!S.tris){S.supSticks=[];return;}
+    const t=S.tris,m=t.length/9;
+    const ovAng=S.params?-(Math.cos((90-(S.params.supportAngle||50))*Math.PI/180)):-0.57;
+    const thr=ovAng<-0.2?ovAng:-0.57,GS=4,buckets=new Map();
+    for(let i=0;i<m;i++){
+      const o=i*9;
+      const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx=t[o+6],cy=t[o+7],cz=t[o+8];
+      const Ux=bx-ax,Uy=by-ay,Uz=bz-az,Vx=cx-ax,Vy=cy-ay,Vz=cz-az;
+      const Nx=Uy*Vz-Uz*Vy,Ny=Uz*Vx-Ux*Vz,Nz=Ux*Vy-Uy*Vx,Nl=Math.hypot(Nx,Ny,Nz)||1;
+      if(Nz/Nl>=thr)continue;                 // no es voladizo
+      const gx=(ax+bx+cx)/3,gy=(ay+by+cy)/3,gz=(az+bz+cz)/3;
+      if(gz<=0.6)continue;                     // apoyado en la cama
+      const key=Math.round(gx/GS)+'_'+Math.round(gy/GS);
+      const ex=buckets.get(key);
+      if(!ex||gz<ex.gz)buckets.set(key,{gx,gy,gz});   // el voladizo más bajo de la columna
+    }
+    const reps=[...buckets.values()],sticks=[];
+    for(const r of reps){
+      let below=0;                             // busca la superficie más alta estrictamente debajo
+      for(let k=0;k<m;k++){const zk=_triZatXY(t,k*9,r.gx,r.gy);if(zk!==null&&zk<r.gz-0.4&&zk>below)below=zk;}
+      sticks.push([r.gx,r.gy,r.gz,below]);
+    }
+    S.supSticks=sticks;
+  }
   function render(){
     const cv=el('slCanvas');if(!S.prev||cv.style.display==='none')return;
     const dpr=window.devicePixelRatio||1,w=cv.clientWidth||420,h=300;
@@ -18917,8 +19012,18 @@ const SL3D=(function(){
       // Voladizos en naranja (necesitan soporte); resto en teal
       ctx.fillStyle=f.over?`rgb(${Math.round(120+f.sh*135)},${Math.round(50+f.sh*90)},${Math.round(20+f.sh*30)})`:`rgb(${Math.round(f.sh*90)},${Math.round(f.sh*200)},${Math.round(f.sh*192)})`;ctx.fill();
     }
+    // ── Columnas de soporte (palitos verticales bajo los voladizos) ──
+    if(S.showSupports){
+      if(!S.supSticks)_computeSupportSticks();
+      ctx.strokeStyle='rgba(255,150,40,0.85)';ctx.lineWidth=1.4;
+      for(const s of S.supSticks){
+        const a=proj(s[0],s[1],s[3]),b=proj(s[0],s[1],s[2]);
+        ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+        ctx.fillStyle='rgba(255,170,60,0.9)';ctx.beginPath();ctx.arc(b[0],b[1],1.8,0,6.283);ctx.fill();
+      }
+    }
     ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='10px JetBrains Mono,monospace';
-    ctx.fillText(S.layFlatMode?'haz clic en una cara para apoyarla en la cama':(S.showSupports?'naranja = voladizos que necesitan soporte':'arrastra para rotar · la rejilla es la cama'),10,h-10);
+    ctx.fillText(S.layFlatMode?'haz clic en una cara para apoyarla en la cama':(S.showSupports?`soportes: ${S.supSticks?S.supSticks.length:0} columnas · naranja = voladizos`:'arrastra para rotar · la rejilla es la cama'),10,h-10);
   }
 
   // ── Auto-orientación: prueba orientaciones y elige la de menos voladizos ──
@@ -18947,7 +19052,7 @@ const SL3D=(function(){
     const cands=[[0,0],[Math.PI,0],[Math.PI/2,0],[-Math.PI/2,0],[0,Math.PI/2],[0,-Math.PI/2]];
     let best=S.tris,bestScore=1e18,bestI=0;
     cands.forEach(([rx,ry],i)=>{const tt=_rotTris(S.tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
-    S.tris=best;analyze(S.tris);buildPreview();render();renderStats();
+    S.tris=best;analyze(S.tris);buildPreview();S.supSticks=null;render();renderStats();
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     toast(bestI===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
   }
@@ -19004,7 +19109,7 @@ const SL3D=(function(){
     }
     if(!bestN){toast('No se detectó cara ahí — haz clic sobre la figura','error');return;}
     S.tris=_alignTris(S.tris,bestN);
-    analyze(S.tris);buildPreview();
+    analyze(S.tris);buildPreview();S.supSticks=null;
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];
     el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     renderModifiers();renderSupRegions();
@@ -19096,7 +19201,7 @@ const SL3D=(function(){
       for(const f of files){const r=_repairMesh(await _parseFile(f));totRemoved+=r.removed;totWelded+=r.welded;parsed.push(_centerTris(r.tris));}
       S.objects=parsed;S.name=files[0].name.replace(/\.(stl|obj|3mf)$/i,'')+(files.length>1?` +${files.length-1}`:'');
       S.modifiers=[];S.supRegions=[]; // nuevos rangos de Z dependen del modelo → limpiar al cargar uno nuevo
-      S.layFlatMode=false;_updLayFlatBtn();
+      S.layFlatMode=false;S.supSticks=null;_updLayFlatBtn();
       _replate();
       const repMsg=totRemoved>0?` · reparado: ${totRemoved} triángulo(s) inválido(s) descartado(s)`:'';
       toast((files.length>1?`${files.length} piezas cargadas y acomodadas en el plato`:`Modelo cargado: ${S.stats.tris.toLocaleString('es-CL')} triángulos`)+repMsg,'success');
