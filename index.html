@@ -19059,6 +19059,7 @@ const SL3D=(function(){
     {k:'flowRatio',l:'Flujo (%)',s:1},{k:'pressureAdvance',l:'Pressure Advance',s:0.005},{k:'wipeDist',l:'Wipe (mm)',s:0.2},
     {k:'widthOuter',l:'Ancho pared ext. (mm)',s:0.02},{k:'widthInfill',l:'Ancho relleno (mm)',s:0.02},
     {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo','aleatorio']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
+    {k:'seamScarf',l:'Costura scarf (oculta)',sel:['no','sí']},{k:'scarfLen',l:'Scarf: largo (mm)',s:0.5},
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
     {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},{k:'sequential',l:'Impresión secuencial',sel:['no','sí']},
     {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
@@ -19548,7 +19549,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,brimGap:0,ironingFlow:12,retractMinTravel:1,fuzzyAll:false,fuzzyPointDist:0.4,draftShield:false,
       minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
       adaptiveLayerHeight:obj==='calidad',
-      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
+      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',seamScarf:false,scarfLen:5,
       bridgeDetect:st.ovPct>8,arcFitting:false,gradualTemp: obj!=='rapido',
       spiralize:false,monotonic:obj==='calidad',arachne:obj==='calidad',
       gapFill:obj!=='rapido',fuzzySkin:0,coasting:obj==='calidad'?0.2:0,
@@ -19583,6 +19584,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       supInterface:Math.round(cl(p.supInterface,0,5,2)),supOnPlate:!!p.supOnPlate&&p.supOnPlate!=='no',infillOverlap:Math.round(cl(p.infillOverlap,0,40,15)),pauseAtZ:cl(p.pauseAtZ,0,1000,0),
       brimGap:cl(p.brimGap,0,1,0),ironingFlow:Math.round(cl(p.ironingFlow,5,30,12)),retractMinTravel:cl(p.retractMinTravel,0,10,1),
       fuzzyAll:!!p.fuzzyAll&&p.fuzzyAll!=='no',fuzzyPointDist:cl(p.fuzzyPointDist,0.2,2,0.4),draftShield:!!p.draftShield&&p.draftShield!=='no',
+      seamScarf:!!p.seamScarf&&p.seamScarf!=='no',scarfLen:cl(p.scarfLen,1,15,5),
       minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
       excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
@@ -20296,7 +20298,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
     return[E,sx,sy];
   }
-  function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p,fuzzy,ohTest,ohFeed){
+  function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p,fuzzy,ohTest,ohFeed,scarf){
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     let ord=[...poly.slice(bi),...poly.slice(0,bi)];
     // Piel rugosa (fuzzy skin): resamplea el contorno al paso indicado y perturba cada punto a lo largo de su normal
@@ -20314,6 +20316,30 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     // Recorrido absoluto cerrado + coasting (deja de extruir en los últimos `coast` mm para evitar blob de costura)
     const pts=[];for(let i=0;i<=ord.length;i++){const pt=ord[i%ord.length];pts.push([pt[0]+ox,pt[1]+oy]);}
     let total=0;for(let i=1;i<pts.length;i++)total+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);
+    // Costura scarf: imprime el lazo con rampa de flujo al inicio y un solape decreciente al final → costura casi invisible
+    if(scarf>0&&total>scarf*2.2){
+      let acc2=0;
+      for(let i=1;i<pts.length;i++){
+        const qx=pts[i][0],qy=pts[i][1];if(!isFinite(qx)||!isFinite(qy)){continue;}
+        const seg=Math.hypot(qx-cX,qy-cY),mid=acc2+seg/2;
+        const f=mid<scarf?Math.max(0.05,mid/scarf):1; // rampa de subida en los primeros `scarf` mm
+        const sf=(ohTest&&ohFeed&&ohTest((cX+qx)/2,(cY+qy)/2))?ohFeed:feed;
+        E+=(seg*extW*lh*f)/FILA_AREA;gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} E${E.toFixed(4)} F${sf}`);
+        acc2+=seg;cX=qx;cY=qy;
+      }
+      // Solape: re-traza el inicio con flujo decreciente (1→0)
+      let ov=0;
+      for(let i=1;i<pts.length&&ov<scarf;i++){
+        const qx=pts[i][0],qy=pts[i][1];if(!isFinite(qx)||!isFinite(qy))break;
+        const seg=Math.hypot(qx-cX,qy-cY)||1e-6,use=Math.min(seg,scarf-ov);
+        const tt=use/seg,ex=cX+(qx-cX)*tt,ey=cY+(qy-cY)*tt;
+        const f=Math.max(0,1-(ov+use/2)/scarf);
+        E+=(use*extW*lh*f)/FILA_AREA;gc.push(`G1 X${ex.toFixed(3)} Y${ey.toFixed(3)} E${E.toFixed(4)} F${feed}`);
+        ov+=use;cX=ex;cY=ey;
+      }
+      if(pts.length>=2)_setWipe(pts[pts.length-2][0],pts[pts.length-2][1],cX,cY);
+      return[E,cX,cY];
+    }
     const coast=(p&&p.coasting)||0,coastStart=total-coast;
     let acc=0;
     for(let i=1;i<pts.length;i++){
@@ -20700,9 +20726,10 @@ self.onmessage=function(ev){
           if(ins&&ins.length>=3)shells.push(ins);else break;
         }
         const idxs=[...shells.keys()];if(p.outerWallLast)idxs.reverse(); // pared exterior al final → mejor acabado
+        const _scarf=(p.seamScarf&&li>0)?(p.scarfLen||5):0;
         for(const s of idxs){
           gc.push(s===0?'; pared exterior':'; pared interior');
-          [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,s===0?wOuter:wInner,s===0?outerF:innerF,p,(p.fuzzyAll||s===0)&&li>0,s===0?ohTest:null,ohFeed);
+          [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,s===0?wOuter:wInner,s===0?outerF:innerF,p,(p.fuzzyAll||s===0)&&li>0,s===0?ohTest:null,ohFeed,s===0?_scarf:0);
         }
         fillLoops.push(shells[shells.length-1]);
         // Gap fill: pared fina donde no cupieron 2 perímetros → cordón central sólido para no dejar hueco
