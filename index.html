@@ -19030,7 +19030,10 @@ const SL3D=(function(){
     {k:'supports',l:'Soportes',sel:['no','sí']},{k:'treeSupports',l:'Soporte árbol',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
     {k:'supGrid',l:'Soporte: rejilla (mm)',s:0.5},{k:'supZGap',l:'Soporte: sep. Z (mm)',s:0.05},{k:'supDensity',l:'Soporte: densidad (%)',s:5},
     {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
-    {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
+    {k:'minLayerTime',l:'Tiempo mín. capa (s)',s:1},{k:'overhangSpeed',l:'Vel. voladizo (mm/s)',s:5},
+    {k:'flowRatio',l:'Flujo (%)',s:1},{k:'pressureAdvance',l:'Pressure Advance',s:0.005},{k:'wipeDist',l:'Wipe (mm)',s:0.2},
+    {k:'widthOuter',l:'Ancho pared ext. (mm)',s:0.02},{k:'widthInfill',l:'Ancho relleno (mm)',s:0.02},
+    {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo','aleatorio']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
     {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
     {k:'spiralize',l:'Modo jarrón',sel:['no','sí']},{k:'monotonic',l:'Relleno monot.',sel:['no','sí']},{k:'arachne',l:'Arachne (pared var.)',sel:['no','sí']},
@@ -19473,8 +19476,9 @@ Eliges parámetros de laminado óptimos según geometría de la pieza, material,
 REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). Si activas soportes (supports=true), pon SIEMPRE treeSupports=true por defecto (troncos de celosía con base ancha, estables y fáciles de retirar); usa treeSupports=false solo si el voladizo es una superficie plana grande y continua que necesita interfaz densa. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), cubic (3D resistente), concentric (sigue el contorno, bueno para flexibles/sellos), linear (rápido).
 COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético), "agudo" en esquinas, "cercano" minimiza viaje. outerWallLast=true imprime la pared exterior al final → mejor acabado. bridgeDetect=true para voladizos horizontales. elephantFoot (mm, 0-0.3): encoge la 1ª capa. xyCompensation (mm, -0.3 a 0.3): negativo agranda agujeros. arcFitting=false salvo que se indique (requiere [gcode_arcs] en Klipper).
 VELOCIDAD: outerSpeed (mm/s, 0=auto) baja la pared exterior para mejor acabado (60% de speed en piezas vistosas). infillSpeed (0=auto) sube el relleno. accel (mm/s², 0=no tocar) limita aceleración para reducir ringing en piezas finas. ADHESIÓN: skirt (líneas, ceba el filamento sin pegarse a la pieza), brim (pegado, para piezas altas o ABS), raft=true (base completa bajo la pieza, para superficies difíciles o ABS — encarece). DETALLE: gapFill=true rellena paredes finas sin huecos. fuzzySkin (mm, 0.1-0.3) da textura rugosa mate a la pared exterior. coasting (mm, 0.1-0.3) corta la extrusión antes del fin del perímetro para evitar el blob de costura.
+CALIDAD (estilo OrcaSlicer): minLayerTime (s, 5-12) ralentiza capas chicas para que enfríen → mejor en piezas pequeñas/torres. overhangSpeed (mm/s, 0=off) baja la velocidad de la pared exterior sobre voladizos. flowRatio (%, 95-105) ajusta extrusión. pressureAdvance (mm, 0=off; típico 0.02-0.05 en Klipper) reduce blobbing en esquinas — déjalo en 0 salvo que conozcas el valor de la impresora. wipeDist (mm, 0.5-1.5) limpia la boquilla al retraer → menos stringing. widthOuter/widthInfill (mm, 0=auto) anchos de línea por feature (outer un poco más fino = más nítido). seamMode también acepta "aleatorio" (costura dispersa).
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
     if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
@@ -19508,6 +19512,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
       supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,
+      minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
       adaptiveLayerHeight:obj==='calidad',
       seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
       bridgeDetect:st.ovPct>8,arcFitting:false,gradualTemp: obj!=='rapido',
@@ -19541,6 +19546,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
+      minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
       seamMode:['cercano','alineado','agudo'].includes(p.seamMode)?p.seamMode:'cercano',
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
@@ -19934,6 +19940,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   // Punto de inicio de costura según modo (cercano / alineado atrás / esquina aguda)
   function _seamStart(poly,mode,cX,cY,ox,oy){
     const n=poly.length;
+    if(mode==='aleatorio')return Math.floor(Math.random()*n); // costura dispersa → no se acumula una cicatriz vertical
     if(mode==='alineado'){
       let bi=0,bv=-1e9;
       for(let i=0;i<n;i++){const yy=poly[i][1];if(yy>bv+1e-6||(Math.abs(yy-bv)<=1e-6&&poly[i][0]<poly[bi][0])){bv=yy;bi=i;}}
@@ -20156,7 +20163,26 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return lhs;
   }
-  function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p,fuzzy){
+  // Estado de wipe: dirección del último segmento impreso → se limpia hacia atrás sobre él al retraer
+  let _wipeState={dx:0,dy:0,has:false};
+  function _setWipe(ax,ay,bx,by){const dx=bx-ax,dy=by-ay,l=Math.hypot(dx,dy);if(l>1e-4){_wipeState={dx:dx/l,dy:dy/l,has:true};}}
+  // Retracción + viaje (con wipe y z-hop) centralizado → devuelve [E, x, y] en el destino
+  function _retractTravel(gc,cX,cY,sx,sy,z,E,p,td){
+    if(p.wipeDist>0&&_wipeState.has){
+      const wx=cX-_wipeState.dx*p.wipeDist,wy=cY-_wipeState.dy*p.wipeDist;
+      E-=p.retractDist;
+      if(isFinite(wx)&&isFinite(wy))gc.push(`G1 X${wx.toFixed(3)} Y${wy.toFixed(3)} E${E.toFixed(4)} F${Math.round(p.retractSpeed*60)} ; wipe`);
+      else gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+    }else{
+      E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+    }
+    if(p.zHop>0&&td>5)gc.push(`G1 Z${(z+p.zHop).toFixed(3)} F600`);
+    gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
+    if(p.zHop>0&&td>5)gc.push(`G1 Z${z.toFixed(3)} F600`);
+    E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
+    return[E,sx,sy];
+  }
+  function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p,fuzzy,ohTest,ohFeed){
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     let ord=[...poly.slice(bi),...poly.slice(0,bi)];
     // Piel rugosa (fuzzy skin): perturba los vértices de la pared exterior a lo largo de su normal
@@ -20167,16 +20193,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy;
     // Solo retraer/z-hop si el salto es real — evita retracciones inútiles entre paredes concéntricas
     const td=Math.hypot(sx-cX,sy-cY),doRet=td>extW*3;
-    if(doRet){
-      E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
-      if(p.zHop>0&&td>5)gc.push(`G1 Z${(z+p.zHop).toFixed(3)} F600`);
-      gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
-      if(p.zHop>0&&td>5)gc.push(`G1 Z${z.toFixed(3)} F600`);
-      E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
-    }else{
-      gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
-    }
-    cX=sx;cY=sy;
+    if(doRet){[E,cX,cY]=_retractTravel(gc,cX,cY,sx,sy,z,E,p,td);}
+    else{gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);cX=sx;cY=sy;}
     // Recorrido absoluto cerrado + coasting (deja de extruir en los últimos `coast` mm para evitar blob de costura)
     const pts=[];for(let i=0;i<=ord.length;i++){const pt=ord[i%ord.length];pts.push([pt[0]+ox,pt[1]+oy]);}
     let total=0;for(let i=1;i<pts.length;i++)total+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);
@@ -20186,17 +20204,20 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       const qx=pts[i][0],qy=pts[i][1];
       if(!isFinite(qx)||!isFinite(qy))continue;
       const seg=Math.hypot(qx-cX,qy-cY);
+      // Velocidad reducida en voladizos: si el punto medio del segmento está sobre aire, usa ohFeed
+      const sf=(ohTest&&ohFeed&&ohTest((cX+qx)/2,(cY+qy)/2))?ohFeed:feed;
       if(coast>0&&acc<coastStart&&acc+seg>coastStart){
         const tt=(coastStart-acc)/seg,mx=cX+(qx-cX)*tt,my=cY+(qy-cY)*tt;
-        E+=(Math.hypot(mx-cX,my-cY)*extW*lh)/FILA_AREA;gc.push(`G1 X${mx.toFixed(3)} Y${my.toFixed(3)} E${E.toFixed(4)} F${feed}`);
-        gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} F${feed}`);
+        E+=(Math.hypot(mx-cX,my-cY)*extW*lh)/FILA_AREA;gc.push(`G1 X${mx.toFixed(3)} Y${my.toFixed(3)} E${E.toFixed(4)} F${sf}`);
+        gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} F${sf}`);
       }else if(coast>0&&acc>=coastStart){
-        gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} F${feed}`);
+        gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} F${sf}`);
       }else{
-        E+=(seg*extW*lh)/FILA_AREA;gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} E${E.toFixed(4)} F${feed}`);
+        E+=(seg*extW*lh)/FILA_AREA;gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} E${E.toFixed(4)} F${sf}`);
       }
       acc+=seg;cX=qx;cY=qy;
     }
+    if(pts.length>=2)_setWipe(pts[pts.length-2][0],pts[pts.length-2][1],cX,cY);
     return[E,cX,cY];
   }
   // Arachne: pared de ancho variable — igual que _printPoly pero con E escalado por wRatio (0..1)
@@ -20204,14 +20225,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     const ord=[...poly.slice(bi),...poly.slice(0,bi)];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy,td=Math.hypot(sx-cX,sy-cY);
-    if(td>extW*3){
-      E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
-      if(p.zHop>0&&td>5)gc.push(`G1 Z${(z+p.zHop).toFixed(3)} F600`);
-      gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
-      if(p.zHop>0&&td>5)gc.push(`G1 Z${z.toFixed(3)} F600`);
-      E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
-    }else{gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);}
-    cX=sx;cY=sy;
+    if(td>extW*3){[E,cX,cY]=_retractTravel(gc,cX,cY,sx,sy,z,E,p,td);}
+    else{gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);cX=sx;cY=sy;}
     const pts=[];for(let i=0;i<=ord.length;i++){const pt=ord[i%ord.length];pts.push([pt[0]+ox,pt[1]+oy]);}
     for(let i=1;i<pts.length;i++){
       const qx=pts[i][0],qy=pts[i][1];
@@ -20220,6 +20235,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       E+=(seg*extW*lh*wRatio)/FILA_AREA;gc.push(`G1 X${qx.toFixed(3)} Y${qy.toFixed(3)} E${E.toFixed(4)} F${feed}`);
       cX=qx;cY=qy;
     }
+    if(pts.length>=2)_setWipe(pts[pts.length-2][0],pts[pts.length-2][1],cX,cY);
     return[E,cX,cY];
   }
   // Spiralize: imprime el perímetro exterior con Z creciendo continuamente (sin costura de capa)
@@ -20254,17 +20270,34 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       const sx=p1[0]+ox,sy=p1[1]+oy,ex=p2[0]+ox,ey=p2[1]+oy;
       if(!isFinite(sx)||!isFinite(sy)||!isFinite(ex)||!isFinite(ey))continue;
       const td=Math.hypot(sx-cX,sy-cY);
-      if(td>rt){
-        E-=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
-        if(p.zHop>0&&td>5)gc.push(`G1 Z${(z+p.zHop).toFixed(3)} F600`);
-        gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);
-        if(p.zHop>0&&td>5)gc.push(`G1 Z${z.toFixed(3)} F600`);
-        E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
-      }else{gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);}
+      if(td>rt){[E,cX,cY]=_retractTravel(gc,cX,cY,sx,sy,z,E,p,td);}
+      else{gc.push(`G1 X${sx.toFixed(3)} Y${sy.toFixed(3)} F${p.travelSpeed*60}`);cX=sx;cY=sy;}
       E+=(Math.hypot(ex-sx,ey-sy)*extW*lh)/FILA_AREA;
       gc.push(`G1 X${ex.toFixed(3)} Y${ey.toFixed(3)} E${E.toFixed(4)} F${feed}`);cX=ex;cY=ey;
+      _setWipe(sx,sy,ex,ey);
     }
     return[E,cX,cY];
+  }
+  // Tiempo mínimo de capa: si la capa imprime en < minSec, ralentiza SOLO los movimientos de extrusión
+  // (no los viajes) para dar tiempo a enfriar. Devuelve true si ralentizó (→ subir ventilador).
+  function _applyMinLayerTime(gc,fromIdx,minSec){
+    if(!(minSec>0))return false;
+    let x=null,y=null,extT=0,travT=0;const extIdx=[];
+    for(let i=fromIdx;i<gc.length;i++){
+      const c=gc[i];if(c.charCodeAt(0)!==71||!(c.startsWith('G1 ')||c.startsWith('G0 ')))continue; // 71='G'
+      const mx=/X(-?[\d.]+)/.exec(c),my=/Y(-?[\d.]+)/.exec(c),mf=/F([\d.]+)/.exec(c);
+      const nx=mx?+mx[1]:x,ny=my?+my[1]:y,f=mf?+mf[1]:null;
+      const isE=/E-?[\d.]/.test(c);
+      if(x!=null&&f&&(nx!==x||ny!==y)){const d=Math.hypot(nx-x,ny-y),t=d/(f/60);if(isE){extT+=t;extIdx.push(i);}else travT+=t;}
+      if(mx)x=nx;if(my)y=ny;
+    }
+    const total=extT+travT;
+    if(total>=minSec||extT<=0)return false;
+    const targetExt=Math.max(0.01,minSec-travT);
+    let factor=extT/targetExt;if(factor>1)factor=1;if(factor<0.08)factor=0.08; // tope ~12× más lento
+    const minF=8*60; // nunca por debajo de 8 mm/s
+    for(const i of extIdx)gc[i]=gc[i].replace(/F([\d.]+)/,(m,f)=>'F'+Math.max(minF,Math.round(+f*factor)));
+    return true;
   }
   // ── Web Worker para el precompute de contornos (la etapa más pesada) ──
   // Se construye desde el .toString() de las funciones puras reales → sin duplicar código.
@@ -20342,6 +20375,8 @@ self.onmessage=function(ev){
     gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
     if(p.accel>0)gc.push('M204 S'+p.accel+' ; aceleración');
+    if(p.flowRatio&&Math.round(p.flowRatio)!==100)gc.push('M221 S'+Math.round(p.flowRatio)+' ; flujo %');
+    if(p.pressureAdvance>0)gc.push('SET_PRESSURE_ADVANCE ADVANCE='+(+p.pressureAdvance).toFixed(4)+' ; pressure advance (Klipper)');
     // Línea de purga
     const purgeY0=5,purgeY1=Math.min(spec.y-5,55);
     gc.push(`G1 Z${p.firstLayerHeight.toFixed(3)} F600`);gc.push(`G1 X3 Y${purgeY0} F3000`);
@@ -20459,6 +20494,14 @@ self.onmessage=function(ev){
       const spd=li===0?p.firstLayerSpeed:p.speed;
       const outerF=(li>0&&p.outerSpeed>0?p.outerSpeed:spd)*60; // velocidad pared exterior
       const innerF=Math.round(spd*0.9)*60;
+      // Anchos de línea por feature (0 = auto = base extW). 1ª capa más ancha para adherencia.
+      const wOuter=li===0?extW*1.1:(p.widthOuter>0?p.widthOuter:extW);
+      const wInner=li===0?extW*1.1:extW;
+      const wInfill=li===0?extW*1.1:(p.widthInfill>0?p.widthInfill:extW);
+      // Voladizo: punto sobre aire en la capa de abajo → velocidad reducida en la pared exterior
+      const _ob1=li>0?(layerPolys[li-1]||[]):[],_ob1BB=li>0?(layerBB[li-1]||[]):[];
+      const ohTest=(li>0&&p.overhangSpeed>0)?((x,y)=>!_inSolidBB(x,y,_ob1,_ob1BB)):null;
+      const ohFeed=(p.overhangSpeed>0?p.overhangSpeed:Math.round(spd*0.5))*60;
       if(li===1&&p.fanPct>0)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; ventilador`);
       // Temperatura gradual: reduce 5°C a 50% y 10°C a 80% de altura → menos stringing en las capas superiores
       if(p.gradualTemp&&li>0&&p.nozzleTemp>175){
@@ -20483,6 +20526,7 @@ self.onmessage=function(ev){
         continue; // omitir relleno, soportes, infill
       }
       gc.push(`G1 Z${zOut.toFixed(3)} F600`);
+      const _layerStartIdx=gc.length; // para el tiempo mínimo de capa (ralentiza extrusión si la capa es muy corta)
       // Soporte (antes del modelo de esta capa)
       if(supCols){
         const sl=_supportLinesAtLayer(supCols,li,SUP_GS,p);
@@ -20529,7 +20573,7 @@ self.onmessage=function(ev){
         }
         const idxs=[...shells.keys()];if(p.outerWallLast)idxs.reverse(); // pared exterior al final → mejor acabado
         for(const s of idxs)
-          [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,extW,s===0?outerF:innerF,p,s===0&&li>0);
+          [E,cX,cY]=_printPoly(gc,shells[s],zOut,offX,offY,cX,cY,E,lh,s===0?wOuter:wInner,s===0?outerF:innerF,p,s===0&&li>0,s===0?ohTest:null,ohFeed);
         fillLoops.push(shells[shells.length-1]);
         // Gap fill: pared fina donde no cupieron 2 perímetros → cordón central sólido para no dejar hueco
         if(p.gapFill&&pe.shells>=2&&shells.length<2&&!hole)gapLoops.push(ct);
@@ -20558,7 +20602,7 @@ self.onmessage=function(ev){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
           if(pe.infillPct>0){
             const sp=_infillMulti(fillLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ);
-            if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
+            if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
           }
         }else{
           const above=layerPolys[li+pe.topLayers]||[],below=layerPolys[li-pe.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
@@ -20568,7 +20612,7 @@ self.onmessage=function(ev){
           const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolidBB(x,y,below1,below1BB);
           // 1) Superficies sólidas (top/bottom) que no son puente
           const surf=_clipLines(_scanfillAll(fillLoops,extW*1.02,solidAngle,p.monotonic),(x,y)=>isSurf(x,y)&&!isBridge(x,y),extW);
-          if(surf.length)[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
+          if(surf.length)[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
           // 2) Puentes (cara inferior sobre aire) — sólido, lento, ventilador máximo, orientado al vano
           if(p.bridgeDetect){
             const bAng=_bridgeInfoMulti(fillLoops,below1).angle;
@@ -20596,7 +20640,7 @@ self.onmessage=function(ev){
             if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);}
           }else if(pe.infillPct>0){
             const sp=_clipLines(_infillMulti(fillLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
-            if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);
+            if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
           }
         }
         // Gap fill: cordón central en paredes finas (un sólo paso de scanline ≈ línea central)
@@ -20610,6 +20654,11 @@ self.onmessage=function(ev){
           const ir=_clipLines(_scanfillAll(fillLoops,extW*0.5,li%2?45:135),(x,y)=>!_inSolidBB(x,y,above1,above1BB),extW*0.5);
           if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,zOut,offX,offY,cX,cY,E,lh*0.12,extW,Math.round(Math.min(spd,40))*60,p,COMB);}
         }
+      }
+      // Tiempo mínimo de capa: ralentiza la extrusión de esta capa si imprime muy rápido (enfría mejor)
+      if(li>0&&p.minLayerTime>0){
+        const cooled=_applyMinLayerTime(gc,_layerStartIdx,p.minLayerTime);
+        if(cooled&&(p.fanPct||0)<100){gc.splice(_layerStartIdx,0,'M106 S255 ; enfriamiento — capa corta');gc.push(`M106 S${Math.round((p.fanPct||0)*2.55)} ; restaurar ventilador`);}
       }
       if(li%8===0){setProg(4+li/totalL*92,`Laminando capa ${li+1}/${totalL}…`);await new Promise(r=>setTimeout(r,0));}
     }
