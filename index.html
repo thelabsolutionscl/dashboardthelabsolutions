@@ -2673,6 +2673,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('slAddInput').click()">➕ Agregar pieza</button>
             <button class="btn btn-ghost btn-sm" onclick="SL3D.autoOrient()">🔄 Auto-orientar</button>
+            <button class="btn btn-ghost btn-sm" id="slLayFlatBtn" onclick="SL3D.toggleLayFlat()">📐 Apoyar cara</button>
           </div>
           <canvas id="slCanvas" height="300" style="width:100%;border-radius:10px;background:#0d0d0d;border:1px solid var(--border);margin-top:12px;display:none;cursor:grab;touch-action:none"></canvas>
           <div id="slStats" style="display:none;margin-top:10px"></div>
@@ -18617,7 +18618,7 @@ const SL3D=(function(){
     {k:'brim',l:'Brim (líneas)',s:1},{k:'raft',l:'Raft',sel:['no','sí']},{k:'ironing',l:'Planchado',sel:['no','sí']},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
-  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[]};
+  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[],layFlatMode:false};
   const el=id=>document.getElementById(id);
 
   // ── Parsers ─────────────────────────────────────────────────
@@ -18727,6 +18728,25 @@ const SL3D=(function(){
     const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
     const st=S.stats,zm=st.dz/2,ca=Math.cos(S.rot.a),sa=Math.sin(S.rot.a),cb=Math.cos(S.rot.b),sb=Math.sin(S.rot.b);
     const rad=Math.sqrt(st.dx*st.dx+st.dy*st.dy+st.dz*st.dz)/2||1,sc=0.42*Math.min(w,h)/rad;
+    // ── Cama de impresión (plano Z=0) + eje Z: deja claro cuál es la base ──
+    const proj=(x,y,z)=>{const zz=z-zm;const x1=x*ca-y*sa,y1=x*sa+y*ca;const y2=y1*cb-zz*sb,z2=y1*sb+zz*cb;return[w/2+x1*sc,h/2-z2*sc];};
+    (function drawBed(){
+      const ext=Math.max(st.dx,st.dy)*0.72+6,n=8,step=ext*2/n;
+      ctx.lineWidth=1;
+      for(let i=0;i<=n;i++){
+        const c=-ext+i*step,mid=(i===n/2);
+        ctx.strokeStyle=mid?'rgba(0,212,204,0.45)':'rgba(255,255,255,0.09)';
+        let a=proj(c,-ext,0),b=proj(c,ext,0);
+        ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+        let d=proj(-ext,c,0),e=proj(ext,c,0);
+        ctx.beginPath();ctx.moveTo(d[0],d[1]);ctx.lineTo(e[0],e[1]);ctx.stroke();
+      }
+      const z0=proj(0,0,0),z1=proj(0,0,st.dz*0.6+4);
+      ctx.strokeStyle='rgba(0,212,204,0.55)';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.moveTo(z0[0],z0[1]);ctx.lineTo(z1[0],z1[1]);ctx.stroke();
+      ctx.fillStyle='rgba(0,212,204,0.9)';ctx.font='10px JetBrains Mono,monospace';
+      ctx.fillText('Z↑',z1[0]+3,z1[1]+3);
+    })();
     const t=S.prev,m=t.length/9,list=new Array(m);
     for(let i=0;i<m;i++){
       const o=i*9,P=[];let dsum=0;
@@ -18748,7 +18768,7 @@ const SL3D=(function(){
       ctx.fillStyle=`rgb(${Math.round(f.sh*90)},${Math.round(f.sh*200)},${Math.round(f.sh*192)})`;ctx.fill();
     }
     ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='10px JetBrains Mono,monospace';
-    ctx.fillText('arrastra para rotar',10,h-10);
+    ctx.fillText(S.layFlatMode?'haz clic en una cara para apoyarla en la cama':'arrastra para rotar · la rejilla es la cama',10,h-10);
   }
 
   // ── Auto-orientación: prueba orientaciones y elige la de menos voladizos ──
@@ -18780,6 +18800,77 @@ const SL3D=(function(){
     S.tris=best;analyze(S.tris);buildPreview();render();renderStats();
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     toast(bestI===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
+  }
+  // ── Apoyar cara en la cama (lay-flat por clic) ──────────────
+  // Rota toda la malla para que la normal `n` apunte hacia abajo (−Z) → esa cara queda sobre la cama.
+  function _alignTris(t,n){
+    let nx=n[0],ny=n[1],nz=n[2];const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
+    // eje de giro = n × (0,0,−1) = (−ny, nx, 0) ; dot = n·(0,0,−1) = −nz
+    let ax=-ny,ay=nx,az=0;
+    const al=Math.hypot(ax,ay,az),dot=-nz;
+    const o=new Float32Array(t.length);
+    if(al<1e-6){
+      if(dot>0)return t.slice();           // ya mira hacia abajo
+      for(let i=0;i<t.length;i+=3){o[i]=t[i];o[i+1]=-t[i+1];o[i+2]=-t[i+2];}// antiparalela: girar 180° en X
+      return o;
+    }
+    ax/=al;ay/=al;az/=al;
+    const ang=Math.atan2(al,dot),c=Math.cos(ang),s=Math.sin(ang),C=1-c;
+    const r00=c+ax*ax*C,r01=ax*ay*C-az*s,r02=ax*az*C+ay*s;
+    const r10=ay*ax*C+az*s,r11=c+ay*ay*C,r12=ay*az*C-ax*s;
+    const r20=az*ax*C-ay*s,r21=az*ay*C+ax*s,r22=c+az*az*C;
+    for(let i=0;i<t.length;i+=3){const x=t[i],y=t[i+1],z=t[i+2];o[i]=r00*x+r01*y+r02*z;o[i+1]=r10*x+r11*y+r12*z;o[i+2]=r20*x+r21*y+r22*z;}
+    return o;
+  }
+  function _pointInTri2(px,py,ax,ay,bx,by,cx,cy){
+    const d1=(px-bx)*(ay-by)-(ax-bx)*(py-by);
+    const d2=(px-cx)*(by-cy)-(bx-cx)*(py-cy);
+    const d3=(px-ax)*(cy-ay)-(cx-ax)*(py-ay);
+    const neg=(d1<0)||(d2<0)||(d3<0),pos=(d1>0)||(d2>0)||(d3>0);
+    return!(neg&&pos);
+  }
+  // Raycast 2D sobre el visor: encuentra la cara frontal bajo el cursor y la apoya en la cama.
+  function _layFlatAt(px,py){
+    if(!S.tris||!S.stats)return;
+    const cv=el('slCanvas'),w=cv.clientWidth||420,h=300;
+    const st=S.stats,zm=st.dz/2,ca=Math.cos(S.rot.a),sa=Math.sin(S.rot.a),cb=Math.cos(S.rot.b),sb=Math.sin(S.rot.b);
+    const rad=Math.sqrt(st.dx*st.dx+st.dy*st.dy+st.dz*st.dz)/2||1,sc=0.42*Math.min(w,h)/rad;
+    const t=S.tris,m=t.length/9;let bestD=1e18,bestN=null;
+    for(let i=0;i<m;i++){
+      const o=i*9,P=[];let d=0;
+      for(let j=0;j<3;j++){
+        const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
+        const x1=x*ca-y*sa,y1=x*sa+y*ca;
+        const y2=y1*cb-z*sb,z2=y1*sb+z*cb;
+        P.push(w/2+x1*sc,h/2-z2*sc);d+=y2;
+      }
+      if(!_pointInTri2(px,py,P[0],P[1],P[2],P[3],P[4],P[5]))continue;
+      if(d<bestD){// menor profundidad = cara frontal (la que el usuario ve)
+        bestD=d;
+        const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx2=t[o+6],cy2=t[o+7],cz2=t[o+8];
+        const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx2-ax,vy=cy2-ay,vz=cz2-az;
+        bestN=[uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx];
+      }
+    }
+    if(!bestN){toast('No se detectó cara ahí — haz clic sobre la figura','error');return;}
+    S.tris=_alignTris(S.tris,bestN);
+    analyze(S.tris);buildPreview();
+    S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];
+    el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
+    renderModifiers();renderSupRegions();
+    S.layFlatMode=false;_updLayFlatBtn();
+    render();renderStats();
+    toast(`✓ Cara apoyada en la cama (voladizos ${S.stats.ovPct.toFixed(1)}%) — revisa parámetros y vuelve a generar`,'success');
+  }
+  function _updLayFlatBtn(){
+    const b=el('slLayFlatBtn'),cv=el('slCanvas');if(!b)return;
+    if(S.layFlatMode){b.classList.add('btn-primary');b.classList.remove('btn-ghost');b.textContent='📐 Clic en una cara…';if(cv)cv.style.cursor='crosshair';}
+    else{b.classList.remove('btn-primary');b.classList.add('btn-ghost');b.textContent='📐 Apoyar cara';if(cv)cv.style.cursor='grab';}
+  }
+  function toggleLayFlat(){
+    if(!S.tris){toast('Carga un modelo primero','error');return;}
+    S.layFlatMode=!S.layFlatMode;_updLayFlatBtn();render();
+    if(S.layFlatMode)toast('Haz clic en la cara que quieres apoyar en la cama','success');
   }
   // ── Plating multi-objeto: centra cada pieza y las acomoda en rejilla ──
   function _centerTris(t){
@@ -18846,6 +18937,7 @@ const SL3D=(function(){
       for(const f of files){const r=_repairMesh(await _parseFile(f));totRemoved+=r.removed;totWelded+=r.welded;parsed.push(_centerTris(r.tris));}
       S.objects=parsed;S.name=files[0].name.replace(/\.(stl|obj|3mf)$/i,'')+(files.length>1?` +${files.length-1}`:'');
       S.modifiers=[];S.supRegions=[]; // nuevos rangos de Z dependen del modelo → limpiar al cargar uno nuevo
+      S.layFlatMode=false;_updLayFlatBtn();
       _replate();
       const repMsg=totRemoved>0?` · reparado: ${totRemoved} triángulo(s) inválido(s) descartado(s)`:'';
       toast((files.length>1?`${files.length} piezas cargadas y acomodadas en el plato`:`Modelo cargado: ${S.stats.tris.toLocaleString('es-CL')} triángulos`)+repMsg,'success');
@@ -19769,7 +19861,8 @@ self.onmessage=function(ev){
     if(p.supports||_hasEnforce){
       setProg(3.5,'Calculando soportes…');await new Promise(r=>setTimeout(r,0));
       const dx=S.stats.dx,dy=S.stats.dy,minZ=Math.max(0.8,lhs[0]+0.4),cols=[];
-      const hit=(x,y,li)=>{const ps=layerPolys[li],bbs=layerBB[li];for(let k=0;k<ps.length;k++){const b=bbs[k];if(x<b[0]||x>b[2]||y<b[1]||y>b[3])continue;if(_pointInPoly(x,y,ps[k]))return true;}return false;};
+      // ¿Hay material sólido en (x,y) en la capa li? Regla par-impar → los agujeros cuentan como aire.
+      const hit=(x,y,li)=>{const ps=layerPolys[li],bbs=layerBB[li];let inside=false;for(let k=0;k<ps.length;k++){const b=bbs[k];if(x<b[0]||x>b[2]||y<b[1]||y>b[3])continue;if(_pointInPoly(x,y,ps[k]))inside=!inside;}return inside;};
       // Regiones de soporte (opcional): bloquear o forzar soporte en cajas XY·Z. Sin regiones → sin efecto.
       const regs=S.supRegions||[];
       const inRegXY=(r,x,y)=>x>=Math.min(r.x0,r.x1)&&x<=Math.max(r.x0,r.x1)&&y>=Math.min(r.y0,r.y1)&&y<=Math.max(r.y0,r.y1);
@@ -19777,19 +19870,28 @@ self.onmessage=function(ev){
       const blocked=(x,y,z)=>regs.some(r=>r.mode==='block'&&inRegXY(r,x,y)&&inRegZ(r,z));
       const enforced=(x,y,z)=>regs.some(r=>r.mode==='enforce'&&inRegXY(r,x,y)&&inRegZ(r,z));
       for(let gx=-dx/2+SUP_GS/2;gx<dx/2;gx+=SUP_GS)for(let gy=-dy/2+SUP_GS/2;gy<dy/2;gy+=SUP_GS){
-        let first=-1;
-        for(let li=0;li<totalL;li++){if(hit(gx,gy,li)){first=li;break;}}
-        if(first>0&&layerTopZ[first]>minZ){
-          const cz=layerTopZ[first];
-          if(blocked(gx,gy,cz))continue; // región bloquea soporte aquí
+        // Presencia de material por capa en esta columna (una sola pasada)
+        const sol=new Array(totalL);
+        for(let li=0;li<totalL;li++)sol[li]=hit(gx,gy,li);
+        // Detectar TODOS los voladizos de la columna: material en li con aire justo debajo (li-1).
+        // Antes sólo se miraba la primera capa con material → se perdían voladizos sobre material ya impreso.
+        for(let li=1;li<totalL;li++){
+          if(!sol[li]||sol[li-1])continue;            // sólo transiciones aire→sólido
+          const cz=layerTopZ[li];
+          if(cz<=minZ)continue;                        // muy cerca de la cama, se imprime directo
+          if(blocked(gx,gy,cz))continue;               // región bloquea soporte aquí
           // Auto-soporte por ángulo: si la capa de abajo tiene material a ≤ tol (= altura·tan(ángulo)),
           // el voladizo es suave y se sostiene solo → no necesita soporte. Honra p.supportAngle.
-          const tol=Math.max(0.1,lhs[first]*Math.tan((p.supportAngle||50)*Math.PI/180));
+          const tol=Math.max(0.1,lhs[li]*Math.tan((p.supportAngle||50)*Math.PI/180));
           let selfSup=false;
-          for(let a=0;a<8&&!selfSup;a++){const an=a*Math.PI/4;if(hit(gx+tol*Math.cos(an),gy+tol*Math.sin(an),first-1))selfSup=true;}
+          for(let a=0;a<8&&!selfSup;a++){const an=a*Math.PI/4;if(hit(gx+tol*Math.cos(an),gy+tol*Math.sin(an),li-1))selfSup=true;}
           // Si el soporte global está activo: añade por ángulo (salvo bloqueo) + forzados. Si está apagado: sólo forzados.
           const want=p.supports?(!selfSup||enforced(gx,gy,cz)):enforced(gx,gy,cz);
-          if(want)cols.push({x:gx,y:gy,bot:0,top:first-1});
+          if(!want)continue;
+          // Base de la columna: baja hasta el modelo de abajo (deja de poner soporte ahí) o la cama.
+          let bot=0;
+          for(let b=li-2;b>=0;b--){if(sol[b]){bot=b+1;break;}}
+          cols.push({x:gx,y:gy,bot,top:li-1});
         }
       }
       if(cols.length){
@@ -20387,12 +20489,16 @@ self.onmessage=function(ev){
     ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--accent)';drop.style.background='rgba(0,212,204,0.05)';}));
     ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--border2)';drop.style.background='';}));
     drop.addEventListener('drop',e=>loadFiles(e.dataTransfer.files));
-    const cv=el('slCanvas');
-    cv.addEventListener('pointerdown',e=>{S.drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing';});
-    cv.addEventListener('pointermove',e=>{if(!S.drag)return;S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
-    cv.addEventListener('pointerup',()=>{S.drag=null;cv.style.cursor='grab';});
+    const cv=el('slCanvas');let _ptStart=null,_ptMoved=0;
+    cv.addEventListener('pointerdown',e=>{S.drag={x:e.clientX,y:e.clientY};_ptStart={x:e.clientX,y:e.clientY};_ptMoved=0;cv.setPointerCapture(e.pointerId);if(!S.layFlatMode)cv.style.cursor='grabbing';});
+    cv.addEventListener('pointermove',e=>{if(!S.drag)return;_ptMoved+=Math.abs(e.clientX-S.drag.x)+Math.abs(e.clientY-S.drag.y);S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
+    cv.addEventListener('pointerup',e=>{
+      const wasClick=_ptStart&&_ptMoved<6;S.drag=null;_ptStart=null;
+      cv.style.cursor=S.layFlatMode?'crosshair':'grab';
+      if(wasClick&&S.layFlatMode){const r=cv.getBoundingClientRect();_layFlatAt(e.clientX-r.left,e.clientY-r.top);}
+    });
   });
-  return{loadFile,loadFiles,addObject,autoOrient,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion};
+  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion};
 })();
 </script>
 
