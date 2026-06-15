@@ -19050,6 +19050,8 @@ const SL3D=(function(){
     {k:'nozzleTemp',l:'Boquilla (°C)',s:5},{k:'bedTemp',l:'Cama (°C)',s:5},{k:'fanPct',l:'Ventilador (%)',s:10},
     {k:'supports',l:'Soportes',sel:['no','sí']},{k:'treeSupports',l:'Soporte árbol',sel:['no','sí']},{k:'supportAngle',l:'Áng. soporte (°)',s:5},
     {k:'supGrid',l:'Soporte: rejilla (mm)',s:0.5},{k:'supZGap',l:'Soporte: sep. Z (mm)',s:0.05},{k:'supDensity',l:'Soporte: densidad (%)',s:5},
+    {k:'supInterface',l:'Soporte: interfaz (capas)',s:1},{k:'supOnPlate',l:'Soporte solo desde cama',sel:['no','sí']},
+    {k:'infillOverlap',l:'Solape relleno/pared (%)',s:5},{k:'pauseAtZ',l:'Pausa a Z (mm, 0=off)',s:1},
     {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
     {k:'minLayerTime',l:'Tiempo mín. capa (s)',s:1},{k:'overhangSpeed',l:'Vel. voladizo (mm/s)',s:5},
     {k:'flowRatio',l:'Flujo (%)',s:1},{k:'pressureAdvance',l:'Pressure Advance',s:0.005},{k:'wipeDist',l:'Wipe (mm)',s:0.2},
@@ -19539,7 +19541,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       speed:Math.round(vbase),outerSpeed:obj==='calidad'?Math.round(vbase*0.6):0,infillSpeed:obj==='rapido'?0:Math.round(vbase*1.1),
       firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
-      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,
+      supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,
       minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
       adaptiveLayerHeight:obj==='calidad',
       seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',
@@ -19574,6 +19576,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
+      supInterface:Math.round(cl(p.supInterface,0,5,2)),supOnPlate:!!p.supOnPlate&&p.supOnPlate!=='no',infillOverlap:Math.round(cl(p.infillOverlap,0,40,15)),pauseAtZ:cl(p.pauseAtZ,0,1000,0),
       minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
       excludeObject:!!p.excludeObject&&p.excludeObject!=='no',
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
@@ -20519,7 +20522,7 @@ self.onmessage=function(ev){
     // ── Soportes: columnas bajo voladizos (rejilla o árbol) ──
     let supCols=null,supTrees=null;const SUP_GS=p.supGrid||3;
     const gapLayers=Math.max(0,Math.round((p.supZGap||0)/p.layerHeight)); // separación de aire (capas) entre soporte y pieza
-    const ifaceLayers=2; // capas de interfaz densa justo bajo la pieza
+    const ifaceLayers=Math.max(0,Math.round(p.supInterface!=null?p.supInterface:2)); // capas de interfaz densa justo bajo la pieza
     const _hasEnforce=(S.supRegions||[]).some(r=>r.mode==='enforce');
     if(p.supports||_hasEnforce){
       setProg(3.5,'Calculando soportes…');await new Promise(r=>setTimeout(r,0));
@@ -20557,6 +20560,7 @@ self.onmessage=function(ev){
           // Separación de aire: el soporte se detiene `gapLayers` por debajo del voladizo → retiro limpio
           const top=li-1-gapLayers;
           if(top<bot)continue; // el hueco consume la columna: el voladizo bridgeará solo
+          if(p.supOnPlate&&bot>0)continue; // "solo desde la cama": descarta soportes que nacen sobre el modelo
           cols.push({x:gx,y:gy,bot,top,contactLi:li});
         }
       }
@@ -20593,7 +20597,7 @@ self.onmessage=function(ev){
       }
     }
     // ── Capas ────────────────────────────────────
-    curZ=0;
+    curZ=0;let _pausedAtZ=false;
     for(let li=0;li<totalL;li++){
       const lh=lhs[li];curZ+=lh;const zOut=curZ+zBase; // zOut = altura física (sube sobre el raft)
       const pe=_layerParams(p,curZ); // parámetros efectivos: aplica modificadores por altura (pe===p si no hay)
@@ -20632,6 +20636,8 @@ self.onmessage=function(ev){
         continue; // omitir relleno, soportes, infill
       }
       gc.push(`G1 Z${zOut.toFixed(3)} F600`);
+      // Pausa programada por altura (inserto de tuerca / cambio de color manual) — PAUSE de Klipper
+      if(p.pauseAtZ>0&&!_pausedAtZ&&curZ>=p.pauseAtZ){_pausedAtZ=true;gc.push(`; === PAUSA programada a Z=${(+p.pauseAtZ).toFixed(2)}mm (inserto/cambio de color) ===`);gc.push('PAUSE');}
       const _layerStartIdx=gc.length; // para el tiempo mínimo de capa (ralentiza extrusión si la capa es muy corta)
       // Soporte (antes del modelo de esta capa)
       if(supCols){
@@ -20700,6 +20706,9 @@ self.onmessage=function(ev){
       // ── Relleno con detección de superficies por región (even-odd excluye agujeros) ──
       if(fillLoops.length){
         const solidFeed=(li>0&&p.infillSpeed>0?p.infillSpeed:Math.round(spd*1.1))*60,solidAngle=li%2?135:45,COMB=Math.max(extW*3,2);
+        // Solape relleno↔pared: expande los lazos de relleno hacia la pared → sin hueco entre relleno y perímetro
+        const _ovl=extW*((p.infillOverlap||0)/100);
+        const infLoops=_ovl>0.001?fillLoops.map(l=>{const r=_insetRaw(l,-_ovl);return(r&&r.length>=3)?r:l;}):fillLoops;
         const aLi=layerNetArea[li],aTop=layerNetArea[li+pe.topLayers],aBot=layerNetArea[li-pe.bottomLayers];
         // ¿Hay alguna cara expuesta? Sólo si arriba/abajo (N capas) la sección encoge (o no existe = global)
         // Lightning siempre usa el camino muestreado: necesita escanear hacia arriba para hallar techos.
@@ -20707,7 +20716,7 @@ self.onmessage=function(ev){
         if(!exposed){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
           if(pe.infillPct>0){
-            const sp=_infillMulti(fillLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ);
+            const sp=_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ);
             if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
           }
         }else{
@@ -20717,7 +20726,7 @@ self.onmessage=function(ev){
           const isSurf=(x,y)=>isTop(x,y)||isBot(x,y);
           const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolidBB(x,y,below1,below1BB);
           // 1) Superficies sólidas (top/bottom) que no son puente
-          const surf=_clipLines(_scanfillAll(fillLoops,extW*1.02,solidAngle,p.monotonic),(x,y)=>isSurf(x,y)&&!isBridge(x,y),extW);
+          const surf=_clipLines(_scanfillAll(infLoops,extW*1.02,solidAngle,p.monotonic),(x,y)=>isSurf(x,y)&&!isBridge(x,y),extW);
           if(surf.length)[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
           // 2) Puentes (cara inferior sobre aire) — sólido, lento, ventilador máximo, orientado al vano
           if(p.bridgeDetect){
@@ -20742,10 +20751,10 @@ self.onmessage=function(ev){
               return false; // techo lejano → sin relleno (ahorro)
             };
             const lspac=Math.max(extW*2,extW/Math.max(0.05,pe.infillPct/100)*1.4);
-            const sp=_clipLines(_scanfillAll(fillLoops,lspac,li%2?135:45),needsLight,extW);
+            const sp=_clipLines(_scanfillAll(infLoops,lspac,li%2?135:45),needsLight,extW);
             if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);}
           }else if(pe.infillPct>0){
-            const sp=_clipLines(_infillMulti(fillLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
+            const sp=_clipLines(_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
             if(sp.length)[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);
           }
         }
