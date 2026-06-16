@@ -20874,8 +20874,11 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       const n1x=-e1y,n1y=e1x,n2x=-e2y,n2y=e2x;
       const mx=n1x+n2x,my=n1y+n2y,ml=Math.hypot(mx,my);
       if(!ml){res.push([curr[0]+n1x*d,curr[1]+n1y*d]);continue;}
-      const dot=n1x*n2x+n1y*n2y,ms=d/Math.max(0.25,Math.sqrt((1+dot)/2));
-      res.push([curr[0]+(mx/ml)*Math.min(ms,d*5),curr[1]+(my/ml)*Math.min(ms,d*5)]);
+      // Math.max(0,…) evita sqrt de negativo cuando dot < -1 por error de punto flotante (vértice en horquilla) → NaN
+      const dot=n1x*n2x+n1y*n2y,ms=d/Math.max(0.25,Math.sqrt(Math.max(0,(1+dot)/2)));
+      const rx=curr[0]+(mx/ml)*Math.min(ms,d*5),ry=curr[1]+(my/ml)*Math.min(ms,d*5);
+      if(!isFinite(rx)||!isFinite(ry)){res.push([curr[0]+n1x*d,curr[1]+n1y*d]);continue;}
+      res.push([rx,ry]);
     }
     const oa=Math.abs(_polyArea(poly)),ia=Math.abs(_polyArea(res));
     return(ia<0.05||ia>oa*1.15)?null:res;
@@ -21347,6 +21350,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       const n=rs.length;
       ord=rs.map((pt,i)=>{const pr=rs[(i-1+n)%n],ne=rs[(i+1)%n];let nx=pr[1]-ne[1],ny=ne[0]-pr[0];const l=Math.hypot(nx,ny)||1;const r=(Math.random()*2-1)*p.fuzzySkin;return[pt[0]+nx/l*r,pt[1]+ny/l*r];});
     }
+    // Defensa en profundidad: descarta cualquier punto no-finito antes de imprimir (jamás un G1 XNaN)
+    ord=ord.filter(pt=>isFinite(pt[0])&&isFinite(pt[1]));
+    if(ord.length<3)return[E,cX,cY];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy;
     // Solo retraer/z-hop si el salto es real — evita retracciones inútiles entre paredes concéntricas
     const td=Math.hypot(sx-cX,sy-cY),doRet=td>Math.max(extW*3,(p.retractMinTravel||0));
