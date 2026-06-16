@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="794" height="1123" viewBox="0 0 794 1123" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif">
+  <defs>
+    <style>
+      .h1{font-size:24px;font-weight:700;fill:#0f1115}
+      .h2{font-size:14px;font-weight:700;fill:#0097a7;letter-spacing:.5px}
+      .sub{font-size:11px;fill:#5b6472}
+      .t{font-size:10.5px;fill:#3a4150}
+      .tb{font-size:10.5px;font-weight:700;fill:#0f1115}
+      .chip{font-size:9.5px;font-weight:700}
+      .step{font-size:10.5px;fill:#3a4150}
+      .num{font-size:11px;font-weight:700;fill:#fff}
+    </style>
+  </defs>
+  <rect width="794" height="1123" fill="#ffffff"/>
+  <rect x="0" y="0" width="794" height="8" fill="#00bcd4"/>
+
+  <!-- Header -->
+  <text x="48" y="56" class="h1">Pipeline de Ventas con Agentes IA</text>
+  <text x="48" y="78" class="sub">The Lab Solutions · fabricación digital, Santiago · captura multicanal → cola en Airtable → agentes Claude → CRM</text>
+  <line x1="48" y1="92" x2="746" y2="92" stroke="#e3e6ea" stroke-width="1"/>
+
+  <!-- 1. Flujo -->
+  <text x="48" y="120" class="h2">EL FLUJO EN 6 PASOS</text>
+  <g>
+    <circle cx="58" cy="146" r="10" fill="#00bcd4"/><text x="58" y="150" text-anchor="middle" class="num">1</text>
+    <text x="78" y="143" class="tb">Captura</text><text x="78" y="158" class="step">3 puertas: web (/lead), Google Ads y LinkedIn (/webhooks), cada una con su llave anti-bot.</text>
+
+    <circle cx="58" cy="182" r="10" fill="#00bcd4"/><text x="58" y="186" text-anchor="middle" class="num">2</text>
+    <text x="78" y="179" class="tb">Normaliza</text><text x="78" y="194" class="step">El Worker aplana cualquier canal a una forma interna única e infiere el source (gclid/li_fat_id).</text>
+
+    <circle cx="58" cy="218" r="10" fill="#00bcd4"/><text x="58" y="222" text-anchor="middle" class="num">3</text>
+    <text x="78" y="215" class="tb">Persiste</text><text x="78" y="230" class="step">Deduplica el Cliente por email/teléfono y crea la tarea en Agent_Queue (Estado: Pendiente).</text>
+
+    <circle cx="58" cy="254" r="10" fill="#00bcd4"/><text x="58" y="258" text-anchor="middle" class="num">4</text>
+    <text x="78" y="251" class="tb">Speed-to-lead</text><text x="78" y="266" class="step">Email automático de “recibimos tu solicitud” al instante (Resend), sin bloquear la respuesta.</text>
+
+    <circle cx="58" cy="290" r="10" fill="#00bcd4"/><text x="58" y="294" text-anchor="middle" class="num">5</text>
+    <text x="78" y="287" class="tb">Procesa el agente</text><text x="78" y="302" class="step">Claude califica el lead: Lead Score 1–10, servicio detectado, próxima acción, mensajes listos.</text>
+
+    <circle cx="58" cy="326" r="10" fill="#00bcd4"/><text x="58" y="330" text-anchor="middle" class="num">6</text>
+    <text x="78" y="323" class="tb">De vuelta al CRM</text><text x="78" y="338" class="step">Escribe Lead Score IA, Próxima acción y Resumen en el Cliente; sigue a cotización → producción.</text>
+  </g>
+
+  <!-- 2. Robustez -->
+  <line x1="48" y1="360" x2="746" y2="360" stroke="#e3e6ea" stroke-width="1"/>
+  <text x="48" y="386" class="h2">POR QUÉ NO PIERDE UN LEAD</text>
+  <text x="48" y="408" class="t">• <tspan font-weight="700">Tolerancia a campos:</tspan> si Airtable rechaza un campo inexistente, lo descarta y reintenta.</text>
+  <text x="48" y="426" class="t">• <tspan font-weight="700">Dead-letter + cron:</tspan> si Airtable cae, el lead va a buffer en KV y se reintenta hasta 7 días.</text>
+  <text x="48" y="444" class="t">• <tspan font-weight="700">Anti-bot:</tspan> honeypot (responde 200 al bot), Turnstile y rate-limit por IP.</text>
+
+  <!-- 3. Agentes -->
+  <line x1="48" y1="466" x2="746" y2="466" stroke="#e3e6ea" stroke-width="1"/>
+  <text x="48" y="492" class="h2">EL EQUIPO — 14 AGENTES ESPECIALIZADOS</text>
+  <text x="48" y="512" class="tb">Ventas / Leads</text>
+  <g transform="translate(48,520)">
+    <rect x="0" y="0" width="86" height="22" rx="11" fill="#e8f8fb" stroke="#00bcd4"/><text x="43" y="15" text-anchor="middle" class="chip" fill="#0097a7">LEAD</text>
+    <rect x="94" y="0" width="100" height="22" rx="11" fill="#f3ecfb" stroke="#7e57c2"/><text x="144" y="15" text-anchor="middle" class="chip" fill="#5e35b1">LINKEDIN</text>
+    <rect x="202" y="0" width="86" height="22" rx="11" fill="#eafaf0" stroke="#2e9e5b"/><text x="245" y="15" text-anchor="middle" class="chip" fill="#1f7a44">SALES</text>
+    <rect x="296" y="0" width="98" height="22" rx="11" fill="#f3ecfb" stroke="#7e57c2"/><text x="345" y="15" text-anchor="middle" class="chip" fill="#5e35b1">LEAD_GEN</text>
+    <rect x="402" y="0" width="100" height="22" rx="11" fill="#f1f3f5" stroke="#8a93a0"/><text x="452" y="15" text-anchor="middle" class="chip" fill="#4a5260">FOLLOWUP</text>
+  </g>
+  <text x="48" y="566" class="tb">Operación</text>
+  <g transform="translate(48,574)">
+    <rect x="0" y="0" width="80" height="22" rx="11" fill="#eafaf0" stroke="#2e9e5b"/><text x="40" y="15" text-anchor="middle" class="chip" fill="#1f7a44">QUOTE</text>
+    <rect x="88" y="0" width="104" height="22" rx="11" fill="#fff6e6" stroke="#e0a32e"/><text x="140" y="15" text-anchor="middle" class="chip" fill="#b8860b">PRODUCTION</text>
+    <rect x="200" y="0" width="56" height="22" rx="11" fill="#f1f3f5" stroke="#8a93a0"/><text x="228" y="15" text-anchor="middle" class="chip" fill="#4a5260">QA</text>
+    <rect x="264" y="0" width="104" height="22" rx="11" fill="#f1f3f5" stroke="#8a93a0"/><text x="316" y="15" text-anchor="middle" class="chip" fill="#4a5260">ONBOARDING</text>
+    <rect x="376" y="0" width="124" height="22" rx="11" fill="#eafaf0" stroke="#2e9e5b"/><text x="438" y="15" text-anchor="middle" class="chip" fill="#1f7a44">REPORTE_CLIENTE</text>
+  </g>
+  <text x="48" y="620" class="tb">Negocio / Marketing</text>
+  <g transform="translate(48,628)">
+    <rect x="0" y="0" width="62" height="22" rx="11" fill="#eafaf0" stroke="#2e9e5b"/><text x="31" y="15" text-anchor="middle" class="chip" fill="#1f7a44">CEO</text>
+    <rect x="70" y="0" width="84" height="22" rx="11" fill="#eafaf0" stroke="#2e9e5b"/><text x="112" y="15" text-anchor="middle" class="chip" fill="#1f7a44">FINANCE</text>
+    <rect x="162" y="0" width="62" height="22" rx="11" fill="#fff6e6" stroke="#e0a32e"/><text x="193" y="15" text-anchor="middle" class="chip" fill="#b8860b">ADS</text>
+    <rect x="232" y="0" width="90" height="22" rx="11" fill="#f3ecfb" stroke="#7e57c2"/><text x="277" y="15" text-anchor="middle" class="chip" fill="#5e35b1">CONTENT</text>
+  </g>
+  <text x="48" y="668" class="sub">Solo LEAD y LINKEDIN corren automáticos sobre la cola; el resto se disparan desde el dashboard cuando se necesitan.</text>
+
+  <!-- 4. Simulación -->
+  <line x1="48" y1="686" x2="746" y2="686" stroke="#e3e6ea" stroke-width="1"/>
+  <text x="48" y="712" class="h2">SIMULACIÓN — LEAD DE LINKEDIN</text>
+  <rect x="48" y="724" width="698" height="252" rx="10" fill="#fafbfc" stroke="#e3e6ea"/>
+  <text x="64" y="746" class="tb">María González · Marketing Manager · “Retail Demo” · kit de bienvenida para 200 colaboradores</text>
+  <text x="64" y="770" class="t"><tspan font-weight="700">1.</tspan> LinkedIn Lead Gen → Make/Zapier → POST /webhooks/linkedin (con X-Linkedin-Webhook-Key).</text>
+  <text x="64" y="790" class="t"><tspan font-weight="700">2.</tspan> El Worker valida la llave, normaliza y marca source = linkedin.</text>
+  <text x="64" y="810" class="t"><tspan font-weight="700">3.</tspan> Crea Cliente (sin duplicar) + tarea LINKEDIN_AGENT en Agent_Queue. Email automático a María.</text>
+  <text x="64" y="830" class="t"><tspan font-weight="700">4.</tspan> El LINKEDIN_AGENT (Claude) responde:</text>
+  <rect x="64" y="842" width="666" height="86" rx="6" fill="#0f1115"/>
+  <text x="76" y="862" class="t" fill="#9aa3b2" font-family="ui-monospace, Menlo, monospace">score_b2b: 8   ·   servicio_recomendado: Merchandising   ·   decisor: Alto</text>
+  <text x="76" y="882" class="t" fill="#e6e9ef" font-family="ui-monospace, Menlo, monospace">mensaje_linkedin: "Hola María, vimos que buscan kit de bienvenida para 200…"</text>
+  <text x="76" y="902" class="t" fill="#9aa3b2" font-family="ui-monospace, Menlo, monospace">proxima_accion: enviar referencias + pedir fecha y presupuesto por unidad</text>
+  <text x="76" y="920" class="t" fill="#9aa3b2" font-family="ui-monospace, Menlo, monospace">objeciones: plazo para 200 uds · presupuesto/unidad</text>
+  <text x="64" y="952" class="t"><tspan font-weight="700">5.</tspan> Escribe en el Cliente: Lead Score IA = 8, Próxima acción, Resumen. Loguea en Agent_Log.</text>
+  <text x="64" y="970" class="t"><tspan font-weight="700">6.</tspan> Sigue la venta: QUOTE_AGENT cotiza los 200 kits; si no responde, FOLLOWUP_AGENT rescata.</text>
+
+  <!-- Límites -->
+  <text x="48" y="1004" class="h2">LÍMITES A TENER EN CUENTA</text>
+  <text x="48" y="1024" class="t">• Procesamiento manual por defecto (botón Procesar) salvo que se active AUTO_PROCESS_LEADS.</text>
+  <text x="48" y="1040" class="t">• La llave pública de la web no es secreto fuerte (va en el bundle); LinkedIn depende de Make/Zapier.</text>
+  <text x="48" y="1056" class="t">• Los agentes sugieren, no cierran: el cierre de la venta sigue siendo humano.</text>
+
+  <line x1="48" y1="1080" x2="746" y2="1080" stroke="#e3e6ea" stroke-width="1"/>
+  <text x="48" y="1100" class="sub">Detalle técnico: docs/PIPELINE.md · diagrama: docs/pipeline-diagram.svg · prueba E2E: scripts/test-pipeline.sh</text>
+</svg>
