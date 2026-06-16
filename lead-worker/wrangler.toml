@@ -15,7 +15,7 @@ ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,http://
 # "true" para que el Worker llame a Claude y deje el lead pre-scoreado.
 AUTO_PROCESS_LEADS = "true"
 # Auto-respuesta al lead (requiere secret RESEND_API_KEY). From debe ser dominio verificado en Resend.
-RESEND_FROM = "The Lab Solutions <contacto@thelab.solutions>"
+RESEND_FROM = "The Lab Solutions <hola@thelab.solutions>"
 WHATSAPP_NUMBER = "56928785039"
 
 # ── KV opcional para rate-limiting ─────────────────────────────────────
