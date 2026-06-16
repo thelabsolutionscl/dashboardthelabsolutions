@@ -20,7 +20,8 @@ base64 -i ../cert/169374015.pfx | tr -d '\n' | npx wrangler secret put CERT_PFX_
 #   base64 -i /ruta/a/tu.pfx | tr -d '\n' | npx wrangler secret put CERT_PFX_BASE64
 
 echo "🔑 [2/11] Contraseña del certificado..."
-printf 'Primos2525' | npx wrangler secret put CERT_PFX_PASSWORD
+read -rsp 'CERT_PFX_PASSWORD: ' _PFXPW; echo
+printf '%s' "$_PFXPW" | npx wrangler secret put CERT_PFX_PASSWORD; unset _PFXPW
 
 # ── Datos del emisor ─────────────────────────────────────────
 echo "🏢 [3/11] RUT del emisor..."

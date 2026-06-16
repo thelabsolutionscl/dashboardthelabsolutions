@@ -12,16 +12,7 @@ SII_ENV = "certificacion"
 binding = "FOLIOS_KV"
 id = "12c2c38ebe2d47b39e20daafddfa6ea7"
 
-# Secrets — ejecutar: bash setup-secrets.sh
-#
-# CERT_PFX_BASE64   →  base64 del archivo 169374015.pfx
-# CERT_PFX_PASSWORD →  Primos2525
-# RUT_EMISOR        →  77.499.554-4  (WAST3D SPA)
-# RAZON_SOCIAL      →  WAST3D SPA
-# GIRO_EMISOR       →  SERVICIOS DE IMPRESION Y PUBLICIDAD
-# ACTECO            →  329900
-# DIR_EMISOR        →  VILLAGRA 70
-# CMNA_EMISOR       →  Providencia
-# CIUDAD_EMISOR     →  Santiago
-# RESOLUCION_FECHA  →  2014-10-21
-# RESOLUCION_NUMERO →  99
+# Secrets — configurar con: bash setup-secrets.sh  (o: wrangler secret put NOMBRE)
+# Nombres requeridos (los VALORES reales NO van aquí — viven como secrets):
+#   CERT_PFX_BASE64, CERT_PFX_PASSWORD, RUT_EMISOR, RAZON_SOCIAL, GIRO_EMISOR,
+#   ACTECO, DIR_EMISOR, CMNA_EMISOR, CIUDAD_EMISOR, RESOLUCION_FECHA, RESOLUCION_NUMERO
