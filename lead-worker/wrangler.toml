@@ -13,7 +13,7 @@ AIRTABLE_BASE_ID = "app1YtD74AqiPWQhy"
 # Orígenes permitidos para CORS (coma-separado). Sin wildcard.
 ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,http://localhost:3000"
 # "true" para que el Worker llame a Claude y deje el lead pre-scoreado.
-AUTO_PROCESS_LEADS = "false"
+AUTO_PROCESS_LEADS = "true"
 
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL
