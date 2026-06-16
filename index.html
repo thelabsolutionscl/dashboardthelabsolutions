@@ -2749,6 +2749,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
                 <span id="slAdvCaret" style="color:var(--text3);font-size:12px">▾</span>
               </div>
               <div id="slAdvBody" style="display:none;margin-top:10px">
+                <div id="slObjSetWrap" style="display:none;margin-bottom:14px">
+                  <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">AJUSTES POR PIEZA <span style="font-weight:400">(relleno/perímetros/soporte distintos por pieza del plato — vacío = global)</span></div>
+                  <div id="slObjSetList"></div>
+                </div>
                 <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">MODIFICADORES POR ALTURA <span style="font-weight:400">(distintos parámetros en un rango de Z)</span></div>
                 <div id="slModList"></div>
                 <button class="btn btn-ghost btn-sm" onclick="SL3D.addModifier()" style="margin:4px 0 12px">+ Agregar modificador</button>
@@ -19072,7 +19076,7 @@ const SL3D=(function(){
     {k:'ironing',l:'Planchado',sel:['no','sí']},{k:'ironingFlow',l:'Planchado: flujo (%)',s:1},{k:'retractMinTravel',l:'Retrac. mín. viaje (mm)',s:0.2},
     {k:'retractDist',l:'Retracción (mm)',s:0.1},{k:'retractSpeed',l:'Vel. retrac.',s:5},{k:'zHop',l:'Z-hop (mm)',s:0.1},
   ];
-  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[],layFlatMode:false,showSupports:false,supSticks:null};
+  const S={tris:null,objects:[],prev:null,stats:null,name:'',params:null,gcode:'',rot:{a:0.7,b:-1.1},enginePromise:null,drag:null,modifiers:[],supRegions:[],layFlatMode:false,showSupports:false,supSticks:null,objSettings:null};
   const el=id=>document.getElementById(id);
 
   // ── Parsers ─────────────────────────────────────────────────
@@ -19364,7 +19368,7 @@ const SL3D=(function(){
     analyze(S.tris);buildPreview();S.supSticks=null;
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];
     el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
-    renderModifiers();renderSupRegions();
+    renderModifiers();renderSupRegions();renderObjSettings();
     S.layFlatMode=false;_updLayFlatBtn();
     render();renderStats();
     toast(`✓ Cara apoyada en la cama (voladizos ${S.stats.ovPct.toFixed(1)}%) — revisa parámetros y vuelve a generar`,'success');
@@ -19414,6 +19418,7 @@ const SL3D=(function(){
   function _replate(){
     S.tris=S.objects.length>1?_plate(S.objects):S.objects[0];
     S.objBBs=S.objects.length>1?S._plateBBs:null; // EXCLUDE_OBJECT sólo con 2+ piezas
+    S.objSettings=S.objects.length>1?(S._plateBBs||[]).map((_,i)=>(S.objSettings&&S.objSettings[i])||{}):null; // ajustes por pieza
     analyze(S.tris);buildPreview();
     const fn=el('slFileName');fn.style.display='block';fn.textContent=S.objects.length>1?`✓ ${S.objects.length} piezas en el plato`:'✓ '+S.name;
     el('slCanvas').style.display='block';render();renderStats();
@@ -19627,7 +19632,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     el('slParamsWrap').style.display='block';
     renderProfileSel();
-    renderModifiers();renderSupRegions();
+    renderModifiers();renderSupRegions();renderObjSettings();
   }
   // ── Perfiles de laminado (guardar/cargar conjuntos de parámetros) ──
   function _slProfiles(){try{return JSON.parse(localStorage.getItem('sl_profiles')||'{}');}catch(e){return{};}}
@@ -19658,7 +19663,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const b=el('slAdvBody'),c=el('slAdvCaret');
     const open=b.style.display==='none';
     b.style.display=open?'block':'none';c.textContent=open?'▴':'▾';
-    if(open)loadMachineGcode();
+    if(open){loadMachineGcode();renderObjSettings();}
   }
   // ── G-code de máquina (inicio/fin) por impresora ──
   function _sub(tpl,vars){return tpl.replace(/\{(\w+)\}/g,(m,k)=>k in vars?vars[k]:m);}
@@ -19741,6 +19746,25 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         </div>
       </div>`).join('');
   }
+  // ── Ajustes por pieza (overrides de relleno/perímetros/soporte por objeto del plato) ──
+  const _inStyle="width:58px;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;font-family:monospace";
+  function renderObjSettings(){
+    const wrap=el('slObjSetWrap'),list=el('slObjSetList');if(!wrap||!list)return;
+    if(!S.objSettings||!S.objBBs||S.objBBs.length<2){wrap.style.display='none';return;}
+    wrap.style.display='block';
+    const pats=['','grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','adaptive','linear'];
+    list.innerHTML=S.objSettings.map((s,i)=>`
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px;margin-bottom:6px">
+        <div style="font-size:10px;font-weight:700;color:var(--text2);margin-bottom:6px">Pieza ${i+1}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <label style="font-size:9px;color:var(--text3)">Relleno %<br><input type="number" step="5" placeholder="—" value="${s.infillPct??''}" onchange="SL3D.updObjSetting(${i},'infillPct',this.value)" style="${_inStyle}"></label>
+          <label style="font-size:9px;color:var(--text3)">Patrón<br><select onchange="SL3D.updObjSetting(${i},'infillType',this.value)" style="background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px">${pats.map(o=>`<option value="${o}" ${o===(s.infillType||'')?'selected':''}>${o||'—'}</option>`).join('')}</select></label>
+          <label style="font-size:9px;color:var(--text3)">Perímetros<br><input type="number" step="1" placeholder="—" value="${s.shells??''}" onchange="SL3D.updObjSetting(${i},'shells',this.value)" style="${_inStyle}"></label>
+          <label style="font-size:9px;color:var(--text3)">Soporte<br><select onchange="SL3D.updObjSetting(${i},'supports',this.value)" style="background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px"><option value="" ${!s.supports?'selected':''}>global</option><option value="sí" ${s.supports==='sí'?'selected':''}>sí</option><option value="no" ${s.supports==='no'?'selected':''}>no</option></select></label>
+        </div>
+      </div>`).join('');
+  }
+  function updObjSetting(i,k,v){if(S.objSettings&&S.objSettings[i])S.objSettings[i][k]=v;}
   // Parámetros efectivos para una capa a altura curZ (aplica modificadores que cubran ese Z).
   // Sin modificadores activos → devuelve el mismo objeto p (cero cambios en la salida).
   function _layerParams(p,curZ){
@@ -20560,12 +20584,20 @@ self.onmessage=function(ev){
     const _pre=await _precomputeLayers(tris,sortedIdx,triZmin,triZmax,lhs,totalL,
       f=>setProg(3+f*1.5,`Calculando contornos… ${Math.round(f*100)}%`));
     const layerTopZ=_pre.layerTopZ,layerPolys=_pre.layerPolys,layerParity=_pre.layerParity,layerNetArea=_pre.layerNetArea,layerBB=_pre.layerBB;
+    // ── Ajustes por pieza: mapa (x,y)→objeto y overrides de relleno/perímetros/soporte ──
+    const _objBBs=S.objBBs||[],_objSet=S.objSettings||[];
+    const _hasObjSet=_objBBs.length>1&&_objSet.some(s=>s&&((s.infillPct!==''&&s.infillPct!=null)||s.infillType||(s.shells!==''&&s.shells!=null)||s.supports));
+    const _objIdx=(x,y)=>{for(let i=0;i<_objBBs.length;i++){const b=_objBBs[i];if(x>=b.x0-1&&x<=b.x1+1&&y>=b.y0-1&&y<=b.y1+1)return i;}return -1;};
+    const _objParams=(base,oi)=>{const s=_objSet[oi];if(!s)return base;const o=Object.assign({},base);const cl=(v,a,b)=>Math.max(a,Math.min(b,Math.round(+v)));if(s.infillPct!==''&&s.infillPct!=null)o.infillPct=cl(s.infillPct,0,100);if(s.infillType)o.infillType=s.infillType;if(s.shells!==''&&s.shells!=null)o.shells=cl(s.shells,1,8);return o;};
+    const _objSupOff=(x,y)=>_hasObjSet&&((s)=>s&&s.supports==='no')(_objSet[_objIdx(x,y)]);
+    const _objSupOn=(x,y)=>((s)=>s&&s.supports==='sí')(_objSet[_objIdx(x,y)]);
+    const _hasObjSupOn=_objBBs.length>1&&_objSet.some(s=>s&&s.supports==='sí');
     // ── Soportes: columnas bajo voladizos (rejilla o árbol) ──
     let supCols=null,supTrees=null;const SUP_GS=p.supGrid||3;
     const gapLayers=Math.max(0,Math.round((p.supZGap||0)/p.layerHeight)); // separación de aire (capas) entre soporte y pieza
     const ifaceLayers=Math.max(0,Math.round(p.supInterface!=null?p.supInterface:2)); // capas de interfaz densa justo bajo la pieza
     const _hasEnforce=(S.supRegions||[]).some(r=>r.mode==='enforce');
-    if(p.supports||_hasEnforce){
+    if(p.supports||_hasEnforce||_hasObjSupOn){
       setProg(3.5,'Calculando soportes…');await new Promise(r=>setTimeout(r,0));
       const dx=S.stats.dx,dy=S.stats.dy,minZ=Math.max(0.8,lhs[0]+0.4),cols=[];
       // ¿Hay material sólido en (x,y) en la capa li? Regla par-impar → los agujeros cuentan como aire.
@@ -20592,8 +20624,11 @@ self.onmessage=function(ev){
           const tol=Math.max(0.1,lhs[li]*Math.tan((p.supportAngle||50)*Math.PI/180));
           let selfSup=false;
           for(let a=0;a<8&&!selfSup;a++){const an=a*Math.PI/4;if(hit(gx+tol*Math.cos(an),gy+tol*Math.sin(an),li-1))selfSup=true;}
+          // Ajuste por pieza: una pieza con soporte 'no' nunca recibe; con 'sí' fuerza soporte (como enforce).
+          if(_objSupOff(gx,gy))continue;
+          const _objOn=_objSupOn(gx,gy);
           // Si el soporte global está activo: añade por ángulo (salvo bloqueo) + forzados. Si está apagado: sólo forzados.
-          const want=p.supports?(!selfSup||enforced(gx,gy,cz)):enforced(gx,gy,cz);
+          const want=p.supports?(!selfSup||enforced(gx,gy,cz)||_objOn):(enforced(gx,gy,cz)||_objOn);
           if(!want)continue;
           // Base de la columna: baja hasta el modelo de abajo (deja de poner soporte ahí) o la cama.
           let bot=0;
@@ -20721,13 +20756,19 @@ self.onmessage=function(ev){
       if(Math.abs(comp)>0.001){
         baseC=contours.map((ct,ci)=>{const off=parity[ci]?comp:-comp;const r=_insetRaw(ct,off);return(r&&r.length>=3)?r:ct;});
       }
+      // Agrupar contornos por pieza (ajustes por pieza); sin ajustes → un solo grupo = comportamiento idéntico
+      let _grps;
+      if(_hasObjSet){const gm=new Map();for(let _ci=0;_ci<baseC.length;_ci++){const _ct=baseC[_ci];if(_ct.length<3)continue;let _sx=0,_sy=0;for(const _pt of _ct){_sx+=_pt[0];_sy+=_pt[1];}const _oi=_objIdx(_sx/_ct.length,_sy/_ct.length);(gm.get(_oi)||gm.set(_oi,[]).get(_oi)).push(_ci);}_grps=[...gm.entries()].map(([oi,cis])=>({oi,cis}));}
+      else _grps=[{oi:-1,cis:baseC.map((_,i)=>i)}];
+      for(const _grp of _grps){
+      const peo=_hasObjSet?_objParams(pe,_grp.oi):pe;
       // Paredes por contorno: exterior crece hacia adentro, agujero crece hacia afuera (más material alrededor)
       const fillLoops=[],gapLoops=[];
-      for(let ci=0;ci<baseC.length;ci++){
+      for(const ci of _grp.cis){
         const ct=baseC[ci];if(ct.length<3)continue;
         const hole=parity[ci];
         const shells=[ct];
-        for(let s=1;s<pe.shells;s++){
+        for(let s=1;s<peo.shells;s++){
           const ins=hole?_insetRaw(shells[s-1],-extW):_inset(shells[s-1],extW);
           if(ins&&ins.length>=3)shells.push(ins);else break;
         }
@@ -20740,9 +20781,9 @@ self.onmessage=function(ev){
         }
         fillLoops.push(shells[shells.length-1]);
         // Gap fill: pared fina donde no cupieron 2 perímetros → cordón central sólido para no dejar hueco
-        if(p.gapFill&&pe.shells>=2&&shells.length<2&&!hole)gapLoops.push(ct);
+        if(p.gapFill&&peo.shells>=2&&shells.length<2&&!hole)gapLoops.push(ct);
         // Arachne: si la pared es más delgada que 2×extW, rellenar con una pared central de ancho variable
-        if(p.arachne&&!hole&&pe.shells>=2&&shells.length===1){
+        if(p.arachne&&!hole&&peo.shells>=2&&shells.length===1){
           const inner=_insetRaw(ct,extW);
           if(inner&&inner.length>=3){
             // El inset cabe → la pared es ≥ extW pero falta la segunda pared
@@ -20762,19 +20803,19 @@ self.onmessage=function(ev){
         // Solape relleno↔pared: expande los lazos de relleno hacia la pared → sin hueco entre relleno y perímetro
         const _ovl=extW*((p.infillOverlap||0)/100);
         const infLoops=_ovl>0.001?fillLoops.map(l=>{const r=_insetRaw(l,-_ovl);return(r&&r.length>=3)?r:l;}):fillLoops;
-        const aLi=layerNetArea[li],aTop=layerNetArea[li+pe.topLayers],aBot=layerNetArea[li-pe.bottomLayers];
+        const aLi=layerNetArea[li],aTop=layerNetArea[li+peo.topLayers],aBot=layerNetArea[li-peo.bottomLayers];
         // ¿Hay alguna cara expuesta? Sólo si arriba/abajo (N capas) la sección encoge (o no existe = global)
         // Lightning siempre usa el camino muestreado: necesita escanear hacia arriba para hallar techos.
-        const exposed=(pe.infillType==='lightning')||(aTop===undefined||aTop<aLi*0.98)||(aBot===undefined||aBot<aLi*0.98);
+        const exposed=(peo.infillType==='lightning')||(aTop===undefined||aTop<aLi*0.98)||(aBot===undefined||aBot<aLi*0.98);
         if(!exposed){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
-          if(pe.infillPct>0){
-            const sp=_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType==='adaptive'?'cubic':pe.infillType,li,curZ);
+          if(peo.infillPct>0){
+            const sp=_infillMulti(infLoops,extW/(peo.infillPct/100),peo.infillType==='adaptive'?'cubic':peo.infillType,li,curZ);
             if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
           }
         }else{
-          const above=layerPolys[li+pe.topLayers]||[],below=layerPolys[li-pe.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
-          const aboveBB=layerBB[li+pe.topLayers]||[],belowBB=layerBB[li-pe.bottomLayers]||[],below1BB=li>0?(layerBB[li-1]||[]):[];
+          const above=layerPolys[li+peo.topLayers]||[],below=layerPolys[li-peo.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
+          const aboveBB=layerBB[li+peo.topLayers]||[],belowBB=layerBB[li-peo.bottomLayers]||[],below1BB=li>0?(layerBB[li-1]||[]):[];
           const isTop=(x,y)=>!_inSolidBB(x,y,above,aboveBB),isBot=(x,y)=>!_inSolidBB(x,y,below,belowBB);
           const isSurf=(x,y)=>isTop(x,y)||isBot(x,y);
           const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolidBB(x,y,below1,below1BB);
@@ -20793,30 +20834,30 @@ self.onmessage=function(ev){
             }
           }
           // 3) Relleno disperso en el interior (ni superficie)
-          if(pe.infillType==='lightning'){
+          if(peo.infillType==='lightning'){
             // Lightning: estructura mínima tipo árbol — sólo soporta techos dentro del alcance vertical,
             // dejando el resto del interior hueco. Gran ahorro de material y tiempo.
-            const reach=Math.max(4,pe.topLayers+3);
+            const reach=Math.max(4,peo.topLayers+3);
             const isAirAt=(x,y,L)=>{const pp=layerPolys[L];if(!pp||!pp.length)return true;return !_inSolidBB(x,y,pp,layerBB[L]);};
             const needsLight=(x,y)=>{
               if(isSurf(x,y))return false;
               for(let d=1;d<=reach;d++){const L=li+d;if(L>=totalL)return false;if(isAirAt(x,y,L))return true;}
               return false; // techo lejano → sin relleno (ahorro)
             };
-            const lspac=Math.max(extW*2,extW/Math.max(0.05,pe.infillPct/100)*1.4);
+            const lspac=Math.max(extW*2,extW/Math.max(0.05,peo.infillPct/100)*1.4);
             const sp=_clipLines(_scanfillAll(infLoops,lspac,li%2?135:45),needsLight,extW);
             if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);}
-          }else if(pe.infillType==='adaptive'&&pe.infillPct>0){
+          }else if(peo.infillType==='adaptive'&&peo.infillPct>0){
             // Relleno adaptativo: base disperso cúbico en todo el interior + pasada extra densa cerca de los techos
-            const baseSp=_clipLines(_infillMulti(infLoops,extW/(pe.infillPct/100),'cubic',li,curZ),(x,y)=>!isSurf(x,y),extW);
+            const baseSp=_clipLines(_infillMulti(infLoops,extW/(peo.infillPct/100),'cubic',li,curZ),(x,y)=>!isSurf(x,y),extW);
             if(baseSp.length){gc.push('; relleno adaptativo (base)');[E,cX,cY]=_printLines(gc,baseSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
-            const reach=Math.max(4,pe.topLayers+4);
+            const reach=Math.max(4,peo.topLayers+4);
             const isAirAt=(x,y,L)=>{const pp=layerPolys[L];if(!pp||!pp.length)return true;return !_inSolidBB(x,y,pp,layerBB[L]);};
             const nearCeil=(x,y)=>{if(isSurf(x,y))return false;for(let d=1;d<=reach;d++){const L=li+d;if(L>=totalL)return false;if(isAirAt(x,y,L))return true;}return false;};
-            const densSp=_clipLines(_scanfillAll(infLoops,extW/Math.max(0.05,pe.infillPct/100)*0.7,li%2?45:135),nearCeil,extW);
+            const densSp=_clipLines(_scanfillAll(infLoops,extW/Math.max(0.05,peo.infillPct/100)*0.7,li%2?45:135),nearCeil,extW);
             if(densSp.length){gc.push('; relleno adaptativo (densificado bajo techos)');[E,cX,cY]=_printLines(gc,densSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
-          }else if(pe.infillPct>0){
-            const sp=_clipLines(_infillMulti(infLoops,extW/(pe.infillPct/100),pe.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
+          }else if(peo.infillPct>0){
+            const sp=_clipLines(_infillMulti(infLoops,extW/(peo.infillPct/100),peo.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
             if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
           }
         }
@@ -20832,6 +20873,7 @@ self.onmessage=function(ev){
           if(ir.length){gc.push('; ironing');[E,cX,cY]=_printLines(gc,ir,zOut,offX,offY,cX,cY,E,lh*((p.ironingFlow||12)/100),extW,Math.round(Math.min(spd,40))*60,p,COMB);}
         }
       }
+      } // fin loop por pieza (ajustes por pieza)
       // Tiempo mínimo de capa: ralentiza la extrusión de esta capa si imprime muy rápido (enfría mejor)
       if(li>0&&p.minLayerTime>0){
         const cooled=_applyMinLayerTime(gc,_layerStartIdx,p.minLayerTime);
@@ -21362,7 +21404,7 @@ self.onmessage=function(ev){
       gcv.addEventListener('pointerup',()=>{gd=null;gcv.style.cursor='grab';});
     }
   });
-  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel,toggleGcode3D};
+  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,updObjSetting,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel,toggleGcode3D};
 })();
 </script>
 
