@@ -6315,7 +6315,14 @@ async function callClaude(system,user){
 const _CLAUDE_BODY=(system,user)=>JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system,messages:[{role:'user',content:user}]});
 function _claudeText(j){return j.content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
 async function _callClaudeViaProxy(system,user,px){
-  const r=await fetch(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key,'anthropic-version':'2023-06-01'},body:_CLAUDE_BODY(system,user)});
+  // No mandamos 'anthropic-version' como header: dispara un preflight CORS que el Worker podría no permitir.
+  // El Worker la inyecta por defecto. Sólo 'Content-Type' y 'X-App-Key' (ambos ya permitidos por el Worker).
+  let r;
+  try{
+    r=await fetch(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key},body:_CLAUDE_BODY(system,user)});
+  }catch(e){
+    throw new Error('no se pudo conectar al proxy IA — revisa la URL/clave en Mi cuenta → Proxy y que el Worker esté desplegado');
+  }
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`Proxy IA error ${r.status}`);}
   return _claudeText(await r.json());
 }

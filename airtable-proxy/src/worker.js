@@ -4,7 +4,7 @@ const ANTHROPIC_BASE = 'https://api.anthropic.com';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,X-App-Key',
+  'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,anthropic-version,x-api-key',
 };
 
 export default {
