@@ -3697,6 +3697,17 @@ function _reportarResultados(muts) {
         <div>Configura el endpoint y haz clic en "Actualizar" para cargar campañas</div>
       </div>
     </div>
+
+    <!-- Palabras clave + Quality Score -->
+    <div id="adsKeywordsPanel" style="display:none;margin-top:16px">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Palabras clave · Quality Score</span>
+          <span id="adsKwBadge" style="font-size:10px;color:var(--text3);margin-left:auto"></span>
+        </div>
+        <div id="adsKeywordsArea" style="padding:6px 10px 12px"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Accesos rápidos -->
@@ -16204,7 +16215,61 @@ function renderAdsCRMPanel(data,days){
   }
   set('crm-ads-bar-label',roasReal>=1?`✓ ROAS ${roasReal.toFixed(1)}x — rentable`:`⚠ ROAS ${roasReal>0?roasReal.toFixed(2)+'x':'sin datos'}`);
 }
+let _adsKwActions=[];
+function _adsKwAction(idx){
+  const d=_adsKwActions[idx];if(!d)return;
+  if(d.type==='copy') adsGenerateAdCopy(d.termino,d.campana);
+  else if(d.type==='pause'){
+    if(window._adsLastData&&window._adsLastData.demo){toast('Datos DEMO — conecta tu cuenta para pausar','info');return;}
+    if(typeof _adsQueueMutation==='function'){_adsQueueMutation({op:'pause_keyword',id:'',data:{campana:d.campana||'',termino:d.termino},timestamp:new Date().toISOString(),status:'pending'});toast(`⏸ Pausar "${d.termino}" en cola`,'success');}
+    else toast('Cola de mutaciones no disponible','error');
+  }
+}
+function renderAdsKeywords(data){
+  const panel=document.getElementById('adsKeywordsPanel');
+  const area=document.getElementById('adsKeywordsArea');
+  const badge=document.getElementById('adsKwBadge');
+  if(!panel||!area)return;
+  const kws=(data&&data.keywords)||[];
+  if(!kws.length){panel.style.display='none';return;}
+  panel.style.display='';
+  _adsKwActions=[];
+  const sorted=[...kws].sort((a,b)=>(b.gasto||0)-(a.gasto||0));
+  const top=sorted.slice(0,20);
+  const nLow=kws.filter(k=>(k.qs||0)>0&&(k.qs||0)<=5).length;
+  const nWaste=kws.filter(k=>(k.gasto||0)>4000&&(k.conversiones||0)===0).length;
+  if(badge)badge.textContent=`${kws.length} kw · ${nLow} con QS bajo · ${nWaste} sin convertir`;
+  const _qsComp=(label,v)=>{const c=v==='ABOVE_AVERAGE'?'var(--success)':v==='BELOW_AVERAGE'?'var(--danger)':v==='AVERAGE'?'var(--warn)':'var(--text3)';return `<span title="${label}: ${v||'s/d'}" style="display:inline-flex;align-items:center;gap:2px;font-size:8px;color:var(--text3);margin-right:5px"><span style="width:6px;height:6px;border-radius:50%;background:${c};display:inline-block"></span>${label}</span>`;};
+  const rows=top.map(k=>{
+    const qs=k.qs||0;
+    const qsColor=qs>=7?'var(--success)':qs>=4?'var(--warn)':qs>0?'var(--danger)':'var(--text3)';
+    const cpa=(k.conversiones||0)>0?Math.round(k.gasto/k.conversiones):0;
+    const waste=(k.gasto||0)>4000&&(k.conversiones||0)===0;
+    const anuncioBajo=k.qs_anuncio==='BELOW_AVERAGE';
+    const ci=_adsKwActions.push({type:'copy',termino:k.kw||'',campana:k.campana||''})-1;
+    const pi=_adsKwActions.push({type:'pause',termino:k.kw||'',campana:k.campana||''})-1;
+    const acc=`<span style="display:inline-flex;gap:4px">
+        <button class="btn-icon accent" onclick="_adsKwAction(${ci})" title="Generar anuncios para esta keyword">✍</button>
+        <button class="btn-icon danger" onclick="_adsKwAction(${pi})" title="Pausar esta palabra clave">⏸</button>
+      </span>`;
+    return `<tr${waste?' style="background:rgba(255,68,68,0.05)"':''}>
+      <td style="white-space:nowrap"><span style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle" title="${escapeHtml(k.kw||'')}${k.campana?' · '+escapeHtml(k.campana):''}">${escapeHtml(k.kw||'')}</span> <span style="font-size:8px;color:var(--text3)">${escapeHtml((k.match||'').slice(0,1)||'')}</span>${anuncioBajo?' <span title="Anuncio con relevancia baja — genera mejor copy" style="font-size:9px">✍</span>':''}${waste?' <span title="Gasta sin convertir" style="color:var(--danger);font-size:9px">⚑</span>':''}</td>
+      <td style="text-align:center"><span style="display:inline-block;min-width:24px;text-align:center;color:${qsColor};border:1px solid ${qsColor};border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700">${qs>0?qs:'—'}</span></td>
+      <td style="white-space:nowrap">${_qsComp('Anuncio',k.qs_anuncio)}${_qsComp('Landing',k.qs_landing)}${_qsComp('CTR',k.qs_ctr)}</td>
+      <td style="text-align:right">${fmtMoney(k.gasto||0)}</td>
+      <td style="text-align:right;color:var(--success)">${(k.conversiones||0)>0?Number(k.conversiones).toFixed(0):'—'}</td>
+      <td style="text-align:right">${(k.conversiones||0)>0?fmtMoney(cpa):'—'}</td>
+      <td style="text-align:right">${acc}</td>
+    </tr>`;
+  }).join('');
+  area.innerHTML=`<div class="table-wrap"><table>
+    <thead><tr><th>Palabra clave</th><th style="text-align:center" title="Quality Score 1–10">QS</th><th title="Componentes del Quality Score">Componentes</th><th style="text-align:right">Gasto</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th><th style="text-align:right">Acción</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>
+  <div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 4px;line-height:1.5">Mostrando top ${top.length} por gasto. <span style="color:var(--danger)">⚑</span> gasta sin convertir · <span>✍</span> relevancia de anuncio baja (el copy es la palanca). Quality Score alto = CPC más barato.</div>`;
+}
 function renderAdsCampaigns(data){
+  try{renderAdsKeywords(data);}catch(e){console.error('renderAdsKeywords',e);}
   const camps=data.campanas||[];
   if(!camps.length){
     document.getElementById('adsCampaignsArea').innerHTML='<div class="empty-state" style="padding:30px 0"><div>No hay campañas en el período seleccionado</div></div>';
