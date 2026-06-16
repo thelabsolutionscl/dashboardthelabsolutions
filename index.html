@@ -3363,7 +3363,7 @@ function main() {
 
   // 3. Aplicar mutaciones
   if (isMCC) {
-    // executeInParallel da contexto nativo: AdsApp.newCampaignBuilder() funciona aquí
+    // executeInParallel da contexto nativo de cuenta para aplicar las mutaciones
     AdsManagerApp.accounts()
       .withIds([CUSTOMER_ID])
       .executeInParallel('_aplicarMutaciones', '_finalizarMutaciones', JSON.stringify(muts));
@@ -3496,31 +3496,32 @@ function _aplicarMutaciones(mutsJson) {
     if (m.status !== 'pending') continue;
     try {
       if (m.op === 'create') {
-        var campOp = AdsApp.newCampaignBuilder()
-          .withName(m.data.nombre)
-          .withStatus(m.data.estado || 'ENABLED')
-          .withBudget(m.data.presupuesto)
-          .forSearchNetwork()
-          .build();
-        if (!campOp.isSuccessful()) throw new Error(campOp.getErrors().join(', '));
-        var nuevaCamp = campOp.getResult();
-        if (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) {
-          try {
-            var agOp = nuevaCamp.newAdGroupBuilder()
-              .withName('Grupo 1 - ' + m.data.nombre)
-              .withCpc(300)
-              .build();
-            if (agOp.isSuccessful()) {
-              var ag = agOp.getResult();
-              for (var kw = 0; kw &lt; m.data.palabrasClave.length; kw++) {
-                ag.newKeywordBuilder().withText(m.data.palabrasClave[kw]).build();
-              }
-              Logger.log('  + grupo con ' + m.data.palabrasClave.length + ' keywords');
-            }
-          } catch(eAg) { Logger.log('  Aviso grupo/keywords: ' + eAg.message); }
+        // Google Ads Scripts NO permite crear campañas con builders
+        // (AdsApp.newCampaignBuilder no existe). La vía soportada es la carga
+        // masiva (bulk upload) con el formato CSV del Editor de Google Ads.
+        var _grupo = 'Grupo 1 - ' + m.data.nombre;
+        var _kws = (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) ? m.data.palabrasClave : [];
+        var _cols = ['Campaign', 'Campaign status', 'Budget', 'Bid Strategy type',
+                     'Campaign type', 'Ad group', 'Max CPC', 'Keyword'];
+        var _up = AdsApp.bulkUploads().newCsvUpload(_cols, {moneyInMicros: false});
+        // Fila de campaña (presupuesto y Max CPC en moneda de la cuenta, p. ej. CLP)
+        _up.append({
+          'Campaign': m.data.nombre,
+          'Campaign status': (m.data.estado === 'PAUSED') ? 'Paused' : 'Enabled',
+          'Budget': m.data.presupuesto,
+          'Bid Strategy type': 'cpc',
+          'Campaign type': 'Search Only'
+        });
+        // Fila de grupo de anuncios
+        _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': 300});
+        // Filas de palabras clave (concordancia amplia por defecto)
+        for (var kw = 0; kw &lt; _kws.length; kw++) {
+          _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Keyword': _kws[kw]});
         }
+        _up.forCampaignManagement();
+        _up.apply();
         muts[k].status = 'aplicado';
-        Logger.log('OK creada: ' + m.data.nombre);
+        Logger.log('OK creada (bulk upload): ' + m.data.nombre + ' con ' + _kws.length + ' keywords');
 
       } else if (m.op === 'edit') {
         var iter = AdsApp.campaigns().withIds([m.id]).get();
