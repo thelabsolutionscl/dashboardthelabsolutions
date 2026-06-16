@@ -246,6 +246,9 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     console.error("[leads-worker] Agent_Queue:", e.message);
   }
 
+  // Auto-respuesta al lead (speed-to-lead), best-effort, no bloquea la respuesta
+  if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
+
   // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
   if (
     env.AUTO_PROCESS_LEADS === "true" &&
@@ -367,6 +370,43 @@ async function callClaude(env, system, user) {
   }
   const data = await r.json();
   return data.content?.find((b) => b.type === "text")?.text || "";
+}
+
+// Auto-respuesta al lead (speed-to-lead). Best-effort vía Resend. Requiere RESEND_API_KEY.
+async function sendLeadAutoReply(env, norm) {
+  if (!env.RESEND_API_KEY || !norm.email) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <contacto@thelab.solutions>";
+  const wa = env.WHATSAPP_NUMBER ? `https://wa.me/${env.WHATSAPP_NUMBER}` : null;
+  const name = norm.name ? norm.name.split(" ")[0] : "";
+  const svc = norm.service ? ` sobre <strong>${norm.service}</strong>` : "";
+  const html =
+    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:520px">` +
+    `<h2 style="margin:0 0 12px">¡Recibimos tu solicitud! 👋</h2>` +
+    `<p>Hola ${name},</p>` +
+    `<p>Gracias por escribirnos. Recibimos tu solicitud${svc} y te contactaremos en ` +
+    `<strong>menos de 24 horas hábiles</strong> con una cotización (material, plazo y precio).</p>` +
+    (wa
+      ? `<p>Si quieres adelantar, escríbenos por WhatsApp: <a href="${wa}">${wa.replace("https://", "")}</a></p>`
+      : "") +
+    `<p style="color:#666;font-size:13px;margin-top:18px">— Equipo The Lab Solutions · fabricación digital, Santiago</p>` +
+    `</div>`;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + env.RESEND_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [norm.email],
+        subject: "Recibimos tu solicitud — The Lab Solutions",
+        html,
+      }),
+    });
+  } catch (e) {
+    console.error("[leads-worker] auto-reply:", e.message);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
