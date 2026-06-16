@@ -3547,6 +3547,20 @@ function _aplicarMutaciones(mutsJson) {
         if (!added) muts[k].error = 'No se pudo agregar el negativo (campaña no encontrada)';
         Logger.log((added?'OK':'ERR') + ' negativo: ' + term);
 
+      } else if (m.op === 'pause_keyword') {
+        // Pausa la(s) palabra(s) clave que coincidan con el texto (acotado a la campaña si se indica)
+        var kwt = m.data && m.data.termino; var paused = 0;
+        if (kwt) {
+          var sel = AdsApp.keywords()
+            .withCondition("ad_group_criterion.keyword.text = '" + kwt.replace(/'/g, '') + "'");
+          if (m.data.campana) sel = sel.withCondition("campaign.name = '" + m.data.campana.replace(/'/g, '') + "'");
+          var kwIt = sel.get();
+          while (kwIt.hasNext()) { kwIt.next().pause(); paused++; }
+        }
+        muts[k].status = paused > 0 ? 'aplicado' : 'error';
+        if (paused === 0) muts[k].error = 'Palabra clave no encontrada: ' + kwt;
+        Logger.log((paused > 0 ? 'OK' : 'ERR') + ' pausar keyword: ' + kwt + ' (' + paused + ')');
+
       } else if (m.op === 'delete') {
         var iter2 = AdsApp.campaigns().withIds([m.id]).get();
         if (iter2.hasNext()) {
@@ -5424,6 +5438,9 @@ AL FINAL incluye SIEMPRE un bloque entre [ACTIONS] y [/ACTIONS] con un JSON arra
   {"tipo":"activar","id":"<id>","campana":"<nombre>","motivo":"..."}
   {"tipo":"presupuesto","id":"<id>","campana":"<nombre>","nuevo":<CLP/día entero>,"motivo":"..."}
   {"tipo":"negativo","campana":"<nombre o 'cuenta'>","termino":"<palabra negativa>","motivo":"..."}
+  {"tipo":"pausar_kw","campana":"<nombre o vacío>","termino":"<texto exacto de la palabra clave a pausar>","motivo":"..."}
+  {"tipo":"keyword_exacta","campana":"<nombre>","termino":"<término que convierte para subir a exacta>","motivo":"..."}
+Usa "pausar_kw" para palabras clave que gastan sin convertir o con Quality Score muy bajo sin retorno; usa "keyword_exacta" para términos de búsqueda que ya convierten. El "termino" debe ser el texto exacto que aparece en los datos.
 Usa los IDs exactos que aparecen en los datos. Sólo acciones que recomiendes de verdad (máx 6). Si no hay ninguna, pon [].
 Sé específico con números y campañas concretas. Sin relleno. CLP con puntos de miles.`,
    pre:'',
@@ -11032,6 +11049,22 @@ function _parseAdsActions(text){
   if(!m)return[];
   try{const arr=JSON.parse(m[1].trim());return Array.isArray(arr)?arr.filter(a=>a&&a.tipo):[];}catch(e){return[];}
 }
+// Etiqueta y estilo del botón de una acción del agente (compartido por todos los render)
+function _adsActionLabel(a){
+  switch(a.tipo){
+    case 'pausar':return '⏸ Pausar '+(a.campana||'');
+    case 'activar':return '▶ Activar '+(a.campana||'');
+    case 'presupuesto':return '💰 '+(a.campana||'')+' → '+fmtMoney(+a.nuevo||0);
+    case 'negativo':return '🚫 «'+(a.termino||'')+'»';
+    case 'pausar_kw':return '⏸ Pausar kw «'+(a.termino||'')+'»';
+    case 'keyword_exacta':return '🎯 Subir «'+(a.termino||'')+'» a exacta';
+    default:return a.tipo;
+  }
+}
+function _adsActionClass(a){return (a.tipo==='pausar'||a.tipo==='pausar_kw')?'btn-danger':a.tipo==='keyword_exacta'?'btn-success':'btn-accent';}
+function _adsRenderActionBtns(actions){
+  return actions.map((a,i)=>`<button class="btn btn-sm ${_adsActionClass(a)}" title="${escapeHtml(a.motivo||'')}" onclick="applyAdsAction(${i})">${escapeHtml(_adsActionLabel(a))}</button>`).join('');
+}
 // Convierte una acción del agente en una mutación de Google Ads aplicable con 1 clic
 function applyAdsAction(i){
   const a=(window._adsAgentActions||[])[i];if(!a)return;
@@ -11040,6 +11073,17 @@ function applyAdsAction(i){
     const camp=(window._adsLastData?.campanas||[]).find(c=>c.nombre===a.campana||String(c.id)===String(a.id));
     if(typeof _adsQueueMutation==='function'&&a.termino){_adsQueueMutation({op:'negative',id:camp?camp.id:'',data:{campana:a.campana||'cuenta',termino:a.termino},timestamp:new Date().toISOString(),status:'pending'});toast(`🚫 Negativo "${a.termino}" en cola (requiere Script 2 actualizado) · copiado al portapapeles`,'success');}
     else toast(`Negativo "${a.termino}" copiado al portapapeles`,'info');
+    return;
+  }
+  if(a.tipo==='pausar_kw'){
+    if(typeof _adsQueueMutation==='function'&&a.termino){_adsQueueMutation({op:'pause_keyword',id:'',data:{campana:a.campana||'',termino:a.termino},timestamp:new Date().toISOString(),status:'pending'});toast(`⏸ Pausar palabra clave "${a.termino}" en cola (requiere Script 2 actualizado)`,'success');}
+    else toast('Falta el término de la palabra clave','error');
+    return;
+  }
+  if(a.tipo==='keyword_exacta'){
+    // Promover a exacta es ambiguo (¿qué grupo de anuncios?) → guía + portapapeles, no mutación a ciegas
+    try{navigator.clipboard.writeText('['+(a.termino||'')+']');}catch(e){}
+    toast(`🎯 "[${a.termino}]" copiado — agrégalo como exacta en el grupo correcto de "${a.campana||'la campaña'}"`,'info');
     return;
   }
   const camp=(window._adsLastData?.campanas||[]).find(c=>String(c.id)===String(a.id)||c.nombre===a.campana);
@@ -11063,11 +11107,7 @@ function runAdsAgent(){
     const rEl=document.getElementById('agentInlineResult');if(rEl)rEl.textContent=String(result).replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/i,'').trim();
     // log de memoria (qué recomendó y cuándo)
     try{_adsLogRecommendation(actions,result);}catch(e){}
-    const btns=actions.map((a,i)=>{
-      const lbl=a.tipo==='pausar'?('⏸ Pausar '+(a.campana||'')):a.tipo==='activar'?('▶ Activar '+(a.campana||'')):a.tipo==='presupuesto'?('💰 '+(a.campana||'')+' → '+fmtMoney(+a.nuevo||0)):a.tipo==='negativo'?('🚫 «'+(a.termino||'')+'»'):a.tipo;
-      const danger=a.tipo==='pausar';
-      return `<button class="btn btn-sm ${danger?'btn-danger':'btn-accent'}" title="${escapeHtml(a.motivo||'')}" onclick="applyAdsAction(${i})">${escapeHtml(lbl)}</button>`;
-    }).join('');
+    const btns=_adsRenderActionBtns(actions);
     return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
@@ -15521,7 +15561,7 @@ function runAdsCampaignAgent(id){
   runAgentInline('ADS',ctx,(result)=>{
     const actions=_parseAdsActions(result);window._adsAgentActions=actions;
     const rEl=document.getElementById('agentInlineResult');if(rEl)rEl.textContent=String(result).replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/i,'').trim();
-    const btns=actions.map((a,i)=>{const lbl=a.tipo==='pausar'?('⏸ Pausar '+(a.campana||'')):a.tipo==='activar'?('▶ Activar '+(a.campana||'')):a.tipo==='presupuesto'?('💰 '+(a.campana||'')+' → '+fmtMoney(+a.nuevo||0)):a.tipo==='negativo'?('🚫 «'+(a.termino||'')+'»'):a.tipo;return `<button class="btn btn-sm ${a.tipo==='pausar'?'btn-danger':'btn-accent'}" title="${escapeHtml(a.motivo||'')}" onclick="applyAdsAction(${i})">${escapeHtml(lbl)}</button>`;}).join('');
+    const btns=_adsRenderActionBtns(actions);
     return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
@@ -15735,7 +15775,7 @@ function closeAdsDeleteModal(){
 
 // Encola una mutación reemplazando cualquier mutación pendiente equivalente (evita duplicados)
 function _adsQueueMutation(mutation){
-  const keyOf=m=>m.op+'|'+(m.id||'')+'|'+(m.op==='create'?((m.data&&m.data.nombre)||''):'');
+  const keyOf=m=>m.op+'|'+(m.id||'')+'|'+(m.op==='create'?((m.data&&m.data.nombre)||''):(m.op==='negative'||m.op==='pause_keyword')?((m.data&&m.data.termino)||'')+'|'+((m.data&&m.data.campana)||''):'');
   const k=keyOf(mutation);
   // Conserva las ya aplicadas; descarta una pendiente/enviada/errónea equivalente
   _adsPendingMutations=_adsPendingMutations.filter(m=>m.status==='aplicado'||keyOf(m)!==k);
@@ -15873,7 +15913,11 @@ function renderPendingMutations(){
   if(badge) badge.textContent=nPend+' pendiente'+(nPend!==1?'s':'')+(nErr?' · '+nErr+' error'+(nErr!==1?'es':''):'');
   const retryBtn=document.getElementById('adsRetryAllBtn');
   if(retryBtn) retryBtn.style.display=nErr?'':'none';
-  const opLabel={create:'Crear',edit:'Editar',delete:'Eliminar'};
+  const opLabel={create:'Crear',edit:'Editar',delete:'Eliminar',negative:'Negativo',pause_keyword:'Pausar kw'};
+  const mutDesc=m=>{
+    if(m.op==='negative'||m.op==='pause_keyword')return (m.data&&m.data.termino?'«'+m.data.termino+'»':'')+(m.data&&m.data.campana?' · '+m.data.campana:'');
+    return (m.data&&m.data.nombre)||m.id||'';
+  };
   const stMap={
     pending:{c:'var(--warn)',t:'⏳ Pendiente'},
     enviado:{c:'var(--accent3)',t:'✓ En cola — esperando Script 2'},
@@ -15886,8 +15930,8 @@ function renderPendingMutations(){
     return `
     <div style="padding:7px 10px;background:var(--surface2);border-radius:6px;font-size:11px">
       <div style="display:flex;align-items:center;gap:10px">
-        <span style="color:${m.op==='delete'?'var(--danger)':m.op==='create'?'var(--success)':'var(--accent)'};font-weight:600;flex-shrink:0">${opLabel[m.op]||m.op}</span>
-        <span style="color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((m.data&&m.data.nombre)||m.id||'')}</span>
+        <span style="color:${m.op==='delete'||m.op==='pause_keyword'?'var(--danger)':m.op==='create'?'var(--success)':'var(--accent)'};font-weight:600;flex-shrink:0">${opLabel[m.op]||m.op}</span>
+        <span style="color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(mutDesc(m))}</span>
         <span style="color:${st.c};font-size:9px;white-space:nowrap;flex-shrink:0">${st.t}</span>
         ${retry}
         <button onclick="removePendingMutationByTs('${m.timestamp}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0;line-height:1;flex-shrink:0" title="Quitar de la cola">×</button>
