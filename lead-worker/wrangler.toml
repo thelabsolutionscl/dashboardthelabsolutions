@@ -18,9 +18,9 @@ AUTO_PROCESS_LEADS = "true"
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL
 # y luego descomentar y pegar el id:
-# [[kv_namespaces]]
-# binding = "RL"
-# id = "PEGAR_ID_AQUI"
+[[kv_namespaces]]
+binding = "RL"
+id = "c148848321344f60939fa71a51d050c6"
 
 # ── SECRETOS (NO escribir valores aquí) ────────────────────────────────
 # Configurar con:  npx wrangler secret put NOMBRE

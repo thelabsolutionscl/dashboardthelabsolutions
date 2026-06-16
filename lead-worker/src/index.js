@@ -191,7 +191,6 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     "Cargo contacto": norm.jobTitle,
     "Origen lead": source,
     Comuna: norm.comuna,
-    "Servicios varios": norm.service,
     "Servicio interés": norm.service,
     "Notas internas": buildNotes(norm),
     "Fecha primer contacto": today(),
