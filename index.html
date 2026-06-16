@@ -197,6 +197,23 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .btn-ghost:hover{border-color:var(--text2);}
 .btn-sm{font-size:10px;padding:5px 10px;}
 .btn-ghost.active-filter{background:var(--accent);color:var(--black);border-color:var(--accent);}
+/* ── Variantes semánticas (misma línea gráfica) ── */
+.btn-danger{background:rgba(255,68,68,0.12);color:var(--danger);border:1px solid rgba(255,68,68,0.3);}
+.btn-danger:hover{background:rgba(255,68,68,0.2);border-color:rgba(255,68,68,0.55);}
+.btn-warn{background:rgba(255,170,0,0.12);color:#ffaa00;border:1px solid rgba(255,170,0,0.32);}
+.btn-warn:hover{background:rgba(255,170,0,0.2);border-color:rgba(255,170,0,0.55);}
+.btn-success{background:rgba(0,212,170,0.13);color:var(--accent3);border:1px solid rgba(0,212,170,0.32);}
+.btn-success:hover{background:rgba(0,212,170,0.22);border-color:rgba(0,212,170,0.55);}
+.btn-accent{background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.28);}
+.btn-accent:hover{background:rgba(0,212,204,0.2);border-color:rgba(0,212,204,0.5);}
+.btn-icon{display:inline-flex;align-items:center;justify-content:center;gap:4px;font-family:'DM Sans',sans-serif;font-size:10px;font-weight:700;padding:4px 7px;border-radius:6px;background:var(--surface2);color:var(--text3);border:1px solid var(--border2);cursor:pointer;transition:all 0.15s;line-height:1.4;}
+.btn-icon:hover{border-color:var(--text2);color:var(--text);}
+.btn-icon.danger{border-color:rgba(255,68,68,0.3);color:var(--danger);}
+.btn-icon.danger:hover{background:rgba(255,68,68,0.12);border-color:rgba(255,68,68,0.55);}
+.btn-icon.accent{background:rgba(0,212,204,0.08);border-color:rgba(0,212,204,0.28);color:var(--accent);}
+.btn-icon.accent:hover{background:rgba(0,212,204,0.18);}
+.btn-icon.purple{background:rgba(167,139,250,0.1);border-color:rgba(167,139,250,0.3);color:var(--accent4);}
+.btn-icon.purple:hover{background:rgba(167,139,250,0.2);}
 .btn-mini{background:var(--surface3);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 7px;cursor:pointer;transition:all 0.15s;margin-right:3px;white-space:nowrap;}
 .btn-mini:hover{background:var(--accent);color:var(--black);border-color:var(--accent);}
 .btn-mini-green{background:rgba(0,212,170,0.15);border-color:rgba(0,212,170,0.3);color:var(--accent3);}
@@ -1523,24 +1540,24 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-key"/></svg> Token Airtable</div>
           <input type="password" id="umAirtableToken" placeholder="patXXX..." autocomplete="off">
           <div class="user-menu-token-actions">
-            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuToken()">Guardar</button>
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuToken()">Limpiar</button>
+            <button class="btn btn-primary btn-sm" onclick="saveUserMenuToken()">Guardar</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearUserMenuToken()">Limpiar</button>
           </div>
         </div>
         <div class="user-menu-token">
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> OpenAI API Key</div>
           <input type="password" id="umOpenaiKey" placeholder="sk-proj-..." autocomplete="off">
           <div class="user-menu-token-actions">
-            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuOpenai()">Guardar</button>
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuOpenai()">Limpiar</button>
+            <button class="btn btn-primary btn-sm" onclick="saveUserMenuOpenai()">Guardar</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearUserMenuOpenai()">Limpiar</button>
           </div>
         </div>
         <div class="user-menu-token">
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> Google Drive Client ID</div>
           <input type="text" id="umGoogleClientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" style="font-size:9px">
           <div class="user-menu-token-actions">
-            <button style="background:var(--accent);color:var(--black)" onclick="saveGoogleClientId()">Guardar</button>
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearGoogleClientId()">Limpiar</button>
+            <button class="btn btn-primary btn-sm" onclick="saveGoogleClientId()">Guardar</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearGoogleClientId()">Limpiar</button>
           </div>
           <div id="umDriveStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
@@ -1549,8 +1566,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <input type="text" id="umProxyUrl" placeholder="https://airtable-proxy.xxx.workers.dev" autocomplete="off" style="font-size:9px">
           <input type="password" id="umProxyKey" placeholder="clave-secreta" autocomplete="off" style="margin-top:4px">
           <div class="user-menu-token-actions">
-            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuProxy()">Guardar</button>
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuProxy()">Limpiar</button>
+            <button class="btn btn-primary btn-sm" onclick="saveUserMenuProxy()">Guardar</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearUserMenuProxy()">Limpiar</button>
           </div>
           <div id="umProxyStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
@@ -1559,12 +1576,12 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <input type="text" id="umPrinterTunnel" placeholder="https://printers.thelab.solutions" autocomplete="off" style="font-size:9px">
           <input type="password" id="umPrinterToken" placeholder="Token del bridge (opcional)" autocomplete="off" style="font-size:9px;margin-top:4px">
           <div class="user-menu-token-actions">
-            <button style="background:var(--accent);color:var(--black)" onclick="savePrinterTunnel()">Guardar</button>
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearPrinterTunnel()">Limpiar</button>
+            <button class="btn btn-primary btn-sm" onclick="savePrinterTunnel()">Guardar</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearPrinterTunnel()">Limpiar</button>
           </div>
           <div class="user-menu-token-actions" style="margin-top:4px">
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="testPrinterBridge('umPrinterTunnelStatus')">Probar</button>
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="restartPrinterBridge('umPrinterTunnelStatus')">Reiniciar bridge</button>
+            <button class="btn btn-ghost btn-sm" onclick="testPrinterBridge('umPrinterTunnelStatus')">Probar</button>
+            <button class="btn btn-ghost btn-sm" onclick="restartPrinterBridge('umPrinterTunnelStatus')">Reiniciar bridge</button>
           </div>
           <div id="umPrinterTunnelStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
@@ -1572,8 +1589,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> KAI — Anthropic API Key</div>
           <input type="password" id="umAnthropicKey" placeholder="sk-ant-api03-..." autocomplete="off">
           <div class="user-menu-token-actions">
-            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuAnthropicKey()">Guardar</button>
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuAnthropicKey()">Limpiar</button>
+            <button class="btn btn-primary btn-sm" onclick="saveUserMenuAnthropicKey()">Guardar</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearUserMenuAnthropicKey()">Limpiar</button>
           </div>
           <div id="umAnthropicStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
@@ -1581,8 +1598,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-mic"/></svg> ElevenLabs — Voz KAI</div>
           <input type="password" id="umElevenLabsKey" placeholder="sk_..." autocomplete="off">
           <div class="user-menu-token-actions">
-            <button style="background:var(--accent);color:var(--black)" onclick="saveUserMenuElevenLabsKey()">Guardar</button>
-            <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2)" onclick="clearUserMenuElevenLabsKey()">Limpiar</button>
+            <button class="btn btn-primary btn-sm" onclick="saveUserMenuElevenLabsKey()">Guardar</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearUserMenuElevenLabsKey()">Limpiar</button>
           </div>
           <div id="umElevenLabsStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
@@ -1662,8 +1679,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-key"/></svg> Token Airtable</div>
           <input type="password" id="mbAirtableToken" placeholder="patXXX..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button onclick="saveMbAirtableToken()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
-            <button onclick="clearMbAirtableToken()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+            <button onclick="saveMbAirtableToken()" class="btn btn-primary btn-sm" style="flex:1">Guardar</button>
+            <button onclick="clearMbAirtableToken()" class="btn btn-ghost btn-sm" style="flex:1">Limpiar</button>
           </div>
         </div>
         <!-- OpenAI Key -->
@@ -1671,8 +1688,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> OpenAI API Key</div>
           <input type="password" id="mbOpenaiKey" placeholder="sk-proj-..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button onclick="saveMbOpenaiKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
-            <button onclick="clearMbOpenaiKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+            <button onclick="saveMbOpenaiKey()" class="btn btn-primary btn-sm" style="flex:1">Guardar</button>
+            <button onclick="clearMbOpenaiKey()" class="btn btn-ghost btn-sm" style="flex:1">Limpiar</button>
           </div>
         </div>
         <!-- Google Drive Client ID -->
@@ -1680,8 +1697,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> Google Drive Client ID</div>
           <input type="text" id="mbGoogleClientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button onclick="saveMbGoogleClientId()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
-            <button onclick="clearMbGoogleClientId()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+            <button onclick="saveMbGoogleClientId()" class="btn btn-primary btn-sm" style="flex:1">Guardar</button>
+            <button onclick="clearMbGoogleClientId()" class="btn btn-ghost btn-sm" style="flex:1">Limpiar</button>
           </div>
           <div id="mbDriveStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
         </div>
@@ -1691,8 +1708,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <input type="text" id="mbProxyUrl" placeholder="https://airtable-proxy.xxx.workers.dev" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
           <input type="password" id="mbProxyKey" placeholder="clave-secreta" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box;margin-top:4px">
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button onclick="saveMbProxy()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
-            <button onclick="clearMbProxy()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+            <button onclick="saveMbProxy()" class="btn btn-primary btn-sm" style="flex:1">Guardar</button>
+            <button onclick="clearMbProxy()" class="btn btn-ghost btn-sm" style="flex:1">Limpiar</button>
           </div>
           <div id="mbProxyStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
         </div>
@@ -1702,12 +1719,12 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <input type="text" id="mbPrinterTunnel" placeholder="https://printers.thelab.solutions" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
           <input type="password" id="mbPrinterToken" placeholder="Token del bridge (opcional)" autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:10px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box;margin-top:5px">
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button onclick="saveMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
-            <button onclick="clearMbPrinterTunnel()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+            <button onclick="saveMbPrinterTunnel()" class="btn btn-primary btn-sm" style="flex:1">Guardar</button>
+            <button onclick="clearMbPrinterTunnel()" class="btn btn-ghost btn-sm" style="flex:1">Limpiar</button>
           </div>
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button onclick="testPrinterBridge('mbPrinterTunnelStatus')" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Probar</button>
-            <button onclick="restartPrinterBridge('mbPrinterTunnelStatus')" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Reiniciar bridge</button>
+            <button onclick="testPrinterBridge('mbPrinterTunnelStatus')" class="btn btn-ghost btn-sm" style="flex:1">Probar</button>
+            <button onclick="restartPrinterBridge('mbPrinterTunnelStatus')" class="btn btn-ghost btn-sm" style="flex:1">Reiniciar bridge</button>
           </div>
           <div id="mbPrinterTunnelStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
         </div>
@@ -1716,8 +1733,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> KAI — Anthropic API Key</div>
           <input type="password" id="mbAnthropicKey" placeholder="sk-ant-api03-..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button onclick="saveMbAnthropicKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
-            <button onclick="clearMbAnthropicKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+            <button onclick="saveMbAnthropicKey()" class="btn btn-primary btn-sm" style="flex:1">Guardar</button>
+            <button onclick="clearMbAnthropicKey()" class="btn btn-ghost btn-sm" style="flex:1">Limpiar</button>
           </div>
           <div id="mbAnthropicStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
         </div>
@@ -1726,8 +1743,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-mic"/></svg> ElevenLabs — Voz KAI</div>
           <input type="password" id="mbElevenLabsKey" placeholder="sk_..." autocomplete="off" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text);outline:none;box-sizing:border-box">
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button onclick="saveMbElevenLabsKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--accent);color:#000">Guardar</button>
-            <button onclick="clearMbElevenLabsKey()" style="flex:1;font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;background:var(--surface2);color:var(--text2)">Limpiar</button>
+            <button onclick="saveMbElevenLabsKey()" class="btn btn-primary btn-sm" style="flex:1">Guardar</button>
+            <button onclick="clearMbElevenLabsKey()" class="btn btn-ghost btn-sm" style="flex:1">Limpiar</button>
           </div>
           <div id="mbElevenLabsStatus" style="font-size:9px;color:var(--text3);margin-top:4px"></div>
         </div>
@@ -4237,7 +4254,7 @@ function _reportarResultados(muts) {
 
     <!-- Ventas ingresadas manualmente -->
     <div class="card" style="margin-top:20px" id="fin-nueva-lista-card">
-      <div class="card-header"><span class="card-title">Ventas Ingresadas Manualmente</span><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="nvLimpiarTodas()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Borrar todas</button></div>
+      <div class="card-header"><span class="card-title">Ventas Ingresadas Manualmente</span><button class="btn btn-danger btn-sm" onclick="nvLimpiarTodas()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Borrar todas</button></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Mes/Año</th><th>Nombre</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Canal</th><th>Acción</th></tr></thead>
@@ -8275,7 +8292,7 @@ function renderFPItems(){
     <div style="border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border2)">
         <span style="font-size:11px;font-weight:700;color:#00d4cc;letter-spacing:.5px">MUESTRA ${idx+1}</span>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:4px 8px" onclick="removeFPItem(${idx})">✕ Eliminar</button>
+        <button class="btn btn-danger btn-sm" style="padding:4px 8px" onclick="removeFPItem(${idx})">✕ Eliminar</button>
       </div>
       <div style="padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:12px">
         <div class="fp-fields-grid">
@@ -10951,7 +10968,7 @@ function runAdsAgent(){
     const btns=actions.map((a,i)=>{
       const lbl=a.tipo==='pausar'?('⏸ Pausar '+(a.campana||'')):a.tipo==='activar'?('▶ Activar '+(a.campana||'')):a.tipo==='presupuesto'?('💰 '+(a.campana||'')+' → '+fmtMoney(+a.nuevo||0)):a.tipo==='negativo'?('🚫 «'+(a.termino||'')+'»'):a.tipo;
       const danger=a.tipo==='pausar';
-      return `<button class="btn btn-ghost btn-sm" title="${escapeHtml(a.motivo||'')}" style="${danger?'color:var(--danger)':'color:var(--accent)'}" onclick="applyAdsAction(${i})">${escapeHtml(lbl)}</button>`;
+      return `<button class="btn btn-sm ${danger?'btn-danger':'btn-accent'}" title="${escapeHtml(a.motivo||'')}" onclick="applyAdsAction(${i})">${escapeHtml(lbl)}</button>`;
     }).join('');
     return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
@@ -15396,7 +15413,7 @@ function runAdsCampaignAgent(id){
   runAgentInline('ADS',ctx,(result)=>{
     const actions=_parseAdsActions(result);window._adsAgentActions=actions;
     const rEl=document.getElementById('agentInlineResult');if(rEl)rEl.textContent=String(result).replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/i,'').trim();
-    const btns=actions.map((a,i)=>{const lbl=a.tipo==='pausar'?('⏸ Pausar '+(a.campana||'')):a.tipo==='activar'?('▶ Activar '+(a.campana||'')):a.tipo==='presupuesto'?('💰 '+(a.campana||'')+' → '+fmtMoney(+a.nuevo||0)):a.tipo==='negativo'?('🚫 «'+(a.termino||'')+'»'):a.tipo;return `<button class="btn btn-ghost btn-sm" title="${escapeHtml(a.motivo||'')}" style="${a.tipo==='pausar'?'color:var(--danger)':'color:var(--accent)'}" onclick="applyAdsAction(${i})">${escapeHtml(lbl)}</button>`;}).join('');
+    const btns=actions.map((a,i)=>{const lbl=a.tipo==='pausar'?('⏸ Pausar '+(a.campana||'')):a.tipo==='activar'?('▶ Activar '+(a.campana||'')):a.tipo==='presupuesto'?('💰 '+(a.campana||'')+' → '+fmtMoney(+a.nuevo||0)):a.tipo==='negativo'?('🚫 «'+(a.termino||'')+'»'):a.tipo;return `<button class="btn btn-sm ${a.tipo==='pausar'?'btn-danger':'btn-accent'}" title="${escapeHtml(a.motivo||'')}" onclick="applyAdsAction(${i})">${escapeHtml(lbl)}</button>`;}).join('');
     return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
@@ -15966,10 +15983,10 @@ function renderAdsCampaigns(data){
     const ci=_adsCampActions.push({type:'copy',nombre:c.nombre||'',estado:c.estado||'',gasto:c.gasto||0,clics:c.clics||0,conv:c.conversiones||0,ctr:ctr.toFixed(2),cpc:c.clics>0?Math.round(c.gasto/c.clics):0})-1;
     const ai=_adsCampActions.push({type:'analyze',id:c.id})-1;
     const acciones=`<span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">
-        <button onclick="event.stopPropagation();_adsCampAction(${ai})" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:var(--accent4);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Analizar esta campaña con IA">⚡</button>
-        <button onclick="event.stopPropagation();_adsCampAction(${ei})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
-        <button onclick="event.stopPropagation();_adsCampAction(${di})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-trash"/></svg></button>
-        <button onclick="event.stopPropagation();_adsCampAction(${ci})" style="background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Generar copy IA">✍</button>
+        <button class="btn-icon purple" onclick="event.stopPropagation();_adsCampAction(${ai})" title="Analizar esta campaña con IA">⚡</button>
+        <button class="btn-icon" onclick="event.stopPropagation();_adsCampAction(${ei})" title="Editar">✏</button>
+        <button class="btn-icon danger" onclick="event.stopPropagation();_adsCampAction(${di})" title="Eliminar"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-trash"/></svg></button>
+        <button class="btn-icon accent" onclick="event.stopPropagation();_adsCampAction(${ci})" title="Generar copy IA">✍</button>
       </span>`;
     return `<tr>
       <td style="white-space:nowrap"><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</span>${acciones}</td>
@@ -17396,7 +17413,7 @@ function ldRenderTabla(){
 <td style="font-size:11px;color:var(--text3)">${escapeHtml(e.metodo||'—')}</td>
 <td style="font-size:11px;color:var(--text3)">${escapeHtml(e.referencia||'—')}</td>
 <td style="font-size:11px;color:var(--text3)">${escapeHtml(e.contraparte||'—')}</td>
-<td><button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:2px 6px;font-size:12px" onclick="ldEliminar('${e.id}')" title="Eliminar">✕</button></td>
+<td><button class="btn btn-danger btn-sm" style="padding:2px 6px;font-size:12px" onclick="ldEliminar('${e.id}')" title="Eliminar">✕</button></td>
 </tr>`;
   }).join('');
   const totalPages=Math.ceil(total/LD_PAG);
