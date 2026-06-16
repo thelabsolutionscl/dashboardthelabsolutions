@@ -1813,6 +1813,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="kpi-card green"><div class="kpi-label">Margen Prom.</div><div class="kpi-skeleton"></div></div>
   </div>
   <div id="equipoSnapshot" style="margin-bottom:16px"></div>
+  <!-- ── Centro de acciones del día ── -->
+  <div class="card" id="accionesHoyCard" style="margin-bottom:16px;display:none">
+    <div class="card-header">
+      <span class="card-title">⚡ Acciones de hoy <span id="accionesHoyCount" style="font-size:10px;color:var(--text3);font-weight:400"></span></span>
+      <button class="btn btn-ghost btn-sm" onclick="renderAccionesHoy()" style="margin-left:auto" title="Recalcular">↻</button>
+    </div>
+    <div id="accionesHoyList" style="padding:8px 12px;display:flex;flex-direction:column;gap:6px"></div>
+  </div>
   <div class="data-grid">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pipeline Pedidos</span><span class="card-badge" id="pedActivosBadge">—</span></div><div id="pipelineArea"><div class="loading-state"><div class="spinner"></div> cargando...</div></div></div>
     <div class="card" onclick="switchTab('cotizaciones')" style="cursor:pointer"><div class="card-header"><span class="card-title">Cotizaciones Recientes</span><span class="card-badge" id="cotsBadge">—</span></div><div class="table-wrap"><table><thead><tr><th>N°</th><th>Cliente</th><th>Total Neto</th><th>Estado</th><th>Margen</th></tr></thead><tbody id="cotTableBody"><tr><td colspan="5"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div></div>
@@ -6323,9 +6331,42 @@ function switchTab(name){
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────
+// ── Centro de acciones del día: junta lo accionable de todos los agentes en una lista priorizada ──
+function renderAccionesHoy(){
+  const card=document.getElementById('accionesHoyCard'),list=document.getElementById('accionesHoyList');
+  if(!card||!list)return;
+  const today=new Date();today.setHours(0,0,0,0);
+  const in3=new Date(today);in3.setDate(today.getDate()+3);
+  const ago5=new Date(Date.now()-5*86400000),ago90=new Date(Date.now()-90*86400000);
+  const vendor=isVendorMode();
+  const _cli=vendor?(state.clientes||[]).filter(vendorOwnsRecord):(state.clientes||[]);
+  const _cot=vendor?(state.cotizaciones||[]).filter(vendorOwnsRecord):(state.cotizaciones||[]);
+  const _ped=vendor?(state.pedidos||[]).filter(vendorOwnsRecord):(state.pedidos||[]);
+  const items=[];const cap={};const push=(cat,prio,icon,txt,btn,fn,color)=>{cap[cat]=(cap[cat]||0)+1;if(cap[cat]<=4)items.push({prio,icon,txt,btn,fn,color});};
+  // 1) Cobranza — clientes con facturas vencidas (no vendedor)
+  if(!vendor)_cli.forEach(c=>{const v=c.fields['Facturas vencidas']||0;if(v>=2)push('cob',1,'💰',`<b>${escapeHtml(c.fields['Empresa']||'—')}</b> · ${v} facturas vencidas`,'Cobrar IA',`runFinanceAgent('${c.id}')`,'var(--danger)');});
+  // 2) Pedidos atrasados → update al cliente
+  _ped.forEach(p=>{const f=p.fields,est=f['Estado pedido']||'';if(f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(est)){const d=Math.round((today-new Date(f['Fecha entrega']+'T00:00:00'))/86400000);push('ped',1,'⏰',`<b>${escapeHtml(f['N° Pedido']||'—')}</b> (${escapeHtml(resolveClienteName(f['Cliente']))}) · atrasado ${d}d`,'Update IA',`runRepClienteAgent('${p.id}')`,'var(--danger)');}});
+  // 3) Pedidos sin anticipo confirmado
+  _ped.forEach(p=>{const f=p.fields,est=f['Estado pedido']||'';if(['Confirmado','En producción'].includes(est)&&!f['Anticipo pagado (50%)'])push('pago',2,'💵',`<b>${escapeHtml(f['N° Pedido']||'—')}</b> · anticipo 50% pendiente`,'Ver pedido',`switchTab('pedidos')`,'var(--warn)');});
+  // 4) Cotizaciones por vencer / sin respuesta → seguimiento
+  _cot.forEach(c=>{const f=c.fields,est=f['Estado cotización']||'';if(!['Enviada','Solicitada'].includes(est))return;const vto=f['Fecha vencimiento'],fc=f['Fecha cotización'];let urge=false,sub='';if(vto){const dd=Math.round((new Date(vto+'T00:00:00')-today)/86400000);if(dd<=3){urge=true;sub=dd<0?`vencida ${Math.abs(dd)}d`:`vence en ${dd}d`;}}if(!urge&&fc&&new Date(fc+'T00:00:00')<ago5){urge=true;const dd=Math.round((today-new Date(fc+'T00:00:00'))/86400000);sub=`${dd}d sin respuesta`;}if(urge)push('cot',2,'✍',`<b>${escapeHtml(f['N° Cotización']||'—')}</b> (${escapeHtml(resolveClienteName(f['Cliente']))}) · ${sub}`,'Seguir IA',`runFollowupAgent('${c.id}')`,'var(--accent)');});
+  // 5) Leads nuevos / contactados recientes → estrategia de venta
+  _cli.forEach(c=>{const f=c.fields,et=f['Etapa venta']||'';if(['Lead nuevo','Contactado'].includes(et)){const cr=c.createdTime?new Date(c.createdTime):null;if(cr&&cr>=ago90)push('lead',2,'🎯',`<b>${escapeHtml(f['Empresa']||f['Contacto']||'—')}</b> · ${escapeHtml(et)}`,'Estrategia IA',`runSalesAgent('${c.id}')`,'var(--accent4)');}});
+  // 6) Pedidos listos para QA
+  _ped.forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Listo para despacho'&&(f['Resultado QA']||'Pendiente')==='Pendiente')push('qa',2,'✅',`<b>${escapeHtml(f['N° Pedido']||'—')}</b> · QA pendiente antes de despachar`,'Checklist QA',`openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')`,'var(--accent3)');});
+  // 7) Ads — campañas que gastan sin convertir (si hay datos)
+  if(!vendor&&window._adsLastData&&!window._adsLastData.demo){(window._adsLastData.campanas||[]).forEach(c=>{if((c.gasto||0)>15000&&(c.conversiones||0)===0)push('ads',2,'📉',`Ads: <b>${escapeHtml(c.nombre||'')}</b> gasta sin convertir`,'Analizar',`runAdsCampaignAgent('${c.id}')`,'var(--warn)');});}
+  items.sort((a,b)=>a.prio-b.prio);
+  if(!items.length){card.style.display='none';return;}
+  card.style.display='';
+  const cnt=document.getElementById('accionesHoyCount');if(cnt)cnt.textContent=`· ${items.length} pendiente${items.length!==1?'s':''}`;
+  list.innerHTML=items.slice(0,14).map(it=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid ${it.color};border-radius:7px"><span style="font-size:14px;flex-shrink:0">${it.icon}</span><span style="flex:1;font-size:12px;color:var(--text2);min-width:0">${it.txt}</span><button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:3px 10px;color:${it.color}" onclick="${it.fn}">${it.btn}</button></div>`).join('');
+}
 function renderOverview(){
   renderKPIs();
   renderEquipoSnapshot();
+  renderAccionesHoy();
   renderPipelineArea();
   renderCotTable();
   renderFunnel();
