@@ -1,0 +1,15 @@
+{
+  "name": "thelab-bff",
+  "version": "1.0.0",
+  "description": "Backend-for-frontend (Cloudflare Worker) para el dashboard de The Lab Solutions.",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.0"
+  }
+}

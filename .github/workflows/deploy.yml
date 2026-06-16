@@ -35,7 +35,12 @@ jobs:
           PROXY_URL: ${{ secrets.PROXY_URL }}
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
           PRINTER_TUNNEL: ${{ secrets.PRINTER_TUNNEL }}
+          BFF_URL: ${{ secrets.BFF_URL }}
         run: |
+          sed -i "s|%%BFF_URL%%|${BFF_URL}|g" index.html
+          # SEGURIDAD: con BFF_URL configurado y verificado, ELIMINA las 4 líneas de
+          # AIRTABLE_TOKEN / OPENAI_KEY / ANTHROPIC_KEY / PROXY_KEY de abajo — con el
+          # BFF activo el cliente no debe llevar ningún secreto de proveedor.
           sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
           sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
           sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
