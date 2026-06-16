@@ -20227,11 +20227,27 @@ const SL3D=(function(){
     }
     S.supSticks=sticks;
   }
+  // Normales por vértice con detección de pliegues: promedia las caras que comparten vértice
+  // SÓLO si su ángulo es suave (curva) → superficies curvas suaves, pero bordes duros (cubo) nítidos.
+  function _computeVertexNormals(t){
+    const m=t.length/9,fN=new Float32Array(m*3);
+    for(let i=0;i<m;i++){const o=i*9;const ux=t[o+3]-t[o],uy=t[o+4]-t[o+1],uz=t[o+5]-t[o+2],vx=t[o+6]-t[o],vy=t[o+7]-t[o+1],vz=t[o+8]-t[o+2];fN[i*3]=uy*vz-uz*vy;fN[i*3+1]=uz*vx-ux*vz;fN[i*3+2]=ux*vy-uy*vx;}
+    const map=new Map(),EPS=1e-3,key=(x,y,z)=>Math.round(x/EPS)+'_'+Math.round(y/EPS)+'_'+Math.round(z/EPS);
+    for(let i=0;i<m;i++){const o=i*9;for(let j=0;j<3;j++){const k=key(t[o+j*3],t[o+j*3+1],t[o+j*3+2]);(map.get(k)||map.set(k,[]).get(k)).push(i);}}
+    const out=new Float32Array(t.length),COS=0.5; // pliegue ~60°: caras a más de 60° = borde duro
+    for(let i=0;i<m;i++){const o=i*9;const fx=fN[i*3],fy=fN[i*3+1],fz=fN[i*3+2],fl=Math.hypot(fx,fy,fz)||1;
+      for(let j=0;j<3;j++){const inc=map.get(key(t[o+j*3],t[o+j*3+1],t[o+j*3+2]))||[i];let nx=0,ny=0,nz=0;
+        for(const ti of inc){const gx=fN[ti*3],gy=fN[ti*3+1],gz=fN[ti*3+2],gl=Math.hypot(gx,gy,gz)||1;if((fx*gx+fy*gy+fz*gz)/(fl*gl)>=COS){nx+=gx;ny+=gy;nz+=gz;}}
+        const l=Math.hypot(nx,ny,nz)||1;out[o+j*3]=nx/l;out[o+j*3+1]=ny/l;out[o+j*3+2]=nz/l;}}
+    return out;
+  }
   function render(){
     const cv=el('slCanvas');if(!S.prev||cv.style.display==='none')return;
     const dpr=window.devicePixelRatio||1,w=cv.clientWidth||420,h=300;
     cv.width=w*dpr;cv.height=h*dpr;
-    const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+    const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+    // Fondo con degradado suave (estudio) en vez de negro plano
+    {const bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,'#1b1e22');bg.addColorStop(0.55,'#121417');bg.addColorStop(1,'#0a0b0d');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);}
     const st=S.stats,zm=st.dz/2,ca=Math.cos(S.rot.a),sa=Math.sin(S.rot.a),cb=Math.cos(S.rot.b),sb=Math.sin(S.rot.b);
     const rad=Math.sqrt(st.dx*st.dx+st.dy*st.dy+st.dz*st.dz)/2||1,sc=0.42*Math.min(w,h)/rad;
     // ── Cama de impresión (plano Z=0) + eje Z: deja claro cuál es la base ──
@@ -20253,7 +20269,11 @@ const SL3D=(function(){
       ctx.fillStyle='rgba(0,212,204,0.9)';ctx.font='10px JetBrains Mono,monospace';
       ctx.fillText('Z↑',z1[0]+3,z1[1]+3);
     })();
+    // Sombra de contacto blanda bajo la pieza (asienta el modelo en la cama)
+    {const base=proj(0,0,0),rsh=Math.max(st.dx,st.dy)*0.55*sc+5;ctx.save();ctx.translate(base[0],base[1]);ctx.scale(1,Math.abs(sb)*0.5+0.16);const rg=ctx.createRadialGradient(0,0,0,0,0,rsh);rg.addColorStop(0,'rgba(0,0,0,0.42)');rg.addColorStop(0.7,'rgba(0,0,0,0.18)');rg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=rg;ctx.beginPath();ctx.arc(0,0,rsh,0,6.283);ctx.fill();ctx.restore();}
     const t=S.prev,m=t.length/9,list=new Array(m);
+    if(S._prevNfor!==t){S.prevN=_computeVertexNormals(t);S._prevNfor=t;} // normales suaves cacheadas por malla
+    const VN=S.prevN;
     const ovAng=S.params?-(Math.cos((90-(S.params.supportAngle||50))*Math.PI/180)):-0.57; // criterio según ángulo
     for(let i=0;i<m;i++){
       const o=i*9,P=[];let dsum=0;
@@ -20262,26 +20282,34 @@ const SL3D=(function(){
       const Ux=bx-ax,Uy=by-ay,Uz=bz-az,Vx=cx2-ax,Vy=cy2-ay,Vz=cz2-az;
       const Nx=Uy*Vz-Uz*Vy,Ny=Uz*Vx-Ux*Vz,Nz=Ux*Vy-Uy*Vx,Nl=Math.hypot(Nx,Ny,Nz)||1;
       const over=S.showSupports&&(Nz/Nl< (ovAng<-0.2?ovAng:-0.57))&&Math.min(az,bz,cz2)>0.5;
+      let diff=0,spec=0;
       for(let j=0;j<3;j++){
         const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
         const x1=x*ca-y*sa,y1=x*sa+y*ca;
         const y2=y1*cb-z*sb,z2=y1*sb+z*cb;
         P.push(w/2+x1*sc,h/2-z2*sc);dsum+=y2;
+        // Normal SUAVE del vértice, rotada igual que el vértice → sombreado tipo Gouraud
+        const vnx=VN[o+j*3],vny=VN[o+j*3+1],vnz=VN[o+j*3+2];
+        const r1=vnx*ca-vny*sa,r2=vnx*sa+vny*ca,rD=r2*cb-vnz*sb,rU=r2*sb+vnz*cb;
+        const d1=Math.max(0,r1*-0.398+rD*-0.498+rU*0.747); // luz principal (arriba-izq-frente)
+        const d2=Math.max(0,r1*0.707+rD*0.566+rU*0.424);   // luz de relleno (abajo-der, suave)
+        diff+=0.30+0.66*d1+0.18*d2+0.10*Math.abs(rD);      // ambiental + principal + relleno + luz de cabeza
+        const hsp=Math.abs(r1*-0.233+rD*-0.876+rU*0.437);  // half-vector → brillo especular
+        spec+=Math.pow(hsp,22);
       }
-      // Iluminación Lambert con la normal 3D rotada igual que los vértices.
-      // Caras planas = muchos triángulos con la MISMA normal → mismo tono → superficie sólida (sin facetas).
-      const nx1=Nx*ca-Ny*sa,ny1=Nx*sa+Ny*ca,nD=ny1*cb-Nz*sb,nU=ny1*sb+Nz*cb,nl2=Math.hypot(nx1,nD,nU)||1;
-      const lit=Math.abs((nx1*-0.35+nD*-0.55+nU*0.78)/nl2); // luz desde arriba-izquierda-frente, dos caras
-      const sh=Math.max(0.26,Math.min(1,0.36+lit*0.7));
-      list[i]={d:dsum,P,sh,over};
+      diff=Math.min(1,diff/3);spec=spec/3*0.5;
+      list[i]={d:dsum,P,diff,spec,over};
     }
     list.sort((p,q)=>q.d-p.d);
     for(const f of list){
       ctx.beginPath();ctx.moveTo(f.P[0],f.P[1]);ctx.lineTo(f.P[2],f.P[3]);ctx.lineTo(f.P[4],f.P[5]);ctx.closePath();
-      // Voladizos en naranja (necesitan soporte); resto en teal
-      const col=f.over?`rgb(${Math.round(120+f.sh*135)},${Math.round(50+f.sh*90)},${Math.round(20+f.sh*30)})`:`rgb(${Math.round(f.sh*90)},${Math.round(f.sh*200)},${Math.round(f.sh*192)})`;
+      const sp=Math.round(f.spec*255);
+      // Voladizos en naranja (necesitan soporte); resto en teal · brillo especular sumado en blanco
+      const col=f.over
+        ?`rgb(${Math.min(255,Math.round(236*f.diff)+sp)},${Math.min(255,Math.round(128*f.diff)+sp)},${Math.min(255,Math.round(52*f.diff)+sp)})`
+        :`rgb(${Math.min(255,Math.round(70*f.diff)+sp)},${Math.min(255,Math.round(200*f.diff)+sp)},${Math.min(255,Math.round(190*f.diff)+sp)})`;
       ctx.fillStyle=col;ctx.fill();
-      ctx.strokeStyle=col;ctx.lineWidth=1;ctx.lineJoin='round';ctx.stroke(); // tapa las costuras entre triángulos → sólido continuo
+      ctx.strokeStyle=col;ctx.lineWidth=1;ctx.lineJoin='round';ctx.stroke(); // tapa costuras → superficie continua
     }
     // ── Columnas de soporte (palitos verticales bajo los voladizos) ──
     if(S.showSupports){
