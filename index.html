@@ -3704,6 +3704,7 @@ function _reportarResultados(muts) {
         <div class="card-header">
           <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Palabras clave · Quality Score</span>
           <span id="adsKwBadge" style="font-size:10px;color:var(--text3);margin-left:auto"></span>
+          <button onclick="adsExportKeywordsCSV()" style="background:rgba(0,212,204,0.06);border:1px solid rgba(0,212,204,0.2);color:var(--text2);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer" title="Descargar todas las palabras clave como CSV">⬇ CSV</button>
         </div>
         <div id="adsKeywordsArea" style="padding:6px 10px 12px"></div>
       </div>
@@ -15770,6 +15771,23 @@ function adsExportCSV(){
   a.download='campanas_google_ads_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click();
   toast('✓ CSV descargado','success');
+}
+function adsExportKeywordsCSV(){
+  const kws=(window._adsLastData&&window._adsLastData.keywords)||[];
+  if(!kws.length){toast('No hay palabras clave para exportar','error');return;}
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const head=['Palabra clave','Concordancia','Quality Score','Anuncio','Landing','CTR esperado','Campaña','Grupo','Impresiones','Clics','Gasto','Conversiones','CPA'];
+  const lines=[head.map(q).join(',')];
+  [...kws].sort((a,b)=>(b.gasto||0)-(a.gasto||0)).forEach(k=>{
+    const cpa=(k.conversiones||0)>0?Math.round(k.gasto/k.conversiones):'';
+    lines.push([k.kw,k.match,k.qs||'',k.qs_anuncio,k.qs_landing,k.qs_ctr,k.campana,k.grupo,k.impresiones||0,k.clics||0,k.gasto||0,k.conversiones||0,cpa].map(q).join(','));
+  });
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='palabras_clave_google_ads_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  toast('✓ CSV de palabras clave descargado','success');
 }
 function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s) return JSON.parse(s);}catch(e){}return{endpoint:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:'757-781-2099'};}
 function saveAdsConfig(){
