@@ -5375,8 +5375,10 @@ MÉTRICAS OBJETIVO (contexto chileno, fabricación personalizada):
 
 CAUTELA CON DATOS: si una campaña tiene <8 conversiones en el período, NO tomes decisiones agresivas sobre ella (muestra insuficiente) — dilo explícitamente. Una campaña con gasto alto y 0 conversiones SÍ es accionable (pausar/revisar).
 
+DIRECCIÓN, NO SÓLO LA FOTO: el contexto incluye una sección TENDENCIA (vs la carga anterior), ANOMALÍAS detectadas y RITMO DE PRESUPUESTO. Reacciona a la dirección: si el ROAS-real baja, el CPC se dispara o una campaña deja de convertir, eso es la alerta #1 aunque los totales se vean bien. Si vas tope de presupuesto y el ROAS-real es ≥1, recomienda subir ppto; si sobra presupuesto, el problema no es la plata sino keywords/ranking/anuncio.
+
 ESTRUCTURA DE RESPUESTA:
-1. DIAGNÓSTICO (2–3 líneas: ROAS-real vs reportado, qué gana y qué pierde plata)
+1. DIAGNÓSTICO (2–3 líneas: ROAS-real vs reportado, hacia dónde va la tendencia, qué gana y qué pierde plata)
 2. ALERTAS CRÍTICAS (máx 3, con impacto estimado en $ y por qué)
 3. ACCIONES INMEDIATAS (ordenadas por impacto en ganancia)
 4. REASIGNACIÓN DE PRESUPUESTO (mover $X de campaña baja a alta, con montos)
@@ -10506,6 +10508,46 @@ function buildAgentContext(id){
       lines.push(`VERDAD CRM (manda esto): Ingresos netos ${fmtCLP(ingresoCRM)} de ${_ped.length} pedido(s) · ROAS-REAL ${roasReal>0?roasReal.toFixed(2)+'x':'—'} · ${_leads} leads nuevos · CPL real ${cplReal>0?fmtCLP(cplReal):'—'}`);
       if(roasReal>0&&valConv>0){const gap=(roas/roasReal);if(gap>1.6)lines.push(`  ⚠ Google reporta ${roas}x pero el CRM-real es ${roasReal.toFixed(2)}x (${gap.toFixed(1)}× inflado) — usa el real.`);}
       if(conv<8)lines.push(`  ⚠ DATOS INSUFICIENTES a nivel cuenta (${conv} conversiones): evita decisiones agresivas, sólo lo obvio (gasto alto + 0 conversión).`);
+      // ── TENDENCIA: comparar contra una foto anterior para que el agente vea la DIRECCIÓN, no sólo la foto ──
+      try{
+        let _snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');
+        const _today=new Date().toISOString().slice(0,10);
+        const _prev=_snaps.filter(s=>s.date&&s.date<_today&&(s.days===days||!s.days)).pop()||_snaps.filter(s=>s.date&&s.date<_today).pop();
+        if(_prev){
+          const _ageD=Math.max(1,Math.round((Date.now()-new Date(_prev.date).getTime())/86400000));
+          const pct=(cur,old)=>{if(!old||!isFinite(old))return null;return (cur-old)/Math.abs(old)*100;};
+          const arrow=(p,goodUp)=>{if(p==null)return '';const up=p>0;const good=goodUp?up:!up;return ` ${up?'↑':'↓'}${Math.abs(p).toFixed(0)}% ${good?'✓':'⚠'}`;};
+          const oCpa=_prev.conv>0?_prev.gasto/_prev.conv:0;
+          const oCpc=_prev.clics>0?_prev.gasto/_prev.clics:0;
+          const dGasto=pct(gasto,_prev.gasto),dConv=pct(conv,_prev.conv),dRR=pct(roasReal,_prev.roasReal||0),dCpa=pct(cpa,oCpa),dCpc=pct(cpc,oCpc);
+          lines.push(`\nTENDENCIA vs foto de hace ~${_ageD}d (misma ventana ${days}d):`);
+          lines.push(`  Gasto${arrow(dGasto,false)} | Conv${arrow(dConv,true)} | CPA${arrow(dCpa,false)} | CPC${arrow(dCpc,false)} | ROAS-real${_prev.roasReal>0?arrow(dRR,true):' (sin base previa)'}`);
+          // Anomalías que merecen atención inmediata
+          const alarms=[];
+          if(dCpc!=null&&dCpc>30)alarms.push(`CPC subió ${dCpc.toFixed(0)}% (${fmtCLP(Math.round(oCpc))}→${fmtCLP(cpc)}) — competencia o calidad de anuncio`);
+          if(dConv!=null&&dConv<-40&&_prev.conv>=3)alarms.push(`Conversiones cayeron ${Math.abs(dConv).toFixed(0)}% (${_prev.conv}→${conv}) — revisa landing/seguimiento/oferta`);
+          if(dRR!=null&&_prev.roasReal>0&&dRR<-25)alarms.push(`ROAS-real bajó ${Math.abs(dRR).toFixed(0)}% (${(_prev.roasReal).toFixed(2)}x→${roasReal.toFixed(2)}x) — el dinero rinde menos`);
+          if(dGasto!=null&&dGasto>40&&(dConv==null||dConv<10))alarms.push(`Gasto subió ${dGasto.toFixed(0)}% sin traer más conversiones — posible fuga`);
+          if(alarms.length){lines.push('  🚨 ANOMALÍAS DETECTADAS:');alarms.forEach(a=>lines.push(`    • ${a}`));}
+          else lines.push('  (sin anomalías bruscas vs la foto anterior)');
+          // Anomalías por campaña: gasto disparado o conversiones a cero donde antes había
+          const _cAl=[];(d.campanas||[]).forEach(c=>{const old=_prev.camps&&_prev.camps[c.id];if(!old)return;const og=old.gasto||0,oc=old.conv||0;if(og>2000&&(c.gasto||0)>og*1.6&&(c.conversiones||0)<=oc)_cAl.push(`"${c.nombre||c.id}": gasto ${fmtCLP(og)}→${fmtCLP(c.gasto||0)} sin más conversiones`);else if(oc>=2&&(c.conversiones||0)===0&&(c.gasto||0)>2000)_cAl.push(`"${c.nombre||c.id}": dejó de convertir (${oc}→0 conv) gastando ${fmtCLP(c.gasto||0)}`);});
+          if(_cAl.length){lines.push('  Campañas con cambio brusco:');_cAl.slice(0,5).forEach(a=>lines.push(`    • ${a}`));}
+        } else {
+          lines.push('\nTENDENCIA: aún no hay foto anterior comparable — esta carga queda guardada como base. Vuelve en unos días para ver la dirección.');
+        }
+      }catch(e){}
+      // ── RITMO DE PRESUPUESTO: proyección de gasto vs presupuesto disponible ──
+      try{
+        const _pptoDia=(d.campanas||[]).filter(c=>(c.estado||'')==='ENABLED').reduce((s,c)=>s+(c.presupuesto||0),0);
+        const _gastoDia=days>0?gasto/days:0;
+        if(_pptoDia>0){
+          const util=Math.round(_gastoDia/_pptoDia*100);
+          lines.push(`\nRITMO DE PRESUPUESTO: gastas ~${fmtCLP(Math.round(_gastoDia))}/día de ${fmtCLP(_pptoDia)}/día habilitados (${util}% de uso).`);
+          if(util>=92)lines.push(`  ⚠ Estás tope de presupuesto — si el ROAS-real (${roasReal>0?roasReal.toFixed(2)+'x':'?'}) es ≥1 dejas ventas sobre la mesa; evalúa subir ppto en las campañas rentables.`);
+          else if(util<55&&conv>0)lines.push(`  ℹ Sobra presupuesto (${100-util}% sin usar) — el límite no es la plata, es el ranking/keywords/anuncio. Subir ppto no traerá más por sí solo.`);
+        }
+      }catch(e){}
       const camps=d.campanas||[];
       if(camps.length){
         lines.push('\nCAMPAÑAS (usa el ID para las acciones):');
@@ -15181,7 +15223,17 @@ function adsSaveSnapshot(data,days){
   const conv=data.conversiones||0;
   const ctr=imp>0?(clics/imp*100):0;
   const roas=gasto>0&&(data.valor_conversion||0)>0?data.valor_conversion/gasto:0;
-  const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days};
+  // Verdad CRM: ingresos netos + leads del mismo período, para que el agente vea la dirección REAL
+  let ingresoCRM=0,leads=0;
+  try{
+    const cutoff=new Date(Date.now()-days*86400000);
+    ingresoCRM=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const dd=p.createdTime?new Date(p.createdTime):null;return dd&&dd>=cutoff;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+    leads=(state.clientes||[]).filter(c=>{const dd=c.createdTime?new Date(c.createdTime):null;return dd&&dd>=cutoff;}).length;
+  }catch(e){}
+  const roasReal=gasto>0?ingresoCRM/gasto:0;
+  // Huella por campaña (id→gasto/conv) para detectar anomalías a nivel campaña
+  const camps={};(data.campanas||[]).forEach(c=>{if(c&&c.id!=null)camps[c.id]={gasto:c.gasto||0,conv:c.conversiones||0};});
+  const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days,ingresoCRM,leads,roasReal,camps};
   const idx=snaps.findIndex(s=>s.date===today);
   if(idx>=0) snaps[idx]=snap; else snaps.push(snap);
   snaps.sort((a,b)=>a.date.localeCompare(b.date));
