@@ -20268,17 +20268,20 @@ const SL3D=(function(){
         const y2=y1*cb-z*sb,z2=y1*sb+z*cb;
         P.push(w/2+x1*sc,h/2-z2*sc);dsum+=y2;
       }
-      // sombreado plano según normal proyectada
-      const ux=P[2]-P[0],uy=P[3]-P[1],vx=P[4]-P[0],vy=P[5]-P[1];
-      const facing=ux*vy-uy*vx;
-      const sh=Math.max(0.18,Math.min(1,0.3+Math.abs(facing)/( (Math.hypot(ux,uy)*Math.hypot(vx,vy))||1)*0.75));
+      // Iluminación Lambert con la normal 3D rotada igual que los vértices.
+      // Caras planas = muchos triángulos con la MISMA normal → mismo tono → superficie sólida (sin facetas).
+      const nx1=Nx*ca-Ny*sa,ny1=Nx*sa+Ny*ca,nD=ny1*cb-Nz*sb,nU=ny1*sb+Nz*cb,nl2=Math.hypot(nx1,nD,nU)||1;
+      const lit=Math.abs((nx1*-0.35+nD*-0.55+nU*0.78)/nl2); // luz desde arriba-izquierda-frente, dos caras
+      const sh=Math.max(0.26,Math.min(1,0.36+lit*0.7));
       list[i]={d:dsum,P,sh,over};
     }
     list.sort((p,q)=>q.d-p.d);
     for(const f of list){
       ctx.beginPath();ctx.moveTo(f.P[0],f.P[1]);ctx.lineTo(f.P[2],f.P[3]);ctx.lineTo(f.P[4],f.P[5]);ctx.closePath();
       // Voladizos en naranja (necesitan soporte); resto en teal
-      ctx.fillStyle=f.over?`rgb(${Math.round(120+f.sh*135)},${Math.round(50+f.sh*90)},${Math.round(20+f.sh*30)})`:`rgb(${Math.round(f.sh*90)},${Math.round(f.sh*200)},${Math.round(f.sh*192)})`;ctx.fill();
+      const col=f.over?`rgb(${Math.round(120+f.sh*135)},${Math.round(50+f.sh*90)},${Math.round(20+f.sh*30)})`:`rgb(${Math.round(f.sh*90)},${Math.round(f.sh*200)},${Math.round(f.sh*192)})`;
+      ctx.fillStyle=col;ctx.fill();
+      ctx.strokeStyle=col;ctx.lineWidth=1;ctx.lineJoin='round';ctx.stroke(); // tapa las costuras entre triángulos → sólido continuo
     }
     // ── Columnas de soporte (palitos verticales bajo los voladizos) ──
     if(S.showSupports){
