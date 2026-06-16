@@ -2561,6 +2561,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
               <div style="display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-top:1px solid var(--border2);background:var(--surface3)"><div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);grid-column:1/3">Costo total</div><div id="itemsCostoVal" style="padding:6px 10px;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--text2);text-align:right;border-left:1px solid var(--border2)">$0</div><div style="border-left:1px solid var(--border2)"></div><div style="border-left:1px solid var(--border2)"></div></div>
               <div style="display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-top:1px solid var(--border2);background:var(--surface3)"><div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);grid-column:1/4">Precio neto (sin IVA)</div><div id="itemsNetoVal" style="padding:6px 10px;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--text);text-align:right;border-left:1px solid var(--border2)">$0</div><div style="border-left:1px solid var(--border2)"></div></div>
               <div style="display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-top:1px solid var(--border2);background:var(--surface3)"><div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);grid-column:1/4">Margen</div><div id="itemsMarkupVal" style="padding:6px 10px;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;text-align:right;border-left:1px solid var(--border2)">—</div><div style="border-left:1px solid var(--border2)"></div></div>
+              <div id="itemsMarginWarn" style="display:none;padding:6px 12px;font-size:10.5px;border-top:1px solid var(--border2);background:rgba(255,68,68,0.06);color:var(--danger)"></div>
               <div style="display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-top:1px solid var(--border2);background:var(--surface3)"><div style="padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);grid-column:1/4;display:flex;align-items:center;gap:6px">Descuento <input id="cot-descuento" type="number" min="0" max="100" step="0.5" value="0" oninput="updateItemsTotal()" style="background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:2px 6px;width:55px;text-align:center;outline:none"> <span style="color:var(--text3)">%</span></div><div id="itemsDescuentoVal" style="padding:6px 10px;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--danger);text-align:right;border-left:1px solid var(--border2)"></div><div style="border-left:1px solid var(--border2)"></div></div>
               <div style="display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-top:1px solid var(--border2);background:var(--surface2)"><div style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent3);grid-column:1/4">TOTAL IVA INC. <span style="font-size:9px;color:var(--text3);font-weight:400">(+19%)</span></div><div id="itemsTotalIvaVal" style="padding:8px 10px;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent3);text-align:right;border-left:1px solid var(--border2)">$0</div><div style="border-left:1px solid var(--border2)"></div></div>
             </div>
@@ -9821,6 +9822,17 @@ function updateItemsTotal(){
   if(de) de.textContent=descMonto>0?'−'+formatCLP(descMonto):'';
   if(ie) ie.textContent=formatCLP(totalIvaDesc);
   const cs=document.getElementById('cot-subtotal'),ct=document.getElementById('cot-total');if(cs) cs.value=costo;if(ct) ct.value=totalIvaDesc;
+  // Guarda de margen: margen EFECTIVO (tras descuento) vs objetivo — avisa si quedó bajo
+  const warn=document.getElementById('itemsMarginWarn');
+  if(warn){
+    const target=parseFloat(localStorage.getItem('cot_margen_min')||'25');
+    const effM=(costo>0&&netoDesc>0)?(netoDesc-costo)/netoDesc*100:null;
+    if(effM!==null&&effM<target){
+      const subir=costo/(1-target/100); // venta neta necesaria para alcanzar el objetivo
+      warn.style.display='block';
+      warn.innerHTML=`⚠ Margen efectivo ${effM.toFixed(0)}% (tras descuento) — bajo el objetivo de ${target}%. Para llegar al objetivo, vende a ≥ ${formatCLP(Math.round(subir))} neto (hoy ${formatCLP(netoDesc)}).`;
+    } else warn.style.display='none';
+  }
 }
 function updateItemTotal(){updateItemsTotal();updateItemsDetalle();}
 function updateItemsDetalle(){const rows=document.querySelectorAll('#itemsContainer .item-row');const lines=[];rows.forEach(row=>{const desc=row.querySelector('.item-desc')?.value.trim()||'';const und=row.querySelector('.item-und')?.value||'1';const costo=parseFloat(row.querySelector('.item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.item-venta')?.value)||0;if(desc||venta>0) lines.push(`${desc} | ${und} und. | Costo: ${formatCLP(costo*parseFloat(und))} | Venta: ${formatCLP(venta*parseFloat(und))}`);});const hidden=document.getElementById('cot-detalle');if(hidden) hidden.value=lines.join('\n');}
@@ -10420,9 +10432,16 @@ function buildAgentContext(id){
     const aprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-8);
     lines.push('\nÚLTIMAS COTIZACIONES APROBADAS (referencia de precios reales):');
     if(aprobadas.length){aprobadas.forEach(c=>{const f=c.fields;const neto=Math.round((f['Total final (CLP)']||0)/1.19);const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Neto: ${fmtCLP(neto)}${sol?' | '+sol.substring(0,70):''}`);});}else lines.push('  Sin cotizaciones aprobadas aún');
+    // Punto dulce de precio: margen promedio de las APROBADAS (lo que el mercado acepta) + tasa de aprobación
+    const _aprAll=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada');
+    const _aprM=_aprAll.map(c=>getMargenCot(c.fields)).filter(m=>m!==null);
+    const _avgAprM=_aprM.length?Math.round(_aprM.reduce((s,m)=>s+m,0)/_aprM.length):null;
+    const _enviadas=state.cotizaciones.filter(c=>['Aprobada','Rechazada','Enviada'].includes(c.fields['Estado cotización']||'')).length;
+    const _tasa=_enviadas?Math.round(_aprAll.length/_enviadas*100):null;
+    if(_avgAprM!==null)lines.push(`\nPUNTO DULCE: las cotizaciones que el cliente APRUEBA tienen margen promedio ${_avgAprM}% (tasa de aprobación ${_tasa!==null?_tasa+'%':'—'}). Apunta a ese rango para maximizar probabilidad de cierre sin regalar margen.`);
     lines.push('\nCOST BASE (referencia interna):');
     lines.push('  Trofeo $18.000/und | Medalla $4.500/und | Neón $18.000–25.000/m | PLA $24/g+$1.200/h');
-    lines.push('  Margen objetivo: 35–45%');
+    lines.push('  Margen objetivo: 35–45% · piso mínimo 25%');
     const rech=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Rechazada'&&c.fields['Notas rechazo']).slice(-5);
     if(rech.length){
       lines.push('\nCOTIZACIONES RECHAZADAS RECIENTES (considera estos motivos al fijar precios):');
