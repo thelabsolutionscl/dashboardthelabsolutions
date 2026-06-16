@@ -3540,7 +3540,7 @@ function _reportarResultados(muts) {
     <!-- Recomendaciones del Agente -->
     <div id="adsAgentBox" style="display:none;margin-bottom:16px">
       <div class="card">
-        <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Recomendaciones del Agente</span><div style="display:flex;align-items:center;gap:8px"><span id="adsAgentBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span><button class="btn btn-ghost btn-sm act-item-cyan" onclick="runAdsAgent()" style="font-size:10px;padding:2px 10px">⚡ Análisis IA</button></div></div>
+        <div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Recomendaciones del Agente</span><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text3);cursor:pointer" title="Genera y envía un análisis por email una vez por semana al cargar los datos"><input type="checkbox" id="adsAutoWeekly" onchange="adsToggleAutoWeekly(this.checked)" style="cursor:pointer">auto-semanal</label><span id="adsAgentBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span><button class="btn btn-ghost btn-sm act-item-cyan" onclick="runAdsAgent()" style="font-size:10px;padding:2px 10px">⚡ Análisis IA</button></div></div>
         <div id="adsAgentList" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
       </div>
     </div>
@@ -10837,6 +10837,30 @@ function runAdsAgent(){
     return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
+// ── Reporte Ads semanal automático (genera + email 1×/semana al cargar datos) ──
+function adsToggleAutoWeekly(on){
+  localStorage.setItem('ads_auto_weekly',on?'1':'0');
+  if(on){const def=(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser()?.email)||'';const to=prompt('¿A qué correo enviar el reporte Google Ads semanal?',localStorage.getItem('ads_auto_email')||def||'');if(to&&validEmail(to.trim())){localStorage.setItem('ads_auto_email',to.trim());toast('✓ Reporte Ads semanal activado','success');}else if(to!==null)toast('Correo inválido — se generará igual sin envío','info');}
+  else toast('Reporte Ads semanal desactivado','info');
+}
+let _adsAutoRunning=false;
+async function adsAutoWeeklyCheck(){
+  if(localStorage.getItem('ads_auto_weekly')!=='1'||!window._adsLastData||window._adsLastData.demo||_adsAutoRunning)return;
+  const wk=(typeof _isoWeekKey==='function')?_isoWeekKey():new Date().toISOString().slice(0,7);
+  if(localStorage.getItem('ads_auto_last_week')===wk)return;
+  _adsAutoRunning=true;
+  try{
+    const sys=AGENTES_CFG.find(a=>a.id==='ADS').sys, ctx=buildAgentContext('ADS');
+    const resp=await callClaude(sys,ctx);
+    localStorage.setItem('ads_auto_last_week',wk);
+    try{_adsLogRecommendation(_parseAdsActions(resp),resp);}catch(e){}
+    const to=localStorage.getItem('ads_auto_email')||'';
+    const body=String(resp).replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/i,'').trim();
+    if(to&&typeof MAIL!=='undefined'){try{await MAIL.post({action:'send',to,subject:`Reporte Google Ads ${wk} — The Lab Solutions`,body,from_name:'The Lab Solutions'});toast('✓ Reporte Ads semanal generado y enviado','success');}catch(e){toast('Reporte Ads generado (no se pudo enviar)','info');}}
+    else toast('✓ Reporte Ads semanal generado','success');
+  }catch(e){console.error('adsAutoWeeklyCheck:',e);}
+  finally{_adsAutoRunning=false;}
+}
 // Memoria de recomendaciones del agente Ads (para realimentar y no repetir)
 function _adsLogRecommendation(actions,text){
   let log=[];try{log=JSON.parse(localStorage.getItem('ads_agent_log')||'[]');}catch(e){}
@@ -15237,6 +15261,25 @@ function _adsCampAction(idx){
   if(d.type==='edit') openEditCampaign(d.id,d.nombre,d.estado,d.presupuesto);
   else if(d.type==='delete') openDeleteCampaign(d.id,d.nombre);
   else if(d.type==='copy') runAdsCopyAgent(d);
+  else if(d.type==='analyze') runAdsCampaignAgent(d.id);
+}
+// Análisis profundo de UNA campaña (con sus acciones de 1 clic)
+function runAdsCampaignAgent(id){
+  const camp=(window._adsLastData?.campanas||[]).find(c=>String(c.id)===String(id));
+  if(!camp){toast('Carga primero los datos de Google Ads','error');return;}
+  const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+  const ctr=camp.impresiones>0?(camp.clics/camp.impresiones*100).toFixed(2):0;
+  const cpc=camp.clics>0?Math.round(camp.gasto/camp.clics):0;
+  const cpa=camp.conversiones>0?Math.round(camp.gasto/camp.conversiones):0;
+  const ro=camp.gasto>0&&(camp.valor_conversion||0)>0?(camp.valor_conversion/camp.gasto).toFixed(2):0;
+  const util=camp.presupuesto>0?Math.round(camp.gasto/days/camp.presupuesto*100):0;
+  const ctx=buildAgentContext('ADS')+`\n\nANALIZA EN PROFUNDIDAD SÓLO ESTA CAMPAÑA:\nid=${camp.id} "${camp.nombre}" [${camp.estado}] · ${days} días\nPpto ${fmtMoney(camp.presupuesto||0)}/día (${util}% uso) · Gasto ${fmtMoney(camp.gasto||0)} · CTR ${ctr}% · CPC ${fmtMoney(cpc)} · Conv ${camp.conversiones||0} · CPA ${camp.conversiones>0?fmtMoney(cpa):'—'} · ROAS-Google ${(camp.valor_conversion||0)>0?ro+'x':'—'}\nDa un diagnóstico específico y las acciones concretas (con [ACTIONS]) para esta campaña. Si la muestra es chica, dilo.`;
+  runAgentInline('ADS',ctx,(result)=>{
+    const actions=_parseAdsActions(result);window._adsAgentActions=actions;
+    const rEl=document.getElementById('agentInlineResult');if(rEl)rEl.textContent=String(result).replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/i,'').trim();
+    const btns=actions.map((a,i)=>{const lbl=a.tipo==='pausar'?('⏸ Pausar '+(a.campana||'')):a.tipo==='activar'?('▶ Activar '+(a.campana||'')):a.tipo==='presupuesto'?('💰 '+(a.campana||'')+' → '+fmtMoney(+a.nuevo||0)):a.tipo==='negativo'?('🚫 «'+(a.termino||'')+'»'):a.tipo;return `<button class="btn btn-ghost btn-sm" title="${escapeHtml(a.motivo||'')}" style="${a.tipo==='pausar'?'color:var(--danger)':'color:var(--accent)'}" onclick="applyAdsAction(${i})">${escapeHtml(lbl)}</button>`;}).join('');
+    return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
 }
 // ── Health Score por campaña (0–100) ────────────────────
 function adsHealthScore(c){
@@ -15671,6 +15714,8 @@ async function loadAdsData(){
     renderPendingMutations();
     // Refleja en el dashboard lo que el Script 2 ya aplicó en Google Ads
     syncMutationStatuses();
+    const _aw=document.getElementById('adsAutoWeekly');if(_aw)_aw.checked=localStorage.getItem('ads_auto_weekly')==='1';
+    setTimeout(()=>{try{adsAutoWeeklyCheck();}catch(e){}},1200);
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
     const btnNueva=document.getElementById('btnNuevaCampana');
@@ -15800,7 +15845,9 @@ function renderAdsCampaigns(data){
     const ei=_adsCampActions.push({type:'edit',id:c.id,nombre:c.nombre||'',estado:c.estado,presupuesto:c.presupuesto||0})-1;
     const di=_adsCampActions.push({type:'delete',id:c.id,nombre:c.nombre||''})-1;
     const ci=_adsCampActions.push({type:'copy',nombre:c.nombre||'',estado:c.estado||'',gasto:c.gasto||0,clics:c.clics||0,conv:c.conversiones||0,ctr:ctr.toFixed(2),cpc:c.clics>0?Math.round(c.gasto/c.clics):0})-1;
+    const ai=_adsCampActions.push({type:'analyze',id:c.id})-1;
     const acciones=`<span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">
+        <button onclick="event.stopPropagation();_adsCampAction(${ai})" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:var(--accent4);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Analizar esta campaña con IA">⚡</button>
         <button onclick="event.stopPropagation();_adsCampAction(${ei})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Editar">✏</button>
         <button onclick="event.stopPropagation();_adsCampAction(${di})" style="background:none;border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Eliminar"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-trash"/></svg></button>
         <button onclick="event.stopPropagation();_adsCampAction(${ci})" style="background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);color:var(--accent);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.4" title="Generar copy IA">✍</button>
