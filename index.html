@@ -4072,14 +4072,14 @@ function _reportarResultados(muts) {
 
     <!-- Cuentas por cobrar generales -->
     <div class="card">
-      <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro</span><button class="btn btn-primary btn-sm" id="finCobranzaIABtn" onclick="finPlanCobranzaIA()" style="margin-left:auto">📋 Plan de cobranza IA</button></div>
+      <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro</span><button class="btn btn-ghost btn-sm" onclick="finExportCobranza()" style="margin-left:auto">⬇ CSV</button><button class="btn btn-primary btn-sm" id="finCobranzaIABtn" onclick="finPlanCobranzaIA()">📋 Plan de cobranza IA</button></div>
       <div id="finCobranzaIAout" style="display:none;margin:12px 16px 0;padding:14px;background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.22);border-radius:9px;font-size:12px;color:var(--text2);white-space:pre-wrap;word-break:break-word;overflow-x:auto;line-height:1.6"></div>
       <div style="padding:12px 16px 0">
         <div id="fin-cobrar-aging"></div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Mes</th><th>Cliente</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Por Cobrar</th><th title="Días de mora estimados (vencimiento ≈ inicio de mes + 30 días)">Mora</th><th>Fact. N°</th></tr></thead>
+          <thead><tr><th>Mes</th><th>Cliente</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Por Cobrar</th><th title="Días de mora desde el vencimiento (inicio de mes + plazo de pago configurable; o fecha/plazo propio de la factura)">Mora</th><th>Fact. N°</th></tr></thead>
           <tbody id="fin-cobrar-body"></tbody>
         </table>
       </div>
@@ -9495,6 +9495,15 @@ async function rellenarQAconIA(){
 }
 function setQAResultado(r){qaResultadoActual=r;updateQAResultadoBtns();}
 function updateQAResultadoBtns(){document.getElementById('qaAprobadoBtn').style.opacity=qaResultadoActual==='QA aprobado'?'1':'0.4';document.getElementById('qaRechazadoBtn').style.opacity=qaResultadoActual==='Rechazado'?'1':'0.4';document.getElementById('qaPendienteBtn').style.opacity=qaResultadoActual==='Pendiente'?'1':'0.4';}
+// Tras un QA rechazado, ofrece devolver el pedido a producción para retrabajo
+async function _qaOfferRework(id){
+  if(qaResultadoActual!=='Rechazado')return;
+  const p=state.pedidos.find(x=>x.id===id);if(!p)return;
+  if((p.fields['Estado pedido']||'')==='En producción')return;
+  if(!confirm('QA rechazado. ¿Devolver el pedido a "En producción" para retrabajo?'))return;
+  try{await airtableWrite('Pedidos','PATCH',id,{'Estado pedido':'En producción'});p.fields['Estado pedido']='En producción';toast('↩ Pedido devuelto a producción para retrabajo','info');}
+  catch(e){toast('No se pudo cambiar el estado: '+e.message,'error');}
+}
 async function saveQAModal(){
   const id=document.getElementById('qaModalPedidoId').value;
   // Trazabilidad: al rechazar, captura el motivo (queda como ítem visible en el checklist)
@@ -9503,8 +9512,10 @@ async function saveQAModal(){
     if(motivo&&motivo.trim())qaItems.push({texto:'❌ Motivo rechazo: '+motivo.trim(),checked:false,motivo:true});
   }
   const notasQA=JSON.stringify(qaItems);const checked=qaItems.filter(x=>x.checked).length;
-  try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual,'Notas QA':notasQA});const p=state.pedidos.find(x=>x.id===id);if(p){p.fields['Resultado QA']=qaResultadoActual;p.fields['Notas QA']=notasQA;}toast(`✓ QA ${checked}/${qaItems.length}`,'success');closeQAModal();renderPedidos();renderOverview();}
-  catch(e){try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Resultado QA']=qaResultadoActual;toast(`✓ QA ${qaResultadoActual}`,'success');closeQAModal();renderPedidos();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
+  let saved=false;
+  try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual,'Notas QA':notasQA});const p=state.pedidos.find(x=>x.id===id);if(p){p.fields['Resultado QA']=qaResultadoActual;p.fields['Notas QA']=notasQA;}toast(`✓ QA ${checked}/${qaItems.length}`,'success');saved=true;}
+  catch(e){try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Resultado QA']=qaResultadoActual;toast(`✓ QA ${qaResultadoActual}`,'success');saved=true;}catch(e2){toast('Error: '+e2.message,'error');}}
+  if(saved){await _qaOfferRework(id);closeQAModal();renderPedidos();renderOverview();}
 }
 function filterPedidos(filter,btn){document.querySelectorAll('.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');renderPedidos(filter);}
 
@@ -12564,7 +12575,7 @@ function renderMaintenanceTable(){
     let fcHtml;
     if(!fc||(fc.rate<=0&&fc.hoursLeft>0))fcHtml=`<span style="color:var(--text3);font-size:10px" title="Sin impresiones completadas en las últimas 4 semanas — no se puede proyectar">sin uso reciente</span>`;
     else if(fc.hoursLeft<=0)fcHtml=`<span style="color:#ff4444;font-size:10px;font-weight:700">⚠ ${escapeHtml(fc.tipo)} vencida</span>`;
-    else{const w=fc.weeks;const col=w<1?'#ff4444':w<2?'#ffaa00':'#00d4aa';const lbl=w<1?'esta semana':w<2?`~${Math.round(w*7)} días`:`~${Math.round(w)} sem`;fcHtml=`<span style="color:${col};font-size:10px;font-weight:600" title="${escapeHtml(fc.tipo)}: faltan ${fc.hoursLeft.toFixed(0)}h al ritmo de ${fc.rate.toFixed(1)}h/semana">${escapeHtml(fc.tipo)} en ${lbl}</span>`;}
+    else{const w=fc.weeks;const col=w<1?'#ff4444':w<2?'#ffaa00':'#00d4aa';const lbl=w<1?'esta semana':w<2?`~${Math.round(w*7)} días`:`~${Math.round(w)} sem`;fcHtml=`<span style="color:${col};font-size:10px;font-weight:600" title="${escapeHtml(fc.tipo)}: faltan ${fc.hoursLeft.toFixed(0)}h al ritmo de ${fc.rate.toFixed(1)}h/semana">${escapeHtml(fc.tipo)} en ${lbl}</span> <span style="color:var(--text3);font-size:9px">· ${fc.rate.toFixed(0)}h/sem</span>`;}
     return`<tr style="border-bottom:1px solid var(--border2)">
       <td style="padding:9px 10px;font-size:11px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc?.color||'#888'};margin-right:6px"></span><b>${m.nombre}</b> <span style="color:var(--text3)">#${m.numG}</span></td>
       <td style="padding:9px 10px;font-size:11px;text-align:center;font-weight:700;color:var(--accent)">${totalH}h</td>
@@ -17206,6 +17217,20 @@ function finRenderCobrar(){
   });
   if(!html)html='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro registradas</td></tr>';
   document.getElementById('fin-cobrar-body').innerHTML=html;
+}
+// Exporta la cartera por cobrar (ordenada por mora) a CSV para trabajarla aparte o pasarla a cobranza
+function finExportCobranza(){
+  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  if(!data.length){toast('No hay facturas pendientes de cobro','error');return;}
+  const hoy=Date.now();const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const rows=data.map(r=>{const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));const cobrar=r.porCobrar||tot;const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));return{r,tot,cobrar,dias};}).sort((a,b)=>b.dias-a.dias||b.cobrar-a.cobrar);
+  const head=['Cliente','Empresa','Mes','Ítem','Total+IVA','Por Cobrar','Mora (días)','Fact. N°'];
+  const lines=[head.map(q).join(',')];
+  rows.forEach(({r,tot,cobrar,dias})=>lines.push([r.nombre,r.empresa,`${MESES[(parseInt(r.mes,10)||1)-1]} ${r.year}`,r.item,tot,cobrar,dias,r.fact||''].map(q).join(',')));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cobranza_pendiente_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  toast('✓ Cobranza exportada a CSV','success');
 }
 // Plan de cobranza con IA: prioriza toda la cartera por mora y monto (FINANCE_AGENT)
 async function finPlanCobranzaIA(){
@@ -22006,6 +22031,11 @@ self.onmessage=function(ev){
     const fc=est.grams/1000*pk,tc=est.secs/3600*rh,tot=fc+tc;
     const out=el('slCostOut');
     if(out)out.innerHTML=`<b style="color:var(--accent3);font-size:16px">${_money(tot)}</b> <span style="color:var(--text3);font-size:10px">= filamento ${_money(fc)} + máquina ${_money(tc)}</span>`;
+    // Precio sugerido al margen objetivo del taller (precio = costo / (1 - margen))
+    const mEl=el('slMargen');const m=Math.max(0,Math.min(95,+(mEl?.value)||0));
+    try{if(mEl)localStorage.setItem('cot_margen_min',m);}catch(e){}
+    const sug=el('slPriceSuggest');
+    if(sug){const precio=m<95?tot/(1-m/100):0;sug.innerHTML=precio>0?`<b style="color:var(--accent);font-size:14px">${_money(precio)}</b> <span style="color:var(--text3);font-size:9px">+ IVA = ${_money(precio*1.19)}</span>`:'—';}
   }
   // ── Vista previa del G-code por capas ───────────────────────
   function _parseGcodeLayers(){
@@ -22160,6 +22190,11 @@ self.onmessage=function(ev){
           <span style="font-size:10px;color:var(--text3)">Máquina $/h</span>
           <input id="slRateH" type="number" value="${rh}" oninput="SL3D.costRecalc()" style="width:70px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 7px;color:var(--text);font-size:11px">
           <span style="margin-left:auto;font-size:10px;color:var(--text3)">Costo estimado:&nbsp;</span><span id="slCostOut"></span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;font-size:10px;color:var(--text3)">
+          <span>Margen objetivo</span>
+          <input id="slMargen" type="number" min="0" max="95" value="${localStorage.getItem('cot_margen_min')||25}" oninput="SL3D.costRecalc()" style="width:55px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 7px;color:var(--text);font-size:11px;text-align:center"> %
+          <span style="margin-left:auto">Precio sugerido (neto):&nbsp;</span><span id="slPriceSuggest"></span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" onclick="SL3D.descargar()">⬇ Descargar .gcode</button>
