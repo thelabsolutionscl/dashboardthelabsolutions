@@ -6928,7 +6928,10 @@ function renderClientes(){
   tbody.innerHTML=sorted.map(c=>buildClienteRow(c)).join('');if(document.getElementById('clienteSearch')?.value) filterClientes();
   renderClientesAnalytics();
 }
-function filterClientes(){const q=document.getElementById('clienteSearch').value.toLowerCase();document.querySelectorAll('#clientesTableBody tr').forEach(r=>{r.classList.toggle('cliente-hidden',!!(q&&!r.textContent.toLowerCase().includes(q)));});updateBulkBar();}
+function _debounce(fn,wait){let t;return function(...a){clearTimeout(t);t=setTimeout(()=>fn.apply(this,a),wait);};}
+function _filterClientesNow(){const inp=document.getElementById('clienteSearch');if(!inp)return;const q=inp.value.toLowerCase();document.querySelectorAll('#clientesTableBody tr').forEach(r=>{let s=r.dataset.search;if(s===undefined||s===''){s=r.textContent.toLowerCase();r.dataset.search=s;}r.classList.toggle('cliente-hidden',!!(q&&!s.includes(q)));});updateBulkBar();}
+const _filterClientesDebounced=_debounce(_filterClientesNow,150);
+function filterClientes(){_filterClientesDebounced();}
 async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
@@ -7068,7 +7071,7 @@ function renderClienteFacturas(clienteId,empresa){
   </div>
   <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
     <div class="fac-filtros" style="margin-bottom:0;flex:1;min-width:0">
-      ${filtros.map(f=>`<button class="fac-chip${_facFiltro===f.k?' fac-chip-active':''}" onclick="_facFiltro='${f.k}';_facBuscar='';renderClienteFacturas(cdCurrentId,cdCurrentEmpresa)">${f.label}${f.n>0?` <span class="fac-chip-n">${f.n}</span>`:''}</button>`).join('')}
+      ${filtros.map(f=>`<button class="fac-chip${_facFiltro===f.k?' fac-chip-active':''}" onclick="_facFiltro='${f.k}';renderClienteFacturas(cdCurrentId,cdCurrentEmpresa)">${f.label}${f.n>0?` <span class="fac-chip-n">${f.n}</span>`:''}</button>`).join('')}
     </div>
     <input class="field-input fac-search" placeholder="🔍 Folio / texto…" value="${escapeHtml(_facBuscar)}" oninput="_facBuscar=this.value;renderClienteFacturas(cdCurrentId,cdCurrentEmpresa)" style="width:130px;padding:3px 8px;font-size:11px;height:28px;flex-shrink:0">
     ${nBulk>1?`<button class="btn btn-sm fac-btn-cobrar" onclick="marcarFiltradasCobradas()" style="font-size:10px;padding:4px 8px;flex-shrink:0;white-space:nowrap">✓ Cobrar ${nBulk}</button>`:''}
@@ -9567,6 +9570,9 @@ RESUMEN_CRM:
 // ── AGENT_QUEUE (cola de agentes) ─────────────────────────────
 const AGENT_QUEUE_TABLE='Agent_Queue';
 let _agentQueue=[];
+// Reintentos de tareas en Error por sesión (recordId→intentos). Tope: 2 reintentos automáticos.
+const _aqRetries=new Map();
+const _AQ_MAX_RETRIES=2;
 
 // Escritura tolerante: si Airtable rechaza un campo inexistente, lo quita y reintenta.
 async function airtableWriteTolerant(table,method,recordId,fields,maxTries=10){
@@ -9630,7 +9636,7 @@ function renderAgentQueue(){
   const order={Pendiente:0,Procesando:1,Error:2,Completado:3};
   const badge={Pendiente:'badge-yellow',Procesando:'badge-orange',Completado:'badge-green',Error:'badge-red'};
   const rows=[..._agentQueue].sort((a,b)=>(order[a.fields.Estado]??9)-(order[b.fields.Estado]??9));
-  el.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Evento</th><th>Entidad</th><th>Agente</th><th>Estado</th><th>Prioridad</th><th>Source</th><th>Campaign</th><th>Score</th><th></th></tr></thead><tbody>${rows.map(r=>{const f=r.fields;const est=f.Estado||'Pendiente';return `<tr><td>${escapeHtml(f.Evento||'')}</td><td>${escapeHtml([f.Entidad,f['ID entidad']].filter(Boolean).join(' '))}</td><td>${escapeHtml(f.Agente||'')}</td><td><span class="badge ${badge[est]||'badge-gray'}">${escapeHtml(est)}</span></td><td>${escapeHtml(f.Prioridad||'')}</td><td>${escapeHtml(f.Source||'')}</td><td>${escapeHtml(f.Campaign||'')}</td><td>${f['Lead Score']??''}</td><td><button class="btn btn-ghost btn-sm" onclick="processAgentQueueItem('${r.id}')" ${est==='Procesando'?'disabled':''}>▶ Procesar</button></td></tr>`;}).join('')}</tbody></table></div>`;
+  el.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Evento</th><th>Entidad</th><th>Agente</th><th>Estado</th><th>Prioridad</th><th>Source</th><th>Campaign</th><th>Score</th><th></th></tr></thead><tbody>${rows.map(r=>{const f=r.fields;const est=f.Estado||'Pendiente';return `<tr><td>${escapeHtml(f.Evento||'')}</td><td>${escapeHtml([f.Entidad,f['ID entidad']].filter(Boolean).join(' '))}</td><td>${escapeHtml(f.Agente||'')}</td><td><span class="badge ${badge[est]||'badge-gray'}">${escapeHtml(est)}</span></td><td>${escapeHtml(f.Prioridad||'')}</td><td>${escapeHtml(f.Source||'')}</td><td>${escapeHtml(f.Campaign||'')}</td><td>${f['Lead Score']??''}</td><td><button class="btn btn-ghost btn-sm" onclick="processAgentQueueItem('${r.id}')" ${est==='Procesando'?'disabled':''}>▶ Procesar</button>${est==='Error'?` <button class="btn btn-ghost btn-sm" onclick="processAgentQueueItem('${r.id}')">↻ Reintentar</button>`:''}</td></tr>`;}).join('')}</tbody></table></div>`;
 }
 
 async function refreshAgentQueue(){try{await loadAgentQueue();renderAgentQueue();toast('Cola actualizada','success');}catch(e){}}
@@ -9689,6 +9695,7 @@ async function processAgentQueueItem(recordId){
   }catch(e){
     try{await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,{'Estado':'Error','Error':String(e.message).slice(0,1000),'Fecha ejecución':new Date().toISOString()});}catch(_){}
     if(rec){rec.fields.Estado='Error';rec.fields.Error=e.message;}
+    _aqRetries.set(recordId,(_aqRetries.get(recordId)||0)+1);
     toast('Error procesando '+agentId+': '+e.message,'error');renderAgentQueue();
   }
 }
@@ -9700,9 +9707,12 @@ async function processAllPendingAgentQueue(){
   try{
     try{await loadAgentQueue();}catch(e){return;}
     const pend=_agentQueue.filter(r=>(r.fields.Estado||'Pendiente')==='Pendiente');
-    if(!pend.length){renderAgentQueue();toast('No hay tareas pendientes','info');return;}
-    toast('Procesando '+pend.length+' tarea(s)...','info');
-    for(const r of pend){await processAgentQueueItem(r.id);}
+    // Reintentos de tareas en Error, con tope por sesión (_AQ_MAX_RETRIES).
+    const retry=_agentQueue.filter(r=>r.fields.Estado==='Error'&&(_aqRetries.get(r.id)||0)<_AQ_MAX_RETRIES);
+    const batch=pend.concat(retry);
+    if(!batch.length){renderAgentQueue();toast('No hay tareas pendientes ni reintentos disponibles','info');return;}
+    toast('Procesando '+pend.length+' pendiente(s)'+(retry.length?' + '+retry.length+' reintento(s)':'')+'...','info');
+    for(const r of batch){await processAgentQueueItem(r.id);}
     toast('✓ Cola procesada','success');
   }finally{_aqProcessing=false;}
 }
