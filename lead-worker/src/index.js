@@ -247,7 +247,12 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
   }
 
   // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
-  if (env.AUTO_PROCESS_LEADS === "true" && env.ANTHROPIC_API_KEY && queueId) {
+  if (
+    env.AUTO_PROCESS_LEADS === "true" &&
+    env.ANTHROPIC_API_KEY &&
+    queueId &&
+    (await autoProcessAllowed(env))
+  ) {
     ctx.waitUntil(processLeadAgent(env, { clienteId, queueId, norm, agente }));
   }
 
@@ -350,7 +355,7 @@ async function callClaude(env, system, user) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+      model: env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
       max_tokens: 1200,
       system,
       messages: [{ role: "user", content: user }],
@@ -503,7 +508,9 @@ async function airtableFindCliente(env, { email, phone }) {
   const esc = (s) => String(s).replace(/'/g, "\\'");
   const clauses = [];
   if (email) clauses.push(`LOWER({Email})=LOWER('${esc(email)}')`);
-  if (phone) clauses.push(`{Teléfono}='${esc(phone)}'`);
+  const phoneDigits = phone ? String(phone).replace(/[^0-9]/g, "") : "";
+  if (phoneDigits)
+    clauses.push(`REGEX_REPLACE({Teléfono} & "", "[^0-9]", "") = '${phoneDigits}'`);
   if (!clauses.length) return null;
   const formula = clauses.length > 1 ? `OR(${clauses.join(",")})` : clauses[0];
   const url =
@@ -604,6 +611,17 @@ async function rateLimited(env, request, scope, max, windowSec) {
   if (cur >= max) return true;
   await env.RL.put(key, String(cur + 1), { expirationTtl: windowSec });
   return false;
+}
+
+// Tope diario de auto-procesamiento (guardrail de costo de Claude). Requiere KV (RL).
+async function autoProcessAllowed(env) {
+  if (!env.RL) return true;
+  const cap = parseInt(env.AUTO_PROCESS_DAILY_CAP || "200", 10);
+  const key = `autoproc:${new Date().toISOString().slice(0, 10)}`;
+  const cur = parseInt((await env.RL.get(key)) || "0", 10);
+  if (cur >= cap) return false;
+  await env.RL.put(key, String(cur + 1), { expirationTtl: 172800 });
+  return true;
 }
 
 function corsHeaders(origin, env) {
