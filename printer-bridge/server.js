@@ -120,8 +120,10 @@ const server = http.createServer((req, res) => {
   delete headers['x-bridge-token'];
   delete headers.origin;
   delete headers.referer;
-  // Eliminar headers de Cloudflare/proxy para que Moonraker vea la IP del bridge
-  delete headers['x-forwarded-for'];
+  // Reescribir headers de Cloudflare/proxy: Moonraker usa xheaders=True y lee
+  // X-Forwarded-For para determinar la IP del cliente. Forzamos 127.0.0.1 para
+  // que siempre caiga en trusted_clients (127.0.0.0/8).
+  headers['x-forwarded-for'] = '127.0.0.1';
   delete headers['x-forwarded-proto'];
   delete headers['x-real-ip'];
   delete headers['cf-connecting-ip'];
