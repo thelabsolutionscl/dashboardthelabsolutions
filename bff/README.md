@@ -61,6 +61,49 @@ legacy directo). Activar el BFF es simplemente setear `BFF_URL`.
 
 Además, un **cron** (`*/5 * * * *`) ejecuta `processQueue` automáticamente.
 
+### Agentes IA de la cola
+
+`processQueue` (y por tanto `/queue/process` y el cron) puede ejecutar **cualquier
+agente** del dashboard, no solo `LEAD_AGENT`/`LINKEDIN_AGENT`. Los system prompts
+de todos los agentes vienen **embebidos por defecto** en el Worker
+(`DEFAULT_AGENTS` en `src/index.js`), portados literalmente desde `AGENTES_CFG`
+del dashboard. A cada prompt se le añade una línea de **SEGURIDAD anti
+prompt-injection** (los datos de entrada llegan entre `<lead_data_no_confiable>`
+y son NO confiables).
+
+Agentes embebidos (se resuelven tanto por su `label` como por su `id` corto):
+
+| Agente (`Agente` en Agent_Queue) | id corto     |
+| -------------------------------- | ------------ |
+| `SALES_AGENT`                    | `SALES`      |
+| `QUOTE_AGENT`                    | `QUOTE`      |
+| `PRODUCTION_AGENT`               | `PRODUCTION` |
+| `QA_AGENT`                       | `QA`         |
+| `FOLLOWUP_AGENT`                 | `FOLLOWUP`   |
+| `CEO_AGENT`                      | `CEO`        |
+| `LEAD_GEN_AGENT`                 | `LEADGEN`    |
+| `ONBOARDING_AGENT`               | `ONBOARDING` |
+| `FINANCE_AGENT`                  | `FINANCE`    |
+| `REPORTE_CLIENTE`                | `REPCLIENTE` |
+| `CONTENT_AGENT`                  | `CONTENT`    |
+| `ADS_AGENT`                      | `ADS`        |
+| `LINKEDIN_AGENT`                 | `LINKEDIN`   |
+
+Además, `LEAD_AGENT` se mantiene por compatibilidad con su prompt histórico
+(`LEAD_AGENT_SYS`).
+
+**Orden de resolución del system prompt** (función `resolveSystemPrompt`):
+
+1. `env.AGENTS[agentId]` — si existe, **override** por configuración.
+2. `DEFAULT_AGENTS[agentId]` — agente embebido por defecto.
+3. `LEAD_AGENT_SYS` para `LEAD_AGENT`/`LINKEDIN_AGENT` — compatibilidad.
+4. Si nada coincide → la tarea se marca `Error: Agente no encontrado: <id>`.
+
+Esto significa que `env.AGENTS` (ver Setup) permite **sobrescribir** el prompt de
+un agente embebido o **añadir agentes nuevos** sin necesidad de redeploy del
+código del Worker. Todos los agentes usan `max_tokens: 1500` (el dashboard no
+define límites de tokens por agente).
+
 ### RBAC (aplicado en `/airtable/*`)
 
 | Rol        | Escribir | Borrar | Config (meta/) |
@@ -99,11 +142,16 @@ npm install
    wrangler secret put OPENAI_KEY       # API key de OpenAI
    # Opcionales:
    wrangler secret put USERS            # JSON: array de {username,name,role,hash}
-   wrangler secret put AGENTS           # JSON: map agentId -> systemPrompt
+   wrangler secret put AGENTS           # JSON: map agentId -> systemPrompt (override/añadir)
    ```
 
    Si no defines `USERS`, se usa la lista de usuarios por defecto incluida en el
    código (con las contraseñas actuales del dashboard).
+
+   `AGENTS` es **opcional**: todos los agentes del dashboard ya vienen embebidos
+   (`DEFAULT_AGENTS`). Solo necesitas definir `AGENTS` para **sobrescribir** el
+   prompt de un agente existente o **añadir agentes nuevos** sin redeploy de
+   código (ver sección "Agentes IA de la cola").
 
 3. **Ajustar variables públicas** en `wrangler.toml`:
 
