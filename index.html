@@ -5300,22 +5300,29 @@ Siempre genera los 3 formatos. Emojis solo en Instagram y TikTok.`,
    sys:`Eres el ADS_AGENT de The Lab Solutions, empresa de fabricación digital premium en Santiago, Chile.
 PRODUCTOS: trofeos y medallas personalizadas, señalética acrílico, neones LED, impresión 3D, packaging.
 CLIENTES IDEALES: empresas corporativas, eventos, colegios, gimnasios, restaurants, marcas retail.
-ROL: analizar el rendimiento de campañas Google Ads y dar recomendaciones de optimización concretas y priorizadas.
+ROL: analizar el rendimiento de campañas Google Ads y dar recomendaciones de optimización concretas, priorizadas y APLICABLES con un clic.
 
-MÉTRICAS OBJETIVO (contexto chileno, industria fabricación personalizada):
-- CTR búsqueda: >3% | CTR display: >0.5%
-- CPC búsqueda: <$1.200 CLP | ROAS objetivo: >3x
-- Tasa conversión: >2% | CPA objetivo: <$8.000 CLP
-- Presupuesto bien distribuido: ninguna campaña >50% del total
+PRINCIPIO RECTOR: optimiza por GANANCIA, no por clics ni por el ROAS que reporta Google. El ROAS-REAL (ingresos del CRM / gasto) es la verdad — si Google reporta 6x pero el CRM-real es 2x, manda el 2x. Una conversión de Google no es una venta hasta que el CRM la confirma.
 
-ESTRUCTURA DE RESPUESTA (siempre usar esta):
-1. DIAGNÓSTICO RÁPIDO (2–3 líneas: qué está funcionando y qué no)
-2. ALERTAS CRÍTICAS (máx 3, con impacto estimado en revenue)
-3. ACCIONES INMEDIATAS (esta semana, ordenadas por impacto):
-   • Cada acción con: QUÉ hacer + DÓNDE en Google Ads + resultado esperado
-4. OPTIMIZACIONES A MEDIANO PLAZO (próximas 2–4 semanas)
-5. DISTRIBUCIÓN DE PRESUPUESTO RECOMENDADA (tabla con % por campaña)
+MÉTRICAS OBJETIVO (contexto chileno, fabricación personalizada):
+- CTR búsqueda: >3% | CPC búsqueda: <$1.200 CLP
+- ROAS-real (CRM): >3x es sano, <1.5x es pérdida → pausar o arreglar
+- CPA objetivo: <$8.000 CLP | ninguna campaña >50% del presupuesto total
 
+CAUTELA CON DATOS: si una campaña tiene <8 conversiones en el período, NO tomes decisiones agresivas sobre ella (muestra insuficiente) — dilo explícitamente. Una campaña con gasto alto y 0 conversiones SÍ es accionable (pausar/revisar).
+
+ESTRUCTURA DE RESPUESTA:
+1. DIAGNÓSTICO (2–3 líneas: ROAS-real vs reportado, qué gana y qué pierde plata)
+2. ALERTAS CRÍTICAS (máx 3, con impacto estimado en $ y por qué)
+3. ACCIONES INMEDIATAS (ordenadas por impacto en ganancia)
+4. REASIGNACIÓN DE PRESUPUESTO (mover $X de campaña baja a alta, con montos)
+
+AL FINAL incluye SIEMPRE un bloque entre [ACTIONS] y [/ACTIONS] con un JSON array de las acciones aplicables (las que el operador puede ejecutar con un clic). Tipos válidos:
+  {"tipo":"pausar","id":"<id campaña>","campana":"<nombre>","motivo":"<corto>"}
+  {"tipo":"activar","id":"<id>","campana":"<nombre>","motivo":"..."}
+  {"tipo":"presupuesto","id":"<id>","campana":"<nombre>","nuevo":<CLP/día entero>,"motivo":"..."}
+  {"tipo":"negativo","campana":"<nombre o 'cuenta'>","termino":"<palabra negativa>","motivo":"..."}
+Usa los IDs exactos que aparecen en los datos. Sólo acciones que recomiendes de verdad (máx 6). Si no hay ninguna, pon [].
 Sé específico con números y campañas concretas. Sin relleno. CLP con puntos de miles.`,
    pre:'',
    qs:['Analiza el rendimiento actual y dame las 3 acciones más urgentes','¿En qué campaña debo aumentar el presupuesto y por qué?','El ROAS está bajo — ¿qué cambios concretos hago esta semana?','¿Cómo redistribuyo el presupuesto para maximizar conversiones?']},
@@ -10374,21 +10381,34 @@ function buildAgentContext(id){
       const cpa=conv>0?Math.round(gasto/conv):0;
       const roas=gasto>0?(valConv/gasto).toFixed(2):0;
       lines.push(`\nGOOGLE ADS — PERÍODO: ${d.periodo||days+' días'}${d.demo?' (DEMO)':''}`);
-      lines.push(`TOTALES: Gasto ${fmtCLP(gasto)} | Imp. ${(imp||0).toLocaleString('es-CL')} | Clics ${(clics||0).toLocaleString('es-CL')} | CTR ${ctr}% | CPC ${fmtCLP(cpc)} | Conv. ${conv} | CPA ${conv>0?fmtCLP(cpa):'—'} | ROAS ${valConv>0?roas+'x':'—'}`);
+      lines.push(`TOTALES (reportado por Google): Gasto ${fmtCLP(gasto)} | Imp. ${(imp||0).toLocaleString('es-CL')} | Clics ${(clics||0).toLocaleString('es-CL')} | CTR ${ctr}% | CPC ${fmtCLP(cpc)} | Conv. ${conv} | CPA ${conv>0?fmtCLP(cpa):'—'} | ROAS reportado ${valConv>0?roas+'x':'—'}`);
+      // ── ROAS-REAL desde el CRM (verdad de negocio): ingresos netos de pedidos creados en el período ──
+      const _cut=new Date(Date.now()-days*86400000);
+      const _ped=(state.pedidos||[]).filter(pp=>{const f=pp.fields;const dd=pp.createdTime?new Date(pp.createdTime):null;return dd&&dd>=_cut&&(f['Estado pedido']||'')!=='Cancelado';});
+      const ingresoCRM=_ped.reduce((s,pp)=>s+Math.round((pp.fields['Monto total (CLP)']||0)/1.19),0);
+      const _leads=(state.clientes||[]).filter(c=>{const dd=c.createdTime?new Date(c.createdTime):null;return dd&&dd>=_cut;}).length;
+      const roasReal=gasto>0?(ingresoCRM/gasto):0,cplReal=_leads>0&&gasto>0?Math.round(gasto/_leads):0;
+      lines.push(`VERDAD CRM (manda esto): Ingresos netos ${fmtCLP(ingresoCRM)} de ${_ped.length} pedido(s) · ROAS-REAL ${roasReal>0?roasReal.toFixed(2)+'x':'—'} · ${_leads} leads nuevos · CPL real ${cplReal>0?fmtCLP(cplReal):'—'}`);
+      if(roasReal>0&&valConv>0){const gap=(roas/roasReal);if(gap>1.6)lines.push(`  ⚠ Google reporta ${roas}x pero el CRM-real es ${roasReal.toFixed(2)}x (${gap.toFixed(1)}× inflado) — usa el real.`);}
+      if(conv<8)lines.push(`  ⚠ DATOS INSUFICIENTES a nivel cuenta (${conv} conversiones): evita decisiones agresivas, sólo lo obvio (gasto alto + 0 conversión).`);
       const camps=d.campanas||[];
       if(camps.length){
-        lines.push('\nCAMPAÑAS:');
+        lines.push('\nCAMPAÑAS (usa el ID para las acciones):');
         camps.forEach(c=>{
           const ct=c.impresiones>0?(c.clics/c.impresiones*100).toFixed(2):0;
           const cp=c.clics>0?Math.round(c.gasto/c.clics):0;
           const ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0;
           const ro=c.gasto>0&&(c.valor_conversion||0)>0?(c.valor_conversion/c.gasto).toFixed(2):0;
           const dailyUtil=c.presupuesto>0?Math.round(c.gasto/days/c.presupuesto*100):0;
-          lines.push(`  • [${c.estado||'?'}] "${c.nombre||c.id}" | Ppto ${fmtCLP(c.presupuesto||0)}/día (${dailyUtil}% uso) | Gasto ${fmtCLP(c.gasto||0)} | CTR ${ct}% | CPC ${fmtCLP(cp)} | Conv ${c.conversiones||0} | CPA ${c.conversiones>0?fmtCLP(ca):'—'} | ROAS ${(c.valor_conversion||0)>0?ro+'x':'—'}`);
+          const flags=[];if(dailyUtil>=90)flags.push('TOPADA-PPTO');if((c.gasto||0)>15000&&(c.conversiones||0)===0)flags.push('GASTA-SIN-CONVERTIR');if((c.conversiones||0)>0&&(c.conversiones||0)<8)flags.push('POCA-MUESTRA');
+          lines.push(`  • id=${c.id} [${c.estado||'?'}] "${c.nombre||c.id}" | Ppto ${fmtCLP(c.presupuesto||0)}/día (${dailyUtil}% uso) | Gasto ${fmtCLP(c.gasto||0)} | CTR ${ct}% | CPC ${fmtCLP(cp)} | Conv ${c.conversiones||0} | CPA ${c.conversiones>0?fmtCLP(ca):'—'} | ROAS-Google ${(c.valor_conversion||0)>0?ro+'x':'—'}${flags.length?' | ⚑ '+flags.join(','):''}`);
         });
       }
       lines.push('\nCONTEXTO NEGOCIO:');
       lines.push(`  Pedidos activos: ${pedActivos.length} | Atrasados: ${pedAtrasados.length} | Revenue semana: ${fmtCLP(revSemana)}`);
+      lines.push('  Productos y márgenes orientativos: Trofeo ~$18.000 (margen ~40%), Medalla ~$4.500 (~45%), Neón $18-25k/ml (~35%), Señalética $8-15k (~40%), 3D PLA $24/g+$1.200/h. → un cliente vale varios pedidos; pondera por ganancia, no por una venta.');
+      // Memoria: última recomendación del agente (para dar continuidad y evaluar si funcionó)
+      try{const _alog=JSON.parse(localStorage.getItem('ads_agent_log')||'[]');const _last=_alog[_alog.length-1];if(_last)lines.push(`\nTU ÚLTIMA RECOMENDACIÓN (${new Date(_last.t).toLocaleDateString('es-CL')}): ${(_last.acciones||[]).join(' · ')||'sin acciones'}. Compara: ¿mejoró el ROAS-real desde entonces? Reconócelo y ajusta.`);}catch(e){}
     } else {
       lines.push('\nGOOGLE ADS: sin datos cargados (carga primero los datos en la sección Web → Google Ads)');
     }
@@ -10779,10 +10799,50 @@ function runFinanceAgent(cliId){
 }
 
 // — ADS analysis desde sección Web → Google Ads
+function _parseAdsActions(text){
+  const m=/\[ACTIONS\]([\s\S]*?)\[\/ACTIONS\]/i.exec(text||'');
+  if(!m)return[];
+  try{const arr=JSON.parse(m[1].trim());return Array.isArray(arr)?arr.filter(a=>a&&a.tipo):[];}catch(e){return[];}
+}
+// Convierte una acción del agente en una mutación de Google Ads aplicable con 1 clic
+function applyAdsAction(i){
+  const a=(window._adsAgentActions||[])[i];if(!a)return;
+  if(a.tipo==='negativo'){try{navigator.clipboard.writeText(a.termino||'');}catch(e){}toast(`Negativo "${a.termino}" copiado — pégalo en Google Ads (palabras clave negativas)`,'info');return;}
+  const camp=(window._adsLastData?.campanas||[]).find(c=>String(c.id)===String(a.id)||c.nombre===a.campana);
+  if(!camp){toast('No encontré la campaña de la acción','error');return;}
+  const base={nombre:camp.nombre,presupuesto:camp.presupuesto,estado:camp.estado,tipo:camp.tipo||'SEARCH'};
+  let data,desc;
+  if(a.tipo==='pausar'){data={...base,estado:'PAUSED'};desc='Pausar '+camp.nombre;}
+  else if(a.tipo==='activar'){data={...base,estado:'ENABLED'};desc='Activar '+camp.nombre;}
+  else if(a.tipo==='presupuesto'){const nb=Math.max(1000,Math.round(+a.nuevo||0));data={...base,presupuesto:nb};desc='Ppto '+camp.nombre+' → '+fmtMoney(nb);}
+  else{toast('Tipo de acción no soportado','error');return;}
+  if(typeof _adsQueueMutation==='function'){_adsQueueMutation({op:'update',id:camp.id,data,timestamp:new Date().toISOString(),status:'pending'});toast('✓ En cola: '+desc,'success');}
+  else toast('Cola de mutaciones no disponible','error');
+}
 function runAdsAgent(){
   if(!window._adsLastData){toast('Carga primero los datos de Google Ads','error');return;}
+  if(window._adsLastData.demo){toast('Datos DEMO — conecta tu cuenta para acciones reales','info');}
   const ctx=buildAgentContext('ADS');
-  runAgentInline('ADS',ctx,()=>`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar recomendaciones</button>`);
+  runAgentInline('ADS',ctx,(result)=>{
+    const actions=_parseAdsActions(result);window._adsAgentActions=actions;
+    // limpiar el bloque [ACTIONS] del texto visible
+    const rEl=document.getElementById('agentInlineResult');if(rEl)rEl.textContent=String(result).replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/i,'').trim();
+    // log de memoria (qué recomendó y cuándo)
+    try{_adsLogRecommendation(actions,result);}catch(e){}
+    const btns=actions.map((a,i)=>{
+      const lbl=a.tipo==='pausar'?('⏸ Pausar '+(a.campana||'')):a.tipo==='activar'?('▶ Activar '+(a.campana||'')):a.tipo==='presupuesto'?('💰 '+(a.campana||'')+' → '+fmtMoney(+a.nuevo||0)):a.tipo==='negativo'?('🚫 «'+(a.termino||'')+'»'):a.tipo;
+      const danger=a.tipo==='pausar';
+      return `<button class="btn btn-ghost btn-sm" title="${escapeHtml(a.motivo||'')}" style="${danger?'color:var(--danger)':'color:var(--accent)'}" onclick="applyAdsAction(${i})">${escapeHtml(lbl)}</button>`;
+    }).join('');
+    return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+  });
+}
+// Memoria de recomendaciones del agente Ads (para realimentar y no repetir)
+function _adsLogRecommendation(actions,text){
+  let log=[];try{log=JSON.parse(localStorage.getItem('ads_agent_log')||'[]');}catch(e){}
+  log.push({t:new Date().toISOString(),n:actions.length,acciones:actions.map(a=>a.tipo+(a.campana?':'+a.campana:'')),resumen:(text||'').slice(0,400)});
+  if(log.length>20)log=log.slice(-20);
+  try{localStorage.setItem('ads_agent_log',JSON.stringify(log));}catch(e){}
 }
 
 // — ADS copy generator para campaña específica
