@@ -3266,7 +3266,7 @@ function doPost(e) {
       guardado: new Date().toISOString(),
       gasto: body.gasto, impresiones: body.impresiones, clics: body.clics,
       conversiones: body.conversiones, valor_conversion: body.valor_conversion,
-      campanas: body.campanas
+      campanas: body.campanas, terminos: body.terminos || []
     }));
     return json({ok:true, saved:true});
   } catch(err) { return json({ok:false, error:err.message}); }
@@ -3353,7 +3353,9 @@ function _enviarStats() {
     var report = AdsApp.report(
       'SELECT campaign.name, campaign.id, campaign.status, ' +
       'campaign_budget.amount_micros, metrics.impressions, metrics.clicks, ' +
-      'metrics.cost_micros, metrics.conversions, metrics.conversions_value ' +
+      'metrics.cost_micros, metrics.conversions, metrics.conversions_value, ' +
+      'metrics.search_impression_share, metrics.search_budget_lost_impression_share, ' +
+      'metrics.search_rank_lost_impression_share ' +
       'FROM campaign WHERE segments.date DURING LAST_30_DAYS'
     );
     var rows = report.rows();
@@ -3368,16 +3370,40 @@ function _enviarStats() {
       campaigns.push({
         id:row['campaign.id'], nombre:row['campaign.name'], estado:row['campaign.status'],
         presupuesto:Math.round(parseInt(row['campaign_budget.amount_micros']||0)/1e6),
-        gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc
+        gasto:g, impresiones:i, clics:c, conversiones:cv, valor_conversion:vc,
+        is:parseFloat(row['metrics.search_impression_share']||0),
+        is_lost_budget:parseFloat(row['metrics.search_budget_lost_impression_share']||0),
+        is_lost_rank:parseFloat(row['metrics.search_rank_lost_impression_share']||0)
       });
     }
     Logger.log('Campañas leídas: ' + campaigns.length);
   } catch(e) { Logger.log('Error leyendo campañas: ' + e.message); return; }
+  // Términos de búsqueda (los que gastan): el mayor ahorro en Google Ads está aquí
+  var searchTerms = [];
+  try {
+    var stRep = AdsApp.report(
+      'SELECT search_term_view.search_term, campaign.name, metrics.clicks, ' +
+      'metrics.cost_micros, metrics.conversions ' +
+      'FROM search_term_view WHERE segments.date DURING LAST_30_DAYS ' +
+      'AND metrics.cost_micros > 1000000 ORDER BY metrics.cost_micros DESC LIMIT 40'
+    );
+    var stRows = stRep.rows();
+    while (stRows.hasNext()) {
+      var sr = stRows.next();
+      searchTerms.push({
+        termino: sr['search_term_view.search_term'], campana: sr['campaign.name'],
+        clics: parseInt(sr['metrics.clicks']||0),
+        gasto: Math.round(parseInt(sr['metrics.cost_micros']||0)/1e6),
+        conversiones: parseFloat(sr['metrics.conversions']||0)
+      });
+    }
+    Logger.log('Términos de búsqueda: ' + searchTerms.length);
+  } catch(e) { Logger.log('Aviso términos de búsqueda: ' + e.message); }
   try {
     UrlFetchApp.fetch(ENDPOINT, {
       method:'post', contentType:'application/json', muteHttpExceptions:true,
       payload:JSON.stringify({
-        secret:SECRET, campanas:campaigns,
+        secret:SECRET, campanas:campaigns, terminos:searchTerms,
         gasto:t.gasto, impresiones:t.impresiones, clics:t.clics,
         conversiones:t.conversiones, valor_conversion:t.valor_conversion
       })
@@ -3448,6 +3474,18 @@ function _aplicarMutaciones(mutsJson) {
           muts[k].status = 'error';
           muts[k].error = 'Campaña no encontrada: ' + m.id;
         }
+
+      } else if (m.op === 'negative') {
+        // Agrega palabra clave negativa: a la campaña (por id o nombre) o a nivel cuenta
+        var term = m.data && m.data.termino; var added = false;
+        if (term) {
+          var itN = m.id ? AdsApp.campaigns().withIds([m.id]).get()
+                         : AdsApp.campaigns().withCondition("campaign.name = '" + (m.data.campana||'').replace(/'/g,"") + "'").get();
+          if (itN.hasNext()) { itN.next().createNegativeKeyword('[' + term + ']'); added = true; }
+        }
+        muts[k].status = added ? 'aplicado' : 'error';
+        if (!added) muts[k].error = 'No se pudo agregar el negativo (campaña no encontrada)';
+        Logger.log((added?'OK':'ERR') + ' negativo: ' + term);
 
       } else if (m.op === 'delete') {
         var iter2 = AdsApp.campaigns().withIds([m.id]).get();
@@ -10404,6 +10442,21 @@ function buildAgentContext(id){
           lines.push(`  • id=${c.id} [${c.estado||'?'}] "${c.nombre||c.id}" | Ppto ${fmtCLP(c.presupuesto||0)}/día (${dailyUtil}% uso) | Gasto ${fmtCLP(c.gasto||0)} | CTR ${ct}% | CPC ${fmtCLP(cp)} | Conv ${c.conversiones||0} | CPA ${c.conversiones>0?fmtCLP(ca):'—'} | ROAS-Google ${(c.valor_conversion||0)>0?ro+'x':'—'}${flags.length?' | ⚑ '+flags.join(','):''}`);
         });
       }
+      // ── Impression Share perdido (si el script lo envía): ¿pierdo por presupuesto o por ranking? ──
+      const isBud=camps.filter(c=>(c.is_lost_budget||0)>0.05);
+      if(isBud.length){lines.push('\nIMPRESSION SHARE PERDIDO POR PRESUPUESTO (oportunidad de subir ppto si el ROAS-real lo justifica):');isBud.slice(0,6).forEach(c=>lines.push(`  • "${c.nombre}": pierdo ${Math.round((c.is_lost_budget||0)*100)}% de impresiones por presupuesto, ${Math.round((c.is_lost_rank||0)*100)}% por ranking (IS actual ${Math.round((c.is||0)*100)}%)`));}
+      // ── Términos de búsqueda (si el script los envía): el mayor ahorro está acá ──
+      const terms=d.terminos||d.searchTerms||[];
+      if(terms.length){
+        const waste=terms.filter(t=>(t.gasto||0)>3000&&(t.conversiones||0)===0).sort((a,b)=>(b.gasto||0)-(a.gasto||0));
+        lines.push('\nTÉRMINOS DE BÚSQUEDA QUE GASTAN SIN CONVERTIR (candidatos a NEGATIVO):');
+        if(waste.length)waste.slice(0,12).forEach(t=>lines.push(`  • "${t.termino}" → gasto ${fmtCLP(t.gasto||0)}, ${t.clics||0} clics, 0 conv ${t.campana?'(en "'+t.campana+'")':''}`));
+        else lines.push('  (ninguno relevante — los términos están convirtiendo bien)');
+        const winners=terms.filter(t=>(t.conversiones||0)>0).sort((a,b)=>(b.conversiones||0)-(a.conversiones||0)).slice(0,6);
+        if(winners.length){lines.push('TÉRMINOS QUE CONVIERTEN (considera subirlos a keyword exacta):');winners.forEach(t=>lines.push(`  • "${t.termino}" → ${t.conversiones} conv, gasto ${fmtCLP(t.gasto||0)}`));}
+      } else {
+        lines.push('\n(El script aún NO envía términos de búsqueda ni impression share — actualiza el Script 2 para recomendaciones de negativos/keywords y de presupuesto vs ranking.)');
+      }
       lines.push('\nCONTEXTO NEGOCIO:');
       lines.push(`  Pedidos activos: ${pedActivos.length} | Atrasados: ${pedAtrasados.length} | Revenue semana: ${fmtCLP(revSemana)}`);
       lines.push('  Productos y márgenes orientativos: Trofeo ~$18.000 (margen ~40%), Medalla ~$4.500 (~45%), Neón $18-25k/ml (~35%), Señalética $8-15k (~40%), 3D PLA $24/g+$1.200/h. → un cliente vale varios pedidos; pondera por ganancia, no por una venta.');
@@ -10807,7 +10860,13 @@ function _parseAdsActions(text){
 // Convierte una acción del agente en una mutación de Google Ads aplicable con 1 clic
 function applyAdsAction(i){
   const a=(window._adsAgentActions||[])[i];if(!a)return;
-  if(a.tipo==='negativo'){try{navigator.clipboard.writeText(a.termino||'');}catch(e){}toast(`Negativo "${a.termino}" copiado — pégalo en Google Ads (palabras clave negativas)`,'info');return;}
+  if(a.tipo==='negativo'){
+    try{navigator.clipboard.writeText(a.termino||'');}catch(e){}
+    const camp=(window._adsLastData?.campanas||[]).find(c=>c.nombre===a.campana||String(c.id)===String(a.id));
+    if(typeof _adsQueueMutation==='function'&&a.termino){_adsQueueMutation({op:'negative',id:camp?camp.id:'',data:{campana:a.campana||'cuenta',termino:a.termino},timestamp:new Date().toISOString(),status:'pending'});toast(`🚫 Negativo "${a.termino}" en cola (requiere Script 2 actualizado) · copiado al portapapeles`,'success');}
+    else toast(`Negativo "${a.termino}" copiado al portapapeles`,'info');
+    return;
+  }
   const camp=(window._adsLastData?.campanas||[]).find(c=>String(c.id)===String(a.id)||c.nombre===a.campana);
   if(!camp){toast('No encontré la campaña de la acción','error');return;}
   const base={nombre:camp.nombre,presupuesto:camp.presupuesto,estado:camp.estado,tipo:camp.tipo||'SEARCH'};
@@ -10816,7 +10875,7 @@ function applyAdsAction(i){
   else if(a.tipo==='activar'){data={...base,estado:'ENABLED'};desc='Activar '+camp.nombre;}
   else if(a.tipo==='presupuesto'){const nb=Math.max(1000,Math.round(+a.nuevo||0));data={...base,presupuesto:nb};desc='Ppto '+camp.nombre+' → '+fmtMoney(nb);}
   else{toast('Tipo de acción no soportado','error');return;}
-  if(typeof _adsQueueMutation==='function'){_adsQueueMutation({op:'update',id:camp.id,data,timestamp:new Date().toISOString(),status:'pending'});toast('✓ En cola: '+desc,'success');}
+  if(typeof _adsQueueMutation==='function'){_adsQueueMutation({op:'edit',id:camp.id,data,timestamp:new Date().toISOString(),status:'pending'});toast('✓ En cola: '+desc,'success');}
   else toast('Cola de mutaciones no disponible','error');
 }
 function runAdsAgent(){
