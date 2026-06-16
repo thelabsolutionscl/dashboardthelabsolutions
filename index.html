@@ -6465,6 +6465,14 @@ function renderAccionesHoy(){
     const lowAd=(ad.keywords||[]).filter(k=>k.qs_anuncio==='BELOW_AVERAGE'&&(k.gasto||0)>2000);
     if(lowAd.length)push('ads',3,'✍',`Ads: <b>${lowAd.length}</b> keyword(s) con anuncio poco relevante — mejora el copy`,'Ver Ads',`switchTab('web')`,'var(--accent)');
   }
+  // 8) Máquinas — mantención vencida o muy próxima según el ritmo de uso
+  if(!vendor&&typeof MAQUINAS!=='undefined'&&typeof getMaintForecast==='function'){
+    try{MAQUINAS.forEach(mq=>{
+      const fc=getMaintForecast(mq);if(!fc)return;
+      if(fc.hoursLeft<=0)push('maq',1,'🔧',`Mantención <b>${escapeHtml(fc.tipo)}</b> vencida en ${escapeHtml(mq.nombre)}`,'Ver máquinas',`switchTab('maquinas')`,'var(--danger)');
+      else if(fc.rate>0&&fc.weeks<1.5)push('maq',2,'🔧',`${escapeHtml(mq.nombre)}: <b>${escapeHtml(fc.tipo)}</b> en ~${Math.max(1,Math.round(fc.weeks*7))} días`,'Ver máquinas',`switchTab('maquinas')`,'var(--warn)');
+    });}catch(e){}
+  }
   items.sort((a,b)=>a.prio-b.prio);
   if(!items.length){card.style.display='none';return;}
   card.style.display='';
@@ -9488,7 +9496,13 @@ async function rellenarQAconIA(){
 function setQAResultado(r){qaResultadoActual=r;updateQAResultadoBtns();}
 function updateQAResultadoBtns(){document.getElementById('qaAprobadoBtn').style.opacity=qaResultadoActual==='QA aprobado'?'1':'0.4';document.getElementById('qaRechazadoBtn').style.opacity=qaResultadoActual==='Rechazado'?'1':'0.4';document.getElementById('qaPendienteBtn').style.opacity=qaResultadoActual==='Pendiente'?'1':'0.4';}
 async function saveQAModal(){
-  const id=document.getElementById('qaModalPedidoId').value;const notasQA=JSON.stringify(qaItems);const checked=qaItems.filter(x=>x.checked).length;
+  const id=document.getElementById('qaModalPedidoId').value;
+  // Trazabilidad: al rechazar, captura el motivo (queda como ítem visible en el checklist)
+  if(qaResultadoActual==='Rechazado'&&!qaItems.some(x=>x.motivo)){
+    const motivo=prompt('Motivo del rechazo de QA (¿qué falló?):','');
+    if(motivo&&motivo.trim())qaItems.push({texto:'❌ Motivo rechazo: '+motivo.trim(),checked:false,motivo:true});
+  }
+  const notasQA=JSON.stringify(qaItems);const checked=qaItems.filter(x=>x.checked).length;
   try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual,'Notas QA':notasQA});const p=state.pedidos.find(x=>x.id===id);if(p){p.fields['Resultado QA']=qaResultadoActual;p.fields['Notas QA']=notasQA;}toast(`✓ QA ${checked}/${qaItems.length}`,'success');closeQAModal();renderPedidos();renderOverview();}
   catch(e){try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Resultado QA']=qaResultadoActual;toast(`✓ QA ${qaResultadoActual}`,'success');closeQAModal();renderPedidos();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
 }
@@ -17120,6 +17134,16 @@ function finPagPrev(){if(finFactPag>0){finFactPag--;finRenderFacturasPage();}}
 function finPagNext(){const pages=Math.ceil(finFactFiltradas.length/FIN_PAG_SIZE);if(finFactPag<pages-1){finFactPag++;finRenderFacturasPage();}}
 
 /* ── Por cobrar ── */
+// Plazo de pago por defecto (configurable) — muchos clientes B2B en Chile son a 30/60/90 días
+function finPlazoDefault(){const v=parseInt(localStorage.getItem('fin_plazo_default'));return(v>0&&v<=365)?v:30;}
+function setFinPlazoDefault(v){const n=parseInt(v)||30;localStorage.setItem('fin_plazo_default',Math.max(0,Math.min(365,n)));try{finRenderCobrar();finRenderAging();}catch(e){}}
+// Vencimiento real de una factura: usa fecha explícita o plazo propio si existen; si no, el plazo por defecto
+function finVenc(r){
+  if(r&&r.venc){const d=new Date(r.venc);if(!isNaN(d))return d;}
+  const base=new Date(`${r.year}-${r.mes}-01`).getTime();
+  const plazo=(r&&r.plazoDias>0)?r.plazoDias:finPlazoDefault();
+  return new Date(base+plazo*86400000);
+}
 function finRenderCobrar(){
   const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
   const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -17131,9 +17155,7 @@ function finRenderCobrar(){
     const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
     const cobrar=r.porCobrar||tot;
     sumTotal+=cobrar;
-    // Estimamos vencimiento: año-mes-01 + 30 días para registros sin fecha exacta
-    const fechaBase=`${r.year}-${r.mes}-01`;
-    const venc=new Date(new Date(fechaBase).getTime()+30*86400000);
+    const venc=finVenc(r);
     const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
     if(dias<=30) buckets.b0+=cobrar;
     else if(dias<=60) buckets.b30+=cobrar;
@@ -17151,13 +17173,17 @@ function finRenderCobrar(){
       <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">31–60 días</span><span class="fac-kpi-val" style="color:var(--warn)">${clp(buckets.b30)}</span></div>
       <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">61–90 días</span><span class="fac-kpi-val" style="color:var(--danger)">${clp(buckets.b60)}</span></div>
       <div class="fac-kpi fac-kpi-danger" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">&gt;90 días</span><span class="fac-kpi-val">${clp(buckets.b90)}</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px;font-size:11px;color:var(--text3)">
+      <span>Plazo de pago estándar:</span>
+      <input type="number" min="0" max="365" value="${finPlazoDefault()}" onchange="setFinPlazoDefault(this.value)" style="width:60px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:3px 7px;color:var(--text);font-size:11px;text-align:center"> días
+      <span style="color:var(--text3)" title="La mora se calcula desde el vencimiento (inicio de mes de la factura + este plazo). Las facturas con fecha o plazo propio usan el suyo.">ⓘ</span>
     </div>`:'';
   }
 
   // Mora por factura + orden por urgencia (más morosa primero)
   const ordenadas=data.map(r=>{
-    const venc=new Date(new Date(`${r.year}-${r.mes}-01`).getTime()+30*86400000);
-    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));
     return{...r,_dias:dias};
   }).sort((a,b)=>b._dias-a._dias||(b.porCobrar||0)-(a.porCobrar||0));
   let html='';
@@ -17187,8 +17213,7 @@ async function finPlanCobranzaIA(){
   if(!data.length){toast('No hay facturas pendientes de cobro','info');return;}
   const hoy=Date.now(),byCli=new Map();
   data.forEach(r=>{
-    const venc=new Date(new Date(`${r.year}-${r.mes}-01`).getTime()+30*86400000);
-    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));
     const k=r.empresa||r.nombre||'—';
     const e=byCli.get(k)||{empresa:k,total:0,maxDias:0,n:0};
     e.total+=r.porCobrar;e.maxDias=Math.max(e.maxDias,dias);e.n++;byCli.set(k,e);
@@ -17222,9 +17247,7 @@ function finRenderAging(){
     const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
     const cobrar=r.porCobrar||tot;
     sumTotal+=cobrar;
-    const fechaBase=`${r.year}-${r.mes}-01`;
-    const venc=new Date(new Date(fechaBase).getTime()+30*86400000);
-    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));
     let tramo,tramoLabel,tramoColor;
     if(dias<=30){buckets.b0+=cobrar;tramo='0';tramoLabel='Corriente';tramoColor='var(--accent3)';}
     else if(dias<=60){buckets.b30+=cobrar;tramo='31';tramoLabel='31–60 días';tramoColor='var(--warn)';}
@@ -17273,9 +17296,7 @@ function finExportAgingCSV(){
   data.forEach(r=>{
     const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
     const cobrar=r.porCobrar||tot;
-    const fechaBase=`${r.year}-${r.mes}-01`;
-    const venc=new Date(new Date(fechaBase).getTime()+30*86400000);
-    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));
     const tramo=dias<=30?'Corriente':dias<=60?'31-60 días':dias<=90?'61-90 días':'+90 días';
     rows.push([r.nombre||'',r.empresa||'',r.item||r.fact||'',tot,cobrar,dias,tramo]);
   });
