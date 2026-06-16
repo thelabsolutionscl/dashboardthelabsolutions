@@ -6440,8 +6440,30 @@ function renderAccionesHoy(){
   _cli.forEach(c=>{const f=c.fields,et=f['Etapa venta']||'';if(['Lead nuevo','Contactado'].includes(et)){const cr=c.createdTime?new Date(c.createdTime):null;if(cr&&cr>=ago90)push('lead',2,'🎯',`<b>${escapeHtml(f['Empresa']||f['Contacto']||'—')}</b> · ${escapeHtml(et)}`,'Estrategia IA',`runSalesAgent('${c.id}')`,'var(--accent4)');}});
   // 6) Pedidos listos para QA
   _ped.forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Listo para despacho'&&(f['Resultado QA']||'Pendiente')==='Pendiente')push('qa',2,'✅',`<b>${escapeHtml(f['N° Pedido']||'—')}</b> · QA pendiente antes de despachar`,'Checklist QA',`openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')`,'var(--accent3)');});
-  // 7) Ads — campañas que gastan sin convertir (si hay datos)
-  if(!vendor&&window._adsLastData&&!window._adsLastData.demo){(window._adsLastData.campanas||[]).forEach(c=>{if((c.gasto||0)>15000&&(c.conversiones||0)===0)push('ads',2,'📉',`Ads: <b>${escapeHtml(c.nombre||'')}</b> gasta sin convertir`,'Analizar',`runAdsCampaignAgent('${c.id}')`,'var(--warn)');});}
+  // 7) Ads — señales del agente (sólo datos reales): anomalía de ROAS, gasto sin convertir, waste, anuncio débil
+  if(!vendor&&window._adsLastData&&!window._adsLastData.demo){
+    const ad=window._adsLastData;
+    const adsDays=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+    // a) Anomalía: el ROAS-real (CRM) cayó fuerte vs la foto anterior
+    try{
+      const cutoff=new Date(Date.now()-adsDays*86400000);
+      const ingresoCRM=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=cutoff;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+      const gasto=ad.gasto||0,roasReal=gasto>0?ingresoCRM/gasto:0;
+      const prev=typeof adsGetPrevSnapshot==='function'?adsGetPrevSnapshot():null;
+      if(prev&&prev.roasReal>0&&roasReal>0&&roasReal<prev.roasReal*0.75)
+        push('ads',1,'📉',`Ads: ROAS-real bajó a <b>${roasReal.toFixed(2)}x</b> (era ${prev.roasReal.toFixed(2)}x)`,'Analizar IA',`switchTab('web')`,'var(--danger)');
+    }catch(e){}
+    // b) Campañas que gastan sin convertir (top 2 por gasto)
+    (ad.campanas||[]).filter(c=>(c.gasto||0)>15000&&(c.conversiones||0)===0).sort((a,b)=>(b.gasto||0)-(a.gasto||0)).slice(0,2).forEach(c=>push('ads',2,'📉',`Ads: <b>${escapeHtml(c.nombre||'')}</b> gasta sin convertir`,'Analizar',`runAdsCampaignAgent('${c.id}')`,'var(--warn)'));
+    // c) Términos/keywords que queman plata (resumen, evita meter texto sin escapar en onclick)
+    const wasteTerms=(ad.terminos||[]).filter(t=>(t.gasto||0)>4000&&(t.conversiones||0)===0);
+    const wasteKw=(ad.keywords||[]).filter(k=>(k.gasto||0)>4000&&(k.conversiones||0)===0);
+    const wasteN=wasteTerms.length+wasteKw.length;
+    if(wasteN){const wasteSum=wasteTerms.reduce((s,t)=>s+(t.gasto||0),0)+wasteKw.reduce((s,k)=>s+(k.gasto||0),0);push('ads',2,'🚫',`Ads: <b>${wasteN}</b> término(s)/keyword(s) quemaron ${fmtMoney(wasteSum)} sin convertir`,'Ver Ads',`switchTab('web')`,'var(--warn)');}
+    // d) Keywords con relevancia de anuncio baja — el copy es la palanca
+    const lowAd=(ad.keywords||[]).filter(k=>k.qs_anuncio==='BELOW_AVERAGE'&&(k.gasto||0)>2000);
+    if(lowAd.length)push('ads',3,'✍',`Ads: <b>${lowAd.length}</b> keyword(s) con anuncio poco relevante — mejora el copy`,'Ver Ads',`switchTab('web')`,'var(--accent)');
+  }
   items.sort((a,b)=>a.prio-b.prio);
   if(!items.length){card.style.display='none';return;}
   card.style.display='';
