@@ -1,0 +1,133 @@
+###############################################################################
+#  THE LAB SOLUTIONS — COMANDOS DE PUESTA EN MARCHA  (copiar / pegar)
+#  -------------------------------------------------------------------------
+#  Cómo usar este archivo:
+#   1) Rellena el BLOQUE 0 con tus valores (entre << >>).
+#   2) Ve ejecutando bloque por bloque, en orden.
+#   3) Las líneas que empiezan con "#" son notas, NO se ejecutan.
+#  Nota de seguridad: estos comandos quedan en el historial del shell.
+#  Al terminar, opcional:  history -c   (limpia el historial).
+###############################################################################
+
+
+# =============================================================================
+# BLOQUE 0 — RELLENA ESTAS VARIABLES (pega una sola vez en tu terminal)
+# =============================================================================
+# Genera 3 claves aleatorias (ejecuta y copia el resultado a las vars de abajo):
+#   openssl rand -hex 24
+
+export PUBLIC_LEAD_KEY="<<pega-clave-aleatoria-1>>"
+export GOOGLE_ADS_WEBHOOK_KEY="<<pega-clave-aleatoria-2>>"
+export LINKEDIN_WEBHOOK_KEY="<<pega-clave-aleatoria-3>>"
+
+export AIRTABLE_TOKEN="<<pat-nuevo-de-airtable>>"      # airtable.com/create/tokens
+export ANTHROPIC_KEY="<<sk-ant-nueva>>"                # console.anthropic.com/settings/keys
+export RESEND_API_KEY="<<re_tu-key-de-resend>>"
+export APP_KEY="<<passphrase-min-20-chars-para-el-proxy>>"
+
+# Ruta a los repos clonados en tu máquina (ajusta si están en otro lado):
+export DASH_DIR="$HOME/dashboardthelabsolutions"
+export WEB_DIR="$HOME/web-thelab-solutions"
+
+
+# =============================================================================
+# BLOQUE 1 — LOGIN EN CLOUDFLARE (una vez)
+# =============================================================================
+cd "$DASH_DIR/lead-worker"
+npm install
+npx wrangler login          # abre el navegador y autoriza
+
+
+# =============================================================================
+# BLOQUE 2 — DESPLEGAR EL LEAD-WORKER (captación de leads)
+# =============================================================================
+printf '%s' "$AIRTABLE_TOKEN"         | npx wrangler secret put AIRTABLE_TOKEN
+printf '%s' "$PUBLIC_LEAD_KEY"        | npx wrangler secret put PUBLIC_LEAD_KEY
+printf '%s' "$GOOGLE_ADS_WEBHOOK_KEY" | npx wrangler secret put GOOGLE_ADS_WEBHOOK_KEY
+printf '%s' "$LINKEDIN_WEBHOOK_KEY"   | npx wrangler secret put LINKEDIN_WEBHOOK_KEY
+printf '%s' "$RESEND_API_KEY"         | npx wrangler secret put RESEND_API_KEY
+printf '%s' "$ANTHROPIC_KEY"          | npx wrangler secret put ANTHROPIC_API_KEY
+
+npx wrangler deploy
+# >>> COPIA la URL que imprime: https://thelab-leads-worker.TU-SUB.workers.dev
+# Si falla por el KV "RL", créalo, pega el id en wrangler.toml (línea 34) y repite deploy:
+#   npx wrangler kv namespace create LEADS_RL
+
+
+# =============================================================================
+# BLOQUE 3 — VERIFICAR EL WORKER  (reemplaza TU-SUB por tu subdominio)
+# =============================================================================
+curl https://thelab-leads-worker.TU-SUB.workers.dev/health
+# Esperado:  {"ok":true, ... "airtable":true}
+
+
+# =============================================================================
+# BLOQUE 4 — VARIABLES EN VERCEL  (opción CLI; o hazlo en la web de Vercel)
+# =============================================================================
+# Define la URL del endpoint (URL del Worker + /lead):
+export LEAD_ENDPOINT="https://thelab-leads-worker.TU-SUB.workers.dev/lead"
+
+cd "$WEB_DIR"
+npm i -g vercel        # si no tienes el CLI
+vercel link            # enlaza esta carpeta con el proyecto en Vercel
+
+printf '%s' "$LEAD_ENDPOINT"     | vercel env add NEXT_PUBLIC_LEAD_ENDPOINT production
+printf '%s' "$PUBLIC_LEAD_KEY"   | vercel env add NEXT_PUBLIC_LEAD_KEY production
+printf '%s' "56928785039"        | vercel env add NEXT_PUBLIC_WHATSAPP_NUMBER production
+printf '%s' "$RESEND_API_KEY"    | vercel env add RESEND_API_KEY production
+# (opcional, si usas Turnstile)
+# printf '%s' "<<site-key-turnstile>>" | vercel env add NEXT_PUBLIC_TURNSTILE_SITE_KEY production
+
+# Repite los mismos para "preview" si quieres que funcione en las previews:
+#   ... | vercel env add NOMBRE preview
+
+# Redeploy a producción:
+vercel --prod
+# (o desde la web: Deployments -> ultimo -> ... -> Redeploy)
+
+
+# =============================================================================
+# BLOQUE 5 — PROBAR EL WORKER DIRECTO (opcional, sin pasar por la web)
+# =============================================================================
+curl -X POST https://thelab-leads-worker.TU-SUB.workers.dev/lead \
+  -H "Content-Type: application/json" \
+  -H "X-Public-Lead-Key: $PUBLIC_LEAD_KEY" \
+  -d '{"name":"Prueba QA","company":"Test","email":"prueba@ejemplo.cl","phone":"+56912345678","service":"Cartelería","message":"Lead de prueba","source":"web"}'
+# Esperado: {"ok":true,"clienteId":"rec...","queueId":"rec..."}
+# Verifica luego en Airtable: tablas Clientes + Agent_Queue.
+
+
+# =============================================================================
+# BLOQUE 6 — DESPLEGAR EL AIRTABLE-PROXY (seguridad del dashboard)
+# =============================================================================
+cd "$DASH_DIR/airtable-proxy"
+printf '%s' "$AIRTABLE_TOKEN" | npx wrangler secret put AIRTABLE_TOKEN
+printf '%s' "$ANTHROPIC_KEY"  | npx wrangler secret put ANTHROPIC_TOKEN
+printf '%s' "$APP_KEY"        | npx wrangler secret put APP_KEY
+npx wrangler deploy
+# >>> COPIA la URL del proxy: https://airtable-proxy.TU-SUB.workers.dev
+
+
+# =============================================================================
+# PASOS MANUALES (no son comandos — hazlos en el navegador)
+# =============================================================================
+# A) GitHub -> repo dashboardthelabsolutions -> Settings -> Secrets and
+#    variables -> Actions:
+#      - ELIMINA los secrets:  AIRTABLE_TOKEN  y  ANTHROPIC_KEY
+#      - AGREGA:  PROXY_URL = (url del proxy del BLOQUE 6)
+#                 PROXY_KEY = (el valor de APP_KEY)
+#      - Vuelve a desplegar el dashboard (push a main o re-run del workflow).
+#
+# B) En el dashboard abierto -> Mi cuenta -> Proxy Worker:
+#      pega la URL del proxy y la passphrase (APP_KEY).
+#
+# C) REVOCA los tokens viejos:
+#      - Airtable: borra el PAT antiguo en airtable.com/create/tokens
+#      - Anthropic: borra la API key antigua en console.anthropic.com/settings/keys
+#
+# D) Airtable (UI) -> tabla Clientes -> campo "Revenue total cliente (CLP)":
+#      cámbialo a tipo Rollup -> Pedidos / "Monto total (CLP)" / SUM(values).
+#
+# E) Make: NO hagas nada y NO pagues. Cuando se reinicie el ciclo mensual del
+#    plan gratis, entra y confirma que las 5 ALERTAS estén en "activo".
+###############################################################################
