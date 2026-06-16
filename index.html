@@ -5442,7 +5442,7 @@ ESTRUCTURA DE RESPUESTA:
 1. DIAGNÓSTICO (2–3 líneas: ROAS-real vs reportado, hacia dónde va la tendencia, qué gana y qué pierde plata)
 2. ALERTAS CRÍTICAS (máx 3, con impacto estimado en $ y por qué)
 3. ACCIONES INMEDIATAS (ordenadas por impacto en ganancia)
-4. REASIGNACIÓN DE PRESUPUESTO (mover $X de campaña baja a alta, con montos)
+4. REASIGNACIÓN DE PRESUPUESTO (mover $X de campañas con flag PIERDE-REAL a las RENTABLE-REAL, usando el ROAS-real~ por campaña, NO el ROAS-Google; con montos concretos)
 
 AL FINAL incluye SIEMPRE un bloque entre [ACTIONS] y [/ACTIONS] con un JSON array de las acciones aplicables (las que el operador puede ejecutar con un clic). Tipos válidos:
   {"tipo":"pausar","id":"<id campaña>","campana":"<nombre>","motivo":"<corto>"}
@@ -10637,15 +10637,19 @@ function buildAgentContext(id){
       }catch(e){}
       const camps=d.campanas||[];
       if(camps.length){
+        const _totalConv=camps.reduce((s,c)=>s+(c.conversiones||0),0);
         lines.push('\nCAMPAÑAS (usa el ID para las acciones):');
+        if(ingresoCRM>0&&_totalConv>0)lines.push(`  (ROAS-real est. = ingreso CRM ${fmtCLP(ingresoCRM)} repartido por participación en conversiones — aproximado, manda sobre el ROAS-Google para decidir presupuesto)`);
         camps.forEach(c=>{
           const ct=c.impresiones>0?(c.clics/c.impresiones*100).toFixed(2):0;
           const cp=c.clics>0?Math.round(c.gasto/c.clics):0;
           const ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0;
           const ro=c.gasto>0&&(c.valor_conversion||0)>0?(c.valor_conversion/c.gasto).toFixed(2):0;
           const dailyUtil=c.presupuesto>0?Math.round(c.gasto/days/c.presupuesto*100):0;
-          const flags=[];if(dailyUtil>=90)flags.push('TOPADA-PPTO');if((c.gasto||0)>15000&&(c.conversiones||0)===0)flags.push('GASTA-SIN-CONVERTIR');if((c.conversiones||0)>0&&(c.conversiones||0)<8)flags.push('POCA-MUESTRA');
-          lines.push(`  • id=${c.id} [${c.estado||'?'}] "${c.nombre||c.id}" | Ppto ${fmtCLP(c.presupuesto||0)}/día (${dailyUtil}% uso) | Gasto ${fmtCLP(c.gasto||0)} | CTR ${ct}% | CPC ${fmtCLP(cp)} | Conv ${c.conversiones||0} | CPA ${c.conversiones>0?fmtCLP(ca):'—'} | ROAS-Google ${(c.valor_conversion||0)>0?ro+'x':'—'}${flags.length?' | ⚑ '+flags.join(','):''}`);
+          const _estIng=_totalConv>0?ingresoCRM*((c.conversiones||0)/_totalConv):0;
+          const rrEst=(c.gasto||0)>0&&_estIng>0?(_estIng/c.gasto):0;
+          const flags=[];if(dailyUtil>=90)flags.push('TOPADA-PPTO');if((c.gasto||0)>15000&&(c.conversiones||0)===0)flags.push('GASTA-SIN-CONVERTIR');if((c.conversiones||0)>0&&(c.conversiones||0)<8)flags.push('POCA-MUESTRA');if(rrEst>=2)flags.push('RENTABLE-REAL');else if(rrEst>0&&rrEst<1)flags.push('PIERDE-REAL');
+          lines.push(`  • id=${c.id} [${c.estado||'?'}] "${c.nombre||c.id}" | Ppto ${fmtCLP(c.presupuesto||0)}/día (${dailyUtil}% uso) | Gasto ${fmtCLP(c.gasto||0)} | CTR ${ct}% | CPC ${fmtCLP(cp)} | Conv ${c.conversiones||0} | CPA ${c.conversiones>0?fmtCLP(ca):'—'} | ROAS-Google ${(c.valor_conversion||0)>0?ro+'x':'—'} | ROAS-real~${rrEst>0?rrEst.toFixed(2)+'x':'—'}${flags.length?' | ⚑ '+flags.join(','):''}`);
         });
       }
       // ── Impression Share perdido (si el script lo envía): ¿pierdo por presupuesto o por ranking? ──
