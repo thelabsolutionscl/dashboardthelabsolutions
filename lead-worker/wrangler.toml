@@ -6,6 +6,14 @@ name = "thelab-leads-worker"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 
+# Observabilidad (logs/analytics del Worker)
+[observability]
+enabled = true
+
+# Reintento de leads en buffer (dead-letter) cada hora
+[triggers]
+crons = ["17 * * * *"]
+
 # ── Variables NO secretas ──────────────────────────────────────────────
 # El Base ID de Airtable NO es secreto (aparece en URLs), por eso va aquí.
 [vars]

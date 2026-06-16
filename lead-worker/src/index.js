@@ -67,6 +67,11 @@ export default {
       return json({ ok: false, error: "Error interno" }, 500, cors);
     }
   },
+
+  // Cron: reintenta los leads que quedaron en buffer si Airtable falló
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(retryDeadLetters(env));
+  },
 };
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -221,7 +226,10 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     }
   } catch (e) {
     console.error("[leads-worker] Clientes:", e.message);
-    return json({ ok: false, error: "No se pudo crear el cliente" }, 502, cors);
+    // No perder el lead: a buffer (KV) para reintento por cron + auto-reply igual
+    await bufferDeadLetter(env, { norm, agente, evento, source, campaign });
+    if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
+    return json({ ok: true, clienteId: null, queueId: null, buffered: true }, 200, cors);
   }
 
   // 2) Agent_Queue — tabla bajo nuestro control (campos fijos)
@@ -662,6 +670,76 @@ async function autoProcessAllowed(env) {
   if (cur >= cap) return false;
   await env.RL.put(key, String(cur + 1), { expirationTtl: 172800 });
   return true;
+}
+
+// ── Dead-letter: nunca perder un lead si Airtable falla ──────────────────
+async function bufferDeadLetter(env, item) {
+  if (!env.RL) return;
+  try {
+    const key = `dl:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    await env.RL.put(key, JSON.stringify(item), { expirationTtl: 604800 }); // 7 días
+  } catch (_) {}
+}
+
+async function retryDeadLetters(env) {
+  if (!env.RL || !env.AIRTABLE_TOKEN) return;
+  const { keys } = await env.RL.list({ prefix: "dl:" });
+  for (const k of keys) {
+    const raw = await env.RL.get(k.name);
+    if (!raw) continue;
+    let item;
+    try {
+      item = JSON.parse(raw);
+    } catch {
+      await env.RL.delete(k.name);
+      continue;
+    }
+    const { norm, agente, evento, source, campaign } = item;
+    try {
+      let clienteId = await airtableFindCliente(env, {
+        email: norm.email,
+        phone: norm.phone,
+      });
+      if (!clienteId) {
+        const cliente = await airtableCreateTolerant(
+          env,
+          "Clientes",
+          stripEmpty({
+            Empresa: norm.company || norm.name,
+            Contacto: norm.name,
+            Email: norm.email,
+            Teléfono: norm.phone,
+            "Cargo contacto": norm.jobTitle,
+            "Origen lead": source,
+            Comuna: norm.comuna,
+            "Servicio interés": norm.service,
+            "Notas internas": buildNotes(norm),
+            "Fecha primer contacto": today(),
+          })
+        );
+        clienteId = cliente?.id || null;
+      }
+      await airtableCreateTolerant(
+        env,
+        "Agent_Queue",
+        stripEmpty({
+          Evento: evento,
+          Entidad: "Cliente",
+          "ID entidad": clienteId,
+          Agente: agente,
+          Estado: "Pendiente",
+          Prioridad: source === "google_ads" ? "Alta" : "Media",
+          "Input JSON": JSON.stringify(norm).slice(0, 95000),
+          Source: source,
+          Campaign: campaign,
+          "Fecha creación": new Date().toISOString(),
+        })
+      );
+      await env.RL.delete(k.name); // recuperado → fuera del buffer
+    } catch (_) {
+      /* sigue en buffer para el próximo intento */
+    }
+  }
 }
 
 function corsHeaders(origin, env) {
