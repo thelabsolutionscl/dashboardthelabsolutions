@@ -14,6 +14,9 @@ AIRTABLE_BASE_ID = "app1YtD74AqiPWQhy"
 ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,http://localhost:3000"
 # "true" para que el Worker llame a Claude y deje el lead pre-scoreado.
 AUTO_PROCESS_LEADS = "true"
+# Auto-respuesta al lead (requiere secret RESEND_API_KEY). From debe ser dominio verificado en Resend.
+RESEND_FROM = "The Lab Solutions <contacto@thelab.solutions>"
+WHATSAPP_NUMBER = "56928785039"
 
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL
