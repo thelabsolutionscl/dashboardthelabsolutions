@@ -198,8 +198,27 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
 
   let clienteId = null;
   try {
-    const cliente = await airtableCreateTolerant(env, "Clientes", clienteFields);
-    clienteId = cliente?.id || null;
+    const existing = await airtableFindCliente(env, {
+      email: norm.email,
+      phone: norm.phone,
+    });
+    if (existing) {
+      // Cliente recurrente: reutiliza el registro y refresca interés/cargo
+      // sin pisar notas ni la fecha de primer contacto.
+      clienteId = existing;
+      await airtableUpdateTolerant(
+        env,
+        "Clientes",
+        existing,
+        stripEmpty({
+          "Servicio interés": norm.service,
+          "Cargo contacto": norm.jobTitle,
+        })
+      );
+    } else {
+      const cliente = await airtableCreateTolerant(env, "Clientes", clienteFields);
+      clienteId = cliente?.id || null;
+    }
   } catch (e) {
     console.error("[leads-worker] Clientes:", e.message);
     return json({ ok: false, error: "No se pudo crear el cliente" }, 502, cors);
@@ -477,6 +496,29 @@ async function airtableUpdate(env, table, recordId, fields) {
   );
   if (!r.ok) throw new Error(await airtableErr(r));
   return await r.json();
+}
+
+// Busca un Cliente existente por email o teléfono (dedupe). Best-effort.
+async function airtableFindCliente(env, { email, phone }) {
+  const esc = (s) => String(s).replace(/'/g, "\\'");
+  const clauses = [];
+  if (email) clauses.push(`LOWER({Email})=LOWER('${esc(email)}')`);
+  if (phone) clauses.push(`{Teléfono}='${esc(phone)}'`);
+  if (!clauses.length) return null;
+  const formula = clauses.length > 1 ? `OR(${clauses.join(",")})` : clauses[0];
+  const url =
+    `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Clientes")}` +
+    `?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
+  try {
+    const r = await fetch(url, {
+      headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data?.records?.[0]?.id || null;
+  } catch (_) {
+    return null;
+  }
 }
 
 // Crea reintentando: si Airtable rechaza un campo desconocido, lo quita y reintenta.
