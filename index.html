@@ -20839,7 +20839,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         if(!found)break;
         if(K(c[c.length-1])===K(c[0]))break;
       }
-      if(c.length>=3)contours.push(c);
+      // Descarta loops degenerados: <3 pts o área minúscula (motas de ruido al rozar una cara casi horizontal)
+      if(c.length>=3&&Math.abs(_polyArea(c))>=0.02)contours.push(c);
     }
     return contours;
   }
