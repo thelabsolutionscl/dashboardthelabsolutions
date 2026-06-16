@@ -3363,7 +3363,7 @@ function main() {
 
   // 3. Aplicar mutaciones
   if (isMCC) {
-    // executeInParallel da contexto nativo: AdsApp.newCampaignBuilder() funciona aquí
+    // executeInParallel da contexto nativo de cuenta para aplicar las mutaciones
     AdsManagerApp.accounts()
       .withIds([CUSTOMER_ID])
       .executeInParallel('_aplicarMutaciones', '_finalizarMutaciones', JSON.stringify(muts));
@@ -3496,31 +3496,52 @@ function _aplicarMutaciones(mutsJson) {
     if (m.status !== 'pending') continue;
     try {
       if (m.op === 'create') {
-        var campOp = AdsApp.newCampaignBuilder()
-          .withName(m.data.nombre)
-          .withStatus(m.data.estado || 'ENABLED')
-          .withBudget(m.data.presupuesto)
-          .forSearchNetwork()
-          .build();
-        if (!campOp.isSuccessful()) throw new Error(campOp.getErrors().join(', '));
-        var nuevaCamp = campOp.getResult();
-        if (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) {
-          try {
-            var agOp = nuevaCamp.newAdGroupBuilder()
-              .withName('Grupo 1 - ' + m.data.nombre)
-              .withCpc(300)
-              .build();
-            if (agOp.isSuccessful()) {
-              var ag = agOp.getResult();
-              for (var kw = 0; kw &lt; m.data.palabrasClave.length; kw++) {
-                ag.newKeywordBuilder().withText(m.data.palabrasClave[kw]).build();
-              }
-              Logger.log('  + grupo con ' + m.data.palabrasClave.length + ' keywords');
-            }
-          } catch(eAg) { Logger.log('  Aviso grupo/keywords: ' + eAg.message); }
+        // Google Ads Scripts NO permite crear campañas con builders
+        // (AdsApp.newCampaignBuilder no existe). La vía soportada es la carga
+        // masiva (bulk upload) con el formato CSV del Editor de Google Ads.
+        var _grupo = 'Grupo 1 - ' + m.data.nombre;
+        var _kws = (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) ? m.data.palabrasClave : [];
+        var _ad = m.data.anuncio || null;
+        var _titulos = (_ad &amp;&amp; _ad.titulos &amp;&amp; _ad.titulos.length) ? _ad.titulos.slice(0, 15) : [];
+        var _descs = (_ad &amp;&amp; _ad.descripciones &amp;&amp; _ad.descripciones.length) ? _ad.descripciones.slice(0, 4) : [];
+        var _conAnuncio = !!(_ad &amp;&amp; _ad.finalUrl &amp;&amp; _titulos.length >= 3 &amp;&amp; _descs.length >= 2);
+        var _cols = ['Campaign', 'Campaign status', 'Budget', 'Bid Strategy type',
+                     'Campaign type', 'Ad group', 'Max CPC', 'Keyword'];
+        if (_conAnuncio) {
+          _cols = _cols.concat(['Ad type', 'Final URL', 'Path 1', 'Path 2']);
+          for (var h = 0; h &lt; _titulos.length; h++) _cols.push('Headline ' + (h + 1));
+          for (var d = 0; d &lt; _descs.length; d++) _cols.push('Description ' + (d + 1));
         }
+        var _up = AdsApp.bulkUploads().newCsvUpload(_cols, {moneyInMicros: false});
+        // Fila de campaña (presupuesto y Max CPC en moneda de la cuenta, p. ej. CLP)
+        _up.append({
+          'Campaign': m.data.nombre,
+          'Campaign status': (m.data.estado === 'PAUSED') ? 'Paused' : 'Enabled',
+          'Budget': m.data.presupuesto,
+          'Bid Strategy type': 'cpc',
+          'Campaign type': 'Search Only'
+        });
+        // Fila de grupo de anuncios
+        _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': 300});
+        // Filas de palabras clave (concordancia amplia por defecto)
+        for (var kw = 0; kw &lt; _kws.length; kw++) {
+          _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Keyword': _kws[kw]});
+        }
+        // Fila de anuncio responsivo de búsqueda (RSA), si hay datos suficientes
+        if (_conAnuncio) {
+          var _fila = {'Campaign': m.data.nombre, 'Ad group': _grupo,
+                       'Ad type': 'Responsive search ad', 'Final URL': _ad.finalUrl};
+          if (_ad.path1) _fila['Path 1'] = _ad.path1;
+          if (_ad.path2) _fila['Path 2'] = _ad.path2;
+          for (var hh = 0; hh &lt; _titulos.length; hh++) _fila['Headline ' + (hh + 1)] = _titulos[hh];
+          for (var dd = 0; dd &lt; _descs.length; dd++) _fila['Description ' + (dd + 1)] = _descs[dd];
+          _up.append(_fila);
+        }
+        _up.forCampaignManagement();
+        _up.apply();
         muts[k].status = 'aplicado';
-        Logger.log('OK creada: ' + m.data.nombre);
+        Logger.log('OK creada (bulk upload): ' + m.data.nombre + ' · ' + _kws.length +
+                   ' keywords · ' + (_conAnuncio ? 'con anuncio RSA' : 'sin anuncio'));
 
       } else if (m.op === 'edit') {
         var iter = AdsApp.campaigns().withIds([m.id]).get();
@@ -15544,19 +15565,32 @@ function adsLastSyncStr(){
   return 'hace '+Math.floor(diff/86400000)+'d';
 }
 // ── Líneas de producción ↔ campañas Google Ads ───────────
+const ADS_DEFAULT_URL='https://thelab.solutions';
 const ADS_LINEAS=[
   {id:'3d_small',label:'Impresión 3D — K1/K2',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
-   palabrasClave:['impresión 3d santiago','impresión 3d','impresora 3d','piezas 3d','prototipo 3d','fabricación 3d','figuras 3d','modelos 3d','carcasas 3d','repuestos plásticos']},
+   palabrasClave:['impresión 3d santiago','impresión 3d','impresora 3d','piezas 3d','prototipo 3d','fabricación 3d','figuras 3d','modelos 3d','carcasas 3d','repuestos plásticos'],
+   titulos:['Impresión 3D en Santiago','Piezas y Prototipos 3D','Fabricación 3D a Medida','Repuestos y Figuras 3D','The Lab Solutions'],
+   descripciones:['Impresión 3D profesional en Santiago: piezas, prototipos y repuestos a medida.','Cotiza online y recibe tu pieza impresa en 3D con calidad garantizada.']},
   {id:'3d_large',label:'Impresión 3D — Giga',campañaSugerida:'Búsqueda - Impresión 3D Grande',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['impresión 3d grande','maqueta arquitectura','modelos a escala','pieza industrial grande','prototipo tamaño real','impresión gran formato']},
+   palabrasClave:['impresión 3d grande','maqueta arquitectura','modelos a escala','pieza industrial grande','prototipo tamaño real','impresión gran formato'],
+   titulos:['Impresión 3D Gran Formato','Maquetas y Modelos a Escala','Piezas 3D de Gran Tamaño','Prototipos a Tamaño Real','The Lab Solutions'],
+   descripciones:['Impresión 3D de gran formato para maquetas, prototipos y piezas industriales.','Llevamos tus ideas a escala real. Cotiza tu proyecto 3D hoy mismo.']},
   {id:'laser',label:'Láser y Señalética',campañaSugerida:'Búsqueda - Señalética Acrílico',tipo:'SEARCH',presupuesto:6000,
-   palabrasClave:['señalética corporativa','señalética acrílico','corte láser','grabado láser','letrero acrílico','placa grabada','señalización empresa','rótulo acrílico']},
+   palabrasClave:['señalética corporativa','señalética acrílico','corte láser','grabado láser','letrero acrílico','placa grabada','señalización empresa','rótulo acrílico'],
+   titulos:['Señalética en Acrílico','Corte y Grabado Láser','Letreros y Placas a Medida','Rótulos para Empresas','The Lab Solutions'],
+   descripciones:['Señalética corporativa en acrílico con corte y grabado láser de alta precisión.','Letreros, placas y rótulos a medida para tu empresa. Cotiza online.']},
   {id:'neon',label:'Neon LED y Rótulos',campañaSugerida:'Búsqueda - Neon LED Personalizado',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['neon led personalizado','letrero neon','cartel neon','rótulo led','neon decorativo','letreros luminosos','neon para negocio','carteles de neon']},
+   palabrasClave:['neon led personalizado','letrero neon','cartel neon','rótulo led','neon decorativo','letreros luminosos','neon para negocio','carteles de neon'],
+   titulos:['Letreros Neon LED','Neon Personalizado','Rótulos Luminosos a Medida','Carteles Neon a Pedido','The Lab Solutions'],
+   descripciones:['Letreros y carteles neon LED personalizados para tu negocio o decoración.','Diseñamos tu rótulo luminoso a medida. Cotiza tu letrero neon hoy.']},
   {id:'trofeos',label:'Trofeos y Reconocimientos',campañaSugerida:'Búsqueda - Trofeos Corporativos',tipo:'SEARCH',presupuesto:4000,
-   palabrasClave:['trofeos personalizados','medallas empresa','reconocimiento corporativo','galvano personalizado','premio empresa','trofeos corporativos','placa reconocimiento']},
+   palabrasClave:['trofeos personalizados','medallas empresa','reconocimiento corporativo','galvano personalizado','premio empresa','trofeos corporativos','placa reconocimiento'],
+   titulos:['Trofeos Personalizados','Galvanos y Medallas','Reconocimientos a Medida','Premios para tu Equipo','The Lab Solutions'],
+   descripciones:['Trofeos, galvanos y medallas personalizados para premiar a tu equipo.','Reconocimientos corporativos a medida. Cotiza tu pedido de trofeos online.']},
   {id:'papeleria',label:'Papelería Corporativa',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000,
-   palabrasClave:['papelería corporativa','tarjetas presentación','sello empresa','membrete personalizado','carpetas corporativas','impresión corporativa']},
+   palabrasClave:['papelería corporativa','tarjetas presentación','sello empresa','membrete personalizado','carpetas corporativas','impresión corporativa'],
+   titulos:['Papelería Corporativa','Tarjetas y Membretes','Sellos y Carpetas','Imagen para tu Empresa','The Lab Solutions'],
+   descripciones:['Papelería corporativa: tarjetas, membretes, sellos y carpetas personalizadas.','Imagen profesional para tu empresa. Cotiza tu papelería corporativa online.']},
 ];
 function _adsMatchCampaign(campanas,linea){
   if(!campanas||!campanas.length) return null;
@@ -15703,7 +15737,7 @@ function renderAdsSugerencias(data){
 }
 // Palabras clave a incluir en la próxima campaña creada (Script 2 las usará para armar el grupo de anuncios)
 let _adsCreateKeywords=[];
-function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave){
+function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulos,descripciones){
   openCreateCampaign();
   _adsCreateKeywords=Array.isArray(palabrasClave)?palabrasClave.slice():[];
   setTimeout(()=>{
@@ -15711,16 +15745,18 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave){
     const bd=document.getElementById('adsCampaignModalPresupuesto');if(bd) bd.value=presupuesto;
     const st=document.getElementById('adsCampaignModalEstado');if(st) st.value='ENABLED';
     const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
+    const tt=document.getElementById('adsCampaignModalTitulos');if(tt&&Array.isArray(titulos)&&titulos.length) tt.value=titulos.join('\n');
+    const ds=document.getElementById('adsCampaignModalDescripciones');if(ds&&Array.isArray(descripciones)&&descripciones.length) ds.value=descripciones.join('\n');
     const hint=document.getElementById('adsCampaignModalKwHint');
     if(hint){
-      if(_adsCreateKeywords.length){hint.style.display='block';hint.textContent='✓ Se incluirán '+_adsCreateKeywords.length+' palabras clave en el grupo de anuncios al crear la campaña.';}
+      if(_adsCreateKeywords.length){hint.style.display='block';hint.textContent='✓ Se incluirán '+_adsCreateKeywords.length+' palabras clave y un anuncio responsivo en el grupo de anuncios al crear la campaña. Revisa o edita el anuncio abajo.';}
       else hint.style.display='none';
     }
   },80);
 }
 function openCreateCampaignByLineaId(lineaId){
   const l=ADS_LINEAS.find(x=>x.id===lineaId);
-  if(l) openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave);
+  if(l) openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave,l.titulos,l.descripciones);
 }
 let _adsCapBtnStore=[];
 function _adsCapBtn(idx){
@@ -15950,6 +15986,12 @@ function openCreateCampaign(){
   document.getElementById('adsCampaignModalPresupuesto').value='';
   document.getElementById('adsCampaignModalEstado').value='ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='';
+  document.getElementById('adsCampaignModalAnuncioGroup').style.display='';
+  document.getElementById('adsCampaignModalFinalUrl').value=ADS_DEFAULT_URL;
+  document.getElementById('adsCampaignModalPath1').value='';
+  document.getElementById('adsCampaignModalPath2').value='';
+  document.getElementById('adsCampaignModalTitulos').value='';
+  document.getElementById('adsCampaignModalDescripciones').value='';
   const hint=document.getElementById('adsCampaignModalKwHint');if(hint) hint.style.display='none';
   document.getElementById('adsCampaignModal').style.display='flex';
 }
@@ -15963,6 +16005,7 @@ function openEditCampaign(id, nombre, estado, presupuesto){
   document.getElementById('adsCampaignModalPresupuesto').value=presupuesto||'';
   document.getElementById('adsCampaignModalEstado').value=estado||'ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='none';
+  document.getElementById('adsCampaignModalAnuncioGroup').style.display='none';
   document.getElementById('adsCampaignModal').style.display='flex';
 }
 
@@ -16004,6 +16047,30 @@ function saveCampaignMutation(){
   if(presupuesto<1000){alert('El presupuesto debe ser al menos $1.000 CLP.');return;}
   const data={nombre,presupuesto,estado,tipo};
   if(op==='create'&&_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.slice();
+  if(op==='create'){
+    const finalUrl=(document.getElementById('adsCampaignModalFinalUrl').value||'').trim();
+    const path1=(document.getElementById('adsCampaignModalPath1').value||'').trim();
+    const path2=(document.getElementById('adsCampaignModalPath2').value||'').trim();
+    const splitLines=v=>(v||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    const titulos=splitLines(document.getElementById('adsCampaignModalTitulos').value);
+    const descripciones=splitLines(document.getElementById('adsCampaignModalDescripciones').value);
+    const hasAdData=finalUrl||titulos.length||descripciones.length||path1||path2;
+    if(hasAdData){
+      if(!/^https?:\/\/.+/i.test(finalUrl)){alert('La URL final del anuncio debe empezar con http:// o https://');return;}
+      if(titulos.length<3){alert('El anuncio necesita al menos 3 títulos (uno por línea).');return;}
+      if(descripciones.length<2){alert('El anuncio necesita al menos 2 descripciones (una por línea).');return;}
+      const tLargo=titulos.find(t=>t.length>30);
+      if(tLargo){alert('Cada título debe tener máximo 30 caracteres. Acorta: "'+tLargo+'" ('+tLargo.length+').');return;}
+      const dLargo=descripciones.find(d=>d.length>90);
+      if(dLargo){alert('Cada descripción debe tener máximo 90 caracteres. Acorta: "'+dLargo+'" ('+dLargo.length+').');return;}
+      if(path1.length>15||path2.length>15){alert('Cada ruta (Path) debe tener máximo 15 caracteres.');return;}
+      data.anuncio={finalUrl,titulos:titulos.slice(0,15),descripciones:descripciones.slice(0,4)};
+      if(path1) data.anuncio.path1=path1;
+      if(path2) data.anuncio.path2=path2;
+    } else if(!confirm('La campaña se creará SIN anuncios y no se publicará hasta que agregues uno en Google Ads. ¿Continuar de todos modos?')){
+      return;
+    }
+  }
   const mutation={op,id,data,timestamp:new Date().toISOString(),status:'pending'};
   closeAdsCampaignModal();
   _adsQueueMutation(mutation);
@@ -19338,6 +19405,17 @@ function qcalcClear(kind){
           <option value="ENABLED">Habilitada</option>
           <option value="PAUSED">Pausada</option>
         </select>
+      </div>
+      <div class="field-group" id="adsCampaignModalAnuncioGroup">
+        <label class="field-label">Anuncio responsivo (se publica con la campaña)</label>
+        <input class="field-input" id="adsCampaignModalFinalUrl" placeholder="URL final · ej: https://thelab.solutions" style="margin-bottom:8px">
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input class="field-input" id="adsCampaignModalPath1" maxlength="15" placeholder="Ruta 1 (opcional)" style="flex:1">
+          <input class="field-input" id="adsCampaignModalPath2" maxlength="15" placeholder="Ruta 2 (opcional)" style="flex:1">
+        </div>
+        <textarea class="field-input" id="adsCampaignModalTitulos" rows="4" placeholder="Títulos: uno por línea (mín. 3, máx. 15 · hasta 30 caracteres c/u)" style="resize:vertical;margin-bottom:8px"></textarea>
+        <textarea class="field-input" id="adsCampaignModalDescripciones" rows="3" placeholder="Descripciones: una por línea (mín. 2, máx. 4 · hasta 90 caracteres c/u)" style="resize:vertical"></textarea>
+        <div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.4">El anuncio responsivo es obligatorio para que la campaña se publique. Si lo dejas vacío, la campaña se crea pero no mostrará anuncios.</div>
       </div>
       <div id="adsCampaignModalKwHint" style="display:none;font-size:10px;color:var(--accent);background:rgba(0,212,204,0.07);border:1px solid rgba(0,212,204,0.2);border-radius:6px;padding:7px 10px;line-height:1.4"></div>
     </div>
