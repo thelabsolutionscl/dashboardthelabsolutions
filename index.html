@@ -5440,7 +5440,8 @@ AL FINAL incluye SIEMPRE un bloque entre [ACTIONS] y [/ACTIONS] con un JSON arra
   {"tipo":"negativo","campana":"<nombre o 'cuenta'>","termino":"<palabra negativa>","motivo":"..."}
   {"tipo":"pausar_kw","campana":"<nombre o vacío>","termino":"<texto exacto de la palabra clave a pausar>","motivo":"..."}
   {"tipo":"keyword_exacta","campana":"<nombre>","termino":"<término que convierte para subir a exacta>","motivo":"..."}
-Usa "pausar_kw" para palabras clave que gastan sin convertir o con Quality Score muy bajo sin retorno; usa "keyword_exacta" para términos de búsqueda que ya convierten. El "termino" debe ser el texto exacto que aparece en los datos.
+  {"tipo":"generar_copy","campana":"<nombre>","termino":"<keyword con relevancia de anuncio baja>","motivo":"..."}
+Usa "pausar_kw" para palabras clave que gastan sin convertir o con Quality Score muy bajo sin retorno; usa "keyword_exacta" para términos de búsqueda que ya convierten; usa "generar_copy" cuando una keyword tenga el componente de anuncio BAJO el promedio (ahí el problema es el texto del anuncio, no la puja). El "termino" debe ser el texto exacto que aparece en los datos.
 Usa los IDs exactos que aparecen en los datos. Sólo acciones que recomiendes de verdad (máx 6). Si no hay ninguna, pon [].
 Sé específico con números y campañas concretas. Sin relleno. CLP con puntos de miles.`,
    pre:'',
@@ -11058,6 +11059,7 @@ function _adsActionLabel(a){
     case 'negativo':return '🚫 «'+(a.termino||'')+'»';
     case 'pausar_kw':return '⏸ Pausar kw «'+(a.termino||'')+'»';
     case 'keyword_exacta':return '🎯 Subir «'+(a.termino||'')+'» a exacta';
+    case 'generar_copy':return '✍ Anuncios para «'+(a.termino||a.campana||'')+'»';
     default:return a.tipo;
   }
 }
@@ -11086,6 +11088,10 @@ function applyAdsAction(i){
     toast(`🎯 "[${a.termino}]" copiado — agrégalo como exacta en el grupo correcto de "${a.campana||'la campaña'}"`,'info');
     return;
   }
+  if(a.tipo==='generar_copy'){
+    adsGenerateAdCopy(a.termino||a.campana||'',a.campana||'');
+    return;
+  }
   const camp=(window._adsLastData?.campanas||[]).find(c=>String(c.id)===String(a.id)||c.nombre===a.campana);
   if(!camp){toast('No encontré la campaña de la acción','error');return;}
   const base={nombre:camp.nombre,presupuesto:camp.presupuesto,estado:camp.estado,tipo:camp.tipo||'SEARCH'};
@@ -11096,6 +11102,79 @@ function applyAdsAction(i){
   else{toast('Tipo de acción no soportado','error');return;}
   if(typeof _adsQueueMutation==='function'){_adsQueueMutation({op:'edit',id:camp.id,data,timestamp:new Date().toISOString(),status:'pending'});toast('✓ En cola: '+desc,'success');}
   else toast('Cola de mutaciones no disponible','error');
+}
+// ── Generador de copy de anuncios (RSA) para keywords con relevancia baja ──
+const _RSA_LIMITS={titulo:30,descripcion:90,ruta:15};
+function _adsCopyOverlay(){
+  let ov=document.getElementById('adsCopyOverlay');
+  if(!ov){
+    ov=document.createElement('div');ov.id='adsCopyOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.onclick=e=>{if(e.target===ov)ov.remove();};
+    document.body.appendChild(ov);
+  }
+  return ov;
+}
+let _adsCopyData={titulos:[],descripciones:[],rutas:[]};
+function _adsCopyClip(cat,i){const t=(_adsCopyData[cat]||[])[i];if(t==null)return;navigator.clipboard.writeText(t).then(()=>toast('Copiado ✓','success')).catch(()=>{});}
+function _adsCopyClipAll(cat){const a=_adsCopyData[cat]||[];if(!a.length)return;navigator.clipboard.writeText(a.join('\n')).then(()=>toast('Copiado ✓','success')).catch(()=>{});}
+function _adsCopyItemRow(cat,i,text,limit){
+  const len=[...String(text)].length;const ok=len<=limit;
+  return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--surface2);border-radius:5px;margin-bottom:4px">
+    <span style="flex:1;min-width:0;font-size:12px;color:var(--text);word-break:break-word">${escapeHtml(text)}</span>
+    <span style="font-size:9px;font-weight:600;flex-shrink:0;color:${ok?'var(--success)':'var(--danger)'}">${len}/${limit}</span>
+    <button onclick="_adsCopyClip('${cat}',${i})" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer;flex-shrink:0">📋</button>
+  </div>`;
+}
+async function adsGenerateAdCopy(termino,campana){
+  const ov=_adsCopyOverlay();
+  const kw=String(termino||'').trim();
+  ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div><div style="font-weight:700;font-size:15px;color:var(--text)">✍ Anuncios para «${escapeHtml(kw)}»</div><div style="font-size:11px;color:var(--text3)">${escapeHtml(campana||'')}</div></div>
+      <button onclick="document.getElementById('adsCopyOverlay').remove()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div id="adsCopyBody"><div class="loading-state" style="padding:30px 0;text-align:center"><div class="spinner"></div><div style="color:var(--text3);font-size:12px;margin-top:10px">Generando anuncios optimizados…</div></div></div>
+  </div>`;
+  const sys=`Eres copywriter senior de Google Ads para The Lab Solutions, fabricación digital premium en Santiago, Chile (impresión 3D, trofeos y medallas, señalética acrílico, neones LED, packaging).
+Escribes anuncios de búsqueda responsivos (RSA) en español chileno, persuasivos y de alta relevancia.
+REGLAS DURAS:
+- Títulos: máximo 30 caracteres CADA UNO (cuenta los caracteres, no te pases).
+- Descripciones: máximo 90 caracteres CADA UNA.
+- Rutas de visualización: máximo 15 caracteres cada una.
+- Incluye la palabra clave (o su raíz) en al menos 3 títulos para subir la relevancia/Quality Score.
+- Variedad: beneficios, diferenciadores, llamados a la acción (CTA), prueba social, urgencia. Sin clickbait falso.
+- Nada de mayúsculas sostenidas ni signos de exclamación repetidos. Profesional y local.
+Responde SOLO con un objeto JSON válido, sin texto adicional ni markdown, con esta forma exacta:
+{"titulos":["...", ... 12 ítems], "descripciones":["...", ...4 ítems], "rutas":["...","..."]}`;
+  const user=`Palabra clave objetivo: "${kw}"${campana?`\nCampaña: ${campana}`:''}
+Genera 12 títulos, 4 descripciones y 2 rutas para esta keyword. Respeta los límites de caracteres al pie de la letra.`;
+  try{
+    const raw=await callClaude(sys,user);
+    let obj=null;
+    try{const mm=String(raw).match(/\{[\s\S]*\}/);obj=JSON.parse(mm?mm[0]:raw);}catch(e){obj=null;}
+    const body=document.getElementById('adsCopyBody');
+    if(!body)return;
+    if(!obj||!Array.isArray(obj.titulos)){
+      body.innerHTML=`<div style="color:var(--danger);font-size:12px">No pude interpretar la respuesta. Texto crudo:</div><pre style="white-space:pre-wrap;font-size:11px;color:var(--text2);margin-top:8px">${escapeHtml(String(raw).slice(0,1200))}</pre>`;
+      return;
+    }
+    const titulos=(obj.titulos||[]).map(String),descripciones=(obj.descripciones||[]).map(String),rutas=(obj.rutas||[]).map(String);
+    _adsCopyData={titulos,descripciones,rutas};
+    const overTit=titulos.filter(t=>[...t].length>_RSA_LIMITS.titulo).length;
+    const overDes=descripciones.filter(t=>[...t].length>_RSA_LIMITS.descripcion).length;
+    const warn=(overTit||overDes)?`<div style="font-size:10px;color:var(--warn);margin-bottom:8px">⚠ ${overTit+overDes} elemento(s) exceden el límite (en rojo) — edítalos antes de pegar.</div>`:'';
+    body.innerHTML=`${warn}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 6px"><div style="font-size:11px;font-weight:700;color:var(--text2)">TÍTULOS (${titulos.length})</div><button class="btn btn-ghost btn-sm" onclick="_adsCopyClipAll('titulos')">📋 Copiar todos</button></div>
+      ${titulos.map((t,i)=>_adsCopyItemRow('titulos',i,t,_RSA_LIMITS.titulo)).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px"><div style="font-size:11px;font-weight:700;color:var(--text2)">DESCRIPCIONES (${descripciones.length})</div><button class="btn btn-ghost btn-sm" onclick="_adsCopyClipAll('descripciones')">📋 Copiar todas</button></div>
+      ${descripciones.map((t,i)=>_adsCopyItemRow('descripciones',i,t,_RSA_LIMITS.descripcion)).join('')}
+      ${rutas.length?`<div style="font-size:11px;font-weight:700;color:var(--text2);margin:12px 0 6px">RUTAS</div>${rutas.map((t,i)=>_adsCopyItemRow('rutas',i,t,_RSA_LIMITS.ruta)).join('')}`:''}
+      <div style="font-size:10px;color:var(--text3);margin-top:12px;line-height:1.5">Pégalos en Google Ads → tu grupo de anuncios → Anuncios → nuevo anuncio responsivo de búsqueda. Mantén los que tengan la keyword para subir el Quality Score del componente "anuncio".</div>`;
+  }catch(e){
+    const body=document.getElementById('adsCopyBody');
+    if(body)body.innerHTML=`<div style="color:var(--danger);font-size:12px">Error generando anuncios: ${escapeHtml(e.message||String(e))}</div>`;
+  }
 }
 function runAdsAgent(){
   if(!window._adsLastData){toast('Carga primero los datos de Google Ads','error');return;}
