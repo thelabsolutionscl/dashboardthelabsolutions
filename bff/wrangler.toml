@@ -1,0 +1,38 @@
+name = "thelab-bff"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+# ---------------------------------------------------------------------------
+# Variables públicas (no secretas). Ajusta los placeholders antes de deploy.
+# ---------------------------------------------------------------------------
+[vars]
+AIRTABLE_BASE_ID = "appXXXX"                              # <-- reemplaza por tu base real
+ALLOWED_ORIGINS  = "https://thelabsolutionscl.github.io"  # orígenes permitidos (coma-separado)
+PWD_SALT         = "thelab.v2:"
+
+# ---------------------------------------------------------------------------
+# KV namespace para los locks de la cola.
+# Crea el namespace con:
+#   wrangler kv namespace create QUEUE_LOCK
+# y reemplaza <KV_ID> por el id que entrega el comando.
+# ---------------------------------------------------------------------------
+[[kv_namespaces]]
+binding = "QUEUE_LOCK"
+id = "<KV_ID>"
+
+# ---------------------------------------------------------------------------
+# Cron: procesa la cola cada 5 minutos.
+# ---------------------------------------------------------------------------
+[triggers]
+crons = ["*/5 * * * *"]
+
+# ---------------------------------------------------------------------------
+# SECRETS (NO van aquí). Configúralos con `wrangler secret put <NOMBRE>`:
+#   wrangler secret put JWT_SECRET       # secreto para firmar/verificar JWT
+#   wrangler secret put AIRTABLE_TOKEN   # Personal Access Token de Airtable
+#   wrangler secret put ANTHROPIC_KEY    # API key de Anthropic
+#   wrangler secret put OPENAI_KEY       # API key de OpenAI
+# Opcionales:
+#   wrangler secret put USERS            # JSON: array de {username,name,role,hash}
+#   wrangler secret put AGENTS           # JSON: map agentId -> systemPrompt
+# ---------------------------------------------------------------------------

@@ -2,15 +2,63 @@ import { parsePFX } from './sii-crypto.js';
 import { getSIIToken, uploadDTE } from './sii-auth.js';
 import { generateSignedDTE, buildEnvioDTE } from './dte-xml.js';
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
+const CORS_BASE = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Max-Age': '86400',
 };
 
+// Resuelve cabeceras CORS según allowlist en env.ALLOWED_ORIGINS.
+// Si no está definida, conserva '*' pero avisa por consola.
+function corsHeaders(request, env) {
+  const headers = { ...CORS_BASE };
+  const allowlist = (env && env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS : '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (allowlist.length === 0) {
+    console.warn('[SII Worker] ALLOWED_ORIGINS no definida — CORS abierto a "*". Configúrala para restringir orígenes.');
+    headers['Access-Control-Allow-Origin'] = '*';
+    return headers;
+  }
+  const origin = request.headers.get('Origin') || '';
+  headers['Vary'] = 'Origin';
+  headers['Access-Control-Allow-Origin'] = origin && allowlist.includes(origin) ? origin : allowlist[0];
+  return headers;
+}
+
+// Comparación en tiempo constante (bytes UTF-8, longitud fija).
+function timingSafeEqualStr(a, b) {
+  const enc = new TextEncoder();
+  const ba = enc.encode(String(a == null ? '' : a));
+  const bb = enc.encode(String(b == null ? '' : b));
+  const len = Math.max(ba.length, bb.length);
+  let diff = ba.length ^ bb.length;
+  for (let i = 0; i < len; i++) diff |= (ba[i] || 0) ^ (bb[i] || 0);
+  return diff === 0;
+}
+
+// Exige Authorization: Bearer <env.SII_API_KEY> en rutas que mutan estado.
+// Si SII_API_KEY no está definida → console.warn y permite (compatibilidad).
+// Devuelve una Response 401 si falla; null si pasa.
+function requireBearer(request, env, CORS) {
+  if (!env.SII_API_KEY) {
+    console.warn('[SII Worker] SII_API_KEY no definida — ruta protegida abierta. Configúrala para exigir Bearer.');
+    return null;
+  }
+  const auth = request.headers.get('Authorization') || '';
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  const token = m ? m[1].trim() : '';
+  if (!token || !timingSafeEqualStr(token, env.SII_API_KEY)) {
+    return err('No autorizado', 401, CORS);
+  }
+  return null;
+}
+
 export default {
   async fetch(request, env) {
+    const CORS = corsHeaders(request, env);
+
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS });
     }
@@ -18,45 +66,49 @@ export default {
     const url = new URL(request.url);
 
     try {
-      // GET /health — verifica configuración básica
+      // GET /health — verifica configuración básica (sin auth)
       if (request.method === 'GET' && url.pathname === '/health') {
         return ok({
           status: 'ok',
           sii_env: env.SII_ENV || 'certificacion',
           rut_emisor: env.RUT_EMISOR || 'no configurado',
           cert_loaded: !!env.CERT_PFX_BASE64,
-        });
+        }, CORS);
       }
 
-      // PUT /caf — sube un CAF para un tipo de documento
+      // PUT /caf — sube un CAF para un tipo de documento (muta estado → bearer)
       // Body: { "tipo_documento": "33", "caf_xml": "<?xml..." }
       if (request.method === 'PUT' && url.pathname === '/caf') {
-        return await handleCafUpload(request, env);
+        const unauth = requireBearer(request, env, CORS);
+        if (unauth) return unauth;
+        return await handleCafUpload(request, env, CORS);
       }
 
-      // GET /folio/:tipo — consulta el folio actual y rango CAF
+      // GET /folio/:tipo — consulta el folio actual y rango CAF (solo lectura)
       if (request.method === 'GET' && url.pathname.startsWith('/folio/')) {
         const tipo = url.pathname.split('/')[2];
-        return await handleFolioStatus(tipo, env);
+        return await handleFolioStatus(tipo, env, CORS);
       }
 
-      // POST / — emite un DTE
+      // POST / — emite un DTE (muta estado / emite DTE → bearer)
       if (request.method === 'POST') {
-        return await handleEmitDTE(request, env);
+        const unauth = requireBearer(request, env, CORS);
+        if (unauth) return unauth;
+        return await handleEmitDTE(request, env, CORS);
       }
 
-      return err('Ruta no encontrada', 404);
+      return err('Ruta no encontrada', 404, CORS);
 
     } catch (e) {
       console.error('[SII Worker]', e.message);
-      return err(e.message, 500);
+      return err(e.message, 500, CORS);
     }
   },
 };
 
 // ── Emitir DTE ───────────────────────────────────────────────────────────────
 
-async function handleEmitDTE(request, env) {
+async function handleEmitDTE(request, env, CORS) {
   validateEnvSecrets(env);
 
   const data = await request.json().catch(() => { throw new Error('Body inválido — se espera JSON'); });
@@ -102,20 +154,20 @@ async function handleEmitDTE(request, env) {
     estado_sii: siiResult.estado,
     glosa_sii: siiResult.glosa || '',
     pdf_url: null,  // Generación de PDF requiere paso adicional con tu proveedor
-  });
+  }, CORS);
 }
 
 // ── CAF ───────────────────────────────────────────────────────────────────────
 
-async function handleCafUpload(request, env) {
+async function handleCafUpload(request, env, CORS) {
   const body = await request.json().catch(() => { throw new Error('Body inválido'); });
   const { tipo_documento, caf_xml } = body;
 
   if (!tipo_documento || !caf_xml) {
-    return err('tipo_documento y caf_xml son requeridos', 400);
+    return err('tipo_documento y caf_xml son requeridos', 400, CORS);
   }
   if (!['33', '39', '61', '56', '52'].includes(String(tipo_documento))) {
-    return err('tipo_documento no soportado', 400);
+    return err('tipo_documento no soportado', 400, CORS);
   }
 
   const range = parseCafRange(caf_xml);
@@ -124,12 +176,12 @@ async function handleCafUpload(request, env) {
   // Resetea el contador al inicio del rango
   await env.FOLIOS_KV.put(`folio_${tipo_documento}`, String(range.desde - 1));
 
-  return ok({ ok: true, tipo_documento, rango: range, siguiente_folio: range.desde });
+  return ok({ ok: true, tipo_documento, rango: range, siguiente_folio: range.desde }, CORS);
 }
 
-async function handleFolioStatus(tipo, env) {
+async function handleFolioStatus(tipo, env, CORS) {
   const cafXml = await env.FOLIOS_KV.get(`caf_${tipo}`);
-  if (!cafXml) return err(`Sin CAF configurado para tipo ${tipo}`, 404);
+  if (!cafXml) return err(`Sin CAF configurado para tipo ${tipo}`, 404, CORS);
 
   const range = parseCafRange(cafXml);
   const actual = parseInt(await env.FOLIOS_KV.get(`folio_${tipo}`) || String(range.desde - 1));
@@ -142,7 +194,7 @@ async function handleFolioStatus(tipo, env) {
     rango_caf: range,
     folios_disponibles: disponibles,
     advertencia: disponibles <= 10 ? '⚠ Quedan pocos folios — solicita nuevo CAF al SII' : null,
-  });
+  }, CORS);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -191,16 +243,16 @@ function validatePayload(data) {
   if (!data.totales?.total) throw new Error('totales.total es requerido');
 }
 
-function ok(data) {
+function ok(data, cors = {}) {
   return new Response(JSON.stringify(data), {
     status: 200,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   });
 }
 
-function err(msg, status = 400) {
+function err(msg, status = 400, cors = {}) {
   return new Response(JSON.stringify({ error: msg }), {
     status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   });
 }
