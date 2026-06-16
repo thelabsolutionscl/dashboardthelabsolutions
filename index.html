@@ -16238,6 +16238,7 @@ function renderAdsCRMPanel(data,days){
   set('crm-ads-bar-label',roasReal>=1?`✓ ROAS ${roasReal.toFixed(1)}x — rentable`:`⚠ ROAS ${roasReal>0?roasReal.toFixed(2)+'x':'sin datos'}`);
 }
 let _adsKwActions=[];
+let _adsKwSort='gasto',_adsKwFilter='all';
 function _adsKwAction(idx){
   const d=_adsKwActions[idx];if(!d)return;
   if(d.type==='copy') adsGenerateAdCopy(d.termino,d.campana);
@@ -16247,6 +16248,8 @@ function _adsKwAction(idx){
     else toast('Cola de mutaciones no disponible','error');
   }
 }
+function _adsKwSetSort(v){_adsKwSort=v;if(window._adsLastData)renderAdsKeywords(window._adsLastData);}
+function _adsKwSetFilter(v){_adsKwFilter=v;if(window._adsLastData)renderAdsKeywords(window._adsLastData);}
 function renderAdsKeywords(data){
   const panel=document.getElementById('adsKeywordsPanel');
   const area=document.getElementById('adsKeywordsArea');
@@ -16256,11 +16259,27 @@ function renderAdsKeywords(data){
   if(!kws.length){panel.style.display='none';return;}
   panel.style.display='';
   _adsKwActions=[];
-  const sorted=[...kws].sort((a,b)=>(b.gasto||0)-(a.gasto||0));
-  const top=sorted.slice(0,20);
   const nLow=kws.filter(k=>(k.qs||0)>0&&(k.qs||0)<=5).length;
   const nWaste=kws.filter(k=>(k.gasto||0)>4000&&(k.conversiones||0)===0).length;
+  const nAd=kws.filter(k=>k.qs_anuncio==='BELOW_AVERAGE').length;
   if(badge)badge.textContent=`${kws.length} kw · ${nLow} con QS bajo · ${nWaste} sin convertir`;
+  // Filtro
+  const filtFns={all:()=>true,qsbajo:k=>(k.qs||0)>0&&(k.qs||0)<=5,waste:k=>(k.gasto||0)>4000&&(k.conversiones||0)===0,anuncio:k=>k.qs_anuncio==='BELOW_AVERAGE'};
+  const filt=filtFns[_adsKwFilter]||filtFns.all;
+  // Orden
+  const sortFns={gasto:(a,b)=>(b.gasto||0)-(a.gasto||0),qs:(a,b)=>(a.qs||99)-(b.qs||99),conv:(a,b)=>(b.conversiones||0)-(a.conversiones||0),cpa:(a,b)=>{const ca=(a.conversiones||0)>0?a.gasto/a.conversiones:Infinity,cb=(b.conversiones||0)>0?b.gasto/b.conversiones:Infinity;return cb===ca?0:ca-cb;}};
+  const srt=sortFns[_adsKwSort]||sortFns.gasto;
+  const filtered=kws.filter(filt).sort(srt);
+  const top=filtered.slice(0,20);
+  // Controles de orden y filtro
+  const filtChip=(val,lbl,n)=>`<button onclick="_adsKwSetFilter('${val}')" style="background:${_adsKwFilter===val?'var(--accent)':'var(--surface3)'};color:${_adsKwFilter===val?'var(--black)':'var(--text2)'};border:1px solid ${_adsKwFilter===val?'var(--accent)':'var(--border2)'};border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;font-weight:600">${lbl}${n!=null?` (${n})`:''}</button>`;
+  const sortOpt=(v,l)=>`<option value="${v}"${_adsKwSort===v?' selected':''}>${l}</option>`;
+  const controls=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <div style="display:flex;gap:5px;flex-wrap:wrap">${filtChip('all','Todas',kws.length)}${filtChip('qsbajo','QS bajo',nLow)}${filtChip('waste','Sin convertir',nWaste)}${filtChip('anuncio','Anuncio débil',nAd)}</div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:5px"><span style="font-size:10px;color:var(--text3)">Ordenar</span>
+      <select onchange="_adsKwSetSort(this.value)" class="field-input" style="width:auto;padding:3px 8px;font-size:10px">${sortOpt('gasto','Mayor gasto')}${sortOpt('qs','Menor QS')}${sortOpt('conv','Más conversiones')}${sortOpt('cpa','Menor CPA')}</select>
+    </div>
+  </div>`;
   const _qsComp=(label,v)=>{const c=v==='ABOVE_AVERAGE'?'var(--success)':v==='BELOW_AVERAGE'?'var(--danger)':v==='AVERAGE'?'var(--warn)':'var(--text3)';return `<span title="${label}: ${v||'s/d'}" style="display:inline-flex;align-items:center;gap:2px;font-size:8px;color:var(--text3);margin-right:5px"><span style="width:6px;height:6px;border-radius:50%;background:${c};display:inline-block"></span>${label}</span>`;};
   const rows=top.map(k=>{
     const qs=k.qs||0;
@@ -16284,11 +16303,12 @@ function renderAdsKeywords(data){
       <td style="text-align:right">${acc}</td>
     </tr>`;
   }).join('');
-  area.innerHTML=`<div class="table-wrap"><table>
+  const emptyMsg=top.length?'':`<div class="empty-state" style="padding:24px 0"><div style="color:var(--text3);font-size:12px">Ninguna palabra clave coincide con el filtro</div></div>`;
+  area.innerHTML=controls+(top.length?`<div class="table-wrap"><table>
     <thead><tr><th>Palabra clave</th><th style="text-align:center" title="Quality Score 1–10">QS</th><th title="Componentes del Quality Score">Componentes</th><th style="text-align:right">Gasto</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th><th style="text-align:right">Acción</th></tr></thead>
     <tbody>${rows}</tbody>
-  </table></div>
-  <div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 4px;line-height:1.5">Mostrando top ${top.length} por gasto. <span style="color:var(--danger)">⚑</span> gasta sin convertir · <span>✍</span> relevancia de anuncio baja (el copy es la palanca). Quality Score alto = CPC más barato.</div>`;
+  </table></div>`:emptyMsg)+`
+  <div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 4px;line-height:1.5">Mostrando ${top.length} de ${filtered.length}${filtered.length>20?' (top 20)':''}. <span style="color:var(--danger)">⚑</span> gasta sin convertir · <span>✍</span> relevancia de anuncio baja (el copy es la palanca). Quality Score alto = CPC más barato.</div>`;
 }
 function renderAdsCampaigns(data){
   try{renderAdsKeywords(data);}catch(e){console.error('renderAdsKeywords',e);}
@@ -16298,10 +16318,20 @@ function renderAdsCampaigns(data){
     return;
   }
   _adsCampActions=[];
+  // ROAS-real estimado por campaña: el CRM no atribuye qué pedido vino de qué campaña,
+  // así que repartimos el ingreso CRM del período por participación en conversiones (proxy honesto).
+  const _adsDays=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+  const _cutoff=new Date(Date.now()-_adsDays*86400000);
+  const _ingresoCRM=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=_cutoff;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const _totalConv=camps.reduce((s,c)=>s+(c.conversiones||0),0);
   const rows=camps.map(c=>{
     const ctr=c.impresiones>0?(c.clics/c.impresiones*100):0;
     const cpc=c.clics>0?(c.gasto/c.clics):0;
     const cpa=c.conversiones>0?(c.gasto/c.conversiones):0;
+    const estIng=_totalConv>0?_ingresoCRM*((c.conversiones||0)/_totalConv):0;
+    const rrEst=(c.gasto||0)>0&&estIng>0?estIng/c.gasto:0;
+    const rrColor=rrEst>=2?'var(--success)':rrEst>=1?'var(--warn)':rrEst>0?'var(--danger)':'var(--text3)';
+    const convShare=_totalConv>0?Math.round((c.conversiones||0)/_totalConv*100):0;
     const activa=c.estado==='ENABLED';
     const estadoBadge=activa
       ?'<span style="background:rgba(0,212,170,0.15);color:var(--accent3);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Activa</span>'
@@ -16331,6 +16361,7 @@ function renderAdsCampaigns(data){
       <td style="text-align:right">${fmtMoney(cpc)}</td>
       <td style="text-align:right;color:var(--success)">${c.conversiones>0?Number(c.conversiones).toFixed(0):'—'}</td>
       <td style="text-align:right">${c.conversiones>0?fmtMoney(cpa):'—'}</td>
+      <td style="text-align:right;color:${rrColor}" title="ROAS-real estimado: ingreso CRM del período repartido por participación en conversiones (esta campaña = ${convShare}% de las conversiones). No es atribución exacta.">${rrEst>0?rrEst.toFixed(2)+'x':'—'}</td>
     </tr>`;
   }).join('');
   const demoBanner=data.demo?`<div style="background:rgba(255,200,0,0.08);border-bottom:1px solid rgba(255,200,0,0.2);padding:7px 16px;font-size:10px;color:#ffc107;display:flex;align-items:center;gap:6px"><span>⚠</span><span>Datos de demostración — <button onclick="toggleAdsConfig()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">configura tu endpoint</button> para ver datos reales</span></div>`:'';
@@ -16339,9 +16370,10 @@ function renderAdsCampaigns(data){
       <div class="card-header"><span class="card-title">Campañas</span><div style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span><button onclick="adsExportCSV()" style="background:rgba(0,212,204,0.06);border:1px solid rgba(0,212,204,0.2);color:var(--text2);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer" title="Descargar tabla como CSV">⬇ CSV</button><button onclick="openCreateCampaign()" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer;font-weight:600">+ Nueva</button></div></div>
       ${demoBanner}
       <div class="table-wrap"><table>
-        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:center" title="Score de salud 0–100 (CTR + Conv. + ROAS)">Score</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th></tr></thead>
+        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:center" title="Score de salud 0–100 (CTR + Conv. + ROAS)">Score</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th><th style="text-align:right" title="ROAS-real estimado por participación en conversiones (no atribución exacta)">ROAS-real*</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
+      <div style="font-size:10px;color:var(--text3);padding:8px 16px 12px;line-height:1.5">* ROAS-real estimado: el ingreso del CRM del período (${fmtMoney(_ingresoCRM)}) repartido entre campañas según su participación en conversiones. Es una aproximación —el CRM no registra de qué campaña vino cada pedido—, pero refleja mejor la ganancia que el ROAS que reporta Google.</div>
     </div>`;
 }
 function renderAdsAgent(data){
