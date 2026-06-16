@@ -553,9 +553,19 @@ async function airtableUpdate(env, table, recordId, fields) {
 
 // Busca un Cliente existente por email o teléfono (dedupe). Best-effort.
 async function airtableFindCliente(env, { email, phone }) {
-  const esc = (s) => String(s).replace(/'/g, "\\'");
+  // Escapa para filterByFormula de Airtable: además de la comilla simple,
+  // neutraliza la barra invertida (para no permitir secuencias de escape) y
+  // elimina caracteres de control. La comilla doble no se usa como delimitador
+  // aquí, pero la quitamos por seguridad.
+  const esc = (s) =>
+    String(s)
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'")
+      .replace(/[\r\n\t"]/g, "");
+  // Regex simple de email: solo si cumple usamos el valor en la fórmula.
+  const isEmail = (s) => /^[^\s@'"\\]+@[^\s@'"\\]+\.[^\s@'"\\]+$/.test(String(s));
   const clauses = [];
-  if (email) clauses.push(`LOWER({Email})=LOWER('${esc(email)}')`);
+  if (email && isEmail(email)) clauses.push(`LOWER({Email})=LOWER('${esc(email)}')`);
   const phoneDigits = phone ? String(phone).replace(/[^0-9]/g, "") : "";
   if (phoneDigits)
     clauses.push(`REGEX_REPLACE({Teléfono} & "", "[^0-9]", "") = '${phoneDigits}'`);

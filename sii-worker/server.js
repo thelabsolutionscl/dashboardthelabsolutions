@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { timingSafeEqual as cryptoTimingSafeEqual } from 'crypto';
 import { parsePFX } from './src/sii-crypto.js';
 import { getSIIToken, uploadDTE, getUploadStatus } from './src/sii-auth.js';
 import { buildSignedEnvioDTE, buildSignedEnvioDTESet } from './src/dte-xml.js';
@@ -53,7 +54,51 @@ app.use((req, res, next) => {
   next();
 });
 
-// GET /health
+// ── Seguridad ──────────────────────────────────────────────────────────────
+// Comparación de cadenas en tiempo constante con crypto.timingSafeEqual.
+function timingSafeEqualStr(a, b) {
+  const ba = Buffer.from(String(a == null ? '' : a), 'utf8');
+  const bb = Buffer.from(String(b == null ? '' : b), 'utf8');
+  // timingSafeEqual exige buffers de igual longitud. Igualamos a longitud común
+  // copiando sobre buffers del mismo tamaño y comparamos también las longitudes.
+  const len = Math.max(ba.length, bb.length, 1);
+  const pa = Buffer.alloc(len);
+  const pb = Buffer.alloc(len);
+  ba.copy(pa);
+  bb.copy(pb);
+  const eq = cryptoTimingSafeEqual(pa, pb);
+  return eq && ba.length === bb.length;
+}
+
+// Middleware de autenticación: exige Authorization: Bearer <SII_API_KEY> para
+// TODAS las rutas excepto GET /health. Si SII_API_KEY no está en env, avisa y
+// no bloquea (compatibilidad).
+app.use((req, res, next) => {
+  if (req.method === 'GET' && req.path === '/health') return next();
+  if (req.method === 'OPTIONS') return next();
+  if (!process.env.SII_API_KEY) {
+    console.warn('[SII Server] SII_API_KEY no definida — rutas sin protección. Configúrala para exigir Bearer.');
+    return next();
+  }
+  const auth = req.headers['authorization'] || '';
+  const m = String(auth).match(/^Bearer\s+(.+)$/i);
+  const token = m ? m[1].trim() : '';
+  if (!token || !timingSafeEqualStr(token, process.env.SII_API_KEY)) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+  next();
+});
+
+// Gate para endpoints de debug/test peligrosos: solo responden si
+// ENABLE_DEBUG === 'true'; de lo contrario 404.
+function debugOnly(req, res, next) {
+  if (process.env.ENABLE_DEBUG !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  next();
+}
+
+// GET /health (sin auth)
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -64,7 +109,7 @@ app.get('/health', (req, res) => {
 });
 
 // GET /debug — diagnóstico: IP de salida + prueba endpoints SII
-app.get('/debug', async (req, res) => {
+app.get('/debug', debugOnly, async (req, res) => {
   const results = {};
   const hdrs = { 'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)', 'Accept': 'text/xml' };
 
@@ -185,7 +230,8 @@ app.get('/folio/:tipo', (req, res) => {
 });
 
 // GET /test-raw — envía XML mínimo para diagnosticar transporte SOAP
-app.get('/test-raw', async (req, res) => {
+// (toca el flujo SOAP real con el cert → exige bearer [middleware] + flag debug)
+app.get('/test-raw', debugOnly, async (req, res) => {
   try {
     const { certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
     const { certDerb64 } = await import('./src/sii-crypto.js');
@@ -249,7 +295,7 @@ app.get('/test-raw', async (req, res) => {
 });
 
 // GET /test-cert — inspecciona el .pfx: cuántos certs trae y cuál matchea la clave
-app.get('/test-cert', async (req, res) => {
+app.get('/test-cert', debugOnly, async (req, res) => {
   try {
     const { describePFX } = await import('./src/sii-crypto.js');
     res.json(describePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD));
@@ -260,7 +306,7 @@ app.get('/test-cert', async (req, res) => {
 
 // GET /preview-dte — genera un EnvioDTE de ejemplo y lo devuelve como XML,
 // SIN subirlo al SII y SIN consumir folio. Sirve para inspeccionar la firma.
-app.get('/preview-dte', async (req, res) => {
+app.get('/preview-dte', debugOnly, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const tipo = '33';
@@ -297,7 +343,8 @@ app.get('/preview-dte', async (req, res) => {
 // GET /test-emit — emite una Factura de prueba REAL al SII (consume 1 folio).
 // Usa el mismo flujo que POST / pero con datos de ejemplo, para validar el
 // pipeline completo contra SII certificación.
-app.get('/test-emit', async (req, res) => {
+// PELIGROSO: emite DTE real y consume folio → exige bearer [middleware] + flag debug.
+app.get('/test-emit', debugOnly, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const tipo = '33';
@@ -401,7 +448,7 @@ function prepareSet({ allowPartial = false } = {}) {
 // GET /preview-set — genera el SET BÁSICO (XML) sin subirlo ni consumir folios.
 // Genera solo los documentos con CAF disponible (parcial), y antepone un
 // comentario con lo incluido/omitido.
-app.get('/preview-set', async (req, res) => {
+app.get('/preview-set', debugOnly, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -424,11 +471,18 @@ app.get('/preview-set', async (req, res) => {
 // GET /pdf/:tipo/:folio — representación impresa (PDF + timbre PDF417) de un DTE YA emitido.
 app.get('/pdf/:tipo/:folio', async (req, res) => {
   try {
-    const f = join(DATA_DIR, 'dte', `${req.params.tipo}_${req.params.folio}.xml`);
-    if (!existsSync(f)) return res.status(404).json({ error: `No hay DTE emitido para tipo ${req.params.tipo} folio ${req.params.folio}. Emítelo primero.` });
+    // Sanitización con whitelist para evitar path traversal:
+    // tipo = alfanumérico corto (máx 4), folio = solo dígitos.
+    const tipo = String(req.params.tipo);
+    const folio = String(req.params.folio);
+    if (!/^[A-Za-z0-9]{1,4}$/.test(tipo) || !/^[0-9]{1,12}$/.test(folio)) {
+      return res.status(400).json({ error: 'Parámetros inválidos: tipo alfanumérico (máx 4) y folio numérico.' });
+    }
+    const f = join(DATA_DIR, 'dte', `${tipo}_${folio}.xml`);
+    if (!existsSync(f)) return res.status(404).json({ error: `No hay DTE emitido para tipo ${tipo} folio ${folio}. Emítelo primero.` });
     const { generateDtePdf } = await import('./src/pdf-dte.js');
     res.type('application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="DTE_${req.params.tipo}_${req.params.folio}.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="DTE_${tipo}_${folio}.pdf"`);
     await generateDtePdf(readFileSync(f, 'utf8'), env, res);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -437,7 +491,7 @@ app.get('/pdf/:tipo/:folio', async (req, res) => {
 
 // GET /preview-pdf — PDF de prueba del layout sin emitir. ?tipo=&folio= para elegir,
 // si no, toma el primer documento del set.
-app.get('/preview-pdf', async (req, res) => {
+app.get('/preview-pdf', debugOnly, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -537,7 +591,7 @@ app.get('/estado/:trackid', async (req, res) => {
 });
 
 // GET /test-token — prueba el flujo semilla→token sin emitir DTE
-app.get('/test-token', async (req, res) => {
+app.get('/test-token', debugOnly, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -608,7 +662,7 @@ function prepareSetBe({ allowPartial = false } = {}) {
 }
 
 // GET /preview-set-be — previsualiza el set de boleta electrónica sin emitir
-app.get('/preview-set-be', async (req, res) => {
+app.get('/preview-set-be', debugOnly, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -625,7 +679,7 @@ app.get('/preview-set-be', async (req, res) => {
 });
 
 // GET /preview-pdf-be — PDF de prueba de boleta electrónica
-app.get('/preview-pdf-be', async (req, res) => {
+app.get('/preview-pdf-be', debugOnly, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -708,4 +762,7 @@ function validatePayload(data) {
 }
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`SII DTE Server en http://0.0.0.0:${PORT}`));
+// BIND_HOST configurable (default '0.0.0.0' para no romper el comportamiento
+// actual). Para endurecer, fija BIND_HOST=127.0.0.1 y expón vía proxy/túnel.
+const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
+app.listen(PORT, BIND_HOST, () => console.log(`SII DTE Server en http://${BIND_HOST}:${PORT}`));

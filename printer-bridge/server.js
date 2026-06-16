@@ -24,7 +24,13 @@ const path = require('path');
 const crypto = require('crypto');
 
 const PORT = parseInt(process.env.BRIDGE_PORT || '8347', 10);
-const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
+// CORS: usa BRIDGE_ALLOW_ORIGIN; si no está definido mantenemos '*' para no
+// romper instalaciones existentes, pero avisamos para que se configure.
+let ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN;
+if (!ALLOW_ORIGIN) {
+  console.warn('[printer-bridge] BRIDGE_ALLOW_ORIGIN no definida — CORS abierto a "*". Configúrala para restringir el origen.');
+  ALLOW_ORIGIN = '*';
+}
 const ALLOWED_PORTS = (process.env.BRIDGE_PORTS || '7125,8080,4408,4409,80')
   .split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
 const TOKEN_FILE = path.join(__dirname, '.bridge-token');
@@ -40,6 +46,20 @@ function loadToken() {
   return t;
 }
 const TOKEN = loadToken();
+
+// Comparación de tokens en tiempo constante (crypto.timingSafeEqual). Iguala
+// longitudes copiando sobre buffers del mismo tamaño y compara también la
+// longitud para no aceptar prefijos.
+function timingSafeEqualStr(a, b) {
+  const ba = Buffer.from(String(a == null ? '' : a), 'utf8');
+  const bb = Buffer.from(String(b == null ? '' : b), 'utf8');
+  const len = Math.max(ba.length, bb.length, 1);
+  const pa = Buffer.alloc(len);
+  const pb = Buffer.alloc(len);
+  ba.copy(pa);
+  bb.copy(pb);
+  return crypto.timingSafeEqual(pa, pb) && ba.length === bb.length;
+}
 
 // Solo IPs privadas (RFC 1918) + loopback — nunca proxy hacia internet
 function isPrivateIp(ip) {
@@ -65,6 +85,10 @@ function jsonError(res, code, msg) {
   res.end(JSON.stringify({ error: msg }));
 }
 
+// Rate-limit mínimo para /restart (anti-DoS de reinicios).
+const RESTART_MIN_INTERVAL_MS = parseInt(process.env.BRIDGE_RESTART_MIN_INTERVAL_MS || '5000', 10);
+let lastRestartAt = 0;
+
 const server = http.createServer((req, res) => {
   setCors(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -85,7 +109,7 @@ const server = http.createServer((req, res) => {
   const qParts = rawQuery ? rawQuery.split('&') : [];
   const btPart = qParts.find(p => p.startsWith('bt='));
   const given = req.headers['x-bridge-token'] || (btPart ? decodeURIComponent(btPart.slice(3)) : '');
-  if (given !== TOKEN) { jsonError(res, 401, 'unauthorized'); return; }
+  if (!timingSafeEqualStr(given, TOKEN)) { jsonError(res, 401, 'unauthorized'); return; }
 
   // Token válido — endpoints de diagnóstico/control (no son proxy a impresora)
   if (rawPath === '/authcheck') {
@@ -94,6 +118,15 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (rawPath === '/restart') {
+    // Token ya verificado arriba en tiempo constante. Añadimos un rate-limit
+    // mínimo: no más de un /restart cada RESTART_MIN_INTERVAL_MS para evitar
+    // que se use como DoS de reinicios.
+    const now = Date.now();
+    if (now - lastRestartAt < RESTART_MIN_INTERVAL_MS) {
+      jsonError(res, 429, 'demasiados reinicios — espera unos segundos');
+      return;
+    }
+    lastRestartAt = now;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, restarting: true }));
     console.log('Reinicio solicitado vía /restart — saliendo (launchd lo levanta de nuevo).');

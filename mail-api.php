@@ -18,6 +18,15 @@ header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit(0); }
 
+// Límite de tamaño de petición: rechaza cuerpos > ~25 MB antes de procesar
+// (incluye los adjuntos base64 que luego pasan por json_decode).
+$content_length = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
+if ($content_length > 25 * 1024 * 1024) {
+    http_response_code(413);
+    echo json_encode(['error' => 'Petición demasiado grande (máx 25 MB)']);
+    exit;
+}
+
 $user   = trim($_POST['user']   ?? '');
 $pass   =      $_POST['pass']   ?? '';
 $action = trim($_POST['action'] ?? '');
@@ -46,6 +55,10 @@ define('SMTP_HOST', 'mail.thelab.solutions');
 define('SMTP_PORT', 465);
 
 function imap_str($folder = 'INBOX') {
+    // TODO validar cert: idealmente quitar 'novalidate-cert' para verificar el
+    // certificado TLS del servidor IMAP. Se mantiene por compatibilidad con el
+    // hosting actual (cert posiblemente self-signed / nombre no coincidente);
+    // quitarlo aquí rompería la conexión si el cert no valida.
     return '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}' . $folder;
 }
 
@@ -371,14 +384,46 @@ case 'read':
 
 // ── send ─────────────────────────────────────────────────────
 case 'send':
-    $to        = trim($_POST['to']        ?? '');
-    $cc        = trim($_POST['cc']        ?? '');
+    // Sanea cabeceras: elimina CR/LF de cada valor para evitar header injection.
+    $strip_crlf = function ($s) { return str_replace(["\r", "\n"], '', (string)$s); };
+
+    $to        = $strip_crlf(trim($_POST['to']        ?? ''));
+    $cc        = $strip_crlf(trim($_POST['cc']        ?? ''));
     $subject   = trim($_POST['subject']   ?? '');
     $body_html = $_POST['body']           ?? '';
-    $from_name = trim($_POST['from_name'] ?? '');
+    $from_name = $strip_crlf(trim($_POST['from_name'] ?? ''));
 
     if (!$to)      { echo json_encode(['error' => 'Destinatario requerido']); exit; }
     if (!$subject) { echo json_encode(['error' => 'Asunto requerido']); exit; }
+
+    // Valida cada dirección de email de los destinatarios (to y cc).
+    // Formato esperado por entrada: "Nombre <correo@dominio>" o "correo@dominio".
+    $extract_email = function ($entry) {
+        $entry = trim($entry);
+        if ($entry === '') return null;
+        if (preg_match('/<([^>]+)>/', $entry, $m)) return trim($m[1]);
+        return $entry;
+    };
+    foreach (explode(',', $to) as $rcpt) {
+        $addr = $extract_email($rcpt);
+        if ($addr === null) continue;
+        if (!filter_var($addr, FILTER_VALIDATE_EMAIL)) {
+            http_response_code(400);
+            echo json_encode(['error' => "Dirección de destinatario inválida: $addr"]);
+            exit;
+        }
+    }
+    if ($cc !== '') {
+        foreach (explode(',', $cc) as $rcpt) {
+            $addr = $extract_email($rcpt);
+            if ($addr === null) continue;
+            if (!filter_var($addr, FILTER_VALIDATE_EMAIL)) {
+                http_response_code(400);
+                echo json_encode(['error' => "Dirección Cc inválida: $addr"]);
+                exit;
+            }
+        }
+    }
 
     // Adjuntos: JSON [{name, type, data(base64)}] — máx 20 MB decodificado
     $attachments = [];

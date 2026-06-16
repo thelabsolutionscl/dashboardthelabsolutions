@@ -1,2 +1,14 @@
 .claude/worktrees/
 printer-bridge/.bridge-token
+
+# Secretos / certificados — nunca commitear
+**/.env
+**/.env.*
+!**/.env.example
+**/.dev.vars
+cert/
+**/*.pfx
+**/*.pem
+**/*.key
+sii-worker/data/
+**/caf_*.xml
