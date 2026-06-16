@@ -3292,7 +3292,7 @@ function doPost(e) {
       guardado: new Date().toISOString(),
       gasto: body.gasto, impresiones: body.impresiones, clics: body.clics,
       conversiones: body.conversiones, valor_conversion: body.valor_conversion,
-      campanas: body.campanas, terminos: body.terminos || []
+      campanas: body.campanas, terminos: body.terminos || [], keywords: body.keywords || []
     }));
     return json({ok:true, saved:true});
   } catch(err) { return json({ok:false, error:err.message}); }
@@ -3425,11 +3425,45 @@ function _enviarStats() {
     }
     Logger.log('Términos de búsqueda: ' + searchTerms.length);
   } catch(e) { Logger.log('Aviso términos de búsqueda: ' + e.message); }
+  // Palabras clave con Quality Score: dónde mejorar relevancia/landing para bajar el CPC
+  var keywords = [];
+  try {
+    var kwRep = AdsApp.report(
+      'SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ' +
+      'ad_group_criterion.quality_info.quality_score, ' +
+      'ad_group_criterion.quality_info.creative_quality_score, ' +
+      'ad_group_criterion.quality_info.post_click_quality_score, ' +
+      'ad_group_criterion.quality_info.search_predicted_ctr, ' +
+      'campaign.name, ad_group.name, metrics.impressions, metrics.clicks, ' +
+      'metrics.cost_micros, metrics.conversions ' +
+      'FROM keyword_view WHERE segments.date DURING LAST_30_DAYS ' +
+      "AND ad_group_criterion.status = 'ENABLED' AND metrics.impressions > 0 " +
+      'ORDER BY metrics.cost_micros DESC LIMIT 60'
+    );
+    var kwRows = kwRep.rows();
+    while (kwRows.hasNext()) {
+      var kr = kwRows.next();
+      keywords.push({
+        kw: kr['ad_group_criterion.keyword.text'],
+        match: kr['ad_group_criterion.keyword.match_type'],
+        qs: parseInt(kr['ad_group_criterion.quality_info.quality_score']||0),
+        qs_anuncio: kr['ad_group_criterion.quality_info.creative_quality_score'],
+        qs_landing: kr['ad_group_criterion.quality_info.post_click_quality_score'],
+        qs_ctr: kr['ad_group_criterion.quality_info.search_predicted_ctr'],
+        campana: kr['campaign.name'], grupo: kr['ad_group.name'],
+        impresiones: parseInt(kr['metrics.impressions']||0),
+        clics: parseInt(kr['metrics.clicks']||0),
+        gasto: Math.round(parseInt(kr['metrics.cost_micros']||0)/1e6),
+        conversiones: parseFloat(kr['metrics.conversions']||0)
+      });
+    }
+    Logger.log('Palabras clave: ' + keywords.length);
+  } catch(e) { Logger.log('Aviso palabras clave: ' + e.message); }
   try {
     UrlFetchApp.fetch(ENDPOINT, {
       method:'post', contentType:'application/json', muteHttpExceptions:true,
       payload:JSON.stringify({
-        secret:SECRET, campanas:campaigns, terminos:searchTerms,
+        secret:SECRET, campanas:campaigns, terminos:searchTerms, keywords:keywords,
         gasto:t.gasto, impresiones:t.impresiones, clics:t.clics,
         conversiones:t.conversiones, valor_conversion:t.valor_conversion
       })
@@ -5377,6 +5411,8 @@ CAUTELA CON DATOS: si una campaña tiene <8 conversiones en el período, NO tome
 
 DIRECCIÓN, NO SÓLO LA FOTO: el contexto incluye una sección TENDENCIA (vs la carga anterior), ANOMALÍAS detectadas y RITMO DE PRESUPUESTO. Reacciona a la dirección: si el ROAS-real baja, el CPC se dispara o una campaña deja de convertir, eso es la alerta #1 aunque los totales se vean bien. Si vas tope de presupuesto y el ROAS-real es ≥1, recomienda subir ppto; si sobra presupuesto, el problema no es la plata sino keywords/ranking/anuncio.
 
+QUALITY SCORE = CPC MÁS BARATO: el contexto puede traer PALABRAS CLAVE con su Quality Score (1-10) y los 3 componentes (anuncio/relevancia, experiencia de landing, CTR esperado). Una keyword con QS bajo (≤5) que gasta está pagando un CPC inflado — subir su QS baja el costo sin tocar el presupuesto. Diagnostica por el componente más débil: anuncio bajo→reescribir titulares con la keyword; landing bajo→mejorar la página; CTR esperado bajo→keyword poco relevante (acotar a exacta o pausar). Las keywords que gastan sin convertir son candidatas a pausa o a negativo; las que convierten, protégelas.
+
 ESTRUCTURA DE RESPUESTA:
 1. DIAGNÓSTICO (2–3 líneas: ROAS-real vs reportado, hacia dónde va la tendencia, qué gana y qué pierde plata)
 2. ALERTAS CRÍTICAS (máx 3, con impacto estimado en $ y por qué)
@@ -5391,7 +5427,7 @@ AL FINAL incluye SIEMPRE un bloque entre [ACTIONS] y [/ACTIONS] con un JSON arra
 Usa los IDs exactos que aparecen en los datos. Sólo acciones que recomiendes de verdad (máx 6). Si no hay ninguna, pon [].
 Sé específico con números y campañas concretas. Sin relleno. CLP con puntos de miles.`,
    pre:'',
-   qs:['Analiza el rendimiento actual y dame las 3 acciones más urgentes','¿En qué campaña debo aumentar el presupuesto y por qué?','El ROAS está bajo — ¿qué cambios concretos hago esta semana?','¿Cómo redistribuyo el presupuesto para maximizar conversiones?']},
+   qs:['Analiza el rendimiento actual y dame las 3 acciones más urgentes','¿En qué campaña debo aumentar el presupuesto y por qué?','El ROAS está bajo — ¿qué cambios concretos hago esta semana?','¿Qué palabras clave tienen Quality Score bajo y cómo bajo su CPC?','¿Qué términos/keywords agrego como negativos para dejar de quemar plata?']},
 
   {id:'LINKEDIN',label:'LINKEDIN_AGENT',icon:'🔗',badge:'badge-purple',
    sys:`Eres el LINKEDIN_AGENT de The Lab Solutions, empresa de fabricación digital B2B en Santiago, Chile.
@@ -10576,6 +10612,26 @@ function buildAgentContext(id){
       } else {
         lines.push('\n(El script aún NO envía términos de búsqueda ni impression share — actualiza el Script 2 para recomendaciones de negativos/keywords y de presupuesto vs ranking.)');
       }
+      // ── Palabras clave + Quality Score (si el script las envía): bajar el CPC mejorando relevancia ──
+      const kws=d.keywords||[];
+      if(kws.length){
+        const _qsTxt=v=>({ABOVE_AVERAGE:'sobre el promedio',AVERAGE:'promedio',BELOW_AVERAGE:'BAJO el promedio'}[v]||v||'—');
+        // QS bajo con gasto = el CPC está inflado por relevancia; la palanca más barata
+        const lowQS=kws.filter(k=>(k.qs||0)>0&&(k.qs||0)<=5&&(k.gasto||0)>2000).sort((a,b)=>(b.gasto||0)-(a.gasto||0));
+        if(lowQS.length){
+          lines.push('\nPALABRAS CLAVE CON QUALITY SCORE BAJO (≤5) QUE GASTAN — bajar el CPC mejorando anuncio/landing:');
+          lowQS.slice(0,10).forEach(k=>lines.push(`  • "${k.kw}" [${k.match||'?'}] QS ${k.qs}/10 | gasto ${fmtCLP(k.gasto||0)}, ${k.conversiones||0} conv | anuncio: ${_qsTxt(k.qs_anuncio)}, landing: ${_qsTxt(k.qs_landing)}, CTR esperado: ${_qsTxt(k.qs_ctr)}${k.campana?' ('+k.campana+')':''}`));
+          lines.push('  → Componente más débil = dónde actuar: "anuncio bajo"→reescribe titulares con la keyword; "landing bajo"→mejora la página de destino; "CTR esperado bajo"→keyword poco relevante, considera pausarla o moverla a exacta.');
+        }
+        // Keywords que gastan sin convertir (candidatas a pausa/negativo o exacta)
+        const kwWaste=kws.filter(k=>(k.gasto||0)>4000&&(k.conversiones||0)===0).sort((a,b)=>(b.gasto||0)-(a.gasto||0));
+        if(kwWaste.length){
+          lines.push('PALABRAS CLAVE QUE GASTAN SIN CONVERTIR (candidatas a pausar o acotar a exacta):');
+          kwWaste.slice(0,8).forEach(k=>lines.push(`  • "${k.kw}" [${k.match||'?'}] → gasto ${fmtCLP(k.gasto||0)}, ${k.clics||0} clics, 0 conv${k.campana?' ('+k.campana+')':''}`));
+        }
+        const kwWin=kws.filter(k=>(k.conversiones||0)>0).sort((a,b)=>(b.conversiones||0)-(a.conversiones||0)).slice(0,5);
+        if(kwWin.length){lines.push('PALABRAS CLAVE QUE CONVIERTEN (protégelas, sube ppto/puja si rinden):');kwWin.forEach(k=>lines.push(`  • "${k.kw}" [${k.match||'?'}] → ${k.conversiones} conv, gasto ${fmtCLP(k.gasto||0)}, QS ${k.qs||'—'}/10`));}
+      }
       lines.push('\nCONTEXTO NEGOCIO:');
       lines.push(`  Pedidos activos: ${pedActivos.length} | Atrasados: ${pedAtrasados.length} | Revenue semana: ${fmtCLP(revSemana)}`);
       lines.push('  Productos y márgenes orientativos: Trofeo ~$18.000 (margen ~40%), Medalla ~$4.500 (~45%), Neón $18-25k/ml (~35%), Señalética $8-15k (~40%), 3D PLA $24/g+$1.200/h. → un cliente vale varios pedidos; pondera por ganancia, no por una venta.');
@@ -15598,15 +15654,29 @@ function getAdsDemoData(days){
     conversiones:Math.round(38*f),valor_conversion:Math.round(1140000*f),
     campanas:[
       {id:'1',nombre:'Búsqueda - Impresión 3D General',estado:'ENABLED',presupuesto:8000,
-        gasto:Math.round(74200*f),impresiones:Math.round(38400*f),clics:Math.round(980*f),conversiones:Math.round(18*f),valor_conversion:Math.round(540000*f)},
+        gasto:Math.round(74200*f),impresiones:Math.round(38400*f),clics:Math.round(980*f),conversiones:Math.round(18*f),valor_conversion:Math.round(540000*f),
+        is:0.42,is_lost_budget:0.31,is_lost_rank:0.27},
       {id:'2',nombre:'Búsqueda - Arquitectura & Diseño',estado:'ENABLED',presupuesto:6000,
-        gasto:Math.round(58900*f),impresiones:Math.round(29100*f),clics:Math.round(820*f),conversiones:Math.round(12*f),valor_conversion:Math.round(360000*f)},
+        gasto:Math.round(58900*f),impresiones:Math.round(29100*f),clics:Math.round(820*f),conversiones:Math.round(12*f),valor_conversion:Math.round(360000*f),
+        is:0.55,is_lost_budget:0.08,is_lost_rank:0.37},
       {id:'3',nombre:'Display Remarketing',estado:'ENABLED',presupuesto:3000,
         gasto:Math.round(31400*f),impresiones:Math.round(22700*f),clics:Math.round(310*f),conversiones:Math.round(6*f),valor_conversion:Math.round(180000*f)},
       {id:'4',nombre:'Búsqueda - Papelería Corporativa',estado:'PAUSED',presupuesto:4000,
         gasto:Math.round(18200*f),impresiones:Math.round(3900*f),clics:Math.round(180*f),conversiones:Math.round(2*f),valor_conversion:Math.round(60000*f)},
       {id:'5',nombre:'YouTube - Branding Lab',estado:'ENABLED',presupuesto:2000,
         gasto:Math.round(4700*f),impresiones:Math.round(102*f*100),clics:Math.round(20*f),conversiones:0,valor_conversion:0},
+    ],
+    terminos:[
+      {termino:'impresora 3d barata',campana:'Búsqueda - Impresión 3D General',clics:Math.round(64*f),gasto:Math.round(11800*f),conversiones:0},
+      {termino:'reparar impresora 3d',campana:'Búsqueda - Impresión 3D General',clics:Math.round(38*f),gasto:Math.round(7200*f),conversiones:0},
+      {termino:'impresión 3d santiago',campana:'Búsqueda - Impresión 3D General',clics:Math.round(120*f),gasto:Math.round(22400*f),conversiones:Math.round(9*f)},
+      {termino:'maqueta arquitectura',campana:'Búsqueda - Arquitectura & Diseño',clics:Math.round(72*f),gasto:Math.round(15100*f),conversiones:Math.round(7*f)},
+    ],
+    keywords:[
+      {kw:'impresora 3d',match:'BROAD',qs:4,qs_anuncio:'BELOW_AVERAGE',qs_landing:'AVERAGE',qs_ctr:'BELOW_AVERAGE',campana:'Búsqueda - Impresión 3D General',grupo:'3D General',impresiones:Math.round(14200*f),clics:Math.round(280*f),gasto:Math.round(28400*f),conversiones:Math.round(2*f)},
+      {kw:'impresión 3d santiago',match:'PHRASE',qs:8,qs_anuncio:'ABOVE_AVERAGE',qs_landing:'ABOVE_AVERAGE',qs_ctr:'AVERAGE',campana:'Búsqueda - Impresión 3D General',grupo:'3D Local',impresiones:Math.round(9800*f),clics:Math.round(310*f),gasto:Math.round(21600*f),conversiones:Math.round(11*f)},
+      {kw:'prototipo 3d',match:'PHRASE',qs:5,qs_anuncio:'AVERAGE',qs_landing:'BELOW_AVERAGE',qs_ctr:'AVERAGE',campana:'Búsqueda - Arquitectura & Diseño',grupo:'Prototipos',impresiones:Math.round(6100*f),clics:Math.round(150*f),gasto:Math.round(13900*f),conversiones:0},
+      {kw:'maqueta arquitectura',match:'EXACT',qs:9,qs_anuncio:'ABOVE_AVERAGE',qs_landing:'ABOVE_AVERAGE',qs_ctr:'ABOVE_AVERAGE',campana:'Búsqueda - Arquitectura & Diseño',grupo:'Maquetas',impresiones:Math.round(4200*f),clics:Math.round(190*f),gasto:Math.round(16800*f),conversiones:Math.round(7*f)},
     ]
   };
 }
