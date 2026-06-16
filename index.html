@@ -4079,7 +4079,7 @@ function _reportarResultados(muts) {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Mes</th><th>Cliente</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Por Cobrar</th><th>Fact. N°</th></tr></thead>
+          <thead><tr><th>Mes</th><th>Cliente</th><th>Empresa</th><th>Ítem</th><th>Total+IVA</th><th>Por Cobrar</th><th title="Días de mora estimados (vencimiento ≈ inicio de mes + 30 días)">Mora</th><th>Fact. N°</th></tr></thead>
           <tbody id="fin-cobrar-body"></tbody>
         </table>
       </div>
@@ -9520,7 +9520,19 @@ async function bulkDeletePedidos(){
 }
 async function bulkEditPedidoEstado(){
   const estado=document.getElementById('pedidosBulkEstado')?.value;if(!estado){toast('Selecciona un estado primero','error');return;}
-  const ids=[...selectedPedidos];if(!ids.length) return;
+  let ids=[...selectedPedidos];if(!ids.length) return;
+  // Compuerta de calidad en lote: nunca despachar rechazados; avisar de los que no tienen QA aprobado
+  if(estado==='Despachado'){
+    const sel=ids.map(id=>state.pedidos.find(x=>x.id===id)).filter(Boolean);
+    const rechazados=sel.filter(p=>(p.fields['Resultado QA']||'')==='Rechazado');
+    const sinAprobar=sel.filter(p=>(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'&&(p.fields['Resultado QA']||'')!=='Rechazado');
+    if(rechazados.length){
+      toast(`🚫 ${rechazados.length} pedido(s) con QA RECHAZADO se excluyen del despacho`,'error');
+      const rejIds=new Set(rechazados.map(p=>p.id));ids=ids.filter(id=>!rejIds.has(id));
+      if(!ids.length){return;}
+    }
+    if(sinAprobar.length&&!confirm(`⚠ ${sinAprobar.length} de ${ids.length} pedido(s) NO tienen QA aprobado.\n¿Despachar igualmente sin control de calidad?`)) return;
+  }
   if(!confirm(`¿Cambiar estado a "${estado}" para ${ids.length} pedido${ids.length!==1?'s':''}?`)) return;
   const btn=document.querySelector('[onclick="bulkEditPedidoEstado()"]');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   let ok=0,err=0;
@@ -9562,6 +9574,12 @@ async function advancePedido(id,estado){
   const f=p.fields;
   // Bloqueo duro: saldo antes de despachar
   if(estado==='Despachado'&&!f['Saldo pagado (50%)']){toast('⚠ Confirma el saldo (50%) antes de despachar','error');return;}
+  // Compuerta de calidad: no despachar sin QA aprobado (rechazado = bloqueo; pendiente = confirmación)
+  if(estado==='Despachado'){
+    const qa=f['Resultado QA']||'Pendiente';
+    if(qa==='Rechazado'){toast('🚫 QA RECHAZADO — no se puede despachar. Corrige y re-evalúa el QA primero.','error');return;}
+    if(qa!=='QA aprobado'&&!confirm('⚠ Este pedido NO tiene QA aprobado.\n¿Despachar igualmente sin control de calidad?')) return;
+  }
   // Advertencia suave: sin ningún pago al pasar a producción
   if(estado==='En producción'&&!f['Anticipo pagado (50%)']&&!f['Saldo pagado (50%)']){
     if(!confirm('⚠ No hay abono ni pago total registrado para este pedido.\n¿Estás seguro que quieres avanzar a "En producción"?')) return;
@@ -12494,6 +12512,20 @@ function getMaintAlerts(m){
   return MAINT_TYPES.filter(t=>getHoursSinceMaint(m.id,t.key)>=getMaintThreshold(t.key)*0.9)
     .map(t=>({...t,hours:getHoursSinceMaint(m.id,t.key),threshold:getMaintThreshold(t.key)}));
 }
+// Ritmo de impresión (h/semana) de las últimas 4 semanas, para proyectar mantención
+function getWeeklyPrintRate(id){
+  try{const cut=Date.now()-28*86400000;const hrs=JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id&&x.result==='Completado'&&(x.ts||x.end||0)>=cut).reduce((s,x)=>s+(x.dur||0)/60,0);return hrs/4;}catch(e){return 0;}
+}
+// Mantención más próxima a vencer, con ETA en semanas según el ritmo de uso
+function getMaintForecast(m){
+  const rate=getWeeklyPrintRate(m.id);let soonest=null;
+  MAINT_TYPES.forEach(t=>{
+    const left=getMaintThreshold(t.key)-getHoursSinceMaint(m.id,t.key);
+    const weeks=left<=0?0:(rate>0?left/rate:Infinity);
+    if(!soonest||weeks<soonest.weeks)soonest={tipo:t.label,key:t.key,hoursLeft:left,weeks,rate};
+  });
+  return soonest;
+}
 function getTotalFilamentKg(id){
   try{const mm=JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*0.000002982;}catch(e){return 0;}}
 function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFloat(localStorage.getItem(FILAMENT_COST_KEY)||'0');return Math.round(kg*cost);}
@@ -12514,10 +12546,16 @@ function renderMaintenanceTable(){
       return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':lastRec?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':lastRec?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':lastRec?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${lastStr}</span></span>`;
     }).join('');
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
+    const fc=getMaintForecast(m);
+    let fcHtml;
+    if(!fc||(fc.rate<=0&&fc.hoursLeft>0))fcHtml=`<span style="color:var(--text3);font-size:10px" title="Sin impresiones completadas en las últimas 4 semanas — no se puede proyectar">sin uso reciente</span>`;
+    else if(fc.hoursLeft<=0)fcHtml=`<span style="color:#ff4444;font-size:10px;font-weight:700">⚠ ${escapeHtml(fc.tipo)} vencida</span>`;
+    else{const w=fc.weeks;const col=w<1?'#ff4444':w<2?'#ffaa00':'#00d4aa';const lbl=w<1?'esta semana':w<2?`~${Math.round(w*7)} días`:`~${Math.round(w)} sem`;fcHtml=`<span style="color:${col};font-size:10px;font-weight:600" title="${escapeHtml(fc.tipo)}: faltan ${fc.hoursLeft.toFixed(0)}h al ritmo de ${fc.rate.toFixed(1)}h/semana">${escapeHtml(fc.tipo)} en ${lbl}</span>`;}
     return`<tr style="border-bottom:1px solid var(--border2)">
       <td style="padding:9px 10px;font-size:11px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc?.color||'#888'};margin-right:6px"></span><b>${m.nombre}</b> <span style="color:var(--text3)">#${m.numG}</span></td>
       <td style="padding:9px 10px;font-size:11px;text-align:center;font-weight:700;color:var(--accent)">${totalH}h</td>
       <td style="padding:9px 10px"><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div></td>
+      <td style="padding:9px 10px;white-space:nowrap">${fcHtml}</td>
       <td style="padding:9px 10px;font-size:10px;color:var(--text3);white-space:nowrap">${filKg}kg${filCost>0?` · $${filCost.toLocaleString('es-CL')}`:''}  </td>
       <td style="padding:9px 10px"><button onclick="openMaintModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:4px 10px;cursor:pointer;white-space:nowrap" ${alerts.length?'style="border-color:rgba(255,170,0,0.5)"':''}>+ Registrar</button></td>
     </tr>`;
@@ -12527,6 +12565,7 @@ function renderMaintenanceTable(){
       <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Máquina</th>
       <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:center">Horas totales</th>
       <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Estado mantención</th>
+      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left" title="Proyección según horas de impresión de las últimas 4 semanas">Próxima mantención</th>
       <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Filamento</th>
       <th style="padding:8px 10px;font-size:10px;color:var(--text3)"></th>
     </tr></thead>
@@ -17115,11 +17154,19 @@ function finRenderCobrar(){
     </div>`:'';
   }
 
+  // Mora por factura + orden por urgencia (más morosa primero)
+  const ordenadas=data.map(r=>{
+    const venc=new Date(new Date(`${r.year}-${r.mes}-01`).getTime()+30*86400000);
+    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
+    return{...r,_dias:dias};
+  }).sort((a,b)=>b._dias-a._dias||(b.porCobrar||0)-(a.porCobrar||0));
   let html='';
-  data.forEach(r=>{
+  ordenadas.forEach(r=>{
     const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
     const cobrar=r.porCobrar||tot;
     const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
+    const d=r._dias;const mcol=d>90?'var(--danger)':d>30?'var(--warn)':'var(--text3)';
+    const mlbl=d<=0?'—':`${d}d`;
     html+=`<tr>
       <td data-label="Mes">${mesNombre} ${r.year}</td>
       <td data-label="Cliente" style="font-weight:600">${r.nombre}</td>
@@ -17127,10 +17174,11 @@ function finRenderCobrar(){
       <td data-label="Ítem">${r.item}</td>
       <td data-label="Total+IVA" style="text-align:right">${clp(tot)}</td>
       <td data-label="Por Cobrar" style="text-align:right;color:var(--danger);font-weight:700">${clp(cobrar)}</td>
+      <td data-label="Mora" style="text-align:right;color:${mcol};font-weight:600">${mlbl}</td>
       <td data-label="Fact.N°">${r.fact||'—'}</td>
     </tr>`;
   });
-  if(!html)html='<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro registradas</td></tr>';
+  if(!html)html='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro registradas</td></tr>';
   document.getElementById('fin-cobrar-body').innerHTML=html;
 }
 // Plan de cobranza con IA: prioriza toda la cartera por mora y monto (FINANCE_AGENT)
@@ -22067,7 +22115,8 @@ self.onmessage=function(ev){
       return`<option value="${m.id}" ${isSugg?'selected':m.modelo===model?'selected':''}>${label}</option>`;
     }).join('');
     const kb=Math.round(S.gcode.length/1024);
-    const pk=localStorage.getItem('sl_price_kg')||'15000',rh=localStorage.getItem('sl_rate_h')||'1500';
+    // Precio del filamento: usa el ya configurado en Máquinas (filament_cost_clp) si el slicer no tiene uno propio, para mantener un solo número en toda la app
+    const pk=localStorage.getItem('sl_price_kg')||localStorage.getItem('filament_cost_clp')||'15000',rh=localStorage.getItem('sl_rate_h')||'1500';
     const warns=[];
     if(S.params.supports)warns.push('<b>Soportes activados</b>: '+(S.params.treeSupports?'tipo árbol (ramas que se fusionan en troncos, fáciles de retirar)':'columnas en rejilla bajo los voladizos, retirar a mano')+'. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
     if(S.params.raft)warns.push('Se pidió <b>raft</b>: no está soportado — se imprime brim como adhesión alternativa.');
