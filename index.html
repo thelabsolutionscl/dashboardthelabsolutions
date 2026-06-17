@@ -6204,7 +6204,8 @@ async function saveMaintRecordAirtable(rec){
   await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields:{maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()}}],typecast:true})});
 }
 
-function getMaintLogLocal(){try{return JSON.parse(localStorage.getItem(MAINT_KEY)||'[]');}catch(e){return[];}}
+let _maintRaw=null,_maintParsed=[];
+function getMaintLogLocal(){const raw=localStorage.getItem(MAINT_KEY)||'[]';if(raw!==_maintRaw){try{_maintParsed=JSON.parse(raw);}catch(e){_maintParsed=[];}_maintRaw=raw;}return _maintParsed;}
 
 // ── EQUIPO PERSISTENCE ────────────────────────────────────────
 async function crearTablaEquipoEventos(){
@@ -11859,6 +11860,11 @@ function printerCamUrl(id){
   return _appendBridgeToken(`${getPrinterTunnel()}/${mm[1]}:${mm[2]||'80'}${mm[3]||'/'}`);
 }
 const HIST_KEY='printer_history_v1';
+// Caché del historial: parsea localStorage una sola vez y reusa el resultado
+// hasta que el string cambie (lo invalida automáticamente cualquier escritura).
+// Evita cientos de JSON.parse por minuto al renderizar 13+ máquinas cada 15s.
+let _histRaw=null,_histParsed=[];
+function getHist(){const raw=localStorage.getItem(HIST_KEY)||'[]';if(raw!==_histRaw){try{_histParsed=JSON.parse(raw);}catch(e){_histParsed=[];}_histRaw=raw;}return _histParsed;}
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={},_demoPrinterState={};
 // ── Print queue ──────────────────────────────────────────────
@@ -12418,7 +12424,7 @@ function saveHistoryEntry(m,file,start,end,dur,result,filamentMm=0){
   try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift({id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,filamentMm,ts:Date.now()});if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
 }
 
-function getHistoryForPrinter(id){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(h=>h.id===id);}catch(e){return[];}}
+function getHistoryForPrinter(id){return getHist().filter(h=>h.id===id);}
 
 function requestNotificationPermission(manual){
   if(!('Notification'in window))return;
@@ -12558,6 +12564,15 @@ function checkIdleAlerts(){
 
 // ── MANTENIMIENTO ─────────────────────────────────────────────
 const MAINT_KEY='printer_maint_v1',MAINT_CFG_KEY='printer_maint_cfg',FILAMENT_COST_KEY='filament_cost_clp';
+// Peso del filamento según material y diámetro (configurable en Umbrales de mantención).
+// Devuelve kg por mm de filamento extruido. Por defecto PLA 1.75 mm ≈ 0.000002982 kg/mm.
+const FILAMENT_DENSITY={PLA:1.24,PETG:1.27,ABS:1.04,ASA:1.07,TPU:1.21,Nylon:1.14};
+function getFilamentKgPerMm(){
+  const dens=FILAMENT_DENSITY[localStorage.getItem('filament_material')||'PLA']||1.24; // g/cm³
+  const dia=parseFloat(localStorage.getItem('filament_diameter')||'1.75')||1.75;       // mm
+  const area=Math.PI*(dia/2)*(dia/2);                                                  // mm²
+  return area*dens/1e6;                                                                // kg/mm
+}
 const MAINT_TYPES=[
   {key:'nozzle',label:'Nozzle',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-nut"/></svg>',defaultHours:200},
   {key:'lubrication',label:'Lubricación',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-droplet"/></svg>',defaultHours:100},
@@ -12567,7 +12582,7 @@ const MAINT_TYPES=[
 function getMaintConfig(){try{return JSON.parse(localStorage.getItem(MAINT_CFG_KEY)||'{}');}catch(e){return{};}}
 function getMaintThreshold(tipo){const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;}
 function getMaintLog(){return maquinaState.maintLog.length?maquinaState.maintLog:getMaintLogLocal();}
-function getPrintHours(id){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}catch(e){return 0;}}
+function getPrintHours(id){return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
 function getHoursSinceMaint(id,tipo){
   const log=getMaintLog().filter(x=>x.maquinaId===id&&x.tipo===tipo).sort((a,b)=>b.ts-a.ts);
   const total=getPrintHours(id);
@@ -12580,7 +12595,7 @@ function getMaintAlerts(m){
 }
 // Ritmo de impresión (h/semana) de las últimas 4 semanas, para proyectar mantención
 function getWeeklyPrintRate(id){
-  try{const cut=Date.now()-28*86400000;const hrs=JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id&&x.result==='Completado'&&(x.ts||x.end||0)>=cut).reduce((s,x)=>s+(x.dur||0)/60,0);return hrs/4;}catch(e){return 0;}
+  const cut=Date.now()-28*86400000;return getHist().filter(x=>x.id===id&&x.result==='Completado'&&(x.ts||x.end||0)>=cut).reduce((s,x)=>s+(x.dur||0)/60,0)/4;
 }
 // Mantención más próxima a vencer, con ETA en semanas según el ritmo de uso
 function getMaintForecast(m){
@@ -12593,7 +12608,7 @@ function getMaintForecast(m){
   return soonest;
 }
 function getTotalFilamentKg(id){
-  try{const mm=JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*0.000002982;}catch(e){return 0;}}
+  const mm=getHist().filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*getFilamentKgPerMm();}
 function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFloat(localStorage.getItem(FILAMENT_COST_KEY)||'0');return Math.round(kg*cost);}
 
 function renderMaintenanceTable(){
@@ -12667,6 +12682,8 @@ function openMaintConfig(){
   document.getElementById('cfgGeneral').value=cfg.general||50;
   document.getElementById('cfgIdle').value=localStorage.getItem('idle_alert_hours')||2;
   document.getElementById('cfgFilamentCost').value=localStorage.getItem(FILAMENT_COST_KEY)||0;
+  document.getElementById('cfgFilamentMaterial').value=localStorage.getItem('filament_material')||'PLA';
+  document.getElementById('cfgFilamentDiameter').value=localStorage.getItem('filament_diameter')||'1.75';
   document.getElementById('maintConfigModal').style.display='flex';
 }
 function saveMaintConfig(){
@@ -12674,15 +12691,18 @@ function saveMaintConfig(){
   localStorage.setItem(MAINT_CFG_KEY,JSON.stringify(cfg));
   localStorage.setItem('idle_alert_hours',document.getElementById('cfgIdle').value||2);
   localStorage.setItem(FILAMENT_COST_KEY,document.getElementById('cfgFilamentCost').value||0);
-  closeMaintConfig();renderMaintenanceTable();renderMonitorGrid();toast('Configuración guardada ✓','success');
+  localStorage.setItem('filament_material',document.getElementById('cfgFilamentMaterial').value||'PLA');
+  localStorage.setItem('filament_diameter',document.getElementById('cfgFilamentDiameter').value||'1.75');
+  closeMaintConfig();renderMaintenanceTable();renderMonitorGrid();renderProductionAnalytics();toast('Configuración guardada ✓','success');
 }
 function closeMaintConfig(){document.getElementById('maintConfigModal').style.display='none';}
 
 // ── ANALÍTICA ─────────────────────────────────────────────────
 function renderProductionAnalytics(){
   const el=document.getElementById('analyticsContent');if(!el)return;
-  let hist=[];try{hist=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}catch(e){}
+  const hist=getHist();
   if(!hist.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center">Sin datos aún — el historial se generará automáticamente cuando las impresoras estén conectadas</div>';return;}
+  const kgPerMm=getFilamentKgPerMm();
 
   // Impresiones últimas 7 días
   const days=[];const today=new Date();today.setHours(0,0,0,0);
@@ -12692,14 +12712,14 @@ function renderProductionAnalytics(){
     const entries=hist.filter(h=>new Date(h.start).toDateString()===ds);
     const count=entries.filter(h=>h.result==='Completado').length;
     const hours=entries.reduce((s,h)=>s+(h.dur||0)/60,0);
-    const filKg=entries.reduce((s,h)=>s+(h.filamentMm||0),0)*0.000002982;
+    const filKg=entries.reduce((s,h)=>s+(h.filamentMm||0),0)*kgPerMm;
     return{label:`${d.getDate()}/${d.getMonth()+1}`,count,hours:Math.round(hours*10)/10,filKg:Math.round(filKg*100)/100};
   });
   const maxCount=Math.max(...dayData.map(d=>d.count),1);
   const maxHours=Math.max(...dayData.map(d=>d.hours),1);
   const totalPrints=dayData.reduce((s,d)=>s+d.count,0);
   const totalHours=dayData.reduce((s,d)=>s+d.hours,0).toFixed(1);
-  const totalFilKg=(hist.reduce((s,h)=>s+(h.filamentMm||0),0)*0.000002982).toFixed(2);
+  const totalFilKg=(hist.reduce((s,h)=>s+(h.filamentMm||0),0)*kgPerMm).toFixed(2);
 
   // Top printers by hours
   const byPrinter=MAQUINAS.map(m=>({m,h:getPrintHours(m.id)})).sort((a,b)=>b.h-a.h).slice(0,5);
@@ -12709,7 +12729,7 @@ function renderProductionAnalytics(){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
       <div class="kpi-card"><div class="kpi-label">Impresiones (7d)</div><div class="kpi-value">${totalPrints}</div></div>
       <div class="kpi-card"><div class="kpi-label">Horas activas (7d)</div><div class="kpi-value">${totalHours}h</div></div>
-      <div class="kpi-card"><div class="kpi-label">Filamento total</div><div class="kpi-value">${totalFilKg}kg</div></div>
+      <div class="kpi-card" title="Peso calculado con ${localStorage.getItem('filament_material')||'PLA'} de ${localStorage.getItem('filament_diameter')||'1.75'} mm (configurable en Umbrales de mantención)"><div class="kpi-label">Filamento total · ${localStorage.getItem('filament_material')||'PLA'} ${localStorage.getItem('filament_diameter')||'1.75'}mm</div><div class="kpi-value">${totalFilKg}kg</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
       <div class="card" style="padding:14px">
@@ -16728,6 +16748,8 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
       <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🔧 Mantención general</label><input id="cfgGeneral" type="number" min="10" max="2000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
       <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border2);padding-top:10px"><label style="font-size:12px;color:var(--text)">💤 Alerta idle (horario laboral)</label><input id="cfgIdle" type="number" min="1" max="24" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
       <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> Costo filamento (CLP/kg)</label><input id="cfgFilamentCost" type="number" min="0" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🧵 Material filamento</label><select id="cfgFilamentMaterial" style="width:92px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="PLA">PLA</option><option value="PETG">PETG</option><option value="ABS">ABS</option><option value="ASA">ASA</option><option value="TPU">TPU</option><option value="Nylon">Nylon</option></select></div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">📏 Diámetro filamento</label><select id="cfgFilamentDiameter" style="width:92px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="1.75">1.75 mm</option><option value="2.85">2.85 mm</option><option value="3.0">3.0 mm</option></select></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn btn-primary btn-sm" onclick="saveMaintConfig()" style="flex:1">Guardar</button>
