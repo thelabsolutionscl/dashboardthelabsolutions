@@ -11802,6 +11802,7 @@ async function toggleMaquinaEstado(id){
 async function initMaquinas(){
   await loadMaquinasAirtable();
   await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
+  seedOdometerIfNeeded();
   renderMaquinasCalendar();
   renderMonitorFilterTabs();
   renderMonitorKPIs();
@@ -11865,6 +11866,28 @@ const HIST_KEY='printer_history_v1';
 // Evita cientos de JSON.parse por minuto al renderizar 13+ máquinas cada 15s.
 let _histRaw=null,_histParsed=[];
 function getHist(){const raw=localStorage.getItem(HIST_KEY)||'[]';if(raw!==_histRaw){try{_histParsed=JSON.parse(raw);}catch(e){_histParsed=[];}_histRaw=raw;}return _histParsed;}
+// ── Odómetro acumulado por máquina ────────────────────────────
+// El historial se recorta a 200 entradas, así que en una granja activa las
+// horas/filamento "totales" se subestimarían con el tiempo. El odómetro acumula
+// de forma persistente (horas completadas y mm de filamento) y no pierde datos
+// al recortarse el historial. Se siembra una vez desde el historial actual.
+const ODO_KEY='printer_odometer_v1';
+let _odo=null;
+function getOdometer(){if(_odo===null){try{_odo=JSON.parse(localStorage.getItem(ODO_KEY)||'{}');}catch(e){_odo={};}}return _odo;}
+function _saveOdometer(){try{localStorage.setItem(ODO_KEY,JSON.stringify(_odo||{}));}catch(e){}}
+function _useOdometer(){return!window._DEMO_MODE&&localStorage.getItem('printer_odometer_seeded')==='1';}
+function seedOdometerIfNeeded(){
+  if(window._DEMO_MODE||localStorage.getItem('printer_odometer_seeded')==='1')return;
+  const o={};
+  getHist().forEach(h=>{const e=o[h.id]||(o[h.id]={hours:0,filamentMm:0,prints:0});if(h.result==='Completado'){e.hours+=(h.dur||0)/60;e.prints++;}e.filamentMm+=(h.filamentMm||0);});
+  _odo=o;_saveOdometer();localStorage.setItem('printer_odometer_seeded','1');
+}
+function odoAdd(id,hours,filamentMm,completed){
+  if(window._DEMO_MODE)return;
+  const e=getOdometer()[id]||(getOdometer()[id]={hours:0,filamentMm:0,prints:0});
+  if(completed){e.hours+=hours;e.prints++;}
+  e.filamentMm+=(filamentMm||0);_saveOdometer();
+}
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={},_demoPrinterState={};
 // ── Print queue ──────────────────────────────────────────────
@@ -12050,7 +12073,7 @@ function renderMonitorGrid(){
   const el=document.getElementById('maquinaMonGrid');if(!el)return;
   const base=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
   const lista=sortedList(base);
-  el.innerHTML=lista.map(m=>{
+  const __cards=lista.map(m=>{
     const s=_printerStatus[m.id]||{state:'offline'};
     const sm=printerStateMeta(s.state);
     const ip=getPrinterIp(m);
@@ -12140,7 +12163,7 @@ function renderMonitorGrid(){
         </div>`;
     }
 
-    return`<div style="background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
+    return`<div id="mcard_${m.id}" style="background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
@@ -12155,7 +12178,24 @@ function renderMonitorGrid(){
       </div>
       ${body}
     </div>`;
-  }).join('');
+  });
+  // Render selectivo: solo reescribe el DOM de las tarjetas cuyo HTML cambió.
+  // Evita reconstruir el grid entero cada 15s → preserva streams MJPEG de
+  // webcam, el foco en inputs (IP/API key) y reduce reflows. Reconstruye
+  // todo solo si cambia el conjunto/orden de máquinas (filtro, orden, alta).
+  const __order=lista.map(m=>m.id).join('|');
+  if(el.__order!==__order){
+    el.innerHTML=__cards.join('');
+    el.__order=__order;el.__html={};
+    lista.forEach((m,i)=>{el.__html[m.id]=__cards[i];});
+  }else{
+    lista.forEach((m,i)=>{
+      if(el.__html[m.id]===__cards[i])return;
+      const node=document.getElementById('mcard_'+m.id);
+      if(node)node.outerHTML=__cards[i];else el.insertAdjacentHTML('beforeend',__cards[i]);
+      el.__html[m.id]=__cards[i];
+    });
+  }
   const lu=document.getElementById('monitorLastUpdate');
   if(lu)lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
@@ -12422,6 +12462,7 @@ function checkTransitions(m,s){
 
 function saveHistoryEntry(m,file,start,end,dur,result,filamentMm=0){
   try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift({id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,filamentMm,ts:Date.now()});if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
+  odoAdd(m.id,(dur||0)/60,filamentMm,result==='Completado');
 }
 
 function getHistoryForPrinter(id){return getHist().filter(h=>h.id===id);}
@@ -12582,7 +12623,7 @@ const MAINT_TYPES=[
 function getMaintConfig(){try{return JSON.parse(localStorage.getItem(MAINT_CFG_KEY)||'{}');}catch(e){return{};}}
 function getMaintThreshold(tipo){const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;}
 function getMaintLog(){return maquinaState.maintLog.length?maquinaState.maintLog:getMaintLogLocal();}
-function getPrintHours(id){return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
+function getPrintHours(id){if(_useOdometer())return(getOdometer()[id]||{}).hours||0;return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
 function getHoursSinceMaint(id,tipo){
   const log=getMaintLog().filter(x=>x.maquinaId===id&&x.tipo===tipo).sort((a,b)=>b.ts-a.ts);
   const total=getPrintHours(id);
@@ -12608,26 +12649,37 @@ function getMaintForecast(m){
   return soonest;
 }
 function getTotalFilamentKg(id){
-  const mm=getHist().filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*getFilamentKgPerMm();}
+  const mm=_useOdometer()?((getOdometer()[id]||{}).filamentMm||0):getHist().filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*getFilamentKgPerMm();}
 function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFloat(localStorage.getItem(FILAMENT_COST_KEY)||'0');return Math.round(kg*cost);}
 
 function renderMaintenanceTable(){
   const el=document.getElementById('maintTable');if(!el)return;
+  let totH=0,totKg=0,totCost=0,totPrints=0,totAlerts=0;       // acumuladores de flota
   const rows=MAQUINAS.map(m=>{
-    const totalH=getPrintHours(m.id).toFixed(1);
-    const filKg=getTotalFilamentKg(m.id).toFixed(3);
+    const ph=getPrintHours(m.id);
+    const totalH=ph.toFixed(1);
+    const filKgN=getTotalFilamentKg(m.id);const filKg=filKgN.toFixed(3);
     const filCost=getFilamentCost(m.id);
-    const alerts=getMaintAlerts(m);
-    const chips=MAINT_TYPES.map(t=>{
-      const h=getHoursSinceMaint(m.id,t.key);const thresh=getMaintThreshold(t.key);
-      const pct=h/thresh;const ok=pct<0.9;const over=pct>=1;
-      const lastRec=getMaintLog().filter(x=>x.maquinaId===m.id&&x.tipo===t.key).sort((a,b)=>b.ts-a.ts)[0];
-      const lastStr=lastRec?new Date(lastRec.ts).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'sin reg.';
+    const prints=(getOdometer()[m.id]||{}).prints||0;
+    // Una sola pasada por el log de mantención de la máquina (evita ~12 recálculos)
+    const mLog=getMaintLog().filter(x=>x.maquinaId===m.id);
+    const perType=MAINT_TYPES.map(t=>{
+      const l=mLog.filter(x=>x.tipo===t.key).sort((a,b)=>b.ts-a.ts);const last=l[0];
+      const h=last?Math.max(0,ph-last.printHoursAtTime):ph;const thresh=getMaintThreshold(t.key);
+      return{t,h,thresh,last,pct:thresh>0?h/thresh:0};
+    });
+    const alertsN=perType.filter(p=>p.pct>=0.9).length;
+    totH+=ph;totKg+=filKgN;totCost+=filCost;totPrints+=prints;totAlerts+=alertsN;
+    const chips=perType.map(({t,h,thresh,last,pct})=>{
+      const ok=pct<0.9,over=pct>=1;
+      const lastStr=last?new Date(last.ts).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'sin reg.';
       const statusIcon=over?'⚠':ok?'✓':'~';
-      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':lastRec?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':lastRec?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':lastRec?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${lastStr}</span></span>`;
+      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h (${Math.round(pct*100)}%) · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':last?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':last?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':last?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${Math.round(pct*100)}%</span></span>`;
     }).join('');
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
-    const fc=getMaintForecast(m);
+    const alerts={length:alertsN};
+    const rate=getWeeklyPrintRate(m.id);let fc=null;
+    perType.forEach(p=>{const left=p.thresh-p.h;const weeks=left<=0?0:(rate>0?left/rate:Infinity);if(!fc||weeks<fc.weeks)fc={tipo:p.t.label,hoursLeft:left,weeks,rate};});
     let fcHtml;
     if(!fc||(fc.rate<=0&&fc.hoursLeft>0)){const _disp=(typeof getMaquinaEstadoGlobal==='function'?getMaquinaEstadoGlobal(m.id):'disponible')==='disponible';fcHtml=_disp?`<span style="color:#ffaa00;font-size:10px;font-weight:600" title="Habilitada pero sin impresiones completadas en 4 semanas — capacidad ociosa">⚠ subutilizada</span>`:`<span style="color:var(--text3);font-size:10px" title="Sin impresiones recientes">sin uso reciente</span>`;}
     else if(fc.hoursLeft<=0)fcHtml=`<span style="color:#ff4444;font-size:10px;font-weight:700">⚠ ${escapeHtml(fc.tipo)} vencida</span>`;
@@ -12651,6 +12703,14 @@ function renderMaintenanceTable(){
       <th style="padding:8px 10px;font-size:10px;color:var(--text3)"></th>
     </tr></thead>
     <tbody>${rows}</tbody>
+    <tfoot><tr style="border-top:2px solid var(--border);background:var(--surface2)">
+      <td style="padding:9px 10px;font-size:10px;font-weight:700;color:var(--text)">FLOTA · ${MAQUINAS.length} máq.</td>
+      <td style="padding:9px 10px;font-size:11px;text-align:center;font-weight:700;color:var(--accent)">${totH.toFixed(0)}h</td>
+      <td style="padding:9px 10px;font-size:10px;color:${totAlerts>0?'#ffaa00':'var(--text3)'};font-weight:700">${totAlerts>0?`🔧 ${totAlerts} alerta${totAlerts>1?'s':''}`:'✓ sin alertas'}</td>
+      <td style="padding:9px 10px;font-size:10px;color:var(--text3)">${totPrints} impresiones</td>
+      <td style="padding:9px 10px;font-size:10px;color:var(--text3);white-space:nowrap;font-weight:700">${totKg.toFixed(2)}kg${totCost>0?` · $${totCost.toLocaleString('es-CL')}`:''}</td>
+      <td></td>
+    </tr></tfoot>
   </table></div>`;
 }
 
