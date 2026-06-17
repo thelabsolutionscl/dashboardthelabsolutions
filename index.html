@@ -10407,6 +10407,8 @@ function gfStart(config){
 function _gfSaveDraft(){if(GF.flowKey){try{sessionStorage.setItem(GF.flowKey,JSON.stringify({idx:GF.idx,answers:GF.answers,t:Date.now()}));}catch(e){}}}
 function _gfClearDraft(){if(GF.flowKey){try{sessionStorage.removeItem(GF.flowKey);}catch(e){}GF.flowKey=null;}}
 function gfClose(){document.getElementById('guidedModal').style.display='none';GF.steps=[];GF.answers={};GF.onComplete=null;}
+// JSON seguro para meter dentro de un atributo onclick="..." (escapa comillas dobles)
+function _gfA(v){return JSON.stringify(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
 function gfRender(){
   const step=GF.steps[GF.idx];if(!step)return;
   if(typeof step.skip==='function'&&step.skip(GF.answers)){GF.idx++;return gfRender();}
@@ -10429,7 +10431,7 @@ function gfRender(){
   if(step.type==='chips'){
     html+='<div class="gf-chips">'+step.options.map(o=>{
       const sel=step.multi?((GF.answers[step.key]||[]).indexOf(o.value)>=0):GF.answers[step.key]===o.value;
-      return '<button class="gf-chip'+(sel?' sel':'')+'" onclick="gfPick('+JSON.stringify(step.key)+','+JSON.stringify(o.value)+','+(!!step.multi)+')">'+(o.icon?o.icon+' ':'')+escapeHtml(o.label)+'</button>';
+      return '<button class="gf-chip'+(sel?' sel':'')+'" onclick="gfPick('+_gfA(step.key)+','+_gfA(o.value)+','+(!!step.multi)+')">'+(o.icon?o.icon+' ':'')+escapeHtml(o.label)+'</button>';
     }).join('')+'</div>';
   }else if(step.type==='text'){
     html+='<textarea id="gfInput" class="gf-input" rows="'+(step.rows||3)+'" placeholder="'+escapeHtml(step.placeholder||'')+'">'+escapeHtml(GF.answers[step.key]||'')+'</textarea>';
@@ -10499,7 +10501,7 @@ function gfClientSearch(){
   const el=document.getElementById('gfClientResults');if(!el)return;
   const q=(document.getElementById('gfClientSearch')?.value||'').toLowerCase().trim();
   const src=q?state.clientes.filter(c=>((c.fields['Empresa']||'')+' '+(c.fields['Contacto']||'')).toLowerCase().includes(q)).slice(0,8):state.clientes.slice(0,6);
-  el.innerHTML=src.map(c=>'<button class="gf-clientrow" onclick="gfClientPick('+JSON.stringify(c.id)+','+JSON.stringify(c.fields['Empresa']||'—')+')"><span style="font-size:16px">🏢</span><span style="flex:1;min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(c.fields['Empresa']||'—')+'</b><span style="font-size:11px;color:var(--text3)">'+escapeHtml(c.fields['Contacto']||'')+'</span></span></button>').join('')||'<div class="gf-sub">Sin coincidencias. Crea un cliente nuevo u omite.</div>';
+  el.innerHTML=src.map(c=>'<button class="gf-clientrow" onclick="gfClientPick('+_gfA(c.id)+','+_gfA(c.fields['Empresa']||'—')+')"><span style="font-size:16px">🏢</span><span style="flex:1;min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(c.fields['Empresa']||'—')+'</b><span style="font-size:11px;color:var(--text3)">'+escapeHtml(c.fields['Contacto']||'')+'</span></span></button>').join('')||'<div class="gf-sub">Sin coincidencias. Crea un cliente nuevo u omite.</div>';
 }
 function gfClientPick(id,nombre){GF.answers.clienteId=id;GF.answers.clienteNombre=nombre;gfNext();}
 function gfClientNew(){const f=document.getElementById('gfClientNewForm');if(f){f.style.display=f.style.display==='none'?'block':'none';if(f.style.display==='block')setTimeout(()=>document.getElementById('gfNewEmpresa')?.focus(),40);}}
