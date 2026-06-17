@@ -8585,7 +8585,7 @@ function _driveGetToken(){
     if(!_driveTokenClient){
       _driveTokenClient=google.accounts.oauth2.initTokenClient({
         client_id:clientId,
-        scope:'https://www.googleapis.com/auth/drive.file',
+        scope:'https://www.googleapis.com/auth/drive',
         callback:(resp)=>{
           if(resp.error){reject(new Error('OAuth: '+resp.error));return;}
           _driveAccessToken=resp.access_token;
@@ -8609,7 +8609,7 @@ async function _driveApiFetch(url,opts={}){
 async function _driveGetOrCreateFolder(name,parentId){
   const safe=name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,100);
   const q=`name='${safe.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder'${parentId?" and '"+parentId+"' in parents":""} and trashed=false`;
-  const search=await _driveApiFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id)&pageSize=1');
+  const search=await _driveApiFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id)&orderBy=createdTime&pageSize=1');
   if(search.files?.length) return search.files[0].id;
   const meta={name:safe,mimeType:'application/vnd.google-apps.folder'};
   if(parentId) meta.parents=[parentId];
@@ -8884,7 +8884,7 @@ function _renderAdjuntosBody(files){
       ${canPrev?`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="previewAdjunto('${f.id}')">👁 Ver</button>`:''}
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="downloadAdjunto('${f.id}')" title="Descargar">⬇</button>
     </div>`;
-  }).join(''):'<div style="padding:26px;text-align:center;color:var(--text3);font-size:13px">📭 Sin archivos en esta carpeta todavía.<br><span style="font-size:11px">Las fichas, facturas y fotos subidas desde el panel aparecerán aquí.</span></div>';
+  }).join(''):'<div style="padding:26px;text-align:center;color:var(--text3);font-size:13px">📭 Esta carpeta de Drive está vacía.<br><span style="font-size:11px">Aún no hay archivos para este pedido.</span></div>';
   body.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px">${rows}</div><div id="adjuntosPreview" style="display:none;margin-top:14px;border-top:1px solid var(--border2);padding-top:12px"></div>`;
 }
 async function previewAdjunto(fileId){
