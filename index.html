@@ -78,7 +78,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 body.kiosk .icon-dock{display:none!important;}
 /* ── Mobile Bottom Dock (visible solo en móvil) ────────────────── */
 @keyframes mbd-in{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.mobile-bottom-dock{display:none;position:fixed;bottom:0;left:0;right:0;z-index:190;background:rgba(8,8,8,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,0.1);box-shadow:0 -4px 32px rgba(0,0,0,0.6);flex-direction:column;align-items:center;transition:transform .32s cubic-bezier(0.32,0.72,0,1);}
+.mobile-bottom-dock{display:none;position:fixed;bottom:0;left:0;right:0;z-index:190;background:rgba(8,8,8,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,0.1);box-shadow:0 -4px 32px rgba(0,0,0,0.6);flex-direction:column;align-items:center;transition:transform .32s cubic-bezier(0.32,0.72,0,1);touch-action:none;}
 .mbd-handle-row{width:100%;display:flex;justify-content:center;align-items:center;padding:9px 0 6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .mbd-handle-pill{width:38px;height:5px;border-radius:3px;background:rgba(255,255,255,0.22);transition:background .2s,width .18s;pointer-events:none;}
 .mbd-handle-row:active .mbd-handle-pill{background:var(--accent);width:56px;}
@@ -248,6 +248,19 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .act-item-purple:hover{background:rgba(192,132,252,0.1)!important;}
 .act-item-cyan{color:#00d4cc!important;}
 .act-item-cyan:hover{background:rgba(0,212,204,0.1)!important;}
+/* Feedback táctil al tocar (móvil no tiene :hover) */
+.act-item:active{background:var(--surface3);}
+.act-item-green:active{background:rgba(0,212,170,0.12)!important;}
+.act-item-red:active{background:rgba(255,68,68,0.12)!important;}
+.act-item-yellow:active{background:rgba(0,212,204,0.1)!important;}
+.act-item-blue:active{background:rgba(59,130,246,0.1)!important;}
+.act-item-purple:active{background:rgba(192,132,252,0.1)!important;}
+.act-item-cyan:active{background:rgba(0,212,204,0.1)!important;}
+/* Botón de cierre (✕) inyectado en modales que no tenían uno visible */
+.modal-x-auto{position:absolute;top:10px;right:12px;z-index:5;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .12s,color .12s;}
+.modal-x-auto:hover,.modal-x-auto:active{background:rgba(255,68,68,0.12);color:var(--danger);border-color:rgba(255,68,68,0.3);}
+/* Botón Conectar Google Drive — estado conectado */
+.drive-conn-btn.drive-on{color:var(--accent3)!important;border-color:rgba(0,212,170,0.4)!important;background:rgba(0,212,170,0.1)!important;}
 /* Agent inline modal */
 .agent-modal-result{white-space:pre-wrap;font-size:12px;line-height:1.68;color:var(--text2);min-height:80px;}
 .agent-modal-result.loading{color:var(--text3);font-style:italic;}
@@ -446,7 +459,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .act-menu{position:fixed!important;bottom:0!important;left:0!important;right:0!important;top:auto!important;border-radius:14px 14px 0 0;min-width:unset;max-height:55vh;overflow-y:auto;z-index:2000;padding-bottom:env(safe-area-inset-bottom,8px);}
   .act-menu.open::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:-1;border-radius:0;}
   /* Scroll hint fade on horizontally scrollable tables */
-  [style*="overflow-x:auto"]:not(.kpi-grid){position:relative;}
+  [style*="overflow-x:auto"]:not(.kpi-grid){position:relative;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
   .scroll-x-wrap{position:relative;}
   .scroll-x-wrap::after{content:'';position:absolute;top:0;right:0;bottom:0;width:32px;background:linear-gradient(to right,transparent,rgba(14,14,14,0.85));pointer-events:none;border-radius:0 8px 8px 0;}
   /* Tablas de datos → tarjetas apiladas en móvil */
@@ -566,6 +579,24 @@ body.kiosk .maquina-section{display:none!important;}
 body.kiosk #tab-maquinas .section-header{display:none!important;}
 body.kiosk #maquinaMonGrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;}
 body.kiosk .tab-content{padding-top:12px!important;}
+/* ── Monitor de impresoras: rediseño de tarjetas ── */
+@keyframes pdotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.78)}}
+@keyframes pbarStripe{from{background-position:0 0}to{background-position:28px 0}}
+#maquinaMonGrid .pcard{position:relative;transition:border-color .3s,box-shadow .3s}
+#maquinaMonGrid .pcard.active{box-shadow:0 6px 22px -12px var(--acc,transparent)}
+#maquinaMonGrid .pdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc,#888);flex-shrink:0}
+#maquinaMonGrid .pdot.live{animation:pdotPulse 1.5s ease-in-out infinite}
+#maquinaMonGrid .pbar{position:relative;background:var(--surface2);border-radius:5px;height:10px;overflow:hidden}
+#maquinaMonGrid .pbar>i{display:block;height:100%;border-radius:5px;background:var(--acc,#00d4aa);transition:width .6s ease}
+#maquinaMonGrid .pbar.live>i{background-image:linear-gradient(110deg,transparent 0 33%,rgba(255,255,255,.28) 50%,transparent 67% 100%);background-size:28px 100%;animation:pbarStripe 1s linear infinite}
+#maquinaMonGrid .pbig{font-variant-numeric:tabular-nums;line-height:1}
+/* Kiosko: agranda lo esencial y oculta los controles para verlo de lejos */
+body.kiosk #maquinaMonGrid .pcard{padding:18px!important}
+body.kiosk #maquinaMonGrid .pcard-actions,body.kiosk #maquinaMonGrid .pcard-iprow{display:none!important}
+body.kiosk #maquinaMonGrid .pcard-name{font-size:15px!important}
+body.kiosk #maquinaMonGrid .pbig{font-size:30px!important}
+body.kiosk #maquinaMonGrid .ptemp{font-size:24px!important}
+body.kiosk #maquinaMonGrid .pbar{height:14px!important}
 /* ── Supplier Search Agent ──────────────────────────────────────── */
 .ss-results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:14px}
 .ss-card{background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
@@ -616,7 +647,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
 .kpi-exp-row.hl .kev{color:var(--accent);}
 
 /* ── VISUAL AI SECTION ─────────────────────────────────────── */
-#tab-visual .vai-frame-wrap{position:relative;width:100%;height:calc(100vh - 160px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);}
+#tab-visual .vai-frame-wrap{position:relative;width:100%;height:calc(100vh - 160px);height:calc(100dvh - 160px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);}
 #tab-visual .vai-frame-wrap iframe{width:100%;height:100%;border:none;display:block;}
 #tab-visual .vai-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
 #tab-visual .vai-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);}
@@ -627,7 +658,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
 
 
 /* ── MAIL CLIENT ──────────────────────────────────────────── */
-.mail-client{display:grid;grid-template-columns:200px 320px 1fr;height:calc(100vh - 190px);min-height:520px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;gap:0;}
+.mail-client{display:grid;grid-template-columns:200px 320px 1fr;height:calc(100vh - 190px);height:calc(100dvh - 190px);min-height:520px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;gap:0;}
 .mail-folders{background:var(--surface2);border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;}
 .mail-compose-btn{background:var(--accent);color:#000;border:none;border-radius:8px;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:6px;justify-content:center;transition:opacity .15s;width:100%;}
 .mail-compose-btn:hover{opacity:.85;}
@@ -665,7 +696,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
 .mail-reader-body{flex:1;overflow-y:auto;padding:16px;}
 .mail-reader-body iframe{width:100%;border:none;display:block;min-height:300px;}
 /* Compose */
-.mail-compose-panel{position:fixed;bottom:0;right:80px;width:520px;max-width:calc(100vw - 100px);background:var(--surface);border:1px solid var(--border);border-radius:10px 10px 0 0;box-shadow:0 -4px 40px rgba(0,0,0,.5);z-index:400;display:flex;flex-direction:column;max-height:70vh;}
+.mail-compose-panel{position:fixed;bottom:0;right:80px;width:520px;max-width:calc(100vw - 100px);background:var(--surface);border:1px solid var(--border);border-radius:10px 10px 0 0;box-shadow:0 -4px 40px rgba(0,0,0,.5);z-index:400;display:flex;flex-direction:column;max-height:70vh;max-height:70dvh;}
 .mail-compose-panel.collapsed{max-height:44px;overflow:hidden;}
 .mail-compose-hdr{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-shrink:0;}
 .mail-compose-hdr-title{font-weight:700;font-size:13px;color:var(--text);}
@@ -697,7 +728,7 @@ body.kiosk .tab-content{padding-top:12px!important;}
 .mail-tpl-item:hover{background:rgba(255,255,255,.05);color:var(--text);}
 .mail-compose-footer{padding:9px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-shrink:0;}
 @media(max-width:900px){
-  .mail-client{grid-template-columns:1fr;height:calc(100vh - 230px);}
+  .mail-client{grid-template-columns:1fr;height:calc(100vh - 230px);height:calc(100dvh - 230px);}
   .mail-folders,.mail-list-wrap,.mail-reader{display:none;}
   .mail-client.mob-folders .mail-folders{display:flex;}
   .mail-client.mob-list .mail-list-wrap{display:flex;}
@@ -1072,8 +1103,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* ── Form ────────────────────────────────────────────── */
   .form-grid{padding:12px 14px;gap:10px;}
   .field-label{font-size:11px;}
-  .field-input,.field-select{min-height:42px;font-size:14px!important;padding:8px 12px;}
-  .field-textarea{font-size:14px!important;}
+  .field-input,.field-select{min-height:42px;font-size:16px!important;padding:8px 12px;}
+  .field-textarea{font-size:16px!important;}
 
   /* Form actions: full-width stacked */
   .form-actions{flex-direction:column;padding:8px 14px 16px;gap:8px;}
@@ -1129,7 +1160,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .modal-body{padding:12px 14px!important;}
   .modal-box{max-width:calc(100vw - 16px)!important;max-height:calc(100dvh - 16px);margin:8px;border-radius:12px;}
   .modal-header{padding:12px 14px;min-height:48px;}
-  .modal-footer{padding:10px 14px;flex-wrap:wrap;}
+  .modal-footer{padding:10px 14px;flex-wrap:wrap;position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border2);}
   .modal-footer .btn{flex:1 1 auto;min-width:100px;justify-content:center;}
   /* Ficha Propuesta: collapse grids on mobile */
   .fp-top-grid,.fp-fields-grid{grid-template-columns:1fr!important;}
@@ -1273,6 +1304,17 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* Modal facturas form: acciones apiladas */
   #facturaModal .modal-card>div:last-child{flex-direction:column!important;gap:8px!important;}
   #facturaModal .modal-card>div:last-child .btn{width:100%;justify-content:center;min-height:42px!important;}
+
+  /* ── Inputs de ajustes/config a 16px: evita el zoom automático de iOS al enfocar ── */
+  #userMenu input,#userMenu textarea,#mobileConfigBody input,#mobileConfigBody textarea{font-size:16px!important;}
+  /* ── Toasts por encima del dock inferior (antes quedaban tapados/encima del dock) ── */
+  .toast-container{bottom:calc(112px + env(safe-area-inset-bottom,0px))!important;left:12px;right:12px;align-items:flex-end;}
+  .toast{max-width:calc(100vw - 24px);}
+  /* ── Panel de notificaciones: ancho adaptable para no salirse en pantallas angostas (≤354px) ── */
+  .notif-panel{top:60px;left:10px;right:10px;width:auto;max-height:72dvh;}
+  /* ── Monitor de impresoras: botones de acción con mejor área táctil en móvil ── */
+  #maquinaMonGrid .pcard-actions{flex-wrap:wrap;gap:6px;}
+  #maquinaMonGrid .pcard-actions button{padding:7px 11px!important;font-size:13px!important;}
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2059,7 +2101,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- PEDIDOS -->
 <div class="tab-panel" id="tab-pedidos">
-  <div class="section-header"><div><div class="section-title">Pedidos en Producción</div><div class="section-desc">Seguimiento completo de cada orden: estado de producción, fecha de entrega comprometida, control de calidad (QA) y equipo responsable.</div></div></div>
+  <div class="section-header"><div><div class="section-title">Pedidos en Producción</div><div class="section-desc">Seguimiento completo de cada orden: estado de producción, fecha de entrega comprometida, control de calidad (QA) y equipo responsable.</div></div><button class="btn btn-ghost btn-sm drive-conn-btn" onclick="connectDrive()" title="Conecta Google Drive una vez por sesión: así las carpetas se crean solas al aprobar cotizaciones y puedes ver adjuntos sin volver a iniciar sesión">🔗 Conectar Drive</button></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Atrasados</button>
@@ -2096,6 +2138,15 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
   <!-- Modal edición individual pedido -->
+  <div id="adjuntosModal" class="modal-overlay" style="display:none">
+    <div class="modal-backdrop" onclick="closeAdjuntosModal()"></div>
+    <div class="modal-card" style="max-width:680px;width:96vw;max-height:88vh;display:flex;flex-direction:column;position:relative">
+      <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-folder"/></svg> <span id="adjuntosTitle">Adjuntos</span></div>
+      <button class="modal-x-auto" onclick="closeAdjuntosModal()" aria-label="Cerrar">✕</button>
+      <div id="adjuntosBody" style="margin-top:14px;overflow-y:auto;flex:1;min-height:80px"></div>
+    </div>
+  </div>
+
   <div id="editPedidoModal" class="modal-overlay" style="display:none">
     <div class="modal-backdrop" onclick="closeEditPedidoModal()"></div>
     <div class="modal-card">
@@ -2466,8 +2517,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group form-full"><label class="field-label">Categorías *</label><div class="pv-catbox" id="np-catbox" style="display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;min-height:38px;cursor:default"></div><div style="font-size:10px;color:var(--text3);margin-top:4px">Haz clic en las categorías para seleccionarlas (puedes elegir varias)</div></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="np-contacto" placeholder="Juan Pérez"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="np-cargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="np-telefono" placeholder="+56 2 1234 5678"></div>
-      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="np-whatsapp" placeholder="+56 9 1234 5678"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="np-telefono" type="tel" placeholder="+56 2 1234 5678"></div>
+      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="np-whatsapp" type="tel" placeholder="+56 9 1234 5678"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="np-email" type="email"></div>
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="np-web" placeholder="https://proveedor.cl"></div>
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="np-rut" placeholder="76.123.456-7"></div>
@@ -2496,7 +2547,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">Empresa *</label><input class="field-input" id="nl-empresa" placeholder="Acme Corp"></div>
       <div class="field-group"><label class="field-label">Contacto *</label><input class="field-input" id="nl-contacto" placeholder="Juan Pérez"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="nl-cargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="nl-telefono" placeholder="+56 9 1234 5678"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="nl-telefono" type="tel" placeholder="+56 9 1234 5678"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="nl-email" type="email"></div>
       <div class="field-group"><label class="field-label">Origen</label><select class="field-select" id="nl-origen"><option>Referido</option><option>Instagram</option><option>LinkedIn</option><option>Google</option><option>Contacto directo</option><option>Otro</option></select></div>
       <div class="field-group"><label class="field-label">Industria</label><select class="field-select" id="nl-industria"><option value="">— seleccionar —</option><option>Agencia / Marketing</option><option>Retail</option><option>Tecnología</option><option>Educación</option><option>Eventos</option><option>Otro</option></select></div>
@@ -3080,7 +3131,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">Empresa *</label><input class="field-input" id="ecEmpresa"></div>
       <div class="field-group"><label class="field-label">Contacto *</label><input class="field-input" id="ecContacto"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="ecCargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="ecTelefono"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="ecTelefono" type="tel"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="ecEmail" type="email"></div>
       <div class="field-group"><label class="field-label">Ciudad</label><input class="field-input" id="ecCiudad"></div>
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="ecRut"></div>
@@ -3148,8 +3199,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group form-full"><label class="field-label">Categorías *</label><div class="pv-catbox" id="ep-catbox" style="display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;min-height:38px;cursor:default"></div></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="epContacto"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="epCargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="epTelefono"></div>
-      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="epWhatsapp"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="epTelefono" type="tel"></div>
+      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="epWhatsapp" type="tel"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="epEmail" type="email"></div>
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="epWeb"></div>
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="epRut"></div>
@@ -4587,7 +4638,7 @@ function _reportarResultados(muts) {
       </a>
       <span style="font-size:11px;color:var(--text3);">150+ modelos · Imagen · Video · Audio · VFX</span>
     </div>
-    <div style="position:relative;width:100%;height:calc(100vh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+    <div style="position:relative;width:100%;height:calc(100vh - 200px);height:calc(100dvh - 200px);min-height:600px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
       <!-- Fallback visible hasta que el iframe confirme que cargó -->
       <div id="vaiFallback" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--surface2);z-index:2;">
         <div style="font-size:48px">🎨</div>
@@ -6207,7 +6258,8 @@ async function saveMaintRecordAirtable(rec){
   await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields:{maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()}}],typecast:true})});
 }
 
-function getMaintLogLocal(){try{return JSON.parse(localStorage.getItem(MAINT_KEY)||'[]');}catch(e){return[];}}
+let _maintRaw=null,_maintParsed=[];
+function getMaintLogLocal(){const raw=localStorage.getItem(MAINT_KEY)||'[]';if(raw!==_maintRaw){try{_maintParsed=JSON.parse(raw);}catch(e){_maintParsed=[];}_maintRaw=raw;}return _maintParsed;}
 
 // ── EQUIPO PERSISTENCE ────────────────────────────────────────
 async function crearTablaEquipoEventos(){
@@ -7622,6 +7674,17 @@ async function updateCotizacionEstado(id,estado){
       const _cid=Array.isArray(_cot?.fields['Cliente'])?_cot.fields['Cliente'][0]:null;
       await _advanceEtapaCliente(_cid,'Cliente activo',['Lead nuevo','Contactado','Propuesta enviada','Negociación']);
       await crearPedidoDesdeCotizacion(id);
+      // Crea/actualiza la carpeta del cliente + carpeta de cotización en Drive.
+      // Solo si ya hay sesión de Drive activa (evita un popup bloqueado a mitad
+      // del flujo). Si no, la carpeta se crea sola al abrir "Ver adjuntos".
+      if(_driveConnected()){
+        try{
+          const numCot=_cot?.fields['N° Cotización']||id.slice(-6);
+          const cliente=resolveClienteName(_cot?.fields['Cliente']);
+          await ensureCotFolder(id,numCot,cliente);
+          toast('📂 Carpeta de Drive lista','success');
+        }catch(e){toast('No se pudo crear la carpeta en Drive: '+(e.message||''),'error');}
+      }
     }
     await loadAllDataSilent();renderCotizaciones();renderOverview();
   }
@@ -8741,6 +8804,118 @@ async function guardarFichaEnDrive(cotId){
   }
 }
 // ────────────────────────────────────────────────────────────
+// Carpetas Drive (no interactivas) + visor de adjuntos en el panel
+// ────────────────────────────────────────────────────────────
+function _driveFolderIdFromLink(link){const m=(link||'').match(/\/folders\/([A-Za-z0-9_-]+)/);return m?m[1]:'';}
+
+// Crea/actualiza Cliente → COT-xxx en Drive y guarda el link. No abre ventana.
+async function ensureCotFolder(cotId,numCot,clienteNombre){
+  const rootId=await _driveGetOrCreateFolder('The Lab Solutions',null);
+  const cliId=await _driveGetOrCreateFolder(clienteNombre||'Cliente',rootId);
+  const foldId=await _driveGetOrCreateFolder('COT-'+(numCot||(cotId||'').slice(-6)),cliId);
+  localStorage.setItem('fp_drive_folder_'+cotId,'https://drive.google.com/drive/folders/'+foldId);
+  return foldId;
+}
+// Resuelve (creando si hace falta) la carpeta de un pedido y devuelve su folderId.
+async function ensurePedidoFolder(pedidoId){
+  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return null;
+  const f=p.fields;const cotIds=f['Cotizaciones'];
+  if(cotIds&&cotIds.length){
+    const cot=state.cotizaciones.find(x=>x.id===cotIds[0]);
+    const numCot=cot?.fields['N° Cotización']||'';
+    const cliente=resolveClienteName(cot?.fields['Cliente']||f['Cliente']);
+    return await ensureCotFolder(cotIds[0],numCot,cliente);
+  }
+  const rootId=await _driveGetOrCreateFolder('The Lab Solutions',null);
+  const cliId=await _driveGetOrCreateFolder(resolveClienteName(f['Cliente'])||'Cliente',rootId);
+  const foldId=await _driveGetOrCreateFolder(f['N° Pedido']||pedidoId.slice(-6),cliId);
+  localStorage.setItem('fp_drive_folder_ped_'+pedidoId,'https://drive.google.com/drive/folders/'+foldId);
+  return foldId;
+}
+// Lista los archivos de una carpeta (excluye subcarpetas en el render).
+async function _driveListFiles(folderId){
+  const q=`'${folderId}' in parents and trashed=false`;
+  const res=await _driveApiFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&orderBy=folder,modifiedTime desc&fields=files(id,name,mimeType,size,modifiedTime)&pageSize=200');
+  return res.files||[];
+}
+// Descarga el contenido binario (sirve para archivos subidos por la app).
+async function _driveFetchBlob(fileId){
+  const token=await _driveGetToken();
+  const r=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{'Authorization':'Bearer '+token}});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message)||('HTTP '+r.status));}
+  return await r.blob();
+}
+
+// ── Modal "Ver adjuntos" ──────────────────────────────────────
+let _adjFiles=[],_adjUrl=null,_adjFolderId=null;
+function _adjIcon(m){if(/^image\//.test(m))return'🖼️';if(m==='application/pdf')return'📄';if(/^video\//.test(m))return'🎬';if(/sheet|excel|csv/.test(m))return'📊';if(/word|document/.test(m))return'📝';if(/zip|compressed|rar/.test(m))return'🗜️';if(m==='application/vnd.google-apps.folder')return'📁';return'📎';}
+function _fmtBytes(n){if(!n)return'';const u=['B','KB','MB','GB'];let i=0;n=+n;while(n>=1024&&i<u.length-1){n/=1024;i++;}return n.toFixed(i?1:0)+' '+u[i];}
+async function openAdjuntosModal(kind,id){
+  const modal=document.getElementById('adjuntosModal');
+  const body=document.getElementById('adjuntosBody');
+  const titleEl=document.getElementById('adjuntosTitle');
+  let label='Adjuntos';
+  if(kind==='ped'){const p=state.pedidos.find(x=>x.id===id);label='Adjuntos — '+(p?.fields['N° Pedido']||'Pedido');}
+  titleEl.textContent=label;
+  modal.style.display='flex';
+  if(_adjUrl){URL.revokeObjectURL(_adjUrl);_adjUrl=null;}
+  body.innerHTML='<div style="padding:34px;text-align:center;color:var(--text3);font-size:13px">Conectando con Google Drive…</div>';
+  if(!_driveGetClientId()){body.innerHTML='<div style="padding:26px;text-align:center;color:var(--text3);font-size:13px">Configura el <b>Google Drive Client ID</b> en ⚙️ Mi cuenta para ver los adjuntos.</div>';return;}
+  try{
+    const folderId=kind==='ped'?await ensurePedidoFolder(id):null;
+    _adjFolderId=folderId;
+    const files=(await _driveListFiles(folderId)).filter(f=>f.mimeType!=='application/vnd.google-apps.folder');
+    _adjFiles=files;
+    _renderAdjuntosBody(files);
+    _refreshDriveBtns();
+  }catch(e){
+    const msg=escapeHtml(e.message||'error');
+    body.innerHTML='<div style="padding:24px;text-align:center;color:var(--danger);font-size:13px">No se pudieron cargar los adjuntos.<br><span style="font-size:11px;color:var(--text3)">'+msg+'</span></div>';
+  }
+}
+function _renderAdjuntosBody(files){
+  const body=document.getElementById('adjuntosBody');
+  const rows=files.length?files.map(f=>{
+    const canPrev=/^image\//.test(f.mimeType)||f.mimeType==='application/pdf'||/^text\//.test(f.mimeType);
+    const sub=[_fmtBytes(f.size),f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'}):''].filter(Boolean).join(' · ');
+    return`<div style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px">
+      <span style="font-size:18px;flex-shrink:0">${_adjIcon(f.mimeType)}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.name)}</div><div style="font-size:10px;color:var(--text3)">${sub}</div></div>
+      ${canPrev?`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="previewAdjunto('${f.id}')">👁 Ver</button>`:''}
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="downloadAdjunto('${f.id}')" title="Descargar">⬇</button>
+    </div>`;
+  }).join(''):'<div style="padding:26px;text-align:center;color:var(--text3);font-size:13px">📭 Sin archivos en esta carpeta todavía.<br><span style="font-size:11px">Las fichas, facturas y fotos subidas desde el panel aparecerán aquí.</span></div>';
+  body.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px">${rows}</div><div id="adjuntosPreview" style="display:none;margin-top:14px;border-top:1px solid var(--border2);padding-top:12px"></div>`;
+}
+async function previewAdjunto(fileId){
+  const f=_adjFiles.find(x=>x.id===fileId);if(!f) return;
+  const pv=document.getElementById('adjuntosPreview');if(!pv) return;
+  pv.style.display='block';pv.scrollIntoView({behavior:'smooth',block:'nearest'});
+  pv.innerHTML='<div style="padding:18px;color:var(--text3);font-size:12px">Cargando vista previa…</div>';
+  try{
+    const blob=await _driveFetchBlob(fileId);
+    if(_adjUrl) URL.revokeObjectURL(_adjUrl);
+    _adjUrl=URL.createObjectURL(blob);
+    let inner;
+    if(/^image\//.test(f.mimeType)) inner=`<img src="${_adjUrl}" style="max-width:100%;max-height:68vh;display:block;margin:0 auto;border-radius:8px">`;
+    else if(f.mimeType==='application/pdf') inner=`<iframe src="${_adjUrl}" style="width:100%;height:68vh;border:none;border-radius:8px;background:#fff"></iframe>`;
+    else if(/^text\//.test(f.mimeType)){const txt=await blob.text();inner=`<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;max-height:60vh;overflow:auto;background:var(--surface2);padding:12px;border-radius:8px">${escapeHtml(txt)}</pre>`;}
+    else inner='<div style="padding:18px;color:var(--text3);font-size:12px">No se puede previsualizar este tipo de archivo. Usa Descargar.</div>';
+    pv.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px"><span style="font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.name)}</span><button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="closeAdjPreview()">✕ Cerrar vista</button></div>${inner}`;
+  }catch(e){pv.innerHTML='<div style="padding:18px;color:var(--danger);font-size:12px">Error al previsualizar: '+escapeHtml(e.message||'')+'</div>';}
+}
+function closeAdjPreview(){const pv=document.getElementById('adjuntosPreview');if(pv){pv.style.display='none';pv.innerHTML='';}if(_adjUrl){URL.revokeObjectURL(_adjUrl);_adjUrl=null;}}
+async function downloadAdjunto(fileId){
+  const f=_adjFiles.find(x=>x.id===fileId);if(!f) return;
+  try{
+    toast('Descargando '+f.name+'…','info');
+    const blob=await _driveFetchBlob(fileId);
+    const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=f.name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),5000);
+  }catch(e){toast('Error al descargar: '+(e.message||''),'error');}
+}
+function closeAdjuntosModal(){const m=document.getElementById('adjuntosModal');if(m) m.style.display='none';if(_adjUrl){URL.revokeObjectURL(_adjUrl);_adjUrl=null;}_adjFiles=[];}
+// ────────────────────────────────────────────────────────────
 async function openDriveFolder(cotId,numCot,clienteNombre){
   const existing=localStorage.getItem('fp_drive_folder_'+cotId);
   if(existing){window.open(existing,'_blank');return;}
@@ -9232,6 +9407,7 @@ function exportRemCSV(){
 
 function renderPedidos(filter){
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
+  _refreshDriveBtns();
   const basePedidos=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
   let data=filter==='all'?basePedidos:filter==='atrasados'?basePedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
@@ -9250,7 +9426,7 @@ function renderPedidos(filter){
     const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item act-item-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ &nbsp;Avanzar a "${stages[idx+1]}"</button><div class="act-sep"></div>`:(estado==='Despachado'?'':'');
     const repClienteItem=estado!=='Despachado'?`<button class="act-item act-item-cyan" onclick="runRepClienteAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> &nbsp;📢 Update cliente IA</button>`:'';
     const contentItem=estado==='Despachado'?`<button class="act-item act-item-cyan" onclick="runContentAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> &nbsp;🎬 Contenido IA</button>`:'';
-    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}<button class="act-item${pedDriveLink?' act-item-blue':''}" onclick="openPedidoDrive('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${pedDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
+    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}<button class="act-item act-item-blue" onclick="openAdjuntosModal('ped','${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;Ver adjuntos</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -9452,6 +9628,26 @@ let qaFotoData=null,qaFotoLink=null;
 function _qaFotoKey(){const id=document.getElementById('qaModalPedidoId').value;return id?'qa_foto_'+id:null;}
 function _qaFotoLinkKey(){const id=document.getElementById('qaModalPedidoId').value;return id?'qa_foto_link_'+id:null;}
 function _driveConnected(){return _driveAccessToken&&_driveTokenExpiry>Date.now()+5000;}
+// Conecta Google Drive una vez por sesión (gesto directo → OAuth sin bloqueos).
+// Tras esto, aprobar cotizaciones crea la carpeta sola y "Ver adjuntos" no re-pide login.
+async function connectDrive(){
+  if(_driveConnected()){toast('✓ Google Drive ya está conectado','success');_refreshDriveBtns();return;}
+  if(!_driveGetClientId()){toast('Configura el Google Drive Client ID en ⚙️ Mi cuenta','error');if(typeof openUserMenu==='function')openUserMenu();return;}
+  try{
+    toast('Conectando con Google Drive…','info');
+    await _driveGetToken();
+    toast('✓ Google Drive conectado para esta sesión','success');
+  }catch(e){toast('No se pudo conectar: '+(e.message||''),'error');}
+  _refreshDriveBtns();
+}
+function _refreshDriveBtns(){
+  const ok=_driveConnected();
+  document.querySelectorAll('.drive-conn-btn').forEach(b=>{
+    b.innerHTML=ok?'✓ Drive conectado':'🔗 Conectar Drive';
+    b.classList.toggle('drive-on',ok);
+    b.title=ok?'Google Drive conectado para esta sesión. Las carpetas se crean solas al aprobar cotizaciones.':'Conecta Google Drive una vez por sesión: así las carpetas se crean solas al aprobar cotizaciones y puedes ver adjuntos sin volver a iniciar sesión';
+  });
+}
 function renderQAFoto(){
   const wrap=document.getElementById('qaFotoWrap'),thumb=document.getElementById('qaFotoThumb'),link=document.getElementById('qaFotoLink'),drvBtn=document.getElementById('qaFotoDriveBtn');
   if(!wrap||!thumb)return;
@@ -11817,6 +12013,7 @@ async function toggleMaquinaEstado(id){
 async function initMaquinas(){
   await loadMaquinasAirtable();
   await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
+  seedOdometerIfNeeded();
   renderMaquinasCalendar();
   renderMonitorFilterTabs();
   renderMonitorKPIs();
@@ -11875,6 +12072,33 @@ function printerCamUrl(id){
   return _appendBridgeToken(`${getPrinterTunnel()}/${mm[1]}:${mm[2]||'80'}${mm[3]||'/'}`);
 }
 const HIST_KEY='printer_history_v1';
+// Caché del historial: parsea localStorage una sola vez y reusa el resultado
+// hasta que el string cambie (lo invalida automáticamente cualquier escritura).
+// Evita cientos de JSON.parse por minuto al renderizar 13+ máquinas cada 15s.
+let _histRaw=null,_histParsed=[];
+function getHist(){const raw=localStorage.getItem(HIST_KEY)||'[]';if(raw!==_histRaw){try{_histParsed=JSON.parse(raw);}catch(e){_histParsed=[];}_histRaw=raw;}return _histParsed;}
+// ── Odómetro acumulado por máquina ────────────────────────────
+// El historial se recorta a 200 entradas, así que en una granja activa las
+// horas/filamento "totales" se subestimarían con el tiempo. El odómetro acumula
+// de forma persistente (horas completadas y mm de filamento) y no pierde datos
+// al recortarse el historial. Se siembra una vez desde el historial actual.
+const ODO_KEY='printer_odometer_v1';
+let _odo=null;
+function getOdometer(){if(_odo===null){try{_odo=JSON.parse(localStorage.getItem(ODO_KEY)||'{}');}catch(e){_odo={};}}return _odo;}
+function _saveOdometer(){try{localStorage.setItem(ODO_KEY,JSON.stringify(_odo||{}));}catch(e){}}
+function _useOdometer(){return!window._DEMO_MODE&&localStorage.getItem('printer_odometer_seeded')==='1';}
+function seedOdometerIfNeeded(){
+  if(window._DEMO_MODE||localStorage.getItem('printer_odometer_seeded')==='1')return;
+  const o={};
+  getHist().forEach(h=>{const e=o[h.id]||(o[h.id]={hours:0,filamentMm:0,prints:0});if(h.result==='Completado'){e.hours+=(h.dur||0)/60;e.prints++;}e.filamentMm+=(h.filamentMm||0);});
+  _odo=o;_saveOdometer();localStorage.setItem('printer_odometer_seeded','1');
+}
+function odoAdd(id,hours,filamentMm,completed){
+  if(window._DEMO_MODE)return;
+  const e=getOdometer()[id]||(getOdometer()[id]={hours:0,filamentMm:0,prints:0});
+  if(completed){e.hours+=hours;e.prints++;}
+  e.filamentMm+=(filamentMm||0);_saveOdometer();
+}
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={},_demoPrinterState={};
 // ── Print queue ──────────────────────────────────────────────
@@ -12060,7 +12284,7 @@ function renderMonitorGrid(){
   const el=document.getElementById('maquinaMonGrid');if(!el)return;
   const base=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
   const lista=sortedList(base);
-  el.innerHTML=lista.map(m=>{
+  const __cards=lista.map(m=>{
     const s=_printerStatus[m.id]||{state:'offline'};
     const sm=printerStateMeta(s.state);
     const ip=getPrinterIp(m);
@@ -12102,25 +12326,26 @@ function renderMonitorGrid(){
       </div>`;
     } else {
       body=`
-        ${isActive?`<div style="margin:10px 0 6px;display:flex;gap:8px;align-items:flex-start">
-          ${s.thumbUrl?`<img src="${s.thumbUrl}" style="width:52px;height:52px;object-fit:cover;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
+        ${isActive?`<div style="margin:10px 0 6px;display:flex;gap:9px;align-items:center">
+          ${s.thumbUrl?`<img src="${s.thumbUrl}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
           <div style="flex:1;min-width:0">
-            <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
-            <div style="background:var(--surface2);border-radius:4px;height:8px;overflow:hidden"><div style="background:${sm.color};height:100%;width:${s.progress}%;border-radius:4px;transition:width 0.6s"></div></div>
-            <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;color:var(--text3)">
-              <span style="font-weight:700;color:${sm.color}">${s.progress}%</span><span>⏱ ${fmtSecs(s.eta)} restante</span>
+            <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
+            <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:5px">
+              <span class="pbig" style="font-size:22px;font-weight:800;color:${sm.color}">${s.progress}%</span>
+              <span style="font-size:10px;color:var(--text3);margin-left:auto">⏱ ${fmtSecs(s.eta)} restante</span>
             </div>
+            <div class="pbar ${isPrinting?'live':''}"><i style="width:${s.progress}%"></i></div>
           </div>
         </div>`:''}
         <div style="display:flex;gap:6px;margin-top:8px">
           <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
             <div style="font-size:9px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">HOTEND</div>
-            <div style="font-size:17px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'};line-height:1">${s.hotend?.actual||0}°</div>
+            <div class="ptemp" style="font-size:17px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'};line-height:1">${s.hotend?.actual||0}°</div>
             <div style="font-size:9px;color:var(--text3);margin-top:2px">${s.hotend?.target>0?'→ '+s.hotend.target+'°':'fría'}</div>
           </div>
           <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
             <div style="font-size:9px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">CAMA</div>
-            <div style="font-size:17px;font-weight:700;color:${s.bed?.target>0?'#ffaa00':'var(--text)'};line-height:1">${s.bed?.actual||0}°</div>
+            <div class="ptemp" style="font-size:17px;font-weight:700;color:${s.bed?.target>0?'#ffaa00':'var(--text)'};line-height:1">${s.bed?.actual||0}°</div>
             <div style="font-size:9px;color:var(--text3);margin-top:2px">${s.bed?.target>0?'→ '+s.bed.target+'°':'fría'}</div>
           </div>
         </div>
@@ -12136,9 +12361,9 @@ function renderMonitorGrid(){
         ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative">
           <img src="${printerCamUrl(m.id)}" style="width:100%;display:block;max-height:160px;object-fit:cover" onerror="this.parentElement.innerHTML='<div style=\\'padding:12px;text-align:center;color:#666;font-size:10px\\'>Sin señal · verifica la URL</div>'">
         </div>`:''}
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+        <div class="pcard-iprow" style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
           <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">🔑</span>`:''}</span>
-          <div style="display:flex;gap:4px">
+          <div class="pcard-actions" style="display:flex;gap:4px">
             <button onclick="openPrinterControl('${m.id}')" style="background:${isActive?'rgba(0,212,170,0.12)':'var(--surface2)'};border:1px solid ${isActive?'rgba(0,212,170,0.35)':'var(--border2)'};border-radius:6px;color:${isActive?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Control de impresora">🎛️</button>
             <button onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Enviar G-code">📤</button>
             <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
@@ -12150,22 +12375,39 @@ function renderMonitorGrid(){
         </div>`;
     }
 
-    return`<div style="background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column;transition:border-color 0.3s">
+    return`<div id="mcard_${m.id}" class="pcard${isActive?' active':''}" style="--acc:${sm.color};background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column">
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
-          <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.nombre}</div>
+          <div class="pcard-name" style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.nombre}</div>
           <div style="font-size:10px;color:var(--text3)">Máquina #${m.numG}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
-          <span style="background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700;border:1px solid ${sm.color}33">${sm.label}</span>
+          <span style="display:inline-flex;align-items:center;gap:5px;background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700;border:1px solid ${sm.color}33"><span class="pdot${isActive?' live':''}"></span>${sm.label}</span>
           ${maintAlerts.length?`<span style="background:rgba(255,170,0,0.15);color:#ffaa00;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(255,170,0,0.3)" title="${maintAlerts.map(a=>a.label).join(', ')}">🔧 ${maintAlerts.length} alerta${maintAlerts.length>1?'s':''}</span>`:''}
           ${idleWarn?`<span style="background:rgba(100,100,100,0.15);color:#888;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(100,100,100,0.2)">💤 ${idleHours}h idle</span>`:''}
         </div>
       </div>
       ${body}
     </div>`;
-  }).join('');
+  });
+  // Render selectivo: solo reescribe el DOM de las tarjetas cuyo HTML cambió.
+  // Evita reconstruir el grid entero cada 15s → preserva streams MJPEG de
+  // webcam, el foco en inputs (IP/API key) y reduce reflows. Reconstruye
+  // todo solo si cambia el conjunto/orden de máquinas (filtro, orden, alta).
+  const __order=lista.map(m=>m.id).join('|');
+  if(el.__order!==__order){
+    el.innerHTML=__cards.join('');
+    el.__order=__order;el.__html={};
+    lista.forEach((m,i)=>{el.__html[m.id]=__cards[i];});
+  }else{
+    lista.forEach((m,i)=>{
+      if(el.__html[m.id]===__cards[i])return;
+      const node=document.getElementById('mcard_'+m.id);
+      if(node)node.outerHTML=__cards[i];else el.insertAdjacentHTML('beforeend',__cards[i]);
+      el.__html[m.id]=__cards[i];
+    });
+  }
   const lu=document.getElementById('monitorLastUpdate');
   if(lu)lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
@@ -12432,9 +12674,10 @@ function checkTransitions(m,s){
 
 function saveHistoryEntry(m,file,start,end,dur,result,filamentMm=0){
   try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift({id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,filamentMm,ts:Date.now()});if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
+  odoAdd(m.id,(dur||0)/60,filamentMm,result==='Completado');
 }
 
-function getHistoryForPrinter(id){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(h=>h.id===id);}catch(e){return[];}}
+function getHistoryForPrinter(id){return getHist().filter(h=>h.id===id);}
 
 function requestNotificationPermission(manual){
   if(!('Notification'in window))return;
@@ -12574,6 +12817,15 @@ function checkIdleAlerts(){
 
 // ── MANTENIMIENTO ─────────────────────────────────────────────
 const MAINT_KEY='printer_maint_v1',MAINT_CFG_KEY='printer_maint_cfg',FILAMENT_COST_KEY='filament_cost_clp';
+// Peso del filamento según material y diámetro (configurable en Umbrales de mantención).
+// Devuelve kg por mm de filamento extruido. Por defecto PLA 1.75 mm ≈ 0.000002982 kg/mm.
+const FILAMENT_DENSITY={PLA:1.24,PETG:1.27,ABS:1.04,ASA:1.07,TPU:1.21,Nylon:1.14};
+function getFilamentKgPerMm(){
+  const dens=FILAMENT_DENSITY[localStorage.getItem('filament_material')||'PLA']||1.24; // g/cm³
+  const dia=parseFloat(localStorage.getItem('filament_diameter')||'1.75')||1.75;       // mm
+  const area=Math.PI*(dia/2)*(dia/2);                                                  // mm²
+  return area*dens/1e6;                                                                // kg/mm
+}
 const MAINT_TYPES=[
   {key:'nozzle',label:'Nozzle',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-nut"/></svg>',defaultHours:200},
   {key:'lubrication',label:'Lubricación',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-droplet"/></svg>',defaultHours:100},
@@ -12583,7 +12835,7 @@ const MAINT_TYPES=[
 function getMaintConfig(){try{return JSON.parse(localStorage.getItem(MAINT_CFG_KEY)||'{}');}catch(e){return{};}}
 function getMaintThreshold(tipo){const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;}
 function getMaintLog(){return maquinaState.maintLog.length?maquinaState.maintLog:getMaintLogLocal();}
-function getPrintHours(id){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}catch(e){return 0;}}
+function getPrintHours(id){if(_useOdometer())return(getOdometer()[id]||{}).hours||0;return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
 function getHoursSinceMaint(id,tipo){
   const log=getMaintLog().filter(x=>x.maquinaId===id&&x.tipo===tipo).sort((a,b)=>b.ts-a.ts);
   const total=getPrintHours(id);
@@ -12596,7 +12848,7 @@ function getMaintAlerts(m){
 }
 // Ritmo de impresión (h/semana) de las últimas 4 semanas, para proyectar mantención
 function getWeeklyPrintRate(id){
-  try{const cut=Date.now()-28*86400000;const hrs=JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id&&x.result==='Completado'&&(x.ts||x.end||0)>=cut).reduce((s,x)=>s+(x.dur||0)/60,0);return hrs/4;}catch(e){return 0;}
+  const cut=Date.now()-28*86400000;return getHist().filter(x=>x.id===id&&x.result==='Completado'&&(x.ts||x.end||0)>=cut).reduce((s,x)=>s+(x.dur||0)/60,0)/4;
 }
 // Mantención más próxima a vencer, con ETA en semanas según el ritmo de uso
 function getMaintForecast(m){
@@ -12609,26 +12861,37 @@ function getMaintForecast(m){
   return soonest;
 }
 function getTotalFilamentKg(id){
-  try{const mm=JSON.parse(localStorage.getItem(HIST_KEY)||'[]').filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*0.000002982;}catch(e){return 0;}}
+  const mm=_useOdometer()?((getOdometer()[id]||{}).filamentMm||0):getHist().filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*getFilamentKgPerMm();}
 function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFloat(localStorage.getItem(FILAMENT_COST_KEY)||'0');return Math.round(kg*cost);}
 
 function renderMaintenanceTable(){
   const el=document.getElementById('maintTable');if(!el)return;
+  let totH=0,totKg=0,totCost=0,totPrints=0,totAlerts=0;       // acumuladores de flota
   const rows=MAQUINAS.map(m=>{
-    const totalH=getPrintHours(m.id).toFixed(1);
-    const filKg=getTotalFilamentKg(m.id).toFixed(3);
+    const ph=getPrintHours(m.id);
+    const totalH=ph.toFixed(1);
+    const filKgN=getTotalFilamentKg(m.id);const filKg=filKgN.toFixed(3);
     const filCost=getFilamentCost(m.id);
-    const alerts=getMaintAlerts(m);
-    const chips=MAINT_TYPES.map(t=>{
-      const h=getHoursSinceMaint(m.id,t.key);const thresh=getMaintThreshold(t.key);
-      const pct=h/thresh;const ok=pct<0.9;const over=pct>=1;
-      const lastRec=getMaintLog().filter(x=>x.maquinaId===m.id&&x.tipo===t.key).sort((a,b)=>b.ts-a.ts)[0];
-      const lastStr=lastRec?new Date(lastRec.ts).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'sin reg.';
+    const prints=(getOdometer()[m.id]||{}).prints||0;
+    // Una sola pasada por el log de mantención de la máquina (evita ~12 recálculos)
+    const mLog=getMaintLog().filter(x=>x.maquinaId===m.id);
+    const perType=MAINT_TYPES.map(t=>{
+      const l=mLog.filter(x=>x.tipo===t.key).sort((a,b)=>b.ts-a.ts);const last=l[0];
+      const h=last?Math.max(0,ph-last.printHoursAtTime):ph;const thresh=getMaintThreshold(t.key);
+      return{t,h,thresh,last,pct:thresh>0?h/thresh:0};
+    });
+    const alertsN=perType.filter(p=>p.pct>=0.9).length;
+    totH+=ph;totKg+=filKgN;totCost+=filCost;totPrints+=prints;totAlerts+=alertsN;
+    const chips=perType.map(({t,h,thresh,last,pct})=>{
+      const ok=pct<0.9,over=pct>=1;
+      const lastStr=last?new Date(last.ts).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'sin reg.';
       const statusIcon=over?'⚠':ok?'✓':'~';
-      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':lastRec?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':lastRec?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':lastRec?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${lastStr}</span></span>`;
+      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h (${Math.round(pct*100)}%) · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':last?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':last?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':last?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${Math.round(pct*100)}%</span></span>`;
     }).join('');
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
-    const fc=getMaintForecast(m);
+    const alerts={length:alertsN};
+    const rate=getWeeklyPrintRate(m.id);let fc=null;
+    perType.forEach(p=>{const left=p.thresh-p.h;const weeks=left<=0?0:(rate>0?left/rate:Infinity);if(!fc||weeks<fc.weeks)fc={tipo:p.t.label,hoursLeft:left,weeks,rate};});
     let fcHtml;
     if(!fc||(fc.rate<=0&&fc.hoursLeft>0)){const _disp=(typeof getMaquinaEstadoGlobal==='function'?getMaquinaEstadoGlobal(m.id):'disponible')==='disponible';fcHtml=_disp?`<span style="color:#ffaa00;font-size:10px;font-weight:600" title="Habilitada pero sin impresiones completadas en 4 semanas — capacidad ociosa">⚠ subutilizada</span>`:`<span style="color:var(--text3);font-size:10px" title="Sin impresiones recientes">sin uso reciente</span>`;}
     else if(fc.hoursLeft<=0)fcHtml=`<span style="color:#ff4444;font-size:10px;font-weight:700">⚠ ${escapeHtml(fc.tipo)} vencida</span>`;
@@ -12652,6 +12915,14 @@ function renderMaintenanceTable(){
       <th style="padding:8px 10px;font-size:10px;color:var(--text3)"></th>
     </tr></thead>
     <tbody>${rows}</tbody>
+    <tfoot><tr style="border-top:2px solid var(--border);background:var(--surface2)">
+      <td style="padding:9px 10px;font-size:10px;font-weight:700;color:var(--text)">FLOTA · ${MAQUINAS.length} máq.</td>
+      <td style="padding:9px 10px;font-size:11px;text-align:center;font-weight:700;color:var(--accent)">${totH.toFixed(0)}h</td>
+      <td style="padding:9px 10px;font-size:10px;color:${totAlerts>0?'#ffaa00':'var(--text3)'};font-weight:700">${totAlerts>0?`🔧 ${totAlerts} alerta${totAlerts>1?'s':''}`:'✓ sin alertas'}</td>
+      <td style="padding:9px 10px;font-size:10px;color:var(--text3)">${totPrints} impresiones</td>
+      <td style="padding:9px 10px;font-size:10px;color:var(--text3);white-space:nowrap;font-weight:700">${totKg.toFixed(2)}kg${totCost>0?` · $${totCost.toLocaleString('es-CL')}`:''}</td>
+      <td></td>
+    </tr></tfoot>
   </table></div>`;
 }
 
@@ -12683,6 +12954,8 @@ function openMaintConfig(){
   document.getElementById('cfgGeneral').value=cfg.general||50;
   document.getElementById('cfgIdle').value=localStorage.getItem('idle_alert_hours')||2;
   document.getElementById('cfgFilamentCost').value=localStorage.getItem(FILAMENT_COST_KEY)||0;
+  document.getElementById('cfgFilamentMaterial').value=localStorage.getItem('filament_material')||'PLA';
+  document.getElementById('cfgFilamentDiameter').value=localStorage.getItem('filament_diameter')||'1.75';
   document.getElementById('maintConfigModal').style.display='flex';
 }
 function saveMaintConfig(){
@@ -12690,15 +12963,18 @@ function saveMaintConfig(){
   localStorage.setItem(MAINT_CFG_KEY,JSON.stringify(cfg));
   localStorage.setItem('idle_alert_hours',document.getElementById('cfgIdle').value||2);
   localStorage.setItem(FILAMENT_COST_KEY,document.getElementById('cfgFilamentCost').value||0);
-  closeMaintConfig();renderMaintenanceTable();renderMonitorGrid();toast('Configuración guardada ✓','success');
+  localStorage.setItem('filament_material',document.getElementById('cfgFilamentMaterial').value||'PLA');
+  localStorage.setItem('filament_diameter',document.getElementById('cfgFilamentDiameter').value||'1.75');
+  closeMaintConfig();renderMaintenanceTable();renderMonitorGrid();renderProductionAnalytics();toast('Configuración guardada ✓','success');
 }
 function closeMaintConfig(){document.getElementById('maintConfigModal').style.display='none';}
 
 // ── ANALÍTICA ─────────────────────────────────────────────────
 function renderProductionAnalytics(){
   const el=document.getElementById('analyticsContent');if(!el)return;
-  let hist=[];try{hist=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}catch(e){}
+  const hist=getHist();
   if(!hist.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center">Sin datos aún — el historial se generará automáticamente cuando las impresoras estén conectadas</div>';return;}
+  const kgPerMm=getFilamentKgPerMm();
 
   // Impresiones últimas 7 días
   const days=[];const today=new Date();today.setHours(0,0,0,0);
@@ -12708,14 +12984,14 @@ function renderProductionAnalytics(){
     const entries=hist.filter(h=>new Date(h.start).toDateString()===ds);
     const count=entries.filter(h=>h.result==='Completado').length;
     const hours=entries.reduce((s,h)=>s+(h.dur||0)/60,0);
-    const filKg=entries.reduce((s,h)=>s+(h.filamentMm||0),0)*0.000002982;
+    const filKg=entries.reduce((s,h)=>s+(h.filamentMm||0),0)*kgPerMm;
     return{label:`${d.getDate()}/${d.getMonth()+1}`,count,hours:Math.round(hours*10)/10,filKg:Math.round(filKg*100)/100};
   });
   const maxCount=Math.max(...dayData.map(d=>d.count),1);
   const maxHours=Math.max(...dayData.map(d=>d.hours),1);
   const totalPrints=dayData.reduce((s,d)=>s+d.count,0);
   const totalHours=dayData.reduce((s,d)=>s+d.hours,0).toFixed(1);
-  const totalFilKg=(hist.reduce((s,h)=>s+(h.filamentMm||0),0)*0.000002982).toFixed(2);
+  const totalFilKg=(hist.reduce((s,h)=>s+(h.filamentMm||0),0)*kgPerMm).toFixed(2);
 
   // Top printers by hours
   const byPrinter=MAQUINAS.map(m=>({m,h:getPrintHours(m.id)})).sort((a,b)=>b.h-a.h).slice(0,5);
@@ -12725,7 +13001,7 @@ function renderProductionAnalytics(){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
       <div class="kpi-card"><div class="kpi-label">Impresiones (7d)</div><div class="kpi-value">${totalPrints}</div></div>
       <div class="kpi-card"><div class="kpi-label">Horas activas (7d)</div><div class="kpi-value">${totalHours}h</div></div>
-      <div class="kpi-card"><div class="kpi-label">Filamento total</div><div class="kpi-value">${totalFilKg}kg</div></div>
+      <div class="kpi-card" title="Peso calculado con ${localStorage.getItem('filament_material')||'PLA'} de ${localStorage.getItem('filament_diameter')||'1.75'} mm (configurable en Umbrales de mantención)"><div class="kpi-label">Filamento total · ${localStorage.getItem('filament_material')||'PLA'} ${localStorage.getItem('filament_diameter')||'1.75'}mm</div><div class="kpi-value">${totalFilKg}kg</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
       <div class="card" style="padding:14px">
@@ -13321,6 +13597,8 @@ function catDrop(e,targetIdx){
   setPvCats(cats);fillCatSelects();renderCatManager();
 }
 function catDragEnd(){_catDragIdx=null;document.querySelectorAll('#catManagerList [data-cidx]').forEach(x=>{x.style.opacity='1';x.style.borderColor='var(--border)';});}
+// Reordenar con botones ↑/↓ (el drag HTML5 no funciona en táctil)
+function catMove(idx,dir){const cats=getPvCats();const j=idx+dir;if(j<0||j>=cats.length)return;const t=cats[idx];cats[idx]=cats[j];cats[j]=t;setPvCats(cats);fillCatSelects();renderCatManager();}
 function renderCatManager(){
   const cats=getPvCats();
   const inUseCount={};
@@ -13336,6 +13614,8 @@ function renderCatManager(){
       <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${color};box-shadow:0 0 6px ${color}88"></span>
       <span style="flex:1;font-size:12px;color:var(--text)">${escapeHtml(cat)}</span>
       ${n?`<span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">${n} uso${n!==1?'s':''}</span>`:''}
+      <button onclick="catMove(${i},-1)" ${i===0?'disabled':''} title="Subir" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:11px;line-height:1;cursor:pointer;opacity:${i===0?'.3':'1'}">↑</button>
+      <button onclick="catMove(${i},1)" ${i===cats.length-1?'disabled':''} title="Bajar" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:11px;line-height:1;cursor:pointer;opacity:${i===cats.length-1?'.3':'1'}">↓</button>
       <button onclick="deletePvCat(${i})" title="${n?'Hay proveedores en esta categoría':''}" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>
     </div>`;
   }).join(''):`<div class="empty-state" style="padding:20px;font-size:12px">Sin categorías — agrega una abajo</div>`;
@@ -15224,9 +15504,38 @@ function initSidebarTooltips(){
   });
 }
 
+// Inyecta un botón de cierre (✕) en cada modal que no tenga uno visible.
+// Reutiliza el onclick del backdrop (misma lógica de cierre) o, si no hay,
+// oculta el overlay. Pensado para móvil, donde tocar el backdrop es difícil
+// cuando el modal ocupa casi toda la pantalla.
+function injectModalCloseButtons(){
+  const CLOSE_GLYPHS=['✕','×','✖','✗','⨯','╳'];
+  document.querySelectorAll('.modal-overlay, .modal-box-overlay').forEach(ov=>{
+    try{
+      const panel=ov.querySelector('.modal-card, .modal-box');
+      if(!panel||panel.querySelector('.modal-x-auto, .modal-close')) return;
+      // ¿Ya tiene una X propia cerca del encabezado? (evita duplicar)
+      const head=panel.innerHTML.slice(0,600);
+      if(CLOSE_GLYPHS.some(g=>head.includes(g))) return;
+      const bd=ov.querySelector('.modal-backdrop');
+      const onclick=bd&&bd.getAttribute('onclick');
+      const btn=document.createElement('button');
+      btn.type='button';btn.className='modal-x-auto';btn.setAttribute('aria-label','Cerrar');btn.textContent='✕';
+      btn.addEventListener('click', e=>{
+        e.preventDefault();e.stopPropagation();
+        if(onclick){try{(new Function(onclick)).call(ov);return;}catch(err){}}
+        ov.style.display='none';
+      });
+      if(getComputedStyle(panel).position==='static') panel.style.position='relative';
+      panel.appendChild(btn);
+    }catch(e){}
+  });
+}
+
 document.addEventListener('DOMContentLoaded',()=>{
   initSidebarTooltips();
   initMobileDockSwipe();
+  injectModalCloseButtons();
   // Fallback: muestra botón reintentar a los 8s y fuerza cierre a los 10s
   setTimeout(()=>{const r=document.getElementById('slRetry');if(r){const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')) r.style.display='block';}},8000);
   setTimeout(()=>{const sl=document.getElementById('sysLoader');if(sl&&!sl.classList.contains('hidden')){sl.classList.add('hidden');try{_airtableConfig();}catch(e){showTokenModal();}}},10000);
@@ -16744,6 +17053,8 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
       <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🔧 Mantención general</label><input id="cfgGeneral" type="number" min="10" max="2000" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
       <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border2);padding-top:10px"><label style="font-size:12px;color:var(--text)">💤 Alerta idle (horario laboral)</label><input id="cfgIdle" type="number" min="1" max="24" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"> h</div>
       <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> Costo filamento (CLP/kg)</label><input id="cfgFilamentCost" type="number" min="0" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:center"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">🧵 Material filamento</label><select id="cfgFilamentMaterial" style="width:92px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="PLA">PLA</option><option value="PETG">PETG</option><option value="ABS">ABS</option><option value="ASA">ASA</option><option value="TPU">TPU</option><option value="Nylon">Nylon</option></select></div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;color:var(--text)">📏 Diámetro filamento</label><select id="cfgFilamentDiameter" style="width:92px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="1.75">1.75 mm</option><option value="2.85">2.85 mm</option><option value="3.0">3.0 mm</option></select></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn btn-primary btn-sm" onclick="saveMaintConfig()" style="flex:1">Guardar</button>
@@ -16822,7 +17133,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
       </div>
       <div>
         <div class="field-label" style="margin-bottom:6px">📲 Alertas por WhatsApp (vía WATI)</div>
-        <input id="alertWaPhone" type="text" placeholder="+56912345678" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+        <input id="alertWaPhone" type="tel" placeholder="+56912345678" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:16px;font-family:monospace">
         <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11px;color:var(--text2);cursor:pointer"><input type="checkbox" id="alertWaEnabled"> Avisar al completar o fallar una impresión</label>
         <div style="font-size:10px;color:var(--text3);margin-top:4px">Usa la conexión WATI ya configurada. Deja el número con código de país.</div>
       </div>
@@ -19575,7 +19886,7 @@ function qcalcClear(kind){
   /* ─── Panel ─── */
   #jvs-panel{
     position:fixed; bottom:96px; right:24px; z-index:9001;
-    width:380px; max-width:calc(100vw - 32px); height:540px; max-height:calc(100vh - 130px);
+    width:380px; max-width:calc(100vw - 32px); height:540px; max-height:calc(100vh - 130px); max-height:calc(100dvh - 130px);
     background:linear-gradient(180deg,#0d0d0d 0%,#080808 100%);
     border:1px solid #1f3d3a; border-radius:18px;
     box-shadow:0 20px 60px rgba(0,0,0,.65), 0 0 0 1px rgba(0,212,204,.08);
