@@ -10397,7 +10397,7 @@ async function createCotizacion(){
 // ════════════════════════════════════════════════════════════════
 const GF={steps:[],idx:0,answers:{},onComplete:null,title:'',_busy:false,flowKey:null};
 function gfStart(config){
-  GF.steps=config.steps||[];GF.idx=0;GF.answers=config.initial||{};GF.onComplete=config.onComplete;GF.title=config.title||'Asistente';GF._busy=false;
+  GF.steps=config.steps||[];GF.idx=0;GF.answers=config.initial||{};GF.onComplete=config.onComplete;GF.title=config.title||'Asistente';GF._busy=false;GF.finishLabel=config.finishLabel||'';
   GF.flowKey=config.draft?('gfdraft_'+(config.flowKey||config.title)):null;
   if(GF.flowKey){try{const d=JSON.parse(sessionStorage.getItem(GF.flowKey)||'null');if(d&&d.answers&&Object.keys(d.answers).length){GF.answers=Object.assign(GF.answers,d.answers);GF.idx=Math.min(d.idx||0,GF.steps.length-1);toast('📝 Borrador recuperado','info');}}catch(e){}}
   const foot=document.querySelector('#guidedModal .gf-foot');if(foot)foot.style.display='flex';
@@ -10445,12 +10445,15 @@ function gfRender(){
     html+=gfClientStepHTML();
   }else if(step.type==='review'){
     html+=gfReviewHTML();
+  }else if(step.type==='summary'){
+    const sr=(step.fields||[]).map(fld=>{let v=GF.answers[fld.key];if(fld.fmt)v=fld.fmt(v,GF.answers);if(Array.isArray(v))v=v.join(', ');if(v===undefined||v===null||String(v).trim()==='')return '';return '<div class="gf-rev-row"><span>'+escapeHtml(fld.label)+'</span><b>'+escapeHtml(String(v))+'</b></div>';}).join('');
+    html+='<div style="margin-top:4px">'+(sr||'<div class="gf-sub">Sin datos para mostrar.</div>')+'</div>';
   }
   body.innerHTML=html;
   // Footer: chips de selección única y el paso cliente avanzan solos → ocultar "Siguiente"
   const hideNext=(step.type==='chips'&&!step.multi)||step.type==='client';
   $next.style.display=hideNext?'none':'inline-flex';
-  $next.textContent=(GF.idx===total-1)?'✓ Crear cotización':'Siguiente →';
+  $next.textContent=(GF.idx===total-1)?(GF.finishLabel||'✓ Confirmar'):'Siguiente →';
   if(step.type==='client')setTimeout(gfClientSearch,0);
   if(step.type==='text')setTimeout(()=>document.getElementById('gfInput')?.focus(),60);
 }
@@ -10630,7 +10633,7 @@ function startQuoteFlow(presetClienteId,presetClienteNombre){
   const initial={};
   if(presetClienteId){initial.clienteId=presetClienteId;initial.clienteNombre=presetClienteNombre||(state.clientesById&&state.clientesById[presetClienteId])||'';steps[0].skip=()=>true;}
   gfStart({
-    title:'💰 Cotizar con KAI',draft:true,flowKey:'quote',initial,steps,
+    title:'💰 Cotizar con KAI',draft:true,flowKey:'quote',finishLabel:'✓ Crear cotización',initial,steps,
     onComplete:async(a)=>{
       const items=(a._items||[]).filter(it=>it.desc||it.ventaUnit);
       if(!items.length||!items.some(it=>it.ventaUnit)){toast('Agrega al menos un ítem con precio de venta','error');return;}
@@ -10660,23 +10663,31 @@ async function actualizarCliente(id,fields){const r=await airtableWrite('Cliente
 async function actualizarCotizacion(id,fields){const r=await airtableWrite('Cotizaciones','PATCH',id,fields);const c=state.cotizaciones.find(x=>x.id===id);if(c)Object.assign(c.fields,fields);return r;}
 async function actualizarPedido(id,fields){const r=await airtableWrite('Pedidos','PATCH',id,fields);const p=state.pedidos.find(x=>x.id===id);if(p)Object.assign(p.fields,fields);return r;}
 
+const _CLI_SUM=[{label:'Empresa',key:'empresa'},{label:'Contacto',key:'contacto'},{label:'Cargo',key:'cargo'},{label:'Teléfono',key:'telefono'},{label:'Email',key:'email'},{label:'RUT',key:'rut'},{label:'Ciudad',key:'ciudad'},{label:'Sitio web',key:'web'},{label:'Origen',key:'origen'},{label:'Etapa',key:'etapa'},{label:'Notas',key:'notas'}];
+const _ORIGEN_OPTS=[{label:'Referido',value:'Referido'},{label:'Instagram',value:'Instagram'},{label:'LinkedIn',value:'LinkedIn'},{label:'Google',value:'Google'},{label:'Contacto directo',value:'Contacto directo'},{label:'Otro',value:'Otro'}];
+const _ETAPA_OPTS=['Lead nuevo','Contactado','Propuesta enviada','Negociación','Cliente activo','Perdido'].map(v=>({label:v,value:v}));
 // ── Crear cliente (guiado) ──
 function startNewClientFlow(){
-  gfStart({title:'➕ Nuevo cliente',draft:true,flowKey:'newclient',steps:[
+  gfStart({title:'➕ Nuevo cliente',draft:true,flowKey:'newclient',finishLabel:'✓ Crear cliente',steps:[
     {key:'empresa',type:'text',q:'¿Nombre de la empresa o cliente?',rows:1,required:true,placeholder:'Ej: Constructora Andes SpA'},
     {key:'contacto',type:'text',q:'¿Persona de contacto?',rows:1,placeholder:'Ej: Juan Pérez'},
+    {key:'cargo',type:'text',q:'¿Cargo del contacto?',sub:'Opcional.',rows:1,placeholder:'Ej: Jefe de compras'},
     {key:'telefono',type:'text',q:'¿Teléfono / WhatsApp?',rows:1,placeholder:'+56 9 1234 5678'},
     {key:'email',type:'text',q:'¿Email?',rows:1,placeholder:'correo@empresa.cl'},
-    {key:'origen',type:'chips',q:'¿De dónde viene el lead?',options:[{label:'Referido',value:'Referido'},{label:'Instagram',value:'Instagram'},{label:'LinkedIn',value:'LinkedIn'},{label:'Google',value:'Google'},{label:'Contacto directo',value:'Contacto directo'},{label:'Otro',value:'Otro'}]},
+    {key:'rut',type:'text',q:'¿RUT?',sub:'Opcional.',rows:1,placeholder:'76.123.456-7'},
+    {key:'ciudad',type:'text',q:'¿Ciudad?',sub:'Opcional.',rows:1,placeholder:'Ej: Santiago'},
+    {key:'web',type:'text',q:'¿Sitio web?',sub:'Opcional.',rows:1,placeholder:'https://…'},
+    {key:'origen',type:'chips',q:'¿De dónde viene el lead?',options:_ORIGEN_OPTS},
     {key:'notas',type:'text',q:'Notas internas',sub:'Opcional.',rows:2,placeholder:'Contexto, necesidades…'},
+    {key:'_sum',type:'summary',q:'Revisa y confirma',sub:'Verifica los datos antes de crear el cliente.',fields:_CLI_SUM},
   ],onComplete:async(a)=>{
     if(!a.empresa){toast('La empresa es obligatoria','error');return;}
-    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Teléfono':a.telefono||'','Email':a.email||'','Origen lead':a.origen||'','Notas internas':a.notas||'','Etapa venta':'Lead nuevo','Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
+    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Origen lead':a.origen||'','Notas internas':a.notas||'','Etapa venta':'Lead nuevo','Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
     if(isVendorMode())f['Vendedor']=currentVendorId();
     toast('Creando cliente…','info');
     let rec;
     try{rec=await airtableWrite('Clientes','POST',null,f);}
-    catch(e){if(e.message.toLowerCase().includes('unknown')){delete f['Origen lead'];rec=await airtableWrite('Clientes','POST',null,f);}else throw e;}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){['Origen lead','Sitio web','Ciudad','RUT','Cargo contacto'].forEach(k=>delete f[k]);rec=await airtableWrite('Clientes','POST',null,f);}else throw e;}
     if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=a.empresa;}
     _gfClearDraft();gfClose();switchTab('clientes');if(typeof renderClientes==='function')renderClientes();renderOverview();
     toast('✓ Cliente "'+a.empresa+'" creado','success');
@@ -10686,16 +10697,23 @@ function startNewClientFlow(){
 function startEditClientFlow(id){
   const c=state.clientes.find(x=>x.id===id);if(!c){toast('Cliente no encontrado','error');return;}
   const f=c.fields;
-  gfStart({title:'✏️ Editar cliente',initial:{empresa:f['Empresa']||'',contacto:f['Contacto']||'',telefono:f['Teléfono']||'',email:f['Email']||'',etapa:f['Etapa venta']||'Lead nuevo',notas:f['Notas internas']||''},steps:[
+  gfStart({title:'✏️ Editar cliente',finishLabel:'✓ Guardar cambios',initial:{empresa:f['Empresa']||'',contacto:f['Contacto']||'',cargo:f['Cargo contacto']||'',telefono:f['Teléfono']||'',email:f['Email']||'',rut:f['RUT']||'',ciudad:f['Ciudad']||'',web:f['Sitio web']||'',etapa:f['Etapa venta']||'Lead nuevo',notas:f['Notas internas']||''},steps:[
     {key:'empresa',type:'text',q:'Empresa',rows:1,required:true},
     {key:'contacto',type:'text',q:'Contacto',rows:1},
+    {key:'cargo',type:'text',q:'Cargo del contacto',rows:1},
     {key:'telefono',type:'text',q:'Teléfono / WhatsApp',rows:1},
     {key:'email',type:'text',q:'Email',rows:1},
-    {key:'etapa',type:'chips',q:'Etapa de venta',options:['Lead nuevo','Contactado','Propuesta enviada','Negociación','Cliente activo','Perdido'].map(v=>({label:v,value:v}))},
+    {key:'rut',type:'text',q:'RUT',rows:1},
+    {key:'ciudad',type:'text',q:'Ciudad',rows:1},
+    {key:'web',type:'text',q:'Sitio web',rows:1},
+    {key:'etapa',type:'chips',q:'Etapa de venta',options:_ETAPA_OPTS},
     {key:'notas',type:'text',q:'Notas internas',rows:2},
+    {key:'_sum',type:'summary',q:'Revisa y confirma',fields:_CLI_SUM},
   ],onComplete:async(a)=>{
     toast('Guardando…','info');
-    await actualizarCliente(id,{'Empresa':a.empresa,'Contacto':a.contacto||'','Teléfono':a.telefono||'','Email':a.email||'','Etapa venta':a.etapa,'Notas internas':a.notas||''});
+    const fields={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Etapa venta':a.etapa,'Notas internas':a.notas||''};
+    try{await actualizarCliente(id,fields);}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){['Cargo contacto','RUT','Ciudad','Sitio web'].forEach(k=>delete fields[k]);await actualizarCliente(id,fields);}else throw e;}
     gfClose();if(typeof renderClientes==='function')renderClientes();renderOverview();
     toast('✓ Cliente actualizado','success');
   }});
@@ -10766,30 +10784,78 @@ function startMaintFlow(){
   }});
 }
 // ── #5 Nuevo proveedor (guiado) ──
+const _REP_OPTS=[{label:'⭐',value:'1'},{label:'⭐⭐',value:'2'},{label:'⭐⭐⭐',value:'3'},{label:'⭐⭐⭐⭐',value:'4'},{label:'⭐⭐⭐⭐⭐',value:'5'}];
+const _COND_OPTS=[{label:'Contado',value:'Contado'},{label:'30 días',value:'30 días'},{label:'45 días',value:'45 días'},{label:'60 días',value:'60 días'}];
+const _PROV_SUM=[{label:'Nombre',key:'nombre'},{label:'Categoría',key:'categoria'},{label:'Estado',key:'estado'},{label:'Contacto',key:'contacto'},{label:'Cargo',key:'cargo'},{label:'Teléfono',key:'telefono'},{label:'WhatsApp',key:'whatsapp'},{label:'Email',key:'email'},{label:'Sitio web',key:'web'},{label:'RUT',key:'rut'},{label:'Productos',key:'productos'},{label:'Reputación',key:'reputacion',fmt:v=>v?'★'.repeat(+v):''},{label:'Condiciones',key:'condiciones'},{label:'Plazo',key:'plazo',fmt:v=>v?v+' días':''},{label:'Notas',key:'notas'}];
+function _provCatOpts(){const cats=(typeof getPvCats==='function')?getPvCats():[];return (cats.length?cats:['Filamento','Resina','Insumos','Maquinaria','Servicios']).map(c=>({label:c,value:c}));}
 function startNewProveedorFlow(){
-  const cats=(typeof getPvCats==='function')?getPvCats():[];
-  gfStart({title:'➕ Nuevo proveedor',draft:true,flowKey:'newprov',steps:[
+  gfStart({title:'➕ Nuevo proveedor',draft:true,flowKey:'newprov',finishLabel:'✓ Crear proveedor',steps:[
     {key:'nombre',type:'text',q:'¿Nombre del proveedor?',rows:1,required:true,placeholder:'Ej: Filamentos Chile SpA'},
-    {key:'categoria',type:'chips',q:'¿Categoría?',sub:'Puedes elegir varias.',multi:true,options:(cats.length?cats:['Filamento','Resina','Insumos','Maquinaria','Servicios']).map(c=>({label:c,value:c}))},
+    {key:'categoria',type:'chips',q:'¿Categoría?',sub:'Puedes elegir varias.',multi:true,options:_provCatOpts()},
     {key:'contacto',type:'text',q:'Persona de contacto',rows:1},
-    {key:'telefono',type:'text',q:'Teléfono / WhatsApp',rows:1},
+    {key:'cargo',type:'text',q:'Cargo del contacto',sub:'Opcional.',rows:1},
+    {key:'telefono',type:'text',q:'Teléfono',rows:1},
+    {key:'whatsapp',type:'text',q:'WhatsApp',sub:'Opcional.',rows:1},
     {key:'email',type:'text',q:'Email',rows:1},
-    {key:'condiciones',type:'chips',q:'Condiciones de pago',options:[{label:'Contado',value:'Contado'},{label:'30 días',value:'30 días'},{label:'45 días',value:'45 días'},{label:'60 días',value:'60 días'}]},
+    {key:'web',type:'text',q:'Sitio web',sub:'Opcional.',rows:1,placeholder:'https://…'},
+    {key:'rut',type:'text',q:'RUT',sub:'Opcional.',rows:1},
+    {key:'productos',type:'text',q:'Productos / servicios que provee',sub:'Opcional.',rows:2,placeholder:'Ej: Filamento PLA, PETG, resina…'},
+    {key:'reputacion',type:'chips',q:'Reputación',sub:'Opcional.',options:_REP_OPTS},
+    {key:'condiciones',type:'chips',q:'Condiciones de pago',options:_COND_OPTS},
     {key:'plazo',type:'number',q:'Plazo de entrega',min:0,suffix:'días'},
     {key:'notas',type:'text',q:'Notas',rows:2},
+    {key:'_sum',type:'summary',q:'Revisa y confirma',sub:'Verifica antes de crear el proveedor.',fields:_PROV_SUM},
   ],onComplete:async(a)=>{
     if(!a.nombre){toast('El nombre es obligatorio','error');return;}
-    const f={'Nombre':a.nombre,'Contacto':a.contacto||'','Teléfono':a.telefono||'','Email':a.email||'','Estado':'Activo','Notas':a.notas||''};
+    const f={'Nombre':a.nombre,'Contacto':a.contacto||'','Cargo':a.cargo||'','Teléfono':a.telefono||'','WhatsApp':a.whatsapp||'','Email':a.email||'','Sitio Web':a.web||'','RUT':a.rut||'','Productos':a.productos||'','Estado':'Activo','Notas':a.notas||''};
     if(a.categoria&&a.categoria.length)f['Categoría']=a.categoria;
     if(a.condiciones)f['Condiciones de pago']=a.condiciones;
     if(a.plazo)f['Plazo de entrega (días)']=parseInt(a.plazo);
+    if(a.reputacion)f['Reputación']=parseInt(a.reputacion);
     toast('Creando proveedor…','info');
     try{await airtableWrite('Proveedores','POST',null,f);}
-    catch(e){if(e.message.toLowerCase().includes('unknown')){delete f['Condiciones de pago'];delete f['Plazo de entrega (días)'];delete f['Categoría'];await airtableWrite('Proveedores','POST',null,f);}else throw e;}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){['Condiciones de pago','Plazo de entrega (días)','Categoría','Cargo','WhatsApp','Sitio Web','RUT','Productos','Reputación'].forEach(k=>delete f[k]);await airtableWrite('Proveedores','POST',null,f);}else throw e;}
     _gfClearDraft();gfClose();await loadAllDataSilent();if(typeof renderProveedores==='function')renderProveedores();
     toast('✓ Proveedor "'+a.nombre+'" creado','success');
   }});
 }
+// ── Editar proveedor (guiado) ──
+function startEditProveedorFlow(id){
+  const pv=(state.proveedores||[]).find(x=>x.id===id);if(!pv){toast('Proveedor no encontrado','error');return;}
+  const f=pv.fields;
+  const catActual=(typeof pvCat==='function'?pvCat(f):'').split(',').map(s=>s.trim()).filter(Boolean);
+  gfStart({title:'✏️ Editar proveedor',finishLabel:'✓ Guardar cambios',initial:{nombre:f['Nombre']||'',categoria:catActual,contacto:f['Contacto']||'',cargo:f['Cargo']||'',telefono:f['Teléfono']||'',whatsapp:f['WhatsApp']||'',email:f['Email']||'',web:f['Sitio Web']||'',rut:f['RUT']||'',productos:f['Productos']||'',reputacion:f['Reputación']?String(f['Reputación']):'',condiciones:f['Condiciones de pago']||'',plazo:f['Plazo de entrega (días)']||'',estado:f['Estado']||'Activo',notas:f['Notas']||''},steps:[
+    {key:'nombre',type:'text',q:'Nombre',rows:1,required:true},
+    {key:'categoria',type:'chips',q:'Categoría',multi:true,options:_provCatOpts()},
+    {key:'estado',type:'chips',q:'Estado',options:[{label:'Activo',value:'Activo'},{label:'Inactivo',value:'Inactivo'}]},
+    {key:'contacto',type:'text',q:'Contacto',rows:1},
+    {key:'cargo',type:'text',q:'Cargo del contacto',rows:1},
+    {key:'telefono',type:'text',q:'Teléfono',rows:1},
+    {key:'whatsapp',type:'text',q:'WhatsApp',rows:1},
+    {key:'email',type:'text',q:'Email',rows:1},
+    {key:'web',type:'text',q:'Sitio web',rows:1},
+    {key:'rut',type:'text',q:'RUT',rows:1},
+    {key:'productos',type:'text',q:'Productos / servicios',rows:2},
+    {key:'reputacion',type:'chips',q:'Reputación',options:_REP_OPTS},
+    {key:'condiciones',type:'chips',q:'Condiciones de pago',options:_COND_OPTS},
+    {key:'plazo',type:'number',q:'Plazo de entrega',min:0,suffix:'días'},
+    {key:'notas',type:'text',q:'Notas',rows:2},
+    {key:'_sum',type:'summary',q:'Revisa y confirma',fields:_PROV_SUM},
+  ],onComplete:async(a)=>{
+    toast('Guardando…','info');
+    const fields={'Nombre':a.nombre,'Contacto':a.contacto||'','Cargo':a.cargo||'','Teléfono':a.telefono||'','WhatsApp':a.whatsapp||'','Email':a.email||'','Sitio Web':a.web||'','RUT':a.rut||'','Productos':a.productos||'','Estado':a.estado||'Activo','Notas':a.notas||''};
+    if(a.categoria&&a.categoria.length)fields['Categoría']=a.categoria;
+    if(a.condiciones)fields['Condiciones de pago']=a.condiciones;
+    if(a.plazo)fields['Plazo de entrega (días)']=parseInt(a.plazo);
+    if(a.reputacion)fields['Reputación']=parseInt(a.reputacion);
+    const sync=()=>{const p=(state.proveedores||[]).find(x=>x.id===id);if(p)Object.assign(p.fields,fields);};
+    try{await airtableWrite('Proveedores','PATCH',id,fields);sync();}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){['Condiciones de pago','Plazo de entrega (días)','Categoría','Cargo','WhatsApp','Sitio Web','RUT','Productos','Reputación'].forEach(k=>delete fields[k]);await airtableWrite('Proveedores','PATCH',id,fields);sync();}else throw e;}
+    gfClose();await loadAllDataSilent();if(typeof renderProveedores==='function')renderProveedores();
+    toast('✓ Proveedor actualizado','success');
+  }});
+}
+window.startEditProveedorFlow=startEditProveedorFlow;
 // ── #2 Registrar pago / abono (guiado) ──
 function startPaymentFlow(){
   if(!state||!Array.isArray(state.pedidos)){toast('Aún se están cargando los datos…','info');return;}
@@ -14305,7 +14371,7 @@ function buildProveedorRow(p){
     <td class="pv-rep">${starsCell}</td>
     <td class="pv-estado">${estadoPvBadge(estado)}</td>
     <td class="pv-plazo" style="font-family:'JetBrains Mono',monospace;font-size:11px">${plazo}</td>
-    <td class="pv-acc" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg></button></td>
+    <td class="pv-acc" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="startEditProveedorFlow('${id}')" title="Editar guiado">🪄</button><button class="btn btn-ghost btn-sm" onclick="openEditProveedor('${id}')" title="Editar ficha completa"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg></button></td>
   </tr>
   <tr id="pv-ficha-${id}" style="display:none">
     <td colspan="11" style="padding:0;background:var(--surface2)">
