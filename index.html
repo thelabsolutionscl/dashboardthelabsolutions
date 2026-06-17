@@ -3334,6 +3334,11 @@ var ENDPOINT    = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
 var SECRET      = 'thelab2025';
 // ID de la cuenta cliente SIN guiones (ej: 7577812099)
 var CUSTOMER_ID = 'PEGA_AQUI_EL_CUSTOMER_ID';
+// Modo seguro: las campañas nuevas quedan como BORRADOR en
+// Google Ads → Acciones masivas → Cargas (revísalas y aplícalas a mano).
+// Cuando confirmes que se crean bien, ponlo en false para que se
+// apliquen automáticamente. (Solo afecta la CREACIÓN de campañas.)
+var PREVIEW_NUEVAS_CAMPANAS = true;
 
 function main() {
   var isMCC = typeof AdsManagerApp !== 'undefined';
@@ -3538,10 +3543,16 @@ function _aplicarMutaciones(mutsJson) {
           _up.append(_fila);
         }
         _up.forCampaignManagement();
-        _up.apply();
+        if (PREVIEW_NUEVAS_CAMPANAS) {
+          _up.preview();
+          Logger.log('BORRADOR (preview) listo: ' + m.data.nombre + ' — revísalo y aplícalo en ' +
+                     'Google Ads -> Acciones masivas -> Cargas. Pon PREVIEW_NUEVAS_CAMPANAS=false para aplicar solo.');
+        } else {
+          _up.apply();
+          Logger.log('OK creada (bulk upload): ' + m.data.nombre + ' · ' + _kws.length +
+                     ' keywords · ' + (_conAnuncio ? 'con anuncio RSA' : 'sin anuncio'));
+        }
         muts[k].status = 'aplicado';
-        Logger.log('OK creada (bulk upload): ' + m.data.nombre + ' · ' + _kws.length +
-                   ' keywords · ' + (_conAnuncio ? 'con anuncio RSA' : 'sin anuncio'));
 
       } else if (m.op === 'edit') {
         var iter = AdsApp.campaigns().withIds([m.id]).get();
