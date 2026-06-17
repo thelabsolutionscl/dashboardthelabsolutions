@@ -7670,16 +7670,16 @@ async function updateCotizacionEstado(id,estado){
       await _advanceEtapaCliente(_cid,'Cliente activo',['Lead nuevo','Contactado','Propuesta enviada','Negociación']);
       await crearPedidoDesdeCotizacion(id);
       // Crea/actualiza la carpeta del cliente + carpeta de cotización en Drive.
-      // No bloqueante: si Drive no está configurado o falla, no rompe la aprobación.
-      try{
-        if(_driveGetClientId()){
+      // Solo si ya hay sesión de Drive activa (evita un popup bloqueado a mitad
+      // del flujo). Si no, la carpeta se crea sola al abrir "Ver adjuntos".
+      if(_driveConnected()){
+        try{
           const numCot=_cot?.fields['N° Cotización']||id.slice(-6);
           const cliente=resolveClienteName(_cot?.fields['Cliente']);
-          toast('📂 Sincronizando carpeta en Drive…','info');
           await ensureCotFolder(id,numCot,cliente);
           toast('📂 Carpeta de Drive lista','success');
-        }
-      }catch(e){toast('No se pudo crear la carpeta en Drive: '+(e.message||''),'error');}
+        }catch(e){toast('No se pudo crear la carpeta en Drive: '+(e.message||''),'error');}
+      }
     }
     await loadAllDataSilent();renderCotizaciones();renderOverview();
   }
