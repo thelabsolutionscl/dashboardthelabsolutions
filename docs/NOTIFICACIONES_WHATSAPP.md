@@ -56,9 +56,9 @@ Campo Vendedor por tabla: Clientes `fldT2NeOO6YjQgVns`, Cotizaciones
 
 | ID | Nombre | Tabla | Intervalo | Filtro (fórmula Airtable) |
 |---|---|---|---|---|
-| `5409833` | The Lab — WhatsApp · Leads asignados → Nicanor | Clientes | 15 min | `AND({Vendedor}='nicanor', {WA: aviso asignación enviado}=FALSE())` |
-| `5409848` | The Lab — WhatsApp · Cotizaciones asignadas → vendedor | Cotizaciones | 30 min | `AND({Vendedor}!='', {WA: aviso asignación enviado}=FALSE())` |
-| `5409850` | The Lab — WhatsApp · Pedidos asignados → vendedor | Pedidos | 30 min | `AND({Vendedor}!='', {WA: aviso asignación enviado}=FALSE())` |
+| `5409833` | The Lab — WhatsApp · Leads asignados → Nicanor | Clientes | 1 h | `AND({Vendedor}='nicanor', {WA: aviso asignación enviado}=FALSE())` |
+| `5409848` | The Lab — WhatsApp · Cotizaciones asignadas → vendedor | Cotizaciones | 1 h | `AND({Vendedor}!='', {WA: aviso asignación enviado}=FALSE())` |
+| `5409850` | The Lab — WhatsApp · Pedidos asignados → vendedor | Pedidos | 1 h | `AND({Vendedor}!='', {WA: aviso asignación enviado}=FALSE())` |
 | `5409851` | The Lab — WhatsApp · Estado de Máquinas → Gustavo | Maquinas | 6 h | `({estado}&'')!=({WA: estado notificado}&'')` |
 
 Estructura de cada escenario (clona el patrón de los escenarios de alerta ya
@@ -94,7 +94,10 @@ En el módulo **HTTP** de cada escenario hay que reemplazar:
 ## 5. Puesta en marcha (go-live)
 
 1. **Cargar credenciales WATI** en los 4 escenarios (reemplazar los 2
-   placeholders del módulo HTTP de cada uno).
+   placeholders del módulo HTTP de cada uno). Atajo sin compartir el token por
+   chat: en el dashboard, **⚙ WATI → Guardar** (escribe el registro
+   `WATI_CONFIG` en la tabla *Monitor Sistema* de Airtable); luego se leen esas
+   credenciales y se rellenan los escenarios.
 2. **Despausar la organización** de Make — hoy está en pausa
    (`org 2450620 isPaused: true`); sin esto nada corre.
 3. **Activar** los 4 escenarios (`5409833`, `5409848`, `5409850`, `5409851`).
@@ -108,11 +111,22 @@ En el módulo **HTTP** de cada escenario hay que reemplazar:
 que cada persona mantenga abierta la conversación con el bot, o se aprueba la
 plantilla.
 
-## 6. Costo de operaciones (plan Core: 10.000 ops/mes)
+## 6. Costo de operaciones (plan Core: 10.000 ops/mes) — IMPORTANTE
 
-Cada pasada que no encuentra registros consume ~1 op. Estimado en reposo:
-Leads 15 min (~2.880/mes) + Cotizaciones/Pedidos 30 min (~2×1.440) + Máquinas 6 h
-(~120) ≈ **~5.900 ops/mes** de base, más 2 ops por cada aviso real. Para ahorrar,
-subir los intervalos. Para tiempo real sin polling, migrar a **Automatización de
-Airtable → webhook de Make** (1 escenario instantáneo que enruta por entidad +
-Vendedor); deja el polling sólo como respaldo.
+⚠️ **La organización ya consumió sus 10.000 ops del ciclo** (`unusedOperations: 0`)
+y por eso está pausada. Reinicia el **2026-06-21**. Hasta entonces (o hasta subir
+de plan / comprar ops) **nada corre**.
+
+Cada pasada que no encuentra registros consume ~1 op. Con los intervalos actuales:
+Leads 1 h (~720/mes) + Cotizaciones 1 h (~720) + Pedidos 1 h (~720) + Máquinas 6 h
+(~120) ≈ **~2.280 ops/mes** de base, más ~2 ops por cada aviso real. Súmalo a lo
+que ya consumen los 6 escenarios activos previos.
+
+Para no volver a topar el límite, dos caminos:
+1. **Subir intervalos** (p. ej. todo a 2–4 h) o subir de plan en Make.
+2. **Migrar a event-driven (recomendado):** crear *Automatizaciones de Airtable*
+   (una por tabla, "cuando un registro coincide" → "enviar webhook") que apunten a
+   **un** webhook de Make que enruta por entidad + Vendedor y envía por WATI.
+   Consumo ~0 en reposo y entrega casi instantánea; deja el polling como respaldo.
+   (Las automatizaciones se crean en la UI de Airtable; el webhook de Make lo puedo
+   dejar armado cuando quieras.)
