@@ -2167,22 +2167,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
   <!-- Modal edición individual pedido -->
-  <div id="guidedModal" class="modal-overlay" style="display:none">
-    <div class="modal-backdrop" onclick="gfClose()"></div>
-    <div class="modal-card">
-      <button class="modal-x-auto" onclick="gfClose()" aria-label="Cerrar">✕</button>
-      <div class="gf-head">
-        <div class="gf-title" id="gfTitle">Asistente</div>
-        <div class="gf-stepinfo" id="gfStepInfo"></div>
-        <div class="gf-track"><i id="gfProgress" style="width:0%"></i></div>
-      </div>
-      <div class="gf-body" id="gfBody"></div>
-      <div class="gf-foot">
-        <button class="btn btn-ghost btn-sm" id="gfBack" onclick="gfBack()">← Atrás</button>
-        <button class="btn btn-primary btn-sm" id="gfNext" onclick="gfNext()">Siguiente →</button>
-      </div>
-    </div>
-  </div>
 
   <div id="adjuntosModal" class="modal-overlay" style="display:none">
     <div class="modal-backdrop" onclick="closeAdjuntosModal()"></div>
@@ -17594,6 +17578,24 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
 <!-- Proveedor multi-select dropdown -->
 <div id="pvMultiDrop" style="display:none;position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:240px;max-height:360px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.45)">
   <div id="pvMultiDropContent"></div>
+</div>
+
+<!-- ASISTENTE GUIADO (global: se abre desde cualquier pestaña) -->
+<div id="guidedModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="gfClose()"></div>
+  <div class="modal-card">
+    <button class="modal-x-auto" onclick="gfClose()" aria-label="Cerrar">✕</button>
+    <div class="gf-head">
+      <div class="gf-title" id="gfTitle">Asistente</div>
+      <div class="gf-stepinfo" id="gfStepInfo"></div>
+      <div class="gf-track"><i id="gfProgress" style="width:0%"></i></div>
+    </div>
+    <div class="gf-body" id="gfBody"></div>
+    <div class="gf-foot">
+      <button class="btn btn-ghost btn-sm" id="gfBack" onclick="gfBack()">← Atrás</button>
+      <button class="btn btn-primary btn-sm" id="gfNext" onclick="gfNext()">Siguiente →</button>
+    </div>
+  </div>
 </div>
 
 <!-- MANTENIMIENTO REGISTRO MODAL -->
