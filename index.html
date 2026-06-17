@@ -344,12 +344,15 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .ai-response-wrap{position:relative;}
 .copy-btn{position:absolute;top:7px;right:7px;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text2);font-size:10px;padding:3px 8px;cursor:pointer;}
 .copy-btn:hover{color:var(--accent);border-color:var(--accent);}
-.modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);}
+.modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);animation:modalFade .2s ease-out;}
 .modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);}
-.modal-card{position:relative;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:24px;max-width:480px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.6);}
+.modal-card{position:relative;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:24px;max-width:480px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.6);animation:modalPop .28s cubic-bezier(.16,1,.3,1);}
 .modal-card.wide{max-width:640px;}
+@keyframes modalFade{from{opacity:0}to{opacity:1}}
+@keyframes modalPop{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.modal-overlay,.modal-card,.modal-box{animation:none!important}}
 /* Modal box — header/body/footer pattern */
-.modal-box{position:relative;background:var(--surface);border:1px solid var(--border2);border-radius:14px;width:calc(100% - 32px);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.75),0 0 0 1px rgba(255,255,255,0.04);}
+.modal-box{position:relative;background:var(--surface);border:1px solid var(--border2);border-radius:14px;width:calc(100% - 32px);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.75),0 0 0 1px rgba(255,255,255,0.04);animation:modalPop .28s cubic-bezier(.16,1,.3,1);}
 .modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border2);flex-shrink:0;gap:12px;min-height:56px;}
 .modal-body{padding:20px;overflow-y:auto;flex:1;}
 .modal-footer{padding:12px 20px;border-top:1px solid var(--border2);flex-shrink:0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center;background:var(--surface2);}
@@ -9506,6 +9509,21 @@ function _parseQAIAResponse(text){
   }
   return{items,resultado};
 }
+// Persiste el checklist QA en Airtable: 'Notas QA' (JSON, round-trip del dashboard)
+// + 'Checklist QA' (texto legible para Airtable/Make) + 'Resultado QA' + marca el agente.
+async function _qaPersist(id,{silent}={}){
+  if(!id) return false;
+  const notasQA=JSON.stringify(qaItems);
+  const checked=qaItems.filter(x=>x.checked).length;
+  const legible=qaItems.map(it=>`[${it.checked?'x':' '}] ${it.texto}`).join('\n');
+  const apply=fields=>{const p=state.pedidos.find(x=>x.id===id);if(p)Object.assign(p.fields,fields);};
+  const full={'Resultado QA':qaResultadoActual,'Notas QA':notasQA,'Checklist QA':legible,'Procesado por QA_AGENT':true};
+  try{await airtableWrite('Pedidos','PATCH',id,full);apply(full);if(!silent)toast(`✓ Checklist QA guardado (${checked}/${qaItems.length})`,'success');return true;}
+  catch(e){
+    try{const min={'Resultado QA':qaResultadoActual,'Notas QA':notasQA};await airtableWrite('Pedidos','PATCH',id,min);apply(min);if(!silent)toast(`✓ Checklist QA guardado (${checked}/${qaItems.length})`,'success');return true;}
+    catch(e2){if(!silent)toast('Error al guardar QA: '+e2.message,'error');return false;}
+  }
+}
 async function rellenarQAconIA(){
   const descEl=document.getElementById('qaIADesc'),desc=(descEl?.value||'').trim();
   const id=document.getElementById('qaModalPedidoId').value;
@@ -9530,7 +9548,8 @@ async function rellenarQAconIA(){
     qaItems=parsed.items;
     if(parsed.resultado){qaResultadoActual=parsed.resultado;updateQAResultadoBtns();}
     renderQAChecklist();
-    toast(`✓ Checklist IA: ${parsed.items.length} ítems${parsed.resultado?' · '+parsed.resultado:''}`,'success');
+    await _qaPersist(id,{silent:true});
+    toast(`✓ Checklist IA guardado en Airtable: ${parsed.items.length} ítems${parsed.resultado?' · '+parsed.resultado:''}`,'success');
   }catch(e){toast('Error IA: '+e.message,'error');}
   finally{btn.disabled=false;btn.innerHTML=prev;}
 }
@@ -9552,10 +9571,7 @@ async function saveQAModal(){
     const motivo=prompt('Motivo del rechazo de QA (¿qué falló?):','');
     if(motivo&&motivo.trim())qaItems.push({texto:'❌ Motivo rechazo: '+motivo.trim(),checked:false,motivo:true});
   }
-  const notasQA=JSON.stringify(qaItems);const checked=qaItems.filter(x=>x.checked).length;
-  let saved=false;
-  try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual,'Notas QA':notasQA});const p=state.pedidos.find(x=>x.id===id);if(p){p.fields['Resultado QA']=qaResultadoActual;p.fields['Notas QA']=notasQA;}toast(`✓ QA ${checked}/${qaItems.length}`,'success');saved=true;}
-  catch(e){try{await airtableWrite('Pedidos','PATCH',id,{'Resultado QA':qaResultadoActual});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Resultado QA']=qaResultadoActual;toast(`✓ QA ${qaResultadoActual}`,'success');saved=true;}catch(e2){toast('Error: '+e2.message,'error');}}
+  const saved=await _qaPersist(id);
   if(saved){await _qaOfferRework(id);closeQAModal();renderPedidos();renderOverview();}
 }
 function filterPedidos(filter,btn){document.querySelectorAll('.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');renderPedidos(filter);}
