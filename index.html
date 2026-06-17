@@ -20088,7 +20088,7 @@ function qcalcClear(kind){
   'use strict';
 
   const JV = {
-    open:false, listening:false, thinking:false, speaking:false,
+    open:false, listening:false, thinking:false, speaking:false, busy:false, ctrl:null,
     rec:null, synth:window.speechSynthesis, history:[], autoListen:false,
   };
 
@@ -20183,14 +20183,16 @@ CAPACIDADES Y REGLAS:
     const lbl={u:'TÚ',j:'KAI',a:'ACCIÓN',e:'ERROR'}[role];
     const d=document.createElement('div');
     d.className='jvs-msg '+cls;
-    d.innerHTML=`<span class="jvs-lbl">${lbl}</span><span class="jvs-txt">${text}</span>`;
+    const ls=document.createElement('span');ls.className='jvs-lbl';ls.textContent=lbl;
+    const ts=document.createElement('span');ts.className='jvs-txt';ts.textContent=text;
+    d.appendChild(ls);d.appendChild(ts);
     $log.appendChild(d); $log.scrollTop=$log.scrollHeight;
-    return d.querySelector('.jvs-txt');
+    return ts;
   }
 
   // ─── Panel open/close ───
   function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); if(window.innerWidth>768) setTimeout(()=>$input.focus(),200); }
-  function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); stopListen(); JV.synth.cancel(); setState('idle'); }
+  function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); stopListen(); JV.synth.cancel(); if(JV.ctrl){try{JV.ctrl.abort();}catch(e){}JV.ctrl=null;} JV.busy=false; JV.thinking=false; setState('idle'); }
   $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
   $close.addEventListener('click',closePanel);
 
@@ -20252,11 +20254,16 @@ CAPACIDADES Y REGLAS:
 
   // ─── Ask Claude (reuses dashboard's key + endpoint) ───
   async function ask(userText){
-    if(JV.thinking) return;
-    JV.thinking=true; setState('thinking');
+    if(JV.busy) return;                       // re-entrada: bloquea durante toda la llamada (también en streaming)
+    JV.busy=true; JV.thinking=true; setState('thinking');
     JV.history.push({role:'user',content:userText});
 
     const $typ=addMsg('j',''); $typ.classList.add('jvs-cursor');
+    // Si la llamada no llega a generar respuesta, quita el mensaje de usuario colgado:
+    // dejarlo provocaría dos turnos 'user' seguidos y la API respondería 400.
+    const popUser=()=>{ if(JV.history.length && JV.history[JV.history.length-1].role==='user') JV.history.pop(); };
+    const ctrl=new AbortController(); JV.ctrl=ctrl; let timedOut=false;
+    const to=setTimeout(()=>{ timedOut=true; try{ctrl.abort();}catch(e){} },60000);
 
     try{
       // reuse dashboard's stored Anthropic key
@@ -20265,27 +20272,30 @@ CAPACIDADES Y REGLAS:
       // Strip non-printable-ASCII chars that break fetch headers (ISO-8859-1 enforcement)
       if(key) key = key.replace(/[^\x20-\x7E]/g,'').trim();
       if(!key||key.startsWith('%%')||key==='undefined'){
+        clearTimeout(to); JV.ctrl=null; popUser();
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='No hay API Key configurada. Configúrala desde el dashboard (botón de ajustes) y vuelve a intentar.';
         $typ.parentElement.className='jvs-msg jvs-e';
-        JV.thinking=false; setState('idle'); return;
+        JV.busy=false; JV.thinking=false; setState('idle'); return;
       }
 
       // Use Blob body (not string) so Unicode chars in context (•, —, emojis from
       // Airtable data) never trigger "non ISO-8859-1 code point" fetch errors
       const r=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
+        signal:ctrl.signal,
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:new Blob([JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, system:SYS(), messages:JV.history.slice(-12) })],{type:'application/json'})
       });
 
       if(!r.ok){
+        clearTimeout(to); JV.ctrl=null; popUser();
         const e=await r.json().catch(()=>({}));
         if(r.status===401){ localStorage.removeItem('anthropic_key'); sessionStorage.removeItem('anthropic_key'); }
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='Error: '+(e.error?.message||('API '+r.status));
         $typ.parentElement.className='jvs-msg jvs-e';
-        JV.thinking=false; setState('idle'); return;
+        JV.busy=false; JV.thinking=false; setState('idle'); return;
       }
 
       // ── Stream tokens en vivo (SSE) ──
@@ -20317,19 +20327,28 @@ CAPACIDADES Y REGLAS:
           }
         }
       }
+      clearTimeout(to); JV.ctrl=null;
 
       const clean=execActions(full||'Sin respuesta.');
       $typ.textContent=clean;
       $log.scrollTop=$log.scrollHeight;
       JV.history.push({role:'assistant',content:full});
       if(JV.history.length>14) JV.history=JV.history.slice(-12);
+      JV.busy=false;
       if($voiceToggle.checked) speak(clean); else { setState('idle'); maybeRelisten(); }
 
     }catch(err){
+      clearTimeout(to); JV.ctrl=null; popUser();
+      JV.busy=false; JV.thinking=false;
+      if(err && err.name==='AbortError' && !timedOut){
+        // el usuario cerró el panel a mitad: limpia el mensaje sin mostrar error
+        const p=$typ.parentElement; if(p&&p.parentElement) p.parentElement.removeChild(p);
+        return;
+      }
       $typ.classList.remove('jvs-cursor');
-      $typ.textContent='Error de conexión: '+err.message;
+      $typ.textContent=(err&&err.name==='AbortError')?'La respuesta tardó demasiado. Intenta de nuevo.':('Error de conexión: '+(err&&err.message||''));
       $typ.parentElement.className='jvs-msg jvs-e';
-      JV.thinking=false; setState('idle');
+      setState('idle');
     }
   }
 
