@@ -7841,6 +7841,7 @@ async function saveEditCot(){
     const cotId=document.getElementById('editCotId').value;
     try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','PATCH',cotId,fields);ensureCotizacionFields();}
     toast('✓ Cotización actualizada','success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
+    syncCotizacionADrive(cotId);
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='💾 Guardar';
 }
@@ -8845,6 +8846,54 @@ async function _driveFetchBlob(fileId){
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message)||('HTTP '+r.status));}
   return await r.blob();
 }
+// Sube un File/Blob a una carpeta (multipart).
+async function _driveUploadFile(fileOrBlob,folderId,name){
+  const token=await _driveGetToken();
+  const filename=name||fileOrBlob.name||'archivo';
+  const meta={name:filename};if(folderId) meta.parents=[folderId];
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',fileOrBlob,filename);
+  const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{'Authorization':'Bearer '+token},body:form});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message)||r.statusText);}
+  return r.json();
+}
+// Elimina un archivo de Drive.
+async function _driveDeleteFile(fileId){
+  const token=await _driveGetToken();
+  const r=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId,{method:'DELETE',headers:{'Authorization':'Bearer '+token}});
+  if(!r.ok&&r.status!==204){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message)||r.statusText);}
+}
+// Crea o reemplaza (por nombre, en la carpeta) un archivo. Evita duplicados.
+async function _driveUpsertFile(folderId,filename,blob,mimeType){
+  const token=await _driveGetToken();
+  const q=`name='${filename.replace(/'/g,"\\'")}' and '${folderId}' in parents and trashed=false`;
+  const search=await _driveApiFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id)&pageSize=1');
+  if(search.files&&search.files.length){
+    const id=search.files[0].id;
+    const r=await fetch('https://www.googleapis.com/upload/drive/v3/files/'+id+'?uploadType=media&fields=id',{method:'PATCH',headers:{'Authorization':'Bearer '+token,'Content-Type':mimeType},body:blob});
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message)||r.statusText);}
+    return r.json();
+  }
+  return _driveUploadFile(blob,folderId,filename);
+}
+// Genera/actualiza el PDF (o HTML) de la cotización en su carpeta de Drive.
+// Solo si ya hay sesión de Drive activa (evita popups bloqueados al guardar).
+async function syncCotizacionADrive(cotId){
+  if(!_driveConnected()) return;
+  try{
+    const res=buildCotizacionDoc(cotId);if(!res) return;
+    const f=res.c.fields;
+    const numCot=f['N° Cotización']||cotId.slice(-6);
+    const cliente=resolveClienteName(f['Cliente']);
+    const folderId=await ensureCotFolder(cotId,numCot,cliente);
+    let filename='Cotización '+numCot+'.pdf',blob,mime='application/pdf';
+    try{blob=await _fichaHTMLtoPdfBlob(res.html);}
+    catch(e){blob=new Blob([res.html],{type:'text/html;charset=utf-8'});mime='text/html';filename='Cotización '+numCot+'.html';}
+    await _driveUpsertFile(folderId,filename,blob,mime);
+    toast('📂 Cotización guardada en Drive','success');
+  }catch(e){console.warn('Drive cotización:',e);}
+}
 
 // ── Modal "Ver adjuntos" ──────────────────────────────────────
 let _adjFiles=[],_adjUrl=null,_adjFolderId=null;
@@ -8878,14 +8927,42 @@ function _renderAdjuntosBody(files){
   const rows=files.length?files.map(f=>{
     const canPrev=/^image\//.test(f.mimeType)||f.mimeType==='application/pdf'||/^text\//.test(f.mimeType);
     const sub=[_fmtBytes(f.size),f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'}):''].filter(Boolean).join(' · ');
-    return`<div style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px">
+    return`<div style="display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px">
       <span style="font-size:18px;flex-shrink:0">${_adjIcon(f.mimeType)}</span>
       <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.name)}</div><div style="font-size:10px;color:var(--text3)">${sub}</div></div>
       ${canPrev?`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="previewAdjunto('${f.id}')">👁 Ver</button>`:''}
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="downloadAdjunto('${f.id}')" title="Descargar">⬇</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;color:var(--danger)" onclick="deleteAdjunto('${f.id}')" title="Eliminar">🗑</button>
     </div>`;
-  }).join(''):'<div style="padding:26px;text-align:center;color:var(--text3);font-size:13px">📭 Esta carpeta de Drive está vacía.<br><span style="font-size:11px">Aún no hay archivos para este pedido.</span></div>';
-  body.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px">${rows}</div><div id="adjuntosPreview" style="display:none;margin-top:14px;border-top:1px solid var(--border2);padding-top:12px"></div>`;
+  }).join(''):'<div style="padding:26px;text-align:center;color:var(--text3);font-size:13px">📭 Esta carpeta de Drive está vacía.<br><span style="font-size:11px">Sube un archivo con el botón de arriba.</span></div>';
+  const uploader=`<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><input type="file" id="adjFileInput" style="display:none" onchange="subirAdjunto(this)"><button class="btn btn-primary btn-sm" onclick="document.getElementById('adjFileInput').click()">⬆ Subir archivo</button></div>`;
+  body.innerHTML=uploader+`<div style="display:flex;flex-direction:column;gap:6px">${rows}</div><div id="adjuntosPreview" style="display:none;margin-top:14px;border-top:1px solid var(--border2);padding-top:12px"></div>`;
+}
+async function _adjReload(){
+  if(!_adjFolderId) return;
+  const files=(await _driveListFiles(_adjFolderId)).filter(f=>f.mimeType!=='application/vnd.google-apps.folder');
+  _adjFiles=files;_renderAdjuntosBody(files);
+}
+async function subirAdjunto(input){
+  const file=input.files&&input.files[0];if(!file) return;input.value='';
+  if(!_adjFolderId){toast('La carpeta aún no está lista','error');return;}
+  try{
+    toast('Subiendo '+file.name+'…','info');
+    await _driveUploadFile(file,_adjFolderId);
+    toast('✓ Archivo subido','success');
+    await _adjReload();
+  }catch(e){toast('Error al subir: '+(e.message||''),'error');}
+}
+async function deleteAdjunto(fileId){
+  const f=_adjFiles.find(x=>x.id===fileId);if(!f) return;
+  if(!confirm('¿Eliminar "'+f.name+'" de Drive? Esta acción no se puede deshacer.')) return;
+  try{
+    toast('Eliminando…','info');
+    await _driveDeleteFile(fileId);
+    toast('✓ Archivo eliminado','success');
+    closeAdjPreview();
+    await _adjReload();
+  }catch(e){toast('Error al eliminar: '+(e.message||''),'error');}
 }
 async function previewAdjunto(fileId){
   const f=_adjFiles.find(x=>x.id===fileId);if(!f) return;
@@ -10275,6 +10352,8 @@ async function createCotizacion(){
     toast(`✓ Cotización ${num} guardada`,'success');
     await _advanceEtapaCliente(clienteId,'Propuesta enviada',['Lead nuevo','Contactado']);
     clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
+    const _newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
+    if(_newCot) syncCotizacionADrive(_newCot.id);
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='✚ Guardar Cotización';
 }
