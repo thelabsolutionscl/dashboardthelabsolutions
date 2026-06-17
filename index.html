@@ -1087,8 +1087,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* ── Form ────────────────────────────────────────────── */
   .form-grid{padding:12px 14px;gap:10px;}
   .field-label{font-size:11px;}
-  .field-input,.field-select{min-height:42px;font-size:14px!important;padding:8px 12px;}
-  .field-textarea{font-size:14px!important;}
+  .field-input,.field-select{min-height:42px;font-size:16px!important;padding:8px 12px;}
+  .field-textarea{font-size:16px!important;}
 
   /* Form actions: full-width stacked */
   .form-actions{flex-direction:column;padding:8px 14px 16px;gap:8px;}
@@ -1288,6 +1288,17 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* Modal facturas form: acciones apiladas */
   #facturaModal .modal-card>div:last-child{flex-direction:column!important;gap:8px!important;}
   #facturaModal .modal-card>div:last-child .btn{width:100%;justify-content:center;min-height:42px!important;}
+
+  /* ── Inputs de ajustes/config a 16px: evita el zoom automático de iOS al enfocar ── */
+  #userMenu input,#userMenu textarea,#mobileConfigBody input,#mobileConfigBody textarea{font-size:16px!important;}
+  /* ── Toasts por encima del dock inferior (antes quedaban tapados/encima del dock) ── */
+  .toast-container{bottom:calc(112px + env(safe-area-inset-bottom,0px))!important;left:12px;right:12px;align-items:flex-end;}
+  .toast{max-width:calc(100vw - 24px);}
+  /* ── Panel de notificaciones: ancho adaptable para no salirse en pantallas angostas (≤354px) ── */
+  .notif-panel{top:60px;left:10px;right:10px;width:auto;max-height:72dvh;}
+  /* ── Monitor de impresoras: botones de acción con mejor área táctil en móvil ── */
+  #maquinaMonGrid .pcard-actions{flex-wrap:wrap;gap:6px;}
+  #maquinaMonGrid .pcard-actions button{padding:7px 11px!important;font-size:13px!important;}
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2481,8 +2492,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group form-full"><label class="field-label">Categorías *</label><div class="pv-catbox" id="np-catbox" style="display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;min-height:38px;cursor:default"></div><div style="font-size:10px;color:var(--text3);margin-top:4px">Haz clic en las categorías para seleccionarlas (puedes elegir varias)</div></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="np-contacto" placeholder="Juan Pérez"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="np-cargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="np-telefono" placeholder="+56 2 1234 5678"></div>
-      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="np-whatsapp" placeholder="+56 9 1234 5678"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="np-telefono" type="tel" placeholder="+56 2 1234 5678"></div>
+      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="np-whatsapp" type="tel" placeholder="+56 9 1234 5678"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="np-email" type="email"></div>
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="np-web" placeholder="https://proveedor.cl"></div>
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="np-rut" placeholder="76.123.456-7"></div>
@@ -2511,7 +2522,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">Empresa *</label><input class="field-input" id="nl-empresa" placeholder="Acme Corp"></div>
       <div class="field-group"><label class="field-label">Contacto *</label><input class="field-input" id="nl-contacto" placeholder="Juan Pérez"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="nl-cargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="nl-telefono" placeholder="+56 9 1234 5678"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="nl-telefono" type="tel" placeholder="+56 9 1234 5678"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="nl-email" type="email"></div>
       <div class="field-group"><label class="field-label">Origen</label><select class="field-select" id="nl-origen"><option>Referido</option><option>Instagram</option><option>LinkedIn</option><option>Google</option><option>Contacto directo</option><option>Otro</option></select></div>
       <div class="field-group"><label class="field-label">Industria</label><select class="field-select" id="nl-industria"><option value="">— seleccionar —</option><option>Agencia / Marketing</option><option>Retail</option><option>Tecnología</option><option>Educación</option><option>Eventos</option><option>Otro</option></select></div>
@@ -3095,7 +3106,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">Empresa *</label><input class="field-input" id="ecEmpresa"></div>
       <div class="field-group"><label class="field-label">Contacto *</label><input class="field-input" id="ecContacto"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="ecCargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="ecTelefono"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="ecTelefono" type="tel"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="ecEmail" type="email"></div>
       <div class="field-group"><label class="field-label">Ciudad</label><input class="field-input" id="ecCiudad"></div>
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="ecRut"></div>
@@ -3163,8 +3174,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group form-full"><label class="field-label">Categorías *</label><div class="pv-catbox" id="ep-catbox" style="display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;min-height:38px;cursor:default"></div></div>
       <div class="field-group"><label class="field-label">Contacto</label><input class="field-input" id="epContacto"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="epCargo"></div>
-      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="epTelefono"></div>
-      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="epWhatsapp"></div>
+      <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="epTelefono" type="tel"></div>
+      <div class="field-group"><label class="field-label">WhatsApp</label><input class="field-input" id="epWhatsapp" type="tel"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="epEmail" type="email"></div>
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="epWeb"></div>
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="epRut"></div>
@@ -16907,7 +16918,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
       </div>
       <div>
         <div class="field-label" style="margin-bottom:6px">📲 Alertas por WhatsApp (vía WATI)</div>
-        <input id="alertWaPhone" type="text" placeholder="+56912345678" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+        <input id="alertWaPhone" type="tel" placeholder="+56912345678" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:16px;font-family:monospace">
         <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11px;color:var(--text2);cursor:pointer"><input type="checkbox" id="alertWaEnabled"> Avisar al completar o fallar una impresión</label>
         <div style="font-size:10px;color:var(--text3);margin-top:4px">Usa la conexión WATI ya configurada. Deja el número con código de país.</div>
       </div>
