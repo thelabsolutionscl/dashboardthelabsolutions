@@ -2443,7 +2443,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- PROVEEDORES -->
 <div class="tab-panel" id="tab-proveedores">
-  <div class="section-header"><div><div class="section-title">Proveedores</div><div class="section-desc">Directorio de proveedores activos: filamentos, componentes LED, packaging y servicios. Gestiona contactos, evalúa reputación y controla plazos de entrega.</div></div><div class="section-subtitle" id="proveedoresCount">—</div></div>
+  <div class="section-header"><div><div class="section-title">Proveedores</div><div class="section-desc">Directorio de proveedores activos: filamentos, componentes LED, packaging y servicios. Gestiona contactos, evalúa reputación y controla plazos de entrega.</div></div><div style="display:flex;align-items:center;gap:10px"><button class="btn btn-primary btn-sm" onclick="startNewProveedorFlow()" title="Crear proveedor paso a paso">➕ Proveedor guiado</button><div class="section-subtitle" id="proveedoresCount">—</div></div></div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Directorio</span>
@@ -2970,6 +2970,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mantenimiento preventivo</span>
       <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="startMaintFlow()" style="font-size:11px" title="Registrar mantención paso a paso">🔧 Registrar mantención</button>
         <button class="btn btn-ghost btn-sm" onclick="openMaintConfig()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar umbrales</button>
         <button class="btn btn-ghost btn-sm" onclick="renderMaintenanceTable()" style="font-size:11px">↻ Actualizar</button>
       </div>
@@ -3924,6 +3925,7 @@ function _reportarResultados(muts) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <span class="section-subtitle" id="finActualizadoEn">—</span>
       <button class="btn btn-ghost btn-sm" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
+      <button class="btn btn-primary btn-sm" onclick="startPaymentFlow()" title="Registrar un pago/abono paso a paso">💵 Registrar pago</button>
       <button class="btn btn-ghost btn-sm" onclick="exportarFinanzasCSV()">⬇ CSV</button>
     </div>
   </div>
@@ -7097,6 +7099,7 @@ function buildClienteRow(c){
           <button class="act-item" onclick="startEditClientFlow('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;✏️ Editar (guiado)</button>
           <button class="act-item act-item-yellow" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="verCotizacionesCliente('${c.id}',this.dataset.empresa)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ver cotizaciones</button>
           <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
+          <button class="act-item act-item-green" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="startQuoteFlow('${c.id}',this.dataset.empresa)">💰 &nbsp;Cotizar con KAI (guiado)</button>
           <button class="act-item" onclick="compartirPortalCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-link"/></svg> &nbsp;Portal cliente</button>
           ${iaItems}
         </div>
@@ -9550,7 +9553,7 @@ function renderPedidos(filter){
     const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item act-item-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ &nbsp;Avanzar a "${stages[idx+1]}"</button><div class="act-sep"></div>`:(estado==='Despachado'?'':'');
     const repClienteItem=estado!=='Despachado'?`<button class="act-item act-item-cyan" onclick="runRepClienteAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> &nbsp;📢 Update cliente IA</button>`:'';
     const contentItem=estado==='Despachado'?`<button class="act-item act-item-cyan" onclick="runContentAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> &nbsp;🎬 Contenido IA</button>`:'';
-    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button><button class="act-item act-item-yellow" onclick="startManagePedidoFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📦 Gestionar (guiado)</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}<button class="act-item act-item-blue" onclick="openAdjuntosModal('ped','${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;Ver adjuntos</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
+    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button><button class="act-item act-item-yellow" onclick="startManagePedidoFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📦 Gestionar (guiado)</button><button class="act-item" onclick="startPedidoOnboardingFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;🚀 Iniciar producción</button><button class="act-item act-item-cyan" onclick="startQAFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🎬 QA (guiado)</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}<button class="act-item act-item-blue" onclick="openAdjuntosModal('ped','${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;Ver adjuntos</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -10408,12 +10411,17 @@ async function createCotizacion(){
 // ════════════════════════════════════════════════════════════════
 // ASISTENTE DE PREGUNTAS GUIADAS (reutilizable) + COTIZADOR KAI
 // ════════════════════════════════════════════════════════════════
-const GF={steps:[],idx:0,answers:{},onComplete:null,title:'',_busy:false};
+const GF={steps:[],idx:0,answers:{},onComplete:null,title:'',_busy:false,flowKey:null};
 function gfStart(config){
   GF.steps=config.steps||[];GF.idx=0;GF.answers=config.initial||{};GF.onComplete=config.onComplete;GF.title=config.title||'Asistente';GF._busy=false;
+  GF.flowKey=config.draft?('gfdraft_'+(config.flowKey||config.title)):null;
+  if(GF.flowKey){try{const d=JSON.parse(sessionStorage.getItem(GF.flowKey)||'null');if(d&&d.answers&&Object.keys(d.answers).length){GF.answers=Object.assign(GF.answers,d.answers);GF.idx=Math.min(d.idx||0,GF.steps.length-1);toast('📝 Borrador recuperado','info');}}catch(e){}}
+  const foot=document.querySelector('#guidedModal .gf-foot');if(foot)foot.style.display='flex';
   document.getElementById('guidedModal').style.display='flex';
   gfRender();
 }
+function _gfSaveDraft(){if(GF.flowKey){try{sessionStorage.setItem(GF.flowKey,JSON.stringify({idx:GF.idx,answers:GF.answers,t:Date.now()}));}catch(e){}}}
+function _gfClearDraft(){if(GF.flowKey){try{sessionStorage.removeItem(GF.flowKey);}catch(e){}GF.flowKey=null;}}
 function gfClose(){document.getElementById('guidedModal').style.display='none';GF.steps=[];GF.answers={};GF.onComplete=null;}
 function gfRender(){
   const step=GF.steps[GF.idx];if(!step)return;
@@ -10426,7 +10434,7 @@ function gfRender(){
   const $next=document.getElementById('gfNext'),$back=document.getElementById('gfBack');
   $back.style.visibility=GF.idx>0?'visible':'hidden';$next.disabled=false;
   // Paso review: estima precio con KAI al entrar
-  if(step.type==='review'&&!GF.answers._sug){
+  if(step.type==='review'&&!GF.answers._items){
     body.innerHTML='<div class="gf-loading"><div class="gf-spin"></div>KAI está estimando el precio…</div>';
     $next.style.display='none';$back.style.visibility='hidden';
     _gfSuggest().then(()=>gfRender());
@@ -10445,6 +10453,8 @@ function gfRender(){
     html+='<div class="gf-numwrap"><input id="gfInput" type="number" class="gf-input" min="'+(step.min||0)+'" value="'+(GF.answers[step.key]!=null?GF.answers[step.key]:(step.default!=null?step.default:''))+'" placeholder="'+escapeHtml(step.placeholder||'')+'">'+(step.suffix?'<span class="gf-suffix">'+escapeHtml(step.suffix)+'</span>':'')+'</div>';
   }else if(step.type==='date'){
     html+='<input id="gfInput" type="date" class="gf-input" value="'+(GF.answers[step.key]||'')+'">';
+  }else if(step.type==='photo'){
+    html+='<input type="file" accept="image/*" class="gf-input" onchange="gfPhotoPreview(this)"><div id="gfPhotoPrev">'+(GF.answers._photoData?'<img src="'+GF.answers._photoData+'" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px">':'')+'</div>';
   }else if(step.type==='client'){
     html+=gfClientStepHTML();
   }else if(step.type==='review'){
@@ -10459,24 +10469,25 @@ function gfRender(){
   if(step.type==='text')setTimeout(()=>document.getElementById('gfInput')?.focus(),60);
 }
 function gfPick(key,value,multi){
-  if(multi){const arr=GF.answers[key]||[];const i=arr.indexOf(value);if(i>=0)arr.splice(i,1);else arr.push(value);GF.answers[key]=arr;gfRender();}
-  else{GF.answers[key]=value;gfNext();}
+  if(multi){const arr=GF.answers[key]||[];const i=arr.indexOf(value);if(i>=0)arr.splice(i,1);else arr.push(value);GF.answers[key]=arr;_gfSaveDraft();gfRender();}
+  else{GF.answers[key]=value;_gfSaveDraft();gfNext();}
 }
 function gfCollect(){
   const step=GF.steps[GF.idx];if(!step)return;
   if(step.type==='text')GF.answers[step.key]=(document.getElementById('gfInput')?.value||'').trim();
   else if(step.type==='number')GF.answers[step.key]=parseFloat(document.getElementById('gfInput')?.value)||0;
   else if(step.type==='date')GF.answers[step.key]=document.getElementById('gfInput')?.value||'';
-  else if(step.type==='review'){const s=GF.answers._sug||{};s.desc=(document.getElementById('gfRevDesc')?.value||s.desc||'').trim();s.costoUnit=parseFloat(document.getElementById('gfRevCosto')?.value)||0;s.ventaUnit=parseFloat(document.getElementById('gfRevVenta')?.value)||0;GF.answers._sug=s;}
+  else if(step.type==='review'){GF.answers._items=_gfReadItems();}
 }
 function gfNext(){
   const step=GF.steps[GF.idx];if(!step)return;
   gfCollect();
   if(step.required){const v=GF.answers[step.key];if(v===undefined||v===''||(Array.isArray(v)&&!v.length)){toast('Completa este paso para continuar','error');return;}}
+  _gfSaveDraft();
   if(GF.idx>=GF.steps.length-1){gfFinish();return;}
   GF.idx++;gfRender();
 }
-function gfBack(){if(GF.idx>0){gfCollect();delete GF.answers._sug;GF.idx--;gfRender();}}
+function gfBack(){if(GF.idx>0){gfCollect();delete GF.answers._items;GF.idx--;gfRender();}}
 async function gfFinish(){
   if(GF._busy)return;GF._busy=true;
   const $next=document.getElementById('gfNext');if($next)$next.disabled=true;
@@ -10526,7 +10537,7 @@ async function gfClientCreate(){
 async function _gfSuggest(){
   const a=GF.answers;
   const tipo=a.tipo||'producto',desc=a.descripcion||'',mat=a.material||'a elección',color=a.color||'',qty=a.cantidad||1,urg=a.urgencia==='urgente';
-  let sug={desc:(desc||tipo).slice(0,120),costoUnit:0,ventaUnit:0};
+  let item={desc:(desc||tipo).slice(0,120),und:qty,costoUnit:0,ventaUnit:0};
   try{
     const key=(typeof getAnthropicKey==='function')?getAnthropicKey():'';
     if(typeof callClaude==='function'&&key&&!key.startsWith('%%')){
@@ -10534,28 +10545,36 @@ async function _gfSuggest(){
       const user='Producto: '+tipo+'\nDescripcion: '+desc+'\nMaterial: '+mat+'\nColor/acabado: '+color+'\nCantidad: '+qty+'\nUrgente: '+(urg?'si (+25%)':'no');
       const txt=await callClaude(sys,user);
       const m=txt&&txt.match(/\{[\s\S]*\}/);
-      if(m){const j=JSON.parse(m[0]);sug={desc:String(j.desc||sug.desc).slice(0,120),costoUnit:Math.round(+j.costo||0),ventaUnit:Math.round(+j.venta||0)};}
+      if(m){const j=JSON.parse(m[0]);item={desc:String(j.desc||item.desc).slice(0,120),und:qty,costoUnit:Math.round(+j.costo||0),ventaUnit:Math.round(+j.venta||0)};}
     }
   }catch(e){console.warn('KAI estimate:',e);}
-  GF.answers._sug=sug;
+  GF.answers._items=[item];
 }
+function _gfItemsTotal(){let v=0;(GF.answers._items||[]).forEach(it=>v+=(it.ventaUnit||0)*(it.und||1));return Math.round(v*1.19);}
+function _gfReadItems(){const items=[];document.querySelectorAll('#gfBody .gf-item').forEach(el=>{items.push({desc:(el.querySelector('.gf-it-desc')?.value||'').trim(),und:parseFloat(el.querySelector('.gf-it-und')?.value)||1,costoUnit:parseFloat(el.querySelector('.gf-it-costo')?.value)||0,ventaUnit:parseFloat(el.querySelector('.gf-it-venta')?.value)||0});});return items.length?items:(GF.answers._items||[]);}
 function gfReviewHTML(){
-  const a=GF.answers,s=a._sug||{},qty=a.cantidad||1;
-  const total=Math.round((s.ventaUnit||0)*qty*1.19);
-  return '<div class="gf-rev-row"><span>Cliente</span><b>'+escapeHtml(a.clienteNombre||'Sin cliente')+'</b></div>'
-    +'<div class="gf-rev-row"><span>Producto</span><b>'+escapeHtml(a.tipo||'-')+'</b></div>'
-    +'<div class="gf-rev-row"><span>Material · Color</span><b>'+escapeHtml((a.material||'-')+(a.color?' · '+a.color:''))+'</b></div>'
-    +'<div class="gf-rev-row"><span>Cantidad · Urgencia</span><b>'+qty+(a.urgencia==='urgente'?' · ⚡ Urgente':'')+'</b></div>'
-    +'<div style="margin-top:13px"><label class="gf-sub" style="margin:0;display:block;margin-bottom:4px">Descripción del ítem</label><input id="gfRevDesc" class="gf-input" value="'+escapeHtml(s.desc||'')+'" style="font-size:14px"></div>'
-    +'<div style="display:flex;gap:10px;margin-top:10px"><div style="flex:1"><label class="gf-sub" style="margin:0;display:block;margin-bottom:4px">Costo unit. neto</label><input id="gfRevCosto" type="number" class="gf-input" value="'+(s.costoUnit||0)+'" oninput="gfRevCalc()"></div><div style="flex:1"><label class="gf-sub" style="margin:0;display:block;margin-bottom:4px">Venta unit. neto</label><input id="gfRevVenta" type="number" class="gf-input" value="'+(s.ventaUnit||0)+'" oninput="gfRevCalc()"></div></div>'
-    +'<div class="gf-total"><span>TOTAL (IVA incl.)</span><span id="gfRevTotal">'+formatCLP(total)+'</span></div>'
-    +(s.ventaUnit?'<div class="gf-sub" style="margin-top:9px">✨ Precio sugerido por KAI — ajústalo si quieres.</div>':'<div class="gf-sub" style="margin-top:9px;color:var(--warn)">KAI no pudo estimar (¿sin API key de Anthropic?). Ingresa el precio manualmente.</div>');
+  const a=GF.answers,items=a._items||[];
+  const head='<div class="gf-rev-row"><span>Cliente</span><b>'+escapeHtml(a.clienteNombre||'Sin cliente')+'</b></div>'
+    +'<div class="gf-rev-row"><span>Producto · Material</span><b>'+escapeHtml((a.tipo||'-')+(a.material&&a.material!=='a elección de KAI'?' · '+a.material:''))+'</b></div>'
+    +'<div class="gf-rev-row" style="border-bottom:none"><span>Urgencia · Pago</span><b>'+(a.urgencia==='urgente'?'⚡ Urgente':'Normal')+(a.formaPago?' · '+escapeHtml(a.formaPago):'')+'</b></div>';
+  const rows=items.map((it,i)=>'<div class="gf-item" data-i="'+i+'" style="border:1px solid var(--border2);border-radius:10px;padding:10px;margin-bottom:8px;background:var(--surface2)">'
+    +'<input class="gf-input gf-it-desc" value="'+escapeHtml(it.desc||'')+'" placeholder="Descripción del ítem" style="font-size:13px;margin-bottom:6px">'
+    +'<div style="display:flex;gap:6px;align-items:center">'
+    +'<input class="gf-input gf-it-und" type="number" min="1" value="'+(it.und||1)+'" oninput="gfRevCalc()" title="Cantidad" style="width:62px">'
+    +'<input class="gf-input gf-it-costo" type="number" value="'+(it.costoUnit||0)+'" oninput="gfRevCalc()" placeholder="Costo u." title="Costo unitario neto">'
+    +'<input class="gf-input gf-it-venta" type="number" value="'+(it.ventaUnit||0)+'" oninput="gfRevCalc()" placeholder="Venta u." title="Venta unitaria neta">'
+    +(items.length>1?'<button class="btn btn-ghost btn-sm" onclick="gfItemRemove('+i+')" title="Quitar" style="color:var(--danger);flex-shrink:0">🗑</button>':'')
+    +'</div></div>').join('');
+  return head
+    +'<div style="margin-top:13px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Ítems</div>'
+    +rows
+    +'<button class="btn btn-ghost btn-sm" onclick="gfItemAdd()" style="margin-bottom:8px">➕ Agregar ítem</button>'
+    +'<div class="gf-total"><span>TOTAL (IVA incl.)</span><span id="gfRevTotal">'+formatCLP(_gfItemsTotal())+'</span></div>'
+    +(items.some(x=>x.ventaUnit)?'<div class="gf-sub" style="margin-top:9px">✨ Precio sugerido por KAI — ajústalo o agrega más ítems.</div>':'<div class="gf-sub" style="margin-top:9px;color:var(--warn)">Ingresa el precio de venta de cada ítem.</div>');
 }
-function gfRevCalc(){
-  const qty=GF.answers.cantidad||1;
-  const venta=parseFloat(document.getElementById('gfRevVenta')?.value)||0;
-  const el=document.getElementById('gfRevTotal');if(el)el.textContent=formatCLP(Math.round(venta*qty*1.19));
-}
+function gfRevCalc(){GF.answers._items=_gfReadItems();const el=document.getElementById('gfRevTotal');if(el)el.textContent=formatCLP(_gfItemsTotal());}
+function gfItemAdd(){GF.answers._items=_gfReadItems();GF.answers._items.push({desc:'',und:1,costoUnit:0,ventaUnit:0});gfRender();}
+function gfItemRemove(i){GF.answers._items=_gfReadItems();GF.answers._items.splice(i,1);if(!GF.answers._items.length)GF.answers._items.push({desc:'',und:1,costoUnit:0,ventaUnit:0});gfRender();}
 // ── Crea la cotización real (Airtable + etapa + Drive) desde datos guiados ──
 async function crearCotizacionGuiada(d){
   const num=generarNumeroCotizacion();
@@ -10576,14 +10595,34 @@ async function crearCotizacionGuiada(d){
   await loadAllDataSilent();renderCotizaciones();renderOverview();
   const newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
   if(newCot)syncCotizacionADrive(newCot.id);
-  return{num,total};
+  return{num,total,cotId:newCot?newCot.id:null};
+}
+// Pantalla final con opciones de compartir (#8)
+function _gfQuoteSuccess(r,clienteId){
+  const c=clienteId?state.clientes.find(x=>x.id===clienteId):null;
+  const tel=c?((c.fields['Teléfono']||c.fields['WhatsApp']||'').replace(/\D/g,'')):'';
+  const waNum=tel?(tel.length<=9?'56'+tel:tel):'';
+  const email=c?(c.fields['Email']||''):'';
+  const waMsg=encodeURIComponent('Hola'+(c?' '+(c.fields['Contacto']||c.fields['Empresa']||''):'')+', te comparto la cotización '+r.num+' por '+formatCLP(r.total)+'. ¡Quedo atento a tus comentarios!');
+  document.getElementById('gfTitle').textContent='✓ Cotización creada';
+  document.getElementById('gfStepInfo').textContent='';
+  document.getElementById('gfProgress').style.width='100%';
+  const foot=document.querySelector('#guidedModal .gf-foot');if(foot)foot.style.display='none';
+  document.getElementById('gfBody').innerHTML='<div style="text-align:center;padding:10px 0 4px">'
+    +'<div style="font-size:44px;line-height:1">✅</div>'
+    +'<div style="font-size:17px;font-weight:800;margin-top:6px">Cotización '+escapeHtml(r.num)+'</div>'
+    +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Total '+formatCLP(r.total)+'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;max-width:320px;margin:0 auto">'
+    +(waNum?'<button class="btn btn-primary btn-sm" onclick="window.open(\'https://wa.me/'+waNum+'?text='+waMsg+'\',\'_blank\')">💬 Enviar por WhatsApp</button>':'')
+    +(email&&window.MAIL&&MAIL.sendCotizacion&&r.cotId?'<button class="btn btn-ghost btn-sm" onclick="gfClose();MAIL.sendCotizacion(\''+r.cotId+'\')">✉️ Enviar por correo</button>':'')
+    +(r.cotId?'<button class="btn btn-ghost btn-sm" onclick="generarPDFCotizacion(\''+r.cotId+'\')">📄 Ver PDF</button>':'')
+    +'<button class="btn btn-ghost btn-sm" onclick="gfClose()">Cerrar</button>'
+    +'</div></div>';
 }
 // ── Lanza el cotizador guiado de KAI ──
-function startQuoteFlow(){
+function startQuoteFlow(presetClienteId,presetClienteNombre){
   if(!state||!Array.isArray(state.clientes)){toast('Aún se están cargando los datos…','info');return;}
-  gfStart({
-    title:'💰 Cotizar con KAI',
-    steps:[
+  const steps=[
       {key:'clienteId',type:'client',q:'¿Para qué cliente es la cotización?',sub:'Busca uno existente, crea uno nuevo, u omítelo.'},
       {key:'tipo',type:'chips',q:'¿Qué tipo de producto?',options:[{label:'Impresión 3D',value:'Impresión 3D',icon:'🖨️'},{label:'Letrero Neón',value:'Letrero Neón',icon:'💡'},{label:'Trofeo',value:'Trofeo',icon:'🏆'},{label:'Otro',value:'Otro',icon:'📦'}]},
       {key:'descripcion',type:'text',q:'Describe lo que necesita el cliente',sub:'Medidas, diseño, referencias… cuanto más detalle, mejor estima KAI.',placeholder:'Ej: 50 trofeos de acrílico de 15cm con logo grabado…',rows:3,required:true},
@@ -10593,15 +10632,19 @@ function startQuoteFlow(){
       {key:'urgencia',type:'chips',q:'¿Es urgente?',sub:'La urgencia suele subir el precio (+25%).',options:[{label:'Normal',value:'normal',icon:'🟢'},{label:'Urgente',value:'urgente',icon:'⚡'}]},
       {key:'formaPago',type:'chips',q:'¿Forma de pago?',options:[{label:'Al contado',value:'AL CONTADO'},{label:'30 días OC',value:'30 DÍAS DESDE OC'},{label:'45 días OC',value:'45 DÍAS DESDE OC'},{label:'70/30',value:'70% ABONO Y 30% CONTRA ENTREGA'},{label:'50/50',value:'50% ABONO Y 50% 30 DÍAS'}]},
       {key:'plazo',type:'number',q:'¿Plazo de producción?',sub:'Días hábiles estimados desde la confirmación.',min:1,default:7,suffix:'días hábiles'},
-      {key:'_review',type:'review',q:'Revisa y confirma',sub:'KAI sugirió un precio; ajústalo si quieres.'},
-    ],
+      {key:'_review',type:'review',q:'Revisa y confirma',sub:'KAI sugirió un precio; ajústalo o agrega más ítems.'},
+  ];
+  const initial={};
+  if(presetClienteId){initial.clienteId=presetClienteId;initial.clienteNombre=presetClienteNombre||(state.clientesById&&state.clientesById[presetClienteId])||'';steps[0].skip=()=>true;}
+  gfStart({
+    title:'💰 Cotizar con KAI',draft:true,flowKey:'quote',initial,steps,
     onComplete:async(a)=>{
-      const s=a._sug||{};
-      if(!s.ventaUnit){toast('Ingresa el precio de venta para continuar','error');return;}
+      const items=(a._items||[]).filter(it=>it.desc||it.ventaUnit);
+      if(!items.length||!items.some(it=>it.ventaUnit)){toast('Agrega al menos un ítem con precio de venta','error');return;}
       toast('Creando cotización…','info');
       const r=await crearCotizacionGuiada({
         clienteId:a.clienteId||'',
-        items:[{desc:s.desc||a.descripcion||a.tipo,und:a.cantidad||1,costo:s.costoUnit||0,venta:s.ventaUnit||0}],
+        items:items.map(it=>({desc:it.desc||a.descripcion||a.tipo,und:it.und||1,costo:it.costoUnit||0,venta:it.ventaUnit||0})),
         solicitud:a.descripcion||'',
         formaPago:a.formaPago||'',
         tiempoProd:a.plazo||'',
@@ -10610,9 +10653,9 @@ function startQuoteFlow(){
         canal:'KAI',
         notas:'Cotización generada con el asistente guiado de KAI.'
       });
-      gfClose();
+      _gfClearDraft();
       switchTab('cotizaciones');
-      toast('✓ Cotización '+r.num+' creada · '+formatCLP(r.total),'success');
+      _gfQuoteSuccess(r,a.clienteId||'');
     }
   });
 }
@@ -10625,7 +10668,7 @@ async function actualizarPedido(id,fields){const r=await airtableWrite('Pedidos'
 
 // ── Crear cliente (guiado) ──
 function startNewClientFlow(){
-  gfStart({title:'➕ Nuevo cliente',steps:[
+  gfStart({title:'➕ Nuevo cliente',draft:true,flowKey:'newclient',steps:[
     {key:'empresa',type:'text',q:'¿Nombre de la empresa o cliente?',rows:1,required:true,placeholder:'Ej: Constructora Andes SpA'},
     {key:'contacto',type:'text',q:'¿Persona de contacto?',rows:1,placeholder:'Ej: Juan Pérez'},
     {key:'telefono',type:'text',q:'¿Teléfono / WhatsApp?',rows:1,placeholder:'+56 9 1234 5678'},
@@ -10641,7 +10684,7 @@ function startNewClientFlow(){
     try{rec=await airtableWrite('Clientes','POST',null,f);}
     catch(e){if(e.message.toLowerCase().includes('unknown')){delete f['Origen lead'];rec=await airtableWrite('Clientes','POST',null,f);}else throw e;}
     if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=a.empresa;}
-    gfClose();switchTab('clientes');if(typeof renderClientes==='function')renderClientes();renderOverview();
+    _gfClearDraft();gfClose();switchTab('clientes');if(typeof renderClientes==='function')renderClientes();renderOverview();
     toast('✓ Cliente "'+a.empresa+'" creado','success');
   }});
 }
@@ -10705,6 +10748,116 @@ function startManagePedidoFlow(id){
   }});
 }
 window.startNewClientFlow=startNewClientFlow;window.startEditClientFlow=startEditClientFlow;window.startEditCotFlow=startEditCotFlow;window.startManagePedidoFlow=startManagePedidoFlow;
+
+// Lectura de foto para el paso type:'photo'
+function gfPhotoPreview(input){
+  const f=input.files&&input.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{GF.answers._photoData=e.target.result;const pv=document.getElementById('gfPhotoPrev');if(pv)pv.innerHTML='<img src="'+e.target.result+'" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px">';};
+  r.readAsDataURL(f);
+}
+
+// ── #4 Mantención de máquina (guiado) ──
+function startMaintFlow(){
+  if(typeof MAQUINAS==='undefined'||!Array.isArray(MAQUINAS)||!MAQUINAS.length){toast('No hay máquinas cargadas','info');return;}
+  gfStart({title:'🔧 Registrar mantención',steps:[
+    {key:'maquinaId',type:'chips',q:'¿Qué máquina?',options:MAQUINAS.map(m=>({label:m.nombre+' #'+m.numG,value:m.id}))},
+    {key:'tipo',type:'chips',q:'¿Tipo de mantención?',options:MAINT_TYPES.map(t=>({label:t.label,value:t.key}))},
+    {key:'notas',type:'text',q:'Notas (opcional)',rows:2,placeholder:'Trabajo realizado, repuestos, observaciones…'},
+  ],onComplete:async(a)=>{
+    const idEl=document.getElementById('maintModalId'),tEl=document.getElementById('maintModalTipo'),nEl=document.getElementById('maintModalNotas');
+    if(idEl)idEl.value=a.maquinaId;if(tEl)tEl.value=a.tipo;if(nEl)nEl.value=a.notas||'';
+    gfClose();
+    if(typeof saveMaintRecord==='function')await saveMaintRecord();
+  }});
+}
+// ── #5 Nuevo proveedor (guiado) ──
+function startNewProveedorFlow(){
+  const cats=(typeof getPvCats==='function')?getPvCats():[];
+  gfStart({title:'➕ Nuevo proveedor',draft:true,flowKey:'newprov',steps:[
+    {key:'nombre',type:'text',q:'¿Nombre del proveedor?',rows:1,required:true,placeholder:'Ej: Filamentos Chile SpA'},
+    {key:'categoria',type:'chips',q:'¿Categoría?',sub:'Puedes elegir varias.',multi:true,options:(cats.length?cats:['Filamento','Resina','Insumos','Maquinaria','Servicios']).map(c=>({label:c,value:c}))},
+    {key:'contacto',type:'text',q:'Persona de contacto',rows:1},
+    {key:'telefono',type:'text',q:'Teléfono / WhatsApp',rows:1},
+    {key:'email',type:'text',q:'Email',rows:1},
+    {key:'condiciones',type:'chips',q:'Condiciones de pago',options:[{label:'Contado',value:'Contado'},{label:'30 días',value:'30 días'},{label:'45 días',value:'45 días'},{label:'60 días',value:'60 días'}]},
+    {key:'plazo',type:'number',q:'Plazo de entrega',min:0,suffix:'días'},
+    {key:'notas',type:'text',q:'Notas',rows:2},
+  ],onComplete:async(a)=>{
+    if(!a.nombre){toast('El nombre es obligatorio','error');return;}
+    const f={'Nombre':a.nombre,'Contacto':a.contacto||'','Teléfono':a.telefono||'','Email':a.email||'','Estado':'Activo','Notas':a.notas||''};
+    if(a.categoria&&a.categoria.length)f['Categoría']=a.categoria;
+    if(a.condiciones)f['Condiciones de pago']=a.condiciones;
+    if(a.plazo)f['Plazo de entrega (días)']=parseInt(a.plazo);
+    toast('Creando proveedor…','info');
+    try{await airtableWrite('Proveedores','POST',null,f);}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){delete f['Condiciones de pago'];delete f['Plazo de entrega (días)'];delete f['Categoría'];await airtableWrite('Proveedores','POST',null,f);}else throw e;}
+    _gfClearDraft();gfClose();await loadAllDataSilent();if(typeof renderProveedores==='function')renderProveedores();
+    toast('✓ Proveedor "'+a.nombre+'" creado','success');
+  }});
+}
+// ── #2 Registrar pago / abono (guiado) ──
+function startPaymentFlow(){
+  if(!state||!Array.isArray(state.pedidos)){toast('Aún se están cargando los datos…','info');return;}
+  const pend=state.pedidos.filter(p=>!p.fields['Saldo pagado (50%)']&&(p.fields['Estado pedido']||'')!=='Cancelado');
+  const lista=(pend.length?pend:state.pedidos).slice(0,40);
+  gfStart({title:'💵 Registrar pago',steps:[
+    {key:'pedidoId',type:'chips',q:'¿De qué pedido?',sub:'Pedidos con saldo pendiente.',options:lista.map(p=>({label:(p.fields['N° Pedido']||'—')+' · '+formatCLP(p.fields['Monto total (CLP)']||0),value:p.id}))},
+    {key:'tipo',type:'chips',q:'¿Qué pago registras?',options:[{label:'Anticipo (50%)',value:'anticipo',icon:'1️⃣'},{label:'Saldo (50%)',value:'saldo',icon:'2️⃣'},{label:'Pago total',value:'total',icon:'💯'}]},
+  ],onComplete:async(a)=>{
+    const p=state.pedidos.find(x=>x.id===a.pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
+    const monto=p.fields['Monto total (CLP)']||0;const fields={};
+    if(a.tipo==='anticipo'){fields['Anticipo pagado (50%)']=true;fields['Monto abono (CLP)']=Math.round(monto*0.5);}
+    else if(a.tipo==='saldo'){fields['Saldo pagado (50%)']=true;}
+    else{fields['Anticipo pagado (50%)']=true;fields['Saldo pagado (50%)']=true;fields['Monto abono (CLP)']=monto;}
+    toast('Registrando pago…','info');
+    await actualizarPedido(a.pedidoId,fields);
+    gfClose();renderPedidos();renderOverview();if(typeof renderFinanzas==='function')renderFinanzas();
+    toast('✓ Pago registrado','success');
+  }});
+}
+// ── #1 Iniciar producción / onboarding de pedido (guiado) ──
+function startPedidoOnboardingFlow(id){
+  const p=state.pedidos.find(x=>x.id===id);if(!p){toast('Pedido no encontrado','error');return;}
+  const f=p.fields;
+  gfStart({title:'🚀 Iniciar producción '+(f['N° Pedido']||''),initial:{estado:'En producción',equipo:f['Equipo asignado']||'',fecha:f['Fecha entrega']||''},steps:[
+    {key:'estado',type:'chips',q:'¿Mover a producción?',options:[{label:'En producción',value:'En producción',icon:'⚙️'},{label:'Mantener Confirmado',value:'Confirmado'}]},
+    {key:'equipo',type:'text',q:'¿Quién(es) lo fabrican?',sub:'Equipo asignado (nombres separados por coma).',rows:1,placeholder:'Ej: Diego, Camila'},
+    {key:'fecha',type:'date',q:'Fecha de entrega comprometida'},
+  ],onComplete:async(a)=>{
+    const fields={'Estado pedido':a.estado||'Confirmado'};
+    if(a.equipo)fields['Equipo asignado']=a.equipo;
+    if(a.fecha)fields['Fecha entrega']=a.fecha;
+    toast('Guardando…','info');
+    try{await actualizarPedido(id,fields);}catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Equipo asignado'];await actualizarPedido(id,fields);}else throw e;}
+    gfClose();await loadAllDataSilent();renderPedidos();renderOverview();
+    toast('✓ Producción iniciada','success');
+  }});
+}
+// ── #3 Cierre de QA (guiado, con foto opcional) ──
+function startQAFlow(id){
+  const p=state.pedidos.find(x=>x.id===id);if(!p){toast('Pedido no encontrado','error');return;}
+  const QAD=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
+  gfStart({title:'🎬 QA '+(p.fields['N° Pedido']||''),steps:[
+    {key:'checks',type:'chips',q:'¿Qué cumple la pieza?',sub:'Marca todo lo aprobado.',multi:true,options:QAD.map(t=>({label:t,value:t}))},
+    {key:'resultado',type:'chips',q:'Resultado final',options:[{label:'Aprobado',value:'QA aprobado',icon:'✅'},{label:'Rechazado',value:'Rechazado',icon:'❌'}]},
+    {key:'motivo',type:'text',q:'Observaciones / motivo',sub:'Opcional (recomendado si rechazas).',rows:2},
+    {key:'_foto',type:'photo',q:'Foto de evidencia',sub:'Opcional — se guarda en la carpeta del pedido en Drive.'},
+  ],onComplete:async(a)=>{
+    const notas=JSON.stringify(QAD.map(t=>({texto:t,checked:(a.checks||[]).indexOf(t)>=0})));
+    const fields={'Resultado QA':a.resultado||'Pendiente','Notas QA':notas};
+    if(a.motivo)fields['Motivo rechazo QA']=a.motivo;
+    toast('Guardando QA…','info');
+    if(a._photoData&&typeof _driveConnected==='function'&&_driveConnected()){
+      try{const fid=await ensurePedidoFolder(id);const up=await _driveUploadDataUrl('QA_'+(p.fields['N° Pedido']||id)+'_'+Date.now()+'.jpg',a._photoData,fid);if(up&&up.webViewLink)fields['Foto QA URL']=up.webViewLink;}catch(e){console.warn('QA foto:',e);}
+    }
+    try{await actualizarPedido(id,fields);}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Motivo rechazo QA'];delete fields['Foto QA URL'];await actualizarPedido(id,fields);}else throw e;}
+    gfClose();await loadAllDataSilent();renderPedidos();renderOverview();
+    toast('✓ QA registrado · '+(a.resultado||'Pendiente'),'success');
+  }});
+}
+window.startMaintFlow=startMaintFlow;window.startNewProveedorFlow=startNewProveedorFlow;window.startPaymentFlow=startPaymentFlow;window.startPedidoOnboardingFlow=startPedidoOnboardingFlow;window.startQAFlow=startQAFlow;
 
 // ── REPORTES ──────────────────────────────────────────────────
 function prefillReporte(){
@@ -20411,6 +20564,7 @@ function qcalcClear(kind){
   </div>
 
   <div id="jvs-chips">
+    <span class="jvs-chip" id="jvs-ctx-chip" style="display:none;border-color:rgba(0,212,204,0.5);color:var(--accent);font-weight:700"></span>
     <span class="jvs-chip" data-cmd="¿cuántos pedidos activos hay y cuántos están atrasados?">📦 Estado pedidos</span>
     <span class="jvs-chip" data-cmd="resumen de cotizaciones pendientes"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Cotizaciones</span>
     <span class="jvs-chip" data-cmd="abre el módulo de máquinas"><svg class="dashboard-icon" width="12" height="12" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Máquinas</span>
@@ -20541,7 +20695,22 @@ CAPACIDADES Y REGLAS:
   }
 
   // ─── Panel open/close ───
-  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); if(window.innerWidth>768) setTimeout(()=>$input.focus(),200); }
+  function _ctxSuggest(){
+    const chip=document.getElementById('jvs-ctx-chip');if(!chip)return;
+    let tab='';try{tab=sessionStorage.getItem('thelab_active_tab')||'';}catch(e){}
+    const map={
+      clientes:{label:'➕ Nuevo cliente',fn:window.startNewClientFlow},
+      cotizaciones:{label:'💰 Cotizar',fn:window.startQuoteFlow},
+      overview:{label:'💰 Cotizar',fn:window.startQuoteFlow},
+      proveedores:{label:'➕ Nuevo proveedor',fn:window.startNewProveedorFlow},
+      maquinas:{label:'🔧 Registrar mantención',fn:window.startMaintFlow},
+      finanzas:{label:'💵 Registrar pago',fn:window.startPaymentFlow},
+    };
+    const s=map[tab];
+    if(s&&typeof s.fn==='function'){chip.textContent=s.label;chip.style.display='';chip.onclick=()=>{closePanel();s.fn();};}
+    else{chip.style.display='none';chip.onclick=null;}
+  }
+  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); _ctxSuggest(); if(window.innerWidth>768) setTimeout(()=>$input.focus(),200); }
   function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); stopListen(); JV.synth.cancel(); if(JV.ctrl){try{JV.ctrl.abort();}catch(e){}JV.ctrl=null;} JV.busy=false; JV.thinking=false; setState('idle'); }
   $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
   $close.addEventListener('click',closePanel);
