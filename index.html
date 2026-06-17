@@ -20707,6 +20707,22 @@ function qcalcClear(kind){
       const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||''));
       const revTotal = ped.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0);
 
+      // Finanzas (cobranza), proveedores y máquinas — contexto extra
+      const fac = s.facturas || [];
+      const porCobrar = fac.filter(x=>x.fields&&(x.fields['Estado Pago']||'')!=='Cobrada'&&(+x.fields['Total']>0));
+      const vencidas = fac.filter(x=>x.fields&&(x.fields['Estado Pago']||'')==='Vencida');
+      const sumCobrar = porCobrar.reduce((a,x)=>a+(+x.fields['Total']||0),0);
+      const prov = s.proveedores || [];
+      const provAct = prov.filter(p=>(p.fields?.['Estado']||'Activo')==='Activo').length;
+      let maqLine='';
+      try{
+        if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)){
+          let impr=0; MAQUINAS.forEach(m=>{try{if((typeof _printerStatus!=='undefined'?(_printerStatus[m.id]||{}).state:'')==='printing')impr++;}catch(e){}});
+          let mant=0; if(typeof getMaintAlerts==='function')MAQUINAS.forEach(m=>{try{if(getMaintAlerts(m).length)mant++;}catch(e){}});
+          maqLine='\n- Máquinas: '+MAQUINAS.length+' | Imprimiendo: '+impr+' | Con alerta de mantención: '+mant;
+        }
+      }catch(e){}
+
       const pedRows = activos.slice(0,10).map(p=>{
         const f=p.fields||{};
         return `  • ${f['N° Pedido']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado pedido']||'—'} | $${Math.round((f['Monto total (CLP)']||0)/1.19).toLocaleString('es-CL')} neto | Entrega: ${f['Fecha entrega']||'sin fecha'}`;
@@ -20722,6 +20738,8 @@ function qcalcClear(kind){
 - Cotizaciones totales: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
 - Clientes registrados: ${cli.length}
 - Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP
+- Cobranza: ${porCobrar.length} facturas por cobrar ($${sumCobrar.toLocaleString('es-CL')}) | ${vencidas.length} vencidas
+- Proveedores: ${prov.length} (${provAct} activos)${maqLine}
 
 PEDIDOS ACTIVOS:
 ${pedRows||'  (ninguno)'}
@@ -20743,6 +20761,7 @@ CAPACIDADES Y REGLAS:
 - Para abrir formularios de nuevo registro incluye al final: [NUEVO:tipo]
   Tipos validos: cliente, cotizacion, proveedor, venta, diario
 - Si el usuario quiere COTIZAR (armar un presupuesto) incluye al final: [COTIZAR]. Esto abre un cotizador guiado paso a paso. Anuncia brevemente que abres el cotizador.
+- Para abrir un asistente guiado paso a paso incluye al final: [FLUJO:tipo]. Tipos validos: cliente (nuevo cliente), proveedor (nuevo proveedor), pago (registrar pago/abono), mantencion (registrar mantencion de maquina), cotizar (cotizar). Anuncia brevemente que abres el asistente.
 - Para delegar una tarea a un agente especializado incluye al final: [AGENTE:ID|instruccion detallada]
   IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), LEADGEN (prospeccion de nichos), FINANCE (cobranza), ONBOARDING (bienvenida clientes), REPCLIENTE (update estado pedido al cliente), CONTENT (contenido redes), ADS (optimizacion Google Ads).
   Ejemplo: [AGENTE:FOLLOWUP|Cotizacion COT-123 de Maria, 8 dias sin respuesta, trofeos por 250000]
@@ -20770,6 +20789,23 @@ CAPACIDADES Y REGLAS:
     d.appendChild(ls);d.appendChild(ts);
     $log.appendChild(d); $log.scrollTop=$log.scrollHeight;
     return ts;
+  }
+
+  // ── Persistencia de conversación (sobrevive a recargas dentro de la sesión) ──
+  function _kaiStripTags(s){return String(s||'').replace(/\[NAV:[^\]]*\]/gi,'').replace(/\[NUEVO:[^\]]*\]/gi,'').replace(/\[AGENTE:[^\]]*\]/gi,'').replace(/\[COTIZAR\]/gi,'').replace(/\[FLUJO:[^\]]*\]/gi,'').trim();}
+  function _kaiPersist(){try{sessionStorage.setItem('kai_hist',JSON.stringify(JV.history.slice(-14)));}catch(e){}}
+  function _kaiRestore(){
+    try{
+      const raw=sessionStorage.getItem('kai_hist');if(!raw)return;
+      const h=JSON.parse(raw);if(!Array.isArray(h)||!h.length)return;
+      JV.history=h.slice(-14);
+      JV.history.forEach(msg=>{const t=_kaiStripTags(msg.content);if(t)addMsg(msg.role==='user'?'u':'j',t);});
+    }catch(e){}
+  }
+  // Lanza un asistente guiado por nombre (acción [FLUJO:tipo] de KAI)
+  function _kaiLaunchFlow(t){
+    const map={cliente:window.startNewClientFlow,lead:window.startNewClientFlow,proveedor:window.startNewProveedorFlow,pago:window.startPaymentFlow,abono:window.startPaymentFlow,mantencion:window.startMaintFlow,'mantención':window.startMaintFlow,cotizar:window.startQuoteFlow,cotizacion:window.startQuoteFlow,'cotización':window.startQuoteFlow};
+    const fn=map[t];if(typeof fn==='function')fn();
   }
 
   // ─── Panel open/close ───
@@ -20825,6 +20861,8 @@ CAPACIDADES Y REGLAS:
       delegateToAgent(m[1].toUpperCase().trim(),m[2].trim());
     }
     if(/\[COTIZAR\]/i.test(text)){ cleaned=cleaned.replace(/\[COTIZAR\]/gi,'').trim(); closePanel(); if(window.startQuoteFlow) setTimeout(window.startQuoteFlow,150); }
+    const fm=text.match(/\[FLUJO:\s*([a-záéíóúñ\-]+)\]/i);
+    if(fm){ cleaned=cleaned.replace(/\[FLUJO:[^\]]*\]/gi,'').trim(); const t=fm[1].toLowerCase().trim(); closePanel(); setTimeout(()=>_kaiLaunchFlow(t),150); }
     return cleaned;
   }
 
@@ -20842,6 +20880,7 @@ CAPACIDADES Y REGLAS:
       $res.classList.remove('jvs-cursor');
       $res.textContent=`[${cfg.label}]\n${result}`;
       $log.scrollTop=$log.scrollHeight;
+      try{ const h=JV.history; if(h.length&&h[h.length-1].role==='assistant'){ h[h.length-1].content+='\n\n[Resultado de '+cfg.label+']: '+result; _kaiPersist(); } }catch(e){}
       try{ if(typeof AGENT_LOG!=='undefined') AGENT_LOG.add(cfg.label,'KAI: '+consulta,result); }catch(e){}
     }catch(e){
       $res.classList.remove('jvs-cursor');
@@ -20902,7 +20941,7 @@ CAPACIDADES Y REGLAS:
       const reader=r.body.getReader();
       const decoder=new TextDecoder();
       // Oculta etiquetas [NAV:...] y [NUEVO:...] mientras llega texto
-      const stripNav=s=>s.replace(/\[NAV:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[NUEVO:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[AGENTE:[^\]]*\]/gi,'').replace(/\[COTIZAR\]/gi,'').replace(/\[(NAV|NUEVO|AGENTE):[^\]]*$/i,'');
+      const stripNav=s=>s.replace(/\[NAV:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[NUEVO:[a-záéíóúñ\s\-]*\]/gi,'').replace(/\[AGENTE:[^\]]*\]/gi,'').replace(/\[COTIZAR\]/gi,'').replace(/\[FLUJO:[^\]]*\]/gi,'').replace(/\[(NAV|NUEVO|AGENTE|FLUJO):[^\]]*$/i,'');
       let buf='', full='';
       while(true){
         const {done,value}=await reader.read();
@@ -20930,8 +20969,9 @@ CAPACIDADES Y REGLAS:
       const clean=execActions(full||'Sin respuesta.');
       $typ.textContent=clean;
       $log.scrollTop=$log.scrollHeight;
-      JV.history.push({role:'assistant',content:full});
+      JV.history.push({role:'assistant',content:full||'Sin respuesta.'});
       if(JV.history.length>14) JV.history=JV.history.slice(-12);
+      _kaiPersist();
       JV.busy=false;
       if($voiceToggle.checked) speak(clean); else { setState('idle'); maybeRelisten(); }
 
@@ -21048,6 +21088,7 @@ CAPACIDADES Y REGLAS:
   window.speechSynthesis && (window.speechSynthesis.onvoiceschanged=()=>{});
   // Expose a global to open KAI programmatically if needed
   window.openKai=()=>{ JV.open?closePanel():openPanel(); };
+  _kaiRestore();
 })();
 </script>
 <script>
