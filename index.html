@@ -10543,22 +10543,27 @@ function gfReviewHTML(){
   const head='<div class="gf-rev-row"><span>Cliente</span><b>'+escapeHtml(a.clienteNombre||'Sin cliente')+'</b></div>'
     +'<div class="gf-rev-row"><span>Producto · Material</span><b>'+escapeHtml((a.tipo||'-')+(a.material&&a.material!=='a elección de KAI'?' · '+a.material:''))+'</b></div>'
     +'<div class="gf-rev-row" style="border-bottom:none"><span>Urgencia · Pago</span><b>'+(a.urgencia==='urgente'?'⚡ Urgente':'Normal')+(a.formaPago?' · '+escapeHtml(a.formaPago):'')+'</b></div>';
-  const rows=items.map((it,i)=>'<div class="gf-item" data-i="'+i+'" style="border:1px solid var(--border2);border-radius:10px;padding:10px;margin-bottom:8px;background:var(--surface2)">'
-    +'<input class="gf-input gf-it-desc" value="'+escapeHtml(it.desc||'')+'" placeholder="Descripción del ítem" style="font-size:13px;margin-bottom:6px">'
-    +'<div style="display:flex;gap:6px;align-items:center">'
-    +'<input class="gf-input gf-it-und" type="number" min="1" value="'+(it.und||1)+'" oninput="gfRevCalc()" title="Cantidad" style="width:62px">'
-    +'<input class="gf-input gf-it-costo" type="number" value="'+(it.costoUnit||0)+'" oninput="gfRevCalc()" placeholder="Costo u." title="Costo unitario neto">'
-    +'<input class="gf-input gf-it-venta" type="number" value="'+(it.ventaUnit||0)+'" oninput="gfRevCalc()" placeholder="Venta u." title="Venta unitaria neta">'
-    +(items.length>1?'<button class="btn btn-ghost btn-sm" onclick="gfItemRemove('+i+')" title="Quitar" style="color:var(--danger);flex-shrink:0">🗑</button>':'')
-    +'</div></div>').join('');
+  const rows=items.map((it,i)=>{
+    const sub=Math.round((it.ventaUnit||0)*(it.und||1));
+    return '<div class="gf-item" data-i="'+i+'" style="border:1px solid var(--border2);border-radius:10px;padding:11px;margin-bottom:8px;background:var(--surface2)">'
+    +'<input class="gf-input gf-it-desc" value="'+escapeHtml(it.desc||'')+'" placeholder="Descripción del ítem" style="font-size:13px;margin-bottom:8px">'
+    +'<div style="display:flex;gap:8px;align-items:flex-end">'
+    +'<div style="width:74px"><label class="gf-sub" style="margin:0 0 3px;display:block">Cantidad</label><input class="gf-input gf-it-und" type="number" min="1" value="'+(it.und||1)+'" oninput="gfRevCalc()"></div>'
+    +'<div style="flex:1"><label class="gf-sub" style="margin:0 0 3px;display:block">Costo unit. (neto)</label><input class="gf-input gf-it-costo" type="number" value="'+(it.costoUnit||0)+'" oninput="gfRevCalc()"></div>'
+    +'<div style="flex:1"><label class="gf-sub" style="margin:0 0 3px;display:block">Venta unit. (neto)</label><input class="gf-input gf-it-venta" type="number" value="'+(it.ventaUnit||0)+'" oninput="gfRevCalc()"></div>'
+    +(items.length>1?'<button class="btn btn-ghost btn-sm" onclick="gfItemRemove('+i+')" title="Quitar ítem" style="color:var(--danger);flex-shrink:0;margin-bottom:1px">🗑</button>':'')
+    +'</div>'
+    +'<div class="gf-sub" style="margin:7px 0 0;text-align:right">Subtotal línea: <b id="gfRevSub'+i+'" style="color:var(--text)">'+formatCLP(sub)+'</b> <span style="opacity:.55">neto · cant. × venta unit.</span></div>'
+    +'</div>';
+  }).join('');
   return head
-    +'<div style="margin-top:13px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Ítems</div>'
+    +'<div style="margin-top:13px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Ítems · el precio de venta es UNITARIO (por unidad)</div>'
     +rows
     +'<button class="btn btn-ghost btn-sm" onclick="gfItemAdd()" style="margin-bottom:8px">➕ Agregar ítem</button>'
     +'<div class="gf-total"><span>TOTAL (IVA incl.)</span><span id="gfRevTotal">'+formatCLP(_gfItemsTotal())+'</span></div>'
     +(items.some(x=>x.ventaUnit)?'<div class="gf-sub" style="margin-top:9px">✨ Precio sugerido por KAI — ajústalo o agrega más ítems.</div>':'<div class="gf-sub" style="margin-top:9px;color:var(--warn)">Ingresa el precio de venta de cada ítem.</div>');
 }
-function gfRevCalc(){GF.answers._items=_gfReadItems();const el=document.getElementById('gfRevTotal');if(el)el.textContent=formatCLP(_gfItemsTotal());}
+function gfRevCalc(){GF.answers._items=_gfReadItems();GF.answers._items.forEach((it,i)=>{const s=document.getElementById('gfRevSub'+i);if(s)s.textContent=formatCLP(Math.round((it.ventaUnit||0)*(it.und||1)));});const el=document.getElementById('gfRevTotal');if(el)el.textContent=formatCLP(_gfItemsTotal());}
 function gfItemAdd(){GF.answers._items=_gfReadItems();GF.answers._items.push({desc:'',und:1,costoUnit:0,ventaUnit:0});gfRender();}
 function gfItemRemove(i){GF.answers._items=_gfReadItems();GF.answers._items.splice(i,1);if(!GF.answers._items.length)GF.answers._items.push({desc:'',und:1,costoUnit:0,ventaUnit:0});gfRender();}
 // ── Crea la cotización real (Airtable + etapa + Drive) desde datos guiados ──
@@ -10570,6 +10575,7 @@ async function crearCotizacionGuiada(d){
   const fecha=new Date().toISOString().split('T')[0];
   const vto=addBusinessDays(new Date(fecha+'T00:00:00'),10).toISOString().split('T')[0];
   const fields={'N° Cotización':num,'Canal solicitud':d.canal||'WhatsApp','Fecha cotización':fecha,'Fecha vencimiento':vto,'Subtotal (CLP)':costo,'Total final (CLP)':total,'Urgencia (+25%)':!!d.urgente,'Solicitud cliente (texto libre)':d.solicitud||'','Detalle productos':detalle,'Notas cotización':d.notas||'','Estado cotización':'Enviada'};
+  if(d.alias)fields['Alias / Título']=d.alias;
   if(descPct>0)fields['Descuento (%)']=descPct;
   if(d.formaPago)fields['Forma de pago']=d.formaPago;
   if(d.tiempoProd){fields['Tiempo de producción']=parseInt(d.tiempoProd);fields['Tipo días producción']=d.tipoDias||'DÍAS HÁBILES';}
@@ -10610,6 +10616,7 @@ function startQuoteFlow(presetClienteId,presetClienteNombre){
   if(!state||!Array.isArray(state.clientes)){toast('Aún se están cargando los datos…','info');return;}
   const steps=[
       {key:'clienteId',type:'client',q:'¿Para qué cliente es la cotización?',sub:'Busca uno existente, crea uno nuevo, u omítelo.'},
+      {key:'alias',type:'text',q:'¿Título o alias para la cotización?',sub:'Opcional — para identificarla rápido en la lista.',rows:1,placeholder:'Ej: Trofeos premiación 2026'},
       {key:'tipo',type:'chips',q:'¿Qué tipo de producto?',options:[{label:'Impresión 3D',value:'Impresión 3D',icon:'🖨️'},{label:'Letrero Neón',value:'Letrero Neón',icon:'💡'},{label:'Trofeo',value:'Trofeo',icon:'🏆'},{label:'Otro',value:'Otro',icon:'📦'}]},
       {key:'descripcion',type:'text',q:'Describe lo que necesita el cliente',sub:'Medidas, diseño, referencias… cuanto más detalle, mejor estima KAI.',placeholder:'Ej: 50 trofeos de acrílico de 15cm con logo grabado…',rows:3,required:true},
       {key:'material',type:'chips',q:'¿Material o técnica?',options:[{label:'PLA',value:'PLA'},{label:'PETG',value:'PETG'},{label:'ABS',value:'ABS'},{label:'Resina',value:'Resina'},{label:'Acrílico',value:'Acrílico'},{label:'Que sugiera KAI',value:'a elección de KAI',icon:'✨'}]},
@@ -10630,6 +10637,7 @@ function startQuoteFlow(presetClienteId,presetClienteNombre){
       toast('Creando cotización…','info');
       const r=await crearCotizacionGuiada({
         clienteId:a.clienteId||'',
+        alias:a.alias||'',
         items:items.map(it=>({desc:it.desc||a.descripcion||a.tipo,und:it.und||1,costo:it.costoUnit||0,venta:it.ventaUnit||0})),
         solicitud:a.descripcion||'',
         formaPago:a.formaPago||'',
