@@ -7496,7 +7496,7 @@ function renderClienteFacturas(clienteId,empresa){
       const esVencida=f['Estado Pago']!=='Cobrada'&&dias>0;
       const rowStyle=esVencida?'border-bottom:1px solid var(--border);background:rgba(255,68,68,0.05)':'border-bottom:1px solid var(--border)';
       const waMsg=clienteTel&&esVencida?encodeURIComponent(`Estimados, les recordamos que la factura N°${folio} por ${formatCLP(f['Total']||0)} está pendiente de pago. Quedo atento para coordinar. Gracias.`):'';
-      return`<tr data-id="${id}" class="${_flashCls(id).trim()}" style="${rowStyle}"${notasTip}>
+      return`<tr data-id="${rid}" class="${_flashCls(rid).trim()}" style="${rowStyle}"${notasTip}>
         <td style="padding:6px 4px">
           <strong style="color:var(--accent)">${escapeHtml(tipoNum2)}</strong>
           ${tipoNombre?`<span style="color:var(--text3);font-size:10px;font-weight:400"> ${escapeHtml(tipoNombre)}</span>`:''}
@@ -14834,7 +14834,7 @@ function buildProveedorRow(p){
   const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha pedido']||'').filter(Boolean).sort().reverse()[0]||null;
   const estado=f['Estado']||'Activo';
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
-  return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}" class="${selectedProveedores.has(id)?'row-selected':''}">
+  return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}" class="${selectedProveedores.has(id)?'row-selected':''}${_flashCls(id)}">
     <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="row-chk" data-id="${id}" ${selectedProveedores.has(id)?'checked':''} onchange="toggleProveedorRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="pv-nombre"><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}</td>
     <td class="pv-cat">${pvCatBadge(pvCat(f)||'—')}</td>
