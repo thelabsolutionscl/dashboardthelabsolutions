@@ -11085,7 +11085,7 @@ async function crearReporte(){
   const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
   const liveCtx=(ceoCfg&&state.loaded)?buildAgentContext('CEO')+'\n\n':'';
   const response=await callClaude(sys,`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
-  out.textContent=response;
+  out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(response);
   try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response);}catch(e){}
   const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':new Date().toISOString().split('T')[0],'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
   catch(e){toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;}
@@ -11099,54 +11099,93 @@ async function crearReporteAuto(){
 // Convierte el texto crudo del CEO_AGENT en bloques ordenados por sección
 // (Resumen · Métricas · Alertas · Prioridades · Oportunidad) con viñetas,
 // listas numeradas y métricas label:valor. Tolera variaciones de markdown.
-function formatCeoReport(raw){
+// ── Formateador genérico de respuestas de agentes IA ──
+// Convierte el texto crudo de cualquier agente en bloques ordenados por sección,
+// con viñetas, listas numeradas, métricas label:valor, checkboxes (QA), tablas
+// markdown (Finance) y bloques LABEL: (LinkedIn). Oculta los bloques máquina
+// [ITEMS]/[ACTIONS]. Tolerante a las variaciones de markdown del modelo.
+function formatAgentReport(raw){
   if(!raw||!String(raw).trim()) return '';
-  const txt=String(raw).replace(/\r/g,'').replace(/•/g,'•').trim();
+  let txt=String(raw).replace(/\r/g,'').replace(/•/g,'•');
+  // Oculta bloques destinados a la máquina, no al humano
+  txt=txt.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/gi,'').replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/gi,'').trim();
   const lines=txt.split('\n');
   const SECMETA=[
-    {re:/oportunidad|insight/i,            ico:'💡',color:'var(--warn)'},
-    {re:/prioridad|acci[oó]n|tarea|paso/i, ico:'✅',color:'var(--success)'},
-    {re:/alerta|cr[ií]tic|riesgo/i,        ico:'⚠️',color:'var(--danger)'},
-    {re:/m[eé]trica|kpi|indicador/i,       ico:'📊',color:'var(--accent4)'},
-    {re:/resumen|ejecutiv/i,               ico:'📋',color:'var(--accent)'}
+    {re:/whatsapp|\bwsp\b/i,                                                ico:'💬',color:'var(--success)'},
+    {re:/e-?mail|correo|asunto/i,                                           ico:'📧',color:'var(--accent)'},
+    {re:/oportunidad|insight/i,                                             ico:'💡',color:'var(--warn)'},
+    {re:/alerta|cr[ií]tic|riesgo/i,                                         ico:'⚠️',color:'var(--danger)'},
+    {re:/diagn[oó]stic|m[eé]trica|kpi|indicador|score/i,                    ico:'📊',color:'var(--accent4)'},
+    {re:/objeci/i,                                                          ico:'🛡️',color:'var(--warn)'},
+    {re:/checklist|control de calidad|calidad|\bqa\b/i,                     ico:'☑️',color:'var(--accent)'},
+    {re:/cronograma|plazo|tiempo estimado|entrega|hito/i,                   ico:'📅',color:'var(--accent4)'},
+    {re:/bienvenida|onboarding/i,                                           ico:'👋',color:'var(--accent)'},
+    {re:/precio|cotiza|desglose|presupuesto|subtotal|\btotal\b|pago|cobranza|margen|financ/i, ico:'💰',color:'var(--success)'},
+    {re:/nicho|perfil|decisor|servicio|volumen|prospec/i,                   ico:'🎯',color:'var(--accent4)'},
+    {re:/instagram|tiktok|reel|linkedin|contenido|gui[oó]n|hashtag/i,       ico:'📣',color:'var(--accent4)'},
+    {re:/prioridad|acci[oó]n|tarea|\bpaso|siguiente|pr[oó]xim|reasignaci/i, ico:'✅',color:'var(--success)'},
+    {re:/resumen|ejecutiv/i,                                                ico:'📋',color:'var(--accent)'},
+    {re:/mensaje|apertura|reconexi|seguimiento|update|recordatorio/i,       ico:'💬',color:'var(--accent)'}
   ];
-  const KEYW=/resumen|ejecutiv|m[eé]trica|kpi|indicador|alerta|cr[ií]tic|riesgo|prioridad|oportunidad|insight|acci[oó]n|tarea|paso/i;
   const metaFor=t=>{for(const m of SECMETA) if(m.re.test(t)) return m;return{ico:'•',color:'var(--text3)'};};
   // Inline: escapa y aplica **negrita** / `código`, limpia marcadores sueltos
   const inl=s=>{let h=escapeHtml(s);
     h=h.replace(/\*\*([^*]+?)\*\*/g,'<strong style="color:var(--text)">$1</strong>').replace(/__([^_]+?)__/g,'<strong style="color:var(--text)">$1</strong>').replace(/\*\*/g,'');
     h=h.replace(/`([^`]+)`/g,'<code style="background:var(--surface3);padding:1px 5px;border-radius:4px">$1</code>');
     return h;};
-  // ¿Es un encabezado de sección? Devuelve el título limpio o null
-  const headTitle=line=>{const t=line.trim();if(!t) return null;
-    const structural=/^#{1,4}\s+/.test(t)||/^\*\*[^*]+\*\*:?\s*$/.test(t)||/^\d+[\.\)]\s+/.test(t)||(t===t.toUpperCase()&&/[A-ZÁÉÍÓÚÑ]/.test(t)&&t.split(/\s+/).length<=8);
-    if(!structural) return null;
-    let title=t.replace(/^#{1,4}\s*/,'').replace(/^\d+[\.\)]\s*/,'').replace(/^\*\*|\*\*$/g,'').replace(/:\s*$/,'').replace(/^\*\*|\*\*$/g,'').trim();
-    return KEYW.test(title)?title:null;};
+  // ¿Es un encabezado de sección? Devuelve el título limpio o null.
+  // Sólo casos estructurales inequívocos: markdown #, línea en negrita completa,
+  // etiqueta MAYÚS:, o línea CORTA EN MAYÚSCULAS (sin un valor tras ':').
+  const headTitle=line=>{const t=line.trim();if(!t) return null;let m;
+    if((m=t.match(/^#{1,4}\s+(.+?)\s*$/))) return m[1].replace(/\*\*/g,'').replace(/:\s*$/,'').trim();
+    if((m=t.match(/^\*\*([^*]+?)\*\*:?\s*$/))) return m[1].replace(/:\s*$/,'').trim();
+    const noNum=t.replace(/^\d+[\.\)]\s*/,'').replace(/^\*\*|\*\*$/g,'').trim();
+    const noColon=noNum.replace(/:\s*$/,'');
+    const hasInnerValue=/:\s*\S/.test(noColon);
+    if(hasInnerValue) return null;
+    if(/:\s*$/.test(noNum)&&/^[A-ZÁÉÍÓÚÜÑ0-9][A-ZÁÉÍÓÚÜÑ0-9 _\/·&\-]{1,44}$/.test(noColon)) return noColon.trim();
+    if(noNum===noNum.toUpperCase()&&/[A-ZÁÉÍÓÚÜÑ]/.test(noNum)&&noNum.split(/\s+/).length<=10&&noNum.length<=64) return noColon.trim();
+    return null;};
   // Agrupa líneas en secciones (lo previo al primer encabezado = intro)
   const sections=[];let cur=null;const intro=[];
-  lines.forEach(line=>{const h=headTitle(line);if(h){cur={title:h,body:[]};sections.push(cur);}else if(cur)cur.body.push(line);else intro.push(line);});
-  // Renderiza el cuerpo: viñetas, listas numeradas, métricas label:valor, párrafos
-  const renderBody=arr=>{let html='';arr.forEach(rw=>{const l=rw.trim();if(!l||/^[-–—_=*•·\s]{3,}$/.test(l)) return;let m;
-    if((m=l.match(/^[\-\*•–·]\s+(.+)$/)))
-      html+=`<div style="display:flex;gap:8px;margin:5px 0;line-height:1.55"><span style="color:var(--accent);flex-shrink:0">•</span><span>${inl(m[1])}</span></div>`;
-    else if((m=l.match(/^(\d+)[\.\)]\s+(.+)$/)))
-      html+=`<div style="display:flex;gap:9px;margin:6px 0;line-height:1.55"><span style="flex-shrink:0;min-width:18px;height:18px;border-radius:5px;background:var(--surface3);color:var(--accent);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">${m[1]}</span><span>${inl(m[2])}</span></div>`;
-    else if((m=l.match(/^([^:]{2,42}):\s+(\S.*)$/))&&m[1].split(/\s+/).length<=6&&m[2].length<=70&&!/[.!?]$/.test(m[1]))
-      html+=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2);font-size:11px">${inl(m[1])}</span><span style="font-weight:600;text-align:right">${inl(m[2])}</span></div>`;
-    else
-      html+=`<div style="margin:5px 0;line-height:1.6">${inl(l)}</div>`;});
+  lines.forEach(line=>{const h=headTitle(line);if(h!==null&&h!==''){cur={title:h,body:[]};sections.push(cur);}else if(cur)cur.body.push(line);else intro.push(line);});
+  // Renderiza el cuerpo: tablas, checkboxes, viñetas, listas, veredicto QA, métricas, párrafos
+  const renderBody=arr=>{let html='';
+    for(let i=0;i<arr.length;i++){const l=(arr[i]||'').trim();
+      if(!l||/^[-–—_=*•·\s]{3,}$/.test(l)) continue;
+      // Tabla markdown: fila | … | seguida de separador |---|
+      if(/^\|.*\|$/.test(l)&&i+1<arr.length&&/^\|[\s:|-]+\|$/.test((arr[i+1]||'').trim())){
+        const cells=r=>r.replace(/^\||\|$/g,'').split('|').map(s=>s.trim());
+        const heads=cells(l);let j=i+2;const rows=[];
+        while(j<arr.length&&/^\|.*\|$/.test((arr[j]||'').trim())){rows.push(cells(arr[j].trim()));j++;}
+        html+=`<div style="overflow-x:auto;margin:7px 0"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>${heads.map(h=>`<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border2);color:var(--text2);font-weight:700;white-space:nowrap">${inl(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td style="padding:6px 8px;border-bottom:1px solid var(--border)">${inl(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        i=j-1;continue;}
+      let m;const lb=l.replace(/\*\*/g,'');
+      if((m=l.match(/^[-*]?\s*\[([ xX])\]\s+(.+)$/))){const done=m[1].toLowerCase()==='x';
+        html+=`<div style="display:flex;gap:8px;margin:4px 0;line-height:1.5"><span style="flex-shrink:0;color:${done?'var(--success)':'var(--text3)'}">${done?'☑':'☐'}</span><span style="${done?'color:var(--text2)':''}">${inl(m[2])}</span></div>`;}
+      else if((m=lb.match(/^([✅❌])\s*(APROBAD[OA]|RECHAZAD[OA])\b(.*)$/i))){const ok=m[1]==='✅';
+        html+=`<div style="display:inline-flex;align-items:center;gap:7px;margin:7px 0;padding:6px 12px;border-radius:8px;font-weight:700;font-size:12px;background:${ok?'rgba(0,212,170,0.12)':'rgba(255,68,68,0.12)'};color:${ok?'var(--success)':'var(--danger)'};border:1px solid ${ok?'var(--success)':'var(--danger)'}">${m[1]} ${escapeHtml(m[2].toUpperCase())}${m[3]&&m[3].trim()?`<span style="font-weight:400;color:var(--text2)">${inl(m[3].replace(/^[\s—:-]+/,'  · '))}</span>`:''}</div>`;}
+      else if((m=l.match(/^[\-\*•–·]\s+(.+)$/)))
+        html+=`<div style="display:flex;gap:8px;margin:5px 0;line-height:1.55"><span style="color:var(--accent);flex-shrink:0">•</span><span>${inl(m[1])}</span></div>`;
+      else if((m=l.match(/^(\d+)[\.\)]\s+(.+)$/)))
+        html+=`<div style="display:flex;gap:9px;margin:6px 0;line-height:1.55"><span style="flex-shrink:0;min-width:18px;height:18px;border-radius:5px;background:var(--surface3);color:var(--accent);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">${m[1]}</span><span>${inl(m[2])}</span></div>`;
+      else if((m=l.match(/^([^:]{2,42}):\s+(\S.*)$/))&&m[1].split(/\s+/).length<=6&&m[2].length<=70&&!/[.!?]$/.test(m[1]))
+        html+=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2);font-size:11px">${inl(m[1])}</span><span style="font-weight:600;text-align:right">${inl(m[2])}</span></div>`;
+      else
+        html+=`<div style="margin:5px 0;line-height:1.6">${inl(l)}</div>`;}
     return html;};
   if(!sections.length) return `<div style="font-size:12px;color:var(--text2)">${renderBody(intro)||`<span style="white-space:pre-wrap">${escapeHtml(txt)}</span>`}</div>`;
   let out='<div style="display:flex;flex-direction:column;gap:12px">';
   if(intro.some(l=>l.trim())) out+=`<div style="font-size:12px;color:var(--text2)">${renderBody(intro)}</div>`;
   sections.forEach(s=>{const mt=metaFor(s.title);
     out+=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${mt.color};border-radius:9px;padding:12px 14px">`
-      +`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:700;font-size:12px;letter-spacing:.3px;color:var(--text);text-transform:capitalize"><span style="font-size:14px">${mt.ico}</span>${escapeHtml(s.title.toLowerCase())}</div>`
+      +`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:700;font-size:12px;letter-spacing:.3px;color:var(--text);text-transform:capitalize"><span style="font-size:14px">${mt.ico}</span>${escapeHtml(s.title.toLowerCase().replace(/_/g,' '))}</div>`
       +`<div style="font-size:12px;color:var(--text2)">${renderBody(s.body)||'<span style="color:var(--text3)">—</span>'}</div></div>`;});
   out+='</div>';
   return out;
 }
+// Alias retro-compatible: el reporte CEO usa el mismo motor genérico.
+function formatCeoReport(raw){return formatAgentReport(raw);}
 function ovRenderUltimoReporteCEO(){
   const chk=document.getElementById('ovCeoAuto');if(chk)chk.checked=localStorage.getItem('ceo_auto_weekly')==='1';
   const body=document.getElementById('ovCeoBody');if(!body)return;
@@ -11967,12 +12006,12 @@ async function runAgent(id){
         }
       }
     }
-    out.textContent=_r;
+    out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(_r);
   }
-  catch(e){out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
+  catch(e){out.style.whiteSpace='';out._rawText='';out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
   if(btn) btn.disabled=false;
 }
-function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
+function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el._rawText||el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
 
 // ── AGENTES INLINE ─────────────────────────────────────────────
 let _agentInlineText='';
@@ -12025,7 +12064,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
     const result=await callClaude(cfg.sys,fullInput);
     _agentInlineText=result;
     resultEl.className='agent-modal-result';
-    resultEl.textContent=result;
+    resultEl.style.whiteSpace='normal';resultEl.innerHTML=formatAgentReport(result);
     if(actionsFn) actionsEl.innerHTML=actionsFn(result);
     try{AGENT_LOG.add(cfg.label,contextText,result);}catch(e){}
   }catch(e){
@@ -12414,7 +12453,7 @@ function runAdsAgent(){
   runAgentInline('ADS',ctx,(result)=>{
     const actions=_parseAdsActions(result);window._adsAgentActions=actions;
     // limpiar el bloque [ACTIONS] del texto visible
-    const rEl=document.getElementById('agentInlineResult');if(rEl)rEl.textContent=String(result).replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/i,'').trim();
+    const rEl=document.getElementById('agentInlineResult');if(rEl){rEl.style.whiteSpace='normal';rEl.innerHTML=formatAgentReport(result);}
     // log de memoria (qué recomendó y cuándo)
     try{_adsLogRecommendation(actions,result);}catch(e){}
     const btns=_adsRenderActionBtns(actions);
@@ -17020,7 +17059,7 @@ function runAdsCampaignAgent(id){
   const ctx=buildAgentContext('ADS')+`\n\nANALIZA EN PROFUNDIDAD SÓLO ESTA CAMPAÑA:\nid=${camp.id} "${camp.nombre}" [${camp.estado}] · ${days} días\nPpto ${fmtMoney(camp.presupuesto||0)}/día (${util}% uso) · Gasto ${fmtMoney(camp.gasto||0)} · CTR ${ctr}% · CPC ${fmtMoney(cpc)} · Conv ${camp.conversiones||0} · CPA ${camp.conversiones>0?fmtMoney(cpa):'—'} · ROAS-Google ${(camp.valor_conversion||0)>0?ro+'x':'—'}\nDa un diagnóstico específico y las acciones concretas (con [ACTIONS]) para esta campaña. Si la muestra es chica, dilo.`;
   runAgentInline('ADS',ctx,(result)=>{
     const actions=_parseAdsActions(result);window._adsAgentActions=actions;
-    const rEl=document.getElementById('agentInlineResult');if(rEl)rEl.textContent=String(result).replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/i,'').trim();
+    const rEl=document.getElementById('agentInlineResult');if(rEl){rEl.style.whiteSpace='normal';rEl.innerHTML=formatAgentReport(result);}
     const btns=_adsRenderActionBtns(actions);
     return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
@@ -18593,7 +18632,7 @@ async function finPlanCobranzaIA(){
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='FINANCE');
     const resp=await callClaude(cfg.sys,ctx);
-    if(out)out.textContent=resp;
+    if(out){out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(resp);}
     try{AGENT_LOG.add('FINANCE_AGENT','Plan de cobranza ('+lista.length+' clientes)',resp);}catch(e){}
   }catch(e){if(out)out.textContent='Error: '+e.message;}
   finally{btn.disabled=false;btn.innerHTML=prev;}
