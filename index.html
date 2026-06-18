@@ -2141,6 +2141,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="openIAConfigModal()" title="Configurar API keys para generación IA"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Config IA</button>
         <button class="btn btn-primary btn-sm" onclick="switchTab('nueva-cot')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> Nueva Cot.</button>
+        <button class="btn btn-ghost btn-sm" id="cotGroupBtn" onclick="toggleCotGroup()" title="Agrupar por estado con subtotales">⊞ Agrupar</button>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('cotizaciones')">⬇ CSV</button>
       </div>
     </div>
@@ -5204,6 +5205,8 @@ function _loadMoreRow(restantes,cols,fn){return `<tr class="load-more-row"><td c
 function _rowText(html){return html.replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&nbsp;/g,' ').toLowerCase();}
 function cliShowMore(){_cliCap+=TABLE_PAGE;renderClientes();}
 function cotShowMore(){_cotCap+=TABLE_PAGE;renderCotizaciones();}
+let _cotGroup=false;
+function toggleCotGroup(){_cotGroup=!_cotGroup;const b=document.getElementById('cotGroupBtn');if(b){b.classList.toggle('active-filter',_cotGroup);b.textContent=_cotGroup?'⊟ Desagrupar':'⊞ Agrupar';}renderCotizaciones();}
 function pedShowMore(){_pedCap+=TABLE_PAGE;renderPedidos(state.pedidoFilter);}
 // ── Densidad de la interfaz (compacto/cómodo), persistida ──
 function applyDensity(){const c=localStorage.getItem('ui_density')==='compact';document.body.classList.toggle('compact',c);const b=document.getElementById('densityBtn');if(b){b.textContent=c?'≣':'≡';b.title=c?'Vista compacta — clic para cómoda':'Vista cómoda — clic para compacta';}}
@@ -7887,9 +7890,19 @@ function renderCotizaciones(){
       :'<tr><td colspan="11"><div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg></div>Aún no hay cotizaciones<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>';
     _setRows(tbody,emptyMsg);return;
   }
-  const shown=sorted.slice(0,_cotCap);
-  let html=shown.map(c=>buildCotRow(c)).join('');
-  if(sorted.length>_cotCap) html+=_loadMoreRow(sorted.length-_cotCap,11,'cotShowMore()');
+  let html;
+  if(_cotGroup){
+    const order=['Solicitada','Enviada','Aprobada','Negociación','Rechazada','Vencida'];
+    const byEst={};sorted.forEach(c=>{const e=c.fields['Estado cotización']||'—';(byEst[e]=byEst[e]||[]).push(c);});
+    const keys=Object.keys(byEst).sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b);});
+    html=keys.map(e=>{const items=byEst[e];const sub=items.reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
+      return `<tr class="cot-group"><td colspan="11" style="padding:8px 14px;background:var(--surface3);border-top:1px solid var(--border2)">${estadoBadge(e)} <span style="color:var(--text3);font-size:11px;margin-left:6px">${items.length} cotiz. · neto ${formatCLP(sub)}</span></td></tr>`+items.map(c=>buildCotRow(c)).join('');
+    }).join('');
+  }else{
+    const shown=sorted.slice(0,_cotCap);
+    html=shown.map(c=>buildCotRow(c)).join('');
+    if(sorted.length>_cotCap) html+=_loadMoreRow(sorted.length-_cotCap,11,'cotShowMore()');
+  }
   _setRows(tbody,html);renderCotAnalytics();_applySortIndicators();
 }
 function resolveVendedorName(vid){if(!vid) return '—';const p=PERSONAS.find(x=>x.id===vid.toLowerCase().trim());return p?p.nombre:vid;}
@@ -11308,6 +11321,18 @@ function formatRichText(raw){
     else html+=`<div style="margin:3px 0;line-height:1.55">${inl(l)}</div>`;});
   return html;
 }
+// Formateador email-safe (estilos inline, sin variables CSS) para el resumen diario
+function _emailRich(raw){if(!raw)return '';const esc=escapeHtml;
+  const inl=s=>esc(s).replace(/\*\*([^*]+?)\*\*/g,'<strong style="color:#fff">$1</strong>').replace(/\*\*/g,'');
+  let h='';String(raw).replace(/\r/g,'').replace(/\[(ITEMS|ACTIONS)\][\s\S]*?\[\/(ITEMS|ACTIONS)\]/gi,'').split('\n').forEach(rw=>{const l=rw.trim();if(!l||/^[-–—_=*•·\s]{3,}$/.test(l))return;let m;
+    const noNum=l.replace(/^#{1,4}\s*/,'').replace(/^\d+[\.\)]\s*/,'').replace(/^\*\*|\*\*$/g,'').trim();
+    const noColon=noNum.replace(/:\s*$/,'');
+    const isHead=/^#{1,4}\s+/.test(l)||/^\*\*[^*]+\*\*:?\s*$/.test(l)||(noNum===noNum.toUpperCase()&&/[A-ZÁÉÍÓÚÜÑ]/.test(noNum)&&noNum.split(/\s+/).length<=9&&!/:\s*\S/.test(noColon));
+    if(isHead)h+=`<div style="color:#00f3ff;font-weight:700;font-size:13px;margin:12px 0 4px">${esc(noColon)}</div>`;
+    else if((m=l.match(/^[\-\*•–·]\s+(.+)$/)))h+=`<div style="margin:3px 0;padding-left:10px;color:#ccc;font-size:12px;line-height:1.5">• ${inl(m[1])}</div>`;
+    else if((m=l.match(/^(\d+)[\.\)]\s+(.+)$/)))h+=`<div style="margin:3px 0;padding-left:6px;color:#ccc;font-size:12px;line-height:1.5"><strong style="color:#fff">${m[1]}.</strong> ${inl(m[2])}</div>`;
+    else h+=`<div style="margin:4px 0;color:#ccc;font-size:12px;line-height:1.55">${inl(l)}</div>`;});
+  return h;}
 function ovRenderUltimoReporteCEO(){
   const chk=document.getElementById('ovCeoAuto');if(chk)chk.checked=localStorage.getItem('ceo_auto_weekly')==='1';
   const body=document.getElementById('ovCeoBody');if(!body)return;
@@ -15076,8 +15101,8 @@ function initDates(){
 }
 function exportToCSV(t){
   let rows=[],headers=[];
-  if(t==='clientes'){headers=['Empresa','Contacto','Email','Teléfono','Etapa','Revenue','Estado','Fact.venc.'];rows=state.clientes.map(c=>{const f=c.fields;return[f['Empresa']||'',f['Contacto']||'',f['Email']||'',f['Teléfono']||'',f['Etapa venta']||'',f['Revenue total cliente (CLP)']||0,f['Estado cuenta']||'',f['Facturas vencidas']||0];});}
-  else if(t==='cotizaciones'){headers=['N°','Cliente','Canal','Subtotal','Total','Urgente','Estado','Vto.'];rows=state.cotizaciones.map(c=>{const f=c.fields;return[f['N° Cotización']||'',resolveClienteName(f['Cliente']),f['Canal solicitud']||'',f['Subtotal (CLP)']||0,f['Total final (CLP)']||0,f['Urgencia (+25%)']?'Sí':'No',f['Estado cotización']||'',f['Fecha vencimiento']||''];});}
+  if(t==='clientes'){headers=['Empresa','Contacto','Email','Teléfono','Etapa','Revenue','Estado','Fact.venc.'];let _cd=(typeof getSortedClientes==='function')?getSortedClientes():state.clientes;if(typeof _cliQuery!=='undefined'&&_cliQuery)_cd=_cd.filter(c=>_rowText(buildClienteRow(c)).includes(_cliQuery));rows=_cd.map(c=>{const f=c.fields;return[f['Empresa']||'',f['Contacto']||'',f['Email']||'',f['Teléfono']||'',f['Etapa venta']||'',f['Revenue total cliente (CLP)']||0,f['Estado cuenta']||'',f['Facturas vencidas']||0];});}
+  else if(t==='cotizaciones'){headers=['N°','Cliente','Canal','Subtotal','Total','Urgente','Estado','Vto.'];rows=((typeof getSortedCotizaciones==='function')?getSortedCotizaciones():state.cotizaciones).map(c=>{const f=c.fields;return[f['N° Cotización']||'',resolveClienteName(f['Cliente']),f['Canal solicitud']||'',f['Subtotal (CLP)']||0,f['Total final (CLP)']||0,f['Urgencia (+25%)']?'Sí':'No',f['Estado cotización']||'',f['Fecha vencimiento']||''];});}
   else if(t==='pedidos'){headers=['N°','Cliente','Estado','Proveedor','Monto','Forma de Pago','Anticipo 50%','Saldo 50%','QA','Entrega'];rows=state.pedidos.map(p=>{const f=p.fields;return[f['N° Pedido']||'',resolveClienteName(f['Cliente']),f['Estado pedido']||'',f['Proveedor']||'',f['Monto total (CLP)']||0,f['Forma de pago']||'',f['Anticipo pagado (50%)']?'Sí':'No',f['Saldo pagado (50%)']?'Sí':'No',f['Resultado QA']||'',f['Fecha entrega']||''];});}
   else if(t==='proveedores'){headers=['Nombre','Categoría','Contacto','Teléfono','Email','Comuna','Reputación','Estado','Plazo (días)','Condiciones pago','Productos','Notas'];rows=state.proveedores.map(p=>{const f=p.fields;return[f['Nombre']||'',pvCat(f),f['Contacto']||'',f['Teléfono']||'',f['Email']||'',f['Comuna']||'',f['Reputación']||'',f['Estado']||'',f['Plazo de entrega (días)']||'',f['Condiciones de pago']||'',f['Productos']||'',f['Notas']||''];});}
   else{toast('Tipo desconocido','error');return;}
@@ -15554,16 +15579,29 @@ const NOTIFY={
             try{AGENT_LOG.add(ceoCfg.label,'Resumen diario automático',analysis);}catch(e){}
             ceoHtml=`<div style="margin-top:20px;background:#1a1a1a;border-radius:8px;padding:16px">
 <h3 style="color:#00f3ff;margin:0 0 10px;font-size:14px">📊 Análisis CEO_AGENT</h3>
-<pre style="white-space:pre-wrap;font-family:Arial,sans-serif;font-size:12px;color:#ccc;margin:0;line-height:1.6">${this.esc(analysis)}</pre></div>`;
+<pre style="white-space:pre-wrap;font-family:Arial,sans-serif;font-size:12px;color:#ccc;margin:0;line-height:1.6">${this.esc(analysis)}</pre></div>`.replace(/<pre[^>]*>[\s\S]*?<\/pre>/,_emailRich(analysis));
           }
         }
       }catch(e){/* el resumen se envía igual sin análisis CEO */}
     }
+    // Snapshot de KPIs para la cabecera del resumen
+    let kpiTable='';
+    try{
+      const _t=new Date();_t.setHours(0,0,0,0);const _ws=new Date(_t);_ws.setDate(_t.getDate()-_t.getDay());_ws.setHours(0,0,0,0);
+      const _ped=state.pedidos||[],_cot=state.cotizaciones||[];
+      const revSem=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=_ws?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+      const pedAct=_ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
+      const atras=_ped.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<_t;}).length;
+      const cotPend=_cot.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
+      const cell=(lb,val,col)=>`<td style="padding:12px;text-align:center;border:1px solid #222;background:#1a1a1a"><div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.5px">${lb}</div><div style="font-size:19px;font-weight:700;color:${col};margin-top:3px">${val}</div></td>`;
+      kpiTable=`<table style="width:100%;border-collapse:collapse;margin-bottom:20px"><tr>${cell('Revenue sem.',formatCLP(revSem),'#00f3ff')}${cell('Pedidos activos',pedAct,'#fff')}${cell('Cot. pendientes',cotPend,'#ffaa00')}${cell('Atrasados',atras,atras>0?'#ff4444':'#4caf50')}</tr></table>`;
+    }catch(e){}
     const body=`<div style="font-family:Arial,sans-serif;background:#0d0d0d;color:#fff;padding:24px;max-width:600px;margin:0 auto">
 <div style="border-left:4px solid #00f3ff;padding-left:16px;margin-bottom:20px">
 <h2 style="color:#00f3ff;margin:0 0 4px;font-size:18px">⚠️ Resumen de Alertas Críticas</h2>
 <p style="color:#888;margin:0;font-size:13px">${new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
 </div>
+${kpiTable}
 ${criticas.length
   ?`<table style="width:100%;border-collapse:collapse;background:#1a1a1a;border-radius:8px;overflow:hidden">
 <thead><tr style="background:#1f1f1f"><th style="text-align:left;padding:8px 10px;font-size:11px;color:#00f3ff;font-weight:600;letter-spacing:.5px;text-transform:uppercase">Hora</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#00f3ff;font-weight:600;letter-spacing:.5px;text-transform:uppercase">Alerta</th></tr></thead>
