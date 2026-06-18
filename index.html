@@ -1915,7 +1915,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div class="main">
 <!-- OVERVIEW -->
 <div class="tab-panel active" id="tab-overview">
-  <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Meta</button></div></div>
+  <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Meta</button><div style="position:relative"><button class="btn btn-ghost btn-sm" onclick="openOvCustomize(event)" title="Personalizar overview" style="font-size:14px;line-height:1">⚙</button></div></div></div>
   <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana</div><div class="kpi-skeleton"></div></div>
     <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-skeleton"></div></div>
@@ -1934,7 +1934,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="accionesHoyList" style="padding:8px 12px;display:flex;flex-direction:column;gap:6px"></div>
   </div>
   <div class="ov-zone"><span>📊 Comercial</span></div>
-  <div class="data-grid">
+  <div class="data-grid" id="ovSecComercial">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pipeline Pedidos</span><span class="card-badge" id="pedActivosBadge">—</span></div><div id="pipelineArea"><div class="loading-state"><div class="spinner"></div> cargando...</div></div></div>
     <div class="card" onclick="switchTab('cotizaciones')" style="cursor:pointer"><div class="card-header"><span class="card-title">Cotizaciones Recientes</span><span class="card-badge" id="cotsBadge">—</span></div><div class="table-wrap"><table><thead><tr><th>N°</th><th>Cliente</th><th>Total Neto</th><th>Estado</th><th>Margen</th></tr></thead><tbody id="cotTableBody"><tr><td colspan="5"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div></div>
   </div>
@@ -1948,7 +1948,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="ovFunnelBody" style="padding:16px"></div>
   </div>
   <div class="ov-zone"><span>🚦 Sistema &amp; IA</span></div>
-  <div class="card" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-warning"/></svg>Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
+  <div class="card" id="ovSecAlertas" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-warning"/></svg>Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
   <!-- ── Reporte ejecutivo CEO (IA) ── -->
   <div class="card" style="margin-bottom:24px" id="ovCeoCard">
     <div class="card-header">
@@ -1962,14 +1962,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="ovCeoBody" style="padding:16px;font-size:12px;color:var(--text2);white-space:pre-wrap;word-break:break-word;overflow-x:auto;line-height:1.6">Genera un resumen ejecutivo (revenue, márgenes, pedidos atrasados, prioridades) con los datos reales de esta semana.</div>
   </div>
   <div class="ov-zone"><span>📈 Tendencias</span></div>
-  <div class="data-grid">
+  <div class="data-grid" id="ovSecCharts">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Revenue últimas 4 semanas</span></div><div id="chartRevenue" style="padding:16px"></div></div>
   </div>
 
   <!-- ── Snapshots: Finanzas + Web ── -->
   <div class="ov-zone"><span>🗂️ Áreas del negocio</span></div>
-  <div class="data-grid">
+  <div class="data-grid" id="ovSecSnapshots">
     <!-- Finanzas snapshot -->
     <div class="card" id="overview-fin-card" onclick="switchTab('finanzas')" style="cursor:pointer">
       <div class="card-header">
@@ -5193,6 +5193,16 @@ function _restoreUIState(){try{const s=JSON.parse(localStorage.getItem('ui_state
 }catch(e){}}
 // Sincroniza las flechas asc/desc de los encabezados con el orden vigente
 function _applySortIndicators(){[['#tab-clientes',clientesSort,/sortClientes\('(\w+)'\)/],['#tab-cotizaciones',cotizacionesSort,/sortCotizaciones\('(\w+)'\)/],['#tab-proveedores',proveedoresSort,/sortProveedores\('(\w+)'\)/]].forEach(([sel,sort,re])=>{document.querySelectorAll(sel+' .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(re)?.[1];th.classList.remove('asc','desc');if(sort.key&&k===sort.key)th.classList.add(sort.dir===1?'asc':'desc');});});}
+// ── Sparklines en KPI cards ──
+// Agrupa registros en las últimas N semanas (0=esta semana) y suma getVal por bucket.
+function _weeklySeries(records,getDate,getVal,weeks){weeks=weeks||8;const today=new Date();today.setHours(0,0,0,0);const ws=new Date(today);ws.setDate(today.getDate()-today.getDay());ws.setHours(0,0,0,0);const b=new Array(weeks).fill(0);(records||[]).forEach(r=>{const dv=getDate(r);if(!dv)return;const dt=new Date(dv);if(isNaN(dt))return;const dx=new Date(dt);dx.setHours(0,0,0,0);const dxs=new Date(dx);dxs.setDate(dx.getDate()-dx.getDay());dxs.setHours(0,0,0,0);const wAgo=Math.round((ws-dxs)/(7*86400000));const idx=weeks-1-wAgo;if(idx>=0&&idx<weeks)b[idx]+=(getVal?getVal(r):1);});return b;}
+function _sparkline(vals,color){vals=(vals||[]).map(v=>+v||0);if(vals.length<2||vals.every(v=>v===vals[0]))return '';const w=72,h=18,max=Math.max(...vals),min=Math.min(...vals),rng=(max-min)||1;const pts=vals.map((v,i)=>`${(i/(vals.length-1)*w).toFixed(1)},${(h-1-((v-min)/rng)*(h-2)).toFixed(1)}`).join(' ');return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="margin-top:6px;display:block;opacity:.8"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;}
+// ── Personalizar overview: mostrar/ocultar secciones (persistido en localStorage) ──
+const OV_SECTIONS=[{id:'equipoSnapshot',label:'Disponibilidad equipo'},{id:'accionesHoyCard',label:'Acciones de hoy'},{id:'ovSecComercial',label:'Pipeline + Cotizaciones'},{id:'ovFunnelCard',label:'Embudo de conversión'},{id:'ovSecAlertas',label:'Alertas del sistema'},{id:'ovCeoCard',label:'Reporte ejecutivo CEO'},{id:'ovSecCharts',label:'Gráficos (estados / revenue)'},{id:'ovSecSnapshots',label:'Snapshots (Finanzas / Web / Ads)'}];
+function _ovHidden(){try{return JSON.parse(localStorage.getItem('ov_hidden')||'[]');}catch(e){return [];}}
+function applyOverviewLayout(){const hid=_ovHidden();OV_SECTIONS.forEach(s=>{const el=document.getElementById(s.id);if(el&&hid.includes(s.id))el.style.display='none';});}
+function toggleOvSection(id,on){let hid=_ovHidden();if(on)hid=hid.filter(x=>x!==id);else if(!hid.includes(id))hid.push(id);try{localStorage.setItem('ov_hidden',JSON.stringify(hid));}catch(e){}const el=document.getElementById(id);if(el)el.style.display=on?'':'none';}
+function openOvCustomize(ev){ev&&ev.stopPropagation();const old=document.getElementById('ovCustomizePop');if(old){old.remove();return;}const hid=_ovHidden();const p=document.createElement('div');p.id='ovCustomizePop';p.style.cssText='position:absolute;right:0;top:calc(100% + 6px);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,.6);padding:8px;z-index:320;min-width:250px';p.innerHTML='<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);padding:4px 8px 7px">Mostrar secciones del overview</div>'+OV_SECTIONS.map(s=>`<label style="display:flex;align-items:center;gap:9px;padding:6px 8px;font-size:12px;color:var(--text2);cursor:pointer;border-radius:6px"><input type="checkbox" ${hid.includes(s.id)?'':'checked'} onchange="toggleOvSection('${s.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent)">${s.label}</label>`).join('');ev.currentTarget.parentElement.appendChild(p);setTimeout(()=>{const close=e=>{if(!p.contains(e.target)){p.remove();document.removeEventListener('click',close);}};document.addEventListener('click',close);},10);}
 window.debInput=debInput;
 let _ovScheduled=false;  // coalescer de renderOverview (ver definición más abajo)
 // ── Red de seguridad global: captura errores no atrapados para que la UI no quede en estado inconsistente ──
@@ -6692,7 +6702,7 @@ function renderAccionesHoy(){
   const _cli=vendor?(state.clientes||[]).filter(vendorOwnsRecord):(state.clientes||[]);
   const _cot=vendor?(state.cotizaciones||[]).filter(vendorOwnsRecord):(state.cotizaciones||[]);
   const _ped=vendor?(state.pedidos||[]).filter(vendorOwnsRecord):(state.pedidos||[]);
-  const items=[];const cap={};const push=(cat,prio,icon,txt,btn,fn,color)=>{cap[cat]=(cap[cat]||0)+1;if(cap[cat]<=4)items.push({prio,icon,txt,btn,fn,color});};
+  const items=[];const cap={};const push=(cat,prio,icon,txt,btn,fn,color)=>{cap[cat]=(cap[cat]||0)+1;if(cap[cat]<=4)items.push({cat,prio,icon,txt,btn,fn,color});};
   // 1) Cobranza — clientes con facturas vencidas (no vendedor)
   if(!vendor)_cli.forEach(c=>{const v=c.fields['Facturas vencidas']||0;if(v>=2)push('cob',1,'💰',`<b>${escapeHtml(c.fields['Empresa']||'—')}</b> · ${v} facturas vencidas`,'Cobrar IA',`runFinanceAgent('${c.id}')`,'var(--danger)');});
   // 2) Pedidos atrasados → update al cliente
@@ -6737,11 +6747,18 @@ function renderAccionesHoy(){
       else if(fc.rate>0&&fc.weeks<1.5)push('maq',2,'🔧',`${escapeHtml(mq.nombre)}: <b>${escapeHtml(fc.tipo)}</b> en ~${Math.max(1,Math.round(fc.weeks*7))} días`,'Ver máquinas',`switchTab('maquinas')`,'var(--warn)');
     });}catch(e){}
   }
-  items.sort((a,b)=>a.prio-b.prio);
   if(!items.length){card.style.display='none';return;}
   card.style.display='';
   const cnt=document.getElementById('accionesHoyCount');if(cnt)cnt.textContent=`· ${items.length} pendiente${items.length!==1?'s':''}`;
-  list.innerHTML=items.slice(0,14).map(it=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid ${it.color};border-radius:7px"><span style="font-size:14px;flex-shrink:0">${it.icon}</span><span style="flex:1;font-size:12px;color:var(--text2);min-width:0">${it.txt}</span><button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:3px 10px;color:${it.color}" onclick="${it.fn}">${it.btn}</button></div>`).join('');
+  // Agrupado por área de negocio, ordenado por prioridad de impacto
+  const GMAP={cob:'Cobranza',ped:'Producción',pago:'Producción',qa:'Producción',cot:'Ventas',lead:'Ventas',ads:'Ads',maq:'Máquinas'};
+  const GORDER=['Cobranza','Producción','Ventas','Ads','Máquinas'];
+  const GICON={Cobranza:'💰',Producción:'🏭',Ventas:'📈',Ads:'📣',Máquinas:'🔧'};
+  const row=it=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid ${it.color};border-radius:7px"><span style="font-size:14px;flex-shrink:0">${it.icon}</span><span style="flex:1;font-size:12px;color:var(--text2);min-width:0">${it.txt}</span><button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:3px 10px;color:${it.color}" onclick="${it.fn}">${it.btn}</button></div>`;
+  let _h='';
+  GORDER.forEach(g=>{const gi=items.filter(it=>GMAP[it.cat]===g).sort((a,b)=>a.prio-b.prio);if(!gi.length)return;
+    _h+=`<div style="display:flex;align-items:center;gap:7px;margin:9px 0 3px;font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--text3)"><span>${GICON[g]}</span>${g}<span style="color:var(--accent);font-weight:700">${gi.length}</span></div>`+gi.map(row).join('');});
+  list.innerHTML=_h;
 }
 // renderOverview() agrupa múltiples llamadas del mismo tick en una sola pasada
 // (se invoca ~40 veces, a menudo en ráfaga tras cargar datos o guardar registros).
@@ -6765,6 +6782,7 @@ function _renderOverviewNow(){
   const finCard=document.getElementById('overview-fin-card');
   if(finCard&&finCard.parentElement) finCard.parentElement.style.display=vendor?'none':'';
   // Equipo snapshot already handled in renderEquipoSnapshot
+  applyOverviewLayout();
 }
 function _avHtml(p,sz,extraStyle){const es=extraStyle||'';if(p&&p.photo)return`<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;flex-shrink:0;${es}"><img loading="lazy" decoding="async" src="${p.photo}" style="width:100%;height:100%;object-fit:cover;object-position:center 15%"></div>`;const fs=Math.max(9,Math.round(sz*0.33));return`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${(p&&p.color)||'#888'};display:flex;align-items:center;justify-content:center;font-size:${fs}px;font-weight:700;color:var(--black);flex-shrink:0;${es}">${(p&&p.avatar)||'?'}</div>`;}
 function renderEquipoSnapshot(){
@@ -6909,12 +6927,16 @@ function renderKPIs(){
     return;
   }
 
+  const spRev=_weeklySeries(_ped.filter(p=>(p.fields['Estado pedido']||'')!=='Cancelado'),p=>p.createdTime,p=>Math.round((p.fields['Monto total (CLP)']||0)/1.19));
+  const spPed=_weeklySeries(_ped,p=>p.createdTime,()=>1);
+  const spCot=_weeklySeries(_cot,c=>c.createdTime,()=>1);
+  const spCli=_weeklySeries(_cli,c=>c.createdTime,()=>1);
   const _ki=(id)=>`<div class="kpi-icon"><svg class="dashboard-icon" width="20" height="20" stroke-width="1.5"><use href="#${id}"/></svg></div>`;
   document.getElementById('kpiGrid').innerHTML=`
-    <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos">${_ki('icon-trending')}<div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${metaHtml}</div>
-    <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}">` + _ki('icon-pedidos') + `<div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
-    <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes">${_ki('icon-message')}<div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
-    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes">${_ki('icon-clientes')}<div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
+    <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos">${_ki('icon-trending')}<div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${_sparkline(spRev,'var(--accent)')}${metaHtml}</div>
+    <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}">` + _ki('icon-pedidos') + `<div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}${_sparkline(spPed,'var(--accent3)')}</div>
+    <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes">${_ki('icon-message')}<div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}${_sparkline(spCot,'var(--accent2)')}</div>
+    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes">${_ki('icon-clientes')}<div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}${_sparkline(spCli,'var(--accent4)')}</div>
     <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas">${_ki('icon-warning')}<div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div>${alertBadge(alertas,alertasPrev)}</div>
     <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div>${ptsBadge(avgMSem,avgMPrev,_cotMPrev.length>0)}</div>`;
   updateDockBadges();
@@ -16539,7 +16561,7 @@ function injectModalCloseButtons(){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
-  try{applyDensity();_restoreUIState();}catch(e){}
+  try{applyDensity();_restoreUIState();applyOverviewLayout();}catch(e){}
   initSidebarTooltips();
   initMobileDockSwipe();
   injectModalCloseButtons();
