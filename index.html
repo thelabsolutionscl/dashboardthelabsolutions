@@ -11155,7 +11155,7 @@ function startQAFlow(id){
       try{const fid=await ensurePedidoFolder(id);const up=await _driveUploadDataUrl('QA_'+(p.fields['N° Pedido']||id)+'_'+Date.now()+'.jpg',a._photoData,fid);if(up&&up.webViewLink)fields['Foto QA URL']=up.webViewLink;}catch(e){console.warn('QA foto:',e);}
     }
     try{await actualizarPedido(id,fields);}
-    catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Motivo rechazo QA'];delete fields['Foto QA URL'];await actualizarPedido(id,fields);}else throw e;}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Foto QA URL'];await actualizarPedido(id,fields);}else throw e;}
     gfClose();await loadAllDataSilent();renderPedidos();renderOverview();
     toast('✓ QA registrado · '+(a.resultado||'Pendiente'),'success');
   }});
