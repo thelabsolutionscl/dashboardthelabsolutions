@@ -11056,15 +11056,77 @@ async function crearReporteAuto(){
   await crearReporte();
 }
 // ── Reporte CEO surtido en el Overview ──
+// Convierte el texto crudo del CEO_AGENT en bloques ordenados por sección
+// (Resumen · Métricas · Alertas · Prioridades · Oportunidad) con viñetas,
+// listas numeradas y métricas label:valor. Tolera variaciones de markdown.
+function formatCeoReport(raw){
+  if(!raw||!String(raw).trim()) return '';
+  const txt=String(raw).replace(/\r/g,'').replace(/•/g,'•').trim();
+  const lines=txt.split('\n');
+  const SECMETA=[
+    {re:/oportunidad|insight/i,            ico:'💡',color:'var(--warn)'},
+    {re:/prioridad|acci[oó]n|tarea|paso/i, ico:'✅',color:'var(--success)'},
+    {re:/alerta|cr[ií]tic|riesgo/i,        ico:'⚠️',color:'var(--danger)'},
+    {re:/m[eé]trica|kpi|indicador/i,       ico:'📊',color:'var(--accent4)'},
+    {re:/resumen|ejecutiv/i,               ico:'📋',color:'var(--accent)'}
+  ];
+  const KEYW=/resumen|ejecutiv|m[eé]trica|kpi|indicador|alerta|cr[ií]tic|riesgo|prioridad|oportunidad|insight|acci[oó]n|tarea|paso/i;
+  const metaFor=t=>{for(const m of SECMETA) if(m.re.test(t)) return m;return{ico:'•',color:'var(--text3)'};};
+  // Inline: escapa y aplica **negrita** / `código`, limpia marcadores sueltos
+  const inl=s=>{let h=escapeHtml(s);
+    h=h.replace(/\*\*([^*]+?)\*\*/g,'<strong style="color:var(--text)">$1</strong>').replace(/__([^_]+?)__/g,'<strong style="color:var(--text)">$1</strong>').replace(/\*\*/g,'');
+    h=h.replace(/`([^`]+)`/g,'<code style="background:var(--surface3);padding:1px 5px;border-radius:4px">$1</code>');
+    return h;};
+  // ¿Es un encabezado de sección? Devuelve el título limpio o null
+  const headTitle=line=>{const t=line.trim();if(!t) return null;
+    const structural=/^#{1,4}\s+/.test(t)||/^\*\*[^*]+\*\*:?\s*$/.test(t)||/^\d+[\.\)]\s+/.test(t)||(t===t.toUpperCase()&&/[A-ZÁÉÍÓÚÑ]/.test(t)&&t.split(/\s+/).length<=8);
+    if(!structural) return null;
+    let title=t.replace(/^#{1,4}\s*/,'').replace(/^\d+[\.\)]\s*/,'').replace(/^\*\*|\*\*$/g,'').replace(/:\s*$/,'').replace(/^\*\*|\*\*$/g,'').trim();
+    return KEYW.test(title)?title:null;};
+  // Agrupa líneas en secciones (lo previo al primer encabezado = intro)
+  const sections=[];let cur=null;const intro=[];
+  lines.forEach(line=>{const h=headTitle(line);if(h){cur={title:h,body:[]};sections.push(cur);}else if(cur)cur.body.push(line);else intro.push(line);});
+  // Renderiza el cuerpo: viñetas, listas numeradas, métricas label:valor, párrafos
+  const renderBody=arr=>{let html='';arr.forEach(rw=>{const l=rw.trim();if(!l||/^[-–—_=*•·\s]{3,}$/.test(l)) return;let m;
+    if((m=l.match(/^[\-\*•–·]\s+(.+)$/)))
+      html+=`<div style="display:flex;gap:8px;margin:5px 0;line-height:1.55"><span style="color:var(--accent);flex-shrink:0">•</span><span>${inl(m[1])}</span></div>`;
+    else if((m=l.match(/^(\d+)[\.\)]\s+(.+)$/)))
+      html+=`<div style="display:flex;gap:9px;margin:6px 0;line-height:1.55"><span style="flex-shrink:0;min-width:18px;height:18px;border-radius:5px;background:var(--surface3);color:var(--accent);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">${m[1]}</span><span>${inl(m[2])}</span></div>`;
+    else if((m=l.match(/^([^:]{2,42}):\s+(\S.*)$/))&&m[1].split(/\s+/).length<=6&&m[2].length<=70&&!/[.!?]$/.test(m[1]))
+      html+=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2);font-size:11px">${inl(m[1])}</span><span style="font-weight:600;text-align:right">${inl(m[2])}</span></div>`;
+    else
+      html+=`<div style="margin:5px 0;line-height:1.6">${inl(l)}</div>`;});
+    return html;};
+  if(!sections.length) return `<div style="font-size:12px;color:var(--text2)">${renderBody(intro)||`<span style="white-space:pre-wrap">${escapeHtml(txt)}</span>`}</div>`;
+  let out='<div style="display:flex;flex-direction:column;gap:12px">';
+  if(intro.some(l=>l.trim())) out+=`<div style="font-size:12px;color:var(--text2)">${renderBody(intro)}</div>`;
+  sections.forEach(s=>{const mt=metaFor(s.title);
+    out+=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${mt.color};border-radius:9px;padding:12px 14px">`
+      +`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:700;font-size:12px;letter-spacing:.3px;color:var(--text);text-transform:capitalize"><span style="font-size:14px">${mt.ico}</span>${escapeHtml(s.title.toLowerCase())}</div>`
+      +`<div style="font-size:12px;color:var(--text2)">${renderBody(s.body)||'<span style="color:var(--text3)">—</span>'}</div></div>`;});
+  out+='</div>';
+  return out;
+}
 function ovRenderUltimoReporteCEO(){
   const chk=document.getElementById('ovCeoAuto');if(chk)chk.checked=localStorage.getItem('ceo_auto_weekly')==='1';
   const body=document.getElementById('ovCeoBody');if(!body)return;
   const reps=(state.reportes||[]).slice().sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')));
   const r=reps[0];
-  if(r&&r.fields['Resumen ejecutivo']){
-    const fecha=r.fields['Fecha generación']||r.fields['Semana']||'';
-    body.innerHTML=(fecha?`<div style="font-size:10px;color:var(--text3);margin-bottom:8px">Último reporte · ${escapeHtml(String(fecha))}</div>`:'')+`<div style="white-space:pre-wrap">${escapeHtml(r.fields['Resumen ejecutivo'])}</div>`;
-  }
+  if(!(r&&r.fields['Resumen ejecutivo'])) return;
+  const f=r.fields;
+  const fecha=f['Fecha generación']||'',semana=f['Semana']||'';
+  // Chips de métricas a partir de los campos numéricos del reporte
+  const mp=f['Margen promedio semana (%)']||0,marg=mp<=1?mp*100:mp;
+  const cp=f['Tasa conversión (%)']||0,conv=cp<=1?cp*100:cp;
+  const chips=[];
+  if(f['Revenue semana (CLP)']) chips.push({l:'Revenue',v:formatCLP(f['Revenue semana (CLP)']),c:'var(--accent)'});
+  if(conv) chips.push({l:'Conversión',v:conv.toFixed(0)+'%',c:'var(--accent4)'});
+  if(f['Pedidos activos']!=null||f['Pedidos despachados']!=null) chips.push({l:'Pedidos',v:(f['Pedidos activos']||0)+' act · '+(f['Pedidos despachados']||0)+' desp',c:'var(--text)'});
+  if(marg) chips.push({l:'Margen',v:marg.toFixed(0)+'%',c:marg>=35?'var(--success)':marg>=20?'var(--warn)':'var(--danger)'});
+  const chipsHtml=chips.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">${chips.map(c=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:78px"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:2px">${escapeHtml(c.l)}</div><div style="font-size:13px;font-weight:700;color:${c.c}">${escapeHtml(c.v)}</div></div>`).join('')}</div>`:'';
+  const head=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700;color:var(--text)">${escapeHtml(semana||'Reporte semanal')}</span>${fecha?`<span style="font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);padding:2px 8px;border-radius:20px">Generado · ${escapeHtml(String(fecha))}</span>`:''}</div>`;
+  body.style.whiteSpace='normal';
+  body.innerHTML=head+chipsHtml+formatCeoReport(f['Resumen ejecutivo']);
 }
 async function ovGenerarReporteCEO(){
   if(!state.loaded){toast('Pulsa ↺ Actualizar para cargar los datos primero','error');return;}
@@ -11124,7 +11186,7 @@ function renderReportes(){
       <td>${estadoBadge(f['Estado reporte']||'—')}</td>
       <td style="text-align:center;color:var(--text3);font-size:11px;transition:transform .2s" id="chev-${rid}">${resumen?'▼':''}</td>
     </tr>
-    ${resumen?`<tr id="${rid}" style="display:none"><td colspan="7" style="padding:0"><div style="padding:14px 18px;background:var(--surface2);border-left:3px solid var(--accent);font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.7;border-bottom:1px solid var(--border)">${escapeHtml(resumen)}</div></td></tr>`:''}`;
+    ${resumen?`<tr id="${rid}" style="display:none"><td colspan="7" style="padding:0"><div style="padding:16px 18px;background:var(--surface);border-bottom:1px solid var(--border)">${formatCeoReport(resumen)}</div></td></tr>`:''}`;
   }).join('');
 }
 function toggleReporteDetalle(rid,row){
