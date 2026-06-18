@@ -5908,8 +5908,9 @@ async function airtableHttp(url,opts,{retries=2,timeout=20000}={}){
     const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),timeout);
     try{
       const r=await fetch(url,{...opts,signal:ctrl.signal});
-      if(r.status===429&&attempt<retries){
-        const wait=(parseInt(r.headers.get('Retry-After'))||1)*1000;
+      // Reintenta ante 429 (rate limit) y 5xx transitorios (500/502/503/529)
+      if((r.status===429||r.status===500||r.status===502||r.status===503||r.status===529)&&attempt<retries){
+        const wait=r.status===429?((parseInt(r.headers.get('Retry-After'))||1)*1000):(600*(attempt+1));
         await new Promise(res=>setTimeout(res,wait));continue;
       }
       return r;
@@ -15204,6 +15205,7 @@ function playMailSound(){
 
 let _mailPollErrors = 0;
 async function _mailCheck(){
+  if(document.hidden) return;          // no consultar el servidor de correo con la pestaña oculta
   if(!MAIL.getMailPass || !MAIL.getMailPass()) return;
   try{
     const data = await MAIL.post({action:'check'});
@@ -20761,9 +20763,7 @@ ${cotRows||'  (ninguna)'}`;
     }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
   }
 
-  const SYS = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
-
-${buildContext()}
+  const SYS_RULES = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
 
 CAPACIDADES Y REGLAS:
 - Responde SIEMPRE en espanol chileno, profesional y conciso (maximo 3 oraciones, pensado para voz).
@@ -20778,9 +20778,16 @@ CAPACIDADES Y REGLAS:
   IDs validos: SALES (ventas y leads), QUOTE (cotizar), PRODUCTION (instrucciones de fabricacion), QA (checklist calidad), FOLLOWUP (seguimiento de cotizaciones), CEO (reporte ejecutivo), LEADGEN (prospeccion de nichos), FINANCE (cobranza), ONBOARDING (bienvenida clientes), REPCLIENTE (update estado pedido al cliente), CONTENT (contenido redes), ADS (optimizacion Google Ads).
   Ejemplo: [AGENTE:FOLLOWUP|Cotizacion COT-123 de Maria, 8 dias sin respuesta, trofeos por 250000]
   Usa esto cuando el usuario pida redactar, cotizar, generar checklist, reporte o analisis. Anuncia brevemente que estas delegando.
-- Usa los DATOS EN VIVO de arriba para responder sobre pedidos/cotizaciones/clientes.
+- Usa los DATOS EN VIVO del dashboard (que recibes a continuacion) para responder sobre pedidos/cotizaciones/clientes.
 - Cuando sea util, ofrece 1 a 3 acciones rapidas de seguimiento al final con: [BTN:texto corto|comando que se enviaria]. El texto es lo que ve el usuario (2-4 palabras) y el comando es la instruccion que tu recibirias si lo pulsa. Ejemplo: [BTN:Ver atrasados|muestrame los pedidos atrasados][BTN:Cotizar|quiero cotizar]. No mas de 3.
 - Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
+  // Compat: SYS() devuelve el system completo como string (reglas + contexto en vivo).
+  const SYS = () => SYS_RULES()+'\n\n'+buildContext();
+  // System en bloques: reglas estaticas con cache_control (prompt caching) + contexto dinamico.
+  const SYS_BLOCKS = () => [
+    {type:'text', text:SYS_RULES(), cache_control:{type:'ephemeral'}},
+    {type:'text', text:buildContext()}
+  ];
 
   // ─── UI helpers ───
   function setState(mode){
@@ -20988,7 +20995,7 @@ CAPACIDADES Y REGLAS:
       // Use Blob body (not string) so Unicode chars in context (•, —, emojis from
       // Airtable data) never trigger "non ISO-8859-1 code point" fetch errors.
       // Un Blob es reutilizable entre reintentos (a diferencia de un stream).
-      const reqBody=new Blob([JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, system:SYS(), messages:JV.history.slice(-12) })],{type:'application/json'});
+      const reqBody=new Blob([JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, system:SYS_BLOCKS(), messages:JV.history.slice(-12) })],{type:'application/json'});
       // Reintenta hasta 3 veces ante errores transitorios (#1)
       const RETRY=[429,500,502,503,529];
       let r=null;
