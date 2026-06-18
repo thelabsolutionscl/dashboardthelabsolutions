@@ -11958,10 +11958,10 @@ function buildAgentContext(id){
     lines.push('\nCOST BASE (referencia interna):');
     lines.push('  Trofeo $18.000/und | Medalla $4.500/und | Neón $18.000–25.000/m | PLA $24/g+$1.200/h');
     lines.push('  Margen objetivo: 35–45% · piso mínimo 25%');
-    const rech=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Rechazada'&&c.fields['Notas rechazo']).slice(-5);
+    const rech=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Rechazada'&&c.fields['Motivo rechazo']).slice(-5);
     if(rech.length){
       lines.push('\nCOTIZACIONES RECHAZADAS RECIENTES (considera estos motivos al fijar precios):');
-      rech.forEach(c=>{const f=c.fields;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Neto: ${fmtCLP(Math.round((f['Total final (CLP)']||0)/1.19))} | Motivo: ${String(f['Notas rechazo']).substring(0,100)}`);});
+      rech.forEach(c=>{const f=c.fields;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Neto: ${fmtCLP(Math.round((f['Total final (CLP)']||0)/1.19))} | Motivo: ${String(f['Motivo rechazo']).substring(0,100)}`);});
     }
   }
 
@@ -12381,7 +12381,7 @@ function runWinbackAgent(cotId){
   const estado=f['Estado cotización'];
   const sol=(f['Solicitud cliente (texto libre)']||f['Solicitud / detalle']||'').substring(0,150);
   const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'—';
-  const motivo=estado==='Rechazada'?`\nMotivo de rechazo: ${String(f['Notas rechazo']||'no registrado').substring(0,150)}`:'';
+  const motivo=estado==='Rechazada'?`\nMotivo de rechazo: ${String(f['Motivo rechazo']||'no registrado').substring(0,150)}`:'';
   const ctx=`Cotización ${estado==='Rechazada'?'RECHAZADA':'VENCIDA'}: ${f['N° Cotización']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Monto neto: ${monto} | Vencía: ${f['Fecha vencimiento']||'—'}${motivo}\nProducto: ${sol}\nTAREA: redacta un mensaje de REACTIVACIÓN (win-back): ofrecer actualizar la cotización${estado==='Rechazada'?', abordando con tacto el motivo del rechazo si ayuda a recuperar la venta':''}, sin presionar. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`;
   runAgentInline('FOLLOWUP',ctx,()=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
@@ -14831,7 +14831,7 @@ function buildProveedorRow(p){
   const pedidosTodos=state.pedidos.filter(x=>(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
   const pedCount=pedidosActivos.length;
   const pvTotalValor=pedidosTodos.reduce((s,x)=>s+(x.fields['Monto total (CLP)']||0),0);
-  const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha pedido']||'').filter(Boolean).sort().reverse()[0]||null;
+  const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha ingreso']||'').filter(Boolean).sort().reverse()[0]||null;
   const estado=f['Estado']||'Activo';
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
   return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}" class="${selectedProveedores.has(id)?'row-selected':''}${_flashCls(id)}">
