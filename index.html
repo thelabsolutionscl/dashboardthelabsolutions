@@ -7343,7 +7343,7 @@ function compartirPortalCliente(clienteId){
 }
 function openClienteDetalle(id){
   const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
-  document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Ciudad']||''}`:f['Ciudad']||'';
+  document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Comuna']||''}`:f['Comuna']||'';
   {const _cc=document.getElementById('cdCrumbName');if(_cc)_cc.textContent=f['Empresa']||f['Contacto']||'Cliente';}
   // Última actividad: fecha más reciente entre cotizaciones, pedidos y primer contacto
   const _cliCots=(state.cotizaciones||[]).filter(x=>{const ca=x.fields['Cliente'];return Array.isArray(ca)?ca.includes(id):ca===f['Empresa'];});
@@ -7356,7 +7356,7 @@ function openClienteDetalle(id){
   document.getElementById('cdBadges').innerHTML=`${f['Etapa venta']?estadoBadge(f['Etapa venta']):''}${f['Estado cuenta']?estadoBadge(f['Estado cuenta']):''}${venc>0?`<span class="badge ${venc>=2?'badge-red':'badge-yellow'}">⚠ ${venc} fact. vencida${venc>1?'s':''}</span>`:''}${_frio?`<span class="badge badge-yellow">❄ sin actividad ${_diasAct}d</span>`:''}`;
   const row=(label,v,href)=>{if(!v)return '';const sh=href?safeHref(href):'';return `<div style="display:flex;gap:8px"><span style="color:var(--text3);min-width:72px">${label}</span><span>${sh?`<a href="${sh}" style="color:var(--accent);text-decoration:none">${escapeHtml(v)}</a>`:escapeHtml(v)}</span></div>`;}
   document.getElementById('cdContacto').innerHTML=[row('Contacto',f['Contacto']),row('Cargo',f['Cargo contacto']),row('Teléfono',f['Teléfono'],f['Teléfono']?`tel:${f['Teléfono']}`:''),row('Email',f['Email'],f['Email']?`mailto:${f['Email']}`:'')].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
-  document.getElementById('cdEmpresa').innerHTML=[row('RUT',f['RUT']),row('Dirección',f['Dirección']),row('Región',f['Región']),row('Comuna',f['Comuna']),row('Ciudad',f['Ciudad']),row('Sitio web',f['Sitio web'],f['Sitio web']?f['Sitio web']:''),row('Origen',f['Origen lead']),row('1er cont.',f['Fecha primer contacto'])].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
+  document.getElementById('cdEmpresa').innerHTML=[row('RUT',f['RUT']),row('Dirección',f['Dirección']),row('Región',f['Región']),row('Comuna',f['Comuna']),row('Sitio web',f['Sitio web'],f['Sitio web']?f['Sitio web']:''),row('Origen',f['Origen lead']),row('1er cont.',f['Fecha primer contacto'])].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
   document.getElementById('cdFinanciero').innerHTML=[row('Revenue',formatCLP(f['Revenue total cliente (CLP)']||0)),row('Fact. venc.',String(venc)),row('Estado cta',f['Estado cuenta'])].filter(Boolean).join('');
   const _actTxt=_lastStr?`hace ${_diasAct} día${_diasAct===1?'':'s'}`:'sin registro';
   document.getElementById('cdCRM').innerHTML=[row('Etapa',f['Etapa venta']),row('Valoración','★'.repeat(val)+'☆'.repeat(5-val)),row('Industria',f['Industria / Rubro']),row('Últ. activ.',_actTxt+(_lastStr?` · ${_lastStr}`:'')),row('Cotiz./Ped.',`${_cliCots.length} / ${_cliPeds.length}`)].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
@@ -7809,7 +7809,7 @@ async function confirmarImportarDtes(){
 }
 function openEditCliente(id){
   const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields;
-  document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Ciudad']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'Referido';document.getElementById('ecEtapa').value=f['Etapa venta']||'Lead nuevo';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
+  document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Comuna']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'Referido';document.getElementById('ecEtapa').value=f['Etapa venta']||'Lead nuevo';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
   const _ecV=document.getElementById('ec-vendedor');if(_ecV) _ecV.value=f['Vendedor']||'';
   document.getElementById('editClienteModal').style.display='flex';
 }
@@ -7825,13 +7825,13 @@ async function saveEditCliente(){
   btn.disabled=true;btn.textContent='Guardando...';const id=document.getElementById('ecId').value;
   const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('ecCargo').value,'Teléfono':document.getElementById('ecTelefono').value,'Email':document.getElementById('ecEmail').value,'Sitio web':document.getElementById('ecWeb').value,'RUT':document.getElementById('ecRut').value,'Industria / Rubro':document.getElementById('ecIndustria').value,'Origen lead':document.getElementById('ecOrigen').value,'Etapa venta':document.getElementById('ecEtapa').value,'Estado cuenta':document.getElementById('ecEstado').value,'Facturas vencidas':parseInt(document.getElementById('ecFactVenc').value)||0,'Notas internas':document.getElementById('ecNotas').value};
   if(document.getElementById('ecValoracion').value) fields['Valoración cliente']=parseInt(document.getElementById('ecValoracion').value);
-  const ciudadVal=document.getElementById('ecCiudad').value.trim();if(ciudadVal) fields['Ciudad']=ciudadVal;
+  const ciudadVal=document.getElementById('ecCiudad').value.trim();if(ciudadVal) fields['Comuna']=ciudadVal;
   const _ecVv=document.getElementById('ec-vendedor')?.value||'';fields['Vendedor']=_ecVv||null;
   try{
     await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}
     toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();
   }catch(e){
-    if(ciudadVal&&e.message.toLowerCase().includes('unknown')){try{delete fields['Ciudad'];await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
+    if(ciudadVal&&e.message.toLowerCase().includes('unknown')){try{delete fields['Comuna'];await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
     else{toast('Error: '+e.message,'error');}
   }
   btn.disabled=false;btn.textContent='💾 Guardar cambios';
@@ -10533,7 +10533,7 @@ async function createLead(){
   if(document.getElementById('nl-industria').value) fields['Industria / Rubro']=document.getElementById('nl-industria').value;
   if(document.getElementById('nl-rut').value) fields['RUT']=document.getElementById('nl-rut').value;
   if(document.getElementById('nl-web').value) fields['Sitio web']=document.getElementById('nl-web').value;
-  const ciudadVal=document.getElementById('nl-ciudad').value.trim();if(ciudadVal) fields['Ciudad']=ciudadVal;
+  const ciudadVal=document.getElementById('nl-ciudad').value.trim();if(ciudadVal) fields['Comuna']=ciudadVal;
   const dirVal=document.getElementById('nl-direccion')?.value.trim();if(dirVal) fields['Dirección']=dirVal;
   const regVal=document.getElementById('nl-region')?.value;if(regVal) fields['Región']=regVal;
   const comVal=document.getElementById('nl-comuna')?.value;if(comVal) fields['Comuna']=comVal;
@@ -10557,7 +10557,7 @@ async function createLead(){
     clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();
   }catch(e){
     if(ciudadVal&&e.message.toLowerCase().includes('unknown')){
-      try{delete fields['Ciudad'];await saveAndPatch(fields);toast(`✓ "${empresa}" creado`,'success');_leadAgentResponse=null;document.getElementById('leadAgentPanel').style.display='none';clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();}
+      try{delete fields['Comuna'];await saveAndPatch(fields);toast(`✓ "${empresa}" creado`,'success');_leadAgentResponse=null;document.getElementById('leadAgentPanel').style.display='none';clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();}
       catch(e2){toast('Error: '+e2.message,'error');}
     }else{toast('Error: '+e.message,'error');}
   }
@@ -10940,7 +10940,7 @@ function startNewClientFlow(){
 function startEditClientFlow(id){
   const c=state.clientes.find(x=>x.id===id);if(!c){toast('Cliente no encontrado','error');return;}
   const f=c.fields;
-  gfStart({title:'✏️ Editar cliente',finishLabel:'✓ Guardar cambios',initial:{empresa:f['Empresa']||'',contacto:f['Contacto']||'',cargo:f['Cargo contacto']||'',telefono:f['Teléfono']||'',email:f['Email']||'',rut:f['RUT']||'',ciudad:f['Ciudad']||'',web:f['Sitio web']||'',etapa:f['Etapa venta']||'Lead nuevo',notas:f['Notas internas']||''},steps:[
+  gfStart({title:'✏️ Editar cliente',finishLabel:'✓ Guardar cambios',initial:{empresa:f['Empresa']||'',contacto:f['Contacto']||'',cargo:f['Cargo contacto']||'',telefono:f['Teléfono']||'',email:f['Email']||'',rut:f['RUT']||'',ciudad:f['Comuna']||'',web:f['Sitio web']||'',etapa:f['Etapa venta']||'Lead nuevo',notas:f['Notas internas']||''},steps:[
     {key:'empresa',type:'text',q:'Empresa',rows:1,required:true},
     {key:'contacto',type:'text',q:'Contacto',rows:1},
     {key:'cargo',type:'text',q:'Cargo del contacto',rows:1},
@@ -11471,7 +11471,7 @@ function runGlobalSearch(q){
   const query=q.toLowerCase();
   const acts=_paletteActions().filter(a=>(a.lb+' '+a.kw).toLowerCase().includes(query)).slice(0,6);
   const groups={cliente:[],cot:[],pedido:[]};
-  state.clientes.filter(c=>{const f=c.fields;return(f['Empresa']||'').toLowerCase().includes(query)||(f['Contacto']||'').toLowerCase().includes(query)||(f['Email']||'').toLowerCase().includes(query);}).slice(0,5).forEach(c=>groups.cliente.push({icon:'👤',label:c.fields['Empresa']||'—',sub:(c.fields['Etapa venta']||'—')+' · '+(c.fields['Ciudad']||''),id:c.id,tab:'clientes'}));
+  state.clientes.filter(c=>{const f=c.fields;return(f['Empresa']||'').toLowerCase().includes(query)||(f['Contacto']||'').toLowerCase().includes(query)||(f['Email']||'').toLowerCase().includes(query);}).slice(0,5).forEach(c=>groups.cliente.push({icon:'👤',label:c.fields['Empresa']||'—',sub:(c.fields['Etapa venta']||'—')+' · '+(c.fields['Comuna']||''),id:c.id,tab:'clientes'}));
   state.cotizaciones.filter(c=>{const f=c.fields;return(f['N° Cotización']||'').toLowerCase().includes(query)||(resolveClienteName(f['Cliente'])||'').toLowerCase().includes(query);}).slice(0,5).forEach(c=>groups.cot.push({icon:'📋',label:c.fields['N° Cotización']||'—',sub:resolveClienteName(c.fields['Cliente'])+' · '+(c.fields['Estado cotización']||'—'),id:c.id,tab:'cotizaciones'}));
   state.pedidos.filter(p=>{const f=p.fields;return(f['N° Pedido']||'').toLowerCase().includes(query)||(resolveClienteName(f['Cliente'])||'').toLowerCase().includes(query)||(f['Equipo asignado']||'').toLowerCase().includes(query);}).slice(0,5).forEach(p=>groups.pedido.push({icon:'📦',label:p.fields['N° Pedido']||'—',sub:resolveClienteName(p.fields['Cliente'])+' · '+(p.fields['Estado pedido']||'—'),id:p.id,tab:'pedidos'}));
   const total=acts.length+groups.cliente.length+groups.cot.length+groups.pedido.length;
@@ -11972,7 +11972,7 @@ function buildAgentContext(id){
 
   if(id==='LEADGEN'){
     lines.push('\nCLIENTES ACTUALES POR INDUSTRIA:');
-    const ind={};state.clientes.forEach(c=>{const i=c.fields['Industria']||'Sin clasificar';ind[i]=(ind[i]||0)+1;});
+    const ind={};state.clientes.forEach(c=>{const i=c.fields['Industria / Rubro']||'Sin clasificar';ind[i]=(ind[i]||0)+1;});
     Object.entries(ind).sort((a,b)=>b[1]-a[1]).forEach(([i,n])=>lines.push(`  • ${i}: ${n}`));
     lines.push('\nDISTRIBUCIÓN PIPELINE:');
     const et={};state.clientes.forEach(c=>{const e=c.fields['Etapa venta']||'—';et[e]=(et[e]||0)+1;});
@@ -12412,7 +12412,7 @@ function runSalesAgent(cliId){
   const email=f['Email']||'';
   const cotsCli=state.cotizaciones.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
   const cotsTxt=cotsCli.length?cotsCli.slice(-3).map(x=>`${x.fields['N° Cotización']||'—'} (${x.fields['Estado cotización']||'—'})`).join(', '):'ninguna aún';
-  const ctx=`Lead: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'} | Origen: ${f['Origen']||'—'} | Industria: ${f['Industria']||'—'}\nCotizaciones previas: ${cotsTxt}${f['Notas']?'\nNotas: '+String(f['Notas']).substring(0,200):''}\nTAREA: dame la estrategia para avanzar este lead a la siguiente etapa: cómo abordarlo, qué producto ofrecerle según su industria, posibles objeciones y cómo responderlas, y un mensaje de apertura listo para WhatsApp (máx 4 líneas).`;
+  const ctx=`Lead: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'} | Origen: ${f['Origen lead']||'—'} | Industria: ${f['Industria / Rubro']||'—'}\nCotizaciones previas: ${cotsTxt}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,200):''}\nTAREA: dame la estrategia para avanzar este lead a la siguiente etapa: cómo abordarlo, qué producto ofrecerle según su industria, posibles objeciones y cómo responderlas, y un mensaje de apertura listo para WhatsApp (máx 4 líneas).`;
   runAgentInline('SALES',ctx,()=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
     return `${waBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
@@ -12439,7 +12439,7 @@ function runLeadRankingAgent(){
     const cotsCli=state.cotizaciones.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(c.id));
     const abiertas=cotsCli.filter(x=>['Enviada','Solicitada'].includes(x.fields['Estado cotización']||''));
     const montoAbierto=abiertas.reduce((s,x)=>s+Math.round((x.fields['Total final (CLP)']||0)/1.19),0);
-    return `  • ${f['Empresa']||'—'} | ${f['Etapa venta']} | ${dias}d en pipeline | Industria: ${f['Industria']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)} | Cotizaciones abiertas: ${abiertas.length}${montoAbierto?' por '+formatCLP(montoAbierto)+' neto':''}`;
+    return `  • ${f['Empresa']||'—'} | ${f['Etapa venta']} | ${dias}d en pipeline | Industria: ${f['Industria / Rubro']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)} | Cotizaciones abiertas: ${abiertas.length}${montoAbierto?' por '+formatCLP(montoAbierto)+' neto':''}`;
   });
   const ctx=`MIS LEADS EN PIPELINE (${leads.length}):\n${lineas.join('\n')}\n\nTAREA: rankea TODOS estos leads de mayor a menor prioridad de contacto HOY. Criterios: monto en juego, días sin avance (más días = más urgente hasta los 14d, después baja probabilidad), etapa (Negociación > Propuesta enviada > Contactado > Lead nuevo) e industria con historial de conversión. Para cada uno: posición, empresa, score 1-10, POR QUÉ, y la acción concreta de hoy (1 línea).`;
   runAgentInline('SALES',ctx,()=>`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();switchTab('clientes')">👥 Ir a Clientes</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`);
@@ -12455,7 +12455,7 @@ function runClienteWinbackAgent(cliId){
   const ultCot=cotsCli.length?cotsCli[cotsCli.length-1]:null;
   const pedsCli=state.pedidos.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
   const ultPed=pedsCli.length?pedsCli[pedsCli.length-1]:null;
-  const ctx=`Cliente ${f['Etapa venta']==='Perdido'?'PERDIDO':'INACTIVO'}: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nIndustria: ${f['Industria']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}\n${ultPed?'Último pedido: '+(ultPed.fields['Descripción del pedido']||ultPed.fields['Solicitud cliente (texto libre)']||'—').substring(0,120):''}${ultCot?'\nÚltima cotización: '+(ultCot.fields['N° Cotización']||'—')+' ('+(ultCot.fields['Estado cotización']||'—')+')':''}${f['Notas']?'\nNotas: '+String(f['Notas']).substring(0,150):''}\nTAREA: redacta un mensaje de RECONEXIÓN para recuperar a este cliente. Referencia lo que compró antes, ofrece algo concreto (novedad de producto o revisión de precios), sin sonar desesperado. DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`;
+  const ctx=`Cliente ${f['Etapa venta']==='Perdido'?'PERDIDO':'INACTIVO'}: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nIndustria: ${f['Industria / Rubro']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}\n${ultPed?'Último pedido: '+(ultPed.fields['Descripción del pedido']||ultPed.fields['Solicitud cliente (texto libre)']||'—').substring(0,120):''}${ultCot?'\nÚltima cotización: '+(ultCot.fields['N° Cotización']||'—')+' ('+(ultCot.fields['Estado cotización']||'—')+')':''}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}\nTAREA: redacta un mensaje de RECONEXIÓN para recuperar a este cliente. Referencia lo que compró antes, ofrece algo concreto (novedad de producto o revisión de precios), sin sonar desesperado. DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`;
   runAgentInline('SALES',ctx,()=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Tenemos novedades para ti — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
@@ -12469,7 +12469,7 @@ function runOnboardingAgent(cliId){
   const f=c.fields;
   const waPhone=_getClienteWAPhone(c);
   const email=f['Email']||'';
-  const ctx=`Cliente nuevo: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'}${f['Notas']?'\nNotas: '+String(f['Notas']).substring(0,150):''}`;
+  const ctx=`Cliente nuevo: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}`;
   runAgentInline('ONBOARDING',ctx,()=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Bienvenido a The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
