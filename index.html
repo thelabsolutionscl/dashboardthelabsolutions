@@ -6150,7 +6150,7 @@ function renderMaquinasManagerModal(){
     <tr id="mgr-row-${m.id}">
       <td style="padding:6px 8px;font-size:12px;color:var(--text2)">#${m.numG}</td>
       <td style="padding:6px 8px"><span style="font-size:11px;background:${m.color}22;color:${m.color};border-radius:4px;padding:2px 6px">${m.modelo}</span></td>
-      <td style="padding:6px 8px;font-size:12px">${m.nombre} <span style="color:var(--text3)">#${m.num}</span></td>
+      <td style="padding:6px 8px;font-size:12px">${escHtml(m.nombre)} <span style="color:var(--text3)">#${m.num}</span></td>
       <td style="padding:6px 8px"><input id="mgr-ip-${m.id}" value="${m.ip||''}" placeholder="192.168.100.x" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text);width:130px"></td>
       <td style="padding:6px 8px">
         <select id="mgr-estado-${m.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text)">
@@ -13023,7 +13023,7 @@ function renderMonitorGrid(){
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
-          <div class="pcard-name" style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.nombre}</div>
+          <div class="pcard-name" style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(m.nombre)}</div>
           <div style="font-size:10px;color:var(--text3)">Máquina #${m.numG}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
