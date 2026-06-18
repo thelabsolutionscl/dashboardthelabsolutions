@@ -1553,7 +1553,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <button id="mobilePlusBtn" class="mobile-menu-btn" onclick="toggleNuevoMenuMobile(event)" style="display:none;font-size:20px;font-weight:300;padding:6px 12px">＋</button>
   <div class="global-search" id="globalSearch">
     <svg class="gs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    <input id="globalSearchInput" type="text" autocomplete="off" spellcheck="false" placeholder="Buscar secciones, clientes, pedidos, cotizaciones…" oninput="globalSearchOnInput(this.value)" onkeydown="globalSearchOnKey(event)" onfocus="globalSearchOnInput(this.value)">
+    <input id="globalSearchInput" type="text" autocomplete="off" spellcheck="false" placeholder="Buscar secciones, clientes, pedidos, cotizaciones…" oninput="(v=>debInput('gs',()=>globalSearchOnInput(v)))(this.value)" onkeydown="globalSearchOnKey(event)" onfocus="globalSearchOnInput(this.value)">
     <kbd class="gs-kbd">⌘K</kbd>
     <button class="gs-clear" id="gsClear" onclick="globalSearchClear()" title="Limpiar" style="display:none">✕</button>
     <div class="global-search-results" id="globalSearchResults"></div>
@@ -2066,7 +2066,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-primary btn-sm" onclick="switchTab('nuevo-lead')">➕ Nuevo Lead / Cliente</button>
         <button class="btn btn-ghost btn-sm" onclick="runLeadGenAgent()" style="color:var(--accent);border-color:rgba(0,212,204,0.3)">🎯 Prospección IA</button>
         <button class="btn btn-ghost btn-sm" onclick="runLeadRankingAgent()" style="color:var(--accent);border-color:rgba(0,212,204,0.3)">📊 Ranking leads IA</button>
-        <input class="field-input" style="width:180px;font-size:11px;padding:5px 10px" id="clienteSearch" placeholder="🔍 buscar..." oninput="filterClientes()">
+        <input class="field-input" style="width:180px;font-size:11px;padding:5px 10px" id="clienteSearch" placeholder="🔍 buscar..." oninput="debInput('cli',filterClientes)">
         <div id="bulkBar" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
           <span id="bulkCount" style="font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace"></span>
           <select id="bulkEtapaSelect" class="field-select" style="font-size:11px;padding:4px 8px;width:auto;border-color:var(--accent)">
@@ -2436,7 +2436,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <span class="card-title">Directorio</span>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="switchTab('nuevo-proveedor')">➕ Nuevo Proveedor</button>
-        <input class="field-input" style="width:160px;font-size:11px;padding:5px 10px" id="proveedorSearch" placeholder="🔍 buscar..." oninput="filterProveedores()">
+        <input class="field-input" style="width:160px;font-size:11px;padding:5px 10px" id="proveedorSearch" placeholder="🔍 buscar..." oninput="debInput('prov',filterProveedores)">
         <select class="field-select" id="proveedorCatFilter" style="font-size:11px;padding:5px 8px;width:auto" onchange="filterProveedores()">
           <option value="">Todas las categorías</option>
         </select>
@@ -2626,7 +2626,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="form-grid">
         <div class="field-group form-full"><label class="field-label">Cliente *</label>
           <div class="search-select-wrap">
-            <input class="field-input" id="cot-cliente-search" placeholder="🔍 buscar cliente..." autocomplete="off" oninput="onClienteSearchInput()" onfocus="onClienteSearchInput()">
+            <input class="field-input" id="cot-cliente-search" placeholder="🔍 buscar cliente..." autocomplete="off" oninput="debInput('cliSearch',onClienteSearchInput)" onfocus="onClienteSearchInput()">
             <input type="hidden" id="cot-cliente-id">
             <div class="search-select-dropdown" id="cot-cliente-dropdown"></div>
           </div>
@@ -3048,7 +3048,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <input type="hidden" id="editCotId">
     <div class="form-grid" style="padding:12px 0 0">
       <div class="field-group form-full"><label class="field-label">Cliente</label>
-        <div class="search-select-wrap"><input class="field-input" id="editCotClienteSearch" placeholder="🔍 buscar cliente..." autocomplete="off" oninput="onEditCotClienteSearch()" onfocus="onEditCotClienteSearch()"><input type="hidden" id="editCotClienteId"><div class="search-select-dropdown" id="editCotClienteDropdown"></div></div>
+        <div class="search-select-wrap"><input class="field-input" id="editCotClienteSearch" placeholder="🔍 buscar cliente..." autocomplete="off" oninput="debInput('editCot',onEditCotClienteSearch)" onfocus="onEditCotClienteSearch()"><input type="hidden" id="editCotClienteId"><div class="search-select-dropdown" id="editCotClienteDropdown"></div></div>
         <div class="text-small text-muted" id="editCotClienteInfo" style="margin-top:3px"></div>
       </div>
       <div class="field-group"><label class="field-label">N° Cotización</label><input class="field-input" id="editCotNum"></div>
@@ -4112,7 +4112,7 @@ function _reportarResultados(muts) {
             <option value="DTE">DTE (Emitidos)</option>
             <option value="VENDEDORES">Vendedores</option>
           </select>
-          <input class="field-input" id="fin-filtro-buscar" placeholder="Buscar cliente / ítem..." style="width:180px;padding:4px 10px;font-size:11px" oninput="finRenderFacturas()">
+          <input class="field-input" id="fin-filtro-buscar" placeholder="Buscar cliente / ítem..." style="width:180px;padding:4px 10px;font-size:11px" oninput="debInput('finFac',finRenderFacturas)">
           <span id="fin-fact-count" style="font-size:11px;color:var(--text3);white-space:nowrap"></span>
           <button class="btn btn-ghost btn-sm" onclick="exportarLibroVentas()" style="font-size:10px;padding:4px 8px;white-space:nowrap" title="Exportar Libro de Ventas DTE en formato CSV"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> Libro Ventas</button>
         </div>
@@ -4547,7 +4547,7 @@ function _reportarResultados(muts) {
             <option value="ingreso">Ingresos</option>
             <option value="gasto">Gastos</option>
           </select>
-          <input class="field-input" id="ld-f-busca" placeholder="🔍 buscar..." style="width:140px;font-size:11px;padding:4px 8px" oninput="ldFiltrar()">
+          <input class="field-input" id="ld-f-busca" placeholder="🔍 buscar..." style="width:140px;font-size:11px;padding:4px 8px" oninput="debInput('ld',ldFiltrar)">
           <button class="btn btn-ghost btn-sm" onclick="ldExportCSV()">⬇ CSV</button>
         </div>
       </div>
@@ -5017,7 +5017,7 @@ function _reportarResultados(muts) {
   <div style="background:var(--surface);border-radius:14px;border:1px solid var(--border2);width:640px;max-width:92vw;overflow:hidden;box-shadow:0 28px 70px rgba(0,0,0,0.65)">
     <div style="display:flex;align-items:center;padding:14px 16px;gap:10px;border-bottom:1px solid var(--border)">
       <span style="color:var(--text3);font-size:15px">🔍</span>
-      <input id="globalSearchInput" type="text" placeholder="Buscar clientes, cotizaciones, pedidos…" autocomplete="off" style="flex:1;background:none;border:none;outline:none;color:var(--text1);font-size:14px;font-family:'DM Sans',sans-serif" oninput="runGlobalSearch(this.value)" onkeydown="if(event.key==='Escape')closeGlobalSearch()">
+      <input id="globalSearchInput" type="text" placeholder="Buscar clientes, cotizaciones, pedidos…" autocomplete="off" style="flex:1;background:none;border:none;outline:none;color:var(--text1);font-size:14px;font-family:'DM Sans',sans-serif" oninput="(v=>debInput('rgs',()=>runGlobalSearch(v)))(this.value)" onkeydown="if(event.key==='Escape')closeGlobalSearch()">
       <kbd style="font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border2);padding:2px 7px;border-radius:4px">Esc</kbd>
     </div>
     <div id="globalSearchResults" style="max-height:430px;overflow-y:auto;padding:6px 0"><div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Escribe para buscar en todo el dashboard…</div></div>
@@ -5134,6 +5134,13 @@ const ERRLOG={
 window.ERRLOG=ERRLOG;
 // Helper para usar en catch en vez de tragarse el error: catch(e){logErr('contexto',e);}
 function logErr(ctx,err){return ERRLOG.add(ctx,err);}
+
+// ── Debounce: evita re-renders en cada tecla de búsquedas/filtros ──
+const _debTimers={};
+function debInput(key,fn,ms){ clearTimeout(_debTimers[key]); _debTimers[key]=setTimeout(()=>{ try{ fn(); }catch(e){ logErr('debInput:'+key,e); } }, ms==null?180:ms); }
+function debounce(fn,ms){ let t; return function(){ const a=arguments,c=this; clearTimeout(t); t=setTimeout(()=>fn.apply(c,a), ms||180); }; }
+window.debInput=debInput;
+let _ovScheduled=false;  // coalescer de renderOverview (ver definición más abajo)
 // ── Red de seguridad global: captura errores no atrapados para que la UI no quede en estado inconsistente ──
 (function(){
   let _lastErr=0;
@@ -6343,6 +6350,77 @@ function _schemaHealthCheck(){
     if(window.console)console.warn('[schema] '+msg);
   }
 }
+// ── Carga de datos core (centralizada) ──────────────────────────────
+// Trae las 7 tablas completas en paralelo.
+function _fetchAllCore(){
+  return Promise.allSettled([
+    airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),
+    airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),
+    airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),
+    airtableFetch('Facturas',1000)
+  ]);
+}
+// Trae sólo los registros de una tabla modificados después de sinceIso (refresco incremental).
+async function airtableFetchSince(table,sinceIso,max=1000){
+  const cfg=_airtableConfig();
+  const formula=`IS_AFTER(LAST_MODIFIED_TIME(), '${sinceIso}')`;
+  let all=[],offset=null;
+  do{
+    let url=`${cfg.base}/${BASE_ID}/${encodeURIComponent(table)}?pageSize=100&filterByFormula=${encodeURIComponent(formula)}`;
+    if(offset) url+=`&offset=${encodeURIComponent(offset)}`;
+    const r=await airtableHttp(url,{headers:cfg.headers});
+    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`Airtable ${r.status}: ${j.error?.message||''}`);}
+    const d=await r.json();all=all.concat(d.records||[]);offset=d.offset||null;
+    if(all.length>=max) break;
+  }while(offset);
+  return {records:all};
+}
+// Upsert por id: reemplaza los registros cambiados y agrega los nuevos.
+function _mergeRecords(arr,changed){
+  arr=arr||[];
+  if(!changed||!changed.length) return arr;
+  const idx={}; for(let i=0;i<arr.length;i++) idx[arr[i].id]=i;
+  changed.forEach(r=>{ if(idx[r.id]!=null) arr[idx[r.id]]=r; else { idx[r.id]=arr.length; arr.push(r); } });
+  return arr;
+}
+function _rebuildClientesById(){
+  state.clientesById={};
+  state.clientes.forEach(x=>{ state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—'; });
+}
+// Aplica config desde la tabla 'Monitor Sistema' (META_REVENUE / WATI_CONFIG / FIN_VENTAS).
+function _applyMonitorSistema(recs){
+  recs=recs||[];
+  const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');
+  if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){logErr('monitorSistema:meta',e);}}
+  const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');
+  if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){logErr('monitorSistema:wati',e);}}
+  const finRec=recs.find(r=>r.fields['Name']==='FIN_VENTAS');
+  if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){logErr('monitorSistema:fin',e);}}
+  renderWatiConfigBtn();
+}
+// Asigna el resultado de un fetch COMPLETO a state. render=true repinta cada lista.
+function _assignCoreState(res,render){
+  const [cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=res;
+  if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
+  if(cRes.status==='fulfilled'){ state.clientes=cRes.value.records||[]; _rebuildClientesById(); if(render) renderClientes(); }
+  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; if(render) renderCotizaciones(); }
+  if(pRes.status==='fulfilled'){ state.pedidos=pRes.value.records||[]; if(render){ renderPedidos(); if(document.getElementById('tab-remuneraciones')?.classList.contains('active')) renderRemuneraciones(); } }
+  if(rRes.status==='fulfilled'){ state.reportes=rRes.value.records||[]; if(render) renderReportes(); }
+  if(pvRes.status==='fulfilled'){ state.proveedores=pvRes.value.records||[]; if(render){ renderProveedores(); fillCatSelects(); } }
+  if(monRes.status==='fulfilled') _applyMonitorSistema(monRes.value.records||[]);
+}
+// Mezcla (upsert) el resultado de un fetch INCREMENTAL a state.
+function _mergeCoreState(res){
+  const [cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=res;
+  if(facRes.status==='fulfilled') state.facturas=_mergeRecords(state.facturas,facRes.value.records);
+  if(cRes.status==='fulfilled'){ state.clientes=_mergeRecords(state.clientes,cRes.value.records); _rebuildClientesById(); }
+  if(coRes.status==='fulfilled') state.cotizaciones=_mergeRecords(state.cotizaciones,coRes.value.records);
+  if(pRes.status==='fulfilled') state.pedidos=_mergeRecords(state.pedidos,pRes.value.records);
+  if(rRes.status==='fulfilled') state.reportes=_mergeRecords(state.reportes,rRes.value.records);
+  if(pvRes.status==='fulfilled') state.proveedores=_mergeRecords(state.proveedores,pvRes.value.records);
+  if(monRes.status==='fulfilled' && (monRes.value.records||[]).length) _applyMonitorSistema(monRes.value.records);
+}
+
 async function loadAllData(){
   if(isLoadingData)return;
   isLoadingData=true;
@@ -6351,16 +6429,9 @@ async function loadAllData(){
   try{
     if(btn){btn.disabled=true;btn.textContent='↺ Cargando...';}
     setStatus('cargando...',false);
-    if(isFirst) slProgress(10,'Conectando con Airtable...');
-    if(isFirst) slProgress(20,'Cargando clientes...');
-    const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([
-      airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),
-      airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),
-      airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),
-      airtableFetch('Facturas',1000)
-    ]);
-    // Facturas emitidas (tabla opcional; si no existe aún, queda vacía)
-    if(facRes.status==='fulfilled'){state.facturas=facRes.value.records||[];}
+    if(isFirst){ slProgress(10,'Conectando con Airtable...'); slProgress(20,'Cargando datos...'); }
+    const res=await _fetchAllCore();
+    const cRes=res[0];
     // Detectar token inválido (401) — solo avisa, no bloquea el dashboard
     const tokenErr=msg=>/401|403|Sin token/.test(msg||'');
     if(cRes.status==='rejected'&&tokenErr(cRes.reason?.message)){
@@ -6375,16 +6446,10 @@ async function loadAllData(){
         setTimeout(()=>showTokenModal(),1200);
       }
     }
-    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});renderClientes();}
-    if(isFirst) slProgress(50,'Cargando cotizaciones y pedidos...');
-    if(coRes.status==='fulfilled'){state.cotizaciones=coRes.value.records||[];renderCotizaciones();}
-    if(pRes.status==='fulfilled'){state.pedidos=pRes.value.records||[];renderPedidos();if(document.getElementById('tab-remuneraciones')?.classList.contains('active'))renderRemuneraciones();}
-    if(isFirst) slProgress(75,'Cargando proveedores y reportes...');
-    if(rRes.status==='fulfilled'){state.reportes=rRes.value.records||[];renderReportes();}
-    if(pvRes.status==='fulfilled'){state.proveedores=pvRes.value.records||[];renderProveedores();fillCatSelects();}
-    if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}const finRec=recs.find(r=>r.fields['Name']==='FIN_VENTAS');if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){}}renderWatiConfigBtn();}
+    if(isFirst) slProgress(60,'Procesando registros...');
+    _assignCoreState(res,true);
     if(isFirst) slProgress(92,'Calculando resumen...');
-    state.loaded=true;state.lastUpdateTs=Date.now();setStatus('en vivo',true);
+    state.loaded=true;state.lastUpdateTs=Date.now();state._silentN=0;setStatus('en vivo',true);
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
     renderOverview();
     if(!isFirst) toast('Datos actualizados ✓','success');
@@ -6402,21 +6467,34 @@ async function loadAllData(){
     if(btn){btn.disabled=false;btn.textContent='↺ Actualizar';}
   }
 }
+// Refresco automático en segundo plano. Usa fetch INCREMENTAL (solo registros
+// modificados desde el último refresco) y reconcilia con un fetch COMPLETO cada
+// 4 ciclos (~2 h) para capturar eliminaciones, que el delta no detecta.
 async function loadAllDataSilent(){
   const hasAuth=!!(getToken()||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));
   if(!hasAuth) return;
   if(Date.now()-(state.lastUpdateTs||0)<MIN_REFRESH_MS) return; // throttle
+  state._silentN=(state._silentN||0)+1;
+  const doFull = !state.lastUpdateTs || (state._silentN % 4)===0;
   try{
-    const[cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=await Promise.allSettled([airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),airtableFetch('Facturas',1000)]);
-    if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
-    if(cRes.status==='fulfilled'){state.clientes=cRes.value.records||[];state.clientesById={};state.clientes.forEach(x=>{state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—';});}
-    if(coRes.status==='fulfilled') state.cotizaciones=coRes.value.records||[];
-    if(pRes.status==='fulfilled') state.pedidos=pRes.value.records||[];
-    if(rRes.status==='fulfilled') state.reportes=rRes.value.records||[];
-    if(pvRes.status==='fulfilled') state.proveedores=pvRes.value.records||[];
-    if(monRes.status==='fulfilled'){const recs=monRes.value.records||[];const metaRec=recs.find(r=>r.fields['Name']==='META_REVENUE');if(metaRec){state.metaRecordId=metaRec.id;try{const cfg=JSON.parse(metaRec.fields['Notes']||'{}');if(cfg.metaSemanal>0) localStorage.setItem('revMetaSemanal',cfg.metaSemanal);if(cfg.metaMensual>0) localStorage.setItem('revMetaMensual',cfg.metaMensual);}catch(e){}}const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){}}const finRec=recs.find(r=>r.fields['Name']==='FIN_VENTAS');if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){}}renderWatiConfigBtn();}
-    state.lastUpdateTs=Date.now();document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;renderOverview();
-  }catch(e){setStatus('error (auto)',false);}
+    if(doFull){
+      const res=await _fetchAllCore();
+      _assignCoreState(res,false);
+    } else {
+      // 2 min de solape para no perder registros por desfase de reloj
+      const sinceIso=new Date(Math.max(0,(state.lastUpdateTs||0)-120000)).toISOString();
+      const res=await Promise.allSettled([
+        airtableFetchSince('Clientes',sinceIso),airtableFetchSince('Cotizaciones',sinceIso),
+        airtableFetchSince('Pedidos',sinceIso),airtableFetchSince('Reportes',sinceIso),
+        airtableFetchSince('Proveedores',sinceIso),airtableFetchSince('Monitor Sistema',sinceIso),
+        airtableFetchSince('Facturas',sinceIso)
+      ]);
+      _mergeCoreState(res);
+    }
+    state.lastUpdateTs=Date.now();
+    document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;
+    renderOverview();
+  }catch(e){ setStatus('error (auto)',false); logErr('loadAllDataSilent',e); }
 }
 function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},1800000);} // 30 min
 
@@ -6611,7 +6689,14 @@ function renderAccionesHoy(){
   const cnt=document.getElementById('accionesHoyCount');if(cnt)cnt.textContent=`· ${items.length} pendiente${items.length!==1?'s':''}`;
   list.innerHTML=items.slice(0,14).map(it=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid ${it.color};border-radius:7px"><span style="font-size:14px;flex-shrink:0">${it.icon}</span><span style="flex:1;font-size:12px;color:var(--text2);min-width:0">${it.txt}</span><button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:3px 10px;color:${it.color}" onclick="${it.fn}">${it.btn}</button></div>`).join('');
 }
+// renderOverview() agrupa múltiples llamadas del mismo tick en una sola pasada
+// (se invoca ~40 veces, a menudo en ráfaga tras cargar datos o guardar registros).
 function renderOverview(){
+  if(_ovScheduled) return;
+  _ovScheduled=true;
+  Promise.resolve().then(()=>{ _ovScheduled=false; try{ _renderOverviewNow(); }catch(e){ logErr('renderOverview',e); } });
+}
+function _renderOverviewNow(){
   renderKPIs();
   renderEquipoSnapshot();
   renderAccionesHoy();
@@ -7250,7 +7335,7 @@ function renderClienteFacturas(clienteId,empresa){
     <div class="fac-filtros" style="margin-bottom:0;flex:1;min-width:0">
       ${filtros.map(f=>`<button class="fac-chip${_facFiltro===f.k?' fac-chip-active':''}" onclick="_facFiltro='${f.k}';_facBuscar='';renderClienteFacturas(cdCurrentId,cdCurrentEmpresa)">${f.label}${f.n>0?` <span class="fac-chip-n">${f.n}</span>`:''}</button>`).join('')}
     </div>
-    <input class="field-input fac-search" placeholder="🔍 Folio / texto…" value="${escapeHtml(_facBuscar)}" oninput="_facBuscar=this.value;renderClienteFacturas(cdCurrentId,cdCurrentEmpresa)" style="width:130px;padding:3px 8px;font-size:11px;height:28px;flex-shrink:0">
+    <input class="field-input fac-search" placeholder="🔍 Folio / texto…" value="${escapeHtml(_facBuscar)}" oninput="(v=>{_facBuscar=v;debInput('facb',()=>renderClienteFacturas(cdCurrentId,cdCurrentEmpresa))})(this.value)" style="width:130px;padding:3px 8px;font-size:11px;height:28px;flex-shrink:0">
     ${nBulk>1?`<button class="btn btn-sm fac-btn-cobrar" onclick="marcarFiltradasCobradas()" style="font-size:10px;padding:4px 8px;flex-shrink:0;white-space:nowrap">✓ Cobrar ${nBulk}</button>`:''}
   </div>
   ${facs.length===0?`<div style="color:var(--text3);font-size:12px;padding:8px 0">Sin resultados${_facBuscar?` para "<em>${escapeHtml(_facBuscar)}</em>"`:' para este filtro'}.</div>`:`
@@ -10491,7 +10576,7 @@ async function gfFinish(){
 // ── Paso cliente ──
 function gfClientStepHTML(){
   const sel=GF.answers.clienteNombre;
-  return '<input id="gfClientSearch" class="gf-input" placeholder="Buscar por empresa o contacto…" oninput="gfClientSearch()" autocomplete="off" style="margin-bottom:8px">'
+  return '<input id="gfClientSearch" class="gf-input" placeholder="Buscar por empresa o contacto…" oninput="debInput(`gfcli`,gfClientSearch)" autocomplete="off" style="margin-bottom:8px">'
     +'<div id="gfClientResults"></div>'
     +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
     +'<button class="btn btn-ghost btn-sm" onclick="gfClientNew()">➕ Cliente nuevo</button>'
@@ -24025,7 +24110,7 @@ trusted_clients:
       <button onclick="NOTIFY.closeHistory()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px;line-height:1">✕</button>
     </div>
     <div class="notif-hist-filters">
-      <input type="search" id="nhSearchInput" placeholder="Buscar..." oninput="NOTIFY._renderHistory()">
+      <input type="search" id="nhSearchInput" placeholder="Buscar..." oninput="debInput('notif',()=>NOTIFY._renderHistory())">
       <select id="nhDateFilter" onchange="NOTIFY._renderHistory()">
         <option value="all">Todas las fechas</option>
         <option value="hoy">Hoy</option>
