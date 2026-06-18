@@ -403,6 +403,11 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 body.compact table th,body.compact table td{padding:5px 10px;}
 body.compact .kpi-card{padding:12px 14px;}
 body.compact .ov-zone{margin:18px 0 10px;}
+/* Pestañas internas del modal de detalle de cliente */
+.cd-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--text3);font-size:12px;font-weight:600;padding:7px 13px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.cd-tab:hover{color:var(--text2);}
+.cd-tab.active{color:var(--text);border-bottom-color:var(--accent);}
+.cd-hidden{display:none!important;}
 .copy-btn{position:absolute;top:7px;right:7px;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text2);font-size:10px;padding:3px 8px;cursor:pointer;}
 .copy-btn:hover{color:var(--accent);border-color:var(--accent);}
 .modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);animation:modalFade .2s ease-out;}
@@ -3137,15 +3142,21 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="modal-backdrop" onclick="closeClienteDetalle()"></div>
   <div class="modal-card wide">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div id="cdCrumb" style="font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.3px"><span style="cursor:pointer" onclick="closeClienteDetalle();switchTab('clientes')">Clientes</span> <span style="opacity:.55">›</span> <span style="color:var(--text2)" id="cdCrumbName"></span></div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
-    <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap" id="cdBadges"></div>
-    <div id="cdInfoGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="cdBadges"></div>
+    <div id="cdTabs" style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto">
+      <button class="cd-tab active" data-t="datos" onclick="cdTab('datos')">Datos</button>
+      <button class="cd-tab" data-t="actividad" onclick="cdTab('actividad')">Actividad</button>
+      <button class="cd-tab" data-t="facturas" onclick="cdTab('facturas')">Facturas</button>
+      <button class="cd-tab" data-t="notas" onclick="cdTab('notas')">Notas</button>
+    </div>
+    <div id="cdInfoGrid" data-cdtab="datos" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">📞 Contacto</div><div id="cdContacto" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">🏢 Empresa</div><div id="cdEmpresa" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-finanzas"/></svg> Financiero</div><div id="cdFinanciero" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> CRM</div><div id="cdCRM" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
     </div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:8px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> Notas</div><div id="cdNotas" style="font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap"></div></div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
+    <div data-cdtab="notas" class="cd-hidden" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:8px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> Notas</div><div id="cdNotas" style="font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap"></div></div>
+    <div data-cdtab="actividad" class="cd-hidden" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">🕐 Historial</div>
         <div style="display:flex;gap:4px">
@@ -3156,7 +3167,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       </div>
       <div id="cdTimeline" style="font-size:12px"></div>
     </div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
+    <div data-cdtab="facturas" class="cd-hidden" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
       <div id="cdFacturasHeader" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:6px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> Facturas emitidas</div>
@@ -7343,6 +7354,7 @@ function openClienteDetalle(id){
   if(_waPhone){_waBtn.style.display='';_waBtn.onclick=()=>openFollowupWA(_waPhone);}else{_waBtn.style.display='none';}
   document.getElementById('cdSalesIABtn').onclick=()=>{closeClienteDetalle();runSalesAgent(id);};
   document.getElementById('clienteDetalleModal').style.display='flex';
+  cdTab('datos');
 }
 // ── Facturas por cliente: Airtable + base Finanzas ────────────────────
 function facturasForCliente(clienteId,empresa){
@@ -7691,6 +7703,7 @@ function cdTimelineFilter(mode){
   </div>`).join('');
 }
 function closeClienteDetalle(){document.getElementById('clienteDetalleModal').style.display='none';}
+function cdTab(name){document.querySelectorAll('#clienteDetalleModal [data-cdtab]').forEach(el=>el.classList.toggle('cd-hidden',el.getAttribute('data-cdtab')!==name));document.querySelectorAll('#cdTabs .cd-tab').forEach(b=>b.classList.toggle('active',b.getAttribute('data-t')===name));}
 function copiarFolio(folio){navigator.clipboard.writeText(String(folio)).then(()=>toast('Folio '+folio+' copiado','success')).catch(()=>toast('No se pudo copiar','error'));}
 async function consultarEstadoSII(trackId,facturaId,empresa){
   if(!trackId){toast('Sin Track ID','error');return;}
