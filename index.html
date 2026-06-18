@@ -3,11 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
+<!-- Cachea el shell pero revalida siempre (304 si no cambió) en vez de re-descargar ~1.8 MB.
+     Requiere que el host responda ETag/Last-Modified; al desplegar, bumpea el comentario de versión. -->
+<meta http-equiv="Cache-Control" content="no-cache">
 <!-- v20260528-4 -->
 <title>The Lab Solutions — Centro de Comando</title>
+<!-- Adelanta el handshake (DNS+TLS) a los orígenes críticos -->
+<link rel="preconnect" href="https://api.airtable.com" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://thelab.solutions">
+<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
 <link rel="icon" type="image/png" href="https://thelab.solutions/wp-content/uploads/2024/05/faviconthelab.png">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -1484,7 +1490,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="loginPage">
   <div class="lp-glow"></div>
   <div class="login-card">
-    <img class="login-logo" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions">
+    <img loading="lazy" decoding="async" class="login-logo" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions">
     <div class="login-title">Centro de Comando</div>
     <div class="login-subtitle">Acceso restringido</div>
     <form class="login-form" onsubmit="handleLogin(event)" autocomplete="on">
@@ -1513,7 +1519,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="sl-glow"></div>
   <div class="sl-content">
     <div class="sl-logo-wrap">
-      <img class="sl-logo" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions" style="height:36px;mix-blend-mode:normal;filter:brightness(0) invert(1);">
+      <img loading="lazy" decoding="async" class="sl-logo" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions" style="height:36px;mix-blend-mode:normal;filter:brightness(0) invert(1);">
       <div class="sl-subtitle">Centro de Comando</div>
     </div>
     <div class="sl-progress-wrap">
@@ -1548,7 +1554,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 })();
 </script>
 <div class="topbar">
-  <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
+  <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img loading="lazy" decoding="async" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab Solutions"></div>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
   <button id="mobilePlusBtn" class="mobile-menu-btn" onclick="toggleNuevoMenuMobile(event)" style="display:none;font-size:20px;font-weight:300;padding:6px 12px">＋</button>
   <div class="global-search" id="globalSearch">
@@ -1711,7 +1717,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div class="mobile-nav-overlay" id="mobileOverlay" onclick="closeMobileMenu()"></div>
 <div class="mobile-nav-panel" id="mobileNavPanel">
   <div class="mobile-nav-header">
-    <img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab" onclick="closeMobileMenu();switchTab('overview')" style="cursor:pointer">
+    <img loading="lazy" decoding="async" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" alt="The Lab" onclick="closeMobileMenu();switchTab('overview')" style="cursor:pointer">
     <button class="mobile-nav-close" onclick="closeMobileMenu()">✕</button>
   </div>
   <div class="mobile-status"><div class="status-dot" id="statusDotMobile"></div><span id="statusTextMobile">iniciando...</span></div>
@@ -2323,7 +2329,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('qaFotoInput').click()">📷 Foto evidencia</button>
         <input type="file" id="qaFotoInput" accept="image/*" capture="environment" style="display:none" onchange="qaAddFoto(this.files[0])">
         <div id="qaFotoWrap" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
-          <img id="qaFotoThumb" alt="evidencia QA" style="height:44px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;object-fit:cover" onclick="qaVerFoto()">
+          <img loading="lazy" decoding="async" id="qaFotoThumb" alt="evidencia QA" style="height:44px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;object-fit:cover" onclick="qaVerFoto()">
           <button class="btn btn-ghost btn-sm" id="qaFotoDriveBtn" onclick="qaUploadFotoDrive(false)" style="display:none">☁ Subir a Drive</button>
           <a id="qaFotoLink" href="#" target="_blank" style="display:none;font-size:11px;color:var(--accent);text-decoration:none">☁ Ver en Drive</a>
           <button class="btn btn-ghost btn-sm" onclick="qaRemoveFoto()" style="color:var(--danger)">Quitar</button>
@@ -4960,7 +4966,7 @@ function _reportarResultados(muts) {
 
 
 <div class="footer"><div class="footer-inner">
-  <div style="display:flex;align-items:center;gap:10px"><img src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" style="height:14px;opacity:0.4;mix-blend-mode:screen"><span class="footer-text">v5.1 · Centro de Comando</span></div>
+  <div style="display:flex;align-items:center;gap:10px"><img loading="lazy" decoding="async" src="https://thelab.solutions/wp-content/uploads/2024/05/THELAB-SOLUTIONS-HORIZONTAL-03.png" style="height:14px;opacity:0.4;mix-blend-mode:screen"><span class="footer-text">v5.1 · Centro de Comando</span></div>
   <div style="display:flex;gap:8px;align-items:center"><span class="footer-text">Atajos:</span><kbd>1-8</kbd><span class="footer-text">tabs</span><kbd>Ctrl+R</kbd><span class="footer-text">refresh</span></div>
   <span class="footer-text">Auto-refresh: 90s</span>
 </div></div>
@@ -5139,6 +5145,10 @@ function logErr(ctx,err){return ERRLOG.add(ctx,err);}
 const _debTimers={};
 function debInput(key,fn,ms){ clearTimeout(_debTimers[key]); _debTimers[key]=setTimeout(()=>{ try{ fn(); }catch(e){ logErr('debInput:'+key,e); } }, ms==null?180:ms); }
 function debounce(fn,ms){ let t; return function(){ const a=arguments,c=this; clearTimeout(t); t=setTimeout(()=>fn.apply(c,a), ms||180); }; }
+// Evita el costoso innerHTML + reflow (cientos de filas) cuando el HTML pintado
+// no cambió respecto a la última vez en ese mismo contenedor. Todos los
+// escritores de un contenedor memoizado deben pasar por aquí para no desincronizar.
+function _setRows(el,html){ if(!el) return; if(el._lastRows===html){ return; } el._lastRows=html; el.innerHTML=html; }
 window.debInput=debInput;
 let _ovScheduled=false;  // coalescer de renderOverview (ver definición más abajo)
 // ── Red de seguridad global: captura errores no atrapados para que la UI no quede en estado inconsistente ──
@@ -6712,7 +6722,7 @@ function _renderOverviewNow(){
   if(finCard&&finCard.parentElement) finCard.parentElement.style.display=vendor?'none':'';
   // Equipo snapshot already handled in renderEquipoSnapshot
 }
-function _avHtml(p,sz,extraStyle){const es=extraStyle||'';if(p&&p.photo)return`<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;flex-shrink:0;${es}"><img src="${p.photo}" style="width:100%;height:100%;object-fit:cover;object-position:center 15%"></div>`;const fs=Math.max(9,Math.round(sz*0.33));return`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${(p&&p.color)||'#888'};display:flex;align-items:center;justify-content:center;font-size:${fs}px;font-weight:700;color:var(--black);flex-shrink:0;${es}">${(p&&p.avatar)||'?'}</div>`;}
+function _avHtml(p,sz,extraStyle){const es=extraStyle||'';if(p&&p.photo)return`<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;flex-shrink:0;${es}"><img loading="lazy" decoding="async" src="${p.photo}" style="width:100%;height:100%;object-fit:cover;object-position:center 15%"></div>`;const fs=Math.max(9,Math.round(sz*0.33));return`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${(p&&p.color)||'#888'};display:flex;align-items:center;justify-content:center;font-size:${fs}px;font-weight:700;color:var(--black);flex-shrink:0;${es}">${(p&&p.avatar)||'?'}</div>`;}
 function renderEquipoSnapshot(){
   const el=document.getElementById('equipoSnapshot');if(!el) return;
   if(isVendorMode()){el.style.display='none';return;}
@@ -7188,16 +7198,16 @@ function renderClientes(){
     const emptyMsg=isVendorMode()&&state.clientes.length
       ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>Aún no tienes clientes asignados<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>'
       :'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>Aún no hay clientes<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>';
-    tbody.innerHTML='<tr><td colspan="10">'+emptyMsg+'</td></tr>';return;
+    _setRows(tbody,'<tr><td colspan="10">'+emptyMsg+'</td></tr>');return;
   }
-  tbody.innerHTML=sorted.map(c=>buildClienteRow(c)).join('');if(document.getElementById('clienteSearch')?.value) filterClientes();
+  _setRows(tbody,sorted.map(c=>buildClienteRow(c)).join(''));if(document.getElementById('clienteSearch')?.value) filterClientes();
   renderClientesAnalytics();
 }
 function filterClientes(){const q=document.getElementById('clienteSearch').value.toLowerCase();document.querySelectorAll('#clientesTableBody tr').forEach(r=>{r.classList.toggle('cliente-hidden',!!(q&&!r.textContent.toLowerCase().includes(q)));});updateBulkBar();}
 async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
-  setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`;return;}tbody.innerHTML=cots.map(c=>buildCotRow(c)).join('');},50);
+  setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`);return;}_setRows(tbody,cots.map(c=>buildCotRow(c)).join(''));},50);
 }
 function cotizarParaCliente(clienteId){const c=state.clientes.find(x=>x.id===clienteId);if(!c) return;switchTab('nueva-cot');setTimeout(()=>{selectCliente(clienteId);initDates();toast(`Cotizando para ${c.fields['Empresa']}`,'info');},100);}
 function compartirPortalCliente(clienteId){
@@ -7749,9 +7759,9 @@ function renderCotizaciones(){
     const emptyMsg=isVendorMode()&&state.cotizaciones.length
       ?'<tr><td colspan="11"><div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg></div>Aún no tienes cotizaciones asignadas<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>'
       :'<tr><td colspan="11"><div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg></div>Aún no hay cotizaciones<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>';
-    tbody.innerHTML=emptyMsg;return;
+    _setRows(tbody,emptyMsg);return;
   }
-  tbody.innerHTML=sorted.map(c=>buildCotRow(c)).join('');renderCotAnalytics();
+  _setRows(tbody,sorted.map(c=>buildCotRow(c)).join(''));renderCotAnalytics();
 }
 function resolveVendedorName(vid){if(!vid) return '—';const p=PERSONAS.find(x=>x.id===vid.toLowerCase().trim());return p?p.nombre:vid;}
 function buildCotRow(c){
@@ -8026,7 +8036,7 @@ table.items thead th:nth-child(2){text-align:center;}table.items thead th:nth-ch
 .footer .left{font-size:8px;color:#bbb;line-height:1.7;}.footer .validity{background:#f8f8f8;border-radius:5px;padding:5px 10px;font-size:9px;color:#555;}
 .footer .validity strong{color:#0a0a0a;}
 @media print{body{padding:10px 14px;}@page{margin:8mm;size:A4;}}</style></head><body>
-<div class="header"><div class="logo-area"><img src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
+<div class="header"><div class="logo-area"><img loading="lazy" decoding="async" src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
 <div class="cot-meta"><h1>Cotización</h1><div class="num">${escHtml(num)}</div><div class="fechas">Emitida: <strong>${escHtml(fecha)}</strong><br>Válida hasta: <strong>${escHtml(vto)}</strong></div></div></div>
 ${urgente?'<div class="urgente-strip">⚡ Cotización con urgencia — se aplica recargo del 25%</div>':''}
 <div class="info-grid">
@@ -8173,7 +8183,7 @@ table.items thead th{padding:6px 10px;font-size:8px;font-weight:700;letter-spaci
 </style></head><body>
 <div class="header">
   <div class="logo-area">
-    <img src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'">
+    <img loading="lazy" decoding="async" src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'">
     <div class="tagline">Impresión 3D · Neones · Trofeos</div>
   </div>
   <div class="doc-meta">
@@ -8656,7 +8666,7 @@ function renderFPItems(){
             <div style="flex:1;min-width:0">
               <div style="font-size:9px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Foto de referencia del producto</div>
               <label style="cursor:pointer;display:block;border:2px dashed #00c8cc;border-radius:8px;overflow:hidden;background:var(--surface)">
-                <img id="fpRaw-${idx}" src="${_fpRawImages[idx]?.dataUrl||''}" style="width:100%;height:100px;object-fit:contain;display:${_fpRawImages[idx]?'block':'none'}">
+                <img loading="lazy" decoding="async" id="fpRaw-${idx}" src="${_fpRawImages[idx]?.dataUrl||''}" style="width:100%;height:100px;object-fit:contain;display:${_fpRawImages[idx]?'block':'none'}">
                 <div id="fpRawPh-${idx}" style="display:${_fpRawImages[idx]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100px;gap:6px;color:#0097a7">
                   <svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-camera"/></svg>
                   <span style="font-size:9px;font-weight:700">Subir foto del producto</span>
@@ -8677,7 +8687,7 @@ function renderFPItems(){
               <div>
                 <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:6px 4px;border-radius:8px 8px 0 0;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase">${l}</div>
                 <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
-                  <img id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:var(--surface);display:${item[c]?'block':'none'}">
+                  <img loading="lazy" decoding="async" id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:var(--surface);display:${item[c]?'block':'none'}">
                   <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;color:var(--text3)">
                     <span style="font-size:22px">📷</span>
                     <span style="font-size:9px;font-weight:600">Subir foto</span>
@@ -9097,7 +9107,7 @@ async function previewAdjunto(fileId){
     if(_adjUrl) URL.revokeObjectURL(_adjUrl);
     _adjUrl=URL.createObjectURL(blob);
     let inner;
-    if(/^image\//.test(f.mimeType)) inner=`<img src="${_adjUrl}" style="max-width:100%;max-height:68vh;display:block;margin:0 auto;border-radius:8px">`;
+    if(/^image\//.test(f.mimeType)) inner=`<img loading="lazy" decoding="async" src="${_adjUrl}" style="max-width:100%;max-height:68vh;display:block;margin:0 auto;border-radius:8px">`;
     else if(f.mimeType==='application/pdf') inner=`<iframe src="${_adjUrl}" style="width:100%;height:68vh;border:none;border-radius:8px;background:#fff"></iframe>`;
     else if(/^text\//.test(f.mimeType)){const txt=await blob.text();inner=`<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;max-height:60vh;overflow:auto;background:var(--surface2);padding:12px;border-radius:8px">${escapeHtml(txt)}</pre>`;}
     else inner='<div style="padding:18px;color:var(--text3);font-size:12px">No se puede previsualizar este tipo de archivo. Usa Descargar.</div>';
@@ -9213,7 +9223,7 @@ function buildFichaPropuestaDoc(cotId){
   if(!items.length&&sessionItems.length) items.push(...sessionItems);
 
   const foto=(src,label)=>src
-    ?'<div class="fbox"><div class="flbl">'+label+'</div><img src="'+src+'" class="fimg"></div>'
+    ?'<div class="fbox"><div class="flbl">'+label+'</div><img loading="lazy" decoding="async" src="'+src+'" class="fimg"></div>'
     :'<div class="fbox"><div class="flbl">'+label+'</div><div class="fph"><span style="font-size:22px">📷</span><span>'+label+'</span></div></div>';
 
   const theLabLogo='https://thelab.solutions/wp-content/uploads/2024/05/Logo-the-lab-solutions.png';
@@ -9226,7 +9236,7 @@ function buildFichaPropuestaDoc(cotId){
         <div class="fp-num">${escH(numFicha)}</div>
         <div class="fp-contact">${contacto}</div>
       </div>
-      <img src="${theLabLogo}" onerror="this.style.display='none'" class="portada-lab-logo">
+      <img loading="lazy" decoding="async" src="${theLabLogo}" onerror="this.style.display='none'" class="portada-lab-logo">
     </div>
     <div class="portada-client-band">
       <div class="band-eyebrow">PROPUESTA PARA</div>
@@ -9237,12 +9247,12 @@ function buildFichaPropuestaDoc(cotId){
       <span class="project-name">${escH(proyecto)}</span>
     </div>
     <div class="portada-fotos">
-      ${(()=>{const imgs=items.slice(0,3).filter(it=>it.imgFrontal);if(!imgs.length) return '<div class="cover-no-img">Las fotos del producto aparecerán aquí</div>';const pct=imgs.length===1?'55%':'28%';return imgs.map(it=>'<img src="'+it.imgFrontal+'" class="cover-img" style="max-width:'+pct+'">').join('');})()}
+      ${(()=>{const imgs=items.slice(0,3).filter(it=>it.imgFrontal);if(!imgs.length) return '<div class="cover-no-img">Las fotos del producto aparecerán aquí</div>';const pct=imgs.length===1?'55%':'28%';return imgs.map(it=>'<img loading="lazy" decoding="async" src="'+it.imgFrontal+'" class="cover-img" style="max-width:'+pct+'">').join('');})()}
     </div>
     <div class="portada-footer">
-      <div>${_fpLogoCliente?'<img src="'+_fpLogoCliente+'" class="client-logo">':''}</div>
+      <div>${_fpLogoCliente?'<img loading="lazy" decoding="async" src="'+_fpLogoCliente+'" class="client-logo">':''}</div>
       <div class="portada-footer-right">
-        <img src="${theLabLogo}" onerror="this.style.display='none'" class="footer-lab-logo">
+        <img loading="lazy" decoding="async" src="${theLabLogo}" onerror="this.style.display='none'" class="footer-lab-logo">
         <div class="footer-contact">${contacto}</div>
       </div>
     </div>
@@ -9281,7 +9291,7 @@ function buildFichaPropuestaDoc(cotId){
       <div class="item-footer">
         <div class="item-footer-text">${escH(proyecto)} — ${escH(cliente)} · N° ${escH(numFicha)}</div>
         <div style="display:flex;align-items:center;gap:8px">
-          <img src="${theLabLogo}" onerror="this.style.display='none'" class="footer-lab-logo">
+          <img loading="lazy" decoding="async" src="${theLabLogo}" onerror="this.style.display='none'" class="footer-lab-logo">
           <div class="footer-contact">${contacto}</div>
         </div>
       </div>
@@ -9425,7 +9435,7 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
 .footer .left{font-size:8px;color:#bbb;line-height:1.7;}.footer .right{font-size:8px;color:#bbb;}
 @media print{body{padding:10px 14px;}@page{margin:8mm;size:A4 landscape;}}</style></head><body>
 <div class="header">
-  <div class="logo-area"><img src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
+  <div class="logo-area"><img loading="lazy" decoding="async" src="https://thelab.solutions/wp-content/uploads/2026/05/2THELAB-SOLUTIONS-HORIZONTAL-03.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
   <div class="report-meta"><h1>Reporte de Cotizaciones</h1><div class="sub">Generado el ${escH(now)} · ${cots.length} cotizaciones</div></div>
 </div>
 <div class="kpis">
@@ -9614,9 +9624,9 @@ function renderPedidos(filter){
     const emptyHtml=basePedidos.length
       ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-search"/></svg></div>Ningún pedido coincide con este filtro<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="filterPedidos(\'all\',document.querySelector(\'#pedidosFilterBar>button\'))">Ver todos los pedidos</button></div>'
       :'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-pedidos"/></svg></div>Aún no hay pedidos<br><span style="font-size:11px;color:var(--text3)">Los pedidos se generan al aprobar una cotización</span><br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'cotizaciones\')">📋 Ir a cotizaciones</button></div>';
-    tbody.innerHTML='<tr><td colspan="12">'+emptyHtml+'</td></tr>';return;}
+    _setRows(tbody,'<tr><td colspan="12">'+emptyHtml+'</td></tr>');return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
-  tbody.innerHTML=data.map(p=>{
+  _setRows(tbody,data.map(p=>{
     const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
     const facturaLink=localStorage.getItem('factura_drive_'+p.id)||f['Factura URL']||'';
     const fichaData=parseFichaData(f['Ficha Tecnica']);
@@ -9640,14 +9650,14 @@ function renderPedidos(filter){
     <td style="text-align:center"><button data-pedido="${escapeHtml(f['N° Pedido']||'—')}" onclick="openQAModal('${p.id}',this.dataset.pedido)" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
     <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
-  }).join('');
+  }).join(''));
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
 function renderEquipoCell(pedidoId,equipoStr){
   const asignados=equipoStr2Arr(equipoStr);
   return`<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${PERSONAS.map(p=>{
     const on=asignados.includes(p.nombre);
-    return`<span onclick="toggleEquipoPedido('${pedidoId}','${escapeHtml(p.nombre)}',event)" title="${on?'✓ Asignado: ':'Asignar: '}${escapeHtml(p.nombre)} · ${p.rol}" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;overflow:hidden;background:${on?p.color:'var(--surface3)'};color:${on?'#000':'var(--text3)'};font-size:9px;font-weight:700;cursor:pointer;border:2px solid ${on?p.color:'var(--border2)'};transition:all 0.15s;flex-shrink:0;user-select:none" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform=''">${p.photo?`<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover;object-position:center 15%;${on?'':'opacity:0.45'}">`:p.avatar}</span>`;
+    return`<span onclick="toggleEquipoPedido('${pedidoId}','${escapeHtml(p.nombre)}',event)" title="${on?'✓ Asignado: ':'Asignar: '}${escapeHtml(p.nombre)} · ${p.rol}" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;overflow:hidden;background:${on?p.color:'var(--surface3)'};color:${on?'#000':'var(--text3)'};font-size:9px;font-weight:700;cursor:pointer;border:2px solid ${on?p.color:'var(--border2)'};transition:all 0.15s;flex-shrink:0;user-select:none" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform=''">${p.photo?`<img loading="lazy" decoding="async" src="${p.photo}" style="width:100%;height:100%;object-fit:cover;object-position:center 15%;${on?'':'opacity:0.45'}">`:p.avatar}</span>`;
   }).join('')}</div>`;
 }
 async function toggleEquipoPedido(pedidoId,personaNombre,evt){
@@ -9886,7 +9896,7 @@ async function qaUploadFotoDrive(silent){
   finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
 }
 function qaRemoveFoto(){qaFotoData=null;qaFotoLink=null;const k=_qaFotoKey(),lk=_qaFotoLinkKey();if(k)localStorage.removeItem(k);if(lk)localStorage.removeItem(lk);renderQAFoto();}
-function qaVerFoto(){const src=qaFotoData||qaFotoLink;if(!src)return;if(qaFotoLink&&!qaFotoData){window.open(qaFotoLink,'_blank');return;}const w=window.open('','_blank');if(w)w.document.write('<title>Evidencia QA</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="'+qaFotoData+'" style="max-width:100%;max-height:100vh"></body>');}
+function qaVerFoto(){const src=qaFotoData||qaFotoLink;if(!src)return;if(qaFotoLink&&!qaFotoData){window.open(qaFotoLink,'_blank');return;}const w=window.open('','_blank');if(w)w.document.write('<title>Evidencia QA</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img loading="lazy" decoding="async" src="'+qaFotoData+'" style="max-width:100%;max-height:100vh"></body>');}
 function addQAItem(){const inp=document.getElementById('qaNewItem');const val=inp.value.trim();if(!val){inp.focus();return;}qaItems.push({texto:val,checked:false});inp.value='';_qaAutoResult();renderQAChecklist();inp.focus();}
 // Convierte la respuesta markdown del QA_AGENT en ítems de checklist + resultado
 function _parseQAIAResponse(text){
@@ -10529,7 +10539,7 @@ function gfRender(){
   }else if(step.type==='date'){
     html+='<input id="gfInput" type="date" class="gf-input" value="'+(GF.answers[step.key]||'')+'">';
   }else if(step.type==='photo'){
-    html+='<input type="file" accept="image/*" class="gf-input" onchange="gfPhotoPreview(this)"><div id="gfPhotoPrev">'+(GF.answers._photoData?'<img src="'+GF.answers._photoData+'" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px">':'')+'</div>';
+    html+='<input type="file" accept="image/*" class="gf-input" onchange="gfPhotoPreview(this)"><div id="gfPhotoPrev">'+(GF.answers._photoData?'<img loading="lazy" decoding="async" src="'+GF.answers._photoData+'" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px">':'')+'</div>';
   }else if(step.type==='client'){
     html+=gfClientStepHTML();
   }else if(step.type==='review'){
@@ -10854,7 +10864,7 @@ window.startNewClientFlow=startNewClientFlow;window.startEditClientFlow=startEdi
 function gfPhotoPreview(input){
   const f=input.files&&input.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=e=>{GF.answers._photoData=e.target.result;const pv=document.getElementById('gfPhotoPrev');if(pv)pv.innerHTML='<img src="'+e.target.result+'" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px">';};
+  r.onload=e=>{GF.answers._photoData=e.target.result;const pv=document.getElementById('gfPhotoPrev');if(pv)pv.innerHTML='<img loading="lazy" decoding="async" src="'+e.target.result+'" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px">';};
   r.readAsDataURL(f);
 }
 
@@ -13118,7 +13128,7 @@ function renderMonitorGrid(){
     } else {
       body=`
         ${isActive?`<div style="margin:10px 0 6px;display:flex;gap:9px;align-items:center">
-          ${s.thumbUrl?`<img src="${s.thumbUrl}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
+          ${s.thumbUrl?`<img loading="lazy" decoding="async" src="${s.thumbUrl}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
           <div style="flex:1;min-width:0">
             <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
             <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:5px">
@@ -13150,7 +13160,7 @@ function renderMonitorGrid(){
           ${renderSparkline(th,'h','#ff6b35')}
         </div>`:''}
         ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative">
-          <img src="${printerCamUrl(m.id)}" style="width:100%;display:block;max-height:160px;object-fit:cover" onerror="this.parentElement.innerHTML='<div style=\\'padding:12px;text-align:center;color:#666;font-size:10px\\'>Sin señal · verifica la URL</div>'">
+          <img loading="lazy" decoding="async" src="${printerCamUrl(m.id)}" style="width:100%;display:block;max-height:160px;object-fit:cover" onerror="this.parentElement.innerHTML='<div style=\\'padding:12px;text-align:center;color:#666;font-size:10px\\'>Sin señal · verifica la URL</div>'">
         </div>`:''}
         <div class="pcard-iprow" style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
           <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">🔑</span>`:''}</span>
@@ -13168,7 +13178,7 @@ function renderMonitorGrid(){
 
     return`<div id="mcard_${m.id}" class="pcard${isActive?' active':''}" style="--acc:${sm.color};background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column">
       <div style="display:flex;align-items:center;gap:8px">
-        ${img?`<img src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
+        ${img?`<img loading="lazy" decoding="async" src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
           <div class="pcard-name" style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(m.nombre)}</div>
           <div style="font-size:10px;color:var(--text3)">Máquina #${m.numG}</div>
@@ -14009,7 +14019,7 @@ function renderMaquinasCalendar(){
     const dispBorder=ms.disp>0?'rgba(0,212,170,0.3)':'rgba(255,68,68,0.3)';
     const groupRow=isNewGroup?`<tr><td colspan="${dias.length+2}" style="padding:7px 14px;background:rgba(0,0,0,0.35);border-bottom:1px solid var(--border);border-top:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        ${MODELO_IMGS[m.modelo]?`<img src="${MODELO_IMGS[m.modelo]}" alt="${m.modelo}" style="height:32px;width:auto;object-fit:contain;filter:brightness(0.9)" onerror="this.style.display='none'">`:''}
+        ${MODELO_IMGS[m.modelo]?`<img loading="lazy" decoding="async" src="${MODELO_IMGS[m.modelo]}" alt="${m.modelo}" style="height:32px;width:auto;object-fit:contain;filter:brightness(0.9)" onerror="this.style.display='none'">`:''}
         <div>
           <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${m.color}">${m.modelo}</div>
           <div style="font-size:9px;color:var(--text3);margin-top:1px">${MODEL_SPECS[m.modelo]||''}</div>
@@ -15896,14 +15906,14 @@ const MAIL={
     const url=prompt('URL de la imagen:');
     if(!url) return;
     document.getElementById('mailSigEditor').focus();
-    document.execCommand('insertHTML',false,`<img src="${url}" style="max-height:100px;max-width:100%">`);
+    document.execCommand('insertHTML',false,`<img loading="lazy" decoding="async" src="${url}" style="max-height:100px;max-width:100%">`);
   },
 
   insertImagePrompt(){
     const url=prompt('URL de la imagen:');
     if(!url) return;
     document.getElementById('mailCmpBody').focus();
-    document.execCommand('insertHTML',false,`<img src="${url}" style="max-width:100%">`);
+    document.execCommand('insertHTML',false,`<img loading="lazy" decoding="async" src="${url}" style="max-width:100%">`);
   },
   toggleCompose(){document.getElementById('mailComposePanel').classList.toggle('collapsed');},
   toggleCc(){const r=document.getElementById('mailCcRow');r.style.display=r.style.display==='none'?'flex':'none';},
@@ -16057,14 +16067,14 @@ const AUTH={
     const chip=document.getElementById('userChip');
     if(chip){
       const av=document.getElementById('userAvatar');
-      if(photo){av.innerHTML=`<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;object-position:center 15%">`;av.style.background='transparent';av.style.overflow='hidden';}
+      if(photo){av.innerHTML=`<img loading="lazy" decoding="async" src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;object-position:center 15%">`;av.style.background='transparent';av.style.overflow='hidden';}
       else{av.textContent=initials;av.style.background='';av.style.overflow='';}
       document.getElementById('userName').textContent=u.name.split(' ')[0];
       chip.style.display='flex';
     }
     // Chip del panel móvil
     const mav=document.getElementById('mobileUserAv');
-    if(mav){if(photo){mav.innerHTML=`<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;object-position:center 15%">`;mav.style.background='transparent';mav.style.overflow='hidden';}else{mav.textContent=initials;mav.style.background='';mav.style.overflow='';}}
+    if(mav){if(photo){mav.innerHTML=`<img loading="lazy" decoding="async" src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;object-position:center 15%">`;mav.style.background='transparent';mav.style.overflow='hidden';}else{mav.textContent=initials;mav.style.background='';mav.style.overflow='';}}
     const mnm=document.getElementById('mobileUserNm');if(mnm) mnm.textContent=u.name;
     const lb=document.getElementById('logoutBtn');
     if(lb) lb.style.display='flex';
@@ -17879,7 +17889,7 @@ function ovSyncWebKPIs(total, completo, sinTitle, sinDesc, pctStr){
   <div class="modal-card" style="max-width:700px;width:95vw">
     <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-camera"/></svg> <span id="webcamModalTitle">Webcam</span></div>
     <div style="margin-top:12px;background:#000;border-radius:10px;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center">
-      <img id="webcamModalImg" src="" style="max-width:100%;max-height:60vh;display:block" onerror="this.style.display='none';document.getElementById('webcamNoFeed').style.display='flex'" onload="document.getElementById('webcamNoFeed').style.display='none';this.style.display='block'">
+      <img loading="lazy" decoding="async" id="webcamModalImg" src="" style="max-width:100%;max-height:60vh;display:block" onerror="this.style.display='none';document.getElementById('webcamNoFeed').style.display='flex'" onload="document.getElementById('webcamNoFeed').style.display='none';this.style.display='block'">
       <div id="webcamNoFeed" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px;color:#666">
         <span style="font-size:32px">📷</span>
         <span style="font-size:12px">Sin feed · configura la URL abajo</span>
@@ -20256,7 +20266,7 @@ function checkClientePortal(){
   overlay.id='clientePortalOverlay';
   overlay.style.cssText='position:fixed;inset:0;background:var(--black);z-index:9999;display:flex;flex-direction:column;overflow:hidden';
   overlay.innerHTML=`<div style="padding:16px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
-    <img src="https://thelab.solutions/wp-content/uploads/2023/10/Logo-The-Lab-Solutions-Blanco-Sinfondo.png" style="height:28px;object-fit:contain" onerror="this.style.display='none'">
+    <img loading="lazy" decoding="async" src="https://thelab.solutions/wp-content/uploads/2023/10/Logo-The-Lab-Solutions-Blanco-Sinfondo.png" style="height:28px;object-fit:contain" onerror="this.style.display='none'">
     <div><div style="font-size:14px;font-weight:700;color:var(--text)">The Lab Solutions</div><div style="font-size:11px;color:var(--text3)">Portal de seguimiento de pedidos</div></div>
   </div>
   <div style="flex:1;overflow-y:auto;padding:20px;max-width:800px;margin:0 auto;width:100%">
@@ -20637,7 +20647,7 @@ function qcalcClear(kind){
       <div class="field-group">
         <label class="field-label">Logo del cliente <span style="color:var(--text3);font-weight:400">(aparece en la portada del PDF)</span></label>
         <label style="cursor:pointer;display:block;border:1px dashed var(--border2);border-radius:8px;overflow:hidden;height:64px;background:var(--surface)">
-          <img id="fpLogoPrev" style="height:64px;width:100%;object-fit:contain;display:none;padding:6px">
+          <img loading="lazy" decoding="async" id="fpLogoPrev" style="height:64px;width:100%;object-fit:contain;display:none;padding:6px">
           <div id="fpLogoPh" style="display:flex;flex-direction:row;align-items:center;justify-content:center;height:64px;gap:8px;color:var(--text3)">
             <span style="font-size:22px">🏢</span>
             <span style="font-size:10px">Subir logo empresa (PNG/JPG)</span>
