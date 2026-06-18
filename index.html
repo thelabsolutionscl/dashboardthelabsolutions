@@ -3136,7 +3136,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="clienteDetalleModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeClienteDetalle()"></div>
   <div class="modal-card wide">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div id="cdCrumb" style="font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.3px"><span style="cursor:pointer" onclick="closeClienteDetalle();switchTab('clientes')">Clientes</span> <span style="opacity:.55">›</span> <span style="color:var(--text2)" id="cdCrumbName"></span></div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
     <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap" id="cdBadges"></div>
     <div id="cdInfoGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:10px">📞 Contacto</div><div id="cdContacto" style="display:flex;flex-direction:column;gap:7px;font-size:12px"></div></div>
@@ -5184,12 +5184,13 @@ function pedShowMore(){_pedCap+=TABLE_PAGE;renderPedidos(state.pedidoFilter);}
 function applyDensity(){const c=localStorage.getItem('ui_density')==='compact';document.body.classList.toggle('compact',c);const b=document.getElementById('densityBtn');if(b){b.textContent=c?'≣':'≡';b.title=c?'Vista compacta — clic para cómoda':'Vista cómoda — clic para compacta';}}
 function toggleDensity(){const c=localStorage.getItem('ui_density')==='compact';localStorage.setItem('ui_density',c?'comfortable':'compact');applyDensity();}
 // ── Persistencia de orden/búsqueda por pestaña ──
-function _saveUIState(){try{localStorage.setItem('ui_state',JSON.stringify({cli:clientesSort,cot:cotizacionesSort,prov:proveedoresSort,q:_cliQuery}));}catch(e){}}
+function _saveUIState(){try{localStorage.setItem('ui_state',JSON.stringify({cli:clientesSort,cot:cotizacionesSort,prov:proveedoresSort,q:_cliQuery,ped:state.pedidoFilter}));}catch(e){}}
 function _restoreUIState(){try{const s=JSON.parse(localStorage.getItem('ui_state')||'{}');
   if(s.cli&&'key' in s.cli){clientesSort.key=s.cli.key;clientesSort.dir=s.cli.dir||1;}
   if(s.cot&&'key' in s.cot){cotizacionesSort.key=s.cot.key;cotizacionesSort.dir=s.cot.dir||1;}
   if(s.prov&&'key' in s.prov){proveedoresSort.key=s.prov.key;proveedoresSort.dir=s.prov.dir||1;}
   if(s.q){_cliQuery=s.q;const i=document.getElementById('clienteSearch');if(i)i.value=s.q;}
+  if(s.ped)state.pedidoFilter=s.ped;
 }catch(e){}}
 // Sincroniza las flechas asc/desc de los encabezados con el orden vigente
 function _applySortIndicators(){[['#tab-clientes',clientesSort,/sortClientes\('(\w+)'\)/],['#tab-cotizaciones',cotizacionesSort,/sortCotizaciones\('(\w+)'\)/],['#tab-proveedores',proveedoresSort,/sortProveedores\('(\w+)'\)/]].forEach(([sel,sort,re])=>{document.querySelectorAll(sel+' .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(re)?.[1];th.classList.remove('asc','desc');if(sort.key&&k===sort.key)th.classList.add(sort.dir===1?'asc':'desc');});});}
@@ -7313,6 +7314,7 @@ function compartirPortalCliente(clienteId){
 function openClienteDetalle(id){
   const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Ciudad']||''}`:f['Ciudad']||'';
+  {const _cc=document.getElementById('cdCrumbName');if(_cc)_cc.textContent=f['Empresa']||f['Contacto']||'Cliente';}
   // Última actividad: fecha más reciente entre cotizaciones, pedidos y primer contacto
   const _cliCots=(state.cotizaciones||[]).filter(x=>{const ca=x.fields['Cliente'];return Array.isArray(ca)?ca.includes(id):ca===f['Empresa'];});
   const _cliPeds=(state.pedidos||[]).filter(x=>{const ca=x.fields['Cliente'];return Array.isArray(ca)?ca.includes(id):ca===f['Empresa'];});
@@ -9715,6 +9717,7 @@ function exportRemCSV(){
 
 function renderPedidos(filter){
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
+  try{document.querySelectorAll('#pedidosFilterBar button[onclick*="filterPedidos("]').forEach(b=>{const k=/filterPedidos\('([^']+)'/.exec(b.getAttribute('onclick')||'')?.[1];b.classList.toggle('active-filter',k===filter);});}catch(e){}
   _refreshDriveBtns();
   const basePedidos=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
   let data=filter==='all'?basePedidos:filter==='atrasados'?basePedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
@@ -10079,7 +10082,7 @@ async function saveQAModal(){
   const saved=await _qaPersist(id);
   if(saved){await _qaOfferRework(id);closeQAModal();renderPedidos();renderOverview();}
 }
-function filterPedidos(filter,btn){document.querySelectorAll('.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');_pedCap=TABLE_PAGE;renderPedidos(filter);}
+function filterPedidos(filter,btn){document.querySelectorAll('.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');_pedCap=TABLE_PAGE;renderPedidos(filter);_saveUIState();}
 
 // ── PEDIDOS MULTI-SELECT ──────────────────────────────────────
 function togglePedidoRow(chk){const id=chk.dataset.id;if(chk.checked) selectedPedidos.add(id);else selectedPedidos.delete(id);chk.closest('tr')?.classList.toggle('row-selected',chk.checked);updatePedidosBulkBar();}
@@ -11383,18 +11386,48 @@ function openGlobalSearch(){
   },30);
 }
 function closeGlobalSearch(){document.getElementById('globalSearchOverlay').style.display='none';}
+// Acciones rápidas del command palette (Ctrl/⌘+K). run = expresión JS con comillas simples.
+function _paletteActions(){
+  const T=n=>`switchTab('${n}')`;
+  return [
+    {ic:'🏠',lb:'Ir a Overview',kw:'inicio resumen overview centro de comando',run:T('overview')},
+    {ic:'👥',lb:'Ir a Clientes',kw:'clientes crm cartera contactos',run:T('clientes')},
+    {ic:'📋',lb:'Ir a Cotizaciones',kw:'cotizaciones presupuestos',run:T('cotizaciones')},
+    {ic:'📦',lb:'Ir a Pedidos',kw:'pedidos produccion ordenes',run:T('pedidos')},
+    {ic:'🏭',lb:'Ir a Proveedores',kw:'proveedores',run:T('proveedores')},
+    {ic:'💰',lb:'Ir a Finanzas',kw:'finanzas ventas facturas dinero cobranza',run:T('finanzas')},
+    {ic:'🌐',lb:'Ir a Web · SEO · Ads',kw:'web seo google ads marketing campanas',run:T('web')},
+    {ic:'🖨️',lb:'Ir a Máquinas',kw:'maquinas impresoras 3d monitor',run:T('maquinas')},
+    {ic:'👷',lb:'Ir a Equipo',kw:'equipo personas disponibilidad',run:T('equipo')},
+    {ic:'🤖',lb:'Ir a Agentes IA',kw:'agentes ia inteligencia artificial',run:T('agentes')},
+    {ic:'📈',lb:'Ir a Reportes',kw:'reportes historial semanal',run:T('reporte')},
+    {ic:'➕',lb:'Nuevo lead / cliente',kw:'nuevo crear cliente lead',run:T('nuevo-lead')},
+    {ic:'➕',lb:'Nueva cotización',kw:'nueva crear cotizacion presupuesto',run:T('nueva-cot')},
+    {ic:'➕',lb:'Nuevo proveedor',kw:'nuevo crear proveedor',run:T('nuevo-proveedor')},
+    {ic:'⏰',lb:'Ver pedidos atrasados',kw:'atrasados retraso pedidos urgente',run:`switchTab('pedidos');setTimeout(()=>{try{filterPedidos('atrasados')}catch(e){}},80)`},
+    {ic:'⚡',lb:'Generar reporte CEO',kw:'reporte ceo ejecutivo ia generar semanal',run:`switchTab('overview');setTimeout(()=>{try{ovGenerarReporteCEO()}catch(e){}},250)`},
+    {ic:'🎯',lb:'Prospección de nichos IA',kw:'prospeccion leadgen nichos ia leads',run:`try{runLeadGenAgent()}catch(e){}`},
+    {ic:'💬',lb:'Abrir KAI (asistente)',kw:'kai asistente chat ayuda',run:`try{openKai()}catch(e){}`},
+    {ic:'≣',lb:'Alternar densidad (compacto/cómodo)',kw:'densidad compacto comodo vista filas',run:`try{toggleDensity()}catch(e){}`}
+  ];
+}
 function runGlobalSearch(q){
   const res=document.getElementById('globalSearchResults');
-  if(!q||q.length<2){res.innerHTML='<div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Escribe al menos 2 caracteres…</div>';return;}
+  if(!q||q.length<2){res.innerHTML='<div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Escribe para buscar registros o ejecutar acciones…</div>';return;}
   const query=q.toLowerCase();
+  const acts=_paletteActions().filter(a=>(a.lb+' '+a.kw).toLowerCase().includes(query)).slice(0,6);
   const groups={cliente:[],cot:[],pedido:[]};
   state.clientes.filter(c=>{const f=c.fields;return(f['Empresa']||'').toLowerCase().includes(query)||(f['Contacto']||'').toLowerCase().includes(query)||(f['Email']||'').toLowerCase().includes(query);}).slice(0,5).forEach(c=>groups.cliente.push({icon:'👤',label:c.fields['Empresa']||'—',sub:(c.fields['Etapa venta']||'—')+' · '+(c.fields['Ciudad']||''),id:c.id,tab:'clientes'}));
   state.cotizaciones.filter(c=>{const f=c.fields;return(f['N° Cotización']||'').toLowerCase().includes(query)||(resolveClienteName(f['Cliente'])||'').toLowerCase().includes(query);}).slice(0,5).forEach(c=>groups.cot.push({icon:'📋',label:c.fields['N° Cotización']||'—',sub:resolveClienteName(c.fields['Cliente'])+' · '+(c.fields['Estado cotización']||'—'),id:c.id,tab:'cotizaciones'}));
   state.pedidos.filter(p=>{const f=p.fields;return(f['N° Pedido']||'').toLowerCase().includes(query)||(resolveClienteName(f['Cliente'])||'').toLowerCase().includes(query)||(f['Equipo asignado']||'').toLowerCase().includes(query);}).slice(0,5).forEach(p=>groups.pedido.push({icon:'📦',label:p.fields['N° Pedido']||'—',sub:resolveClienteName(p.fields['Cliente'])+' · '+(p.fields['Estado pedido']||'—'),id:p.id,tab:'pedidos'}));
-  const total=groups.cliente.length+groups.cot.length+groups.pedido.length;
+  const total=acts.length+groups.cliente.length+groups.cot.length+groups.pedido.length;
   if(!total){res.innerHTML='<div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">Sin resultados para "'+escapeHtml(q)+'"</div>';return;}
-  const labels={cliente:'Clientes',cot:'Cotizaciones',pedido:'Pedidos'};
   let html='';
+  if(acts.length){
+    html+=`<div style="padding:7px 16px 3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3)">Acciones</div>`;
+    acts.forEach(a=>{html+=`<div onclick="closeGlobalSearch();${a.run}" style="display:flex;align-items:center;gap:11px;padding:9px 14px;cursor:pointer;margin:1px 6px;border-radius:7px" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background='transparent'"><span style="font-size:16px;flex-shrink:0;width:22px;text-align:center">${a.ic}</span><div style="min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text1)">${escapeHtml(a.lb)}</div><div style="font-size:10px;color:var(--text3)">Acción rápida</div></div></div>`;});
+  }
+  const labels={cliente:'Clientes',cot:'Cotizaciones',pedido:'Pedidos'};
   ['cliente','cot','pedido'].forEach(type=>{
     const items=groups[type];if(!items.length) return;
     html+=`<div style="padding:7px 16px 3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3)">${labels[type]}</div>`;
