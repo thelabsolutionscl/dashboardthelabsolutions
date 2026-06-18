@@ -399,6 +399,10 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 /* Tablas grandes: scroll interno con encabezado fijo (sólo desktop; en móvil el thead se oculta) */
 .table-wrap.sticky-head{max-height:calc(100vh - 230px);overflow:auto;}
 .table-wrap.sticky-head thead th{position:sticky;top:0;z-index:6;background:var(--surface);box-shadow:inset 0 -1px 0 var(--border);}
+/* Densidad compacta (toggle en topbar) */
+body.compact table th,body.compact table td{padding:5px 10px;}
+body.compact .kpi-card{padding:12px 14px;}
+body.compact .ov-zone{margin:18px 0 10px;}
 .copy-btn{position:absolute;top:7px;right:7px;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text2);font-size:10px;padding:3px 8px;cursor:pointer;}
 .copy-btn:hover{color:var(--accent);border-color:var(--accent);}
 .modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);animation:modalFade .2s ease-out;}
@@ -1589,6 +1593,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div class="status-dot" id="statusDot"></div>
     <span class="status-text" id="statusText">iniciando...</span>
     <button class="refresh-btn" id="refreshBtn" onclick="loadAllData()">↺ Actualizar</button>
+    <button class="notif-btn" id="densityBtn" onclick="toggleDensity()" title="Densidad" style="font-size:16px;line-height:1;font-weight:700">≡</button>
     <!-- Campana de notificaciones -->
     <div id="notifBtnWrap" style="position:relative">
       <button class="notif-btn" id="notifBtn" onclick="NOTIFY.toggle(event)" title="Notificaciones">
@@ -5175,6 +5180,19 @@ function _rowText(html){return html.replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&'
 function cliShowMore(){_cliCap+=TABLE_PAGE;renderClientes();}
 function cotShowMore(){_cotCap+=TABLE_PAGE;renderCotizaciones();}
 function pedShowMore(){_pedCap+=TABLE_PAGE;renderPedidos(state.pedidoFilter);}
+// ── Densidad de la interfaz (compacto/cómodo), persistida ──
+function applyDensity(){const c=localStorage.getItem('ui_density')==='compact';document.body.classList.toggle('compact',c);const b=document.getElementById('densityBtn');if(b){b.textContent=c?'≣':'≡';b.title=c?'Vista compacta — clic para cómoda':'Vista cómoda — clic para compacta';}}
+function toggleDensity(){const c=localStorage.getItem('ui_density')==='compact';localStorage.setItem('ui_density',c?'comfortable':'compact');applyDensity();}
+// ── Persistencia de orden/búsqueda por pestaña ──
+function _saveUIState(){try{localStorage.setItem('ui_state',JSON.stringify({cli:clientesSort,cot:cotizacionesSort,prov:proveedoresSort,q:_cliQuery}));}catch(e){}}
+function _restoreUIState(){try{const s=JSON.parse(localStorage.getItem('ui_state')||'{}');
+  if(s.cli&&'key' in s.cli){clientesSort.key=s.cli.key;clientesSort.dir=s.cli.dir||1;}
+  if(s.cot&&'key' in s.cot){cotizacionesSort.key=s.cot.key;cotizacionesSort.dir=s.cot.dir||1;}
+  if(s.prov&&'key' in s.prov){proveedoresSort.key=s.prov.key;proveedoresSort.dir=s.prov.dir||1;}
+  if(s.q){_cliQuery=s.q;const i=document.getElementById('clienteSearch');if(i)i.value=s.q;}
+}catch(e){}}
+// Sincroniza las flechas asc/desc de los encabezados con el orden vigente
+function _applySortIndicators(){[['#tab-clientes',clientesSort,/sortClientes\('(\w+)'\)/],['#tab-cotizaciones',cotizacionesSort,/sortCotizaciones\('(\w+)'\)/],['#tab-proveedores',proveedoresSort,/sortProveedores\('(\w+)'\)/]].forEach(([sel,sort,re])=>{document.querySelectorAll(sel+' .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(re)?.[1];th.classList.remove('asc','desc');if(sort.key&&k===sort.key)th.classList.add(sort.dir===1?'asc':'desc');});});}
 window.debInput=debInput;
 let _ovScheduled=false;  // coalescer de renderOverview (ver definición más abajo)
 // ── Red de seguridad global: captura errores no atrapados para que la UI no quede en estado inconsistente ──
@@ -7124,7 +7142,7 @@ async function deleteSelectedClientes(){
   let ok=0,fail=0;for(const id of ids){try{await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];ok++;}catch(e){fail++;}}
   selectedClientes.clear();renderClientes();renderOverview();fail>0?toast(`${ok} eliminados, ${fail} con error`,'info'):toast(`✓ ${ok} eliminados`,'success');
 }
-function sortClientes(key){if(clientesSort.key===key) clientesSort.dir*=-1;else{clientesSort.key=key;clientesSort.dir=1;}document.querySelectorAll('#tab-clientes .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(/sortClientes\('(\w+)'\)/)?.[1];th.classList.remove('asc','desc');if(k===key) th.classList.add(clientesSort.dir===1?'asc':'desc');});renderClientes();}
+function sortClientes(key){if(clientesSort.key===key) clientesSort.dir*=-1;else{clientesSort.key=key;clientesSort.dir=1;}document.querySelectorAll('#tab-clientes .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(/sortClientes\('(\w+)'\)/)?.[1];th.classList.remove('asc','desc');if(k===key) th.classList.add(clientesSort.dir===1?'asc':'desc');});renderClientes();_saveUIState();}
 function getSortValue(c,key){const f=c.fields;switch(key){case 'empresa':return(f['Empresa']||'').toLowerCase();case 'contacto':return(f['Contacto']||'').toLowerCase();case 'etapa':return(f['Etapa venta']||'').toLowerCase();case 'revenue':return f['Revenue total cliente (CLP)']||0;case 'val':return parseInt(f['Valoración cliente'])||0;case 'estado':return(f['Estado cuenta']||'').toLowerCase();case 'venc':return f['Facturas vencidas']||0;default:return '';}}
 function getSortedClientes(){const base=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;if(!clientesSort.key) return base;return[...base].sort((a,b)=>{const va=getSortValue(a,clientesSort.key),vb=getSortValue(b,clientesSort.key);if(typeof va==='number') return(va-vb)*clientesSort.dir;return va.localeCompare(vb,'es')*clientesSort.dir;});}
 // ── NOTAS INTERNAS ──────────────────────────────────────────
@@ -7256,8 +7274,9 @@ function renderClientes(){
   _setRows(tbody,html);
   updateBulkBar();
   renderClientesAnalytics();
+  _applySortIndicators();
 }
-function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes();}
+function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes();_saveUIState();}
 async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
@@ -7778,7 +7797,7 @@ async function deleteCliente(id,nombre){
 function sortCotizaciones(key){
   if(cotizacionesSort.key===key) cotizacionesSort.dir*=-1;else{cotizacionesSort.key=key;cotizacionesSort.dir=1;}
   document.querySelectorAll('#tab-cotizaciones .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(/sortCotizaciones\('(\w+)'\)/)?.[1];th.classList.remove('asc','desc');if(k===key) th.classList.add(cotizacionesSort.dir===1?'asc':'desc');});
-  renderCotizaciones();
+  renderCotizaciones();_saveUIState();
 }
 function getSortedCotizaciones(){
   const base=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
@@ -7818,7 +7837,7 @@ function renderCotizaciones(){
   const shown=sorted.slice(0,_cotCap);
   let html=shown.map(c=>buildCotRow(c)).join('');
   if(sorted.length>_cotCap) html+=_loadMoreRow(sorted.length-_cotCap,11,'cotShowMore()');
-  _setRows(tbody,html);renderCotAnalytics();
+  _setRows(tbody,html);renderCotAnalytics();_applySortIndicators();
 }
 function resolveVendedorName(vid){if(!vid) return '—';const p=PERSONAS.find(x=>x.id===vid.toLowerCase().trim());return p?p.nombre:vid;}
 function buildCotRow(c){
@@ -14650,7 +14669,7 @@ function pvCatBadge(cat){
 function sortProveedores(key){
   if(proveedoresSort.key===key) proveedoresSort.dir*=-1;
   else{proveedoresSort.key=key;proveedoresSort.dir=1;}
-  renderProveedores();
+  renderProveedores();_saveUIState();
 }
 function getSortedProveedores(list){
   if(!proveedoresSort.key) return list;
@@ -14685,6 +14704,7 @@ function renderProveedores(){
   if(!sorted.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
   renderProveedoresAnalytics();
+  _applySortIndicators();
 }
 function buildProveedorRow(p){
   const f=p.fields,id=p.id;
@@ -16519,6 +16539,7 @@ function injectModalCloseButtons(){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
+  try{applyDensity();_restoreUIState();}catch(e){}
   initSidebarTooltips();
   initMobileDockSwipe();
   injectModalCloseButtons();
