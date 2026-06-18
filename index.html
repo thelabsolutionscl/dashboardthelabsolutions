@@ -11336,6 +11336,72 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){closeGlobalSearch();closeMetaModal();}
 });
 
+// ── ACCESIBILIDAD DE MODALES (focus trap, Escape, restauración de foco, ARIA) ──
+// Capa no invasiva sobre los overlays .modal-overlay: no toca los call-sites de
+// apertura/cierre; observa el cambio de display para gestionar foco y aria.
+(function(){
+  const SEL='a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  const _prevFocus=new WeakMap();
+  const _visible=el=>{ try{ return getComputedStyle(el).display!=='none' && el.offsetParent!==null; }catch(e){ return false; } };
+  // Modal visible "más arriba" (último en orden de documento entre los visibles)
+  function topModal(){
+    const all=document.querySelectorAll('.modal-overlay');
+    for(let i=all.length-1;i>=0;i--){ if(_visible(all[i])) return all[i]; }
+    return null;
+  }
+  function focusables(m){ return Array.prototype.slice.call(m.querySelectorAll(SEL)).filter(el=>el.offsetParent!==null); }
+
+  // Escape: cierra el modal superior usando su botón de cierre si existe (respeta
+  // la lógica de limpieza del modal); si no, oculta el overlay como último recurso.
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape') return;
+    const m=topModal(); if(!m) return;
+    const btn=m.querySelector('.modal-close,.modal-x-auto,[data-modal-close]');
+    if(btn){ e.preventDefault(); btn.click(); }
+    else { m.style.display='none'; }
+  });
+  // Tab: atrapa el foco dentro del modal superior
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Tab') return;
+    const m=topModal(); if(!m) return;
+    const f=focusables(m); if(!f.length) return;
+    const first=f[0], last=f[f.length-1];
+    if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+  });
+
+  function initModals(){
+    document.querySelectorAll('.modal-overlay').forEach(m=>{
+      if(m._a11y) return; m._a11y=true;
+      if(!m.getAttribute('role')) m.setAttribute('role','dialog');
+      m.setAttribute('aria-modal','true');
+      const titulo=m.querySelector('.modal-title,.modal-header,h1,h2,h3');
+      if(titulo && !m.getAttribute('aria-label') && !m.getAttribute('aria-labelledby')){
+        if(!titulo.id) titulo.id='a11ytt_'+Math.random().toString(36).slice(2,8);
+        m.setAttribute('aria-labelledby',titulo.id);
+      }
+      const obs=new MutationObserver(()=>{
+        const vis=_visible(m);
+        if(vis && !m._a11yVis){
+          m._a11yVis=true;
+          _prevFocus.set(m, document.activeElement);
+          // Enfoca el contenedor (tabindex -1) en vez de un input: da contexto al
+          // lector de pantalla sin abrir el teclado del móvil.
+          if(m.getAttribute('tabindex')==null) m.setAttribute('tabindex','-1');
+          setTimeout(()=>{ try{ m.focus({preventScroll:true}); }catch(e){} },40);
+        } else if(!vis && m._a11yVis){
+          m._a11yVis=false;
+          const p=_prevFocus.get(m);
+          if(p && typeof p.focus==='function' && document.contains(p)){ try{ p.focus({preventScroll:true}); }catch(e){} }
+        }
+      });
+      obs.observe(m,{attributes:true,attributeFilter:['style','class']});
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',initModals);
+  else initModals();
+})();
+
 // ── AUTO-REFRESH INTELIGENTE (Page Visibility) ─────────────────────────
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){

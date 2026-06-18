@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Syntax check (inline scripts)
+        run: |
+          node -e '
+            const fs=require("fs");
+            const html=fs.readFileSync("index.html","utf8");
+            const re=/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
+            let m,i=0,bad=0;
+            while((m=re.exec(html))){
+              const head=m[0].slice(0,m[0].indexOf(">"));
+              if(/\bsrc\s*=/.test(head)) continue;
+              i++; fs.writeFileSync("/tmp/b"+i+".js",m[1]);
+              try{ require("child_process").execSync("node --check /tmp/b"+i+".js",{stdio:"pipe"}); }
+              catch(e){ bad++; console.log("BLOCK "+i+" FAILED:\n"+e.stdout+e.stderr); }
+            }
+            console.log("Inline script blocks:",i,"| Failed:",bad);
+            process.exit(bad?1:0);
+          '
+
+      - name: Run calculation tests
+        run: node tests/calc.test.js
