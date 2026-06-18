@@ -408,6 +408,10 @@ body.compact .ov-zone{margin:18px 0 10px;}
 .cd-tab:hover{color:var(--text2);}
 .cd-tab.active{color:var(--text);border-bottom-color:var(--accent);}
 .cd-hidden{display:none!important;}
+/* Skeleton shimmer para carga de tablas */
+.skel-row td{padding:8px 16px;}
+.skel-bar{height:14px;border-radius:5px;background:linear-gradient(90deg,var(--surface2) 25%,var(--surface3) 50%,var(--surface2) 75%);background-size:200% 100%;animation:skelShimmer 1.2s infinite;}
+@keyframes skelShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .copy-btn{position:absolute;top:7px;right:7px;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text2);font-size:10px;padding:3px 8px;cursor:pointer;}
 .copy-btn:hover{color:var(--accent);border-color:var(--accent);}
 .modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);animation:modalFade .2s ease-out;}
@@ -2121,7 +2125,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <th>Vendedor</th>
           <th>Acc.</th>
         </tr></thead>
-        <tbody id="clientesTableBody"><tr><td colspan="10"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody>
+        <tbody id="clientesTableBody"><tr class="skel-row"><td colspan="10"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="10"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="10"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="10"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="10"><div class="skel-bar"></div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -2153,7 +2157,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <th>Vendedor</th>
       <th>Acciones</th>
     </tr></thead>
-    <tbody id="cotsTableBodyFull"><tr><td colspan="11"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div>
+    <tbody id="cotsTableBodyFull"><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr></tbody></table></div>
   </div>
   <div id="cotAnalytics"></div>
 </div>
@@ -2496,7 +2500,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <th class="sort-th" onclick="sortProveedores('plazo')">Plazo</th>
           <th>Acc.</th>
         </tr></thead>
-        <tbody id="proveedoresTableBody"><tr><td colspan="11"><div class="loading-state"><div class="spinner"></div> cargando...</div></td></tr></tbody>
+        <tbody id="proveedoresTableBody"><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -5176,6 +5180,16 @@ function debounce(fn,ms){ let t; return function(){ const a=arguments,c=this; cl
 // no cambió respecto a la última vez en ese mismo contenedor. Todos los
 // escritores de un contenedor memoizado deben pasar por aquí para no desincronizar.
 function _setRows(el,html){ if(!el) return; if(el._lastRows===html){ return; } el._lastRows=html; el.innerHTML=html; }
+// ── Consistencia: formato de fecha, empty-state, skeleton y flash de filas ──
+function formatFecha(d){if(!d)return '';try{const s=String(d);const dt=new Date(/^\d{4}-\d{2}-\d{2}$/.test(s)?s+'T00:00:00':s);if(isNaN(dt))return s;return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'});}catch(e){return String(d);}}
+function emptyState(iconId,msg,btnHtml){return `<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#${iconId}"/></svg></div><div>${msg}</div>${btnHtml||''}</div>`;}
+function _skelRows(cols,rows){rows=rows||6;let h='';for(let i=0;i<rows;i++)h+=`<tr class="skel-row"><td colspan="${cols}"><div class="skel-bar"></div></td></tr>`;return h;}
+// Ids de registros que cambiaron en el último refresco incremental, para resaltarlos
+const _flashIds=new Set();
+function _registerFlash(records){if(!records||!records.length)return;records.forEach(r=>r&&r.id&&_flashIds.add(r.id));setTimeout(()=>_flashIds.clear(),6000);}
+function _flashCls(id){return _flashIds.has(id)?' row-flash':'';}
+// Re-renderiza la tabla del tab activo (usado tras un merge incremental para mostrar+resaltar cambios)
+function _reRenderActiveList(){const a=(document.querySelector('.tab-panel.active')||{}).id||'';try{if(a==='tab-clientes')renderClientes();else if(a==='tab-cotizaciones')renderCotizaciones();else if(a==='tab-pedidos')renderPedidos();else if(a==='tab-proveedores')renderProveedores();}catch(e){}}
 // ── Paginación progresiva ("mostrar más") para las tablas grandes ──
 // Limita las filas pintadas y evita parsear/insertar cientos de <tr> de golpe.
 // La selección (Sets por id) y la búsqueda (basada en datos) se preservan.
@@ -6495,6 +6509,7 @@ function _mergeCoreState(res){
   if(rRes.status==='fulfilled') state.reportes=_mergeRecords(state.reportes,rRes.value.records);
   if(pvRes.status==='fulfilled') state.proveedores=_mergeRecords(state.proveedores,pvRes.value.records);
   if(monRes.status==='fulfilled' && (monRes.value.records||[]).length) _applyMonitorSistema(monRes.value.records);
+  try{if(cRes.status==='fulfilled')_registerFlash(cRes.value.records);if(coRes.status==='fulfilled')_registerFlash(coRes.value.records);if(pRes.status==='fulfilled')_registerFlash(pRes.value.records);if(pvRes.status==='fulfilled')_registerFlash(pvRes.value.records);}catch(e){}
 }
 
 async function loadAllData(){
@@ -6566,6 +6581,7 @@ async function loadAllDataSilent(){
         airtableFetchSince('Facturas',sinceIso)
       ]);
       _mergeCoreState(res);
+      _reRenderActiveList();
     }
     state.lastUpdateTs=Date.now();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;
@@ -6609,7 +6625,7 @@ async function _callClaudeRaw(system,user,k){const sk=k.replace(/[^\x20-\x7E]/g,
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
 function margenBadge(m){if(m===null) return '—';return`<span class="badge ${m>=35?'badge-green':m>=20?'badge-yellow':'badge-red'}">${m.toFixed(0)}%</span>`;}
 function resolveClienteName(f){if(!f) return '—';if(typeof f==='string') return f;if(Array.isArray(f)&&f.length>0) return(state.clientesById&&state.clientesById[f[0]])||'(cliente)';return '—';}
-function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-yellow','Confirmado':'badge-yellow','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Listo para despacho':'badge-green','Pendiente':'badge-gray','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
+function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-yellow','Confirmado':'badge-yellow','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Listo para despacho':'badge-green','Pendiente':'badge-gray','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green','Cancelado':'badge-red','Cancelada':'badge-red','Anulada':'badge-red','Negociación':'badge-yellow','Contactado':'badge-yellow','Propuesta enviada':'badge-yellow','Cliente activo':'badge-green','Cliente inactivo':'badge-gray','Perdido':'badge-gray','Con deuda':'badge-yellow','Cobrada':'badge-green','Pagada':'badge-green','Pagado':'badge-green','Vencida':'badge-red','QA rechazado':'badge-red','QA pendiente':'badge-yellow'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
 function formatCLP(v){if(!v) return '$0';return '$'+Math.round(v).toLocaleString('es-CL');}
 function escapeHtml(s){if(s===null||s===undefined) return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function safeHref(v){if(!v)return '';const s=String(v).trim();return(/^https?:\/\//i.test(s)||/^mailto:/i.test(s)||/^tel:/i.test(s))?s.replace(/"/g,'&quot;').replace(/'/g,'&#39;'):'';}
@@ -7259,7 +7275,7 @@ function buildClienteRow(c){
   const esInactivo=['Cliente inactivo','Perdido'].includes(f['Etapa venta']||'');
   const tieneDeuda=(f['Facturas vencidas']||0)>=1;
   const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(esInactivo?`<button class="act-item act-item-cyan" onclick="runClienteWinbackAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reconectar IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
-  return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}">
+  return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}${_flashCls(c.id)}">
     <td class="td-chk" style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="td-empresa"><strong>${escapeHtml(f['Empresa']||'—')}</strong><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
     <td class="td-contacto" data-label="Contacto">${escapeHtml(f['Contacto']||'—')}</td>
@@ -7477,7 +7493,7 @@ function renderClienteFacturas(clienteId,empresa){
       const esVencida=f['Estado Pago']!=='Cobrada'&&dias>0;
       const rowStyle=esVencida?'border-bottom:1px solid var(--border);background:rgba(255,68,68,0.05)':'border-bottom:1px solid var(--border)';
       const waMsg=clienteTel&&esVencida?encodeURIComponent(`Estimados, les recordamos que la factura N°${folio} por ${formatCLP(f['Total']||0)} está pendiente de pago. Quedo atento para coordinar. Gracias.`):'';
-      return`<tr style="${rowStyle}"${notasTip}>
+      return`<tr data-id="${id}" class="${_flashCls(id).trim()}" style="${rowStyle}"${notasTip}>
         <td style="padding:6px 4px">
           <strong style="color:var(--accent)">${escapeHtml(tipoNum2)}</strong>
           ${tipoNombre?`<span style="color:var(--text3);font-size:10px;font-weight:400"> ${escapeHtml(tipoNombre)}</span>`:''}
@@ -7699,7 +7715,7 @@ function cdTimelineFilter(mode){
       <div style="font-weight:600;color:var(--text1)">${escapeHtml(it.label)}</div>
       <div style="color:var(--text3);font-size:11px;margin-top:2px">${it.sub}</div>
     </div>
-    <div style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0">${it.date||'—'}</div>
+    <div style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0">${it.date?formatFecha(it.date):'—'}</div>
   </div>`).join('');
 }
 function closeClienteDetalle(){document.getElementById('clienteDetalleModal').style.display='none';}
@@ -7896,7 +7912,7 @@ function buildCotRow(c){
   const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}${winbackItem}<button class="act-item" onclick="openEditCot('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar</button><button class="act-item" onclick="startEditCotFlow('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;✏️ Editar (guiado)</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> &nbsp;Descargar PDF</button><button class="act-item act-item-green" onclick="MAIL.sendCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-correo"/></svg> &nbsp;Enviar por correo</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar</button></div></div>`;
   const vendNom=resolveVendedorName(f['Vendedor']||'');
   const _aliasEsc=escapeHtml(f['Alias / Título']||'');
-  return`<tr data-id="${c.id}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Alias / Título" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)">${_aliasEsc?`<span title="${_aliasEsc}">${_aliasEsc}</span>`:'<span style="color:var(--text3)">—</span>'}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${escapeHtml(f['Fecha vencimiento']||'—')}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
+  return`<tr data-id="${c.id}" class="${_flashCls(c.id).trim()}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Alias / Título" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)">${_aliasEsc?`<span title="${_aliasEsc}">${_aliasEsc}</span>`:'<span style="color:var(--text3)">—</span>'}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${f['Fecha vencimiento']?formatFecha(f['Fecha vencimiento']):'—'}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
   <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${actMenu}</div></td></tr>`;
 }
 // Avanza la etapa del cliente solo si su etapa actual está en la lista `desde` (no retrocede etapas)
@@ -9755,7 +9771,7 @@ function renderPedidos(filter){
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
-    return`<tr data-id="${p.id}" class="${sel?'row-selected':''}">
+    return`<tr data-id="${p.id}" class="${sel?'row-selected':''}${_flashCls(p.id)}">
     <td style="text-align:center"><input type="checkbox" class="row-chk" data-id="${p.id}" ${sel?'checked':''} onchange="togglePedidoRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Estado">${estadoBadge(estado)}</td><td class="td-equipo" data-label="Equipo">${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
     <td>${renderProveedorCell(p.id,f['Proveedor']||'')}</td>
