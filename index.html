@@ -393,6 +393,12 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .ai-response{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;line-height:1.7;white-space:pre-wrap;min-height:90px;max-height:380px;overflow-y:auto;}
 .ai-response.empty{color:var(--text3);font-style:italic;}
 .ai-response-wrap{position:relative;}
+.ov-zone{display:flex;align-items:center;gap:12px;margin:30px 0 14px;}
+.ov-zone>span{font-size:11px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--text3);white-space:nowrap;display:flex;align-items:center;gap:7px;}
+.ov-zone::after{content:"";flex:1;height:1px;background:var(--border);}
+/* Tablas grandes: scroll interno con encabezado fijo (sólo desktop; en móvil el thead se oculta) */
+.table-wrap.sticky-head{max-height:calc(100vh - 230px);overflow:auto;}
+.table-wrap.sticky-head thead th{position:sticky;top:0;z-index:6;background:var(--surface);box-shadow:inset 0 -1px 0 var(--border);}
 .copy-btn{position:absolute;top:7px;right:7px;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text2);font-size:10px;padding:3px 8px;cursor:pointer;}
 .copy-btn:hover{color:var(--accent);border-color:var(--accent);}
 .modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);animation:modalFade .2s ease-out;}
@@ -502,6 +508,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .scroll-x-wrap::after{content:'';position:absolute;top:0;right:0;bottom:0;width:32px;background:linear-gradient(to right,transparent,rgba(14,14,14,0.85));pointer-events:none;border-radius:0 8px 8px 0;}
   /* Tablas de datos → tarjetas apiladas en móvil */
   .table-wrap{overflow-x:visible;}
+  .table-wrap.sticky-head{max-height:none;overflow:visible;}
   .table-wrap table,.table-wrap tbody{display:block;width:100%;}
   .table-wrap thead{display:none;}
   .table-wrap tbody tr{display:block;margin-bottom:10px;border:1px solid var(--border2);border-radius:9px;padding:8px 12px;background:var(--surface2);}
@@ -1921,6 +1928,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
     <div id="accionesHoyList" style="padding:8px 12px;display:flex;flex-direction:column;gap:6px"></div>
   </div>
+  <div class="ov-zone"><span>📊 Comercial</span></div>
   <div class="data-grid">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pipeline Pedidos</span><span class="card-badge" id="pedActivosBadge">—</span></div><div id="pipelineArea"><div class="loading-state"><div class="spinner"></div> cargando...</div></div></div>
     <div class="card" onclick="switchTab('cotizaciones')" style="cursor:pointer"><div class="card-header"><span class="card-title">Cotizaciones Recientes</span><span class="card-badge" id="cotsBadge">—</span></div><div class="table-wrap"><table><thead><tr><th>N°</th><th>Cliente</th><th>Total Neto</th><th>Estado</th><th>Margen</th></tr></thead><tbody id="cotTableBody"><tr><td colspan="5"><div class="loading-state"><div class="spinner"></div></div></td></tr></tbody></table></div></div>
@@ -1934,6 +1942,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
     <div id="ovFunnelBody" style="padding:16px"></div>
   </div>
+  <div class="ov-zone"><span>🚦 Sistema &amp; IA</span></div>
   <div class="card" style="margin-bottom:24px;cursor:pointer" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'center'})"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5" style="vertical-align:middle;margin-right:5px;margin-bottom:1px"><use href="#icon-warning"/></svg>Alertas del Sistema</span></div><div id="alertasArea"><div class="loading-state"><div class="spinner"></div></div></div></div>
   <!-- ── Reporte ejecutivo CEO (IA) ── -->
   <div class="card" style="margin-bottom:24px" id="ovCeoCard">
@@ -1947,12 +1956,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
     <div id="ovCeoBody" style="padding:16px;font-size:12px;color:var(--text2);white-space:pre-wrap;word-break:break-word;overflow-x:auto;line-height:1.6">Genera un resumen ejecutivo (revenue, márgenes, pedidos atrasados, prioridades) con los datos reales de esta semana.</div>
   </div>
+  <div class="ov-zone"><span>📈 Tendencias</span></div>
   <div class="data-grid">
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Pedidos por Estado</span></div><div id="chartEstados" style="padding:16px"></div></div>
     <div class="card" onclick="switchTab('pedidos')" style="cursor:pointer"><div class="card-header"><span class="card-title">Revenue últimas 4 semanas</span></div><div id="chartRevenue" style="padding:16px"></div></div>
   </div>
 
   <!-- ── Snapshots: Finanzas + Web ── -->
+  <div class="ov-zone"><span>🗂️ Áreas del negocio</span></div>
   <div class="data-grid">
     <!-- Finanzas snapshot -->
     <div class="card" id="overview-fin-card" onclick="switchTab('finanzas')" style="cursor:pointer">
@@ -2086,7 +2097,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('clientes')">⬇ CSV</button>
       </div>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap sticky-head">
       <table>
         <thead><tr>
           <th style="width:36px;text-align:center"><input type="checkbox" id="selectAllChk" onchange="toggleSelectAll(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
@@ -2119,7 +2130,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('cotizaciones')">⬇ CSV</button>
       </div>
     </div>
-    <div class="table-wrap"><table><thead><tr>
+    <div class="table-wrap sticky-head"><table><thead><tr>
       <th class="sort-th" onclick="sortCotizaciones('num')">N° Cot.</th>
       <th class="sort-th" onclick="sortCotizaciones('alias')">Alias / Título</th>
       <th class="sort-th" onclick="sortCotizaciones('cliente')">Cliente</th>
@@ -2168,7 +2179,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
   <div id="pedidosPlanificacion" style="display:none"></div>
-  <div id="pedidosTableWrap" class="card"><div class="table-wrap">
+  <div id="pedidosTableWrap" class="card"><div class="table-wrap sticky-head">
     <table><thead><tr>
       <th style="width:36px;text-align:center"><input type="checkbox" id="pedidosSelectAll" onchange="toggleSelectAllPedidos(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
       <th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th><th>Entrega</th><th>Acciones</th>
@@ -2460,7 +2471,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         </div>
       </div>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap sticky-head">
       <table>
         <thead><tr>
           <th style="width:36px;text-align:center"><input type="checkbox" id="proveedoresSelectAll" onchange="toggleSelectAllProveedores(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
@@ -6809,9 +6820,23 @@ function renderKPIs(){
     +_cot.filter(c=>(c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h).length
     +_cot.filter(c=>{const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return false;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return false;const cl=_cli.find(x=>x.id===cid);return cl?.fields['Estado cuenta']==='Bloqueado';}).length;
 
+  // ── Tendencia de alertas: snapshot semanal en localStorage (acumula histórico) ──
+  let _kpiHist;try{_kpiHist=JSON.parse(localStorage.getItem('kpiHist')||'[]');}catch(e){_kpiHist=[];}
+  const _wk=(typeof _isoWeekKey==='function')?_isoWeekKey():String(weekStart.getTime());
+  const _lastH=_kpiHist[_kpiHist.length-1];
+  if(_lastH&&_lastH.wk===_wk){_lastH.alertas=alertas;}else{_kpiHist.push({wk:_wk,alertas});}
+  if(_kpiHist.length>8)_kpiHist=_kpiHist.slice(-8);
+  try{localStorage.setItem('kpiHist',JSON.stringify(_kpiHist));}catch(e){}
+  const _prevH=[..._kpiHist].reverse().find(e=>e.wk!==_wk);
+  const alertasPrev=_prevH?_prevH.alertas:null;
+
   // ── Margen ────────────────────────────────────────────────────────────
   const cotM=_cot.filter(c=>getMargenCot(c.fields)!==null);
   const avgM=cotM.length>0?cotM.reduce((sum,c)=>sum+getMargenCot(c.fields),0)/cotM.length:0;
+  const _cotMSem=_cot.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart&&getMargenCot(c.fields)!==null);
+  const avgMSem=_cotMSem.length?_cotMSem.reduce((s,c)=>s+getMargenCot(c.fields),0)/_cotMSem.length:0;
+  const _cotMPrev=_cot.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart&&getMargenCot(c.fields)!==null;});
+  const avgMPrev=_cotMPrev.length?_cotMPrev.reduce((s,c)=>s+getMargenCot(c.fields),0)/_cotMPrev.length:0;
 
   // ── Delta helpers ─────────────────────────────────────────────────────
   // Percentage change badge (revenue)
@@ -6829,6 +6854,9 @@ function renderKPIs(){
     const arrow=d>0?'↑ ':d<0?'↓ ':'';
     return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${arrow}${d>=0?'+':''}${d} ${label}</div>`;
   };
+  // Puntos porcentuales (margen, más=mejor) y alertas (menos=mejor, color invertido)
+  const ptsBadge=(cur,prev,hasPrev)=>{if(!hasPrev) return '';const d=Math.round(cur-prev);if(d===0) return '<div style="font-size:9px;color:var(--text3);font-weight:700;margin-top:4px">= vs sem. ant.</div>';const col=d>0?'var(--accent3)':'var(--danger)';return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${d>0?'↑ +':'↓ '}${d} pts vs sem. ant.</div>`;};
+  const alertBadge=(cur,prev)=>{if(prev==null) return '';const d=cur-prev;if(d===0) return '<div style="font-size:9px;color:var(--text3);font-weight:700;margin-top:4px">= vs sem. ant.</div>';const col=d<0?'var(--accent3)':'var(--danger)';return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${d<0?'↓ ':'↑ +'}${d} vs sem. ant.</div>`;};
 
   // ── Metas semanal + mensual ───────────────────────────────────────────
   const revMeta=parseInt(localStorage.getItem('revMetaSemanal'))||0;
@@ -6869,8 +6897,8 @@ function renderKPIs(){
     <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}">` + _ki('icon-pedidos') + `<div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}</div>
     <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes">${_ki('icon-message')}<div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}</div>
     <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes">${_ki('icon-clientes')}<div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}</div>
-    <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas">${_ki('icon-warning')}<div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div></div>
-    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div></div>`;
+    <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas">${_ki('icon-warning')}<div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div>${alertBadge(alertas,alertasPrev)}</div>
+    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div>${ptsBadge(avgMSem,avgMPrev,_cotMPrev.length>0)}</div>`;
   updateDockBadges();
 }
 function renderPipelineArea(){
@@ -7259,7 +7287,7 @@ function openClienteDetalle(id){
   document.getElementById('cdFinanciero').innerHTML=[row('Revenue',formatCLP(f['Revenue total cliente (CLP)']||0)),row('Fact. venc.',String(venc)),row('Estado cta',f['Estado cuenta'])].filter(Boolean).join('');
   const _actTxt=_lastStr?`hace ${_diasAct} día${_diasAct===1?'':'s'}`:'sin registro';
   document.getElementById('cdCRM').innerHTML=[row('Etapa',f['Etapa venta']),row('Valoración','★'.repeat(val)+'☆'.repeat(5-val)),row('Industria',f['Industria / Rubro']),row('Últ. activ.',_actTxt+(_lastStr?` · ${_lastStr}`:'')),row('Cotiz./Ped.',`${_cliCots.length} / ${_cliPeds.length}`)].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
-  const notasEl=document.getElementById('cdNotas');notasEl.textContent=f['Notas internas']||'Sin notas';notasEl.style.color=f['Notas internas']?'var(--text2)':'var(--text3)';
+  const notasEl=document.getElementById('cdNotas');if(f['Notas internas']){notasEl.style.whiteSpace='normal';notasEl.innerHTML=formatRichText(f['Notas internas']);notasEl.style.color='var(--text2)';}else{notasEl.textContent='Sin notas';notasEl.style.color='var(--text3)';}
   cdCurrentId=id;
   renderClienteTimeline(id,f['Empresa']||''); cdCurrentEmpresa=f['Empresa']||'';
   _facFiltro='todas'; _facBuscar='';
@@ -11186,6 +11214,27 @@ function formatAgentReport(raw){
 }
 // Alias retro-compatible: el reporte CEO usa el mismo motor genérico.
 function formatCeoReport(raw){return formatAgentReport(raw);}
+// Formateador LIGERO para texto conversacional / notas: negrita, código, enlaces,
+// viñetas, listas numeradas y saltos de línea — SIN tarjetas de sección ni colores
+// forzados (hereda el color del contenedor). Ideal para KAI y notas internas.
+function formatRichText(raw){
+  if(!raw||!String(raw).trim()) return '';
+  const inl=s=>{let h=escapeHtml(s);
+    h=h.replace(/\*\*([^*]+?)\*\*/g,'<strong>$1</strong>').replace(/__([^_]+?)__/g,'<strong>$1</strong>').replace(/\*\*/g,'');
+    h=h.replace(/`([^`]+)`/g,'<code style="background:var(--surface3);padding:1px 5px;border-radius:4px">$1</code>');
+    h=h.replace(/\bhttps?:\/\/[^\s<]+/g,m=>`<a href="${m}" target="_blank" rel="noopener" style="color:var(--accent);word-break:break-all">${m}</a>`);
+    return h;};
+  let html='';
+  String(raw).replace(/\r/g,'').split('\n').forEach(rw=>{const l=rw.trim();let m;
+    if(!l){html+='<div style="height:6px"></div>';return;}
+    if(/^[-–—_=*•·\s]{3,}$/.test(l)) return;
+    if((m=l.match(/^#{1,4}\s+(.+)$/))) html+=`<div style="font-weight:700;color:var(--text);margin:7px 0 2px">${inl(m[1].replace(/\*\*/g,''))}</div>`;
+    else if((m=l.match(/^[-*]?\s*\[([ xX])\]\s+(.+)$/))){const d=m[1].toLowerCase()==='x';html+=`<div style="display:flex;gap:7px;margin:3px 0"><span style="flex-shrink:0;color:${d?'var(--success)':'var(--text3)'}">${d?'☑':'☐'}</span><span>${inl(m[2])}</span></div>`;}
+    else if((m=l.match(/^[\-\*•–·]\s+(.+)$/))) html+=`<div style="display:flex;gap:7px;margin:3px 0"><span style="color:var(--accent);flex-shrink:0">•</span><span>${inl(m[1])}</span></div>`;
+    else if((m=l.match(/^(\d+)[\.\)]\s+(.+)$/))) html+=`<div style="display:flex;gap:7px;margin:3px 0"><span style="color:var(--accent);font-weight:700;flex-shrink:0">${m[1]}.</span><span>${inl(m[2])}</span></div>`;
+    else html+=`<div style="margin:3px 0;line-height:1.55">${inl(l)}</div>`;});
+  return html;
+}
 function ovRenderUltimoReporteCEO(){
   const chk=document.getElementById('ovCeoAuto');if(chk)chk.checked=localStorage.getItem('ceo_auto_weekly')==='1';
   const body=document.getElementById('ovCeoBody');if(!body)return;
@@ -14684,7 +14733,7 @@ function buildProveedorRow(p){
           ${pvTotalValor>0?`<div style="font-size:11px"><span style="color:var(--text3)">Total pedidos:</span> <strong>${formatCLP(pvTotalValor)}</strong> (${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''})</div>`:''}
           ${pvLastOrder?`<div style="font-size:11px"><span style="color:var(--text3)">Último pedido:</span> ${escapeHtml(pvLastOrder)}</div>`:''}
           ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
-          ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px;white-space:pre-wrap">${escapeHtml(f['Notas'])}</div>`:''}
+          ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px">${formatRichText(f['Notas'])}</div>`:''}
         </div>
         ${pedCount>0?`<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:6px">Pedidos activos vinculados</div><div style="display:flex;flex-direction:column;gap:4px">${pedidosActivos.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:11px;background:var(--surface3);border-radius:5px;padding:5px 10px"><span class="mono" style="color:var(--accent)">${escapeHtml(x.fields['N° Pedido']||'—')}</span><span style="color:var(--text2)">${escapeHtml(resolveClienteName(x.fields['Cliente']))}</span><span style="color:var(--text3)">${x.fields['Estado pedido']||'—'}</span>${x.fields['Fecha entrega']?`<span style="color:var(--text3);margin-left:auto">📅 ${x.fields['Fecha entrega']}</span>`:''}</div>`).join('')}</div></div>`:''}
       </div>
@@ -20424,7 +20473,7 @@ function checkClientePortal(){
           <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;background:${stageColors[est]||'var(--surface3)'}22;color:${stageColors[est]||'var(--text3)'};">${est}</span>
         </div>
         ${pf['Fecha entrega']?`<div style="font-size:11px;color:${atras&&est!=='Despachado'?'var(--danger)':'var(--text3)'};margin-bottom:6px">📅 Entrega: ${pf['Fecha entrega']}${atras&&est!=='Despachado'?' ⚠ En proceso de despacho':''}</div>`:''}
-        ${pf['Notas']?`<div style="font-size:11px;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px;white-space:pre-wrap">${escapeHtml(pf['Notas']||'')}</div>`:''}
+        ${pf['Notas']?`<div style="font-size:11px;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px">${formatRichText(pf['Notas']||'')}</div>`:''}
       </div>`;
     }).join(''):'<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px">Sin pedidos registrados</div>';
     document.getElementById('portalContent').innerHTML=`
@@ -21243,7 +21292,7 @@ CAPACIDADES Y REGLAS:
       const fullInput=ctx?`${ctx}\n\nCONSULTA: ${consulta}`:consulta;
       const result=await callClaude(cfg.sys,fullInput);
       $res.classList.remove('jvs-cursor');
-      $res.textContent=`[${cfg.label}]\n${result}`;
+      $res.innerHTML=`<div style="font-size:10px;color:var(--text3);font-weight:700;margin-bottom:4px">[${escapeHtml(cfg.label)}]</div>`+formatRichText(result);
       $log.scrollTop=$log.scrollHeight;
       try{ const h=JV.history; if(h.length&&h[h.length-1].role==='assistant'){ h[h.length-1].content+='\n\n[Resultado de '+cfg.label+']: '+result; _kaiPersist(); } }catch(e){}
       try{ if(typeof AGENT_LOG!=='undefined') AGENT_LOG.add(cfg.label,'KAI: '+consulta,result); }catch(e){}
@@ -21389,7 +21438,7 @@ CAPACIDADES Y REGLAS:
       const _toolBtns=(JV._btns||[]).slice();
       const clean=execActions(JV._accum||'Listo.');
       JV._btns=_toolBtns.concat(JV._btns||[]);
-      $typ.textContent=clean||'Listo.';
+      $typ.innerHTML=formatRichText(clean||'Listo.');
       _kaiRenderButtons(JV._btns);
       $log.scrollTop=$log.scrollHeight;
       JV.history.push({role:'assistant',content:(clean||'Listo.')});
