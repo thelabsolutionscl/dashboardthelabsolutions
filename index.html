@@ -751,7 +751,14 @@ body.kiosk #maquinaMonGrid .pbar{height:14px!important}
 .mail-search-input{width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 10px 6px 28px;font-size:12px;color:var(--text);font-family:inherit;outline:none;box-sizing:border-box;}
 .mail-search-input:focus{border-color:var(--accent);}
 .mail-list{flex:1;overflow-y:auto;}
-.mail-item{padding:9px 10px;border-bottom:1px solid var(--border2);cursor:pointer;transition:background .1s;}
+.mail-item{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border-bottom:1px solid var(--border2);cursor:pointer;transition:background .1s;}
+.mail-item-chk{flex-shrink:0;margin-top:2px;width:15px;height:15px;cursor:pointer;accent-color:var(--accent);}
+.mail-item-main{flex:1;min-width:0;}
+.mail-item.sel-checked{background:rgba(0,243,255,.05);}
+/* Barra de selección múltiple de la bandeja */
+.mail-sel-bar{display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface2);border-bottom:1px solid var(--border2);font-size:12px;}
+.mail-sel-bar label{display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text2);white-space:nowrap;}
+.mail-sel-bar input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:15px;height:15px;}
 .mail-item:hover{background:rgba(255,255,255,.03);}
 .mail-item.selected{background:rgba(0,243,255,.07);border-left:2px solid var(--accent);padding-left:8px;}
 .mail-item.unread .mail-item-from{font-weight:700;color:var(--text);}
@@ -5034,6 +5041,12 @@ function _reportarResultados(muts) {
           <input class="mail-search-input" id="mailSearchInput" type="text" placeholder="Buscar en bandeja..."
             oninput="MAIL.onSearchInput(this.value)">
         </div>
+      </div>
+      <div class="mail-sel-bar" id="mailSelBar" style="display:none">
+        <label><input type="checkbox" id="mailSelAllChk" onclick="MAIL.toggleSelectAll(this.checked)"> <span id="mailSelCount">0 seleccionados</span></label>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="MAIL.trashSelected()"><svg class="dashboard-icon" width="13" height="13" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
+        <button class="btn btn-ghost btn-sm" onclick="MAIL.clearSelection()">Cancelar</button>
       </div>
       <div class="mail-list" id="mailList">
         <div class="loading-state" style="padding:30px"><div class="spinner"></div></div>
@@ -16723,6 +16736,7 @@ const MAIL={
   async loadMessages(folder,page){
     if(folder) this.folder=folder;
     if(page)   this.page=page;
+    this._sel=new Set(); // la lista cambia → reinicia la selección múltiple
     const list=document.getElementById('mailList');
     list.innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
     document.getElementById('mailFolderTitle').textContent=this.folder.replace(/^INBOX\./i,'').replace(/^INBOX$/i,'Bandeja de entrada');
@@ -16745,21 +16759,27 @@ const MAIL={
 
   renderMsgList(msgs){
     const list=document.getElementById('mailList');
-    if(!msgs.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">Sin mensajes</div>';return;}
+    if(!msgs.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">Sin mensajes</div>';this._updateSelBar();return;}
+    this._sel=this._sel||new Set();
     list.innerHTML=msgs.map(m=>{
       const from=this.parseFrom(m.from);
       const date=this.fmtDate(m.date);
       const unread=!m.seen?'unread':'';
       const sel=m.uid===this.selUid?'selected':'';
-      return `<div class="mail-item ${unread} ${sel}" data-uid="${m.uid}" onclick="MAIL.readMsg(${m.uid})">
-        <div class="mail-item-row1">
-          <span class="mail-item-from">${m.flagged?'<span class="mail-item-star">★</span> ':''}${this.esc(from)}</span>
-          <span class="mail-item-date">${date}</span>
+      const checked=this._sel.has(m.uid);
+      return `<div class="mail-item ${unread} ${sel} ${checked?'sel-checked':''}" data-uid="${m.uid}" onclick="MAIL.readMsg(${m.uid})">
+        <input type="checkbox" class="mail-item-chk" ${checked?'checked':''} onclick="event.stopPropagation();MAIL.toggleSelect(${m.uid},this.checked)" title="Seleccionar">
+        <div class="mail-item-main">
+          <div class="mail-item-row1">
+            <span class="mail-item-from">${m.flagged?'<span class="mail-item-star">★</span> ':''}${this.esc(from)}</span>
+            <span class="mail-item-date">${date}</span>
+          </div>
+          <div class="mail-item-subject">${this.esc(m.subject)}</div>
+          ${m.snippet?`<div class="mail-item-snippet">${this.esc(m.snippet)}</div>`:''}
         </div>
-        <div class="mail-item-subject">${this.esc(m.subject)}</div>
-        ${m.snippet?`<div class="mail-item-snippet">${this.esc(m.snippet)}</div>`:''}
       </div>`;
     }).join('');
+    this._updateSelBar();
   },
 
   async readMsg(uid){
@@ -17177,6 +17197,65 @@ const MAIL={
     this.selUid=null;
     document.getElementById('mailReaderEmpty').style.display='flex';
     document.getElementById('mailReaderContent').style.display='none';
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
+  // ── Selección múltiple de la bandeja ──────────────────────────
+  toggleSelect(uid,on){
+    this._sel=this._sel||new Set();
+    if(on) this._sel.add(uid); else this._sel.delete(uid);
+    const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
+    if(item) item.classList.toggle('sel-checked',on);
+    this._updateSelBar();
+  },
+  toggleSelectAll(on){
+    this._sel=this._sel||new Set();
+    (this.msgs||[]).forEach(m=>{ if(on) this._sel.add(m.uid); else this._sel.delete(m.uid); });
+    document.querySelectorAll('#mailList .mail-item').forEach(el=>{
+      const chk=el.querySelector('.mail-item-chk');
+      if(chk) chk.checked=on;
+      el.classList.toggle('sel-checked',on);
+    });
+    this._updateSelBar();
+  },
+  clearSelection(){
+    this._sel=new Set();
+    document.querySelectorAll('#mailList .mail-item').forEach(el=>{
+      const c=el.querySelector('.mail-item-chk'); if(c) c.checked=false;
+      el.classList.remove('sel-checked');
+    });
+    this._updateSelBar();
+  },
+  _updateSelBar(){
+    const n=this._sel?this._sel.size:0;
+    const bar=document.getElementById('mailSelBar'); if(bar) bar.style.display=n>0?'flex':'none';
+    const cnt=document.getElementById('mailSelCount'); if(cnt) cnt.textContent=`${n} seleccionado${n!==1?'s':''}`;
+    const a=document.getElementById('mailSelAllChk');
+    if(a){ const total=(this.msgs||[]).length; a.checked=total>0&&n>=total; a.indeterminate=n>0&&n<total; }
+  },
+  async trashSelected(){
+    this._sel=this._sel||new Set();
+    const uids=[...this._sel];
+    if(!uids.length) return;
+    if(!confirm(`¿Mover ${uids.length} mensaje${uids.length>1?'s':''} a la papelera?`)) return;
+    const bar=document.getElementById('mailSelBar');
+    const btns=bar?bar.querySelectorAll('button'):[];
+    btns.forEach(b=>b.disabled=true);
+    let ok=0,fail=0;
+    for(const uid of uids){
+      const data=await this.post({action:'trash',folder:this.folder,uid});
+      if(data&&!data.error) ok++; else fail++;
+    }
+    btns.forEach(b=>b.disabled=false);
+    // Si el mensaje abierto se eliminó, cierra el lector
+    if(this.selUid&&uids.includes(this.selUid)){
+      this.selUid=null;
+      document.getElementById('mailReaderEmpty').style.display='flex';
+      document.getElementById('mailReaderContent').style.display='none';
+    }
+    this._sel=new Set();
+    toast(fail?`${ok} eliminado${ok!==1?'s':''} · ${fail} con error`:`✓ ${ok} mensaje${ok!==1?'s':''} eliminado${ok!==1?'s':''}`, fail?'info':'success');
     await this.loadMessages();
     await this.loadFolders();
   },
