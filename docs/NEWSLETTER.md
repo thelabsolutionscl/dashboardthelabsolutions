@@ -131,9 +131,36 @@ env var de endpoint del Worker que el formulario de contacto).
 
 ## 5. Automatización con Make (envío + tracking)
 
-El dashboard redacta y aprueba; **Make + Resend** envían y escuchan:
+El dashboard redacta y aprueba; **Make** envía y escucha.
 
-### 5.1 Envío (`Newsletter_Campañas` → Resend)
+### 5.0 Escenario ya creado (revisar antes de activar)
+Se creó en Make el escenario **`The Lab — Newsletter · Envío (Programada → email)`**
+(team `259748`, id `5438569`), **inactivo/en pausa** — no envía nada hasta que lo
+revises y lo actives. Flujo (clonado del patrón ya usado en la cuenta):
+
+1. **Airtable · Search** `Newsletter_Campañas` → `Estado = "Programada"` y
+   `Fecha envío ≤ hoy` (máx. 1 por corrida).
+2. **Iterator** sobre la campaña.
+3. **Airtable · Search** `Clientes` → `Suscrito newsletter = true` y
+   `Baja newsletter = false` y `Email` no vacío (audiencia, máx. 200).
+4. **Iterator** sobre la audiencia.
+5. **Email · Send** (conexión **SMTP `hola@thelab.solutions`**) con el `Asunto`,
+   `Preheader` y `Cuerpo (Markdown)` de la campaña.
+6. **Airtable · Update** la campaña → `Estado = "Enviada"` (idempotente: evita
+   reenvíos en la siguiente corrida).
+
+> **Se usa SMTP, no Resend**, porque en la cuenta de Make **no hay conexión
+> Resend** (sí Airtable y SMTP). Para volúmenes altos conviene migrar el módulo
+> de envío a **Resend** (módulo HTTP `POST https://api.resend.com/emails` con
+> `Authorization: Bearer <RESEND_API_KEY>`, igual que las llamadas a Claude),
+> que mejora la entregabilidad y habilita los webhooks de apertura/clic.
+
+**Para encenderlo:** reactivar la organización (hoy está en pausa) → revisar el
+escenario → enviar una prueba con una campaña de test → **activar**. El cuerpo va
+en Markdown con `white-space:pre-wrap`; si quieres HTML rico (negritas, títulos),
+conviene renderizar el Markdown antes (módulo de texto o el paso a Resend).
+
+### 5.1 Envío masivo (alternativa Resend)
 - **Trigger:** Airtable *Watch Records* sobre `Newsletter_Campañas`, vista
   `Estado = Programada` **y** `Fecha envío <= hoy`.
 - **Audiencia:** *Search Records* en `Clientes` con `Suscrito newsletter = true`
