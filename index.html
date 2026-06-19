@@ -2940,7 +2940,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="card" style="margin-bottom:20px">
     <div class="card-header">
       <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> Bandeja de interacciones</span>
-      <span class="badge badge-gray" id="redesInbCount">—</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span class="badge badge-gray" id="redesInbCount">—</span>
+        <button class="btn btn-primary btn-sm" id="redesInbBulkBtn" onclick="redesReplyAllPending()">⚡ Sugerir pendientes</button>
+      </div>
     </div>
     <div id="redesInboxList" style="padding:8px 0">
       <div style="padding:16px;color:var(--text3);font-size:12px">Comentarios y DMs pendientes de responder (tabla <code>Social_Interactions</code> de Airtable). El COMMUNITY_AGENT sugiere la respuesta y detecta si es un lead.</div>
@@ -12495,7 +12498,8 @@ async function runAgent(id){
 function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el._rawText||el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
 
 // ── REDES SOCIALES ─────────────────────────────────────────────
-let _redesLoaded=false, _redesLastGen='';
+let _redesLoaded=false, _redesLastGen='', _redesLastAgent='';
+const _redesLeadCreated=new Set();   // interacciones ya convertidas en lead (anti-duplicado)
 const REDES_ICON={Instagram:'📷',LinkedIn:'in',TikTok:'♪',Facebook:'f'};
 const REDES_COLOR={Instagram:'#e1306c',LinkedIn:'#0a66c2',TikTok:'#000',Facebook:'#1877f2'};
 
@@ -12506,11 +12510,13 @@ function initRedes(){
 
 async function redesLoad(force){
   if(!getToken()){toast('Falta el token de Airtable (Mi cuenta)','error');return;}
-  const postsEl=document.getElementById('redesPostsList');
-  if(postsEl && force) postsEl.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
-  // Lecturas tolerantes: si una tabla no existe aún, queda como arreglo vacío y mostramos el estado guía.
-  state.socialPosts = await airtableFetch('Social_Posts',200).then(r=>r.records).catch(()=>{state._socialPostsErr=true;return [];});
-  state.socialInteractions = await airtableFetch('Social_Interactions',200).then(r=>r.records).catch(()=>{state._socialIntErr=true;return [];});
+  const loadingHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
+  if(force){const pe=document.getElementById('redesPostsList');if(pe)pe.innerHTML=loadingHTML;const ie=document.getElementById('redesInboxList');if(ie)ie.innerHTML=loadingHTML;}
+  // Lecturas tolerantes: distingue "tabla no existe" (estado guía) de un error de red (toast).
+  state._socialPostsErr=false; state._socialIntErr=false;
+  const isMissing=e=>/not ?found|could ?not|no such|table|404|NOT_FOUND|invalid permissions|not authorized|403/i.test(String((e&&e.message)||''));
+  state.socialPosts = await airtableFetch('Social_Posts',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialPostsErr=true;else toast('No se pudieron cargar publicaciones: '+e.message,'error');return [];});
+  state.socialInteractions = await airtableFetch('Social_Interactions',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialIntErr=true;else toast('No se pudieron cargar interacciones: '+e.message,'error');return [];});
   _redesLoaded=true;
   renderRedesKpis(); renderRedesPosts(); renderRedesInbox();
 }
@@ -12519,7 +12525,7 @@ function renderRedesKpis(){
   const posts=state.socialPosts||[], inter=state.socialInteractions||[];
   const now=new Date(), m=now.getMonth(), y=now.getFullYear();
   const est=p=>p.fields['Estado']||p.fields['Estado post']||'';
-  const pub=posts.filter(p=>{const e=est(p);if(e!=='Publicado')return false;const d=p.fields['Fecha programada']||p.fields['Fecha publicación']||p.createdTime;const dt=d?new Date(d):null;return dt&&dt.getMonth()===m&&dt.getFullYear()===y;}).length;
+  const pub=posts.filter(p=>{const e=est(p);if(e!=='Publicado')return false;const d=p.fields['Fecha publicación']||p.fields['Fecha programada']||p.createdTime;const dt=d?new Date(d):null;return dt&&dt.getMonth()===m&&dt.getFullYear()===y;}).length;
   const prog=posts.filter(p=>est(p)==='Programado').length;
   const borr=posts.filter(p=>est(p)==='Borrador').length;
   const intPend=inter.filter(i=>(i.fields['Estado']||'Pendiente')==='Pendiente').length;
@@ -12536,7 +12542,8 @@ function _redesFmtFecha(d){
   return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short'})+' '+dt.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
 }
 function _redesChip(red){
-  const c=REDES_COLOR[red]||'var(--text3)';
+  const c=REDES_COLOR[red];
+  if(!c) return `<span class="badge badge-gray">${escapeHtml(red||'—')}</span>`;
   return `<span class="badge" style="background:${c}1a;color:${c};border-color:${c}55">${escapeHtml(red||'—')}</span>`;
 }
 
@@ -12563,8 +12570,11 @@ function renderRedesPosts(){
     const copy=(f['Copy']||f['Texto']||'').toString();
     const fecha=f['Fecha programada']||f['Fecha publicación']||'';
     const btns=[];
-    if(e==='Borrador') btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','Programado')">Programar →</button>`);
-    if(e==='Programado') btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','Publicado')">Marcar publicado ✓</button>`);
+    if(e==='Borrador') btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSchedule('${p.id}')">📅 Programar</button>`);
+    if(e==='Programado'){
+      btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSchedule('${p.id}')">📅 Reagendar</button>`);
+      btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','Publicado')">Marcar publicado ✓</button>`);
+    }
     btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesCopyPost('${p.id}')">Copiar copy</button>`);
     return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
@@ -12589,6 +12599,23 @@ async function redesSetEstado(id,estado){
     p.fields['Estado']=estado; if(fields['Fecha publicación']) p.fields['Fecha publicación']=fields['Fecha publicación'];
     toast('Estado actualizado ✓','success'); renderRedesKpis(); renderRedesPosts();
   }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
+}
+// Programa una publicación CON fecha/hora (sin fecha, Make no sabría cuándo publicar).
+async function redesSchedule(id){
+  const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+  const base=p.fields['Fecha programada']?new Date(p.fields['Fecha programada']):(()=>{const d=new Date();d.setDate(d.getDate()+1);d.setHours(18,0,0,0);return d;})();
+  const pad=n=>String(n).padStart(2,'0');
+  const def=`${base.getFullYear()}-${pad(base.getMonth()+1)}-${pad(base.getDate())} ${pad(base.getHours())}:${pad(base.getMinutes())}`;
+  const inp=prompt('¿Cuándo publicar? (hora local, formato AAAA-MM-DD HH:MM)',def);
+  if(inp===null) return;
+  const dt=new Date(inp.trim().replace(' ','T'));
+  if(isNaN(dt.getTime())){toast('Fecha inválida — usa AAAA-MM-DD HH:MM','error');return;}
+  try{
+    const iso=dt.toISOString();
+    await airtableWriteTolerant('Social_Posts','PATCH',id,{'Estado':'Programado','Fecha programada':iso});
+    p.fields['Estado']='Programado'; p.fields['Fecha programada']=iso;
+    toast('Programado para '+_redesFmtFecha(iso)+' ✓','success'); renderRedesKpis(); renderRedesPosts();
+  }catch(e){toast('No se pudo programar: '+e.message,'error');}
 }
 function redesCopyPost(id){
   const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
@@ -12625,32 +12652,51 @@ function renderRedesInbox(){
         <button class="btn btn-primary btn-sm" onclick="redesReply('${i.id}')">🤖 ${resp?'Regenerar':'Sugerir'} respuesta</button>
         ${resp?`<button class="btn btn-ghost btn-sm" onclick="redesCopyReply('${i.id}')">Copiar</button>`:''}
         ${estado==='Pendiente'?`<button class="btn btn-ghost btn-sm" onclick="redesMarkInteraction('${i.id}','Respondido')">Marcar respondido ✓</button>`:''}
-        ${esLead?`<button class="btn btn-ghost btn-sm" onclick="redesInteractionToLead('${i.id}')">→ Crear lead</button>`:''}
+        ${esLead&&!_redesLeadCreated.has(i.id)?`<button class="btn btn-ghost btn-sm" onclick="redesInteractionToLead('${i.id}')">→ Crear lead</button>`:''}
+        ${_redesLeadCreated.has(i.id)?'<span class="badge badge-green" style="font-size:8px;align-self:center">✓ Lead creado</span>':''}
       </div>
     </div>`;
   }).join('');
 }
 
+// Core: pide a COMMUNITY_AGENT la respuesta para una interacción y la persiste. Devuelve true si ok.
+async function _redesSuggestReply(i){
+  const f=i.fields;
+  const cfg=AGENTES_CFG.find(a=>a.id==='COMMUNITY_AGENT'); if(!cfg) throw new Error('Falta COMMUNITY_AGENT');
+  const ctx=`Red: ${f['Red']||'—'} · Tipo: ${f['Tipo']||'Comentario'} · Usuario: @${f['Usuario']||'usuario'}\nMensaje recibido: ${f['Mensaje']||''}`;
+  const out=await callClaude(cfg.sys,ctx);
+  const mResp=out.match(/RESPUESTA_PUBLICA:\s*([\s\S]*?)(?=\n\s*ES_LEAD:|$)/i);
+  const mLead=out.match(/ES_LEAD:\s*(s[ií]|no)/i);
+  const mInt=out.match(/INTENCION:\s*([^\n]+)/i);
+  const resp=(mResp?mResp[1]:out).trim();
+  const esLead=mLead?/^s/i.test(mLead[1]):false;
+  const fields={'Respuesta sugerida':resp.slice(0,5000),'Es lead':esLead};
+  if(mInt) fields['Intención']=mInt[1].trim().slice(0,100);
+  await airtableWriteTolerant('Social_Interactions','PATCH',i.id,fields);
+  Object.assign(i.fields,fields);
+  try{AGENT_LOG.add('COMMUNITY_AGENT',ctx,out);}catch(_){}
+  return true;
+}
 async function redesReply(id){
   const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
-  const f=i.fields;
-  const ctx=`Red: ${f['Red']||'—'} · Tipo: ${f['Tipo']||'Comentario'} · Usuario: @${f['Usuario']||'usuario'}\nMensaje recibido: ${f['Mensaje']||''}`;
-  const cfg=AGENTES_CFG.find(a=>a.id==='COMMUNITY_AGENT'); if(!cfg){toast('Falta COMMUNITY_AGENT','error');return;}
   toast('Generando respuesta…','info');
-  try{
-    const out=await callClaude(cfg.sys,ctx);
-    const mResp=out.match(/RESPUESTA_PUBLICA:\s*([\s\S]*?)(?=\nES_LEAD:|$)/i);
-    const mLead=out.match(/ES_LEAD:\s*(s[ií]|no)/i);
-    const mInt=out.match(/INTENCION:\s*([^\n]+)/i);
-    const resp=(mResp?mResp[1]:out).trim();
-    const esLead=mLead?/^s/i.test(mLead[1]):false;
-    const fields={'Respuesta sugerida':resp.slice(0,5000),'Es lead':esLead};
-    if(mInt) fields['Intención']=mInt[1].trim().slice(0,100);
-    await airtableWriteTolerant('Social_Interactions','PATCH',id,fields);
-    Object.assign(i.fields,fields);
-    try{AGENT_LOG.add('COMMUNITY_AGENT',ctx,out);}catch(_){}
-    toast('Respuesta lista ✓','success'); renderRedesKpis(); renderRedesInbox();
-  }catch(e){toast('Error: '+e.message,'error');}
+  try{ await _redesSuggestReply(i); toast('Respuesta lista ✓','success'); renderRedesKpis(); renderRedesInbox(); }
+  catch(e){ toast('Error: '+e.message,'error'); }
+}
+// Sugiere respuesta para TODAS las interacciones pendientes sin respuesta (secuencial, para no saturar la API).
+async function redesReplyAllPending(){
+  const pend=(state.socialInteractions||[]).filter(i=>(i.fields['Estado']||'Pendiente')==='Pendiente' && !((i.fields['Respuesta sugerida']||'').trim()));
+  if(!pend.length){toast('No hay pendientes sin respuesta','info');return;}
+  const btn=document.getElementById('redesInbBulkBtn'); const prev=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;}
+  let ok=0,fail=0;
+  for(let k=0;k<pend.length;k++){
+    if(btn) btn.textContent=`⏳ ${k+1}/${pend.length}…`;
+    try{ await _redesSuggestReply(pend[k]); ok++; renderRedesInbox(); }catch(e){ fail++; }
+  }
+  if(btn){btn.disabled=false;btn.textContent=prev;}
+  renderRedesKpis(); renderRedesInbox();
+  toast(`Sugeridas ${ok} respuesta${ok!==1?'s':''}${fail?` · ${fail} con error`:''}`, fail?'error':'success');
 }
 function redesCopyReply(id){
   const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
@@ -12663,6 +12709,7 @@ async function redesMarkInteraction(id,estado){
   }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
 }
 async function redesInteractionToLead(id){
+  if(_redesLeadCreated.has(id)){toast('Ya creaste el lead para esta interacción','info');return;}
   const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
   const f=i.fields;
   try{
@@ -12671,6 +12718,7 @@ async function redesInteractionToLead(id){
       'Etapa venta':'Lead nuevo','Origen lead':'Redes sociales',
       'Notas internas':`Lead desde ${f['Red']||'redes'} (${f['Tipo']||'interacción'}):\n"${f['Mensaje']||''}"`
     });
+    _redesLeadCreated.add(id);
     await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':'Respondido'});
     if(i) i.fields['Estado']='Respondido';
     toast('Lead creado en Clientes ✓','success'); renderRedesKpis(); renderRedesInbox();
@@ -12692,12 +12740,15 @@ async function redesGenerate(){
     const ctx=state.loaded?buildAgentContext(agentId):'';
     const full=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
     const out=await callClaude(cfg.sys,full);
-    _redesLastGen=out;
+    _redesLastGen=out; _redesLastAgent=agentId;
     try{AGENT_LOG.add(cfg.label,input,out);}catch(_){}
+    // Solo los agentes que producen UN post (no un calendario/plan) pueden guardarse como borrador.
+    const singlePost=['CAPTION_AGENT','CONTENT'].includes(agentId);
     res.innerHTML=`<div class="ai-response" style="white-space:normal">${formatAgentReport(out)}</div>
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="redesSaveDraft()">💾 Guardar como borrador</button>
+        ${singlePost?`<button class="btn btn-primary btn-sm" onclick="redesSaveDraft()">💾 Guardar como borrador</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(_redesLastGen).then(()=>toast('Copiado ✓','success'))">Copiar todo</button>
+        ${singlePost?'':'<span style="font-size:10px;color:var(--text3);align-self:center">El Estratega y Tendencias generan planes/ideas — usa Caption o Content para crear un post guardable.</span>'}
       </div>`;
   }catch(e){res.innerHTML=`<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`;toast('Error: '+e.message,'error');}
   if(btn) btn.disabled=false;
@@ -12705,7 +12756,7 @@ async function redesGenerate(){
 async function redesSaveDraft(){
   if(!_redesLastGen){toast('Genera contenido primero','error');return;}
   const red=document.getElementById('redesGenRed').value;
-  const agentId=document.getElementById('redesGenAgent').value;
+  const agentId=_redesLastAgent||document.getElementById('redesGenAgent').value;
   const cfg=AGENTES_CFG.find(a=>a.id===agentId);
   let copy=_redesLastGen, hashtags='';
   const mh=_redesLastGen.match(/HASHTAGS?:\s*([^\n]+)/i);
@@ -21798,7 +21849,7 @@ CAPACIDADES Y REGLAS:
   - abrir_formulario(tipo): abre un formulario de nuevo registro. Tipos: cliente, cotizacion, proveedor, venta, diario.
   - cotizar(): abre el cotizador guiado paso a paso cuando el usuario quiere armar un presupuesto.
   - asistente(tipo): abre un asistente guiado. Tipos: cliente, proveedor, pago, mantencion, cotizar.
-  - delegar(agente, instruccion): delega a un agente y recibes su resultado para resumirlo. Agentes: SALES, QUOTE, PRODUCTION, QA, FOLLOWUP, CEO, LEADGEN, FINANCE, ONBOARDING, REPCLIENTE, CONTENT, ADS. Usalo cuando pidan redactar, cotizar, generar checklist, reporte o analisis.
+  - delegar(agente, instruccion): delega a un agente y recibes su resultado para resumirlo. Agentes: SALES, QUOTE, PRODUCTION, QA, FOLLOWUP, CEO, LEADGEN, FINANCE, ONBOARDING, REPCLIENTE, CONTENT, ADS, SOCIAL_STRATEGIST, CAPTION_AGENT, COMMUNITY_AGENT, SOCIAL_ADS_AGENT, TREND_AGENT, REPORT_SOCIAL_AGENT. Usalo cuando pidan redactar, cotizar, generar checklist, reporte, analisis o contenido de redes sociales.
   - sugerir_acciones(botones): cuando sea util, ofrece 1 a 3 botones de seguimiento; cada boton tiene texto (2-4 palabras que ve el usuario) y comando (lo que recibirias si lo pulsa).
 - Acompana SIEMPRE el uso de una herramienta con una frase breve hablada que diga lo que estas haciendo.
 - Usa los DATOS EN VIVO del dashboard (que recibes a continuacion) para responder sobre pedidos/cotizaciones/clientes.
@@ -21993,7 +22044,7 @@ CAPACIDADES Y REGLAS:
     {name:'abrir_formulario', description:'Abre un formulario de creación de un nuevo registro.', input_schema:{type:'object',properties:{tipo:{type:'string',enum:['cliente','cotizacion','proveedor','venta','diario']}},required:['tipo']}},
     {name:'cotizar', description:'Abre el cotizador guiado paso a paso para armar un presupuesto.', input_schema:{type:'object',properties:{}}},
     {name:'asistente', description:'Abre un asistente guiado paso a paso.', input_schema:{type:'object',properties:{tipo:{type:'string',enum:['cliente','proveedor','pago','mantencion','cotizar']}},required:['tipo']}},
-    {name:'delegar', description:'Delega una tarea a un agente especializado (redactar, cotizar, checklist, reporte, análisis) y devuelve su resultado para que lo resumas.', input_schema:{type:'object',properties:{agente:{type:'string',enum:['SALES','QUOTE','PRODUCTION','QA','FOLLOWUP','CEO','LEADGEN','FINANCE','ONBOARDING','REPCLIENTE','CONTENT','ADS']},instruccion:{type:'string',description:'Instrucción detallada con todo el contexto necesario.'}},required:['agente','instruccion']}},
+    {name:'delegar', description:'Delega una tarea a un agente especializado (redactar, cotizar, checklist, reporte, análisis, contenido de redes) y devuelve su resultado para que lo resumas.', input_schema:{type:'object',properties:{agente:{type:'string',enum:['SALES','QUOTE','PRODUCTION','QA','FOLLOWUP','CEO','LEADGEN','FINANCE','ONBOARDING','REPCLIENTE','CONTENT','ADS','SOCIAL_STRATEGIST','CAPTION_AGENT','COMMUNITY_AGENT','SOCIAL_ADS_AGENT','TREND_AGENT','REPORT_SOCIAL_AGENT']},instruccion:{type:'string',description:'Instrucción detallada con todo el contexto necesario.'}},required:['agente','instruccion']}},
     {name:'sugerir_acciones', description:'Muestra 1 a 3 botones de acción rápida bajo tu respuesta.', input_schema:{type:'object',properties:{botones:{type:'array',maxItems:3,items:{type:'object',properties:{texto:{type:'string',description:'2-4 palabras que ve el usuario'},comando:{type:'string',description:'Instrucción que recibirías si lo pulsa'}},required:['texto','comando']}}},required:['botones']}}
   ];
   // Ejecuta una herramienta: efectos colaterales seguros + devuelve texto para el tool_result.
