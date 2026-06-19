@@ -73,6 +73,8 @@ falta un campo, no rompe — muestra el estado guía. Ya están creadas.
 | Media URL | url | imagen/video a publicar |
 | Agente | singleLineText | agente que lo generó |
 | Pedido | singleLineText | proyecto de origen (referencia) |
+| Engagement | number | interacciones tras publicar (Make) — alimenta el reciclaje de contenido |
+| Link | url | enlace destino con UTMs (atribución de clics → leads) |
 
 ### `Social_Interactions` — `tblIp8LFCWG3JJ5l8` (bandeja)
 | Campo | Tipo | Notas |
@@ -84,6 +86,7 @@ falta un campo, no rompe — muestra el estado guía. Ya están creadas.
 | Respuesta sugerida | multilineText | la rellena `COMMUNITY_AGENT` |
 | Estado | singleSelect | Pendiente · Respondido · Ignorado |
 | Es lead | checkbox | lo marca el agente |
+| Lead creado | checkbox | el dashboard lo marca al crear el Cliente — **anti-duplicado durable** |
 | Intención | singleLineText | consulta_precio / interes_producto / soporte / elogio / spam / otro |
 | Fecha | dateTime | |
 
@@ -153,5 +156,52 @@ dashboard solo aprueba/edita. Blueprints sugeridos:
   leads (4.2). Requiere conectar Meta/LinkedIn/TikTok en Make.
 - **Fase 3 — Métricas y reporte:** ingesta de `Social_Metrics` (4.4), atribución
   de leads por red y reporte semanal automático (4.5).
+
+---
+
+## 6. Mejoras implementadas (auditoría + upgrades)
+
+Sobre la base anterior se ejecutó una auditoría y se añadió:
+
+- **Programar con fecha real** (modal date-picker `datetime-local`) — sin fecha, la
+  automatización de Make no sabría cuándo publicar. Incluye *Reagendar*.
+- **Vista Calendario mensual** con **drag & drop**: arrastra una publicación a otro
+  día para reprogramarla (junto a la vista Lista).
+- **Generar desde pedido entregado**: selector de pedidos `Despachado`/`Listo para
+  despacho`; usa su `Foto QA URL` como media y referencia el N° de pedido.
+- **Guardar 1 post por red**: parsea la salida multi-red de CAPTION/CONTENT y crea
+  un `Social_Posts` por plataforma (además del guardado único).
+- **Media URL + preview**: miniatura de imagen/video en lista y calendario.
+- **Bandeja**: *Sugerir pendientes* (procesa todas las interacciones pendientes) y
+  **anti-duplicado** al crear leads.
+- **Lead → `Agent_Queue`**: al convertir una interacción en lead se encola un
+  `LEAD_AGENT` (Source = red), igual que el pipeline web/LinkedIn/Google Ads.
+- **Métricas + reporte semanal IA**: barras por red desde `Social_Metrics` y el
+  `REPORT_SOCIAL_AGENT` con botón *Enviar por email* (vía `MAIL.post`).
+- **Agentes sociales delegables desde KAI** (el asistente IA).
+- **RBAC acotado**: el rol `marketing` (sin escritura global) puede escribir solo en
+  `Social_Posts`, `Social_Interactions`, `Social_Metrics`, `Clientes` y `Agent_Queue`
+  (`RBAC.canWriteTable` + `RBAC.socialWriteTables`). Así, al convertir una interacción
+  en lead, `marketing` también lo encola para scoring igual que el resto de roles.
+
+### Auditoría 3 — features avanzadas
+
+- **Edición inline** de cada publicación (modal): red, estado, fecha, copy, hashtags,
+  media, objetivo y link; con **eliminar**. Se abre desde la lista (✏ Editar) o clic
+  en un chip del calendario.
+- **Flujo de aprobación**: estado `En revisión` entre Borrador y Programado
+  (Borrador → 👀 A revisión → ✓ Aprobar y programar).
+- **Programación masiva** (`⚙ Auto-programar`): reparte los borradores 1 por día desde
+  mañana a la mejor hora por red.
+- **Mejor momento para publicar**: mejor día por red desde `Social_Metrics`
+  (engagement) + hora sugerida; botón ✨ en el modal de fecha.
+- **Constructor de UTM** en el editor → campo `Link` (`utm_source=red&utm_medium=social&utm_campaign=…`).
+- **Reciclar contenido**: top performers (`Social_Posts` Publicados por `Engagement`)
+  con re-publicación en un clic (clona como Borrador).
+- **Biblioteca de hashtags** por red (localStorage): guardar/insertar sets desde el editor.
+- **Sentimiento en la bandeja**: detecta quejas (heurístico + `Intención`), las prioriza
+  arriba y las marca (⚠ queja); contador de quejas en la cabecera.
+- **Anti-duplicado de leads durable** (campo `Social_Interactions."Lead creado"`) y
+  guards de concurrencia (`_redesLoadBusy`, `_redesReplyBusy`).
 </content>
 </invoke>
