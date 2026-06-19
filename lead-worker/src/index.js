@@ -15,6 +15,8 @@
  *   GET  /health
  *   POST /lead                  (web pública — clave X-Public-Lead-Key + Turnstile opcional)
  *   POST /newsletter            (alta de suscriptor desde la web — misma clave + anti-bot)
+ *   GET  /newsletter/confirm    (doble opt-in: confirma la suscripción vía token HMAC)
+ *   GET  /newsletter/unsubscribe(baja de la lista — token HMAC opcional)
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
@@ -57,6 +59,14 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/newsletter") {
         return await handleNewsletter(request, env, ctx, cors);
+      }
+
+      if (request.method === "GET" && url.pathname === "/newsletter/confirm") {
+        return await handleNewsletterConfirm(request, env);
+      }
+
+      if (request.method === "GET" && url.pathname === "/newsletter/unsubscribe") {
+        return await handleNewsletterUnsubscribe(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/webhooks/google-ads") {
@@ -138,8 +148,9 @@ async function handleLead(request, env, ctx, cors) {
 
 /* ════════════════════════════════════════════════════════════════════════
  * RUTA: POST /newsletter   (alta de suscriptor desde la web)
- * Crea/actualiza el Cliente en el CRM y marca "Suscrito newsletter".
- * No encola agentes ni dispara la auto-respuesta de lead: es solo opt-in.
+ * Doble opt-in: si hay Resend configurado, NO marca "Suscrito" hasta que el
+ * suscriptor confirme por email (link con token HMAC). Si no hay Resend, hace
+ * alta directa (single opt-in). No encola agentes: es solo opt-in.
  * ══════════════════════════════════════════════════════════════════════ */
 async function handleNewsletter(request, env, ctx, cors) {
   // 1) Clave compartida (mismo anti-bot básico que /lead)
@@ -181,24 +192,50 @@ async function handleNewsletter(request, env, ctx, cors) {
     return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
   }
 
+  // Doble opt-in si podemos enviar el correo de confirmación (Resend) y no está deshabilitado.
+  const doubleOptIn = !!env.RESEND_API_KEY && env.NEWSLETTER_DOUBLE_OPTIN !== "false";
+
   try {
-    // Si el contacto ya existe (por email), solo reactiva la suscripción.
     const existing = await airtableFindCliente(env, { email });
+
+    if (doubleOptIn) {
+      // Aseguramos que el contacto exista (sin marcar "Suscrito" todavía).
+      let clienteId = existing;
+      if (!existing) {
+        const cliente = await airtableCreateTolerant(
+          env,
+          "Clientes",
+          stripEmpty({
+            Empresa: company || name || email,
+            Contacto: name,
+            Email: email,
+            "Origen lead": source,
+            "Email válido": true,
+            "Fecha primer contacto": today(),
+            "Notas internas":
+              "Solicitó newsletter (pendiente de confirmar)" +
+              (body.landingUrl ? ` — ${str(body.landingUrl)}` : ""),
+          })
+        );
+        clienteId = cliente?.id || null;
+      }
+      const origin = new URL(request.url).origin;
+      const token = await nlSign(env, "confirm", email);
+      const confirmUrl = `${origin}/newsletter/confirm?e=${encodeURIComponent(email)}&t=${token}`;
+      ctx.waitUntil(sendNewsletterConfirm(env, email, name, confirmUrl));
+      return json({ ok: true, pending: true, clienteId }, 200, cors);
+    }
+
+    // Sin Resend → alta directa (single opt-in).
     if (existing) {
       await airtableUpdateTolerant(
         env,
         "Clientes",
         existing,
-        stripEmpty({
-          "Suscrito newsletter": true,
-          "Baja newsletter": false,
-          "Email válido": true,
-        })
+        stripEmpty({ "Suscrito newsletter": true, "Baja newsletter": false, "Email válido": true })
       );
       return json({ ok: true, subscribed: true, clienteId: existing, created: false }, 200, cors);
     }
-
-    // Nuevo contacto: alta mínima ya suscrita.
     const cliente = await airtableCreateTolerant(
       env,
       "Clientes",
@@ -211,18 +248,114 @@ async function handleNewsletter(request, env, ctx, cors) {
         "Email válido": true,
         "Fecha primer contacto": today(),
         "Notas internas":
-          "Alta a newsletter desde la web" +
-          (body.landingUrl ? ` (${str(body.landingUrl)})` : ""),
+          "Alta a newsletter desde la web" + (body.landingUrl ? ` (${str(body.landingUrl)})` : ""),
       })
     );
-    return json(
-      { ok: true, subscribed: true, clienteId: cliente?.id || null, created: true },
-      200,
-      cors
-    );
+    return json({ ok: true, subscribed: true, clienteId: cliente?.id || null, created: true }, 200, cors);
   } catch (e) {
     console.error("[leads-worker] newsletter:", e.message);
     return json({ ok: false, error: "No se pudo suscribir" }, 500, cors);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: GET /newsletter/confirm   (doble opt-in)
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleNewsletterConfirm(request, env) {
+  const url = new URL(request.url);
+  const email = str(url.searchParams.get("e"));
+  const token = str(url.searchParams.get("t"));
+  if (!email || !(await nlVerify(env, "confirm", email, token))) {
+    return htmlPage("Enlace inválido", "Este enlace de confirmación no es válido o ya expiró. Vuelve a suscribirte en thelab.solutions.", false);
+  }
+  if (env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
+    try {
+      const id = await airtableFindCliente(env, { email });
+      if (id) {
+        await airtableUpdateTolerant(env, "Clientes", id, stripEmpty({ "Suscrito newsletter": true, "Baja newsletter": false, "Email válido": true }));
+      } else {
+        await airtableCreateTolerant(env, "Clientes", stripEmpty({ Empresa: email, Email: email, "Origen lead": "Newsletter web", "Suscrito newsletter": true, "Email válido": true, "Fecha primer contacto": today() }));
+      }
+    } catch (e) {
+      console.error("[leads-worker] confirm:", e.message);
+    }
+  }
+  return htmlPage("¡Suscripción confirmada! 🎉", "Gracias por confirmar. Te escribiremos con novedades, casos reales y ofertas — sin spam.", true);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: GET /newsletter/unsubscribe   (baja)
+ * Token HMAC opcional: si viene, se valida; si no, igual se procesa la baja
+ * (un opt-out nunca se bloquea).
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleNewsletterUnsubscribe(request, env) {
+  const url = new URL(request.url);
+  const email = str(url.searchParams.get("e"));
+  if (!email) return htmlPage("Enlace inválido", "Falta el correo en el enlace de baja.", false);
+  if (env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
+    try {
+      const id = await airtableFindCliente(env, { email });
+      if (id) await airtableUpdateTolerant(env, "Clientes", id, stripEmpty({ "Baja newsletter": true, "Suscrito newsletter": false }));
+    } catch (e) {
+      console.error("[leads-worker] unsubscribe:", e.message);
+    }
+  }
+  return htmlPage("Te diste de baja", "Ya no recibirás más correos del newsletter. Si fue un error, puedes volver a suscribirte en thelab.solutions.", true);
+}
+
+/* ── Newsletter: helpers de token HMAC (sin estado), página HTML y email ── */
+function nlSecret(env) {
+  return env.NEWSLETTER_SECRET || env.PUBLIC_LEAD_KEY || env.AIRTABLE_TOKEN || "thelab-newsletter";
+}
+async function nlSign(env, purpose, email) {
+  const msg = new TextEncoder().encode(`${purpose}:${String(email).trim().toLowerCase()}`);
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(nlSecret(env)), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, msg);
+  let s = "";
+  const b = new Uint8Array(sig);
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function nlVerify(env, purpose, email, token) {
+  if (!token) return false;
+  return timingSafeEqual(token, await nlSign(env, purpose, email));
+}
+function escapeHtmlW(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function htmlPage(title, msg, ok) {
+  const color = ok ? "#00b3a4" : "#e5484d";
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtmlW(title)} — The Lab Solutions</title></head>
+<body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
+<div style="max-width:460px;padding:40px 28px;text-align:center">
+<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:18px">The Lab Solutions</div>
+<h1 style="font-size:22px;margin:0 0 12px;color:${color}">${escapeHtmlW(title)}</h1>
+<p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 24px">${escapeHtmlW(msg)}</p>
+<a href="https://thelab.solutions" style="display:inline-block;background:#00b3a4;color:#06231f;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:9px;font-size:14px">Ir a thelab.solutions</a>
+</div></body></html>`;
+  return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+async function sendNewsletterConfirm(env, email, name, confirmUrl) {
+  if (!env.RESEND_API_KEY) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  const first = name ? String(name).split(" ")[0] : "";
+  const html =
+    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.6;max-width:520px">` +
+    `<h2 style="margin:0 0 12px">Confirma tu suscripción ✅</h2>` +
+    `<p>Hola ${escapeHtmlW(first)},</p>` +
+    `<p>Recibimos tu solicitud para recibir el newsletter de <strong>The Lab Solutions</strong>. Para activarla, confirma tu correo:</p>` +
+    `<p style="margin:22px 0"><a href="${confirmUrl}" style="background:#00b3a4;color:#06231f;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:9px">Confirmar suscripción</a></p>` +
+    `<p style="color:#666;font-size:13px">Si no fuiste tú, ignora este correo y no te suscribiremos.</p>` +
+    `<p style="color:#666;font-size:12px;margin-top:18px">— Equipo The Lab Solutions · fabricación digital, Santiago</p>` +
+    `</div>`;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [email], subject: "Confirma tu suscripción — The Lab Solutions", html }),
+    });
+  } catch (e) {
+    console.error("[leads-worker] confirm email:", e.message);
   }
 }
 
