@@ -13021,6 +13021,58 @@ function redesCalNav(delta){
 }
 // Refresca la vista activa al cambiar los filtros (lista o calendario).
 function redesApplyFilters(){ if(_redesView==='cal') renderRedesCalendarGrid(); else renderRedesPosts(); }
+// ── Feriados, festividades y fechas comerciales de Chile (precargados en el calendario de contenido) ──
+let _redesFechasCache={};
+function _redesEaster(y){ // computus (Meeus/Jones/Butcher) → Domingo de Pascua
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+  return new Date(y,mo-1,da);
+}
+function _redesNthDow(y,m,dow,n){const first=new Date(y,m,1).getDay();const day=1+((dow-first+7)%7)+(n-1)*7;return new Date(y,m,day);} // n-ésimo (1..) día de semana dow (0=dom) del mes m (0-base)
+function _redesFechas(year){
+  if(_redesFechasCache[year])return _redesFechasCache[year];
+  const map={};const add=(dt,label,type,emoji)=>{const k=_redesDayKey(dt);(map[k]=map[k]||[]).push({label,type,emoji});};
+  const F='feriado',C='comercial',V='festividad';
+  // Feriados legales fijos
+  add(new Date(year,0,1),'Año Nuevo',F,'🎉');
+  add(new Date(year,4,1),'Día del Trabajo',F,'🛠️');
+  add(new Date(year,4,21),'Glorias Navales',F,'⚓');
+  add(new Date(year,5,20),'Día de los Pueblos Indígenas',F,'🌅');
+  add(new Date(year,5,29),'San Pedro y San Pablo',F,'⛪');
+  add(new Date(year,6,16),'Virgen del Carmen',F,'🙏');
+  add(new Date(year,7,15),'Asunción de la Virgen',F,'⛪');
+  add(new Date(year,8,18),'Independencia Nacional',F,'🇨🇱');
+  add(new Date(year,8,19),'Glorias del Ejército',F,'🎖️');
+  add(new Date(year,9,12),'Encuentro de Dos Mundos',F,'🌎');
+  add(new Date(year,9,31),'Iglesias Evangélicas',F,'⛪');
+  add(new Date(year,10,1),'Día de Todos los Santos',F,'🕯️');
+  add(new Date(year,11,8),'Inmaculada Concepción',F,'⛪');
+  add(new Date(year,11,25),'Navidad',F,'🎄');
+  // Semana Santa (calculada)
+  const e=_redesEaster(year);
+  add(new Date(year,e.getMonth(),e.getDate()-2),'Viernes Santo',F,'✝️');
+  add(new Date(year,e.getMonth(),e.getDate()-1),'Sábado Santo',F,'✝️');
+  // Festividades / efemérides
+  add(new Date(year,2,8),'Día de la Mujer',V,'♀️');
+  add(new Date(year,9,16),'Día del Profesor',V,'🍎');
+  // Fechas COMERCIALES (las clave para vender)
+  add(new Date(year,1,14),'San Valentín',C,'💝');
+  add(_redesNthDow(year,4,0,2),'Día de la Madre',C,'🌷');   // 2° domingo de mayo
+  add(_redesNthDow(year,5,0,3),'Día del Padre',C,'👔');      // 3er domingo de junio
+  add(_redesNthDow(year,7,0,2),'Día del Niño',C,'🧸');       // 2° domingo de agosto (Chile)
+  add(new Date(year,8,18),'Fiestas Patrias 🎉',C,'🇨🇱');     // se solapa con feriado, refuerza lo comercial
+  add(new Date(year,9,31),'Halloween',C,'🎃');
+  const thx=_redesNthDow(year,10,4,4);                        // 4° jueves de noviembre
+  const bf=new Date(year,10,thx.getDate()+1); add(bf,'Black Friday',C,'🛍️');
+  add(new Date(year,10,bf.getDate()+3),'Cyber Monday',C,'💻');
+  add(new Date(year,11,15),'Temporada de graduaciones',C,'🎓'); // medallas/trofeos fin de año
+  _redesFechasCache[year]=map;return map;
+}
+// Clic en una fecha del calendario → pre-llena el generador con una idea para esa ocasión
+function redesPlanFecha(label){
+  const inp=document.getElementById('redesGenInput');
+  if(inp){inp.value=`Contenido para ${label}: idea que conecte un producto de The Lab Solutions (trofeos, medallas, neón, impresión 3D, señalética) con esta fecha, con gancho y llamado a la acción`;inp.focus();inp.scrollIntoView({behavior:'smooth',block:'center'});}
+  toast('💡 Idea cargada para '+label+' — ajústala y genera el contenido','info');
+}
 function renderRedesCalendarGrid(){
   const el=document.getElementById('redesPostsCal'); if(!el) return;
   if(!_redesCalMonth){const n=new Date();_redesCalMonth=new Date(n.getFullYear(),n.getMonth(),1);}
@@ -13037,14 +13089,19 @@ function renderRedesCalendarGrid(){
   const dim=new Date(year,month+1,0).getDate();
   const monthName=base.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
   const todayKey=_redesDayKey(new Date());
+  const fechas=_redesFechas(year); // feriados/festividades/fechas comerciales
+  const _fxCol={feriado:'#ff6b6b',festividad:'#a78bfa',comercial:'#ec4899'};
   let cells='';
   ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].forEach(d=>cells+=`<div style="font-size:10px;color:var(--text3);text-align:center;padding:4px 0;font-weight:600">${d}</div>`);
   for(let i=0;i<startDow;i++) cells+='<div></div>';
   for(let day=1;day<=dim;day++){
     const dt=new Date(year,month,day), key=_redesDayKey(dt), lst=byDay[key]||[];
+    const fx=fechas[key]||[];
+    const fxHtml=fx.map(o=>{const c=_fxCol[o.type]||'#888';return `<div onclick="event.stopPropagation();redesPlanFecha('${(o.label||'').replace(/'/g,'')}')" title="${escapeHtml(o.type.charAt(0).toUpperCase()+o.type.slice(1)+': '+o.label+' — clic para planificar contenido')}" style="font-size:8.5px;font-weight:600;background:${c}1f;color:${c};border-radius:4px;padding:1px 4px;margin-bottom:2px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.emoji} ${escapeHtml(o.label)}</div>`;}).join('');
+    const hasFer=fx.some(o=>o.type==='feriado');
     const chips=lst.map(p=>{const f=p.fields,red=f['Red']||'',c=REDES_COLOR[red]||'#888',txt=(f['Copy']||red||'').slice(0,22);
       return `<div class="redes-cal-chip" draggable="true" ondragstart="redesDragStart(event,'${p.id}')" onclick="redesOpenEdit('${p.id}')" title="${escapeHtml((red||'—')+' · '+(f['Estado']||'')+' — clic para editar, arrastra para reprogramar')}" style="font-size:9px;background:${c}22;color:${c};border-left:3px solid ${c};border-radius:5px;padding:2px 5px;margin:2px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(txt)}</div>`;}).join('');
-    cells+=`<div class="redes-cal-cell" ondragover="redesAllowDrop(event)" ondrop="redesDropOnDay(event,'${key}')" style="min-height:64px;border:1px solid ${key===todayKey?'var(--accent)':'var(--border)'};border-radius:9px;padding:4px;background:var(--surface2)"><div style="font-size:10px;color:${key===todayKey?'var(--accent)':'var(--text3)'};text-align:right;font-weight:${key===todayKey?'700':'400'}">${day}</div>${chips}</div>`;
+    cells+=`<div class="redes-cal-cell" ondragover="redesAllowDrop(event)" ondrop="redesDropOnDay(event,'${key}')" style="min-height:64px;border:1px solid ${key===todayKey?'var(--accent)':hasFer?'rgba(255,107,107,0.4)':'var(--border)'};border-radius:9px;padding:4px;background:var(--surface2)"><div style="font-size:10px;color:${key===todayKey?'var(--accent)':'var(--text3)'};text-align:right;font-weight:${key===todayKey?'700':'400'}">${day}</div>${fxHtml}${chips}</div>`;
   }
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <button class="btn btn-ghost btn-sm" onclick="redesCalNav(-1)">‹</button>
@@ -13052,7 +13109,12 @@ function renderRedesCalendarGrid(){
     <button class="btn btn-ghost btn-sm" onclick="redesCalNav(1)">›</button>
   </div>
   <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${cells}</div>
-  <div style="font-size:10px;color:var(--text3);margin-top:8px">↔ Arrastra una publicación a otro día para reprogramarla.</div>`;
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:10px;color:var(--text3);margin-top:8px">
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#ff6b6b;margin-right:4px"></span>Feriado</span>
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#ec4899;margin-right:4px"></span>Fecha comercial</span>
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#a78bfa;margin-right:4px"></span>Festividad</span>
+    <span style="margin-left:auto">↔ Arrastra una publicación a otro día · clic en una fecha para planificar contenido</span>
+  </div>`;
 }
 let _redesDragId=null;
 function redesDragStart(ev,id){_redesDragId=id;try{ev.dataTransfer.setData('text/plain',id);ev.dataTransfer.effectAllowed='move';}catch(_){}}
