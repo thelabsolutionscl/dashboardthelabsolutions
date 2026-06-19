@@ -134,9 +134,10 @@ env var de endpoint del Worker que el formulario de contacto).
 El dashboard redacta y aprueba; **Make** envía y escucha.
 
 ### 5.0 Escenario ya creado (revisar antes de activar)
-Se creó en Make el escenario **`The Lab — Newsletter · Envío (Programada → email)`**
+Se creó en Make el escenario **`The Lab — Newsletter · Envío (Programada → Resend)`**
 (team `259748`, id `5438569`), **inactivo/en pausa** — no envía nada hasta que lo
-revises y lo actives. Flujo (clonado del patrón ya usado en la cuenta):
+revises, le pongas tu API key y lo actives. Flujo (clonado del patrón ya usado en
+la cuenta, envío por **Resend vía HTTP** como el resto de llamadas a APIs):
 
 1. **Airtable · Search** `Newsletter_Campañas` → `Estado = "Programada"` y
    `Fecha envío ≤ hoy` (máx. 1 por corrida).
@@ -144,31 +145,40 @@ revises y lo actives. Flujo (clonado del patrón ya usado en la cuenta):
 3. **Airtable · Search** `Clientes` → `Suscrito newsletter = true` y
    `Baja newsletter = false` y `Email` no vacío (audiencia, máx. 200).
 4. **Iterator** sobre la audiencia.
-5. **Email · Send** (conexión **SMTP `hola@thelab.solutions`**) con el `Asunto`,
-   `Preheader` y `Cuerpo (Markdown)` de la campaña.
+5. **HTTP · POST `https://api.resend.com/emails`** (Resend) con el `Asunto`,
+   `Preheader` y `Cuerpo (Markdown)` de la campaña como HTML; remitente
+   `The Lab Solutions <hola@thelab.solutions>`.
 6. **Airtable · Update** la campaña → `Estado = "Enviada"` (idempotente: evita
    reenvíos en la siguiente corrida).
 
-> **Se usa SMTP, no Resend**, porque en la cuenta de Make **no hay conexión
-> Resend** (sí Airtable y SMTP). Para volúmenes altos conviene migrar el módulo
-> de envío a **Resend** (módulo HTTP `POST https://api.resend.com/emails` con
-> `Authorization: Bearer <RESEND_API_KEY>`, igual que las llamadas a Claude),
-> que mejora la entregabilidad y habilita los webhooks de apertura/clic.
+> **Envío por Resend.** En la cuenta de Make **no hay conexión Resend**, así que el
+> módulo HTTP lleva un **placeholder** en el header: `Authorization: Bearer
+> re_PEGA_AQUI_TU_API_KEY_DE_RESEND`. Reemplázalo por tu API key real en el editor
+> de Make (no por chat). Alternativa: usar el módulo nativo **email/SMTP**
+> (`hola@thelab.solutions`, ya conectado) si prefieres no usar Resend.
 
-**Para encenderlo:** reactivar la organización (hoy está en pausa) → revisar el
-escenario → enviar una prueba con una campaña de test → **activar**. El cuerpo va
-en Markdown con `white-space:pre-wrap`; si quieres HTML rico (negritas, títulos),
-conviene renderizar el Markdown antes (módulo de texto o el paso a Resend).
+**Para encenderlo:**
+1. En Resend: **verificar el dominio `thelab.solutions`** (DNS) y crear una **API key**.
+2. En Make: abrir el escenario → módulo HTTP → pegar la API key en el header
+   `Authorization`.
+3. **Reactivar la organización** (hoy está en pausa).
+4. Crear una campaña de prueba (`Estado = Programada`, `Fecha envío = hoy`) con tu
+   correo como único suscrito y **ejecutar una vez** para validar.
+5. **Activar** el escenario.
 
-### 5.1 Envío masivo (alternativa Resend)
-- **Trigger:** Airtable *Watch Records* sobre `Newsletter_Campañas`, vista
-  `Estado = Programada` **y** `Fecha envío <= hoy`.
-- **Audiencia:** *Search Records* en `Clientes` con `Suscrito newsletter = true`
-  **y** `Baja newsletter ≠ true` (y filtrando por el `Segmento objetivo` si aplica).
-- **Envío:** Resend (API o *Broadcast*) con `Asunto` + `Preheader` + el
-  `Cuerpo (Markdown)` renderizado a HTML, con link de **baja** (actualiza
-  `Baja newsletter`). Crea una fila por destinatario en `Newsletter_Envios`.
-- **Cierre:** *Update Record* → `Estado = Enviada`, `Fecha envío = now`, `Enviados = N`.
+> El cuerpo va en Markdown renderizado con `white-space:pre-wrap` (respeta saltos de
+> línea). Para HTML rico (negritas, títulos) conviene convertir el Markdown a HTML
+> antes del envío (un módulo de texto en Make o una plantilla de Resend).
+
+### 5.1 Mejoras opcionales del envío
+Sobre el escenario base (5.0) se pueden añadir:
+- **Segmentación:** filtrar la *Search* de `Clientes` por el `Segmento objetivo` /
+  `Industria / Rubro` de la campaña.
+- **`Newsletter_Envios`:** un *Create Record* por destinatario (link a `Campaña` y
+  `Cliente`, `Email`, `Fecha envío`) para tener la traza por persona.
+- **Link de baja** en el HTML (actualiza `Baja newsletter`) y conteo `Enviados`.
+- **Alternativa event-driven:** *Watch Records* sobre `Newsletter_Campañas` en vez
+  del polling cada 15 min.
 
 ### 5.2 Tracking (webhooks de Resend → `Newsletter_Envios`)
 - *opened/clicked/bounced/complained* → actualiza la fila (`Estado`, fechas).
