@@ -153,5 +153,34 @@ dashboard solo aprueba/edita. Blueprints sugeridos:
   leads (4.2). Requiere conectar Meta/LinkedIn/TikTok en Make.
 - **Fase 3 — Métricas y reporte:** ingesta de `Social_Metrics` (4.4), atribución
   de leads por red y reporte semanal automático (4.5).
+
+---
+
+## 6. Mejoras implementadas (auditoría + upgrades)
+
+Sobre la base anterior se ejecutó una auditoría y se añadió:
+
+- **Programar con fecha real** (modal date-picker `datetime-local`) — sin fecha, la
+  automatización de Make no sabría cuándo publicar. Incluye *Reagendar*.
+- **Vista Calendario mensual** con **drag & drop**: arrastra una publicación a otro
+  día para reprogramarla (junto a la vista Lista).
+- **Generar desde pedido entregado**: selector de pedidos `Despachado`/`Listo para
+  despacho`; usa su `Foto QA URL` como media y referencia el N° de pedido.
+- **Guardar 1 post por red**: parsea la salida multi-red de CAPTION/CONTENT y crea
+  un `Social_Posts` por plataforma (además del guardado único).
+- **Media URL + preview**: miniatura de imagen/video en lista y calendario.
+- **Bandeja**: *Sugerir pendientes* (procesa todas las interacciones pendientes) y
+  **anti-duplicado** al crear leads.
+- **Lead → `Agent_Queue`**: al convertir una interacción en lead se encola un
+  `LEAD_AGENT` (Source = red), igual que el pipeline web/LinkedIn/Google Ads.
+- **Métricas + reporte semanal IA**: barras por red desde `Social_Metrics` y el
+  `REPORT_SOCIAL_AGENT` con botón *Enviar por email* (vía `MAIL.post`).
+- **Agentes sociales delegables desde KAI** (el asistente IA).
+- **RBAC acotado**: el rol `marketing` (sin escritura global) puede escribir solo en
+  `Social_Posts`, `Social_Interactions`, `Social_Metrics` y `Clientes`
+  (`RBAC.canWriteTable` + `RBAC.socialWriteTables`). *Nota:* el encolado a
+  `Agent_Queue` al crear un lead no está incluido en el carve-out, así que para un
+  usuario `marketing` el lead se crea pero no se auto-encola (sí lo hacen
+  admin/gerencia/comercial).
 </content>
 </invoke>
