@@ -17301,8 +17301,8 @@ const RBAC={
   canConfig: {admin:true,  gerencia:false, comercial:false, produccion:false, finanzas:false, marketing:false, demo:false},
 
   // Tablas donde un rol con acceso a la sección Redes (pero sin escritura global, p.ej. marketing)
-  // SÍ puede escribir — acotado a redes + Clientes (para convertir interacciones en leads).
-  socialWriteTables: ['Social_Posts','Social_Interactions','Social_Metrics','Clientes'],
+  // SÍ puede escribir — acotado a redes + Clientes (leads) + Agent_Queue (encolar lead para scoring).
+  socialWriteTables: ['Social_Posts','Social_Interactions','Social_Metrics','Clientes','Agent_Queue'],
   canWriteRole(role){return !!(this.canWrite[role]);},
   // Permiso de escritura por tabla: respeta el global y, si no, abre un carve-out acotado para Redes.
   canWriteTable(role,table){

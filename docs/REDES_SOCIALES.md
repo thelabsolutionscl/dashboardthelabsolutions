@@ -177,10 +177,8 @@ Sobre la base anterior se ejecutó una auditoría y se añadió:
   `REPORT_SOCIAL_AGENT` con botón *Enviar por email* (vía `MAIL.post`).
 - **Agentes sociales delegables desde KAI** (el asistente IA).
 - **RBAC acotado**: el rol `marketing` (sin escritura global) puede escribir solo en
-  `Social_Posts`, `Social_Interactions`, `Social_Metrics` y `Clientes`
-  (`RBAC.canWriteTable` + `RBAC.socialWriteTables`). *Nota:* el encolado a
-  `Agent_Queue` al crear un lead no está incluido en el carve-out, así que para un
-  usuario `marketing` el lead se crea pero no se auto-encola (sí lo hacen
-  admin/gerencia/comercial).
+  `Social_Posts`, `Social_Interactions`, `Social_Metrics`, `Clientes` y `Agent_Queue`
+  (`RBAC.canWriteTable` + `RBAC.socialWriteTables`). Así, al convertir una interacción
+  en lead, `marketing` también lo encola para scoring igual que el resto de roles.
 </content>
 </invoke>
