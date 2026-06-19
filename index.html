@@ -6529,16 +6529,20 @@ function _assignCoreState(res,render){
   if(monRes.status==='fulfilled') _applyMonitorSistema(monRes.value.records||[]);
 }
 // Mezcla (upsert) el resultado de un fetch INCREMENTAL a state.
+// Devuelve cuántos registros llegaron en el delta (0 = nada cambió → se puede
+// omitir el re-render en el refresco silencioso).
 function _mergeCoreState(res){
   const [cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=res;
-  if(facRes.status==='fulfilled') state.facturas=_mergeRecords(state.facturas,facRes.value.records);
-  if(cRes.status==='fulfilled'){ state.clientes=_mergeRecords(state.clientes,cRes.value.records); _rebuildClientesById(); }
-  if(coRes.status==='fulfilled') state.cotizaciones=_mergeRecords(state.cotizaciones,coRes.value.records);
-  if(pRes.status==='fulfilled') state.pedidos=_mergeRecords(state.pedidos,pRes.value.records);
-  if(rRes.status==='fulfilled') state.reportes=_mergeRecords(state.reportes,rRes.value.records);
-  if(pvRes.status==='fulfilled') state.proveedores=_mergeRecords(state.proveedores,pvRes.value.records);
-  if(monRes.status==='fulfilled' && (monRes.value.records||[]).length) _applyMonitorSistema(monRes.value.records);
+  let n=0;
+  if(facRes.status==='fulfilled'){const r=facRes.value.records||[];n+=r.length;state.facturas=_mergeRecords(state.facturas,r);}
+  if(cRes.status==='fulfilled'){const r=cRes.value.records||[];n+=r.length;state.clientes=_mergeRecords(state.clientes,r); _rebuildClientesById(); }
+  if(coRes.status==='fulfilled'){const r=coRes.value.records||[];n+=r.length;state.cotizaciones=_mergeRecords(state.cotizaciones,r);}
+  if(pRes.status==='fulfilled'){const r=pRes.value.records||[];n+=r.length;state.pedidos=_mergeRecords(state.pedidos,r);}
+  if(rRes.status==='fulfilled'){const r=rRes.value.records||[];n+=r.length;state.reportes=_mergeRecords(state.reportes,r);}
+  if(pvRes.status==='fulfilled'){const r=pvRes.value.records||[];n+=r.length;state.proveedores=_mergeRecords(state.proveedores,r);}
+  if(monRes.status==='fulfilled' && (monRes.value.records||[]).length){n+=monRes.value.records.length;_applyMonitorSistema(monRes.value.records);}
   try{if(cRes.status==='fulfilled')_registerFlash(cRes.value.records);if(coRes.status==='fulfilled')_registerFlash(coRes.value.records);if(pRes.status==='fulfilled')_registerFlash(pRes.value.records);if(pvRes.status==='fulfilled')_registerFlash(pvRes.value.records);}catch(e){}
+  return n;
 }
 
 async function loadAllData(){
@@ -6597,6 +6601,7 @@ async function loadAllDataSilent(){
   state._silentN=(state._silentN||0)+1;
   const doFull = !state.lastUpdateTs || (state._silentN % 4)===0;
   try{
+    let changed=true;
     if(doFull){
       const res=await _fetchAllCore();
       _assignCoreState(res,false);
@@ -6609,12 +6614,14 @@ async function loadAllDataSilent(){
         airtableFetchSince('Proveedores',sinceIso),airtableFetchSince('Monitor Sistema',sinceIso),
         airtableFetchSince('Facturas',sinceIso)
       ]);
-      _mergeCoreState(res);
-      _reRenderActiveList();
+      // Si el delta no trajo registros, nada cambió: evitamos recomputar KPIs,
+      // acciones, tablas y overview (re-render inútil cada ciclo).
+      changed=_mergeCoreState(res)>0;
+      if(changed) _reRenderActiveList();
     }
     state.lastUpdateTs=Date.now();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;
-    renderOverview();
+    if(changed) renderOverview();
   }catch(e){ setStatus('error (auto)',false); logErr('loadAllDataSilent',e); }
 }
 function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},1800000);} // 30 min
@@ -6848,19 +6855,20 @@ function renderEquipoSnapshot(){
   const today=new Date();today.setHours(0,0,0,0);
   const todayStr=fmtDate(today);
   const dayLabel=today.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+  // Precalcula una sola vez los pedidos activos (con su "Equipo asignado" ya en
+  // minúsculas) en lugar de re-escanear todos los pedidos por cada persona.
+  const activosEq=[];
+  state.pedidos.forEach(x=>{const est=x.fields['Estado pedido']||'';if(est==='Despachado'||est==='Cancelado')return;activosEq.push({ea:(x.fields['Equipo asignado']||'').toLowerCase(),fe:x.fields['Fecha entrega']||''});});
   const chips=PERSONAS.map(p=>{
     const ev=equipoState.eventos[`${p.id}_${todayStr}`];
     const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):EQUIPO_TIPOS.disponible;
     const fn=p.nombre.split(' ')[0].toLowerCase();
-    const misPedidos=state.pedidos.filter(x=>{
-      const ea=(x.fields['Equipo asignado']||'').toLowerCase();
-      return ea.includes(fn)&&!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'');
-    });
+    const misPedidos=activosEq.filter(o=>o.ea.includes(fn));
     const proxEntrega=misPedidos
-      .filter(x=>x.fields['Fecha entrega']&&new Date(x.fields['Fecha entrega']+'T00:00:00')>=today)
-      .map(x=>x.fields['Fecha entrega']).sort()[0];
+      .filter(o=>o.fe&&new Date(o.fe+'T00:00:00')>=today)
+      .map(o=>o.fe).sort()[0];
     const proxLabel=proxEntrega?` · próx: ${proxEntrega.substring(5).replace('-','/')}` :'';
-    const conflictoHoy=ev&&['ausente','vacaciones'].includes(ev.tipo)&&misPedidos.some(x=>(x.fields['Fecha entrega']||'')===todayStr);
+    const conflictoHoy=ev&&['ausente','vacaciones'].includes(ev.tipo)&&misPedidos.some(o=>o.fe===todayStr);
     const borderColor=conflictoHoy?'rgba(255,68,68,0.5)':ev&&ev.tipo!=='disponible'?'var(--border2)':'var(--border)';
     return`<div style="display:flex;align-items:flex-start;gap:10px;background:var(--surface2);border-radius:10px;padding:10px 14px;flex:1;min-width:170px;border:1px solid ${borderColor}">
       ${_avHtml(p,36)}
