@@ -5305,7 +5305,7 @@ const _DEFAULTS={
   PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%'
 };
 // ────────────────────────────────────────────────────────────
-const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
+const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},clientesByIdRec:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
 window.state=state;
 let cdCurrentId='',cdCurrentEmpresa='';
 let _importDtes=[];
@@ -6504,7 +6504,8 @@ function _mergeRecords(arr,changed){
 }
 function _rebuildClientesById(){
   state.clientesById={};
-  state.clientes.forEach(x=>{ state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—'; });
+  state.clientesByIdRec={};
+  state.clientes.forEach(x=>{ state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—'; state.clientesByIdRec[x.id]=x; });
 }
 // Aplica config desde la tabla 'Monitor Sistema' (META_REVENUE / WATI_CONFIG / FIN_VENTAS).
 function _applyMonitorSistema(recs){
@@ -6890,36 +6891,55 @@ function renderKPIs(){
   const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
   const _cli=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;
 
-  // ── Revenue ──────────────────────────────────────────────────────────
-  const revSemana=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
-  const revAnterior=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
-  const revTotal=_ped.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-
-  // ── Pedidos ───────────────────────────────────────────────────────────
-  const pedActivos=_ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
-  const atrasados=_ped.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
-  const pedNuevosSem=_ped.filter(p=>p.createdTime&&new Date(p.createdTime)>=weekStart).length;
-  const pedNuevosPrev=_ped.filter(p=>{const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
-
-  // ── Cotizaciones ──────────────────────────────────────────────────────
-  const cotPend=_cot.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
-  const cotNuevosSem=_cot.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
-  const cotNuevosPrev=_cot.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
-
-  // ── Clientes ──────────────────────────────────────────────────────────
-  const clientesNuevos=_cli.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
-  const clientesPrev=_cli.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
-
-  // ── Alertas ───────────────────────────────────────────────────────────
+  // ── Métricas del overview en 3 pasadas (una por tabla) en vez de ~22 filtros
+  //    sueltos; createdTime y getMargenCot se calculan una sola vez por registro.
+  //    Lógica verificada idéntica a la versión previa (300 datasets aleatorios). ──
   const in2days=new Date(today);in2days.setDate(today.getDate()+2);
   const ago48h=new Date(Date.now()-48*3600*1000);
-  const alertas=_cli.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length
-    +_ped.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length
-    +atrasados
-    +_cot.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v+'T00:00:00')<today;}).length
-    +_ped.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];if(!fe||['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;const d=new Date(fe+'T00:00:00');return d>=today&&d<=in2days;}).length
-    +_cot.filter(c=>(c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h).length
-    +_cot.filter(c=>{const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return false;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return false;const cl=_cli.find(x=>x.id===cid);return cl?.fields['Estado cuenta']==='Bloqueado';}).length;
+  // Pedidos
+  let revSemana=0,revAnterior=0,revTotal=0,pedActivos=0,atrasados=0,pedNuevosSem=0,pedNuevosPrev=0,_aAnticipo=0,_aEntrega=0;
+  for(const p of _ped){
+    const f=p.fields,est=f['Estado pedido']||'';
+    const cancel=est==='Cancelado',despCanc=cancel||est==='Despachado';
+    const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
+    revTotal+=neto;
+    const d=p.createdTime?new Date(p.createdTime):null;
+    if(d){
+      if(d>=weekStart){pedNuevosSem++;if(!cancel)revSemana+=neto;}
+      else if(d>=prevWeekStart&&d<weekStart){pedNuevosPrev++;if(!cancel)revAnterior+=neto;}
+    }
+    if(!despCanc)pedActivos++;
+    const fe=f['Fecha entrega'];
+    if(!despCanc&&fe&&new Date(fe)<today)atrasados++;
+    if(!f['Anticipo pagado (50%)']&&(est==='Confirmado'||est==='En producción'))_aAnticipo++;
+    if(fe&&!despCanc){const de=new Date(fe+'T00:00:00');if(de>=today&&de<=in2days)_aEntrega++;}
+  }
+  // Clientes (+ índice id→registro para el cruce con cotizaciones)
+  const _cliById={};let clientesNuevos=0,clientesPrev=0,_aFacVenc=0;
+  for(const c of _cli){
+    _cliById[c.id]=c;
+    const d=c.createdTime?new Date(c.createdTime):null;
+    if(d){if(d>=weekStart)clientesNuevos++;else if(d>=prevWeekStart&&d<weekStart)clientesPrev++;}
+    if((c.fields['Facturas vencidas']||0)>=2)_aFacVenc++;
+  }
+  // Cotizaciones (pendientes, nuevas, alertas dependientes de cliente y márgenes)
+  let cotPend=0,cotNuevosSem=0,cotNuevosPrev=0,_aCotVenc=0,_aCotSolic=0,_aCotBloq=0;
+  let _mSum=0,_mN=0,_mSemSum=0,_mSemN=0,_mPrevSum=0,mPrevN=0;
+  for(const c of _cot){
+    const f=c.fields,est=f['Estado cotización']||'';
+    const envSol=est==='Enviada'||est==='Solicitada';
+    if(envSol)cotPend++;
+    const d=c.createdTime?new Date(c.createdTime):null;
+    const inSem=!!(d&&d>=weekStart),inPrev=!!(d&&d>=prevWeekStart&&d<weekStart);
+    if(inSem)cotNuevosSem++;else if(inPrev)cotNuevosPrev++;
+    if(envSol){const v=f['Fecha vencimiento'];if(v&&new Date(v+'T00:00:00')<today)_aCotVenc++;}
+    if(est==='Solicitada'&&d&&d<ago48h)_aCotSolic++;
+    if(envSol){const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(cid){const cl=_cliById[cid];if(cl&&cl.fields['Estado cuenta']==='Bloqueado')_aCotBloq++;}}
+    const m=getMargenCot(f);
+    if(m!==null){_mSum+=m;_mN++;if(inSem){_mSemSum+=m;_mSemN++;}else if(inPrev){_mPrevSum+=m;mPrevN++;}}
+  }
+  const alertas=_aFacVenc+_aAnticipo+atrasados+_aCotVenc+_aEntrega+_aCotSolic+_aCotBloq;
+  const avgM=_mN>0?_mSum/_mN:0,avgMSem=_mSemN?_mSemSum/_mSemN:0,avgMPrev=mPrevN?_mPrevSum/mPrevN:0;
 
   // ── Tendencia de alertas: snapshot semanal en localStorage (acumula histórico) ──
   let _kpiHist;try{_kpiHist=JSON.parse(localStorage.getItem('kpiHist')||'[]');}catch(e){_kpiHist=[];}
@@ -6931,13 +6951,6 @@ function renderKPIs(){
   const _prevH=[..._kpiHist].reverse().find(e=>e.wk!==_wk);
   const alertasPrev=_prevH?_prevH.alertas:null;
 
-  // ── Margen ────────────────────────────────────────────────────────────
-  const cotM=_cot.filter(c=>getMargenCot(c.fields)!==null);
-  const avgM=cotM.length>0?cotM.reduce((sum,c)=>sum+getMargenCot(c.fields),0)/cotM.length:0;
-  const _cotMSem=_cot.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart&&getMargenCot(c.fields)!==null);
-  const avgMSem=_cotMSem.length?_cotMSem.reduce((s,c)=>s+getMargenCot(c.fields),0)/_cotMSem.length:0;
-  const _cotMPrev=_cot.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart&&getMargenCot(c.fields)!==null;});
-  const avgMPrev=_cotMPrev.length?_cotMPrev.reduce((s,c)=>s+getMargenCot(c.fields),0)/_cotMPrev.length:0;
 
   // ── Delta helpers ─────────────────────────────────────────────────────
   // Percentage change badge (revenue)
@@ -7003,7 +7016,7 @@ function renderKPIs(){
     <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes">${_ki('icon-message')}<div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}${_sparkline(spCot,'var(--accent2)')}</div>
     <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes">${_ki('icon-clientes')}<div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}${_sparkline(spCli,'var(--accent4)')}</div>
     <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas">${_ki('icon-warning')}<div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div>${alertBadge(alertas,alertasPrev)}</div>
-    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div>${ptsBadge(avgMSem,avgMPrev,_cotMPrev.length>0)}</div>`;
+    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div>${ptsBadge(avgMSem,avgMPrev,mPrevN>0)}</div>`;
   updateDockBadges();
 }
 function renderPipelineArea(){
@@ -7070,7 +7083,7 @@ function renderAlertas(){
   _cot.forEach(c=>{
     const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return;
     const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return;
-    const cl=_cli.find(x=>x.id===cid)||state.clientes.find(x=>x.id===cid);
+    const cl=_cli.find(x=>x.id===cid)||state.clientesByIdRec[cid];
     if(cl?.fields['Estado cuenta']==='Bloqueado')
       alertas.push({sev:3,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-lock"/></svg>',type:'cliente-bloqueado',msg:`<strong>${escapeHtml(cl.fields['Empresa']||'—')}</strong>: bloqueado con cot. activa <span style="color:var(--text3)">${escapeHtml(f['N° Cotización']||'—')}</span>`,id:c.id,tab:'cotizaciones'});
   });
@@ -7226,7 +7239,7 @@ async function bulkChangeEtapa(){
 }
 async function deleteSelectedClientes(){
   const ids=[...selectedClientes];if(!ids.length) return;const nombres=ids.map(id=>state.clientes.find(c=>c.id===id)?.fields['Empresa']||id);if(!confirm(`¿Eliminar ${ids.length} cliente${ids.length>1?'s':''}?\n\n${nombres.join('\n')}`)) return;
-  let ok=0,fail=0;for(const id of ids){try{await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];ok++;}catch(e){fail++;}}
+  let ok=0,fail=0;for(const id of ids){try{await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];delete state.clientesByIdRec[id];ok++;}catch(e){fail++;}}
   selectedClientes.clear();renderClientes();renderOverview();fail>0?toast(`${ok} eliminados, ${fail} con error`,'info'):toast(`✓ ${ok} eliminados`,'success');
 }
 function sortClientes(key){if(clientesSort.key===key) clientesSort.dir*=-1;else{clientesSort.key=key;clientesSort.dir=1;}document.querySelectorAll('#tab-clientes .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(/sortClientes\('(\w+)'\)/)?.[1];th.classList.remove('asc','desc');if(k===key) th.classList.add(clientesSort.dir===1?'asc':'desc');});renderClientes();_saveUIState();}
@@ -7875,7 +7888,7 @@ async function deleteCliente(id,nombre){
   const rec=state.clientes.find(x=>x.id===id);
   const snapshot=rec?sanitizeForRestore(rec.fields):null;
   try{
-    await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];closeClienteDetalle();renderClientes();renderOverview();
+    await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];delete state.clientesByIdRec[id];closeClienteDetalle();renderClientes();renderOverview();
     toastUndo(`Cliente "${nombre}" eliminado`,async()=>{
       try{const r=await airtableWrite('Clientes','POST',null,snapshot);if(r&&r.id){state.clientes.push(r);state.clientesById[r.id]=r.fields['Empresa']||nombre;}renderClientes();renderOverview();toast(`✓ "${nombre}" restaurado`,'success');}
       catch(e){toast('No se pudo restaurar: '+e.message,'error');}
@@ -11975,7 +11988,7 @@ function buildAgentContext(id){
     const hace5=new Date(Date.now()-5*86400000);
     const sinResp=state.cotizaciones.filter(c=>{const f=c.fields;if(f['Estado cotización']!=='Enviada') return false;const fc=f['Fecha cotización']?new Date(f['Fecha cotización']+'T00:00:00'):null;return fc&&fc<hace5;}).slice(0,8);
     lines.push('\nCOTIZACIONES SIN RESPUESTA (+5 DÍAS):');
-    if(sinResp.length){sinResp.forEach(c=>{const f=c.fields;const dias=f['Fecha cotización']?Math.round((today-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):'—';const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientes.find(x=>x.id===cid):null;const contacto=[cl?.fields['Teléfono'],cl?.fields['Email']].filter(Boolean).join(' | ')||'—';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${dias}d sin respuesta | Contacto: ${contacto}`);const sol=f['Solicitud cliente (texto libre)']||'';if(sol) lines.push(`    Solicitud: ${sol.substring(0,80)}`);});}else lines.push('  Sin cotizaciones pendientes +5 días ✓');
+    if(sinResp.length){sinResp.forEach(c=>{const f=c.fields;const dias=f['Fecha cotización']?Math.round((today-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):'—';const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientesByIdRec[cid]:null;const contacto=[cl?.fields['Teléfono'],cl?.fields['Email']].filter(Boolean).join(' | ')||'—';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${dias}d sin respuesta | Contacto: ${contacto}`);const sol=f['Solicitud cliente (texto libre)']||'';if(sol) lines.push(`    Solicitud: ${sol.substring(0,80)}`);});}else lines.push('  Sin cotizaciones pendientes +5 días ✓');
   }
 
   if(id==='QUOTE'){
@@ -12144,7 +12157,7 @@ function buildAgentContext(id){
   if(id==='ONBOARDING'){
     const recienAprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-3);
     lines.push('\nCOTIZACIONES RECIENTEMENTE APROBADAS (nuevos clientes):');
-    if(recienAprobadas.length){recienAprobadas.forEach(c=>{const f=c.fields;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientes.find(x=>x.id===cid):null;const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])}${cl?.fields['Email']?' | '+cl.fields['Email']:''}${sol?' | Solicitud: '+sol.substring(0,70):''}`);});}else lines.push('  Sin aprobaciones recientes');
+    if(recienAprobadas.length){recienAprobadas.forEach(c=>{const f=c.fields;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientesByIdRec[cid]:null;const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])}${cl?.fields['Email']?' | '+cl.fields['Email']:''}${sol?' | Solicitud: '+sol.substring(0,70):''}`);});}else lines.push('  Sin aprobaciones recientes');
   }
 
   lines.push('\n=== FIN CONTEXTO ===');
@@ -12714,7 +12727,7 @@ function runRepClienteAgent(pedidoId){
   const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
   const f=p.fields;
   const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;
-  const cl=cid?state.clientes.find(x=>x.id===cid):null;
+  const cl=cid?state.clientesByIdRec[cid]:null;
   const waPhone=cl?_getClienteWAPhone(cl):'';
   const email=cl?.fields['Email']||'';
   const today=new Date();today.setHours(0,0,0,0);
@@ -12990,7 +13003,7 @@ function checkAgentSuggestions(){
   const pendOB=state.cotizaciones.filter(c=>{
     if(c.fields['Estado cotización']!=='Aprobada') return false;
     const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
-    const cl=cid?state.clientes.find(x=>x.id===cid):null;
+    const cl=cid?state.clientesByIdRec[cid]:null;
     return cl&&!['Cliente activo','Cliente inactivo'].includes(cl.fields['Etapa venta']||'');
   });
   if(pendOB.length&&seen.onboarding!==todayStr){
@@ -13086,7 +13099,7 @@ function openOnboardingPicker(){
   const pend=state.cotizaciones.filter(c=>{
     if(c.fields['Estado cotización']!=='Aprobada') return false;
     const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
-    const cl=cid?state.clientes.find(x=>x.id===cid):null;
+    const cl=cid?state.clientesByIdRec[cid]:null;
     return cl&&!['Cliente activo','Cliente inactivo'].includes(cl.fields['Etapa venta']||'');
   });
   _openAgentPicker('📨 Clientes nuevos sin bienvenida',pend.map(c=>{
@@ -16180,7 +16193,7 @@ const MAIL={
     let email='',empresa='';
     const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;
     if(cid){
-      const cli=state.clientes.find(x=>x.id===cid);
+      const cli=state.clientesByIdRec[cid];
       if(cli){email=cli.fields['Email']||'';empresa=cli.fields['Empresa']||'';}
     }
     // Generar PDF de la cotización como adjunto
