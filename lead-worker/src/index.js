@@ -14,6 +14,7 @@
  * Rutas:
  *   GET  /health
  *   POST /lead                  (web pública — clave X-Public-Lead-Key + Turnstile opcional)
+ *   POST /newsletter            (alta de suscriptor desde la web — misma clave + anti-bot)
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
@@ -52,6 +53,10 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/lead") {
         return await handleLead(request, env, ctx, cors);
+      }
+
+      if (request.method === "POST" && url.pathname === "/newsletter") {
+        return await handleNewsletter(request, env, ctx, cors);
       }
 
       if (request.method === "POST" && url.pathname === "/webhooks/google-ads") {
@@ -129,6 +134,96 @@ async function handleLead(request, env, ctx, cors) {
     source: norm.source || "web",
     campaign: norm.utmCampaign,
   });
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: POST /newsletter   (alta de suscriptor desde la web)
+ * Crea/actualiza el Cliente en el CRM y marca "Suscrito newsletter".
+ * No encola agentes ni dispara la auto-respuesta de lead: es solo opt-in.
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleNewsletter(request, env, ctx, cors) {
+  // 1) Clave compartida (mismo anti-bot básico que /lead)
+  if (env.PUBLIC_LEAD_KEY) {
+    const key = request.headers.get("X-Public-Lead-Key") || "";
+    if (!timingSafeEqual(key, env.PUBLIC_LEAD_KEY)) {
+      return json({ ok: false, error: "No autorizado" }, 401, cors);
+    }
+  }
+
+  const body = await readJson(request);
+  if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
+
+  // 2) Honeypot: si viene relleno, es un bot. Respondemos 200 sin enseñarle.
+  if (body.company_website || body._hp) {
+    return json({ ok: true, subscribed: true }, 200, cors);
+  }
+
+  // 3) Turnstile (opcional)
+  if (env.TURNSTILE_SECRET) {
+    const ok = await verifyTurnstile(env.TURNSTILE_SECRET, body.turnstileToken, request);
+    if (!ok) return json({ ok: false, error: "Verificación anti-bot falló" }, 403, cors);
+  }
+
+  // 4) Rate-limit por IP (opcional, requiere binding KV "RL")
+  const limited = await rateLimited(env, request, "newsletter", 8, 60);
+  if (limited) return json({ ok: false, error: "Demasiadas solicitudes" }, 429, cors);
+
+  // 5) Validación: email obligatorio y con forma válida
+  const email = str(body.email);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return json({ ok: false, error: "Email inválido" }, 400, cors);
+  }
+  const name = str(body.name);
+  const company = str(body.company);
+  const source = str(body.source) || "Newsletter web";
+
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
+    return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
+  }
+
+  try {
+    // Si el contacto ya existe (por email), solo reactiva la suscripción.
+    const existing = await airtableFindCliente(env, { email });
+    if (existing) {
+      await airtableUpdateTolerant(
+        env,
+        "Clientes",
+        existing,
+        stripEmpty({
+          "Suscrito newsletter": true,
+          "Baja newsletter": false,
+          "Email válido": true,
+        })
+      );
+      return json({ ok: true, subscribed: true, clienteId: existing, created: false }, 200, cors);
+    }
+
+    // Nuevo contacto: alta mínima ya suscrita.
+    const cliente = await airtableCreateTolerant(
+      env,
+      "Clientes",
+      stripEmpty({
+        Empresa: company || name || email,
+        Contacto: name,
+        Email: email,
+        "Origen lead": source,
+        "Suscrito newsletter": true,
+        "Email válido": true,
+        "Fecha primer contacto": today(),
+        "Notas internas":
+          "Alta a newsletter desde la web" +
+          (body.landingUrl ? ` (${str(body.landingUrl)})` : ""),
+      })
+    );
+    return json(
+      { ok: true, subscribed: true, clienteId: cliente?.id || null, created: true },
+      200,
+      cors
+    );
+  } catch (e) {
+    console.error("[leads-worker] newsletter:", e.message);
+    return json({ ok: false, error: "No se pudo suscribir" }, 500, cors);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
