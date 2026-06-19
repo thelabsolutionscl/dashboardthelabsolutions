@@ -6623,9 +6623,16 @@ async function loadAllData(){
     ensureFichaPropuestaField();
     if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}}
   }catch(e){
-    setStatus('error',false);
     console.error('loadAllData error:',e);
-    toast('Error cargando datos: '+e.message,'error');
+    // Si ya hay datos en pantalla (de la caché o de una carga previa), el fallo
+    // del refresco no es bloqueante: avisamos suave en vez de un error alarmante.
+    if(state.clientes.length||state.pedidos.length||state.cotizaciones.length){
+      setStatus('sin conexión',false);
+      toast('Sin conexión — mostrando datos guardados','info');
+    }else{
+      setStatus('error',false);
+      toast('Error cargando datos: '+e.message,'error');
+    }
   }finally{
     isLoadingData=false;
     hideSysLoader();  // siempre se oculta, sin importar qué pasó
