@@ -6507,6 +6507,38 @@ function _rebuildClientesById(){
   state.clientesByIdRec={};
   state.clientes.forEach(x=>{ state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—'; state.clientesByIdRec[x.id]=x; });
 }
+// ── Caché de datos para arranque instantáneo (stale-while-revalidate) ──
+// Guarda un snapshot del último fetch completo, con clave por usuario (misma
+// convención que el resto de prefs: thelab_*_<username>). En el arranque se
+// hidrata el state y se pinta de inmediato; loadAllData() refresca en segundo
+// plano. No se cachea en modo demo (datos sintéticos que igual se regeneran).
+function _dataCacheKey(){const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;return(u&&u.username)?'thelab_datacache_'+u.username:null;}
+function _saveDataCache(){
+  if(window._DEMO_MODE) return;
+  const k=_dataCacheKey();if(!k) return;
+  try{
+    const snap=JSON.stringify({v:1,t:Date.now(),d:{
+      clientes:state.clientes,cotizaciones:state.cotizaciones,pedidos:state.pedidos,
+      reportes:state.reportes,proveedores:state.proveedores,facturas:state.facturas
+    }});
+    if(snap.length>4500000){try{localStorage.removeItem(k);}catch(e){}return;} // no arriesgar la cuota
+    localStorage.setItem(k,snap);
+  }catch(e){ try{localStorage.removeItem(k);}catch(e2){} } // p.ej. QuotaExceeded → se descarta
+}
+function _hydrateFromCache(){
+  if(window._DEMO_MODE) return false;
+  const k=_dataCacheKey();if(!k) return false;
+  try{
+    const raw=localStorage.getItem(k);if(!raw) return false;
+    const o=JSON.parse(raw);if(!o||!o.d) return false;
+    state.clientes=o.d.clientes||[];state.cotizaciones=o.d.cotizaciones||[];
+    state.pedidos=o.d.pedidos||[];state.reportes=o.d.reportes||[];
+    state.proveedores=o.d.proveedores||[];state.facturas=o.d.facturas||[];
+    _rebuildClientesById();
+    state._cacheTs=o.t||null;
+    return (state.clientes.length+state.cotizaciones.length+state.pedidos.length)>0;
+  }catch(e){ return false; }
+}
 // Aplica config desde la tabla 'Monitor Sistema' (META_REVENUE / WATI_CONFIG / FIN_VENTAS).
 function _applyMonitorSistema(recs){
   recs=recs||[];
@@ -6575,9 +6607,13 @@ async function loadAllData(){
     _assignCoreState(res,true);
     if(isFirst) slProgress(92,'Calculando resumen...');
     state.loaded=true;state.lastUpdateTs=Date.now();state._silentN=0;setStatus('en vivo',true);
+    _saveDataCache();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
     renderOverview();
-    if(!isFirst) toast('Datos actualizados ✓','success');
+    // Tras hidratar desde caché, el primer fetch es un refresco silencioso: no
+    // mostramos el toast (se limpia la marca para que los refrescos manuales sí avisen).
+    if(!isFirst && !state._hydrated) toast('Datos actualizados ✓','success');
+    state._hydrated=false;
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
@@ -6620,6 +6656,7 @@ async function loadAllDataSilent(){
       changed=_mergeCoreState(res)>0;
       if(changed) _reRenderActiveList();
     }
+    if(doFull||changed) _saveDataCache();
     state.lastUpdateTs=Date.now();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;
     if(changed) renderOverview();
@@ -16656,6 +16693,14 @@ function initDashboard(){
     toast('Configura tu token de Airtable para continuar','error');
     startAutoRefresh();
   }else{
+    // Arranque instantáneo: si hay datos cacheados de este usuario, hidrata y
+    // pinta de inmediato; loadAllData() refresca en segundo plano.
+    if(_hydrateFromCache()){
+      state.loaded=true;state._hydrated=true;
+      hideSysLoader();
+      setStatus('actualizando…',false);
+      try{_renderOverviewNow();_reRenderActiveList();}catch(e){logErr('hydrateRender',e);}
+    }
     loadAllData().then(()=>{startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
   }
   initMobileTableLabels();
