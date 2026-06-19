@@ -11563,6 +11563,11 @@ function formatAgentReport(raw){
   const inl=s=>{let h=escapeHtml(s);
     h=h.replace(/\*\*([^*]+?)\*\*/g,'<strong style="color:var(--text)">$1</strong>').replace(/__([^_]+?)__/g,'<strong style="color:var(--text)">$1</strong>').replace(/\*\*/g,'');
     h=h.replace(/`([^`]+)`/g,'<code style="background:var(--surface3);padding:1px 5px;border-radius:4px">$1</code>');
+    // Resalta nº de pedido (PED-AAAA-NNN) y de cotización (AAMMNN) en negrita + blanco.
+    // El patrón de cotización exige año 24-35 y mes 01-12, y evita vecinos $/dígito/punto
+    // para no marcar montos ni años sueltos.
+    h=h.replace(/\b(PED-\d{4}-\d{2,})\b/gi,'<strong style="color:#fff">$1</strong>');
+    h=h.replace(/(^|[^\d.$])((?:2[4-9]|3[0-5])(?:0[1-9]|1[0-2])\d{2})(?![\d.])/g,(m,p,n)=>p+'<strong style="color:#fff">'+n+'</strong>');
     return h;};
   // ¿Es un encabezado de sección? Devuelve el título limpio o null.
   // Sólo casos estructurales inequívocos: markdown #, línea en negrita completa,
