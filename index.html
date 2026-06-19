@@ -2936,14 +2936,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm active-filter" id="redesBtnLista" onclick="redesSetView('lista')">Lista</button>
         <button class="btn btn-ghost btn-sm" id="redesBtnCal" onclick="redesSetView('cal')">📅 Calendario</button>
-        <select class="field-select" id="redesFiltroRed" onchange="renderRedesPosts()" style="font-size:11px;padding:4px 8px;width:auto">
+        <select class="field-select" id="redesFiltroRed" onchange="redesApplyFilters()" style="font-size:11px;padding:4px 8px;width:auto">
           <option value="">Todas las redes</option>
           <option value="Instagram">Instagram</option>
           <option value="LinkedIn">LinkedIn</option>
           <option value="TikTok">TikTok</option>
           <option value="Facebook">Facebook</option>
         </select>
-        <select class="field-select" id="redesFiltroEstado" onchange="renderRedesPosts()" style="font-size:11px;padding:4px 8px;width:auto">
+        <select class="field-select" id="redesFiltroEstado" onchange="redesApplyFilters()" style="font-size:11px;padding:4px 8px;width:auto">
           <option value="">Todos</option>
           <option value="Borrador">Borradores</option>
           <option value="Programado">Programados</option>
@@ -12565,6 +12565,7 @@ function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classLi
 // ── REDES SOCIALES ─────────────────────────────────────────────
 let _redesLoaded=false, _redesLastGen='', _redesLastAgent='', _redesLastMedia='';
 let _redesView='lista', _redesCalMonth=null, _redesReportText='', _redesDateResolve=null, _redesLastPedido='';
+let _redesReplyBusy=false, _redesLoadBusy=false;   // guards anti-concurrencia (carga y llamadas a Claude)
 const _redesLeadCreated=new Set();   // interacciones ya convertidas en lead (anti-duplicado)
 const REDES_NETS=['Instagram','LinkedIn','TikTok','Facebook'];
 const REDES_ICON={Instagram:'📷',LinkedIn:'in',TikTok:'♪',Facebook:'f'};
@@ -12580,16 +12581,20 @@ function initRedes(){
 
 async function redesLoad(force){
   if(!getToken()){toast('Falta el token de Airtable (Mi cuenta)','error');return;}
-  const loadingHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
-  if(force){const pe=document.getElementById('redesPostsList');if(pe)pe.innerHTML=loadingHTML;const ie=document.getElementById('redesInboxList');if(ie)ie.innerHTML=loadingHTML;}
-  // Lecturas tolerantes: distingue "tabla no existe" (estado guía) de un error de red (toast).
-  state._socialPostsErr=false; state._socialIntErr=false;
-  const isMissing=e=>/not ?found|could ?not|no such|table|404|NOT_FOUND|invalid permissions|not authorized|403/i.test(String((e&&e.message)||''));
-  state.socialPosts = await airtableFetch('Social_Posts',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialPostsErr=true;else toast('No se pudieron cargar publicaciones: '+e.message,'error');return [];});
-  state.socialInteractions = await airtableFetch('Social_Interactions',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialIntErr=true;else toast('No se pudieron cargar interacciones: '+e.message,'error');return [];});
-  state.socialMetrics = await airtableFetch('Social_Metrics',365).then(r=>r.records).catch(()=>[]);
-  _redesLoaded=true;
-  renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics();
+  if(_redesLoadBusy) return;   // evita recargas solapadas (spam del botón Actualizar)
+  _redesLoadBusy=true;
+  try{
+    const loadingHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
+    if(force){const pe=document.getElementById('redesPostsList');if(pe)pe.innerHTML=loadingHTML;const ie=document.getElementById('redesInboxList');if(ie)ie.innerHTML=loadingHTML;}
+    // Lecturas tolerantes: distingue "tabla no existe" (estado guía) de un error de red (toast).
+    state._socialPostsErr=false; state._socialIntErr=false;
+    const isMissing=e=>/not ?found|could ?not|no such|table|404|NOT_FOUND|invalid permissions|not authorized|403/i.test(String((e&&e.message)||''));
+    state.socialPosts = await airtableFetch('Social_Posts',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialPostsErr=true;else toast('No se pudieron cargar publicaciones: '+e.message,'error');return [];});
+    state.socialInteractions = await airtableFetch('Social_Interactions',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialIntErr=true;else toast('No se pudieron cargar interacciones: '+e.message,'error');return [];});
+    state.socialMetrics = await airtableFetch('Social_Metrics',365).then(r=>r.records).catch(()=>[]);
+    _redesLoaded=true;
+    renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics();
+  }finally{ _redesLoadBusy=false; }
 }
 
 // Pobla el selector de pedidos entregados (idea: generar contenido desde tu propia producción).
@@ -12742,12 +12747,20 @@ function redesSetView(mode){
 function redesCalNav(delta){
   const b=_redesCalMonth||new Date(); _redesCalMonth=new Date(b.getFullYear(),b.getMonth()+delta,1); renderRedesCalendarGrid();
 }
+// Refresca la vista activa al cambiar los filtros (lista o calendario).
+function redesApplyFilters(){ if(_redesView==='cal') renderRedesCalendarGrid(); else renderRedesPosts(); }
 function renderRedesCalendarGrid(){
   const el=document.getElementById('redesPostsCal'); if(!el) return;
   if(!_redesCalMonth){const n=new Date();_redesCalMonth=new Date(n.getFullYear(),n.getMonth(),1);}
   const base=_redesCalMonth, year=base.getFullYear(), month=base.getMonth();
+  const fRed=document.getElementById('redesFiltroRed')?.value||'';
+  const fEst=document.getElementById('redesFiltroEstado')?.value||'';
   const byDay={};
-  (state.socialPosts||[]).forEach(p=>{const d=p.fields['Fecha programada']||p.fields['Fecha publicación'];if(!d)return;const dt=new Date(d);if(isNaN(dt))return;const k=_redesDayKey(dt);(byDay[k]=byDay[k]||[]).push(p);});
+  (state.socialPosts||[]).forEach(p=>{
+    const e=p.fields['Estado']||p.fields['Estado post']||'';
+    if((fRed&&p.fields['Red']!==fRed)||(fEst&&e!==fEst)) return;
+    const d=p.fields['Fecha programada']||p.fields['Fecha publicación'];if(!d)return;const dt=new Date(d);if(isNaN(dt))return;const k=_redesDayKey(dt);(byDay[k]=byDay[k]||[]).push(p);
+  });
   const startDow=(new Date(year,month,1).getDay()+6)%7; // lunes=0
   const dim=new Date(year,month+1,0).getDate();
   const monthName=base.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
@@ -12799,6 +12812,7 @@ function renderRedesInbox(){
   el.innerHTML=inter.map(i=>{
     const f=i.fields, red=f['Red']||'—', estado=f['Estado']||'Pendiente';
     const esLead=f['Es lead']===true||/^s[ií]/i.test(f['Es lead']||'');
+    const leadDone=_redesLeadCreated.has(i.id)||f['Lead creado']===true;
     const resp=f['Respuesta sugerida']||'';
     return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
@@ -12812,8 +12826,8 @@ function renderRedesInbox(){
         <button class="btn btn-primary btn-sm" onclick="redesReply('${i.id}')">🤖 ${resp?'Regenerar':'Sugerir'} respuesta</button>
         ${resp?`<button class="btn btn-ghost btn-sm" onclick="redesCopyReply('${i.id}')">Copiar</button>`:''}
         ${estado==='Pendiente'?`<button class="btn btn-ghost btn-sm" onclick="redesMarkInteraction('${i.id}','Respondido')">Marcar respondido ✓</button>`:''}
-        ${esLead&&!_redesLeadCreated.has(i.id)?`<button class="btn btn-ghost btn-sm" onclick="redesInteractionToLead('${i.id}')">→ Crear lead</button>`:''}
-        ${_redesLeadCreated.has(i.id)?'<span class="badge badge-green" style="font-size:8px;align-self:center">✓ Lead creado</span>':''}
+        ${esLead&&!leadDone?`<button class="btn btn-ghost btn-sm" onclick="redesInteractionToLead('${i.id}')">→ Crear lead</button>`:''}
+        ${leadDone?'<span class="badge badge-green" style="font-size:8px;align-self:center">✓ Lead creado</span>':''}
       </div>
     </div>`;
   }).join('');
@@ -12838,24 +12852,29 @@ async function _redesSuggestReply(i){
   return true;
 }
 async function redesReply(id){
+  if(_redesReplyBusy){toast('Espera a que termine la operación en curso','info');return;}
   const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
-  toast('Generando respuesta…','info');
+  _redesReplyBusy=true; toast('Generando respuesta…','info');
   try{ await _redesSuggestReply(i); toast('Respuesta lista ✓','success'); renderRedesKpis(); renderRedesInbox(); }
   catch(e){ toast('Error: '+e.message,'error'); }
+  finally{ _redesReplyBusy=false; }
 }
 // Sugiere respuesta para TODAS las interacciones pendientes sin respuesta (secuencial, para no saturar la API).
 async function redesReplyAllPending(){
+  if(_redesReplyBusy){toast('Espera a que termine la operación en curso','info');return;}
   const pend=(state.socialInteractions||[]).filter(i=>(i.fields['Estado']||'Pendiente')==='Pendiente' && !((i.fields['Respuesta sugerida']||'').trim()));
   if(!pend.length){toast('No hay pendientes sin respuesta','info');return;}
+  _redesReplyBusy=true;
   const btn=document.getElementById('redesInbBulkBtn'); const prev=btn?btn.textContent:'';
   if(btn){btn.disabled=true;}
   let ok=0,fail=0;
   for(let k=0;k<pend.length;k++){
     if(btn) btn.textContent=`⏳ ${k+1}/${pend.length}…`;
-    try{ await _redesSuggestReply(pend[k]); ok++; renderRedesInbox(); }catch(e){ fail++; }
+    try{ await _redesSuggestReply(pend[k]); ok++; }catch(e){ fail++; }
   }
+  _redesReplyBusy=false;
   if(btn){btn.disabled=false;btn.textContent=prev;}
-  renderRedesKpis(); renderRedesInbox();
+  renderRedesKpis(); renderRedesInbox();   // un solo re-render al final (antes O(N²) en DOM)
   toast(`Sugeridas ${ok} respuesta${ok!==1?'s':''}${fail?` · ${fail} con error`:''}`, fail?'error':'success');
 }
 function redesCopyReply(id){
@@ -12893,8 +12912,8 @@ async function redesInteractionToLead(id){
         encolado=true;
       }catch(_){}
     }
-    await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':'Respondido'});
-    if(i) i.fields['Estado']='Respondido';
+    await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':'Respondido','Lead creado':true});
+    if(i){ i.fields['Estado']='Respondido'; i.fields['Lead creado']=true; }
     toast(encolado?'Lead creado y encolado para scoring ✓':'Lead creado en Clientes ✓','success'); renderRedesKpis(); renderRedesInbox();
   }catch(e){toast('No se pudo crear el lead: '+e.message,'error');}
 }
@@ -12974,9 +12993,10 @@ async function redesSaveDraft(){
 }
 // Separa la salida de CAPTION/CONTENT (varias redes en un bloque) en secciones por red.
 function _redesSplitByNetwork(text){
-  const nets=[{key:'Instagram',re:/instagram/i},{key:'LinkedIn',re:/linked\s?in/i},{key:'TikTok',re:/tik\s?tok|reels?/i},{key:'Facebook',re:/facebook/i}];
+  // Encabezados anclados al inicio de la línea (tras limpiar markdown/viñetas) → evita falsos positivos.
+  const nets=[{key:'Instagram',re:/^instagram\b/i},{key:'LinkedIn',re:/^linked\s?in\b/i},{key:'TikTok',re:/^(tik\s?tok|reels?)\b/i},{key:'Facebook',re:/^facebook\b/i}];
   const lines=String(text).split('\n'); const marks=[];
-  lines.forEach((ln,idx)=>{const t=ln.replace(/[*_#>\-•·]/g,'').trim();if(!t||t.length>40)return;for(const n of nets){if(n.re.test(t)){marks.push({idx,key:n.key});break;}}});
+  lines.forEach((ln,idx)=>{const t=ln.replace(/[*_#>]/g,'').replace(/^[\s\-•·\d.\)]+/,'').trim();if(!t||t.length>40)return;for(const n of nets){if(n.re.test(t)){marks.push({idx,key:n.key});break;}}});
   if(marks.length<2) return null;
   const seen={}, out=[];
   for(let i=0;i<marks.length;i++){

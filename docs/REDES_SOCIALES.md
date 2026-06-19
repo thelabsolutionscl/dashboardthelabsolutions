@@ -84,6 +84,7 @@ falta un campo, no rompe — muestra el estado guía. Ya están creadas.
 | Respuesta sugerida | multilineText | la rellena `COMMUNITY_AGENT` |
 | Estado | singleSelect | Pendiente · Respondido · Ignorado |
 | Es lead | checkbox | lo marca el agente |
+| Lead creado | checkbox | el dashboard lo marca al crear el Cliente — **anti-duplicado durable** |
 | Intención | singleLineText | consulta_precio / interes_producto / soporte / elogio / spam / otro |
 | Fecha | dateTime | |
 
