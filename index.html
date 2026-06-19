@@ -5305,7 +5305,7 @@ const _DEFAULTS={
   PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%'
 };
 // ────────────────────────────────────────────────────────────
-const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},clientesByIdRec:{},pedidosById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
+const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},clientesByIdRec:{},pedidosById:{},cotizacionesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
 window.state=state;
 let cdCurrentId='',cdCurrentEmpresa='';
 let _importDtes=[];
@@ -6511,6 +6511,10 @@ function _rebuildPedidosById(){
   state.pedidosById={};
   state.pedidos.forEach(x=>{ state.pedidosById[x.id]=x; });
 }
+function _rebuildCotizacionesById(){
+  state.cotizacionesById={};
+  state.cotizaciones.forEach(x=>{ state.cotizacionesById[x.id]=x; });
+}
 // ── Caché de datos para arranque instantáneo (stale-while-revalidate) ──
 // Guarda un snapshot del último fetch completo, con clave por usuario (misma
 // convención que el resto de prefs: thelab_*_<username>). En el arranque se
@@ -6538,7 +6542,7 @@ function _hydrateFromCache(){
     state.clientes=o.d.clientes||[];state.cotizaciones=o.d.cotizaciones||[];
     state.pedidos=o.d.pedidos||[];state.reportes=o.d.reportes||[];
     state.proveedores=o.d.proveedores||[];state.facturas=o.d.facturas||[];
-    _rebuildClientesById();_rebuildPedidosById();
+    _rebuildClientesById();_rebuildPedidosById();_rebuildCotizacionesById();
     state._cacheTs=o.t||null;
     return (state.clientes.length+state.cotizaciones.length+state.pedidos.length)>0;
   }catch(e){ return false; }
@@ -6559,7 +6563,7 @@ function _assignCoreState(res,render){
   const [cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=res;
   if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
   if(cRes.status==='fulfilled'){ state.clientes=cRes.value.records||[]; _rebuildClientesById(); if(render) renderClientes(); }
-  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; if(render) renderCotizaciones(); }
+  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; _rebuildCotizacionesById(); if(render) renderCotizaciones(); }
   if(pRes.status==='fulfilled'){ state.pedidos=pRes.value.records||[]; _rebuildPedidosById(); if(render){ renderPedidos(); if(document.getElementById('tab-remuneraciones')?.classList.contains('active')) renderRemuneraciones(); } }
   if(rRes.status==='fulfilled'){ state.reportes=rRes.value.records||[]; if(render) renderReportes(); }
   if(pvRes.status==='fulfilled'){ state.proveedores=pvRes.value.records||[]; if(render){ renderProveedores(); fillCatSelects(); } }
@@ -6573,7 +6577,7 @@ function _mergeCoreState(res){
   let n=0;
   if(facRes.status==='fulfilled'){const r=facRes.value.records||[];n+=r.length;state.facturas=_mergeRecords(state.facturas,r);}
   if(cRes.status==='fulfilled'){const r=cRes.value.records||[];n+=r.length;state.clientes=_mergeRecords(state.clientes,r); _rebuildClientesById(); }
-  if(coRes.status==='fulfilled'){const r=coRes.value.records||[];n+=r.length;state.cotizaciones=_mergeRecords(state.cotizaciones,r);}
+  if(coRes.status==='fulfilled'){const r=coRes.value.records||[];n+=r.length;state.cotizaciones=_mergeRecords(state.cotizaciones,r);_rebuildCotizacionesById();}
   if(pRes.status==='fulfilled'){const r=pRes.value.records||[];n+=r.length;state.pedidos=_mergeRecords(state.pedidos,r);_rebuildPedidosById();}
   if(rRes.status==='fulfilled'){const r=rRes.value.records||[];n+=r.length;state.reportes=_mergeRecords(state.reportes,r);}
   if(pvRes.status==='fulfilled'){const r=pvRes.value.records||[];n+=r.length;state.proveedores=_mergeRecords(state.proveedores,r);}
@@ -8040,7 +8044,7 @@ async function updateCotizacionEstado(id,estado){
   try{
     await airtableWrite('Cotizaciones','PATCH',id,{'Estado cotización':estado});toast(`Cotización ${estado}`,'success');
     if(estado==='Aprobada'){
-      const _cot=state.cotizaciones.find(x=>x.id===id);
+      const _cot=state.cotizacionesById[id];
       const _cid=Array.isArray(_cot?.fields['Cliente'])?_cot.fields['Cliente'][0]:null;
       await _advanceEtapaCliente(_cid,'Cliente activo',['Lead nuevo','Contactado','Propuesta enviada','Negociación']);
       await crearPedidoDesdeCotizacion(id);
@@ -8061,7 +8065,7 @@ async function updateCotizacionEstado(id,estado){
   catch(e){toast('Error: '+e.message,'error');}
 }
 async function toggleUrgenciaCotizacion(id){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c) return;
+  const c=state.cotizacionesById[id];if(!c) return;
   const nuevo=!c.fields['Urgencia (+25%)'];
   c.fields['Urgencia (+25%)']=nuevo;
   const row=document.querySelector(`#cotsTableBodyFull tr[data-id="${id}"]`);
@@ -8070,7 +8074,7 @@ async function toggleUrgenciaCotizacion(id){
   catch(e){c.fields['Urgencia (+25%)']=!nuevo;renderCotizaciones();toast('Error: '+e.message,'error');}
 }
 async function crearPedidoDesdeCotizacion(cotId){
-  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;const f=cot.fields;
+  const cot=state.cotizacionesById[cotId];if(!cot) return;const f=cot.fields;
   const year=new Date().getFullYear();let maxNum=0;state.pedidos.forEach(p=>{const m=(p.fields['N° Pedido']||'').toString().match(new RegExp(`PED-${year}-(\\d+)`));if(m) maxNum=Math.max(maxNum,parseInt(m[1]));});
   const numPedido=`PED-${year}-${String(maxNum+1).padStart(3,'0')}`;
   const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0};
@@ -8082,7 +8086,7 @@ async function crearPedidoDesdeCotizacion(cotId){
   catch(e){if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('cliente')){try{await airtableWrite('Pedidos','POST',null,{'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']});toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();renderPedidos();_offerAgentChain(numPedido,solicitudCot);}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');}}else{toast(`⚠ Error: ${e.message}`,'error');}}
 }
 function openEditCot(id){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c) return;const f=c.fields;
+  const c=state.cotizacionesById[id];if(!c) return;const f=c.fields;
   document.getElementById('editCotId').value=id;document.getElementById('editCotNum').value=f['N° Cotización']||'';const _eAlias=document.getElementById('editCotAlias');if(_eAlias) _eAlias.value=f['Alias / Título']||'';document.getElementById('editCotCanal').value=f['Canal solicitud']||'WhatsApp';document.getElementById('editCotEstado').value=f['Estado cotización']||'Enviada';document.getElementById('editCotUrgente').value=f['Urgencia (+25%)']?'true':'false';document.getElementById('editCotFecha').value=f['Fecha cotización']||'';document.getElementById('editCotVto').value=f['Fecha vencimiento']||'';document.getElementById('editCotSolicitud').value=f['Solicitud cliente (texto libre)']||'';document.getElementById('editCotNotas').value=f['Notas cotización']||'';
   const _efp=document.getElementById('editCotFormaPago');if(_efp) _efp.value=f['Forma de pago']||'';
   const _etp=document.getElementById('editCotTiempoProd');if(_etp) _etp.value=f['Tiempo de producción']||'';
@@ -8141,7 +8145,7 @@ function openCopyCotPicker(target){
 }
 function closeCopyCotPicker(){document.getElementById('copyCotPickerModal').style.display='none';}
 function applyCopyCot(cotId){
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;const t=_copyCotTarget;
   // Ítems
   const detalle=f['Detalle productos']||'';
@@ -8231,7 +8235,7 @@ function selectEditCotCliente(id){
 
 // ── PDF ───────────────────────────────────────────────────────
 function buildCotizacionDoc(id){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c) return null;
+  const c=state.cotizacionesById[id];if(!c) return null;
   const f=c.fields;const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cf=(clienteId?state.clientes.find(x=>x.id===clienteId):null)?.fields||{};
   const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||new Date().toISOString().split('T')[0],vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',notas=f['Notas cotización']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
   const tiempoProd=f['Tiempo de producción'];const tipoDias=(f['Tipo días producción']||'DÍAS HÁBILES').toLowerCase();
@@ -8545,7 +8549,7 @@ function loadFPImgCache(cotId){
 }
 
 function openFichaPropModal(cotId){
-  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
+  const cot=state.cotizacionesById[cotId];if(!cot) return;
   _fpCotId=cotId;
   const f=cot.fields;
   const saved=parseFichaPropData(f['Ficha Propuesta'])||{};
@@ -9097,7 +9101,7 @@ async function subirFactura(pedidoId){
 }
 
 async function guardarFichaEnDrive(cotId){
-  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
+  const cot=state.cotizacionesById[cotId];if(!cot) return;
   const f=cot.fields;
   const numCot=f['N° Cotización']||cotId;
   const clienteNombre=(resolveClienteName(f['Cliente'])||'Sin_Contacto').replace(/[<>:"/\\|?*]/g,'_');
@@ -9192,7 +9196,7 @@ async function ensurePedidoFolder(pedidoId){
   const p=state.pedidosById[pedidoId];if(!p) return null;
   const f=p.fields;const cotIds=f['Cotizaciones'];
   if(cotIds&&cotIds.length){
-    const cot=state.cotizaciones.find(x=>x.id===cotIds[0]);
+    const cot=state.cotizacionesById[cotIds[0]];
     const numCot=cot?.fields['N° Cotización']||'';
     const cliente=resolveClienteName(cot?.fields['Cliente']||f['Cliente']);
     return await ensureCotFolder(cotIds[0],numCot,cliente);
@@ -9384,7 +9388,7 @@ async function openPedidoDrive(pedidoId){
   const f=p.fields;
   const cotIds=f['Cotizaciones'];
   if(cotIds&&cotIds.length){
-    const cot=state.cotizaciones.find(x=>x.id===cotIds[0]);
+    const cot=state.cotizacionesById[cotIds[0]];
     const numCot=cot?.fields['N° Cotización']||'';
     const cliente=resolveClienteName(cot?.fields['Cliente']||f['Cliente']);
     await openDriveFolder(cotIds[0],numCot,cliente);
@@ -9417,7 +9421,7 @@ async function saveFichaPropModal(verPDF=false){
     updatedAt:new Date().toISOString().slice(0,10)
   };
   const applyAndClose=()=>{
-    const cot=state.cotizaciones.find(x=>x.id===_fpCotId);
+    const cot=state.cotizacionesById[_fpCotId];
     if(cot) cot.fields['Ficha Propuesta']=JSON.stringify(data);
     saveFPImgCache(_fpCotId);
     toast('Ficha propuesta guardada ✓','success');
@@ -9445,7 +9449,7 @@ async function saveFichaPropModal(verPDF=false){
 }
 
 function buildFichaPropuestaDoc(cotId){
-  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return null;
+  const cot=state.cotizacionesById[cotId];if(!cot) return null;
   const f=cot.fields;
   const data=parseFichaPropData(f['Ficha Propuesta'])||{};
   const escH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
@@ -9878,7 +9882,7 @@ function renderPedidos(filter){
     const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button><button class="act-item act-item-yellow" onclick="startManagePedidoFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📦 Gestionar (guiado)</button><button class="act-item" onclick="startPedidoOnboardingFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;🚀 Iniciar producción</button><button class="act-item act-item-cyan" onclick="startQAFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🎬 QA (guiado)</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}<button class="act-item act-item-blue" onclick="openAdjuntosModal('ped','${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;Ver adjuntos</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
-    if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
+    if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizacionesById[f['Cotizaciones'][0]];if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
     return`<tr data-id="${p.id}" class="${sel?'row-selected':''}${_flashCls(p.id)}">
     <td style="text-align:center"><input type="checkbox" class="row-chk" data-id="${p.id}" ${sel?'checked':''} onchange="togglePedidoRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Estado">${estadoBadge(estado)}</td><td class="td-equipo" data-label="Equipo">${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
@@ -10998,7 +11002,7 @@ window.startQuoteFlow=startQuoteFlow;
 
 // ── Helpers de actualización (PATCH + sincroniza estado local) ──
 async function actualizarCliente(id,fields){const r=await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c)Object.assign(c.fields,fields);if(fields['Empresa'])state.clientesById[id]=fields['Empresa'];return r;}
-async function actualizarCotizacion(id,fields){const r=await airtableWrite('Cotizaciones','PATCH',id,fields);const c=state.cotizaciones.find(x=>x.id===id);if(c)Object.assign(c.fields,fields);return r;}
+async function actualizarCotizacion(id,fields){const r=await airtableWrite('Cotizaciones','PATCH',id,fields);const c=state.cotizacionesById[id];if(c)Object.assign(c.fields,fields);return r;}
 async function actualizarPedido(id,fields){const r=await airtableWrite('Pedidos','PATCH',id,fields);const p=state.pedidosById[id];if(p)Object.assign(p.fields,fields);return r;}
 
 const _CLI_SUM=[{label:'Empresa',key:'empresa'},{label:'Contacto',key:'contacto'},{label:'Cargo',key:'cargo'},{label:'Teléfono',key:'telefono'},{label:'Email',key:'email'},{label:'RUT',key:'rut'},{label:'Ciudad',key:'ciudad'},{label:'Sitio web',key:'web'},{label:'Origen',key:'origen'},{label:'Etapa',key:'etapa'},{label:'Notas',key:'notas'}];
@@ -11058,7 +11062,7 @@ function startEditClientFlow(id){
 }
 // ── Editar cotización (guiado, campos clave; los ítems se editan en el modal clásico) ──
 function startEditCotFlow(id){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c){toast('Cotización no encontrada','error');return;}
+  const c=state.cotizacionesById[id];if(!c){toast('Cotización no encontrada','error');return;}
   const f=c.fields;
   gfStart({title:'✏️ Editar '+(f['N° Cotización']||'cotización'),initial:{estado:f['Estado cotización']||'Enviada',formaPago:f['Forma de pago']||'',urgencia:f['Urgencia (+25%)']?'urgente':'normal',plazo:f['Tiempo de producción']||'',notas:f['Notas cotización']||''},steps:[
     {key:'estado',type:'chips',q:'Estado de la cotización',sub:'Para APROBAR usa el botón "Aprobar" (crea el pedido automáticamente).',options:['Enviada','Solicitada','Rechazada','Vencida'].map(v=>({label:v,value:v}))},
@@ -12348,7 +12352,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
 
 // — FOLLOWUP desde cotización
 function runFollowupAgent(cotId){
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;
   const _t=new Date();_t.setHours(0,0,0,0);
   const cliRec=_getClienteRecFromField(f['Cliente']);
@@ -12374,7 +12378,7 @@ function openFollowupWA(phone){
 
 async function _sendFollowupEmail(cotId,toEmail){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const emailText=_extractEmailPart(_agentInlineText)||_agentInlineText;
   const u=AUTH.getUser();
   const from_name=u?.name||'The Lab Solutions';
@@ -12430,7 +12434,7 @@ function runQuoteFormAgent(){
 
 // — QUOTE para una cotización existente en estado Solicitada
 function runQuoteCotAgent(cotId){
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;
   const sol=(f['Solicitud cliente (texto libre)']||f['Solicitud / detalle']||'').trim();
   if(!sol){toast('La cotización no tiene solicitud del cliente registrada — edítala primero','error');return;}
@@ -12468,7 +12472,7 @@ function quoteInsertItemsToEdit(cotId){
 
 // — WIN-BACK: reactivar cotización vencida o rechazada
 function runWinbackAgent(cotId){
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;
   const cliRec=_getClienteRecFromField(f['Cliente']);
   const waPhone=_getClienteWAPhone(cliRec);
@@ -16233,7 +16237,7 @@ const MAIL={
 
   // ── Enviar cotización por correo ──
   async sendCotizacion(cotId){
-    const c=state.cotizaciones.find(x=>x.id===cotId);
+    const c=state.cotizacionesById[cotId];
     if(!c){toast('Cotización no encontrada','error');return;}
     const f=c.fields;
     const numCot=f['N° Cotización']||'—';
