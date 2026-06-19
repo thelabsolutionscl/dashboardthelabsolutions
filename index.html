@@ -5225,6 +5225,10 @@ let _cliCap=TABLE_PAGE,_cliQuery='',_cotCap=TABLE_PAGE,_pedCap=TABLE_PAGE;
 // Ids del conjunto actualmente vigente (filtrado/ordenado) de cada tabla, para que
 // "seleccionar todo" abarque TODO el set y no solo las filas pintadas por paginación.
 let _cliRowIds=[],_pedRowIds=[];
+// Caché del texto buscable por cliente (id→texto). Se reusa entre teclas de
+// búsqueda y se vacía en cada render por cambio de datos (renderClientes sin el
+// flag skipAnalytics), así nunca queda obsoleto.
+let _cliSearchCache=new Map();
 function _loadMoreRow(restantes,cols,fn){return `<tr class="load-more-row"><td colspan="${cols}" style="text-align:center;padding:10px"><button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="${fn}">▼ Mostrar ${Math.min(TABLE_PAGE,restantes)} más · quedan ${restantes}</button></td></tr>`;}
 // Texto buscable de una fila: equivale al textContent que veía el filtro por DOM
 // (quita etiquetas y decodifica las entidades que introduce escapeHtml).
@@ -7404,6 +7408,7 @@ function buildClienteRow(c){
   </tr>`;
 }
 function renderClientes(skipAnalytics){
+  if(!skipAnalytics) _cliSearchCache.clear();
   const sorted=getSortedClientes();
   const tbody=document.getElementById('clientesTableBody');
   const countEl=document.getElementById('clientesCount');
@@ -7416,7 +7421,7 @@ function renderClientes(skipAnalytics){
   }
   // Búsqueda basada en datos: replica el texto exacto que veía el filtro por DOM
   // (textContent de la fila) sin tener que pintar las ~1000 filas primero.
-  const matched=_cliQuery?sorted.filter(c=>_rowText(buildClienteRow(c)).includes(_cliQuery)):sorted;
+  const matched=_cliQuery?sorted.filter(c=>{let t=_cliSearchCache.get(c.id);if(t===undefined){t=_rowText(buildClienteRow(c));_cliSearchCache.set(c.id,t);}return t.includes(_cliQuery);}):sorted;
   _cliRowIds=matched.map(c=>c.id);
   if(countEl) countEl.textContent=_cliQuery?`${matched.length} de ${sorted.length}`:(isVendorMode()?`${sorted.length} mis clientes`:`${state.clientes.length} clientes en CRM`);
   if(!matched.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state" style="padding:20px">Sin resultados para "${escapeHtml(_cliQuery)}"</div></td></tr>`);updateBulkBar();return;}
