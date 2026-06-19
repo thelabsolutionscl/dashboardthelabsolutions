@@ -1514,6 +1514,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <symbol id="icon-printer" viewBox="0 0 24 24" fill="none"><polyline points="6 9 6 2 18 2 18 9"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
 
 <symbol id="icon-correo" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="2 7 12 13 22 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="icon-redes" viewBox="0 0 24 24" fill="none"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke-linecap="round"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke-linecap="round"/></symbol>
 </defs></svg>
 <!-- ── LOGIN PAGE ── -->
 <div id="loginPage">
@@ -1741,6 +1742,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="dock-btn" data-tab="visual" onclick="switchTab('visual')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-visual"/></svg></span><span class="dock-label">Visual AI</span></button>
     <button class="dock-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-remuneraciones"/></svg></span><span class="dock-label">Remuneraciones</span></button>
     <button class="dock-btn" data-tab="correo" onclick="switchTab('correo')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-correo"/></svg></span><span class="dock-label">Correo</span></button>
+    <button class="dock-btn" data-tab="redes" onclick="switchTab('redes')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-redes"/></svg></span><span class="dock-label">Redes</span><span class="dock-badge" id="badge-redes" style="display:none">0</span></button>
   </div>
 </div>
 
@@ -1780,6 +1782,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="visual" onclick="switchTabMobile('visual')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-visual"/></svg></span>Visual AI</button>
     <button class="mobile-tab-btn" data-tab="remuneraciones" onclick="switchTabMobile('remuneraciones')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-remuneraciones"/></svg></span>Remuneraciones</button>
     <button class="mobile-tab-btn" data-tab="correo" onclick="switchTabMobile('correo')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-correo"/></svg></span>Correo</button>
+    <button class="mobile-tab-btn" data-tab="redes" onclick="switchTabMobile('redes')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-redes"/></svg></span>Redes Sociales</button>
     <!-- Acordeón Configuración / Tokens -->
     <div style="border-top:1px solid var(--border)">
       <button onclick="toggleMobileConfig()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 18px;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.3px">
@@ -2835,6 +2838,105 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
 
   <div class="data-grid-3" id="agentesGrid"></div>
+</div>
+
+<!-- REDES SOCIALES -->
+<div class="tab-panel" id="tab-redes">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Redes Sociales</div>
+      <div class="section-desc">Planifica, genera y programa contenido para Instagram, LinkedIn, TikTok y Facebook. Responde comentarios y DMs con IA, y convierte interacciones en leads de tu CRM.</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="redesLoad(true)" style="flex-shrink:0">↻ Actualizar</button>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" id="redesKpis">
+    <div class="kpi-card green"><div class="kpi-label">Publicados (mes)</div><div class="kpi-value" id="redesKpiPub">—</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">Programados</div><div class="kpi-value" id="redesKpiProg">—</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">Borradores</div><div class="kpi-value" id="redesKpiBorr">—</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Interacciones pend.</div><div class="kpi-value" id="redesKpiInt">—</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Leads desde redes</div><div class="kpi-value" id="redesKpiLeads">—</div></div>
+  </div>
+
+  <!-- GENERADOR RÁPIDO -->
+  <div class="card" style="margin-bottom:20px;border-color:rgba(236,72,153,0.30);box-shadow:0 0 24px rgba(236,72,153,0.06)">
+    <div class="card-header" style="border-bottom-color:rgba(236,72,153,0.2)">
+      <span class="card-title" style="color:#ec4899"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> Generador de contenido</span>
+      <div style="display:flex;gap:5px;align-items:center"><span class="badge badge-purple">IA</span></div>
+    </div>
+    <div style="padding:14px 16px 0">
+      <div class="ss-form-grid">
+        <div class="field-group" style="grid-column:1/-1">
+          <label class="field-label">Proyecto / producto / idea *</label>
+          <input class="field-input" id="redesGenInput" placeholder="ej: Neón OPEN entregado a restaurant en Vitacura | 50 trofeos para gala corporativa | Time-lapse de impresión 3D">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Agente</label>
+          <select class="field-select" id="redesGenAgent">
+            <option value="CAPTION_AGENT">Caption (copy por red)</option>
+            <option value="SOCIAL_STRATEGIST">Estratega (calendario)</option>
+            <option value="TREND_AGENT">Tendencias (ideas de Reels)</option>
+            <option value="CONTENT">Content (3 formatos)</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Red destino (al guardar)</label>
+          <select class="field-select" id="redesGenRed">
+            <option value="Instagram">Instagram</option>
+            <option value="LinkedIn">LinkedIn</option>
+            <option value="TikTok">TikTok</option>
+            <option value="Facebook">Facebook</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">
+        <span style="font-size:10px;color:var(--text3);align-self:center;margin-right:3px">Rápidas:</span>
+        <button onclick="redesQuick('Neón LED personalizado recién entregado, foto nocturna de ambiente')" class="btn-mini">Neón entregado</button>
+        <button onclick="redesQuick('Time-lapse del proceso de impresión 3D de medallas para torneo')" class="btn-mini">Proceso 3D</button>
+        <button onclick="redesQuick('50 trofeos personalizados para gala corporativa de empresa tecnológica')" class="btn-mini">Trofeos gala</button>
+        <button onclick="redesQuick('Arma el calendario de contenido del próximo mes para captar leads')" class="btn-mini">Calendario mes</button>
+      </div>
+      <button class="btn btn-primary" id="redesGenBtn" onclick="redesGenerate()" style="background:#ec4899;color:#fff;border-color:#ec4899"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> Generar contenido</button>
+    </div>
+    <div id="redesGenResult" style="padding:14px 16px"></div>
+  </div>
+
+  <!-- CALENDARIO / POSTS -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-redes"/></svg> Calendario de contenido</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="field-select" id="redesFiltroRed" onchange="renderRedesPosts()" style="font-size:11px;padding:4px 8px;width:auto">
+          <option value="">Todas las redes</option>
+          <option value="Instagram">Instagram</option>
+          <option value="LinkedIn">LinkedIn</option>
+          <option value="TikTok">TikTok</option>
+          <option value="Facebook">Facebook</option>
+        </select>
+        <select class="field-select" id="redesFiltroEstado" onchange="renderRedesPosts()" style="font-size:11px;padding:4px 8px;width:auto">
+          <option value="">Todos</option>
+          <option value="Borrador">Borradores</option>
+          <option value="Programado">Programados</option>
+          <option value="Publicado">Publicados</option>
+        </select>
+      </div>
+    </div>
+    <div id="redesPostsList" style="padding:8px 0">
+      <div style="padding:16px;color:var(--text3);font-size:12px">Presiona “Actualizar” para cargar tus publicaciones (tabla <code>Social_Posts</code> de Airtable).</div>
+    </div>
+  </div>
+
+  <!-- BANDEJA DE INTERACCIONES -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> Bandeja de interacciones</span>
+      <span class="badge badge-gray" id="redesInbCount">—</span>
+    </div>
+    <div id="redesInboxList" style="padding:8px 0">
+      <div style="padding:16px;color:var(--text3);font-size:12px">Comentarios y DMs pendientes de responder (tabla <code>Social_Interactions</code> de Airtable). El COMMUNITY_AGENT sugiere la respuesta y detecta si es un lead.</div>
+    </div>
+  </div>
 </div>
 
 <!-- MÁQUINAS -->
@@ -5714,6 +5816,99 @@ PROXIMA_ACCION:
 <acción recomendada>`,
    pre:'Lead B2B de LinkedIn: ',
    qs:['Gerente de Marketing de retail, empresa 200 empleados, interesado en merchandising corporativo','Jefe de RRHH busca kit de onboarding para nuevos colaboradores','Productora de eventos quiere activaciones y volumétricos para feria','Dueño de cadena de restaurantes pregunta por cartelería y neones para 5 locales']},
+
+  // ── REDES SOCIALES ───────────────────────────────────────────
+  {id:'SOCIAL_STRATEGIST',label:'SOCIAL_STRATEGIST',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-target"/></svg>',badge:'badge-green',
+   sys:`Eres el SOCIAL_STRATEGIST de The Lab Solutions, empresa de fabricación digital premium en Santiago, Chile.
+MARCA: estética oscura, minimalista, toques neón cyan/naranja. Productos fotogénicos: neones LED, trofeos, medallas, impresión 3D, señalética, packaging.
+ROL: diseñar el CALENDARIO DE CONTENIDO mensual conectando lo que pasa en el negocio (pedidos entregados, temporada, lanzamientos) con publicaciones que generen leads.
+REDES Y RITMO RECOMENDADO: Instagram (4–5/sem: reels de proceso, antes/después, producto final), LinkedIn (2–3/sem: casos B2B, detrás de cámara, hitos), TikTok (3–4/sem: time-lapse, ganchos virales), Facebook (replica IG + comunidad local).
+PILARES DE CONTENIDO: 1) Proceso/craftsmanship  2) Producto terminado (cliente real)  3) Educativo (materiales, tips)  4) Prueba social (testimonios, eventos)  5) Oferta/CTA directo.
+FORMATO DE SALIDA: tabla semana por semana con columnas — Día · Red · Pilar · Idea concreta del post · Objetivo (alcance/leads/marca) · CTA. Cierra con 3 ideas de campaña del mes y los KPIs a vigilar.
+Sé concreto con el mercado chileno y la temporada. Nada genérico tipo "sube contenido de valor".`,
+   pre:'Mes / objetivo / contexto: ',
+   qs:['Arma el calendario de contenido del próximo mes enfocado en captar leads corporativos','Plan de contenido para temporada alta de fin de año (trofeos y medallas para empresas)','Calendario para lanzar la línea de neones LED personalizados','Tengo 8 pedidos entregados este mes con fotos — conviértelos en un plan de posts']},
+
+  {id:'CAPTION_AGENT',label:'CAPTION_AGENT',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-camera"/></svg>',badge:'badge-purple',
+   sys:`Eres el CAPTION_AGENT de The Lab Solutions, fabricación digital premium en Santiago.
+ROL: a partir de un proyecto/foto/producto, redactar el COPY listo para publicar, optimizado por red, en producción rápida.
+TONO: cercano, chileno, premium sin ser pomposo. Gancho en la primera línea (las primeras 5 palabras deben frenar el scroll).
+ENTREGA SIEMPRE, para cada red pedida (por defecto las 4):
+- Instagram: 3–4 líneas + CTA + 12–15 hashtags (mezcla nicho local + masivos). Emojis sí.
+- LinkedIn: 4–6 líneas B2B, ángulo de negocio/caso, cierra con pregunta. Sin hashtags de moda (máx 3 profesionales).
+- TikTok/Reels: gancho de 3 seg + guion en pantalla + audio sugerido + 5 hashtags. Emojis sí.
+- Facebook: versión community-friendly, 2–3 líneas + CTA local.
+Incluye además 2 variantes A/B del gancho de Instagram para testear.
+Marca los hashtags en una línea aparte que empiece con "HASHTAGS:" para poder copiarlos rápido.`,
+   pre:'Proyecto / producto / foto: ',
+   qs:['Neón "OPEN" entregado a restaurant en Vitacura, foto nocturna de ambiente','50 trofeos personalizados para gala de empresa tecnológica','Time-lapse de impresión 3D de medallas para torneo de fútbol','Señalética acrílico premium recién instalada en oficina de startup']},
+
+  {id:'COMMUNITY_AGENT',label:'COMMUNITY_AGENT',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chat"/></svg>',badge:'badge-green',
+   sys:`Eres el COMMUNITY_AGENT de The Lab Solutions, fabricación digital en Santiago.
+ROL: responder comentarios y mensajes directos (DM) de redes sociales en nombre de la marca, y detectar cuándo una interacción es un LEAD de venta.
+TONO: cálido, chileno, rápido, humano. Nunca robótico ni copy-paste evidente. Máx 2–3 líneas para comentarios, un poco más para DM.
+REGLAS:
+- Si preguntan precio: no esquives, da rango orientativo y pide el dato que falta (cantidad, medida, fecha) para cotizar bien.
+- Si es solo elogio: agradece con calidez y suma un CTA suave (sígueme / escríbeme para tu proyecto).
+- Si hay queja: empatiza, no discutas en público, ofrece pasar a DM.
+- Español chileno natural, emojis con moderación.
+RESPONDE SIEMPRE EN ESTE FORMATO EXACTO:
+RESPUESTA_PUBLICA:
+<texto listo para pegar>
+ES_LEAD:
+<Sí / No>
+INTENCION:
+<consulta_precio / interes_producto / soporte / elogio / spam / otro>
+SIGUIENTE_PASO:
+<acción concreta: pasar a DM, pedir cotización, derivar a SALES_AGENT, ninguna>`,
+   pre:'Comentario o DM recibido: ',
+   qs:['Comentario en un reel: "cuánto sale un neón con mi logo?"','DM: "hola, necesito 100 medallas para un torneo en 2 semanas, hacen eso?"','Comentario: "quedó increíble el trabajo 🔥🔥"','DM molesto: "mi pedido llegó con un detalle mal pintado"']},
+
+  {id:'SOCIAL_ADS_AGENT',label:'SOCIAL_ADS_AGENT',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-megaphone"/></svg>',badge:'badge-yellow',
+   sys:`Eres el SOCIAL_ADS_AGENT de The Lab Solutions, fabricación digital premium en Santiago, Chile.
+ROL: analizar y optimizar campañas pagadas en Meta (Instagram/Facebook Ads) y LinkedIn Ads, y proponer creatividades.
+PRINCIPIO RECTOR: optimiza por GANANCIA real del CRM, no por el ROAS ni los leads que reporta la plataforma. Una "conversión" de Meta no es venta hasta que el CRM la confirma. Si Meta reporta 5x pero el CRM-real es 1.8x, manda el 1.8x.
+MÉTRICAS OBJETIVO (contexto chileno, fabricación personalizada):
+- CPM Meta: <$6.000 CLP | CTR: >1.2% | CPC: <$400 CLP | Costo por lead: <$8.000 CLP
+- ROAS-real (CRM): >3x sano, <1.5x pérdida → pausar o rehacer creatividad
+- LinkedIn (B2B): CPL más alto aceptable (<$25.000 CLP) si el ticket promedio lo justifica
+CAUTELA CON DATOS: con <8 conversiones en el período, no tomes decisiones agresivas (muestra insuficiente) — dilo. Gasto alto con 0 conversiones SÍ es accionable.
+ESTRUCTURA DE RESPUESTA:
+1. DIAGNÓSTICO (2–3 líneas: ROAS-real vs reportado, qué gana y qué pierde plata)
+2. ALERTAS CRÍTICAS (máx 3, con impacto en $ y por qué)
+3. ACCIONES INMEDIATAS (ordenadas por impacto en ganancia: pausar/escalar/rehacer)
+4. CREATIVIDAD: 2 ideas de anuncio nuevas (gancho + visual + público) para lo que sí convierte
+CLP con puntos de miles. Sin relleno.`,
+   pre:'Datos de campaña / consulta: ',
+   qs:['Analiza mis campañas de Meta y dime qué pausar y qué escalar','El costo por lead en Instagram se disparó esta semana — ¿qué hago?','¿Conviene invertir en LinkedIn Ads para captar leads corporativos B2B?','Dame 3 ideas de creatividades para promocionar neones LED en Meta']},
+
+  {id:'TREND_AGENT',label:'TREND_AGENT',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-trending"/></svg>',badge:'badge-purple',
+   sys:`Eres el TREND_AGENT de The Lab Solutions, fabricación digital en Santiago.
+ROL: proponer ganchos, formatos y tendencias de redes (sobre todo Reels/TikTok) APLICADOS a los productos de The Lab: neones LED, trofeos, medallas, impresión 3D, señalética, packaging.
+ENFOQUE: tendencias atemporales y reutilizables (no depender de un audio puntual que caduca): satisfying/ASMR de proceso, antes/después, "POV cliente", revelado del producto, time-lapse, "cosas que no sabías", retos visuales.
+FORMATO POR IDEA:
+1. Nombre del formato/tendencia + por qué funciona
+2. Cómo adaptarlo a un producto concreto de The Lab
+3. Gancho exacto (primeros 3 seg, texto en pantalla)
+4. Tipo de audio/ritmo sugerido (sin nombrar canciones que caduquen)
+5. CTA y objetivo (alcance vs leads)
+Entrega 4–5 ideas accionables esta semana. Mercado chileno. Nada genérico.`,
+   pre:'Producto o tema a explotar: ',
+   qs:['Dame 5 ideas de Reels virales para neones LED esta semana','Formatos de TikTok para mostrar el proceso de impresión 3D','Ideas de contenido tendencia para trofeos y medallas corporativas','¿Qué formato uso para un "antes y después" de una señalética?']},
+
+  {id:'REPORT_SOCIAL_AGENT',label:'REPORT_SOCIAL_AGENT',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-reporte"/></svg>',badge:'badge-green',
+   sys:`Eres el REPORT_SOCIAL_AGENT de The Lab Solutions, fabricación digital en Santiago.
+ROL: generar el reporte semanal de redes sociales con foco en negocio (no en vanity metrics).
+ESTRUCTURA FIJA:
+1. RESUMEN (3 líneas: qué pasó esta semana en redes en términos de negocio)
+2. MÉTRICAS CLAVE por red (alcance, engagement, clics al sitio, seguidores nuevos, leads atribuidos)
+3. MEJOR Y PEOR POST (cuál rindió y por qué — qué replicar / qué evitar)
+4. LEADS DESDE REDES (cuántos, de qué red, estado en el CRM)
+5. TOP 3 ACCIONES para la próxima semana (concretas: formato, red, día)
+CRITERIO: el engagement no paga cuentas — prioriza siempre clics, leads y ventas atribuidas sobre likes. Si una red trae alcance pero 0 leads, dilo y propón corregir el CTA o el público.
+Números claros, CLP con puntos de miles cuando aplique. Directo, sin relleno.`,
+   pre:'Datos de la semana: ',
+   qs:['Genera el reporte semanal de redes con lo que tengo cargado','¿Qué red me está trayendo más leads y cuál debo replantear?','¿Cuál fue mi mejor post de la semana y por qué funcionó?','Dame las 3 acciones más importantes para subir leads desde redes la próxima semana']},
 ];
 
 // ── MOBILE ────────────────────────────────────────────────────
@@ -5745,6 +5940,7 @@ function openMobileGrid(){
     {tab:'visual',label:'Visual AI'},
     {tab:'remuneraciones',label:'Remuner.'},
     {tab:'correo',label:'Correo'},
+    {tab:'redes',label:'Redes'},
   ];
   const u=AUTH.getUser();
   const allowed=(typeof RBAC!=='undefined'&&u)?(RBAC.tabs[u.role]||RBAC.tabs.demo):null;
@@ -6723,6 +6919,7 @@ function switchTab(name){
   if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='correo') MAIL.init();
+  if(name==='redes') initRedes();
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
   if(name==='equipo') initEquipo();
@@ -12199,6 +12396,234 @@ async function runAgent(id){
 }
 function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el._rawText||el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
 
+// ── REDES SOCIALES ─────────────────────────────────────────────
+let _redesLoaded=false, _redesLastGen='';
+const REDES_ICON={Instagram:'📷',LinkedIn:'in',TikTok:'♪',Facebook:'f'};
+const REDES_COLOR={Instagram:'#e1306c',LinkedIn:'#0a66c2',TikTok:'#000',Facebook:'#1877f2'};
+
+function initRedes(){
+  if(!_redesLoaded && getToken()) redesLoad();
+  else { renderRedesKpis(); renderRedesPosts(); renderRedesInbox(); }
+}
+
+async function redesLoad(force){
+  if(!getToken()){toast('Falta el token de Airtable (Mi cuenta)','error');return;}
+  const postsEl=document.getElementById('redesPostsList');
+  if(postsEl && force) postsEl.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
+  // Lecturas tolerantes: si una tabla no existe aún, queda como arreglo vacío y mostramos el estado guía.
+  state.socialPosts = await airtableFetch('Social_Posts',200).then(r=>r.records).catch(()=>{state._socialPostsErr=true;return [];});
+  state.socialInteractions = await airtableFetch('Social_Interactions',200).then(r=>r.records).catch(()=>{state._socialIntErr=true;return [];});
+  _redesLoaded=true;
+  renderRedesKpis(); renderRedesPosts(); renderRedesInbox();
+}
+
+function renderRedesKpis(){
+  const posts=state.socialPosts||[], inter=state.socialInteractions||[];
+  const now=new Date(), m=now.getMonth(), y=now.getFullYear();
+  const est=p=>p.fields['Estado']||p.fields['Estado post']||'';
+  const pub=posts.filter(p=>{const e=est(p);if(e!=='Publicado')return false;const d=p.fields['Fecha programada']||p.fields['Fecha publicación']||p.createdTime;const dt=d?new Date(d):null;return dt&&dt.getMonth()===m&&dt.getFullYear()===y;}).length;
+  const prog=posts.filter(p=>est(p)==='Programado').length;
+  const borr=posts.filter(p=>est(p)==='Borrador').length;
+  const intPend=inter.filter(i=>(i.fields['Estado']||'Pendiente')==='Pendiente').length;
+  const leads=inter.filter(i=>i.fields['Es lead']===true||/^s[ií]/i.test(i.fields['Es lead']||'')).length;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('redesKpiPub',pub); set('redesKpiProg',prog); set('redesKpiBorr',borr); set('redesKpiInt',intPend); set('redesKpiLeads',leads);
+  const badge=document.getElementById('badge-redes');
+  if(badge){if(intPend>0){badge.textContent=intPend;badge.style.display='';}else badge.style.display='none';}
+}
+
+function _redesFmtFecha(d){
+  if(!d) return 'sin fecha';
+  const dt=new Date(d); if(isNaN(dt)) return escapeHtml(String(d));
+  return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short'})+' '+dt.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+}
+function _redesChip(red){
+  const c=REDES_COLOR[red]||'var(--text3)';
+  return `<span class="badge" style="background:${c}1a;color:${c};border-color:${c}55">${escapeHtml(red||'—')}</span>`;
+}
+
+function renderRedesPosts(){
+  const el=document.getElementById('redesPostsList'); if(!el) return;
+  let posts=(state.socialPosts||[]).slice();
+  if(!posts.length){
+    el.innerHTML=`<div style="padding:18px;color:var(--text3);font-size:12px;line-height:1.7">
+      No hay publicaciones aún${state._socialPostsErr?' (o falta crear la tabla <code>Social_Posts</code> en Airtable)':''}.
+      <br>Genera contenido arriba y pulsa <b>“Guardar como borrador”</b> para que aparezca aquí en el calendario.
+      <br><span style="color:var(--text2)">Campos esperados: Red · Copy · Estado (Borrador/Programado/Publicado) · Fecha programada · Hashtags · Objetivo · Media URL · Agente</span>
+    </div>`; return;
+  }
+  const fRed=document.getElementById('redesFiltroRed')?.value||'';
+  const fEst=document.getElementById('redesFiltroEstado')?.value||'';
+  posts=posts.filter(p=>{
+    const red=p.fields['Red']||'', e=p.fields['Estado']||p.fields['Estado post']||'';
+    return (!fRed||red===fRed)&&(!fEst||e===fEst);
+  });
+  posts.sort((a,b)=>{const da=a.fields['Fecha programada']||a.createdTime||'',db=b.fields['Fecha programada']||b.createdTime||'';return new Date(db)-new Date(da);});
+  if(!posts.length){el.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Sin publicaciones con esos filtros.</div>';return;}
+  el.innerHTML=posts.map(p=>{
+    const f=p.fields, red=f['Red']||'—', e=f['Estado']||f['Estado post']||'Borrador';
+    const copy=(f['Copy']||f['Texto']||'').toString();
+    const fecha=f['Fecha programada']||f['Fecha publicación']||'';
+    const btns=[];
+    if(e==='Borrador') btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','Programado')">Programar →</button>`);
+    if(e==='Programado') btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','Publicado')">Marcar publicado ✓</button>`);
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesCopyPost('${p.id}')">Copiar copy</button>`);
+    return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+        ${_redesChip(red)} ${estadoBadge(e)}
+        <span style="font-size:10px;color:var(--text3)">🗓 ${_redesFmtFecha(fecha)}</span>
+        ${f['Objetivo']?`<span style="font-size:10px;color:var(--text3)">· 🎯 ${escapeHtml(f['Objetivo'])}</span>`:''}
+        ${f['Agente']?`<span class="badge badge-gray" style="font-size:8px">${escapeHtml(f['Agente'])}</span>`:''}
+      </div>
+      <div style="font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.5;max-height:120px;overflow:auto">${escapeHtml(copy||'(sin copy)')}</div>
+      ${f['Hashtags']?`<div style="font-size:11px;color:var(--accent);margin-top:5px">${escapeHtml(f['Hashtags'])}</div>`:''}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${btns.join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+async function redesSetEstado(id,estado){
+  const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+  try{
+    const fields={'Estado':estado};
+    if(estado==='Publicado'&&!p.fields['Fecha publicación']) fields['Fecha publicación']=new Date().toISOString();
+    await airtableWriteTolerant('Social_Posts','PATCH',id,fields);
+    p.fields['Estado']=estado; if(fields['Fecha publicación']) p.fields['Fecha publicación']=fields['Fecha publicación'];
+    toast('Estado actualizado ✓','success'); renderRedesKpis(); renderRedesPosts();
+  }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
+}
+function redesCopyPost(id){
+  const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+  const t=[(p.fields['Copy']||p.fields['Texto']||''),p.fields['Hashtags']||''].filter(Boolean).join('\n\n');
+  navigator.clipboard.writeText(t).then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error'));
+}
+
+function renderRedesInbox(){
+  const el=document.getElementById('redesInboxList'), cnt=document.getElementById('redesInbCount'); if(!el) return;
+  let inter=(state.socialInteractions||[]).slice();
+  const pend=inter.filter(i=>(i.fields['Estado']||'Pendiente')==='Pendiente');
+  if(cnt) cnt.textContent=pend.length?`${pend.length} pendientes`:'al día';
+  if(!inter.length){
+    el.innerHTML=`<div style="padding:18px;color:var(--text3);font-size:12px;line-height:1.7">
+      No hay interacciones cargadas${state._socialIntErr?' (o falta crear la tabla <code>Social_Interactions</code> en Airtable)':''}.
+      <br>Conecta Instagram/Facebook/LinkedIn vía Make para que los comentarios y DMs lleguen aquí automáticamente.
+      <br><span style="color:var(--text2)">Campos esperados: Red · Tipo (Comentario/DM/Mención) · Usuario · Mensaje · Respuesta sugerida · Estado (Pendiente/Respondido/Ignorado) · Es lead · Intención · Fecha</span>
+    </div>`; return;
+  }
+  inter.sort((a,b)=>{const pa=(a.fields['Estado']||'Pendiente')==='Pendiente'?0:1,pb=(b.fields['Estado']||'Pendiente')==='Pendiente'?0:1;if(pa!==pb)return pa-pb;return new Date(b.fields['Fecha']||b.createdTime||0)-new Date(a.fields['Fecha']||a.createdTime||0);});
+  el.innerHTML=inter.map(i=>{
+    const f=i.fields, red=f['Red']||'—', estado=f['Estado']||'Pendiente';
+    const esLead=f['Es lead']===true||/^s[ií]/i.test(f['Es lead']||'');
+    const resp=f['Respuesta sugerida']||'';
+    return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+        ${_redesChip(red)} <span class="badge badge-gray" style="font-size:8px">${escapeHtml(f['Tipo']||'Comentario')}</span>
+        ${estadoBadge(estado)} ${esLead?'<span class="badge badge-green" style="font-size:8px">LEAD</span>':''}
+        <span style="font-size:11px;color:var(--text2)">@${escapeHtml(f['Usuario']||'usuario')}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:6px">${escapeHtml(f['Mensaje']||'')}</div>
+      ${resp?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;white-space:pre-wrap"><b style="color:var(--accent)">Respuesta sugerida:</b>\n${escapeHtml(resp)}</div>`:''}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="redesReply('${i.id}')">🤖 ${resp?'Regenerar':'Sugerir'} respuesta</button>
+        ${resp?`<button class="btn btn-ghost btn-sm" onclick="redesCopyReply('${i.id}')">Copiar</button>`:''}
+        ${estado==='Pendiente'?`<button class="btn btn-ghost btn-sm" onclick="redesMarkInteraction('${i.id}','Respondido')">Marcar respondido ✓</button>`:''}
+        ${esLead?`<button class="btn btn-ghost btn-sm" onclick="redesInteractionToLead('${i.id}')">→ Crear lead</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function redesReply(id){
+  const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
+  const f=i.fields;
+  const ctx=`Red: ${f['Red']||'—'} · Tipo: ${f['Tipo']||'Comentario'} · Usuario: @${f['Usuario']||'usuario'}\nMensaje recibido: ${f['Mensaje']||''}`;
+  const cfg=AGENTES_CFG.find(a=>a.id==='COMMUNITY_AGENT'); if(!cfg){toast('Falta COMMUNITY_AGENT','error');return;}
+  toast('Generando respuesta…','info');
+  try{
+    const out=await callClaude(cfg.sys,ctx);
+    const mResp=out.match(/RESPUESTA_PUBLICA:\s*([\s\S]*?)(?=\nES_LEAD:|$)/i);
+    const mLead=out.match(/ES_LEAD:\s*(s[ií]|no)/i);
+    const mInt=out.match(/INTENCION:\s*([^\n]+)/i);
+    const resp=(mResp?mResp[1]:out).trim();
+    const esLead=mLead?/^s/i.test(mLead[1]):false;
+    const fields={'Respuesta sugerida':resp.slice(0,5000),'Es lead':esLead};
+    if(mInt) fields['Intención']=mInt[1].trim().slice(0,100);
+    await airtableWriteTolerant('Social_Interactions','PATCH',id,fields);
+    Object.assign(i.fields,fields);
+    try{AGENT_LOG.add('COMMUNITY_AGENT',ctx,out);}catch(_){}
+    toast('Respuesta lista ✓','success'); renderRedesKpis(); renderRedesInbox();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+function redesCopyReply(id){
+  const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
+  navigator.clipboard.writeText(i.fields['Respuesta sugerida']||'').then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error'));
+}
+async function redesMarkInteraction(id,estado){
+  try{ await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':estado});
+    const i=(state.socialInteractions||[]).find(x=>x.id===id); if(i) i.fields['Estado']=estado;
+    toast('Actualizado ✓','success'); renderRedesKpis(); renderRedesInbox();
+  }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
+}
+async function redesInteractionToLead(id){
+  const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
+  const f=i.fields;
+  try{
+    await airtableWriteTolerant('Clientes','POST',null,{
+      'Contacto':f['Usuario']||'Lead redes','Empresa':f['Usuario']?('@'+f['Usuario']):'Lead redes sociales',
+      'Etapa venta':'Lead nuevo','Origen lead':'Redes sociales',
+      'Notas internas':`Lead desde ${f['Red']||'redes'} (${f['Tipo']||'interacción'}):\n"${f['Mensaje']||''}"`
+    });
+    await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':'Respondido'});
+    if(i) i.fields['Estado']='Respondido';
+    toast('Lead creado en Clientes ✓','success'); renderRedesKpis(); renderRedesInbox();
+  }catch(e){toast('No se pudo crear el lead: '+e.message,'error');}
+}
+
+function redesQuick(text){
+  const inp=document.getElementById('redesGenInput'); if(inp){inp.value=text; inp.focus();}
+}
+async function redesGenerate(){
+  const inp=document.getElementById('redesGenInput'), input=inp?.value.trim();
+  if(!input){toast('Escribe un proyecto o idea primero','error');inp?.focus();return;}
+  const agentId=document.getElementById('redesGenAgent').value;
+  const cfg=AGENTES_CFG.find(a=>a.id===agentId); if(!cfg){toast('Agente no encontrado','error');return;}
+  const btn=document.getElementById('redesGenBtn'); if(btn) btn.disabled=true;
+  const res=document.getElementById('redesGenResult');
+  res.innerHTML='<div style="color:var(--text3);font-size:12px">⏳ Generando contenido…</div>';
+  try{
+    const ctx=state.loaded?buildAgentContext(agentId):'';
+    const full=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
+    const out=await callClaude(cfg.sys,full);
+    _redesLastGen=out;
+    try{AGENT_LOG.add(cfg.label,input,out);}catch(_){}
+    res.innerHTML=`<div class="ai-response" style="white-space:normal">${formatAgentReport(out)}</div>
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="redesSaveDraft()">💾 Guardar como borrador</button>
+        <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(_redesLastGen).then(()=>toast('Copiado ✓','success'))">Copiar todo</button>
+      </div>`;
+  }catch(e){res.innerHTML=`<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`;toast('Error: '+e.message,'error');}
+  if(btn) btn.disabled=false;
+}
+async function redesSaveDraft(){
+  if(!_redesLastGen){toast('Genera contenido primero','error');return;}
+  const red=document.getElementById('redesGenRed').value;
+  const agentId=document.getElementById('redesGenAgent').value;
+  const cfg=AGENTES_CFG.find(a=>a.id===agentId);
+  let copy=_redesLastGen, hashtags='';
+  const mh=_redesLastGen.match(/HASHTAGS?:\s*([^\n]+)/i);
+  if(mh){hashtags=mh[1].trim(); copy=_redesLastGen.replace(/HASHTAGS?:\s*[^\n]+/i,'').trim();}
+  try{
+    const rec=await airtableWriteTolerant('Social_Posts','POST',null,{
+      'Red':red,'Copy':copy.slice(0,9000),'Hashtags':hashtags.slice(0,1000),
+      'Estado':'Borrador','Agente':cfg?cfg.label:agentId,'Objetivo':'Captar leads'
+    });
+    if(rec&&rec.id){ state.socialPosts=state.socialPosts||[]; state.socialPosts.unshift(rec); }
+    else { await redesLoad(); }
+    toast('Borrador guardado ✓','success'); renderRedesKpis(); renderRedesPosts();
+    document.getElementById('redesPostsList')?.scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(e){toast('No se pudo guardar (¿existe la tabla Social_Posts?): '+e.message,'error');}
+}
+
 // ── AGENTES INLINE ─────────────────────────────────────────────
 let _agentInlineText='';
 
@@ -16422,13 +16847,13 @@ const AUTH={
 const RBAC={
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','correo','nuevo-lead','nueva-cot','cot3d'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','redes','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','redes','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','correo','redes','nuevo-lead','nueva-cot','cot3d'],
     produccion: ['overview','pedidos','maquinas','equipo','visual','correo'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo'],
-    marketing:  ['overview','web','agentes','reporte','correo'],
-    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','remuneraciones'],
+    marketing:  ['overview','web','agentes','reporte','correo','redes'],
+    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','remuneraciones','redes'],
   },
   // Items del menú "Nuevo" visibles por rol
   nuevos:{
@@ -20069,6 +20494,7 @@ const GS_SECTIONS=[
   {tab:'finanzas',      icon:'icon-finanzas',       c:'#22c55e',title:'Finanzas',        kw:'facturas dte sii caja flujo dinero contabilidad'},
   {tab:'visual',        icon:'icon-visual',         c:'#8b5cf6',title:'Visual AI',       kw:'imagenes render diseno generador'},
   {tab:'remuneraciones',icon:'icon-remuneraciones', c:'#84cc16',title:'Remuneraciones',  kw:'sueldos pagos nominas liquidaciones rrhh'},
+  {tab:'redes',         icon:'icon-redes',          c:'#ec4899',title:'Redes Sociales',  kw:'instagram tiktok linkedin facebook social media contenido calendario posts comunidad'},
 ];
 const GS_ACTIONS=[
   {nuevo:'nuevo-lead',     icon:'icon-user-plus',    title:'Nuevo Lead / Cliente',    kw:'crear agregar nuevo cliente contacto lead',  run:()=>switchTab('nuevo-lead')},
