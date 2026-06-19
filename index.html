@@ -3234,6 +3234,32 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
 
+  <!-- MODAL: destinatarios de la campaña -->
+  <div id="nlDestModal" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.65);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:min(560px,95vw);max-height:90vh;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:600;color:var(--text)">👥 Destinatarios de la campaña</span>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nlDestModal').style.display='none'">✕</button>
+      </div>
+      <div style="padding:10px 18px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3)" id="nlDestCamp"></div>
+      <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <label style="font-size:11px;color:var(--text3)">Segmento</label>
+        <select id="nlDestSeg" class="field-select" style="width:auto;font-size:12px" onchange="nlDestSetSeg(this.value)"></select>
+        <input id="nlDestSearch" oninput="nlDestRenderList()" placeholder="Buscar…" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 9px;color:var(--text);font-size:12px;width:min(170px,38vw)">
+      </div>
+      <div style="padding:10px 18px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)">
+        <input id="nlDestExtraEmail" type="email" placeholder="agregar un email puntual…" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 9px;color:var(--text);font-size:12px" onkeydown="if(event.key==='Enter')nlDestAddExtra()">
+        <button class="btn btn-ghost btn-sm" onclick="nlDestAddExtra()">+ Agregar</button>
+      </div>
+      <div id="nlDestList" style="flex:1;overflow:auto;padding:2px 0;min-height:120px"></div>
+      <div style="display:flex;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid var(--border)">
+        <span id="nlDestCount" style="font-size:12px;color:var(--text2);font-weight:600">—</span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="nlDestSave(true)">Guardar selección</button>
+        <button class="btn btn-primary btn-sm" id="nlDestSendBtn" onclick="nlDestSend()" style="background:#ec4899;border-color:#ec4899;color:#fff">✉ Enviar ahora</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: programar -->
   <div id="nlDateModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);align-items:center;justify-content:center" onclick="if(event.target===this)nlDateCancel()">
     <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:20px;width:min(360px,92vw)">
@@ -13599,6 +13625,80 @@ async function nlSubRemove(id){
     renderNlSubscribers();renderNlKpis();nlPopulateSegments();renderNlAudience();
   }catch(e){toast('No se pudo quitar: '+e.message,'error');}
 }
+// ── Destinatarios POR CAMPAÑA: segmento + incluir/excluir + emails puntuales (guardado local) ──
+let _nlDest=null; // estado del modal: {campId, seg, exclude:Set<clientId>, extra:[{nombre,email}]}
+function _nlDestKey(id){return 'nl_dest_'+id;}
+function _nlGetDest(id){
+  try{const j=JSON.parse(localStorage.getItem(_nlDestKey(id))||'null');if(j)return j;}catch(_){}
+  const c=(state.nlCampaigns||[]).find(x=>x.id===id);
+  return {seg:(c&&c.fields['Segmento objetivo'])?String(c.fields['Segmento objetivo']):'',exclude:[],extra:[]};
+}
+function _nlBaseDest(seg){let base=_nlSubList();if(seg)base=base.filter(c=>String(c.fields['Industria / Rubro']||'')===seg);return base;}
+function _nlDestResolve(seg,exclude,extra){
+  const ex=exclude instanceof Set?exclude:new Set(exclude||[]);const out=[],seen=new Set();
+  _nlBaseDest(seg).forEach(c=>{if(ex.has(c.id))return;const em=String(c.fields['Email']||'').toLowerCase();if(seen.has(em))return;seen.add(em);out.push({id:c.id,nombre:c.fields['Empresa']||c.fields['Contacto']||em,email:c.fields['Email']});});
+  (extra||[]).forEach(e=>{const em=String(e.email||'').toLowerCase();if(!em||seen.has(em))return;seen.add(em);out.push({id:null,nombre:e.nombre||e.email,email:e.email});});
+  return out;
+}
+function nlDestCount(id){const d=_nlGetDest(id);return _nlDestResolve(d.seg,d.exclude,d.extra).length;}
+function nlDestOpen(id){
+  const c=(state.nlCampaigns||[]).find(x=>x.id===id);if(!c){toast('Campaña no encontrada','error');return;}
+  if(!(state.clientes||[]).length){toast('Carga los clientes (↻ del Overview) para gestionar destinatarios','info');return;}
+  const d=_nlGetDest(id);
+  _nlDest={campId:id,seg:d.seg||'',exclude:new Set(d.exclude||[]),extra:(d.extra||[]).slice()};
+  document.getElementById('nlDestCamp').textContent='Asunto: '+(c.fields['Asunto']||c.fields['Campaña']||'(sin asunto)');
+  const a=_nlAudience();const rubros=Object.keys(a.byRubro||{}).sort();
+  const seg=document.getElementById('nlDestSeg');
+  seg.innerHTML='<option value="">Toda la audiencia</option>'+rubros.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  seg.value=_nlDest.seg;
+  document.getElementById('nlDestSearch').value='';document.getElementById('nlDestExtraEmail').value='';
+  nlDestRenderList();
+  document.getElementById('nlDestModal').style.display='flex';
+}
+function nlDestSetSeg(v){if(_nlDest){_nlDest.seg=v;nlDestRenderList();}}
+function _nlDestWorking(){return _nlDest?_nlDestResolve(_nlDest.seg,_nlDest.exclude,_nlDest.extra):[];}
+function _nlDestUpdCount(){const n=_nlDestWorking().length;const el=document.getElementById('nlDestCount');if(el)el.textContent=n+' destinatario'+(n!==1?'s':'')+' seleccionado'+(n!==1?'s':'');}
+function nlDestRenderList(){
+  if(!_nlDest)return;const el=document.getElementById('nlDestList');if(!el)return;
+  const q=(document.getElementById('nlDestSearch')?.value||'').trim().toLowerCase();
+  let base=_nlBaseDest(_nlDest.seg);
+  if(q)base=base.filter(c=>(String(c.fields['Empresa']||'')+' '+String(c.fields['Contacto']||'')+' '+String(c.fields['Email']||'')).toLowerCase().includes(q));
+  base.sort((a,b)=>String(a.fields['Empresa']||a.fields['Contacto']||'').localeCompare(String(b.fields['Empresa']||b.fields['Contacto']||'')));
+  let html=base.map(c=>{const inc=!_nlDest.exclude.has(c.id);const nom=escapeHtml(c.fields['Empresa']||c.fields['Contacto']||'(sin nombre)');const em=escapeHtml(c.fields['Email']||'');
+    return `<label style="display:flex;align-items:center;gap:9px;padding:7px 18px;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" ${inc?'checked':''} onchange="nlDestToggle('${c.id}',this.checked)">
+      <div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</div><div style="font-size:10px;color:var(--text3)">${em}</div></div>
+    </label>`;}).join('');
+  if(_nlDest.extra.length)html+='<div style="padding:6px 18px;font-size:10px;color:var(--text3);font-weight:600;margin-top:4px">Emails puntuales</div>'+
+    _nlDest.extra.map((e,i)=>`<div style="display:flex;align-items:center;gap:9px;padding:7px 18px;border-bottom:1px solid var(--border)"><span style="flex:1;font-size:12px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">✚ ${escapeHtml(e.email)}</span><button class="btn btn-ghost btn-sm" onclick="nlDestRemoveExtra(${i})" style="color:var(--danger)">✕</button></div>`).join('');
+  if(!html)html='<div style="padding:16px;color:var(--text3);font-size:12px">Sin destinatarios en este segmento. Agrega emails puntuales o cambia el segmento.</div>';
+  el.innerHTML=html;_nlDestUpdCount();
+}
+function nlDestToggle(id,checked){if(!_nlDest)return;if(checked)_nlDest.exclude.delete(id);else _nlDest.exclude.add(id);_nlDestUpdCount();}
+function nlDestAddExtra(){if(!_nlDest)return;const inp=document.getElementById('nlDestExtraEmail');const em=(inp.value||'').trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Email inválido','error');return;}if(_nlDest.extra.some(e=>e.email.toLowerCase()===em.toLowerCase())){toast('Ya está en la lista','info');inp.value='';return;}_nlDest.extra.push({nombre:em,email:em});inp.value='';nlDestRenderList();}
+function nlDestRemoveExtra(i){if(!_nlDest)return;_nlDest.extra.splice(i,1);nlDestRenderList();}
+function nlDestSave(close){if(!_nlDest)return;try{localStorage.setItem(_nlDestKey(_nlDest.campId),JSON.stringify({seg:_nlDest.seg,exclude:[..._nlDest.exclude],extra:_nlDest.extra}));}catch(_){}
+  toast('Selección de destinatarios guardada ✓','success');renderNlCampaigns();if(close)document.getElementById('nlDestModal').style.display='none';}
+async function nlDestSend(){
+  if(!_nlDest)return;const list=_nlDestWorking();
+  if(!list.length){toast('No hay destinatarios seleccionados','error');return;}
+  if(typeof MAIL==='undefined'||!MAIL.post){toast('Correo no disponible','error');return;}
+  const c=(state.nlCampaigns||[]).find(x=>x.id===_nlDest.campId);if(!c)return;const f=c.fields;
+  if(!confirm(`¿Enviar esta campaña a ${list.length} destinatario(s) REALES ahora?\n\nAsunto: ${f['Asunto']||f['Campaña']||'(sin asunto)'}\n\nCada uno recibe el correo por separado.`))return;
+  nlDestSave(false);
+  const btn=document.getElementById('nlDestSendBtn');const prev=btn.textContent;btn.disabled=true;
+  const body=_nlEmailHtml(f),subject=f['Asunto']||f['Campaña']||'Newsletter';
+  let ok=0,fail=0;
+  for(let i=0;i<list.length;i++){
+    btn.textContent=`Enviando ${i+1}/${list.length}…`;
+    try{const r=await MAIL.post({action:'send',to:list[i].email,subject,body,from_name:'The Lab Solutions'});if(r&&!r.error)ok++;else fail++;}catch(_){fail++;}
+    await new Promise(r=>setTimeout(r,120));
+  }
+  btn.disabled=false;btn.textContent=prev;
+  try{await airtableWriteTolerant('Newsletter_Campañas','PATCH',c.id,{'Estado':'Enviada','Enviados':ok,'Fecha envío':c.fields['Fecha envío']||new Date().toISOString().slice(0,10)});Object.assign(c.fields,{'Estado':'Enviada','Enviados':ok});}catch(_){}
+  toast(`✓ Enviado a ${ok}${fail?` · ${fail} con error`:''}`,fail?'info':'success');
+  document.getElementById('nlDestModal').style.display='none';renderNlKpis();renderNlCampaigns();
+}
 function _nlEstBadge(e){return `<span class="badge ${NL_ESTADO_BADGE[e]||'badge-gray'}">${escapeHtml(e||'Borrador')}</span>`;}
 function _nlFmtFecha(d){if(!d)return '—';const dt=new Date(d);if(isNaN(dt))return escapeHtml(String(d));return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'});}
 
@@ -13618,7 +13718,7 @@ function renderNlCampaigns(){
     const f=c.fields, est=f['Estado']||'Borrador';
     const asunto=f['Asunto']||f['Campaña']||'(sin asunto)';
     const cuerpo=(f['Cuerpo (Markdown)']||'').toString();
-    const btns=[`<button class="btn btn-ghost btn-sm" onclick="nlPreview('${c.id}')">👁 Vista previa</button>`,`<button class="btn btn-ghost btn-sm" onclick="nlEditOpen('${c.id}')">✏️ Ver/editar</button>`];
+    const btns=[`<button class="btn btn-ghost btn-sm" onclick="nlPreview('${c.id}')">👁 Vista previa</button>`,`<button class="btn btn-ghost btn-sm" onclick="nlEditOpen('${c.id}')">✏️ Ver/editar</button>`,`<button class="btn btn-ghost btn-sm" onclick="nlDestOpen('${c.id}')">👥 Destinatarios${(state.clientes||[]).length?' ('+nlDestCount(c.id)+')':''}</button>`];
     if(est==='Borrador') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSetEstado('${c.id}','En revisión')">Pasar a revisión</button>`);
     if(est==='Borrador'||est==='En revisión') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSchedule('${c.id}')">📅 Programar</button>`);
     if(est==='Programada') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSchedule('${c.id}')">📅 Reprogramar</button>`);
