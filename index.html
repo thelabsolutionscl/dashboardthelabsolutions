@@ -274,6 +274,15 @@ tr:hover td{background:rgba(255,255,255,0.02);}
   .act-menu.open::before{content:"";position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:-1;}
   .act-item{padding:13px 16px;font-size:13px;}
 }
+/* Móvil: otros menús del mismo estilo (popover anclado a un botón) también
+   como hoja inferior, para que no se recorten ni bloqueen el scroll.
+   - #ovCustomizePop: popover "personalizar overview" (estilos inline → !important)
+   - .mail-tpl-menu: menú de plantillas del compositor de correo */
+@media(max-width:768px){
+  #ovCustomizePop,.mail-tpl-menu{position:fixed!important;left:8px!important;right:8px!important;bottom:0!important;top:auto!important;margin:0!important;width:auto!important;min-width:0!important;max-width:none!important;max-height:80vh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch;border-radius:16px 16px 0 0!important;z-index:1000!important;box-shadow:0 -10px 44px rgba(0,0,0,0.6)!important;animation:mbd-in .22s cubic-bezier(0.32,0.72,0,1);}
+  #ovCustomizePop::before,.mail-tpl-menu::before{content:"";position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:-1;}
+  .mail-tpl-item{padding:13px 14px;font-size:13px;}
+}
 /* Botón de cierre (✕) inyectado en modales que no tenían uno visible */
 .modal-x-auto{position:absolute;top:10px;right:12px;z-index:5;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .12s,color .12s;}
 .modal-x-auto:hover,.modal-x-auto:active{background:rgba(255,68,68,0.12);color:var(--danger);border-color:rgba(255,68,68,0.3);}
@@ -5293,7 +5302,15 @@ function debounce(fn,ms){ let t; return function(){ const a=arguments,c=this; cl
 // escritores de un contenedor memoizado deben pasar por aquí para no desincronizar.
 function _setRows(el,html){ if(!el) return; if(el._lastRows===html){ return; } el._lastRows=html; el.innerHTML=html; }
 // ── Consistencia: formato de fecha, empty-state, skeleton y flash de filas ──
-function formatFecha(d){if(!d)return '';try{const s=String(d);const dt=new Date(/^\d{4}-\d{2}-\d{2}$/.test(s)?s+'T00:00:00':s);if(isNaN(dt))return s;return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'});}catch(e){return String(d);}}
+// Formatters Intl cacheados. `toLocaleDateString` con un objeto de opciones
+// reconstruye un Intl.DateTimeFormat en CADA llamada (~60µs); reutilizar una
+// instancia es ~70x más rápido y produce exactamente el mismo texto (verificado).
+// Se usan en formatFecha y en los formateadores por-fila de tablas/kanban.
+const _NF_CL=new Intl.NumberFormat('es-CL');
+const _DTF_DMY=new Intl.DateTimeFormat('es-CL',{day:'numeric',month:'short',year:'numeric'});
+const _DTF_DM=new Intl.DateTimeFormat('es-CL',{day:'numeric',month:'short'});
+const _DTF_D2MY2=new Intl.DateTimeFormat('es-CL',{day:'2-digit',month:'short',year:'2-digit'});
+function formatFecha(d){if(!d)return '';try{const s=String(d);const dt=new Date(/^\d{4}-\d{2}-\d{2}$/.test(s)?s+'T00:00:00':s);if(isNaN(dt))return s;return _DTF_DMY.format(dt);}catch(e){return String(d);}}
 function emptyState(iconId,msg,btnHtml){return `<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#${iconId}"/></svg></div><div>${msg}</div>${btnHtml||''}</div>`;}
 function _skelRows(cols,rows){rows=rows||6;let h='';for(let i=0;i<rows;i++)h+=`<tr class="skel-row"><td colspan="${cols}"><div class="skel-bar"></div></td></tr>`;return h;}
 // Ids de registros que cambiaron en el último refresco incremental, para resaltarlos
@@ -5310,14 +5327,18 @@ let _cliCap=TABLE_PAGE,_cliQuery='',_cotCap=TABLE_PAGE,_pedCap=TABLE_PAGE;
 // Ids del conjunto actualmente vigente (filtrado/ordenado) de cada tabla, para que
 // "seleccionar todo" abarque TODO el set y no solo las filas pintadas por paginación.
 let _cliRowIds=[],_pedRowIds=[];
+// Caché del texto buscable por cliente (id→texto). Se reusa entre teclas de
+// búsqueda y se vacía en cada render por cambio de datos (renderClientes sin el
+// flag skipAnalytics), así nunca queda obsoleto.
+let _cliSearchCache=new Map();
 function _loadMoreRow(restantes,cols,fn){return `<tr class="load-more-row"><td colspan="${cols}" style="text-align:center;padding:10px"><button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="${fn}">▼ Mostrar ${Math.min(TABLE_PAGE,restantes)} más · quedan ${restantes}</button></td></tr>`;}
 // Texto buscable de una fila: equivale al textContent que veía el filtro por DOM
 // (quita etiquetas y decodifica las entidades que introduce escapeHtml).
 function _rowText(html){return html.replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&nbsp;/g,' ').toLowerCase();}
-function cliShowMore(){_cliCap+=TABLE_PAGE;renderClientes();}
-function cotShowMore(){_cotCap+=TABLE_PAGE;renderCotizaciones();}
+function cliShowMore(){_cliCap+=TABLE_PAGE;renderClientes(true);}
+function cotShowMore(){_cotCap+=TABLE_PAGE;renderCotizaciones(true);}
 let _cotGroup=false;
-function toggleCotGroup(){_cotGroup=!_cotGroup;const b=document.getElementById('cotGroupBtn');if(b){b.classList.toggle('active-filter',_cotGroup);b.textContent=_cotGroup?'⊟ Desagrupar':'⊞ Agrupar';}renderCotizaciones();}
+function toggleCotGroup(){_cotGroup=!_cotGroup;const b=document.getElementById('cotGroupBtn');if(b){b.classList.toggle('active-filter',_cotGroup);b.textContent=_cotGroup?'⊟ Desagrupar':'⊞ Agrupar';}renderCotizaciones(true);}
 function pedShowMore(){_pedCap+=TABLE_PAGE;renderPedidos(state.pedidoFilter);}
 // ── Densidad de la interfaz (compacto/cómodo), persistida ──
 function applyDensity(){const c=localStorage.getItem('ui_density')==='compact';document.body.classList.toggle('compact',c);const b=document.getElementById('densityBtn');if(b){b.textContent=c?'≣':'≡';b.title=c?'Vista compacta — clic para cómoda':'Vista cómoda — clic para compacta';}}
@@ -5390,7 +5411,7 @@ const _DEFAULTS={
   PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%'
 };
 // ────────────────────────────────────────────────────────────
-const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
+const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},clientesByIdRec:{},pedidosById:{},cotizacionesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
 window.state=state;
 let cdCurrentId='',cdCurrentEmpresa='';
 let _importDtes=[];
@@ -6683,7 +6704,48 @@ function _mergeRecords(arr,changed){
 }
 function _rebuildClientesById(){
   state.clientesById={};
-  state.clientes.forEach(x=>{ state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—'; });
+  state.clientesByIdRec={};
+  state.clientes.forEach(x=>{ state.clientesById[x.id]=x.fields['Empresa']||x.fields['Contacto']||'—'; state.clientesByIdRec[x.id]=x; });
+}
+function _rebuildPedidosById(){
+  state.pedidosById={};
+  state.pedidos.forEach(x=>{ state.pedidosById[x.id]=x; });
+}
+function _rebuildCotizacionesById(){
+  state.cotizacionesById={};
+  state.cotizaciones.forEach(x=>{ state.cotizacionesById[x.id]=x; });
+}
+// ── Caché de datos para arranque instantáneo (stale-while-revalidate) ──
+// Guarda un snapshot del último fetch completo, con clave por usuario (misma
+// convención que el resto de prefs: thelab_*_<username>). En el arranque se
+// hidrata el state y se pinta de inmediato; loadAllData() refresca en segundo
+// plano. No se cachea en modo demo (datos sintéticos que igual se regeneran).
+function _dataCacheKey(){const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;return(u&&u.username)?'thelab_datacache_'+u.username:null;}
+function _saveDataCache(){
+  if(window._DEMO_MODE) return;
+  const k=_dataCacheKey();if(!k) return;
+  try{
+    const snap=JSON.stringify({v:1,t:Date.now(),d:{
+      clientes:state.clientes,cotizaciones:state.cotizaciones,pedidos:state.pedidos,
+      reportes:state.reportes,proveedores:state.proveedores,facturas:state.facturas
+    }});
+    if(snap.length>4500000){try{localStorage.removeItem(k);}catch(e){}return;} // no arriesgar la cuota
+    localStorage.setItem(k,snap);
+  }catch(e){ try{localStorage.removeItem(k);}catch(e2){} } // p.ej. QuotaExceeded → se descarta
+}
+function _hydrateFromCache(){
+  if(window._DEMO_MODE) return false;
+  const k=_dataCacheKey();if(!k) return false;
+  try{
+    const raw=localStorage.getItem(k);if(!raw) return false;
+    const o=JSON.parse(raw);if(!o||!o.d) return false;
+    state.clientes=o.d.clientes||[];state.cotizaciones=o.d.cotizaciones||[];
+    state.pedidos=o.d.pedidos||[];state.reportes=o.d.reportes||[];
+    state.proveedores=o.d.proveedores||[];state.facturas=o.d.facturas||[];
+    _rebuildClientesById();_rebuildPedidosById();_rebuildCotizacionesById();
+    state._cacheTs=o.t||null;
+    return (state.clientes.length+state.cotizaciones.length+state.pedidos.length)>0;
+  }catch(e){ return false; }
 }
 // Aplica config desde la tabla 'Monitor Sistema' (META_REVENUE / WATI_CONFIG / FIN_VENTAS).
 function _applyMonitorSistema(recs){
@@ -6701,23 +6763,27 @@ function _assignCoreState(res,render){
   const [cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=res;
   if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
   if(cRes.status==='fulfilled'){ state.clientes=cRes.value.records||[]; _rebuildClientesById(); if(render) renderClientes(); }
-  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; if(render) renderCotizaciones(); }
-  if(pRes.status==='fulfilled'){ state.pedidos=pRes.value.records||[]; if(render){ renderPedidos(); if(document.getElementById('tab-remuneraciones')?.classList.contains('active')) renderRemuneraciones(); } }
+  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; _rebuildCotizacionesById(); if(render) renderCotizaciones(); }
+  if(pRes.status==='fulfilled'){ state.pedidos=pRes.value.records||[]; _rebuildPedidosById(); if(render){ renderPedidos(); if(document.getElementById('tab-remuneraciones')?.classList.contains('active')) renderRemuneraciones(); } }
   if(rRes.status==='fulfilled'){ state.reportes=rRes.value.records||[]; if(render) renderReportes(); }
   if(pvRes.status==='fulfilled'){ state.proveedores=pvRes.value.records||[]; if(render){ renderProveedores(); fillCatSelects(); } }
   if(monRes.status==='fulfilled') _applyMonitorSistema(monRes.value.records||[]);
 }
 // Mezcla (upsert) el resultado de un fetch INCREMENTAL a state.
+// Devuelve cuántos registros llegaron en el delta (0 = nada cambió → se puede
+// omitir el re-render en el refresco silencioso).
 function _mergeCoreState(res){
   const [cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=res;
-  if(facRes.status==='fulfilled') state.facturas=_mergeRecords(state.facturas,facRes.value.records);
-  if(cRes.status==='fulfilled'){ state.clientes=_mergeRecords(state.clientes,cRes.value.records); _rebuildClientesById(); }
-  if(coRes.status==='fulfilled') state.cotizaciones=_mergeRecords(state.cotizaciones,coRes.value.records);
-  if(pRes.status==='fulfilled') state.pedidos=_mergeRecords(state.pedidos,pRes.value.records);
-  if(rRes.status==='fulfilled') state.reportes=_mergeRecords(state.reportes,rRes.value.records);
-  if(pvRes.status==='fulfilled') state.proveedores=_mergeRecords(state.proveedores,pvRes.value.records);
-  if(monRes.status==='fulfilled' && (monRes.value.records||[]).length) _applyMonitorSistema(monRes.value.records);
+  let n=0;
+  if(facRes.status==='fulfilled'){const r=facRes.value.records||[];n+=r.length;state.facturas=_mergeRecords(state.facturas,r);}
+  if(cRes.status==='fulfilled'){const r=cRes.value.records||[];n+=r.length;state.clientes=_mergeRecords(state.clientes,r); _rebuildClientesById(); }
+  if(coRes.status==='fulfilled'){const r=coRes.value.records||[];n+=r.length;state.cotizaciones=_mergeRecords(state.cotizaciones,r);_rebuildCotizacionesById();}
+  if(pRes.status==='fulfilled'){const r=pRes.value.records||[];n+=r.length;state.pedidos=_mergeRecords(state.pedidos,r);_rebuildPedidosById();}
+  if(rRes.status==='fulfilled'){const r=rRes.value.records||[];n+=r.length;state.reportes=_mergeRecords(state.reportes,r);}
+  if(pvRes.status==='fulfilled'){const r=pvRes.value.records||[];n+=r.length;state.proveedores=_mergeRecords(state.proveedores,r);}
+  if(monRes.status==='fulfilled' && (monRes.value.records||[]).length){n+=monRes.value.records.length;_applyMonitorSistema(monRes.value.records);}
   try{if(cRes.status==='fulfilled')_registerFlash(cRes.value.records);if(coRes.status==='fulfilled')_registerFlash(coRes.value.records);if(pRes.status==='fulfilled')_registerFlash(pRes.value.records);if(pvRes.status==='fulfilled')_registerFlash(pvRes.value.records);}catch(e){}
+  return n;
 }
 
 async function loadAllData(){
@@ -6749,17 +6815,28 @@ async function loadAllData(){
     _assignCoreState(res,true);
     if(isFirst) slProgress(92,'Calculando resumen...');
     state.loaded=true;state.lastUpdateTs=Date.now();state._silentN=0;setStatus('en vivo',true);
+    _saveDataCache();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
     renderOverview();
-    if(!isFirst) toast('Datos actualizados ✓','success');
+    // Tras hidratar desde caché, el primer fetch es un refresco silencioso: no
+    // mostramos el toast (se limpia la marca para que los refrescos manuales sí avisen).
+    if(!isFirst && !state._hydrated) toast('Datos actualizados ✓','success');
+    state._hydrated=false;
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
     if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}}
   }catch(e){
-    setStatus('error',false);
     console.error('loadAllData error:',e);
-    toast('Error cargando datos: '+e.message,'error');
+    // Si ya hay datos en pantalla (de la caché o de una carga previa), el fallo
+    // del refresco no es bloqueante: avisamos suave en vez de un error alarmante.
+    if(state.clientes.length||state.pedidos.length||state.cotizaciones.length){
+      setStatus('sin conexión',false);
+      toast('Sin conexión — mostrando datos guardados','info');
+    }else{
+      setStatus('error',false);
+      toast('Error cargando datos: '+e.message,'error');
+    }
   }finally{
     isLoadingData=false;
     hideSysLoader();  // siempre se oculta, sin importar qué pasó
@@ -6776,6 +6853,7 @@ async function loadAllDataSilent(){
   state._silentN=(state._silentN||0)+1;
   const doFull = !state.lastUpdateTs || (state._silentN % 4)===0;
   try{
+    let changed=true;
     if(doFull){
       const res=await _fetchAllCore();
       _assignCoreState(res,false);
@@ -6788,12 +6866,15 @@ async function loadAllDataSilent(){
         airtableFetchSince('Proveedores',sinceIso),airtableFetchSince('Monitor Sistema',sinceIso),
         airtableFetchSince('Facturas',sinceIso)
       ]);
-      _mergeCoreState(res);
-      _reRenderActiveList();
+      // Si el delta no trajo registros, nada cambió: evitamos recomputar KPIs,
+      // acciones, tablas y overview (re-render inútil cada ciclo).
+      changed=_mergeCoreState(res)>0;
+      if(changed) _reRenderActiveList();
     }
+    if(doFull||changed) _saveDataCache();
     state.lastUpdateTs=Date.now();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;
-    renderOverview();
+    if(changed) renderOverview();
   }catch(e){ setStatus('error (auto)',false); logErr('loadAllDataSilent',e); }
 }
 function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},1800000);} // 30 min
@@ -6834,7 +6915,7 @@ function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']
 function margenBadge(m){if(m===null) return '—';return`<span class="badge ${m>=35?'badge-green':m>=20?'badge-yellow':'badge-red'}">${m.toFixed(0)}%</span>`;}
 function resolveClienteName(f){if(!f) return '—';if(typeof f==='string') return f;if(Array.isArray(f)&&f.length>0) return(state.clientesById&&state.clientesById[f[0]])||'(cliente)';return '—';}
 function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-yellow','Confirmado':'badge-yellow','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Listo para despacho':'badge-green','Pendiente':'badge-gray','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green','Cancelado':'badge-red','Cancelada':'badge-red','Anulada':'badge-red','Negociación':'badge-yellow','Contactado':'badge-yellow','Propuesta enviada':'badge-yellow','Cliente activo':'badge-green','Cliente inactivo':'badge-gray','Perdido':'badge-gray','Con deuda':'badge-yellow','Cobrada':'badge-green','Pagada':'badge-green','Pagado':'badge-green','Vencida':'badge-red','QA rechazado':'badge-red','QA pendiente':'badge-yellow'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
-function formatCLP(v){if(!v) return '$0';return '$'+Math.round(v).toLocaleString('es-CL');}
+function formatCLP(v){if(!v) return '$0';return '$'+_NF_CL.format(Math.round(v));}
 function escapeHtml(s){if(s===null||s===undefined) return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function safeHref(v){if(!v)return '';const s=String(v).trim();return(/^https?:\/\//i.test(s)||/^mailto:/i.test(s)||/^tel:/i.test(s))?s.replace(/"/g,'&quot;').replace(/'/g,'&#39;'):'';}
 // ── Validaciones (Chile) ──────────────────────────────────────
@@ -7028,19 +7109,20 @@ function renderEquipoSnapshot(){
   const today=new Date();today.setHours(0,0,0,0);
   const todayStr=fmtDate(today);
   const dayLabel=today.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+  // Precalcula una sola vez los pedidos activos (con su "Equipo asignado" ya en
+  // minúsculas) en lugar de re-escanear todos los pedidos por cada persona.
+  const activosEq=[];
+  state.pedidos.forEach(x=>{const est=x.fields['Estado pedido']||'';if(est==='Despachado'||est==='Cancelado')return;activosEq.push({ea:(x.fields['Equipo asignado']||'').toLowerCase(),fe:x.fields['Fecha entrega']||''});});
   const chips=PERSONAS.map(p=>{
     const ev=equipoState.eventos[`${p.id}_${todayStr}`];
     const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):EQUIPO_TIPOS.disponible;
     const fn=p.nombre.split(' ')[0].toLowerCase();
-    const misPedidos=state.pedidos.filter(x=>{
-      const ea=(x.fields['Equipo asignado']||'').toLowerCase();
-      return ea.includes(fn)&&!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'');
-    });
+    const misPedidos=activosEq.filter(o=>o.ea.includes(fn));
     const proxEntrega=misPedidos
-      .filter(x=>x.fields['Fecha entrega']&&new Date(x.fields['Fecha entrega']+'T00:00:00')>=today)
-      .map(x=>x.fields['Fecha entrega']).sort()[0];
+      .filter(o=>o.fe&&new Date(o.fe+'T00:00:00')>=today)
+      .map(o=>o.fe).sort()[0];
     const proxLabel=proxEntrega?` · próx: ${proxEntrega.substring(5).replace('-','/')}` :'';
-    const conflictoHoy=ev&&['ausente','vacaciones'].includes(ev.tipo)&&misPedidos.some(x=>(x.fields['Fecha entrega']||'')===todayStr);
+    const conflictoHoy=ev&&['ausente','vacaciones'].includes(ev.tipo)&&misPedidos.some(o=>o.fe===todayStr);
     const borderColor=conflictoHoy?'rgba(255,68,68,0.5)':ev&&ev.tipo!=='disponible'?'var(--border2)':'var(--border)';
     return`<div style="display:flex;align-items:flex-start;gap:10px;background:var(--surface2);border-radius:10px;padding:10px 14px;flex:1;min-width:170px;border:1px solid ${borderColor}">
       ${_avHtml(p,36)}
@@ -7062,36 +7144,55 @@ function renderKPIs(){
   const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
   const _cli=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;
 
-  // ── Revenue ──────────────────────────────────────────────────────────
-  const revSemana=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
-  const revAnterior=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
-  const revTotal=_ped.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-
-  // ── Pedidos ───────────────────────────────────────────────────────────
-  const pedActivos=_ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
-  const atrasados=_ped.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
-  const pedNuevosSem=_ped.filter(p=>p.createdTime&&new Date(p.createdTime)>=weekStart).length;
-  const pedNuevosPrev=_ped.filter(p=>{const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
-
-  // ── Cotizaciones ──────────────────────────────────────────────────────
-  const cotPend=_cot.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
-  const cotNuevosSem=_cot.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
-  const cotNuevosPrev=_cot.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
-
-  // ── Clientes ──────────────────────────────────────────────────────────
-  const clientesNuevos=_cli.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart).length;
-  const clientesPrev=_cli.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart;}).length;
-
-  // ── Alertas ───────────────────────────────────────────────────────────
+  // ── Métricas del overview en 3 pasadas (una por tabla) en vez de ~22 filtros
+  //    sueltos; createdTime y getMargenCot se calculan una sola vez por registro.
+  //    Lógica verificada idéntica a la versión previa (300 datasets aleatorios). ──
   const in2days=new Date(today);in2days.setDate(today.getDate()+2);
   const ago48h=new Date(Date.now()-48*3600*1000);
-  const alertas=_cli.filter(c=>(c.fields['Facturas vencidas']||0)>=2).length
-    +_ped.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||'')).length
-    +atrasados
-    +_cot.filter(c=>{const v=c.fields['Fecha vencimiento'];return['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')&&v&&new Date(v+'T00:00:00')<today;}).length
-    +_ped.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];if(!fe||['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;const d=new Date(fe+'T00:00:00');return d>=today&&d<=in2days;}).length
-    +_cot.filter(c=>(c.fields['Estado cotización']||'')==='Solicitada'&&c.createdTime&&new Date(c.createdTime)<ago48h).length
-    +_cot.filter(c=>{const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return false;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return false;const cl=_cli.find(x=>x.id===cid);return cl?.fields['Estado cuenta']==='Bloqueado';}).length;
+  // Pedidos
+  let revSemana=0,revAnterior=0,revTotal=0,pedActivos=0,atrasados=0,pedNuevosSem=0,pedNuevosPrev=0,_aAnticipo=0,_aEntrega=0;
+  for(const p of _ped){
+    const f=p.fields,est=f['Estado pedido']||'';
+    const cancel=est==='Cancelado',despCanc=cancel||est==='Despachado';
+    const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
+    revTotal+=neto;
+    const d=p.createdTime?new Date(p.createdTime):null;
+    if(d){
+      if(d>=weekStart){pedNuevosSem++;if(!cancel)revSemana+=neto;}
+      else if(d>=prevWeekStart&&d<weekStart){pedNuevosPrev++;if(!cancel)revAnterior+=neto;}
+    }
+    if(!despCanc)pedActivos++;
+    const fe=f['Fecha entrega'];
+    if(!despCanc&&fe&&new Date(fe)<today)atrasados++;
+    if(!f['Anticipo pagado (50%)']&&(est==='Confirmado'||est==='En producción'))_aAnticipo++;
+    if(fe&&!despCanc){const de=new Date(fe+'T00:00:00');if(de>=today&&de<=in2days)_aEntrega++;}
+  }
+  // Clientes (+ índice id→registro para el cruce con cotizaciones)
+  const _cliById={};let clientesNuevos=0,clientesPrev=0,_aFacVenc=0;
+  for(const c of _cli){
+    _cliById[c.id]=c;
+    const d=c.createdTime?new Date(c.createdTime):null;
+    if(d){if(d>=weekStart)clientesNuevos++;else if(d>=prevWeekStart&&d<weekStart)clientesPrev++;}
+    if((c.fields['Facturas vencidas']||0)>=2)_aFacVenc++;
+  }
+  // Cotizaciones (pendientes, nuevas, alertas dependientes de cliente y márgenes)
+  let cotPend=0,cotNuevosSem=0,cotNuevosPrev=0,_aCotVenc=0,_aCotSolic=0,_aCotBloq=0;
+  let _mSum=0,_mN=0,_mSemSum=0,_mSemN=0,_mPrevSum=0,mPrevN=0;
+  for(const c of _cot){
+    const f=c.fields,est=f['Estado cotización']||'';
+    const envSol=est==='Enviada'||est==='Solicitada';
+    if(envSol)cotPend++;
+    const d=c.createdTime?new Date(c.createdTime):null;
+    const inSem=!!(d&&d>=weekStart),inPrev=!!(d&&d>=prevWeekStart&&d<weekStart);
+    if(inSem)cotNuevosSem++;else if(inPrev)cotNuevosPrev++;
+    if(envSol){const v=f['Fecha vencimiento'];if(v&&new Date(v+'T00:00:00')<today)_aCotVenc++;}
+    if(est==='Solicitada'&&d&&d<ago48h)_aCotSolic++;
+    if(envSol){const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(cid){const cl=_cliById[cid];if(cl&&cl.fields['Estado cuenta']==='Bloqueado')_aCotBloq++;}}
+    const m=getMargenCot(f);
+    if(m!==null){_mSum+=m;_mN++;if(inSem){_mSemSum+=m;_mSemN++;}else if(inPrev){_mPrevSum+=m;mPrevN++;}}
+  }
+  const alertas=_aFacVenc+_aAnticipo+atrasados+_aCotVenc+_aEntrega+_aCotSolic+_aCotBloq;
+  const avgM=_mN>0?_mSum/_mN:0,avgMSem=_mSemN?_mSemSum/_mSemN:0,avgMPrev=mPrevN?_mPrevSum/mPrevN:0;
 
   // ── Tendencia de alertas: snapshot semanal en localStorage (acumula histórico) ──
   let _kpiHist;try{_kpiHist=JSON.parse(localStorage.getItem('kpiHist')||'[]');}catch(e){_kpiHist=[];}
@@ -7103,13 +7204,6 @@ function renderKPIs(){
   const _prevH=[..._kpiHist].reverse().find(e=>e.wk!==_wk);
   const alertasPrev=_prevH?_prevH.alertas:null;
 
-  // ── Margen ────────────────────────────────────────────────────────────
-  const cotM=_cot.filter(c=>getMargenCot(c.fields)!==null);
-  const avgM=cotM.length>0?cotM.reduce((sum,c)=>sum+getMargenCot(c.fields),0)/cotM.length:0;
-  const _cotMSem=_cot.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart&&getMargenCot(c.fields)!==null);
-  const avgMSem=_cotMSem.length?_cotMSem.reduce((s,c)=>s+getMargenCot(c.fields),0)/_cotMSem.length:0;
-  const _cotMPrev=_cot.filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=prevWeekStart&&d<weekStart&&getMargenCot(c.fields)!==null;});
-  const avgMPrev=_cotMPrev.length?_cotMPrev.reduce((s,c)=>s+getMargenCot(c.fields),0)/_cotMPrev.length:0;
 
   // ── Delta helpers ─────────────────────────────────────────────────────
   // Percentage change badge (revenue)
@@ -7175,7 +7269,7 @@ function renderKPIs(){
     <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes">${_ki('icon-message')}<div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}${_sparkline(spCot,'var(--accent2)')}</div>
     <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes">${_ki('icon-clientes')}<div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}${_sparkline(spCli,'var(--accent4)')}</div>
     <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas">${_ki('icon-warning')}<div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div>${alertBadge(alertas,alertasPrev)}</div>
-    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div>${ptsBadge(avgMSem,avgMPrev,_cotMPrev.length>0)}</div>`;
+    <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div>${ptsBadge(avgMSem,avgMPrev,mPrevN>0)}</div>`;
   updateDockBadges();
 }
 function renderPipelineArea(){
@@ -7242,7 +7336,7 @@ function renderAlertas(){
   _cot.forEach(c=>{
     const f=c.fields;if(!['Enviada','Solicitada'].includes(f['Estado cotización']||'')) return;
     const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;if(!cid) return;
-    const cl=_cli.find(x=>x.id===cid)||state.clientes.find(x=>x.id===cid);
+    const cl=_cli.find(x=>x.id===cid)||state.clientesByIdRec[cid];
     if(cl?.fields['Estado cuenta']==='Bloqueado')
       alertas.push({sev:3,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-lock"/></svg>',type:'cliente-bloqueado',msg:`<strong>${escapeHtml(cl.fields['Empresa']||'—')}</strong>: bloqueado con cot. activa <span style="color:var(--text3)">${escapeHtml(f['N° Cotización']||'—')}</span>`,id:c.id,tab:'cotizaciones'});
   });
@@ -7391,14 +7485,14 @@ async function bulkChangeEtapa(){
   const etapa=document.getElementById('bulkEtapaSelect').value;if(!etapa){toast('Selecciona una etapa primero','error');return;}
   const ids=[...selectedClientes];if(!ids.length) return;if(!confirm(`¿Cambiar etapa a "${etapa}" para ${ids.length} cliente${ids.length>1?'s':''}?`)) return;
   const ab=document.getElementById('bulkApplyBtn'),db=document.getElementById('bulkDelBtn');if(ab){ab.disabled=true;ab.textContent='Aplicando...';}if(db) db.disabled=true;
-  let ok=0,fail=0;for(const id of ids){try{const res=await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=res.fields?.['Etapa venta']||etapa;ok++;}catch(e){fail++;}}
+  let ok=0,fail=0;for(const id of ids){try{const res=await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientesByIdRec[id];if(c) c.fields['Etapa venta']=res.fields?.['Etapa venta']||etapa;ok++;}catch(e){fail++;}}
   document.getElementById('bulkEtapaSelect').value='';renderClientes();renderOverview();
   fail>0?toast(`${ok} actualizados · ${fail} fallaron`,'info'):toast(`✓ ${ok} cliente${ok>1?'s':''} → "${etapa}"`,'success');
   if(ab){ab.disabled=false;ab.textContent='✓ Aplicar etapa';}if(db) db.disabled=false;
 }
 async function deleteSelectedClientes(){
-  const ids=[...selectedClientes];if(!ids.length) return;const nombres=ids.map(id=>state.clientes.find(c=>c.id===id)?.fields['Empresa']||id);if(!confirm(`¿Eliminar ${ids.length} cliente${ids.length>1?'s':''}?\n\n${nombres.join('\n')}`)) return;
-  let ok=0,fail=0;for(const id of ids){try{await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];ok++;}catch(e){fail++;}}
+  const ids=[...selectedClientes];if(!ids.length) return;const nombres=ids.map(id=>state.clientesByIdRec[id]?.fields['Empresa']||id);if(!confirm(`¿Eliminar ${ids.length} cliente${ids.length>1?'s':''}?\n\n${nombres.join('\n')}`)) return;
+  let ok=0,fail=0;for(const id of ids){try{await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];delete state.clientesByIdRec[id];ok++;}catch(e){fail++;}}
   selectedClientes.clear();renderClientes();renderOverview();fail>0?toast(`${ok} eliminados, ${fail} con error`,'info'):toast(`✓ ${ok} eliminados`,'success');
 }
 function sortClientes(key){if(clientesSort.key===key) clientesSort.dir*=-1;else{clientesSort.key=key;clientesSort.dir=1;}document.querySelectorAll('#tab-clientes .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(/sortClientes\('(\w+)'\)/)?.[1];th.classList.remove('asc','desc');if(k===key) th.classList.add(clientesSort.dir===1?'asc':'desc');});renderClientes();_saveUIState();}
@@ -7463,7 +7557,7 @@ function renderNotasList(){
   const sameDay=(a,b)=>a.toDateString()===b.toDateString();
   el.innerHTML=arr.map(n=>{
     const d=new Date(n.ts);
-    const f=sameDay(d,hoy)?'Hoy':sameDay(d,ayer)?'Ayer':d.toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'2-digit'});
+    const f=sameDay(d,hoy)?'Hoy':sameDay(d,ayer)?'Ayer':_DTF_D2MY2.format(d);
     const h=d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
     return`<div class="nota-item"><div class="nota-header"><span class="nota-ts">${f}, ${h}</span><button class="nota-del" onclick="deleteNota('${n.id}')" title="Eliminar">✕</button></div><div class="nota-text">${escapeHtml(n.text)}</div></div>`;
   }).join('');
@@ -7510,7 +7604,8 @@ function buildClienteRow(c){
     </td>
   </tr>`;
 }
-function renderClientes(){
+function renderClientes(skipAnalytics){
+  if(!skipAnalytics) _cliSearchCache.clear();
   const sorted=getSortedClientes();
   const tbody=document.getElementById('clientesTableBody');
   const countEl=document.getElementById('clientesCount');
@@ -7523,7 +7618,7 @@ function renderClientes(){
   }
   // Búsqueda basada en datos: replica el texto exacto que veía el filtro por DOM
   // (textContent de la fila) sin tener que pintar las ~1000 filas primero.
-  const matched=_cliQuery?sorted.filter(c=>_rowText(buildClienteRow(c)).includes(_cliQuery)):sorted;
+  const matched=_cliQuery?sorted.filter(c=>{let t=_cliSearchCache.get(c.id);if(t===undefined){t=_rowText(buildClienteRow(c));_cliSearchCache.set(c.id,t);}return t.includes(_cliQuery);}):sorted;
   _cliRowIds=matched.map(c=>c.id);
   if(countEl) countEl.textContent=_cliQuery?`${matched.length} de ${sorted.length}`:(isVendorMode()?`${sorted.length} mis clientes`:`${state.clientes.length} clientes en CRM`);
   if(!matched.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state" style="padding:20px">Sin resultados para "${escapeHtml(_cliQuery)}"</div></td></tr>`);updateBulkBar();return;}
@@ -7532,11 +7627,14 @@ function renderClientes(){
   if(!_cliQuery&&matched.length>_cliCap) html+=_loadMoreRow(matched.length-_cliCap,10,'cliShowMore()');
   _setRows(tbody,html);
   updateBulkBar();
-  renderClientesAnalytics();
+  // El analytics agrega sobre TODOS los datos (independiente de búsqueda/orden/
+  // paginación). Se omite en los renders de búsqueda y "ver más" para no rehacer
+  // 3 pasadas sobre pedidos/cotizaciones en cada tecla.
+  if(!skipAnalytics) renderClientesAnalytics();
   _applySortIndicators();
 }
-function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes();_saveUIState();}
-async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes(true);_saveUIState();}
+async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientesByIdRec[id];if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
   setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`);return;}_setRows(tbody,cots.map(c=>buildCotRow(c)).join(''));},50);
@@ -7548,7 +7646,7 @@ function compartirPortalCliente(clienteId){
   else{prompt('Copia esta URL para el cliente:',url);}
 }
 function openClienteDetalle(id){
-  const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
+  const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Comuna']||''}`:f['Comuna']||'';
   {const _cc=document.getElementById('cdCrumbName');if(_cc)_cc.textContent=f['Empresa']||f['Contacto']||'Cliente';}
   // Última actividad: fecha más reciente entre cotizaciones, pedidos y primer contacto
@@ -8014,7 +8112,7 @@ async function confirmarImportarDtes(){
   renderClienteFacturas(cdCurrentId,cdCurrentEmpresa);
 }
 function openEditCliente(id){
-  const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields;
+  const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields;
   document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Comuna']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'Referido';document.getElementById('ecEtapa').value=f['Etapa venta']||'Lead nuevo';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
   const _ecV=document.getElementById('ec-vendedor');if(_ecV) _ecV.value=f['Vendedor']||'';
   document.getElementById('editClienteModal').style.display='flex';
@@ -8034,22 +8132,22 @@ async function saveEditCliente(){
   const ciudadVal=document.getElementById('ecCiudad').value.trim();if(ciudadVal) fields['Comuna']=ciudadVal;
   const _ecVv=document.getElementById('ec-vendedor')?.value||'';fields['Vendedor']=_ecVv||null;
   try{
-    await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}
+    await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}
     toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();
   }catch(e){
-    if(ciudadVal&&e.message.toLowerCase().includes('unknown')){try{delete fields['Comuna'];await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
+    if(ciudadVal&&e.message.toLowerCase().includes('unknown')){try{delete fields['Comuna'];await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
     else{toast('Error: '+e.message,'error');}
   }
   btn.disabled=false;btn.textContent='💾 Guardar cambios';
 }
 async function deleteCliente(id,nombre){
   if(!confirm(`¿Eliminar a "${nombre}"?`)) return;
-  const rec=state.clientes.find(x=>x.id===id);
+  const rec=state.clientesByIdRec[id];
   const snapshot=rec?sanitizeForRestore(rec.fields):null;
   try{
-    await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];closeClienteDetalle();renderClientes();renderOverview();
+    await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];delete state.clientesByIdRec[id];closeClienteDetalle();renderClientes();renderOverview();
     toastUndo(`Cliente "${nombre}" eliminado`,async()=>{
-      try{const r=await airtableWrite('Clientes','POST',null,snapshot);if(r&&r.id){state.clientes.push(r);state.clientesById[r.id]=r.fields['Empresa']||nombre;}renderClientes();renderOverview();toast(`✓ "${nombre}" restaurado`,'success');}
+      try{const r=await airtableWrite('Clientes','POST',null,snapshot);if(r&&r.id){state.clientes.push(r);state.clientesById[r.id]=r.fields['Empresa']||nombre;state.clientesByIdRec[r.id]=r;}renderClientes();renderOverview();toast(`✓ "${nombre}" restaurado`,'success');}
       catch(e){toast('No se pudo restaurar: '+e.message,'error');}
     });
   }catch(e){toast('Error: '+e.message,'error');}
@@ -8087,7 +8185,7 @@ function getSortedCotizaciones(){
     if(typeof va==='number') return(va-vb)*cotizacionesSort.dir;return va.localeCompare(vb,'es')*cotizacionesSort.dir;
   });
 }
-function renderCotizaciones(){
+function renderCotizaciones(skipAnalytics){
   const tbody=document.getElementById('cotsTableBodyFull');
   const sorted=getSortedCotizaciones();
   if(!sorted.length){
@@ -8109,7 +8207,7 @@ function renderCotizaciones(){
     html=shown.map(c=>buildCotRow(c)).join('');
     if(sorted.length>_cotCap) html+=_loadMoreRow(sorted.length-_cotCap,11,'cotShowMore()');
   }
-  _setRows(tbody,html);renderCotAnalytics();_applySortIndicators();
+  _setRows(tbody,html);if(!skipAnalytics)renderCotAnalytics();_applySortIndicators();
 }
 function resolveVendedorName(vid){if(!vid) return '—';const p=PERSONAS.find(x=>x.id===vid.toLowerCase().trim());return p?p.nombre:vid;}
 function buildCotRow(c){
@@ -8151,7 +8249,7 @@ async function updateCotizacionEstado(id,estado){
   try{
     await airtableWrite('Cotizaciones','PATCH',id,{'Estado cotización':estado});toast(`Cotización ${estado}`,'success');
     if(estado==='Aprobada'){
-      const _cot=state.cotizaciones.find(x=>x.id===id);
+      const _cot=state.cotizacionesById[id];
       const _cid=Array.isArray(_cot?.fields['Cliente'])?_cot.fields['Cliente'][0]:null;
       await _advanceEtapaCliente(_cid,'Cliente activo',['Lead nuevo','Contactado','Propuesta enviada','Negociación']);
       await crearPedidoDesdeCotizacion(id);
@@ -8172,7 +8270,7 @@ async function updateCotizacionEstado(id,estado){
   catch(e){toast('Error: '+e.message,'error');}
 }
 async function toggleUrgenciaCotizacion(id){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c) return;
+  const c=state.cotizacionesById[id];if(!c) return;
   const nuevo=!c.fields['Urgencia (+25%)'];
   c.fields['Urgencia (+25%)']=nuevo;
   const row=document.querySelector(`#cotsTableBodyFull tr[data-id="${id}"]`);
@@ -8181,7 +8279,7 @@ async function toggleUrgenciaCotizacion(id){
   catch(e){c.fields['Urgencia (+25%)']=!nuevo;renderCotizaciones();toast('Error: '+e.message,'error');}
 }
 async function crearPedidoDesdeCotizacion(cotId){
-  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;const f=cot.fields;
+  const cot=state.cotizacionesById[cotId];if(!cot) return;const f=cot.fields;
   const year=new Date().getFullYear();let maxNum=0;state.pedidos.forEach(p=>{const m=(p.fields['N° Pedido']||'').toString().match(new RegExp(`PED-${year}-(\\d+)`));if(m) maxNum=Math.max(maxNum,parseInt(m[1]));});
   const numPedido=`PED-${year}-${String(maxNum+1).padStart(3,'0')}`;
   const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0};
@@ -8189,11 +8287,11 @@ async function crearPedidoDesdeCotizacion(cotId){
   if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
   if(f['Vendedor']) fields['Vendedor']=f['Vendedor'];
   const solicitudCot=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';
-  try{await airtableWrite('Pedidos','POST',null,fields);toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();_offerAgentChain(numPedido,solicitudCot);}
-  catch(e){if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('cliente')){try{await airtableWrite('Pedidos','POST',null,{'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']});toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];renderPedidos();_offerAgentChain(numPedido,solicitudCot);}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');}}else{toast(`⚠ Error: ${e.message}`,'error');}}
+  try{await airtableWrite('Pedidos','POST',null,fields);toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();renderPedidos();_offerAgentChain(numPedido,solicitudCot);}
+  catch(e){if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('cliente')){try{await airtableWrite('Pedidos','POST',null,{'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']});toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();renderPedidos();_offerAgentChain(numPedido,solicitudCot);}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');}}else{toast(`⚠ Error: ${e.message}`,'error');}}
 }
 function openEditCot(id){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c) return;const f=c.fields;
+  const c=state.cotizacionesById[id];if(!c) return;const f=c.fields;
   document.getElementById('editCotId').value=id;document.getElementById('editCotNum').value=f['N° Cotización']||'';const _eAlias=document.getElementById('editCotAlias');if(_eAlias) _eAlias.value=f['Alias / Título']||'';document.getElementById('editCotCanal').value=f['Canal solicitud']||'WhatsApp';document.getElementById('editCotEstado').value=f['Estado cotización']||'Enviada';document.getElementById('editCotUrgente').value=f['Urgencia (+25%)']?'true':'false';document.getElementById('editCotFecha').value=f['Fecha cotización']||'';document.getElementById('editCotVto').value=f['Fecha vencimiento']||'';document.getElementById('editCotSolicitud').value=f['Solicitud cliente (texto libre)']||'';document.getElementById('editCotNotas').value=f['Notas cotización']||'';
   const _efp=document.getElementById('editCotFormaPago');if(_efp) _efp.value=f['Forma de pago']||'';
   const _etp=document.getElementById('editCotTiempoProd');if(_etp) _etp.value=f['Tiempo de producción']||'';
@@ -8252,7 +8350,7 @@ function openCopyCotPicker(target){
 }
 function closeCopyCotPicker(){document.getElementById('copyCotPickerModal').style.display='none';}
 function applyCopyCot(cotId){
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;const t=_copyCotTarget;
   // Ítems
   const detalle=f['Detalle productos']||'';
@@ -8335,14 +8433,14 @@ function onEditCotClienteSearch(){
   dropdown.classList.toggle('open',!!src.length);
 }
 function selectEditCotCliente(id){
-  const c=state.clientes.find(x=>x.id===id);if(!c) return;
+  const c=state.clientesByIdRec[id];if(!c) return;
   document.getElementById('editCotClienteSearch').value=c.fields['Empresa']||'';document.getElementById('editCotClienteId').value=id;document.getElementById('editCotClienteDropdown').classList.remove('open');
   const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('editCotClienteInfo');const prevCotsE=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return(Array.isArray(cl)?cl.includes(id):cl===id)&&x.id!==document.getElementById('editCotId').value;}).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));const prevBtnE=prevCotsE.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('e')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">📋 Cot. anterior (${prevCotsE.length})</button>`:'';info.innerHTML=(venc>=2?`<span style="color:var(--danger)">⚠ ${venc} facturas vencidas</span>`:`<span style="color:var(--text2)">✓ Cliente seleccionado</span>`)+prevBtnE;
 }
 
 // ── PDF ───────────────────────────────────────────────────────
 function buildCotizacionDoc(id){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c) return null;
+  const c=state.cotizacionesById[id];if(!c) return null;
   const f=c.fields;const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cf=(clienteId?state.clientes.find(x=>x.id===clienteId):null)?.fields||{};
   const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||new Date().toISOString().split('T')[0],vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',notas=f['Notas cotización']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
   const tiempoProd=f['Tiempo de producción'];const tipoDias=(f['Tipo días producción']||'DÍAS HÁBILES').toLowerCase();
@@ -8427,7 +8525,7 @@ function descargarPDFCotizacion(id){
 function parseFichaData(s){try{return s?JSON.parse(s):null;}catch(e){return null;}}
 
 function openFichaModal(pedidoId){
-  const ped=state.pedidos.find(x=>x.id===pedidoId);if(!ped) return;
+  const ped=state.pedidosById[pedidoId];if(!ped) return;
   const f=ped.fields;
   const data=parseFichaData(f['Ficha Tecnica'])||{};
   document.getElementById('fichaPedidoId').value=pedidoId;
@@ -8462,7 +8560,7 @@ async function saveFichaModal(verPDF=false){
   };
   try{
     await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(data)});
-    const ped=state.pedidos.find(x=>x.id===pedidoId);
+    const ped=state.pedidosById[pedidoId];
     if(ped) ped.fields['Ficha Tecnica']=JSON.stringify(data);
     toast('Ficha técnica guardada ✓','success');
     renderPedidos();
@@ -8472,7 +8570,7 @@ async function saveFichaModal(verPDF=false){
 }
 
 function buildFichaDoc(pedidoId){
-  const ped=state.pedidos.find(x=>x.id===pedidoId);if(!ped) return null;
+  const ped=state.pedidosById[pedidoId];if(!ped) return null;
   const f=ped.fields;
   const data=parseFichaData(f['Ficha Tecnica'])||{};
   const escH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
@@ -8656,7 +8754,7 @@ function loadFPImgCache(cotId){
 }
 
 function openFichaPropModal(cotId){
-  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
+  const cot=state.cotizacionesById[cotId];if(!cot) return;
   _fpCotId=cotId;
   const f=cot.fields;
   const saved=parseFichaPropData(f['Ficha Propuesta'])||{};
@@ -9157,7 +9255,7 @@ async function _fichaHTMLtoPdfBlob(htmlDoc){
 }
 
 async function subirFactura(pedidoId){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   const f=p.fields;
   const nPedido=f['N° Pedido']||pedidoId;
   const btn=document.querySelector(`[onclick="subirFactura('${pedidoId}')"]`);
@@ -9208,7 +9306,7 @@ async function subirFactura(pedidoId){
 }
 
 async function guardarFichaEnDrive(cotId){
-  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return;
+  const cot=state.cotizacionesById[cotId];if(!cot) return;
   const f=cot.fields;
   const numCot=f['N° Cotización']||cotId;
   const clienteNombre=(resolveClienteName(f['Cliente'])||'Sin_Contacto').replace(/[<>:"/\\|?*]/g,'_');
@@ -9300,10 +9398,10 @@ async function ensureCotFolder(cotId,numCot,clienteNombre){
 }
 // Resuelve (creando si hace falta) la carpeta de un pedido y devuelve su folderId.
 async function ensurePedidoFolder(pedidoId){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return null;
+  const p=state.pedidosById[pedidoId];if(!p) return null;
   const f=p.fields;const cotIds=f['Cotizaciones'];
   if(cotIds&&cotIds.length){
-    const cot=state.cotizaciones.find(x=>x.id===cotIds[0]);
+    const cot=state.cotizacionesById[cotIds[0]];
     const numCot=cot?.fields['N° Cotización']||'';
     const cliente=resolveClienteName(cot?.fields['Cliente']||f['Cliente']);
     return await ensureCotFolder(cotIds[0],numCot,cliente);
@@ -9385,7 +9483,7 @@ async function openAdjuntosModal(kind,id){
   const body=document.getElementById('adjuntosBody');
   const titleEl=document.getElementById('adjuntosTitle');
   let label='Adjuntos';
-  if(kind==='ped'){const p=state.pedidos.find(x=>x.id===id);label='Adjuntos — '+(p?.fields['N° Pedido']||'Pedido');}
+  if(kind==='ped'){const p=state.pedidosById[id];label='Adjuntos — '+(p?.fields['N° Pedido']||'Pedido');}
   titleEl.textContent=label;
   modal.style.display='flex';
   if(_adjUrl){URL.revokeObjectURL(_adjUrl);_adjUrl=null;}
@@ -9407,7 +9505,7 @@ function _renderAdjuntosBody(files){
   const body=document.getElementById('adjuntosBody');
   const rows=files.length?files.map(f=>{
     const canPrev=/^image\//.test(f.mimeType)||f.mimeType==='application/pdf'||/^text\//.test(f.mimeType);
-    const sub=[_fmtBytes(f.size),f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'}):''].filter(Boolean).join(' · ');
+    const sub=[_fmtBytes(f.size),f.modifiedTime?_DTF_DMY.format(new Date(f.modifiedTime)):''].filter(Boolean).join(' · ');
     return`<div style="display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px">
       <span style="font-size:18px;flex-shrink:0">${_adjIcon(f.mimeType)}</span>
       <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.name)}</div><div style="font-size:10px;color:var(--text3)">${sub}</div></div>
@@ -9491,11 +9589,11 @@ async function openDriveFolder(cotId,numCot,clienteNombre){
   }catch(e){toast('Error Drive: '+e.message,'error');}
 }
 async function openPedidoDrive(pedidoId){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   const f=p.fields;
   const cotIds=f['Cotizaciones'];
   if(cotIds&&cotIds.length){
-    const cot=state.cotizaciones.find(x=>x.id===cotIds[0]);
+    const cot=state.cotizacionesById[cotIds[0]];
     const numCot=cot?.fields['N° Cotización']||'';
     const cliente=resolveClienteName(cot?.fields['Cliente']||f['Cliente']);
     await openDriveFolder(cotIds[0],numCot,cliente);
@@ -9528,7 +9626,7 @@ async function saveFichaPropModal(verPDF=false){
     updatedAt:new Date().toISOString().slice(0,10)
   };
   const applyAndClose=()=>{
-    const cot=state.cotizaciones.find(x=>x.id===_fpCotId);
+    const cot=state.cotizacionesById[_fpCotId];
     if(cot) cot.fields['Ficha Propuesta']=JSON.stringify(data);
     saveFPImgCache(_fpCotId);
     toast('Ficha propuesta guardada ✓','success');
@@ -9556,7 +9654,7 @@ async function saveFichaPropModal(verPDF=false){
 }
 
 function buildFichaPropuestaDoc(cotId){
-  const cot=state.cotizaciones.find(x=>x.id===cotId);if(!cot) return null;
+  const cot=state.cotizacionesById[cotId];if(!cot) return null;
   const f=cot.fields;
   const data=parseFichaPropData(f['Ficha Propuesta'])||{};
   const escH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
@@ -9989,7 +10087,7 @@ function renderPedidos(filter){
     const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button><button class="act-item act-item-yellow" onclick="startManagePedidoFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📦 Gestionar (guiado)</button><button class="act-item" onclick="startPedidoOnboardingFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;🚀 Iniciar producción</button><button class="act-item act-item-cyan" onclick="startQAFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🎬 QA (guiado)</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}<button class="act-item act-item-blue" onclick="openAdjuntosModal('ped','${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;Ver adjuntos</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
-    if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizaciones.find(x=>x.id===f['Cotizaciones'][0]);if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
+    if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizacionesById[f['Cotizaciones'][0]];if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
     return`<tr data-id="${p.id}" class="${sel?'row-selected':''}${_flashCls(p.id)}">
     <td style="text-align:center"><input type="checkbox" class="row-chk" data-id="${p.id}" ${sel?'checked':''} onchange="togglePedidoRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="mono">${escapeHtml(f['N° Pedido']||'—')}</td><td class="text-small">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Estado">${estadoBadge(estado)}</td><td class="td-equipo" data-label="Equipo">${renderEquipoCell(p.id,f['Equipo asignado']||'')}</td>
@@ -10012,7 +10110,7 @@ function renderEquipoCell(pedidoId,equipoStr){
 }
 async function toggleEquipoPedido(pedidoId,personaNombre,evt){
   if(evt) evt.stopPropagation();
-  const ped=state.pedidos.find(x=>x.id===pedidoId);if(!ped) return;
+  const ped=state.pedidosById[pedidoId];if(!ped) return;
   const old=ped.fields['Equipo asignado']||'';
   const arr=equipoStr2Arr(old);
   const idx=arr.indexOf(personaNombre);
@@ -10064,7 +10162,7 @@ function openProveedorDrop(pedidoId,btn){
 }
 function pvDropSetCat(cat){_pvDropCat=cat;renderPvMultiDrop();}
 function renderPvMultiDrop(){
-  const p=state.pedidos.find(x=>x.id===_pvDropId);
+  const p=state.pedidosById[_pvDropId];
   const selected=(p?.fields['Proveedor']||'').split(',').map(s=>s.trim()).filter(Boolean);
   const activos=state.proveedores.filter(x=>(x.fields['Estado']||'')==='Activo');
   const cats=[...new Set(activos.flatMap(x=>pvCat(x.fields).split(',').map(s=>s.trim()).filter(Boolean)))].sort();
@@ -10074,7 +10172,7 @@ function renderPvMultiDrop(){
   document.getElementById('pvMultiDropContent').innerHTML=catBar+pvHtml;
 }
 async function pvMultiToggle(nombre,checked){
-  const id=_pvDropId;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const id=_pvDropId;const p=state.pedidosById[id];if(!p) return;
   const arr=(p.fields['Proveedor']||'').split(',').map(s=>s.trim()).filter(Boolean);
   if(checked&&!arr.includes(nombre)) arr.push(nombre);
   else if(!checked){const i=arr.indexOf(nombre);if(i>=0) arr.splice(i,1);}
@@ -10088,9 +10186,9 @@ document.addEventListener('click',function(e){
   const drop=document.getElementById('pvMultiDrop');
   if(drop&&drop.style.display==='block'&&!drop.contains(e.target)&&!e.target.closest('[onclick*="openProveedorDrop"]')) drop.style.display='none';
 });
-async function updateFormaPago(id,forma){try{await airtableWrite('Pedidos','PATCH',id,{'Forma de pago':forma});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Forma de pago']=forma;toast(`Forma de pago → ${forma}`,'success');}catch(e){toast('Error: '+e.message,'error');}}
+async function updateFormaPago(id,forma){try{await airtableWrite('Pedidos','PATCH',id,{'Forma de pago':forma});const p=state.pedidosById[id];if(p) p.fields['Forma de pago']=forma;toast(`Forma de pago → ${forma}`,'success');}catch(e){toast('Error: '+e.message,'error');}}
 async function updateProveedorPedido(id,nombre){
-  const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const p=state.pedidosById[id];if(!p) return;
   const old=p.fields['Proveedor']||'';
   p.fields['Proveedor']=nombre;
   try{
@@ -10108,7 +10206,7 @@ async function updateProveedorPedido(id,nombre){
 function pedPagoEstado(f){const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'];return a&&s?2:a?1:0;}
 function pedPagado(f){return pedPagoEstado(f)===2;}
 async function toggleAnticipo(id,actual){
-  const n=!actual;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const n=!actual;const p=state.pedidosById[id];if(!p) return;
   if(n){
     // Activando: pedir monto
     openAbonoModal(id);
@@ -10123,7 +10221,7 @@ async function toggleAnticipo(id,actual){
   }catch(e){p.fields['Anticipo pagado (50%)']=actual;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
 }
 function openAbonoModal(id){
-  const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const p=state.pedidosById[id];if(!p) return;
   const f=p.fields;
   document.getElementById('abonoModalPedidoId').value=id;
   const total=f['Monto total (CLP)']||0;
@@ -10140,7 +10238,7 @@ async function saveAbono(){
   const id=document.getElementById('abonoModalPedidoId').value;
   const monto=parseFloat(document.getElementById('abonoMonto').value)||0;
   if(!monto){toast('Ingresa el monto abonado','error');return;}
-  const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const p=state.pedidosById[id];if(!p) return;
   btn.disabled=true;btn.textContent='Guardando...';
   p.fields['Anticipo pagado (50%)']=true;p.fields['Monto abono (CLP)']=monto;
   renderPedidos();renderOverview();
@@ -10152,7 +10250,7 @@ async function saveAbono(){
   btn.disabled=false;btn.textContent='✓ Confirmar abono';
 }
 async function toggleSaldo(id,actual){
-  const n=!actual;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const n=!actual;const p=state.pedidosById[id];if(!p) return;
   if(n&&!p.fields['Anticipo pagado (50%)']){toast('⚠ Primero confirma el anticipo (50%)','error');return;}
   p.fields['Saldo pagado (50%)']=n;renderPedidos();renderOverview();
   try{
@@ -10161,7 +10259,7 @@ async function toggleSaldo(id,actual){
   }catch(e){p.fields['Saldo pagado (50%)']=actual;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
 }
 async function toggleTotal(id,actual){
-  const n=!actual;const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const n=!actual;const p=state.pedidosById[id];if(!p) return;
   p.fields['Anticipo pagado (50%)']=n;p.fields['Saldo pagado (50%)']=n;
   renderPedidos();renderOverview();
   try{
@@ -10169,10 +10267,10 @@ async function toggleTotal(id,actual){
     toast(n?'✓ Pago total recibido':'Pago total revertido',n?'success':'info');
   }catch(e){p.fields['Anticipo pagado (50%)']=!n;p.fields['Saldo pagado (50%)']=!n;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
 }
-async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidosById[id];if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
 let qaItems=[],qaResultadoActual='Pendiente';
-function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidos.find(x=>x.id===pedidoId);const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}const descEl=document.getElementById('qaIADesc');if(descEl)descEl.value=f['Detalle productos']||f['Solicitud cliente (texto libre)']||'';qaFotoData=localStorage.getItem('qa_foto_'+pedidoId)||null;qaFotoLink=localStorage.getItem('qa_foto_link_'+pedidoId)||f['Foto QA URL']||null;renderQAFoto();renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
+function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidosById[pedidoId];const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}const descEl=document.getElementById('qaIADesc');if(descEl)descEl.value=f['Detalle productos']||f['Solicitud cliente (texto libre)']||'';qaFotoData=localStorage.getItem('qa_foto_'+pedidoId)||null;qaFotoLink=localStorage.getItem('qa_foto_link_'+pedidoId)||f['Foto QA URL']||null;renderQAFoto();renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
 function closeQAModal(){document.getElementById('qaModal').style.display='none';}
 function renderQAChecklist(){const el=document.getElementById('qaChecklist');if(!qaItems.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">Sin ítems</div>';return;}el.innerHTML=qaItems.map((item,i)=>`<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:8px 12px"><input type="checkbox" ${item.checked?'checked':''} onchange="toggleQAItem(${i})" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent3);flex-shrink:0"><span style="flex:1;font-size:12px;color:${item.checked?'var(--accent3)':'var(--text)'};text-decoration:${item.checked?'line-through':'none'}">${escapeHtml(item.texto)}</span><button onclick="removeQAItem(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button></div>`).join('');}
 function toggleQAItem(i){qaItems[i].checked=!qaItems[i].checked;_qaAutoResult();renderQAChecklist();}
@@ -10231,7 +10329,7 @@ async function qaAddFoto(file){
 async function qaUploadFotoDrive(silent){
   if(!qaFotoData){if(!silent)toast('Adjunta una foto primero','error');return;}
   const id=document.getElementById('qaModalPedidoId').value;
-  const p=state.pedidos.find(x=>x.id===id);const num=(p?.fields?.['N° Pedido'])||id;
+  const p=state.pedidosById[id];const num=(p?.fields?.['N° Pedido'])||id;
   const btn=document.getElementById('qaFotoDriveBtn');const prev=btn?btn.innerHTML:'';
   if(btn){btn.disabled=true;btn.innerHTML='⏳ Subiendo…';}
   try{
@@ -10272,7 +10370,7 @@ async function _qaPersist(id,{silent}={}){
   const notasQA=JSON.stringify(qaItems);
   const checked=qaItems.filter(x=>x.checked).length;
   const legible=qaItems.map(it=>`[${it.checked?'x':' '}] ${it.texto}`).join('\n');
-  const apply=fields=>{const p=state.pedidos.find(x=>x.id===id);if(p)Object.assign(p.fields,fields);};
+  const apply=fields=>{const p=state.pedidosById[id];if(p)Object.assign(p.fields,fields);};
   const full={'Resultado QA':qaResultadoActual,'Notas QA':notasQA,'Checklist QA':legible,'Procesado por QA_AGENT':true};
   try{await airtableWrite('Pedidos','PATCH',id,full);apply(full);if(!silent)toast(`✓ Checklist QA guardado (${checked}/${qaItems.length})`,'success');return true;}
   catch(e){
@@ -10283,7 +10381,7 @@ async function _qaPersist(id,{silent}={}){
 async function rellenarQAconIA(){
   const descEl=document.getElementById('qaIADesc'),desc=(descEl?.value||'').trim();
   const id=document.getElementById('qaModalPedidoId').value;
-  const p=state.pedidos.find(x=>x.id===id);const f=p?.fields||{};
+  const p=state.pedidosById[id];const f=p?.fields||{};
   if(!desc&&!f['Detalle productos']&&!f['Solicitud cliente (texto libre)']){toast('Describe el producto a revisar','error');descEl?.focus();return;}
   const btn=document.getElementById('qaIABtn');const prev=btn.innerHTML;btn.disabled=true;btn.innerHTML='⏳ Generando…';
   try{
@@ -10314,7 +10412,7 @@ function updateQAResultadoBtns(){document.getElementById('qaAprobadoBtn').style.
 // Tras un QA rechazado, ofrece devolver el pedido a producción para retrabajo
 async function _qaOfferRework(id){
   if(qaResultadoActual!=='Rechazado')return;
-  const p=state.pedidos.find(x=>x.id===id);if(!p)return;
+  const p=state.pedidosById[id];if(!p)return;
   if((p.fields['Estado pedido']||'')==='En producción')return;
   if(!confirm('QA rechazado. ¿Devolver el pedido a "En producción" para retrabajo?'))return;
   try{await airtableWrite('Pedidos','PATCH',id,{'Estado pedido':'En producción'});p.fields['Estado pedido']='En producción';toast('↩ Pedido devuelto a producción para retrabajo','info');}
@@ -10344,15 +10442,15 @@ function updatePedidosBulkBar(){
 function clearPedidosSelection(){selectedPedidos.clear();document.querySelectorAll('#pedidosTableBody .row-chk').forEach(c=>{c.checked=false;c.closest('tr')?.classList.remove('row-selected');});const sa=document.getElementById('pedidosSelectAll');if(sa){sa.checked=false;sa.indeterminate=false;}updatePedidosBulkBar();}
 async function deletePedido(id,num){
   if(!confirm(`¿Eliminar pedido ${num}?`)) return;
-  try{await airtableDelete('Pedidos',id);state.pedidos=state.pedidos.filter(x=>x.id!==id);selectedPedidos.delete(id);toast('Pedido eliminado','info');renderPedidos();renderOverview();}
+  try{await airtableDelete('Pedidos',id);state.pedidos=state.pedidos.filter(x=>x.id!==id);delete state.pedidosById[id];selectedPedidos.delete(id);toast('Pedido eliminado','info');renderPedidos();renderOverview();}
   catch(e){toast('Error: '+e.message,'error');}
 }
 async function bulkDeletePedidos(){
   const ids=[...selectedPedidos];if(!ids.length) return;
-  const nums=ids.map(id=>state.pedidos.find(p=>p.id===id)?.fields['N° Pedido']||id).join(', ');
+  const nums=ids.map(id=>state.pedidosById[id]?.fields['N° Pedido']||id).join(', ');
   if(!confirm(`¿Eliminar ${ids.length} pedido${ids.length!==1?'s':''}?\n${nums}`)) return;
   let ok=0,err=0;
-  for(const id of ids){try{await airtableDelete('Pedidos',id);state.pedidos=state.pedidos.filter(x=>x.id!==id);selectedPedidos.delete(id);ok++;}catch(e){err++;}}
+  for(const id of ids){try{await airtableDelete('Pedidos',id);state.pedidos=state.pedidos.filter(x=>x.id!==id);delete state.pedidosById[id];selectedPedidos.delete(id);ok++;}catch(e){err++;}}
   err?toast(`${ok} eliminados, ${err} con error`,'info'):toast(`✓ ${ok} pedido${ok!==1?'s':''} eliminados`,'success');
   clearPedidosSelection();renderPedidos();renderOverview();
 }
@@ -10361,7 +10459,7 @@ async function bulkEditPedidoEstado(){
   let ids=[...selectedPedidos];if(!ids.length) return;
   // Compuerta de calidad en lote: nunca despachar rechazados; avisar de los que no tienen QA aprobado
   if(estado==='Despachado'){
-    const sel=ids.map(id=>state.pedidos.find(x=>x.id===id)).filter(Boolean);
+    const sel=ids.map(id=>state.pedidosById[id]).filter(Boolean);
     const rechazados=sel.filter(p=>(p.fields['Resultado QA']||'')==='Rechazado');
     const sinAprobar=sel.filter(p=>(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'&&(p.fields['Resultado QA']||'')!=='Rechazado');
     if(rechazados.length){
@@ -10374,14 +10472,14 @@ async function bulkEditPedidoEstado(){
   if(!confirm(`¿Cambiar estado a "${estado}" para ${ids.length} pedido${ids.length!==1?'s':''}?`)) return;
   const btn=document.querySelector('[onclick="bulkEditPedidoEstado()"]');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   let ok=0,err=0;
-  for(const id of ids){try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);const p=state.pedidos.find(x=>x.id===id);if(p) p.fields['Estado pedido']=estado;ok++;}catch(e){err++;}}
+  for(const id of ids){try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);const p=state.pedidosById[id];if(p) p.fields['Estado pedido']=estado;ok++;}catch(e){err++;}}
   document.getElementById('pedidosBulkEstado').value='';
   err?toast(`${ok} actualizados, ${err} con error`,'info'):toast(`✓ ${ok} pedido${ok!==1?'s':''} → "${estado}"`,'success');
   if(btn){btn.disabled=false;btn.textContent='✓ Aplicar estado';}
   clearPedidosSelection();renderPedidos();renderOverview();
 }
 function openEditPedidoModal(id){
-  const p=state.pedidos.find(x=>x.id===id);if(!p) return;const f=p.fields;
+  const p=state.pedidosById[id];if(!p) return;const f=p.fields;
   document.getElementById('editPedidoId').value=id;
   document.getElementById('editPedidoEstado').value=f['Estado pedido']||'Confirmado';
   document.getElementById('editPedidoFecha').value=f['Fecha entrega']||'';
@@ -10399,16 +10497,16 @@ async function saveEditPedido(){
     const fields={'Estado pedido':document.getElementById('editPedidoEstado').value,'Fecha entrega':document.getElementById('editPedidoFecha').value||null,'Equipo asignado':document.getElementById('editPedidoEquipo').value,'Proveedor':document.getElementById('editPedidoProveedor').value};
     const fp=document.getElementById('editPedidoFormaPago').value;if(fp) fields['Forma de pago']=fp;
     const _epVv=document.getElementById('editPedidoVendedor')?.value||'';fields['Vendedor']=_epVv||null;
-    if(fields['Estado pedido']==='Despachado'&&!state.pedidos.find(x=>x.id===id)?.fields['Fecha despacho']) fields['Fecha despacho']=new Date().toISOString().split('T')[0];
+    if(fields['Estado pedido']==='Despachado'&&!state.pedidosById[id]?.fields['Fecha despacho']) fields['Fecha despacho']=new Date().toISOString().split('T')[0];
     await airtableWrite('Pedidos','PATCH',id,fields);
-    const p=state.pedidos.find(x=>x.id===id);if(p) Object.assign(p.fields,fields);
+    const p=state.pedidosById[id];if(p) Object.assign(p.fields,fields);
     toast('✓ Pedido actualizado','success');closeEditPedidoModal();renderPedidos();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='💾 Guardar';
 }
 
 async function advancePedido(id,estado){
-  const p=state.pedidos.find(x=>x.id===id);if(!p) return;
+  const p=state.pedidosById[id];if(!p) return;
   const f=p.fields;
   // Bloqueo duro: saldo antes de despachar
   if(estado==='Despachado'&&!f['Saldo pagado (50%)']){toast('⚠ Confirma el saldo (50%) antes de despachar','error');return;}
@@ -10966,7 +11064,7 @@ async function gfClientCreate(){
     const f={'Empresa':empresa,'Contacto':contacto||'','Etapa venta':'Lead nuevo','Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
     if(isVendorMode())f['Vendedor']=currentVendorId();
     const rec=await airtableWrite('Clientes','POST',null,f);
-    if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=empresa;}
+    if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=empresa;state.clientesByIdRec[rec.id]=rec;}
     GF.answers.clienteId=rec.id;GF.answers.clienteNombre=empresa;
     toast('✓ Cliente creado','success');gfNext();
   }catch(e){toast('Error al crear cliente: '+(e.message||''),'error');}
@@ -11108,9 +11206,9 @@ function startQuoteFlow(presetClienteId,presetClienteNombre){
 window.startQuoteFlow=startQuoteFlow;
 
 // ── Helpers de actualización (PATCH + sincroniza estado local) ──
-async function actualizarCliente(id,fields){const r=await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c)Object.assign(c.fields,fields);if(fields['Empresa'])state.clientesById[id]=fields['Empresa'];return r;}
-async function actualizarCotizacion(id,fields){const r=await airtableWrite('Cotizaciones','PATCH',id,fields);const c=state.cotizaciones.find(x=>x.id===id);if(c)Object.assign(c.fields,fields);return r;}
-async function actualizarPedido(id,fields){const r=await airtableWrite('Pedidos','PATCH',id,fields);const p=state.pedidos.find(x=>x.id===id);if(p)Object.assign(p.fields,fields);return r;}
+async function actualizarCliente(id,fields){const r=await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c)Object.assign(c.fields,fields);if(fields['Empresa'])state.clientesById[id]=fields['Empresa'];return r;}
+async function actualizarCotizacion(id,fields){const r=await airtableWrite('Cotizaciones','PATCH',id,fields);const c=state.cotizacionesById[id];if(c)Object.assign(c.fields,fields);return r;}
+async function actualizarPedido(id,fields){const r=await airtableWrite('Pedidos','PATCH',id,fields);const p=state.pedidosById[id];if(p)Object.assign(p.fields,fields);return r;}
 
 const _CLI_SUM=[{label:'Empresa',key:'empresa'},{label:'Contacto',key:'contacto'},{label:'Cargo',key:'cargo'},{label:'Teléfono',key:'telefono'},{label:'Email',key:'email'},{label:'RUT',key:'rut'},{label:'Ciudad',key:'ciudad'},{label:'Sitio web',key:'web'},{label:'Origen',key:'origen'},{label:'Etapa',key:'etapa'},{label:'Notas',key:'notas'}];
 const _ORIGEN_OPTS=[{label:'Referido',value:'Referido'},{label:'Instagram',value:'Instagram'},{label:'LinkedIn',value:'LinkedIn'},{label:'Google',value:'Google'},{label:'Contacto directo',value:'Contacto directo'},{label:'Otro',value:'Otro'}];
@@ -11137,14 +11235,14 @@ function startNewClientFlow(){
     let rec;
     try{rec=await airtableWrite('Clientes','POST',null,f);}
     catch(e){if(e.message.toLowerCase().includes('unknown')){['Origen lead','Sitio web','Ciudad','RUT','Cargo contacto'].forEach(k=>delete f[k]);rec=await airtableWrite('Clientes','POST',null,f);}else throw e;}
-    if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=a.empresa;}
+    if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=a.empresa;state.clientesByIdRec[rec.id]=rec;}
     _gfClearDraft();gfClose();switchTab('clientes');if(typeof renderClientes==='function')renderClientes();renderOverview();
     toast('✓ Cliente "'+a.empresa+'" creado','success');
   }});
 }
 // ── Editar cliente (guiado) ──
 function startEditClientFlow(id){
-  const c=state.clientes.find(x=>x.id===id);if(!c){toast('Cliente no encontrado','error');return;}
+  const c=state.clientesByIdRec[id];if(!c){toast('Cliente no encontrado','error');return;}
   const f=c.fields;
   gfStart({title:'✏️ Editar cliente',finishLabel:'✓ Guardar cambios',initial:{empresa:f['Empresa']||'',contacto:f['Contacto']||'',cargo:f['Cargo contacto']||'',telefono:f['Teléfono']||'',email:f['Email']||'',rut:f['RUT']||'',ciudad:f['Comuna']||'',web:f['Sitio web']||'',etapa:f['Etapa venta']||'Lead nuevo',notas:f['Notas internas']||''},steps:[
     {key:'empresa',type:'text',q:'Empresa',rows:1,required:true},
@@ -11169,7 +11267,7 @@ function startEditClientFlow(id){
 }
 // ── Editar cotización (guiado, campos clave; los ítems se editan en el modal clásico) ──
 function startEditCotFlow(id){
-  const c=state.cotizaciones.find(x=>x.id===id);if(!c){toast('Cotización no encontrada','error');return;}
+  const c=state.cotizacionesById[id];if(!c){toast('Cotización no encontrada','error');return;}
   const f=c.fields;
   gfStart({title:'✏️ Editar '+(f['N° Cotización']||'cotización'),initial:{estado:f['Estado cotización']||'Enviada',formaPago:f['Forma de pago']||'',urgencia:f['Urgencia (+25%)']?'urgente':'normal',plazo:f['Tiempo de producción']||'',notas:f['Notas cotización']||''},steps:[
     {key:'estado',type:'chips',q:'Estado de la cotización',sub:'Para APROBAR usa el botón "Aprobar" (crea el pedido automáticamente).',options:['Enviada','Solicitada','Rechazada','Vencida'].map(v=>({label:v,value:v}))},
@@ -11191,7 +11289,7 @@ function startEditCotFlow(id){
 }
 // ── Gestionar pedido (guiado) ──
 function startManagePedidoFlow(id){
-  const p=state.pedidos.find(x=>x.id===id);if(!p){toast('Pedido no encontrado','error');return;}
+  const p=state.pedidosById[id];if(!p){toast('Pedido no encontrado','error');return;}
   const f=p.fields;
   gfStart({title:'📦 Gestionar '+(f['N° Pedido']||'pedido'),initial:{estado:f['Estado pedido']||'Confirmado',fecha:f['Fecha entrega']||'',qa:f['Resultado QA']||'Pendiente'},steps:[
     {key:'estado',type:'chips',q:'Estado del pedido',options:['Confirmado','En producción','Listo para despacho','Despachado','Cancelado'].map(v=>({label:v,value:v}))},
@@ -11314,7 +11412,7 @@ function startPaymentFlow(){
     {key:'pedidoId',type:'chips',q:'¿De qué pedido?',sub:'Pedidos con saldo pendiente.',options:lista.map(p=>({label:(p.fields['N° Pedido']||'—')+' · '+formatCLP(p.fields['Monto total (CLP)']||0),value:p.id}))},
     {key:'tipo',type:'chips',q:'¿Qué pago registras?',options:[{label:'Anticipo (50%)',value:'anticipo',icon:'1️⃣'},{label:'Saldo (50%)',value:'saldo',icon:'2️⃣'},{label:'Pago total',value:'total',icon:'💯'}]},
   ],onComplete:async(a)=>{
-    const p=state.pedidos.find(x=>x.id===a.pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
+    const p=state.pedidosById[a.pedidoId];if(!p){toast('Pedido no encontrado','error');return;}
     const monto=p.fields['Monto total (CLP)']||0;const fields={};
     if(a.tipo==='anticipo'){fields['Anticipo pagado (50%)']=true;fields['Monto abono (CLP)']=Math.round(monto*0.5);}
     else if(a.tipo==='saldo'){fields['Saldo pagado (50%)']=true;}
@@ -11327,7 +11425,7 @@ function startPaymentFlow(){
 }
 // ── #1 Iniciar producción / onboarding de pedido (guiado) ──
 function startPedidoOnboardingFlow(id){
-  const p=state.pedidos.find(x=>x.id===id);if(!p){toast('Pedido no encontrado','error');return;}
+  const p=state.pedidosById[id];if(!p){toast('Pedido no encontrado','error');return;}
   const f=p.fields;
   gfStart({title:'🚀 Iniciar producción '+(f['N° Pedido']||''),initial:{estado:'En producción',equipo:f['Equipo asignado']||'',fecha:f['Fecha entrega']||''},steps:[
     {key:'estado',type:'chips',q:'¿Mover a producción?',options:[{label:'En producción',value:'En producción',icon:'⚙️'},{label:'Mantener Confirmado',value:'Confirmado'}]},
@@ -11345,7 +11443,7 @@ function startPedidoOnboardingFlow(id){
 }
 // ── #3 Cierre de QA (guiado, con foto opcional) ──
 function startQAFlow(id){
-  const p=state.pedidos.find(x=>x.id===id);if(!p){toast('Pedido no encontrado','error');return;}
+  const p=state.pedidosById[id];if(!p){toast('Pedido no encontrado','error');return;}
   const QAD=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
   gfStart({title:'🎬 QA '+(p.fields['N° Pedido']||''),steps:[
     {key:'checks',type:'chips',q:'¿Qué cumple la pieza?',sub:'Marca todo lo aprobado.',multi:true,options:QAD.map(t=>({label:t,value:t}))},
@@ -11902,7 +12000,7 @@ function renderPedidosPlanificacion(){
   const listos=activos.filter(p=>p.fields['Estado pedido']==='Listo para despacho').length;
   const estaSemana=activos.filter(p=>{const fe=p.fields['Fecha entrega'];if(!fe)return false;const d=new Date(fe+'T00:00:00'),diff=Math.floor((d-today)/86400000);return diff>=0&&diff<=7;}).length;
   const colEstado={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)'};
-  const fmtShort=d=>d.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+  const fmtShort=d=>_DTF_DM.format(d);
   const equipoSet=new Set();
   activos.forEach(p=>{const eq=p.fields['Equipo asignado']||'';eq.split(',').map(x=>x.trim()).filter(Boolean).forEach(n=>equipoSet.add(n));});
   const equipoList=[...equipoSet].sort();
@@ -12147,7 +12245,7 @@ function buildAgentContext(id){
     const hace5=new Date(Date.now()-5*86400000);
     const sinResp=state.cotizaciones.filter(c=>{const f=c.fields;if(f['Estado cotización']!=='Enviada') return false;const fc=f['Fecha cotización']?new Date(f['Fecha cotización']+'T00:00:00'):null;return fc&&fc<hace5;}).slice(0,8);
     lines.push('\nCOTIZACIONES SIN RESPUESTA (+5 DÍAS):');
-    if(sinResp.length){sinResp.forEach(c=>{const f=c.fields;const dias=f['Fecha cotización']?Math.round((today-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):'—';const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientes.find(x=>x.id===cid):null;const contacto=[cl?.fields['Teléfono'],cl?.fields['Email']].filter(Boolean).join(' | ')||'—';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${dias}d sin respuesta | Contacto: ${contacto}`);const sol=f['Solicitud cliente (texto libre)']||'';if(sol) lines.push(`    Solicitud: ${sol.substring(0,80)}`);});}else lines.push('  Sin cotizaciones pendientes +5 días ✓');
+    if(sinResp.length){sinResp.forEach(c=>{const f=c.fields;const dias=f['Fecha cotización']?Math.round((today-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):'—';const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientesByIdRec[cid]:null;const contacto=[cl?.fields['Teléfono'],cl?.fields['Email']].filter(Boolean).join(' | ')||'—';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${dias}d sin respuesta | Contacto: ${contacto}`);const sol=f['Solicitud cliente (texto libre)']||'';if(sol) lines.push(`    Solicitud: ${sol.substring(0,80)}`);});}else lines.push('  Sin cotizaciones pendientes +5 días ✓');
   }
 
   if(id==='QUOTE'){
@@ -12316,7 +12414,7 @@ function buildAgentContext(id){
   if(id==='ONBOARDING'){
     const recienAprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-3);
     lines.push('\nCOTIZACIONES RECIENTEMENTE APROBADAS (nuevos clientes):');
-    if(recienAprobadas.length){recienAprobadas.forEach(c=>{const f=c.fields;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientes.find(x=>x.id===cid):null;const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])}${cl?.fields['Email']?' | '+cl.fields['Email']:''}${sol?' | Solicitud: '+sol.substring(0,70):''}`);});}else lines.push('  Sin aprobaciones recientes');
+    if(recienAprobadas.length){recienAprobadas.forEach(c=>{const f=c.fields;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientesByIdRec[cid]:null;const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])}${cl?.fields['Email']?' | '+cl.fields['Email']:''}${sol?' | Solicitud: '+sol.substring(0,70):''}`);});}else lines.push('  Sin aprobaciones recientes');
   }
 
   lines.push('\n=== FIN CONTEXTO ===');
@@ -12687,7 +12785,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
 
 // — FOLLOWUP desde cotización
 function runFollowupAgent(cotId){
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;
   const _t=new Date();_t.setHours(0,0,0,0);
   const cliRec=_getClienteRecFromField(f['Cliente']);
@@ -12713,7 +12811,7 @@ function openFollowupWA(phone){
 
 async function _sendFollowupEmail(cotId,toEmail){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const emailText=_extractEmailPart(_agentInlineText)||_agentInlineText;
   const u=AUTH.getUser();
   const from_name=u?.name||'The Lab Solutions';
@@ -12769,7 +12867,7 @@ function runQuoteFormAgent(){
 
 // — QUOTE para una cotización existente en estado Solicitada
 function runQuoteCotAgent(cotId){
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;
   const sol=(f['Solicitud cliente (texto libre)']||f['Solicitud / detalle']||'').trim();
   if(!sol){toast('La cotización no tiene solicitud del cliente registrada — edítala primero','error');return;}
@@ -12807,7 +12905,7 @@ function quoteInsertItemsToEdit(cotId){
 
 // — WIN-BACK: reactivar cotización vencida o rechazada
 function runWinbackAgent(cotId){
-  const c=state.cotizaciones.find(x=>x.id===cotId);if(!c) return;
+  const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;
   const cliRec=_getClienteRecFromField(f['Cliente']);
   const waPhone=_getClienteWAPhone(cliRec);
@@ -13111,10 +13209,10 @@ function runAdsCopyAgent(d){
 
 // — REPCLIENTE: update de estado al cliente desde pedido
 function runRepClienteAgent(pedidoId){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   const f=p.fields;
   const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;
-  const cl=cid?state.clientes.find(x=>x.id===cid):null;
+  const cl=cid?state.clientesByIdRec[cid]:null;
   const waPhone=cl?_getClienteWAPhone(cl):'';
   const email=cl?.fields['Email']||'';
   const today=new Date();today.setHours(0,0,0,0);
@@ -13130,7 +13228,7 @@ function runRepClienteAgent(pedidoId){
 
 // — CONTENT: generar post de redes para pedido despachado
 function runContentAgent(pedidoId){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   const f=p.fields;
   const sol=(f['Solicitud cliente (texto libre)']||f['Descripción del pedido']||f['Detalle productos']||'Sin detalle').substring(0,300);
   const montoNeto=f['Monto total (CLP)']?'$'+Math.round(f['Monto total (CLP)']/1.19).toLocaleString('es-CL')+' neto':'—';
@@ -13140,7 +13238,7 @@ function runContentAgent(pedidoId){
 
 // — PRODUCTION desde pedido
 function runProductionAgent(pedidoId){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   const f=p.fields;
   const ctx=`Pedido: ${f['N° Pedido']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])}\nEstado: ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'} | Equipo: ${f['Equipo asignado']||'Sin asignar'}\nSolicitud: ${(f['Solicitud cliente (texto libre)']||f['Detalle productos']||'Sin detalle').substring(0,300)}`;
   runAgentInline('PRODUCTION',ctx,()=>{
@@ -13151,7 +13249,7 @@ function runProductionAgent(pedidoId){
 
 async function saveProductionFicha(pedidoId){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   const existing=parseFichaData(p.fields['Ficha Tecnica'])||{};
   existing.instrucciones=_agentInlineText;
   existing.generadoIA=new Date().toISOString().substring(0,10);
@@ -13169,7 +13267,7 @@ async function saveProductionFicha(pedidoId){
 // — Rellena las notas de producción del modal Ficha con el PRODUCTION_AGENT (inline, sin abrir otro modal)
 async function rellenarFichaNotasIA(){
   const id=document.getElementById('fichaPedidoId').value;
-  const p=state.pedidos.find(x=>x.id===id);const f=p?.fields||{};
+  const p=state.pedidosById[id];const f=p?.fields||{};
   const mat=document.getElementById('fichaMaterial').value,col=document.getElementById('fichaColor').value,cant=document.getElementById('fichaCantidad').value,acab=document.getElementById('fichaAcabado').value;
   const sol=(f['Solicitud cliente (texto libre)']||f['Detalle productos']||'').trim();
   if(!sol&&!mat&&!col){toast('Indica al menos material o la solicitud del pedido','error');return;}
@@ -13192,7 +13290,7 @@ async function rellenarFichaNotasIA(){
 
 // — QA desde pedido
 function runQAAgent(pedidoId){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   const f=p.fields;
   const ctx=`Pedido: ${f['N° Pedido']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])}\nEntrega: ${f['Fecha entrega']||'—'}\nSolicitud/Producto: ${(f['Solicitud cliente (texto libre)']||f['Detalle productos']||'Sin detalle').substring(0,300)}`;
   runAgentInline('QA',ctx,()=>
@@ -13202,7 +13300,7 @@ function runQAAgent(pedidoId){
 
 async function saveQAFromAgent(pedidoId,resultado){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   try{
     await airtableWrite('Pedidos','PATCH',pedidoId,{'Resultado QA':resultado,'Notas QA':_agentInlineText});
     p.fields['Resultado QA']=resultado;p.fields['Notas QA']=_agentInlineText;
@@ -13222,7 +13320,7 @@ function _parseQAChecklist(text){
 }
 
 async function runAgentChain(pedidoId,solicitudOverride){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
+  const p=state.pedidosById[pedidoId];if(!p){toast('Pedido no encontrado','error');return;}
   const f=p.fields;
   const num=f['N° Pedido']||'—';
   const solicitud=(solicitudOverride||f['Solicitud cliente (texto libre)']||f['Detalle productos']||'').substring(0,300);
@@ -13390,7 +13488,7 @@ function checkAgentSuggestions(){
   const pendOB=state.cotizaciones.filter(c=>{
     if(c.fields['Estado cotización']!=='Aprobada') return false;
     const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
-    const cl=cid?state.clientes.find(x=>x.id===cid):null;
+    const cl=cid?state.clientesByIdRec[cid]:null;
     return cl&&!['Cliente activo','Cliente inactivo'].includes(cl.fields['Etapa venta']||'');
   });
   if(pendOB.length&&seen.onboarding!==todayStr){
@@ -13486,7 +13584,7 @@ function openOnboardingPicker(){
   const pend=state.cotizaciones.filter(c=>{
     if(c.fields['Estado cotización']!=='Aprobada') return false;
     const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
-    const cl=cid?state.clientes.find(x=>x.id===cid):null;
+    const cl=cid?state.clientesByIdRec[cid]:null;
     return cl&&!['Cliente activo','Cliente inactivo'].includes(cl.fields['Etapa venta']||'');
   });
   _openAgentPicker('📨 Clientes nuevos sin bienvenida',pend.map(c=>{
@@ -14431,7 +14529,7 @@ function renderMaintenanceTable(){
     totH+=ph;totKg+=filKgN;totCost+=filCost;totPrints+=prints;totAlerts+=alertsN;
     const chips=perType.map(({t,h,thresh,last,pct})=>{
       const ok=pct<0.9,over=pct>=1;
-      const lastStr=last?new Date(last.ts).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'sin reg.';
+      const lastStr=last?_DTF_DM.format(new Date(last.ts)):'sin reg.';
       const statusIcon=over?'⚠':ok?'✓':'~';
       return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h (${Math.round(pct*100)}%) · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':last?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':last?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':last?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${Math.round(pct*100)}%</span></span>`;
     }).join('');
@@ -14718,7 +14816,7 @@ function renderHeatmapSemanas(){
   const todayDate=new Date();todayDate.setHours(0,0,0,0);
   const dow=todayDate.getDay();
   const thisMon=todayDate.getTime()-((dow===0?6:dow-1)*86400000);
-  const fmtC=d=>d.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+  const fmtC=d=>_DTF_DM.format(d);
   const pctColor=p=>p>=80?'var(--danger)':p>=50?'var(--warn)':p>0?'var(--accent3)':'var(--text3)';
   const pctBg=p=>p>=80?'rgba(255,68,68,0.1)':p>=50?'rgba(255,170,0,0.1)':'transparent';
   const chips=[];
@@ -14778,7 +14876,7 @@ function renderMaquinasCalendar(){
     </td></tr>`:'' ;
     const enMant=getMaquinaEstadoGlobal(m.id)==='mantencion';
     const estadoBtn=enMant?`<button class="btn-mini btn-mini-red" onclick="toggleMaquinaEstado('${m.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mant.</button>`:`<button class="btn-mini btn-mini-green" onclick="toggleMaquinaEstado('${m.id}')">✓ Disp.</button>`;
-    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key],isH=ds===today;let bg='',content='';if(ev){if(ev.tipo==='mantencion'){bg='rgba(255,68,68,0.2)';content=`<div style="font-size:9px;font-weight:700;color:var(--danger)">🔧 MANT.</div>`;}else if(ev.tipo==='uso'){bg='rgba(255,107,53,0.2)';const pedLabel=ev.pedidoId?state.pedidos.find(p=>p.id===ev.pedidoId)?.fields['N° Pedido']||null:null;const descLabel=pedLabel?`🔗 ${pedLabel}`:(ev.desc||'En uso');content=`<div style="font-size:9px;color:${pedLabel?'var(--accent)':'var(--accent2)'};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85px" title="${escapeHtml(ev.desc||'')}">${escapeHtml(descLabel)}</div>${ev.tiempo?`<div style="font-size:8px;color:var(--text3)">${ev.tiempo}h</div>`:''}`;}else{bg='rgba(0,212,170,0.12)';content=`<div style="font-size:9px;color:var(--accent3);font-weight:600">✓ Libre</div>`;}}return`<td onclick="openMaquinaModal('${m.id}','${m.nombre} #${m.num}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg||'transparent'};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.5)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content||`<span style="color:var(--text3);font-size:10px">+</span>`}${ev?`<button onclick="event.stopPropagation();deleteMaquinaEvento('${m.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:8px;padding:0">✕</button>`:''}</div></td>`;}).join('');
+    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key],isH=ds===today;let bg='',content='';if(ev){if(ev.tipo==='mantencion'){bg='rgba(255,68,68,0.2)';content=`<div style="font-size:9px;font-weight:700;color:var(--danger)">🔧 MANT.</div>`;}else if(ev.tipo==='uso'){bg='rgba(255,107,53,0.2)';const pedLabel=ev.pedidoId?state.pedidosById[ev.pedidoId]?.fields['N° Pedido']||null:null;const descLabel=pedLabel?`🔗 ${pedLabel}`:(ev.desc||'En uso');content=`<div style="font-size:9px;color:${pedLabel?'var(--accent)':'var(--accent2)'};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85px" title="${escapeHtml(ev.desc||'')}">${escapeHtml(descLabel)}</div>${ev.tiempo?`<div style="font-size:8px;color:var(--text3)">${ev.tiempo}h</div>`:''}`;}else{bg='rgba(0,212,170,0.12)';content=`<div style="font-size:9px;color:var(--accent3);font-weight:600">✓ Libre</div>`;}}return`<td onclick="openMaquinaModal('${m.id}','${m.nombre} #${m.num}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg||'transparent'};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.5)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content||`<span style="color:var(--text3);font-size:10px">+</span>`}${ev?`<button onclick="event.stopPropagation();deleteMaquinaEvento('${m.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:8px;padding:0">✕</button>`:''}</div></td>`;}).join('');
     return`${groupRow}<tr><td style="padding:9px 14px;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:0;z-index:2"><span style="width:7px;height:7px;border-radius:50%;background:${m.color};display:inline-block;margin-right:6px"></span>${escapeHtml(m.nombre)} <span style="color:var(--text3)">#${m.num}</span></td><td style="padding:4px 6px;text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:2">${estadoBtn}</td>${celdas}</tr>`;
   }).join('');
   document.getElementById('maquinasSubtitle').textContent=`${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)!=='mantencion').length} disponibles · ${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)==='mantencion').length} en mantención`;
@@ -14825,7 +14923,7 @@ function onMaquinaModalTipoChange(){
 function onMaquinaModalPedidoChange(){
   const sel=document.getElementById('maquinaModalPedido');
   const pid=sel.value;if(!pid) return;
-  const p=state.pedidos.find(x=>x.id===pid);if(!p) return;
+  const p=state.pedidosById[pid];if(!p) return;
   const f=p.fields;
   const nPed=f['N° Pedido']||'—',cliente=resolveClienteName(f['Cliente']),estado=f['Estado pedido']||'—';
   document.getElementById('maquinaModalDesc').value=`${nPed} · ${cliente}`;
@@ -15026,7 +15124,7 @@ function onClienteSearchInput(){
   if(q&&!src.some(c=>(c.fields['Empresa']||'').toLowerCase()===q)) html+=`<div class="search-select-item create-new" onclick="selectClienteNew()">+ Usar "${escapeHtml(inp.value)}"</div>`;
   dropdown.innerHTML=html;dropdown.classList.toggle('open',!!html);
 }
-function selectCliente(id){const c=state.clientes.find(x=>x.id===id);if(!c) return;document.getElementById('cot-cliente-search').value=c.fields['Empresa']||'';document.getElementById('cot-cliente-id').value=id;document.getElementById('cot-cliente-dropdown').classList.remove('open');const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('cot-cliente-info');const prevCots=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return Array.isArray(cl)?cl.includes(id):cl===id;}).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));const prevBtn=prevCots.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('n')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">📋 Cot. anterior (${prevCots.length})</button>`:'';info.innerHTML=(venc>=2?`<span style="color:var(--danger)">⚠ ${venc} facturas vencidas</span>`:`<span style="color:var(--text2)">✓ Cliente seleccionado</span>`)+prevBtn;}
+function selectCliente(id){const c=state.clientesByIdRec[id];if(!c) return;document.getElementById('cot-cliente-search').value=c.fields['Empresa']||'';document.getElementById('cot-cliente-id').value=id;document.getElementById('cot-cliente-dropdown').classList.remove('open');const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('cot-cliente-info');const prevCots=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return Array.isArray(cl)?cl.includes(id):cl===id;}).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));const prevBtn=prevCots.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('n')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">📋 Cot. anterior (${prevCots.length})</button>`:'';info.innerHTML=(venc>=2?`<span style="color:var(--danger)">⚠ ${venc} facturas vencidas</span>`:`<span style="color:var(--text2)">✓ Cliente seleccionado</span>`)+prevBtn;}
 function selectClienteNew(){document.getElementById('cot-cliente-id').value='';document.getElementById('cot-cliente-dropdown').classList.remove('open');}
 document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap')) document.querySelectorAll('.search-select-dropdown').forEach(d=>d.classList.remove('open'));});
 function clearForm(type){
@@ -15231,8 +15329,8 @@ function getSortedProveedores(list){
     if(va<vb) return -d;if(va>vb) return d;return 0;
   });
 }
-function filterProveedores(){renderProveedores();}
-function renderProveedores(){
+function filterProveedores(){renderProveedores(true);}
+function renderProveedores(skipAnalytics){
   const search=(document.getElementById('proveedorSearch')?.value||'').toLowerCase();
   const cat=document.getElementById('proveedorCatFilter')?.value||'';
   let list=state.proveedores.filter(p=>{
@@ -15246,7 +15344,7 @@ function renderProveedores(){
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
   if(!sorted.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
-  renderProveedoresAnalytics();
+  if(!skipAnalytics) renderProveedoresAnalytics();
   _applySortIndicators();
 }
 function buildProveedorRow(p){
@@ -15857,7 +15955,7 @@ const NOTIFY={
       if(diff<60) return 'ahora';
       if(diff<3600) return Math.floor(diff/60)+'m';
       if(diff<86400) return Math.floor(diff/3600)+'h';
-      return d.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+      return _DTF_DM.format(d);
     }catch(e){return '';}
   },
   _fmtFull(iso){
@@ -16572,7 +16670,7 @@ const MAIL={
 
   // ── Enviar cotización por correo ──
   async sendCotizacion(cotId){
-    const c=state.cotizaciones.find(x=>x.id===cotId);
+    const c=state.cotizacionesById[cotId];
     if(!c){toast('Cotización no encontrada','error');return;}
     const f=c.fields;
     const numCot=f['N° Cotización']||'—';
@@ -16580,7 +16678,7 @@ const MAIL={
     let email='',empresa='';
     const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;
     if(cid){
-      const cli=state.clientes.find(x=>x.id===cid);
+      const cli=state.clientesByIdRec[cid];
       if(cli){email=cli.fields['Email']||'';empresa=cli.fields['Empresa']||'';}
     }
     // Generar PDF de la cotización como adjunto
@@ -16767,7 +16865,7 @@ const MAIL={
       const diff=(now-d)/1000;
       if(diff<86400 && d.getDate()===now.getDate()) return d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
       if(diff<604800) return ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()];
-      return d.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+      return _DTF_DM.format(d);
     }catch(e){return dateStr.substring(0,10);}
   },
 
@@ -17043,6 +17141,14 @@ function initDashboard(){
     toast('Configura tu token de Airtable para continuar','error');
     startAutoRefresh();
   }else{
+    // Arranque instantáneo: si hay datos cacheados de este usuario, hidrata y
+    // pinta de inmediato; loadAllData() refresca en segundo plano.
+    if(_hydrateFromCache()){
+      state.loaded=true;state._hydrated=true;
+      hideSysLoader();
+      setStatus('actualizando…',false);
+      try{_renderOverviewNow();_reRenderActiveList();}catch(e){logErr('hydrateRender',e);}
+    }
     loadAllData().then(()=>{startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
   }
   initMobileTableLabels();
@@ -20699,7 +20805,7 @@ async function checkFolios(tipo){
   }
 }
 function openDTEModal(pedidoId){
-  const p=state.pedidos.find(x=>x.id===pedidoId);if(!p) return;
+  const p=state.pedidosById[pedidoId];if(!p) return;
   const f=p.fields;
   const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:f['Cliente'];
   const c=state.clientes.find(x=>x.id===clienteId);
@@ -20768,7 +20874,7 @@ async function emitirDTE(){
     const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||(dteNum?cfg.webhookUrl+'/pdf/'+tipoDTE+'/'+dteNum:'');
     if(dteNum){
       try{await airtableWrite('Pedidos','PATCH',pedidoId,{'DTE N°':String(dteNum)});}catch(e){}
-      const p=state.pedidos.find(x=>x.id===pedidoId);if(p) p.fields['DTE N°']=String(dteNum);
+      const p=state.pedidosById[pedidoId];if(p) p.fields['DTE N°']=String(dteNum);
       renderPedidos();
     }
     toast('\u2705 DTE emitido'+(dteNum?' \u2014 N\u00b0 '+dteNum:'')+(pdfUrl?' \u00b7 <a href="'+escapeHtml(pdfUrl)+'" target="_blank" style="color:var(--accent)">Ver PDF</a>':''),'success');
