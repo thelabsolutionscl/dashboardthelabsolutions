@@ -16,6 +16,7 @@
  *   POST /lead                  (web pública — clave X-Public-Lead-Key + Turnstile opcional)
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
+ *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
  *
  * NINGÚN secreto vive en este archivo. Todo viene de `env` (wrangler secret put).
  */
@@ -59,6 +60,10 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/webhooks/linkedin") {
         return await handleLinkedin(request, env, ctx, cors);
+      }
+
+      if (request.method === "POST" && url.pathname === "/webhooks/social") {
+        return await handleSocial(request, env, ctx, cors);
       }
 
       return json({ ok: false, error: "Ruta no encontrada" }, 404, cors);
@@ -177,6 +182,121 @@ async function handleLinkedin(request, env, ctx, cors) {
     source: "linkedin",
     campaign: norm.campaign || norm.utmCampaign,
   });
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: POST /webhooks/social   (comentarios y DMs de Instagram/Facebook/TikTok
+ * vía Make). Siempre registra la interacción en Social_Interactions; si viene
+ * marcada como lead, además crea Cliente + Agent_Queue (mismo pipeline).
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleSocial(request, env, ctx, cors) {
+  const provided =
+    request.headers.get("X-Social-Webhook-Key") ||
+    request.headers.get("X-Public-Lead-Key") ||
+    "";
+  const expected = env.SOCIAL_WEBHOOK_KEY || env.PUBLIC_LEAD_KEY;
+  if (!expected || !timingSafeEqual(provided, expected)) {
+    return json({ ok: false, error: "No autorizado" }, 401, cors);
+  }
+
+  const body = await readJson(request);
+  if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
+
+  const s = normalizeSocial(body);
+  if (!s.usuario && !s.mensaje) {
+    return json({ ok: false, error: "Faltan datos (usuario/mensaje)" }, 400, cors);
+  }
+
+  // 1) Siempre: registra la interacción en Social_Interactions (best-effort).
+  let interactionId = null;
+  try {
+    const inter = await airtableCreateTolerant(
+      env,
+      "Social_Interactions",
+      stripEmpty({
+        Red: s.red,
+        Tipo: s.tipo,
+        Usuario: s.usuario,
+        Mensaje: s.mensaje,
+        Intención: s.intencion,
+        "Es lead": s.esLead || undefined,
+        Queja: s.queja || undefined,
+        Estado: "Pendiente",
+        Fecha: s.fecha,
+      })
+    );
+    interactionId = inter?.id || null;
+  } catch (e) {
+    console.error("[leads-worker] Social_Interactions:", e.message);
+  }
+
+  // 2) Si viene marcada como lead, crea Cliente + Agent_Queue (sin email no hay
+  //    auto-reply; el LEAD_AGENT lo pre-scorea si AUTO_PROCESS_LEADS está activo).
+  if (s.esLead) {
+    const norm = {
+      name: s.usuario,
+      company: s.usuario ? "@" + s.usuario : "Lead redes sociales",
+      message: s.mensaje,
+      service: s.service,
+      red: s.red,
+      tipo: s.tipo,
+      intencion: s.intencion,
+      campaign: s.campaign,
+      interactionId,
+    };
+    return await createLeadAndQueue(env, ctx, cors, {
+      norm,
+      agente: "LEAD_AGENT",
+      evento: "social.lead_received",
+      source: s.source,
+      campaign: s.campaign,
+    });
+  }
+
+  return json({ ok: true, interactionId, lead: false }, 200, cors);
+}
+
+function normalizeSocial(b) {
+  const redRaw = (str(b.red) || str(b.network) || "").toLowerCase();
+  const redMap = {
+    instagram: "Instagram", ig: "Instagram",
+    facebook: "Facebook", fb: "Facebook",
+    linkedin: "LinkedIn",
+    tiktok: "TikTok", tt: "TikTok",
+  };
+  const red = redMap[redRaw] || str(b.red) || str(b.network) || "";
+  const tipoRaw = (str(b.tipo) || str(b.type) || "comentario").toLowerCase();
+  const tipo =
+    tipoRaw.startsWith("dm") || tipoRaw.includes("message") || tipoRaw.includes("mensaje")
+      ? "DM"
+      : tipoRaw.includes("menc") || tipoRaw.includes("mention")
+      ? "Mención"
+      : "Comentario";
+  const esLead = /^(s[ií]|true|1)$/i.test(String(b.esLead ?? b.es_lead ?? "").trim());
+  const mensaje = str(b.mensaje) || str(b.message) || str(b.text) || str(b.comment);
+  const intencion = str(b.intencion) || str(b.intent);
+  return {
+    red,
+    tipo,
+    usuario: str(b.usuario) || str(b.username) || str(b.from) || str(b.user),
+    mensaje,
+    intencion,
+    esLead,
+    queja: socialIsComplaint(mensaje, intencion),
+    service: str(b.service),
+    source: redRaw || "redes",
+    campaign: str(b.campaign),
+    fecha: str(b.fecha) || str(b.date) || new Date().toISOString(),
+  };
+}
+
+// Detección simple de queja (sentimiento negativo) para disparar el aviso por WhatsApp.
+// Espeja la heurística del dashboard (_redesSentiment).
+function socialIsComplaint(mensaje, intencion) {
+  if (/soporte|queja|reclamo/i.test(intencion || "")) return true;
+  return /problema|reclamo|p[eé]simo|pesimo|terrible|malo|mala|horrible|estafa|fraude|no lleg|no me lleg|roto|rota|da[ñn]ad|atras|tarde|nunca lleg|enojad|molest|deficiente|denunci|devoluci|no funciona|no sirve/i.test(
+    mensaje || ""
+  );
 }
 
 /* ════════════════════════════════════════════════════════════════════════

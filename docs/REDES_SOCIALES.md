@@ -87,6 +87,8 @@ falta un campo, no rompe — muestra el estado guía. Ya están creadas.
 | Estado | singleSelect | Pendiente · Respondido · Ignorado |
 | Es lead | checkbox | lo marca el agente |
 | Lead creado | checkbox | el dashboard lo marca al crear el Cliente — **anti-duplicado durable** |
+| Queja | checkbox | el Worker la marca al detectar sentimiento negativo → dispara aviso WhatsApp |
+| WA: aviso enviado | checkbox | dedup del aviso WhatsApp (lo marca Make tras enviar) |
 | Intención | singleLineText | consulta_precio / interes_producto / soporte / elogio / spam / otro |
 | Fecha | dateTime | |
 
@@ -203,5 +205,51 @@ Sobre la base anterior se ejecutó una auditoría y se añadió:
   arriba y las marca (⚠ queja); contador de quejas en la cabecera.
 - **Anti-duplicado de leads durable** (campo `Social_Interactions."Lead creado"`) y
   guards de concurrencia (`_redesLoadBusy`, `_redesReplyBusy`).
-</content>
-</invoke>
+
+---
+
+## 7. Captura server-side + notificaciones (auditoría 4)
+
+### 7.1 Worker — `POST /webhooks/social`
+`lead-worker/src/index.js` ahora expone `/webhooks/social` (clave
+`SOCIAL_WEBHOOK_KEY`, con fallback a `PUBLIC_LEAD_KEY`). Recibe comentarios y DMs
+desde Make y:
+1. Siempre crea la fila en **`Social_Interactions`** (tolerante a campos faltantes).
+2. Detecta **queja** (sentimiento negativo, `socialIsComplaint`) y marca `Queja`.
+3. Si el payload trae `esLead:true`, crea **Cliente + `Agent_Queue`** (LEAD_AGENT,
+   `Source` = red) reutilizando el núcleo `createLeadAndQueue` — y lo pre-scorea si
+   `AUTO_PROCESS_LEADS=true`.
+
+Funciona aunque el dashboard esté cerrado. Payload esperado (campos flexibles):
+```json
+{ "red":"instagram", "tipo":"DM", "usuario":"cafe.lamorena",
+  "mensaje":"cuánto sale un neón con mi logo?", "esLead":true, "intencion":"consulta_precio" }
+```
+> **Recomendado:** que el escenario de captura de Make haga `POST` a este endpoint
+> (en vez de escribir Airtable directo), así la marca `Queja` y el encolado de leads
+> quedan centralizados en el Worker.
+
+### 7.2 Estado real de Make (team `259748`)
+Conexiones disponibles hoy: **Airtable, Gmail, SMTP**. **No hay ninguna conexión
+social** (Instagram/Facebook/LinkedIn/TikTok). WhatsApp va por **HTTP → WATI** (sin
+conexión dedicada). Por lo tanto:
+- ✅ **Listo para construir** (solo Airtable/HTTP): avisos WhatsApp (7.3), reporte
+  semanal por email, ingesta de métricas si la trae un endpoint propio.
+- ⛔ **Bloqueado hasta conectar OAuth tú**: publicación automática y captura nativa
+  de comentarios/DMs en Meta/LinkedIn/TikTok. Conecta esas cuentas en Make → Mis
+  conexiones, y luego se arman los escenarios 4.1 y 4.2.
+
+### 7.3 Avisos por WhatsApp (clonar un escenario WATI existente)
+Mismo patrón que `The Lab — WhatsApp · Leads asignados → Nicanor`
+(Airtable *Search* → *Feeder* → *Search* → HTTP *WATI* → *Update* dedup). Crear dos:
+1. **Queja entrante** — filtro `AND({Queja}, NOT({WA: aviso enviado}))` sobre
+   `Social_Interactions` → WhatsApp al encargado → marca `WA: aviso enviado`.
+2. **Lead caliente de redes** — filtro `AND({Es lead}, NOT({WA: aviso enviado}))` →
+   WhatsApp a Nicanor → marca `WA: aviso enviado`.
+
+Los campos `Queja` y `WA: aviso enviado` ya existen en `Social_Interactions`.
+
+### 7.4 Tests
+`tests/redes.test.js` (correr con `node tests/redes.test.js`) extrae las funciones
+reales de `index.html` y prueba el parser por red (`_redesSplitByNetwork`), el
+sentimiento (`_redesSentiment`) y el mejor día (`_redesBestByWeekday`). 12 aserciones.
