@@ -1531,6 +1531,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <symbol id="icon-correo" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="2 7 12 13 22 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="icon-redes" viewBox="0 0 24 24" fill="none"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke-linecap="round"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke-linecap="round"/></symbol>
+<symbol id="icon-newsletter" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="9" x2="17" y2="9" stroke-linecap="round"/><line x1="7" y1="13" x2="17" y2="13" stroke-linecap="round"/><line x1="7" y1="17" x2="13" y2="17" stroke-linecap="round"/></symbol>
 </defs></svg>
 <!-- ── LOGIN PAGE ── -->
 <div id="loginPage">
@@ -1759,6 +1760,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="dock-btn" data-tab="remuneraciones" onclick="switchTab('remuneraciones')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-remuneraciones"/></svg></span><span class="dock-label">Remuneraciones</span></button>
     <button class="dock-btn" data-tab="correo" onclick="switchTab('correo')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-correo"/></svg></span><span class="dock-label">Correo</span></button>
     <button class="dock-btn" data-tab="redes" onclick="switchTab('redes')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-redes"/></svg></span><span class="dock-label">Redes</span><span class="dock-badge" id="badge-redes" style="display:none">0</span></button>
+    <button class="dock-btn" data-tab="newsletter" onclick="switchTab('newsletter')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-newsletter"/></svg></span><span class="dock-label">Newsletter</span><span class="dock-badge" id="badge-newsletter" style="display:none">0</span></button>
   </div>
 </div>
 
@@ -1799,6 +1801,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <button class="mobile-tab-btn" data-tab="remuneraciones" onclick="switchTabMobile('remuneraciones')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-remuneraciones"/></svg></span>Remuneraciones</button>
     <button class="mobile-tab-btn" data-tab="correo" onclick="switchTabMobile('correo')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-correo"/></svg></span>Correo</button>
     <button class="mobile-tab-btn" data-tab="redes" onclick="switchTabMobile('redes')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-redes"/></svg></span>Redes Sociales</button>
+    <button class="mobile-tab-btn" data-tab="newsletter" onclick="switchTabMobile('newsletter')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-newsletter"/></svg></span>Newsletter</button>
     <!-- Acordeón Configuración / Tokens -->
     <div style="border-top:1px solid var(--border)">
       <button onclick="toggleMobileConfig()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 18px;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.3px">
@@ -3005,6 +3008,130 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(_redesReportText||'').then(()=>toast('Copiado ✓','success'))">Copiar</button>
         <button class="btn btn-primary btn-sm" id="redesReportEmailBtn" onclick="redesEmailReport()">✉ Enviar por email</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NEWSLETTER -->
+<div class="tab-panel" id="tab-newsletter">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Newsletter</div>
+      <div class="section-desc">Redacta con IA el newsletter de la empresa, guárdalo como borrador, prográmalo y mide aperturas y clics. La audiencia son tus clientes del CRM suscritos; el envío masivo sale por Resend (Make) y quienes hacen clic se marcan como lead caliente para el vendedor.</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="nlLoad(true)" style="flex-shrink:0">↻ Actualizar</button>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" id="nlKpis">
+    <div class="kpi-card green"><div class="kpi-label">Audiencia (con email)</div><div class="kpi-value" id="nlKpiAud">—</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">Suscritos</div><div class="kpi-value" id="nlKpiSub">—</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">Borradores</div><div class="kpi-value" id="nlKpiBorr">—</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Enviadas (mes)</div><div class="kpi-value" id="nlKpiEnv">—</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Leads calientes</div><div class="kpi-value" id="nlKpiHot">—</div></div>
+  </div>
+
+  <!-- GENERADOR -->
+  <div class="card" style="margin-bottom:20px;border-color:rgba(124,77,255,0.30);box-shadow:0 0 24px rgba(124,77,255,0.06)">
+    <div class="card-header" style="border-bottom-color:rgba(124,77,255,0.2)">
+      <span class="card-title" style="color:#9b6bff"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-newsletter"/></svg> Redactar newsletter</span>
+      <div style="display:flex;gap:5px;align-items:center"><span class="badge badge-purple">IA · NEWSLETTER_AGENT</span></div>
+    </div>
+    <div style="padding:14px 16px 0">
+      <div class="ss-form-grid">
+        <div class="field-group" style="grid-column:1/-1">
+          <label class="field-label">Tema / objetivo de la edición *</label>
+          <input class="field-input" id="nlGenInput" placeholder="ej: Premiaciones de fin de año (trofeos y medallas) | Neones LED para restaurantes | Reactivar clientes inactivos">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Segmento (rubro)</label>
+          <select class="field-select" id="nlGenSegment"><option value="">Toda la audiencia</option></select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Mes</label>
+          <input class="field-input" id="nlGenMes" placeholder="se autocompleta">
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">
+        <span style="font-size:10px;color:var(--text3);align-self:center;margin-right:3px">Rápidas:</span>
+        <button onclick="nlQuick('Edición de fin de año: premiaciones corporativas (trofeos y medallas), con un caso real y oferta para cerrar antes de diciembre')" class="btn-mini">Fin de año</button>
+        <button onclick="nlQuick('Newsletter educativo: cuándo conviene impresión 3D vs métodos tradicionales, con ejemplos')" class="btn-mini">Educativo 3D</button>
+        <button onclick="nlQuick('Neones LED personalizados para restaurantes y retail: ideas, antes/después y CTA a cotizar')" class="btn-mini">Neones</button>
+        <button onclick="nlQuick('Campaña de reactivación para clientes que no compran hace meses, con una oferta especial')" class="btn-mini">Reactivación</button>
+      </div>
+      <button class="btn btn-primary" id="nlGenBtn" onclick="nlGenerate()" style="background:#7c4dff;color:#fff;border-color:#7c4dff"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-newsletter"/></svg> Generar newsletter</button>
+    </div>
+    <div id="nlGenResult" style="padding:14px 16px"></div>
+  </div>
+
+  <!-- CAMPAÑAS -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> Campañas</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="field-select" id="nlFiltroEstado" onchange="renderNlCampaigns()" style="font-size:11px;padding:4px 8px;width:auto">
+          <option value="">Todos los estados</option>
+          <option value="Borrador">Borradores</option>
+          <option value="En revisión">En revisión</option>
+          <option value="Programada">Programadas</option>
+          <option value="Enviada">Enviadas</option>
+        </select>
+      </div>
+    </div>
+    <div id="nlCampaignsList" style="padding:8px 0">
+      <div style="padding:16px;color:var(--text3);font-size:12px">Presiona “Actualizar” para cargar tus campañas (tabla <code>Newsletter_Campañas</code> de Airtable).</div>
+    </div>
+  </div>
+
+  <!-- LEADS CALIENTES -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trending"/></svg> Leads calientes (abrieron / hicieron clic)</span>
+      <span class="badge badge-gray" id="nlHotCount">—</span>
+    </div>
+    <div id="nlLeadsList" style="padding:8px 0">
+      <div style="padding:16px;color:var(--text3);font-size:12px">Destinatarios que interactuaron con el newsletter (tabla <code>Newsletter_Envios</code>). Make los marca como lead caliente al hacer clic; aquí los conviertes en una tarea para el vendedor.</div>
+    </div>
+  </div>
+
+  <!-- AUDIENCIA -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-clientes"/></svg> Audiencia por rubro</span>
+    </div>
+    <div id="nlAudience" style="padding:14px 16px">
+      <div style="padding:8px;color:var(--text3);font-size:12px">Tu audiencia son los clientes del CRM con email y suscritos. Carga los clientes (botón ↻ del Overview) para ver el desglose por rubro.</div>
+    </div>
+  </div>
+
+  <!-- MODAL: programar -->
+  <div id="nlDateModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);align-items:center;justify-content:center" onclick="if(event.target===this)nlDateCancel()">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:20px;width:min(360px,92vw)">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--text)">¿Qué día se envía esta campaña?</div>
+      <input type="date" id="nlDateInput" class="field-input" style="width:100%;margin-bottom:14px">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="nlDateCancel()">Cancelar</button>
+        <button class="btn btn-primary btn-sm" onclick="nlDateConfirm()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ver / editar campaña -->
+  <div id="nlEditModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:min(680px,94vw);max-height:90vh;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:600;color:var(--text)">✏️ Editar campaña</span>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nlEditModal').style.display='none'">✕</button>
+      </div>
+      <div style="padding:16px 18px;overflow:auto">
+        <div class="field-group"><label class="field-label">Asunto</label><input class="field-input" id="nlEditAsunto" maxlength="200"></div>
+        <div class="field-group"><label class="field-label">Preheader</label><input class="field-input" id="nlEditPreheader" maxlength="200"></div>
+        <div class="field-group"><label class="field-label">Cuerpo (Markdown)</label><textarea class="field-textarea" id="nlEditCuerpo" rows="14" style="font-family:'JetBrains Mono',monospace;font-size:12px"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nlEditModal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="nlEditSaveBtn" onclick="nlEditSave()">Guardar cambios</button>
       </div>
     </div>
   </div>
@@ -5998,6 +6125,24 @@ CRITERIO: el engagement no paga cuentas — prioriza siempre clics, leads y vent
 Números claros, CLP con puntos de miles cuando aplique. Directo, sin relleno.`,
    pre:'Datos de la semana: ',
    qs:['Genera el reporte semanal de redes con lo que tengo cargado','¿Qué red me está trayendo más leads y cuál debo replantear?','¿Cuál fue mi mejor post de la semana y por qué funcionó?','Dame las 3 acciones más importantes para subir leads desde redes la próxima semana']},
+
+  // ── NEWSLETTER ───────────────────────────────────────────────
+  {id:'NEWSLETTER_AGENT',label:'NEWSLETTER_AGENT',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-newsletter"/></svg>',badge:'badge-purple',
+   sys:`Eres el NEWSLETTER_AGENT de The Lab Solutions, empresa de fabricación digital premium en Santiago, Chile.
+PRODUCTOS: neones LED, trofeos y medallas, impresión 3D, señalética/cartelería, letras volumétricas, merchandising corporativo, packaging, Chip The Lab (NFC).
+PÚBLICO: empresas B2B que ya están en el CRM (marketing, RRHH, productoras de eventos, retail, restaurantes, colegios, gimnasios).
+ROL: redactar el NEWSLETTER de la empresa (mensual o de campaña) que APORTE VALOR y genere oportunidades — nunca spam.
+TONO: cercano, chileno, premium sin ser pomposo. Mobile-first y escaneable (la mayoría lo lee en el celular).
+ESTRUCTURA DEL CUERPO (en Markdown): 1) titular gancho · 2) 2–3 bloques cortos (una novedad/proceso, un caso real de cliente, un tip o tendencia de temporada) · 3) UNA oferta o CTA claro hacia cotización · 4) cierre cálido con firma "— Equipo The Lab Solutions". Usa subtítulos (##), listas y **negritas**. No insertes imágenes (las agrega el equipo). Extensión 180–320 palabras.
+PERSONALIZA según el segmento/rubro indicado (ej. para restaurantes habla de neones y cartelería; para RRHH, de premiaciones y merchandising).
+REGLAS: 1 solo CTA principal. Asunto sin clickbait ni MAYÚSCULAS gritadas. Nada de promesas falsas ni precios inventados.
+DEVUELVE SIEMPRE EXACTAMENTE EN ESTE FORMATO (sin texto antes ni después):
+ASUNTO: <máx 60 caracteres>
+PREHEADER: <máx 90 caracteres, complementa el asunto, no lo repite>
+CUERPO:
+<el cuerpo del correo en Markdown>`,
+   pre:'Tema / objetivo / segmento / contexto: ',
+   qs:['Newsletter de fin de año para captar premiaciones corporativas (trofeos y medallas), con un caso real y oferta para cerrar antes de diciembre','Edición enfocada en neones LED para restaurantes y retail, con antes/después','Newsletter educativo: cuándo conviene impresión 3D frente a métodos tradicionales','Campaña de reactivación para clientes que no compran hace 3 meses con una oferta especial']},
 ];
 
 // ── MOBILE ────────────────────────────────────────────────────
@@ -6030,6 +6175,7 @@ function openMobileGrid(){
     {tab:'remuneraciones',label:'Remuner.'},
     {tab:'correo',label:'Correo'},
     {tab:'redes',label:'Redes'},
+    {tab:'newsletter',label:'Newsletter'},
   ];
   const u=AUTH.getUser();
   const allowed=(typeof RBAC!=='undefined'&&u)?(RBAC.tabs[u.role]||RBAC.tabs.demo):null;
@@ -7069,6 +7215,7 @@ function switchTab(name){
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='correo') MAIL.init();
   if(name==='redes') initRedes();
+  if(name==='newsletter') initNewsletter();
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;}
   if(name==='equipo') initEquipo();
@@ -13067,6 +13214,328 @@ async function redesEmailReport(){
   if(btn) btn.disabled=false;
 }
 
+// ── NEWSLETTER ─────────────────────────────────────────────────
+let _nlLoaded=false, _nlLastGen='', _nlLastParsed=null, _nlLastSegment='', _nlLastInput='', _nlDateResolve=null, _nlEditId=null;
+const NL_ESTADO_BADGE={'Borrador':'badge-gray','En revisión':'badge-yellow','Programada':'badge-purple','Enviada':'badge-green'};
+const _nlHotTasked=new Set();   // envíos ya convertidos en tarea (anti-duplicado en sesión)
+const _nlPad=n=>String(n).padStart(2,'0');
+const _nlSet=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+const _nlPct=v=>{if(v==null||v==='')return '';const n=v<=1?v*100:v;return Math.round(n)+'%';};
+const _nlMesActual=()=>{const m=new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'});return m.charAt(0).toUpperCase()+m.slice(1);};
+
+function initNewsletter(){
+  const mes=document.getElementById('nlGenMes'); if(mes&&!mes.value) mes.value=_nlMesActual();
+  nlPopulateSegments();
+  if(!_nlLoaded && getToken()) nlLoad();
+  else { renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); }
+}
+
+async function nlLoad(force){
+  if(!getToken()){toast('Falta el token de Airtable (Mi cuenta)','error');return;}
+  const loadingHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
+  if(force){const ce=document.getElementById('nlCampaignsList');if(ce)ce.innerHTML=loadingHTML;const le=document.getElementById('nlLeadsList');if(le)le.innerHTML=loadingHTML;}
+  // Lecturas tolerantes: distingue "tabla no existe" (estado guía) de un error de red (toast).
+  state._nlCampErr=false; state._nlEnvErr=false;
+  const isMissing=e=>/not ?found|could ?not|no such|table|404|NOT_FOUND|invalid permissions|not authorized|403/i.test(String((e&&e.message)||''));
+  state.nlCampaigns = await airtableFetch('Newsletter_Campañas',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._nlCampErr=true;else toast('No se pudieron cargar campañas: '+e.message,'error');return [];});
+  state.nlEnvios    = await airtableFetch('Newsletter_Envios',1000).then(r=>r.records).catch(e=>{if(isMissing(e))state._nlEnvErr=true;else toast('No se pudieron cargar envíos: '+e.message,'error');return [];});
+  _nlLoaded=true;
+  nlPopulateSegments(); renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience();
+}
+
+// Audiencia = clientes del CRM con email y sin baja. "Suscritos" = opt-in explícito.
+function _nlAudience(){
+  const cli=state.clientes||[];
+  const hasEmail=c=>/@/.test(String(c.fields['Email']||''));
+  const baja=c=>c.fields['Baja newsletter']===true;
+  const reachable=cli.filter(c=>hasEmail(c)&&!baja(c));
+  const subs=reachable.filter(c=>c.fields['Suscrito newsletter']===true);
+  const byRubro={};
+  reachable.forEach(c=>{const r=c.fields['Industria / Rubro']||'Sin rubro';byRubro[r]=(byRubro[r]||0)+1;});
+  return {total:cli.length, reachable, subs, byRubro, bajas:cli.filter(baja).length, sinEmail:cli.filter(c=>!hasEmail(c)).length};
+}
+
+function nlPopulateSegments(){
+  const sel=document.getElementById('nlGenSegment'); if(!sel) return;
+  const a=_nlAudience(); const cur=sel.value;
+  const rubros=Object.keys(a.byRubro).sort((x,y)=>a.byRubro[y]-a.byRubro[x]);
+  sel.innerHTML=`<option value="">Toda la audiencia (${a.reachable.length})</option>`+rubros.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)} (${a.byRubro[r]})</option>`).join('');
+  if(cur) sel.value=cur;
+}
+
+function renderNlKpis(){
+  const a=_nlAudience();
+  const camps=state.nlCampaigns||[], env=state.nlEnvios||[];
+  const now=new Date(),m=now.getMonth(),y=now.getFullYear();
+  const enviadasMes=camps.filter(c=>{if((c.fields['Estado']||'')!=='Enviada')return false;const d=c.fields['Fecha envío']||c.createdTime;const dt=d?new Date(d):null;return dt&&dt.getMonth()===m&&dt.getFullYear()===y;}).length;
+  const borr=camps.filter(c=>(c.fields['Estado']||'Borrador')==='Borrador').length;
+  const hot=env.filter(e=>e.fields['Lead caliente']===true);
+  const hotPend=hot.filter(e=>e.fields['Tarea creada']!==true&&!_nlHotTasked.has(e.id));
+  _nlSet('nlKpiAud',a.reachable.length); _nlSet('nlKpiSub',a.subs.length); _nlSet('nlKpiBorr',borr); _nlSet('nlKpiEnv',enviadasMes); _nlSet('nlKpiHot',hot.length);
+  const badge=document.getElementById('badge-newsletter');
+  if(badge){if(hotPend.length>0){badge.textContent=hotPend.length;badge.style.display='';}else badge.style.display='none';}
+}
+
+function _nlEstBadge(e){return `<span class="badge ${NL_ESTADO_BADGE[e]||'badge-gray'}">${escapeHtml(e||'Borrador')}</span>`;}
+function _nlFmtFecha(d){if(!d)return '—';const dt=new Date(d);if(isNaN(dt))return escapeHtml(String(d));return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'});}
+
+function renderNlCampaigns(){
+  const el=document.getElementById('nlCampaignsList'); if(!el) return;
+  let camps=(state.nlCampaigns||[]).slice();
+  if(!camps.length){
+    el.innerHTML=`<div style="padding:18px;color:var(--text3);font-size:12px;line-height:1.7">
+      No hay campañas aún${state._nlCampErr?' (o falta crear la tabla <code>Newsletter_Campañas</code> en Airtable)':''}.
+      <br>Redacta una arriba con la IA y pulsa <b>“Guardar borrador”</b> para que aparezca aquí.</div>`; return;
+  }
+  const fEst=document.getElementById('nlFiltroEstado')?.value||'';
+  camps=camps.filter(c=>!fEst||(c.fields['Estado']||'Borrador')===fEst);
+  camps.sort((a,b)=>{const da=a.fields['Fecha envío']||a.createdTime||'',db=b.fields['Fecha envío']||b.createdTime||'';return new Date(db)-new Date(da);});
+  if(!camps.length){el.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Sin campañas con ese filtro.</div>';return;}
+  el.innerHTML=camps.map(c=>{
+    const f=c.fields, est=f['Estado']||'Borrador';
+    const asunto=f['Asunto']||f['Campaña']||'(sin asunto)';
+    const cuerpo=(f['Cuerpo (Markdown)']||'').toString();
+    const btns=[`<button class="btn btn-ghost btn-sm" onclick="nlEditOpen('${c.id}')">✏️ Ver/editar</button>`];
+    if(est==='Borrador') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSetEstado('${c.id}','En revisión')">Pasar a revisión</button>`);
+    if(est==='Borrador'||est==='En revisión') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSchedule('${c.id}')">📅 Programar</button>`);
+    if(est==='Programada') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSchedule('${c.id}')">📅 Reprogramar</button>`);
+    if(est!=='Enviada') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSetEstado('${c.id}','Enviada')">Marcar enviada ✓</button>`);
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSendTest('${c.id}')">✉ Enviar prueba</button>`);
+    const ta=_nlPct(f['Tasa apertura (%)']), tc=_nlPct(f['Tasa click (%)']);
+    const metrics = est==='Enviada' ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--text3)">
+        <span>📨 ${f['Enviados']||0} enviados</span>
+        <span>👁 ${f['Aperturas']||0} aperturas${ta?` (${ta})`:''}</span>
+        <span>🔗 ${f['Clicks']||0} clics${tc?` (${tc})`:''}</span>
+        ${f['Bajas']?`<span>🚫 ${f['Bajas']} bajas</span>`:''}
+      </div>` : '';
+    return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+        ${_nlEstBadge(est)}
+        ${f['Generada por NEWSLETTER_AGENT']?'<span class="badge badge-purple" style="font-size:8px">IA</span>':''}
+        ${f['Mes']?`<span style="font-size:10px;color:var(--text3)">🗓 ${escapeHtml(f['Mes'])}</span>`:''}
+        ${f['Fecha envío']?`<span style="font-size:10px;color:var(--text3)">· envío ${_nlFmtFecha(f['Fecha envío'])}</span>`:''}
+        ${f['Segmento objetivo']?`<span class="badge badge-gray" style="font-size:8px">🎯 ${escapeHtml(String(f['Segmento objetivo']).slice(0,40))}</span>`:''}
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--text)">${escapeHtml(asunto)}</div>
+      ${f['Preheader']?`<div style="font-size:11px;color:var(--text3);margin-top:2px">${escapeHtml(f['Preheader'])}</div>`:''}
+      <div style="font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.5;max-height:80px;overflow:auto;margin-top:6px">${escapeHtml(cuerpo.slice(0,400))}${cuerpo.length>400?'…':''}</div>
+      ${metrics}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${btns.join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+async function nlSetEstado(id,estado){
+  const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
+  try{
+    const fields={'Estado':estado};
+    if(estado==='Enviada'&&!c.fields['Fecha envío']) fields['Fecha envío']=new Date().toISOString().slice(0,10);
+    await airtableWriteTolerant('Newsletter_Campañas','PATCH',id,fields);
+    Object.assign(c.fields,fields);
+    toast('Estado: '+estado+' ✓','success'); renderNlKpis(); renderNlCampaigns();
+  }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
+}
+
+// Modal date-picker (promesa → 'YYYY-MM-DD' o null). 'Fecha envío' es tipo date.
+function nlDatePicker(defaultDay){
+  return new Promise(resolve=>{
+    _nlDateResolve=resolve;
+    const d=defaultDay?new Date(defaultDay):(()=>{const x=new Date();x.setDate(x.getDate()+1);return x;})();
+    document.getElementById('nlDateInput').value=`${d.getFullYear()}-${_nlPad(d.getMonth()+1)}-${_nlPad(d.getDate())}`;
+    document.getElementById('nlDateModal').style.display='flex';
+  });
+}
+function nlDateConfirm(){const v=document.getElementById('nlDateInput').value;document.getElementById('nlDateModal').style.display='none';const r=_nlDateResolve;_nlDateResolve=null;if(r)r(v||null);}
+function nlDateCancel(){document.getElementById('nlDateModal').style.display='none';const r=_nlDateResolve;_nlDateResolve=null;if(r)r(null);}
+
+async function nlSchedule(id){
+  const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
+  const day=await nlDatePicker(c.fields['Fecha envío']||null); if(!day) return;
+  try{
+    await airtableWriteTolerant('Newsletter_Campañas','PATCH',id,{'Estado':'Programada','Fecha envío':day});
+    c.fields['Estado']='Programada'; c.fields['Fecha envío']=day;
+    toast('Programada para el '+_nlFmtFecha(day)+' ✓','success'); renderNlKpis(); renderNlCampaigns();
+  }catch(e){toast('No se pudo programar: '+e.message,'error');}
+}
+
+// Markdown muy básico → HTML (negritas, títulos, listas, saltos). Para el correo de prueba.
+function _nlMdToHtml(md){
+  let h=escapeHtml(md||'');
+  h=h.replace(/^#{1,3}\s*(.+)$/gm,'<h3 style="margin:14px 0 6px">$1</h3>');
+  h=h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  h=h.replace(/^[-*]\s+(.+)$/gm,'• $1');
+  return h.replace(/\n/g,'<br>');
+}
+async function nlSendTest(id){
+  const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
+  if(typeof MAIL==='undefined'||!MAIL.post){toast('Correo no disponible','error');return;}
+  const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;
+  const to=prompt('Enviar PRUEBA del newsletter a:',(u&&u.email)||'hola@thelab.solutions');
+  if(!to) return;
+  const f=c.fields;
+  try{
+    const body=`<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.6;max-width:600px">${f['Preheader']?`<div style="color:#888;font-size:12px;margin-bottom:10px">${escapeHtml(f['Preheader'])}</div>`:''}${_nlMdToHtml(f['Cuerpo (Markdown)']||'')}</div>`;
+    const r=await MAIL.post({action:'send',to,subject:'[PRUEBA] '+(f['Asunto']||f['Campaña']||'Newsletter'),body,from_name:'The Lab Solutions'});
+    if(r&&!r.error) toast('✓ Prueba enviada a '+to,'success'); else throw new Error(r&&r.error||'Error desconocido');
+  }catch(e){toast('No se pudo enviar la prueba: '+e.message,'error');}
+}
+
+function nlEditOpen(id){
+  const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
+  _nlEditId=id;
+  document.getElementById('nlEditAsunto').value=c.fields['Asunto']||'';
+  document.getElementById('nlEditPreheader').value=c.fields['Preheader']||'';
+  document.getElementById('nlEditCuerpo').value=c.fields['Cuerpo (Markdown)']||'';
+  document.getElementById('nlEditModal').style.display='flex';
+}
+async function nlEditSave(){
+  if(!_nlEditId) return;
+  const c=(state.nlCampaigns||[]).find(x=>x.id===_nlEditId); if(!c) return;
+  const fields={'Asunto':document.getElementById('nlEditAsunto').value.slice(0,200),'Preheader':document.getElementById('nlEditPreheader').value.slice(0,200),'Cuerpo (Markdown)':document.getElementById('nlEditCuerpo').value.slice(0,90000)};
+  const btn=document.getElementById('nlEditSaveBtn'); if(btn) btn.disabled=true;
+  try{
+    await airtableWriteTolerant('Newsletter_Campañas','PATCH',_nlEditId,fields);
+    Object.assign(c.fields,fields);
+    document.getElementById('nlEditModal').style.display='none';
+    toast('Cambios guardados ✓','success'); renderNlCampaigns();
+  }catch(e){toast('No se pudo guardar: '+e.message,'error');}
+  if(btn) btn.disabled=false;
+}
+
+function _nlCampName(recId){const c=(state.nlCampaigns||[]).find(x=>x.id===recId);return c?(c.fields['Asunto']||c.fields['Campaña']||''):'';}
+function renderNlLeads(){
+  const el=document.getElementById('nlLeadsList'), cnt=document.getElementById('nlHotCount'); if(!el) return;
+  const hot=(state.nlEnvios||[]).filter(e=>e.fields['Lead caliente']===true);
+  if(cnt) cnt.textContent=hot.length?`${hot.length} leads`:'sin leads';
+  if(!hot.length){
+    el.innerHTML=`<div style="padding:18px;color:var(--text3);font-size:12px;line-height:1.7">
+      Aún no hay leads calientes${state._nlEnvErr?' (o falta crear la tabla <code>Newsletter_Envios</code> en Airtable)':''}.
+      <br>Cuando un destinatario abra o haga clic, Make lo marca como lead caliente y aquí lo conviertes en tarea para el vendedor.</div>`; return;
+  }
+  hot.sort((a,b)=>{const pa=(a.fields['Tarea creada']||_nlHotTasked.has(a.id))?1:0,pb=(b.fields['Tarea creada']||_nlHotTasked.has(b.id))?1:0;if(pa!==pb)return pa-pb;return new Date(b.fields['Fecha click']||b.fields['Fecha apertura']||b.createdTime||0)-new Date(a.fields['Fecha click']||a.fields['Fecha apertura']||a.createdTime||0);});
+  el.innerHTML=hot.map(e=>{
+    const f=e.fields, tasked=f['Tarea creada']===true||_nlHotTasked.has(e.id);
+    const camp=Array.isArray(f['Campaña'])&&f['Campaña'].length?_nlCampName(f['Campaña'][0]):'';
+    const cliName=Array.isArray(f['Cliente'])&&f['Cliente'].length&&typeof resolveClienteName==='function'?resolveClienteName(f['Cliente']):'';
+    return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+        <span class="badge badge-red" style="font-size:8px">🔥 LEAD CALIENTE</span>
+        ${f['Estado']?estadoBadge(f['Estado']):''}
+        <span style="font-size:11px;color:var(--text2)">${escapeHtml(f['Email']||'')}</span>
+        ${cliName?`<span class="badge badge-gray" style="font-size:8px">${escapeHtml(cliName)}</span>`:''}
+        ${f['Rubro']?`<span class="badge badge-gray" style="font-size:8px">${escapeHtml(f['Rubro'])}</span>`:''}
+      </div>
+      <div style="font-size:11px;color:var(--text3)">${camp?('Campaña: '+escapeHtml(camp)+' · '):''}${f['Fecha click']?('clic '+_nlFmtFecha(f['Fecha click'])):(f['Fecha apertura']?('abrió '+_nlFmtFecha(f['Fecha apertura'])):'')}</div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        ${tasked?'<span class="badge badge-green" style="font-size:8px;align-self:center">✓ Tarea creada</span>':`<button class="btn btn-primary btn-sm" onclick="nlLeadToTask('${e.id}')">→ Crear tarea de seguimiento</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function nlLeadToTask(id){
+  const e=(state.nlEnvios||[]).find(x=>x.id===id); if(!e) return;
+  if(e.fields['Tarea creada']===true||_nlHotTasked.has(id)){toast('Ya hay una tarea para este lead','info');return;}
+  const f=e.fields;
+  const cliId=Array.isArray(f['Cliente'])&&f['Cliente'].length?f['Cliente'][0]:'';
+  try{
+    await createAgentQueueItem({
+      evento:'newsletter.hot_lead', entidad:'Cliente', entidadId:cliId, agente:'FOLLOWUP_AGENT', prioridad:'Alta',
+      source:'newsletter',
+      input:{source:'newsletter',email:f['Email']||'',campana:_nlCampName((f['Campaña']||[])[0])||'',estado:f['Estado']||'',rubro:f['Rubro']||''}
+    });
+    try{ await airtableWriteTolerant('Newsletter_Envios','PATCH',id,{'Tarea creada':true}); e.fields['Tarea creada']=true; }catch(_){}
+    _nlHotTasked.add(id);
+    toast('Tarea de seguimiento encolada ✓','success'); renderNlKpis(); renderNlLeads();
+  }catch(err){toast('No se pudo crear la tarea: '+err.message,'error');}
+}
+
+function renderNlAudience(){
+  const el=document.getElementById('nlAudience'); if(!el) return;
+  const a=_nlAudience();
+  if(!a.reachable.length){
+    el.innerHTML='<div style="padding:8px;color:var(--text3);font-size:12px">Sin audiencia cargada. Carga los clientes (botón ↻ del Overview) — tu audiencia son los clientes con email y sin baja.</div>'; return;
+  }
+  const rubros=Object.keys(a.byRubro).sort((x,y)=>a.byRubro[y]-a.byRubro[x]);
+  const max=Math.max(1,...rubros.map(r=>a.byRubro[r]));
+  const COLORS=['#7c4dff','#00d4cc','#ec4899','#f59e0b','#22c55e','#3b82f6','#ef4444','#a855f7'];
+  el.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:11px;color:var(--text3)">
+      <span><b style="color:var(--text)">${a.reachable.length}</b> con email</span>
+      <span><b style="color:var(--text)">${a.subs.length}</b> suscritos</span>
+      <span><b style="color:var(--text)">${a.bajas}</b> bajas</span>
+      <span><b style="color:var(--text)">${a.sinEmail}</b> sin email</span>
+    </div>`+
+    rubros.map((r,i)=>{const c=COLORS[i%COLORS.length],n=a.byRubro[r];
+      return `<div style="margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:var(--text2)">${escapeHtml(r)}</span><span style="color:var(--text3)">${n}</span></div>
+        <div style="height:6px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(n/max*100)}%;background:${c}"></div></div>
+      </div>`;}).join('')+
+    `<div style="font-size:10px;color:var(--text3);margin-top:10px">El alta de suscriptores desde la web llega vía el Worker (<code>/newsletter</code>) y marca <code>Suscrito newsletter</code> en el cliente.</div>`;
+}
+
+function nlQuick(text){const inp=document.getElementById('nlGenInput');if(inp){inp.value=text;inp.focus();}}
+
+function _nlParse(text){
+  const mA=text.match(/ASUNTO:\s*([^\n]+)/i);
+  const mP=text.match(/PREHEADER:\s*([^\n]+)/i);
+  const mC=text.match(/CUERPO:\s*\n?([\s\S]+)$/i);
+  return {asunto:(mA?mA[1]:'').trim(), preheader:(mP?mP[1]:'').trim(), cuerpo:(mC?mC[1]:text).trim()};
+}
+function _nlBuildContext(seg){
+  const a=_nlAudience();
+  const lines=['=== CONTEXTO NEWSLETTER — THE LAB SOLUTIONS ===',`Fecha: ${new Date().toLocaleDateString('es-CL')}`];
+  lines.push(`Audiencia alcanzable (clientes con email): ${a.reachable.length} · suscritos explícitos: ${a.subs.length}`);
+  const rubros=Object.keys(a.byRubro).sort((x,y)=>a.byRubro[y]-a.byRubro[x]).slice(0,6);
+  if(rubros.length) lines.push('Top rubros de la audiencia: '+rubros.map(r=>`${r} (${a.byRubro[r]})`).join(', '));
+  if(seg) lines.push(`SEGMENTO OBJETIVO de esta edición: ${seg} (personaliza para este rubro)`);
+  const peds=(state.pedidos||[]).filter(p=>['Despachado','Listo para despacho'].includes(p.fields['Estado pedido']||'')).slice(0,6);
+  if(peds.length){
+    lines.push('\nTrabajos reales recientes (úsalos como prueba social, sin inventar datos):');
+    peds.forEach(p=>{const f=p.fields;const cli=typeof resolveClienteName==='function'?resolveClienteName(f['Cliente']):'';const det=f['Detalle productos']||f['Material']||'';lines.push(`- ${f['N° Pedido']||''}${cli?(' · '+cli):''}${det?(' · '+String(det).slice(0,60)):''}`);});
+  }
+  return lines.join('\n');
+}
+async function nlGenerate(){
+  const inp=document.getElementById('nlGenInput'),input=inp?.value.trim();
+  if(!input){toast('Escribe el tema/objetivo de la edición','error');inp?.focus();return;}
+  const cfg=AGENTES_CFG.find(a=>a.id==='NEWSLETTER_AGENT'); if(!cfg){toast('Falta NEWSLETTER_AGENT','error');return;}
+  const seg=document.getElementById('nlGenSegment')?.value||'';
+  const btn=document.getElementById('nlGenBtn'); if(btn) btn.disabled=true;
+  const res=document.getElementById('nlGenResult'); res.innerHTML='<div style="color:var(--text3);font-size:12px">⏳ Redactando newsletter…</div>';
+  try{
+    const ctx=_nlBuildContext(seg);
+    const full=`${ctx}\n\nCONSULTA: ${cfg.pre}${input}${seg?(' | Segmento: '+seg):''}`;
+    const out=await callClaude(cfg.sys,full);
+    _nlLastGen=out; _nlLastParsed=_nlParse(out); _nlLastSegment=seg; _nlLastInput=input;
+    try{AGENT_LOG.add(cfg.label,input,out);}catch(_){}
+    const p=_nlLastParsed;
+    res.innerHTML=`<div style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:10px;color:var(--text3)">ASUNTO</div><div style="font-size:13px;font-weight:600;color:var(--text)">${escapeHtml(p.asunto||'—')}</div>
+        ${p.preheader?`<div style="font-size:10px;color:var(--text3);margin-top:6px">PREHEADER</div><div style="font-size:12px;color:var(--text2)">${escapeHtml(p.preheader)}</div>`:''}
+      </div>
+      <div class="ai-response" style="white-space:normal">${formatAgentReport(p.cuerpo||out)}</div>
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="nlSaveDraft()">💾 Guardar borrador</button>
+        <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(_nlLastGen).then(()=>toast('Copiado ✓','success'))">Copiar todo</button>
+      </div>`;
+  }catch(e){res.innerHTML=`<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`;toast('Error: '+e.message,'error');}
+  if(btn) btn.disabled=false;
+}
+async function nlSaveDraft(){
+  if(!_nlLastParsed){toast('Genera contenido primero','error');return;}
+  const p=_nlLastParsed;
+  const mes=(document.getElementById('nlGenMes')?.value||'').trim()||_nlMesActual();
+  const fields={'Campaña':`Newsletter ${mes}`,'Mes':mes,'Asunto':(p.asunto||'').slice(0,200),'Preheader':(p.preheader||'').slice(0,200),'Cuerpo (Markdown)':(p.cuerpo||'').slice(0,90000),'Estado':'Borrador','Generada por NEWSLETTER_AGENT':true};
+  if(_nlLastSegment) fields['Segmento objetivo']=_nlLastSegment;
+  if(_nlLastInput) fields['Notas']='Brief: '+_nlLastInput.slice(0,500);
+  try{
+    const rec=await airtableWriteTolerant('Newsletter_Campañas','POST',null,fields);
+    if(rec&&rec.id){ state.nlCampaigns=state.nlCampaigns||[]; state.nlCampaigns.unshift(rec); } else { await nlLoad(); }
+    toast('Borrador guardado ✓','success'); renderNlKpis(); renderNlCampaigns();
+    document.getElementById('nlCampaignsList')?.scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(e){toast('No se pudo guardar (¿existe la tabla Newsletter_Campañas?): '+e.message,'error');}
+}
+
 // ── AGENTES INLINE ─────────────────────────────────────────────
 let _agentInlineText='';
 
@@ -17356,13 +17825,13 @@ const AUTH={
 const RBAC={
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','redes','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','redes','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','correo','redes','nuevo-lead','nueva-cot','cot3d'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','remuneraciones','correo','redes','newsletter','nuevo-lead','nueva-cot','cot3d'],
     produccion: ['overview','pedidos','maquinas','equipo','visual','correo'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo'],
-    marketing:  ['overview','web','agentes','reporte','correo','redes'],
-    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','remuneraciones','redes'],
+    marketing:  ['overview','web','agentes','reporte','correo','redes','newsletter'],
+    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte','web','finanzas','visual','remuneraciones','redes','newsletter'],
   },
   // Items del menú "Nuevo" visibles por rol
   nuevos:{
@@ -17382,11 +17851,14 @@ const RBAC={
   // Tablas donde un rol con acceso a la sección Redes (pero sin escritura global, p.ej. marketing)
   // SÍ puede escribir — acotado a redes + Clientes (leads) + Agent_Queue (encolar lead para scoring).
   socialWriteTables: ['Social_Posts','Social_Interactions','Social_Metrics','Clientes','Agent_Queue'],
+  // Tablas donde un rol con acceso a Newsletter (sin escritura global) SÍ puede escribir.
+  newsletterWriteTables: ['Newsletter_Campañas','Newsletter_Envios','Clientes','Agent_Queue'],
   canWriteRole(role){return !!(this.canWrite[role]);},
-  // Permiso de escritura por tabla: respeta el global y, si no, abre un carve-out acotado para Redes.
+  // Permiso de escritura por tabla: respeta el global y, si no, abre un carve-out acotado para Redes/Newsletter.
   canWriteTable(role,table){
     if(this.canWriteRole(role)) return true;
     if(table && (this.tabs[role]||[]).includes('redes') && this.socialWriteTables.includes(table)) return true;
+    if(table && (this.tabs[role]||[]).includes('newsletter') && this.newsletterWriteTables.includes(table)) return true;
     return false;
   },
   canDeleteRole(role){return !!(this.canDelete[role]);},
