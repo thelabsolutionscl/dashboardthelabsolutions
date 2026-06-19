@@ -7269,13 +7269,13 @@ async function bulkChangeEtapa(){
   const etapa=document.getElementById('bulkEtapaSelect').value;if(!etapa){toast('Selecciona una etapa primero','error');return;}
   const ids=[...selectedClientes];if(!ids.length) return;if(!confirm(`¿Cambiar etapa a "${etapa}" para ${ids.length} cliente${ids.length>1?'s':''}?`)) return;
   const ab=document.getElementById('bulkApplyBtn'),db=document.getElementById('bulkDelBtn');if(ab){ab.disabled=true;ab.textContent='Aplicando...';}if(db) db.disabled=true;
-  let ok=0,fail=0;for(const id of ids){try{const res=await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=res.fields?.['Etapa venta']||etapa;ok++;}catch(e){fail++;}}
+  let ok=0,fail=0;for(const id of ids){try{const res=await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientesByIdRec[id];if(c) c.fields['Etapa venta']=res.fields?.['Etapa venta']||etapa;ok++;}catch(e){fail++;}}
   document.getElementById('bulkEtapaSelect').value='';renderClientes();renderOverview();
   fail>0?toast(`${ok} actualizados · ${fail} fallaron`,'info'):toast(`✓ ${ok} cliente${ok>1?'s':''} → "${etapa}"`,'success');
   if(ab){ab.disabled=false;ab.textContent='✓ Aplicar etapa';}if(db) db.disabled=false;
 }
 async function deleteSelectedClientes(){
-  const ids=[...selectedClientes];if(!ids.length) return;const nombres=ids.map(id=>state.clientes.find(c=>c.id===id)?.fields['Empresa']||id);if(!confirm(`¿Eliminar ${ids.length} cliente${ids.length>1?'s':''}?\n\n${nombres.join('\n')}`)) return;
+  const ids=[...selectedClientes];if(!ids.length) return;const nombres=ids.map(id=>state.clientesByIdRec[id]?.fields['Empresa']||id);if(!confirm(`¿Eliminar ${ids.length} cliente${ids.length>1?'s':''}?\n\n${nombres.join('\n')}`)) return;
   let ok=0,fail=0;for(const id of ids){try{await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];delete state.clientesByIdRec[id];ok++;}catch(e){fail++;}}
   selectedClientes.clear();renderClientes();renderOverview();fail>0?toast(`${ok} eliminados, ${fail} con error`,'info'):toast(`✓ ${ok} eliminados`,'success');
 }
@@ -7414,7 +7414,7 @@ function renderClientes(){
   _applySortIndicators();
 }
 function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes();_saveUIState();}
-async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientes.find(x=>x.id===id);if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientesByIdRec[id];if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
   setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`);return;}_setRows(tbody,cots.map(c=>buildCotRow(c)).join(''));},50);
@@ -7426,7 +7426,7 @@ function compartirPortalCliente(clienteId){
   else{prompt('Copia esta URL para el cliente:',url);}
 }
 function openClienteDetalle(id){
-  const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
+  const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Comuna']||''}`:f['Comuna']||'';
   {const _cc=document.getElementById('cdCrumbName');if(_cc)_cc.textContent=f['Empresa']||f['Contacto']||'Cliente';}
   // Última actividad: fecha más reciente entre cotizaciones, pedidos y primer contacto
@@ -7892,7 +7892,7 @@ async function confirmarImportarDtes(){
   renderClienteFacturas(cdCurrentId,cdCurrentEmpresa);
 }
 function openEditCliente(id){
-  const c=state.clientes.find(x=>x.id===id);if(!c) return;const f=c.fields;
+  const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields;
   document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Comuna']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'Referido';document.getElementById('ecEtapa').value=f['Etapa venta']||'Lead nuevo';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
   const _ecV=document.getElementById('ec-vendedor');if(_ecV) _ecV.value=f['Vendedor']||'';
   document.getElementById('editClienteModal').style.display='flex';
@@ -7912,22 +7912,22 @@ async function saveEditCliente(){
   const ciudadVal=document.getElementById('ecCiudad').value.trim();if(ciudadVal) fields['Comuna']=ciudadVal;
   const _ecVv=document.getElementById('ec-vendedor')?.value||'';fields['Vendedor']=_ecVv||null;
   try{
-    await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}
+    await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}
     toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();
   }catch(e){
-    if(ciudadVal&&e.message.toLowerCase().includes('unknown')){try{delete fields['Comuna'];await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
+    if(ciudadVal&&e.message.toLowerCase().includes('unknown')){try{delete fields['Comuna'];await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
     else{toast('Error: '+e.message,'error');}
   }
   btn.disabled=false;btn.textContent='💾 Guardar cambios';
 }
 async function deleteCliente(id,nombre){
   if(!confirm(`¿Eliminar a "${nombre}"?`)) return;
-  const rec=state.clientes.find(x=>x.id===id);
+  const rec=state.clientesByIdRec[id];
   const snapshot=rec?sanitizeForRestore(rec.fields):null;
   try{
     await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];delete state.clientesByIdRec[id];closeClienteDetalle();renderClientes();renderOverview();
     toastUndo(`Cliente "${nombre}" eliminado`,async()=>{
-      try{const r=await airtableWrite('Clientes','POST',null,snapshot);if(r&&r.id){state.clientes.push(r);state.clientesById[r.id]=r.fields['Empresa']||nombre;}renderClientes();renderOverview();toast(`✓ "${nombre}" restaurado`,'success');}
+      try{const r=await airtableWrite('Clientes','POST',null,snapshot);if(r&&r.id){state.clientes.push(r);state.clientesById[r.id]=r.fields['Empresa']||nombre;state.clientesByIdRec[r.id]=r;}renderClientes();renderOverview();toast(`✓ "${nombre}" restaurado`,'success');}
       catch(e){toast('No se pudo restaurar: '+e.message,'error');}
     });
   }catch(e){toast('Error: '+e.message,'error');}
@@ -8213,7 +8213,7 @@ function onEditCotClienteSearch(){
   dropdown.classList.toggle('open',!!src.length);
 }
 function selectEditCotCliente(id){
-  const c=state.clientes.find(x=>x.id===id);if(!c) return;
+  const c=state.clientesByIdRec[id];if(!c) return;
   document.getElementById('editCotClienteSearch').value=c.fields['Empresa']||'';document.getElementById('editCotClienteId').value=id;document.getElementById('editCotClienteDropdown').classList.remove('open');
   const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('editCotClienteInfo');const prevCotsE=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return(Array.isArray(cl)?cl.includes(id):cl===id)&&x.id!==document.getElementById('editCotId').value;}).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));const prevBtnE=prevCotsE.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('e')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">📋 Cot. anterior (${prevCotsE.length})</button>`:'';info.innerHTML=(venc>=2?`<span style="color:var(--danger)">⚠ ${venc} facturas vencidas</span>`:`<span style="color:var(--text2)">✓ Cliente seleccionado</span>`)+prevBtnE;
 }
@@ -10844,7 +10844,7 @@ async function gfClientCreate(){
     const f={'Empresa':empresa,'Contacto':contacto||'','Etapa venta':'Lead nuevo','Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
     if(isVendorMode())f['Vendedor']=currentVendorId();
     const rec=await airtableWrite('Clientes','POST',null,f);
-    if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=empresa;}
+    if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=empresa;state.clientesByIdRec[rec.id]=rec;}
     GF.answers.clienteId=rec.id;GF.answers.clienteNombre=empresa;
     toast('✓ Cliente creado','success');gfNext();
   }catch(e){toast('Error al crear cliente: '+(e.message||''),'error');}
@@ -10986,7 +10986,7 @@ function startQuoteFlow(presetClienteId,presetClienteNombre){
 window.startQuoteFlow=startQuoteFlow;
 
 // ── Helpers de actualización (PATCH + sincroniza estado local) ──
-async function actualizarCliente(id,fields){const r=await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientes.find(x=>x.id===id);if(c)Object.assign(c.fields,fields);if(fields['Empresa'])state.clientesById[id]=fields['Empresa'];return r;}
+async function actualizarCliente(id,fields){const r=await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c)Object.assign(c.fields,fields);if(fields['Empresa'])state.clientesById[id]=fields['Empresa'];return r;}
 async function actualizarCotizacion(id,fields){const r=await airtableWrite('Cotizaciones','PATCH',id,fields);const c=state.cotizaciones.find(x=>x.id===id);if(c)Object.assign(c.fields,fields);return r;}
 async function actualizarPedido(id,fields){const r=await airtableWrite('Pedidos','PATCH',id,fields);const p=state.pedidos.find(x=>x.id===id);if(p)Object.assign(p.fields,fields);return r;}
 
@@ -11015,14 +11015,14 @@ function startNewClientFlow(){
     let rec;
     try{rec=await airtableWrite('Clientes','POST',null,f);}
     catch(e){if(e.message.toLowerCase().includes('unknown')){['Origen lead','Sitio web','Ciudad','RUT','Cargo contacto'].forEach(k=>delete f[k]);rec=await airtableWrite('Clientes','POST',null,f);}else throw e;}
-    if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=a.empresa;}
+    if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=a.empresa;state.clientesByIdRec[rec.id]=rec;}
     _gfClearDraft();gfClose();switchTab('clientes');if(typeof renderClientes==='function')renderClientes();renderOverview();
     toast('✓ Cliente "'+a.empresa+'" creado','success');
   }});
 }
 // ── Editar cliente (guiado) ──
 function startEditClientFlow(id){
-  const c=state.clientes.find(x=>x.id===id);if(!c){toast('Cliente no encontrado','error');return;}
+  const c=state.clientesByIdRec[id];if(!c){toast('Cliente no encontrado','error');return;}
   const f=c.fields;
   gfStart({title:'✏️ Editar cliente',finishLabel:'✓ Guardar cambios',initial:{empresa:f['Empresa']||'',contacto:f['Contacto']||'',cargo:f['Cargo contacto']||'',telefono:f['Teléfono']||'',email:f['Email']||'',rut:f['RUT']||'',ciudad:f['Comuna']||'',web:f['Sitio web']||'',etapa:f['Etapa venta']||'Lead nuevo',notas:f['Notas internas']||''},steps:[
     {key:'empresa',type:'text',q:'Empresa',rows:1,required:true},
@@ -14676,7 +14676,7 @@ function onClienteSearchInput(){
   if(q&&!src.some(c=>(c.fields['Empresa']||'').toLowerCase()===q)) html+=`<div class="search-select-item create-new" onclick="selectClienteNew()">+ Usar "${escapeHtml(inp.value)}"</div>`;
   dropdown.innerHTML=html;dropdown.classList.toggle('open',!!html);
 }
-function selectCliente(id){const c=state.clientes.find(x=>x.id===id);if(!c) return;document.getElementById('cot-cliente-search').value=c.fields['Empresa']||'';document.getElementById('cot-cliente-id').value=id;document.getElementById('cot-cliente-dropdown').classList.remove('open');const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('cot-cliente-info');const prevCots=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return Array.isArray(cl)?cl.includes(id):cl===id;}).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));const prevBtn=prevCots.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('n')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">📋 Cot. anterior (${prevCots.length})</button>`:'';info.innerHTML=(venc>=2?`<span style="color:var(--danger)">⚠ ${venc} facturas vencidas</span>`:`<span style="color:var(--text2)">✓ Cliente seleccionado</span>`)+prevBtn;}
+function selectCliente(id){const c=state.clientesByIdRec[id];if(!c) return;document.getElementById('cot-cliente-search').value=c.fields['Empresa']||'';document.getElementById('cot-cliente-id').value=id;document.getElementById('cot-cliente-dropdown').classList.remove('open');const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('cot-cliente-info');const prevCots=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return Array.isArray(cl)?cl.includes(id):cl===id;}).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));const prevBtn=prevCots.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('n')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">📋 Cot. anterior (${prevCots.length})</button>`:'';info.innerHTML=(venc>=2?`<span style="color:var(--danger)">⚠ ${venc} facturas vencidas</span>`:`<span style="color:var(--text2)">✓ Cliente seleccionado</span>`)+prevBtn;}
 function selectClienteNew(){document.getElementById('cot-cliente-id').value='';document.getElementById('cot-cliente-dropdown').classList.remove('open');}
 document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap')) document.querySelectorAll('.search-select-dropdown').forEach(d=>d.classList.remove('open'));});
 function clearForm(type){
