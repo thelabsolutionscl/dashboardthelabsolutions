@@ -3226,8 +3226,20 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nlEditModal').style.display='none'">Cancelar</button>
+        <button class="btn btn-ghost btn-sm" onclick="nlPreviewEdit()">👁 Vista previa</button>
         <button class="btn btn-primary btn-sm" id="nlEditSaveBtn" onclick="nlEditSave()">Guardar cambios</button>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: vista previa del correo -->
+  <div id="nlPreviewModal" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.7);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:min(680px,96vw);height:min(86vh,860px);display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:600;color:var(--text)">👁 Vista previa del correo</span>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nlPreviewModal').style.display='none'">✕</button>
+      </div>
+      <iframe id="nlPreviewFrame" title="Vista previa del newsletter" style="flex:1;border:0;border-radius:0 0 12px 12px;background:#fff"></iframe>
     </div>
   </div>
 </div>
@@ -13445,7 +13457,7 @@ function renderNlCampaigns(){
     const f=c.fields, est=f['Estado']||'Borrador';
     const asunto=f['Asunto']||f['Campaña']||'(sin asunto)';
     const cuerpo=(f['Cuerpo (Markdown)']||'').toString();
-    const btns=[`<button class="btn btn-ghost btn-sm" onclick="nlEditOpen('${c.id}')">✏️ Ver/editar</button>`];
+    const btns=[`<button class="btn btn-ghost btn-sm" onclick="nlPreview('${c.id}')">👁 Vista previa</button>`,`<button class="btn btn-ghost btn-sm" onclick="nlEditOpen('${c.id}')">✏️ Ver/editar</button>`];
     if(est==='Borrador') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSetEstado('${c.id}','En revisión')">Pasar a revisión</button>`);
     if(est==='Borrador'||est==='En revisión') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSchedule('${c.id}')">📅 Programar</button>`);
     if(est==='Programada') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSchedule('${c.id}')">📅 Reprogramar</button>`);
@@ -13508,13 +13520,57 @@ async function nlSchedule(id){
   }catch(e){toast('No se pudo programar: '+e.message,'error');}
 }
 
-// Markdown muy básico → HTML (negritas, títulos, listas, saltos). Para el correo de prueba.
+// Markdown → HTML (títulos, negritas, listas, links, párrafos). Base para preview, prueba y el "Cuerpo HTML" que envía Make.
 function _nlMdToHtml(md){
-  let h=escapeHtml(md||'');
-  h=h.replace(/^#{1,3}\s*(.+)$/gm,'<h3 style="margin:14px 0 6px">$1</h3>');
-  h=h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-  h=h.replace(/^[-*]\s+(.+)$/gm,'• $1');
-  return h.replace(/\n/g,'<br>');
+  const inline=s=>escapeHtml(s)
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" style="color:#00a99d">$1</a>');
+  const lines=String(md||'').replace(/\r/g,'').split('\n');
+  let html='',inList=false;
+  const closeList=()=>{if(inList){html+='</ul>';inList=false;}};
+  for(const raw of lines){
+    const line=raw.trim();
+    if(!line){closeList();continue;}
+    let m;
+    if(m=line.match(/^###\s+(.+)/)){closeList();html+=`<h3 style="margin:18px 0 6px;font-size:16px">${inline(m[1])}</h3>`;}
+    else if(m=line.match(/^##\s+(.+)/)){closeList();html+=`<h2 style="margin:20px 0 8px;font-size:19px">${inline(m[1])}</h2>`;}
+    else if(m=line.match(/^#\s+(.+)/)){closeList();html+=`<h2 style="margin:20px 0 8px;font-size:21px">${inline(m[1])}</h2>`;}
+    else if(m=line.match(/^[-*•]\s+(.+)/)){if(!inList){html+='<ul style="margin:8px 0;padding-left:20px">';inList=true;}html+=`<li style="margin:3px 0">${inline(m[1])}</li>`;}
+    else{closeList();html+=`<p style="margin:0 0 12px">${inline(line)}</p>`;}
+  }
+  closeList();
+  return html||'<p style="color:#999">(sin contenido)</p>';
+}
+// Envuelve el cuerpo en la plantilla de correo con la marca + pie con baja. Es lo que se guarda en "Cuerpo HTML" y envía Make.
+function _nlEmailHtml(f){
+  const pre=escapeHtml(f['Preheader']||'');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>`+
+  `<body style="margin:0;background:#f4f4f5;padding:0">`+
+  (pre?`<span style="display:none;max-height:0;overflow:hidden;opacity:0">${pre}</span>`:'')+
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5"><tr><td align="center" style="padding:24px 12px">`+
+  `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e6e6e9">`+
+  `<tr><td style="background:#0b0b0c;padding:20px 28px"><span style="color:#fff;font-weight:800;font-size:16px;letter-spacing:.04em">THE LAB</span> <span style="color:#00d4cc;font-weight:800;font-size:16px">SOLUTIONS</span></td></tr>`+
+  `<tr><td style="padding:28px;font-family:system-ui,Arial,sans-serif;color:#18181b;font-size:15px;line-height:1.65">${_nlMdToHtml(f['Cuerpo (Markdown)']||'')}</td></tr>`+
+  `<tr><td style="padding:18px 28px;background:#fafafa;border-top:1px solid #eee;font-family:system-ui,Arial,sans-serif;color:#9a9aa2;font-size:11px;line-height:1.6">`+
+  `The Lab Solutions · Fabricación digital · Las Condes, Santiago, Chile<br>`+
+  `Recibes este correo porque te suscribiste en thelab.solutions. <a href="mailto:hola@thelab.solutions?subject=BAJA%20newsletter" style="color:#9a9aa2">Darme de baja</a>.`+
+  `</td></tr></table></td></tr></table></body></html>`;
+}
+function _nlShowPreview(html){
+  const m=document.getElementById('nlPreviewModal'), fr=document.getElementById('nlPreviewFrame');
+  if(!m||!fr) return;
+  fr.srcdoc=html; m.style.display='flex';
+}
+function nlPreview(id){
+  const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c){toast('Campaña no encontrada','error');return;}
+  _nlShowPreview(_nlEmailHtml(c.fields));
+}
+function nlPreviewGenerated(){
+  if(!_nlLastParsed){toast('Genera contenido primero','error');return;}
+  _nlShowPreview(_nlEmailHtml({'Asunto':_nlLastParsed.asunto,'Preheader':_nlLastParsed.preheader,'Cuerpo (Markdown)':_nlLastParsed.cuerpo}));
+}
+function nlPreviewEdit(){
+  _nlShowPreview(_nlEmailHtml({'Asunto':document.getElementById('nlEditAsunto').value,'Preheader':document.getElementById('nlEditPreheader').value,'Cuerpo (Markdown)':document.getElementById('nlEditCuerpo').value}));
 }
 async function nlSendTest(id){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
@@ -13524,7 +13580,7 @@ async function nlSendTest(id){
   if(!to) return;
   const f=c.fields;
   try{
-    const body=`<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.6;max-width:600px">${f['Preheader']?`<div style="color:#888;font-size:12px;margin-bottom:10px">${escapeHtml(f['Preheader'])}</div>`:''}${_nlMdToHtml(f['Cuerpo (Markdown)']||'')}</div>`;
+    const body=_nlEmailHtml(f);
     const r=await MAIL.post({action:'send',to,subject:'[PRUEBA] '+(f['Asunto']||f['Campaña']||'Newsletter'),body,from_name:'The Lab Solutions'});
     if(r&&!r.error) toast('✓ Prueba enviada a '+to,'success'); else throw new Error(r&&r.error||'Error desconocido');
   }catch(e){toast('No se pudo enviar la prueba: '+e.message,'error');}
@@ -13542,6 +13598,7 @@ async function nlEditSave(){
   if(!_nlEditId) return;
   const c=(state.nlCampaigns||[]).find(x=>x.id===_nlEditId); if(!c) return;
   const fields={'Asunto':document.getElementById('nlEditAsunto').value.slice(0,200),'Preheader':document.getElementById('nlEditPreheader').value.slice(0,200),'Cuerpo (Markdown)':document.getElementById('nlEditCuerpo').value.slice(0,90000)};
+  fields['Cuerpo HTML']=_nlEmailHtml(fields).slice(0,99000);
   const btn=document.getElementById('nlEditSaveBtn'); if(btn) btn.disabled=true;
   try{
     await airtableWriteTolerant('Newsletter_Campañas','PATCH',_nlEditId,fields);
@@ -13666,6 +13723,7 @@ async function nlGenerate(){
       <div class="ai-response" style="white-space:normal">${formatAgentReport(p.cuerpo||out)}</div>
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="nlSaveDraft()">💾 Guardar borrador</button>
+        <button class="btn btn-ghost btn-sm" onclick="nlPreviewGenerated()">👁 Vista previa</button>
         <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(_nlLastGen).then(()=>toast('Copiado ✓','success'))">Copiar todo</button>
       </div>`;
   }catch(e){res.innerHTML=`<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`;toast('Error: '+e.message,'error');}
@@ -13678,6 +13736,7 @@ async function nlSaveDraft(){
   const fields={'Campaña':`Newsletter ${mes}`,'Mes':mes,'Asunto':(p.asunto||'').slice(0,200),'Preheader':(p.preheader||'').slice(0,200),'Cuerpo (Markdown)':(p.cuerpo||'').slice(0,90000),'Estado':'Borrador','Generada por NEWSLETTER_AGENT':true};
   if(_nlLastSegment) fields['Segmento objetivo']=_nlLastSegment;
   if(_nlLastInput) fields['Notas']='Brief: '+_nlLastInput.slice(0,500);
+  fields['Cuerpo HTML']=_nlEmailHtml(fields).slice(0,99000);
   try{
     const rec=await airtableWriteTolerant('Newsletter_Campañas','POST',null,fields);
     if(rec&&rec.id){ state.nlCampaigns=state.nlCampaigns||[]; state.nlCampaigns.unshift(rec); } else { await nlLoad(); }

@@ -25,6 +25,9 @@ AUTO_PROCESS_LEADS = "true"
 # Auto-respuesta al lead (requiere secret RESEND_API_KEY). From debe ser dominio verificado en Resend.
 RESEND_FROM = "The Lab Solutions <hola@thelab.solutions>"
 WHATSAPP_NUMBER = "56928785039"
+# Newsletter: doble opt-in. Con RESEND_API_KEY configurado, /newsletter envía un correo
+# de confirmación y NO suscribe hasta que el usuario hace clic. Poner "false" para alta directa.
+NEWSLETTER_DOUBLE_OPTIN = "true"
 
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL
@@ -41,3 +44,5 @@ id = "c148848321344f60939fa71a51d050c6"
 #   LINKEDIN_WEBHOOK_KEY    (clave del webhook de LinkedIn vía Make/Zapier)
 #   TURNSTILE_SECRET        (opcional — verificación Cloudflare Turnstile)
 #   ANTHROPIC_API_KEY       (opcional — solo si AUTO_PROCESS_LEADS=true)
+#   RESEND_API_KEY          (opcional — auto-respuesta de leads + confirmación de newsletter)
+#   NEWSLETTER_SECRET       (opcional — firma tokens de confirmación/baja; si falta usa PUBLIC_LEAD_KEY)
