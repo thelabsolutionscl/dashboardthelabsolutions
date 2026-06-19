@@ -3200,6 +3200,40 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
 
+  <!-- DESTINATARIOS / SUSCRIPTORES -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-user-plus"/></svg> Destinatarios del newsletter</span>
+      <span class="badge badge-gray" id="nlSubCount">—</span>
+      <input id="nlSubSearch" oninput="renderNlSubscribers()" placeholder="Buscar por nombre o email…" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 9px;color:var(--text);font-size:12px;width:min(220px,40vw)">
+      <button class="btn btn-primary btn-sm" onclick="nlSubAddOpen()">+ Agregar</button>
+    </div>
+    <div id="nlSubsList" style="padding:4px 0;max-height:420px;overflow:auto">
+      <div style="padding:16px;color:var(--text3);font-size:12px">Carga los clientes (botón ↻ del Overview) para ver y gestionar tus destinatarios.</div>
+    </div>
+  </div>
+
+  <!-- MODAL: agregar / editar destinatario -->
+  <div id="nlSubModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:min(440px,94vw)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:600;color:var(--text)" id="nlSubModalTitle">Agregar destinatario</span>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nlSubModal').style.display='none'">✕</button>
+      </div>
+      <div style="padding:16px 18px">
+        <input type="hidden" id="nlSubId">
+        <div class="field-group"><label class="field-label">Nombre / Empresa</label><input class="field-input" id="nlSubNombre" placeholder="Ej: Eventos Andes SpA"></div>
+        <div class="field-group"><label class="field-label">Email *</label><input class="field-input" id="nlSubEmail" type="email" placeholder="correo@ejemplo.com"></div>
+        <div class="field-group"><label class="field-label">Rubro</label><input class="field-input" id="nlSubRubro" placeholder="Ej: Retail, Eventos, Educación…"></div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.5">Si el email ya existe en tu CRM, se suscribe a ese cliente en vez de duplicarlo.</div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nlSubModal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="nlSubSaveBtn" onclick="nlSubSave()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: programar -->
   <div id="nlDateModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);align-items:center;justify-content:center" onclick="if(event.target===this)nlDateCancel()">
     <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:20px;width:min(360px,92vw)">
@@ -13451,7 +13485,7 @@ function initNewsletter(){
   const mes=document.getElementById('nlGenMes'); if(mes&&!mes.value) mes.value=_nlMesActual();
   nlPopulateSegments();
   if(!_nlLoaded && getToken()) nlLoad();
-  else { renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); }
+  else { renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); renderNlSubscribers(); }
 }
 
 async function nlLoad(force){
@@ -13464,7 +13498,7 @@ async function nlLoad(force){
   state.nlCampaigns = await airtableFetch('Newsletter_Campañas',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._nlCampErr=true;else toast('No se pudieron cargar campañas: '+e.message,'error');return [];});
   state.nlEnvios    = await airtableFetch('Newsletter_Envios',1000).then(r=>r.records).catch(e=>{if(isMissing(e))state._nlEnvErr=true;else toast('No se pudieron cargar envíos: '+e.message,'error');return [];});
   _nlLoaded=true;
-  nlPopulateSegments(); renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience();
+  nlPopulateSegments(); renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); renderNlSubscribers();
 }
 
 // Audiencia = clientes del CRM con email y sin baja. "Suscritos" = opt-in explícito.
@@ -13500,6 +13534,71 @@ function renderNlKpis(){
   if(badge){if(hotPend.length>0){badge.textContent=hotPend.length;badge.style.display='';}else badge.style.display='none';}
 }
 
+// ── Destinatarios del newsletter (suscriptores del CRM: clientes con email + Suscrito newsletter) ──
+function _nlSubList(){
+  return (state.clientes||[]).filter(c=>/@/.test(String(c.fields['Email']||''))&&c.fields['Suscrito newsletter']===true&&c.fields['Baja newsletter']!==true);
+}
+function renderNlSubscribers(){
+  const el=document.getElementById('nlSubsList'); if(!el) return;
+  let subs=_nlSubList();
+  const cnt=document.getElementById('nlSubCount'); if(cnt) cnt.textContent=subs.length+' suscrito'+(subs.length!==1?'s':'');
+  const q=(document.getElementById('nlSubSearch')?.value||'').trim().toLowerCase();
+  if(q) subs=subs.filter(c=>{const f=c.fields;return (String(f['Empresa']||'')+' '+String(f['Contacto']||'')+' '+String(f['Email']||'')).toLowerCase().includes(q);});
+  if(!(state.clientes||[]).length){el.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Carga los clientes (botón ↻ del Overview) para gestionar destinatarios.</div>';return;}
+  if(!subs.length){el.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">'+(q?'Ningún destinatario coincide con la búsqueda.':'Aún no hay destinatarios suscritos. Usa “+ Agregar” o suscribe clientes desde su ficha.')+'</div>';return;}
+  subs.sort((a,b)=>String(a.fields['Empresa']||a.fields['Contacto']||'').localeCompare(String(b.fields['Empresa']||b.fields['Contacto']||'')));
+  el.innerHTML=subs.map(c=>{const f=c.fields;const nom=escapeHtml(f['Empresa']||f['Contacto']||'(sin nombre)');const em=escapeHtml(f['Email']||'');const ru=f['Industria / Rubro']?`<span class="badge badge-gray" style="font-size:8px;margin-left:6px">${escapeHtml(f['Industria / Rubro'])}</span>`:'';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 16px;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}${ru}</div><div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${em}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="nlSubEditOpen('${c.id}')" title="Editar destinatario">✏️</button>
+      <button class="btn btn-ghost btn-sm" onclick="nlSubRemove('${c.id}')" title="Quitar de la lista (dar de baja)" style="color:var(--danger)">🚫</button>
+    </div>`;}).join('');
+}
+function nlSubAddOpen(){['nlSubId','nlSubNombre','nlSubEmail','nlSubRubro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});const t=document.getElementById('nlSubModalTitle');if(t)t.textContent='Agregar destinatario';document.getElementById('nlSubModal').style.display='flex';setTimeout(()=>document.getElementById('nlSubEmail')?.focus(),50);}
+function nlSubEditOpen(id){const c=(state.clientes||[]).find(x=>x.id===id);if(!c)return;const f=c.fields;document.getElementById('nlSubId').value=id;document.getElementById('nlSubNombre').value=f['Empresa']||f['Contacto']||'';document.getElementById('nlSubEmail').value=f['Email']||'';document.getElementById('nlSubRubro').value=f['Industria / Rubro']||'';document.getElementById('nlSubModalTitle').textContent='Editar destinatario';document.getElementById('nlSubModal').style.display='flex';}
+async function nlSubSave(){
+  const id=document.getElementById('nlSubId').value;
+  const nombre=(document.getElementById('nlSubNombre').value||'').trim();
+  const email=(document.getElementById('nlSubEmail').value||'').trim();
+  const rubro=(document.getElementById('nlSubRubro').value||'').trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Email inválido','error');return;}
+  const btn=document.getElementById('nlSubSaveBtn');const prev=btn.textContent;btn.disabled=true;btn.textContent='Guardando…';
+  try{
+    if(id){
+      const fields={'Email':email,'Suscrito newsletter':true,'Baja newsletter':false};
+      if(nombre)fields['Empresa']=nombre; if(rubro)fields['Industria / Rubro']=rubro;
+      const res=await airtableWrite('Clientes','PATCH',id,fields);
+      const c=(state.clientes||[]).find(x=>x.id===id);if(c)Object.assign(c.fields,res.fields||fields);
+      toast('Destinatario actualizado ✓','success');
+    } else {
+      const exist=(state.clientes||[]).find(x=>String(x.fields['Email']||'').toLowerCase()===email.toLowerCase());
+      if(exist){
+        const fields={'Suscrito newsletter':true,'Baja newsletter':false};if(rubro&&!exist.fields['Industria / Rubro'])fields['Industria / Rubro']=rubro;
+        const res=await airtableWrite('Clientes','PATCH',exist.id,fields);Object.assign(exist.fields,res.fields||fields);
+        toast('Cliente existente suscrito al newsletter ✓','success');
+      } else {
+        const fields={'Empresa':nombre||email,'Email':email,'Suscrito newsletter':true,'Etapa venta':'Lead nuevo'};if(rubro)fields['Industria / Rubro']=rubro;
+        const res=await airtableWrite('Clientes','POST',null,fields);
+        state.clientes=state.clientes||[];state.clientes.unshift(res);if(state.clientesByIdRec)state.clientesByIdRec[res.id]=res;
+        toast('Destinatario agregado ✓','success');
+      }
+    }
+    document.getElementById('nlSubModal').style.display='none';
+    renderNlSubscribers();renderNlKpis();nlPopulateSegments();renderNlAudience();
+  }catch(e){toast('No se pudo guardar: '+e.message,'error');}
+  finally{btn.disabled=false;btn.textContent=prev;}
+}
+async function nlSubRemove(id){
+  const c=(state.clientes||[]).find(x=>x.id===id);if(!c)return;
+  const nom=c.fields['Empresa']||c.fields['Contacto']||c.fields['Email']||'este destinatario';
+  if(!confirm('¿Quitar a "'+nom+'" de la lista del newsletter?\n\nSe da de baja (no recibirá más campañas), pero el cliente sigue en tu CRM.'))return;
+  try{
+    const fields={'Suscrito newsletter':false,'Baja newsletter':true};
+    const res=await airtableWrite('Clientes','PATCH',id,fields);Object.assign(c.fields,res.fields||fields);
+    toast('Quitado de la lista ✓','info');
+    renderNlSubscribers();renderNlKpis();nlPopulateSegments();renderNlAudience();
+  }catch(e){toast('No se pudo quitar: '+e.message,'error');}
+}
 function _nlEstBadge(e){return `<span class="badge ${NL_ESTADO_BADGE[e]||'badge-gray'}">${escapeHtml(e||'Borrador')}</span>`;}
 function _nlFmtFecha(d){if(!d)return '—';const dt=new Date(d);if(isNaN(dt))return escapeHtml(String(d));return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'});}
 
