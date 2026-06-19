@@ -73,6 +73,8 @@ falta un campo, no rompe — muestra el estado guía. Ya están creadas.
 | Media URL | url | imagen/video a publicar |
 | Agente | singleLineText | agente que lo generó |
 | Pedido | singleLineText | proyecto de origen (referencia) |
+| Engagement | number | interacciones tras publicar (Make) — alimenta el reciclaje de contenido |
+| Link | url | enlace destino con UTMs (atribución de clics → leads) |
 
 ### `Social_Interactions` — `tblIp8LFCWG3JJ5l8` (bandeja)
 | Campo | Tipo | Notas |
@@ -84,6 +86,7 @@ falta un campo, no rompe — muestra el estado guía. Ya están creadas.
 | Respuesta sugerida | multilineText | la rellena `COMMUNITY_AGENT` |
 | Estado | singleSelect | Pendiente · Respondido · Ignorado |
 | Es lead | checkbox | lo marca el agente |
+| Lead creado | checkbox | el dashboard lo marca al crear el Cliente — **anti-duplicado durable** |
 | Intención | singleLineText | consulta_precio / interes_producto / soporte / elogio / spam / otro |
 | Fecha | dateTime | |
 
@@ -180,5 +183,25 @@ Sobre la base anterior se ejecutó una auditoría y se añadió:
   `Social_Posts`, `Social_Interactions`, `Social_Metrics`, `Clientes` y `Agent_Queue`
   (`RBAC.canWriteTable` + `RBAC.socialWriteTables`). Así, al convertir una interacción
   en lead, `marketing` también lo encola para scoring igual que el resto de roles.
+
+### Auditoría 3 — features avanzadas
+
+- **Edición inline** de cada publicación (modal): red, estado, fecha, copy, hashtags,
+  media, objetivo y link; con **eliminar**. Se abre desde la lista (✏ Editar) o clic
+  en un chip del calendario.
+- **Flujo de aprobación**: estado `En revisión` entre Borrador y Programado
+  (Borrador → 👀 A revisión → ✓ Aprobar y programar).
+- **Programación masiva** (`⚙ Auto-programar`): reparte los borradores 1 por día desde
+  mañana a la mejor hora por red.
+- **Mejor momento para publicar**: mejor día por red desde `Social_Metrics`
+  (engagement) + hora sugerida; botón ✨ en el modal de fecha.
+- **Constructor de UTM** en el editor → campo `Link` (`utm_source=red&utm_medium=social&utm_campaign=…`).
+- **Reciclar contenido**: top performers (`Social_Posts` Publicados por `Engagement`)
+  con re-publicación en un clic (clona como Borrador).
+- **Biblioteca de hashtags** por red (localStorage): guardar/insertar sets desde el editor.
+- **Sentimiento en la bandeja**: detecta quejas (heurístico + `Intención`), las prioriza
+  arriba y las marca (⚠ queja); contador de quejas en la cabecera.
+- **Anti-duplicado de leads durable** (campo `Social_Interactions."Lead creado"`) y
+  guards de concurrencia (`_redesLoadBusy`, `_redesReplyBusy`).
 </content>
 </invoke>

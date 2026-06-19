@@ -1532,6 +1532,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <symbol id="icon-correo" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="2 7 12 13 22 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="icon-redes" viewBox="0 0 24 24" fill="none"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke-linecap="round"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke-linecap="round"/></symbol>
 <symbol id="icon-newsletter" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="9" x2="17" y2="9" stroke-linecap="round"/><line x1="7" y1="13" x2="17" y2="13" stroke-linecap="round"/><line x1="7" y1="17" x2="13" y2="17" stroke-linecap="round"/></symbol>
+<symbol id="ig-glyph" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.4" cy="6.6" r="1.25" fill="currentColor"/></symbol>
+<symbol id="li-glyph" viewBox="0 0 24 24"><path fill="currentColor" d="M4.98 3.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM3 9.2h4V21H3zM9 9.2h3.8v1.65h.05c.53-.95 1.83-1.95 3.77-1.95 4.03 0 4.78 2.6 4.78 6V21H20.6v-5.3c0-1.27-.02-2.9-1.78-2.9-1.78 0-2.05 1.37-2.05 2.8V21H9z"/></symbol>
+<symbol id="tt-glyph" viewBox="0 0 24 24"><path fill="currentColor" d="M16.2 3c.32 2.3 1.78 3.86 4 4.05v2.96c-1.46.05-2.84-.42-4-1.2v5.86A5.83 5.83 0 1110.5 9v3.07a2.78 2.78 0 102 2.67V3z"/></symbol>
+<symbol id="fb-glyph" viewBox="0 0 24 24"><path fill="currentColor" d="M22 12a10 10 0 10-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.44 2.89h-2.34v6.99A10 10 0 0022 12z"/></symbol>
 </defs></svg>
 <!-- ── LOGIN PAGE ── -->
 <div id="loginPage">
@@ -2860,22 +2864,48 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 </div>
 
 <!-- REDES SOCIALES -->
+<style id="redes-styles">
+/* Redes Sociales — capa visual amigable */
+#tab-redes .card{border-radius:14px;}
+#tab-redes .kpi-card{border-radius:12px;}
+.redes-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1;letter-spacing:.2px;border:1px solid;}
+.redes-pill svg{width:12px;height:12px;flex-shrink:0;}
+.redes-kpi{display:flex;align-items:center;gap:10px;}
+.redes-kpi .ico{font-size:20px;line-height:1;filter:saturate(1.1);}
+.redes-post{transition:background .15s ease;}
+.redes-post:hover{background:var(--surface2);}
+.redes-empty{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:30px 22px;color:var(--text3);font-size:12px;line-height:1.7;}
+.redes-empty .ico{font-size:34px;opacity:.9;}
+.redes-empty b{color:var(--text2);font-weight:600;}
+.redes-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.25);}
+.redes-cal-cell{transition:border-color .15s ease,background .15s ease;}
+.redes-cal-cell:hover{border-color:var(--accent)!important;}
+.redes-cal-chip{transition:transform .12s ease,box-shadow .12s ease;}
+.redes-cal-chip:hover{transform:translateY(-1px);box-shadow:0 3px 9px rgba(0,0,0,.35);}
+.redes-nethead{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+</style>
 <div class="tab-panel" id="tab-redes">
   <div class="section-header">
     <div>
       <div class="section-title">Redes Sociales</div>
-      <div class="section-desc">Planifica, genera y programa contenido para Instagram, LinkedIn, TikTok y Facebook. Responde comentarios y DMs con IA, y convierte interacciones en leads de tu CRM.</div>
+      <div class="section-desc">Planifica, genera y programa contenido. Responde comentarios y DMs con IA, y convierte interacciones en leads de tu CRM.</div>
+      <div class="redes-nethead">
+        <span class="redes-pill" style="background:#e1306c22;color:#e1306c;border-color:#e1306c66"><svg viewBox="0 0 24 24"><use href="#ig-glyph"/></svg>Instagram</span>
+        <span class="redes-pill" style="background:#0a66c222;color:#3b9bff;border-color:#0a66c266"><svg viewBox="0 0 24 24"><use href="#li-glyph"/></svg>LinkedIn</span>
+        <span class="redes-pill" style="background:#fe2c5522;color:#fe2c55;border-color:#fe2c5566"><svg viewBox="0 0 24 24"><use href="#tt-glyph"/></svg>TikTok</span>
+        <span class="redes-pill" style="background:#1877f222;color:#4a9bff;border-color:#1877f266"><svg viewBox="0 0 24 24"><use href="#fb-glyph"/></svg>Facebook</span>
+      </div>
     </div>
     <button class="btn btn-ghost btn-sm" onclick="redesLoad(true)" style="flex-shrink:0">↻ Actualizar</button>
   </div>
 
   <!-- KPIs -->
   <div class="kpi-grid" id="redesKpis">
-    <div class="kpi-card green"><div class="kpi-label">Publicados (mes)</div><div class="kpi-value" id="redesKpiPub">—</div></div>
-    <div class="kpi-card yellow"><div class="kpi-label">Programados</div><div class="kpi-value" id="redesKpiProg">—</div></div>
-    <div class="kpi-card purple"><div class="kpi-label">Borradores</div><div class="kpi-value" id="redesKpiBorr">—</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">Interacciones pend.</div><div class="kpi-value" id="redesKpiInt">—</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Leads desde redes</div><div class="kpi-value" id="redesKpiLeads">—</div></div>
+    <div class="kpi-card green"><div class="redes-kpi"><span class="ico">🚀</span><div><div class="kpi-label">Publicados (mes)</div><div class="kpi-value" id="redesKpiPub">—</div></div></div></div>
+    <div class="kpi-card yellow"><div class="redes-kpi"><span class="ico">🗓️</span><div><div class="kpi-label">Programados</div><div class="kpi-value" id="redesKpiProg">—</div></div></div></div>
+    <div class="kpi-card purple"><div class="redes-kpi"><span class="ico">✏️</span><div><div class="kpi-label">Borradores</div><div class="kpi-value" id="redesKpiBorr">—</div></div></div></div>
+    <div class="kpi-card orange"><div class="redes-kpi"><span class="ico">💬</span><div><div class="kpi-label">Interacciones pend.</div><div class="kpi-value" id="redesKpiInt">—</div></div></div></div>
+    <div class="kpi-card red"><div class="redes-kpi"><span class="ico">🎯</span><div><div class="kpi-label">Leads desde redes</div><div class="kpi-value" id="redesKpiLeads">—</div></div></div></div>
   </div>
 
   <!-- GENERADOR RÁPIDO -->
@@ -2939,19 +2969,21 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm active-filter" id="redesBtnLista" onclick="redesSetView('lista')">Lista</button>
         <button class="btn btn-ghost btn-sm" id="redesBtnCal" onclick="redesSetView('cal')">📅 Calendario</button>
-        <select class="field-select" id="redesFiltroRed" onchange="renderRedesPosts()" style="font-size:11px;padding:4px 8px;width:auto">
+        <select class="field-select" id="redesFiltroRed" onchange="redesApplyFilters()" style="font-size:11px;padding:4px 8px;width:auto">
           <option value="">Todas las redes</option>
           <option value="Instagram">Instagram</option>
           <option value="LinkedIn">LinkedIn</option>
           <option value="TikTok">TikTok</option>
           <option value="Facebook">Facebook</option>
         </select>
-        <select class="field-select" id="redesFiltroEstado" onchange="renderRedesPosts()" style="font-size:11px;padding:4px 8px;width:auto">
+        <select class="field-select" id="redesFiltroEstado" onchange="redesApplyFilters()" style="font-size:11px;padding:4px 8px;width:auto">
           <option value="">Todos</option>
           <option value="Borrador">Borradores</option>
+          <option value="En revisión">En revisión</option>
           <option value="Programado">Programados</option>
           <option value="Publicado">Publicados</option>
         </select>
+        <button class="btn btn-ghost btn-sm" onclick="redesAutoSchedule()" title="Auto-programar todos los borradores, 1 por día a la mejor hora por red">⚙ Auto-programar</button>
       </div>
     </div>
     <div id="redesPostsList" style="padding:8px 0">
@@ -2983,16 +3015,79 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="redesMetrics" style="padding:14px 16px">
       <div style="padding:8px;color:var(--text3);font-size:12px">Sin métricas cargadas (tabla <code>Social_Metrics</code>). Aliméntala con Make desde cada red para ver alcance, engagement, clics y leads por plataforma.</div>
     </div>
+    <div style="padding:0 16px 14px">
+      <div style="font-size:11px;color:var(--text2);font-weight:600;margin:4px 0 6px">⏰ Mejor momento para publicar</div>
+      <div id="redesBestTimes"></div>
+    </div>
+  </div>
+
+  <!-- RECICLAR CONTENIDO -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title">♻️ Reciclar contenido</span>
+      <span class="badge badge-gray" style="font-size:9px">top performers</span>
+    </div>
+    <div id="redesRecycle" style="padding:8px 0">
+      <div style="padding:16px;color:var(--text3);font-size:12px">Tus publicaciones <b>Publicadas</b> con más engagement aparecerán aquí para re-publicarlas con un clic.</div>
+    </div>
   </div>
 
   <!-- MODAL: date-picker para programar -->
   <div id="redesDateModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);align-items:center;justify-content:center" onclick="if(event.target===this)redesDateCancel()">
     <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:20px;width:min(360px,92vw)">
       <div id="redesDateLabel" style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--text)">¿Cuándo publicar?</div>
-      <input type="datetime-local" id="redesDateInput" class="field-input" style="width:100%;margin-bottom:14px">
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn btn-ghost btn-sm" onclick="redesDateCancel()">Cancelar</button>
-        <button class="btn btn-primary btn-sm" onclick="redesDateConfirm()">Confirmar</button>
+      <input type="datetime-local" id="redesDateInput" class="field-input" style="width:100%;margin-bottom:10px">
+      <div style="display:flex;gap:8px;justify-content:space-between;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="redesDateUseBest()" title="Usa el mejor día/hora para esta red">✨ Mejor horario</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="redesDateCancel()">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="redesDateConfirm()">Confirmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: editar publicación -->
+  <div id="redesEditModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);align-items:center;justify-content:center" onclick="if(event.target===this)redesCloseEdit()">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:min(560px,94vw);max-height:90vh;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:600;color:var(--text)">✏️ Editar publicación</span>
+        <button class="btn btn-ghost btn-sm" onclick="redesCloseEdit()">✕</button>
+      </div>
+      <div style="padding:14px 18px;overflow:auto">
+        <div class="ss-form-grid">
+          <div class="field-group"><label class="field-label">Red</label>
+            <select class="field-select" id="redesEditRed"><option>Instagram</option><option>LinkedIn</option><option>TikTok</option><option>Facebook</option></select></div>
+          <div class="field-group"><label class="field-label">Estado</label>
+            <select class="field-select" id="redesEditEstado"><option>Borrador</option><option>En revisión</option><option>Programado</option><option>Publicado</option><option>Archivado</option></select></div>
+          <div class="field-group"><label class="field-label">Fecha programada</label>
+            <input type="datetime-local" class="field-input" id="redesEditFecha"></div>
+          <div class="field-group"><label class="field-label">Objetivo</label>
+            <input class="field-input" id="redesEditObjetivo" placeholder="alcance / leads / marca"></div>
+          <div class="field-group" style="grid-column:1/-1"><label class="field-label">Copy</label>
+            <textarea class="field-textarea" id="redesEditCopy" rows="5"></textarea></div>
+          <div class="field-group" style="grid-column:1/-1"><label class="field-label">Hashtags</label>
+            <input class="field-input" id="redesEditHashtags">
+            <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
+              <select class="field-select" id="redesEditHashSet" style="font-size:11px;padding:3px 6px;width:auto" onchange="redesHashtagInsert()"><option value="">Sets guardados…</option></select>
+              <button class="btn btn-ghost btn-sm" onclick="redesHashtagSave()">💾 Guardar set</button>
+            </div></div>
+          <div class="field-group" style="grid-column:1/-1"><label class="field-label">Media URL (imagen/video)</label>
+            <input class="field-input" id="redesEditMedia" placeholder="https://…"></div>
+          <div class="field-group" style="grid-column:1/-1"><label class="field-label">Link destino (con UTM para atribuir clics)</label>
+            <input class="field-input" id="redesEditLink" placeholder="https://thelab.solutions/…">
+            <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">
+              <input class="field-input" id="redesUtmBase" placeholder="URL base (sin UTM)" style="flex:1;min-width:150px;font-size:11px;padding:4px 8px">
+              <button class="btn btn-ghost btn-sm" onclick="redesBuildUtm()">🔗 Generar UTM</button>
+            </div></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="redesDeletePost()">🗑 Eliminar</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="redesCloseEdit()">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="redesSaveEdit()">Guardar</button>
+        </div>
       </div>
     </div>
   </div>
@@ -12712,31 +12807,40 @@ function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classLi
 // ── REDES SOCIALES ─────────────────────────────────────────────
 let _redesLoaded=false, _redesLastGen='', _redesLastAgent='', _redesLastMedia='';
 let _redesView='lista', _redesCalMonth=null, _redesReportText='', _redesDateResolve=null, _redesLastPedido='';
+let _redesReplyBusy=false, _redesLoadBusy=false;   // guards anti-concurrencia (carga y llamadas a Claude)
+let _redesEditId=null, _redesDateRed='';           // edición inline y red del modal de fecha
 const _redesLeadCreated=new Set();   // interacciones ya convertidas en lead (anti-duplicado)
 const REDES_NETS=['Instagram','LinkedIn','TikTok','Facebook'];
 const REDES_ICON={Instagram:'📷',LinkedIn:'in',TikTok:'♪',Facebook:'f'};
-const REDES_COLOR={Instagram:'#e1306c',LinkedIn:'#0a66c2',TikTok:'#000',Facebook:'#1877f2'};
+// Colores legibles sobre fondo oscuro (TikTok era #000 → invisible; azules aclarados).
+const REDES_COLOR={Instagram:'#e1306c',LinkedIn:'#3b9bff',TikTok:'#fe2c55',Facebook:'#4a9bff'};
+const REDES_GLYPH={Instagram:'ig-glyph',LinkedIn:'li-glyph',TikTok:'tt-glyph',Facebook:'fb-glyph'};
+const REDES_BEST_HOUR={Instagram:19,LinkedIn:9,TikTok:20,Facebook:13};   // hora sugerida por red (afinable con datos)
 const _redesPad=n=>String(n).padStart(2,'0');
 const _redesDayKey=dt=>`${dt.getFullYear()}-${_redesPad(dt.getMonth()+1)}-${_redesPad(dt.getDate())}`;
 
 function initRedes(){
   redesPopulatePedidos();
   if(!_redesLoaded && getToken()) redesLoad();
-  else { renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); }
+  else { renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); renderRedesBestTimes(); renderRedesRecycle(); }
 }
 
 async function redesLoad(force){
   if(!getToken()){toast('Falta el token de Airtable (Mi cuenta)','error');return;}
-  const loadingHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
-  if(force){const pe=document.getElementById('redesPostsList');if(pe)pe.innerHTML=loadingHTML;const ie=document.getElementById('redesInboxList');if(ie)ie.innerHTML=loadingHTML;}
-  // Lecturas tolerantes: distingue "tabla no existe" (estado guía) de un error de red (toast).
-  state._socialPostsErr=false; state._socialIntErr=false;
-  const isMissing=e=>/not ?found|could ?not|no such|table|404|NOT_FOUND|invalid permissions|not authorized|403/i.test(String((e&&e.message)||''));
-  state.socialPosts = await airtableFetch('Social_Posts',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialPostsErr=true;else toast('No se pudieron cargar publicaciones: '+e.message,'error');return [];});
-  state.socialInteractions = await airtableFetch('Social_Interactions',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialIntErr=true;else toast('No se pudieron cargar interacciones: '+e.message,'error');return [];});
-  state.socialMetrics = await airtableFetch('Social_Metrics',365).then(r=>r.records).catch(()=>[]);
-  _redesLoaded=true;
-  renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics();
+  if(_redesLoadBusy) return;   // evita recargas solapadas (spam del botón Actualizar)
+  _redesLoadBusy=true;
+  try{
+    const loadingHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
+    if(force){const pe=document.getElementById('redesPostsList');if(pe)pe.innerHTML=loadingHTML;const ie=document.getElementById('redesInboxList');if(ie)ie.innerHTML=loadingHTML;}
+    // Lecturas tolerantes: distingue "tabla no existe" (estado guía) de un error de red (toast).
+    state._socialPostsErr=false; state._socialIntErr=false;
+    const isMissing=e=>/not ?found|could ?not|no such|table|404|NOT_FOUND|invalid permissions|not authorized|403/i.test(String((e&&e.message)||''));
+    state.socialPosts = await airtableFetch('Social_Posts',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialPostsErr=true;else toast('No se pudieron cargar publicaciones: '+e.message,'error');return [];});
+    state.socialInteractions = await airtableFetch('Social_Interactions',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialIntErr=true;else toast('No se pudieron cargar interacciones: '+e.message,'error');return [];});
+    state.socialMetrics = await airtableFetch('Social_Metrics',365).then(r=>r.records).catch(()=>[]);
+    _redesLoaded=true;
+    renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); renderRedesBestTimes(); renderRedesRecycle();
+  }finally{ _redesLoadBusy=false; }
 }
 
 // Pobla el selector de pedidos entregados (idea: generar contenido desde tu propia producción).
@@ -12774,18 +12878,18 @@ function _redesFmtFecha(d){
 }
 function _redesChip(red){
   const c=REDES_COLOR[red];
-  if(!c) return `<span class="badge badge-gray">${escapeHtml(red||'—')}</span>`;
-  return `<span class="badge" style="background:${c}1a;color:${c};border-color:${c}55">${escapeHtml(red||'—')}</span>`;
+  if(!c) return `<span class="redes-pill" style="background:var(--surface3);color:var(--text2);border-color:var(--border2)">${escapeHtml(red||'—')}</span>`;
+  const g=REDES_GLYPH[red];
+  return `<span class="redes-pill" style="background:${c}22;color:${c};border-color:${c}66">${g?`<svg viewBox="0 0 24 24"><use href="#${g}"/></svg>`:''}${escapeHtml(red)}</span>`;
 }
 
 function renderRedesPosts(){
   const el=document.getElementById('redesPostsList'); if(!el) return;
   let posts=(state.socialPosts||[]).slice();
   if(!posts.length){
-    el.innerHTML=`<div style="padding:18px;color:var(--text3);font-size:12px;line-height:1.7">
-      No hay publicaciones aún${state._socialPostsErr?' (o falta crear la tabla <code>Social_Posts</code> en Airtable)':''}.
-      <br>Genera contenido arriba y pulsa <b>“Guardar como borrador”</b> para que aparezca aquí en el calendario.
-      <br><span style="color:var(--text2)">Campos esperados: Red · Copy · Estado (Borrador/Programado/Publicado) · Fecha programada · Hashtags · Objetivo · Media URL · Agente</span>
+    el.innerHTML=`<div class="redes-empty"><span class="ico">🗓️</span>
+      <div>Aún no hay publicaciones${state._socialPostsErr?' (o falta crear la tabla <code>Social_Posts</code>)':''}.</div>
+      <div>Usa el <b>Generador de contenido</b> de arriba y pulsa <b>“Guardar borrador”</b> para verlas aquí.</div>
     </div>`; return;
   }
   const fRed=document.getElementById('redesFiltroRed')?.value||'';
@@ -12802,14 +12906,22 @@ function renderRedesPosts(){
     const fecha=f['Fecha programada']||f['Fecha publicación']||'';
     const media=safeHref(f['Media URL']||'');
     const btns=[];
-    if(e==='Borrador') btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSchedule('${p.id}')">📅 Programar</button>`);
+    if(e==='Borrador'){
+      btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','En revisión')">👀 A revisión</button>`);
+      btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSchedule('${p.id}')">📅 Programar</button>`);
+    }
+    if(e==='En revisión'){
+      btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSchedule('${p.id}')">✓ Aprobar y programar</button>`);
+      btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','Borrador')">↩ A borrador</button>`);
+    }
     if(e==='Programado'){
       btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSchedule('${p.id}')">📅 Reagendar</button>`);
       btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','Publicado')">Marcar publicado ✓</button>`);
     }
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesOpenEdit('${p.id}')">✏ Editar</button>`);
     btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesCopyPost('${p.id}')">Copiar copy</button>`);
-    return `<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px">
-      ${media?`<a href="${media}" target="_blank" rel="noopener" style="flex-shrink:0">${_redesIsImg(media)?`<img loading="lazy" src="${media}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`:`<div style="width:64px;height:64px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;background:var(--surface3);font-size:20px">🎬</div>`}</a>`:''}
+    return `<div class="redes-post" style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px">
+      ${media?`<a href="${media}" target="_blank" rel="noopener" style="flex-shrink:0">${_redesIsImg(media)?`<img loading="lazy" src="${media}" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--border)">`:`<div style="width:64px;height:64px;border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;background:var(--surface3);font-size:20px">🎬</div>`}</a>`:''}
       <div style="flex:1;min-width:0">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
         ${_redesChip(red)} ${estadoBadge(e)}
@@ -12862,6 +12974,7 @@ function redesDateCancel(){
 // Programa una publicación CON fecha/hora (sin fecha, Make no sabría cuándo publicar).
 async function redesSchedule(id,presetIso){
   const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+  _redesDateRed=p.fields['Red']||'';
   const iso=presetIso||await redesDatePicker('¿Cuándo publicar este post?',p.fields['Fecha programada']||null);
   if(!iso) return;
   try{
@@ -12889,12 +13002,20 @@ function redesSetView(mode){
 function redesCalNav(delta){
   const b=_redesCalMonth||new Date(); _redesCalMonth=new Date(b.getFullYear(),b.getMonth()+delta,1); renderRedesCalendarGrid();
 }
+// Refresca la vista activa al cambiar los filtros (lista o calendario).
+function redesApplyFilters(){ if(_redesView==='cal') renderRedesCalendarGrid(); else renderRedesPosts(); }
 function renderRedesCalendarGrid(){
   const el=document.getElementById('redesPostsCal'); if(!el) return;
   if(!_redesCalMonth){const n=new Date();_redesCalMonth=new Date(n.getFullYear(),n.getMonth(),1);}
   const base=_redesCalMonth, year=base.getFullYear(), month=base.getMonth();
+  const fRed=document.getElementById('redesFiltroRed')?.value||'';
+  const fEst=document.getElementById('redesFiltroEstado')?.value||'';
   const byDay={};
-  (state.socialPosts||[]).forEach(p=>{const d=p.fields['Fecha programada']||p.fields['Fecha publicación'];if(!d)return;const dt=new Date(d);if(isNaN(dt))return;const k=_redesDayKey(dt);(byDay[k]=byDay[k]||[]).push(p);});
+  (state.socialPosts||[]).forEach(p=>{
+    const e=p.fields['Estado']||p.fields['Estado post']||'';
+    if((fRed&&p.fields['Red']!==fRed)||(fEst&&e!==fEst)) return;
+    const d=p.fields['Fecha programada']||p.fields['Fecha publicación'];if(!d)return;const dt=new Date(d);if(isNaN(dt))return;const k=_redesDayKey(dt);(byDay[k]=byDay[k]||[]).push(p);
+  });
   const startDow=(new Date(year,month,1).getDay()+6)%7; // lunes=0
   const dim=new Date(year,month+1,0).getDate();
   const monthName=base.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
@@ -12905,8 +13026,8 @@ function renderRedesCalendarGrid(){
   for(let day=1;day<=dim;day++){
     const dt=new Date(year,month,day), key=_redesDayKey(dt), lst=byDay[key]||[];
     const chips=lst.map(p=>{const f=p.fields,red=f['Red']||'',c=REDES_COLOR[red]||'#888',txt=(f['Copy']||red||'').slice(0,22);
-      return `<div draggable="true" ondragstart="redesDragStart(event,'${p.id}')" title="${escapeHtml((red||'—')+' · '+(f['Estado']||''))}" style="font-size:9px;background:${c}22;color:${c};border-left:2px solid ${c};border-radius:3px;padding:1px 4px;margin:2px 0;cursor:grab;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(txt)}</div>`;}).join('');
-    cells+=`<div ondragover="redesAllowDrop(event)" ondrop="redesDropOnDay(event,'${key}')" style="min-height:62px;border:1px solid ${key===todayKey?'var(--accent)':'var(--border)'};border-radius:6px;padding:3px;background:var(--surface2)"><div style="font-size:10px;color:var(--text3);text-align:right">${day}</div>${chips}</div>`;
+      return `<div class="redes-cal-chip" draggable="true" ondragstart="redesDragStart(event,'${p.id}')" onclick="redesOpenEdit('${p.id}')" title="${escapeHtml((red||'—')+' · '+(f['Estado']||'')+' — clic para editar, arrastra para reprogramar')}" style="font-size:9px;background:${c}22;color:${c};border-left:3px solid ${c};border-radius:5px;padding:2px 5px;margin:2px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(txt)}</div>`;}).join('');
+    cells+=`<div class="redes-cal-cell" ondragover="redesAllowDrop(event)" ondrop="redesDropOnDay(event,'${key}')" style="min-height:64px;border:1px solid ${key===todayKey?'var(--accent)':'var(--border)'};border-radius:9px;padding:4px;background:var(--surface2)"><div style="font-size:10px;color:${key===todayKey?'var(--accent)':'var(--text3)'};text-align:right;font-weight:${key===todayKey?'700':'400'}">${day}</div>${chips}</div>`;
   }
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <button class="btn btn-ghost btn-sm" onclick="redesCalNav(-1)">‹</button>
@@ -12930,28 +13051,45 @@ async function redesDropOnDay(ev,dayKey){
   await redesSchedule(id,dt.toISOString());
 }
 
+// Sentimiento heurístico: prioriza quejas (negativo) en la bandeja.
+function _redesSentiment(i){
+  const f=i.fields, intent=(f['Intención']||'').toLowerCase();
+  if(/soporte|queja|reclamo/.test(intent)) return 'neg';
+  const msg=(f['Mensaje']||'').toLowerCase();
+  if(/problema|reclamo|p[eé]simo|pesimo|terrible|malo|mala|horrible|estafa|fraude|no lleg|no me lleg|roto|rota|da[ñn]ad|atras|tarde|nunca lleg|enojad|molest|deficiente|denunci|devoluci|no funciona|no sirve/.test(msg)) return 'neg';
+  if(/graci|incre[ií]ble|excelente|genial|hermos|encant|🔥|❤|😍|perfect|maravillos|lo mejor|felicit|amo esto|qued[oó] hermos/.test(msg)) return 'pos';
+  return 'neu';
+}
 function renderRedesInbox(){
   const el=document.getElementById('redesInboxList'), cnt=document.getElementById('redesInbCount'); if(!el) return;
   let inter=(state.socialInteractions||[]).slice();
   const pend=inter.filter(i=>(i.fields['Estado']||'Pendiente')==='Pendiente');
-  if(cnt) cnt.textContent=pend.length?`${pend.length} pendientes`:'al día';
+  const quejas=pend.filter(i=>_redesSentiment(i)==='neg').length;
+  if(cnt) cnt.textContent=pend.length?`${pend.length} pendientes${quejas?` · ⚠ ${quejas} queja${quejas>1?'s':''}`:''}`:'al día';
   if(!inter.length){
-    el.innerHTML=`<div style="padding:18px;color:var(--text3);font-size:12px;line-height:1.7">
-      No hay interacciones cargadas${state._socialIntErr?' (o falta crear la tabla <code>Social_Interactions</code> en Airtable)':''}.
-      <br>Conecta Instagram/Facebook/LinkedIn vía Make para que los comentarios y DMs lleguen aquí automáticamente.
-      <br><span style="color:var(--text2)">Campos esperados: Red · Tipo (Comentario/DM/Mención) · Usuario · Mensaje · Respuesta sugerida · Estado (Pendiente/Respondido/Ignorado) · Es lead · Intención · Fecha</span>
+    el.innerHTML=`<div class="redes-empty"><span class="ico">💬</span>
+      <div>Sin comentarios ni DMs por ahora${state._socialIntErr?' (o falta crear la tabla <code>Social_Interactions</code>)':''}.</div>
+      <div>Conecta tus redes vía <b>Make</b> y las interacciones llegarán aquí para responderlas con IA.</div>
     </div>`; return;
   }
-  inter.sort((a,b)=>{const pa=(a.fields['Estado']||'Pendiente')==='Pendiente'?0:1,pb=(b.fields['Estado']||'Pendiente')==='Pendiente'?0:1;if(pa!==pb)return pa-pb;return new Date(b.fields['Fecha']||b.createdTime||0)-new Date(a.fields['Fecha']||a.createdTime||0);});
+  const sv=x=>_redesSentiment(x)==='neg'?0:1;
+  inter.sort((a,b)=>{const pa=(a.fields['Estado']||'Pendiente')==='Pendiente'?0:1,pb=(b.fields['Estado']||'Pendiente')==='Pendiente'?0:1;if(pa!==pb)return pa-pb;const sa=sv(a),sb=sv(b);if(sa!==sb)return sa-sb;return new Date(b.fields['Fecha']||b.createdTime||0)-new Date(a.fields['Fecha']||a.createdTime||0);});
   el.innerHTML=inter.map(i=>{
     const f=i.fields, red=f['Red']||'—', estado=f['Estado']||'Pendiente';
     const esLead=f['Es lead']===true||/^s[ií]/i.test(f['Es lead']||'');
+    const leadDone=_redesLeadCreated.has(i.id)||f['Lead creado']===true;
+    const sent=_redesSentiment(i);
+    const sentBadge=sent==='neg'?'<span class="badge badge-red" style="font-size:8px">⚠ queja</span>':sent==='pos'?'<span class="badge badge-green" style="font-size:8px">💚 positivo</span>':'';
     const resp=f['Respuesta sugerida']||'';
-    return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+    const user=f['Usuario']||'usuario';
+    const av=REDES_COLOR[red]||'#888';
+    return `<div class="redes-post" style="padding:12px 16px;border-bottom:1px solid var(--border)${sent==='neg'?';border-left:3px solid var(--danger)':''};display:flex;gap:11px">
+      <div class="redes-avatar" style="background:linear-gradient(135deg,${av},${av}99)">${escapeHtml((user[0]||'?').toUpperCase())}</div>
+      <div style="flex:1;min-width:0">
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
         ${_redesChip(red)} <span class="badge badge-gray" style="font-size:8px">${escapeHtml(f['Tipo']||'Comentario')}</span>
-        ${estadoBadge(estado)} ${esLead?'<span class="badge badge-green" style="font-size:8px">LEAD</span>':''}
-        <span style="font-size:11px;color:var(--text2)">@${escapeHtml(f['Usuario']||'usuario')}</span>
+        ${estadoBadge(estado)} ${sentBadge} ${esLead?'<span class="badge badge-green" style="font-size:8px">LEAD</span>':''}
+        <span style="font-size:11px;color:var(--text2)">@${escapeHtml(user)}</span>
       </div>
       <div style="font-size:12px;color:var(--text);margin-bottom:6px">${escapeHtml(f['Mensaje']||'')}</div>
       ${resp?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;white-space:pre-wrap"><b style="color:var(--accent)">Respuesta sugerida:</b>\n${escapeHtml(resp)}</div>`:''}
@@ -12959,8 +13097,9 @@ function renderRedesInbox(){
         <button class="btn btn-primary btn-sm" onclick="redesReply('${i.id}')">🤖 ${resp?'Regenerar':'Sugerir'} respuesta</button>
         ${resp?`<button class="btn btn-ghost btn-sm" onclick="redesCopyReply('${i.id}')">Copiar</button>`:''}
         ${estado==='Pendiente'?`<button class="btn btn-ghost btn-sm" onclick="redesMarkInteraction('${i.id}','Respondido')">Marcar respondido ✓</button>`:''}
-        ${esLead&&!_redesLeadCreated.has(i.id)?`<button class="btn btn-ghost btn-sm" onclick="redesInteractionToLead('${i.id}')">→ Crear lead</button>`:''}
-        ${_redesLeadCreated.has(i.id)?'<span class="badge badge-green" style="font-size:8px;align-self:center">✓ Lead creado</span>':''}
+        ${esLead&&!leadDone?`<button class="btn btn-ghost btn-sm" onclick="redesInteractionToLead('${i.id}')">→ Crear lead</button>`:''}
+        ${leadDone?'<span class="badge badge-green" style="font-size:8px;align-self:center">✓ Lead creado</span>':''}
+      </div>
       </div>
     </div>`;
   }).join('');
@@ -12985,24 +13124,29 @@ async function _redesSuggestReply(i){
   return true;
 }
 async function redesReply(id){
+  if(_redesReplyBusy){toast('Espera a que termine la operación en curso','info');return;}
   const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
-  toast('Generando respuesta…','info');
+  _redesReplyBusy=true; toast('Generando respuesta…','info');
   try{ await _redesSuggestReply(i); toast('Respuesta lista ✓','success'); renderRedesKpis(); renderRedesInbox(); }
   catch(e){ toast('Error: '+e.message,'error'); }
+  finally{ _redesReplyBusy=false; }
 }
 // Sugiere respuesta para TODAS las interacciones pendientes sin respuesta (secuencial, para no saturar la API).
 async function redesReplyAllPending(){
+  if(_redesReplyBusy){toast('Espera a que termine la operación en curso','info');return;}
   const pend=(state.socialInteractions||[]).filter(i=>(i.fields['Estado']||'Pendiente')==='Pendiente' && !((i.fields['Respuesta sugerida']||'').trim()));
   if(!pend.length){toast('No hay pendientes sin respuesta','info');return;}
+  _redesReplyBusy=true;
   const btn=document.getElementById('redesInbBulkBtn'); const prev=btn?btn.textContent:'';
   if(btn){btn.disabled=true;}
   let ok=0,fail=0;
   for(let k=0;k<pend.length;k++){
     if(btn) btn.textContent=`⏳ ${k+1}/${pend.length}…`;
-    try{ await _redesSuggestReply(pend[k]); ok++; renderRedesInbox(); }catch(e){ fail++; }
+    try{ await _redesSuggestReply(pend[k]); ok++; }catch(e){ fail++; }
   }
+  _redesReplyBusy=false;
   if(btn){btn.disabled=false;btn.textContent=prev;}
-  renderRedesKpis(); renderRedesInbox();
+  renderRedesKpis(); renderRedesInbox();   // un solo re-render al final (antes O(N²) en DOM)
   toast(`Sugeridas ${ok} respuesta${ok!==1?'s':''}${fail?` · ${fail} con error`:''}`, fail?'error':'success');
 }
 function redesCopyReply(id){
@@ -13040,8 +13184,8 @@ async function redesInteractionToLead(id){
         encolado=true;
       }catch(_){}
     }
-    await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':'Respondido'});
-    if(i) i.fields['Estado']='Respondido';
+    await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':'Respondido','Lead creado':true});
+    if(i){ i.fields['Estado']='Respondido'; i.fields['Lead creado']=true; }
     toast(encolado?'Lead creado y encolado para scoring ✓':'Lead creado en Clientes ✓','success'); renderRedesKpis(); renderRedesInbox();
   }catch(e){toast('No se pudo crear el lead: '+e.message,'error');}
 }
@@ -13121,9 +13265,10 @@ async function redesSaveDraft(){
 }
 // Separa la salida de CAPTION/CONTENT (varias redes en un bloque) en secciones por red.
 function _redesSplitByNetwork(text){
-  const nets=[{key:'Instagram',re:/instagram/i},{key:'LinkedIn',re:/linked\s?in/i},{key:'TikTok',re:/tik\s?tok|reels?/i},{key:'Facebook',re:/facebook/i}];
+  // Encabezados anclados al inicio de la línea (tras limpiar markdown/viñetas) → evita falsos positivos.
+  const nets=[{key:'Instagram',re:/^instagram\b/i},{key:'LinkedIn',re:/^linked\s?in\b/i},{key:'TikTok',re:/^(tik\s?tok|reels?)\b/i},{key:'Facebook',re:/^facebook\b/i}];
   const lines=String(text).split('\n'); const marks=[];
-  lines.forEach((ln,idx)=>{const t=ln.replace(/[*_#>\-•·]/g,'').trim();if(!t||t.length>40)return;for(const n of nets){if(n.re.test(t)){marks.push({idx,key:n.key});break;}}});
+  lines.forEach((ln,idx)=>{const t=ln.replace(/[*_#>]/g,'').replace(/^[\s\-•·\d.\)]+/,'').trim();if(!t||t.length>40)return;for(const n of nets){if(n.re.test(t)){marks.push({idx,key:n.key});break;}}});
   if(marks.length<2) return null;
   const seen={}, out=[];
   for(let i=0;i<marks.length;i++){
@@ -13156,7 +13301,7 @@ async function redesSaveSplit(){
 function renderRedesMetrics(){
   const el=document.getElementById('redesMetrics'); if(!el) return;
   const mets=(state.socialMetrics||[]);
-  if(!mets.length){ el.innerHTML='<div style="padding:8px;color:var(--text3);font-size:12px">Sin métricas cargadas (tabla <code>Social_Metrics</code>). Aliméntala con Make desde cada red para ver alcance, engagement, clics y leads por plataforma.</div>'; return; }
+  if(!mets.length){ el.innerHTML='<div class="redes-empty"><span class="ico">📊</span><div>Sin métricas todavía.</div><div>Conecta cada red vía <b>Make</b> para ver alcance, engagement, clics y leads por plataforma.</div></div>'; return; }
   const since=new Date(Date.now()-30*86400000);
   const recent=mets.filter(m=>{const d=m.fields['Fecha'];return d&&new Date(d)>=since;});
   const use=recent.length?recent:mets;
@@ -13534,6 +13679,158 @@ async function nlSaveDraft(){
     toast('Borrador guardado ✓','success'); renderNlKpis(); renderNlCampaigns();
     document.getElementById('nlCampaignsList')?.scrollIntoView({behavior:'smooth',block:'center'});
   }catch(e){toast('No se pudo guardar (¿existe la tabla Newsletter_Campañas?): '+e.message,'error');}
+}
+
+// ── Mejor momento para publicar (día desde Social_Metrics + hora sugerida por red) ──
+function _redesBestByWeekday(){
+  const acc={};
+  (state.socialMetrics||[]).forEach(m=>{const r=m.fields['Red'],d=m.fields['Fecha'];if(!r||!d)return;const wd=new Date(d).getDay();(acc[r]=acc[r]||[0,0,0,0,0,0,0])[wd]+=m.fields['Engagement']||0;});
+  const best={};
+  Object.entries(acc).forEach(([r,arr])=>{let bi=-1,bv=-1;arr.forEach((v,i)=>{if(v>bv){bv=v;bi=i;}});if(bv>0)best[r]=bi;});
+  return best;
+}
+function renderRedesBestTimes(){
+  const el=document.getElementById('redesBestTimes'); if(!el) return;
+  const best=_redesBestByWeekday(), dias=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  el.innerHTML=REDES_NETS.map(n=>{const wd=best[n],hr=REDES_BEST_HOUR[n],c=REDES_COLOR[n];
+    const dayTxt=wd!=null?dias[wd]:'<span style="color:var(--text3)">sugerido</span>';
+    return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:${c};font-weight:600">${n}</span><span style="color:var(--text2)">${dayTxt} · ${_redesPad(hr)}:00</span></div>`;
+  }).join('')+`<div style="font-size:9px;color:var(--text3);margin-top:6px">Día = mayor engagement en Social_Metrics · Hora = sugerencia por red.</div>`;
+}
+function _redesNextBestSlot(red){
+  const best=_redesBestByWeekday(), hr=REDES_BEST_HOUR[red]||18, targetWd=best[red];
+  const now=new Date(), d=new Date(); d.setHours(hr,0,0,0);
+  if(targetWd==null){ if(d<=now) d.setDate(d.getDate()+1); }
+  else { let add=(targetWd-now.getDay()+7)%7; if(add===0 && d<=now) add=7; d.setDate(d.getDate()+add); }
+  return d.toISOString();
+}
+function redesDateUseBest(){
+  const dt=new Date(_redesNextBestSlot(_redesDateRed||'Instagram'));
+  const el=document.getElementById('redesDateInput'); if(el) el.value=`${dt.getFullYear()}-${_redesPad(dt.getMonth()+1)}-${_redesPad(dt.getDate())}T${_redesPad(dt.getHours())}:${_redesPad(dt.getMinutes())}`;
+}
+
+// ── Programación masiva de borradores ──
+async function redesAutoSchedule(){
+  const fRed=document.getElementById('redesFiltroRed')?.value||'';
+  const drafts=(state.socialPosts||[]).filter(p=>(p.fields['Estado']||'')==='Borrador'&&(!fRed||p.fields['Red']===fRed));
+  if(!drafts.length){toast('No hay borradores para programar','info');return;}
+  if(!confirm(`¿Auto-programar ${drafts.length} borrador(es), 1 por día desde mañana a la mejor hora por red?`)) return;
+  const start=new Date(); start.setHours(0,0,0,0);
+  let ok=0;
+  for(let i=0;i<drafts.length;i++){
+    const p=drafts[i], red=p.fields['Red']||'Instagram', hr=REDES_BEST_HOUR[red]||18;
+    const d=new Date(start); d.setDate(d.getDate()+1+i); d.setHours(hr,0,0,0);
+    try{ await airtableWriteTolerant('Social_Posts','PATCH',p.id,{'Estado':'Programado','Fecha programada':d.toISOString()}); p.fields['Estado']='Programado'; p.fields['Fecha programada']=d.toISOString(); ok++; }catch(e){}
+  }
+  if(ok){ toast(`Programados ${ok} borradores ✓`,'success'); renderRedesKpis(); redesApplyFilters(); }
+  else toast('No se pudo programar','error');
+}
+
+// ── Edición inline de una publicación (modal) ──
+function redesOpenEdit(id){
+  const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+  _redesEditId=id; const f=p.fields;
+  const set=(eid,v)=>{const el=document.getElementById(eid);if(el)el.value=v||'';};
+  set('redesEditRed',f['Red']||'Instagram'); set('redesEditEstado',f['Estado']||'Borrador');
+  set('redesEditObjetivo',f['Objetivo']); set('redesEditCopy',f['Copy']); set('redesEditHashtags',f['Hashtags']);
+  set('redesEditMedia',f['Media URL']); set('redesEditLink',f['Link']);
+  const fe=document.getElementById('redesEditFecha');
+  if(fe){ if(f['Fecha programada']){const d=new Date(f['Fecha programada']);fe.value=`${d.getFullYear()}-${_redesPad(d.getMonth()+1)}-${_redesPad(d.getDate())}T${_redesPad(d.getHours())}:${_redesPad(d.getMinutes())}`;} else fe.value=''; }
+  redesHashPopulate(f['Red']||'Instagram');
+  document.getElementById('redesEditModal').style.display='flex';
+}
+function redesCloseEdit(){ _redesEditId=null; const m=document.getElementById('redesEditModal'); if(m) m.style.display='none'; }
+async function redesSaveEdit(){
+  if(!_redesEditId) return;
+  const p=(state.socialPosts||[]).find(x=>x.id===_redesEditId); if(!p) return;
+  const g=eid=>document.getElementById(eid)?.value||'';
+  const fields={'Red':g('redesEditRed'),'Estado':g('redesEditEstado'),'Objetivo':g('redesEditObjetivo'),'Copy':g('redesEditCopy').slice(0,9000),'Hashtags':g('redesEditHashtags').slice(0,1000),'Media URL':g('redesEditMedia'),'Link':g('redesEditLink')};
+  const feRaw=g('redesEditFecha'); if(feRaw){const d=new Date(feRaw);if(!isNaN(d.getTime()))fields['Fecha programada']=d.toISOString();}
+  try{
+    await airtableWriteTolerant('Social_Posts','PATCH',_redesEditId,fields);
+    Object.assign(p.fields,fields);
+    toast('Publicación guardada ✓','success'); redesCloseEdit(); renderRedesKpis(); redesApplyFilters(); renderRedesRecycle();
+  }catch(e){toast('No se pudo guardar: '+e.message,'error');}
+}
+async function redesDeletePost(){
+  if(!_redesEditId) return;
+  if(!confirm('¿Eliminar esta publicación? No se puede deshacer.')) return;
+  const id=_redesEditId;
+  try{
+    await airtableWrite('Social_Posts','DELETE',id,{});
+    state.socialPosts=(state.socialPosts||[]).filter(x=>x.id!==id);
+    toast('Publicación eliminada','success'); redesCloseEdit(); renderRedesKpis(); redesApplyFilters(); renderRedesRecycle();
+  }catch(e){toast('No se pudo eliminar: '+e.message,'error');}
+}
+function redesBuildUtm(){
+  let base=(document.getElementById('redesUtmBase')?.value||'').trim();
+  if(!base){toast('Escribe la URL base','error');return;}
+  if(!/^https?:\/\//i.test(base)) base='https://'+base;
+  const red=(document.getElementById('redesEditRed')?.value||'social').toLowerCase();
+  const camp=(document.getElementById('redesEditObjetivo')?.value||'redes').toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'')||'redes';
+  const sep=base.includes('?')?'&':'?';
+  const url=`${base}${sep}utm_source=${encodeURIComponent(red)}&utm_medium=social&utm_campaign=${encodeURIComponent(camp)}`;
+  const link=document.getElementById('redesEditLink'); if(link) link.value=url;
+  toast('Link con UTM generado ✓','success');
+}
+
+// ── Biblioteca de hashtags (localStorage, por red) ──
+function _redesHashStore(){
+  let s; try{ s=JSON.parse(localStorage.getItem('redes_hashtags')||'null'); }catch(_){}
+  if(!s) s={Instagram:['#fabricaciondigital #santiago #impresion3d #neonled #disenochile #emprendimiento'],LinkedIn:['#fabricacióndigital #manufactura #b2b #chile'],TikTok:['#fyp #satisfying #impresion3d #neon #diy'],Facebook:['#santiago #pymeschile #regaloscorporativos']};
+  return s;
+}
+function redesHashPopulate(red){
+  const sel=document.getElementById('redesEditHashSet'); if(!sel) return;
+  const sets=_redesHashStore()[red]||[];
+  sel.innerHTML='<option value="">Sets guardados…</option>'+sets.map((h,i)=>`<option value="${i}">${escapeHtml(h.slice(0,40))}${h.length>40?'…':''}</option>`).join('');
+}
+function redesHashtagInsert(){
+  const sel=document.getElementById('redesEditHashSet'); if(!sel||sel.value==='') return;
+  const red=document.getElementById('redesEditRed')?.value||'Instagram';
+  const h=(_redesHashStore()[red]||[])[+sel.value];
+  if(h){ const inp=document.getElementById('redesEditHashtags'); if(inp) inp.value=h; }
+  sel.value='';
+}
+function redesHashtagSave(){
+  const red=document.getElementById('redesEditRed')?.value||'Instagram';
+  const val=(document.getElementById('redesEditHashtags')?.value||'').trim();
+  if(!val){toast('No hay hashtags que guardar','info');return;}
+  const store=_redesHashStore(); store[red]=store[red]||[];
+  if(!store[red].includes(val)) store[red].unshift(val);
+  store[red]=store[red].slice(0,10);
+  try{ localStorage.setItem('redes_hashtags',JSON.stringify(store)); }catch(_){}
+  redesHashPopulate(red); toast('Set de hashtags guardado ✓','success');
+}
+
+// ── Reciclar contenido (top performers publicados) ──
+function renderRedesRecycle(){
+  const el=document.getElementById('redesRecycle'); if(!el) return;
+  const pubs=(state.socialPosts||[]).filter(p=>(p.fields['Estado']||'')==='Publicado');
+  if(!pubs.length){ el.innerHTML='<div class="redes-empty"><span class="ico">♻️</span><div>Aún no hay publicaciones <b>Publicadas</b>.</div><div>Cuando las tengas (con engagement desde Make), aquí podrás re-publicar las que mejor rindieron.</div></div>'; return; }
+  pubs.sort((a,b)=>(b.fields['Engagement']||0)-(a.fields['Engagement']||0)||new Date(b.fields['Fecha publicación']||b.createdTime||0)-new Date(a.fields['Fecha publicación']||a.createdTime||0));
+  el.innerHTML=pubs.slice(0,8).map(p=>{const f=p.fields,red=f['Red']||'—',eng=f['Engagement']||0;
+    return `<div class="redes-post" style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:3px">${_redesChip(red)}<span style="font-size:10px;color:var(--text3)">${eng?('💬 '+eng+' interacciones'):'sin métrica'}</span></div>
+        <div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml((f['Copy']||'').slice(0,80))}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="redesRecycle('${p.id}')" style="white-space:nowrap">♻ Re-publicar</button>
+    </div>`;
+  }).join('');
+}
+async function redesRecycle(id){
+  const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+  const f=p.fields;
+  try{
+    const base={'Red':f['Red']||'Instagram','Copy':(f['Copy']||'').slice(0,9000),'Hashtags':(f['Hashtags']||'').slice(0,1000),'Estado':'Borrador','Agente':'Reciclado','Objetivo':f['Objetivo']||'Captar leads'};
+    if(f['Media URL']) base['Media URL']=f['Media URL'];
+    if(f['Link']) base['Link']=f['Link'];
+    const rec=await airtableWriteTolerant('Social_Posts','POST',null,base);
+    if(rec&&rec.id){ state.socialPosts.unshift(rec); }
+    toast('Copia creada como borrador ✓','success'); renderRedesKpis(); redesApplyFilters();
+    document.getElementById('redesPostsList')?.scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(e){toast('No se pudo reciclar: '+e.message,'error');}
 }
 
 // ── AGENTES INLINE ─────────────────────────────────────────────
