@@ -5229,10 +5229,10 @@ function _loadMoreRow(restantes,cols,fn){return `<tr class="load-more-row"><td c
 // Texto buscable de una fila: equivale al textContent que veía el filtro por DOM
 // (quita etiquetas y decodifica las entidades que introduce escapeHtml).
 function _rowText(html){return html.replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&nbsp;/g,' ').toLowerCase();}
-function cliShowMore(){_cliCap+=TABLE_PAGE;renderClientes();}
-function cotShowMore(){_cotCap+=TABLE_PAGE;renderCotizaciones();}
+function cliShowMore(){_cliCap+=TABLE_PAGE;renderClientes(true);}
+function cotShowMore(){_cotCap+=TABLE_PAGE;renderCotizaciones(true);}
 let _cotGroup=false;
-function toggleCotGroup(){_cotGroup=!_cotGroup;const b=document.getElementById('cotGroupBtn');if(b){b.classList.toggle('active-filter',_cotGroup);b.textContent=_cotGroup?'⊟ Desagrupar':'⊞ Agrupar';}renderCotizaciones();}
+function toggleCotGroup(){_cotGroup=!_cotGroup;const b=document.getElementById('cotGroupBtn');if(b){b.classList.toggle('active-filter',_cotGroup);b.textContent=_cotGroup?'⊟ Desagrupar':'⊞ Agrupar';}renderCotizaciones(true);}
 function pedShowMore(){_pedCap+=TABLE_PAGE;renderPedidos(state.pedidoFilter);}
 // ── Densidad de la interfaz (compacto/cómodo), persistida ──
 function applyDensity(){const c=localStorage.getItem('ui_density')==='compact';document.body.classList.toggle('compact',c);const b=document.getElementById('densityBtn');if(b){b.textContent=c?'≣':'≡';b.title=c?'Vista compacta — clic para cómoda':'Vista cómoda — clic para compacta';}}
@@ -7403,7 +7403,7 @@ function buildClienteRow(c){
     </td>
   </tr>`;
 }
-function renderClientes(){
+function renderClientes(skipAnalytics){
   const sorted=getSortedClientes();
   const tbody=document.getElementById('clientesTableBody');
   const countEl=document.getElementById('clientesCount');
@@ -7425,10 +7425,13 @@ function renderClientes(){
   if(!_cliQuery&&matched.length>_cliCap) html+=_loadMoreRow(matched.length-_cliCap,10,'cliShowMore()');
   _setRows(tbody,html);
   updateBulkBar();
-  renderClientesAnalytics();
+  // El analytics agrega sobre TODOS los datos (independiente de búsqueda/orden/
+  // paginación). Se omite en los renders de búsqueda y "ver más" para no rehacer
+  // 3 pasadas sobre pedidos/cotizaciones en cada tecla.
+  if(!skipAnalytics) renderClientesAnalytics();
   _applySortIndicators();
 }
-function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes();_saveUIState();}
+function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes(true);_saveUIState();}
 async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientesByIdRec[id];if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
@@ -7980,7 +7983,7 @@ function getSortedCotizaciones(){
     if(typeof va==='number') return(va-vb)*cotizacionesSort.dir;return va.localeCompare(vb,'es')*cotizacionesSort.dir;
   });
 }
-function renderCotizaciones(){
+function renderCotizaciones(skipAnalytics){
   const tbody=document.getElementById('cotsTableBodyFull');
   const sorted=getSortedCotizaciones();
   if(!sorted.length){
@@ -8002,7 +8005,7 @@ function renderCotizaciones(){
     html=shown.map(c=>buildCotRow(c)).join('');
     if(sorted.length>_cotCap) html+=_loadMoreRow(sorted.length-_cotCap,11,'cotShowMore()');
   }
-  _setRows(tbody,html);renderCotAnalytics();_applySortIndicators();
+  _setRows(tbody,html);if(!skipAnalytics)renderCotAnalytics();_applySortIndicators();
 }
 function resolveVendedorName(vid){if(!vid) return '—';const p=PERSONAS.find(x=>x.id===vid.toLowerCase().trim());return p?p.nombre:vid;}
 function buildCotRow(c){
@@ -14896,8 +14899,8 @@ function getSortedProveedores(list){
     if(va<vb) return -d;if(va>vb) return d;return 0;
   });
 }
-function filterProveedores(){renderProveedores();}
-function renderProveedores(){
+function filterProveedores(){renderProveedores(true);}
+function renderProveedores(skipAnalytics){
   const search=(document.getElementById('proveedorSearch')?.value||'').toLowerCase();
   const cat=document.getElementById('proveedorCatFilter')?.value||'';
   let list=state.proveedores.filter(p=>{
@@ -14911,7 +14914,7 @@ function renderProveedores(){
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
   if(!sorted.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
-  renderProveedoresAnalytics();
+  if(!skipAnalytics) renderProveedoresAnalytics();
   _applySortIndicators();
 }
 function buildProveedorRow(p){
