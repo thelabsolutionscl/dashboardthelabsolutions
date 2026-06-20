@@ -53,6 +53,10 @@ export default {
         return await handleLead(request, env, ctx, cors);
       }
 
+      if (request.method === "POST" && url.pathname === "/proveedor") {
+        return await handleProveedor(request, env, ctx, cors);
+      }
+
       if (request.method === "POST" && url.pathname === "/webhooks/google-ads") {
         return await handleGoogleAds(request, env, ctx, cors);
       }
@@ -124,6 +128,88 @@ async function handleLead(request, env, ctx, cors) {
     source: norm.source || "web",
     campaign: norm.utmCampaign,
   });
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: POST /proveedor   (formulario "Sé nuestro proveedor" de la web)
+ * Crea un registro en la tabla Proveedores con "Estado postulación" = ENTREVISTAR.
+ * El equipo lo cambia luego a APROBADO / RECHAZADO y añade "Motivo evaluación".
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleProveedor(request, env, ctx, cors) {
+  // 1) Clave compartida (anti-bot básico)
+  if (env.PUBLIC_LEAD_KEY) {
+    const key = request.headers.get("X-Public-Lead-Key") || "";
+    if (!timingSafeEqual(key, env.PUBLIC_LEAD_KEY)) {
+      return json({ ok: false, error: "No autorizado" }, 401, cors);
+    }
+  }
+
+  const body = await readJson(request);
+  if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
+
+  // 2) Honeypot
+  if (body.company_website || body._hp) {
+    return json({ ok: true, proveedorId: null }, 200, cors);
+  }
+
+  // 3) Turnstile (opcional)
+  if (env.TURNSTILE_SECRET) {
+    const ok = await verifyTurnstile(env.TURNSTILE_SECRET, body.turnstileToken, request);
+    if (!ok) return json({ ok: false, error: "Verificación anti-bot falló" }, 403, cors);
+  }
+
+  // 4) Rate-limit por IP
+  const limited = await rateLimited(env, request, "proveedor", 5, 60);
+  if (limited) return json({ ok: false, error: "Demasiadas solicitudes" }, 429, cors);
+
+  // 5) Validación mínima
+  const nombre = str(body.name) || str(body.company);
+  const email = str(body.email);
+  const phone = str(body.phone);
+  if (!nombre) return json({ ok: false, error: "Falta el nombre del proveedor" }, 400, cors);
+  if (!email && !phone) {
+    return json({ ok: false, error: "Falta email o teléfono" }, 400, cors);
+  }
+
+  const contacto = str(body.contact) || nombre;
+  const categoria = str(body.categoria || body.category);
+  const productos = str(body.productos || body.products);
+  const website = str(body.website);
+  const message = str(body.message);
+
+  const notas = ["📥 Postulación vía formulario web (thelab.solutions/proveedores)."];
+  if (message) notas.push(message);
+
+  const fields = stripEmpty({
+    Nombre: nombre,
+    Contacto: contacto,
+    Cargo: str(body.cargo || body.role),
+    Email: email,
+    Teléfono: phone,
+    WhatsApp: str(body.whatsapp) || phone,
+    "Sitio Web": website,
+    RUT: str(body.rut),
+    Comuna: str(body.comuna),
+    Región: str(body.region),
+    // multipleSelects → array; typecast crea la opción si no existe
+    Categoría: categoria ? [categoria] : undefined,
+    Productos: productos,
+    Notas: notas.join("\n\n"),
+    "Estado postulación": "ENTREVISTAR",
+  });
+
+  const summary = { nombre, contacto, email, phone, categoria, productos, website, message };
+
+  try {
+    const rec = await airtableCreateTolerant(env, "Proveedores", fields);
+    ctx.waitUntil(sendProveedorNotification(env, summary));
+    return json({ ok: true, proveedorId: rec?.id || null }, 200, cors);
+  } catch (e) {
+    console.error("[proveedor]", e?.stack || e?.message || String(e));
+    // No perder la postulación: avisar por email aunque Airtable falle.
+    ctx.waitUntil(sendProveedorNotification(env, { ...summary, failed: true }));
+    return json({ ok: false, error: "No se pudo registrar la postulación" }, 502, cors);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -414,6 +500,54 @@ async function sendLeadAutoReply(env, norm) {
     });
   } catch (e) {
     console.error("[leads-worker] auto-reply:", e.message);
+  }
+}
+
+// Aviso interno de nueva postulación de proveedor. Best-effort vía Resend.
+async function sendProveedorNotification(env, p) {
+  if (!env.RESEND_API_KEY) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  const to = env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com";
+  const esc = (s) =>
+    String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+      c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"
+    );
+  const rows = [
+    ["Proveedor", p.nombre],
+    ["Contacto", p.contacto],
+    ["Email", p.email],
+    ["Teléfono", p.phone],
+    ["Categoría / rubro", p.categoria],
+    ["Sitio web", p.website],
+    ["Productos / servicios", p.productos],
+    ["Mensaje", p.message],
+  ].filter(([, v]) => v);
+  const html =
+    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px">` +
+    `<h2 style="margin:0 0 12px">Nueva postulación de proveedor — thelab.solutions</h2>` +
+    (p.failed
+      ? `<p style="color:#b00"><strong>⚠️ No se pudo guardar en Airtable.</strong> Registrar manualmente con estos datos.</p>`
+      : `<p>Estado: <strong>ENTREVISTAR</strong> · revísala en la tabla <em>Proveedores</em> del dashboard.</p>`) +
+    rows.map(([k, v]) => `<p><strong>${esc(k)}:</strong> ${esc(v)}</p>`).join("") +
+    `<p style="color:#666;font-size:13px;margin-top:18px">— Pipeline web · The Lab Solutions</p>` +
+    `</div>`;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + env.RESEND_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        reply_to: p.email || undefined,
+        subject: `Nueva postulación de proveedor: ${p.nombre}`,
+        html,
+      }),
+    });
+  } catch (e) {
+    console.error("[proveedor] notificación:", e.message);
   }
 }
 
