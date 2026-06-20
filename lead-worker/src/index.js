@@ -61,6 +61,14 @@ export default {
         return await handleProveedor(request, env, ctx, cors);
       }
 
+      if (request.method === "GET" && url.pathname === "/blog") {
+        return await handleBlogList(request, env, cors);
+      }
+
+      if (request.method === "GET" && url.pathname.startsWith("/blog/")) {
+        return await handleBlogPost(env, cors, decodeURIComponent(url.pathname.slice(6)));
+      }
+
       if (request.method === "POST" && url.pathname === "/newsletter") {
         return await handleNewsletter(request, env, ctx, cors);
       }
@@ -229,6 +237,90 @@ async function handleProveedor(request, env, ctx, cors) {
     // No perder la postulación: avisar por email aunque Airtable falle.
     ctx.waitUntil(sendProveedorNotification(env, { ...summary, failed: true }));
     return json({ ok: false, error: "No se pudo registrar la postulación" }, 502, cors);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTAS: GET /blog  y  GET /blog/:slug   (lectura pública del blog desde Airtable)
+ * ══════════════════════════════════════════════════════════════════════ */
+async function airtableSelectBlog(env, { formula, fields, sort, maxRecords }) {
+  const params = new URLSearchParams();
+  if (formula) params.set("filterByFormula", formula);
+  (fields || []).forEach((f) => params.append("fields[]", f));
+  if (sort) {
+    params.append("sort[0][field]", sort.field);
+    params.append("sort[0][direction]", sort.dir || "desc");
+  }
+  if (maxRecords) params.set("maxRecords", String(maxRecords));
+  const u = `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Blog")}?${params.toString()}`;
+  const r = await fetch(u, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+  if (!r.ok) throw new Error("airtable " + r.status);
+  const d = await r.json();
+  return d.records || [];
+}
+
+async function handleBlogList(request, env, cors) {
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
+    return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
+  }
+  const u = new URL(request.url);
+  const cat = str(u.searchParams.get("cat"));
+  const limit = Math.min(parseInt(u.searchParams.get("limit") || "100", 10) || 100, 200);
+  let formula = "{Estado}='Publicado'";
+  if (cat) formula = `AND({Estado}='Publicado',{Categoría}='${cat.replace(/'/g, "\\'")}')`;
+  try {
+    const recs = await airtableSelectBlog(env, {
+      formula,
+      fields: ["Título", "Slug", "Fecha", "Extracto", "Imagen", "Categoría"],
+      sort: { field: "Fecha", dir: "desc" },
+      maxRecords: limit,
+    });
+    const posts = recs
+      .map((r) => ({
+        title: r.fields["Título"] || "",
+        slug: r.fields["Slug"] || "",
+        date: r.fields["Fecha"] || "",
+        excerpt: r.fields["Extracto"] || "",
+        image: r.fields["Imagen"] || "",
+        categoria: r.fields["Categoría"] || "",
+      }))
+      .filter((p) => p.slug);
+    return json({ ok: true, posts }, 200, cors);
+  } catch (e) {
+    return json({ ok: false, error: e.message }, 502, cors);
+  }
+}
+
+async function handleBlogPost(env, cors, slug) {
+  if (!slug) return json({ ok: false, error: "Falta slug" }, 400, cors);
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
+    return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
+  }
+  try {
+    const recs = await airtableSelectBlog(env, {
+      formula: `AND({Estado}='Publicado',{Slug}='${slug.replace(/'/g, "\\'")}')`,
+      maxRecords: 1,
+    });
+    if (!recs.length) return json({ ok: false, error: "No encontrado" }, 404, cors);
+    const f = recs[0].fields;
+    return json(
+      {
+        ok: true,
+        post: {
+          title: f["Título"] || "",
+          slug: f["Slug"] || "",
+          date: f["Fecha"] || "",
+          excerpt: f["Extracto"] || "",
+          content: f["Contenido"] || "",
+          image: f["Imagen"] || "",
+          categoria: f["Categoría"] || "",
+        },
+      },
+      200,
+      cors
+    );
+  } catch (e) {
+    return json({ ok: false, error: e.message }, 502, cors);
   }
 }
 
