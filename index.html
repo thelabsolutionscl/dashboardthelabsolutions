@@ -16801,10 +16801,11 @@ function buildProveedorRow(p){
   const pvTotalValor=pedidosTodos.reduce((s,x)=>s+(x.fields['Monto total (CLP)']||0),0);
   const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha ingreso']||'').filter(Boolean).sort().reverse()[0]||null;
   const estado=f['Estado']||'Activo';
-  const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':'';
+  const estadoPost=f['Estado postulación']||'';
+  const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':estadoPost==='ENTREVISTAR'?';border-left:3px solid #ffaa00':'';
   return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}" class="${selectedProveedores.has(id)?'row-selected':''}${_flashCls(id)}">
     <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="row-chk" data-id="${id}" ${selectedProveedores.has(id)?'checked':''} onchange="toggleProveedorRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
-    <td class="pv-nombre"><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}</td>
+    <td class="pv-nombre"><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}${estadoPost?estadoPostPill(estadoPost):''}</td>
     <td class="pv-cat">${pvCatBadge(pvCat(f)||'—')}</td>
     <td class="pv-contacto"><div style="font-size:12px">${escapeHtml(f['Contacto']||'—')}</div>${f['Cargo']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['Cargo'])}</div>`:''}</td>
     <td class="pv-tel">${telCell}</td>
@@ -16832,6 +16833,15 @@ function buildProveedorRow(p){
           ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
           ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px">${formatRichText(f['Notas'])}</div>`:''}
         </div>
+        <div style="border-top:1px solid var(--border2);padding-top:12px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:8px">Postulación / evaluación de proveedor</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <span style="font-size:11px;color:var(--text3)">Estado:</span>
+            <span id="pvpostbtns-${id}" style="display:inline-flex;gap:6px;flex-wrap:wrap">${_pvPostBtns(id,estadoPost)}</span>
+          </div>
+          <textarea id="pvmotivo-${id}" onclick="event.stopPropagation()" placeholder="Motivo de la evaluación (por qué se aprobó o rechazó tras la entrevista)..." style="width:100%;min-height:54px;font-size:11px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;padding:8px;color:var(--text);font-family:inherit;resize:vertical">${escapeHtml(f['Motivo evaluación']||'')}</textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();saveProvMotivo('${id}')" style="font-size:11px">Guardar motivo</button></div>
+        </div>
         ${pedCount>0?`<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:6px">Pedidos activos vinculados</div><div style="display:flex;flex-direction:column;gap:4px">${pedidosActivos.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:11px;background:var(--surface3);border-radius:5px;padding:5px 10px"><span class="mono" style="color:var(--accent)">${escapeHtml(x.fields['N° Pedido']||'—')}</span><span style="color:var(--text2)">${escapeHtml(resolveClienteName(x.fields['Cliente']))}</span><span style="color:var(--text3)">${x.fields['Estado pedido']||'—'}</span>${x.fields['Fecha entrega']?`<span style="color:var(--text3);margin-left:auto">📅 ${x.fields['Fecha entrega']}</span>`:''}</div>`).join('')}</div></div>`:''}
       </div>
     </td>
@@ -16857,6 +16867,43 @@ async function updateRepProveedor(id,rep){
     toast(`★ ${rep}/5 guardado`,'success');
   }catch(e){
     if(p) p.fields['Reputación']=old;
+    toast('Error: '+e.message,'error');
+  }
+}
+// ── Postulación de proveedor (Estado postulación + Motivo evaluación) ──────
+function _pvPostColor(s){return s==='APROBADO'?'#00d4aa':s==='RECHAZADO'?'#ff4444':s==='ENTREVISTAR'?'#ffaa00':'#888888';}
+function estadoPostPill(s){if(!s)return '';const c=_pvPostColor(s);return `<span style="display:inline-block;margin-top:3px;font-size:9px;font-weight:700;letter-spacing:0.5px;color:${c};border:1px solid ${c}55;background:${c}1a;border-radius:4px;padding:1px 6px">${s}</span>`;}
+function _pvPostBtns(id,current){
+  return [['ENTREVISTAR','#ffaa00'],['APROBADO','#00d4aa'],['RECHAZADO','#ff4444']].map(([s,col])=>{
+    const on=current===s;
+    return `<button class="btn btn-sm" onclick="event.stopPropagation();setProvEstadoPost('${id}','${s}')" style="font-size:10px;font-weight:700;letter-spacing:0.3px;border:1px solid ${on?col:'var(--border2)'};color:${on?'#0a0a0a':col};background:${on?col:'transparent'};border-radius:6px;padding:4px 10px;cursor:pointer">${s}</button>`;
+  }).join('');
+}
+async function setProvEstadoPost(id,estado){
+  const p=state.proveedores.find(x=>x.id===id);if(!p)return;
+  const old=p.fields['Estado postulación']||'';
+  p.fields['Estado postulación']=estado;
+  const cont=document.getElementById('pvpostbtns-'+id);if(cont)cont.innerHTML=_pvPostBtns(id,estado);
+  try{
+    await airtableWrite('Proveedores','PATCH',id,{'Estado postulación':estado});
+    toast('Postulación → '+estado,'success');
+  }catch(e){
+    p.fields['Estado postulación']=old;
+    const c2=document.getElementById('pvpostbtns-'+id);if(c2)c2.innerHTML=_pvPostBtns(id,old);
+    toast('Error: '+e.message,'error');
+  }
+}
+async function saveProvMotivo(id){
+  const p=state.proveedores.find(x=>x.id===id);if(!p)return;
+  const el=document.getElementById('pvmotivo-'+id);if(!el)return;
+  const val=el.value.trim();const old=p.fields['Motivo evaluación']||'';
+  if(val===old){toast('Sin cambios','info');return;}
+  p.fields['Motivo evaluación']=val;
+  try{
+    await airtableWrite('Proveedores','PATCH',id,{'Motivo evaluación':val});
+    toast('Motivo guardado','success');
+  }catch(e){
+    p.fields['Motivo evaluación']=old;
     toast('Error: '+e.message,'error');
   }
 }
