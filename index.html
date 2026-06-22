@@ -26992,6 +26992,40 @@ self.onmessage=function(ev){
     out.push(epilogue);
     return out.join('\n');
   }
+  // ── Etiquetas de tipo de línea para OrcaSlicer/PrusaSlicer/Bambu ──────────
+  // El slicer emite comentarios en español (; pared exterior, ; relleno, …) que
+  // sirven a nuestra propia vista previa, pero OrcaSlicer no los entiende y mete
+  // toda la extrusión en "Indefinido". Traducimos cada comentario al tag estándar
+  // "; FEATURE: <rol>" que OrcaSlicer parsea para colorear y desglosar perímetros,
+  // relleno, soporte, etc. (los nombres deben coincidir con los roles de OrcaSlicer).
+  function _orcaFeature(c){
+    c=c.toLowerCase();
+    if(/pared exterior/.test(c))return'Outer wall';
+    if(/pared interior/.test(c))return'Inner wall';
+    if(/puente|bridge/.test(c))return'Bridge';
+    if(/gap-fill|gap fill/.test(c))return'Gap infill';
+    if(/interfaz soporte|interfaz de soporte/.test(c))return'Support interface';
+    if(/soporte/.test(c))return'Support';
+    if(/ironing/.test(c))return'Ironing';
+    if(/superficie/.test(c))return'Top surface';
+    if(/relleno|lightning|adaptativo/.test(c))return'Sparse infill';
+    if(/draft shield|skirt/.test(c))return'Skirt';
+    if(/brim/.test(c))return'Brim';
+    if(/raft/.test(c))return'Support';
+    return null;
+  }
+  function _tagFeatures(gc){
+    const out=[];let last=null;
+    for(const raw of gc.split('\n')){
+      const c=raw.trim();
+      if(c[0]===';'){
+        const f=_orcaFeature(c);
+        if(f){out.push(raw);if(f!==last){out.push('; FEATURE: '+f);last=f;}continue;}
+      }
+      out.push(raw);
+    }
+    return out.join('\n');
+  }
   async function generarGcode(){
     if(!S.stats)return;
     const p=readParams();S.params=p;
@@ -27013,6 +27047,7 @@ self.onmessage=function(ev){
       // EXCLUDE_OBJECT (Klipper): etiqueta cada pieza del plato para cancelarla sin abortar la placa
       if(p.excludeObject&&!_seq&&S.objBBs&&S.objBBs.length>1){gcode=_wrapExcludeObject(gcode,S.objBBs,spec.x/2,spec.y/2);}
       if(p.arcFitting){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
+      gcode=_tagFeatures(gcode); // etiquetas "; FEATURE:" → OrcaSlicer desglosa perímetros/relleno/soporte
       S.gcode=gcode;
       setProg(100,'✓ G-code listo');
       localStorage.setItem('sl_last_est_secs',_est.secs.toFixed(1));
