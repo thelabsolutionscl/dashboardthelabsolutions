@@ -15153,6 +15153,7 @@ let _ofRunsCache={t:0,data:null};          // caché corta del Agent_Log remoto
 let _ofQueueCache={t:0,len:null};          // caché corta de la longitud de Agent_Queue
 let _ofAutoCache={t:0,data:null};          // caché corta de la telemetría de Automations
 let _ofMaqCache={t:0,data:null};           // caché corta de las impresoras 3D (tabla Maquinas)
+let _ofTileW=0,_ofTileH=0;                  // tamaño de baldosa actual (para dibujar el mesón de las impresoras)
 // Estado de impresora 3D → estado de oficina
 function _ofPrinterCls(estado){ const e=(estado||'').toString().toLowerCase();
   if(/imprim|ocupad|print|busy|trabaj|en uso/.test(e)) return 'of-work';
@@ -15559,20 +15560,27 @@ const _OF_STATUS={'of-work':'#00d4aa','of-active':'#00d4cc','of-error':'#ff4444'
 function _ofIsoStation(m,x,y){
   const col=_OF_STATUS[m.cls]||'#7c8590';
   if(m.isPrinter){
-    const working=m.cls==='of-work', pcol=m.pcolor||col;
+    const working=m.cls==='of-work';
     const s=((m.label||'')+' '+(m.role||'')).toLowerCase();
     const big=/giga|orangestorm/.test(s)?1.5:(/k2\s*plus/.test(s)?1.18:1);
-    const Wp=44*big, Hp=50*big, matW=20*big, matH=10*big;
+    const Wp=44*big, Hp=50*big;
     const pclick=`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-    const halo=working?`<ellipse cx="0" cy="${(-Hp*0.5).toFixed(0)}" rx="${(24*big).toFixed(0)}" ry="${(28*big).toFixed(0)}" fill="${col}" opacity="0.3" filter="url(#ofHalo)"/>`:'';
-    const mat=`<polygon points="0,${(4-matH).toFixed(1)} ${matW.toFixed(1)},4 0,${(4+matH).toFixed(1)} ${(-matW).toFixed(1)},4" fill="${pcol}" opacity="0.22" stroke="${pcol}" stroke-opacity="0.5" stroke-width="2"/>`;
-    const body=m.img?`<image href="${m.img}" x="${(-Wp/2).toFixed(1)}" y="${(-Hp-4).toFixed(1)}" width="${Wp.toFixed(1)}" height="${Hp.toFixed(1)}" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-14" text-anchor="middle" font-size="${(36*big).toFixed(0)}">🖨️</text>`;
-    const light=`<circle cx="${(Wp*0.36).toFixed(1)}" cy="${(-Hp*0.82).toFixed(1)}" r="4.6" fill="${col}" stroke="#fff" stroke-width="1.3"${working?' class="of-iso-blink"':''}/>`;
+    // Mesón (tablero isométrico elevado, del tamaño de la baldosa → las contiguas forman un mesón continuo)
+    const cw=(_ofTileW||120)/2, cd=(_ofTileH||62)/2, ch=22;
+    const f=n=>n.toFixed(1);
+    const topPts=`0,${f(-ch-cd)} ${f(cw)},${f(-ch)} 0,${f(-ch+cd)} ${f(-cw)},${f(-ch)}`;
+    const faceL=`${f(-cw)},${f(-ch)} 0,${f(-ch+cd)} 0,${f(cd)} ${f(-cw)},0`;
+    const faceR=`0,${f(-ch+cd)} ${f(cw)},${f(-ch)} ${f(cw)},0 0,${f(cd)}`;
+    const counter=`<polygon points="${faceL}" fill="#aeb8c4"/><polygon points="${faceR}" fill="#c8d0da"/><polygon points="${topPts}" fill="#eaeff4" stroke="#cdd5de" stroke-width="1"/>`;
+    const baseY=-ch+cd*0.22;   // apoyo de la impresora sobre el tablero
+    const halo=working?`<ellipse cx="0" cy="${f(baseY-Hp*0.5)}" rx="${(24*big).toFixed(0)}" ry="${(28*big).toFixed(0)}" fill="${col}" opacity="0.3" filter="url(#ofHalo)"/>`:'';
+    const body=m.img?`<image href="${m.img}" x="${f(-Wp/2)}" y="${f(baseY-Hp)}" width="${f(Wp)}" height="${f(Hp)}" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="${f(baseY-Hp*0.28)}" text-anchor="middle" font-size="${(36*big).toFixed(0)}">🖨️</text>`;
+    const light=`<circle cx="${f(Wp*0.36)}" cy="${f(baseY-Hp*0.82)}" r="4.6" fill="${col}" stroke="#fff" stroke-width="1.3"${working?' class="of-iso-blink"':''}/>`;
     return `<g class="of-iso-char" ${pclick} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
       <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
-      <ellipse cx="0" cy="6" rx="${(22*big).toFixed(0)}" ry="${(10*big).toFixed(0)}" fill="url(#ofShadow)"/>
+      <ellipse cx="0" cy="${f(cd+2)}" rx="${(cw*0.95).toFixed(0)}" ry="${(cd*0.5).toFixed(0)}" fill="url(#ofShadow)"/>
       ${halo}
-      <g class="of-iso-body">${mat}${body}${light}</g>
+      <g class="of-iso-body">${counter}${body}${light}</g>
     </g>`;
   }
   const dark=_ofShade(col,0.72);
@@ -15632,11 +15640,12 @@ function _ofWalker(p1,p2,dur,delay,em){
     </g>
   </g>`;
 }
-// Posiciones exactas de las impresoras dentro de su sala (calca el plano del taller)
-// Grilla local 7×4 (fila 0 = fondo, fila 3 = frente):
-//   fondo: 3 Ender · medio: Giga(izq, grande) + K2 Plus + 2 Ender · frente: K2,K2,K1×5
+// Posiciones exactas de las impresoras dentro de su sala (calca los planos del taller)
+// Grilla local 7×4 (fila 0 = fondo, fila 3 = frente).
+//   Bloque Ender/K2Plus 2×3 (cols 3-4):  col3 = Ender/K2Plus/Ender · col4 = Ender×3
+//   Giga (grande) a la izquierda · fila frontal: K2,K2,K1×5
 function _ofPrinterSlots(members){
-  const enders=[[2,0],[3,0],[4,0],[2,1],[4,1]];
+  const enders=[[3,0],[4,0],[4,1],[3,2],[4,2]];   // 5 Ender alrededor de la K2 Plus
   const k1=[[2,3],[3,3],[4,3],[5,3],[6,3]];
   const k2=[[0,3],[1,3]];
   const map=new Map(); let ei=0,ki=0,k2i=0;
@@ -15680,6 +15689,7 @@ function _ofRenderIso(ia,auto,extras){
   const cols=_maxc, rows=_rt-gap;
   const _roomOf=(c,r)=>_rooms.find(R=>c>=R.c0&&c<=R.c1&&r>=R.r0&&r<=R.r1)||null;
   const tw=cols>=14?140:(cols>=11?162:186), th=Math.round(tw*0.52), wallH=64;
+  _ofTileW=tw; _ofTileH=th;
   const originX=(rows-1)*tw/2 + 56;
   const iso=(c,r)=>[ (c-r)*tw/2 + originX, (c+r)*th/2 ];
 
