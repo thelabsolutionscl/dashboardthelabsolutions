@@ -15413,7 +15413,7 @@ async function _renderOficina(){
   } else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)){ printersRaw=MAQUINAS; }
   const printerModel=printersRaw.map(p=>{ const cls=_ofPrinterCls(p.estado), lbl=_ofPrinterLbl(p.estado); if(cls==='of-work')working++;
     return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', img:_ofModelImg(p.modelo,p.nombre), pcolor:p.color||'#3aa0ff', role:'Impresora 3D · '+(p.modelo||p.nombre||''), cls, lbl, task:(p.modelo||'Impresora 3D')+' · '+lbl, stats:''+(p.modelo||''), num:p.numG||p.num||0};
-  }).sort((a,b)=>a.num-b.num);
+  }).sort((a,b)=>{ const rk=m=>{const s=((m.label||'')+' '+(m.role||'')).toLowerCase(); if(/k2\s*plus/.test(s))return 3; if(/giga|orangestorm/.test(s))return 4; if(/ender/.test(s))return 2; if(/k2/.test(s))return 1; if(/k1/.test(s))return 0; return 5;}; return rk(a)-rk(b)||(a.num-b.num); });
   const extraDepts=printerModel.length?[{name:'Impresoras 3D',color:'#3aa0ff',members:printerModel}]:[];
 
   // Guardar el modelo para el panel de detalle de agente (clic en un trabajador)
@@ -15558,6 +15558,23 @@ function _ofShade(hex,f){
 const _OF_STATUS={'of-work':'#00d4aa','of-active':'#00d4cc','of-error':'#ff4444','of-off':'#7c8590'};
 function _ofIsoStation(m,x,y){
   const col=_OF_STATUS[m.cls]||'#7c8590';
+  if(m.isPrinter){
+    const working=m.cls==='of-work', pcol=m.pcolor||col;
+    const s=((m.label||'')+' '+(m.role||'')).toLowerCase();
+    const big=/giga|orangestorm/.test(s)?1.5:(/k2\s*plus/.test(s)?1.18:1);
+    const Wp=44*big, Hp=50*big, matW=20*big, matH=10*big;
+    const pclick=`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+    const halo=working?`<ellipse cx="0" cy="${(-Hp*0.5).toFixed(0)}" rx="${(24*big).toFixed(0)}" ry="${(28*big).toFixed(0)}" fill="${col}" opacity="0.3" filter="url(#ofHalo)"/>`:'';
+    const mat=`<polygon points="0,${(4-matH).toFixed(1)} ${matW.toFixed(1)},4 0,${(4+matH).toFixed(1)} ${(-matW).toFixed(1)},4" fill="${pcol}" opacity="0.22" stroke="${pcol}" stroke-opacity="0.5" stroke-width="2"/>`;
+    const body=m.img?`<image href="${m.img}" x="${(-Wp/2).toFixed(1)}" y="${(-Hp-4).toFixed(1)}" width="${Wp.toFixed(1)}" height="${Hp.toFixed(1)}" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-14" text-anchor="middle" font-size="${(36*big).toFixed(0)}">🖨️</text>`;
+    const light=`<circle cx="${(Wp*0.36).toFixed(1)}" cy="${(-Hp*0.82).toFixed(1)}" r="4.6" fill="${col}" stroke="#fff" stroke-width="1.3"${working?' class="of-iso-blink"':''}/>`;
+    return `<g class="of-iso-char" ${pclick} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
+      <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
+      <ellipse cx="0" cy="6" rx="${(22*big).toFixed(0)}" ry="${(10*big).toFixed(0)}" fill="url(#ofShadow)"/>
+      ${halo}
+      <g class="of-iso-body">${mat}${body}${light}</g>
+    </g>`;
+  }
   const dark=_ofShade(col,0.72);
   const cat=m.clickIA?_ofCat(m):null;
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
@@ -15631,7 +15648,9 @@ function _ofRenderIso(ia,auto,extras){
   { const ot=ia.filter(m=>_ofCat(m).name==='Otros'); if(ot.length) _depts.push({name:'Otros',color:'#7a7a7a',members:ot}); }
   if(auto.length) _depts.push({name:'Automatizaciones',color:'#a78bfa',members:auto});
   extras.forEach(d=>{ if(d.members&&d.members.length) _depts.push({name:d.name,color:d.color,members:d.members}); });
-  _depts.forEach(d=>{ const n=d.members.length; d.dc=Math.max(2,Math.ceil(Math.sqrt(n*1.5))); d.dr=Math.max(1,Math.ceil(n/d.dc)); });
+  _depts.forEach(d=>{ const n=d.members.length;
+    if(/impresora/i.test(d.name)){ d.dc=Math.min(7,Math.max(2,n)); d.dr=Math.max(1,Math.ceil(n/d.dc)); }
+    else { d.dc=Math.max(2,Math.ceil(Math.sqrt(n*1.5))); d.dr=Math.max(1,Math.ceil(n/d.dc)); } });
   const gap=1;
   const perShelf=Math.max(1,Math.min(3,Math.ceil(Math.sqrt(_depts.length))));
   const _rooms=[]; let _rt=0, _maxc=0, _corrR=0;
