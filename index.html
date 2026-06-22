@@ -15585,21 +15585,17 @@ function _ofIsoStation(m,x,y){
     const working=m.cls==='of-work';
     const s=((m.label||'')+' '+(m.role||'')).toLowerCase();
     const big=/giga|orangestorm/.test(s)?1.5:(/k2\s*plus/.test(s)?1.18:1);
-    const Wp=44*big, Hp=50*big, tw=_ofTileW||120, th=_ofTileH||62, ch=24;
+    const Wp=44*big, Hp=50*big, th=_ofTileH||62;
     const f=n=>n.toFixed(1);
     const pclick=`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-    // Mesón (baldosa completa, elevado ch) → las contiguas forman un mesón continuo y la máquina va encima
-    const Tu=`0,${f(-th/2-ch)}`, Ru=`${f(tw/2)},${f(-ch)}`, Bu=`0,${f(th/2-ch)}`, Lu=`${f(-tw/2)},${f(-ch)}`;
-    const Lf=`${f(-tw/2)},0`, Bf=`0,${f(th/2)}`, Rf=`${f(tw/2)},0`;
-    const counter=`<polygon points="${Lf} ${Bf} ${Bu} ${Lu}" fill="#aeb8c4"/><polygon points="${Bf} ${Rf} ${Ru} ${Bu}" fill="#c8d0da"/><polygon points="${Tu} ${Ru} ${Bu} ${Lu}" fill="#eaeff4" stroke="#cdd5de" stroke-width="1.1"/>`;
-    const baseY=-ch+th*0.10;
+    const baseY=th*0.14;   // la impresora se apoya sobre el mesón común (elevación dada por el translate)
     const halo=working?`<ellipse cx="0" cy="${f(baseY-Hp*0.5)}" rx="${(24*big).toFixed(0)}" ry="${(28*big).toFixed(0)}" fill="${col}" opacity="0.3" filter="url(#ofHalo)"/>`:'';
     const body=m.img?`<image href="${m.img}" x="${f(-Wp/2)}" y="${f(baseY-Hp)}" width="${f(Wp)}" height="${f(Hp)}" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="${f(baseY-Hp*0.28)}" text-anchor="middle" font-size="${(36*big).toFixed(0)}">🖨️</text>`;
     const light=`<circle cx="${f(Wp*0.36)}" cy="${f(baseY-Hp*0.82)}" r="4.6" fill="${col}" stroke="#fff" stroke-width="1.3"${working?' class="of-iso-blink"':''}/>`;
-    const shadow=`<ellipse cx="0" cy="${f(th/2+3)}" rx="${(tw*0.45).toFixed(0)}" ry="${(th*0.16).toFixed(0)}" fill="url(#ofShadow)"/>`;
+    const shadow=`<ellipse cx="0" cy="${f(baseY+2)}" rx="${(Wp*0.46).toFixed(0)}" ry="${(6*big).toFixed(0)}" fill="url(#ofShadow)"/>`;
     return `<g class="of-iso-char" ${pclick} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
       <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
-      ${shadow}${counter}${halo}
+      ${shadow}${halo}
       <g class="of-iso-body">${body}${light}</g>
     </g>`;
   }
@@ -15616,34 +15612,31 @@ function _ofIsoStation(m,x,y){
   }
   const ring=cat?`<ellipse cx="0" cy="5" rx="19" ry="9.5" fill="none" stroke="${cat.color}" stroke-width="2.5" opacity="0.6"/>`:'';
   const halo=working?`<ellipse cx="0" cy="-40" rx="27" ry="32" fill="${col}" opacity="0.3" filter="url(#ofHalo)"/>`:'';
-  // MESÓN frente al agente (counter): el agente queda parado DETRÁS, con su laptop encima
-  const _tw=_ofTileW||120, _th=_ofTileH||62, _ch=18, _f=n=>n.toFixed(1);
-  const Tu=`${_f(-_tw/2)},${_f(-_ch)}`, Bu=`0,${_f(_th/2-_ch)}`, Ru=`${_f(_tw/2)},${_f(-_ch)}`;
-  const Lf=`${_f(-_tw/2)},0`, Bf=`0,${_f(_th/2)}`, Rf=`${_f(_tw/2)},0`;
-  const cTint=cat?cat.color:'#7c8590';
-  const counter=`<polygon points="${Lf} ${Bf} ${Bu} ${Tu}" fill="#b4bdc8"/><polygon points="${Bf} ${Rf} ${Ru} ${Bu}" fill="#c8d0da"/><polygon points="${Tu} ${Bu} ${Ru}" fill="#eef2f6"/><polygon points="${Tu} ${Bu} ${Ru}" fill="${cTint}" opacity="0.16" stroke="${cTint}" stroke-opacity="0.4" stroke-width="1"/>`;
-  const _ly=-_ch+_th*0.18, _scr=working?col:'#6b7785';
-  const laptop=`<polygon points="-7,${_f(_ly)} 0,${_f(_ly+3.5)} 7,${_f(_ly)} 0,${_f(_ly-3.5)}" fill="#e7ecf1"/><rect x="-6" y="${_f(_ly-9)}" width="12" height="8.5" rx="1.2" fill="#15171a"/><rect x="-4.8" y="${_f(_ly-7.8)}" width="9.6" height="6" rx="0.8" fill="${_scr}" opacity="${working?'0.96':'0.5'}"/>`;
+  // MESÓN COMÚN: las caras de baldosas contiguas se unen en una sola barra por fila; el agente va SENTADO detrás
+  const _th=_ofTileH||62, _f=n=>n.toFixed(1);
+  // Computador GRANDE (monitor) sobre el mesón, delante del agente sentado
+  const _my=_th*0.20, _scr=working?col:'#5b7184';
+  const monitor=`<rect x="-13" y="${_f(_my-20)}" width="26" height="16.5" rx="1.8" fill="#0f1114"/><rect x="-11.1" y="${_f(_my-18.1)}" width="22.2" height="12.7" rx="1" fill="${_scr}" opacity="${working?'0.96':'0.5'}"/>`
+    +(working?`<polyline points="-8,${_f(_my-10)} -3,${_f(_my-14)} 1,${_f(_my-9)} 5,${_f(_my-15)} 8,${_f(_my-11)}" fill="none" stroke="#0c100e" stroke-width="1.1" opacity="0.5"/>`:'')
+    +`<rect x="-2.4" y="${_f(_my-3.5)}" width="4.8" height="3.4" fill="#0f1114"/><rect x="-8" y="${_f(_my)}" width="16" height="3" rx="1.4" fill="#1a1d22"/>`
+    +`<rect x="-11" y="${_f(_my+4)}" width="22" height="3.6" rx="1.6" fill="#d3dae2"/>`;
+  // Agente SENTADO en el mesón común (sin piernas; asoma torso y cabeza)
+  const seat=`<g class="of-iso-body">
+      <rect ${working?'class="of-type-l"':''} x="-16" y="-15" width="6.5" height="16" rx="3.2" fill="${dark}"/>
+      <rect ${working?'class="of-type-r"':''} x="9.5" y="-15" width="6.5" height="16" rx="3.2" fill="${dark}"/>
+      <rect x="-13" y="-23" width="26" height="26" rx="12" fill="${col}"/>
+      <rect x="-13" y="-23" width="26" height="26" rx="12" fill="url(#ofShine)"/>
+      <circle cx="0" cy="-35" r="15" fill="#fff7ec" stroke="${col}" stroke-width="3"/>
+      <ellipse cx="-5" cy="-40" rx="4.2" ry="2.8" fill="#fff" opacity="0.6"/>
+      ${m.img?`<image href="${m.img}" x="-12.5" y="-47.5" width="25" height="25" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-30" text-anchor="middle" font-size="16">${em}</text>`}
+      <circle cx="12" cy="-46" r="3.8" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
+    </g>`;
   return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
     <title>${escapeHtml(m.label+' — '+m.lbl+(cat?' · '+cat.name:''))}</title>
-    <ellipse cx="0" cy="5" rx="22" ry="10" fill="url(#ofShadow)"/>
+    <ellipse cx="0" cy="2" rx="15" ry="6.5" fill="url(#ofShadow)"/>
     ${halo}
-    ${ring}
-    <g transform="scale(1.04)">
-    <g class="of-iso-body">
-      <rect x="-7.5" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
-      <rect x="1" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
-      <rect ${working?'class="of-type-l"':''} x="-17" y="-34" width="6.5" height="20" rx="3" fill="${dark}"/>
-      <rect ${working?'class="of-type-r"':''} x="10.5" y="-34" width="6.5" height="20" rx="3" fill="${dark}"/>
-      <rect x="-13" y="-38" width="26" height="32" rx="12" fill="${col}"/>
-      <rect x="-13" y="-38" width="26" height="32" rx="12" fill="url(#ofShine)"/>
-      <circle cx="0" cy="-51" r="16" fill="#fff7ec" stroke="${col}" stroke-width="3.2"/>
-      <ellipse cx="-5.5" cy="-57" rx="4.5" ry="3" fill="#fff" opacity="0.6"/>
-      ${m.img?`<image href="${m.img}" x="-13.5" y="-64.5" width="27" height="27" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-45.5" text-anchor="middle" font-size="17">${em}</text>`}
-      <circle cx="13" cy="-63" r="4" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
-    </g>
-    </g>
-    ${counter}${laptop}
+    <g transform="scale(1.04)">${seat}</g>
+    ${monitor}
     ${bubble}
   </g>`;
 }
@@ -15794,6 +15787,17 @@ function _ofRenderIso(ia,auto,extras){
     dividers+=`<line x1="${k.L[0].toFixed(1)}" y1="${(k.L[1]-dw).toFixed(1)}" x2="${k.T[0].toFixed(1)}" y2="${(k.T[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
   });
 
+  // MESÓN COMÚN: un único tablero elevado por departamento (los agentes se sientan en él)
+  const _ch=24;
+  let counters='';
+  _rooms.forEach(R=>{ const k=_rC(R);
+    const U=p=>`${p[0].toFixed(1)},${(p[1]-_ch).toFixed(1)}`, P=p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`;
+    counters+=`<polygon points="${U(k.L)} ${P(k.L)} ${P(k.F)} ${U(k.F)}" fill="#9aa6b3"/>`
+            +`<polygon points="${U(k.F)} ${P(k.F)} ${P(k.R)} ${U(k.R)}" fill="#b1bcc8"/>`
+            +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="#e8edf2"/>`
+            +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="${R.color}" opacity="0.14"/>`;
+  });
+
   // Mapa etiqueta→sala y ancla (frente del depto) para mover a los agentes que se comunican
   const _roomByLabel={}, _roomAnchor=R=>iso(R.cc,R.r1+0.4);
   _rooms.forEach(R=>R.members.forEach(mm=>{ if(mm&&mm.label) _roomByLabel[mm.label]=R; }));
@@ -15808,7 +15812,7 @@ function _ofRenderIso(ia,auto,extras){
     else R.members.forEach((m,i)=>{ const c=R.c0+(i%R.dc), r=R.r0+Math.floor(i/R.dc); _placed.push({m,c,r}); });
   });
   _placed.sort((a,b)=>(a.r-b.r)||(a.c-b.c));
-  _placed.forEach(({m,c,r})=>{ if(_transit[m.label]) return; const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); tags+=_ofIsoTag(m,x,y); });
+  _placed.forEach(({m,c,r})=>{ if(_transit[m.label]) return; const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y-_ch); tags+=_ofIsoTag(m,x,y); });
   // Agentes que se comunican: caminan de su departamento al de destino (y vuelven)
   Object.values(_transit).forEach((tr,i)=>{ chars+=_ofCommWalker(tr.m, tr.from, tr.to, 4.6, i*0.4); });
   // Mensajeros ambientales: cruzan de un departamento a otro por el pasillo (movimiento continuo)
@@ -15889,6 +15893,7 @@ function _ofRenderIso(ia,auto,extras){
     ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}
     <g>${tiles}</g>
     ${rugs}
+    ${counters}
     ${dividers}
     <g>${chars}</g>
     <g>${tags}</g>
