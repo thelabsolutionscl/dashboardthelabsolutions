@@ -40,6 +40,18 @@ function loadToken() {
   return t;
 }
 const TOKEN = loadToken();
+const TOKEN_BUF = Buffer.from(TOKEN);
+
+// Comparación de tiempo constante para el token, evitando timing attacks.
+// timingSafeEqual lanza si los buffers tienen distinto largo, así que primero
+// se comprueba el largo (este chequeo no filtra el contenido del token).
+function safeEqual(given, expected) {
+  if (typeof given !== 'string' || given.length === 0) return false;
+  const a = Buffer.from(given);
+  const b = (expected === TOKEN) ? TOKEN_BUF : Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
 
 // Solo IPs privadas (RFC 1918) + loopback — nunca proxy hacia internet
 function isPrivateIp(ip) {
@@ -81,11 +93,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Token: header X-Bridge-Token o query ?bt=
+  // Token: se prioriza el header X-Bridge-Token. El query ?bt= se mantiene
+  // por retrocompatibilidad pero está DEPRECADO: los query params se filtran
+  // en logs de servidor/proxy y en la cabecera Referer, exponiendo el token.
   const qParts = rawQuery ? rawQuery.split('&') : [];
   const btPart = qParts.find(p => p.startsWith('bt='));
-  const given = req.headers['x-bridge-token'] || (btPart ? decodeURIComponent(btPart.slice(3)) : '');
-  if (given !== TOKEN) { jsonError(res, 401, 'unauthorized'); return; }
+  const headerToken = req.headers['x-bridge-token'];
+  const given = (headerToken != null && headerToken !== '')
+    ? headerToken
+    : (btPart ? decodeURIComponent(btPart.slice(3)) : '');
+  if (!safeEqual(given, TOKEN)) { jsonError(res, 401, 'unauthorized'); return; }
 
   // Token válido — endpoints de diagnóstico/control (no son proxy a impresora)
   if (rawPath === '/authcheck') {

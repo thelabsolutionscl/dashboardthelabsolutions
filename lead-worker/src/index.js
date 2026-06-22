@@ -483,7 +483,15 @@ async function handleNewsletterUnsubscribe(request, env) {
 
 /* ── Newsletter: helpers de token HMAC (sin estado), página HTML y email ── */
 function nlSecret(env) {
-  return env.NEWSLETTER_SECRET || env.PUBLIC_LEAD_KEY || env.AIRTABLE_TOKEN || "thelab-newsletter";
+  // Orden: NEWSLETTER_SECRET (dedicado) → AIRTABLE_TOKEN (siempre presente y NO
+  // público). NUNCA un literal hardcodeado (sería predecible y permitiría forjar
+  // tokens de confirmación/baja). Si no hay ninguno, error claro.
+  const secret = env.NEWSLETTER_SECRET || env.AIRTABLE_TOKEN;
+  if (!secret) {
+    console.error("[leads-worker] nlSecret: falta NEWSLETTER_SECRET y AIRTABLE_TOKEN; no se pueden firmar tokens de newsletter.");
+    throw new Error("Newsletter signing secret no configurado (NEWSLETTER_SECRET o AIRTABLE_TOKEN)");
+  }
+  return secret;
 }
 async function nlSign(env, purpose, email) {
   const msg = new TextEncoder().encode(`${purpose}:${String(email).trim().toLowerCase()}`);
@@ -1321,10 +1329,16 @@ function corsHeaders(origin, env) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  // Permite los orígenes configurados + los deploys de Vercel de este proyecto
-  // (web-thelab-solutions*.vercel.app) para previsualización. No es wildcard general.
-  const isVercel = /^https:\/\/web-thelab-solutions[a-z0-9-]*\.vercel\.app$/.test(origin);
-  const allow = allowed.includes(origin) || isVercel ? origin : allowed[0] || "";
+  // Previews de Vercel: el patrón real incluye un sufijo con hash y scope, p.ej.
+  //   web-thelab-solutions-<hash>-<scope>.vercel.app
+  // La regex anterior (web-thelab-solutions[a-z0-9-]*) era demasiado amplia y
+  // aceptaba dominios como web-thelab-solutions-evil-attacker.vercel.app o
+  // web-thelab-solutionsXXX.vercel.app. Aquí exigimos al menos dos segmentos
+  // separados por guion tras el prefijo (hash + scope), que es la forma que
+  // genera Vercel. La fuente preferida sigue siendo env.ALLOWED_ORIGINS.
+  const isVercelPreview =
+    /^https:\/\/web-thelab-solutions-[a-z0-9]+(?:-[a-z0-9]+)+\.vercel\.app$/.test(origin);
+  const allow = allowed.includes(origin) || isVercelPreview ? origin : allowed[0] || "";
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",

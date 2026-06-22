@@ -45,4 +45,4 @@ id = "c148848321344f60939fa71a51d050c6"
 #   TURNSTILE_SECRET        (opcional — verificación Cloudflare Turnstile)
 #   ANTHROPIC_API_KEY       (opcional — solo si AUTO_PROCESS_LEADS=true)
 #   RESEND_API_KEY          (opcional — auto-respuesta de leads + confirmación de newsletter)
-#   NEWSLETTER_SECRET       (opcional — firma tokens de confirmación/baja; si falta usa PUBLIC_LEAD_KEY)
+#   NEWSLETTER_SECRET       (opcional — firma tokens de confirmación/baja; si falta se usa AIRTABLE_TOKEN, nunca un literal)

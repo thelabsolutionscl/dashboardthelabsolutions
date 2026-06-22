@@ -155,7 +155,8 @@ export async function getSIIToken(privateKey, certificate, env) {
     `</soapenv:Body>` +
     `</soapenv:Envelope>`;
 
-  console.log('[DEBUG getToken] innerXml firmado:', innerXml);
+  // Logging sensible: solo con SII_DEBUG === '1' (el XML firmado incluye el certificado).
+  if (env.SII_DEBUG === '1') console.log('[DEBUG getToken] innerXml firmado:', innerXml);
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
@@ -164,8 +165,11 @@ export async function getSIIToken(privateKey, certificate, env) {
   });
 
   const xml = await res.text();
-  console.log('[DEBUG getToken] SII HTTP status:', res.status);
-  console.log('[DEBUG getToken] SII raw response:', xml.substring(0, 800));
+  // Logging sensible: la respuesta contiene el TOKEN de sesión. Solo con SII_DEBUG === '1'.
+  if (env.SII_DEBUG === '1') {
+    console.log('[DEBUG getToken] SII HTTP status:', res.status);
+    console.log('[DEBUG getToken] SII raw response:', xml.substring(0, 800));
+  }
 
   // Buscar TOKEN directo o dentro de getTokenReturn (entity-encoded)
   let token = (xml.match(/<TOKEN>([^<]+)<\/TOKEN>/) || [])[1]?.trim();
@@ -215,8 +219,11 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
 
   const text = await res.text();
 
-  console.log('[DEBUG uploadDTE] HTTP status:', res.status);
-  console.log('[DEBUG uploadDTE] respuesta cruda SII COMPLETA:\n', text);
+  // Logging sensible: la respuesta cruda del SII. Solo con SII_DEBUG === '1'.
+  if (env.SII_DEBUG === '1') {
+    console.log('[DEBUG uploadDTE] HTTP status:', res.status);
+    console.log('[DEBUG uploadDTE] respuesta cruda SII COMPLETA:\n', text);
+  }
 
   // La respuesta de recepción usa <TRACKID> y <STATUS> (mayúsculas).
   const trackid = (text.match(/TRACKID[^>]*>([^<]+)/i) || [])[1]?.trim() || null;
@@ -262,7 +269,7 @@ export async function getUploadStatus(trackId, token, rutEmisor, env) {
 
   const xml = await res.text();
   const inner = extractSoapReturn(xml, 'getEstUp') || xml;
-  console.log('[DEBUG getEstUp] respuesta:', inner.substring(0, 600));
+  if (env.SII_DEBUG === '1') console.log('[DEBUG getEstUp] respuesta:', inner.substring(0, 600));
 
   const estado = (inner.match(/<ESTADO>([^<]+)<\/ESTADO>/) || [])[1]?.trim() || null;
   const glosa  = (inner.match(/<GLOSA>([^<]+)<\/GLOSA>/) || [])[1]?.trim() || '';

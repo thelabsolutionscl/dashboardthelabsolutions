@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { timingSafeEqual } from 'crypto';
 import { parsePFX } from './src/sii-crypto.js';
 import { getSIIToken, uploadDTE, getUploadStatus } from './src/sii-auth.js';
 import { buildSignedEnvioDTE, buildSignedEnvioDTESet } from './src/dte-xml.js';
@@ -45,13 +46,57 @@ const env = {
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+
+// CORS: si SII_ALLOW_ORIGIN está definido se usa ese origen; si no, se mantiene
+// "*" por retrocompatibilidad. RECOMENDADO: fijar SII_ALLOW_ORIGIN al dominio
+// del dashboard para no exponer la API a cualquier origen.
+const ALLOW_ORIGIN = process.env.SII_ALLOW_ORIGIN || '*';
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Origin', ALLOW_ORIGIN);
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-SII-Key');
   if (req.method === 'OPTIONS') return res.status(204).send();
   next();
 });
+
+// ── Guard de autenticación retrocompatible ────────────────────────────────────
+// Si existe process.env.SII_API_KEY, todas las rutas que emiten/mutan exigen el
+// header X-SII-Key (comparación de tiempo constante). Si NO está definida, se
+// deja pasar pero se avisa una sola vez por consola.
+let _warnedNoApiKey = false;
+function timingSafeStrEq(a, b) {
+  const bufA = Buffer.from(String(a || ''), 'utf8');
+  const bufB = Buffer.from(String(b || ''), 'utf8');
+  // timingSafeEqual exige buffers del mismo largo; si difieren, no es match,
+  // pero igual hacemos una comparación para no filtrar el largo por timing.
+  if (bufA.length !== bufB.length) {
+    // Compara contra sí mismo para gastar un tiempo comparable sin lanzar.
+    try { timingSafeEqual(bufA, bufA); } catch {}
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
+function requireApiKey(req, res, next) {
+  const expected = process.env.SII_API_KEY;
+  if (!expected) {
+    if (!_warnedNoApiKey) {
+      console.warn('[SII Server] ⚠ SII_API_KEY no está definida: la API está SIN PROTECCIÓN. Define SII_API_KEY para exigir el header X-SII-Key.');
+      _warnedNoApiKey = true;
+    }
+    return next();
+  }
+  const provided = req.get('X-SII-Key') || '';
+  if (!timingSafeStrEq(provided, expected)) {
+    return res.status(401).json({ error: 'No autorizado: header X-SII-Key inválido o ausente' });
+  }
+  next();
+}
+
+// Gate de endpoints de diagnóstico: solo disponibles si SII_DEBUG === '1'.
+function requireDebug(req, res, next) {
+  if (process.env.SII_DEBUG !== '1') return res.status(404).json({ error: 'Ruta no encontrada' });
+  next();
+}
 
 // GET /health
 app.get('/health', (req, res) => {
@@ -64,7 +109,8 @@ app.get('/health', (req, res) => {
 });
 
 // GET /debug — diagnóstico: IP de salida + prueba endpoints SII
-app.get('/debug', async (req, res) => {
+// (gateado tras SII_DEBUG === '1')
+app.get('/debug', requireDebug, async (req, res) => {
   const results = {};
   const hdrs = { 'User-Agent': 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)', 'Accept': 'text/xml' };
 
@@ -129,7 +175,7 @@ app.get('/debug', async (req, res) => {
 });
 
 // PUT /caf
-app.put('/caf', (req, res) => {
+app.put('/caf', requireApiKey, (req, res) => {
   try {
     const { tipo_documento, caf_xml } = req.body;
     if (!tipo_documento || !caf_xml)
@@ -147,7 +193,7 @@ app.put('/caf', (req, res) => {
 
 // PUT /caf-file/:tipo — sube el CAF enviando el XML crudo en el body
 // (más simple: curl -X PUT .../caf-file/61 -H "Content-Type: text/xml" --data-binary @CAF_61.xml)
-app.put('/caf-file/:tipo', express.text({ type: () => true, limit: '5mb' }), (req, res) => {
+app.put('/caf-file/:tipo', requireApiKey, express.text({ type: () => true, limit: '5mb' }), (req, res) => {
   try {
     const tipo = String(req.params.tipo);
     const cafXml = typeof req.body === 'string' ? req.body : '';
@@ -185,7 +231,7 @@ app.get('/folio/:tipo', (req, res) => {
 });
 
 // GET /test-raw — envía XML mínimo para diagnosticar transporte SOAP
-app.get('/test-raw', async (req, res) => {
+app.get('/test-raw', requireDebug, async (req, res) => {
   try {
     const { certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
     const { certDerb64 } = await import('./src/sii-crypto.js');
@@ -249,7 +295,7 @@ app.get('/test-raw', async (req, res) => {
 });
 
 // GET /test-cert — inspecciona el .pfx: cuántos certs trae y cuál matchea la clave
-app.get('/test-cert', async (req, res) => {
+app.get('/test-cert', requireDebug, async (req, res) => {
   try {
     const { describePFX } = await import('./src/sii-crypto.js');
     res.json(describePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD));
@@ -297,7 +343,7 @@ app.get('/preview-dte', async (req, res) => {
 // GET /test-emit — emite una Factura de prueba REAL al SII (consume 1 folio).
 // Usa el mismo flujo que POST / pero con datos de ejemplo, para validar el
 // pipeline completo contra SII certificación.
-app.get('/test-emit', async (req, res) => {
+app.get('/test-emit', requireApiKey, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const tipo = '33';
@@ -321,14 +367,16 @@ app.get('/test-emit', async (req, res) => {
       totales: { neto: 100000, iva: 19000, total: 119000 },
     };
 
-    const folio = nextFolio(tipo, cafXml);
+    const folio = await nextFolio(tipo, cafXml);
     const token = await getSIIToken(privateKey, certificate, env);
     const envioDte = buildSignedEnvioDTE(sample, folio, cafXml, privateKey, certificate, env);
     persistEmittedDtes(envioDte);
     const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
 
-    if (siiResult.estado !== '-11' && siiResult.estado !== '-1') {
-      kv.put(`folio_${tipo}`, String(folio));
+    // El folio ya quedó reservado/persistido en nextFolio. Si hubo error grave,
+    // se revierte para poder reutilizarlo.
+    if (siiResult.estado === '-11' || siiResult.estado === '-1') {
+      await rollbackFolio(tipo, folio);
     }
 
     res.json({
@@ -461,7 +509,7 @@ app.get('/preview-pdf', async (req, res) => {
 });
 
 // POST /set-pruebas — emite el SET BÁSICO completo al SII (consume folios).
-app.post('/set-pruebas', async (req, res) => {
+app.post('/set-pruebas', requireApiKey, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -524,7 +572,7 @@ app.get('/emitted-dtes', (req, res) => {
 });
 
 // GET /estado/:trackid — consulta el estado de procesamiento de un envío
-app.get('/estado/:trackid', async (req, res) => {
+app.get('/estado/:trackid', requireApiKey, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -537,7 +585,7 @@ app.get('/estado/:trackid', async (req, res) => {
 });
 
 // GET /test-token — prueba el flujo semilla→token sin emitir DTE
-app.get('/test-token', async (req, res) => {
+app.get('/test-token', requireDebug, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -549,7 +597,7 @@ app.get('/test-token', async (req, res) => {
 });
 
 // POST / — emitir DTE
-app.post('/', async (req, res) => {
+app.post('/', requireApiKey, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const data = req.body;
@@ -559,14 +607,16 @@ app.post('/', async (req, res) => {
     const cafXml = kv.get(`caf_${data.tipo_documento}`);
     if (!cafXml) throw new Error(`CAF no encontrado para tipo ${data.tipo_documento}`);
 
-    const folio = nextFolio(data.tipo_documento, cafXml);
+    const folio = await nextFolio(data.tipo_documento, cafXml);
     const token = await getSIIToken(privateKey, certificate, env);
     const envioDte = buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env);
     persistEmittedDtes(envioDte);
     const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
 
-    if (siiResult.estado !== '-11' && siiResult.estado !== '-1') {
-      kv.put(`folio_${data.tipo_documento}`, String(folio));
+    // El folio ya quedó reservado/persistido en nextFolio. Si hubo error grave,
+    // se revierte para poder reutilizarlo.
+    if (siiResult.estado === '-11' || siiResult.estado === '-1') {
+      await rollbackFolio(data.tipo_documento, folio);
     }
 
     const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -647,7 +697,7 @@ app.get('/preview-pdf-be', async (req, res) => {
 });
 
 // POST /set-pruebas-be — emite el set de boleta electrónica al SII (consume folios)
-app.post('/set-pruebas-be', async (req, res) => {
+app.post('/set-pruebas-be', requireApiKey, async (req, res) => {
   try {
     validateEnvSecrets(env);
     const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD);
@@ -683,12 +733,40 @@ function parseCafRange(cafXml) {
   return { desde, hasta };
 }
 
+// Mutex en memoria para serializar la asignación de folios. Evita que dos
+// requests concurrentes (dentro del mismo proceso/aislado) lean el mismo
+// contador y obtengan el mismo folio. El folio reservado se persiste de
+// inmediato dentro del lock; si el upload falla con error grave, el caller
+// debe revertir el contador con `rollbackFolio`.
+// NOTA: para un despliegue multi-instancia real esto NO basta — se necesita un
+// lock distribuido (p.ej. KV con CAS, Redis, o una transacción en BD).
+let _folioLock = Promise.resolve();
+
 function nextFolio(tipoDTE, cafXml) {
-  const range = parseCafRange(cafXml);
-  const current = parseInt(kv.get(`folio_${tipoDTE}`) || String(range.desde - 1));
-  const next = current + 1;
-  if (next > range.hasta) throw new Error(`Folios agotados para tipo ${tipoDTE}`);
-  return next;
+  const run = () => {
+    const range = parseCafRange(cafXml);
+    const current = parseInt(kv.get(`folio_${tipoDTE}`) || String(range.desde - 1));
+    const next = current + 1;
+    if (next > range.hasta) throw new Error(`Folios agotados para tipo ${tipoDTE}`);
+    // Reserva atómica: persiste el contador antes de soltar el lock.
+    kv.put(`folio_${tipoDTE}`, String(next));
+    return next;
+  };
+  // Encadena sobre el lock para serializar; devuelve una promesa con el folio.
+  const result = _folioLock.then(run);
+  // El lock avanza aunque `run` lance, para no quedar bloqueado.
+  _folioLock = result.then(() => {}, () => {});
+  return result;
+}
+
+// Revierte el contador de folios al valor anterior (folio - 1) cuando un envío
+// falló con error grave y el folio reservado no se llegó a usar.
+function rollbackFolio(tipoDTE, folio) {
+  return _folioLock = _folioLock.then(() => {
+    const current = parseInt(kv.get(`folio_${tipoDTE}`) || '0');
+    // Solo revertir si nadie más avanzó el contador por encima de este folio.
+    if (current === folio) kv.put(`folio_${tipoDTE}`, String(folio - 1));
+  }, () => {});
 }
 
 function validateEnvSecrets(env) {

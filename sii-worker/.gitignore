@@ -3,3 +3,10 @@ node_modules/
 dist/
 .env
 data/
+
+# Certificados digitales — NUNCA subir al repo
+*.pfx
+*.p12
+*.pem
+*.key
+cert/

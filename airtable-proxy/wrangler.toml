@@ -2,6 +2,17 @@ name = "airtable-proxy"
 main = "src/worker.js"
 compatibility_date = "2024-09-01"
 
+# ── Variables NO secretas (opcionales) ─────────────────────────────────
+# CORS: allowlist de orígenes (coma-separado). Si el Origin de la request está
+# en la lista, se refleja. Si se DEJA SIN DEFINIR, se mantiene '*' (retrocompat).
+# [vars]
+# ALLOWED_ORIGINS = "https://dashboard.thelab.solutions,http://localhost:3000"
+#
+# Defensa en profundidad: restringe los paths de Airtable a estas tablas
+# (coma-separado, nombres tal cual aparecen en la URL). Si se deja sin definir,
+# se permite cualquier tabla (retrocompat). No afecta a /anthropic/*.
+# ALLOWED_TABLES = "Clientes,Proyectos,Agent_Queue"
+
 # Secrets — ejecutar una vez después del deploy:
 #   wrangler secret put AIRTABLE_TOKEN    ← tu PAT de Airtable (patXXX...)
 #   wrangler secret put ANTHROPIC_TOKEN   ← tu API key de Anthropic (sk-ant-...)

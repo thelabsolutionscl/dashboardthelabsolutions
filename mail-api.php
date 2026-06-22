@@ -45,8 +45,102 @@ define('IMAP_PORT', 993);
 define('SMTP_HOST', 'mail.thelab.solutions');
 define('SMTP_PORT', 465);
 
+// ── Helpers de seguridad ──────────────────────────────────────
+/**
+ * Elimina CR/LF (y sus formas codificadas %0a/%0d) de cualquier valor que
+ * vaya a parar a una cabecera de correo, para evitar inyección de cabeceras
+ * SMTP (header injection / CRLF injection). Se aplica a to, cc, subject,
+ * from_name y cualquier otro campo controlado por el usuario.
+ */
+function strip_crlf($s) {
+    $s = (string)$s;
+    // Primero decodificar las formas %0a/%0d (mayúsculas y minúsculas) para
+    // que no se "cuelen" tras una decodificación posterior.
+    $s = str_ireplace(['%0a', '%0d'], '', $s);
+    // Eliminar CR, LF y NUL literales.
+    return str_replace(["\r", "\n", "\0"], '', $s);
+}
+
+/**
+ * Normaliza una lista de direcciones separadas por comas: descarta entradas
+ * cuya dirección de email no sea válida según FILTER_VALIDATE_EMAIL.
+ * Acepta tanto "Nombre <a@b.com>" como "a@b.com". Devuelve la cadena
+ * resultante (separada por comas) ya sin CR/LF.
+ */
+function sanitize_addr_list($list) {
+    $list = strip_crlf($list);
+    $out  = [];
+    foreach (explode(',', $list) as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') continue;
+        // Extraer la dirección entre < > si existe; si no, la entrada completa.
+        $email = preg_match('/<([^>]+)>/', $entry, $m) ? trim($m[1]) : $entry;
+        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $out[] = $entry;
+        }
+    }
+    return implode(', ', $out);
+}
+
 function imap_str($folder = 'INBOX') {
     return '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}' . $folder;
+}
+
+// ── Rate limiting básico por IP ────────────────────────────────
+/**
+ * Límite defensivo por IP para acciones que usan credenciales (login/list).
+ * Usa un archivo temporal en sys_get_temp_dir(). Es best-effort: si no se
+ * puede leer/escribir el archivo, NO bloquea (no rompe funcionalidad).
+ * Si se supera el límite, responde 429 y termina.
+ */
+function rate_limit_check($bucket, $max_per_min = 20) {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    if ($ip === '') return; // sin IP no podemos limitar; no bloquear
+    $window = 60; // segundos
+    $now    = time();
+    $key    = 'mailapi_rl_' . $bucket . '_' . sha1($ip);
+
+    // APCu si está disponible (más fiable bajo concurrencia)
+    if (function_exists('apcu_fetch')) {
+        $data = apcu_fetch($key);
+        if (!is_array($data) || ($now - ($data['start'] ?? 0)) >= $window) {
+            $data = ['start' => $now, 'count' => 0];
+        }
+        $data['count']++;
+        @apcu_store($key, $data, $window);
+        if ($data['count'] > $max_per_min) {
+            http_response_code(429);
+            echo json_encode(['error' => 'Demasiados intentos, espera un momento']);
+            exit;
+        }
+        return;
+    }
+
+    // Fallback: archivo temporal
+    $file = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . $key . '.json';
+    $data = ['start' => $now, 'count' => 0];
+    $fh   = @fopen($file, 'c+');
+    if (!$fh) return; // no se puede abrir → no bloquear (defensivo)
+    if (@flock($fh, LOCK_EX)) {
+        $raw = stream_get_contents($fh);
+        $prev = $raw ? json_decode($raw, true) : null;
+        if (is_array($prev) && ($now - ($prev['start'] ?? 0)) < $window) {
+            $data = $prev;
+        }
+        $data['count'] = (int)($data['count'] ?? 0) + 1;
+        @ftruncate($fh, 0);
+        @rewind($fh);
+        @fwrite($fh, json_encode($data));
+        @fflush($fh);
+        @flock($fh, LOCK_UN);
+    }
+    @fclose($fh);
+
+    if (($data['count'] ?? 0) > $max_per_min) {
+        http_response_code(429);
+        echo json_encode(['error' => 'Demasiados intentos, espera un momento']);
+        exit;
+    }
 }
 
 function open_imap($user, $pass, $folder = 'INBOX') {
@@ -150,6 +244,15 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $at
         return $smtp_read();
     };
 
+    // Sanitizar todo lo que vaya a cabeceras: elimina CR/LF para impedir
+    // inyección de cabeceras SMTP. Las listas de direcciones además se validan.
+    $from_name = strip_crlf($from_name);
+    $subject   = strip_crlf($subject);
+    $to        = sanitize_addr_list($to);
+    $cc        = sanitize_addr_list($cc);
+
+    if ($to === '') return 'Destinatario inválido';
+
     try {
         $smtp_read(); // greeting
         $r = $smtp_cmd('EHLO ' . SMTP_HOST);
@@ -246,6 +349,7 @@ switch ($action) {
 
 // ── folders ──────────────────────────────────────────────────
 case 'folders':
+    rate_limit_check('login', 20); // 'folders' es la primera llamada tras login
     $conn = open_imap($user, $pass);
     if (is_array($conn)) { echo json_encode($conn); exit; }
 
@@ -267,6 +371,7 @@ case 'folders':
 
 // ── list ─────────────────────────────────────────────────────
 case 'list':
+    rate_limit_check('list', 40);
     $folder  = $_POST['folder'] ?? 'INBOX';
     $page    = max(1, (int)($_POST['page'] ?? 1));
     $perpage = 30;
@@ -408,9 +513,14 @@ case 'send':
             $n = strtolower(str_replace($prefix, '', $f));
             if (str_contains($n, 'sent') || str_contains($n, 'enviado')) { $sent = str_replace($prefix, '', $f); break; }
         }
-        $raw = "Date: " . date('r') . "\r\nFrom: $user\r\nTo: $to\r\n"
-             . ($cc ? "Cc: $cc\r\n" : '')
-             . "Subject: $subject\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n$body_html";
+        // Sanitizar también aquí: estas cabeceras se escriben crudas vía APPEND.
+        $append_to      = sanitize_addr_list($to);
+        $append_cc      = sanitize_addr_list($cc);
+        $append_subject = strip_crlf($subject);
+        $append_user    = strip_crlf($user);
+        $raw = "Date: " . date('r') . "\r\nFrom: $append_user\r\nTo: $append_to\r\n"
+             . ($append_cc ? "Cc: $append_cc\r\n" : '')
+             . "Subject: $append_subject\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n$body_html";
         @imap_append($conn, $prefix . $sent, $raw, '\\Seen');
         imap_close($conn);
     }
@@ -483,7 +593,15 @@ case 'search':
     $conn = open_imap($user, $pass, $folder);
     if (is_array($conn)) { echo json_encode($conn); exit; }
 
-    $found = imap_search($conn, 'TEXT "' . addslashes($query) . '"') ?: [];
+    // Inyección IMAP SEARCH: addslashes NO es seguro aquí. El criterio IMAP
+    // espera una "quoted string"; dentro de ella solo " y \ deben escaparse
+    // con backslash, y NO se permiten caracteres de control (CR/LF romperían
+    // el comando IMAP y permitirían inyectar criterios adicionales).
+    // Por eso: eliminamos los caracteres de control y escapamos \ y " para que
+    // el input vaya siempre contenido dentro de la cadena entre comillas.
+    $safe_query = preg_replace('/[\x00-\x1F\x7F]/', '', $query);     // sin controles (incl. CR/LF)
+    $safe_query = str_replace(['\\', '"'], ['\\\\', '\\"'], $safe_query); // escapar \ y "
+    $found = imap_search($conn, 'TEXT "' . $safe_query . '"') ?: [];
     $found = array_slice(array_reverse($found), 0, 50);
 
     $result = [];
