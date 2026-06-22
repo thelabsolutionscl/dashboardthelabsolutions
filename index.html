@@ -15717,6 +15717,24 @@ function _ofRingAgent(m,x,y){
     </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+`
   </g>`;
 }
+// Puerta del departamento (en el vértice frontal de la sala): por aquí salen los agentes
+// que se comunican con otros departamentos. El marco lleva el color del depto.
+function _ofDoor(cx,cy,color){
+  const f=n=>n.toFixed(1), tw=_ofTileW||160;
+  const hw=Math.max(11,tw*0.085), H=46, jt=Math.max(4,tw*0.032);
+  const dk=_ofShade(color,0.72);
+  let s='';
+  s+=`<ellipse cx="${f(cx)}" cy="${f(cy+4)}" rx="${f(hw+jt+7)}" ry="6.5" fill="url(#ofShadow)" opacity="0.5"/>`;
+  s+=`<rect x="${f(cx-hw)}" y="${f(cy-H)}" width="${f(hw*2)}" height="${f(H)}" rx="1.5" fill="#1c2128"/>`;
+  s+=`<rect x="${f(cx-hw+1.5)}" y="${f(cy-H*0.5)}" width="${f(hw*2-3)}" height="${f(H*0.5)}" fill="#ffd9a0" opacity="0.10"/>`;
+  s+=`<polygon points="${f(cx-hw)},${f(cy)} ${f(cx-hw+hw*0.8)},${f(cy-2.5)} ${f(cx-hw+hw*0.8)},${f(cy-H+2.5)} ${f(cx-hw)},${f(cy-H)}" fill="${dk}"/>`;
+  s+=`<circle cx="${f(cx-hw+hw*0.8-2.5)}" cy="${f(cy-H*0.52)}" r="1.5" fill="#ffd96b"/>`;
+  s+=`<rect x="${f(cx-hw-jt)}" y="${f(cy-H-jt)}" width="${f(jt)}" height="${f(H+jt)}" rx="1" fill="${color}"/>`;
+  s+=`<rect x="${f(cx+hw)}" y="${f(cy-H-jt)}" width="${f(jt)}" height="${f(H+jt)}" rx="1" fill="${color}"/>`;
+  s+=`<rect x="${f(cx-hw-jt)}" y="${f(cy-H-jt)}" width="${f(hw*2+jt*2)}" height="${f(jt)}" rx="1.5" fill="${color}"/>`;
+  s+=`<rect x="${f(cx-hw-jt)}" y="${f(cy-H-jt)}" width="${f(hw*2+jt*2)}" height="2" fill="#ffffff" opacity="0.25"/>`;
+  return s;
+}
 // Posiciones exactas de las impresoras dentro de su sala (calca los planos del taller)
 // Grilla local 7×4 (fila 0 = fondo, fila 3 = frente/borde inferior).
 // Bloque Ender/K2Plus original (2 cols × 3 filas, K2 Plus al centro) BAJADO UNA FILA:
@@ -15826,6 +15844,11 @@ function _ofRenderIso(ia,auto,extras){
     dividers+=`<line x1="${k.L[0].toFixed(1)}" y1="${(k.L[1]-dw).toFixed(1)}" x2="${k.T[0].toFixed(1)}" y2="${(k.T[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
   });
 
+  // Puerta de cada departamento, en su vértice frontal (por donde salen los agentes)
+  const _roomDoorPt=R=>{ const F=_rC(R).F; return [F[0], F[1]]; };
+  let doors='';
+  _rooms.forEach(R=>{ const d=_roomDoorPt(R); doors+=_ofDoor(d[0],d[1],R.color); });
+
   // Plataforma sólo para la sala de impresoras (las máquinas van encima)
   const _ch=24;
   let counters='';
@@ -15837,8 +15860,8 @@ function _ofRenderIso(ia,auto,extras){
             +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="${R.color}" opacity="0.14"/>`;
   });
 
-  // Mapa etiqueta→sala y ancla (frente del depto) para mover a los agentes que se comunican
-  const _roomByLabel={}, _roomAnchor=R=>iso(R.cc,R.r1+0.4);
+  // Mapa etiqueta→sala y ancla (la PUERTA del depto) para mover a los agentes que se comunican
+  const _roomByLabel={}, _roomAnchor=R=>_roomDoorPt(R);
   _rooms.forEach(R=>R.members.forEach(mm=>{ if(mm&&mm.label) _roomByLabel[mm.label]=R; }));
   const _transit={};   // label → {m, from:[x,y], to:[x,y]}
   _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm) _transit[c.from]={m:fm, from:_roomAnchor(fr), to:_roomAnchor(to)}; } });
@@ -15960,6 +15983,7 @@ function _ofRenderIso(ia,auto,extras){
     ${rugs}
     ${counters}
     ${dividers}
+    ${doors}
     <g>${chars}</g>
     <g>${tags}</g>
     ${signs}
