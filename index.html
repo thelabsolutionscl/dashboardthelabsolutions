@@ -15348,7 +15348,7 @@ async function _renderOficina(){
     else { const st=_ofStatus(lastT); cls=st.cls; lbl=st.lbl; }
     if(cls==='of-work') working++;
     const today=list.filter(r=>_ofSameDay(r.t)).length;
-    return {clickIA:true, id:a.id, label:a.label, icon:a.icon||'🤖', role:'Agente IA · '+a.id,
+    return {clickIA:true, id:a.id, label:a.label, icon:a.icon||'🤖', role:'Agente IA · '+_ofCat(a).name,
       cls, lbl, task:last?(last.input||last.output||''):'Sin tareas recientes',
       stats:today+' hoy · '+_ofAgo(lastT), spark:_ofSpark(list)};
   });
