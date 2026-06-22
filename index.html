@@ -15718,20 +15718,21 @@ function _ofRingAgent(m,x,y){
   </g>`;
 }
 // Posiciones exactas de las impresoras dentro de su sala (calca los planos del taller)
-// Grilla local 7×4. En isométrico la altura en pantalla = (c+r): "abajo" = c+r grande.
-// Ender-5 Max + K2 Plus van PEGADAS ABAJO (bloque 3×2 al frente-centro, c+r 5-8),
-// con la K2 Plus centrada en [4,3]. El resto (Giga/K1/K2) queda arriba-izquierda (c+r ≤4).
+// Grilla local 7×4 (fila 0 = fondo, fila 3 = frente/borde inferior).
+// Bloque Ender/K2Plus original (2 cols × 3 filas, K2 Plus al centro) BAJADO UNA FILA:
+// ahora ocupa filas 1-3 (cols 3-4) y toca el borde inferior del departamento.
+// K1/K2 quedan en la fila frontal flanqueando el bloque; Giga a la izquierda.
 function _ofPrinterSlots(members){
-  const enders=[[3,2],[4,2],[5,2],[3,3],[5,3]];   // 5 Ender-5 Max rodeando la K2 Plus, pegadas abajo
-  const k1=[[2,0],[3,0],[4,0],[2,1],[3,1]];        // K1 arriba (fondo)
-  const k2=[[0,1],[1,1]];                          // K2 arriba-izquierda
+  const enders=[[3,1],[4,1],[4,2],[3,3],[4,3]];   // 5 Ender-5 Max rodeando la K2 Plus, tocando abajo
+  const k1=[[2,3],[5,3],[6,3],[3,0],[4,0]];        // K1: fila frontal a los lados + 2 detrás del bloque
+  const k2=[[0,3],[1,3]];                          // K2 en la fila frontal (izquierda)
   const map=new Map(); let ei=0,ki=0,k2i=0;
   members.forEach(m=>{ const s=((m.label||'')+' '+(m.role||'')).toLowerCase(); let pos;
-    if(/giga|orangestorm/.test(s)) pos=[0,0];      // Giga (grande) al fondo izquierda
-    else if(/k2\s*plus/.test(s)) pos=[4,3];        // K2 Plus centrada, pegada abajo
-    else if(/ender/.test(s)) pos=enders[ei++]||[5,3];
-    else if(/k2/.test(s)) pos=k2[k2i++]||[0,2];
-    else pos=k1[ki++]||[1,0];
+    if(/giga|orangestorm/.test(s)) pos=[0,1];      // Giga (grande) a la izquierda
+    else if(/k2\s*plus/.test(s)) pos=[3,2];        // K2 Plus al centro del bloque (una fila más abajo)
+    else if(/ender/.test(s)) pos=enders[ei++]||[5,1];
+    else if(/k2/.test(s)) pos=k2[k2i++]||[1,3];
+    else pos=k1[ki++]||[6,3];
     map.set(m,pos);
   });
   return map;
