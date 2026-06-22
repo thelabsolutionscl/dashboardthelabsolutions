@@ -110,7 +110,10 @@ async function heartbeat(env) {
   const rec = data.records && data.records[0];
   if (!rec) return;
 
-  // 2) Marcar como Activo con la hora actual
+  // 2) Marcar como Activo con la hora actual; EjecucionesHoy con reseteo diario
+  const f = rec.fields || {};
+  const sameDay = f.UltimaEjecucion && new Date(f.UltimaEjecucion).toDateString() === new Date().toDateString();
+  const ej = (sameDay ? (Number(f.EjecucionesHoy) || 0) : 0) + 1;
   await fetch(`${tbl}/${rec.id}`, {
     method: 'PATCH',
     headers: { ...auth, 'Content-Type': 'application/json' },
@@ -118,6 +121,7 @@ async function heartbeat(env) {
       fields: {
         Estado: 'Activo',
         UltimaEjecucion: new Date().toISOString(),
+        EjecucionesHoy: ej,
         TareaActual: 'Proxy seguro Airtable + Claude operativo',
       },
       typecast: true,

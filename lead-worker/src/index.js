@@ -1409,11 +1409,14 @@ async function ofHeartbeat(env, id) {
   const data = await found.json();
   const rec = data.records && data.records[0];
   if (!rec) return;
+  const f = rec.fields || {};
+  const sameDay = f.UltimaEjecucion && new Date(f.UltimaEjecucion).toDateString() === new Date().toDateString();
+  const ej = (sameDay ? (Number(f.EjecucionesHoy) || 0) : 0) + 1;
   await fetch(`${tbl}/${rec.id}`, {
     method: "PATCH",
     headers: { ...auth, "Content-Type": "application/json" },
     body: JSON.stringify({
-      fields: { Estado: "Activo", UltimaEjecucion: new Date().toISOString() },
+      fields: { Estado: "Activo", UltimaEjecucion: new Date().toISOString(), EjecucionesHoy: ej },
       typecast: true,
     }),
   });

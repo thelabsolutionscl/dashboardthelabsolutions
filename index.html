@@ -2910,6 +2910,40 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .of-feed-txt{font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
 .of-feed-time{font-size:9.5px;color:var(--text3);white-space:nowrap;font-family:'JetBrains Mono',monospace;}
 @media(max-width:760px){#tab-oficina .of-kpis{grid-template-columns:repeat(2,1fr);}#tab-oficina .of-floor{grid-template-columns:1fr;}}
+/* Accesibilidad */
+.of-worker:focus-visible,.of-desk:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+/* Sparkline */
+.of-spark-wrap{margin-top:8px;opacity:.9;}
+.of-spark{display:block;}
+/* Chip de error */
+#tab-oficina .of-errchip{background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.3);color:var(--warn);font-size:11px;padding:8px 12px;border-radius:10px;margin-bottom:16px;}
+/* Toggle de vista */
+.of-viewtoggle{display:inline-flex;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:2px;gap:2px;}
+.of-vbtn{background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.of-vbtn.active{background:var(--accent);color:var(--black);}
+/* Planta 2D */
+.of-floorroom{background:
+  radial-gradient(circle at 30% 20%,rgba(0,212,204,0.05),transparent 60%),
+  repeating-linear-gradient(0deg,rgba(255,255,255,0.018) 0 1px,transparent 1px 38px),
+  repeating-linear-gradient(90deg,rgba(255,255,255,0.018) 0 1px,transparent 1px 38px),
+  var(--surface);
+  border:1px solid var(--border);border-radius:18px;padding:20px 18px 26px;}
+.of-floor-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin:0 0 12px 2px;}
+.of-desks{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:14px;}
+.of-desk{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;cursor:pointer;transition:transform .12s,border-color .15s,box-shadow .15s;text-align:center;}
+.of-desk:hover{transform:translateY(-3px);border-color:var(--border2);}
+.of-seat{position:relative;width:54px;height:54px;border-radius:14px;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:26px;}
+.of-seat-light{position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:var(--text3);border:2px solid var(--surface2);}
+.of-desk.of-work .of-seat{border-color:rgba(0,212,170,0.5);box-shadow:0 0 18px rgba(0,212,170,0.25);}
+.of-desk.of-work .of-seat-light{background:var(--success);animation:ofPulse 1.6s infinite;}
+.of-desk.of-active .of-seat-light{background:var(--accent);}
+.of-desk.of-error .of-seat{border-color:rgba(255,68,68,0.5);}
+.of-desk.of-error .of-seat-light{background:var(--danger);}
+.of-desk-name{font-size:10.5px;font-weight:700;color:var(--text);max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.of-desk-state{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);}
+.of-desk.of-work .of-desk-state{color:var(--success);}
+.of-desk.of-active .of-desk-state{color:var(--accent);}
+.of-desk.of-error .of-desk-state{color:var(--danger);}
 </style>
 <div class="tab-panel" id="tab-oficina">
   <div class="section-header">
@@ -2917,16 +2951,27 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="section-title">Oficina Virtual</div>
       <div class="section-desc">Tu equipo de agentes IA y automatizaciones trabajando en vivo. El estado se actualiza solo cada 20 s a partir de las ejecuciones reales (Agent_Log), la cola de tareas (Agent_Queue) y, si existe, la tabla Automations.</div>
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="renderOficina()" style="flex-shrink:0">↻ Actualizar</button>
+    <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
+      <div id="oficinaViewToggle" class="of-viewtoggle">
+        <button class="of-vbtn active" data-v="cards" onclick="ofSetView('cards')">▦ Tarjetas</button>
+        <button class="of-vbtn" data-v="floor" onclick="ofSetView('floor')">🏢 Planta</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="renderOficina()">↻ Actualizar</button>
+    </div>
   </div>
 
   <div class="of-kpis" id="oficinaKpis"></div>
+  <div id="oficinaErr" class="of-errchip" style="display:none">⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.</div>
 
-  <div class="of-zone-title">🤖 Agentes IA</div>
-  <div class="of-floor" id="oficinaGridIA"></div>
+  <div id="oficinaCards">
+    <div class="of-zone-title">🤖 Agentes IA</div>
+    <div class="of-floor" id="oficinaGridIA"></div>
 
-  <div class="of-zone-title">⚙️ Automatizaciones</div>
-  <div class="of-floor" id="oficinaGridAuto"></div>
+    <div class="of-zone-title">⚙️ Automatizaciones</div>
+    <div class="of-floor" id="oficinaGridAuto"></div>
+  </div>
+
+  <div id="oficinaFloor" style="display:none"></div>
 
   <div class="card">
     <div class="card-header">
@@ -7454,8 +7499,8 @@ function switchTab(name){
   try{closeGlobalSearch();}catch(e){}
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
   if(name==='agentes'){renderAgentesGrid();if(getToken()&&!_agentQueue.length) refreshAgentQueue();}
-  if(name==='oficina'){renderOficina();clearInterval(_oficinaInterval);_oficinaInterval=setInterval(renderOficina,20000);}
-  else{clearInterval(_oficinaInterval);_oficinaInterval=null;}
+  if(name==='oficina'){ofSetView(_ofView);startOficinaPolling();}
+  else stopOficinaPolling();
   if(name==='remuneraciones') renderRemuneraciones();
   if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
@@ -12937,6 +12982,8 @@ async function runAgent(id){
   const cardIdx=AGENTES_CFG.findIndex(a=>a.id===id)+1;
   const btn=document.querySelector(`#agentesGrid .card:nth-child(${cardIdx}) .btn-primary`);
   if(btn) btn.disabled=true;
+  _ofActive.add(cfg.label);   // Oficina Virtual: marca el agente como "trabajando" en vivo
+  if(typeof renderOficina==='function'&&document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
   const ctx=state.loaded?buildAgentContext(id):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
   try{
@@ -12956,7 +13003,11 @@ async function runAgent(id){
     out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(_r);
   }
   catch(e){out.style.whiteSpace='';out._rawText='';out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
-  if(btn) btn.disabled=false;
+  finally{
+    _ofActive.delete(cfg.label);   // Oficina Virtual: el agente terminó
+    if(btn) btn.disabled=false;
+    if(typeof renderOficina==='function'&&document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
+  }
 }
 function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el._rawText||el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
 
@@ -14979,13 +15030,17 @@ const AGENT_LOG={
 //   · Agent_Queue → tareas pendientes (carga de la oficina)
 //   · Automations → (opcional) estado real de los Workers/Make si creas la tabla
 const AUTOMATIONS_CFG=[
-  {id:'lead-worker',    label:'Lead Worker',    icon:'🧲', role:'Captura y puntúa leads entrantes',     tipo:'Cloudflare Worker'},
+  {id:'lead-worker',    label:'Lead Worker',    icon:'🧲', role:'Captura y puntúa leads entrantes',     tipo:'Cloudflare Worker', expectMins:90},
   {id:'sii-worker',     label:'SII Worker',     icon:'🧾', role:'Sincroniza documentos tributarios (SII)', tipo:'Cloudflare Worker'},
   {id:'printer-bridge', label:'Printer Bridge', icon:'🖨️', role:'Puente de impresión hacia la planta',   tipo:'Bridge local'},
   {id:'mail-api',       label:'Mail API',       icon:'✉️', role:'Envío y recepción de correo',           tipo:'API PHP'},
   {id:'airtable-proxy', label:'Airtable Proxy', icon:'🛡️', role:'Proxy seguro Airtable + Claude',         tipo:'Cloudflare Worker'},
 ];
-let _oficinaInterval=null;
+let _oficinaInterval=null, _oficinaBusy=false;
+const _ofActive=new Set();                 // agentes IA ejecutándose AHORA (en memoria, en vivo)
+let _ofErr=false;                          // la última lectura de Airtable falló
+let _ofRunsCache={t:0,data:null};          // caché corta (25s) del Agent_Log remoto
+let _ofView=(()=>{try{return localStorage.getItem('thelab_oficina_view')||'cards';}catch(e){return 'cards';}})();
 function _ofAgo(ts){
   if(!ts) return '—';
   const d=Date.now()-ts; if(d<0) return 'ahora';
@@ -15007,125 +15062,193 @@ function _ofSameDay(ts){
   const a=new Date(ts), b=new Date();
   return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
 }
+// Campo Estado de Automations → clase de color (fuente de verdad para automatizaciones)
+function _ofEstadoCls(estado){
+  const e=(estado||'').toString().toLowerCase();
+  if(e.includes('error')||e.includes('fall')) return 'of-error';
+  if(e.includes('trabaj')) return 'of-work';
+  if(e.includes('activ'))  return 'of-active';
+  if(e.includes('paus')||e.includes('repos')) return 'of-off';
+  return '';
+}
+// Mini-sparkline de ejecuciones de los últimos 7 días (índice 6 = hoy)
+function _ofSpark(list){
+  const days=[0,0,0,0,0,0,0];
+  const start=new Date(); start.setHours(0,0,0,0);
+  (list||[]).forEach(r=>{ if(!r.t) return; const dd=new Date(r.t); dd.setHours(0,0,0,0); const idx=6-Math.round((start-dd)/86400000); if(idx>=0&&idx<7) days[idx]++; });
+  const max=Math.max(1,...days);
+  const bars=days.map((v,i)=>{const h=Math.max(2,Math.round((v/max)*18)); return `<rect x="${i*9}" y="${20-h}" width="6" height="${h}" rx="1" fill="${v?'var(--accent)':'var(--border2)'}"/>`;}).join('');
+  return `<svg class="of-spark" width="62" height="20" viewBox="0 0 62 20" aria-hidden="true">${bars}</svg>`;
+}
+function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.currentTarget.click(); } }   // a11y teclado
+function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_CFG.find(x=>x.id===id); toast((a?a.label+' — '+a.tipo:id)||'Automatización','info'); }
+function ofSetView(v){
+  _ofView=v;
+  try{localStorage.setItem('thelab_oficina_view',v);}catch(e){}
+  document.querySelectorAll('#oficinaViewToggle .of-vbtn').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
+  const c=document.getElementById('oficinaCards'), f=document.getElementById('oficinaFloor');
+  if(c) c.style.display=v==='cards'?'':'none';
+  if(f) f.style.display=v==='floor'?'':'none';
+  renderOficina();
+}
+function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000); }
+function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=null; }
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden && document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
+});
 async function renderOficina(){
-  const iaGrid=document.getElementById('oficinaGridIA');
-  const autoGrid=document.getElementById('oficinaGridAuto');
-  const kpis=document.getElementById('oficinaKpis');
-  const feed=document.getElementById('oficinaFeed');
-  if(!iaGrid) return;
+  if(!document.getElementById('tab-oficina')) return;
+  if(_oficinaBusy) return;          // B4: evita ejecuciones solapadas
+  _oficinaBusy=true;
+  try{ await _renderOficina(); }
+  catch(e){ /* nunca romper la UI */ }
+  finally{ _oficinaBusy=false; }
+}
 
-  // 1) Reunir ejecuciones: historial local + compartido en Airtable (si hay token y tabla)
+async function _renderOficina(){
+  _ofErr=false;
+  // 1) Ejecuciones: historial local + Airtable (con caché corta de 25s)
   let runs=[];
   try{AGENT_LOG._load();runs=(AGENT_LOG._runs||[]).map(r=>({agent:r.agent,input:r.input,output:r.output,time:r.time}));}catch(e){}
   if(getToken()){
-    try{
-      const res=await airtableFetch('Agent_Log',100);
-      const remote=(res.records||[]).map(r=>({agent:r.fields['Agente']||'',input:r.fields['Consulta']||'',output:r.fields['Resultado']||'',time:r.fields['Fecha']||r.createdTime||''}));
-      runs=[...runs,...remote];
-    }catch(e){/* la tabla puede no existir todavía */}
+    if(_ofRunsCache.data && Date.now()-_ofRunsCache.t<25000){
+      runs=[...runs,..._ofRunsCache.data];
+    }else{
+      try{
+        const res=await airtableFetch('Agent_Log',100);
+        const remote=(res.records||[]).map(r=>({agent:r.fields['Agente']||'',input:r.fields['Consulta']||'',output:r.fields['Resultado']||'',time:r.fields['Fecha']||r.createdTime||''}));
+        _ofRunsCache={t:Date.now(),data:remote};
+        runs=[...runs,...remote];
+      }catch(e){ _ofErr=true; if(_ofRunsCache.data) runs=[...runs,..._ofRunsCache.data]; }
+    }
   }
   // Normalizar tiempo y deduplicar
   const seen=new Set();
   runs=runs.map(r=>({...r,t:Date.parse(r.time||'')||0}))
-           .filter(r=>{const k=r.agent+'|'+String(r.t).slice(0,10)+'|'+(r.input||'').slice(0,30);if(seen.has(k))return false;seen.add(k);return true;})
+           .filter(r=>{const k=r.agent+'|'+(r.t||(r.input||'').slice(0,12))+'|'+(r.input||'').slice(0,30);if(seen.has(k))return false;seen.add(k);return true;})
            .sort((a,b)=>b.t-a.t);
-
-  // Agrupar por agente (por label, que es como AGENT_LOG guarda el nombre)
   const byAgent={};
   runs.forEach(r=>{(byAgent[r.agent]=byAgent[r.agent]||[]).push(r);});
 
-  // 2) Carga de la cola (tareas pendientes)
+  // 2) Cola pendiente
   let queueLen=_agentQueue.length;
-  if(getToken()&&!queueLen){
-    try{const q=await airtableFetch(AGENT_QUEUE_TABLE,200);queueLen=(q.records||[]).length;}catch(e){}
-  }
+  if(getToken()&&!queueLen){ try{const q=await airtableFetch(AGENT_QUEUE_TABLE,200);queueLen=(q.records||[]).length;}catch(e){_ofErr=true;} }
 
-  // 3) Estado real opcional de automatizaciones (tabla Automations)
+  // 3) Telemetría de automatizaciones (tabla Automations)
   const autoState={};
   if(getToken()){
-    try{
-      const a=await airtableFetch('Automations',50);
-      (a.records||[]).forEach(r=>{const k=(r.fields['ID']||r.fields['Nombre']||'').toString().toLowerCase();if(k)autoState[k]=r.fields;});
-    }catch(e){/* tabla opcional */}
+    try{ const a=await airtableFetch('Automations',50); (a.records||[]).forEach(r=>{const k=(r.fields['ID']||r.fields['Nombre']||'').toString().toLowerCase();if(k)autoState[k]=r.fields;}); }
+    catch(e){_ofErr=true;}
   }
 
-  // ── Render: agentes IA ──
-  let working=0, runsToday=0;
-  iaGrid.innerHTML=AGENTES_CFG.map(a=>{
+  // ── Modelo: agentes IA (incluye agentes presentes en logs aunque no estén en CFG — B7) ──
+  let working=0;
+  const cfgLabels=new Set(AGENTES_CFG.map(a=>a.label));
+  const extraIA=Object.keys(byAgent).filter(l=>l && !cfgLabels.has(l)).map(l=>({id:l,label:l,icon:'🤖'}));
+  const iaModel=[...AGENTES_CFG,...extraIA].map(a=>{
     const list=byAgent[a.label]||[];
-    const last=list[0];
-    const lastT=last?last.t:0;
-    const st=_ofStatus(lastT);
-    if(st.cls==='of-work') working++;
+    const last=list[0], lastT=last?last.t:0;
+    let cls,lbl;
+    if(_ofActive.has(a.label)){ cls='of-work'; lbl='Trabajando'; }      // B5: en vivo, mientras ejecuta
+    else { const st=_ofStatus(lastT); cls=st.cls; lbl=st.lbl; }
+    if(cls==='of-work') working++;
     const today=list.filter(r=>_ofSameDay(r.t)).length;
-    runsToday+=today;
-    const task=last?escapeHtml((last.input||last.output||'').substring(0,90)):'Sin tareas recientes';
-    return `<div class="of-worker ${st.cls}" onclick="switchTab('agentes')" title="Ir al Centro de Agentes IA">
-      <div class="of-avatar">${a.icon}</div>
-      <div class="of-body">
-        <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(a.label)}</span></div>
-        <div class="of-role">Agente IA · ${a.id}</div>
-        <div class="of-task">${task}</div>
-        <div class="of-foot"><span class="of-state-lbl">${st.lbl}</span><span class="of-stats">${today} hoy · ${_ofAgo(lastT)}</span></div>
-      </div>
-    </div>`;
-  }).join('');
+    return {clickIA:true, id:a.id, label:a.label, icon:a.icon||'🤖', role:'Agente IA · '+a.id,
+      cls, lbl, task:last?(last.input||last.output||''):'Sin tareas recientes',
+      stats:today+' hoy · '+_ofAgo(lastT), spark:_ofSpark(list)};
+  });
 
-  // ── Render: automatizaciones ──
-  autoGrid.innerHTML=AUTOMATIONS_CFG.map(a=>{
-    const f=autoState[a.id.toLowerCase()]||autoState[a.label.toLowerCase()]||null;
+  // ── Modelo: automatizaciones (data-driven: CFG + filas extra de la tabla) ──
+  const cfgIds=new Set(AUTOMATIONS_CFG.map(a=>a.id.toLowerCase()));
+  const extraAuto=Object.keys(autoState).filter(k=>!cfgIds.has(k)).map(k=>({id:k,label:autoState[k]['Nombre']||k,icon:'⚙️',tipo:autoState[k]['Tipo']||'Automatización',role:autoState[k]['Tipo']||'Automatización'}));
+  let autoToday=0;
+  const autoModel=[...AUTOMATIONS_CFG,...extraAuto].map(a=>{
+    const f=autoState[a.id.toLowerCase()]||autoState[(a.label||'').toLowerCase()]||null;
     let cls='of-off', lbl='Sin telemetría', task=a.role, stats=a.tipo;
     if(f){
       const lastT=Date.parse(f['UltimaEjecucion']||f['Ultima Ejecucion']||f['Fecha']||'')||0;
-      const estado=(f['Estado']||'').toString().toLowerCase();
-      if(estado.includes('error')||estado.includes('fall')) cls='of-error';
-      else { const st=_ofStatus(lastT); cls=st.cls; }
+      cls=_ofEstadoCls(f['Estado']) || _ofStatus(lastT).cls;            // B1: el campo Estado manda
       lbl=f['Estado']||_ofStatus(lastT).lbl;
+      if(a.expectMins && lastT && (Date.now()-lastT)>a.expectMins*60000 && cls!=='of-error'){ cls='of-off'; lbl='Atrasado'; }  // atraso auto
       if(cls==='of-work') working++;
-      task=escapeHtml((f['TareaActual']||f['Tarea Actual']||a.role).toString().substring(0,90));
-      const ej=f['EjecucionesHoy']||f['Ejecuciones Hoy'];
-      stats=(ej!=null?ej+' hoy · ':'')+_ofAgo(lastT);
+      task=(f['TareaActual']||f['Tarea Actual']||a.role).toString();
+      const ej=Number(f['EjecucionesHoy']||f['Ejecuciones Hoy']||0); autoToday+=ej;   // B2
+      stats=(ej?ej+' hoy · ':'')+_ofAgo(lastT);
     }
-    // Señal extra: la cola pendiente "carga" al lead-worker
     if(a.id==='lead-worker'&&queueLen){ if(cls==='of-off'){cls='of-active';lbl='En cola';} task=queueLen+' tarea(s) en Agent_Queue'; stats=queueLen+' pendientes'; }
-    return `<div class="of-worker ${cls}" onclick="toast('${escapeHtml(a.label)} — ${escapeHtml(a.tipo)}','info')" title="${escapeHtml(a.tipo)}">
-      <div class="of-avatar">${a.icon}</div>
-      <div class="of-body">
-        <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(a.label)}</span></div>
-        <div class="of-role">${escapeHtml(a.tipo)}</div>
-        <div class="of-task">${task}</div>
-        <div class="of-foot"><span class="of-state-lbl">${escapeHtml(lbl)}</span><span class="of-stats">${escapeHtml(stats)}</span></div>
-      </div>
-    </div>`;
-  }).join('');
+    return {clickIA:false, id:a.id, label:a.label, icon:a.icon||'⚙️', role:a.tipo||a.role, cls, lbl, task, stats};
+  });
 
-  // ── KPIs ──
-  const totalWorkers=AGENTES_CFG.length+AUTOMATIONS_CFG.length;
-  kpis.innerHTML=`
+  // ── KPIs ── (ejecuciones hoy = todas las del log + las de automatizaciones — B2/B7)
+  const runsToday=runs.filter(r=>_ofSameDay(r.t)).length + autoToday;
+  const totalWorkers=iaModel.length+autoModel.length;
+  const kpis=document.getElementById('oficinaKpis');
+  if(kpis) kpis.innerHTML=`
     <div class="of-kpi"><div class="of-kpi-val">${totalWorkers}</div><div class="of-kpi-lbl">Trabajadores</div></div>
     <div class="of-kpi ${working?'live':''}"><div class="of-kpi-val">${working}</div><div class="of-kpi-lbl">Trabajando ahora</div></div>
     <div class="of-kpi ${runsToday?'live':''}"><div class="of-kpi-val">${runsToday}</div><div class="of-kpi-lbl">Ejecuciones hoy</div></div>
     <div class="of-kpi ${queueLen?'live':''}"><div class="of-kpi-val">${queueLen}</div><div class="of-kpi-lbl">En cola</div></div>`;
 
-  // ── Feed de actividad ──
-  if(feed){
-    const fc=document.getElementById('oficinaFeedCount');
-    if(!runs.length){
-      feed.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Aún no hay ejecuciones registradas. Cuando tus agentes trabajen aparecerán aquí en vivo.</div>';
-      if(fc) fc.textContent='0';
-    }else{
-      if(fc) fc.textContent=String(runs.length);
-      feed.innerHTML=runs.slice(0,15).map(r=>`
-        <div class="of-feed-item">
-          <div class="of-feed-ic">🤖</div>
-          <div class="of-feed-main">
-            <div class="of-feed-agent">${escapeHtml(r.agent||'—')}</div>
-            <div class="of-feed-txt">${escapeHtml((r.input||r.output||'').substring(0,120))}</div>
-          </div>
-          <div class="of-feed-time">${_ofAgo(r.t)}</div>
-        </div>`).join('');
-    }
+  const errEl=document.getElementById('oficinaErr'); if(errEl) errEl.style.display=_ofErr?'':'none';
+
+  if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel);
+  else _ofRenderCards(iaModel,autoModel);
+  _ofRenderFeed(runs);
+}
+
+function _ofWorkerCard(m){
+  const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+  const spark=m.spark?`<div class="of-spark-wrap" title="Ejecuciones últimos 7 días">${m.spark}</div>`:'';
+  return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(m.label)}">
+    <div class="of-avatar">${m.icon}</div>
+    <div class="of-body">
+      <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(m.label)}</span></div>
+      <div class="of-role">${escapeHtml(m.role)}</div>
+      <div class="of-task">${escapeHtml((m.task||'').substring(0,90))}</div>
+      <div class="of-foot"><span class="of-state-lbl">${escapeHtml(m.lbl)}</span><span class="of-stats">${escapeHtml(m.stats||'')}</span></div>
+      ${spark}
+    </div>
+  </div>`;
+}
+function _ofRenderCards(ia,auto){
+  const g1=document.getElementById('oficinaGridIA'), g2=document.getElementById('oficinaGridAuto');
+  if(g1) g1.innerHTML=ia.map(_ofWorkerCard).join('');
+  if(g2) g2.innerHTML=auto.map(_ofWorkerCard).join('');
+}
+function _ofDesk(m){
+  const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+  return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(m.label+' — '+m.lbl)}">
+    <div class="of-seat"><span class="of-seat-light"></span>${m.icon}</div>
+    <div class="of-desk-name">${escapeHtml(m.label)}</div>
+    <div class="of-desk-state">${escapeHtml(m.lbl)}</div>
+  </div>`;
+}
+function _ofRenderFloor(ia,auto){
+  const f=document.getElementById('oficinaFloor'); if(!f) return;
+  f.innerHTML=`<div class="of-floorroom">
+    <div class="of-floor-label">🤖 Agentes IA</div>
+    <div class="of-desks">${ia.map(_ofDesk).join('')}</div>
+    <div class="of-floor-label" style="margin-top:18px">⚙️ Automatizaciones</div>
+    <div class="of-desks">${auto.map(_ofDesk).join('')}</div>
+  </div>`;
+}
+function _ofRenderFeed(runs){
+  const feed=document.getElementById('oficinaFeed'); if(!feed) return;
+  const fc=document.getElementById('oficinaFeedCount');
+  if(!runs.length){
+    feed.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Aún no hay ejecuciones registradas. Cuando tus agentes trabajen aparecerán aquí en vivo.</div>';
+    if(fc) fc.textContent='0'; return;
   }
+  if(fc) fc.textContent=String(runs.length);
+  feed.innerHTML=runs.slice(0,15).map(r=>`
+    <div class="of-feed-item">
+      <div class="of-feed-ic">🤖</div>
+      <div class="of-feed-main">
+        <div class="of-feed-agent">${escapeHtml(r.agent||'—')}</div>
+        <div class="of-feed-txt">${escapeHtml((r.input||r.output||'').substring(0,120))}</div>
+      </div>
+      <div class="of-feed-time">${_ofAgo(r.t)}</div>
+    </div>`).join('');
 }
 
 // ── SUGERENCIAS PROACTIVAS DE AGENTES ──────────────────────────
