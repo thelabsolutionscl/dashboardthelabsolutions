@@ -2987,6 +2987,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 @keyframes ofBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
 .of-iso-blink{animation:ofBlink 1s steps(1,end) infinite;}
 @keyframes ofBlink{50%{opacity:.25;}}
+/* Tecleo: los antebrazos se mueven al trabajar */
+.of-type-l,.of-type-r{transform-box:fill-box;transform-origin:50% 0;}
+.of-type-l{animation:ofTypeL .36s ease-in-out infinite;}
+.of-type-r{animation:ofTypeR .36s ease-in-out infinite;}
+@keyframes ofTypeL{0%,100%{transform:translateY(0) scaleY(1);}50%{transform:translateY(2px) scaleY(.9);}}
+@keyframes ofTypeR{0%,100%{transform:translateY(2px) scaleY(.9);}50%{transform:translateY(0) scaleY(1);}}
+@media(prefers-reduced-motion:reduce){.of-type-l,.of-type-r{animation:none;}}
 #tab-oficina .of-iso-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:10.5px;color:var(--text2);align-items:center;}
 #tab-oficina .of-iso-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle;}
 #tab-oficina .of-iso-cats{margin-top:-4px;gap:12px;opacity:.92;}
@@ -15563,24 +15570,19 @@ function _ofIsoStation(m,x,y){
     const working=m.cls==='of-work';
     const s=((m.label||'')+' '+(m.role||'')).toLowerCase();
     const big=/giga|orangestorm/.test(s)?1.5:(/k2\s*plus/.test(s)?1.18:1);
-    const Wp=44*big, Hp=50*big;
-    const pclick=`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-    // Mesón (tablero isométrico elevado, del tamaño de la baldosa → las contiguas forman un mesón continuo)
-    const cw=(_ofTileW||120)/2, cd=(_ofTileH||62)/2, ch=22;
+    const Wp=44*big, Hp=50*big, cd=(_ofTileH||62)/2;
     const f=n=>n.toFixed(1);
-    const topPts=`0,${f(-ch-cd)} ${f(cw)},${f(-ch)} 0,${f(-ch+cd)} ${f(-cw)},${f(-ch)}`;
-    const faceL=`${f(-cw)},${f(-ch)} 0,${f(-ch+cd)} 0,${f(cd)} ${f(-cw)},0`;
-    const faceR=`0,${f(-ch+cd)} ${f(cw)},${f(-ch)} ${f(cw)},0 0,${f(cd)}`;
-    const counter=`<polygon points="${faceL}" fill="#aeb8c4"/><polygon points="${faceR}" fill="#c8d0da"/><polygon points="${topPts}" fill="#eaeff4" stroke="#cdd5de" stroke-width="1"/>`;
-    const baseY=-ch+cd*0.22;   // apoyo de la impresora sobre el tablero
+    const pclick=`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+    const baseY=cd*0.18;   // la impresora se apoya sobre el mesón (la elevación la da el translate)
     const halo=working?`<ellipse cx="0" cy="${f(baseY-Hp*0.5)}" rx="${(24*big).toFixed(0)}" ry="${(28*big).toFixed(0)}" fill="${col}" opacity="0.3" filter="url(#ofHalo)"/>`:'';
     const body=m.img?`<image href="${m.img}" x="${f(-Wp/2)}" y="${f(baseY-Hp)}" width="${f(Wp)}" height="${f(Hp)}" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="${f(baseY-Hp*0.28)}" text-anchor="middle" font-size="${(36*big).toFixed(0)}">🖨️</text>`;
     const light=`<circle cx="${f(Wp*0.36)}" cy="${f(baseY-Hp*0.82)}" r="4.6" fill="${col}" stroke="#fff" stroke-width="1.3"${working?' class="of-iso-blink"':''}/>`;
+    const shadow=`<ellipse cx="0" cy="${f(baseY+3)}" rx="${(Wp*0.46).toFixed(0)}" ry="${(6.5*big).toFixed(0)}" fill="url(#ofShadow)"/>`;
     return `<g class="of-iso-char" ${pclick} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
       <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
-      <ellipse cx="0" cy="${f(cd+2)}" rx="${(cw*0.95).toFixed(0)}" ry="${(cd*0.5).toFixed(0)}" fill="url(#ofShadow)"/>
+      ${shadow}
       ${halo}
-      <g class="of-iso-body">${counter}${body}${light}</g>
+      <g class="of-iso-body">${body}${light}</g>
     </g>`;
   }
   const dark=_ofShade(col,0.72);
@@ -15605,8 +15607,8 @@ function _ofIsoStation(m,x,y){
     <g class="of-iso-body">
       <rect x="-7.5" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
       <rect x="1" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
-      <rect x="-17" y="-34" width="6.5" height="20" rx="3" fill="${dark}"/>
-      <rect x="10.5" y="-34" width="6.5" height="20" rx="3" fill="${dark}"/>
+      <rect ${working?'class="of-type-l"':''} x="-17" y="-34" width="6.5" height="20" rx="3" fill="${dark}"/>
+      <rect ${working?'class="of-type-r"':''} x="10.5" y="-34" width="6.5" height="20" rx="3" fill="${dark}"/>
       <rect x="-13" y="-38" width="26" height="32" rx="12" fill="${col}"/>
       <rect x="-13" y="-38" width="26" height="32" rx="12" fill="url(#ofShine)"/>
       <circle cx="0" cy="-51" r="16" fill="#fff7ec" stroke="${col}" stroke-width="3.2"/>
@@ -15746,6 +15748,17 @@ function _ofRenderIso(ia,auto,extras){
     dividers+=`<line x1="${k.L[0].toFixed(1)}" y1="${(k.L[1]-dw).toFixed(1)}" x2="${k.T[0].toFixed(1)}" y2="${(k.T[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
   });
 
+  // MESÓN: un único tablero elevado por departamento (las estaciones se apoyan encima)
+  const _ch=22;
+  let counters='';
+  _rooms.forEach(R=>{ const k=_rC(R);
+    const U=p=>`${p[0].toFixed(1)},${(p[1]-_ch).toFixed(1)}`, P=p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`;
+    counters+=`<polygon points="${U(k.L)} ${P(k.L)} ${P(k.F)} ${U(k.F)}" fill="#aeb8c4"/>`            // cara frontal-izquierda
+            +`<polygon points="${U(k.F)} ${P(k.F)} ${P(k.R)} ${U(k.R)}" fill="#c8d0da"/>`            // cara frontal-derecha
+            +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="#eaeff4" stroke="#cdd5de" stroke-width="1.4"/>`  // tablero
+            +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="${R.color}" opacity="0.12"/>`;                   // tinte del depto
+  });
+
   // Estaciones por sala (de atrás hacia adelante para el solapamiento correcto)
   let chars='', tags='';
   const _placed=[];
@@ -15754,7 +15767,7 @@ function _ofRenderIso(ia,auto,extras){
     else R.members.forEach((m,i)=>{ const c=R.c0+(i%R.dc), r=R.r0+Math.floor(i/R.dc); _placed.push({m,c,r}); });
   });
   _placed.sort((a,b)=>(a.r-b.r)||(a.c-b.c));
-  _placed.forEach(({m,c,r})=>{ const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); tags+=_ofIsoTag(m,x,y); });
+  _placed.forEach(({m,c,r})=>{ const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y-_ch); tags+=_ofIsoTag(m,x,y); });
   // Mensajeros ambientales: cruzan de un departamento a otro por el pasillo (movimiento continuo)
   if(_rooms.length>1){
     const midR=Math.min(_corrR,rows-1);
@@ -15800,7 +15813,7 @@ function _ofRenderIso(ia,auto,extras){
 
   // Límites del viewBox — ajuste ceñido al contenido (sin relleno artificial)
   const right=originX+(cols-1)*tw/2+tw/2, left=originX-(rows-1)*tw/2-tw/2;
-  const bottomY=(cols-1+rows-1)*th/2+th/2+46, topY=-(wallH+th/2+54);
+  const bottomY=(cols-1+rows-1)*th/2+th/2+46, topY=-(wallH+th/2+78);
   const vbX=left-66, vbW=(right-left)+132, vbH=(bottomY-topY)+12;
 
   // Ambiente día/noche según la hora local
@@ -15833,6 +15846,7 @@ function _ofRenderIso(ia,auto,extras){
     ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}
     <g>${tiles}</g>
     ${rugs}
+    ${counters}
     ${dividers}
     <g>${chars}</g>
     <g>${tags}</g>
