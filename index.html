@@ -12121,6 +12121,17 @@ async function crearReporteAuto(){
 // con viñetas, listas numeradas, métricas label:valor, checkboxes (QA), tablas
 // markdown (Finance) y bloques LABEL: (LinkedIn). Oculta los bloques máquina
 // [ITEMS]/[ACTIONS]. Tolerante a las variaciones de markdown del modelo.
+// Directiva de estilo compartida: hace que TODOS los agentes respondan de forma
+// humana y cálida, no como un volcado de datos. Se inyecta en el system prompt.
+const AGENT_TONE=`
+
+ESTILO DE RESPUESTA (prioritario — no cambia el contenido técnico, solo cómo lo comunicas):
+- Habla en español chileno cercano y humano, como un colega del equipo. Nada de tono robótico.
+- Abre SIEMPRE con una frase breve y cálida que resuma la conclusión o recomendación principal.
+- Cuando des cifras o métricas, acompáñalas de una lectura en una frase ("esto significa…", "conviene porque…"). No listes datos crudos sin explicar qué implican.
+- Organiza con encabezados de sección cortos y viñetas claras; frases breves, sin jerga innecesaria.
+- Cierra con un próximo paso concreto y en tono motivador.
+- Conserva intactos los bloques técnicos [ITEMS]…[/ITEMS] y [ACTIONS]…[/ACTIONS] si tu rol los usa.`;
 function formatAgentReport(raw){
   if(!raw||!String(raw).trim()) return '';
   let txt=String(raw).replace(/\r/g,'').replace(/•/g,'•');
@@ -12196,9 +12207,9 @@ function formatAgentReport(raw){
       else
         html+=`<div style="margin:5px 0;line-height:1.6">${inl(l)}</div>`;}
     return html;};
-  if(!sections.length) return `<div style="font-size:12px;color:var(--text2)">${renderBody(intro)||`<span style="white-space:pre-wrap">${escapeHtml(txt)}</span>`}</div>`;
+  if(!sections.length) return `<div style="font-size:12.5px;color:var(--text2);line-height:1.65">${renderBody(intro)||`<span style="white-space:pre-wrap">${escapeHtml(txt)}</span>`}</div>`;
   let out='<div style="display:flex;flex-direction:column;gap:12px">';
-  if(intro.some(l=>l.trim())) out+=`<div style="font-size:12px;color:var(--text2)">${renderBody(intro)}</div>`;
+  if(intro.some(l=>l.trim())) out+=`<div style="font-size:12.5px;color:var(--text);line-height:1.65;background:linear-gradient(135deg,rgba(0,212,204,0.08),rgba(0,212,204,0));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 14px">${renderBody(intro)}</div>`;
   sections.forEach(s=>{const mt=metaFor(s.title);
     out+=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${mt.color};border-radius:9px;padding:12px 14px">`
       +`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:700;font-size:12px;letter-spacing:.3px;color:var(--text);text-transform:capitalize"><span style="font-size:14px">${mt.ico}</span>${escapeHtml(s.title.toLowerCase().replace(/_/g,' '))}</div>`
@@ -13050,7 +13061,7 @@ function renderAgentesGrid(){
       <div style="padding:14px">
         <div class="field-group" style="margin-bottom:8px">
           <div class="field-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span>Consulta</span>
+            <span>Consulta ${state.loaded?'<span style="color:var(--success);font-weight:400;font-size:9px;letter-spacing:0">· contexto en vivo incluido</span>':'<span style="color:var(--warn);font-weight:400;font-size:9px;letter-spacing:0">· sin datos (pulsa ↺ Actualizar)</span>'}</span>
             <button onclick="showAgentCtx('${a.id}',this)" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0;font-family:'DM Sans',sans-serif">ver contexto ↓</button>
           </div>
           <div class="agent-ctx-box" id="ctx_${a.id}" style="display:none;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2);white-space:pre-wrap;max-height:150px;overflow-y:auto;margin-bottom:8px;line-height:1.5"></div>
@@ -13080,7 +13091,7 @@ async function runAgent(id){
   const ctx=state.loaded?buildAgentContext(id):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
   try{
-    let _r=await callClaude(cfg.sys,fullInput);
+    let _r=await callClaude(cfg.sys+AGENT_TONE,fullInput);
     try{AGENT_LOG.add(cfg.label,input,_r);}catch(e){}
     const _oldIns=document.getElementById('qins_QUOTE');if(_oldIns) _oldIns.remove();
     if(id==='QUOTE'){
@@ -14429,7 +14440,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
   const ctx=state.loaded?buildAgentContext(agentId):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${contextText}`:contextText;
   try{
-    const result=await callClaude(cfg.sys,fullInput);
+    const result=await callClaude(cfg.sys+AGENT_TONE,fullInput);
     _agentInlineText=result;
     resultEl.className='agent-modal-result';
     resultEl.style.whiteSpace='normal';resultEl.innerHTML=formatAgentReport(result);
