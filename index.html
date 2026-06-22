@@ -2948,6 +2948,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 #tab-oficina .of-iso-scene{overflow-x:auto;border:1px solid var(--border);border-radius:18px;background:radial-gradient(circle at 50% 0%,#181b20,#0c0d10 75%);padding:14px 10px;}
 .of-iso-svg{display:block;width:100%;min-width:540px;height:auto;max-height:72vh;}
 .of-iso-char{cursor:pointer;}
+.of-iso-char:focus{outline:none;}
+.of-iso-char:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:6px;}
 .of-iso-char .of-iso-body{transition:transform .18s ease;}
 .of-iso-char:hover .of-iso-body{transform:translateY(-4px);}
 .of-iso-char:focus-visible .of-iso-body{transform:translateY(-4px);}
@@ -2979,7 +2981,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 #tab-oficina.of-fs{position:fixed;inset:0;z-index:99999;background:radial-gradient(circle at 50% -10%,#161b24,#0a0b0e 70%);overflow:auto;padding:20px 30px;}
 #tab-oficina:fullscreen{background:radial-gradient(circle at 50% -10%,#161b24,#0a0b0e 70%);overflow:auto;padding:20px 30px;}
 #tab-oficina.of-fs .section-desc{display:none;}
-#tab-oficina.of-fs #oficinaErr{display:none!important;}
 #tab-oficina.of-fs #oficinaCards,#tab-oficina.of-fs #oficinaFloor{display:none!important;}
 #tab-oficina.of-fs > .card{display:none!important;}
 #tab-oficina.of-fs #oficinaIso{display:block!important;}
@@ -15338,10 +15339,10 @@ function _ofIsoDesk(col,working){
   const left=`${-hw},${dy} ${0},${dy+hh} ${0},${dy+hh+legH} ${-hw},${dy+legH}`;
   const right=`${0},${dy+hh} ${hw},${dy} ${hw},${dy+legH} ${0},${dy+hh+legH}`;
   const scr=working?col:'#5b7184';
-  const mon=`<rect x="-9" y="${dy-20}" width="18" height="13" rx="1.8" fill="#15171a"/>`+
-    `<rect x="-7.5" y="${dy-18.5}" width="15" height="9.5" rx="1" fill="${scr}" opacity="${working?'0.95':'0.55'}"/>`+
-    (working?`<polyline points="-6,${dy-11} -3,${dy-13.5} 0,${dy-10.5} 3,${dy-14} 6,${dy-12}" fill="none" stroke="#0c100e" stroke-width="0.9" opacity="0.55"/>`:'')+
-    `<rect x="-1.5" y="${dy-7}" width="3" height="4" fill="#15171a"/>`;
+  const mon=`<rect x="-8" y="${dy-13}" width="16" height="11" rx="1.8" fill="#15171a"/>`+
+    `<rect x="-6.5" y="${dy-11.5}" width="13" height="8" rx="1" fill="${scr}" opacity="${working?'0.95':'0.55'}"/>`+
+    (working?`<polyline points="-5,${dy-5} -2.5,${dy-7} 0,${dy-4.5} 2.5,${dy-7.5} 5,${dy-6}" fill="none" stroke="#0c100e" stroke-width="0.9" opacity="0.55"/>`:'')+
+    `<rect x="-1.5" y="${dy-2}" width="3" height="3" fill="#15171a"/>`;
   const kbd=`<rect x="-9" y="${dy+1}" width="18" height="5" rx="1.4" fill="#dfe3e8"/><rect x="-9" y="${dy+1}" width="18" height="2" rx="1" fill="#fff" opacity="0.5"/>`;
   const mug=`<rect x="12" y="${dy-4}" width="5" height="6" rx="1.4" fill="${col}"/><rect x="16.5" y="${dy-2.5}" width="2" height="3" rx="1" fill="none" stroke="${col}" stroke-width="0.9"/>`;
   return `<polygon points="${left}" fill="#85602f"/><polygon points="${right}" fill="#9a7239"/><polygon points="${top}" fill="#bd9156"/>`+
@@ -15365,8 +15366,10 @@ function _ofShade(hex,f){
   let r=Math.round(((n>>16)&255)*f), g=Math.round(((n>>8)&255)*f), b=Math.round((n&255)*f);
   return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
 }
+// Paleta única de estado (avatares 3D, dona y leyendas — coherencia total)
+const _OF_STATUS={'of-work':'#00d4aa','of-active':'#00d4cc','of-error':'#ff4444','of-off':'#7c8590'};
 function _ofIsoStation(m,x,y){
-  const col={'of-work':'#13c39a','of-active':'#19b9d4','of-error':'#ff5a5a','of-off':'#9aa3ad'}[m.cls]||'#9aa3ad';
+  const col=_OF_STATUS[m.cls]||'#7c8590';
   const dark=_ofShade(col,0.72);
   const cat=m.clickIA?_ofCat(m):null;
   const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
@@ -15376,7 +15379,7 @@ function _ofIsoStation(m,x,y){
   if(working){
     const t=escapeHtml(((m.task||'').trim().slice(0,24))||'trabajando…');
     const bw=Math.max(60,Math.min(154,t.length*6+18));
-    bubble=`<g transform="translate(0,-104)"><rect x="${-bw/2}" y="-13" width="${bw}" height="22" rx="9" fill="#ffffff" stroke="${col}" stroke-width="1.5"/><polygon points="-5,9 5,9 0,16" fill="#ffffff" stroke="${col}" stroke-width="0"/><text x="0" y="2.5" text-anchor="middle" font-size="9" fill="#222831" font-family="DM Sans" font-weight="600">${t}</text></g>`;
+    bubble=`<g transform="translate(0,-104)"><rect x="${-bw/2}" y="-13" width="${bw}" height="22" rx="9" fill="#ffffff" stroke="${col}" stroke-width="1.5"/><polygon points="-5,7 5,7 0,15" fill="#ffffff"/><line x1="-5" y1="7" x2="0" y2="15" stroke="${col}" stroke-width="1.5"/><line x1="5" y1="7" x2="0" y2="15" stroke="${col}" stroke-width="1.5"/><text x="0" y="2.5" text-anchor="middle" font-size="9" fill="#222831" font-family="DM Sans" font-weight="600">${t}</text></g>`;
   }
   const ring=cat?`<ellipse cx="0" cy="5" rx="19" ry="9.5" fill="none" stroke="${cat.color}" stroke-width="2.5" opacity="0.6"/>`:'';
   return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
@@ -15396,10 +15399,13 @@ function _ofIsoStation(m,x,y){
       <circle cx="13" cy="-63" r="4" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
     </g>
     ${_ofIsoDesk(col,working)}
-    <rect x="-27" y="41" width="54" height="15" rx="7.5" fill="#ffffff" opacity="0.96"/>
-    <text x="0" y="51" text-anchor="middle" font-size="9" fill="#222831" font-family="DM Sans" font-weight="700">${nm}</text>
     ${bubble}
   </g>`;
+}
+// Placa de nombre dibujada en una capa SUPERIOR (para que ninguna estación tape el nombre de otra)
+function _ofIsoTag(m,x,y){
+  const nm=escapeHtml(m.label.length>15?m.label.slice(0,14)+'…':m.label);
+  return `<g transform="translate(${x},${y})" pointer-events="none"><rect x="-27" y="41" width="54" height="15" rx="7.5" fill="#ffffff" opacity="0.96"/><text x="0" y="51" text-anchor="middle" font-size="9" fill="#222831" font-family="DM Sans" font-weight="700">${nm}</text></g>`;
 }
 function _ofWalker(p1,p2,dur,delay,em){
   return `<g class="of-iso-walker" style="--x1:${p1[0]}px;--y1:${p1[1]}px;--x2:${p2[0]}px;--y2:${p2[1]}px;--dur:${dur}s;animation-delay:${delay}s">
@@ -15417,7 +15423,11 @@ function _ofWalker(p1,p2,dur,delay,em){
 function _ofRenderIso(ia,auto){
   const host=document.getElementById('oficinaIso'); if(!host) return;
   const total=ia.length+auto.length;
-  if(!total){ host.innerHTML='<div class="of-iso-scene" style="padding:24px;color:var(--text3);font-size:12px">Sin trabajadores que mostrar.</div>'; return; }
+  if(!total){ host.innerHTML='<div class="of-iso-scene" style="padding:24px;color:var(--text3);font-size:12px">Sin trabajadores que mostrar.</div>'; host.dataset.sig=''; return; }
+  // No re-renderizar si nada cambió → preserva las animaciones (sin "saltos" en la TV)
+  const sig=_ofView+'|'+[...ia,...auto].map(m=>m.id+m.cls+(m.task||'').slice(0,18)).join(';');
+  if(host.dataset.sig===sig && host.querySelector('svg')) return;
+  host.dataset.sig=sig;
   const cols=Math.max(4,Math.min(6,Math.ceil(Math.sqrt(total))));
   const iaRows=Math.ceil(ia.length/cols);
   const aisle=auto.length?1:0;
@@ -15446,8 +15456,11 @@ function _ofRenderIso(ia,auto){
   // Ventana en la pared derecha con cielo
   const wd=[Br[0]-At[0],Br[1]-At[1]], wp=(f,h)=>[At[0]+f*wd[0],At[1]+f*wd[1]-h];
   const orb=wp(0.7,54);
+  const orbSvg=orbMoon
+    ? `<circle cx="${orb[0].toFixed(1)}" cy="${orb[1].toFixed(1)}" r="6" fill="${orbC}"/><circle cx="${(orb[0]+2.6).toFixed(1)}" cy="${(orb[1]-1.4).toFixed(1)}" r="5" fill="url(#ofSky)"/>`
+    : `<circle cx="${orb[0].toFixed(1)}" cy="${orb[1].toFixed(1)}" r="6" fill="${orbC}" opacity="0.95"/>`;
   const win=`<polygon points="${wp(0.40,22)} ${wp(0.80,22)} ${wp(0.80,64)} ${wp(0.40,64)}" fill="url(#ofSky)" stroke="#ffffff" stroke-width="3.5"/>`+
-    `<circle cx="${orb[0].toFixed(1)}" cy="${orb[1].toFixed(1)}" r="6" fill="${orbC}" opacity="0.95"/>`+
+    orbSvg+
     `<line x1="${wp(0.6,22)[0]}" y1="${wp(0.6,22)[1]}" x2="${wp(0.6,64)[0]}" y2="${wp(0.6,64)[1]}" stroke="#ffffff" stroke-width="2"/>`+
     `<line x1="${wp(0.40,43)[0]}" y1="${wp(0.40,43)[1]}" x2="${wp(0.80,43)[0]}" y2="${wp(0.80,43)[1]}" stroke="#ffffff" stroke-width="2"/>`;
   // Cuadros decorativos en la pared derecha
@@ -15477,18 +15490,18 @@ function _ofRenderIso(ia,auto){
   const iaSorted=[...ia].sort((a,b)=>catIdx(a)-catIdx(b));
   const autoSorted=[...auto].sort((a,b)=>(a.role||'').localeCompare(b.role||''));
 
-  // Estaciones (de atrás hacia adelante para solapamiento correcto)
-  let chars='';
-  iaSorted.forEach((m,i)=>{ const c=i%cols,r=Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); });
+  // Estaciones (de atrás hacia adelante para solapamiento correcto). Los nombres van en una capa aparte (tags).
+  let chars='', tags='';
+  iaSorted.forEach((m,i)=>{ const c=i%cols,r=Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); tags+=_ofIsoTag(m,x,y); });
   // Caminantes por el pasillo entre zonas (vida de oficina)
   if(aisle){
     const s=iso(0,iaRows), e=iso(cols-1,iaRows);
-    chars+=_ofWalker(s,e,9,0,'🧑‍💼')+_ofWalker(e,s,11,1.4,'🧑‍🔧');
+    chars+=_ofWalker(s,e,9,0,'🚶')+_ofWalker(e,s,11,1.4,'🧍');
   }
-  autoSorted.forEach((m,i)=>{ const c=i%cols,r=autoStart+Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); });
+  autoSorted.forEach((m,i)=>{ const c=i%cols,r=autoStart+Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); tags+=_ofIsoTag(m,x,y); });
 
   // Carteles de zona flotantes
-  const sign=(x,y,txt,c)=>`<g transform="translate(${x},${y})"><rect x="-62" y="-11" width="124" height="20" rx="10" fill="#0d0e10" stroke="${c}" stroke-width="1"/><text x="0" y="3" text-anchor="middle" font-size="9.5" fill="${c}" font-family="DM Sans" font-weight="700" letter-spacing="0.6">${txt}</text></g>`;
+  const sign=(x,y,txt,c)=>`<g transform="translate(${x},${y})"><rect x="-64" y="-11" width="128" height="21" rx="10.5" fill="#ffffff" opacity="0.96"/><circle cx="-52" cy="0" r="4" fill="${c}"/><text x="8" y="3" text-anchor="middle" font-size="9.5" fill="#222831" font-family="DM Sans" font-weight="800" letter-spacing="0.5">${txt}</text></g>`;
   const iaMid=iso((cols-1)/2,0), auMid=iso((cols-1)/2,autoStart);
   let signs=sign(iaMid[0],iaMid[1]-th/2-22,`AGENTES IA · ${ia.length}`,'#00d4cc');
   if(auto.length) signs+=sign(auMid[0],auMid[1]-th/2-14,`AUTOMATIZACIONES · ${auto.length}`,'#a78bfa');
@@ -15525,10 +15538,10 @@ function _ofRenderIso(ia,auto){
   const ambient = ambO? `<rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="${ambC}" opacity="${ambO}" pointer-events="none"/>`:'';
 
   const legend=`<div class="of-iso-legend">
-    <span><i style="background:#00d4aa"></i>Trabajando</span>
-    <span><i style="background:#00d4cc"></i>Activo</span>
-    <span><i style="background:#5e5e5e"></i>Reposo</span>
-    <span><i style="background:#ff4444"></i>Error</span>
+    <span><i style="background:${_OF_STATUS['of-work']}"></i>Trabajando</span>
+    <span><i style="background:${_OF_STATUS['of-active']}"></i>Activo</span>
+    <span><i style="background:${_OF_STATUS['of-off']}"></i>Reposo</span>
+    <span><i style="background:${_OF_STATUS['of-error']}"></i>Error</span>
   </div>`;
   const presentCats=_OF_CAT.filter(c=>iaSorted.some(m=>_ofCat(m).name===c.name));
   if(iaSorted.some(m=>_ofCat(m).name==='Otros')) presentCats.push({name:'Otros',color:'#7a7a7a'});
@@ -15546,6 +15559,7 @@ function _ofRenderIso(ia,auto){
     ${rugs}
     ${signs}
     <g>${chars}</g>
+    <g>${tags}</g>
     ${decor}
     ${ambient}
   </svg></div>`;
@@ -15613,7 +15627,7 @@ function _ofDonut(parts,total){
 function _ofDonutStatus(ia,auto){
   const all=[...ia,...auto], c={work:0,active:0,off:0,error:0};
   all.forEach(m=>{ if(m.cls==='of-work')c.work++; else if(m.cls==='of-active')c.active++; else if(m.cls==='of-error')c.error++; else c.off++; });
-  const parts=[{v:c.work,color:'#00d4aa',label:'Trabajando'},{v:c.active,color:'#00d4cc',label:'Activo'},{v:c.off,color:'#5e5e5e',label:'Reposo'},{v:c.error,color:'#ff4444',label:'Error'}];
+  const parts=[{v:c.work,color:_OF_STATUS['of-work'],label:'Trabajando'},{v:c.active,color:_OF_STATUS['of-active'],label:'Activo'},{v:c.off,color:_OF_STATUS['of-off'],label:'Reposo'},{v:c.error,color:_OF_STATUS['of-error'],label:'Error'}];
   const legend=parts.map(p=>`<span><i style="background:${p.color}"></i>${p.label} · ${p.v}</span>`).join('');
   return `<div class="of-donut-wrap">${_ofDonut(parts,all.length)}<div class="of-donut-legend">${legend}</div></div>`;
 }
