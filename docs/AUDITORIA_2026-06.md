@@ -3,6 +3,8 @@
 **Fecha:** 2026-06-22 · **Alcance:** `index.html` (SPA, 26.726 líneas / ~2,06 MB), `lead-worker/`, `sii-worker/`, `airtable-proxy/`, `printer-bridge/`, `mail-api.php`, `tests/`.
 **Método:** revisión de solo lectura del código + ejecución de los tests. Severidades: 🔴 Crítico · 🟠 Alto · 🟡 Medio · ⚪ Bajo.
 
+> **Estado de remediación (2026-06-22):** ✅ aplicada una primera ola de correcciones — ver §8. Lo implementado se hizo **retrocompatible** (la auth del backend solo se activa al definir su variable de entorno) para no romper los despliegues actuales. Para activar plenamente la seguridad del backend hay que configurar las variables de entorno y enviar las claves desde el dashboard (§8.3).
+
 ---
 
 ## 0. Resumen ejecutivo
@@ -187,3 +189,51 @@ Los ítems se serializan a texto (`Costo: $x | Venta: $y`) y al editar se re-par
 3. **Sprint 3 — Seguridad frontend (arquitectónico):** hacer el **proxy Worker obligatorio** para Airtable+Anthropic+OpenAI (resuelve 2.1–2.4 de raíz), auth/sesión server-side (2.5, 2.6), saneo de prompts (2.7).
 4. **Sprint 4 — UX/a11y/resiliencia:** 3.1/3.2 (aria-live + focus-trap), 3.6 (undo), 3.10 (build minificado), 3.14 (PWA), 3.16 (reportar ERRLOG).
 5. **Continuo:** modularización 4.1 (una pestaña por PR) y upgrades del §5 según prioridad de negocio.
+
+---
+
+## 8. Estado de remediación — ola 1 (2026-06-22)
+
+### 8.1 Implementado en el frontend (`index.html` + `tests/`)
+| Hallazgo | Estado | Nota |
+|---|---|---|
+| 1.1 Comisión siempre $0 | ✅ | `isVendorMode()` |
+| 1.2 Urgencia +25% no cobrada | ✅ | helper `aplicaUrgencia()` en crear/editar/toggle/display |
+| 1.3 Pedidos duplicados al aprobar | ✅ | idempotencia (estado previo + flag anti doble-clic). *Persiste el riesgo de race entre usuarios distintos: requiere correlativo en backend.* |
+| 1.4 Fechas en UTC | ✅ | `fechaHoyCL()` en 36 sitios (timestamps con hora intactos) |
+| 1.5 Edición/masivo saltan validaciones | ✅ | `_bloqueoDespacho()` centralizado en avanzar/editar/lote |
+| 1.6 Numeración cotización >99 | ✅ | parseo de sufijo sin asumir 2 dígitos |
+| 1.7 Throttle anula reload tras escritura | ✅ | `loadAllDataSilent(force=true)` por defecto; automáticos en `false` |
+| 1.8 `calcDiasMora` UTC | ✅ | medianoche local |
+| 1.9 Descuento sin clamp | ✅ | clamp `[0,100]` en display/crear/editar |
+| 1.10 Folio duplicado con ceros | ✅ | comparación numérica + validación |
+| 2.9 iframe correo `allow-same-origin` | ✅ | sandbox endurecido (sin same-origin/scripts) |
+| 2.10 `new Function(onclick)` | ✅ | reemplazado por `backdrop.click()` |
+| 2.11 `target=_blank` sin `rel` | ✅ | `rel="noopener noreferrer"` en 20 enlaces |
+| 3.1 Toasts sin `aria-live` | ✅ | `role`/`aria-live` (error=assertive) |
+
+### 8.2 Implementado en el backend (retrocompatible)
+| Componente | Cambio |
+|---|---|
+| `sii-worker` | Auth `X-SII-Key` (si `SII_API_KEY`), debug gateado (`SII_DEBUG=1`), CORS (`SII_ALLOW_ORIGIN`), folios con mutex + rollback, logs sensibles tras debug, `.env.example`/`setup-secrets.sh` sin PII real, `.gitignore` cubre certificados |
+| `mail-api.php` | Anti-CRLF en cabeceras, validación de emails, IMAP SEARCH escapado, rate-limit por IP (429) |
+| `printer-bridge` | Token por `X-Bridge-Token` + comparación constante (`?bt=` deprecado, sigue funcionando) |
+| `airtable-proxy` | `APP_KEY` constante, CORS por `ALLOWED_ORIGINS`, allowlist opcional `ALLOWED_TABLES` |
+| `lead-worker` | `nlSecret()` sin literal predecible, CORS de previews Vercel acotado |
+
+### 8.3 Pasos de configuración para activar la seguridad del backend
+1. **sii-worker**: definir `SII_API_KEY` (genera una con `openssl rand -hex 32`), `SII_ALLOW_ORIGIN` (origen del dashboard) y dejar `SII_DEBUG` sin `1` en producción. En el dashboard: *Configuración SII → "Clave del Worker (X-SII-Key)"* con el mismo valor.
+2. **airtable-proxy**: definir `ALLOWED_ORIGINS` (dominios del dashboard) y, opcionalmente, `ALLOWED_TABLES`.
+3. **lead-worker**: definir `NEWSLETTER_SECRET`; si la web de producción usa `web-thelab-solutions.vercel.app` "plano", añadirlo a `ALLOWED_ORIGINS`.
+4. **printer-bridge**: migrar (opcional) las llamadas a `X-Bridge-Token`; el `?bt=` sigue operativo.
+5. Verificar que ningún certificado `.pfx`/`.p12` esté en el repo (ya cubierto por `.gitignore`).
+
+### 8.4 Pendiente (requiere infraestructura/decisión de producto, NO incluido en esta ola)
+- **Seguridad arquitectónica frontend (2.1–2.6):** sacar el PAT de Airtable y las API keys (Anthropic/OpenAI) del navegador haciendo el **proxy Worker obligatorio**, y mover **auth de sesión y RBAC a server-side** con KDF lento (bcrypt/PBKDF2) y sesión firmada. Es el cambio de mayor impacto y exige backend desplegado; planificar como proyecto aparte. Rotar de inmediato las dos contraseñas admin idénticas.
+- **2.7 Inyección de prompt** en agentes IA: delimitar datos no confiables y validar campos extraídos antes de persistir.
+- **Sprint 4 UX** (focus-trap de modales, undo en borrados, build minificado, PWA/offline, reporte de `ERRLOG`) y **modularización** (§4).
+- **Upgrades** del §5 (tool-use en KAI, inbox WhatsApp, monitor de DTE, agente de cobranzas, push) según prioridad de negocio.
+
+### 8.5 Verificación
+- Tests: `node tests/calc.test.js` → **24 OK** (16 originales + 8 nuevos de regresión), `node tests/redes.test.js` → **12 OK**.
+- Sintaxis: JS inline del `index.html` y los 6 archivos JS de backend pasan `node --check`; `mail-api.php` pasa `php -l`.
