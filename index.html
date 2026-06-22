@@ -2955,6 +2955,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 @keyframes ofBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
 .of-iso-blink{animation:ofBlink 1s steps(1,end) infinite;}
 @keyframes ofBlink{50%{opacity:.25;}}
+#tab-oficina .of-iso-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:10.5px;color:var(--text2);}
+#tab-oficina .of-iso-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle;}
 </style>
 <div class="tab-panel" id="tab-oficina">
   <div class="section-header">
@@ -15265,54 +15267,114 @@ function _ofEmoji(m){
   for(const k in _OF_EMOJI){ if(id.includes(k)) return _OF_EMOJI[k]; }
   return '🤖';
 }
-function _ofIsoChar(m,sx,sy){
+function _ofIsoDesk(col,working){
+  const dy=8, hw=22, hh=11, legH=13;
+  const top=`${0},${dy-hh} ${hw},${dy} ${0},${dy+hh} ${-hw},${dy}`;
+  const left=`${-hw},${dy} ${0},${dy+hh} ${0},${dy+hh+legH} ${-hw},${dy+legH}`;
+  const right=`${0},${dy+hh} ${hw},${dy} ${hw},${dy+legH} ${0},${dy+hh+legH}`;
+  const screen=working?col:'#2b3038';
+  return `<polygon points="${left}" fill="#1b1e23"/><polygon points="${right}" fill="#23272d"/><polygon points="${top}" fill="#30353d"/>`+
+    `<rect x="-8" y="${dy-16}" width="16" height="10" rx="1.5" fill="${screen}" opacity="${working?'0.95':'0.55'}"/><rect x="-1.5" y="${dy-6}" width="3" height="5" fill="#15171a"/>`;
+}
+function _ofIsoStation(m,x,y){
   const col={'of-work':'#00d4aa','of-active':'#00d4cc','of-error':'#ff4444','of-off':'#5e5e5e'}[m.cls]||'#5e5e5e';
   const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-  const nm=escapeHtml(m.label.length>16?m.label.slice(0,15)+'…':m.label);
-  const em=_ofEmoji(m);
-  const bob=m.cls==='of-work'?' of-iso-bob':'';
+  const nm=escapeHtml(m.label.length>15?m.label.slice(0,14)+'…':m.label);
+  const em=_ofEmoji(m), working=m.cls==='of-work', bob=working?' of-iso-bob':'';
   let bubble='';
-  if(m.cls==='of-work'){
-    const t=escapeHtml(((m.task||'').trim().slice(0,22))||'trabajando…');
-    bubble=`<g transform="translate(0,-94)"><rect x="-48" y="-13" width="96" height="22" rx="7" fill="#0f0f0f" stroke="${col}" stroke-width="1"/><polygon points="-4,9 4,9 0,16" fill="#0f0f0f"/><text x="0" y="2" text-anchor="middle" font-size="9" fill="#e8e8e8" font-family="DM Sans">${t}</text></g>`;
+  if(working){
+    const t=escapeHtml(((m.task||'').trim().slice(0,24))||'trabajando…');
+    const bw=Math.max(60,Math.min(154,t.length*6+18));
+    bubble=`<g transform="translate(0,-92)"><rect x="${-bw/2}" y="-13" width="${bw}" height="22" rx="7" fill="#0f0f0f" stroke="${col}" stroke-width="1"/><polygon points="-4,9 4,9 0,16" fill="#0f0f0f"/><text x="0" y="2" text-anchor="middle" font-size="9" fill="#e8e8e8" font-family="DM Sans">${t}</text></g>`;
   }
-  return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${sx},${sy})">
+  return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
     <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
-    <ellipse cx="0" cy="0" rx="20" ry="10" fill="rgba(0,0,0,0.45)"/>
+    <ellipse cx="0" cy="2" rx="19" ry="9" fill="rgba(0,0,0,0.45)"/>
     <g class="of-iso-body">
-      <rect x="-12" y="-40" width="24" height="34" rx="9" fill="${col}"/>
-      <rect x="-12" y="-40" width="24" height="34" rx="9" fill="url(#ofShine)"/>
-      <circle cx="0" cy="-50" r="13" fill="#1a1a1a" stroke="${col}" stroke-width="2.5"/>
-      <text x="0" y="-45.5" text-anchor="middle" font-size="14">${em}</text>
-      <circle cx="11" cy="-61" r="3.5" fill="${col}"${m.cls==='of-work'?' class="of-iso-blink"':''}/>
+      <rect x="-11" y="-38" width="22" height="32" rx="9" fill="${col}"/>
+      <rect x="-11" y="-38" width="22" height="32" rx="9" fill="url(#ofShine)"/>
+      <circle cx="0" cy="-47" r="12" fill="#1a1a1a" stroke="${col}" stroke-width="2.5"/>
+      <text x="0" y="-42.5" text-anchor="middle" font-size="13">${em}</text>
+      <circle cx="10" cy="-57" r="3.3" fill="${col}"${working?' class="of-iso-blink"':''}/>
     </g>
-    <text x="0" y="18" text-anchor="middle" font-size="9" fill="#c9c9c9" font-family="DM Sans" font-weight="600">${nm}</text>
+    ${_ofIsoDesk(col,working)}
+    <rect x="-24" y="36" width="48" height="13" rx="3" fill="#0e0f11" opacity="0.9"/>
+    <text x="0" y="45" text-anchor="middle" font-size="8.5" fill="#cfcfcf" font-family="DM Sans" font-weight="600">${nm}</text>
+    ${bubble}
   </g>`;
 }
 function _ofRenderIso(ia,auto){
   const host=document.getElementById('oficinaIso'); if(!host) return;
-  const all=[...ia,...auto];
-  const n=all.length||1;
-  const cols=Math.max(4,Math.ceil(Math.sqrt(n)));
-  const rows=Math.ceil(n/cols);
-  const tw=74, th=37;
-  const originX=(rows-1)*tw/2 + 50;
+  const total=ia.length+auto.length;
+  if(!total){ host.innerHTML='<div class="of-iso-scene" style="padding:24px;color:var(--text3);font-size:12px">Sin trabajadores que mostrar.</div>'; return; }
+  const cols=Math.max(4,Math.min(6,Math.ceil(Math.sqrt(total))));
+  const iaRows=Math.ceil(ia.length/cols);
+  const aisle=auto.length?1:0;
+  const autoStart=iaRows+aisle;
+  const rows=autoStart+Math.ceil(auto.length/cols);
+  const tw=76, th=38, wallH=76;
+  const originX=(rows-1)*tw/2 + 54;
   const iso=(c,r)=>[ (c-r)*tw/2 + originX, (c+r)*th/2 ];
+
+  // Esquinas del piso (vértices exteriores)
+  const A=iso(0,0), B=iso(cols-1,0), C=iso(cols-1,rows-1), D=iso(0,rows-1);
+  const At=[A[0],A[1]-th/2], Br=[B[0]+tw/2,B[1]], Cb=[C[0],C[1]+th/2], Dl=[D[0]-tw/2,D[1]];
+
+  // Paredes isométricas (sube wallH desde el borde trasero)
+  const wallR=`<polygon points="${At[0]},${At[1]} ${Br[0]},${Br[1]} ${Br[0]},${Br[1]-wallH} ${At[0]},${At[1]-wallH}" fill="#191c21"/>`;
+  const wallL=`<polygon points="${At[0]},${At[1]} ${Dl[0]},${Dl[1]} ${Dl[0]},${Dl[1]-wallH} ${At[0]},${At[1]-wallH}" fill="#131519"/>`;
+  const trimR=`<line x1="${At[0]}" y1="${At[1]-wallH}" x2="${Br[0]}" y2="${Br[1]-wallH}" stroke="#2a2f36" stroke-width="2"/>`;
+  const trimL=`<line x1="${At[0]}" y1="${At[1]-wallH}" x2="${Dl[0]}" y2="${Dl[1]-wallH}" stroke="#22262c" stroke-width="2"/>`;
+  // Ventana en la pared derecha
+  const wd=[Br[0]-At[0],Br[1]-At[1]], wp=(f,h)=>[At[0]+f*wd[0],At[1]+f*wd[1]-h];
+  const win=`<polygon points="${wp(0.46,26)} ${wp(0.74,26)} ${wp(0.74,60)} ${wp(0.46,60)}" fill="#22455e" stroke="#3f6f8c" stroke-width="2"/>`+
+    `<line x1="${wp(0.6,26)[0]}" y1="${wp(0.6,26)[1]}" x2="${wp(0.6,60)[0]}" y2="${wp(0.6,60)[1]}" stroke="#3f6f8c" stroke-width="1.5"/>`+
+    `<line x1="${wp(0.46,43)[0]}" y1="${wp(0.46,43)[1]}" x2="${wp(0.74,43)[0]}" y2="${wp(0.74,43)[1]}" stroke="#3f6f8c" stroke-width="1.5"/>`;
+
+  // Piso con tinte por zona + pasillo
+  const zoneOf=r=> r<iaRows?'ia':(r<autoStart?'aisle':'auto');
   let tiles='';
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
-    const [x,y]=iso(c,r);
-    const fill=((c+r)%2)?'#15171a':'#1a1d22';
+    const [x,y]=iso(c,r), z=zoneOf(r); let fill=((c+r)%2)?'#15171a':'#1a1d22';
+    if(z==='ia')    fill=((c+r)%2)?'#13201f':'#162624';
+    else if(z==='auto') fill=((c+r)%2)?'#1a1626':'#1e1a2c';
+    else            fill='#0f1012';
     tiles+=`<polygon points="${x},${y-th/2} ${x+tw/2},${y} ${x},${y+th/2} ${x-tw/2},${y}" fill="${fill}" stroke="#0b0c0e" stroke-width="1"/>`;
   }
+
+  // Estaciones (de atrás hacia adelante para solapamiento correcto)
   let chars='';
-  all.forEach((m,i)=>{ const c=i%cols, r=Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoChar(m,x,y); });
-  const right=originX+(cols-1)*tw/2+tw/2;
-  const bottom=(cols-1+rows-1)*th/2+th/2+22;
-  const top=-112;
-  host.innerHTML=`<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="-12 ${top} ${right+24} ${bottom-top+12}" preserveAspectRatio="xMidYMin meet">
+  ia.forEach((m,i)=>{ const c=i%cols,r=Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); });
+  auto.forEach((m,i)=>{ const c=i%cols,r=autoStart+Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); });
+
+  // Carteles de zona flotantes
+  const sign=(x,y,txt,c)=>`<g transform="translate(${x},${y})"><rect x="-62" y="-11" width="124" height="20" rx="10" fill="#0d0e10" stroke="${c}" stroke-width="1"/><text x="0" y="3" text-anchor="middle" font-size="9.5" fill="${c}" font-family="DM Sans" font-weight="700" letter-spacing="0.6">${txt}</text></g>`;
+  const iaMid=iso((cols-1)/2,0), auMid=iso((cols-1)/2,autoStart);
+  let signs=sign(iaMid[0],iaMid[1]-th/2-22,`AGENTES IA · ${ia.length}`,'#00d4cc');
+  if(auto.length) signs+=sign(auMid[0],auMid[1]-th/2-14,`AUTOMATIZACIONES · ${auto.length}`,'#a78bfa');
+
+  // Plantas decorativas en las esquinas frontales
+  const plant=(x,y)=>`<g transform="translate(${x},${y})"><ellipse cx="0" cy="2" rx="12" ry="6" fill="rgba(0,0,0,0.4)"/><text x="0" y="3" text-anchor="middle" font-size="22">🪴</text></g>`;
+  const decor=plant(Dl[0]+10,Dl[1]-4)+plant(Cb[0]+2,Cb[1]-4);
+
+  // Límites del viewBox
+  const right=originX+(cols-1)*tw/2+tw/2, left=originX-(rows-1)*tw/2-tw/2;
+  const bottomY=(cols-1+rows-1)*th/2+th/2+50, topY=-(wallH+th/2+30);
+  const vbX=left-18, vbW=(right-left)+36, vbH=(bottomY-topY)+14;
+
+  const legend=`<div class="of-iso-legend">
+    <span><i style="background:#00d4aa"></i>Trabajando</span>
+    <span><i style="background:#00d4cc"></i>Activo</span>
+    <span><i style="background:#5e5e5e"></i>Reposo</span>
+    <span><i style="background:#ff4444"></i>Error</span>
+  </div>`;
+  host.innerHTML=`${legend}<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="${vbX} ${topY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMin meet">
     <defs><linearGradient id="ofShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+    ${wallL}${wallR}${trimL}${trimR}${win}
     <g>${tiles}</g>
+    ${signs}
     <g>${chars}</g>
+    ${decor}
   </svg></div>`;
 }
 function _ofRenderFeed(runs){
