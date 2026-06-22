@@ -154,4 +154,39 @@ server.listen(PORT, () => {
   console.log(`  CORS origin    : ${ALLOW_ORIGIN}`);
   console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
   console.log('─'.repeat(60));
+  startHeartbeat();
 });
+
+// ── Latido a la tabla Automations (Oficina Virtual del dashboard) ─────────
+// Como el bridge es un proceso persistente, reporta "Activo" cada 5 min.
+// Opcional: solo si se definen AIRTABLE_TOKEN y AIRTABLE_BASE_ID en el entorno
+// (p.ej. en el .plist de launchd). Best-effort; cualquier error se ignora.
+function startHeartbeat() {
+  const token = process.env.AIRTABLE_TOKEN;
+  const base = process.env.AIRTABLE_BASE_ID;
+  if (!token || !base) return;
+  const api = 'https://api.airtable.com/v0';
+  const tbl = `${api}/${base}/${encodeURIComponent('Automations')}`;
+  const auth = { Authorization: 'Bearer ' + token };
+  const beat = async () => {
+    try {
+      const q = `${tbl}?maxRecords=1&filterByFormula=${encodeURIComponent("{ID}='printer-bridge'")}`;
+      const found = await fetch(q, { headers: auth });
+      if (!found.ok) return;
+      const data = await found.json();
+      const rec = data.records && data.records[0];
+      if (!rec) return;
+      await fetch(`${tbl}/${rec.id}`, {
+        method: 'PATCH',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: { Estado: 'Activo', UltimaEjecucion: new Date().toISOString() },
+          typecast: true,
+        }),
+      });
+    } catch (e) { /* best-effort */ }
+  };
+  beat();
+  const t = setInterval(beat, 5 * 60 * 1000);
+  if (t.unref) t.unref();
+}

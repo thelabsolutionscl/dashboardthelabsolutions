@@ -38,6 +38,11 @@ export default {
     }
 
     try {
+      // Latido para la "Oficina Virtual" del dashboard (best-effort, no bloquea).
+      if (ctx && env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
+        ctx.waitUntil(ofHeartbeat(env, "lead-worker").catch(() => {}));
+      }
+
       // ── GET /health ────────────────────────────────────────────────
       if (request.method === "GET" && url.pathname === "/health") {
         return json(
@@ -1385,4 +1390,31 @@ function stripEmpty(obj) {
     out[k] = v;
   }
   return out;
+}
+
+// ── Latido a la tabla Automations (Oficina Virtual) ──────────────────────
+// Marca la fila ID=<id> como "Activo" con la hora actual, máx. 1 vez cada
+// 5 min (throttle por isolate). Best-effort: si la tabla/fila no existen,
+// no hace nada. Se invoca con ctx.waitUntil para no añadir latencia.
+let _ofLastBeat = 0;
+async function ofHeartbeat(env, id) {
+  const now = Date.now();
+  if (now - _ofLastBeat < 5 * 60 * 1000) return;
+  _ofLastBeat = now;
+  const tbl = `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Automations")}`;
+  const auth = { Authorization: "Bearer " + env.AIRTABLE_TOKEN };
+  const q = `${tbl}?maxRecords=1&filterByFormula=${encodeURIComponent(`{ID}='${id}'`)}`;
+  const found = await fetch(q, { headers: auth });
+  if (!found.ok) return;
+  const data = await found.json();
+  const rec = data.records && data.records[0];
+  if (!rec) return;
+  await fetch(`${tbl}/${rec.id}`, {
+    method: "PATCH",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fields: { Estado: "Activo", UltimaEjecucion: new Date().toISOString() },
+      typecast: true,
+    }),
+  });
 }

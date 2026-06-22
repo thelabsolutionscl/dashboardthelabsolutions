@@ -10,7 +10,7 @@ const CORS = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS });
     }
@@ -18,6 +18,12 @@ export default {
     const url = new URL(request.url);
 
     try {
+      // Latido para la "Oficina Virtual" del dashboard. Opcional: solo si se
+      // configuran los secrets AIRTABLE_TOKEN y AIRTABLE_BASE_ID. Best-effort.
+      if (ctx && env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
+        ctx.waitUntil(ofHeartbeat(env, 'sii-worker').catch(() => {}));
+      }
+
       // GET /health — verifica configuración básica
       if (request.method === 'GET' && url.pathname === '/health') {
         return ok({
@@ -202,5 +208,33 @@ function err(msg, status = 400) {
   return new Response(JSON.stringify({ error: msg }), {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
+  });
+}
+
+// ── Latido a la tabla Automations (Oficina Virtual) ──────────────────────
+// Marca la fila ID=<id> como "Activo" con la hora actual, máx. 1 vez cada
+// 5 min. Best-effort; requiere los secrets opcionales AIRTABLE_TOKEN y
+// AIRTABLE_BASE_ID. Se invoca con ctx.waitUntil para no añadir latencia.
+let _ofLastBeat = 0;
+async function ofHeartbeat(env, id) {
+  const now = Date.now();
+  if (now - _ofLastBeat < 5 * 60 * 1000) return;
+  _ofLastBeat = now;
+  const api = 'https://api.airtable.com/v0';
+  const tbl = `${api}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent('Automations')}`;
+  const auth = { Authorization: 'Bearer ' + env.AIRTABLE_TOKEN };
+  const q = `${tbl}?maxRecords=1&filterByFormula=${encodeURIComponent(`{ID}='${id}'`)}`;
+  const found = await fetch(q, { headers: auth });
+  if (!found.ok) return;
+  const data = await found.json();
+  const rec = data.records && data.records[0];
+  if (!rec) return;
+  await fetch(`${tbl}/${rec.id}`, {
+    method: 'PATCH',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: { Estado: 'Activo', UltimaEjecucion: new Date().toISOString() },
+      typecast: true,
+    }),
   });
 }
