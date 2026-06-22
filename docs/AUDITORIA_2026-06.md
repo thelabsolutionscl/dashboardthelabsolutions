@@ -259,3 +259,31 @@ Los ítems se serializan a texto (`Costo: $x | Venta: $y`) y al editar se re-par
 ### Verificación ola 2
 - `node tests/calc.test.js` → **24 OK**, `node tests/redes.test.js` → **12 OK**.
 - Sintaxis: 8 bloques `<script>` inline válidos; `sw.js` pasa `node --check`; `manifest.json` es JSON válido.
+
+---
+
+## 10. Remediación — ola 3 (2026-06-22): auth server-side + proxy (opt-in)
+
+Aborda la raíz de los 🔴 de seguridad del frontend (2.1, 2.2, 2.5, 2.6) **sin romper producción**: todo es **opt-in** y retrocompatible.
+
+### Qué se implementó
+- **`airtable-proxy` — login server-side:** endpoint `POST /auth/login` que verifica la contraseña con **PBKDF2-SHA256** y emite una **sesión firmada con HMAC** (`{u,name,role,exp}.HMAC`). Se activa solo si existen los secrets `SESSION_SECRET` y `AUTH_USERS`; si no, responde 501 y el proxy sigue como antes.
+- **`airtable-proxy` — autorización dual + RBAC server-side:** el passthrough acepta **sesión firmada** (modo seguro, con `checkRBAC` por rol/método/tabla) **o** `X-App-Key` (retrocompat). Con sesión, el RBAC se valida en el Worker (no en el navegador): lectura para todos, escritura solo roles con permiso (+ carve-out redes/newsletter), borrado solo admin/gerencia/demo. Comparaciones de tiempo constante (HMAC y PBKDF2).
+- **`airtable-proxy/scripts/make-user.mjs`:** genera entradas de `AUTH_USERS` con PBKDF2 (sin contraseñas en claro).
+- **Cliente (`index.html`) — modo seguro opt-in:** con `localStorage['proxy_auth']==='1'` + `proxy_url`, `AUTH.login` valida contra `<worker>/auth/login` y guarda la **sesión firmada por el servidor**; `_airtableConfig` y las llamadas a Claude usan `Authorization: Bearer <sesión>`. En este modo **el PAT de Airtable y la API key de Anthropic nunca entran al navegador** y el RBAC real lo aplica el Worker. Sin el flag, el comportamiento es idéntico al actual.
+
+### Cómo activarlo (resumen; detalle en `airtable-proxy/wrangler.toml`)
+1. `wrangler secret put SESSION_SECRET` (`openssl rand -hex 32`).
+2. Generar usuarios: `node airtable-proxy/scripts/make-user.mjs <correo> <rol> <password>` y subir el array con `wrangler secret put AUTH_USERS`.
+3. `wrangler secret put AIRTABLE_TOKEN` / `ANTHROPIC_TOKEN` (si no están).
+4. En el dashboard: `localStorage.setItem('proxy_url', '<url worker>'); localStorage.setItem('proxy_auth','1');` y volver a entrar.
+5. Con esto puedes **quitar el PAT del navegador** y dejar de exponer las API keys.
+
+### Lo que sigue requiriendo decisión/infra (no automatizable desde aquí)
+- Desplegar el Worker, definir los secrets y migrar a `proxy_auth=1` en los dispositivos.
+- Tras validar el modo seguro, **eliminar del código los hashes locales** (`AUTH.USERS`) y el modo token directo, y **rotar las contraseñas** (las 2 admin eran idénticas).
+- 2.7 ampliado (sanear datos no confiables en todos los agentes, no solo la cola), build minificado y modularización.
+
+### Verificación ola 3
+- `node --check airtable-proxy/src/worker.js` OK; `make-user.mjs` OK; round-trip PBKDF2/HMAC verificado.
+- `index.html`: 8 bloques `<script>` válidos; tests **24 OK** + **12 OK**.

@@ -6624,7 +6624,19 @@ function clearUserMenuProxy(){
 
 // ── AIRTABLE ──────────────────────────────────────────────────
 // Returns {base, headers} — uses proxy when configured, direct PAT otherwise.
+// Modo seguro (OPT-IN): login server-side vía proxy. Si proxy_auth=1 y hay una sesión
+// firmada vigente, devuelve {base,token}. En este modo el PAT de Airtable NUNCA entra
+// al navegador (lo inyecta el Worker) y el RBAC se valida server-side.
+function _secureSession(){
+  if(localStorage.getItem('proxy_auth')!=='1') return null;
+  const purl=localStorage.getItem('proxy_url');if(!purl) return null;
+  let s=null;try{s=JSON.parse(localStorage.getItem((typeof AUTH!=='undefined'&&AUTH.SESSION_KEY)||'thelab_session_v2'));}catch(_){}
+  if(s&&s.token&&(!s.expires||s.expires>Date.now())) return{base:purl.replace(/\/$/,''),token:s.token};
+  return null;
+}
 function _airtableConfig(){
+  const sec=_secureSession();
+  if(sec) return{base:sec.base,headers:{'Authorization':'Bearer '+sec.token}};
   const proxyUrl=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
   const proxyKey=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
   if(proxyUrl&&proxyKey) return{base:proxyUrl.replace(/\/$/,''),headers:{'X-App-Key':proxyKey}};
@@ -7302,8 +7314,11 @@ function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInt
 // Config del proxy Worker (si está) — guarda los secretos en el servidor, no en el navegador
 function _proxyCfg(){
   const url=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
+  if(!url) return null;
+  const sec=_secureSession();
+  if(sec) return{url:url.replace(/\/$/,''),token:sec.token}; // modo seguro: Bearer de sesión
   const key=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
-  return(url&&key)?{url:url.replace(/\/$/,''),key}:null;
+  return key?{url:url.replace(/\/$/,''),key}:null;
 }
 async function callClaude(system,user){
   // Con proxy: la API key de Anthropic vive en el Worker, no en el navegador
@@ -7319,8 +7334,10 @@ async function _callClaudeViaProxy(system,user,px){
   // No mandamos 'anthropic-version' como header: dispara un preflight CORS que el Worker podría no permitir.
   // El Worker la inyecta por defecto. Sólo 'Content-Type' y 'X-App-Key' (ambos ya permitidos por el Worker).
   let r;
+  const _hdrs={'Content-Type':'application/json'};
+  if(px.token)_hdrs['Authorization']='Bearer '+px.token;else _hdrs['X-App-Key']=px.key;
   try{
-    r=await fetch(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key},body:_CLAUDE_BODY(system,user)});
+    r=await fetch(px.url+'/anthropic/v1/messages',{method:'POST',headers:_hdrs,body:_CLAUDE_BODY(system,user)});
   }catch(e){
     throw new Error('no se pudo conectar al proxy IA — revisa la URL/clave en Mi cuenta → Proxy y que el Worker esté desplegado');
   }
@@ -18555,7 +18572,24 @@ const AUTH={
   async init(){},
 
   async login(username,password,remember){
-    const user=AUTH.USERS.find(u=>u.username===username.trim().toLowerCase());
+    const uname=username.trim().toLowerCase();
+    // ── Modo seguro (opt-in): valida la contraseña EN EL WORKER y obtiene una sesión firmada ──
+    // El navegador no compara hashes ni guarda el PAT; el RBAC se aplica server-side.
+    if(localStorage.getItem('proxy_auth')==='1'&&localStorage.getItem('proxy_url')){
+      try{
+        const purl=localStorage.getItem('proxy_url').replace(/\/$/,'');
+        const r=await fetch(purl+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:uname,password,remember:!!remember})});
+        if(r.status===501){toast('El Worker no tiene auth configurada (SESSION_SECRET/AUTH_USERS)','error');return false;}
+        if(!r.ok) return false;
+        const d=await r.json();
+        if(!d||!d.token) return false;
+        const session={username:d.username||uname,name:d.name||uname,role:d.role,expires:d.exp||(Date.now()+8*3600000),remember:!!remember,token:d.token,secure:true};
+        localStorage.setItem(AUTH.SESSION_KEY,JSON.stringify(session));
+        return{username:session.username,name:session.name,role:session.role};
+      }catch(e){logErr('login.secure',e);toast('No se pudo conectar al Worker de auth','error');return false;}
+    }
+    // ── Modo local (legado): hash en el navegador ──
+    const user=AUTH.USERS.find(u=>u.username===uname);
     if(!user) return false;
     let ok=false;
     try{ok=(await _sha256Hex(AUTH.PWD_SALT+password))===user.hash;}catch(e){ok=false;}

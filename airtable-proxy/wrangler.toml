@@ -28,3 +28,20 @@ compatibility_date = "2024-09-01"
 # Con esto, ni el PAT de Airtable ni la API key de Anthropic salen al navegador:
 #   - Airtable:  <worker>/<base>/<tabla>           (el dashboard ya lo usa)
 #   - Claude:    <worker>/anthropic/v1/messages    (callClaude lo usa automáticamente)
+#
+# ── AUTH SERVER-SIDE (OPT-IN, recomendado) ─────────────────────────────
+# Mueve el LOGIN y el RBAC al Worker: el navegador deja de validar contraseñas
+# (hoy los hashes están en index.html) y deja de portar el PAT. Se activa SOLO si
+# defines estos dos secrets; si no, el proxy sigue funcionando con X-App-Key.
+#   wrangler secret put SESSION_SECRET    ← clave para firmar sesiones (openssl rand -hex 32)
+#   wrangler secret put AUTH_USERS        ← array JSON de usuarios (ver abajo)
+#
+# Genera cada usuario con PBKDF2 (no pongas contraseñas en claro):
+#   node scripts/make-user.mjs nicanor@thelab.solutions admin 'TuClave' 100000
+# y pega todas las entradas en un array al subir AUTH_USERS:
+#   [ {"u":"nicanor@thelab.solutions","name":"Nicanor","role":"admin","salt":"..","iter":100000,"hash":".."}, ... ]
+#
+# En el dashboard, activa el modo seguro:
+#   localStorage.setItem('proxy_url','https://airtable-proxy.<sub>.workers.dev');
+#   localStorage.setItem('proxy_auth','1');   // usa login server-side + sesión firmada
+# (con proxy_auth=1 el login va contra <worker>/auth/login y el PAT nunca entra al navegador).
