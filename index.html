@@ -15526,7 +15526,7 @@ function _ofIsoStation(m,x,y){
     <ellipse cx="0" cy="5" rx="22" ry="10" fill="url(#ofShadow)"/>
     ${halo}
     ${ring}
-    <g transform="scale(1.22)">
+    <g transform="scale(1.04)">
     <g class="of-iso-body">
       <rect x="-7.5" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
       <rect x="1" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
@@ -15573,13 +15573,23 @@ function _ofRenderIso(ia,auto){
   const sig=_ofView+'|'+[...ia,...auto].map(m=>m.id+m.cls+(m.task||'').slice(0,18)).join(';');
   if(host.dataset.sig===sig && host.querySelector('svg')) return;
   host.dataset.sig=sig;
-  const cols=Math.max(6,Math.min(8,Math.ceil(Math.sqrt(total*1.6))));
-  const iaRows=Math.ceil(ia.length/cols);
-  const aisle=auto.length?1:0;
-  const autoStart=iaRows+aisle;
-  const rows=autoStart+Math.ceil(auto.length/cols);
-  // Baldosas anchas: ensanchan el diamante para que llene el área panorámica
-  const tw=212, th=96, wallH=86;
+  // ── Departamentos como SALAS (cada una con su tamaño, empacadas en estantes) ──
+  const _depts=[];
+  _OF_CAT.forEach(c=>{ const mem=ia.filter(m=>_ofCat(m).name===c.name); if(mem.length) _depts.push({name:c.name,color:c.color,members:mem}); });
+  { const ot=ia.filter(m=>_ofCat(m).name==='Otros'); if(ot.length) _depts.push({name:'Otros',color:'#7a7a7a',members:ot}); }
+  if(auto.length) _depts.push({name:'Automatizaciones',color:'#a78bfa',members:auto});
+  _depts.forEach(d=>{ const n=d.members.length; d.dc=Math.max(2,Math.ceil(Math.sqrt(n*1.5))); d.dr=Math.max(1,Math.ceil(n/d.dc)); });
+  const gap=1;
+  const perShelf=Math.max(1,Math.min(3,Math.ceil(Math.sqrt(_depts.length))));
+  const _rooms=[]; let _rt=0, _maxc=0, _corrR=0;
+  for(let s=0;s<_depts.length;s+=perShelf){
+    const shelf=_depts.slice(s,s+perShelf); const shelfH=Math.max(...shelf.map(d=>d.dr)); let ct=0;
+    shelf.forEach(d=>{ _rooms.push({name:d.name,color:d.color,members:d.members,dc:d.dc,dr:d.dr,c0:ct,r0:_rt,c1:ct+d.dc-1,r1:_rt+d.dr-1,cc:ct+(d.dc-1)/2,rc:_rt+(d.dr-1)/2}); ct+=d.dc+gap; });
+    _maxc=Math.max(_maxc,ct-gap); if(s===0)_corrR=_rt+shelfH; _rt+=shelfH+gap;
+  }
+  const cols=_maxc, rows=_rt-gap;
+  const _roomOf=(c,r)=>_rooms.find(R=>c>=R.c0&&c<=R.c1&&r>=R.r0&&r<=R.r1)||null;
+  const tw=cols>=14?140:(cols>=11?162:186), th=Math.round(tw*0.52), wallH=64;
   const originX=(rows-1)*tw/2 + 56;
   const iso=(c,r)=>[ (c-r)*tw/2 + originX, (c+r)*th/2 ];
 
@@ -15613,42 +15623,52 @@ function _ofRenderIso(ia,auto){
   const frame=(f1,f2,h1,h2,c)=>`<polygon points="${wp(f1,h1)} ${wp(f2,h1)} ${wp(f2,h2)} ${wp(f1,h2)}" fill="#fff" stroke="#c9b48f" stroke-width="2"/><polygon points="${wp(f1+0.012,h1-3)} ${wp(f2-0.012,h1-3)} ${wp(f2-0.012,h2+3)} ${wp(f1+0.012,h2+3)}" fill="${c}" opacity="0.8"/>`;
   const frames=frame(0.10,0.20,34,54,'#7fd1c4')+frame(0.23,0.33,34,54,'#f6b8a0');
 
-  // Piso claro tipo alfombra + pasillo
-  const zoneOf=r=> r<iaRows?'ia':(r<autoStart?'aisle':'auto');
+  // Piso: baldosas claras dentro de las salas, pasillos más oscuros entre salas
   let tiles='';
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
-    const [x,y]=iso(c,r), z=zoneOf(r); let fill=((c+r)%2)?'#c9d2dc':'#bdc8d3';
-    if(z==='aisle') fill=((c+r)%2)?'#aeb8c3':'#a7b2bd';
+    const [x,y]=iso(c,r), inRoom=_roomOf(c,r);
+    let fill=inRoom?(((c+r)%2)?'#c9d2dc':'#bdc8d3'):(((c+r)%2)?'#9aa6b3':'#929fac');
     tiles+=`<polygon points="${x},${y-th/2} ${x+tw/2},${y} ${x},${y+th/2} ${x-tw/2},${y}" fill="${fill}" stroke="#aab4bf" stroke-width="0.8"/>`;
   }
-  // Alfombras de color por zona
-  const rugPoly=(r0,r1,color)=>{
-    const cs=[[iso(0,r0)[0],iso(0,r0)[1]-th/2],[iso(cols-1,r0)[0]+tw/2,iso(cols-1,r0)[1]],[iso(cols-1,r1)[0],iso(cols-1,r1)[1]+th/2],[iso(0,r1)[0]-tw/2,iso(0,r1)[1]]];
-    const mx=cs.reduce((s,p)=>s+p[0],0)/4, my=cs.reduce((s,p)=>s+p[1],0)/4;
-    const ins=cs.map(p=>[(mx+(p[0]-mx)*0.9).toFixed(1),(my+(p[1]-my)*0.88).toFixed(1)]);
-    return `<polygon points="${ins.map(p=>p.join(',')).join(' ')}" fill="${color}" opacity="0.16" stroke="${color}" stroke-opacity="0.4" stroke-width="2.5"/>`;
-  };
-  let rugs=rugPoly(0,iaRows-1,'#19b9d4');
-  if(auto.length) rugs+=rugPoly(autoStart,rows-1,'#a78bfa');
+  // Alfombra de color por SALA + muros divisorios bajos en las dos caras traseras
+  const _rC=R=>({T:[iso(R.c0,R.r0)[0],iso(R.c0,R.r0)[1]-th/2], R:[iso(R.c1,R.r0)[0]+tw/2,iso(R.c1,R.r0)[1]], F:[iso(R.c1,R.r1)[0],iso(R.c1,R.r1)[1]+th/2], L:[iso(R.c0,R.r1)[0]-tw/2,iso(R.c0,R.r1)[1]]});
+  let rugs='';
+  _rooms.forEach(R=>{ const k=_rC(R), cs=[k.T,k.R,k.F,k.L], mx=cs.reduce((s,p)=>s+p[0],0)/4, my=cs.reduce((s,p)=>s+p[1],0)/4;
+    const ins=cs.map(p=>[(mx+(p[0]-mx)*0.93).toFixed(1),(my+(p[1]-my)*0.9).toFixed(1)]);
+    rugs+=`<polygon points="${ins.map(p=>p.join(',')).join(' ')}" fill="${R.color}" opacity="0.17" stroke="${R.color}" stroke-opacity="0.45" stroke-width="2.5"/>`;
+  });
+  const dw=36;
+  const wallQuad=(P,Q,col)=>`<polygon points="${P[0].toFixed(1)},${P[1].toFixed(1)} ${Q[0].toFixed(1)},${Q[1].toFixed(1)} ${Q[0].toFixed(1)},${(Q[1]-dw).toFixed(1)} ${P[0].toFixed(1)},${(P[1]-dw).toFixed(1)}" fill="${col}"/>`;
+  let dividers='';
+  _rooms.forEach(R=>{ const k=_rC(R);
+    dividers+=wallQuad(k.T,k.R,'#dfe6ec')+wallQuad(k.L,k.T,'#cfd8e1');
+    dividers+=`<line x1="${k.T[0].toFixed(1)}" y1="${(k.T[1]-dw).toFixed(1)}" x2="${k.R[0].toFixed(1)}" y2="${(k.R[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
+    dividers+=`<line x1="${k.L[0].toFixed(1)}" y1="${(k.L[1]-dw).toFixed(1)}" x2="${k.T[0].toFixed(1)}" y2="${(k.T[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
+  });
 
-  // Agrupar por función: ordena los agentes IA por categoría y las automatizaciones por tipo
-  const catIdx=m=>{ const i=_OF_CAT.findIndex(c=>c.name===_ofCat(m).name); return i<0?99:i; };
-  const iaSorted=[...ia].sort((a,b)=>catIdx(a)-catIdx(b));
-  const autoSorted=[...auto].sort((a,b)=>(a.role||'').localeCompare(b.role||''));
-
-  // Estaciones (de atrás hacia adelante para solapamiento correcto). Los nombres van en una capa aparte (tags).
+  // Estaciones por sala (de atrás hacia adelante para el solapamiento correcto)
   let chars='', tags='';
-  iaSorted.forEach((m,i)=>{ const c=i%cols,r=Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); tags+=_ofIsoTag(m,x,y); });
-  // Caminantes por el pasillo entre zonas (vida de oficina)
-  if(aisle){
-    const s=iso(0,iaRows), e=iso(cols-1,iaRows);
-    chars+=_ofWalker(s,e,9,0,'🚶')+_ofWalker(e,s,11,1.4,'🧍');
+  const _placed=[];
+  _rooms.forEach(R=>{ R.members.forEach((m,i)=>{ const c=R.c0+(i%R.dc), r=R.r0+Math.floor(i/R.dc); _placed.push({m,c,r}); }); });
+  _placed.sort((a,b)=>(a.r-b.r)||(a.c-b.c));
+  _placed.forEach(({m,c,r})=>{ const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); tags+=_ofIsoTag(m,x,y); });
+  // Mensajeros ambientales: cruzan de un departamento a otro por el pasillo (movimiento continuo)
+  if(_rooms.length>1){
+    const midR=Math.min(_corrR,rows-1);
+    const ems=['🚶','🧍','📄','☕','📬'];
+    const n=_rooms.length;
+    const pairs=[[0,Math.min(2,n-1)],[Math.min(1,n-1),0],[n-1,Math.max(0,n-3)],[Math.min(2,n-1),n-1]];
+    pairs.forEach((pr,k)=>{ if(pr[0]===pr[1])return; const a=iso(_rooms[pr[0]].cc,midR), b=iso(_rooms[pr[1]].cc,midR); chars+=_ofWalker(a,b,9+k*1.7,k*1.4,ems[k%ems.length]); });
   }
-  autoSorted.forEach((m,i)=>{ const c=i%cols,r=autoStart+Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); tags+=_ofIsoTag(m,x,y); });
 
-  // Carteles de zona flotantes
-  // Sin carteles flotantes internos (la leyenda superior y las alfombras de color ya marcan las zonas)
-  const signs='';
+  // Rótulo colgante de cada departamento sobre su sala
+  let signs='';
+  _rooms.forEach(R=>{
+    const cx=iso(R.cc,R.r0)[0], cy=iso(R.cc,R.r0)[1]-th/2-dw-15;
+    const label=R.name.toUpperCase()+' · '+R.members.length;
+    const w=Math.max(72,label.length*6.1+24);
+    signs+=`<g transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})"><rect x="${-w/2}" y="-11" width="${w}" height="21" rx="10.5" fill="#0e1116" opacity="0.92"/><circle cx="${(-w/2+13).toFixed(1)}" cy="0" r="4" fill="${R.color}"/><text x="7" y="3.5" text-anchor="middle" font-size="10" fill="#ffffff" font-family="DM Sans" font-weight="700" letter-spacing="0.3">${escapeHtml(label)}</text></g>`;
+  });
 
   // Plantas decorativas en las esquinas frontales
   const plant=(x,y)=>`<g transform="translate(${x},${y})"><ellipse cx="0" cy="2" rx="12" ry="6" fill="rgba(0,0,0,0.4)"/><text x="0" y="3" text-anchor="middle" font-size="22">🪴</text></g>`;
@@ -15677,8 +15697,8 @@ function _ofRenderIso(ia,auto){
 
   // Límites del viewBox — ajuste ceñido al contenido (sin relleno artificial)
   const right=originX+(cols-1)*tw/2+tw/2, left=originX-(rows-1)*tw/2-tw/2;
-  const bottomY=(cols-1+rows-1)*th/2+th/2+44, topY=-(wallH+th/2+30);
-  const vbX=left-52, vbW=(right-left)+104, vbH=(bottomY-topY)+12;
+  const bottomY=(cols-1+rows-1)*th/2+th/2+46, topY=-(wallH+th/2+54);
+  const vbX=left-66, vbW=(right-left)+132, vbH=(bottomY-topY)+12;
 
   // Ambiente día/noche según la hora local
   const hh=now.getHours(); let ambC='', ambO=0;
@@ -15694,8 +15714,8 @@ function _ofRenderIso(ia,auto){
     <span><i style="background:${_OF_STATUS['of-off']}"></i>Reposo</span>
     <span><i style="background:${_OF_STATUS['of-error']}"></i>Error</span>
   </div>`;
-  const presentCats=_OF_CAT.filter(c=>iaSorted.some(m=>_ofCat(m).name===c.name));
-  if(iaSorted.some(m=>_ofCat(m).name==='Otros')) presentCats.push({name:'Otros',color:'#7a7a7a'});
+  const presentCats=_OF_CAT.filter(c=>ia.some(m=>_ofCat(m).name===c.name));
+  if(ia.some(m=>_ofCat(m).name==='Otros')) presentCats.push({name:'Otros',color:'#7a7a7a'});
   const catLegend=presentCats.length?`<div class="of-iso-legend of-iso-cats"><span style="color:var(--text3)">Áreas:</span>${presentCats.map(c=>`<span><i style="background:${c.color}"></i>${c.name}</span>`).join('')}</div>`:'';
   host.innerHTML=`${legend}${catLegend}<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="${vbX} ${topY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet">
     <defs>
@@ -15710,6 +15730,7 @@ function _ofRenderIso(ia,auto){
     ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}
     <g>${tiles}</g>
     ${rugs}
+    ${dividers}
     <g>${chars}</g>
     <g>${tags}</g>
     ${signs}
