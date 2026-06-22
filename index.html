@@ -2944,6 +2944,17 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .of-desk.of-work .of-desk-state{color:var(--success);}
 .of-desk.of-active .of-desk-state{color:var(--accent);}
 .of-desk.of-error .of-desk-state{color:var(--danger);}
+/* Vista isométrica 3D (estilo Habbo) */
+#tab-oficina .of-iso-scene{overflow-x:auto;border:1px solid var(--border);border-radius:18px;background:radial-gradient(circle at 50% 0%,#181b20,#0c0d10 75%);padding:14px 10px;}
+.of-iso-svg{display:block;width:100%;min-width:540px;height:auto;max-height:72vh;}
+.of-iso-char{cursor:pointer;}
+.of-iso-char .of-iso-body{transition:transform .18s ease;}
+.of-iso-char:hover .of-iso-body{transform:translateY(-4px);}
+.of-iso-char:focus-visible .of-iso-body{transform:translateY(-4px);}
+.of-iso-char.of-iso-bob .of-iso-body{animation:ofBob 1.4s ease-in-out infinite;}
+@keyframes ofBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+.of-iso-blink{animation:ofBlink 1s steps(1,end) infinite;}
+@keyframes ofBlink{50%{opacity:.25;}}
 </style>
 <div class="tab-panel" id="tab-oficina">
   <div class="section-header">
@@ -2955,6 +2966,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div id="oficinaViewToggle" class="of-viewtoggle">
         <button class="of-vbtn active" data-v="cards" onclick="ofSetView('cards')">▦ Tarjetas</button>
         <button class="of-vbtn" data-v="floor" onclick="ofSetView('floor')">🏢 Planta</button>
+        <button class="of-vbtn" data-v="iso" onclick="ofSetView('iso')">🏨 3D</button>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="renderOficina()">↻ Actualizar</button>
     </div>
@@ -2972,6 +2984,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
 
   <div id="oficinaFloor" style="display:none"></div>
+  <div id="oficinaIso" style="display:none"></div>
 
   <div class="card">
     <div class="card-header">
@@ -15095,9 +15108,10 @@ function ofSetView(v){
   _ofView=v;
   try{localStorage.setItem('thelab_oficina_view',v);}catch(e){}
   document.querySelectorAll('#oficinaViewToggle .of-vbtn').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
-  const c=document.getElementById('oficinaCards'), f=document.getElementById('oficinaFloor');
+  const c=document.getElementById('oficinaCards'), f=document.getElementById('oficinaFloor'), i=document.getElementById('oficinaIso');
   if(c) c.style.display=v==='cards'?'':'none';
   if(f) f.style.display=v==='floor'?'':'none';
+  if(i) i.style.display=v==='iso'?'':'none';
   renderOficina();
 }
 function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000); }
@@ -15200,7 +15214,8 @@ async function _renderOficina(){
 
   const errEl=document.getElementById('oficinaErr'); if(errEl) errEl.style.display=_ofErr?'':'none';
 
-  if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel);
+  if(_ofView==='iso') _ofRenderIso(iaModel,autoModel);
+  else if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel);
   else _ofRenderCards(iaModel,autoModel);
   _ofRenderFeed(runs);
 }
@@ -15240,6 +15255,65 @@ function _ofRenderFloor(ia,auto){
     <div class="of-floor-label" style="margin-top:18px">⚙️ Automatizaciones</div>
     <div class="of-desks">${auto.map(_ofDesk).join('')}</div>
   </div>`;
+}
+
+// ── Vista isométrica 2.5D (estilo Habbo Hotel) ─────────────────────────
+const _OF_EMOJI={SALES:'💬',QUOTE:'📝',PRODUCTION:'🔧',QA:'✅',FOLLOWUP:'🔁',CEO:'📊',LEADGEN:'🎯',ONBOARDING:'🚀',FINANCE:'💰',ADS:'📣',COMMUNITY:'📷',NEWSLETTER:'📰',REPORT:'📈',SUPPLIER:'🔍'};
+function _ofEmoji(m){
+  if(!m.clickIA) return (m.icon && !m.icon.startsWith('<')) ? m.icon : '⚙️';
+  const id=(m.id||'').toUpperCase();
+  for(const k in _OF_EMOJI){ if(id.includes(k)) return _OF_EMOJI[k]; }
+  return '🤖';
+}
+function _ofIsoChar(m,sx,sy){
+  const col={'of-work':'#00d4aa','of-active':'#00d4cc','of-error':'#ff4444','of-off':'#5e5e5e'}[m.cls]||'#5e5e5e';
+  const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+  const nm=escapeHtml(m.label.length>16?m.label.slice(0,15)+'…':m.label);
+  const em=_ofEmoji(m);
+  const bob=m.cls==='of-work'?' of-iso-bob':'';
+  let bubble='';
+  if(m.cls==='of-work'){
+    const t=escapeHtml(((m.task||'').trim().slice(0,22))||'trabajando…');
+    bubble=`<g transform="translate(0,-94)"><rect x="-48" y="-13" width="96" height="22" rx="7" fill="#0f0f0f" stroke="${col}" stroke-width="1"/><polygon points="-4,9 4,9 0,16" fill="#0f0f0f"/><text x="0" y="2" text-anchor="middle" font-size="9" fill="#e8e8e8" font-family="DM Sans">${t}</text></g>`;
+  }
+  return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${sx},${sy})">
+    <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
+    <ellipse cx="0" cy="0" rx="20" ry="10" fill="rgba(0,0,0,0.45)"/>
+    <g class="of-iso-body">
+      <rect x="-12" y="-40" width="24" height="34" rx="9" fill="${col}"/>
+      <rect x="-12" y="-40" width="24" height="34" rx="9" fill="url(#ofShine)"/>
+      <circle cx="0" cy="-50" r="13" fill="#1a1a1a" stroke="${col}" stroke-width="2.5"/>
+      <text x="0" y="-45.5" text-anchor="middle" font-size="14">${em}</text>
+      <circle cx="11" cy="-61" r="3.5" fill="${col}"${m.cls==='of-work'?' class="of-iso-blink"':''}/>
+    </g>
+    <text x="0" y="18" text-anchor="middle" font-size="9" fill="#c9c9c9" font-family="DM Sans" font-weight="600">${nm}</text>
+  </g>`;
+}
+function _ofRenderIso(ia,auto){
+  const host=document.getElementById('oficinaIso'); if(!host) return;
+  const all=[...ia,...auto];
+  const n=all.length||1;
+  const cols=Math.max(4,Math.ceil(Math.sqrt(n)));
+  const rows=Math.ceil(n/cols);
+  const tw=74, th=37;
+  const originX=(rows-1)*tw/2 + 50;
+  const iso=(c,r)=>[ (c-r)*tw/2 + originX, (c+r)*th/2 ];
+  let tiles='';
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const [x,y]=iso(c,r);
+    const fill=((c+r)%2)?'#15171a':'#1a1d22';
+    tiles+=`<polygon points="${x},${y-th/2} ${x+tw/2},${y} ${x},${y+th/2} ${x-tw/2},${y}" fill="${fill}" stroke="#0b0c0e" stroke-width="1"/>`;
+  }
+  let chars='';
+  all.forEach((m,i)=>{ const c=i%cols, r=Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoChar(m,x,y); });
+  const right=originX+(cols-1)*tw/2+tw/2;
+  const bottom=(cols-1+rows-1)*th/2+th/2+22;
+  const top=-112;
+  host.innerHTML=`<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="-12 ${top} ${right+24} ${bottom-top+12}" preserveAspectRatio="xMidYMin meet">
+    <defs><linearGradient id="ofShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+    <g>${tiles}</g>
+    <g>${chars}</g>
+  </svg></div>`;
 }
 function _ofRenderFeed(runs){
   const feed=document.getElementById('oficinaFeed'); if(!feed) return;
