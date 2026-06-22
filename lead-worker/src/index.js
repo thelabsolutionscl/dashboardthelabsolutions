@@ -714,6 +714,13 @@ function socialIsComplaint(mensaje, intencion) {
  * NÚCLEO: crear Cliente + tarea en Agent_Queue
  * ══════════════════════════════════════════════════════════════════════ */
 
+// Etiqueta "oficial" de Origen lead en el CRM: los leads del sitio quedan como
+// "Web" (la opción curada), no como la "web" en minúscula que generaba antes.
+const ORIGEN_LABEL = { web: "Web" };
+function origenLabel(source) {
+  return ORIGEN_LABEL[source] || source;
+}
+
 // Mapea el lead normalizado a columnas reales de la tabla Clientes. Tolerante:
 // los campos que no existan en la base se descartan en airtableCreateTolerant.
 // Los datos de identidad (RUT, industria, dirección, etc.) van a sus columnas;
@@ -725,7 +732,7 @@ function buildClienteFields(norm, source) {
     Email: norm.email,
     Teléfono: norm.phone,
     "Cargo contacto": norm.jobTitle,
-    "Origen lead": source,
+    "Origen lead": origenLabel(source),
     "Industria / Rubro": norm.industry,
     "Tipo de cliente": norm.tipoCliente,
     RUT: norm.rut,
