@@ -15723,7 +15723,7 @@ function _ofRingAgent(m,x,y){
 // g = geometría del muro {P,Q,C,ux,uy,nx,ny,mx,my,len} calculada en _ofRenderIso.
 function _ofDoor(g,color){
   const f=n=>n.toFixed(1), tw=_ofTileW||160;
-  const hw=Math.min(g.len*0.28, tw*0.3), H=44, jt=Math.max(4,tw*0.028), hs=32, sc='#e3e9ef';
+  const hw=Math.min(g.len*0.2, tw*0.21), H=44, jt=Math.max(3,tw*0.022), hs=32, sc='#e3e9ef';
   const dk=_ofShade(color,0.72);
   const mx=g.mx,my=g.my,ux=g.ux,uy=g.uy,nx=g.nx,ny=g.ny;
   const bl=[mx-ux*hw,my-uy*hw], br=[mx+ux*hw,my+uy*hw];
@@ -15853,8 +15853,10 @@ function _ofRenderIso(ia,auto,extras){
     dividers+=`<line x1="${k.L[0].toFixed(1)}" y1="${(k.L[1]-dw).toFixed(1)}" x2="${k.T[0].toFixed(1)}" y2="${(k.T[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
   });
 
-  // Puerta de cada departamento sobre el muro frontal-derecho (borde R→F), mirando al pasillo
-  const _doorGeo=R=>{ const k=_rC(R), C=iso(R.cc,R.rc), P=k.R, Q=k.F;
+  // Puerta de cada departamento mirando a un pasillo. Por defecto va en el muro
+  // frontal-derecho (R→F); la sala de impresoras la lleva en el muro derecho-superior (T→R).
+  const _doorGeo=R=>{ const k=_rC(R), C=iso(R.cc,R.rc);
+    const isPr=/impresora/i.test(R.name), P=isPr?k.T:k.R, Q=isPr?k.R:k.F;
     const ex=Q[0]-P[0], ey=Q[1]-P[1], len=Math.hypot(ex,ey)||1, ux=ex/len, uy=ey/len;
     const mx=P[0]+ux*len*0.52, my=P[1]+uy*len*0.52;
     let nx=-uy, ny=ux; if((mx+nx-C[0])**2+(my+ny-C[1])**2 < (mx-C[0])**2+(my-C[1])**2){ nx=-nx; ny=-ny; }
