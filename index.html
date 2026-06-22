@@ -2963,6 +2963,18 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .of-iso-walker{transform:translate(var(--x1),var(--y1));animation:ofWalk var(--dur,9s) ease-in-out infinite alternate;}
 .of-iso-walker .of-iso-body{animation:ofBob .55s ease-in-out infinite;}
 @media(prefers-reduced-motion:reduce){.of-iso-walker{animation:none;}.of-iso-char.of-iso-bob .of-iso-body,.of-iso-walker .of-iso-body{animation:none;}}
+/* Analítica — gráficos */
+#tab-oficina .of-charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+#tab-oficina .of-chart{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;min-width:0;}
+#tab-oficina .of-chart-t{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:10px;}
+#tab-oficina .of-chart-svg{width:100%;height:auto;display:block;overflow:visible;}
+#tab-oficina .of-chart-empty{color:var(--text3);font-size:11px;padding:18px 0;text-align:center;}
+#tab-oficina .of-donut-wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+#tab-oficina .of-donut-svg{width:104px;height:104px;flex-shrink:0;}
+#tab-oficina .of-donut-legend{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--text2);}
+#tab-oficina .of-donut-legend span{display:flex;align-items:center;}
+#tab-oficina .of-donut-legend i{width:10px;height:10px;border-radius:3px;margin-right:7px;display:inline-block;flex-shrink:0;}
+@media(max-width:760px){#tab-oficina .of-charts-grid{grid-template-columns:1fr;}}
 </style>
 <div class="tab-panel" id="tab-oficina">
   <div class="section-header">
@@ -2993,6 +3005,11 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
   <div id="oficinaFloor" style="display:none"></div>
   <div id="oficinaIso" style="display:none"></div>
+
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header"><span class="card-title">📊 Analítica de la oficina</span><span class="badge badge-gray">7–14 días</span></div>
+    <div id="oficinaCharts" style="padding:14px 16px"></div>
+  </div>
 
   <div class="card">
     <div class="card-header">
@@ -15226,6 +15243,7 @@ async function _renderOficina(){
   else if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel);
   else _ofRenderCards(iaModel,autoModel);
   _ofRenderFeed(runs);
+  _ofRenderCharts(runs,iaModel,autoModel);
 }
 
 function _ofWorkerCard(m){
@@ -15411,10 +15429,29 @@ function _ofRenderIso(ia,auto){
   const plant=(x,y)=>`<g transform="translate(${x},${y})"><ellipse cx="0" cy="2" rx="12" ry="6" fill="rgba(0,0,0,0.4)"/><text x="0" y="3" text-anchor="middle" font-size="22">🪴</text></g>`;
   const decor=plant(Dl[0]+10,Dl[1]-4)+plant(Cb[0]+2,Cb[1]-4);
 
+  // Puerta en la pared izquierda (hacia el frente)
+  const lp=(f,h)=>[At[0]+f*(Dl[0]-At[0]), At[1]+f*(Dl[1]-At[1])-h];
+  const door=`<polygon points="${lp(0.7,0)} ${lp(0.92,0)} ${lp(0.92,52)} ${lp(0.7,52)}" fill="#0e1013" stroke="#2a2f36" stroke-width="2"/><circle cx="${lp(0.74,26)[0].toFixed(1)}" cy="${lp(0.74,26)[1].toFixed(1)}" r="2" fill="#6a7682"/>`;
+  // Reloj de pared con hora real
+  const clk=lp(0.3,wallH*0.55), now=new Date(), hr=now.getHours()%12, mn=now.getMinutes();
+  const ha=(hr+mn/60)/12*2*Math.PI-Math.PI/2, ma=mn/60*2*Math.PI-Math.PI/2;
+  const clock=`<g><circle cx="${clk[0].toFixed(1)}" cy="${clk[1].toFixed(1)}" r="13" fill="#0f1114" stroke="#2a2f36" stroke-width="2"/>`+
+    `<line x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+6.5*Math.cos(ha)).toFixed(1)}" y2="${(clk[1]+6.5*Math.sin(ha)).toFixed(1)}" stroke="#dadada" stroke-width="2"/>`+
+    `<line x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+10*Math.cos(ma)).toFixed(1)}" y2="${(clk[1]+10*Math.sin(ma)).toFixed(1)}" stroke="#9a9a9a" stroke-width="1.4"/>`+
+    `<circle cx="${clk[0].toFixed(1)}" cy="${clk[1].toFixed(1)}" r="1.6" fill="#dadada"/></g>`;
+
   // Límites del viewBox
   const right=originX+(cols-1)*tw/2+tw/2, left=originX-(rows-1)*tw/2-tw/2;
   const bottomY=(cols-1+rows-1)*th/2+th/2+50, topY=-(wallH+th/2+30);
   const vbX=left-18, vbW=(right-left)+36, vbH=(bottomY-topY)+14;
+
+  // Ambiente día/noche según la hora local
+  const hh=now.getHours(); let ambC='', ambO=0;
+  if(hh>=6&&hh<11){ ambC='#ffd9a0'; ambO=0.06; }
+  else if(hh>=11&&hh<17){ ambO=0; }
+  else if(hh>=17&&hh<20){ ambC='#ff8a4d'; ambO=0.09; }
+  else { ambC='#3a4d8a'; ambO=0.13; }
+  const ambient = ambO? `<rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="${ambC}" opacity="${ambO}" pointer-events="none"/>`:'';
 
   const legend=`<div class="of-iso-legend">
     <span><i style="background:#00d4aa"></i>Trabajando</span>
@@ -15427,11 +15464,12 @@ function _ofRenderIso(ia,auto){
   const catLegend=presentCats.length?`<div class="of-iso-legend of-iso-cats"><span style="color:var(--text3)">Áreas:</span>${presentCats.map(c=>`<span><i style="background:${c.color}"></i>${c.name}</span>`).join('')}</div>`:'';
   host.innerHTML=`${legend}${catLegend}<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="${vbX} ${topY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMin meet">
     <defs><linearGradient id="ofShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
-    ${wallL}${wallR}${trimL}${trimR}${win}
+    ${wallL}${wallR}${door}${trimL}${trimR}${win}${clock}
     <g>${tiles}</g>
     ${signs}
     <g>${chars}</g>
     ${decor}
+    ${ambient}
   </svg></div>`;
 }
 function _ofRenderFeed(runs){
@@ -15451,6 +15489,79 @@ function _ofRenderFeed(runs){
       </div>
       <div class="of-feed-time">${_ofAgo(r.t)}</div>
     </div>`).join('');
+}
+
+// ── Analítica de la oficina (gráficos SVG, sin librerías) ──────────────
+function _ofBarsDays(runs){
+  const N=14, arr=new Array(N).fill(0), lab=[];
+  const start=new Date(); start.setHours(0,0,0,0);
+  for(let i=0;i<N;i++){ const d=new Date(start); d.setDate(start.getDate()-(N-1-i)); lab.push(d.getDate()); }
+  runs.forEach(r=>{ if(!r.t)return; const d=new Date(r.t); d.setHours(0,0,0,0); const idx=N-1-Math.round((start-d)/864e5); if(idx>=0&&idx<N) arr[idx]++; });
+  const max=Math.max(1,...arr), W=320,H=120,pad=16,bw=(W-pad*2)/N;
+  let bars='',lbls='';
+  arr.forEach((v,i)=>{ const x=pad+i*bw, bh=(v/max)*(H-pad-22), y=H-22-bh;
+    bars+=`<rect x="${(x+2).toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i===N-1?'var(--accent)':'var(--accent3)'}" opacity="${i===N-1?1:0.6}"><title>${lab[i]}: ${v}</title></rect>`;
+    if(i%3===0||i===N-1) lbls+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="8" fill="var(--text3)">${lab[i]}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg"><line x1="${pad}" y1="${H-22}" x2="${W-pad}" y2="${H-22}" stroke="var(--border)"/>${bars}${lbls}</svg>`;
+}
+function _ofBarsTop(runs){
+  const since=Date.now()-7*864e5, cnt={};
+  runs.forEach(r=>{ if(r.t&&r.t>=since&&r.agent) cnt[r.agent]=(cnt[r.agent]||0)+1; });
+  const arr=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  if(!arr.length) return '<div class="of-chart-empty">Sin ejecuciones en 7 días.</div>';
+  const max=Math.max(...arr.map(a=>a[1])), W=320, rowH=21, H=arr.length*rowH+6;
+  let rows='';
+  arr.forEach((a,i)=>{ const y=i*rowH+4, bw=(a[1]/max)*(W-150);
+    rows+=`<text x="0" y="${y+12}" font-size="9" fill="var(--text2)">${escapeHtml(a[0].length>17?a[0].slice(0,16)+'…':a[0])}</text>`;
+    rows+=`<rect x="132" y="${y+3}" width="${Math.max(2,bw).toFixed(1)}" height="12" rx="3" fill="var(--accent)"><title>${a[1]}</title></rect>`;
+    rows+=`<text x="${(132+Math.max(2,bw)+6).toFixed(1)}" y="${y+13}" font-size="9" fill="var(--text3)">${a[1]}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg">${rows}</svg>`;
+}
+function _ofDonut(parts,total){
+  const R=42,r=26,cx=52,cy=52, nz=parts.filter(p=>p.v>0);
+  let inner='';
+  if(nz.length===1){ inner=`<circle cx="${cx}" cy="${cy}" r="${(R+r)/2}" fill="none" stroke="${nz[0].color}" stroke-width="${R-r}"/>`; }
+  else { let a=-Math.PI/2;
+    parts.forEach(p=>{ if(!p.v)return; const a2=a+(p.v/(total||1))*2*Math.PI, large=(a2-a)>Math.PI?1:0;
+      const x1=cx+R*Math.cos(a),y1=cy+R*Math.sin(a),x2=cx+R*Math.cos(a2),y2=cy+R*Math.sin(a2);
+      const xi1=cx+r*Math.cos(a),yi1=cy+r*Math.sin(a),xi2=cx+r*Math.cos(a2),yi2=cy+r*Math.sin(a2);
+      inner+=`<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${R},${R} 0 ${large} 1 ${x2.toFixed(1)},${y2.toFixed(1)} L${xi2.toFixed(1)},${yi2.toFixed(1)} A${r},${r} 0 ${large} 0 ${xi1.toFixed(1)},${yi1.toFixed(1)} Z" fill="${p.color}"><title>${p.label}: ${p.v}</title></path>`;
+      a=a2; });
+  }
+  return `<svg viewBox="0 0 104 104" class="of-donut-svg">${inner}<text x="${cx}" y="${cy-1}" text-anchor="middle" font-size="18" font-family="Bebas Neue" fill="var(--text)">${total}</text><text x="${cx}" y="${cy+12}" text-anchor="middle" font-size="7" fill="var(--text3)">TOTAL</text></svg>`;
+}
+function _ofDonutStatus(ia,auto){
+  const all=[...ia,...auto], c={work:0,active:0,off:0,error:0};
+  all.forEach(m=>{ if(m.cls==='of-work')c.work++; else if(m.cls==='of-active')c.active++; else if(m.cls==='of-error')c.error++; else c.off++; });
+  const parts=[{v:c.work,color:'#00d4aa',label:'Trabajando'},{v:c.active,color:'#00d4cc',label:'Activo'},{v:c.off,color:'#5e5e5e',label:'Reposo'},{v:c.error,color:'#ff4444',label:'Error'}];
+  const legend=parts.map(p=>`<span><i style="background:${p.color}"></i>${p.label} · ${p.v}</span>`).join('');
+  return `<div class="of-donut-wrap">${_ofDonut(parts,all.length)}<div class="of-donut-legend">${legend}</div></div>`;
+}
+function _ofBarsArea(runs){
+  const since=Date.now()-7*864e5, cnt={};
+  runs.forEach(r=>{ if(!(r.t&&r.t>=since&&r.agent))return; const n=_ofCat({id:r.agent}).name; cnt[n]=(cnt[n]||0)+1; });
+  const order=[..._OF_CAT,{name:'Otros',color:'#7a7a7a'}];
+  const arr=order.map(c=>[c.name,cnt[c.name]||0,c.color]).filter(a=>a[1]>0);
+  if(!arr.length) return '<div class="of-chart-empty">Sin ejecuciones en 7 días.</div>';
+  const max=Math.max(...arr.map(a=>a[1])), W=320, rowH=22, H=arr.length*rowH+6;
+  let rows='';
+  arr.forEach((a,i)=>{ const y=i*rowH+4, bw=(a[1]/max)*(W-150);
+    rows+=`<text x="0" y="${y+13}" font-size="9.5" fill="var(--text2)">${escapeHtml(a[0])}</text>`;
+    rows+=`<rect x="110" y="${y+3}" width="${Math.max(2,bw).toFixed(1)}" height="13" rx="3" fill="${a[2]}"><title>${a[1]}</title></rect>`;
+    rows+=`<text x="${(110+Math.max(2,bw)+6).toFixed(1)}" y="${y+13}" font-size="9" fill="var(--text3)">${a[1]}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg">${rows}</svg>`;
+}
+function _ofRenderCharts(runs,ia,auto){
+  const host=document.getElementById('oficinaCharts'); if(!host) return;
+  host.innerHTML=`<div class="of-charts-grid">
+    <div class="of-chart"><div class="of-chart-t">📈 Ejecuciones · últimos 14 días</div>${_ofBarsDays(runs)}</div>
+    <div class="of-chart"><div class="of-chart-t">🏆 Top agentes · 7 días</div>${_ofBarsTop(runs)}</div>
+    <div class="of-chart"><div class="of-chart-t">🟢 Estado del equipo · ahora</div>${_ofDonutStatus(ia,auto)}</div>
+    <div class="of-chart"><div class="of-chart-t">🗂️ Ejecuciones por área · 7 días</div>${_ofBarsArea(runs)}</div>
+  </div>`;
 }
 
 // ── SUGERENCIAS PROACTIVAS DE AGENTES ──────────────────────────
