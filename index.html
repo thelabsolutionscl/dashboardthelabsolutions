@@ -15472,9 +15472,9 @@ function _ofIsoStation(m,x,y){
   const em=_ofEmoji(m), working=m.cls==='of-work', bob=working?' of-iso-bob':'';
   let bubble='';
   if(working){
-    const t=escapeHtml(((m.task||'').trim().slice(0,24))||'trabajando…');
-    const bw=Math.max(60,Math.min(154,t.length*6+18));
-    bubble=`<g transform="translate(0,-104)"><rect x="${-bw/2}" y="-13" width="${bw}" height="22" rx="9" fill="#ffffff" stroke="${col}" stroke-width="1.5"/><polygon points="-5,7 5,7 0,15" fill="#ffffff"/><line x1="-5" y1="7" x2="0" y2="15" stroke="${col}" stroke-width="1.5"/><line x1="5" y1="7" x2="0" y2="15" stroke="${col}" stroke-width="1.5"/><text x="0" y="2.5" text-anchor="middle" font-size="9" fill="#222831" font-family="DM Sans" font-weight="600">${t}</text></g>`;
+    const t=escapeHtml(((m.task||'').trim().slice(0,22))||'trabajando…');
+    const bw=Math.max(54,Math.min(138,t.length*5.6+16));
+    bubble=`<g transform="translate(0,-120)"><rect x="${-bw/2}" y="-11" width="${bw}" height="19" rx="8" fill="#ffffff" stroke="${col}" stroke-width="1.4"/><polygon points="-4.5,6 4.5,6 0,13" fill="#ffffff"/><line x1="-4.5" y1="6" x2="0" y2="13" stroke="${col}" stroke-width="1.4"/><line x1="4.5" y1="6" x2="0" y2="13" stroke="${col}" stroke-width="1.4"/><text x="0" y="2.5" text-anchor="middle" font-size="8.5" fill="#222831" font-family="DM Sans" font-weight="600">${t}</text></g>`;
   }
   const ring=cat?`<ellipse cx="0" cy="5" rx="19" ry="9.5" fill="none" stroke="${cat.color}" stroke-width="2.5" opacity="0.6"/>`:'';
   const halo=working?`<ellipse cx="0" cy="-40" rx="27" ry="32" fill="${col}" opacity="0.3" filter="url(#ofHalo)"/>`:'';
@@ -15483,6 +15483,7 @@ function _ofIsoStation(m,x,y){
     <ellipse cx="0" cy="5" rx="22" ry="10" fill="url(#ofShadow)"/>
     ${halo}
     ${ring}
+    <g transform="scale(1.22)">
     <g class="of-iso-body">
       <rect x="-7.5" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
       <rect x="1" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
@@ -15496,13 +15497,16 @@ function _ofIsoStation(m,x,y){
       <circle cx="13" cy="-63" r="4" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
     </g>
     ${_ofIsoDesk(col,working)}
+    </g>
     ${bubble}
   </g>`;
 }
 // Placa de nombre dibujada en una capa SUPERIOR (para que ninguna estación tape el nombre de otra)
 function _ofIsoTag(m,x,y){
-  const nm=escapeHtml(m.label.length>15?m.label.slice(0,14)+'…':m.label);
-  return `<g transform="translate(${x},${y})" pointer-events="none"><rect x="-27" y="41" width="54" height="15" rx="7.5" fill="#ffffff" opacity="0.96"/><text x="0" y="51" text-anchor="middle" font-size="9" fill="#222831" font-family="DM Sans" font-weight="700">${nm}</text></g>`;
+  const raw=m.label.length>16?m.label.slice(0,15)+'…':m.label;
+  const nm=escapeHtml(raw);
+  const w=Math.max(38,raw.length*5.4+12);
+  return `<g transform="translate(${x},${y})" pointer-events="none"><rect x="${-w/2}" y="22" width="${w}" height="14" rx="7" fill="#0e1116" opacity="0.82"/><text x="0" y="31.5" text-anchor="middle" font-size="8.5" fill="#ffffff" font-family="DM Sans" font-weight="600">${nm}</text></g>`;
 }
 function _ofWalker(p1,p2,dur,delay,em){
   return `<g class="of-iso-walker" style="--x1:${p1[0]}px;--y1:${p1[1]}px;--x2:${p2[0]}px;--y2:${p2[1]}px;--dur:${dur}s;animation-delay:${delay}s">
@@ -15525,14 +15529,13 @@ function _ofRenderIso(ia,auto){
   const sig=_ofView+'|'+[...ia,...auto].map(m=>m.id+m.cls+(m.task||'').slice(0,18)).join(';');
   if(host.dataset.sig===sig && host.querySelector('svg')) return;
   host.dataset.sig=sig;
-  // Más columnas → distribución más ancha (widescreen) y agentes menos apretados
-  const cols=Math.max(5,Math.min(8,Math.ceil(Math.sqrt(total*1.7))));
+  const cols=Math.max(6,Math.min(8,Math.ceil(Math.sqrt(total*1.6))));
   const iaRows=Math.ceil(ia.length/cols);
   const aisle=auto.length?1:0;
   const autoStart=iaRows+aisle;
   const rows=autoStart+Math.ceil(auto.length/cols);
-  // Baldosas más grandes y más planas → más aire entre estaciones y encuadre panorámico
-  const tw=128, th=52, wallH=74;
+  // Baldosas grandes y proporcionadas (ratio ~1.7); th alto separa bien las filas
+  const tw=168, th=98, wallH=92;
   const originX=(rows-1)*tw/2 + 56;
   const iso=(c,r)=>[ (c-r)*tw/2 + originX, (c+r)*th/2 ];
 
@@ -15600,10 +15603,8 @@ function _ofRenderIso(ia,auto){
   autoSorted.forEach((m,i)=>{ const c=i%cols,r=autoStart+Math.floor(i/cols); const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y); tags+=_ofIsoTag(m,x,y); });
 
   // Carteles de zona flotantes
-  const sign=(x,y,txt,c)=>`<g transform="translate(${x},${y})"><rect x="-64" y="-11" width="128" height="21" rx="10.5" fill="#ffffff" opacity="0.96"/><circle cx="-52" cy="0" r="4" fill="${c}"/><text x="8" y="3" text-anchor="middle" font-size="9.5" fill="#222831" font-family="DM Sans" font-weight="800" letter-spacing="0.5">${txt}</text></g>`;
-  const iaMid=iso((cols-1)/2,0), auMid=iso((cols-1)/2,autoStart);
-  let signs=sign(iaMid[0],iaMid[1]-th/2-22,`AGENTES IA · ${ia.length}`,'#00d4cc');
-  if(auto.length) signs+=sign(auMid[0],auMid[1]-th/2-14,`AUTOMATIZACIONES · ${auto.length}`,'#a78bfa');
+  // Sin carteles flotantes internos (la leyenda superior y las alfombras de color ya marcan las zonas)
+  const signs='';
 
   // Plantas decorativas en las esquinas frontales
   const plant=(x,y)=>`<g transform="translate(${x},${y})"><ellipse cx="0" cy="2" rx="12" ry="6" fill="rgba(0,0,0,0.4)"/><text x="0" y="3" text-anchor="middle" font-size="22">🪴</text></g>`;
@@ -15661,9 +15662,9 @@ function _ofRenderIso(ia,auto){
     ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}
     <g>${tiles}</g>
     ${rugs}
-    ${signs}
     <g>${chars}</g>
     <g>${tags}</g>
+    ${signs}
     ${decor}
     ${ambient}
     <rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="url(#ofVig)" pointer-events="none"/>
