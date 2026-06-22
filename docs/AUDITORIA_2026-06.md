@@ -237,3 +237,25 @@ Los ítems se serializan a texto (`Costo: $x | Venta: $y`) y al editar se re-par
 ### 8.5 Verificación
 - Tests: `node tests/calc.test.js` → **24 OK** (16 originales + 8 nuevos de regresión), `node tests/redes.test.js` → **12 OK**.
 - Sintaxis: JS inline del `index.html` y los 6 archivos JS de backend pasan `node --check`; `mail-api.php` pasa `php -l`.
+
+---
+
+## 9. Remediación — ola 2 (2026-06-22): UX, resiliencia y agentes
+
+| Hallazgo | Estado | Implementación |
+|---|---|---|
+| 3.1/3.2 a11y de modales | ✅ | Escape para cerrar + focus-trap (Tab) global sobre el modal superior, sin reescribir cada modal |
+| 3.6 Undo en borrados | ✅ | `toastUndo` extendido a Factura, Cotización y Pedido (Cliente y Proveedor ya lo tenían) |
+| 3.14 PWA / offline | ✅ | `manifest.json` (instalable) + `sw.js` (service worker **network-first**: nunca sirve contenido viejo, solo añade offline) + registro en el `<head>` |
+| 3.16 Reporte de `ERRLOG` | ✅ | Envío best-effort batched (sendBeacon/fetch keepalive) a `localStorage['errlog_endpoint']`; no-op si no se configura |
+| 2.7 Inyección de prompt (agente cola) | ✅ (mitigación) | `processAgentQueueItem`: datos del lead delimitados (`<lead_data>`) con instrucción de tratarlos solo como datos |
+
+> **PWA — nota:** los iconos del `manifest.json` apuntan al logo remoto de `thelab.solutions`. Para una instalación óptima conviene añadir iconos propios de 192×192 y 512×512 en el mismo origen. Para configurar el reporte de errores: `localStorage.setItem('errlog_endpoint','<URL del colector>')`.
+
+### Sigue pendiente (requiere backend / decisión de producto)
+- Seguridad arquitectónica frontend (2.1–2.6): proxy obligatorio + auth/RBAC server-side con KDF lento y sesión firmada; **rotar las 2 contraseñas admin idénticas** ya.
+- Build minificado con hash (3.10), virtualización de tablas muy grandes (3.13), modularización (§4) y upgrades del §5.
+
+### Verificación ola 2
+- `node tests/calc.test.js` → **24 OK**, `node tests/redes.test.js` → **12 OK**.
+- Sintaxis: 8 bloques `<script>` inline válidos; `sw.js` pasa `node --check`; `manifest.json` es JSON válido.

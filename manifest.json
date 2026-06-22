@@ -1,0 +1,20 @@
+{
+  "name": "The Lab Solutions — Centro de Comando",
+  "short_name": "The Lab",
+  "description": "Dashboard de operaciones, CRM y fabricación digital de The Lab Solutions.",
+  "lang": "es-CL",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "https://thelab.solutions/wp-content/uploads/2024/05/faviconthelab.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
