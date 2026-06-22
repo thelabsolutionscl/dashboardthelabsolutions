@@ -15159,6 +15159,15 @@ function _ofPrinterCls(estado){ const e=(estado||'').toString().toLowerCase();
   if(/manten|repar|falla|error|offline|sin con/.test(e)) return 'of-error';
   return 'of-off';
 }
+// Imagen real del modelo de impresora (robusto: en Airtable nombre/modelo pueden venir invertidos)
+function _ofModelImg(modelo,nombre){
+  if(typeof MODELO_IMGS==='undefined') return '';
+  const keys=Object.keys(MODELO_IMGS);
+  for(const k of keys){ if(modelo===k||nombre===k) return MODELO_IMGS[k]; }
+  const hay=((modelo||'')+' '+(nombre||'')).toLowerCase();
+  for(const k of keys.slice().sort((a,b)=>b.length-a.length)){ if(hay.includes(k.toLowerCase())) return MODELO_IMGS[k]; }
+  return '';
+}
 function _ofPrinterLbl(estado){ const e=(estado||'').toString().toLowerCase();
   if(/imprim|ocupad|print|busy|trabaj|en uso/.test(e)) return 'Imprimiendo';
   if(/manten|repar/.test(e)) return 'Mantención';
@@ -15399,11 +15408,11 @@ async function _renderOficina(){
   let printersRaw=[];
   if(getToken()){
     if(_ofMaqCache.data && Date.now()-_ofMaqCache.t<_OF_CACHE_MS){ printersRaw=_ofMaqCache.data; }
-    else { try{ const mq=await airtableFetch('Maquinas',200); printersRaw=(mq.records||[]).map(r=>({id:r.fields.id||r.id,nombre:r.fields.nombre||'',num:r.fields.num||0,numG:r.fields.numG||r.fields.num||0,modelo:r.fields.modelo||'',estado:r.fields.estado||'disponible'})); _ofMaqCache={t:Date.now(),data:printersRaw}; }
+    else { try{ const mq=await airtableFetch('Maquinas',200); printersRaw=(mq.records||[]).map(r=>({id:r.fields.id||r.id,nombre:r.fields.nombre||'',num:r.fields.num||0,numG:r.fields.numG||r.fields.num||0,modelo:r.fields.modelo||'',color:r.fields.color||'#3aa0ff',estado:r.fields.estado||'disponible'})); _ofMaqCache={t:Date.now(),data:printersRaw}; }
       catch(e){ _ofErr=true; if(_ofMaqCache.data)printersRaw=_ofMaqCache.data; else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS))printersRaw=MAQUINAS; } }
   } else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)){ printersRaw=MAQUINAS; }
   const printerModel=printersRaw.map(p=>{ const cls=_ofPrinterCls(p.estado), lbl=_ofPrinterLbl(p.estado); if(cls==='of-work')working++;
-    return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', role:'Impresora 3D · '+(p.modelo||''), cls, lbl, task:(p.modelo||'Impresora 3D')+' · '+lbl, stats:''+(p.modelo||''), num:p.numG||p.num||0};
+    return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', img:_ofModelImg(p.modelo,p.nombre), pcolor:p.color||'#3aa0ff', role:'Impresora 3D · '+(p.modelo||p.nombre||''), cls, lbl, task:(p.modelo||'Impresora 3D')+' · '+lbl, stats:''+(p.modelo||''), num:p.numG||p.num||0};
   }).sort((a,b)=>a.num-b.num);
   const extraDepts=printerModel.length?[{name:'Impresoras 3D',color:'#3aa0ff',members:printerModel}]:[];
 
@@ -15435,8 +15444,9 @@ function _ofWorkerCard(m){
   const cat=m.isPrinter?{name:'Impresora 3D',color:'#3aa0ff'}:(m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'});
   const ac=cat.color;
   const avStyle=`background:radial-gradient(circle at 35% 28%,${ac}33,${ac}12);border-color:${ac}59;color:${ac}`;
+  const avInner=m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:5px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:m.icon;
   return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
-    <div class="of-avatar" style="${avStyle}">${m.icon}</div>
+    <div class="of-avatar" style="${avStyle}">${avInner}</div>
     <div class="of-body">
       <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(_ofPretty(m.label))}</span></div>
       <div class="of-role">${escapeHtml(m.role)}</div>
@@ -15461,8 +15471,9 @@ function _ofDesk(m){
   const ac=cat.color;
   const em=m.clickIA?_ofAgentEmoji(m.label):((m.icon&&!m.icon.startsWith('<'))?m.icon:'⚙️');
   const seatStyle=`background:radial-gradient(circle at 35% 28%,${ac}2e,${ac}10);border-color:${ac}55`;
+  const seatInner=m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:6px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:em;
   return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label)+' · '+cat.name+' — '+m.lbl)}">
-    <div class="of-seat" style="${seatStyle}"><span class="of-seat-light"></span>${em}</div>
+    <div class="of-seat" style="${seatStyle}"><span class="of-seat-light"></span>${seatInner}</div>
     <div class="of-desk-name">${escapeHtml(_ofPretty(m.label))}</div>
     <div class="of-desk-state">${escapeHtml(m.lbl)}</div>
   </div>`;
@@ -15575,7 +15586,7 @@ function _ofIsoStation(m,x,y){
       <rect x="-13" y="-38" width="26" height="32" rx="12" fill="url(#ofShine)"/>
       <circle cx="0" cy="-51" r="16" fill="#fff7ec" stroke="${col}" stroke-width="3.2"/>
       <ellipse cx="-5.5" cy="-57" rx="4.5" ry="3" fill="#fff" opacity="0.6"/>
-      <text x="0" y="-45.5" text-anchor="middle" font-size="17">${em}</text>
+      ${m.img?`<image href="${m.img}" x="-13.5" y="-64.5" width="27" height="27" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-45.5" text-anchor="middle" font-size="17">${em}</text>`}
       <circle cx="13" cy="-63" r="4" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
     </g>
     ${_ofIsoDesk(col,working)}
