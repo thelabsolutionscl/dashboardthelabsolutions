@@ -713,24 +713,40 @@ function socialIsComplaint(mensaje, intencion) {
 /* ════════════════════════════════════════════════════════════════════════
  * NÚCLEO: crear Cliente + tarea en Agent_Queue
  * ══════════════════════════════════════════════════════════════════════ */
-async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source, campaign }) {
-  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
-    return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
-  }
 
-  // 1) Cliente — campos tolerantes (si no existen en la base, se descartan)
-  const clienteFields = stripEmpty({
+// Mapea el lead normalizado a columnas reales de la tabla Clientes. Tolerante:
+// los campos que no existan en la base se descartan en airtableCreateTolerant.
+// Los datos de identidad (RUT, industria, dirección, etc.) van a sus columnas;
+// el brief del proyecto (producto, cantidad, fecha, presupuesto) va a "Notas internas".
+function buildClienteFields(norm, source) {
+  return stripEmpty({
     Empresa: norm.company || norm.name,
     Contacto: norm.name,
     Email: norm.email,
     Teléfono: norm.phone,
     "Cargo contacto": norm.jobTitle,
     "Origen lead": source,
+    "Industria / Rubro": norm.industry,
+    "Tipo de cliente": norm.tipoCliente,
+    RUT: norm.rut,
+    "Sitio web": norm.website,
+    Dirección: norm.address,
+    Región: norm.region,
     Comuna: norm.comuna,
     "Servicio interés": norm.service,
+    "Etapa venta": "Lead nuevo",
     "Notas internas": buildNotes(norm),
     "Fecha primer contacto": today(),
   });
+}
+
+async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source, campaign }) {
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
+    return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
+  }
+
+  // 1) Cliente — campos tolerantes (si no existen en la base, se descartan)
+  const clienteFields = buildClienteFields(norm, source);
 
   let clienteId = null;
   try {
@@ -1012,7 +1028,14 @@ function normalizeWeb(b) {
     deliveryDate: str(b.deliveryDate),
     budget: str(b.budget),
     urgency: str(b.urgency),
+    // Ficha de cliente (web) → columnas reales de Clientes
+    rut: str(b.rut),
+    industry: str(b.industry),
+    tipoCliente: str(b.tipoCliente),
+    website: str(b.website),
+    region: str(b.region),
     comuna: str(b.comuna),
+    address: str(b.address),
     message: str(b.message),
     source: str(b.source) || "web",
     landingUrl: str(b.landingUrl),
@@ -1283,18 +1306,7 @@ async function retryDeadLetters(env) {
         const cliente = await airtableCreateTolerant(
           env,
           "Clientes",
-          stripEmpty({
-            Empresa: norm.company || norm.name,
-            Contacto: norm.name,
-            Email: norm.email,
-            Teléfono: norm.phone,
-            "Cargo contacto": norm.jobTitle,
-            "Origen lead": source,
-            Comuna: norm.comuna,
-            "Servicio interés": norm.service,
-            "Notas internas": buildNotes(norm),
-            "Fecha primer contacto": today(),
-          })
+          buildClienteFields(norm, source)
         );
         clienteId = cliente?.id || null;
       }
