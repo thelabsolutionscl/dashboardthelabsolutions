@@ -3005,7 +3005,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="of-vbtn" data-v="floor" onclick="ofSetView('floor')">🏢 Planta</button>
         <button class="of-vbtn" data-v="iso" onclick="ofSetView('iso')">🏨 3D</button>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="renderOficina()">↻ Actualizar</button>
+      <button class="btn btn-ghost btn-sm" onclick="refreshOficina()">↻ Actualizar</button>
       <button class="btn btn-ghost btn-sm" id="ofFsBtn" onclick="ofFullscreen()">📺 Pantalla completa</button>
     </div>
   </div>
@@ -15104,7 +15104,12 @@ const AUTOMATIONS_CFG=[
 let _oficinaInterval=null, _oficinaBusy=false;
 const _ofActive=new Set();                 // agentes IA ejecutándose AHORA (en memoria, en vivo)
 let _ofErr=false;                          // la última lectura de Airtable falló
-let _ofRunsCache={t:0,data:null};          // caché corta (25s) del Agent_Log remoto
+const _OF_CACHE_MS=25000;                  // ventana de caché corta para el polling (evita refetch en cada render)
+let _ofRunsCache={t:0,data:null};          // caché corta del Agent_Log remoto
+let _ofQueueCache={t:0,len:null};          // caché corta de la longitud de Agent_Queue
+let _ofAutoCache={t:0,data:null};          // caché corta de la telemetría de Automations
+let _ofModel=null;                         // último modelo construido (para el panel de detalle de agente)
+let _ofAgentRuns=null;                      // ejecuciones del agente abierto en el panel de detalle
 let _ofView=(()=>{try{return localStorage.getItem('thelab_oficina_view')||'cards';}catch(e){return 'cards';}})();
 function _ofAgo(ts){
   if(!ts) return '—';
@@ -15147,6 +15152,59 @@ function _ofSpark(list){
 }
 function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.currentTarget.click(); } }   // a11y teclado
 function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_CFG.find(x=>x.id===id); toast((a?a.label+' — '+a.tipo:id)||'Automatización','info'); }
+// Refresca la Oficina forzando datos frescos (el polling usa caché corta; el botón manual la invalida)
+function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; renderOficina(); }
+// ── Panel de detalle de un agente IA (clic en un trabajador de la Oficina) ──
+function ofAgentDetail(id){
+  if(!_ofModel||!_ofModel.iaModel){ switchTab('agentes'); return; }
+  const m=_ofModel.iaModel.find(x=>x.id===id);
+  if(!m){ switchTab('agentes'); return; }
+  const runs=_ofModel.byAgent[m.label]||[];
+  _ofAgentRuns=runs;
+  const col=_OF_STATUS[m.cls]||'#7c8590';
+  const total=runs.length, today=runs.filter(r=>_ofSameDay(r.t)).length, last=runs[0];
+  const cfg=AGENTES_CFG.find(a=>a.id===id);
+  const rowsHtml=runs.length?runs.slice(0,10).map((r,i)=>`
+      <div onclick="ofAgentViewRun(${i})" role="button" tabindex="0" onkeydown="ofKey(event)" style="cursor:pointer;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;background:var(--surface2);transition:border-color .12s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+          <span style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((r.input||r.output||'—').substring(0,70))}</span>
+          <span style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0">${_ofAgo(r.t)}</span>
+        </div>
+      </div>`).join('')
+    :'<div style="color:var(--text3);font-size:12px;padding:10px 2px">Sin ejecuciones registradas todavía.</div>';
+  document.getElementById('ofAgentTitle').textContent=(m.icon?m.icon+' ':'')+m.label;
+  document.getElementById('ofAgentBody').innerHTML=`
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <div style="width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--surface3);border:1px solid var(--border);flex-shrink:0">${m.icon||'🤖'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;color:var(--text3)">${escapeHtml(m.role||'')}</div>
+        <div style="margin-top:3px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:${col}"><span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block"></span>${escapeHtml(m.lbl||'')}</span></div>
+      </div>
+      ${m.spark?`<div title="Ejecuciones últimos 7 días" style="flex-shrink:0">${m.spark}</div>`:''}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center"><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;color:var(--text)">${today}</div><div style="font-size:9px;text-transform:uppercase;color:var(--text3);letter-spacing:.5px;margin-top:3px">Hoy</div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center"><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;color:var(--text)">${total}</div><div style="font-size:9px;text-transform:uppercase;color:var(--text3);letter-spacing:.5px;margin-top:3px">Registradas</div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center"><div style="font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1;color:var(--text);margin-top:6px">${last?escapeHtml(_ofAgo(last.t)):'—'}</div><div style="font-size:9px;text-transform:uppercase;color:var(--text3);letter-spacing:.5px;margin-top:6px">Última</div></div>
+    </div>
+    ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:14px" onclick="ofAgentRun('${id}')">▶ Ejecutar este agente</button>`:''}
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px">Últimas ejecuciones</div>
+    ${rowsHtml}`;
+  const mo=document.getElementById('ofAgentModal'); if(mo) mo.style.display='flex';
+}
+function closeOfAgent(){ const e=document.getElementById('ofAgentModal'); if(e) e.style.display='none'; }
+function ofAgentRun(id){ closeOfAgent(); switchTab('agentes'); setTimeout(()=>{const i=document.getElementById('input_'+id); if(i){ i.scrollIntoView({behavior:'smooth',block:'center'}); i.focus(); }},140); }
+function ofAgentViewRun(idx){
+  const r=_ofAgentRuns&&_ofAgentRuns[idx]; if(!r) return;
+  closeOfAgent();
+  document.getElementById('agentInlineTitle').textContent='📜 '+(r.agent||'Agente')+' — '+NOTIFY._fmtFull(r.time);
+  const resultEl=document.getElementById('agentInlineResult');
+  resultEl.className='agent-modal-result'; resultEl.style.whiteSpace='';
+  resultEl.textContent=(r.input?'▸ CONSULTA:\n'+r.input+'\n\n':'')+(r.output||'(sin resultado guardado)');
+  _agentInlineText=r.output||'';
+  document.getElementById('agentInlineActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
+  document.getElementById('agentInlineModal').style.display='flex';
+}
 function ofSetView(v){
   _ofView=v;
   try{localStorage.setItem('thelab_oficina_view',v);}catch(e){}
@@ -15201,7 +15259,7 @@ async function _renderOficina(){
   let runs=[];
   try{AGENT_LOG._load();runs=(AGENT_LOG._runs||[]).map(r=>({agent:r.agent,input:r.input,output:r.output,time:r.time}));}catch(e){}
   if(getToken()){
-    if(_ofRunsCache.data && Date.now()-_ofRunsCache.t<25000){
+    if(_ofRunsCache.data && Date.now()-_ofRunsCache.t<_OF_CACHE_MS){
       runs=[...runs,..._ofRunsCache.data];
     }else{
       try{
@@ -15220,15 +15278,21 @@ async function _renderOficina(){
   const byAgent={};
   runs.forEach(r=>{(byAgent[r.agent]=byAgent[r.agent]||[]).push(r);});
 
-  // 2) Cola pendiente
+  // 2) Cola pendiente (con caché corta para no refetch en cada render/cambio de vista)
   let queueLen=_agentQueue.length;
-  if(getToken()&&!queueLen){ try{const q=await airtableFetch(AGENT_QUEUE_TABLE,200);queueLen=(q.records||[]).length;}catch(e){_ofErr=true;} }
+  if(getToken()&&!queueLen){
+    if(_ofQueueCache.len!=null && Date.now()-_ofQueueCache.t<_OF_CACHE_MS){ queueLen=_ofQueueCache.len; }
+    else { try{const q=await airtableFetch(AGENT_QUEUE_TABLE,200);queueLen=(q.records||[]).length;_ofQueueCache={t:Date.now(),len:queueLen};}catch(e){_ofErr=true;if(_ofQueueCache.len!=null)queueLen=_ofQueueCache.len;} }
+  }
 
-  // 3) Telemetría de automatizaciones (tabla Automations)
+  // 3) Telemetría de automatizaciones (tabla Automations) — con caché corta
   const autoState={};
   if(getToken()){
-    try{ const a=await airtableFetch('Automations',50); (a.records||[]).forEach(r=>{const k=(r.fields['ID']||r.fields['Nombre']||'').toString().toLowerCase();if(k)autoState[k]=r.fields;}); }
-    catch(e){_ofErr=true;}
+    if(_ofAutoCache.data && Date.now()-_ofAutoCache.t<_OF_CACHE_MS){ Object.assign(autoState,_ofAutoCache.data); }
+    else {
+      try{ const a=await airtableFetch('Automations',50); const fresh={}; (a.records||[]).forEach(r=>{const k=(r.fields['ID']||r.fields['Nombre']||'').toString().toLowerCase();if(k)fresh[k]=r.fields;}); Object.assign(autoState,fresh); _ofAutoCache={t:Date.now(),data:fresh}; }
+      catch(e){_ofErr=true; if(_ofAutoCache.data) Object.assign(autoState,_ofAutoCache.data);}
+    }
   }
 
   // ── Modelo: agentes IA (incluye agentes presentes en logs aunque no estén en CFG — B7) ──
@@ -15269,6 +15333,9 @@ async function _renderOficina(){
     return {clickIA:false, id:a.id, label:a.label, icon:a.icon||'⚙️', role:a.tipo||a.role, cls, lbl, task, stats};
   });
 
+  // Guardar el modelo para el panel de detalle de agente (clic en un trabajador)
+  _ofModel={byAgent, iaModel, autoModel};
+
   // ── KPIs ── (ejecuciones hoy = todas las del log + las de automatizaciones — B2/B7)
   const runsToday=runs.filter(r=>_ofSameDay(r.t)).length + autoToday;
   const totalWorkers=iaModel.length+autoModel.length;
@@ -15289,7 +15356,7 @@ async function _renderOficina(){
 }
 
 function _ofWorkerCard(m){
-  const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+  const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
   const spark=m.spark?`<div class="of-spark-wrap" title="Ejecuciones últimos 7 días">${m.spark}</div>`:'';
   return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(m.label)}">
     <div class="of-avatar">${m.icon}</div>
@@ -15308,7 +15375,7 @@ function _ofRenderCards(ia,auto){
   if(g2) g2.innerHTML=auto.map(_ofWorkerCard).join('');
 }
 function _ofDesk(m){
-  const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+  const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
   return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(m.label+' — '+m.lbl)}">
     <div class="of-seat"><span class="of-seat-light"></span>${m.icon}</div>
     <div class="of-desk-name">${escapeHtml(m.label)}</div>
@@ -15372,7 +15439,7 @@ function _ofIsoStation(m,x,y){
   const col=_OF_STATUS[m.cls]||'#7c8590';
   const dark=_ofShade(col,0.72);
   const cat=m.clickIA?_ofCat(m):null;
-  const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+  const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
   const nm=escapeHtml(m.label.length>15?m.label.slice(0,14)+'…':m.label);
   const em=_ofEmoji(m), working=m.cls==='of-work', bob=working?' of-iso-bob':'';
   let bubble='';
@@ -27466,6 +27533,17 @@ trusted_clients:
       </div>
     </div>
     <div id="agentLogList" style="flex:1;overflow-y:auto;padding:6px 10px"></div>
+  </div>
+</div>
+
+<!-- ══ DETALLE DE AGENTE (Oficina) MODAL ════════════════════════ -->
+<div class="modal-overlay" id="ofAgentModal" style="display:none" onclick="if(event.target===this)closeOfAgent()">
+  <div class="modal-card" style="max-width:540px;width:calc(100% - 24px);display:flex;flex-direction:column;max-height:85vh" onclick="event.stopPropagation()">
+    <div class="modal-header" style="flex-shrink:0">
+      <span class="modal-title" id="ofAgentTitle">🤖 Agente</span>
+      <button class="modal-close" onclick="closeOfAgent()">✕</button>
+    </div>
+    <div id="ofAgentBody" style="flex:1;overflow-y:auto;padding:16px"></div>
   </div>
 </div>
 
