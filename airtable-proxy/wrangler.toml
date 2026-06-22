@@ -17,3 +17,10 @@ compatibility_date = "2024-09-01"
 # Con esto, ni el PAT de Airtable ni la API key de Anthropic salen al navegador:
 #   - Airtable:  <worker>/<base>/<tabla>           (el dashboard ya lo usa)
 #   - Claude:    <worker>/anthropic/v1/messages    (callClaude lo usa automáticamente)
+#
+# Oficina Virtual — latido automático:
+#   Tras el deploy, el proxy marca su fila ID="airtable-proxy" en la tabla
+#   Automations como "Activo" con la hora actual (máx. 1 vez cada 5 min,
+#   fire-and-forget, sin añadir latencia). Usa la base del dashboard por
+#   defecto; para apuntar a otra base define la variable:
+#     [vars]  HEARTBEAT_BASE = "appXXXXXXXXXXXXXX"

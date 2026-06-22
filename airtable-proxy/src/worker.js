@@ -8,7 +8,7 @@ const CORS = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS });
     }
@@ -24,6 +24,11 @@ export default {
     if (!appKey || appKey !== env.APP_KEY) {
       return json({ error: 'Unauthorized' }, 403);
     }
+
+    // Latido para la "Oficina Virtual": marca este Worker como Activo en la tabla
+    // Automations. Best-effort, throttled y fuera del camino crítico (waitUntil),
+    // por lo que no añade latencia ni puede romper la respuesta.
+    if (ctx && env.AIRTABLE_TOKEN) ctx.waitUntil(heartbeat(env).catch(() => {}));
 
     // ── Anthropic (Claude) — la API key vive como secreto del Worker ──
     // El dashboard llama a:  <worker>/anthropic/v1/messages
@@ -76,5 +81,50 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { 'Content-Type': 'application/json', ...CORS },
+  });
+}
+
+// ── Heartbeat hacia la tabla Automations ──────────────────────────────
+// Actualiza la fila ID="airtable-proxy" con Estado=Activo y la hora actual,
+// como máximo una vez cada 5 min (throttle por isolate). Totalmente opcional:
+// si la base/tabla no existen o el token no puede escribir, falla en silencio.
+let _lastBeat = 0;
+const HEARTBEAT_ID = 'airtable-proxy';
+const HEARTBEAT_TABLE = 'Automations';
+const HEARTBEAT_MIN_MS = 5 * 60 * 1000;
+
+async function heartbeat(env) {
+  const now = Date.now();
+  if (now - _lastBeat < HEARTBEAT_MIN_MS) return;
+  _lastBeat = now;
+
+  const base = env.HEARTBEAT_BASE || 'app1YtD74AqiPWQhy';
+  const auth = { Authorization: 'Bearer ' + env.AIRTABLE_TOKEN };
+  const tbl = `${AIRTABLE_BASE}/v0/${base}/${encodeURIComponent(HEARTBEAT_TABLE)}`;
+
+  // 1) Buscar la fila del proxy por su ID técnico
+  const q = `${tbl}?maxRecords=1&filterByFormula=${encodeURIComponent(`{ID}='${HEARTBEAT_ID}'`)}`;
+  const found = await fetch(q, { headers: auth });
+  if (!found.ok) return;
+  const data = await found.json();
+  const rec = data.records && data.records[0];
+  if (!rec) return;
+
+  // 2) Marcar como Activo con la hora actual; EjecucionesHoy con reseteo diario
+  const f = rec.fields || {};
+  const sameDay = f.UltimaEjecucion && new Date(f.UltimaEjecucion).toDateString() === new Date().toDateString();
+  const ej = (sameDay ? (Number(f.EjecucionesHoy) || 0) : 0) + 1;
+  await fetch(`${tbl}/${rec.id}`, {
+    method: 'PATCH',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: {
+        Estado: 'Activo',
+        UltimaEjecucion: new Date().toISOString(),
+        EjecucionesHoy: ej,
+        TareaActual: 'Proxy seguro Airtable + Claude operativo',
+      },
+      typecast: true,
+    }),
   });
 }

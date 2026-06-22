@@ -16,3 +16,9 @@ id = "12c2c38ebe2d47b39e20daafddfa6ea7"
 # Nombres requeridos (los VALORES reales NO van aquí — viven como secrets):
 #   CERT_PFX_BASE64, CERT_PFX_PASSWORD, RUT_EMISOR, RAZON_SOCIAL, GIRO_EMISOR,
 #   ACTECO, DIR_EMISOR, CMNA_EMISOR, CIUDAD_EMISOR, RESOLUCION_FECHA, RESOLUCION_NUMERO
+#
+# Oficina Virtual (opcional) — para que este Worker reporte su latido a la
+# tabla Automations del dashboard, configura además:
+#   wrangler secret put AIRTABLE_TOKEN     (PAT con scope data.records:write)
+#   wrangler secret put AIRTABLE_BASE_ID   (= app1YtD74AqiPWQhy)
+# Sin estos, el latido simplemente no se ejecuta (no afecta la emisión de DTE).
