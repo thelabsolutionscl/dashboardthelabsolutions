@@ -3049,6 +3049,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
     <div class="of-zone-title">⚙️ Automatizaciones</div>
     <div class="of-floor" id="oficinaGridAuto"></div>
+
+    <div class="of-zone-title" id="oficinaZonePrinters" style="display:none">🖨️ Impresoras 3D</div>
+    <div class="of-floor" id="oficinaGridPrinters" style="display:none"></div>
   </div>
 
   <div id="oficinaFloor" style="display:none"></div>
@@ -15149,6 +15152,21 @@ const _OF_CACHE_MS=25000;                  // ventana de caché corta para el po
 let _ofRunsCache={t:0,data:null};          // caché corta del Agent_Log remoto
 let _ofQueueCache={t:0,len:null};          // caché corta de la longitud de Agent_Queue
 let _ofAutoCache={t:0,data:null};          // caché corta de la telemetría de Automations
+let _ofMaqCache={t:0,data:null};           // caché corta de las impresoras 3D (tabla Maquinas)
+// Estado de impresora 3D → estado de oficina
+function _ofPrinterCls(estado){ const e=(estado||'').toString().toLowerCase();
+  if(/imprim|ocupad|print|busy|trabaj|en uso/.test(e)) return 'of-work';
+  if(/manten|repar|falla|error|offline|sin con/.test(e)) return 'of-error';
+  return 'of-off';
+}
+function _ofPrinterLbl(estado){ const e=(estado||'').toString().toLowerCase();
+  if(/imprim|ocupad|print|busy|trabaj|en uso/.test(e)) return 'Imprimiendo';
+  if(/manten|repar/.test(e)) return 'Mantención';
+  if(/falla|error/.test(e)) return 'Con falla';
+  if(/offline|sin con/.test(e)) return 'Sin conexión';
+  if(/dispon|libre|idle|ready|en linea|online/.test(e)) return 'Disponible';
+  return estado||'Disponible';
+}
 let _ofModel=null;                         // último modelo construido (para el panel de detalle de agente)
 let _ofAgentRuns=null;                      // ejecuciones del agente abierto en el panel de detalle
 let _ofView=(()=>{try{return localStorage.getItem('thelab_oficina_view')||'cards';}catch(e){return 'cards';}})();
@@ -15192,9 +15210,12 @@ function _ofSpark(list){
   return `<svg class="of-spark" width="62" height="20" viewBox="0 0 62 20" aria-hidden="true">${bars}</svg>`;
 }
 function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.currentTarget.click(); } }   // a11y teclado
-function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_CFG.find(x=>x.id===id); toast((a?a.label+' — '+a.tipo:id)||'Automatización','info'); }
+function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_CFG.find(x=>x.id===id); if(a){toast(a.label+' — '+a.tipo,'info');return;}
+  const pm=(_ofModel&&_ofModel.printerModel)||[]; const p=pm.find(x=>x.id===id);
+  if(p){toast('🖨️ '+p.label+' — '+(p.role||'Impresora 3D').replace('Impresora 3D · ','')+' · '+p.lbl,'info');return;}
+  toast(id||'Elemento','info'); }
 // Refresca la Oficina forzando datos frescos (el polling usa caché corta; el botón manual la invalida)
-function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; renderOficina(); }
+function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; _ofMaqCache={t:0,data:null}; renderOficina(); }
 // ── Panel de detalle de un agente IA (clic en un trabajador de la Oficina) ──
 function ofAgentDetail(id){
   if(!_ofModel||!_ofModel.iaModel){ switchTab('agentes'); return; }
@@ -15374,12 +15395,24 @@ async function _renderOficina(){
     return {clickIA:false, id:a.id, label:a.label, icon:a.icon||'⚙️', role:a.tipo||a.role, cls, lbl, task, stats};
   });
 
+  // ── Impresoras 3D (tabla Maquinas) — con caché corta ──
+  let printersRaw=[];
+  if(getToken()){
+    if(_ofMaqCache.data && Date.now()-_ofMaqCache.t<_OF_CACHE_MS){ printersRaw=_ofMaqCache.data; }
+    else { try{ const mq=await airtableFetch('Maquinas',200); printersRaw=(mq.records||[]).map(r=>({id:r.fields.id||r.id,nombre:r.fields.nombre||'',num:r.fields.num||0,numG:r.fields.numG||r.fields.num||0,modelo:r.fields.modelo||'',estado:r.fields.estado||'disponible'})); _ofMaqCache={t:Date.now(),data:printersRaw}; }
+      catch(e){ _ofErr=true; if(_ofMaqCache.data)printersRaw=_ofMaqCache.data; else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS))printersRaw=MAQUINAS; } }
+  } else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)){ printersRaw=MAQUINAS; }
+  const printerModel=printersRaw.map(p=>{ const cls=_ofPrinterCls(p.estado), lbl=_ofPrinterLbl(p.estado); if(cls==='of-work')working++;
+    return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', role:'Impresora 3D · '+(p.modelo||''), cls, lbl, task:(p.modelo||'Impresora 3D')+' · '+lbl, stats:''+(p.modelo||''), num:p.numG||p.num||0};
+  }).sort((a,b)=>a.num-b.num);
+  const extraDepts=printerModel.length?[{name:'Impresoras 3D',color:'#3aa0ff',members:printerModel}]:[];
+
   // Guardar el modelo para el panel de detalle de agente (clic en un trabajador)
-  _ofModel={byAgent, iaModel, autoModel};
+  _ofModel={byAgent, iaModel, autoModel, printerModel};
 
   // ── KPIs ── (ejecuciones hoy = todas las del log + las de automatizaciones — B2/B7)
   const runsToday=runs.filter(r=>_ofSameDay(r.t)).length + autoToday;
-  const totalWorkers=iaModel.length+autoModel.length;
+  const totalWorkers=iaModel.length+autoModel.length+printerModel.length;
   const kpis=document.getElementById('oficinaKpis');
   if(kpis) kpis.innerHTML=`
     <div class="of-kpi"><div class="of-kpi-val">${totalWorkers}</div><div class="of-kpi-lbl">Trabajadores</div></div>
@@ -15389,17 +15422,17 @@ async function _renderOficina(){
 
   const errEl=document.getElementById('oficinaErr'); if(errEl) errEl.style.display=_ofErr?'':'none';
 
-  if(_ofView==='iso') _ofRenderIso(iaModel,autoModel);
-  else if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel);
-  else _ofRenderCards(iaModel,autoModel);
+  if(_ofView==='iso') _ofRenderIso(iaModel,autoModel,extraDepts);
+  else if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel,extraDepts);
+  else _ofRenderCards(iaModel,autoModel,extraDepts);
   _ofRenderFeed(runs);
-  _ofRenderCharts(runs,iaModel,autoModel);
+  _ofRenderCharts(runs,iaModel,[...autoModel,...printerModel]);
 }
 
 function _ofWorkerCard(m){
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
   const spark=m.spark?`<div class="of-spark-wrap" title="Ejecuciones últimos 7 días">${m.spark}</div>`:'';
-  const cat=m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'};
+  const cat=m.isPrinter?{name:'Impresora 3D',color:'#3aa0ff'}:(m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'});
   const ac=cat.color;
   const avStyle=`background:radial-gradient(circle at 35% 28%,${ac}33,${ac}12);border-color:${ac}59;color:${ac}`;
   return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
@@ -15413,14 +15446,18 @@ function _ofWorkerCard(m){
     </div>
   </div>`;
 }
-function _ofRenderCards(ia,auto){
+function _ofRenderCards(ia,auto,extras){
   const g1=document.getElementById('oficinaGridIA'), g2=document.getElementById('oficinaGridAuto');
   if(g1) g1.innerHTML=ia.map(_ofWorkerCard).join('');
   if(g2) g2.innerHTML=auto.map(_ofWorkerCard).join('');
+  const printers=(extras&&extras[0]&&extras[0].members)||[];
+  const g3=document.getElementById('oficinaGridPrinters'), z3=document.getElementById('oficinaZonePrinters');
+  if(g3){ g3.innerHTML=printers.map(_ofWorkerCard).join(''); g3.style.display=printers.length?'':'none'; }
+  if(z3) z3.style.display=printers.length?'':'none';
 }
 function _ofDesk(m){
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-  const cat=m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'};
+  const cat=m.isPrinter?{name:'Impresora 3D',color:'#3aa0ff'}:(m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'});
   const ac=cat.color;
   const em=m.clickIA?_ofAgentEmoji(m.label):((m.icon&&!m.icon.startsWith('<'))?m.icon:'⚙️');
   const seatStyle=`background:radial-gradient(circle at 35% 28%,${ac}2e,${ac}10);border-color:${ac}55`;
@@ -15430,15 +15467,17 @@ function _ofDesk(m){
     <div class="of-desk-state">${escapeHtml(m.lbl)}</div>
   </div>`;
 }
-function _ofRenderFloor(ia,auto){
+function _ofRenderFloor(ia,auto,extras){
   const f=document.getElementById('oficinaFloor'); if(!f) return;
   const groups=_OF_CAT.map(c=>({c,items:ia.filter(m=>_ofCat(m).name===c.name)})).filter(g=>g.items.length);
   const otros=ia.filter(m=>_ofCat(m).name==='Otros'); if(otros.length) groups.push({c:{name:'Otros',color:'#7a7a7a'},items:otros});
   const sect=g=>`<div class="of-floor-grouplabel" style="color:${g.c.color}"><i style="background:${g.c.color}"></i>${g.c.name} · ${g.items.length}</div><div class="of-desks">${g.items.map(_ofDesk).join('')}</div>`;
+  const extraSects=(extras||[]).filter(d=>d.members&&d.members.length).map(d=>`<div class="of-floor-label" style="margin-top:20px">🖨️ ${escapeHtml(d.name)}</div><div class="of-desks">${d.members.map(_ofDesk).join('')}</div>`).join('');
   f.innerHTML=`<div class="of-floorroom">
     <div class="of-floor-label">🤖 Agentes IA</div>
     ${groups.map(sect).join('')}
     ${auto.length?`<div class="of-floor-label" style="margin-top:20px">⚙️ Automatizaciones</div><div class="of-desks">${auto.map(_ofDesk).join('')}</div>`:''}
+    ${extraSects}
   </div>`;
 }
 
@@ -15565,12 +15604,14 @@ function _ofWalker(p1,p2,dur,delay,em){
     </g>
   </g>`;
 }
-function _ofRenderIso(ia,auto){
+function _ofRenderIso(ia,auto,extras){
   const host=document.getElementById('oficinaIso'); if(!host) return;
-  const total=ia.length+auto.length;
+  extras=extras||[];
+  const extraMembers=extras.reduce((a,d)=>a.concat(d.members||[]),[]);
+  const total=ia.length+auto.length+extraMembers.length;
   if(!total){ host.innerHTML='<div class="of-iso-scene" style="padding:24px;color:var(--text3);font-size:12px">Sin trabajadores que mostrar.</div>'; host.dataset.sig=''; return; }
   // No re-renderizar si nada cambió → preserva las animaciones (sin "saltos" en la TV)
-  const sig=_ofView+'|'+[...ia,...auto].map(m=>m.id+m.cls+(m.task||'').slice(0,18)).join(';');
+  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.task||'').slice(0,18)).join(';');
   if(host.dataset.sig===sig && host.querySelector('svg')) return;
   host.dataset.sig=sig;
   // ── Departamentos como SALAS (cada una con su tamaño, empacadas en estantes) ──
@@ -15578,6 +15619,7 @@ function _ofRenderIso(ia,auto){
   _OF_CAT.forEach(c=>{ const mem=ia.filter(m=>_ofCat(m).name===c.name); if(mem.length) _depts.push({name:c.name,color:c.color,members:mem}); });
   { const ot=ia.filter(m=>_ofCat(m).name==='Otros'); if(ot.length) _depts.push({name:'Otros',color:'#7a7a7a',members:ot}); }
   if(auto.length) _depts.push({name:'Automatizaciones',color:'#a78bfa',members:auto});
+  extras.forEach(d=>{ if(d.members&&d.members.length) _depts.push({name:d.name,color:d.color,members:d.members}); });
   _depts.forEach(d=>{ const n=d.members.length; d.dc=Math.max(2,Math.ceil(Math.sqrt(n*1.5))); d.dr=Math.max(1,Math.ceil(n/d.dc)); });
   const gap=1;
   const perShelf=Math.max(1,Math.min(3,Math.ceil(Math.sqrt(_depts.length))));
