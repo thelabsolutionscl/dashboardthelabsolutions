@@ -2975,6 +2975,22 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 #tab-oficina .of-donut-legend span{display:flex;align-items:center;}
 #tab-oficina .of-donut-legend i{width:10px;height:10px;border-radius:3px;margin-right:7px;display:inline-block;flex-shrink:0;}
 @media(max-width:760px){#tab-oficina .of-charts-grid{grid-template-columns:1fr;}}
+/* Modo TV / pantalla completa (kiosko 1080p) */
+#tab-oficina.of-fs{position:fixed;inset:0;z-index:99999;background:radial-gradient(circle at 50% -10%,#161b24,#0a0b0e 70%);overflow:auto;padding:20px 30px;}
+#tab-oficina:fullscreen{background:radial-gradient(circle at 50% -10%,#161b24,#0a0b0e 70%);overflow:auto;padding:20px 30px;}
+#tab-oficina.of-fs .section-desc{display:none;}
+#tab-oficina.of-fs #oficinaErr{display:none!important;}
+#tab-oficina.of-fs #oficinaCards,#tab-oficina.of-fs #oficinaFloor{display:none!important;}
+#tab-oficina.of-fs > .card{display:none!important;}
+#tab-oficina.of-fs #oficinaIso{display:block!important;}
+#tab-oficina.of-fs .of-iso-scene{border:none;background:transparent;padding:0;}
+#tab-oficina.of-fs .of-iso-svg{max-height:82vh;min-width:0;width:100%;}
+#tab-oficina.of-fs .section-title{font-size:30px;}
+#tab-oficina.of-fs .of-kpis{gap:18px;margin-bottom:14px;}
+#tab-oficina.of-fs .of-kpi{padding:16px 22px;}
+#tab-oficina.of-fs .of-kpi-val{font-size:48px;}
+#tab-oficina.of-fs .of-kpi-lbl{font-size:13px;}
+#tab-oficina.of-fs .of-iso-legend{font-size:14px;gap:22px;}
 </style>
 <div class="tab-panel" id="tab-oficina">
   <div class="section-header">
@@ -2989,6 +3005,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="of-vbtn" data-v="iso" onclick="ofSetView('iso')">🏨 3D</button>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="renderOficina()">↻ Actualizar</button>
+      <button class="btn btn-ghost btn-sm" id="ofFsBtn" onclick="ofFullscreen()">📺 Pantalla completa</button>
     </div>
   </div>
 
@@ -15144,6 +15161,30 @@ function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden && document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
 });
+// ── Pantalla completa (modo TV / kiosko 1080p) ─────────────────────────
+function ofFullscreen(){
+  const el=document.getElementById('tab-oficina'); if(!el) return;
+  const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
+  const active=document.fullscreenElement||document.webkitFullscreenElement;
+  if(req){
+    if(!active){ try{ req.call(el); }catch(e){ _ofToggleFsCss(el); } }
+    else { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
+  } else { _ofToggleFsCss(el); }   // navegador sin Fullscreen API → fallback CSS
+}
+function _ofToggleFsCss(el){
+  const on=el.classList.toggle('of-fs');
+  const b=document.getElementById('ofFsBtn'); if(b) b.textContent=on?'✕ Salir':'📺 Pantalla completa';
+  if(on) ofSetView('iso'); else renderOficina();
+}
+function _ofOnFsChange(){
+  const el=document.getElementById('tab-oficina'); if(!el) return;
+  const fs=(document.fullscreenElement||document.webkitFullscreenElement)===el;
+  el.classList.toggle('of-fs',fs);
+  const b=document.getElementById('ofFsBtn'); if(b) b.textContent=fs?'✕ Salir':'📺 Pantalla completa';
+  if(fs) ofSetView('iso'); else renderOficina();
+}
+document.addEventListener('fullscreenchange',_ofOnFsChange);
+document.addEventListener('webkitfullscreenchange',_ofOnFsChange);
 async function renderOficina(){
   if(!document.getElementById('tab-oficina')) return;
   if(_oficinaBusy) return;          // B4: evita ejecuciones solapadas
@@ -15292,13 +15333,19 @@ function _ofEmoji(m){
   return '🤖';
 }
 function _ofIsoDesk(col,working){
-  const dy=8, hw=22, hh=11, legH=13;
+  const dy=9, hw=23, hh=11, legH=14;
   const top=`${0},${dy-hh} ${hw},${dy} ${0},${dy+hh} ${-hw},${dy}`;
   const left=`${-hw},${dy} ${0},${dy+hh} ${0},${dy+hh+legH} ${-hw},${dy+legH}`;
   const right=`${0},${dy+hh} ${hw},${dy} ${hw},${dy+legH} ${0},${dy+hh+legH}`;
-  const screen=working?col:'#2b3038';
-  return `<polygon points="${left}" fill="#1b1e23"/><polygon points="${right}" fill="#23272d"/><polygon points="${top}" fill="#30353d"/>`+
-    `<rect x="-8" y="${dy-16}" width="16" height="10" rx="1.5" fill="${screen}" opacity="${working?'0.95':'0.55'}"/><rect x="-1.5" y="${dy-6}" width="3" height="5" fill="#15171a"/>`;
+  const scr=working?col:'#5b7184';
+  const mon=`<rect x="-9" y="${dy-20}" width="18" height="13" rx="1.8" fill="#15171a"/>`+
+    `<rect x="-7.5" y="${dy-18.5}" width="15" height="9.5" rx="1" fill="${scr}" opacity="${working?'0.95':'0.55'}"/>`+
+    (working?`<polyline points="-6,${dy-11} -3,${dy-13.5} 0,${dy-10.5} 3,${dy-14} 6,${dy-12}" fill="none" stroke="#0c100e" stroke-width="0.9" opacity="0.55"/>`:'')+
+    `<rect x="-1.5" y="${dy-7}" width="3" height="4" fill="#15171a"/>`;
+  const kbd=`<rect x="-9" y="${dy+1}" width="18" height="5" rx="1.4" fill="#dfe3e8"/><rect x="-9" y="${dy+1}" width="18" height="2" rx="1" fill="#fff" opacity="0.5"/>`;
+  const mug=`<rect x="12" y="${dy-4}" width="5" height="6" rx="1.4" fill="${col}"/><rect x="16.5" y="${dy-2.5}" width="2" height="3" rx="1" fill="none" stroke="${col}" stroke-width="0.9"/>`;
+  return `<polygon points="${left}" fill="#85602f"/><polygon points="${right}" fill="#9a7239"/><polygon points="${top}" fill="#bd9156"/>`+
+    `<polygon points="${top}" fill="url(#ofShine)" opacity="0.55"/>${mon}${kbd}${mug}`;
 }
 // Categorías funcionales de los agentes IA (para agrupar dentro de la zona)
 const _OF_CAT=[
@@ -15319,8 +15366,8 @@ function _ofShade(hex,f){
   return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
 }
 function _ofIsoStation(m,x,y){
-  const col={'of-work':'#00d4aa','of-active':'#00d4cc','of-error':'#ff4444','of-off':'#5e5e5e'}[m.cls]||'#5e5e5e';
-  const dark=_ofShade(col,0.62);
+  const col={'of-work':'#13c39a','of-active':'#19b9d4','of-error':'#ff5a5a','of-off':'#9aa3ad'}[m.cls]||'#9aa3ad';
+  const dark=_ofShade(col,0.72);
   const cat=m.clickIA?_ofCat(m):null;
   const click=m.clickIA?`onclick="switchTab('agentes')"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
   const nm=escapeHtml(m.label.length>15?m.label.slice(0,14)+'…':m.label);
@@ -15329,39 +15376,41 @@ function _ofIsoStation(m,x,y){
   if(working){
     const t=escapeHtml(((m.task||'').trim().slice(0,24))||'trabajando…');
     const bw=Math.max(60,Math.min(154,t.length*6+18));
-    bubble=`<g transform="translate(0,-96)"><rect x="${-bw/2}" y="-13" width="${bw}" height="22" rx="7" fill="#0f0f0f" stroke="${col}" stroke-width="1"/><polygon points="-4,9 4,9 0,16" fill="#0f0f0f"/><text x="0" y="2" text-anchor="middle" font-size="9" fill="#e8e8e8" font-family="DM Sans">${t}</text></g>`;
+    bubble=`<g transform="translate(0,-98)"><rect x="${-bw/2}" y="-13" width="${bw}" height="22" rx="9" fill="#ffffff" stroke="${col}" stroke-width="1.5"/><polygon points="-5,9 5,9 0,16" fill="#ffffff" stroke="${col}" stroke-width="0"/><text x="0" y="2.5" text-anchor="middle" font-size="9" fill="#222831" font-family="DM Sans" font-weight="600">${t}</text></g>`;
   }
-  const ring=cat?`<ellipse cx="0" cy="3" rx="16" ry="8" fill="none" stroke="${cat.color}" stroke-width="2" opacity="0.55"/>`:'';
+  const ring=cat?`<ellipse cx="0" cy="4" rx="17" ry="8.5" fill="none" stroke="${cat.color}" stroke-width="2.5" opacity="0.6"/>`:'';
   return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
     <title>${escapeHtml(m.label+' — '+m.lbl+(cat?' · '+cat.name:''))}</title>
-    <ellipse cx="0" cy="3" rx="18" ry="8.5" fill="rgba(0,0,0,0.45)"/>
+    <ellipse cx="0" cy="4" rx="20" ry="9" fill="url(#ofShadow)"/>
     ${ring}
     <g class="of-iso-body">
-      <rect x="-7" y="-11" width="5.5" height="11" rx="2.5" fill="${dark}"/>
-      <rect x="1.5" y="-11" width="5.5" height="11" rx="2.5" fill="${dark}"/>
-      <rect x="-15" y="-33" width="5" height="19" rx="2.5" fill="${dark}"/>
-      <rect x="10" y="-33" width="5" height="19" rx="2.5" fill="${dark}"/>
-      <rect x="-11" y="-36" width="22" height="29" rx="8" fill="${col}"/>
-      <rect x="-11" y="-36" width="22" height="29" rx="8" fill="url(#ofShine)"/>
-      <circle cx="0" cy="-46" r="12" fill="#1a1a1a" stroke="${col}" stroke-width="2.5"/>
-      <text x="0" y="-41.5" text-anchor="middle" font-size="13">${em}</text>
-      <circle cx="10" cy="-56" r="3.3" fill="${col}"${working?' class="of-iso-blink"':''}/>
+      <rect x="-7" y="-10" width="6" height="11" rx="3" fill="${dark}"/>
+      <rect x="1" y="-10" width="6" height="11" rx="3" fill="${dark}"/>
+      <rect x="-15.5" y="-31" width="6" height="18" rx="3" fill="${dark}"/>
+      <rect x="9.5" y="-31" width="6" height="18" rx="3" fill="${dark}"/>
+      <rect x="-12" y="-35" width="24" height="29" rx="11" fill="${col}"/>
+      <rect x="-12" y="-35" width="24" height="29" rx="11" fill="url(#ofShine)"/>
+      <circle cx="0" cy="-47" r="14.5" fill="#fff7ec" stroke="${col}" stroke-width="3"/>
+      <ellipse cx="-5" cy="-52" rx="4" ry="2.6" fill="#fff" opacity="0.6"/>
+      <text x="0" y="-42" text-anchor="middle" font-size="15">${em}</text>
+      <circle cx="12" cy="-58" r="3.6" fill="${col}" stroke="#fff" stroke-width="1"${working?' class="of-iso-blink"':''}/>
     </g>
     ${_ofIsoDesk(col,working)}
-    <rect x="-24" y="36" width="48" height="13" rx="3" fill="#0e0f11" opacity="0.9"/>
-    <text x="0" y="45" text-anchor="middle" font-size="8.5" fill="#cfcfcf" font-family="DM Sans" font-weight="600">${nm}</text>
+    <rect x="-25" y="38" width="50" height="14" rx="7" fill="#ffffff" opacity="0.95"/>
+    <text x="0" y="47.5" text-anchor="middle" font-size="8.5" fill="#222831" font-family="DM Sans" font-weight="700">${nm}</text>
     ${bubble}
   </g>`;
 }
 function _ofWalker(p1,p2,dur,delay,em){
   return `<g class="of-iso-walker" style="--x1:${p1[0]}px;--y1:${p1[1]}px;--x2:${p2[0]}px;--y2:${p2[1]}px;--dur:${dur}s;animation-delay:${delay}s">
-    <ellipse cx="0" cy="2" rx="12" ry="6" fill="rgba(0,0,0,0.4)"/>
+    <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
     <g class="of-iso-body">
-      <rect x="-6.5" y="-9" width="4.5" height="9" rx="2" fill="#3a434d"/>
-      <rect x="2" y="-9" width="4.5" height="9" rx="2" fill="#3a434d"/>
-      <rect x="-8" y="-26" width="16" height="19" rx="6" fill="#4a5560"/>
-      <circle cx="0" cy="-33" r="9" fill="#1a1a1a" stroke="#6a7682" stroke-width="2"/>
-      <text x="0" y="-29.5" text-anchor="middle" font-size="11">${em}</text>
+      <rect x="-6.5" y="-9" width="5" height="9" rx="2.5" fill="#5a6470"/>
+      <rect x="1.5" y="-9" width="5" height="9" rx="2.5" fill="#5a6470"/>
+      <rect x="-8.5" y="-27" width="17" height="20" rx="8" fill="#7e8a96"/>
+      <rect x="-8.5" y="-27" width="17" height="20" rx="8" fill="url(#ofShine)"/>
+      <circle cx="0" cy="-35" r="10.5" fill="#fff7ec" stroke="#8a96a2" stroke-width="2.5"/>
+      <text x="0" y="-31" text-anchor="middle" font-size="12">${em}</text>
     </g>
   </g>`;
 }
@@ -15382,27 +15431,46 @@ function _ofRenderIso(ia,auto){
   const A=iso(0,0), B=iso(cols-1,0), C=iso(cols-1,rows-1), D=iso(0,rows-1);
   const At=[A[0],A[1]-th/2], Br=[B[0]+tw/2,B[1]], Cb=[C[0],C[1]+th/2], Dl=[D[0]-tw/2,D[1]];
 
-  // Paredes isométricas (sube wallH desde el borde trasero)
-  const wallR=`<polygon points="${At[0]},${At[1]} ${Br[0]},${Br[1]} ${Br[0]},${Br[1]-wallH} ${At[0]},${At[1]-wallH}" fill="#191c21"/>`;
-  const wallL=`<polygon points="${At[0]},${At[1]} ${Dl[0]},${Dl[1]} ${Dl[0]},${Dl[1]-wallH} ${At[0]},${At[1]-wallH}" fill="#131519"/>`;
-  const trimR=`<line x1="${At[0]}" y1="${At[1]-wallH}" x2="${Br[0]}" y2="${Br[1]-wallH}" stroke="#2a2f36" stroke-width="2"/>`;
-  const trimL=`<line x1="${At[0]}" y1="${At[1]-wallH}" x2="${Dl[0]}" y2="${Dl[1]-wallH}" stroke="#22262c" stroke-width="2"/>`;
-  // Ventana en la pared derecha
-  const wd=[Br[0]-At[0],Br[1]-At[1]], wp=(f,h)=>[At[0]+f*wd[0],At[1]+f*wd[1]-h];
-  const win=`<polygon points="${wp(0.46,26)} ${wp(0.74,26)} ${wp(0.74,60)} ${wp(0.46,60)}" fill="#22455e" stroke="#3f6f8c" stroke-width="2"/>`+
-    `<line x1="${wp(0.6,26)[0]}" y1="${wp(0.6,26)[1]}" x2="${wp(0.6,60)[0]}" y2="${wp(0.6,60)[1]}" stroke="#3f6f8c" stroke-width="1.5"/>`+
-    `<line x1="${wp(0.46,43)[0]}" y1="${wp(0.46,43)[1]}" x2="${wp(0.74,43)[0]}" y2="${wp(0.74,43)[1]}" stroke="#3f6f8c" stroke-width="1.5"/>`;
+  const now0=new Date(), H=now0.getHours();
+  // Cielo de la ventana según hora (día / atardecer / noche)
+  let skyT,skyB,orbC,orbMoon;
+  if(H>=7&&H<17){ skyT='#7cc0ff'; skyB='#e8f5ff'; orbC='#ffd96b'; orbMoon=false; }
+  else if(H>=17&&H<20){ skyT='#ff9a5a'; skyB='#ffe2c0'; orbC='#ff8a3d'; orbMoon=false; }
+  else { skyT='#1a2540'; skyB='#384469'; orbC='#e8ecf5'; orbMoon=true; }
 
-  // Piso con tinte por zona + pasillo
+  // Paredes con degradado (claras, sensación de oficina iluminada)
+  const wallR=`<polygon points="${At[0]},${At[1]} ${Br[0]},${Br[1]} ${Br[0]},${Br[1]-wallH} ${At[0]},${At[1]-wallH}" fill="url(#ofWallR)"/>`;
+  const wallL=`<polygon points="${At[0]},${At[1]} ${Dl[0]},${Dl[1]} ${Dl[0]},${Dl[1]-wallH} ${At[0]},${At[1]-wallH}" fill="url(#ofWallL)"/>`;
+  const trimR=`<line x1="${At[0]}" y1="${At[1]-wallH}" x2="${Br[0]}" y2="${Br[1]-wallH}" stroke="#aeb8c4" stroke-width="2.5"/>`;
+  const trimL=`<line x1="${At[0]}" y1="${At[1]-wallH}" x2="${Dl[0]}" y2="${Dl[1]-wallH}" stroke="#9aa6b3" stroke-width="2.5"/>`;
+  // Ventana en la pared derecha con cielo
+  const wd=[Br[0]-At[0],Br[1]-At[1]], wp=(f,h)=>[At[0]+f*wd[0],At[1]+f*wd[1]-h];
+  const orb=wp(0.7,54);
+  const win=`<polygon points="${wp(0.40,22)} ${wp(0.80,22)} ${wp(0.80,64)} ${wp(0.40,64)}" fill="url(#ofSky)" stroke="#ffffff" stroke-width="3.5"/>`+
+    `<circle cx="${orb[0].toFixed(1)}" cy="${orb[1].toFixed(1)}" r="6" fill="${orbC}" opacity="0.95"/>`+
+    `<line x1="${wp(0.6,22)[0]}" y1="${wp(0.6,22)[1]}" x2="${wp(0.6,64)[0]}" y2="${wp(0.6,64)[1]}" stroke="#ffffff" stroke-width="2"/>`+
+    `<line x1="${wp(0.40,43)[0]}" y1="${wp(0.40,43)[1]}" x2="${wp(0.80,43)[0]}" y2="${wp(0.80,43)[1]}" stroke="#ffffff" stroke-width="2"/>`;
+  // Cuadros decorativos en la pared derecha
+  const frame=(f1,f2,h1,h2,c)=>`<polygon points="${wp(f1,h1)} ${wp(f2,h1)} ${wp(f2,h2)} ${wp(f1,h2)}" fill="#fff" stroke="#c9b48f" stroke-width="2"/><polygon points="${wp(f1+0.012,h1-3)} ${wp(f2-0.012,h1-3)} ${wp(f2-0.012,h2+3)} ${wp(f1+0.012,h2+3)}" fill="${c}" opacity="0.8"/>`;
+  const frames=frame(0.10,0.20,34,54,'#7fd1c4')+frame(0.23,0.33,34,54,'#f6b8a0');
+
+  // Piso claro tipo alfombra + pasillo
   const zoneOf=r=> r<iaRows?'ia':(r<autoStart?'aisle':'auto');
   let tiles='';
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
-    const [x,y]=iso(c,r), z=zoneOf(r); let fill=((c+r)%2)?'#15171a':'#1a1d22';
-    if(z==='ia')    fill=((c+r)%2)?'#13201f':'#162624';
-    else if(z==='auto') fill=((c+r)%2)?'#1a1626':'#1e1a2c';
-    else            fill='#0f1012';
-    tiles+=`<polygon points="${x},${y-th/2} ${x+tw/2},${y} ${x},${y+th/2} ${x-tw/2},${y}" fill="${fill}" stroke="#0b0c0e" stroke-width="1"/>`;
+    const [x,y]=iso(c,r), z=zoneOf(r); let fill=((c+r)%2)?'#c9d2dc':'#bdc8d3';
+    if(z==='aisle') fill=((c+r)%2)?'#aeb8c3':'#a7b2bd';
+    tiles+=`<polygon points="${x},${y-th/2} ${x+tw/2},${y} ${x},${y+th/2} ${x-tw/2},${y}" fill="${fill}" stroke="#aab4bf" stroke-width="0.8"/>`;
   }
+  // Alfombras de color por zona
+  const rugPoly=(r0,r1,color)=>{
+    const cs=[[iso(0,r0)[0],iso(0,r0)[1]-th/2],[iso(cols-1,r0)[0]+tw/2,iso(cols-1,r0)[1]],[iso(cols-1,r1)[0],iso(cols-1,r1)[1]+th/2],[iso(0,r1)[0]-tw/2,iso(0,r1)[1]]];
+    const mx=cs.reduce((s,p)=>s+p[0],0)/4, my=cs.reduce((s,p)=>s+p[1],0)/4;
+    const ins=cs.map(p=>[(mx+(p[0]-mx)*0.9).toFixed(1),(my+(p[1]-my)*0.88).toFixed(1)]);
+    return `<polygon points="${ins.map(p=>p.join(',')).join(' ')}" fill="${color}" opacity="0.16" stroke="${color}" stroke-opacity="0.4" stroke-width="2.5"/>`;
+  };
+  let rugs=rugPoly(0,iaRows-1,'#19b9d4');
+  if(auto.length) rugs+=rugPoly(autoStart,rows-1,'#a78bfa');
 
   // Agrupar por función: ordena los agentes IA por categoría y las automatizaciones por tipo
   const catIdx=m=>{ const i=_OF_CAT.findIndex(c=>c.name===_ofCat(m).name); return i<0?99:i; };
@@ -15463,9 +15531,16 @@ function _ofRenderIso(ia,auto){
   if(iaSorted.some(m=>_ofCat(m).name==='Otros')) presentCats.push({name:'Otros',color:'#7a7a7a'});
   const catLegend=presentCats.length?`<div class="of-iso-legend of-iso-cats"><span style="color:var(--text3)">Áreas:</span>${presentCats.map(c=>`<span><i style="background:${c.color}"></i>${c.name}</span>`).join('')}</div>`:'';
   host.innerHTML=`${legend}${catLegend}<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="${vbX} ${topY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMin meet">
-    <defs><linearGradient id="ofShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
-    ${wallL}${wallR}${door}${trimL}${trimR}${win}${clock}
+    <defs>
+      <linearGradient id="ofShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.3"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      <radialGradient id="ofShadow"><stop offset="0" stop-color="#000" stop-opacity="0.38"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+      <linearGradient id="ofWallL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef3f8"/><stop offset="1" stop-color="#d5dde6"/></linearGradient>
+      <linearGradient id="ofWallR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e4ebf1"/><stop offset="1" stop-color="#c8d2dc"/></linearGradient>
+      <linearGradient id="ofSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${skyT}"/><stop offset="1" stop-color="${skyB}"/></linearGradient>
+    </defs>
+    ${wallL}${wallR}${door}${trimL}${trimR}${frames}${win}${clock}
     <g>${tiles}</g>
+    ${rugs}
     ${signs}
     <g>${chars}</g>
     ${decor}
