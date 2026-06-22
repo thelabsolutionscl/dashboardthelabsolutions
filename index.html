@@ -408,6 +408,8 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:var(--surface);}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:var(--accent);}
+::selection{background:rgba(0,212,204,0.28);color:#fff;}
 .ai-response{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;line-height:1.7;white-space:pre-wrap;min-height:90px;max-height:380px;overflow-y:auto;}
 .ai-response.empty{color:var(--text3);font-style:italic;}
 .ai-response-wrap{position:relative;}
@@ -2869,21 +2871,27 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- OFICINA VIRTUAL -->
 <style id="oficina-styles">
 #tab-oficina .of-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
-#tab-oficina .of-kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:relative;overflow:hidden;}
+#tab-oficina .of-kpi{background:linear-gradient(160deg,var(--surface2),var(--surface));border:1px solid var(--border);border-radius:12px;padding:15px 16px;position:relative;overflow:hidden;transition:border-color .15s,transform .12s,box-shadow .15s;}
+#tab-oficina .of-kpi::before{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,var(--border2),transparent);}
+#tab-oficina .of-kpi:hover{transform:translateY(-2px);border-color:var(--border2);}
 #tab-oficina .of-kpi .of-kpi-val{font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1;color:var(--text);letter-spacing:.5px;}
 #tab-oficina .of-kpi .of-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-top:4px;}
-#tab-oficina .of-kpi.live .of-kpi-val{color:var(--accent);}
+#tab-oficina .of-kpi.live{box-shadow:inset 0 0 26px -12px rgba(0,212,204,0.45);}
+#tab-oficina .of-kpi.live::before{background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+#tab-oficina .of-kpi.live .of-kpi-val{color:var(--accent);text-shadow:0 0 18px rgba(0,212,204,0.4);}
 #tab-oficina .of-zone-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin:0 0 12px 2px;display:flex;align-items:center;gap:8px;}
 #tab-oficina .of-zone-title::after{content:'';flex:1;height:1px;background:var(--border);}
 #tab-oficina .of-floor{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px;margin-bottom:24px;}
-.of-worker{position:relative;display:flex;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;cursor:pointer;transition:border-color .15s,transform .12s,box-shadow .15s;overflow:hidden;}
-.of-worker:hover{transform:translateY(-2px);border-color:var(--border2);}
+.of-worker{position:relative;display:flex;gap:12px;background:linear-gradient(155deg,var(--surface2),var(--surface));border:1px solid var(--border);border-radius:14px;padding:14px;cursor:pointer;transition:border-color .15s,transform .12s,box-shadow .15s;overflow:hidden;}
+.of-worker:hover{transform:translateY(-3px);border-color:var(--border2);box-shadow:0 12px 28px -14px rgba(0,0,0,0.75);}
+.of-worker.of-work{box-shadow:inset 0 0 0 1px rgba(0,212,170,0.12);}
+.of-worker.of-work:hover{box-shadow:0 12px 30px -14px rgba(0,212,170,0.4);}
 .of-worker::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--text3);opacity:.6;}
 .of-worker.of-work::before{background:var(--success);opacity:1;}
 .of-worker.of-active::before{background:var(--accent);opacity:.9;}
 .of-worker.of-error::before{background:var(--danger);opacity:1;}
 .of-worker.of-off::before{background:var(--text3);opacity:.4;}
-.of-avatar{width:42px;height:42px;flex-shrink:0;border-radius:11px;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--accent);}
+.of-avatar{width:42px;height:42px;flex-shrink:0;border-radius:11px;background:radial-gradient(circle at 35% 28%,var(--border2),var(--surface3));border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);}
 .of-worker.of-work .of-avatar{border-color:rgba(0,212,170,0.45);box-shadow:0 0 14px rgba(0,212,170,0.18);}
 .of-body{flex:1;min-width:0;}
 .of-name-row{display:flex;align-items:center;gap:7px;margin-bottom:2px;}
@@ -2915,6 +2923,26 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 /* Sparkline */
 .of-spark-wrap{margin-top:8px;opacity:.9;}
 .of-spark{display:block;}
+/* Panel de detalle de agente */
+.ofd-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.ofd-ava{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:27px;background:radial-gradient(circle at 35% 28%,var(--border2),var(--surface3));border:1px solid var(--border2);flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);}
+.ofd-role{font-size:11px;color:var(--text3);}
+.ofd-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;margin-top:4px;}
+.ofd-status i{width:9px;height:9px;border-radius:50%;display:inline-block;box-shadow:0 0 8px currentColor;}
+.ofd-spark{flex-shrink:0;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:7px 9px;}
+.ofd-spark svg{width:90px;height:30px;display:block;}
+.ofd-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+.ofd-stat{background:linear-gradient(160deg,var(--surface2),var(--surface));border:1px solid var(--border);border-radius:10px;padding:11px 8px;text-align:center;}
+.ofd-stat-v{font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1;color:var(--text);}
+.ofd-stat-v.mono{font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:7px;}
+.ofd-stat-l{font-size:9px;text-transform:uppercase;color:var(--text3);letter-spacing:.5px;margin-top:5px;}
+.ofd-seclbl{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px;}
+.ofd-run{cursor:pointer;border:1px solid var(--border);border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surface2);transition:border-color .12s,background .12s,transform .1s;}
+.ofd-run:hover{border-color:var(--accent);background:var(--surface3);transform:translateX(2px);}
+.ofd-run:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.ofd-run-top{display:flex;justify-content:space-between;gap:8px;align-items:center;}
+.ofd-run-q{font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ofd-run-t{font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0;}
 /* Chip de error */
 #tab-oficina .of-errchip{background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.3);color:var(--warn);font-size:11px;padding:8px 12px;border-radius:10px;margin-bottom:16px;}
 /* Toggle de vista */
@@ -2930,9 +2958,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   border:1px solid var(--border);border-radius:18px;padding:20px 18px 26px;}
 .of-floor-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin:0 0 12px 2px;}
 .of-desks{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:14px;}
-.of-desk{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;cursor:pointer;transition:transform .12s,border-color .15s,box-shadow .15s;text-align:center;}
-.of-desk:hover{transform:translateY(-3px);border-color:var(--border2);}
-.of-seat{position:relative;width:54px;height:54px;border-radius:14px;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:26px;}
+.of-desk{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px 12px;background:linear-gradient(160deg,var(--surface3),var(--surface2));border:1px solid var(--border);border-radius:14px;cursor:pointer;transition:transform .12s,border-color .15s,box-shadow .15s;text-align:center;}
+.of-desk:hover{transform:translateY(-3px);border-color:var(--border2);box-shadow:0 12px 24px -14px rgba(0,0,0,0.75);}
+.of-seat{position:relative;width:54px;height:54px;border-radius:14px;background:radial-gradient(circle at 35% 28%,var(--border2),var(--surface3));border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:26px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);}
 .of-seat-light{position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:var(--text3);border:2px solid var(--surface2);}
 .of-desk.of-work .of-seat{border-color:rgba(0,212,170,0.5);box-shadow:0 0 18px rgba(0,212,170,0.25);}
 .of-desk.of-work .of-seat-light{background:var(--success);animation:ofPulse 1.6s infinite;}
@@ -2945,7 +2973,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .of-desk.of-active .of-desk-state{color:var(--accent);}
 .of-desk.of-error .of-desk-state{color:var(--danger);}
 /* Vista isométrica 3D (estilo Habbo) */
-#tab-oficina .of-iso-scene{overflow-x:auto;border:1px solid var(--border);border-radius:18px;background:radial-gradient(circle at 50% 0%,#181b20,#0c0d10 75%);padding:14px 10px;}
+#tab-oficina .of-iso-scene{overflow-x:auto;border:1px solid var(--border);border-radius:18px;background:radial-gradient(ellipse at 50% -8%,#1d222a,#0b0c0f 72%);padding:16px 10px;box-shadow:inset 0 0 70px -12px rgba(0,0,0,0.75),inset 0 1px 0 rgba(255,255,255,0.05);}
 .of-iso-svg{display:block;width:100%;min-width:540px;height:auto;max-height:72vh;}
 .of-iso-char{cursor:pointer;}
 .of-iso-char:focus{outline:none;}
@@ -15165,30 +15193,30 @@ function ofAgentDetail(id){
   const total=runs.length, today=runs.filter(r=>_ofSameDay(r.t)).length, last=runs[0];
   const cfg=AGENTES_CFG.find(a=>a.id===id);
   const rowsHtml=runs.length?runs.slice(0,10).map((r,i)=>`
-      <div onclick="ofAgentViewRun(${i})" role="button" tabindex="0" onkeydown="ofKey(event)" style="cursor:pointer;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;background:var(--surface2);transition:border-color .12s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-          <span style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((r.input||r.output||'—').substring(0,70))}</span>
-          <span style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0">${_ofAgo(r.t)}</span>
+      <div class="ofd-run" onclick="ofAgentViewRun(${i})" role="button" tabindex="0" onkeydown="ofKey(event)">
+        <div class="ofd-run-top">
+          <span class="ofd-run-q">${escapeHtml((r.input||r.output||'—').substring(0,70))}</span>
+          <span class="ofd-run-t">${_ofAgo(r.t)}</span>
         </div>
       </div>`).join('')
     :'<div style="color:var(--text3);font-size:12px;padding:10px 2px">Sin ejecuciones registradas todavía.</div>';
   document.getElementById('ofAgentTitle').textContent=(m.icon?m.icon+' ':'')+m.label;
   document.getElementById('ofAgentBody').innerHTML=`
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-      <div style="width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--surface3);border:1px solid var(--border);flex-shrink:0">${m.icon||'🤖'}</div>
+    <div class="ofd-head">
+      <div class="ofd-ava">${m.icon||'🤖'}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:11px;color:var(--text3)">${escapeHtml(m.role||'')}</div>
-        <div style="margin-top:3px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:${col}"><span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block"></span>${escapeHtml(m.lbl||'')}</span></div>
+        <div class="ofd-role">${escapeHtml(m.role||'')}</div>
+        <div class="ofd-status" style="color:${col}"><i style="background:${col}"></i>${escapeHtml(m.lbl||'')}</div>
       </div>
-      ${m.spark?`<div title="Ejecuciones últimos 7 días" style="flex-shrink:0">${m.spark}</div>`:''}
+      ${m.spark?`<div class="ofd-spark" title="Ejecuciones últimos 7 días">${m.spark}</div>`:''}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center"><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;color:var(--text)">${today}</div><div style="font-size:9px;text-transform:uppercase;color:var(--text3);letter-spacing:.5px;margin-top:3px">Hoy</div></div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center"><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;color:var(--text)">${total}</div><div style="font-size:9px;text-transform:uppercase;color:var(--text3);letter-spacing:.5px;margin-top:3px">Registradas</div></div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center"><div style="font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1;color:var(--text);margin-top:6px">${last?escapeHtml(_ofAgo(last.t)):'—'}</div><div style="font-size:9px;text-transform:uppercase;color:var(--text3);letter-spacing:.5px;margin-top:6px">Última</div></div>
+    <div class="ofd-stats">
+      <div class="ofd-stat"><div class="ofd-stat-v">${today}</div><div class="ofd-stat-l">Hoy</div></div>
+      <div class="ofd-stat"><div class="ofd-stat-v">${total}</div><div class="ofd-stat-l">Registradas</div></div>
+      <div class="ofd-stat"><div class="ofd-stat-v mono">${last?escapeHtml(_ofAgo(last.t)):'—'}</div><div class="ofd-stat-l">Última</div></div>
     </div>
-    ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:14px" onclick="ofAgentRun('${id}')">▶ Ejecutar este agente</button>`:''}
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px">Últimas ejecuciones</div>
+    ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:16px" onclick="ofAgentRun('${id}')">▶ Ejecutar este agente</button>`:''}
+    <div class="ofd-seclbl">Últimas ejecuciones</div>
     ${rowsHtml}`;
   const mo=document.getElementById('ofAgentModal'); if(mo) mo.style.display='flex';
 }
@@ -15449,9 +15477,11 @@ function _ofIsoStation(m,x,y){
     bubble=`<g transform="translate(0,-104)"><rect x="${-bw/2}" y="-13" width="${bw}" height="22" rx="9" fill="#ffffff" stroke="${col}" stroke-width="1.5"/><polygon points="-5,7 5,7 0,15" fill="#ffffff"/><line x1="-5" y1="7" x2="0" y2="15" stroke="${col}" stroke-width="1.5"/><line x1="5" y1="7" x2="0" y2="15" stroke="${col}" stroke-width="1.5"/><text x="0" y="2.5" text-anchor="middle" font-size="9" fill="#222831" font-family="DM Sans" font-weight="600">${t}</text></g>`;
   }
   const ring=cat?`<ellipse cx="0" cy="5" rx="19" ry="9.5" fill="none" stroke="${cat.color}" stroke-width="2.5" opacity="0.6"/>`:'';
+  const halo=working?`<ellipse cx="0" cy="-40" rx="27" ry="32" fill="${col}" opacity="0.3" filter="url(#ofHalo)"/>`:'';
   return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
     <title>${escapeHtml(m.label+' — '+m.lbl+(cat?' · '+cat.name:''))}</title>
     <ellipse cx="0" cy="5" rx="22" ry="10" fill="url(#ofShadow)"/>
+    ${halo}
     ${ring}
     <g class="of-iso-body">
       <rect x="-7.5" y="-11" width="6.5" height="12" rx="3" fill="${dark}"/>
@@ -15620,6 +15650,8 @@ function _ofRenderIso(ia,auto){
       <linearGradient id="ofWallL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef3f8"/><stop offset="1" stop-color="#d5dde6"/></linearGradient>
       <linearGradient id="ofWallR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e4ebf1"/><stop offset="1" stop-color="#c8d2dc"/></linearGradient>
       <linearGradient id="ofSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${skyT}"/><stop offset="1" stop-color="${skyB}"/></linearGradient>
+      <filter id="ofHalo" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7"/></filter>
+      <radialGradient id="ofVig" cx="50%" cy="42%" r="72%"><stop offset="58%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.42"/></radialGradient>
     </defs>
     ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}
     <g>${tiles}</g>
@@ -15629,6 +15661,7 @@ function _ofRenderIso(ia,auto){
     <g>${tags}</g>
     ${decor}
     ${ambient}
+    <rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="url(#ofVig)" pointer-events="none"/>
   </svg></div>`;
 }
 function _ofRenderFeed(runs){
