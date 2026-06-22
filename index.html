@@ -2892,9 +2892,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .of-worker.of-error::before{background:var(--danger);opacity:1;}
 .of-worker.of-off::before{background:var(--text3);opacity:.4;}
 .of-avatar{width:42px;height:42px;flex-shrink:0;border-radius:11px;background:radial-gradient(circle at 35% 28%,var(--border2),var(--surface3));border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);}
-.of-worker.of-work .of-avatar{border-color:rgba(0,212,170,0.45);box-shadow:0 0 14px rgba(0,212,170,0.18);}
-.of-worker.of-active .of-avatar{border-color:rgba(0,212,204,0.4);box-shadow:0 0 12px rgba(0,212,204,0.12);}
-.of-worker.of-error .of-avatar{border-color:rgba(255,68,68,0.45);box-shadow:0 0 12px rgba(255,68,68,0.14);}
+.of-worker.of-work .of-avatar{box-shadow:0 0 14px rgba(0,212,170,0.16);}
 .of-body{flex:1;min-width:0;}
 .of-name-row{display:flex;align-items:center;gap:7px;margin-bottom:2px;}
 .of-name{font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -2959,6 +2957,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   var(--surface);
   border:1px solid var(--border);border-radius:18px;padding:20px 18px 26px;}
 .of-floor-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin:0 0 12px 2px;}
+.of-floor-grouplabel{font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin:16px 0 9px 2px;display:flex;align-items:center;gap:7px;opacity:.95;}
+.of-floor-grouplabel i{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;}
 .of-desks{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:14px;}
 .of-desk{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px 12px;background:linear-gradient(160deg,var(--surface3),var(--surface2));border:1px solid var(--border);border-radius:14px;cursor:pointer;transition:transform .12s,border-color .15s,box-shadow .15s;text-align:center;}
 .of-desk:hover{transform:translateY(-3px);border-color:var(--border2);box-shadow:0 12px 24px -14px rgba(0,0,0,0.75);}
@@ -15399,8 +15399,11 @@ async function _renderOficina(){
 function _ofWorkerCard(m){
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
   const spark=m.spark?`<div class="of-spark-wrap" title="Ejecuciones últimos 7 días">${m.spark}</div>`:'';
-  return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(m.label)}">
-    <div class="of-avatar">${m.icon}</div>
+  const cat=m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'};
+  const ac=cat.color;
+  const avStyle=`background:radial-gradient(circle at 35% 28%,${ac}33,${ac}12);border-color:${ac}59;color:${ac}`;
+  return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
+    <div class="of-avatar" style="${avStyle}">${m.icon}</div>
     <div class="of-body">
       <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(_ofPretty(m.label))}</span></div>
       <div class="of-role">${escapeHtml(m.role)}</div>
@@ -15417,19 +15420,25 @@ function _ofRenderCards(ia,auto){
 }
 function _ofDesk(m){
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-  return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(m.label+' — '+m.lbl)}">
-    <div class="of-seat"><span class="of-seat-light"></span>${m.icon}</div>
-    <div class="of-desk-name">${escapeHtml(m.label)}</div>
+  const cat=m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'};
+  const ac=cat.color;
+  const em=m.clickIA?_ofAgentEmoji(m.label):((m.icon&&!m.icon.startsWith('<'))?m.icon:'⚙️');
+  const seatStyle=`background:radial-gradient(circle at 35% 28%,${ac}2e,${ac}10);border-color:${ac}55`;
+  return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label)+' · '+cat.name+' — '+m.lbl)}">
+    <div class="of-seat" style="${seatStyle}"><span class="of-seat-light"></span>${em}</div>
+    <div class="of-desk-name">${escapeHtml(_ofPretty(m.label))}</div>
     <div class="of-desk-state">${escapeHtml(m.lbl)}</div>
   </div>`;
 }
 function _ofRenderFloor(ia,auto){
   const f=document.getElementById('oficinaFloor'); if(!f) return;
+  const groups=_OF_CAT.map(c=>({c,items:ia.filter(m=>_ofCat(m).name===c.name)})).filter(g=>g.items.length);
+  const otros=ia.filter(m=>_ofCat(m).name==='Otros'); if(otros.length) groups.push({c:{name:'Otros',color:'#7a7a7a'},items:otros});
+  const sect=g=>`<div class="of-floor-grouplabel" style="color:${g.c.color}"><i style="background:${g.c.color}"></i>${g.c.name} · ${g.items.length}</div><div class="of-desks">${g.items.map(_ofDesk).join('')}</div>`;
   f.innerHTML=`<div class="of-floorroom">
     <div class="of-floor-label">🤖 Agentes IA</div>
-    <div class="of-desks">${ia.map(_ofDesk).join('')}</div>
-    <div class="of-floor-label" style="margin-top:18px">⚙️ Automatizaciones</div>
-    <div class="of-desks">${auto.map(_ofDesk).join('')}</div>
+    ${groups.map(sect).join('')}
+    ${auto.length?`<div class="of-floor-label" style="margin-top:20px">⚙️ Automatizaciones</div><div class="of-desks">${auto.map(_ofDesk).join('')}</div>`:''}
   </div>`;
 }
 
@@ -15449,9 +15458,19 @@ function _ofAgentEmoji(label){
   for(const [k,e] of _OF_EMOJI_BYLABEL){ if(s.includes(k)) return e; }
   return '🤖';
 }
-// Nombre de agente para MOSTRAR (cosmético): quita "_AGENT" y los guiones bajos.
-// Conserva acrónimos (CEO, QA). La etiqueta real (m.label) no cambia.
-function _ofPretty(label){ return String(label||'').replace(/_AGENT$/i,'').replace(/_/g,' ').trim()||String(label||''); }
+// Nombre de agente para MOSTRAR en español (solo visual; la etiqueta real no cambia).
+const _OF_NAME_ES={
+  'SALES_AGENT':'Ventas','QUOTE_AGENT':'Cotizador','PRODUCTION_AGENT':'Producción','QA_AGENT':'Calidad',
+  'FOLLOWUP_AGENT':'Seguimiento','CEO_AGENT':'CEO','LEAD_GEN_AGENT':'Prospección','ONBOARDING_AGENT':'Bienvenida',
+  'FINANCE_AGENT':'Finanzas','REPORTE_CLIENTE':'Reporte Cliente','CONTENT_AGENT':'Contenido','ADS_AGENT':'Publicidad',
+  'LINKEDIN_AGENT':'LinkedIn','SOCIAL_STRATEGIST':'Estratega Social','CAPTION_AGENT':'Copys','COMMUNITY_AGENT':'Community',
+  'SOCIAL_ADS_AGENT':'Ads Sociales','TREND_AGENT':'Tendencias','REPORT_SOCIAL_AGENT':'Reporte Social','NEWSLETTER_AGENT':'Newsletter',
+  'LEAD_AGENT':'Prospección'
+};
+function _ofPretty(label){
+  if(_OF_NAME_ES[label]) return _OF_NAME_ES[label];
+  return String(label||'').replace(/_AGENT$/i,'').replace(/_/g,' ').trim()||String(label||'');
+}
 function _ofIsoDesk(col,working){
   const dy=9, hw=23, hh=11, legH=14;
   const top=`${0},${dy-hh} ${hw},${dy} ${0},${dy+hh} ${-hw},${dy}`;
@@ -15470,9 +15489,9 @@ function _ofIsoDesk(col,working){
 // Categorías funcionales de los agentes IA (para agrupar dentro de la zona)
 const _OF_CAT=[
   {name:'Dirección', color:'#a78bfa', ids:['CEO']},
-  {name:'Comercial', color:'#00d4cc', ids:['SALES','QUOTE','FOLLOWUP','LEADGEN','ONBOARDING']},
+  {name:'Comercial', color:'#00d4cc', ids:['SALES','QUOTE','FOLLOWUP','LEADGEN','ONBOARDING','REPCLIENTE','REPORTE_CLIENTE']},
   {name:'Producción',color:'#ffaa00', ids:['PRODUCTION','QA','SUPPLIER']},
-  {name:'Marketing', color:'#ff6b35', ids:['ADS','COMMUNITY','NEWSLETTER','REPORT','SOCIAL']},
+  {name:'Marketing', color:'#ff6b35', ids:['ADS','COMMUNITY','NEWSLETTER','REPORT','SOCIAL','CONTENT','CAPTION','LINKEDIN','TREND']},
   {name:'Finanzas',  color:'#00d4aa', ids:['FINANCE']},
 ];
 function _ofCat(m){
