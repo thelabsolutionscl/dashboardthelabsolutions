@@ -15213,7 +15213,7 @@ function ofAgentDetail(id){
         </div>
       </div>`).join('')
     :'<div style="color:var(--text3);font-size:12px;padding:10px 2px">Sin ejecuciones registradas todavía.</div>';
-  document.getElementById('ofAgentTitle').textContent=(m.icon?m.icon+' ':'')+_ofPretty(m.label);
+  document.getElementById('ofAgentTitle').textContent=_ofAgentEmoji(m.label)+' '+_ofPretty(m.label);
   document.getElementById('ofAgentBody').innerHTML=`
     <div class="ofd-head">
       <div class="ofd-ava">${m.icon||'🤖'}</div>
@@ -15578,8 +15578,8 @@ function _ofRenderIso(ia,auto){
   const aisle=auto.length?1:0;
   const autoStart=iaRows+aisle;
   const rows=autoStart+Math.ceil(auto.length/cols);
-  // Baldosas grandes y proporcionadas (ratio ~1.7); th alto separa bien las filas
-  const tw=168, th=98, wallH=92;
+  // Baldosas anchas: ensanchan el diamante para que llene el área panorámica
+  const tw=212, th=96, wallH=86;
   const originX=(rows-1)*tw/2 + 56;
   const iso=(c,r)=>[ (c-r)*tw/2 + originX, (c+r)*th/2 ];
 
@@ -15668,13 +15668,10 @@ function _ofRenderIso(ia,auto){
     `<line x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+10*Math.cos(ma)).toFixed(1)}" y2="${(clk[1]+10*Math.sin(ma)).toFixed(1)}" stroke="#9a9a9a" stroke-width="1.4"/>`+
     `<circle cx="${clk[0].toFixed(1)}" cy="${clk[1].toFixed(1)}" r="1.6" fill="#dadada"/></g>`;
 
-  // Límites del viewBox
+  // Límites del viewBox — ajuste ceñido al contenido (sin relleno artificial)
   const right=originX+(cols-1)*tw/2+tw/2, left=originX-(rows-1)*tw/2-tw/2;
-  const bottomY=(cols-1+rows-1)*th/2+th/2+44, topY=-(wallH+th/2+26);
-  let vbX=left-18, vbW=(right-left)+36; const vbH=(bottomY-topY)+14;
-  // Encuadre panorámico: rellena horizontalmente hasta ~16:9 para que la escena se vea widescreen en TV
-  const _targetAR=16/9;
-  if(vbW/vbH<_targetAR){ const needW=vbH*_targetAR; vbX-=(needW-vbW)/2; vbW=needW; }
+  const bottomY=(cols-1+rows-1)*th/2+th/2+44, topY=-(wallH+th/2+30);
+  const vbX=left-52, vbW=(right-left)+104, vbH=(bottomY-topY)+12;
 
   // Ambiente día/noche según la hora local
   const hh=now.getHours(); let ambC='', ambO=0;
@@ -15693,7 +15690,7 @@ function _ofRenderIso(ia,auto){
   const presentCats=_OF_CAT.filter(c=>iaSorted.some(m=>_ofCat(m).name===c.name));
   if(iaSorted.some(m=>_ofCat(m).name==='Otros')) presentCats.push({name:'Otros',color:'#7a7a7a'});
   const catLegend=presentCats.length?`<div class="of-iso-legend of-iso-cats"><span style="color:var(--text3)">Áreas:</span>${presentCats.map(c=>`<span><i style="background:${c.color}"></i>${c.name}</span>`).join('')}</div>`:'';
-  host.innerHTML=`${legend}${catLegend}<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="${vbX} ${topY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMin meet">
+  host.innerHTML=`${legend}${catLegend}<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="${vbX} ${topY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet">
     <defs>
       <linearGradient id="ofShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.3"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
       <radialGradient id="ofShadow"><stop offset="0" stop-color="#000" stop-opacity="0.38"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
