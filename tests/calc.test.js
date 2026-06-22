@@ -174,6 +174,61 @@ function near(name, got, want, eps) { assert(name, approx(got, want, eps), 'got 
   eq('IVA: neto desde bruto', Math.round(21480 / 1.19), neto);
 })();
 
+// ════════════════════════════════════════════════════════════════════
+// 5) URGENCIA +25% — aplicaUrgencia (regresión: antes nunca se cobraba)
+// ════════════════════════════════════════════════════════════════════
+(function testUrgencia() {
+  const ctx = { Math, globalThis: {} };
+  ctx.globalThis = ctx; vm.createContext(ctx);
+  vm.runInContext(extractFn('aplicaUrgencia') + '\n; globalThis.__on = aplicaUrgencia(100000,true); globalThis.__off = aplicaUrgencia(100000,false);', ctx);
+  eq('urgencia ON aplica +25% al neto', ctx.__on, 125000);
+  eq('urgencia OFF no cambia el neto', ctx.__off, 100000);
+  // El total con IVA de una cotización urgente debe incluir el recargo
+  eq('total urgente con IVA', Math.round(ctx.__on * 1.19), 148750);
+})();
+
+// ════════════════════════════════════════════════════════════════════
+// 6) NUMERACIÓN COTIZACIÓN — soporta ≥100/mes sin duplicar (regresión)
+// ════════════════════════════════════════════════════════════════════
+(function testNumeracionCot() {
+  const now = new Date();
+  const prefix = String(now.getFullYear()).slice(2) + String(now.getMonth() + 1).padStart(2, '0');
+  const state = { cotizaciones: [
+    { fields: { 'N° Cotización': prefix + '99' } },
+    { fields: { 'N° Cotización': prefix + '100' } }, // 7 chars: el bug viejo (length===6) lo ignoraba
+  ] };
+  const ctx = { Math, String, Number, parseInt, isNaN, Date, state, globalThis: {} };
+  ctx.globalThis = ctx; vm.createContext(ctx);
+  vm.runInContext(extractFn('generarNumeroCotizacion') + '\n; globalThis.__n = generarNumeroCotizacion();', ctx);
+  eq('numeración cotización tras 100 → 101 (no duplica)', ctx.__n, prefix + '101');
+})();
+
+// ════════════════════════════════════════════════════════════════════
+// 7) BLOQUEO DE DESPACHO — _bloqueoDespacho (saldo + QA)
+// ════════════════════════════════════════════════════════════════════
+(function testBloqueoDespacho() {
+  const ctx = { globalThis: {} };
+  ctx.globalThis = ctx; vm.createContext(ctx);
+  vm.runInContext(extractFn('_bloqueoDespacho') +
+    '\n; globalThis.__r = {' +
+    ' sinSaldo: _bloqueoDespacho({"Saldo pagado (50%)":false}),' +
+    ' rechazado: _bloqueoDespacho({"Saldo pagado (50%)":true,"Resultado QA":"Rechazado"}),' +
+    ' ok: _bloqueoDespacho({"Saldo pagado (50%)":true,"Resultado QA":"QA aprobado"}) };', ctx);
+  assert('despacho bloqueado sin saldo', !!ctx.__r.sinSaldo, 'got ' + JSON.stringify(ctx.__r.sinSaldo));
+  assert('despacho bloqueado con QA rechazado', !!ctx.__r.rechazado, 'got ' + JSON.stringify(ctx.__r.rechazado));
+  eq('despacho permitido con saldo + QA aprobado', ctx.__r.ok, null);
+})();
+
+// ════════════════════════════════════════════════════════════════════
+// 8) FECHA CHILE — fechaHoyCL produce YYYY-MM-DD (regresión off-by-one UTC)
+// ════════════════════════════════════════════════════════════════════
+(function testFechaCL() {
+  const ctx = { Date, globalThis: {} };
+  ctx.globalThis = ctx; vm.createContext(ctx);
+  vm.runInContext(extractFn('fechaHoyCL') + '\n; globalThis.__f = fechaHoyCL();', ctx);
+  assert('fechaHoyCL formato YYYY-MM-DD', /^\d{4}-\d{2}-\d{2}$/.test(ctx.__f), 'got ' + ctx.__f);
+})();
+
 // ── Reporte ──
 console.log('\n  Pruebas de cálculo — The Lab Solutions\n');
 if (fails.length) fails.forEach(f => console.log('  \x1b[31m✗\x1b[0m ' + f));
