@@ -15679,6 +15679,43 @@ function _ofCommWalker(m,p1,p2,dur,delay){
     <g transform="translate(0,-56)"><rect x="-11" y="-9" width="22" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-width="1.3"/><polygon points="-4,6 4,6 0,12" fill="#fff"/><text x="0" y="3" text-anchor="middle" font-size="10">💬</text></g>
   </g>`;
 }
+// Mesa de reunión central (mesón) — elipse isométrica elevada con el color del depto
+function _ofMeetingTable(cx,cy,rx,ry,color,h){
+  h=h||16; const f=n=>n.toFixed(1);
+  const sh=`<ellipse cx="${f(cx)}" cy="${f(cy+4)}" rx="${f(rx*1.04)}" ry="${f(ry)}" fill="url(#ofShadow)" opacity="0.55"/>`;
+  const band=`<path d="M${f(cx-rx)},${f(cy-h)} A${f(rx)},${f(ry)} 0 0 0 ${f(cx+rx)},${f(cy-h)} L${f(cx+rx)},${f(cy)} A${f(rx)},${f(ry)} 0 0 1 ${f(cx-rx)},${f(cy)} Z" fill="#aab4c0"/>`;
+  const top=`<ellipse cx="${f(cx)}" cy="${f(cy-h)}" rx="${f(rx)}" ry="${f(ry)}" fill="#e8edf2"/>`;
+  const tint=`<ellipse cx="${f(cx)}" cy="${f(cy-h)}" rx="${f(rx)}" ry="${f(ry)}" fill="${color}" opacity="0.16" stroke="${color}" stroke-opacity="0.35" stroke-width="1.5"/>`;
+  return sh+band+top+tint;
+}
+// Laptop sobre la mesa (se dibuja después de la mesa, por profundidad)
+function _ofDeskLaptop(x,y,working,col){
+  const f=n=>n.toFixed(1), scr=working?col:'#5b7184';
+  const glow=working?`<rect x="-7.2" y="-13" width="14.4" height="9" rx="2" fill="${col}" opacity="0.5" filter="url(#ofHalo)"/>`:'';
+  return `<g transform="translate(${f(x)},${f(y)})">${glow}<polygon points="-11,0 0,5 11,0 0,-5" fill="#cfd6de"/><polygon points="-11,0 0,5 0,-5" fill="#bcc5cf"/><rect x="-9" y="-13.5" width="18" height="12" rx="1.6" fill="#15171a"/><rect x="-7.4" y="-11.9" width="14.8" height="8.8" rx="1" fill="${scr}" opacity="${working?'0.97':'0.5'}"/><rect x="-7.4" y="-11.9" width="14.8" height="3.4" rx="1" fill="#ffffff" opacity="0.18"/></g>`;
+}
+// Agente SENTADO alrededor de la mesa (mira a cámara)
+function _ofRingAgent(m,x,y){
+  const col=_OF_STATUS[m.cls]||'#7c8590', dark=_ofShade(col,0.72), working=m.cls==='of-work', em=_ofEmoji(m);
+  const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
+  const f=n=>n.toFixed(1), bob=working?' of-iso-bob':'';
+  const halo=working?`<ellipse cx="0" cy="-28" rx="22" ry="25" fill="${col}" opacity="0.28" filter="url(#ofHalo)"/>`:'';
+  return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${f(x)},${f(y)})">
+    <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
+    <ellipse cx="0" cy="3" rx="13" ry="5.5" fill="url(#ofShadow)"/>
+    ${halo}
+    <g class="of-iso-body">
+      <rect ${working?'class="of-type-l"':''} x="-14" y="-13" width="6" height="15" rx="3" fill="${dark}"/>
+      <rect ${working?'class="of-type-r"':''} x="8" y="-13" width="6" height="15" rx="3" fill="${dark}"/>
+      <rect x="-12" y="-22" width="24" height="25" rx="11" fill="${col}"/>
+      <rect x="-12" y="-22" width="24" height="25" rx="11" fill="url(#ofShine)"/>
+      <circle cx="0" cy="-34" r="14" fill="#fff7ec" stroke="${col}" stroke-width="3"/>
+      <ellipse cx="-5" cy="-39" rx="4" ry="2.6" fill="#fff" opacity="0.6"/>
+      ${m.img?`<image href="${m.img}" x="-12" y="-46" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-29" text-anchor="middle" font-size="16">${em}</text>`}
+      <circle cx="11" cy="-45" r="3.6" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
+    </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+`
+  </g>`;
+}
 // Posiciones exactas de las impresoras dentro de su sala (calca los planos del taller)
 // Grilla local 7×4 (fila 0 = fondo, fila 3 = frente).
 //   Bloque Ender/K2Plus 2×3 (cols 3-4):  col3 = Ender/K2Plus/Ender · col4 = Ender×3
@@ -15718,7 +15755,7 @@ function _ofRenderIso(ia,auto,extras){
   extras.forEach(d=>{ if(d.members&&d.members.length) _depts.push({name:d.name,color:d.color,members:d.members}); });
   _depts.forEach(d=>{ const n=d.members.length;
     if(/impresora/i.test(d.name)){ d.dc=7; d.dr=4; }
-    else { d.dc=Math.max(2,Math.ceil(Math.sqrt(n*1.5))); d.dr=Math.max(1,Math.ceil(n/d.dc)); } });
+    else { const s=Math.max(2,Math.ceil(Math.sqrt(n))+1); d.dc=s; d.dr=s; } });   // sala cuadrada → mesa al centro y agentes alrededor
   const gap=1;
   const perShelf=Math.max(1,Math.min(3,Math.ceil(Math.sqrt(_depts.length))));
   const _rooms=[]; let _rt=0, _maxc=0, _corrR=0;
@@ -15787,10 +15824,10 @@ function _ofRenderIso(ia,auto,extras){
     dividers+=`<line x1="${k.L[0].toFixed(1)}" y1="${(k.L[1]-dw).toFixed(1)}" x2="${k.T[0].toFixed(1)}" y2="${(k.T[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
   });
 
-  // MESÓN COMÚN: un único tablero elevado por departamento (los agentes se sientan en él)
+  // Plataforma sólo para la sala de impresoras (las máquinas van encima)
   const _ch=24;
   let counters='';
-  _rooms.forEach(R=>{ const k=_rC(R);
+  _rooms.forEach(R=>{ if(!/impresora/i.test(R.name)) return; const k=_rC(R);
     const U=p=>`${p[0].toFixed(1)},${(p[1]-_ch).toFixed(1)}`, P=p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`;
     counters+=`<polygon points="${U(k.L)} ${P(k.L)} ${P(k.F)} ${U(k.F)}" fill="#9aa6b3"/>`
             +`<polygon points="${U(k.F)} ${P(k.F)} ${P(k.R)} ${U(k.R)}" fill="#b1bcc8"/>`
@@ -15804,15 +15841,41 @@ function _ofRenderIso(ia,auto,extras){
   const _transit={};   // label → {m, from:[x,y], to:[x,y]}
   _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm) _transit[c.from]={m:fm, from:_roomAnchor(fr), to:_roomAnchor(to)}; } });
 
-  // Estaciones por sala (de atrás hacia adelante para el solapamiento correcto)
+  // Estaciones por sala: el MESÓN va al MEDIO del depto y los agentes trabajan ALREDEDOR
   let chars='', tags='';
-  const _placed=[];
-  _rooms.forEach(R=>{
-    if(/impresora/i.test(R.name)){ const slots=_ofPrinterSlots(R.members); R.members.forEach(m=>{ const pos=slots.get(m)||[0,0]; _placed.push({m,c:R.c0+pos[0],r:R.r0+pos[1]}); }); }
-    else R.members.forEach((m,i)=>{ const c=R.c0+(i%R.dc), r=R.r0+Math.floor(i/R.dc); _placed.push({m,c,r}); });
+  const _rtag=(m,x,y)=>{ const f=n=>n.toFixed(1), pretty=_ofPretty(m.label); const raw=pretty.length>14?pretty.slice(0,13)+'…':pretty; const nm=escapeHtml(raw), w=Math.max(34,raw.length*5.2+10);
+    return `<g transform="translate(${f(x)},${f(y)})" pointer-events="none"><rect x="${f(-w/2)}" y="6" width="${f(w)}" height="13" rx="6.5" fill="#0e1116" opacity="0.85"/><text x="0" y="15.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="600">${nm}</text></g>`; };
+  // Salas de atrás hacia adelante (orden de pintor entre salas)
+  const _sorted=[..._rooms].sort((a,b)=>(a.r0-b.r0)||(a.c0-b.c0));
+  _sorted.forEach(R=>{
+    if(/impresora/i.test(R.name)){
+      // Impresoras: grilla del taller sobre la plataforma
+      const slots=_ofPrinterSlots(R.members);
+      const ps=R.members.map(m=>{ const pos=slots.get(m)||[0,0]; const [x,y]=iso(R.c0+pos[0],R.r0+pos[1]); return {m,x,y}; });
+      ps.sort((a,b)=>a.y-b.y);
+      ps.forEach(({m,x,y})=>{ chars+=_ofIsoStation(m,x,y-_ch); tags+=_ofIsoTag(m,x,y); });
+      return;
+    }
+    // Agentes: mesón central + anillo de agentes alrededor (trabajando)
+    const ctr=iso(R.cc,R.rc);
+    const seats=R.members.filter(m=>!_transit[m.label]);
+    const N=seats.length;
+    const span=((R.dc-1)+(R.dr-1))/2;                 // semidiámetro de la sala (en tiles)
+    const Wx=span*tw/2, Hy=span*th/2;                 // semiejes de la sala en pantalla
+    const need=N>=2? 42/(2*Math.sin(Math.PI/N)) : 0;  // radio mínimo para que no se solapen
+    const ringRx=Math.min(Wx*0.7, Math.max(need, Wx*0.45, tw*0.5));
+    const ringRy=Math.min(Hy*0.7, ringRx*(th/tw));
+    const tableH=16, tRx=Math.max(tw*0.38, ringRx*0.66), tRy=Math.max(th*0.38, ringRy*0.66);
+    const ang=i=>-Math.PI/2 + 2*Math.PI*(i+0.5)/Math.max(N,1);
+    const pos=seats.map((m,i)=>{ const a=ang(i); return {m,a,sx:ctr[0]+ringRx*Math.cos(a),sy:ctr[1]+ringRy*Math.sin(a)}; });
+    const back=pos.filter(p=>p.sy<ctr[1]).sort((a,b)=>a.sy-b.sy);
+    const front=pos.filter(p=>p.sy>=ctr[1]).sort((a,b)=>a.sy-b.sy);
+    // 1) agentes del fondo · 2) mesón al centro · 3) laptops sobre el mesón · 4) agentes del frente
+    back.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy); tags+=_rtag(p.m,p.sx,p.sy); });
+    chars+=_ofMeetingTable(ctr[0],ctr[1],tRx,tRy,R.color,tableH);
+    pos.forEach(p=>{ const lx=ctr[0]+tRx*0.74*Math.cos(p.a), ly=(ctr[1]-tableH)+tRy*0.74*Math.sin(p.a); chars+=_ofDeskLaptop(lx,ly,p.m.cls==='of-work',_OF_STATUS[p.m.cls]||'#7c8590'); });
+    front.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy); tags+=_rtag(p.m,p.sx,p.sy); });
   });
-  _placed.sort((a,b)=>(a.r-b.r)||(a.c-b.c));
-  _placed.forEach(({m,c,r})=>{ if(_transit[m.label]) return; const [x,y]=iso(c,r); chars+=_ofIsoStation(m,x,y-_ch); tags+=_ofIsoTag(m,x,y); });
   // Agentes que se comunican: caminan de su departamento al de destino (y vuelven)
   Object.values(_transit).forEach((tr,i)=>{ chars+=_ofCommWalker(tr.m, tr.from, tr.to, 4.6, i*0.4); });
   // Mensajeros ambientales: cruzan de un departamento a otro por el pasillo (movimiento continuo)
