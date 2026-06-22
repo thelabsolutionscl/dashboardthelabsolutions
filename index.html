@@ -2974,7 +2974,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .of-desk.of-error .of-desk-state{color:var(--danger);}
 /* Vista isométrica 3D (estilo Habbo) */
 #tab-oficina .of-iso-scene{overflow-x:auto;border:1px solid var(--border);border-radius:18px;background:radial-gradient(ellipse at 50% -8%,#1d222a,#0b0c0f 72%);padding:16px 10px;box-shadow:inset 0 0 70px -12px rgba(0,0,0,0.75),inset 0 1px 0 rgba(255,255,255,0.05);}
-.of-iso-svg{display:block;width:100%;min-width:540px;height:auto;max-height:72vh;}
+.of-iso-svg{display:block;width:100%;min-width:560px;height:auto;max-height:78vh;}
 .of-iso-char{cursor:pointer;}
 .of-iso-char:focus{outline:none;}
 .of-iso-char:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:6px;}
@@ -15525,12 +15525,14 @@ function _ofRenderIso(ia,auto){
   const sig=_ofView+'|'+[...ia,...auto].map(m=>m.id+m.cls+(m.task||'').slice(0,18)).join(';');
   if(host.dataset.sig===sig && host.querySelector('svg')) return;
   host.dataset.sig=sig;
-  const cols=Math.max(4,Math.min(6,Math.ceil(Math.sqrt(total))));
+  // Más columnas → distribución más ancha (widescreen) y agentes menos apretados
+  const cols=Math.max(5,Math.min(8,Math.ceil(Math.sqrt(total*1.7))));
   const iaRows=Math.ceil(ia.length/cols);
   const aisle=auto.length?1:0;
   const autoStart=iaRows+aisle;
   const rows=autoStart+Math.ceil(auto.length/cols);
-  const tw=82, th=41, wallH=84;
+  // Baldosas más grandes y más planas → más aire entre estaciones y encuadre panorámico
+  const tw=128, th=52, wallH=74;
   const originX=(rows-1)*tw/2 + 56;
   const iso=(c,r)=>[ (c-r)*tw/2 + originX, (c+r)*th/2 ];
 
@@ -15623,8 +15625,11 @@ function _ofRenderIso(ia,auto){
 
   // Límites del viewBox
   const right=originX+(cols-1)*tw/2+tw/2, left=originX-(rows-1)*tw/2-tw/2;
-  const bottomY=(cols-1+rows-1)*th/2+th/2+50, topY=-(wallH+th/2+30);
-  const vbX=left-18, vbW=(right-left)+36, vbH=(bottomY-topY)+14;
+  const bottomY=(cols-1+rows-1)*th/2+th/2+44, topY=-(wallH+th/2+26);
+  let vbX=left-18, vbW=(right-left)+36; const vbH=(bottomY-topY)+14;
+  // Encuadre panorámico: rellena horizontalmente hasta ~16:9 para que la escena se vea widescreen en TV
+  const _targetAR=16/9;
+  if(vbW/vbH<_targetAR){ const needW=vbH*_targetAR; vbX-=(needW-vbW)/2; vbW=needW; }
 
   // Ambiente día/noche según la hora local
   const hh=now.getHours(); let ambC='', ambO=0;
