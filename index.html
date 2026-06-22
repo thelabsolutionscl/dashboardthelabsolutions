@@ -15717,22 +15717,31 @@ function _ofRingAgent(m,x,y){
     </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+`
   </g>`;
 }
-// Puerta del departamento (en el vértice frontal de la sala): por aquí salen los agentes
-// que se comunican con otros departamentos. El marco lleva el color del depto.
-function _ofDoor(cx,cy,color){
+// Puerta del departamento: va sobre el MURO frontal-derecho (borde R→F), en su plano
+// isométrico (paralela al muro) y abierta hacia el pasillo. Por aquí salen los agentes
+// que se comunican con otra área. Marco y muretes laterales en el color del depto.
+// g = geometría del muro {P,Q,C,ux,uy,nx,ny,mx,my,len} calculada en _ofRenderIso.
+function _ofDoor(g,color){
   const f=n=>n.toFixed(1), tw=_ofTileW||160;
-  const hw=Math.max(11,tw*0.085), H=46, jt=Math.max(4,tw*0.032);
+  const hw=Math.min(g.len*0.28, tw*0.3), H=44, jt=Math.max(4,tw*0.028), hs=32, sc='#e3e9ef';
   const dk=_ofShade(color,0.72);
+  const mx=g.mx,my=g.my,ux=g.ux,uy=g.uy,nx=g.nx,ny=g.ny;
+  const bl=[mx-ux*hw,my-uy*hw], br=[mx+ux*hw,my+uy*hw];
+  const tl=[bl[0],bl[1]-H], tr=[br[0],br[1]-H];
+  const obl=[bl[0]-ux*jt,bl[1]-uy*jt], obr=[br[0]+ux*jt,br[1]+uy*jt];
+  const otl=[obl[0],obl[1]-H-jt], otr=[obr[0],obr[1]-H-jt];
+  const d=hw*0.9, fb=[br[0]+nx*d,br[1]+ny*d], ft=[fb[0],fb[1]-H];
+  const PT=a=>a.map(p=>f(p[0])+','+f(p[1])).join(' ');
+  const seg=(A,B)=>`<polygon points="${PT([A,B,[B[0],B[1]-hs],[A[0],A[1]-hs]])}" fill="${sc}"/><line x1="${f(A[0])}" y1="${f(A[1]-hs)}" x2="${f(B[0])}" y2="${f(B[1]-hs)}" stroke="${color}" stroke-width="2.2" opacity="0.85"/>`;
   let s='';
-  s+=`<ellipse cx="${f(cx)}" cy="${f(cy+4)}" rx="${f(hw+jt+7)}" ry="6.5" fill="url(#ofShadow)" opacity="0.5"/>`;
-  s+=`<rect x="${f(cx-hw)}" y="${f(cy-H)}" width="${f(hw*2)}" height="${f(H)}" rx="1.5" fill="#1c2128"/>`;
-  s+=`<rect x="${f(cx-hw+1.5)}" y="${f(cy-H*0.5)}" width="${f(hw*2-3)}" height="${f(H*0.5)}" fill="#ffd9a0" opacity="0.10"/>`;
-  s+=`<polygon points="${f(cx-hw)},${f(cy)} ${f(cx-hw+hw*0.8)},${f(cy-2.5)} ${f(cx-hw+hw*0.8)},${f(cy-H+2.5)} ${f(cx-hw)},${f(cy-H)}" fill="${dk}"/>`;
-  s+=`<circle cx="${f(cx-hw+hw*0.8-2.5)}" cy="${f(cy-H*0.52)}" r="1.5" fill="#ffd96b"/>`;
-  s+=`<rect x="${f(cx-hw-jt)}" y="${f(cy-H-jt)}" width="${f(jt)}" height="${f(H+jt)}" rx="1" fill="${color}"/>`;
-  s+=`<rect x="${f(cx+hw)}" y="${f(cy-H-jt)}" width="${f(jt)}" height="${f(H+jt)}" rx="1" fill="${color}"/>`;
-  s+=`<rect x="${f(cx-hw-jt)}" y="${f(cy-H-jt)}" width="${f(hw*2+jt*2)}" height="${f(jt)}" rx="1.5" fill="${color}"/>`;
-  s+=`<rect x="${f(cx-hw-jt)}" y="${f(cy-H-jt)}" width="${f(hw*2+jt*2)}" height="2" fill="#ffffff" opacity="0.25"/>`;
+  s+=`<ellipse cx="${f(mx)}" cy="${f(my+3)}" rx="${f(hw+jt+8)}" ry="6.5" fill="url(#ofShadow)" opacity="0.45"/>`;
+  s+=seg(g.P,obl)+seg(obr,g.Q);                                          // murete a cada lado de la puerta
+  s+=`<polygon points="${PT([obl,obr,otr,otl])}" fill="${color}"/>`;     // marco (jambas + dintel)
+  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="#1c2128"/>`;          // vano oscuro
+  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="#ffd9a0" opacity="0.08"/>`;
+  s+=`<polygon points="${PT([br,fb,ft,tr])}" fill="${dk}" stroke="${color}" stroke-width="1"/>`;   // hoja abierta hacia el pasillo
+  s+=`<circle cx="${f(fb[0])}" cy="${f((fb[1]+ft[1])/2)}" r="1.6" fill="#ffd96b"/>`;                // manilla
+  s+=`<line x1="${f(otl[0])}" y1="${f(otl[1])}" x2="${f(otr[0])}" y2="${f(otr[1])}" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>`;
   return s;
 }
 // Posiciones exactas de las impresoras dentro de su sala (calca los planos del taller)
@@ -15844,10 +15853,15 @@ function _ofRenderIso(ia,auto,extras){
     dividers+=`<line x1="${k.L[0].toFixed(1)}" y1="${(k.L[1]-dw).toFixed(1)}" x2="${k.T[0].toFixed(1)}" y2="${(k.T[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
   });
 
-  // Puerta de cada departamento, en su vértice frontal (por donde salen los agentes)
-  const _roomDoorPt=R=>{ const F=_rC(R).F; return [F[0], F[1]]; };
+  // Puerta de cada departamento sobre el muro frontal-derecho (borde R→F), mirando al pasillo
+  const _doorGeo=R=>{ const k=_rC(R), C=iso(R.cc,R.rc), P=k.R, Q=k.F;
+    const ex=Q[0]-P[0], ey=Q[1]-P[1], len=Math.hypot(ex,ey)||1, ux=ex/len, uy=ey/len;
+    const mx=P[0]+ux*len*0.52, my=P[1]+uy*len*0.52;
+    let nx=-uy, ny=ux; if((mx+nx-C[0])**2+(my+ny-C[1])**2 < (mx-C[0])**2+(my-C[1])**2){ nx=-nx; ny=-ny; }
+    return {P,Q,C,ux,uy,nx,ny,mx,my,len}; };
+  const _roomDoorPt=R=>{ const g=_doorGeo(R); return [g.mx+g.nx*16, g.my+g.ny*16]; };
   let doors='';
-  _rooms.forEach(R=>{ const d=_roomDoorPt(R); doors+=_ofDoor(d[0],d[1],R.color); });
+  _rooms.forEach(R=>{ doors+=_ofDoor(_doorGeo(R), R.color); });
 
   // Plataforma sólo para la sala de impresoras (las máquinas van encima)
   const _ch=24;
