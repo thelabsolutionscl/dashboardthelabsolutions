@@ -26501,7 +26501,22 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return[E,cX,cY];
   }
-  function _printLines(gc,lines,z,ox,oy,cX,cY,E,lh,extW,feed,p,retractThresh){
+  // Ordena segmentos por vecino más cercano (greedy) → minimiza viajes. Crucial para
+  // el soporte: muchas islas dispersas impresas en orden de generación = spaghetti de viajes.
+  function _orderLines(lines,sx,sy){
+    if(!lines||lines.length<3||lines.length>4000)return lines; // tope: evita O(n²) en capas enormes
+    const used=new Array(lines.length).fill(false),out=[];let px=sx,py=sy;
+    for(let k=0;k<lines.length;k++){
+      let bi=-1,bd=Infinity,flip=false;
+      for(let i=0;i<lines.length;i++){if(used[i])continue;const a=lines[i][0],b=lines[i][1];
+        const da=(a[0]-px)*(a[0]-px)+(a[1]-py)*(a[1]-py),db=(b[0]-px)*(b[0]-px)+(b[1]-py)*(b[1]-py);
+        if(da<bd){bd=da;bi=i;flip=false;}if(db<bd){bd=db;bi=i;flip=true;}}
+      used[bi]=true;const s=flip?[lines[bi][1],lines[bi][0]]:lines[bi];out.push(s);px=s[1][0];py=s[1][1];
+    }
+    return out;
+  }
+  function _printLines(gc,lines,z,ox,oy,cX,cY,E,lh,extW,feed,p,retractThresh,optimize){
+    if(optimize)lines=_orderLines(lines,cX-ox,cY-oy); // reordena para minimizar viajes (soporte)
     const rt=Math.max(retractThresh||extW*3,(p.retractMinTravel||0)); // combing + viaje mínimo: menos retracciones
     for(const[p1,p2]of lines){
       const sx=p1[0]+ox,sy=p1[1]+oy,ex=p2[0]+ox,ey=p2[1]+oy;
@@ -26794,11 +26809,11 @@ self.onmessage=function(ev){
       // Soporte (antes del modelo de esta capa)
       if(supCols){
         const sl=_supportLinesAtLayer(supCols,li,SUP_GS,p);
-        if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p);}
+        if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p,undefined,true);}
       }
       if(supTrees){
         const sl=_treeSupportAtLayer(supTrees,li,extW,p);
-        if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p);}
+        if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p,undefined,true);}
       }
       // Interfaz de soporte: relleno denso en las capas justo bajo la pieza (facilita el desprendimiento)
       if(supCols){
@@ -26813,7 +26828,7 @@ self.onmessage=function(ev){
             const x0=arr[0].x-IGS/2,x1=arr[arr.length-1].x+IGS/2,cy=arr[0].y;
             for(let x=x0+extW/2;x<x1;x+=extW*1.05)ifcLines.push([[x,cy-IGS/2],[x,cy+IGS/2]]);
           }
-          if(ifcLines.length){gc.push('; interfaz soporte (densa)');[E,cX,cY]=_printLines(gc,ifcLines,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.75)*60,p);}
+          if(ifcLines.length){gc.push('; interfaz soporte (densa)');[E,cX,cY]=_printLines(gc,ifcLines,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.75)*60,p,undefined,true);}
         }
       }
       const contours=layerPolys[li];
