@@ -26895,7 +26895,7 @@ self.onmessage=function(ev){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
           if(peo.infillPct>0){
             const sp=_infillMulti(infLoops,extW/(peo.infillPct/100),peo.infillType==='adaptive'?'cubic':peo.infillType,li,curZ);
-            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
           }
         }else{
           const above=layerPolys[li+peo.topLayers]||[],below=layerPolys[li-peo.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
@@ -26905,7 +26905,7 @@ self.onmessage=function(ev){
           const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolidBB(x,y,below1,below1BB);
           // 1) Superficies sólidas (top/bottom) que no son puente
           const surf=_clipLines(_scanfillAll(infLoops,extW*1.02,solidAngle,p.monotonic),(x,y)=>isSurf(x,y)&&!isBridge(x,y),extW);
-          if(surf.length){gc.push('; superficie');[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+          if(surf.length){gc.push('; superficie');[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
           // 2) Puentes (cara inferior sobre aire) — sólido, lento, ventilador máximo, orientado al vano
           if(p.bridgeDetect){
             const bAng=_bridgeInfoMulti(fillLoops,below1).angle;
@@ -26930,25 +26930,25 @@ self.onmessage=function(ev){
             };
             const lspac=Math.max(extW*2,extW/Math.max(0.05,peo.infillPct/100)*1.4);
             const sp=_clipLines(_scanfillAll(infLoops,lspac,li%2?135:45),needsLight,extW);
-            if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);}
+            if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB,true);}
           }else if(peo.infillType==='adaptive'&&peo.infillPct>0){
             // Relleno adaptativo: base disperso cúbico en todo el interior + pasada extra densa cerca de los techos
             const baseSp=_clipLines(_infillMulti(infLoops,extW/(peo.infillPct/100),'cubic',li,curZ),(x,y)=>!isSurf(x,y),extW);
-            if(baseSp.length){gc.push('; relleno adaptativo (base)');[E,cX,cY]=_printLines(gc,baseSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            if(baseSp.length){gc.push('; relleno adaptativo (base)');[E,cX,cY]=_printLines(gc,baseSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
             const reach=Math.max(4,peo.topLayers+4);
             const isAirAt=(x,y,L)=>{const pp=layerPolys[L];if(!pp||!pp.length)return true;return !_inSolidBB(x,y,pp,layerBB[L]);};
             const nearCeil=(x,y)=>{if(isSurf(x,y))return false;for(let d=1;d<=reach;d++){const L=li+d;if(L>=totalL)return false;if(isAirAt(x,y,L))return true;}return false;};
             const densSp=_clipLines(_scanfillAll(infLoops,extW/Math.max(0.05,peo.infillPct/100)*0.7,li%2?45:135),nearCeil,extW);
-            if(densSp.length){gc.push('; relleno adaptativo (densificado bajo techos)');[E,cX,cY]=_printLines(gc,densSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            if(densSp.length){gc.push('; relleno adaptativo (densificado bajo techos)');[E,cX,cY]=_printLines(gc,densSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
           }else if(peo.infillPct>0){
             const sp=_clipLines(_infillMulti(infLoops,extW/(peo.infillPct/100),peo.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
-            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
           }
         }
         // Gap fill: cordón central en paredes finas (un sólo paso de scanline ≈ línea central)
         if(gapLoops.length){
           const gl=_scanfillAll(gapLoops,extW,solidAngle);
-          if(gl.length){gc.push('; gap-fill');[E,cX,cY]=_printLines(gc,gl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.8)*60,p,COMB);}
+          if(gl.length){gc.push('; gap-fill');[E,cX,cY]=_printLines(gc,gl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.8)*60,p,COMB,true);}
         }
         // Ironing: plancha TODAS las caras top-expuestas (no sólo la última capa)
         if(p.ironing){
