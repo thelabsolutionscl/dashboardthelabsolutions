@@ -25,7 +25,8 @@ const crypto = require('crypto');
 
 const PORT = parseInt(process.env.BRIDGE_PORT || '8347', 10);
 const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
-const ALLOWED_PORTS = (process.env.BRIDGE_PORTS || '7125,8080,4408,4409,80')
+// 1984 = go2rtc (cámaras WebRTC de las K2/K2 Plus; el dashboard consume su /api/frame.jpeg)
+const ALLOWED_PORTS = (process.env.BRIDGE_PORTS || '7125,8080,4408,4409,80,1984')
   .split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
 const TOKEN_FILE = path.join(__dirname, '.bridge-token');
 

@@ -206,8 +206,9 @@ http://192.168.100.51:8080/?action=stream
 - En **modo remoto** la reescribe automáticamente a través del túnel
   (`https://printers.thelab.solutions/192.168.100.51:8080/?action=stream&bt=...`).
 
-Puertos permitidos por el bridge: `7125, 8080, 4408, 4409, 80`
-(configurable con la variable de entorno `BRIDGE_PORTS`).
+Puertos permitidos por el bridge: `7125, 8080, 4408, 4409, 80, 1984`
+(configurable con la variable de entorno `BRIDGE_PORTS`). El `1984` es go2rtc,
+usado por las cámaras de las K2/K2 Plus (el dashboard consume su `/api/frame.jpeg`).
 
 ---
 
@@ -224,5 +225,5 @@ Puertos permitidos por el bridge: `7125, 8080, 4408, 4409, 80`
 |----------|---------|-------------|
 | `BRIDGE_PORT` | `8347` | Puerto donde escucha el bridge |
 | `BRIDGE_TOKEN` | (autogenerado) | Token fijo, si prefieres definirlo tú |
-| `BRIDGE_PORTS` | `7125,8080,4408,4409,80` | Puertos de destino permitidos |
+| `BRIDGE_PORTS` | `7125,8080,4408,4409,80,1984` | Puertos de destino permitidos (1984 = go2rtc cámaras K2) |
 | `BRIDGE_ALLOW_ORIGIN` | `*` | Origen CORS (puedes restringirlo a la URL del dashboard) |
