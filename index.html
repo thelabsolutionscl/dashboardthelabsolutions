@@ -3035,7 +3035,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="section-header">
     <div>
       <div class="section-title">Oficina Virtual</div>
-      <div class="section-desc">Tu equipo de agentes IA y automatizaciones trabajando en vivo. El estado se actualiza solo cada 20 s a partir de las ejecuciones reales (Agent_Log), la cola de tareas (Agent_Queue) y, si existe, la tabla Automations.</div>
+      <div class="section-desc">Tu equipo de agentes IA y automatizaciones trabajando en vivo. El estado se actualiza solo cada 45 s a partir de las ejecuciones reales (Agent_Log), la cola de tareas (Agent_Queue) y, si existe, la tabla Automations.</div>
     </div>
     <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
       <div id="oficinaViewToggle" class="of-viewtoggle">
@@ -15203,6 +15203,7 @@ function _ofPrinterLbl(estado){ const e=(estado||'').toString().toLowerCase();
 let _ofModel=null;                         // último modelo construido (para el panel de detalle de agente)
 let _ofAgentRuns=null;                      // ejecuciones del agente abierto en el panel de detalle
 let _ofView=(()=>{try{return localStorage.getItem('thelab_oficina_view')||'cards';}catch(e){return 'cards';}})();
+let _ofPrevView=_ofView;                   // vista a restaurar al salir del modo TV/pantalla completa
 function _ofAgo(ts){
   if(!ts) return '—';
   const d=Date.now()-ts; if(d<0) return 'ahora';
@@ -15242,7 +15243,7 @@ function _ofSpark(list){
   const bars=days.map((v,i)=>{const h=Math.max(2,Math.round((v/max)*18)); return `<rect x="${i*9}" y="${20-h}" width="6" height="${h}" rx="1" fill="${v?'var(--accent)':'var(--border2)'}"/>`;}).join('');
   return `<svg class="of-spark" width="62" height="20" viewBox="0 0 62 20" aria-hidden="true">${bars}</svg>`;
 }
-function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.currentTarget.click(); } }   // a11y teclado
+function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); const t=e.currentTarget; if(!t)return; if(typeof t.click==='function') t.click(); else if(typeof t.onclick==='function') t.onclick(e); else t.dispatchEvent(new MouseEvent('click',{bubbles:true})); } }   // a11y teclado (incluye nodos SVG sin .click() en algunos navegadores)
 function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_CFG.find(x=>x.id===id); if(a){toast(a.label+' — '+a.tipo,'info');return;}
   const pm=(_ofModel&&_ofModel.printerModel)||[]; const p=pm.find(x=>x.id===id);
   if(p){toast('🖨️ '+p.label+' — '+(p.role||'Impresora 3D').replace('Impresora 3D · ','')+' · '+p.lbl,'info');return;}
@@ -15328,14 +15329,16 @@ function ofFullscreen(){
 function _ofToggleFsCss(el){
   const on=el.classList.toggle('of-fs');
   const b=document.getElementById('ofFsBtn'); if(b) b.textContent=on?'✕ Salir':'📺 Pantalla completa';
-  if(on) ofSetView('iso'); else renderOficina();
+  if(on){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso'); }   // TV → 3D, recordando la vista previa
+  else ofSetView(_ofPrevView||'cards');                                  // al salir, restaura la vista del usuario
 }
 function _ofOnFsChange(){
   const el=document.getElementById('tab-oficina'); if(!el) return;
   const fs=(document.fullscreenElement||document.webkitFullscreenElement)===el;
   el.classList.toggle('of-fs',fs);
   const b=document.getElementById('ofFsBtn'); if(b) b.textContent=fs?'✕ Salir':'📺 Pantalla completa';
-  if(fs) ofSetView('iso'); else renderOficina();
+  if(fs){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso'); }   // TV → 3D, recordando la vista previa
+  else ofSetView(_ofPrevView||'cards');                                  // al salir, restaura la vista del usuario
 }
 document.addEventListener('fullscreenchange',_ofOnFsChange);
 document.addEventListener('webkitfullscreenchange',_ofOnFsChange);
@@ -15603,7 +15606,6 @@ function _ofIsoStation(m,x,y){
   const dark=_ofShade(col,0.72);
   const cat=m.clickIA?_ofCat(m):null;
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-  const nm=escapeHtml(m.label.length>15?m.label.slice(0,14)+'…':m.label);
   const em=_ofEmoji(m), working=m.cls==='of-work', bob=working?' of-iso-bob':'';
   let bubble='';
   if(working){
@@ -15717,31 +15719,27 @@ function _ofRingAgent(m,x,y){
     </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+`
   </g>`;
 }
-// Puerta del departamento: va sobre el MURO frontal-derecho (borde R→F), en su plano
-// isométrico (paralela al muro) y abierta hacia el pasillo. Por aquí salen los agentes
-// que se comunican con otra área. Marco y muretes laterales en el color del depto.
+// MARCO de puerta (vano ABIERTO, SIN HOJA): va sobre el MURO frontal-derecho (borde R→F),
+// en su plano isométrico (paralelo al muro). Por este vano cruzan los agentes que se
+// comunican con otra área. Solo jambas + dintel y muretes laterales en el color del depto.
 // g = geometría del muro {P,Q,C,ux,uy,nx,ny,mx,my,len} calculada en _ofRenderIso.
 function _ofDoor(g,color){
   const f=n=>n.toFixed(1), tw=_ofTileW||160;
   const hw=Math.min(g.len*0.2, tw*0.21), H=44, jt=Math.max(3,tw*0.022), hs=32, sc='#e3e9ef';
-  const dk=_ofShade(color,0.72);
-  const mx=g.mx,my=g.my,ux=g.ux,uy=g.uy,nx=g.nx,ny=g.ny;
+  const mx=g.mx,my=g.my,ux=g.ux,uy=g.uy;
   const bl=[mx-ux*hw,my-uy*hw], br=[mx+ux*hw,my+uy*hw];
   const tl=[bl[0],bl[1]-H], tr=[br[0],br[1]-H];
   const obl=[bl[0]-ux*jt,bl[1]-uy*jt], obr=[br[0]+ux*jt,br[1]+uy*jt];
   const otl=[obl[0],obl[1]-H-jt], otr=[obr[0],obr[1]-H-jt];
-  const d=hw*0.9, fb=[br[0]+nx*d,br[1]+ny*d], ft=[fb[0],fb[1]-H];
   const PT=a=>a.map(p=>f(p[0])+','+f(p[1])).join(' ');
   const seg=(A,B)=>`<polygon points="${PT([A,B,[B[0],B[1]-hs],[A[0],A[1]-hs]])}" fill="${sc}"/><line x1="${f(A[0])}" y1="${f(A[1]-hs)}" x2="${f(B[0])}" y2="${f(B[1]-hs)}" stroke="${color}" stroke-width="2.2" opacity="0.85"/>`;
   let s='';
   s+=`<ellipse cx="${f(mx)}" cy="${f(my+3)}" rx="${f(hw+jt+8)}" ry="6.5" fill="url(#ofShadow)" opacity="0.45"/>`;
-  s+=seg(g.P,obl)+seg(obr,g.Q);                                          // murete a cada lado de la puerta
+  s+=seg(g.P,obl)+seg(obr,g.Q);                                          // murete a cada lado del vano
   s+=`<polygon points="${PT([obl,obr,otr,otl])}" fill="${color}"/>`;     // marco (jambas + dintel)
-  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="#1c2128"/>`;          // vano oscuro
-  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="#ffd9a0" opacity="0.08"/>`;
-  s+=`<polygon points="${PT([br,fb,ft,tr])}" fill="${dk}" stroke="${color}" stroke-width="1"/>`;   // hoja abierta hacia el pasillo
-  s+=`<circle cx="${f(fb[0])}" cy="${f((fb[1]+ft[1])/2)}" r="1.6" fill="#ffd96b"/>`;                // manilla
-  s+=`<line x1="${f(otl[0])}" y1="${f(otl[1])}" x2="${f(otr[0])}" y2="${f(otr[1])}" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>`;
+  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="url(#ofDoorway)"/>`;  // vano ABIERTO (paso visible, sin hoja)
+  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="#ffd9a0" opacity="0.07"/>`;   // luz cálida del interior
+  s+=`<line x1="${f(otl[0])}" y1="${f(otl[1])}" x2="${f(otr[0])}" y2="${f(otr[1])}" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>`;   // brillo del dintel
   return s;
 }
 // Posiciones exactas de las impresoras dentro de su sala (calca los planos del taller)
@@ -15941,9 +15939,11 @@ function _ofRenderIso(ia,auto,extras){
   const plant=(x,y)=>`<g transform="translate(${x},${y})"><ellipse cx="0" cy="2" rx="12" ry="6" fill="rgba(0,0,0,0.4)"/><text x="0" y="3" text-anchor="middle" font-size="22">🪴</text></g>`;
   const decor=plant(Dl[0]+10,Dl[1]-4)+plant(Cb[0]+2,Cb[1]-4);
 
-  // Puerta en la pared izquierda (hacia el frente)
+  // MARCO de acceso en la pared izquierda (vano ABIERTO, sin hoja ni manilla)
   const lp=(f,h)=>[At[0]+f*(Dl[0]-At[0]), At[1]+f*(Dl[1]-At[1])-h];
-  const door=`<polygon points="${lp(0.7,0)} ${lp(0.92,0)} ${lp(0.92,52)} ${lp(0.7,52)}" fill="#c9d2dc" stroke="#aab4bf" stroke-width="2"/><circle cx="${lp(0.74,26)[0].toFixed(1)}" cy="${lp(0.74,26)[1].toFixed(1)}" r="2.4" fill="#ff6b35"/>`;
+  const door=`<polygon points="${lp(0.70,0)} ${lp(0.90,0)} ${lp(0.90,54)} ${lp(0.70,54)}" fill="#c4cdd7" stroke="#aab4bf" stroke-width="2"/>`
+    +`<polygon points="${lp(0.715,0)} ${lp(0.885,0)} ${lp(0.885,47)} ${lp(0.715,47)}" fill="url(#ofDoorway)"/>`
+    +`<polygon points="${lp(0.715,0)} ${lp(0.885,0)} ${lp(0.885,47)} ${lp(0.715,47)}" fill="#ffd9a0" opacity="0.06"/>`;
   // Logo de marca en la pared izquierda
   const cL=lp(0.33,wallH*0.66);
   // Logo de marca (mismo logo del dashboard) proyectado en DIAGONAL sobre la pared izquierda
@@ -15991,6 +15991,7 @@ function _ofRenderIso(ia,auto,extras){
       <linearGradient id="ofWallL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef3f8"/><stop offset="1" stop-color="#d5dde6"/></linearGradient>
       <linearGradient id="ofWallR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e4ebf1"/><stop offset="1" stop-color="#c8d2dc"/></linearGradient>
       <linearGradient id="ofSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${skyT}"/><stop offset="1" stop-color="${skyB}"/></linearGradient>
+      <linearGradient id="ofDoorway" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#11151b"/><stop offset="0.55" stop-color="#2c343d"/><stop offset="1" stop-color="#5c6775"/></linearGradient>
       <filter id="ofHalo" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7"/></filter>
       <radialGradient id="ofVig" cx="50%" cy="42%" r="72%"><stop offset="58%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.42"/></radialGradient>
     </defs>
