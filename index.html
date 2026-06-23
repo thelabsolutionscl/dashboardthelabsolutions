@@ -3035,7 +3035,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="section-header">
     <div>
       <div class="section-title">Oficina Virtual</div>
-      <div class="section-desc">Tu equipo de agentes IA y automatizaciones trabajando en vivo. El estado se actualiza solo cada 20 s a partir de las ejecuciones reales (Agent_Log), la cola de tareas (Agent_Queue) y, si existe, la tabla Automations.</div>
+      <div class="section-desc">Tu equipo de agentes IA y automatizaciones trabajando en vivo. El estado se actualiza solo cada 45 s a partir de las ejecuciones reales (Agent_Log), la cola de tareas (Agent_Queue) y, si existe, la tabla Automations.</div>
     </div>
     <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
       <div id="oficinaViewToggle" class="of-viewtoggle">
@@ -15203,6 +15203,7 @@ function _ofPrinterLbl(estado){ const e=(estado||'').toString().toLowerCase();
 let _ofModel=null;                         // último modelo construido (para el panel de detalle de agente)
 let _ofAgentRuns=null;                      // ejecuciones del agente abierto en el panel de detalle
 let _ofView=(()=>{try{return localStorage.getItem('thelab_oficina_view')||'cards';}catch(e){return 'cards';}})();
+let _ofPrevView=_ofView;                   // vista a restaurar al salir del modo TV/pantalla completa
 function _ofAgo(ts){
   if(!ts) return '—';
   const d=Date.now()-ts; if(d<0) return 'ahora';
@@ -15242,7 +15243,7 @@ function _ofSpark(list){
   const bars=days.map((v,i)=>{const h=Math.max(2,Math.round((v/max)*18)); return `<rect x="${i*9}" y="${20-h}" width="6" height="${h}" rx="1" fill="${v?'var(--accent)':'var(--border2)'}"/>`;}).join('');
   return `<svg class="of-spark" width="62" height="20" viewBox="0 0 62 20" aria-hidden="true">${bars}</svg>`;
 }
-function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.currentTarget.click(); } }   // a11y teclado
+function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); const t=e.currentTarget; if(!t)return; if(typeof t.click==='function') t.click(); else if(typeof t.onclick==='function') t.onclick(e); else t.dispatchEvent(new MouseEvent('click',{bubbles:true})); } }   // a11y teclado (incluye nodos SVG sin .click() en algunos navegadores)
 function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_CFG.find(x=>x.id===id); if(a){toast(a.label+' — '+a.tipo,'info');return;}
   const pm=(_ofModel&&_ofModel.printerModel)||[]; const p=pm.find(x=>x.id===id);
   if(p){toast('🖨️ '+p.label+' — '+(p.role||'Impresora 3D').replace('Impresora 3D · ','')+' · '+p.lbl,'info');return;}
@@ -15328,14 +15329,16 @@ function ofFullscreen(){
 function _ofToggleFsCss(el){
   const on=el.classList.toggle('of-fs');
   const b=document.getElementById('ofFsBtn'); if(b) b.textContent=on?'✕ Salir':'📺 Pantalla completa';
-  if(on) ofSetView('iso'); else renderOficina();
+  if(on){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso'); }   // TV → 3D, recordando la vista previa
+  else ofSetView(_ofPrevView||'cards');                                  // al salir, restaura la vista del usuario
 }
 function _ofOnFsChange(){
   const el=document.getElementById('tab-oficina'); if(!el) return;
   const fs=(document.fullscreenElement||document.webkitFullscreenElement)===el;
   el.classList.toggle('of-fs',fs);
   const b=document.getElementById('ofFsBtn'); if(b) b.textContent=fs?'✕ Salir':'📺 Pantalla completa';
-  if(fs) ofSetView('iso'); else renderOficina();
+  if(fs){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso'); }   // TV → 3D, recordando la vista previa
+  else ofSetView(_ofPrevView||'cards');                                  // al salir, restaura la vista del usuario
 }
 document.addEventListener('fullscreenchange',_ofOnFsChange);
 document.addEventListener('webkitfullscreenchange',_ofOnFsChange);
@@ -15603,7 +15606,6 @@ function _ofIsoStation(m,x,y){
   const dark=_ofShade(col,0.72);
   const cat=m.clickIA?_ofCat(m):null;
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-  const nm=escapeHtml(m.label.length>15?m.label.slice(0,14)+'…':m.label);
   const em=_ofEmoji(m), working=m.cls==='of-work', bob=working?' of-iso-bob':'';
   let bubble='';
   if(working){
@@ -15717,31 +15719,27 @@ function _ofRingAgent(m,x,y){
     </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+`
   </g>`;
 }
-// Puerta del departamento: va sobre el MURO frontal-derecho (borde R→F), en su plano
-// isométrico (paralela al muro) y abierta hacia el pasillo. Por aquí salen los agentes
-// que se comunican con otra área. Marco y muretes laterales en el color del depto.
+// MARCO de puerta (vano ABIERTO, SIN HOJA): va sobre el MURO frontal-derecho (borde R→F),
+// en su plano isométrico (paralelo al muro). Por este vano cruzan los agentes que se
+// comunican con otra área. Solo jambas + dintel y muretes laterales en el color del depto.
 // g = geometría del muro {P,Q,C,ux,uy,nx,ny,mx,my,len} calculada en _ofRenderIso.
 function _ofDoor(g,color){
   const f=n=>n.toFixed(1), tw=_ofTileW||160;
   const hw=Math.min(g.len*0.2, tw*0.21), H=44, jt=Math.max(3,tw*0.022), hs=32, sc='#e3e9ef';
-  const dk=_ofShade(color,0.72);
-  const mx=g.mx,my=g.my,ux=g.ux,uy=g.uy,nx=g.nx,ny=g.ny;
+  const mx=g.mx,my=g.my,ux=g.ux,uy=g.uy;
   const bl=[mx-ux*hw,my-uy*hw], br=[mx+ux*hw,my+uy*hw];
   const tl=[bl[0],bl[1]-H], tr=[br[0],br[1]-H];
   const obl=[bl[0]-ux*jt,bl[1]-uy*jt], obr=[br[0]+ux*jt,br[1]+uy*jt];
   const otl=[obl[0],obl[1]-H-jt], otr=[obr[0],obr[1]-H-jt];
-  const d=hw*0.9, fb=[br[0]+nx*d,br[1]+ny*d], ft=[fb[0],fb[1]-H];
   const PT=a=>a.map(p=>f(p[0])+','+f(p[1])).join(' ');
   const seg=(A,B)=>`<polygon points="${PT([A,B,[B[0],B[1]-hs],[A[0],A[1]-hs]])}" fill="${sc}"/><line x1="${f(A[0])}" y1="${f(A[1]-hs)}" x2="${f(B[0])}" y2="${f(B[1]-hs)}" stroke="${color}" stroke-width="2.2" opacity="0.85"/>`;
   let s='';
   s+=`<ellipse cx="${f(mx)}" cy="${f(my+3)}" rx="${f(hw+jt+8)}" ry="6.5" fill="url(#ofShadow)" opacity="0.45"/>`;
-  s+=seg(g.P,obl)+seg(obr,g.Q);                                          // murete a cada lado de la puerta
+  s+=seg(g.P,obl)+seg(obr,g.Q);                                          // murete a cada lado del vano
   s+=`<polygon points="${PT([obl,obr,otr,otl])}" fill="${color}"/>`;     // marco (jambas + dintel)
-  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="#1c2128"/>`;          // vano oscuro
-  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="#ffd9a0" opacity="0.08"/>`;
-  s+=`<polygon points="${PT([br,fb,ft,tr])}" fill="${dk}" stroke="${color}" stroke-width="1"/>`;   // hoja abierta hacia el pasillo
-  s+=`<circle cx="${f(fb[0])}" cy="${f((fb[1]+ft[1])/2)}" r="1.6" fill="#ffd96b"/>`;                // manilla
-  s+=`<line x1="${f(otl[0])}" y1="${f(otl[1])}" x2="${f(otr[0])}" y2="${f(otr[1])}" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>`;
+  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="url(#ofDoorway)"/>`;  // vano ABIERTO (paso visible, sin hoja)
+  s+=`<polygon points="${PT([bl,br,tr,tl])}" fill="#ffd9a0" opacity="0.07"/>`;   // luz cálida del interior
+  s+=`<line x1="${f(otl[0])}" y1="${f(otl[1])}" x2="${f(otr[0])}" y2="${f(otr[1])}" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>`;   // brillo del dintel
   return s;
 }
 // Posiciones exactas de las impresoras dentro de su sala (calca los planos del taller)
@@ -15941,9 +15939,11 @@ function _ofRenderIso(ia,auto,extras){
   const plant=(x,y)=>`<g transform="translate(${x},${y})"><ellipse cx="0" cy="2" rx="12" ry="6" fill="rgba(0,0,0,0.4)"/><text x="0" y="3" text-anchor="middle" font-size="22">🪴</text></g>`;
   const decor=plant(Dl[0]+10,Dl[1]-4)+plant(Cb[0]+2,Cb[1]-4);
 
-  // Puerta en la pared izquierda (hacia el frente)
+  // MARCO de acceso en la pared izquierda (vano ABIERTO, sin hoja ni manilla)
   const lp=(f,h)=>[At[0]+f*(Dl[0]-At[0]), At[1]+f*(Dl[1]-At[1])-h];
-  const door=`<polygon points="${lp(0.7,0)} ${lp(0.92,0)} ${lp(0.92,52)} ${lp(0.7,52)}" fill="#c9d2dc" stroke="#aab4bf" stroke-width="2"/><circle cx="${lp(0.74,26)[0].toFixed(1)}" cy="${lp(0.74,26)[1].toFixed(1)}" r="2.4" fill="#ff6b35"/>`;
+  const door=`<polygon points="${lp(0.70,0)} ${lp(0.90,0)} ${lp(0.90,54)} ${lp(0.70,54)}" fill="#c4cdd7" stroke="#aab4bf" stroke-width="2"/>`
+    +`<polygon points="${lp(0.715,0)} ${lp(0.885,0)} ${lp(0.885,47)} ${lp(0.715,47)}" fill="url(#ofDoorway)"/>`
+    +`<polygon points="${lp(0.715,0)} ${lp(0.885,0)} ${lp(0.885,47)} ${lp(0.715,47)}" fill="#ffd9a0" opacity="0.06"/>`;
   // Logo de marca en la pared izquierda
   const cL=lp(0.33,wallH*0.66);
   // Logo de marca (mismo logo del dashboard) proyectado en DIAGONAL sobre la pared izquierda
@@ -15991,6 +15991,7 @@ function _ofRenderIso(ia,auto,extras){
       <linearGradient id="ofWallL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef3f8"/><stop offset="1" stop-color="#d5dde6"/></linearGradient>
       <linearGradient id="ofWallR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e4ebf1"/><stop offset="1" stop-color="#c8d2dc"/></linearGradient>
       <linearGradient id="ofSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${skyT}"/><stop offset="1" stop-color="${skyB}"/></linearGradient>
+      <linearGradient id="ofDoorway" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#11151b"/><stop offset="0.55" stop-color="#2c343d"/><stop offset="1" stop-color="#5c6775"/></linearGradient>
       <filter id="ofHalo" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7"/></filter>
       <radialGradient id="ofVig" cx="50%" cy="42%" r="72%"><stop offset="58%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.42"/></radialGradient>
     </defs>
@@ -26284,17 +26285,23 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   // hitFn(x,y,li) = ¿hay modelo ahí? → se usa para inclinar el tronco y esquivar la pieza
   function _buildTreeSupport(cols,hitFn,totalL){
     if(!cols||!cols.length)return[];
-    const n=cols.length,parent=Array.from({length:n},(_,i)=>i);
-    const MERGE_R=11;
-    function find(i){return parent[i]===i?i:(parent[i]=find(parent[i]));}
-    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)
-      if(Math.hypot(cols[i].x-cols[j].x,cols[i].y-cols[j].y)<MERGE_R)parent[find(i)]=find(j);
-    const map=new Map();
-    for(let i=0;i<n;i++){const r=find(i);(map.get(r)||map.set(r,[]).get(r)).push(cols[i]);}
+    // Clustering local ACOTADO: cada contacto se une al cluster cuyo centroide
+    // esté más cerca dentro de MERGE_R; si ninguno, abre uno nuevo. Evita el
+    // encadenamiento transitivo (union-find) que fusionaba contactos lejanos en
+    // muy pocos troncos y dejaba ramas largas flotando hacia contactos inalcanzables.
+    const MERGE_R=6; // = radio máx del cluster (mm) → ramas cortas e imprimibles
+    const clusters=[];
+    for(const c of cols){
+      let best=null,bd=MERGE_R;
+      for(const cl of clusters){const d=Math.hypot(c.x-cl.cx,c.y-cl.cy);if(d<bd){bd=d;best=cl;}}
+      if(best){best.mem.push(c);best.cx+=(c.x-best.cx)/best.mem.length;best.cy+=(c.y-best.cy)/best.mem.length;}
+      else clusters.push({mem:[c],cx:c.x,cy:c.y});
+    }
     const MAXSTEP=0.45; // desplazamiento horizontal máximo por capa (imprimible)
-    return Array.from(map.values()).map(mem=>{
+    return clusters.map(({mem})=>{
       const cx=mem.reduce((s,c)=>s+c.x,0)/mem.length;
       const cy=mem.reduce((s,c)=>s+c.y,0)/mem.length;
+      const reach=Math.max(0.01,...mem.map(c=>Math.hypot(c.x-cx,c.y-cy))); // alcance horizontal de ramas
       const topLi=Math.max(...mem.map(c=>c.top));
       const baseLi=Math.min(...mem.map(c=>c.bot));
       // Camino del tronco (de arriba hacia abajo): si entra en la pieza, se desvía gradualmente; si está libre, vuelve bajo el contacto
@@ -26312,43 +26319,38 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         if(!isFinite(x)||!isFinite(y)){x=cx;y=cy;}
         path[li]={x,y};
       }
-      return{mem,cx,cy,topLi,baseLi,path};
+      return{mem,cx,cy,topLi,baseLi,path,reach};
     });
   }
   function _treeSupportAtLayer(trees,li,extW,p){
     if(!trees||!trees.length)return[];
     const lines=[];
-    const dens=Math.max(10,Math.min(90,(p&&p.supDensity)||25))/100;
-    const step=Math.max(extW*1.4,extW/dens*0.9); // menor densidad → mayor separación de la celosía
     for(const tree of trees){
-      const{mem,cx,cy,topLi,baseLi,path}=tree;
+      const{mem,cx,cy,topLi,baseLi,path,reach}=tree;
       const active=mem.filter(c=>c.top>=li&&c.bot<=li);
       if(!active.length)continue;
       const tc=(path&&path[li])||{x:cx,y:cy}; // centro del tronco en esta capa (camino que esquiva la pieza)
-      const BRANCH=6;
+      // Altura de la zona de ramas proporcional al alcance horizontal → suben a ~45°
+      // (imprimibles) en vez de un nº fijo de capas que con capa fina (0.12mm) flotaba.
+      const BRANCH=Math.max(6,Math.ceil((reach||1)/Math.max(0.08,(p&&p.layerHeight)||0.2)));
       if(li>=topLi-BRANCH){
-        // Zona de ramas: del tronco hacia cada contacto + puntas cónicas (snap-off fácil)
+        // Zona de ramas: UNA línea fina del tronco a cada contacto + punta (snap-off fácil)
         const prog=Math.max(0,(li-(topLi-BRANCH))/BRANCH); // 0 = tronco, 1 = contacto
         for(const c of active){
           const bx=tc.x+(c.x-tc.x)*prog,by=tc.y+(c.y-tc.y)*prog;
           const ax=tc.x+(c.x-tc.x)*Math.max(0,prog-0.5),ay=tc.y+(c.y-tc.y)*Math.max(0,prog-0.5);
-          lines.push([[ax,ay],[bx,by]]);
-          const dx=bx-ax,dy=by-ay,L=Math.hypot(dx,dy)||1,nx=-dy/L*extW,ny=dx/L*extW;
-          lines.push([[ax+nx,ay+ny],[bx+nx,by+ny]]);
-          if(li>=c.top-1){const r=li>=c.top?extW*0.8:extW*1.6;lines.push([[c.x-r,c.y],[c.x+r,c.y]]);if(li<c.top)lines.push([[c.x,c.y-r],[c.x,c.y+r]]);}
+          lines.push([[ax,ay],[bx,by]]); // rama: una sola línea (ligera)
+          if(li>=c.top-1){const r=li>=c.top?extW*0.8:extW*1.4;lines.push([[c.x-r,c.y],[c.x+r,c.y]]);if(li<c.top)lines.push([[c.x,c.y-r],[c.x,c.y+r]]);}
         }
       }else{
-        // Tronco: pilar de celosía con base ensanchada → estable y retirable, centrado en tc
+        // Tronco fino tipo tubo: solo contorno octogonal (sin celosía maciza) → ligero y retirable
         const fromBot=li-baseLi;
-        let R=Math.min(4.5,1.6+mem.length*0.3);
-        if(fromBot<10)R+=(10-fromBot)*0.18; // zócalo anti-vuelco en las primeras capas
-        lines.push([[tc.x-R,tc.y-R],[tc.x+R,tc.y-R]]);lines.push([[tc.x+R,tc.y-R],[tc.x+R,tc.y+R]]);
-        lines.push([[tc.x+R,tc.y+R],[tc.x-R,tc.y+R]]);lines.push([[tc.x-R,tc.y+R],[tc.x-R,tc.y-R]]);
-        const dir=li%2===0;
-        for(let o=-R+step;o<R-1e-6;o+=step){
-          if(dir)lines.push([[tc.x-R,tc.y+o],[tc.x+R,tc.y+o]]);
-          else lines.push([[tc.x+o,tc.y-R],[tc.x+o,tc.y+R]]);
-        }
+        let R=Math.min(2.2,1.0+mem.length*0.15);
+        if(fromBot<8)R+=(8-fromBot)*0.12; // pequeño zócalo de adhesión en las primeras capas
+        const SEG=8,pts=[];
+        for(let a=0;a<SEG;a++){const an=a/SEG*2*Math.PI;pts.push([tc.x+Math.cos(an)*R,tc.y+Math.sin(an)*R]);}
+        for(let a=0;a<SEG;a++)lines.push([pts[a],pts[(a+1)%SEG]]);
+        if(R>1.7)lines.push([[tc.x-R*0.6,tc.y],[tc.x+R*0.6,tc.y]]); // refuerzo único solo si el tronco es ancho
       }
     }
     return lines;
@@ -26509,7 +26511,22 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }
     return[E,cX,cY];
   }
-  function _printLines(gc,lines,z,ox,oy,cX,cY,E,lh,extW,feed,p,retractThresh){
+  // Ordena segmentos por vecino más cercano (greedy) → minimiza viajes. Crucial para
+  // el soporte: muchas islas dispersas impresas en orden de generación = spaghetti de viajes.
+  function _orderLines(lines,sx,sy){
+    if(!lines||lines.length<3||lines.length>4000)return lines; // tope: evita O(n²) en capas enormes
+    const used=new Array(lines.length).fill(false),out=[];let px=sx,py=sy;
+    for(let k=0;k<lines.length;k++){
+      let bi=-1,bd=Infinity,flip=false;
+      for(let i=0;i<lines.length;i++){if(used[i])continue;const a=lines[i][0],b=lines[i][1];
+        const da=(a[0]-px)*(a[0]-px)+(a[1]-py)*(a[1]-py),db=(b[0]-px)*(b[0]-px)+(b[1]-py)*(b[1]-py);
+        if(da<bd){bd=da;bi=i;flip=false;}if(db<bd){bd=db;bi=i;flip=true;}}
+      used[bi]=true;const s=flip?[lines[bi][1],lines[bi][0]]:lines[bi];out.push(s);px=s[1][0];py=s[1][1];
+    }
+    return out;
+  }
+  function _printLines(gc,lines,z,ox,oy,cX,cY,E,lh,extW,feed,p,retractThresh,optimize){
+    if(optimize)lines=_orderLines(lines,cX-ox,cY-oy); // reordena para minimizar viajes (soporte)
     const rt=Math.max(retractThresh||extW*3,(p.retractMinTravel||0)); // combing + viaje mínimo: menos retracciones
     for(const[p1,p2]of lines){
       const sx=p1[0]+ox,sy=p1[1]+oy,ex=p2[0]+ox,ey=p2[1]+oy;
@@ -26802,11 +26819,11 @@ self.onmessage=function(ev){
       // Soporte (antes del modelo de esta capa)
       if(supCols){
         const sl=_supportLinesAtLayer(supCols,li,SUP_GS,p);
-        if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p);}
+        if(sl.length){gc.push('; soporte');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.2)*60,p,undefined,true);}
       }
       if(supTrees){
         const sl=_treeSupportAtLayer(supTrees,li,extW,p);
-        if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p);}
+        if(sl.length){gc.push('; soporte árbol');[E,cX,cY]=_printLines(gc,sl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*1.15)*60,p,undefined,true);}
       }
       // Interfaz de soporte: relleno denso en las capas justo bajo la pieza (facilita el desprendimiento)
       if(supCols){
@@ -26821,7 +26838,7 @@ self.onmessage=function(ev){
             const x0=arr[0].x-IGS/2,x1=arr[arr.length-1].x+IGS/2,cy=arr[0].y;
             for(let x=x0+extW/2;x<x1;x+=extW*1.05)ifcLines.push([[x,cy-IGS/2],[x,cy+IGS/2]]);
           }
-          if(ifcLines.length){gc.push('; interfaz soporte (densa)');[E,cX,cY]=_printLines(gc,ifcLines,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.75)*60,p);}
+          if(ifcLines.length){gc.push('; interfaz soporte (densa)');[E,cX,cY]=_printLines(gc,ifcLines,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.75)*60,p,undefined,true);}
         }
       }
       const contours=layerPolys[li];
@@ -26841,7 +26858,14 @@ self.onmessage=function(ev){
       const peo=_hasObjSet?_objParams(pe,_grp.oi):pe;
       // Paredes por contorno: exterior crece hacia adentro, agujero crece hacia afuera (más material alrededor)
       const fillLoops=[],gapLoops=[];
-      for(const ci of _grp.cis){
+      // Orden de islas por proximidad (greedy NN desde la posición del cabezal) → menos
+      // viajes entre contornos separados (paredes). Con una sola isla = orden anterior.
+      const _rem=new Set(_grp.cis.filter(_ci=>baseC[_ci]&&baseC[_ci].length>=3));
+      const _cent=new Map();
+      for(const _ci of _rem){const _ct=baseC[_ci];let _sx=0,_sy=0;for(const _pt of _ct){_sx+=_pt[0];_sy+=_pt[1];}_cent.set(_ci,[_sx/_ct.length+offX,_sy/_ct.length+offY]);}
+      while(_rem.size){
+        let ci=null,_bd=Infinity;for(const _k of _rem){const _c=_cent.get(_k);const _d=(_c[0]-cX)*(_c[0]-cX)+(_c[1]-cY)*(_c[1]-cY);if(_d<_bd){_bd=_d;ci=_k;}}
+        _rem.delete(ci);
         const ct=baseC[ci];if(ct.length<3)continue;
         const hole=parity[ci];
         const shells=[ct];
@@ -26888,7 +26912,7 @@ self.onmessage=function(ev){
           // Interior macizo prismático → sólo relleno disperso (camino rápido, sin muestreo)
           if(peo.infillPct>0){
             const sp=_infillMulti(infLoops,extW/(peo.infillPct/100),peo.infillType==='adaptive'?'cubic':peo.infillType,li,curZ);
-            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
           }
         }else{
           const above=layerPolys[li+peo.topLayers]||[],below=layerPolys[li-peo.bottomLayers]||[],below1=li>0?(layerPolys[li-1]||[]):[];
@@ -26898,7 +26922,7 @@ self.onmessage=function(ev){
           const isBridge=(x,y)=>p.bridgeDetect&&li>0&&!_inSolidBB(x,y,below1,below1BB);
           // 1) Superficies sólidas (top/bottom) que no son puente
           const surf=_clipLines(_scanfillAll(infLoops,extW*1.02,solidAngle,p.monotonic),(x,y)=>isSurf(x,y)&&!isBridge(x,y),extW);
-          if(surf.length){gc.push('; superficie');[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+          if(surf.length){gc.push('; superficie');[E,cX,cY]=_printLines(gc,surf,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
           // 2) Puentes (cara inferior sobre aire) — sólido, lento, ventilador máximo, orientado al vano
           if(p.bridgeDetect){
             const bAng=_bridgeInfoMulti(fillLoops,below1).angle;
@@ -26923,25 +26947,25 @@ self.onmessage=function(ev){
             };
             const lspac=Math.max(extW*2,extW/Math.max(0.05,peo.infillPct/100)*1.4);
             const sp=_clipLines(_scanfillAll(infLoops,lspac,li%2?135:45),needsLight,extW);
-            if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB);}
+            if(sp.length){gc.push('; lightning infill (árbol mínimo)');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,extW,solidFeed,p,COMB,true);}
           }else if(peo.infillType==='adaptive'&&peo.infillPct>0){
             // Relleno adaptativo: base disperso cúbico en todo el interior + pasada extra densa cerca de los techos
             const baseSp=_clipLines(_infillMulti(infLoops,extW/(peo.infillPct/100),'cubic',li,curZ),(x,y)=>!isSurf(x,y),extW);
-            if(baseSp.length){gc.push('; relleno adaptativo (base)');[E,cX,cY]=_printLines(gc,baseSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            if(baseSp.length){gc.push('; relleno adaptativo (base)');[E,cX,cY]=_printLines(gc,baseSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
             const reach=Math.max(4,peo.topLayers+4);
             const isAirAt=(x,y,L)=>{const pp=layerPolys[L];if(!pp||!pp.length)return true;return !_inSolidBB(x,y,pp,layerBB[L]);};
             const nearCeil=(x,y)=>{if(isSurf(x,y))return false;for(let d=1;d<=reach;d++){const L=li+d;if(L>=totalL)return false;if(isAirAt(x,y,L))return true;}return false;};
             const densSp=_clipLines(_scanfillAll(infLoops,extW/Math.max(0.05,peo.infillPct/100)*0.7,li%2?45:135),nearCeil,extW);
-            if(densSp.length){gc.push('; relleno adaptativo (densificado bajo techos)');[E,cX,cY]=_printLines(gc,densSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            if(densSp.length){gc.push('; relleno adaptativo (densificado bajo techos)');[E,cX,cY]=_printLines(gc,densSp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
           }else if(peo.infillPct>0){
             const sp=_clipLines(_infillMulti(infLoops,extW/(peo.infillPct/100),peo.infillType,li,curZ),(x,y)=>!isSurf(x,y),extW);
-            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB);}
+            if(sp.length){gc.push('; relleno');[E,cX,cY]=_printLines(gc,sp,zOut,offX,offY,cX,cY,E,lh,wInfill,solidFeed,p,COMB,true);}
           }
         }
         // Gap fill: cordón central en paredes finas (un sólo paso de scanline ≈ línea central)
         if(gapLoops.length){
           const gl=_scanfillAll(gapLoops,extW,solidAngle);
-          if(gl.length){gc.push('; gap-fill');[E,cX,cY]=_printLines(gc,gl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.8)*60,p,COMB);}
+          if(gl.length){gc.push('; gap-fill');[E,cX,cY]=_printLines(gc,gl,zOut,offX,offY,cX,cY,E,lh,extW,Math.round(spd*0.8)*60,p,COMB,true);}
         }
         // Ironing: plancha TODAS las caras top-expuestas (no sólo la última capa)
         if(p.ironing){
@@ -27055,19 +27079,22 @@ self.onmessage=function(ev){
   // "; FEATURE: <rol>" que OrcaSlicer parsea para colorear y desglosar perímetros,
   // relleno, soporte, etc. (los nombres deben coincidir con los roles de OrcaSlicer).
   function _orcaFeature(c){
-    c=c.toLowerCase();
-    if(/pared exterior/.test(c))return'Outer wall';
-    if(/pared interior/.test(c))return'Inner wall';
-    if(/puente|bridge/.test(c))return'Bridge';
-    if(/gap-fill|gap fill/.test(c))return'Gap infill';
-    if(/interfaz soporte|interfaz de soporte/.test(c))return'Support interface';
-    if(/soporte/.test(c))return'Support';
-    if(/ironing/.test(c))return'Ironing';
-    if(/superficie/.test(c))return'Top surface';
-    if(/relleno|lightning|adaptativo/.test(c))return'Sparse infill';
-    if(/draft shield|skirt/.test(c))return'Skirt';
-    if(/brim/.test(c))return'Brim';
-    if(/raft/.test(c))return'Support';
+    // Anclamos al INICIO del comentario (tras ";") para no marcar frases de cabecera
+    // que contengan "relleno:40%" o "soportes activados" como si fueran secciones.
+    const t=c.replace(/^;+\s*/,'').toLowerCase();
+    if(t.startsWith('pared exterior'))return'Outer wall';
+    if(t.startsWith('pared interior'))return'Inner wall';
+    if(/^puente\b/.test(t)||/^bridge\b/.test(t))return'Bridge';
+    if(/^gap[- ]?fill\b/.test(t))return'Gap infill';
+    if(t.startsWith('interfaz soporte')||t.startsWith('interfaz de soporte'))return'Support interface';
+    if(/^soporte\b/.test(t))return'Support';          // "soporte", "soporte árbol" — NO "soportes activados"
+    if(/^ironing\b/.test(t))return'Ironing';
+    if(t.startsWith('superficie'))return'Top surface';
+    if(/^(relleno|lightning)\b/.test(t))return'Sparse infill';
+    if(t.startsWith('draft shield'))return'Skirt';
+    if(/===\s*skirt/.test(t)||/^skirt\b/.test(t))return'Skirt';
+    if(/===\s*brim/.test(t)||/^brim\b/.test(t))return'Brim';
+    if(/===\s*raft/.test(t))return'Support';
     return null;
   }
   function _tagFeatures(gc){
@@ -27076,41 +27103,29 @@ self.onmessage=function(ev){
       const c=raw.trim();
       if(c[0]===';'){
         const f=_orcaFeature(c);
-        if(f){out.push(raw);if(f!==last){out.push('; FEATURE: '+f);last=f;}continue;}
+        // Emitimos AMBOS prefijos: ";TYPE:" lo lee OrcaSlicer en impresoras NO-Bambu
+        // (Creality, Marlin, Klipper…), "; FEATURE:" en impresoras Bambu. El nombre
+        // de rol es el mismo en los dos (lo resuelve string_to_role).
+        if(f){out.push(raw);if(f!==last){out.push(';TYPE:'+f);out.push('; FEATURE: '+f);last=f;}continue;}
       }
       out.push(raw);
     }
     return out.join('\n');
   }
-  // ── Envoltura en formato OrcaSlicer (HEADER_BLOCK + CONFIG_BLOCK) ─────────
-  // Para que se llene el recuadro "Estimación total" (Filamento total / tiempo /
-  // capas) OrcaSlicer debe reconocer el archivo como propio: lo detecta por la
-  // subcadena "generated by OrcaSlicer" y entonces lee las estadísticas del
-  // HEADER_BLOCK. Pero al detectarse, EXIGE también los marcadores
-  // "; CONFIG_BLOCK_START/END" (si no, da "Config tag … not found" al cargar).
-  // Un bloque de config VACÍO entre los marcadores es válido (verificado en el
-  // cargador de OrcaSlicer: las claves desconocidas se ignoran). Las etiquetas
-  // "; FEATURE:" se parsean igual, así que el desglose por tipo de línea se mantiene.
+  // ── Pie de estadísticas (neutro) ─────────────────────────────────────────
+  // El recuadro "Estimación total" de OrcaSlicer se calcula sumando el filamento
+  // de los roles RECONOCIDOS, así que se llena solo al tener bien las etiquetas
+  // ";TYPE:" (no hace falta HEADER ni CONFIG_BLOCK, que además ni se leían).
+  // Dejamos solo comentarios neutros (sin "OrcaSlicer" ni marcadores de bloque)
+  // para no disparar la detección de productor; útiles para Moonraker/Klipper.
   function _fmtHMS(s){s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;return (h?h+'h ':'')+(h||m?m+'m ':'')+sec+'s';}
-  function _orcaFile(body,est,mat){
-    const lenMm=est.filM*1000,grams=est.grams,volCm3=lenMm*FILA_AREA/1000;
-    let layers=0;const re=/=== Capa\s+\d+\/(\d+)/g;let mm;while((mm=re.exec(body)))layers=Math.max(layers,+mm[1]);
-    const T=_fmtHMS(est.secs),L=lenMm.toFixed(2),V=volCm3.toFixed(2),G=grams.toFixed(2),D=(mat.dens||1.24).toFixed(2);
-    const date=new Date().toISOString().slice(0,19).replace('T',' ');
-    const header=[
-      '; HEADER_BLOCK_START',
-      `; generated by OrcaSlicer-compatible engine (The Lab Solutions) on ${date}`,
-      `; model printing time: ${T}; total estimated time: ${T}`,
-      layers?`; total layer number: ${layers}`:null,
-      `; total filament length [mm] : ${L}`,
-      `; total filament volume [cm^3] : ${V}`,
-      `; total filament weight [g] : ${G}`,
-      `; filament_density: ${D}`,
-      '; filament_diameter: 1.75',
-      '; HEADER_BLOCK_END'
-    ].filter(Boolean).join('\n');
-    // Config vacío pero con marcadores: imprescindible para no disparar el error.
-    return header+'\n'+body+'\n\n; CONFIG_BLOCK_START\n; CONFIG_BLOCK_END\n';
+  function _footerStats(est){
+    const L=(est.filM*1000).toFixed(2),G=est.grams.toFixed(2),T=_fmtHMS(est.secs);
+    return ['','; ── Resumen — The Lab Solutions ──',
+      `; estimated printing time (normal mode) = ${T}`,
+      `; filament used [mm] = ${L}`,
+      `; filament used [g] = ${G}`,
+      `; total filament used [g] = ${G}`].join('\n');
   }
   async function generarGcode(){
     if(!S.stats)return;
@@ -27133,10 +27148,8 @@ self.onmessage=function(ev){
       // EXCLUDE_OBJECT (Klipper): etiqueta cada pieza del plato para cancelarla sin abortar la placa
       if(p.excludeObject&&!_seq&&S.objBBs&&S.objBBs.length>1){gcode=_wrapExcludeObject(gcode,S.objBBs,spec.x/2,spec.y/2);}
       if(p.arcFitting){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
-      gcode=_tagFeatures(gcode); // etiquetas "; FEATURE:" → OrcaSlicer desglosa perímetros/relleno/soporte
-      // Envoltura formato OrcaSlicer: HEADER_BLOCK (estadísticas para "Estimación total")
-      // + cuerpo + CONFIG_BLOCK vacío (marcadores obligatorios al detectar el productor).
-      gcode=_orcaFile(gcode,_est,MATS[matName]);
+      gcode=_tagFeatures(gcode); // ";TYPE:"/"; FEATURE:" → desglose por tipo de línea (y llena "Estimación total" por roles)
+      gcode=gcode+'\n'+_footerStats(_est); // comentarios neutros (Moonraker), sin disparar error de carga
       S.gcode=gcode;
       setProg(100,'✓ G-code listo');
       localStorage.setItem('sl_last_est_secs',_est.secs.toFixed(1));
