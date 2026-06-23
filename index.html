@@ -26268,17 +26268,23 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   // hitFn(x,y,li) = ¿hay modelo ahí? → se usa para inclinar el tronco y esquivar la pieza
   function _buildTreeSupport(cols,hitFn,totalL){
     if(!cols||!cols.length)return[];
-    const n=cols.length,parent=Array.from({length:n},(_,i)=>i);
-    const MERGE_R=11;
-    function find(i){return parent[i]===i?i:(parent[i]=find(parent[i]));}
-    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)
-      if(Math.hypot(cols[i].x-cols[j].x,cols[i].y-cols[j].y)<MERGE_R)parent[find(i)]=find(j);
-    const map=new Map();
-    for(let i=0;i<n;i++){const r=find(i);(map.get(r)||map.set(r,[]).get(r)).push(cols[i]);}
+    // Clustering local ACOTADO: cada contacto se une al cluster cuyo centroide
+    // esté más cerca dentro de MERGE_R; si ninguno, abre uno nuevo. Evita el
+    // encadenamiento transitivo (union-find) que fusionaba contactos lejanos en
+    // muy pocos troncos y dejaba ramas largas flotando hacia contactos inalcanzables.
+    const MERGE_R=6; // = radio máx del cluster (mm) → ramas cortas e imprimibles
+    const clusters=[];
+    for(const c of cols){
+      let best=null,bd=MERGE_R;
+      for(const cl of clusters){const d=Math.hypot(c.x-cl.cx,c.y-cl.cy);if(d<bd){bd=d;best=cl;}}
+      if(best){best.mem.push(c);best.cx+=(c.x-best.cx)/best.mem.length;best.cy+=(c.y-best.cy)/best.mem.length;}
+      else clusters.push({mem:[c],cx:c.x,cy:c.y});
+    }
     const MAXSTEP=0.45; // desplazamiento horizontal máximo por capa (imprimible)
-    return Array.from(map.values()).map(mem=>{
+    return clusters.map(({mem})=>{
       const cx=mem.reduce((s,c)=>s+c.x,0)/mem.length;
       const cy=mem.reduce((s,c)=>s+c.y,0)/mem.length;
+      const reach=Math.max(0.01,...mem.map(c=>Math.hypot(c.x-cx,c.y-cy))); // alcance horizontal de ramas
       const topLi=Math.max(...mem.map(c=>c.top));
       const baseLi=Math.min(...mem.map(c=>c.bot));
       // Camino del tronco (de arriba hacia abajo): si entra en la pieza, se desvía gradualmente; si está libre, vuelve bajo el contacto
@@ -26296,7 +26302,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
         if(!isFinite(x)||!isFinite(y)){x=cx;y=cy;}
         path[li]={x,y};
       }
-      return{mem,cx,cy,topLi,baseLi,path};
+      return{mem,cx,cy,topLi,baseLi,path,reach};
     });
   }
   function _treeSupportAtLayer(trees,li,extW,p){
@@ -26305,11 +26311,13 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const dens=Math.max(10,Math.min(90,(p&&p.supDensity)||25))/100;
     const step=Math.max(extW*1.4,extW/dens*0.9); // menor densidad → mayor separación de la celosía
     for(const tree of trees){
-      const{mem,cx,cy,topLi,baseLi,path}=tree;
+      const{mem,cx,cy,topLi,baseLi,path,reach}=tree;
       const active=mem.filter(c=>c.top>=li&&c.bot<=li);
       if(!active.length)continue;
       const tc=(path&&path[li])||{x:cx,y:cy}; // centro del tronco en esta capa (camino que esquiva la pieza)
-      const BRANCH=6;
+      // Altura de la zona de ramas proporcional al alcance horizontal → suben a ~45°
+      // (imprimibles) en vez de un nº fijo de capas que con capa fina (0.12mm) flotaba.
+      const BRANCH=Math.max(6,Math.ceil((reach||1)/Math.max(0.08,(p&&p.layerHeight)||0.2)));
       if(li>=topLi-BRANCH){
         // Zona de ramas: del tronco hacia cada contacto + puntas cónicas (snap-off fácil)
         const prog=Math.max(0,(li-(topLi-BRANCH))/BRANCH); // 0 = tronco, 1 = contacto
@@ -27039,19 +27047,22 @@ self.onmessage=function(ev){
   // "; FEATURE: <rol>" que OrcaSlicer parsea para colorear y desglosar perímetros,
   // relleno, soporte, etc. (los nombres deben coincidir con los roles de OrcaSlicer).
   function _orcaFeature(c){
-    c=c.toLowerCase();
-    if(/pared exterior/.test(c))return'Outer wall';
-    if(/pared interior/.test(c))return'Inner wall';
-    if(/puente|bridge/.test(c))return'Bridge';
-    if(/gap-fill|gap fill/.test(c))return'Gap infill';
-    if(/interfaz soporte|interfaz de soporte/.test(c))return'Support interface';
-    if(/soporte/.test(c))return'Support';
-    if(/ironing/.test(c))return'Ironing';
-    if(/superficie/.test(c))return'Top surface';
-    if(/relleno|lightning|adaptativo/.test(c))return'Sparse infill';
-    if(/draft shield|skirt/.test(c))return'Skirt';
-    if(/brim/.test(c))return'Brim';
-    if(/raft/.test(c))return'Support';
+    // Anclamos al INICIO del comentario (tras ";") para no marcar frases de cabecera
+    // que contengan "relleno:40%" o "soportes activados" como si fueran secciones.
+    const t=c.replace(/^;+\s*/,'').toLowerCase();
+    if(t.startsWith('pared exterior'))return'Outer wall';
+    if(t.startsWith('pared interior'))return'Inner wall';
+    if(/^puente\b/.test(t)||/^bridge\b/.test(t))return'Bridge';
+    if(/^gap[- ]?fill\b/.test(t))return'Gap infill';
+    if(t.startsWith('interfaz soporte')||t.startsWith('interfaz de soporte'))return'Support interface';
+    if(/^soporte\b/.test(t))return'Support';          // "soporte", "soporte árbol" — NO "soportes activados"
+    if(/^ironing\b/.test(t))return'Ironing';
+    if(t.startsWith('superficie'))return'Top surface';
+    if(/^(relleno|lightning)\b/.test(t))return'Sparse infill';
+    if(t.startsWith('draft shield'))return'Skirt';
+    if(/===\s*skirt/.test(t)||/^skirt\b/.test(t))return'Skirt';
+    if(/===\s*brim/.test(t)||/^brim\b/.test(t))return'Brim';
+    if(/===\s*raft/.test(t))return'Support';
     return null;
   }
   function _tagFeatures(gc){
