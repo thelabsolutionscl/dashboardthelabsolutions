@@ -26309,8 +26309,6 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   function _treeSupportAtLayer(trees,li,extW,p){
     if(!trees||!trees.length)return[];
     const lines=[];
-    const dens=Math.max(10,Math.min(90,(p&&p.supDensity)||25))/100;
-    const step=Math.max(extW*1.4,extW/dens*0.9); // menor densidad → mayor separación de la celosía
     for(const tree of trees){
       const{mem,cx,cy,topLi,baseLi,path,reach}=tree;
       const active=mem.filter(c=>c.top>=li&&c.bot<=li);
@@ -26320,28 +26318,23 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       // (imprimibles) en vez de un nº fijo de capas que con capa fina (0.12mm) flotaba.
       const BRANCH=Math.max(6,Math.ceil((reach||1)/Math.max(0.08,(p&&p.layerHeight)||0.2)));
       if(li>=topLi-BRANCH){
-        // Zona de ramas: del tronco hacia cada contacto + puntas cónicas (snap-off fácil)
+        // Zona de ramas: UNA línea fina del tronco a cada contacto + punta (snap-off fácil)
         const prog=Math.max(0,(li-(topLi-BRANCH))/BRANCH); // 0 = tronco, 1 = contacto
         for(const c of active){
           const bx=tc.x+(c.x-tc.x)*prog,by=tc.y+(c.y-tc.y)*prog;
           const ax=tc.x+(c.x-tc.x)*Math.max(0,prog-0.5),ay=tc.y+(c.y-tc.y)*Math.max(0,prog-0.5);
-          lines.push([[ax,ay],[bx,by]]);
-          const dx=bx-ax,dy=by-ay,L=Math.hypot(dx,dy)||1,nx=-dy/L*extW,ny=dx/L*extW;
-          lines.push([[ax+nx,ay+ny],[bx+nx,by+ny]]);
-          if(li>=c.top-1){const r=li>=c.top?extW*0.8:extW*1.6;lines.push([[c.x-r,c.y],[c.x+r,c.y]]);if(li<c.top)lines.push([[c.x,c.y-r],[c.x,c.y+r]]);}
+          lines.push([[ax,ay],[bx,by]]); // rama: una sola línea (ligera)
+          if(li>=c.top-1){const r=li>=c.top?extW*0.8:extW*1.4;lines.push([[c.x-r,c.y],[c.x+r,c.y]]);if(li<c.top)lines.push([[c.x,c.y-r],[c.x,c.y+r]]);}
         }
       }else{
-        // Tronco: pilar de celosía con base ensanchada → estable y retirable, centrado en tc
+        // Tronco fino tipo tubo: solo contorno octogonal (sin celosía maciza) → ligero y retirable
         const fromBot=li-baseLi;
-        let R=Math.min(4.5,1.6+mem.length*0.3);
-        if(fromBot<10)R+=(10-fromBot)*0.18; // zócalo anti-vuelco en las primeras capas
-        lines.push([[tc.x-R,tc.y-R],[tc.x+R,tc.y-R]]);lines.push([[tc.x+R,tc.y-R],[tc.x+R,tc.y+R]]);
-        lines.push([[tc.x+R,tc.y+R],[tc.x-R,tc.y+R]]);lines.push([[tc.x-R,tc.y+R],[tc.x-R,tc.y-R]]);
-        const dir=li%2===0;
-        for(let o=-R+step;o<R-1e-6;o+=step){
-          if(dir)lines.push([[tc.x-R,tc.y+o],[tc.x+R,tc.y+o]]);
-          else lines.push([[tc.x+o,tc.y-R],[tc.x+o,tc.y+R]]);
-        }
+        let R=Math.min(2.2,1.0+mem.length*0.15);
+        if(fromBot<8)R+=(8-fromBot)*0.12; // pequeño zócalo de adhesión en las primeras capas
+        const SEG=8,pts=[];
+        for(let a=0;a<SEG;a++){const an=a/SEG*2*Math.PI;pts.push([tc.x+Math.cos(an)*R,tc.y+Math.sin(an)*R]);}
+        for(let a=0;a<SEG;a++)lines.push([pts[a],pts[(a+1)%SEG]]);
+        if(R>1.7)lines.push([[tc.x-R*0.6,tc.y],[tc.x+R*0.6,tc.y]]); // refuerzo único solo si el tronco es ancho
       }
     }
     return lines;
