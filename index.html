@@ -3074,7 +3074,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="of-vbtn" data-v="floor" onclick="ofSetView('floor')">🏢 Planta</button>
         <button class="of-vbtn" data-v="iso" onclick="ofSetView('iso')">🏨 3D</button>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="ofZoom(1)" title="Acercar (también con la rueda del mouse sobre la escena 3D)">🔍+</button>
+      <button class="btn btn-ghost btn-sm" onclick="ofZoom(1)" title="Acercar (o Ctrl/⌘ + rueda sobre la escena 3D · arrastra para mover)">🔍+</button>
       <button class="btn btn-ghost btn-sm" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
       <button class="btn btn-ghost btn-sm" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
       <button class="btn btn-ghost btn-sm" onclick="refreshOficina()">↻ Actualizar</button>
@@ -15243,6 +15243,8 @@ function _ofModelImg(modelo,nombre){
   for(const k of keys.slice().sort((a,b)=>b.length-a.length)){ if(hay.includes(k.toLowerCase())) return MODELO_IMGS[k]; }
   return '';
 }
+// Defensa en profundidad: solo deja pasar URLs de imagen seguras (bloquea javascript:/data:text/… en href/src)
+function _ofSafeUrl(u){ u=String(u||'').trim(); return /^(https?:\/\/|data:image\/)/i.test(u)?u:''; }
 function _ofPrinterLbl(estado){ const e=(estado||'').toString().toLowerCase();
   if(/imprim|ocupad|print|busy|trabaj|en uso/.test(e)) return 'Imprimiendo';
   if(/manten|repar/.test(e)) return 'Mantención';
@@ -15407,11 +15409,11 @@ function _ofApplyCam(svg){
 }
 function ofZoom(dir){ const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; _ofCam.scale=Math.max(1,Math.min(6,_ofCam.scale*(dir>0?1.25:0.8))); _ofApplyCam(svg); }
 function ofCamReset(){ _ofCam=null; _ofFollowId=null; const svg=_ofSvg(); if(svg)_ofApplyCam(svg); }
-function ofFocusAgent(id){ _ofFollowId=id; if(_ofView!=='iso') ofSetView('iso'); else renderOficina(); }
+function ofFocusAgent(id){ _ofFollowId=id; if(_ofView!=='iso'){ ofSetView('iso'); return; } const svg=_ofSvg(); if(svg && _ofPos[id]){ const p=_ofPos[id]; _ofCam={cx:p[0],cy:p[1]-30,scale:2.4}; _ofFollowId=null; _ofApplyCam(svg); } else renderOficina(); }
 function _ofInitCamControls(host){
   if(host._ofCamInit) return; host._ofCamInit=true;
   const scene=()=>host.querySelector('.of-iso-scene');
-  host.addEventListener('wheel',e=>{ const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; e.preventDefault();
+  host.addEventListener('wheel',e=>{ if(!(e.ctrlKey||e.metaKey)) return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; e.preventDefault();
     if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1};
     const r=svg.getBoundingClientRect(), s0=_ofCam.scale, w0=b[2]/s0, h0=b[3]/s0;
     const fx=(e.clientX-r.left)/r.width, fy=(e.clientY-r.top)/r.height;
@@ -15420,7 +15422,7 @@ function _ofInitCamControls(host){
     _ofCam.cx=ux+(0.5-fx)*w1; _ofCam.cy=uy+(0.5-fy)*h1; _ofCam.scale=ns; _ofApplyCam(svg);
   }, {passive:false});
   let drag=false,lx=0,ly=0,moved=false;
-  host.addEventListener('pointerdown',e=>{ if(e.button!==0)return; if(!_ofSvg())return; drag=true; moved=false; lx=e.clientX; ly=e.clientY; const sc=scene(); if(sc)sc.classList.add('of-grabbing'); });
+  host.addEventListener('pointerdown',e=>{ if(e.button!==0||e.pointerType==='touch')return; if(!_ofSvg())return; drag=true; moved=false; host._ofDragged=false; lx=e.clientX; ly=e.clientY; const sc=scene(); if(sc)sc.classList.add('of-grabbing'); });
   window.addEventListener('pointermove',e=>{ if(!drag)return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; const r=svg.getBoundingClientRect(), w=b[2]/_ofCam.scale, h=b[3]/_ofCam.scale; const dx=(e.clientX-lx)/r.width*w, dy=(e.clientY-ly)/r.height*h; if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)moved=true; _ofCam.cx-=dx; _ofCam.cy-=dy; lx=e.clientX; ly=e.clientY; _ofApplyCam(svg); });
   const end=()=>{ if(!drag)return; drag=false; const sc=scene(); if(sc)sc.classList.remove('of-grabbing'); host._ofDragged=moved; };
   window.addEventListener('pointerup',end); window.addEventListener('pointercancel',end);
@@ -15539,7 +15541,7 @@ async function _renderOficina(){
     } else { cls=_ofPrinterCls(p.estado); lbl=_ofPrinterLbl(p.estado); if(cls==='of-work') progress=-1; }   // sin bridge: barra indeterminada si "imprimiendo"
     if(cls==='of-work')working++;
     const pct=(progress!=null&&progress>=0)?(' · '+progress+'%'):'';
-    return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', img:_ofModelImg(p.modelo,p.nombre), pcolor:p.color||'#3aa0ff', role:'Impresora 3D · '+(p.modelo||p.nombre||''), cls, lbl, progress, eta, task:(p.modelo||'Impresora 3D')+' · '+lbl+pct, stats:''+(p.modelo||''), num:p.numG||p.num||0};
+    return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', img:_ofSafeUrl(_ofModelImg(p.modelo,p.nombre)), role:'Impresora 3D · '+(p.modelo||p.nombre||''), cls, lbl, progress, eta, task:(p.modelo||'Impresora 3D')+' · '+lbl+pct, stats:''+(p.modelo||''), num:p.numG||p.num||0};
   }).sort((a,b)=>{ const rk=m=>{const s=((m.label||'')+' '+(m.role||'')).toLowerCase(); if(/k2\s*plus/.test(s))return 3; if(/giga|orangestorm/.test(s))return 4; if(/ender/.test(s))return 2; if(/k2/.test(s))return 1; if(/k1/.test(s))return 0; return 5;}; return rk(a)-rk(b)||(a.num-b.num); });
   const extraDepts=printerModel.length?[{name:'Impresoras 3D',color:'#3aa0ff',members:printerModel}]:[];
 
@@ -15647,21 +15649,6 @@ const _OF_NAME_ES={
 function _ofPretty(label){
   if(_OF_NAME_ES[label]) return _OF_NAME_ES[label];
   return String(label||'').replace(/_AGENT$/i,'').replace(/_/g,' ').trim()||String(label||'');
-}
-function _ofIsoDesk(col,working){
-  const dy=9, hw=23, hh=11, legH=14;
-  const top=`${0},${dy-hh} ${hw},${dy} ${0},${dy+hh} ${-hw},${dy}`;
-  const left=`${-hw},${dy} ${0},${dy+hh} ${0},${dy+hh+legH} ${-hw},${dy+legH}`;
-  const right=`${0},${dy+hh} ${hw},${dy} ${hw},${dy+legH} ${0},${dy+hh+legH}`;
-  const scr=working?col:'#5b7184';
-  const mon=`<rect x="-8" y="${dy-13}" width="16" height="11" rx="1.8" fill="#15171a"/>`+
-    `<rect x="-6.5" y="${dy-11.5}" width="13" height="8" rx="1" fill="${scr}" opacity="${working?'0.95':'0.55'}"/>`+
-    (working?`<polyline points="-5,${dy-5} -2.5,${dy-7} 0,${dy-4.5} 2.5,${dy-7.5} 5,${dy-6}" fill="none" stroke="#0c100e" stroke-width="0.9" opacity="0.55"/>`:'')+
-    `<rect x="-1.5" y="${dy-2}" width="3" height="3" fill="#15171a"/>`;
-  const kbd=`<rect x="-9" y="${dy+1}" width="18" height="5" rx="1.4" fill="#dfe3e8"/><rect x="-9" y="${dy+1}" width="18" height="2" rx="1" fill="#fff" opacity="0.5"/>`;
-  const mug=`<rect x="12" y="${dy-4}" width="5" height="6" rx="1.4" fill="${col}"/><rect x="16.5" y="${dy-2.5}" width="2" height="3" rx="1" fill="none" stroke="${col}" stroke-width="0.9"/>`;
-  return `<polygon points="${left}" fill="#85602f"/><polygon points="${right}" fill="#9a7239"/><polygon points="${top}" fill="#bd9156"/>`+
-    `<polygon points="${top}" fill="url(#ofShine)" opacity="0.55"/>${mon}${kbd}${mug}`;
 }
 // Categorías funcionales de los agentes IA (para agrupar dentro de la zona)
 const _OF_CAT=[
@@ -16132,8 +16119,6 @@ function _ofRenderIso(ia,auto,extras){
   const door=`<polygon points="${lp(0.70,0)} ${lp(0.90,0)} ${lp(0.90,54)} ${lp(0.70,54)}" fill="#c4cdd7" stroke="#aab4bf" stroke-width="2"/>`
     +`<polygon points="${lp(0.715,0)} ${lp(0.885,0)} ${lp(0.885,47)} ${lp(0.715,47)}" fill="url(#ofDoorway)"/>`
     +`<polygon points="${lp(0.715,0)} ${lp(0.885,0)} ${lp(0.885,47)} ${lp(0.715,47)}" fill="#ffd9a0" opacity="0.06"/>`;
-  // Logo de marca en la pared izquierda
-  const cL=lp(0.33,wallH*0.66);
   // Logo de marca (mismo logo del dashboard) proyectado en DIAGONAL sobre la pared izquierda
   const _lvx=At[0]-Dl[0], _lvy=At[1]-Dl[1], _lvl=Math.hypot(_lvx,_lvy)||1, _lux=_lvx/_lvl, _luy=_lvy/_lvl;
   const _lorg=[At[0]+0.58*(Dl[0]-At[0]), At[1]+0.58*(Dl[1]-At[1])-wallH*0.80];
