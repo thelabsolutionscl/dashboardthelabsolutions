@@ -26849,7 +26849,14 @@ self.onmessage=function(ev){
       const peo=_hasObjSet?_objParams(pe,_grp.oi):pe;
       // Paredes por contorno: exterior crece hacia adentro, agujero crece hacia afuera (más material alrededor)
       const fillLoops=[],gapLoops=[];
-      for(const ci of _grp.cis){
+      // Orden de islas por proximidad (greedy NN desde la posición del cabezal) → menos
+      // viajes entre contornos separados (paredes). Con una sola isla = orden anterior.
+      const _rem=new Set(_grp.cis.filter(_ci=>baseC[_ci]&&baseC[_ci].length>=3));
+      const _cent=new Map();
+      for(const _ci of _rem){const _ct=baseC[_ci];let _sx=0,_sy=0;for(const _pt of _ct){_sx+=_pt[0];_sy+=_pt[1];}_cent.set(_ci,[_sx/_ct.length+offX,_sy/_ct.length+offY]);}
+      while(_rem.size){
+        let ci=null,_bd=Infinity;for(const _k of _rem){const _c=_cent.get(_k);const _d=(_c[0]-cX)*(_c[0]-cX)+(_c[1]-cY)*(_c[1]-cY);if(_d<_bd){_bd=_d;ci=_k;}}
+        _rem.delete(ci);
         const ct=baseC[ci];if(ct.length<3)continue;
         const hole=parity[ci];
         const shells=[ct];
