@@ -3017,6 +3017,23 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 @keyframes ofSteam{0%{opacity:0;transform:translateY(0) scaleX(1);}35%{opacity:.65;}100%{opacity:0;transform:translateY(-8px) scaleX(1.6);}}
 .of-steam{animation:ofSteam 2.8s ease-out infinite;transform-box:fill-box;transform-origin:center bottom;}
 @media(prefers-reduced-motion:reduce){.of-iso-walker,.of-iso-errand,.of-iso-errand-bubble,.of-steam{animation:none;}.of-iso-char.of-iso-bob .of-iso-body,.of-iso-char.of-iso-breathe .of-iso-body,.of-iso-walker .of-iso-body,.of-iso-errand .of-iso-body{animation:none;}}
+/* Reacciones (🎉), corona (👑), moods (⛈️/💤), progreso de impresión y cámara 3D */
+@keyframes ofCelebPop{0%{transform:scale(.4);opacity:0;}25%{transform:scale(1.18);opacity:1;}70%{transform:scale(1);opacity:1;}100%{transform:scale(1.05);opacity:0;}}
+.of-celeb{animation:ofCelebPop 5.2s ease-out infinite;transform-box:fill-box;transform-origin:center;}
+@keyframes ofSpark{0%,100%{opacity:0;transform:scale(.5);}45%{opacity:1;transform:scale(1.25);}}
+.of-celeb .of-spark1{animation:ofSpark 1.1s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
+.of-celeb .of-spark2{animation:ofSpark 1.1s ease-in-out .55s infinite;transform-box:fill-box;transform-origin:center;}
+@keyframes ofCrown{0%,100%{transform:translateY(0) rotate(-4deg);}50%{transform:translateY(-1.6px) rotate(4deg);}}
+.of-crown{animation:ofCrown 3s ease-in-out infinite;transform-box:fill-box;transform-origin:center bottom;}
+@keyframes ofStorm{0%,100%{transform:translateX(0);}25%{transform:translateX(-1.3px);}75%{transform:translateX(1.3px);}}
+.of-mood-storm{animation:ofStorm 1.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
+@keyframes ofSleep{0%{opacity:0;transform:translateY(2px) scale(.8);}40%{opacity:.9;}100%{opacity:0;transform:translateY(-7px) scale(1.1);}}
+.of-mood-sleep{animation:ofSleep 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
+@keyframes ofProgInd{0%{transform:translateX(0);}100%{transform:translateX(calc(var(--pw,40px) * 0.62));}}
+.of-prog-ind{animation:ofProgInd 1.4s ease-in-out infinite alternate;will-change:transform;}
+#tab-oficina .of-iso-scene{cursor:grab;}
+#tab-oficina .of-iso-scene.of-grabbing{cursor:grabbing;}
+@media(prefers-reduced-motion:reduce){.of-celeb,.of-celeb .of-spark1,.of-celeb .of-spark2,.of-crown,.of-mood-storm,.of-mood-sleep,.of-prog-ind{animation:none;}.of-mood-sleep{opacity:.85;}}
 /* Analítica — gráficos */
 #tab-oficina .of-charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
 #tab-oficina .of-chart{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;min-width:0;}
@@ -3057,6 +3074,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="of-vbtn" data-v="floor" onclick="ofSetView('floor')">🏢 Planta</button>
         <button class="of-vbtn" data-v="iso" onclick="ofSetView('iso')">🏨 3D</button>
       </div>
+      <button class="btn btn-ghost btn-sm" onclick="ofZoom(1)" title="Acercar (también con la rueda del mouse sobre la escena 3D)">🔍+</button>
+      <button class="btn btn-ghost btn-sm" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
+      <button class="btn btn-ghost btn-sm" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
       <button class="btn btn-ghost btn-sm" onclick="refreshOficina()">↻ Actualizar</button>
       <button class="btn btn-ghost btn-sm" id="ofFsBtn" onclick="ofFullscreen()">📺 Pantalla completa</button>
     </div>
@@ -13120,6 +13140,7 @@ async function runAgent(id){
   try{
     let _r=await callClaude(cfg.sys+AGENT_TONE,fullInput);
     try{AGENT_LOG.add(cfg.label,input,_r);}catch(e){}
+    try{ofCelebrate(cfg.label);}catch(e){}   // 🎉 reacción en la Oficina Virtual al completar
     const _oldIns=document.getElementById('qins_QUOTE');if(_oldIns) _oldIns.remove();
     if(id==='QUOTE'){
       const qm=_r.match(/\[ITEMS\]([\s\S]*?)\[\/ITEMS\]/i);
@@ -15191,6 +15212,22 @@ function ofLogComm(from,to){
     setTimeout(()=>{ if(document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina(); }, _OF_COMM_MS+300);
   }
 }
+// ── Reacciones / celebraciones cuando un agente COMPLETA una ejecución ──
+let _ofCelebs=[]; const _OF_CELEB_MS=5200;
+function ofCelebrate(label){
+  if(!label) return;
+  const now=Date.now();
+  _ofCelebs=_ofCelebs.filter(c=>now-c.t<_OF_CELEB_MS);
+  _ofCelebs.push({label,t:now});
+  if(typeof renderOficina==='function' && document.getElementById('tab-oficina')?.classList.contains('active')){
+    renderOficina();
+    setTimeout(()=>{ if(document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina(); }, _OF_CELEB_MS+250);
+  }
+}
+// ── Cámara de la escena 3D (pan / zoom / enfocar agente) ──
+let _ofCam=null;                 // {cx,cy,scale} sobre el viewBox base; null = sin tocar
+let _ofFollowId=null;            // agente a centrar tras el render
+const _ofPos={};                 // id → [x,y] del puesto del agente (para enfocar)
 // Estado de impresora 3D → estado de oficina
 function _ofPrinterCls(estado){ const e=(estado||'').toString().toLowerCase();
   if(/imprim|ocupad|print|busy|trabaj|en uso/.test(e)) return 'of-work';
@@ -15297,7 +15334,8 @@ function ofAgentDetail(id){
       <div class="ofd-stat"><div class="ofd-stat-v">${total}</div><div class="ofd-stat-l">Registradas</div></div>
       <div class="ofd-stat"><div class="ofd-stat-v mono">${last?escapeHtml(_ofAgo(last.t)):'—'}</div><div class="ofd-stat-l">Última</div></div>
     </div>
-    ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:16px" onclick="ofAgentRun('${id}')">▶ Ejecutar este agente</button>`:''}
+    ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:8px" onclick="ofAgentRun('${id}')">▶ Ejecutar este agente</button>`:''}
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:16px" onclick="closeOfAgent();ofFocusAgent('${escapeHtml(id)}')">📍 Ver en la oficina 3D</button>
     <div class="ofd-seclbl">Últimas ejecuciones</div>
     ${rowsHtml}`;
   const mo=document.getElementById('ofAgentModal'); if(mo) mo.style.display='flex';
@@ -15356,6 +15394,38 @@ function _ofOnFsChange(){
 }
 document.addEventListener('fullscreenchange',_ofOnFsChange);
 document.addEventListener('webkitfullscreenchange',_ofOnFsChange);
+// ── Cámara de la escena 3D: pan (arrastrar), zoom (rueda/botones) y enfocar agente ──
+function _ofSvg(){ const h=document.getElementById('oficinaIso'); return h&&h.querySelector('svg.of-iso-svg'); }
+function _ofCamBase(svg){ const b=(svg.dataset.vb||'').split(' ').map(Number); return b.length===4?b:null; }
+function _ofApplyCam(svg){
+  if(!svg) return; const b=_ofCamBase(svg); if(!b) return; const [bx,by,bw,bh]=b;
+  if(!_ofCam){ svg.setAttribute('viewBox',`${bx} ${by} ${bw} ${bh}`); return; }
+  const s=Math.max(1,Math.min(6,_ofCam.scale||1)), w=bw/s, h=bh/s;
+  const cx=Math.max(bx+w/2,Math.min(bx+bw-w/2,_ofCam.cx)), cy=Math.max(by+h/2,Math.min(by+bh-h/2,_ofCam.cy));
+  _ofCam.cx=cx; _ofCam.cy=cy; _ofCam.scale=s;
+  svg.setAttribute('viewBox',`${(cx-w/2).toFixed(1)} ${(cy-h/2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+}
+function ofZoom(dir){ const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; _ofCam.scale=Math.max(1,Math.min(6,_ofCam.scale*(dir>0?1.25:0.8))); _ofApplyCam(svg); }
+function ofCamReset(){ _ofCam=null; _ofFollowId=null; const svg=_ofSvg(); if(svg)_ofApplyCam(svg); }
+function ofFocusAgent(id){ _ofFollowId=id; if(_ofView!=='iso') ofSetView('iso'); else renderOficina(); }
+function _ofInitCamControls(host){
+  if(host._ofCamInit) return; host._ofCamInit=true;
+  const scene=()=>host.querySelector('.of-iso-scene');
+  host.addEventListener('wheel',e=>{ const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; e.preventDefault();
+    if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1};
+    const r=svg.getBoundingClientRect(), s0=_ofCam.scale, w0=b[2]/s0, h0=b[3]/s0;
+    const fx=(e.clientX-r.left)/r.width, fy=(e.clientY-r.top)/r.height;
+    const ux=_ofCam.cx-w0/2+fx*w0, uy=_ofCam.cy-h0/2+fy*h0;
+    const ns=Math.max(1,Math.min(6,s0*(e.deltaY<0?1.15:0.87))), w1=b[2]/ns, h1=b[3]/ns;
+    _ofCam.cx=ux+(0.5-fx)*w1; _ofCam.cy=uy+(0.5-fy)*h1; _ofCam.scale=ns; _ofApplyCam(svg);
+  }, {passive:false});
+  let drag=false,lx=0,ly=0,moved=false;
+  host.addEventListener('pointerdown',e=>{ if(e.button!==0)return; if(!_ofSvg())return; drag=true; moved=false; lx=e.clientX; ly=e.clientY; const sc=scene(); if(sc)sc.classList.add('of-grabbing'); });
+  window.addEventListener('pointermove',e=>{ if(!drag)return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; const r=svg.getBoundingClientRect(), w=b[2]/_ofCam.scale, h=b[3]/_ofCam.scale; const dx=(e.clientX-lx)/r.width*w, dy=(e.clientY-ly)/r.height*h; if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)moved=true; _ofCam.cx-=dx; _ofCam.cy-=dy; lx=e.clientX; ly=e.clientY; _ofApplyCam(svg); });
+  const end=()=>{ if(!drag)return; drag=false; const sc=scene(); if(sc)sc.classList.remove('of-grabbing'); host._ofDragged=moved; };
+  window.addEventListener('pointerup',end); window.addEventListener('pointercancel',end);
+  host.addEventListener('click',e=>{ if(host._ofDragged){ e.stopPropagation(); e.preventDefault(); host._ofDragged=false; } }, true);   // un arrastre no abre el detalle
+}
 async function renderOficina(){
   if(!document.getElementById('tab-oficina')) return;
   if(_oficinaBusy) return;          // B4: evita ejecuciones solapadas
@@ -15419,10 +15489,13 @@ async function _renderOficina(){
     else { const st=_ofStatus(lastT); cls=st.cls; lbl=st.lbl; }
     if(cls==='of-work') working++;
     const today=list.filter(r=>_ofSameDay(r.t)).length;
+    const count30=list.filter(r=>r.t && Date.now()-r.t<2592e6).length;   // ejecuciones últimos 30 días
     return {clickIA:true, id:a.id, label:a.label, icon:a.icon||'🤖', role:'Agente IA · '+_ofCat(a).name,
       cls, lbl, task:last?(last.input||last.output||''):'Sin tareas recientes',
-      stats:today+' hoy · '+_ofAgo(lastT), spark:_ofSpark(list)};
+      count30, stats:today+' hoy · '+_ofAgo(lastT), spark:_ofSpark(list)};
   });
+  // 👑 Empleado del mes: el agente con MÁS ejecuciones en los últimos 30 días (si hay actividad)
+  { let _bi=-1,_bv=0; iaModel.forEach((m,i)=>{ if((m.count30||0)>_bv){_bv=m.count30;_bi=i;} }); if(_bi>=0&&_bv>0) iaModel[_bi].top=true; }
 
   // ── Modelo: automatizaciones (data-driven: CFG + filas extra de la tabla) ──
   const cfgIds=new Set(AUTOMATIONS_CFG.map(a=>a.id.toLowerCase()));
@@ -15452,8 +15525,21 @@ async function _renderOficina(){
     else { try{ const mq=await airtableFetch('Maquinas',200); printersRaw=(mq.records||[]).map(r=>({id:r.fields.id||r.id,nombre:r.fields.nombre||'',num:r.fields.num||0,numG:r.fields.numG||r.fields.num||0,modelo:r.fields.modelo||'',color:r.fields.color||'#3aa0ff',estado:r.fields.estado||'disponible'})); _ofMaqCache={t:Date.now(),data:printersRaw}; }
       catch(e){ _ofErr=true; if(_ofMaqCache.data)printersRaw=_ofMaqCache.data; else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS))printersRaw=MAQUINAS; } }
   } else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)){ printersRaw=MAQUINAS; }
-  const printerModel=printersRaw.map(p=>{ const cls=_ofPrinterCls(p.estado), lbl=_ofPrinterLbl(p.estado); if(cls==='of-work')working++;
-    return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', img:_ofModelImg(p.modelo,p.nombre), pcolor:p.color||'#3aa0ff', role:'Impresora 3D · '+(p.modelo||p.nombre||''), cls, lbl, task:(p.modelo||'Impresora 3D')+' · '+lbl, stats:''+(p.modelo||''), num:p.numG||p.num||0};
+  const _liveP=(typeof _printerStatus!=='undefined')?_printerStatus:{};
+  const printerModel=printersRaw.map(p=>{
+    // Telemetría EN VIVO del bridge (si la pestaña Impresoras la ha poblado): manda sobre el estado de Airtable
+    const lv=_liveP[String(p.id)]||null;
+    let cls,lbl,progress=null,eta=0;
+    if(lv && lv.state){ const ls=lv.state;
+      if(ls==='printing'){ cls='of-work'; lbl='Imprimiendo'; progress=(typeof lv.progress==='number'?lv.progress:-1); eta=lv.eta||0; }
+      else if(ls==='paused'){ cls='of-active'; lbl='En pausa'; progress=(typeof lv.progress==='number'?lv.progress:null); }
+      else if(ls==='error'||ls==='shutdown'){ cls='of-error'; lbl='Con falla'; }
+      else if(ls==='offline'||ls==='noip'){ cls='of-off'; lbl='Sin conexión'; }
+      else { cls='of-off'; lbl='Disponible'; }
+    } else { cls=_ofPrinterCls(p.estado); lbl=_ofPrinterLbl(p.estado); if(cls==='of-work') progress=-1; }   // sin bridge: barra indeterminada si "imprimiendo"
+    if(cls==='of-work')working++;
+    const pct=(progress!=null&&progress>=0)?(' · '+progress+'%'):'';
+    return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', img:_ofModelImg(p.modelo,p.nombre), pcolor:p.color||'#3aa0ff', role:'Impresora 3D · '+(p.modelo||p.nombre||''), cls, lbl, progress, eta, task:(p.modelo||'Impresora 3D')+' · '+lbl+pct, stats:''+(p.modelo||''), num:p.numG||p.num||0};
   }).sort((a,b)=>{ const rk=m=>{const s=((m.label||'')+' '+(m.role||'')).toLowerCase(); if(/k2\s*plus/.test(s))return 3; if(/giga|orangestorm/.test(s))return 4; if(/ender/.test(s))return 2; if(/k2/.test(s))return 1; if(/k1/.test(s))return 0; return 5;}; return rk(a)-rk(b)||(a.num-b.num); });
   const extraDepts=printerModel.length?[{name:'Impresoras 3D',color:'#3aa0ff',members:printerModel}]:[];
 
@@ -15489,7 +15575,7 @@ function _ofWorkerCard(m){
   return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
     <div class="of-avatar" style="${avStyle}">${avInner}</div>
     <div class="of-body">
-      <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(_ofPretty(m.label))}</span></div>
+      <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(_ofPretty(m.label))}</span>${m.top?'<span title="Más ejecuciones en 30 días" style="margin-left:4px">👑</span>':''}</div>
       <div class="of-role">${escapeHtml(m.role)}</div>
       <div class="of-task">${escapeHtml((m.task||'').substring(0,90))}</div>
       <div class="of-foot"><span class="of-state-lbl">${escapeHtml(m.lbl)}</span><span class="of-stats">${escapeHtml(m.stats||'')}</span></div>
@@ -15611,10 +15697,22 @@ function _ofIsoStation(m,x,y){
     const body=m.img?`<image href="${m.img}" x="${f(-Wp/2)}" y="${f(baseY-Hp)}" width="${f(Wp)}" height="${f(Hp)}" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="${f(baseY-Hp*0.28)}" text-anchor="middle" font-size="${(36*big).toFixed(0)}">🖨️</text>`;
     const light=`<circle cx="${f(Wp*0.36)}" cy="${f(baseY-Hp*0.82)}" r="4.6" fill="${col}" stroke="#fff" stroke-width="1.3"${working?' class="of-iso-blink"':''}/>`;
     const shadow=`<ellipse cx="0" cy="${f(baseY+2)}" rx="${(Wp*0.46).toFixed(0)}" ry="${(6*big).toFixed(0)}" fill="url(#ofShadow)"/>`;
+    // Barra de PROGRESO de impresión (real si el bridge la reporta; indeterminada si solo se sabe que imprime)
+    let prog='';
+    if(working && m.progress!=null){
+      const _eta=s=>{ s=Math.max(0,Math.round(s||0)); const h=Math.floor(s/3600), mi=Math.floor((s%3600)/60); return h?h+'h'+(mi<10?'0':'')+mi:mi+'m'; };
+      const pw=Wp*0.78, px=-pw/2, py=baseY-Hp*0.16, ph=4.4, det=m.progress>=0;
+      const fillW=det?pw*Math.max(0,Math.min(100,m.progress))/100:pw;
+      prog=`<rect x="${f(px)}" y="${f(py)}" width="${f(pw)}" height="${ph}" rx="${ph/2}" fill="#0f1114" opacity="0.85"/>`
+        +(det?`<rect x="${f(px)}" y="${f(py)}" width="${f(fillW)}" height="${ph}" rx="${ph/2}" fill="${col}"/>`
+             :`<rect class="of-prog-ind" x="${f(px)}" y="${f(py)}" width="${f(pw*0.4)}" height="${ph}" rx="${ph/2}" fill="${col}" style="--pw:${f(pw)}px"/>`)
+        +`<g transform="translate(0,${f(baseY-Hp-7)})"><rect x="-24" y="-8.5" width="48" height="13" rx="6.5" fill="#0e1116" opacity="0.9"/><text x="0" y="1.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="700">🖨️ ${det?m.progress+'%':'···'}${(det&&m.eta&&m.progress<100)?' · '+_eta(m.eta):''}</text></g>`;
+    }
     return `<g class="of-iso-char" ${pclick} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
       <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
       ${shadow}${halo}
       <g class="of-iso-body">${body}${light}</g>
+      ${prog}
     </g>`;
   }
   const dark=_ofShade(col,0.72);
@@ -15765,6 +15863,15 @@ function _ofRingAgent(m,x,y){
   const f=n=>n.toFixed(1), bob=working?' of-iso-bob':' of-iso-breathe';
   const bd=working?'':` style="--bd:-${(_ofHash(m.id)%48)/10}s"`;   // respiración escalonada por agente
   const halo=working?`<ellipse cx="0" cy="-28" rx="22" ry="25" fill="${col}" opacity="0.28" filter="url(#ofHalo)"/>`:'';
+  const celebrating=_ofCelebs.some(c=>c.label===m.label && Date.now()-c.t<_OF_CELEB_MS);
+  // 👑 empleado del mes
+  const crown=m.top?`<g class="of-crown" transform="translate(0,-52)"><text x="0" y="0" text-anchor="middle" font-size="15">👑</text></g>`:'';
+  // Reacción sobre la cabeza: 🎉 al completar · ⛈️ si hay error · 💤 en reposo
+  const reaction=celebrating
+    ? `<g class="of-celeb" transform="translate(0,-62)"><text class="of-spark1" x="-15" y="-3" font-size="10">✨</text><text x="0" y="0" text-anchor="middle" font-size="18">🎉</text><text class="of-spark2" x="13" y="-1" font-size="10">✨</text></g>`
+    : (m.cls==='of-error'
+      ? `<g class="of-mood of-mood-storm" transform="translate(0,-60)"><ellipse cx="0" cy="0" rx="11" ry="6" fill="#7a828d"/><ellipse cx="-5.5" cy="-2.5" rx="6" ry="4.5" fill="#9aa3ad"/><ellipse cx="5.5" cy="-2.5" rx="6" ry="4.5" fill="#9aa3ad"/><polygon points="-1,4 3,4 0,10 4,10 -2,18 0,9 -3,9" fill="#ffd23f"/></g>`
+      : ((!working&&!m.top) ? `<g class="of-mood of-mood-sleep" transform="translate(11,-54)"><text x="0" y="0" font-size="10" fill="#aeb8c4" font-weight="700">z</text><text x="4" y="-6" font-size="7" fill="#9aa6b3" font-weight="700">z</text></g>` : ''));
   return `<g class="of-iso-char${bob}"${bd} ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${f(x)},${f(y)})">
     <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
     <ellipse cx="0" cy="3" rx="13" ry="5.5" fill="url(#ofShadow)"/>
@@ -15778,7 +15885,7 @@ function _ofRingAgent(m,x,y){
       <ellipse cx="-5" cy="-39" rx="4" ry="2.6" fill="#fff" opacity="0.6"/>
       ${m.img?`<image href="${m.img}" x="-12" y="-46" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-29" text-anchor="middle" font-size="16">${em}</text>`}
       <circle cx="11" cy="-45" r="3.6" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
-    </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+`
+    </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+crown+reaction+`
   </g>`;
 }
 // MARCO de puerta (vano ABIERTO, SIN HOJA): va sobre el MURO frontal-derecho (borde R→F),
@@ -15833,9 +15940,15 @@ function _ofRenderIso(ia,auto,extras){
   // Comunicaciones activas (agentes caminando entre departamentos)
   const _comms=_ofComms.filter(c=>Date.now()-c.t<_OF_COMM_MS);
   // No re-renderizar si nada cambió → preserva las animaciones (sin "saltos" en la TV)
-  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.task||'').slice(0,18)).join(';')+'|c:'+_comms.map(c=>c.from+'>'+c.to).join(',');
-  if(host.dataset.sig===sig && host.querySelector('svg')) return;
+  const _cz=_ofCelebs.filter(c=>Date.now()-c.t<_OF_CELEB_MS).map(c=>c.label).join(',');
+  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.top?'*':'')+(m.task||'').slice(0,18)).join(';')+'|c:'+_comms.map(c=>c.from+'>'+c.to).join(',')+'|z:'+_cz;
+  if(host.dataset.sig===sig && host.querySelector('svg')){
+    // misma escena: solo aplica un enfoque pendiente (sin reconstruir → preserva las animaciones)
+    if(_ofFollowId && _ofPos[_ofFollowId]){ const _p=_ofPos[_ofFollowId]; _ofCam={cx:_p[0],cy:_p[1]-30,scale:2.4}; _ofFollowId=null; _ofApplyCam(host.querySelector('svg.of-iso-svg')); }
+    return;
+  }
   host.dataset.sig=sig;
+  for(const _k in _ofPos) delete _ofPos[_k];   // recalcular posiciones de los puestos en este render
   // ── Departamentos como SALAS (cada una con su tamaño, empacadas en estantes) ──
   const _depts=[];
   _OF_CAT.forEach(c=>{ const mem=ia.filter(m=>_ofCat(m).name===c.name); if(mem.length) _depts.push({name:c.name,color:c.color,members:mem}); });
@@ -15957,7 +16070,7 @@ function _ofRenderIso(ia,auto,extras){
       const slots=_ofPrinterSlots(R.members);
       const ps=R.members.map(m=>{ const pos=slots.get(m)||[0,0]; const [x,y]=iso(R.c0+pos[0],R.r0+pos[1]); return {m,x,y}; });
       ps.sort((a,b)=>a.y-b.y);
-      ps.forEach(({m,x,y})=>{ chars+=_ofIsoStation(m,x,y-_ch); tags+=_ofIsoTag(m,x,y); });
+      ps.forEach(({m,x,y})=>{ _ofPos[m.id]=[x,y-_ch]; chars+=_ofIsoStation(m,x,y-_ch); tags+=_ofIsoTag(m,x,y); });
       return;
     }
     // Agentes: mesón central + anillo alrededor; los que están en STAND BY pueden salir a una pausa
@@ -15972,6 +16085,7 @@ function _ofRenderIso(ia,auto,extras){
     const tableH=16, tRx=Math.max(tw*0.38, ringRx*0.66), tRy=Math.max(th*0.38, ringRy*0.66);
     const ang=i=>-Math.PI/2 + 2*Math.PI*(i+0.5)/Math.max(N,1);
     const pos=seats.map((m,i)=>{ const a=ang(i); return {m,a,sx:ctr[0]+ringRx*Math.cos(a),sy:ctr[1]+ringRy*Math.sin(a)}; });
+    pos.forEach(p=>{ _ofPos[p.m.id]=[p.sx,p.sy]; });   // puesto del agente (para enfocar/ubicar)
     // ¿quién sale a una pausa? sólo agentes en reposo (no trabajando); a lo más ~40% de la sala
     const _cand=pos.filter(p=>p.m.cls!=='of-work' && _ofHash(p.m.id+'brk')%3===0);
     const _away=new Set(_cand.slice(0,Math.round(N*0.4)).map(p=>p.m.id));
@@ -16083,6 +16197,14 @@ function _ofRenderIso(ia,auto,extras){
     ${ambient}
     <rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="url(#ofVig)" pointer-events="none"/>
   </svg></div>`;
+  // Cámara: guardar el viewBox base, aplicar pan/zoom/enfoque vigente y activar los controles
+  const _svg=host.querySelector('svg.of-iso-svg');
+  if(_svg){
+    _svg.dataset.vb=`${vbX} ${topY} ${vbW} ${vbH}`;
+    if(_ofFollowId && _ofPos[_ofFollowId]){ const _p=_ofPos[_ofFollowId]; _ofCam={cx:_p[0],cy:_p[1]-30,scale:2.4}; _ofFollowId=null; }
+    _ofApplyCam(_svg);
+    _ofInitCamControls(host);
+  }
 }
 function _ofRenderFeed(runs){
   const feed=document.getElementById('oficinaFeed'); if(!feed) return;
