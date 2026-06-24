@@ -16575,7 +16575,7 @@ const MOONRAKER_PORT=7125;
 // peor caso de un ciclo (timeouts más cortos + backoff) para que no se salten
 // ciclos. El umbral de fallos evita marcar "Offline" por un hipo de red.
 const _MONITOR_INTERVAL_MS=20000;   // sondeo base (el WebSocket lo hace casi irrelevante)
-const _STATUS_TIMEOUT_MS=4000;      // antes 5000
+const _STATUS_TIMEOUT_MS=9000;      // túnel/WiFi lento del taller necesita margen (la histéresis evita falsos Offline)
 const _THUMB_TIMEOUT_MS=2000;       // antes 3000
 const _OFFLINE_AFTER_FAILS=3;       // fallos consecutivos antes de declarar Offline
 function getPrinterTunnel(){const d=_DEFAULTS.PRINTER_TUNNEL.startsWith('%%')?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
