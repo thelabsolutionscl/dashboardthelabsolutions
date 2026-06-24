@@ -19,9 +19,16 @@
 // Sin dependencias — solo Node.js ≥ 18.  Uso:  node server.js
 // ─────────────────────────────────────────────────────────────────────
 const http = require('http');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+
+// Reutiliza conexiones TCP hacia las impresoras (keep-alive) en vez de abrir
+// una nueva por cada petición. Con el dashboard sondeando 14 máquinas cada
+// pocos segundos, esto evita el coste de handshake repetido y reduce timeouts
+// bajo ráfaga. maxSockets alto: el cuello de botella es la impresora, no aquí.
+const keepAliveAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 64, maxFreeSockets: 16 });
 
 const PORT = parseInt(process.env.BRIDGE_PORT || '8347', 10);
 const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
@@ -132,7 +139,7 @@ const server = http.createServer((req, res) => {
   delete headers['cf-ipcountry'];
   delete headers['cf-visitor'];
 
-  const preq = http.request({ host: ip, port, path: targetPath, method: req.method, headers, timeout: 15000 }, pres => {
+  const preq = http.request({ host: ip, port, path: targetPath, method: req.method, headers, timeout: 15000, agent: keepAliveAgent }, pres => {
     const h = { ...pres.headers };
     // Quitar CORS del upstream para no duplicar los nuestros
     delete h['access-control-allow-origin'];
@@ -146,12 +153,72 @@ const server = http.createServer((req, res) => {
   req.pipe(preq);
 });
 
+// ── Proxy de WebSocket ────────────────────────────────────────────────────
+// Moonraker expone /websocket (JSON-RPC) y empuja notify_status_update en
+// tiempo real (es lo que usan Fluidd/Mainsail). Hacemos un proxy transparente
+// a nivel TCP: tras el handshake HTTP de upgrade, los frames WS son bytes que
+// se reenvían en ambos sentidos sin parsearlos. Reusa la auth por token y la
+// validación de IP/puerto del proxy HTTP. Así el dashboard recibe estado en
+// vivo sin sondear, eliminando las ráfagas de polling.
+server.on('upgrade', (req, clientSocket, head) => {
+  const fail = () => { try { clientSocket.destroy(); } catch (e) {} };
+  const qIdx = req.url.indexOf('?');
+  const rawPath = qIdx === -1 ? req.url : req.url.slice(0, qIdx);
+  const rawQuery = qIdx === -1 ? '' : req.url.slice(qIdx + 1);
+  const qParts = rawQuery ? rawQuery.split('&') : [];
+
+  // Auth: header X-Bridge-Token (no llega desde el navegador) o ?bt=
+  const btPart = qParts.find(p => p.startsWith('bt='));
+  const given = req.headers['x-bridge-token'] || (btPart ? decodeURIComponent(btPart.slice(3)) : '');
+  if (given !== TOKEN) return fail();
+
+  const m = rawPath.match(/^\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::(\d{1,5}))?(\/.*)?$/);
+  if (!m) return fail();
+  const ip = m[1];
+  const port = m[2] ? parseInt(m[2], 10) : 7125;
+  let targetPath = m[3] || '/websocket';
+  if (!isPrivateIp(ip)) return fail();
+  if (!ALLOWED_PORTS.includes(port)) return fail();
+
+  const fwdQuery = qParts.filter(p => p && !p.startsWith('bt=')).join('&');
+  if (fwdQuery) targetPath += '?' + fwdQuery;
+
+  const upstream = net.connect(port, ip, () => {
+    // Reconstruir la petición de upgrade hacia Moonraker, reenviando los
+    // headers del handshake (Sec-WebSocket-Key/Version/Protocol/Extensions)
+    // tal cual — así el Accept que calcula Moonraker valida en el navegador.
+    const h = { ...req.headers };
+    delete h['x-bridge-token'];
+    delete h.origin; delete h.referer;
+    delete h['x-forwarded-proto']; delete h['x-real-ip'];
+    delete h['cf-connecting-ip']; delete h['cf-ray']; delete h['cf-ipcountry']; delete h['cf-visitor'];
+    h.host = `${ip}:${port}`;
+    h['x-forwarded-for'] = '127.0.0.1';   // cae en trusted_clients de Moonraker
+    let raw = `GET ${targetPath} HTTP/1.1\r\n`;
+    for (const k in h) {
+      const v = h[k];
+      if (Array.isArray(v)) v.forEach(vv => { raw += `${k}: ${vv}\r\n`; });
+      else raw += `${k}: ${v}\r\n`;
+    }
+    raw += '\r\n';
+    upstream.write(raw);
+    if (head && head.length) upstream.write(head);
+    upstream.pipe(clientSocket);
+    clientSocket.pipe(upstream);
+  });
+  upstream.on('error', fail);
+  clientSocket.on('error', () => { try { upstream.destroy(); } catch (e) {} });
+  upstream.on('close', () => { try { clientSocket.destroy(); } catch (e) {} });
+  clientSocket.on('close', () => { try { upstream.destroy(); } catch (e) {} });
+});
+
 server.listen(PORT, () => {
   console.log('─'.repeat(60));
   console.log('  The Lab Solutions — Printer Bridge');
   console.log(`  Escuchando en  : http://0.0.0.0:${PORT}`);
   console.log(`  Token          : ${TOKEN}`);
   console.log(`  Puertos        : ${ALLOWED_PORTS.join(', ')}`);
+  console.log(`  WebSocket      : proxy activo (/{IP}/websocket → tiempo real)`);
   console.log(`  CORS origin    : ${ALLOW_ORIGIN}`);
   console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
   console.log('─'.repeat(60));

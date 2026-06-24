@@ -212,6 +212,23 @@ usado por las cámaras de las K2/K2 Plus (el dashboard consume su `/api/frame.jp
 
 ---
 
+## Tiempo real (WebSocket)
+
+El dashboard ahora abre un **WebSocket** a Moonraker (`/websocket`) por cada
+impresora y recibe el estado **empujado en vivo** (lo mismo que hacen Fluidd y
+Mainsail), en vez de sondear cada pocos segundos. Esto elimina el parpadeo y
+las ráfagas de polling.
+
+- En **modo remoto** el bridge hace de proxy del WebSocket
+  (`wss://printers.thelab.solutions/{IP}/websocket?bt=TOKEN`). Solo necesitas
+  **actualizar el bridge** en el iMac (`git pull` y reiniciarlo / `launchctl`)
+  para que tenga el soporte WS; mientras tanto el dashboard cae de vuelta al
+  polling automáticamente, así que nada se rompe.
+- En **modo local** conecta directo (`ws://IP:7125/websocket`).
+- Si el WebSocket se cae, el dashboard **reintenta con backoff** y sigue
+  sondeando de respaldo. Para desactivarlo del todo (volver a solo-polling):
+  en la consola del navegador `localStorage.setItem('printer_ws_enabled','0')`.
+
 ## Seguridad
 
 - El bridge **exige token** en cada petición (header `X-Bridge-Token` o `?bt=`).
