@@ -7659,7 +7659,7 @@ function switchTab(name){
   if(name==='redes') initRedes();
   if(name==='newsletter') initNewsletter();
   if(name==='maquinas') initMaquinas();
-  else{clearInterval(_monitorInterval);_monitorInterval=null;}
+  else{clearInterval(_monitorInterval);_monitorInterval=null;if(typeof disconnectAllPrinterWs==='function')disconnectAllPrinterWs();}
   if(name==='equipo') initEquipo();
   if(name==='nueva-cot'){const cn=document.getElementById('cot-num');if(cn) cn.value=generarNumeroCotizacion();updateVtoPreview();}
   window.scrollTo({top:0,behavior:'smooth'});
@@ -16816,7 +16816,12 @@ function _printerWsUrl(ip){
 }
 function _wsScheduleRender(){
   if(_wsRenderTimer)return;   // agrupa ráfagas de updates en un solo render
-  _wsRenderTimer=setTimeout(()=>{_wsRenderTimer=null;if(document.hidden)return;renderMonitorKPIs();renderMonitorGrid();},500);
+  _wsRenderTimer=setTimeout(()=>{
+    _wsRenderTimer=null;
+    if(document.hidden)return;
+    if(!document.getElementById('tab-maquinas')?.classList.contains('active'))return;  // no renderizar una sección inactiva
+    renderMonitorKPIs();renderMonitorGrid();
+  },500);
 }
 function _wsMergeStatus(m,ip,status){
   if(window._DEMO_MODE)return;
