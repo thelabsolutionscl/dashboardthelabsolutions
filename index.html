@@ -6061,10 +6061,10 @@ let MAQUINAS=[
   {id:'k2-2',nombre:'Creality K2',num:2,numG:13,modelo:'K2',color:'#a78bfa',ip:'192.168.100.71'},
   {id:'k2p-1',nombre:'Creality K2 Plus',num:1,numG:11,modelo:'K2 Plus',color:'#ff6b35',ip:'192.168.100.75'},
   {id:'e5-1',nombre:'Creality Ender-5 Max',num:1,numG:6,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.67'},
-  {id:'e5-2',nombre:'Creality Ender-5 Max',num:2,numG:7,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.162'},
-  {id:'e5-3',nombre:'Creality Ender-5 Max',num:3,numG:8,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.65'},
-  {id:'e5-4',nombre:'Creality Ender-5 Max',num:4,numG:9,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.95'},
-  {id:'e5-5',nombre:'Creality Ender-5 Max',num:5,numG:10,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.64'},
+  {id:'e5-2',nombre:'Creality Ender-5 Max',num:2,numG:7,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.64'},
+  {id:'e5-3',nombre:'Creality Ender-5 Max',num:3,numG:8,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.95'},
+  {id:'e5-4',nombre:'Creality Ender-5 Max',num:4,numG:9,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.65'},
+  {id:'e5-5',nombre:'Creality Ender-5 Max',num:5,numG:10,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.162'},
   {id:'giga-1',nombre:'Elegoo OrangeStorm Giga',num:1,numG:14,modelo:'Giga',color:'#ff4444',ip:'192.168.100.44'},
 ];
 const MODELO_IMGS={
@@ -6994,10 +6994,10 @@ const MAQUINAS_HARDCODED=[
   {id:'k2-2',nombre:'Creality K2',num:2,numG:13,modelo:'K2',color:'#a78bfa',ip:'192.168.100.71'},
   {id:'k2p-1',nombre:'Creality K2 Plus',num:1,numG:11,modelo:'K2 Plus',color:'#ff6b35',ip:'192.168.100.75'},
   {id:'e5-1',nombre:'Creality Ender-5 Max',num:1,numG:6,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.67'},
-  {id:'e5-2',nombre:'Creality Ender-5 Max',num:2,numG:7,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.162'},
-  {id:'e5-3',nombre:'Creality Ender-5 Max',num:3,numG:8,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.65'},
-  {id:'e5-4',nombre:'Creality Ender-5 Max',num:4,numG:9,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.95'},
-  {id:'e5-5',nombre:'Creality Ender-5 Max',num:5,numG:10,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.64'},
+  {id:'e5-2',nombre:'Creality Ender-5 Max',num:2,numG:7,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.64'},
+  {id:'e5-3',nombre:'Creality Ender-5 Max',num:3,numG:8,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.95'},
+  {id:'e5-4',nombre:'Creality Ender-5 Max',num:4,numG:9,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.65'},
+  {id:'e5-5',nombre:'Creality Ender-5 Max',num:5,numG:10,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.162'},
   {id:'giga-1',nombre:'Elegoo OrangeStorm Giga',num:1,numG:14,modelo:'Giga',color:'#ff4444',ip:'192.168.100.44'},
 ];
 const MODELO_COLORES={'K1':'#00d4cc','K2':'#a78bfa','K2 Plus':'#ff6b35','Ender-5 Max':'#ffaa00','Giga':'#ff4444'};
@@ -7067,12 +7067,12 @@ async function loadMaquinasAirtable(){
         cam:r.fields.cam||null,
         estado:r.fields.estado||'disponible',
       })).sort((a,b)=>a.numG-b.numG);
-      // Aplica correcciones de IP del código sobre datos viejos de Airtable
-      // (localStorage tiene prioridad si el usuario lo configuró manualmente)
+      // Aplica correcciones de IP del código sobre datos viejos de Airtable/localStorage
+      // (el código manda; localStorage solo se usa para máquinas SIN ip fija, p.ej. k1-5)
       const _hcIp=Object.fromEntries(MAQUINAS_HARDCODED.filter(m=>m.ip).map(m=>[m.id,m.ip]));
       const _t=getToken();
       MAQUINAS=MAQUINAS.map(m=>{
-        const finalIp=localStorage.getItem('printer_ip_'+m.id)||_hcIp[m.id]||m.ip;
+        const finalIp=_hcIp[m.id]||localStorage.getItem('printer_ip_'+m.id)||m.ip;
         if(finalIp&&finalIp!==m.ip&&m._airtableId&&_t)
           fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+_t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:finalIp}})});
         return {...m,ip:finalIp};
