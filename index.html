@@ -16654,6 +16654,10 @@ function odoAdd(id,hours,filamentMm,completed){
 }
 let _monitorInterval=null,_monitorFilter='all';
 const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={},_demoPrinterState={};
+// Histéresis anti-parpadeo: nº de sondeos fallidos consecutivos por máquina.
+// Una impresora sólo se marca Offline tras OFFLINE_STRIKES fallos seguidos;
+// un fallo aislado (WiFi flojo / túnel lento) conserva el último estado bueno.
+const _offlineStrikes={};const OFFLINE_STRIKES=2;
 // ── Print queue ──────────────────────────────────────────────
 const _printQueue={};// { [printerId]: [{gcode,filename,secs,grams},...] }
 function _queueGet(id){return _printQueue[id]||(_printQueue[id]=[]);}
@@ -16741,7 +16745,7 @@ async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   const headers=getPrinterAuthHeaders(m.id);
   try{
-    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard&webhooks`),{signal:AbortSignal.timeout(5000),headers});
+    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard&webhooks`),{signal:AbortSignal.timeout(9000),headers});
     if(!r.ok)return{state:'offline'};
     const d=await r.json();const s=d.result?.status||{};
     const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{},wh=s.webhooks||{};
@@ -17684,7 +17688,20 @@ async function pollPrinters(){
   _pollInFlight=true;
   try{
     await _mapLimit(MAQUINAS,4,async m=>{
-      const s=await fetchPrinterStatus(m);
+      let s=await fetchPrinterStatus(m);
+      // ── Histéresis anti-parpadeo ──────────────────────────────
+      // 'noip' es estado de configuración, no de red → no aplica histéresis.
+      if(s.state==='offline'){
+        const strikes=(_offlineStrikes[m.id]||0)+1;_offlineStrikes[m.id]=strikes;
+        const prev=_printerStatus[m.id];
+        if(strikes<OFFLINE_STRIKES&&prev&&prev.state!=='offline'&&prev.state!=='noip'){
+          // Fallo aislado: conserva el último estado bueno (marcado obsoleto).
+          s={...prev,stale:true};
+        }
+        // si llega al umbral (o no había estado bueno) cae a Offline real.
+      }else{
+        _offlineStrikes[m.id]=0;
+      }
       checkTransitions(m,s);
       _printerStatus[m.id]=s;
       if(s.hotend){if(!_tempHistory[m.id])_tempHistory[m.id]=[];_tempHistory[m.id].push({h:s.hotend.actual,b:s.bed?.actual||0});if(_tempHistory[m.id].length>20)_tempHistory[m.id].shift();}
