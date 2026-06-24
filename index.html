@@ -2940,7 +2940,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .ofd-status i{width:9px;height:9px;border-radius:50%;display:inline-block;box-shadow:0 0 8px currentColor;}
 .ofd-spark{flex-shrink:0;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:7px 9px;}
 .ofd-spark svg{width:90px;height:30px;display:block;}
-.ofd-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+.ofd-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+.ofd-cost{font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:8px 11px;margin-bottom:14px;display:flex;align-items:center;gap:4px;}
 .ofd-stat{background:linear-gradient(160deg,var(--surface2),var(--surface));border:1px solid var(--border);border-radius:10px;padding:11px 8px;text-align:center;}
 .ofd-stat-v{font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1;color:var(--text);}
 .ofd-stat-v.mono{font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:7px;}
@@ -3042,7 +3043,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .of-prog-ind{animation:ofProgInd 1.4s ease-in-out infinite alternate;will-change:transform;}
 #tab-oficina .of-iso-scene{cursor:grab;}
 #tab-oficina .of-iso-scene.of-grabbing{cursor:grabbing;}
-@media(prefers-reduced-motion:reduce){.of-celeb,.of-celeb .of-spark1,.of-celeb .of-spark2,.of-crown,.of-mood-storm,.of-mood-sleep,.of-prog-ind{animation:none;}.of-mood-sleep{opacity:.85;}}
+/* Cartel de "reunión" cuando 2+ agentes de una sala trabajan a la vez */
+@keyframes ofMeet{0%,100%{transform:translateY(0);}50%{transform:translateY(-2.4px);}}
+.of-meeting{animation:ofMeet 2.1s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
+@media(prefers-reduced-motion:reduce){.of-celeb,.of-celeb .of-spark1,.of-celeb .of-spark2,.of-crown,.of-mood-storm,.of-mood-sleep,.of-prog-ind,.of-meeting{animation:none;}.of-mood-sleep{opacity:.85;}}
 /* Analítica — gráficos */
 #tab-oficina .of-charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
 #tab-oficina .of-chart{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;min-width:0;}
@@ -15255,6 +15259,14 @@ function _ofModelImg(modelo,nombre){
 }
 // Defensa en profundidad: solo deja pasar URLs de imagen seguras (bloquea javascript:/data:text/… en href/src)
 function _ofSafeUrl(u){ u=String(u||'').trim(); return /^(https?:\/\/|data:image\/)/i.test(u)?u:''; }
+// Avatar real del agente (foto subida por el usuario, guardada como dataURL en localStorage)
+function _ofAvatar(id){ try{ return _ofSafeUrl(localStorage.getItem('thelab_agent_avatar_'+id)||''); }catch(e){ return ''; } }
+// Estimación de tokens/costo de una ejecución (≈ 4 caracteres por token; tarifa solo de referencia)
+function _ofTok(r){ return Math.ceil((((r&&r.input)||'').length+((r&&r.output)||'').length)/4); }
+const _OF_USD_PER_MTOK=4.5;   // costo mezclado aproximado por millón de tokens
+function _ofUsd(tok){ return tok/1e6*_OF_USD_PER_MTOK; }
+function _ofFmtTok(t){ return t>=1000?((t/1000).toFixed(t>=10000?0:1)+'k'):String(t||0); }
+function _ofFmtUsd(u){ return u>=1?('$'+u.toFixed(2)):('$'+u.toFixed(3)); }
 function _ofPrinterLbl(estado){ const e=(estado||'').toString().toLowerCase();
   if(/imprim|ocupad|print|busy|trabaj|en uso/.test(e)) return 'Imprimiendo';
   if(/manten|repar/.test(e)) return 'Mantención';
@@ -15317,6 +15329,26 @@ function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_C
   toast(id||'Elemento','info'); }
 // Refresca la Oficina forzando datos frescos (el polling usa caché corta; el botón manual la invalida)
 function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; _ofMaqCache={t:0,data:null}; renderOficina(); }
+// Avatar real del agente: subir foto (se recorta a 96×96 y se guarda como dataURL en localStorage)
+function ofSetAvatar(id){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange=()=>{ const file=inp.files&&inp.files[0]; if(!file) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ const im=new Image();
+      im.onload=()=>{ const s=96, cv=document.createElement('canvas'); cv.width=s; cv.height=s;
+        const ctx=cv.getContext('2d'), mn=Math.min(im.width,im.height), sx=(im.width-mn)/2, sy=(im.height-mn)/2;
+        ctx.drawImage(im,sx,sy,mn,mn,0,0,s,s);
+        try{ localStorage.setItem('thelab_agent_avatar_'+id, cv.toDataURL('image/jpeg',0.82));
+          const mm=_ofModel&&_ofModel.iaModel&&_ofModel.iaModel.find(x=>x.id===id); if(mm) mm.img=_ofAvatar(id);
+          renderOficina(); ofAgentDetail(id); toast('Avatar actualizado','success');
+        }catch(e){ toast('No se pudo guardar (imagen muy grande)','error'); } };
+      im.onerror=()=>toast('Imagen inválida','error'); im.src=rd.result; };
+    rd.readAsDataURL(file); };
+  inp.click();
+}
+function ofClearAvatar(id){ try{ localStorage.removeItem('thelab_agent_avatar_'+id); }catch(e){}
+  const mm=_ofModel&&_ofModel.iaModel&&_ofModel.iaModel.find(x=>x.id===id); if(mm) mm.img='';
+  renderOficina(); ofAgentDetail(id); toast('Avatar quitado','info'); }
 // ── Panel de detalle de un agente IA (clic en un trabajador de la Oficina) ──
 function ofAgentDetail(id){
   if(!_ofModel||!_ofModel.iaModel){ switchTab('agentes'); return; }
@@ -15326,6 +15358,7 @@ function ofAgentDetail(id){
   _ofAgentRuns=runs;
   const col=_OF_STATUS[m.cls]||'#7c8590';
   const total=runs.length, today=runs.filter(r=>_ofSameDay(r.t)).length, last=runs[0];
+  const tok=runs.filter(r=>r.t&&Date.now()-r.t<2592e6).reduce((s,r)=>s+_ofTok(r),0);   // tokens estimados · 30 días
   const cfg=AGENTES_CFG.find(a=>a.id===id);
   const rowsHtml=runs.length?runs.slice(0,10).map((r,i)=>`
       <div class="ofd-run" onclick="ofAgentViewRun(${i})" role="button" tabindex="0" onkeydown="ofKey(event)">
@@ -15338,7 +15371,7 @@ function ofAgentDetail(id){
   document.getElementById('ofAgentTitle').textContent=_ofAgentEmoji(m.label)+' '+_ofPretty(m.label);
   document.getElementById('ofAgentBody').innerHTML=`
     <div class="ofd-head">
-      <div class="ofd-ava">${m.icon||'🤖'}</div>
+      <div class="ofd-ava">${m.img?`<img src="${escapeHtml(m.img)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:14px">`:(m.icon||'🤖')}</div>
       <div style="flex:1;min-width:0">
         <div class="ofd-role">${escapeHtml(m.role||'')}</div>
         <div class="ofd-status" style="color:${col}"><i style="background:${col}"></i>${escapeHtml(m.lbl||'')}</div>
@@ -15350,8 +15383,13 @@ function ofAgentDetail(id){
       <div class="ofd-stat"><div class="ofd-stat-v">${total}</div><div class="ofd-stat-l">Registradas</div></div>
       <div class="ofd-stat"><div class="ofd-stat-v mono">${last?escapeHtml(_ofAgo(last.t)):'—'}</div><div class="ofd-stat-l">Última</div></div>
     </div>
+    <div class="ofd-cost">🪙 ≈ ${_ofFmtTok(tok)} tokens · ${_ofFmtUsd(_ofUsd(tok))} <span style="opacity:.55">estimado · 30 días</span></div>
     ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:8px" onclick="ofAgentRun('${id}')">▶ Ejecutar este agente</button>`:''}
-    <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:16px" onclick="closeOfAgent();ofFocusAgent('${escapeHtml(id)}')">📍 Ver en la oficina 3D</button>
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:8px" onclick="closeOfAgent();ofFocusAgent('${escapeHtml(id)}')">📍 Ver en la oficina 3D</button>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="ofSetAvatar('${escapeHtml(id)}')">📷 ${m.img?'Cambiar foto':'Poner foto'}</button>
+      ${m.img?`<button class="btn btn-ghost btn-sm" onclick="ofClearAvatar('${escapeHtml(id)}')">Quitar</button>`:''}
+    </div>
     <div class="ofd-seclbl">Últimas ejecuciones</div>
     ${rowsHtml}`;
   const mo=document.getElementById('ofAgentModal'); if(mo) mo.style.display='flex';
@@ -15505,10 +15543,11 @@ async function _renderOficina(){
     else { const st=_ofStatus(lastT); cls=st.cls; lbl=st.lbl; }
     if(cls==='of-work') working++;
     const today=list.filter(r=>_ofSameDay(r.t)).length;
-    const count30=list.filter(r=>r.t && Date.now()-r.t<2592e6).length;   // ejecuciones últimos 30 días
-    return {clickIA:true, id:a.id, label:a.label, icon:a.icon||'🤖', role:'Agente IA · '+_ofCat(a).name,
+    const recent30=list.filter(r=>r.t && Date.now()-r.t<2592e6);          // ejecuciones últimos 30 días
+    const count30=recent30.length, tok30=recent30.reduce((s,r)=>s+_ofTok(r),0);
+    return {clickIA:true, id:a.id, label:a.label, icon:a.icon||'🤖', img:_ofAvatar(a.id), role:'Agente IA · '+_ofCat(a).name,
       cls, lbl, task:last?(last.input||last.output||''):'Sin tareas recientes',
-      count30, stats:today+' hoy · '+_ofAgo(lastT), spark:_ofSpark(list)};
+      count30, tok30, stats:today+' hoy · '+_ofAgo(lastT), spark:_ofSpark(list)};
   });
   // 👑 Empleado del mes: el agente con MÁS ejecuciones en los últimos 30 días (si hay actividad)
   { let _bi=-1,_bv=0; iaModel.forEach((m,i)=>{ if((m.count30||0)>_bv){_bv=m.count30;_bi=i;} }); if(_bi>=0&&_bv>0) iaModel[_bi].top=true; }
@@ -15587,7 +15626,7 @@ function _ofWorkerCard(m){
   const cat=m.isPrinter?{name:'Impresora 3D',color:'#3aa0ff'}:(m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'});
   const ac=cat.color;
   const avStyle=`background:radial-gradient(circle at 35% 28%,${ac}33,${ac}12);border-color:${ac}59;color:${ac}`;
-  const avInner=m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:5px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:m.icon;
+  const avInner=m.img?`<img src="${escapeHtml(m.img)}" alt="" style="width:100%;height:100%;object-fit:${m.isPrinter?'contain':'cover'};${m.isPrinter?'padding:5px':''};border-radius:inherit" onerror="this.replaceWith(document.createTextNode('${m.isPrinter?'🖨️':'🤖'}'))">`:m.icon;
   return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
     <div class="of-avatar" style="${avStyle}">${avInner}</div>
     <div class="of-body">
@@ -15614,7 +15653,7 @@ function _ofDesk(m){
   const ac=cat.color;
   const em=m.clickIA?_ofAgentEmoji(m.label):((m.icon&&!m.icon.startsWith('<'))?m.icon:'⚙️');
   const seatStyle=`background:radial-gradient(circle at 35% 28%,${ac}2e,${ac}10);border-color:${ac}55`;
-  const seatInner=m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:6px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:em;
+  const seatInner=m.img?`<img src="${escapeHtml(m.img)}" alt="" style="width:100%;height:100%;object-fit:${m.isPrinter?'contain':'cover'};${m.isPrinter?'padding:6px':''};border-radius:inherit" onerror="this.replaceWith(document.createTextNode('${m.isPrinter?'🖨️':'🤖'}'))">`:em;
   return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label)+' · '+cat.name+' — '+m.lbl)}">
     <div class="of-seat" style="${seatStyle}"><span class="of-seat-light"></span>${seatInner}</div>
     <div class="of-desk-name">${escapeHtml(_ofPretty(m.label))}</div>
@@ -15779,6 +15818,13 @@ function _ofWalker(p1,p2,dur,delay,em){
     </g>
   </g>`;
 }
+// Mascota de la oficina 🐕: pasea por el frente, ida y vuelta, con su trotecito
+function _ofPet(p1,p2,dur,delay){
+  return `<g class="of-iso-walker of-pet" style="--x1:${p1[0].toFixed(1)}px;--y1:${p1[1].toFixed(1)}px;--x2:${p2[0].toFixed(1)}px;--y2:${p2[1].toFixed(1)}px;--dur:${dur}s;animation-delay:${delay}s">
+    <ellipse cx="0" cy="2" rx="9" ry="4" fill="url(#ofShadow)"/>
+    <g class="of-iso-body"><text x="0" y="2" text-anchor="middle" font-size="19">🐕</text></g>
+  </g>`;
+}
 // Agente que CAMINA a otro departamento porque se está comunicando (lleva su color y su emoji + 💬)
 function _ofCommWalker(m,p1,p2,dur,delay){
   const col=_OF_STATUS[m.cls]||_OF_STATUS['of-work'];
@@ -15885,7 +15931,7 @@ function _ofRingAgent(m,x,y){
       <rect x="-12" y="-22" width="24" height="25" rx="11" fill="url(#ofShine)"/>
       <circle cx="0" cy="-34" r="14" fill="#fff7ec" stroke="${col}" stroke-width="3"/>
       <ellipse cx="-5" cy="-39" rx="4" ry="2.6" fill="#fff" opacity="0.6"/>
-      ${m.img?`<image href="${m.img}" x="-12" y="-46" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-29" text-anchor="middle" font-size="16">${em}</text>`}
+      ${m.img?`<image href="${m.img}" x="-13" y="-47" width="26" height="26" preserveAspectRatio="xMidYMid slice" clip-path="url(#ofFaceClip)"/>`:`<text x="0" y="-29" text-anchor="middle" font-size="16">${em}</text>`}
       <circle cx="11" cy="-45" r="3.6" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
     </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+crown+reaction+`
   </g>`;
@@ -16100,6 +16146,10 @@ function _ofRenderIso(ia,auto,extras){
     chars+=_ofMeetingTable(ctr[0],ctr[1],tRx,tRy,R.color,tableH);
     pos.forEach(p=>{ const lx=ctr[0]+tRx*0.74*Math.cos(p.a), ly=(ctr[1]-tableH)+tRy*0.74*Math.sin(p.a); chars+=_ofDeskLaptop(lx,ly,p.m.cls==='of-work',_OF_STATUS[p.m.cls]||'#7c8590'); });
     front.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy); tags+=_rtag(p.m,p.sx,p.sy); });
+    // Reunión: si 2+ agentes de la sala trabajan a la vez, un cartel sobre el mesón
+    if(_seated.filter(p=>p.m.cls==='of-work').length>=2){
+      chars+=`<g class="of-meeting" transform="translate(${ctr[0].toFixed(1)},${(ctr[1]-tableH-34).toFixed(1)})"><rect x="-31" y="-10" width="62" height="18" rx="9" fill="#0e1116" opacity="0.92"/><text x="0" y="3.5" text-anchor="middle" font-size="9" fill="#fff" font-family="DM Sans" font-weight="700">💬 Reunión</text></g>`;
+    }
     // 5) agentes en pausa → cruzan al frente (cafetería/baño) y vuelven; se dibujan al final (primer plano)
     pos.forEach(p=>{ if(!p.brk) return; const dest=p.kind==='wc'?wcPt:coffeePt, dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur)); _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],dest,p.kind,dur,dl); });
   });
@@ -16114,6 +16164,8 @@ function _ofRenderIso(ia,auto,extras){
     const pairs=[[0,Math.min(2,n-1)],[Math.min(1,n-1),0],[n-1,Math.max(0,n-3)],[Math.min(2,n-1),n-1]];
     pairs.forEach((pr,k)=>{ if(pr[0]===pr[1])return; const a=iso(_rooms[pr[0]].cc,midR), b=iso(_rooms[pr[1]].cc,midR); chars+=_ofWalker(a,b,9+k*1.7,k*1.4,ems[k%ems.length]); });
   }
+  // Mascota de la oficina: pasea por el frente, ida y vuelta
+  chars+=_ofPet([Dl[0]+72,Dl[1]-2],[Cb[0]-26,Cb[1]-2],15,1.2);
 
   // Rótulo colgante de cada departamento sobre su sala
   let signs='';
@@ -16194,6 +16246,7 @@ function _ofRenderIso(ia,auto,extras){
       <linearGradient id="ofSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${skyT}"/><stop offset="1" stop-color="${skyB}"/></linearGradient>
       <linearGradient id="ofDoorway" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#11151b"/><stop offset="0.55" stop-color="#2c343d"/><stop offset="1" stop-color="#5c6775"/></linearGradient>
       <radialGradient id="ofLampGlow"><stop offset="0" stop-color="#ffe1a3" stop-opacity="0.6"/><stop offset="55%" stop-color="#ffcf86" stop-opacity="0.22"/><stop offset="100%" stop-color="#ffcf86" stop-opacity="0"/></radialGradient>
+      <clipPath id="ofFaceClip"><circle cx="0" cy="-34" r="13"/></clipPath>
       <filter id="ofHalo" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7"/></filter>
       <radialGradient id="ofVig" cx="50%" cy="42%" r="72%"><stop offset="58%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.42"/></radialGradient>
     </defs>
@@ -16324,6 +16377,23 @@ function _ofBarsArea(runs){
   });
   return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg">${rows}</svg>`;
 }
+// Tokens estimados (≈4 chars/token) por área en 7 días + costo total aproximado
+function _ofBarsTokens(runs){
+  const since=Date.now()-7*864e5, cnt={};
+  runs.forEach(r=>{ if(!(r.t&&r.t>=since&&r.agent))return; const n=_ofCat({id:r.agent}).name; cnt[n]=(cnt[n]||0)+_ofTok(r); });
+  const order=[..._OF_CAT,{name:'Otros',color:'#7a7a7a'}];
+  const arr=order.map(c=>[c.name,cnt[c.name]||0,c.color]).filter(a=>a[1]>0).sort((a,b)=>b[1]-a[1]);
+  if(!arr.length) return '<div class="of-chart-empty">Sin ejecuciones en 7 días.</div>';
+  const totTok=arr.reduce((s,a)=>s+a[1],0), max=Math.max(...arr.map(a=>a[1])), W=320, rowH=22, H=arr.length*rowH+20;
+  let rows='';
+  arr.forEach((a,i)=>{ const y=i*rowH+4, bw=(a[1]/max)*(W-160);
+    rows+=`<text x="0" y="${y+13}" font-size="9.5" fill="var(--text2)">${escapeHtml(a[0])}</text>`;
+    rows+=`<rect x="110" y="${y+3}" width="${Math.max(2,bw).toFixed(1)}" height="13" rx="3" fill="${a[2]}"><title>${a[1]} tok</title></rect>`;
+    rows+=`<text x="${(110+Math.max(2,bw)+6).toFixed(1)}" y="${y+13}" font-size="9" fill="var(--text3)">${_ofFmtTok(a[1])}</text>`;
+  });
+  rows+=`<text x="0" y="${arr.length*rowH+16}" font-size="9" fill="var(--text3)">Total ≈ ${_ofFmtTok(totTok)} tok · ${_ofFmtUsd(_ofUsd(totTok))} estimado</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg">${rows}</svg>`;
+}
 // Línea de tiempo del DÍA: ejecuciones por hora (0–23), con la hora actual marcada y el pico
 function _ofTimeline(runs){
   const hours=new Array(24).fill(0);
@@ -16349,6 +16419,7 @@ function _ofRenderCharts(runs,ia,auto){
     <div class="of-chart"><div class="of-chart-t">🏆 Top agentes · 7 días</div>${_ofBarsTop(runs)}</div>
     <div class="of-chart"><div class="of-chart-t">🟢 Estado del equipo · ahora</div>${_ofDonutStatus(ia,auto)}</div>
     <div class="of-chart"><div class="of-chart-t">🗂️ Ejecuciones por área · 7 días</div>${_ofBarsArea(runs)}</div>
+    <div class="of-chart"><div class="of-chart-t">🪙 Tokens estimados por área · 7 días</div>${_ofBarsTokens(runs)}</div>
   </div>`;
 }
 
