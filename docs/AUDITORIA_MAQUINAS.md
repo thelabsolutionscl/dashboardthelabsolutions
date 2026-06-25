@@ -50,35 +50,34 @@ Leyenda de estado: ✅ corregido en esta rama · 📋 recomendado (no aplicado, 
 
 ---
 
-## 2. Recomendaciones no aplicadas (requieren decisión o despliegue aparte)
+## 2. Segunda tanda — endurecimiento (implementado)
 
-### 📋 `printer-bridge` (se despliega en el iMac; cambiarlo afecta instalaciones vivas)
-- **Token en query string (`?bt=`)**: queda en logs de Cloudflare Tunnel y en el DOM
-  (src de cámaras/miniaturas). Para WebSocket e `<img>` del navegador es inevitable
-  (no se pueden poner headers), pero las llamadas REST podrían mandarlo por header
-  `X-Bridge-Token`. Cambiar todos los `fetch` es invasivo → se deja documentado.
-- **CORS `ALLOW_ORIGIN='*'` por defecto**: mitigado por el token, pero conviene fijar
-  el origen del dashboard en producción (variable `BRIDGE_ALLOW_ORIGIN`).
+### `printer-bridge` y comunicación
+| Severidad | Problema | Fix |
+|-----------|----------|-----|
+| 🟡 Seg. | **Token del bridge en query string (`?bt=`)** → expuesto en logs del túnel. | Las llamadas REST ahora mandan el token por header `X-Bridge-Token` (vía `getPrinterAuthHeaders`, que es el chokepoint); `printerUrl` ya no lo pone en la query. `<img>` (cámaras/miniaturas) y WebSocket —que no pueden mandar headers— mantienen `?bt=`. Se auditaron **todos** los usos de `printerUrl`; el único `fetch` REST huérfano (`handleGcodeUpload`, que solo mandaba `X-Api-Key`) ahora usa `getPrinterAuthHeaders`. |
+| 🟡 Seg. | **CORS `ALLOW_ORIGIN='*'`** fijo. | `BRIDGE_ALLOW_ORIGIN` ahora acepta una **lista de orígenes**; con lista, el bridge refleja solo el `Origin` permitido y añade `Vary: Origin`. Default `'*'` (sin romper instalaciones existentes). Requiere redeploy del bridge en el iMac. |
+
+### Slicer SL3D
+| # | Problema | Fix |
+|---|----------|-----|
+| S9 | Volumen sólido (cm³) erróneo en mallas no-manifold (alimenta el resumen para la IA). | Detección barata de bordes abiertos en `analyze` (cada arista de una malla cerrada aparece 2 veces); marca `S.stats.volApprox` y muestra `~`/"aprox." en el badge y en el resumen para la IA. No cambia el filamento real. |
+| S10 | `gradualTemp` podía no dispararse en piezas de pocas capas y bajar temperatura de más. | Disparo robusto en la capa redondeada al 50%/80% (en vez de una ventana frágil) + clamp a un mínimo de extrusión seguro por material. |
+| S14 | `fitsIn` ignoraba brim/skirt/draft-shield al decidir si "cabe". | Margen XY ahora incluye el ancho de la adhesión activa; criterio unificado con `_suggestPrinter`. |
+| S15 | Índices fuera de rango en `parseOBJ`/`parse3MF` → NaN; `JSON.parse` ingenuo de la IA. | Se saltan/cuentan caras con índice inválido (sin NaN); la respuesta IA se valida (objeto con claves esperadas) antes de usarla, con fallback al perfil heurístico. |
+| S11 | PA/arcos (Klipper) y M205 jerk (Marlin) se emitían sin conocer el firmware. | Flag `sl_firmware` (default `klipper`, toda la flota actual): gatea la emisión específica de cada firmware. Aditivo, sin cambio de comportamiento para la flota Klipper actual. |
+| S8 | (Teórico) `_applyMinLayerTime` no ralentizaría líneas sin token `F`. | **Verificado: no es un bug en este código** — el slicer emite `F` en *todas* las líneas de extrusión, así que el `replace(/F.../)` siempre matchea. No se tocó. |
+
+## 3. Recomendaciones aún abiertas (requieren decisión)
+
+### `printer-bridge`
 - **`X-Forwarded-For: 127.0.0.1` forzado**: intencional (cae en `trusted_clients` de
   Moonraker), pero implica que **cualquiera con el token controla las impresoras**.
   Tratar el token como secreto de alto valor y rotarlo si se filtra.
 - **Sin límite de tamaño/rate-limit** en el proxy; `timeout:15000` de socket puede
   cortar subidas grandes de G-code en redes lentas.
 
-### 📋 Slicer (mejoras de precisión/robustez, no bugs bloqueantes)
-- **S11** Gating de firmware por máquina: `SET_PRESSURE_ADVANCE` (Klipper) y arcos
-  `G2/G3` se emiten sin verificar el firmware real. Hoy todas las máquinas corren
-  Klipper, así que es seguro; añadir un campo `flavor`/`caps` por máquina lo blindaría.
-- **S8** `_applyMinLayerTime` no ralentiza líneas que heredan el feedrate (sin token `F`).
-- **S9** El volumen sólido (cm³) por divergencia es erróneo en mallas no-manifold
-  (alimenta el resumen para la IA; el filamento real del G-code no lo usa).
-- **S10** `gradualTemp` puede no dispararse en piezas de pocas capas o bajar temperatura
-  en una capa con puente.
-- **S14** `fitsIn` ignora skirt/brim/raft/draft-shield y la prime line al decidir si "cabe".
-- **S15** Validación de índices fuera de rango en `parseOBJ`/`parse3MF` y del `JSON.parse`
-  de la respuesta IA.
-
-### 📋 Arquitectura / producto
+### Arquitectura / producto
 - **Analítica compartida real**: el espejo de historial (#3) restaura solo si el
   navegador no tiene datos, para no doblar el conteo. Una analítica multi-usuario
   exacta necesita un *id de trabajo estable* (no el `Date.now()` del observador),
@@ -91,9 +90,12 @@ Leyenda de estado: ✅ corregido en esta rama · 📋 recomendado (no aplicado, 
 
 ---
 
-## 3. Validación
+## 4. Validación
 
 - Los 7 bloques `<script>` de `index.html` y `printer-bridge/server.js` pasan la
   verificación de sintaxis (`node`).
 - Todos los cambios son aditivos y de bajo riesgo; no se alteró el esquema de datos
   existente (las tablas nuevas `Maquinas_Historial` se crean bajo demanda, best-effort).
+- **Importante (token por header):** el cambio del bridge requiere **redeploy** del
+  `printer-bridge` en el iMac (el `server.js` ya aceptaba el header `X-Bridge-Token`,
+  así que es retrocompatible, pero conviene actualizarlo para el cambio de CORS).

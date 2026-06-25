@@ -32,6 +32,12 @@ const keepAliveAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000, 
 
 const PORT = parseInt(process.env.BRIDGE_PORT || '8347', 10);
 const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
+// CORS "fijado": BRIDGE_ALLOW_ORIGIN puede ser '*' (default, cualquier origen) o una
+// lista separada por comas de orígenes permitidos. Con lista, se refleja SOLO el Origin
+// de la petición cuando está en la lista. La auth real es el token del bridge (no cookies),
+// así que '*' no es una vulnerabilidad; esto es defensa en profundidad.
+const ALLOW_ORIGINS = ALLOW_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
+const ALLOW_ANY_ORIGIN = ALLOW_ORIGINS.length === 1 && ALLOW_ORIGINS[0] === '*';
 // 1984 = go2rtc (cámaras WebRTC de las K2/K2 Plus; el dashboard consume su /api/frame.jpeg)
 const ALLOWED_PORTS = (process.env.BRIDGE_PORTS || '7125,8080,4408,4409,80,1984')
   .split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
@@ -61,8 +67,14 @@ function isPrivateIp(ip) {
   return false;
 }
 
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+function setCors(req, res) {
+  const origin = req && req.headers && req.headers.origin;
+  if (ALLOW_ANY_ORIGIN) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  } else {
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Origin', (origin && ALLOW_ORIGINS.includes(origin)) ? origin : ALLOW_ORIGINS[0]);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Api-Key,X-Bridge-Token,Authorization');
   res.setHeader('Access-Control-Max-Age', '86400');
@@ -74,7 +86,7 @@ function jsonError(res, code, msg) {
 }
 
 const server = http.createServer((req, res) => {
-  setCors(res);
+  setCors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   // Separar ruta y query SIN re-codificar (Moonraker usa params sin valor,

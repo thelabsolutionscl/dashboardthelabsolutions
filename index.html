@@ -16618,7 +16618,11 @@ async function restartPrinterBridge(statusId){
 }
 function printerUrl(ip,path){
   if(typeof _isLocalMode==='function'&&_isLocalMode())return`http://${ip}:${MOONRAKER_PORT}${path}`;
-  return _appendBridgeToken(`${getPrinterTunnel()}/${ip}${path}`);
+  // El token del bridge ya NO viaja en la query de las llamadas REST: se manda por header
+  // X-Bridge-Token (vía getPrinterAuthHeaders) para no exponerlo en logs del túnel. Las URLs
+  // de <img> (cámaras/miniaturas) y WebSocket, que no pueden mandar headers, siguen usando
+  // _appendBridgeToken donde se construyen.
+  return `${getPrinterTunnel()}/${ip}${path}`;
 }
 // Webcam: en modo remoto reescribe http://IP_LAN:PUERTO/ruta → túnel /{ip}:{puerto}/ruta
 function printerCamUrl(id){
@@ -16732,7 +16736,7 @@ const MONITOR_GRUPOS=[
 
 function getPrinterIp(m){return localStorage.getItem('printer_ip_'+m.id)||m.ip||null;}
 function getPrinterApiKey(id){return localStorage.getItem('printer_key_'+id)||'';}
-function getPrinterAuthHeaders(id){const k=getPrinterApiKey(id);return k?{'X-Api-Key':k}:{};}
+function getPrinterAuthHeaders(id){const k=getPrinterApiKey(id);const h=k?{'X-Api-Key':k}:{};if(!(typeof _isLocalMode==='function'&&_isLocalMode())){const tk=getPrinterTunnelToken();if(tk)h['X-Bridge-Token']=tk;}return h;}
 
 function savePrinterIp(id){
   const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
@@ -16809,7 +16813,7 @@ async function _ensureThumb(m,ip,st){
   let thumbUrl=null;
   try{
     const tr=await fetch(printerUrl(ip,`/server/files/thumbnails?filename=${encodeURIComponent(st.filename+'.gcode')}`),{signal:AbortSignal.timeout(_THUMB_TIMEOUT_MS),headers:getPrinterAuthHeaders(m.id)});
-    if(tr.ok){const td=await tr.json();const best=(td.result||[]).sort((a,b)=>b.size-a.size)[0];thumbUrl=best?printerUrl(ip,`/server/files/gcodes/.thumbnails/${best.relative_path}`):null;}
+    if(tr.ok){const td=await tr.json();const best=(td.result||[]).sort((a,b)=>b.size-a.size)[0];thumbUrl=best?_appendBridgeToken(printerUrl(ip,`/server/files/gcodes/.thumbnails/${best.relative_path}`)):null;}
   }catch(e){}
   _thumbCache[ck]=thumbUrl;
   return thumbUrl;
@@ -25575,7 +25579,7 @@ function _isLocalMode(){const v=localStorage.getItem('printer_local_mode');if(v=
 function renderLocalModeBtn(){const btn=document.getElementById('btnLocalMode');if(!btn)return;const local=_isLocalMode();btn.textContent=local?'📡 Local':'🌐 Remoto';btn.style.color=local?'var(--accent)':'var(--text3)';btn.title=local?'Conectado directo por IP (red local)':'Conectado vía tunnel remoto';}
 function toggleLocalMode(){const next=_isLocalMode()?'0':'1';localStorage.setItem('printer_local_mode',next);renderLocalModeBtn();pollPrinters();if(typeof reconnectAllPrinterWs==='function')reconnectAllPrinterWs();toast(next==='1'?'📡 Modo local — IPs directas':'🌐 Modo remoto — tunnel','info');if(next==='1'&&!localStorage.getItem('local_mode_seen')){localStorage.setItem('local_mode_seen','1');document.getElementById('localModeModal').style.display='flex';}}
 function openGcodeUpload(id){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada para esta impresora','error');return;}_uploadTargetId=id;const inp=document.getElementById('gcodeFileInput');inp.value='';inp.click();}
-async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));const _ak=getPrinterApiKey(id);if(_ak)xhr.setRequestHeader('X-Api-Key',_ak);xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';window._uploadedFileName=file.name;/* el nombre se pasa por variable, no interpolado en HTML (evita romper/inyectar con comillas o < > en el nombre) */actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}',window._uploadedFileName)" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
+async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));const _hh=getPrinterAuthHeaders(id);for(const _k in _hh)xhr.setRequestHeader(_k,_hh[_k]);xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';window._uploadedFileName=file.name;/* el nombre se pasa por variable, no interpolado en HTML (evita romper/inyectar con comillas o < > en el nombre) */actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}',window._uploadedFileName)" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
 async function startUploadedPrint(id,filename){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;if(typeof _isPrinterBusy==='function'&&_isPrinterBusy((_printerStatus[id]||{}).state)){toast('🔒 La impresora está ocupada — no se inició','error');return;}try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});if(r.ok){toast(`▶ Iniciando: ${filename}`,'success');closeGcodeUpload();setTimeout(pollPrinters,2000);}else{toast('Error al iniciar impresión: '+r.status,'error');}}catch(e){toast('Sin conexión con la impresora','error');}}
 function closeGcodeUpload(){document.getElementById('gcodeUploadModal').style.display='none';}
 function openOrcaConfigModal(){const rows=MAQUINAS.filter(m=>getPrinterIp(m)).map(m=>{const ip=getPrinterIp(m);return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--accent)">${escapeHtml(ip)}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text2)">7125</td><td style="padding:8px 10px"><span style="background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">Moonraker</span></td></tr>`;}).join('');document.getElementById('orcaTableBody').innerHTML=rows||`<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text3);font-size:11px">No hay IPs configuradas. Agrégalas en cada tarjeta de impresora primero.</td></tr>`;document.getElementById('orcaConfigModal').style.display='flex';}
@@ -25663,14 +25667,20 @@ const SL3D=(function(){
     return out;
   }
   function parseOBJ(txt){
-    const vs=[],out=[];
+    const vs=[],out=[];let _bad=0;
     for(const line of txt.split('\n')){
       if(line[0]==='v'&&line[1]===' '){const p=line.trim().split(/\s+/);vs.push(+p[1],+p[2],+p[3]);}
       else if(line[0]==='f'&&line[1]===' '){
+        const nv=vs.length/3;
         const idx=line.trim().split(/\s+/).slice(1).map(t=>{let i=parseInt(t.split('/')[0],10);if(i<0)i=vs.length/3+i+1;return i-1;});
-        for(let i=1;i<idx.length-1;i++)for(const k of[idx[0],idx[i],idx[i+1]])out.push(vs[k*3],vs[k*3+1],vs[k*3+2]);
+        for(let i=1;i<idx.length-1;i++){
+          const tri=[idx[0],idx[i],idx[i+1]];
+          if(tri.some(k=>!(k>=0&&k<nv))){_bad++;continue;}   // índice fuera de rango → saltar (evita NaN)
+          for(const k of tri)out.push(vs[k*3],vs[k*3+1],vs[k*3+2]);
+        }
       }
     }
+    if(_bad)console.warn(`parseOBJ: ${_bad} cara(s) con índice fuera de rango descartadas`);
     if(!out.length)throw new Error('OBJ sin caras');
     return new Float32Array(out);
   }
@@ -25703,8 +25713,8 @@ const SL3D=(function(){
     // Parsear vértices y triángulos del XML
     const vs=[],vre=/<vertex\s+x="([-\d.eE+]+)"\s+y="([-\d.eE+]+)"\s+z="([-\d.eE+]+)"/g;let m;
     while((m=vre.exec(xml)))vs.push(+m[1],+m[2],+m[3]);
-    const out=[],tre=/<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"/g;
-    while((m=tre.exec(xml))){const a=+m[1],b=+m[2],c=+m[3];for(const k of[a,b,c])out.push(vs[k*3],vs[k*3+1],vs[k*3+2]);}
+    const out=[],tre=/<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"/g,nv=vs.length/3;
+    while((m=tre.exec(xml))){const a=+m[1],b=+m[2],c=+m[3];if(a>=nv||b>=nv||c>=nv)continue;for(const k of[a,b,c])out.push(vs[k*3],vs[k*3+1],vs[k*3+2]);}
     if(!out.length)throw new Error('3MF sin geometría');
     return new Float32Array(out);
   }
@@ -25719,6 +25729,11 @@ const SL3D=(function(){
     for(let i=0;i<t.length;i+=3){t[i]-=cx;t[i+1]-=cy;t[i+2]-=mnz;}
     const dx=mxx-mnx,dy=mxy-mny,dz=mxz-mnz;
     let vol=0,area=0,ovArea=0;
+    // Detección barata de malla no-manifold (bordes abiertos): en una malla cerrada cada arista
+    // aparece exactamente 2 veces. Si hay aristas con otra cuenta, el volumen sólido por
+    // divergencia es poco fiable → se marca aproximado. Se omite en mallas enormes (coste/RAM);
+    // coords cuantizadas a 1µm para tolerar ruido.
+    const _triCnt=t.length/9,_edges=_triCnt<=300000?new Map():null,_q=v=>Math.round(v*1000);
     for(let i=0;i<t.length;i+=9){
       const ax=t[i],ay=t[i+1],az=t[i+2],bx=t[i+3],by=t[i+4],bz=t[i+5],cxx=t[i+6],cyy=t[i+7],cz=t[i+8];
       const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cxx-ax,vy=cyy-ay,vz=cz-az;
@@ -25728,10 +25743,14 @@ const SL3D=(function(){
       vol+=(ax*(by*cz-bz*cyy)+bx*(cyy*az-cz*ay)+cxx*(ay*bz-az*by))/6;
       // voladizo: cara hacia abajo >55° de la vertical, no apoyada en cama
       if(ln>0&&nz/ln<-0.57&&Math.min(az,bz,cz)>0.5)ovArea+=a2;
+      if(_edges){const kA=_q(ax)+','+_q(ay)+','+_q(az),kB=_q(bx)+','+_q(by)+','+_q(bz),kC=_q(cxx)+','+_q(cyy)+','+_q(cz);
+        const e1=kA<kB?kA+'|'+kB:kB+'|'+kA,e2=kB<kC?kB+'|'+kC:kC+'|'+kB,e3=kC<kA?kC+'|'+kA:kA+'|'+kC;
+        _edges.set(e1,(_edges.get(e1)||0)+1);_edges.set(e2,(_edges.get(e2)||0)+1);_edges.set(e3,(_edges.get(e3)||0)+1);}
     }
     vol=Math.abs(vol);
+    let _open=0;if(_edges)_edges.forEach(c=>{if(c!==2)_open++;});
     S.stats={dx,dy,dz,vol:vol/1000,area:area/100,tris:t.length/9,
-      ovPct:area?ovArea/area*100:0,hr:dz/Math.max(5,Math.min(dx,dy))};
+      ovPct:area?ovArea/area*100:0,hr:dz/Math.max(5,Math.min(dx,dy)),volApprox:_edges?_open>0:false};
     S.bounds={dx,dy,dz};
   }
 
@@ -26079,7 +26098,16 @@ const SL3D=(function(){
 
   // ── Carga de archivo (compat: delega en loadFiles para mantener el estado del plato) ──
   async function loadFile(file){if(file)return loadFiles([file]);}
-  function fitsIn(spec){const st=S.stats;return st.dx<=spec.x-2&&st.dy<=spec.y-2&&st.dz<=spec.z-2;}
+  function _bedMarginXY(){
+    // Margen por lado en XY: borde de seguridad + adhesión activa (brim/skirt/draft shield),
+    // que también ocupa cama. Defensivo: sin params usa solo el borde base.
+    const p=S.params||{};let mh=1;
+    if(p.draftShield)mh+=3;
+    if(p.brim>0)mh+=p.brim*0.45;
+    if(p.skirt>0)mh+=(p.skirtGap||0)+p.skirt*0.45;
+    return mh;
+  }
+  function fitsIn(spec){const st=S.stats,mh=_bedMarginXY();return st.dx<=spec.x-2*mh&&st.dy<=spec.y-2*mh&&st.dz<=spec.z-2;}
   function renderStats(){
     const st=S.stats,spec=SPECS[el('slPrinter').value]||SPECS.K1;
     const fits=fitsIn(spec);
@@ -26087,7 +26115,7 @@ const SL3D=(function(){
     el('slStats').innerHTML=`
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <span class="badge badge-gray">📐 ${st.dx.toFixed(1)} × ${st.dy.toFixed(1)} × ${st.dz.toFixed(1)} mm</span>
-        <span class="badge badge-gray">🧊 ${st.vol.toFixed(1)} cm³</span>
+        <span class="badge badge-gray"${st.volApprox?' title="Malla no cerrada (no-manifold): el volumen es aproximado"':''}>🧊 ${st.volApprox?'~':''}${st.vol.toFixed(1)} cm³</span>
         <span class="badge badge-gray">▲ ${st.tris.toLocaleString('es-CL')} tris</span>
         <span class="badge ${st.ovPct>8?'badge-yellow':'badge-green'}">⛰ voladizos ${st.ovPct.toFixed(1)}%</span>
         ${st.hr>3?'<span class="badge badge-yellow">⚠ pieza alta y delgada</span>':''}
@@ -26101,7 +26129,7 @@ const SL3D=(function(){
     const obj=el('slObjetivo').selectedOptions[0].textContent,noz=el('slNozzle').value,notas=el('slNotas').value.trim();
     return`PIEZA: ${S.name}
 - Dimensiones (X×Y×Z): ${st.dx.toFixed(1)} × ${st.dy.toFixed(1)} × ${st.dz.toFixed(1)} mm
-- Volumen sólido: ${st.vol.toFixed(1)} cm³ · Área: ${st.area.toFixed(0)} cm² · ${st.tris} triángulos
+- Volumen sólido: ${st.volApprox?'~':''}${st.vol.toFixed(1)} cm³${st.volApprox?' (aprox: malla no cerrada)':''} · Área: ${st.area.toFixed(0)} cm² · ${st.tris} triángulos
 - Voladizos >55° sin apoyo: ${st.ovPct.toFixed(1)}% del área
 - Relación altura/base: ${st.hr.toFixed(1)} ${st.hr>3?'(riesgo de volcarse — considerar brim)':'(estable)'}
 IMPRESORA: ${model} — volumen ${spec.x}×${spec.y}×${spec.z}mm, velocidad máx ${spec.vmax}mm/s, boquilla ${noz}mm
@@ -26124,6 +26152,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       const a=out.indexOf('{'),b=out.lastIndexOf('}');
       if(a<0||b<=a)throw new Error('respuesta sin JSON');
       const p=JSON.parse(out.slice(a,b+1));
+      if(!p||typeof p!=='object'||Array.isArray(p)||!('layerHeight'in p||'infillPct'in p||'nozzleTemp'in p))throw new Error('JSON sin los parámetros esperados');
       S.params=clampParams(p);
       showRazon((p.razonamiento||'Parámetros calculados por IA.'),p.advertencias||[]);
       renderParams();
@@ -27182,10 +27211,14 @@ self.onmessage=function(ev){
       gc.push('M109 S'+_noz+' ; esperar temp de impresión');
     }
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
+    // Firmware destino (default Klipper, que es toda la flota actual): condiciona comandos
+    // específicos para no emitir algo que la otra firma rechace (M205 jerk = Marlin;
+    // SET_PRESSURE_ADVANCE y arcos G2/G3 = Klipper). Configurable vía localStorage 'sl_firmware'.
+    const _fw=(localStorage.getItem('sl_firmware')||'klipper').toLowerCase();
     if(p.accel>0)gc.push('M204 S'+p.accel+' ; aceleración');
-    if(p.jerk>0)gc.push('M205 X'+(+p.jerk).toFixed(1)+' Y'+(+p.jerk).toFixed(1)+' ; jerk (Marlin)');
+    if(p.jerk>0&&_fw==='marlin')gc.push('M205 X'+(+p.jerk).toFixed(1)+' Y'+(+p.jerk).toFixed(1)+' ; jerk (Marlin)');
     if(p.flowRatio&&Math.round(p.flowRatio)!==100)gc.push('M221 S'+Math.round(p.flowRatio)+' ; flujo %');
-    if(p.pressureAdvance>0)gc.push('SET_PRESSURE_ADVANCE ADVANCE='+(+p.pressureAdvance).toFixed(4)+' ; pressure advance (Klipper)');
+    if(p.pressureAdvance>0&&_fw==='klipper')gc.push('SET_PRESSURE_ADVANCE ADVANCE='+(+p.pressureAdvance).toFixed(4)+' ; pressure advance (Klipper)');
     // Línea de purga
     const purgeY0=5,purgeY1=Math.min(spec.y-5,55),purgeX=5; // X=5 (no X=3) para alejarse del borde/clips
     gc.push(`G1 Z${p.firstLayerHeight.toFixed(3)} F600`);gc.push(`G1 X${purgeX} Y${purgeY0} F3000`);
@@ -27330,9 +27363,12 @@ self.onmessage=function(ev){
       if(li===1&&p.fanPct>0)gc.push(`M106 S${Math.round(p.fanPct*2.55)} ; ventilador`);
       // Temperatura gradual: reduce 5°C a 50% y 10°C a 80% de altura → menos stringing en las capas superiores
       if(p.gradualTemp&&li>0&&p.nozzleTemp>175){
-        const pct=li/totalL;
-        if(Math.abs(pct-0.5)<0.5/totalL+0.01)gc.push(`M104 S${Math.round(p.nozzleTemp*0.975)} ; temp gradual 50%`);
-        else if(Math.abs(pct-0.8)<0.5/totalL+0.01)gc.push(`M104 S${Math.round(p.nozzleTemp*0.95)} ; temp gradual 80%`);
+        // Disparo robusto: exactamente en la capa redondeada al 50%/80% de la altura (antes una
+        // ventana de fracción podía no dispararse en piezas de pocas capas). Clamp a un mínimo
+        // de extrusión seguro para no enfriar de más en materiales al límite.
+        const _tmin=Math.max(190,Math.round(p.nozzleTemp*0.92));
+        if(li===Math.round(totalL*0.5))gc.push(`M104 S${Math.max(_tmin,Math.round(p.nozzleTemp*0.975))} ; temp gradual 50%`);
+        else if(li===Math.round(totalL*0.8))gc.push(`M104 S${Math.max(_tmin,Math.round(p.nozzleTemp*0.95))} ; temp gradual 80%`);
       }
       gc.push('');gc.push(`; === Capa ${li+1}/${totalL}  Z=${curZ.toFixed(3)}mm ===`);
       // ── Modo jarrón / spiralize: base sólida + espiral continuo sin costura ──
@@ -27689,7 +27725,7 @@ self.onmessage=function(ev){
       const _est=estimate(gcode,MATS[matName],model);
       // EXCLUDE_OBJECT (Klipper): etiqueta cada pieza del plato para cancelarla sin abortar la placa
       if(p.excludeObject&&!_seq&&S.objBBs&&S.objBBs.length>1){gcode=_wrapExcludeObject(gcode,S.objBBs,spec.x/2,spec.y/2);}
-      if(p.arcFitting){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
+      if(p.arcFitting&&(localStorage.getItem('sl_firmware')||'klipper').toLowerCase()==='klipper'){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
       gcode=_tagFeatures(gcode); // ";TYPE:"/"; FEATURE:" → desglose por tipo de línea (y llena "Estimación total" por roles)
       gcode=gcode+'\n'+_footerStats(_est); // comentarios neutros (Moonraker), sin disparar error de carga
       S.gcode=gcode;
@@ -27940,7 +27976,8 @@ self.onmessage=function(ev){
       const busy=st==='printing'||st==='paused';
       const idle=st==='idle'||st==='standby'||st==='ready';
       const spec=SPECS[m.modelo]||SPECS[model]||{};
-      const fits=S.bounds?(S.bounds.dx<=(spec.x||300)&&S.bounds.dy<=(spec.y||300)&&S.bounds.dz<=(spec.z||300)):true;
+      const mh=2*_bedMarginXY(); // mismo criterio "cabe" que fitsIn (incluye adhesión)
+      const fits=S.bounds?(S.bounds.dx<=(spec.x||300)-mh&&S.bounds.dy<=(spec.y||300)-mh&&S.bounds.dz<=(spec.z||300)-2):true;
       let score=0;
       if(busy)score-=100;
       if(idle)score+=10;
