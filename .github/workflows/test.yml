@@ -37,3 +37,6 @@ jobs:
 
       - name: Run calculation tests
         run: node tests/calc.test.js
+
+      - name: Run slicer tests
+        run: node tests/slicer.test.js
