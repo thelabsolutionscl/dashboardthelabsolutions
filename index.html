@@ -7073,7 +7073,11 @@ async function loadMaquinasAirtable(){
       const _hcIp=Object.fromEntries(MAQUINAS_HARDCODED.filter(m=>m.ip).map(m=>[m.id,m.ip]));
       const _t=getToken();
       MAQUINAS=MAQUINAS.map(m=>{
-        const finalIp=_hcIp[m.id]||localStorage.getItem('printer_ip_'+m.id)||m.ip;
+        // Si el usuario editó manualmente la IP (flag de override), su valor manda — así
+        // un cambio de IP por DHCP se puede corregir desde la UI sin que el código lo revierta.
+        // Si NO hay override, el IP del código manda (permite propagar correcciones de fábrica).
+        const ovr=localStorage.getItem('printer_ip_ovr_'+m.id)==='1';
+        const finalIp=ovr?(localStorage.getItem('printer_ip_'+m.id)||m.ip):(_hcIp[m.id]||localStorage.getItem('printer_ip_'+m.id)||m.ip);
         if(finalIp&&finalIp!==m.ip&&m._airtableId&&_t)
           fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+_t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:finalIp}})});
         return {...m,ip:finalIp};
@@ -7149,6 +7153,7 @@ function renderMaquinasManagerModal(){
 async function saveMgrRow(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m) return;
   m.ip=document.getElementById(`mgr-ip-${id}`)?.value?.trim()||null;
+  if(m.ip){localStorage.setItem('printer_ip_'+id,m.ip);localStorage.setItem('printer_ip_ovr_'+id,'1');}else{localStorage.removeItem('printer_ip_'+id);localStorage.removeItem('printer_ip_ovr_'+id);}
   m.estado=document.getElementById(`mgr-estado-${id}`)?.value||'disponible';
   localStorage.setItem('estado_maq_'+id,m.estado);
   try{
@@ -16552,8 +16557,10 @@ async function toggleMaquinaEstado(id){
   try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);}
 }
 async function initMaquinas(){
+  _queueRestore();   // recupera la cola de impresión persistida (sobrevive a recargas)
   await loadMaquinasAirtable();
   await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
+  await loadHistorialAirtable();   // restaura historial central si este navegador no tiene (caché nueva)
   seedOdometerIfNeeded();
   renderMaquinasCalendar();
   renderMonitorFilterTabs();
@@ -16668,34 +16675,49 @@ const _failCount={},_nextPollAt={};
 const _wsConn={},_wsConnected={},_wsRaw={},_wsAttempts={},_wsTimers={};
 let _wsRpcId=0,_wsRenderTimer=null;
 // ── Print queue ──────────────────────────────────────────────
-const _printQueue={};// { [printerId]: [{gcode,filename,secs,grams},...] }
+// La cola guarda SOLO metadatos (nombre, tiempo, peso). El g-code se sube a la
+// impresora al encolar (Moonraker lo almacena), de modo que la cola sobrevive a
+// recargas del navegador y no se acumulan megabytes de g-code en localStorage.
+const QUEUE_KEY='printer_queue_v1';
+const _printQueue={};// { [printerId]: [{filename,secs,grams,added},...] }
 function _queueGet(id){return _printQueue[id]||(_printQueue[id]=[]);}
 function _queueCount(id){return(_printQueue[id]||[]).length;}
-function _queueAdd(id,gcode,filename,secs,grams){
-  _queueGet(id).push({gcode,filename,secs,grams,added:Date.now()});
-  toast(`📋 Encolado en ${(MAQUINAS.find(m=>m.id===id)||{}).nombre||id} (#${_queueCount(id)} en cola)`,'success');
+function _queuePersist(){
+  try{
+    const out={};for(const k in _printQueue){const a=(_printQueue[k]||[]).map(j=>({filename:j.filename,secs:j.secs,grams:j.grams,added:j.added}));if(a.length)out[k]=a;}
+    localStorage.setItem(QUEUE_KEY,JSON.stringify(out));
+  }catch(e){}
+}
+function _queueRestore(){
+  try{const raw=localStorage.getItem(QUEUE_KEY);if(!raw)return;const o=JSON.parse(raw);for(const k in o)if(Array.isArray(o[k])&&o[k].length)_printQueue[k]=o[k];}catch(e){}
+}
+async function _queueAdd(id,gcode,filename,secs,grams){
+  const m=MAQUINAS.find(x=>x.id===id);const ip=m?getPrinterIp(m):null;
+  if(!ip){toast('Sin IP configurada — no se puede encolar','error');return;}
+  // Subir AHORA el g-code a la impresora; la cola solo recuerda el nombre.
+  try{
+    await new Promise((resolve,reject)=>{
+      const fd=new FormData();fd.append('file',new Blob([gcode],{type:'text/plain'}),filename);fd.append('root','gcodes');
+      const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));
+      const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
+      xhr.onload=()=>{(xhr.status>=200&&xhr.status<300)?resolve():reject(new Error('HTTP '+xhr.status));};
+      xhr.onerror=()=>reject(new Error('impresora inaccesible'));xhr.send(fd);
+    });
+  }catch(e){toast('No se pudo encolar ('+e.message+')','error');return;}
+  _queueGet(id).push({filename,secs,grams,added:Date.now()});
+  _queuePersist();
+  toast(`📋 Encolado en ${m.nombre||id} (#${_queueCount(id)} en cola)`,'success');
   renderMonitorGrid();
 }
 async function _queueStartNext(id){
   const q=_printQueue[id];if(!q||!q.length)return;
-  const job=q.shift();renderMonitorGrid();
+  const job=q.shift();_queuePersist();renderMonitorGrid();
   const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);if(!ip)return;
+  // El archivo ya está en la impresora: basta iniciarlo.
   try{
-    const fd=new FormData();
-    fd.append('file',new Blob([job.gcode],{type:'text/plain'}),job.filename);
-    fd.append('root','gcodes');
-    const xhr=new XMLHttpRequest();
-    xhr.open('POST',printerUrl(ip,'/server/files/upload'));
-    const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
-    xhr.onload=async()=>{
-      if(xhr.status>=200&&xhr.status<300){
-        await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
-        toast(`▶ Cola: iniciando ${job.filename} en ${m?.nombre||id}`,'success');
-        if(typeof pollPrinters==='function')pollPrinters();
-      }else toast('Cola: error al subir siguiente trabajo','error');
-    };
-    xhr.onerror=()=>toast('Cola: impresora inaccesible','error');
-    xhr.send(fd);
+    const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
+    if(r.ok){toast(`▶ Cola: iniciando ${job.filename} en ${m?.nombre||id}`,'success');if(typeof pollPrinters==='function')pollPrinters();}
+    else toast('Cola: error al iniciar siguiente trabajo ('+r.status+')','error');
   }catch(e){toast('Cola: '+e.message,'error');}
 }
 
@@ -16715,6 +16737,7 @@ function getPrinterAuthHeaders(id){const k=getPrinterApiKey(id);return k?{'X-Api
 function savePrinterIp(id){
   const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
   localStorage.setItem('printer_ip_'+id,val);
+  localStorage.setItem('printer_ip_ovr_'+id,'1');   // edición manual: gana sobre el IP del código
   const m=MAQUINAS.find(x=>x.id===id);
   if(m){m.ip=val;if(m._airtableId){const t=getToken();if(t)fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:val}})});}}
   toast(`IP guardada · ${m?.nombre} #${m?.numG}`,'success');pollPrinters();
@@ -16742,7 +16765,7 @@ function savePrinterConn(){
   const id=document.getElementById('printerConnId').value;
   const ip=(document.getElementById('printerConnIp').value||'').trim();
   const key=(document.getElementById('printerConnKey').value||'').trim();
-  if(ip)localStorage.setItem('printer_ip_'+id,ip);else localStorage.removeItem('printer_ip_'+id);
+  if(ip){localStorage.setItem('printer_ip_'+id,ip);localStorage.setItem('printer_ip_ovr_'+id,'1');}else{localStorage.removeItem('printer_ip_'+id);localStorage.removeItem('printer_ip_ovr_'+id);}
   if(key)localStorage.setItem('printer_key_'+id,key);else localStorage.removeItem('printer_key_'+id);
   const m=MAQUINAS.find(x=>x.id===id);
   if(m&&m._airtableId){m.ip=ip||m.ip;const t=getToken();if(t)fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
@@ -16756,7 +16779,7 @@ function savePrinterConn(){
 // (status = {print_stats, virtual_sdcard, heater_bed, extruder, webhooks, …}).
 // Es puro/síncrono para reusarlo igual desde el polling REST y desde el WebSocket.
 function _deriveStatus(m,s,ip){
-  const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{},wh=s.webhooks||{};
+  const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{},wh=s.webhooks||{},ds=s.display_status||{};
   // Estado real del firmware Klipper. Si está "shutdown"/"error" la impresora
   // dejó de imprimir y NO reporta sensores (todo 0) → hay que reiniciar el firmware.
   const klState=wh.state||'ready';
@@ -16765,7 +16788,9 @@ function _deriveStatus(m,s,ip){
     try{const j=JSON.parse(wh.state_message);klMsg=j.msg||wh.state_message;}catch(_){klMsg=wh.state_message;}
     klMsg=String(klMsg).split('\n').map(x=>x.trim()).filter(Boolean)[0]||'';
   }
-  const progress=Math.round((vs.progress||0)*100);
+  // Algunos firmwares Creality (K2/K2 Plus) reportan el avance por display_status
+  // y dejan virtual_sdcard.progress en 0 → usamos display_status como respaldo.
+  const progress=Math.round(((vs.progress!=null&&vs.progress>0?vs.progress:ds.progress)||0)*100);
   const elapsed=ps.print_duration||0;
   const eta=progress>0&&progress<100?Math.round(elapsed/progress*(100-progress)):0;
   const filename=(ps.filename||'').replace(/\.gcode$/i,'');
@@ -16874,6 +16899,15 @@ function disconnectAllPrinterWs(){
   });
 }
 function reconnectAllPrinterWs(){disconnectAllPrinterWs();connectAllPrinterWs();}
+// Al volver a la pestaña: el WebSocket pudo cerrarse mientras estaba oculta y su
+// reintento se cancela con document.hidden (quedaba muerto y caías a polling de 20s
+// en silencio). Reconectamos SOLO los sockets caídos y forzamos un sondeo inmediato.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible'||window._DEMO_MODE)return;
+  if(typeof _wsEnabled==='function'&&_wsEnabled())
+    MAQUINAS.forEach(m=>{if(getPrinterIp(m)&&!_wsConn[m.id])connectPrinterWs(m);});
+  if(typeof pollPrinters==='function')pollPrinters();
+});
 
 function fmtSecs(s){if(!s||s<=0)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;}
 
@@ -17186,7 +17220,7 @@ function printerEmergencyStop(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   if(!confirm(`⛔ PARADA DE EMERGENCIA — ${m.nombre} #${m.numG}\n\nDetiene TODO de inmediato (incluido cualquier print en curso) y deja el firmware apagado hasta reiniciarlo desde Fluidd/Mainsail. Úsalo solo ante un peligro real.\n\n¿Continuar?`))return;
   const ip=getPrinterIp(m);
-  fetch(printerUrl(ip,'/printer/emergency_stop'),{method:'POST',headers:getPrinterAuthHeaders(id)}).then(()=>{toast('⛔ Parada de emergencia enviada','info');setTimeout(pollPrinters,1500);}).catch(()=>toast('Sin conexión','error'));
+  fetch(printerUrl(ip,'/printer/emergency_stop'),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)}).then(()=>{toast('⛔ Parada de emergencia enviada','info');setTimeout(pollPrinters,1500);}).catch(()=>toast('Sin conexión','error'));
 }
 // Archivos en la impresora
 async function loadPrinterFiles(id){
@@ -17322,6 +17356,7 @@ function closeQueueModal(){document.getElementById('queueModal').style.display='
 function _queueRemove(id,idx){
   const q=_printQueue[id];if(!q)return;
   q.splice(idx,1);
+  _queuePersist();
   renderMonitorGrid();
   if(q.length>0)openQueueModal(id);else closeQueueModal();
   toast('Trabajo eliminado de la cola','success');
@@ -17331,6 +17366,24 @@ function _sendWaAlertIfEnabled(title,body){
   if(localStorage.getItem('monitor_wa_enabled')!=='1')return;
   const phone=localStorage.getItem('monitor_wa_phone');if(!phone)return;
   sendWatiMessage(phone,`${title}\n${body}`).catch(()=>{});
+}
+// ── Calibración de tiempo del slicer, por trabajo ─────────────
+// Mapa nombre(sin .gcode)→{secs,model}. Al completar un trabajo se calibra el
+// factor del modelo SOLO si ESE archivo tiene una estimación guardada y del mismo
+// modelo — evita cruzar datos entre impresoras que imprimen a la vez (antes una
+// única clave global 'sl_last_est_secs' se contaminaba en una granja).
+const SL_JOBEST_KEY='sl_job_est_v1';
+function _slSaveJobEst(name,secs,model){
+  if(!name||!(secs>0))return;
+  let o={};try{o=JSON.parse(localStorage.getItem(SL_JOBEST_KEY)||'{}');}catch(e){}
+  o[name]={secs,model,ts:Date.now()};
+  const keys=Object.keys(o);
+  if(keys.length>60)keys.sort((a,b)=>(o[a].ts||0)-(o[b].ts||0)).slice(0,keys.length-60).forEach(k=>delete o[k]);
+  try{localStorage.setItem(SL_JOBEST_KEY,JSON.stringify(o));}catch(e){}
+}
+function _slGetJobEst(name){
+  if(!name)return null;
+  try{return(JSON.parse(localStorage.getItem(SL_JOBEST_KEY)||'{}'))[name]||null;}catch(e){return null;}
 }
 function checkTransitions(m,s){
   const prev=_prevState[m.id];const st=s.state;
@@ -17350,7 +17403,12 @@ function checkTransitions(m,s){
   if(st==='printing'&&prev!=='printing')_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
   // 'offline' NO es fin de impresión: la impresora puede seguir imprimiendo y
   // ser solo inalcanzable. No cerramos la sesión (evita un falso "Cancelado").
-  if(prev==='printing'&&st!=='printing'&&st!=='offline'){
+  // Cerramos la sesión cuando: (a) venía imprimiendo y pasó a un estado terminal, o
+  // (b) se RECUPERA tras un corte (prev='offline'/'shutdown') con una sesión todavía
+  // abierta — antes ese trabajo se perdía del historial/odómetro/analítica.
+  const _wasPrinting=prev==='printing';
+  const _recovered=(prev==='offline'||prev==='shutdown')&&!!_sessions[m.id];
+  if((_wasPrinting||_recovered)&&st!=='printing'&&st!=='offline'){
     const sess=_sessions[m.id];
     if(sess){
       const dur=Math.round((Date.now()-sess.start)/60000);
@@ -17358,10 +17416,13 @@ function checkTransitions(m,s){
       saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,st==='complete'?'Completado':'Cancelado',filamentMm);
       delete _sessions[m.id];
       if(st==='complete'){
-        // Auto-calibrar estimación de tiempo por modelo de impresora
-        const estKey='sl_last_est_secs';const estSecs=parseFloat(localStorage.getItem(estKey));
-        if(estSecs>0&&dur>0){const ratio=(dur*60)/estSecs;if(ratio>0.4&&ratio<4){const calKey='sl_time_cal_'+(m.modelo||'default');const prev=parseFloat(localStorage.getItem(calKey))||1;localStorage.setItem(calKey,(prev*0.75+ratio*0.25).toFixed(4));}}
-        localStorage.removeItem(estKey);
+        // Auto-calibrar la estimación de tiempo del modelo, solo si este archivo
+        // concreto tiene estimación guardada y corresponde a este modelo.
+        const je=_slGetJobEst(sess.file);
+        if(je&&je.secs>0&&dur>0&&(!je.model||je.model===m.modelo)){
+          const ratio=(dur*60)/je.secs;
+          if(ratio>0.4&&ratio<4){const calKey='sl_time_cal_'+(m.modelo||'default');const prevCal=parseFloat(localStorage.getItem(calKey))||1;localStorage.setItem(calKey,(prevCal*0.75+ratio*0.25).toFixed(4));}
+        }
         const title=`✅ ${m.nombre} #${m.numG} completado`;
         sendBrowserNotification(title,`${sess.file} · ${dur}m`);
         _sendWaAlertIfEnabled(title,`Archivo: ${sess.file} | Duración: ${dur} min`);
@@ -17373,8 +17434,53 @@ function checkTransitions(m,s){
 }
 
 function saveHistoryEntry(m,file,start,end,dur,result,filamentMm=0){
-  try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift({id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,filamentMm,ts:Date.now()});if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
+  const entry={id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,filamentMm,ts:Date.now()};
+  try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift(entry);if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
   odoAdd(m.id,(dur||0)/60,filamentMm,result==='Completado');
+  saveHistoryAirtable(entry);   // espejo centralizado/duradero (best-effort)
+}
+
+// ── Historial de impresión centralizado (Airtable) ────────────
+// El historial vive en localStorage (por navegador). Espejamos cada impresión a
+// Airtable para tener un respaldo duradero y centralizado; en un navegador nuevo o
+// tras limpiar caché, lo restauramos. NOTA: no fusionamos sobre un historial local
+// existente para no doblar el conteo (cada navegador es autoridad de lo que observó).
+function _histKey(h){return `${h.id}_${h.start}_${(h.file||'').slice(0,40)}`;}
+async function crearTablaMaquinasHistorial(){
+  const t=getToken();if(!t)return false;
+  try{
+    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    if(!r.ok)return false;const d=await r.json();
+    if(d.tables?.find(x=>x.name==='Maquinas_Historial'))return true;
+    const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Historial',fields:[
+      {name:'maquina_id',type:'singleLineText'},{name:'nombre',type:'singleLineText'},{name:'numG',type:'number',options:{precision:0}},
+      {name:'archivo',type:'singleLineText'},{name:'inicio',type:'number',options:{precision:0}},{name:'fin',type:'number',options:{precision:0}},
+      {name:'dur_min',type:'number',options:{precision:0}},{name:'resultado',type:'singleLineText'},{name:'filamento_mm',type:'number',options:{precision:0}},{name:'clave',type:'singleLineText'},
+    ]})});
+    return cr.ok;
+  }catch(e){return false;}
+}
+async function saveHistoryAirtable(h){
+  const t=getToken();if(!t)return;
+  const body={fields:{maquina_id:h.id,nombre:h.nombre||'',numG:h.numG||0,archivo:h.file||'',inicio:h.start||0,fin:h.end||0,dur_min:h.dur||0,resultado:h.result||'',filamento_mm:Math.round(h.filamentMm||0),clave:_histKey(h)},typecast:true};
+  const post=()=>fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Historial`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[body]})});
+  try{
+    const r=await post();
+    if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===404||/not.?found|could not find|NOT_FOUND/i.test(e.error?.message||'')){if(await crearTablaMaquinasHistorial())await post();}}
+  }catch(e){}
+}
+async function loadHistorialAirtable(){
+  const t=getToken();if(!t)return;
+  let local=[];try{local=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}catch(e){}
+  if(local.length)return;   // ya hay historial local → no restaurar (evita doble conteo)
+  try{
+    const res=await airtableFetch('Maquinas_Historial',500);
+    const recs=res.records||[];if(!recs.length)return;
+    const seen=new Set(),uniq=[];
+    recs.forEach(r=>{const f=r.fields||{};const h={id:f.maquina_id||'',nombre:f.nombre||'',numG:f.numG||0,file:f.archivo||'',start:f.inicio||0,end:f.fin||0,dur:f.dur_min||0,result:f.resultado||'',filamentMm:f.filamento_mm||0,ts:f.fin||f.inicio||0};const k=f.clave||_histKey(h);if(!seen.has(k)){seen.add(k);uniq.push(h);}});
+    uniq.sort((a,b)=>(b.ts||b.start||0)-(a.ts||a.start||0));if(uniq.length>500)uniq.splice(500);
+    localStorage.setItem(HIST_KEY,JSON.stringify(uniq));
+  }catch(e){}
 }
 
 function getHistoryForPrinter(id){return getHist().filter(h=>h.id===id);}
@@ -17506,8 +17612,11 @@ function checkIdleAlerts(){
   const isWork=h>=8&&h<19&&now.getDay()>0&&now.getDay()<6;
   MAQUINAS.forEach(m=>{
     const st=(_printerStatus[m.id]||{}).state||'offline';
-    if(st==='printing'||st==='paused'){_lastActiveTime[m.id]=Date.now();delete _idleAlerted[m.id];}
-    else if(isWork&&_lastActiveTime[m.id]&&!_idleAlerted[m.id]){
+    if(st==='printing'||st==='paused'){_lastActiveTime[m.id]=Date.now();delete _idleAlerted[m.id];return;}
+    // Sembrar el reloj de inactividad la primera vez que se ve idle, para que una
+    // máquina ociosa desde el arranque también pueda alertar (antes no lo hacía).
+    if((st==='standby'||st==='complete')&&!_lastActiveTime[m.id])_lastActiveTime[m.id]=Date.now();
+    if(isWork&&_lastActiveTime[m.id]&&!_idleAlerted[m.id]&&st!=='offline'&&st!=='noip'&&st!=='shutdown'){
       const idleH=(Date.now()-_lastActiveTime[m.id])/3600000;
       const threshold=parseFloat(localStorage.getItem('idle_alert_hours')||'2');
       if(idleH>=threshold){sendBrowserNotification(`💤 ${m.nombre} #${m.numG} lleva ${Math.round(idleH)}h sin imprimir`,'Máquina inactiva en horario laboral');sendWebhookAlert(m,'idle');_idleAlerted[m.id]=true;}
@@ -25466,8 +25575,8 @@ function _isLocalMode(){const v=localStorage.getItem('printer_local_mode');if(v=
 function renderLocalModeBtn(){const btn=document.getElementById('btnLocalMode');if(!btn)return;const local=_isLocalMode();btn.textContent=local?'📡 Local':'🌐 Remoto';btn.style.color=local?'var(--accent)':'var(--text3)';btn.title=local?'Conectado directo por IP (red local)':'Conectado vía tunnel remoto';}
 function toggleLocalMode(){const next=_isLocalMode()?'0':'1';localStorage.setItem('printer_local_mode',next);renderLocalModeBtn();pollPrinters();if(typeof reconnectAllPrinterWs==='function')reconnectAllPrinterWs();toast(next==='1'?'📡 Modo local — IPs directas':'🌐 Modo remoto — tunnel','info');if(next==='1'&&!localStorage.getItem('local_mode_seen')){localStorage.setItem('local_mode_seen','1');document.getElementById('localModeModal').style.display='flex';}}
 function openGcodeUpload(id){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada para esta impresora','error');return;}_uploadTargetId=id;const inp=document.getElementById('gcodeFileInput');inp.value='';inp.click();}
-async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));const _ak=getPrinterApiKey(id);if(_ak)xhr.setRequestHeader('X-Api-Key',_ak);xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}','${file.name.replace(/'/g,"\\'")}')" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
-async function startUploadedPrint(id,filename){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});if(r.ok){toast(`▶ Iniciando: ${filename}`,'success');closeGcodeUpload();setTimeout(pollPrinters,2000);}else{toast('Error al iniciar impresión: '+r.status,'error');}}catch(e){toast('Sin conexión con la impresora','error');}}
+async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));const _ak=getPrinterApiKey(id);if(_ak)xhr.setRequestHeader('X-Api-Key',_ak);xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';window._uploadedFileName=file.name;/* el nombre se pasa por variable, no interpolado en HTML (evita romper/inyectar con comillas o < > en el nombre) */actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}',window._uploadedFileName)" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
+async function startUploadedPrint(id,filename){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;if(typeof _isPrinterBusy==='function'&&_isPrinterBusy((_printerStatus[id]||{}).state)){toast('🔒 La impresora está ocupada — no se inició','error');return;}try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});if(r.ok){toast(`▶ Iniciando: ${filename}`,'success');closeGcodeUpload();setTimeout(pollPrinters,2000);}else{toast('Error al iniciar impresión: '+r.status,'error');}}catch(e){toast('Sin conexión con la impresora','error');}}
 function closeGcodeUpload(){document.getElementById('gcodeUploadModal').style.display='none';}
 function openOrcaConfigModal(){const rows=MAQUINAS.filter(m=>getPrinterIp(m)).map(m=>{const ip=getPrinterIp(m);return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--accent)">${escapeHtml(ip)}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text2)">7125</td><td style="padding:8px 10px"><span style="background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">Moonraker</span></td></tr>`;}).join('');document.getElementById('orcaTableBody').innerHTML=rows||`<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text3);font-size:11px">No hay IPs configuradas. Agrégalas en cada tarjeta de impresora primero.</td></tr>`;document.getElementById('orcaConfigModal').style.display='flex';}
 function closeOrcaConfigModal(){document.getElementById('orcaConfigModal').style.display='none';}
@@ -25795,7 +25904,7 @@ const SL3D=(function(){
     let best=S.tris,bestScore=1e18,bestI=0;
     cands.forEach(([rx,ry],i)=>{const tt=_rotTris(S.tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
     S.tris=best;S.objBBs=null;analyze(S.tris);buildPreview();S.supSticks=null;render();renderStats();
-    S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
+    S.params=null;S.gcode='';S.fname='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     toast(bestI===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
   }
   // ── Apoyar cara en la cama (lay-flat por clic) ──────────────
@@ -25852,7 +25961,7 @@ const SL3D=(function(){
     if(!bestN){toast('No se detectó cara ahí — haz clic sobre la figura','error');return;}
     S.tris=_alignTris(S.tris,bestN);S.objBBs=null;
     analyze(S.tris);buildPreview();S.supSticks=null;
-    S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];
+    S.params=null;S.gcode='';S.fname='';S.modifiers=[];S.supRegions=[];
     el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     renderModifiers();renderSupRegions();renderObjSettings();
     S.layFlatMode=false;_updLayFlatBtn();
@@ -25910,7 +26019,7 @@ const SL3D=(function(){
     el('slCanvas').style.display='block';render();renderStats();
     el('slBtnIA').disabled=false;el('slBtnBase').disabled=false;
     el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
-    S.params=null;S.gcode='';
+    S.params=null;S.gcode='';S.fname='';
   }
   // ── Reparación de malla: descarta triángulos inválidos (NaN/Inf) y degenerados (área ~0),
   //    suelda vértices casi-coincidentes a una rejilla fina (cierra micro-huecos de ruido de coma flotante).
@@ -26058,6 +26167,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const noz=+el('slNozzle').value,spec=SPECS[el('slPrinter').value];
     const mat=MATS[el('slMaterial').value]||{};
     const vmax=Math.min(spec.vmax,mat.vcap||spec.vmax); // tope de velocidad por impresora Y material (TPU 35mm/s)
+    // Piso de temperatura de cama solo para materiales que SIN cama caliente se despegan/deforman
+    // (ABS/ASA/PC/PA y CF de alta temp). PLA/PETG/TPU quedan libres para imprimir con cama a 0.
+    const bedFloor=(mat.bed>=90)?Math.round(mat.bed*0.85):0;
     const cl=(v,a,b,d)=>{v=+v;return isFinite(v)?Math.min(b,Math.max(a,v)):d;};
     return{
       layerHeight:cl(p.layerHeight,0.05,noz*0.8,noz*0.5),
@@ -26070,7 +26182,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
       travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),accel:Math.round(cl(p.accel,0,30000,0)),
       accelOuter:Math.round(cl(p.accelOuter,0,30000,0)),accelInfill:Math.round(cl(p.accelInfill,0,30000,0)),jerk:cl(p.jerk,0,40,0),bridgeFlow:Math.round(cl(p.bridgeFlow,40,150,100)),
-      nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
+      nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,bedFloor,110,mat.bed||60)),
       fanPct:Math.round(cl(p.fanPct,0,100,100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
@@ -27052,18 +27164,33 @@ self.onmessage=function(ev){
     const _gcVars={nozzle:p.nozzleTemp,bed:p.bedTemp,accel:p.accel||0,flow:Math.round(p.flowRatio||100),pa:(+p.pressureAdvance||0).toFixed(4),first_layer_height:p.firstLayerHeight,material:matName,model:modelName};
     const _startTpl=(localStorage.getItem('sl_startgcode_'+modelName)||'').trim();
     const _layerTpl=(localStorage.getItem('sl_layergcode_'+modelName)||'').trim();
-    if(_startTpl)_sub(_startTpl,_gcVars).split('\n').forEach(l=>gc.push(l));
-    else{gc.push('M140 S'+p.bedTemp);gc.push('M104 S'+p.nozzleTemp);gc.push('G28');gc.push('M190 S'+p.bedTemp);gc.push('M109 S'+p.nozzleTemp);}
+    if(_startTpl){
+      _sub(_startTpl,_gcVars).split('\n').forEach(l=>gc.push(l));
+      // Aviso: una plantilla de inicio sin homing deja el Z absoluto en una posición desconocida → riesgo de choque
+      if(!/\bG28\b|PRINT_START|\bG29\b|HOME/i.test(_startTpl))toast('⚠ Tu G-code de inicio para '+modelName+' no contiene G28/PRINT_START (homing). Revisa que la plantilla lo incluya o la boquilla puede chocar la cama.','error');
+    }
+    else{
+      // Orden seguro: cama caliente + boquilla a temp de probe (anti-ooze) → homing → temp de impresión.
+      // Así la boquilla no chorrea filamento durante el G28 ni ensucia el probing/ABL.
+      const _bed=p.bedTemp|0,_noz=p.nozzleTemp|0,_probe=Math.min(150,_noz);
+      if(_bed>0)gc.push('M140 S'+_bed+' ; precalentar cama');
+      gc.push('M104 S'+_probe+' ; boquilla a temp segura antes de homear (anti-ooze)');
+      gc.push('M109 S'+_probe+' ; esperar temp segura');
+      gc.push('G28 ; homing con boquilla templada');
+      if(_bed>0)gc.push('M190 S'+_bed+' ; esperar cama'); // omitido si la cama va a 0 (evita cuelgue de M190 S0)
+      gc.push('M104 S'+_noz+' ; subir a temp de impresión');
+      gc.push('M109 S'+_noz+' ; esperar temp de impresión');
+    }
     gc.push('G21 ; mm');gc.push('G90 ; absoluto XYZ');gc.push('M82 ; E absoluto');gc.push('G92 E0');
     if(p.accel>0)gc.push('M204 S'+p.accel+' ; aceleración');
     if(p.jerk>0)gc.push('M205 X'+(+p.jerk).toFixed(1)+' Y'+(+p.jerk).toFixed(1)+' ; jerk (Marlin)');
     if(p.flowRatio&&Math.round(p.flowRatio)!==100)gc.push('M221 S'+Math.round(p.flowRatio)+' ; flujo %');
     if(p.pressureAdvance>0)gc.push('SET_PRESSURE_ADVANCE ADVANCE='+(+p.pressureAdvance).toFixed(4)+' ; pressure advance (Klipper)');
     // Línea de purga
-    const purgeY0=5,purgeY1=Math.min(spec.y-5,55);
-    gc.push(`G1 Z${p.firstLayerHeight.toFixed(3)} F600`);gc.push(`G1 X3 Y${purgeY0} F3000`);
+    const purgeY0=5,purgeY1=Math.min(spec.y-5,55),purgeX=5; // X=5 (no X=3) para alejarse del borde/clips
+    gc.push(`G1 Z${p.firstLayerHeight.toFixed(3)} F600`);gc.push(`G1 X${purgeX} Y${purgeY0} F3000`);
     E+=(purgeY1-purgeY0)*extW*p.firstLayerHeight/FILA_AREA;
-    gc.push(`G1 X3 Y${purgeY1} E${E.toFixed(4)} F${p.firstLayerSpeed*60}`);
+    gc.push(`G1 X${purgeX} Y${purgeY1} E${E.toFixed(4)} F${p.firstLayerSpeed*60}`);
     gc.push('G92 E0');E=0;gc.push('G1 Z2 F900');
     gc.push('; <<<BODY_START>>>'); // marcador para impresión secuencial (separar prólogo/cuerpo/epílogo)
     // ── Índice de triángulos ordenado por Zmin (sweep line) — construido una sola vez ───
@@ -27566,8 +27693,11 @@ self.onmessage=function(ev){
       gcode=_tagFeatures(gcode); // ";TYPE:"/"; FEATURE:" → desglose por tipo de línea (y llena "Estimación total" por roles)
       gcode=gcode+'\n'+_footerStats(_est); // comentarios neutros (Moonraker), sin disparar error de carga
       S.gcode=gcode;
+      S.fname=_computeFileName();   // fija el nombre de este laminado (estable hasta el próximo)
       setProg(100,'✓ G-code listo');
-      localStorage.setItem('sl_last_est_secs',_est.secs.toFixed(1));
+      // Calibración por trabajo: guarda la estimación asociada a ESTE archivo y modelo,
+      // para que al completarse se calibre el modelo correcto (no una clave global).
+      if(typeof _slSaveJobEst==='function')_slSaveJobEst(S.fname.replace(/\.gcode$/i,''),_est.secs,model);
       renderResult(_est);
     }catch(e){
       setProg(0,'✕ Error');
@@ -27611,10 +27741,17 @@ self.onmessage=function(ev){
     return{secs:t,filM:filament/1000,grams:volMm3/1000*mat.dens};
   }
   function fmtTime(s){const h=Math.floor(s/3600),m=Math.round(s%3600/60);return h?`${h}h ${m}min`:`${m}min`;}
-  function gcodeFileName(){
+  function _computeFileName(){
     const lh=S.params?('_'+S.params.layerHeight+'mm'):'';
-    return(S.name||'pieza').replace(/[^\w\-]+/g,'_')+'_'+el('slMaterial').value+lh+'.gcode';
+    // Sello de tiempo para evitar que dos laminados distintos compartan nombre y
+    // se sobrescriban en la impresora (o que la cola arranque el archivo equivocado).
+    const d=new Date(),p2=n=>String(n).padStart(2,'0');
+    const stamp='_'+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+'-'+p2(d.getHours())+p2(d.getMinutes())+p2(d.getSeconds());
+    return(S.name||'pieza').replace(/[^\w\-]+/g,'_')+'_'+el('slMaterial').value+lh+stamp+'.gcode';
   }
+  // El nombre se fija UNA vez por laminado (S.fname) para que subida, cola, descarga
+  // e historial usen exactamente el mismo archivo (mismo sello de tiempo).
+  function gcodeFileName(){return S.fname||_computeFileName();}
   // ── Suite de calibración (genera G-code de test sin necesidad de modelo) ──
   function _calGen(type){
     const matName=el('slMaterial').value,mat=MATS[matName],noz=+el('slNozzle').value,spec=SPECS[el('slPrinter').value];
@@ -27624,7 +27761,12 @@ self.onmessage=function(ev){
     const TRV=(x,y,f)=>{gc.push(`G1 X${x.toFixed(3)} Y${y.toFixed(3)} F${f||3000}`);st.x=x;st.y=y;};
     function header(top){
       gc.push('; The Lab Solutions — Calibración: '+type+' · '+matName);
-      gc.push('M140 S'+bed);gc.push('M104 S'+top);gc.push('G28');gc.push('M190 S'+bed);gc.push('M109 S'+top);
+      // Orden seguro: cama + boquilla a temp de probe → homing → temp de impresión (anti-ooze)
+      const _probe=Math.min(150,top);
+      if(bed>0)gc.push('M140 S'+bed);
+      gc.push('M104 S'+_probe);gc.push('M109 S'+_probe);gc.push('G28');
+      if(bed>0)gc.push('M190 S'+bed);
+      gc.push('M104 S'+top);gc.push('M109 S'+top);
       gc.push('G21');gc.push('G90');gc.push('M82');gc.push('G92 E0');gc.push('M106 S'+Math.round((mat.fan||100)*2.55));
       gc.push('G1 Z0.24 F600');TRV(5,5);st.E+=40*extW*0.24/FILA_AREA;gc.push(`G1 X5 Y45 E${st.E.toFixed(4)} F1200`);st.x=5;st.y=45;gc.push('G92 E0');st.E=0;
     }
@@ -27653,7 +27795,7 @@ self.onmessage=function(ev){
   }
   function calibrar(){
     let res;try{res=_calGen(el('slCalType').value);}catch(e){toast('Error generando test: '+e.message,'error');return;}
-    S.gcode=res.gcode;S.name=res.name;S.params=null;
+    S.gcode=res.gcode;S.name=res.name;S.params=null;S.fname='';
     const machines=MAQUINAS.filter(m=>getPrinterIp(m));
     const opts=machines.map(m=>`<option value="${m.id}">${escapeHtml(m.nombre)} #${m.numG}</option>`).join('');
     const kb=Math.round(res.gcode.length/1024);
@@ -27887,29 +28029,35 @@ self.onmessage=function(ev){
     costRecalc();
   }
   function descargar(){
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob([S.gcode],{type:'text/plain'}));
-    a.download=gcodeFileName();a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    if(!S.gcode){toast('Genera el G-code primero','error');return;}
+    const a=document.createElement('a');const url=URL.createObjectURL(new Blob([S.gcode],{type:'text/plain'}));
+    a.href=url;a.download=gcodeFileName();document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000); // margen amplio para diálogos "Guardar como" lentos o móvil
   }
-  function enviar(){
-    const id=el('slTarget')?.value;if(!id||!S.gcode)return;
-    const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);
-    if(!ip){toast('Esa impresora no tiene IP configurada','error');return;}
+  function enviar(forceId){
+    // forceId permite enviar a una impresora concreta (p.ej. "todas las libres");
+    // sin él se usa la seleccionada en el desplegable.
+    const id=forceId||el('slTarget')?.value;if(!id||!S.gcode)return;
+    const m=MAQUINAS.find(x=>x.id===id);const ip=m?getPrinterIp(m):null;
+    if(!ip){toast(`${m?m.nombre+' #'+m.numG:'Esa impresora'} no tiene IP configurada`,'error');return;}
     const fname=gcodeFileName(),autoStart=el('slAutoStart')?.checked;
-    const btn=el('slBtnSend');btn.disabled=true;btn.textContent='⏳ Subiendo…';
+    // Solo manipulamos el botón cuando es un envío manual (sin forceId); en lote
+    // varios envíos comparten el mismo botón y pisarían su estado.
+    const btn=forceId?null:el('slBtnSend');if(btn){btn.disabled=true;btn.textContent='⏳ Subiendo…';}
     const fd=new FormData();
     fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);
     fd.append('root','gcodes');
     const xhr=new XMLHttpRequest();
     xhr.open('POST',printerUrl(ip,'/server/files/upload'));
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
-    xhr.upload.onprogress=ev=>{if(ev.lengthComputable)btn.textContent='⏳ '+Math.round(ev.loaded/ev.total*100)+'%';};
+    xhr.upload.onprogress=ev=>{if(ev.lengthComputable&&btn)btn.textContent='⏳ '+Math.round(ev.loaded/ev.total*100)+'%';};
     xhr.onload=async()=>{
-      btn.disabled=false;btn.textContent='📤 Enviar a impresora';
+      if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}
       if(xhr.status>=200&&xhr.status<300){
         toast(`✓ ${fname} subido a ${m.nombre} #${m.numG}`,'success');
         if(autoStart){
+          // No arrancar sobre un trabajo en curso: subir el archivo es seguro, iniciar no.
+          if(_isPrinterBusy((_printerStatus[id]||{}).state)){toast(`🔒 ${m.nombre} #${m.numG} está ocupada — archivo subido, no se inició`,'error');return;}
           try{
             const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(fname)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
             toast(r.ok?`▶ Imprimiendo en ${m.nombre} #${m.numG}`:'No se pudo iniciar la impresión',r.ok?'success':'error');
@@ -27918,7 +28066,7 @@ self.onmessage=function(ev){
         }
       }else toast('Error al subir ('+xhr.status+')','error');
     };
-    xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Enviar a impresora';toast('Impresora inaccesible — revisa modo Local/Remoto y el túnel','error');};
+    xhr.onerror=()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}toast('Impresora inaccesible — revisa modo Local/Remoto y el túnel','error');};
     xhr.send(fd);
   }
   function encolar(){
@@ -27961,11 +28109,9 @@ self.onmessage=function(ev){
     });
     if(!libres.length){toast('No hay impresoras libres con IP configurada','error');return;}
     if(!confirm(`¿Enviar a ${libres.length} impresora(s) libre(s)?\n${libres.map(m=>m.nombre+' #'+m.numG).join(', ')}`))return;
-    libres.forEach(m=>{
-      // enviar() recibe el id explícito; el select sólo se sincroniza si existe
-      const slSel=document.getElementById('slSendTo');if(slSel)slSel.value=m.id;
-      enviar(m.id);
-    });
+    // Cada impresora recibe el envío con su id explícito (antes todas iban a la
+    // seleccionada en el desplegable por culpa de un parámetro ignorado).
+    libres.forEach(m=>enviar(m.id));
     toast(`Enviando a ${libres.length} impresora(s)…`,'success');
   }
   // ── Init ────────────────────────────────────────────────────
