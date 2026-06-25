@@ -78,15 +78,38 @@ Leyenda de estado: ✅ corregido en esta rama · 📋 recomendado (no aplicado, 
   cortar subidas grandes de G-code en redes lentas.
 
 ### Arquitectura / producto
-- **Analítica compartida real**: el espejo de historial (#3) restaura solo si el
-  navegador no tiene datos, para no doblar el conteo. Una analítica multi-usuario
-  exacta necesita un *id de trabajo estable* (no el `Date.now()` del observador),
-  idealmente leyendo `/server/history/list` de Moonraker como fuente de verdad.
-- **Power devices / update_manager de Moonraker**: encender/apagar máquinas y ver
-  versión de Klipper/actualizaciones desde el dashboard.
 - **Webcam WebRTC (go2rtc)** para K2/K2 Plus en vez del snapshot cada 1 s.
 - **WS multiplexado por el bridge**: un socket agregando las 14 máquinas en vez de 14
   conexiones desde el navegador.
+- **Tests** del slicer (`estimate`, `clampParams`, `fitsIn`, `_deriveStatus`).
+- **AMS/CFS** de la K2 (sistema multi-filamento).
+
+## 3.b Capacidades nuevas (integración Moonraker)
+
+Implementadas en esta rama (4 avances de la sección Máquinas):
+
+1. **Historial real de Moonraker como fuente de verdad.** `syncMoonrakerHistory`
+   lee `/server/history/list` por máquina (cada trabajo con `job_id` estable),
+   dedup correcto y **fusión donde Moonraker manda**: `getHist`/`getPrintHours`/
+   `getTotalFilamentKg` usan ese historial para las máquinas con `[history]` y el
+   observado por el navegador solo como fallback → analítica exacta y compartida,
+   **sin doble conteo** (resuelve de raíz el punto #3). Sincroniza al iniciar y
+   ~cada 5 min.
+2. **Power + versiones.** En el modal de control, sección "🖥️ Sistema": versión de
+   Klipper/Moonraker, aviso de actualizaciones (`[update_manager]`) y botones
+   encender/apagar por enchufe (`[power]`, `togglePrinterPower`).
+3. **Cola con balanceo.** "Enviar a todas" ahora descarta máquinas donde la pieza
+   **no cabe**, imprime en las libres y **encola en las ocupadas** (imprimen al
+   quedar libres) en vez de mandar copias iguales y saltarse las ocupadas.
+4. **Sensor de filamento (runout) + diagnóstico Klipper.** `ensureSensors` descubre
+   los `filament_*_sensor` y los incluye en REST/WS; `_deriveStatus` marca `runout`,
+   con badge "🧵 sin filamento" y alerta (browser/webhook/WhatsApp). En estado
+   `shutdown`, `_klipperDiagnosis` parsea `klMsg` y sugiere causa probable + acción
+   (termistor, MCU, timer too close, homing, etc.).
+
+### Aún abierto
+- **Analítica multi-usuario 100% exacta** para máquinas SIN `[history]` de Moonraker
+  (firmware antiguo): ahí seguimos con el historial observado por el navegador.
 
 ---
 

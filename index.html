@@ -16562,6 +16562,7 @@ async function initMaquinas(){
   await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
   await loadHistorialAirtable();   // restaura historial central si este navegador no tiene (caché nueva)
   seedOdometerIfNeeded();
+  syncAllMoonrakerHistory();        // historial real de Moonraker (fuente de verdad), best-effort en 2º plano
   renderMaquinasCalendar();
   renderMonitorFilterTabs();
   renderMonitorKPIs();
@@ -16649,7 +16650,28 @@ const HIST_KEY='printer_history_v1';
 // hasta que el string cambie (lo invalida automáticamente cualquier escritura).
 // Evita cientos de JSON.parse por minuto al renderizar 13+ máquinas cada 15s.
 let _histRaw=null,_histParsed=[];
-function getHist(){const raw=localStorage.getItem(HIST_KEY)||'[]';if(raw!==_histRaw){try{_histParsed=JSON.parse(raw);}catch(e){_histParsed=[];}_histRaw=raw;}return _histParsed;}
+// Estado del historial real de Moonraker (fuente de verdad) y de sensores/runout.
+const MRH_KEY='printer_mr_history_v1';
+let _mrh=null,_histMrhRaw=null;
+const _mrhMachines=new Set(),_sensorObjs={},_runoutAlerted={};
+// Une el historial observado por el navegador con el real de Moonraker. Moonraker
+// MANDA: si una máquina tiene historial de su componente [history], se usa ese (exacto
+// y compartido) y se ignora el observado de esa máquina (evita doble conteo).
+function getHist(){
+  const raw=localStorage.getItem(HIST_KEY)||'[]';
+  const mrhRaw=localStorage.getItem(MRH_KEY)||'{}';
+  if(raw!==_histRaw||mrhRaw!==_histMrhRaw){
+    let browser=[];try{browser=JSON.parse(raw);}catch(e){}
+    const mrh=_getMRH(),mrhIds=new Set(Object.keys(mrh).filter(k=>(mrh[k]||[]).length));
+    const mr=[];mrhIds.forEach(k=>{for(const j of mrh[k])mr.push(j);});
+    _histParsed=mr.concat(browser.filter(h=>!mrhIds.has(h.id))).sort((a,b)=>(b.ts||b.start||0)-(a.ts||a.start||0));
+    _histRaw=raw;_histMrhRaw=mrhRaw;
+  }
+  return _histParsed;
+}
+function _getMRH(){if(_mrh===null){try{_mrh=JSON.parse(localStorage.getItem(MRH_KEY)||'{}');}catch(e){_mrh={};}for(const k in _mrh)if((_mrh[k]||[]).length)_mrhMachines.add(k);}return _mrh;}
+function _saveMRH(){try{localStorage.setItem(MRH_KEY,JSON.stringify(_mrh||{}));}catch(e){}}
+function _hasMRH(id){_getMRH();return _mrhMachines.has(id);}
 // ── Odómetro acumulado por máquina ────────────────────────────
 // El historial se recorta a 200 entradas, así que en una granja activa las
 // horas/filamento "totales" se subestimarían con el tiempo. El odómetro acumula
@@ -16803,7 +16825,10 @@ function _deriveStatus(m,s,ip){
   let state=ps.state||'standby';
   if(klState==='shutdown'||klState==='error')state='shutdown';
   else if(klState==='startup')state='startup';
-  return{state,klState,klMsg,progress,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
+  // Runout: algún sensor de filamento dejó de detectar material mientras imprime
+  let runout=false;const _sl=_sensorObjs[m.id];
+  if(_sl&&(state==='printing'||state==='paused')){for(const sn of _sl){const so=s[sn];if(so&&so.enabled!==false&&so.filament_detected===false){runout=true;break;}}}
+  return{state,klState,klMsg,progress,filename,filamentMm,runout,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
 }
 // Miniatura del trabajo en curso (cacheada por archivo). Devuelve la URL o null.
 async function _ensureThumb(m,ip,st){
@@ -16821,8 +16846,10 @@ async function _ensureThumb(m,ip,st){
 async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   const headers=getPrinterAuthHeaders(m.id);
+  const sensors=await ensureSensors(m)||[];          // sensores de filamento (descubiertos 1 vez)
+  const extra=sensors.map(s=>'&'+encodeURIComponent(s)).join('');
   try{
-    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard&webhooks`),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
+    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard&webhooks${extra}`),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
     if(!r.ok)return{state:'offline',_fetchFail:true,ip};
     const d=await r.json();const s=d.result?.status||{};
     const st=_deriveStatus(m,s,ip);
@@ -16876,7 +16903,11 @@ function connectPrinterWs(m){
   let ws;
   try{ws=new WebSocket(_printerWsUrl(ip));}catch(e){return;}
   _wsConn[m.id]=ws;
-  ws.onopen=()=>{try{ws.send(JSON.stringify({jsonrpc:'2.0',method:'printer.objects.subscribe',params:{objects:{print_stats:null,heater_bed:null,extruder:null,display_status:null,virtual_sdcard:null,webhooks:null}},id:++_wsRpcId}));}catch(e){}};
+  ws.onopen=()=>{
+    const sub=()=>{const objs={print_stats:null,heater_bed:null,extruder:null,display_status:null,virtual_sdcard:null,webhooks:null};const sl=_sensorObjs[m.id];if(sl)sl.forEach(sn=>{objs[sn]=null;});try{ws.send(JSON.stringify({jsonrpc:'2.0',method:'printer.objects.subscribe',params:{objects:objs},id:++_wsRpcId}));}catch(e){}};
+    sub();
+    if(_sensorObjs[m.id]===undefined)ensureSensors(m).then(sl=>{if(sl&&sl.length&&_wsConn[m.id]===ws)sub();});  // re-suscribir con sensores
+  };
   ws.onmessage=ev=>{
     let msg;try{msg=JSON.parse(ev.data);}catch(e){return;}
     let status=null;
@@ -16995,7 +17026,7 @@ function renderMonitorGrid(){
     // Huella estructural: SOLO lo que cambia qué ramas se dibujan. Excluye
     // progreso/eta/temperaturas (se parchean en vivo) → la tarjeta no se
     // reconstruye cada 15s mientras imprime, evitando el parpadeo.
-    const structFP=[s.state,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0)].join('~');
+    const structFP=[s.state,s.stale?1:0,s.runout?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0)].join('~');
 
     let body='';
     if(s.state==='noip'){
@@ -17009,9 +17040,11 @@ function renderMonitorGrid(){
     } else if(s.state==='offline'){
       body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:11px;padding:8px 0">Sin respuesta<br><span style="font-family:monospace;font-size:10px">${ip}</span><br><span style="font-size:10px">Verifica que esté encendida</span></div>`;
     } else if(s.state==='shutdown'){
+      const _diag=_klipperDiagnosis(s.klMsg);
       body=`<div style="margin-top:10px;padding:10px;background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);border-radius:8px">
         <div style="font-size:11px;color:#ff6b6b;font-weight:700;margin-bottom:4px">⚠ Klipper detenido</div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:9px;line-height:1.4">${escapeHtml(s.klMsg||'La impresora reportó un error y se detuvo. La impresión en curso se interrumpió.')}</div>
+        ${_diag?`<div style="font-size:10px;color:#ffb86b;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.25);border-radius:6px;padding:7px 8px;margin-bottom:9px;line-height:1.45"><b>🔎 Posible causa:</b> ${escapeHtml(_diag.causa)}<br><b>Qué hacer:</b> ${escapeHtml(_diag.accion)}</div>`:''}
         <button onclick="printerFirmwareRestart('${m.id}')" style="width:100%;background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.45);color:#ff6b6b;border-radius:7px;padding:7px;font-size:11px;font-weight:700;cursor:pointer">🔄 Reiniciar firmware</button>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
           <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}</span>
@@ -17082,6 +17115,7 @@ function renderMonitorGrid(){
           ${s.stale?`<span style="background:rgba(120,120,120,0.15);color:#999;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(120,120,120,0.25)" title="Sin señal momentánea — mostrando el último estado conocido">⟳ reconectando</span>`:''}
           ${maintAlerts.length?`<span style="background:rgba(255,170,0,0.15);color:#ffaa00;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(255,170,0,0.3)" title="${maintAlerts.map(a=>a.label).join(', ')}">🔧 ${maintAlerts.length} alerta${maintAlerts.length>1?'s':''}</span>`:''}
           ${idleWarn?`<span style="background:rgba(100,100,100,0.15);color:#888;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(100,100,100,0.2)">💤 ${idleHours}h idle</span>`:''}
+          ${s.runout?`<span style="background:rgba(255,68,68,0.15);color:#ff4444;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(255,68,68,0.35)" title="Un sensor dejó de detectar filamento">🧵 sin filamento</span>`:''}
         </div>
       </div>
       ${body}
@@ -17291,6 +17325,9 @@ function openPrinterControl(id){
   const btn=(label,onclick,extra='')=>`<button onclick="${onclick}" ${dis} style="background:${busy?'var(--surface3)':'var(--surface2)'};border:1px solid var(--border2);color:${busy?'var(--text3)':'var(--text)'};border-radius:7px;padding:7px 10px;font-size:11px;font-weight:600;cursor:${busy?'not-allowed':'pointer'};${extra}">${label}</button>`;
   document.getElementById('pcBody').innerHTML=`
     ${lockBanner}
+    <!-- SISTEMA: energía + versiones -->
+    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🖥️ Sistema</div>
+    <div id="pcSystem" style="margin-bottom:16px"><div style="font-size:10px;color:var(--text3);padding:6px">Consultando sistema…</div></div>
     <!-- TEMPERATURA -->
     <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🌡️ Temperatura</div>
     <div style="display:flex;gap:10px;margin-bottom:10px">
@@ -17334,6 +17371,7 @@ function openPrinterControl(id){
     </div>
     <div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:11px;padding:8px">Tiempo y filamento reales de cada trabajo — útil para costos.</div></div>`;
   document.getElementById('printerControlModal').style.display='flex';
+  loadPrinterSystem(id);   // carga energía + versiones de forma diferida
 }
 function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';}
 
@@ -17404,6 +17442,13 @@ function checkTransitions(m,s){
     sendWebhookAlert(m,'shutdown');
     _sendWaAlertIfEnabled(title,detail);
   }
+  // Runout de filamento: alerta una sola vez hasta que se reponga
+  if(s.runout&&!_runoutAlerted[m.id]){
+    const title=`🧵 Sin filamento — ${m.nombre} #${m.numG}`;
+    sendBrowserNotification(title,'Un sensor dejó de detectar filamento durante la impresión');
+    sendWebhookAlert(m,'runout');_sendWaAlertIfEnabled(title,'Repón el filamento; la impresora suele pausarse sola.');
+    _runoutAlerted[m.id]=true;
+  }else if(!s.runout&&_runoutAlerted[m.id])delete _runoutAlerted[m.id];
   if(st==='printing'&&prev!=='printing')_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
   // 'offline' NO es fin de impresión: la impresora puede seguir imprimiendo y
   // ser solo inalcanzable. No cerramos la sesión (evita un falso "Cancelado").
@@ -17648,7 +17693,7 @@ const MAINT_TYPES=[
 function getMaintConfig(){try{return JSON.parse(localStorage.getItem(MAINT_CFG_KEY)||'{}');}catch(e){return{};}}
 function getMaintThreshold(tipo){const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;}
 function getMaintLog(){return maquinaState.maintLog.length?maquinaState.maintLog:getMaintLogLocal();}
-function getPrintHours(id){if(_useOdometer())return(getOdometer()[id]||{}).hours||0;return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
+function getPrintHours(id){if(_hasMRH(id))return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);if(_useOdometer())return(getOdometer()[id]||{}).hours||0;return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
 function getHoursSinceMaint(id,tipo){
   const log=getMaintLog().filter(x=>x.maquinaId===id&&x.tipo===tipo).sort((a,b)=>b.ts-a.ts);
   const total=getPrintHours(id);
@@ -17674,8 +17719,115 @@ function getMaintForecast(m){
   return soonest;
 }
 function getTotalFilamentKg(id){
-  const mm=_useOdometer()?((getOdometer()[id]||{}).filamentMm||0):getHist().filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*getFilamentKgPerMm();}
+  const fromHist=()=>getHist().filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);
+  const mm=_hasMRH(id)?fromHist():(_useOdometer()?((getOdometer()[id]||{}).filamentMm||0):fromHist());return mm*getFilamentKgPerMm();}
 function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFloat(localStorage.getItem(FILAMENT_COST_KEY)||'0');return Math.round(kg*cost);}
+
+// ════════════════════════════════════════════════════════════════
+//  AVANCES MÁQUINAS — Moonraker: historial real · diagnóstico ·
+//  power/versiones · sensor de filamento (runout)
+// ════════════════════════════════════════════════════════════════
+
+// ── 1) Historial real desde Moonraker ([history]) ────────────────
+// Cada trabajo trae job_id estable → dedup correcto y analítica compartida.
+async function syncMoonrakerHistory(m){
+  if(window._DEMO_MODE)return;
+  if(!getPrinterIp(m))return;
+  const d=await _moonrakerGet(m.id,'/server/history/list?limit=100&order=desc',8000);
+  if(!d||!d.result||!Array.isArray(d.result.jobs))return;          // firmware sin [history]
+  const mrh=_getMRH();const cur=mrh[m.id]||[];const seen=new Set(cur.map(j=>j.jobId));
+  let added=0;
+  d.result.jobs.forEach(j=>{
+    if(j.status==='in_progress')return;                            // aún corriendo, no es histórico
+    const jobId=String(j.job_id||(j.start_time+'_'+(j.filename||'')));
+    if(seen.has(jobId))return;seen.add(jobId);added++;
+    cur.push({jobId,id:m.id,nombre:m.nombre,numG:m.numG,file:(j.filename||'').replace(/\.gcode$/i,''),
+      start:Math.round((j.start_time||0)*1000),end:Math.round((j.end_time||0)*1000),
+      dur:Math.round((j.print_duration||0)/60),
+      result:j.status==='completed'?'Completado':'Cancelado',
+      filamentMm:Math.round(j.filament_used||0),ts:Math.round((j.end_time||j.start_time||0)*1000)});
+  });
+  cur.sort((a,b)=>(b.ts||0)-(a.ts||0));if(cur.length>500)cur.length=500;
+  mrh[m.id]=cur;_mrhMachines.add(m.id);_saveMRH();
+  if(added)console.log(`[Moonraker history] ${m.nombre} #${m.numG}: +${added} trabajos`);
+}
+let _mrhSyncing=false;
+async function syncAllMoonrakerHistory(){
+  if(window._DEMO_MODE||_mrhSyncing)return;
+  _mrhSyncing=true;
+  try{await _mapLimit(MAQUINAS.filter(m=>getPrinterIp(m)),3,syncMoonrakerHistory);}catch(e){}
+  finally{_mrhSyncing=false;}
+  try{renderProductionAnalytics();renderMaintenanceTable();}catch(e){}
+}
+
+// ── 2) Diagnóstico de errores Klipper (a partir de klMsg) ────────
+function _klipperDiagnosis(msg){
+  const m=(msg||'').toLowerCase();if(!m)return null;
+  if(/thermistor|adc out of range|below minimum|above maximum|min_temp|max_temp|temperature.*(below|outside)/.test(m))
+    return{causa:'Termistor o lectura de temperatura fuera de rango',accion:'Revisa el conector del termistor del hotend/cama; si está suelto o dañado, reconéctalo o cámbialo antes de reiniciar.'};
+  if(/verify_heater|heating|not heating|heater/.test(m))
+    return{causa:'Fallo de calentamiento (no alcanzó la temperatura esperada)',accion:'Comprueba calentador y cableado; una corriente de aire o un ventilador apuntando al bloque puede dispararlo.'};
+  if(/mcu|lost communication|reconnect|usb/.test(m))
+    return{causa:'Pérdida de comunicación con el MCU',accion:'Revisa el cable USB/datos a la placa y reinicia el firmware; si reincide, prueba otro cable o puerto.'};
+  if(/timer too close|missed scheduling|rescheduled/.test(m))
+    return{causa:'Timer too close (la placa no alcanza a procesar a tiempo)',accion:'Reinicia el firmware; si persiste, baja velocidades/microstepping o revisa la carga del host.'};
+  if(/probe|bltouch|endstop|homing|home/.test(m))
+    return{causa:'Sonda / endstop / homing',accion:'Verifica la sonda (BLTouch/inductiva) y el endstop Z; limpia la boquilla antes de homear.'};
+  if(/manual|m112|emergency/.test(m))
+    return{causa:'Parada manual / de emergencia',accion:'Reinicia el firmware cuando sea seguro.'};
+  return null;
+}
+
+// ── 3) Power devices + versiones (Moonraker [power] / [update_manager]) ──
+async function loadPrinterSystem(id){
+  const el=document.getElementById('pcSystem');if(!el)return;
+  el.innerHTML='<div style="font-size:10px;color:var(--text3);padding:6px">Consultando sistema…</div>';
+  const [info,sinfo,upd,pwr]=await Promise.all([
+    _moonrakerGet(id,'/printer/info',6000),
+    _moonrakerGet(id,'/server/info',6000),
+    _moonrakerGet(id,'/machine/update/status?refresh=false',9000),
+    _moonrakerGet(id,'/machine/device_power/devices',6000),
+  ]);
+  const kl=info?.result?.software_version||'—',mr=sinfo?.result?.moonraker_version||'—';
+  let updHtml='<span style="font-size:10px;color:var(--text3)">sin update_manager</span>';
+  const vi=upd?.result?.version_info;
+  if(vi){const pend=Object.keys(vi).filter(k=>{const v=vi[k]||{};return v.version&&v.remote_version&&v.version!==v.remote_version;});
+    updHtml=pend.length?`<span class="badge badge-yellow" title="${escapeHtml(pend.join(', '))}">⬆ ${pend.length} actualización(es) disponibles</span>`:`<span class="badge badge-green">✓ todo al día</span>`;}
+  const devs=pwr?.result?.devices||[];
+  const pwrHtml=devs.length?devs.map(d=>{const on=d.status==='on';
+    return `<button onclick="togglePrinterPower('${id}','${escapeHtml(String(d.device))}','${on?'off':'on'}')" style="background:${on?'rgba(0,212,170,0.12)':'var(--surface2)'};border:1px solid ${on?'rgba(0,212,170,0.4)':'var(--border2)'};color:${on?'#00d4aa':'var(--text3)'};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;cursor:pointer">${on?'🔌 Apagar':'⚡ Encender'} ${escapeHtml(String(d.device))}</button>`;
+  }).join(''):'<span style="font-size:10px;color:var(--text3)">Sin enchufes inteligentes ([power] en Moonraker)</span>';
+  el.innerHTML=`
+    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">
+      <span class="badge badge-gray" title="Versión de Klipper">Klipper ${escapeHtml(String(kl)).slice(0,18)}</span>
+      <span class="badge badge-gray" title="Versión de Moonraker">Moonraker ${escapeHtml(String(mr)).slice(0,18)}</span>
+      ${updHtml}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${pwrHtml}</div>`;
+}
+async function togglePrinterPower(id,device,action){
+  const m=MAQUINAS.find(x=>x.id===id);const ip=m?getPrinterIp(m):null;if(!ip)return;
+  if(action==='off'&&!confirm(`¿Apagar "${device}"?\nSi hay una impresión en curso se cortará.`))return;
+  try{
+    const r=await fetch(printerUrl(ip,`/machine/device_power/device?device=${encodeURIComponent(device)}&action=${action}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
+    toast(r.ok?`${action==='on'?'⚡ Encendido':'🔌 Apagado'}: ${device}`:'Error: '+r.status,r.ok?'success':'error');
+    setTimeout(()=>{loadPrinterSystem(id);pollPrinters();},1800);
+  }catch(e){toast('Sin conexión','error');}
+}
+
+// ── 4) Sensor de filamento (runout) ──────────────────────────────
+// Descubre los objetos filament_*_sensor una vez por máquina y los incluye en las
+// consultas REST/WS; _deriveStatus marca runout si alguno deja de detectar filamento.
+async function ensureSensors(m){
+  if(_sensorObjs[m.id]!==undefined)return _sensorObjs[m.id];
+  _sensorObjs[m.id]=null;
+  try{const d=await _moonrakerGet(m.id,'/printer/objects/list',6000);
+    const objs=(d&&d.result&&d.result.objects)||[];
+    const sens=objs.filter(o=>/^filament_(switch|motion)_sensor /.test(o));
+    _sensorObjs[m.id]=sens.length?sens:null;
+  }catch(e){_sensorObjs[m.id]=null;}
+  return _sensorObjs[m.id];
+}
 
 function renderMaintenanceTable(){
   const el=document.getElementById('maintTable');if(!el)return;
@@ -17973,7 +18125,9 @@ async function pollPrinters(){
   renderMonitorKPIs();
   renderMonitorGrid();
   if(_pollCount%4===0){renderMaintenanceTable();renderProductionAnalytics();}
+  if(_pollCount%15===0)syncMoonrakerHistoryPeriodic();   // historial real ~cada 5 min
 }
+function syncMoonrakerHistoryPeriodic(){syncAllMoonrakerHistory();}
 
 function renderMaquinasKPIs(dias,todayStr){
   const total=MAQUINAS.length*dias.length;
@@ -28140,16 +28294,22 @@ self.onmessage=function(ev){
   // ── Enviar a todas las impresoras libres ──
   function enviarATodas(){
     if(!S.gcode){toast('Genera el G-code primero','error');return;}
-    const libres=MAQUINAS.filter(m=>{
-      const st=(typeof _printerStatus!=='undefined'&&_printerStatus[m.id]||{}).state||'offline';
-      return(st==='idle'||st==='ready'||st==='standby')&&(typeof getPrinterIp==='function'&&getPrinterIp(m));
-    });
-    if(!libres.length){toast('No hay impresoras libres con IP configurada','error');return;}
-    if(!confirm(`¿Enviar a ${libres.length} impresora(s) libre(s)?\n${libres.map(m=>m.nombre+' #'+m.numG).join(', ')}`))return;
-    // Cada impresora recibe el envío con su id explícito (antes todas iban a la
-    // seleccionada en el desplegable por culpa de un parámetro ignorado).
+    // Solo máquinas donde la pieza CABE (descarta por tamaño); luego reparte:
+    // libres → imprimir ahora · ocupadas → encolar (imprimen al quedar libres).
+    const fits=m=>{const sp=SPECS[m.modelo];if(!sp||!S.bounds)return true;const mh=2*_bedMarginXY();return S.bounds.dx<=sp.x-mh&&S.bounds.dy<=sp.y-mh&&S.bounds.dz<=sp.z-2;};
+    const estado=m=>(typeof _printerStatus!=='undefined'&&_printerStatus[m.id]||{}).state||'offline';
+    const conIp=MAQUINAS.filter(m=>getPrinterIp(m));
+    const aptas=conIp.filter(fits);const noCaben=conIp.length-aptas.length;
+    const libres=aptas.filter(m=>['idle','ready','standby'].includes(estado(m)));
+    const ocupadas=aptas.filter(m=>['printing','paused'].includes(estado(m)));
+    if(!libres.length&&!ocupadas.length){toast('No hay máquinas compatibles con IP'+(noCaben?` (${noCaben} no caben)`:''),'error');return;}
+    const lst=arr=>arr.length?'\n   '+arr.map(m=>m.nombre+' #'+m.numG).join(', '):'';
+    const msg=`Repartir en la flota:\n• ${libres.length} libre(s) → imprimir ahora${lst(libres)}\n• ${ocupadas.length} ocupada(s) → encolar${lst(ocupadas)}${noCaben?`\n\n(${noCaben} omitidas: la pieza no cabe)`:''}\n\n¿Continuar?`;
+    if(!confirm(msg))return;
+    const auto=el('slAutoStart');if(auto)auto.checked=true;     // las libres deben arrancar, no solo subir
     libres.forEach(m=>enviar(m.id));
-    toast(`Enviando a ${libres.length} impresora(s)…`,'success');
+    ocupadas.forEach(m=>_queueAdd(m.id,S.gcode,gcodeFileName(),S.est?.secs,S.est?.grams));
+    toast(`Repartido: ${libres.length} imprimiendo · ${ocupadas.length} en cola`,'success');
   }
   // ── Init ────────────────────────────────────────────────────
   function onPrinterChange(){if(S.stats)renderStats();loadMachineGcode();}
