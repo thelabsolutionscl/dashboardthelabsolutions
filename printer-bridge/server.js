@@ -108,6 +108,20 @@ const server = http.createServer((req, res) => {
     setTimeout(() => process.exit(0), 250);
     return;
   }
+  // Mantención: estado de config y ejecución on-demand (para probar sin esperar a la hora)
+  if (rawPath === '/maint/status') {
+    const cfg = loadMaintConfig();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(cfg ? { ok: true, enabled: true, time: cfg.time, tz: cfg.tz, printers: cfg.printers.length, calibrate: cfg.calibrate, dryRun: cfg.dryRun, lastRun: _maintLastRun } : { ok: true, enabled: false }));
+    return;
+  }
+  if (rawPath === '/maint/run' && req.method === 'POST') {
+    const cfg = loadMaintConfig();
+    if (!cfg) { jsonError(res, 400, 'maint-config.json no encontrado — ver README'); return; }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    runMaintenance(cfg).then(r => res.end(JSON.stringify({ ok: true, ...r }))).catch(e => res.end(JSON.stringify({ ok: false, error: e.message })));
+    return;
+  }
 
   // Ruta: /{IP}[:puerto]/resto
   const m = rawPath.match(/^\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::(\d{1,5}))?(\/.*)?$/);
@@ -223,6 +237,7 @@ server.listen(PORT, () => {
   console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
   console.log('─'.repeat(60));
   startHeartbeat();
+  startMaintScheduler();
 });
 
 // ── Latido a la tabla Automations (Oficina Virtual del dashboard) ─────────
@@ -260,4 +275,129 @@ function startHeartbeat() {
   beat();
   const t = setInterval(beat, 5 * 60 * 1000);
   if (t.unref) t.unref();
+}
+
+// ── Auditoría y mantención diaria de impresoras ───────────────────────────
+// Lee maint-config.json (junto a este archivo). Si no existe, queda APAGADO.
+// A la hora configurada (zona horaria del taller) audita cada impresora vía
+// Moonraker y, SOLO sobre las que estén LIBRES (jamás imprimiendo/pausada):
+//   1) si Klipper está en error → reinicia el firmware y reverifica.
+//   2) si quedó OK y calibrate=true → corre G28 + BED_MESH_CALIBRATE y deja la
+//      máquina segura (calentadores a 0 + motores liberados).
+// Reporta a Airtable (tabla Maquinas_Auditoria) y por email (webhook opcional).
+// SEGURIDAD: arranca en dryRun (no manda comandos físicos) hasta que pongas
+// "dryRun": false en el config — así pruebas la auditoría antes de actuar solo.
+const MAINT_CONFIG_FILE = path.join(__dirname, 'maint-config.json');
+function loadMaintConfig() {
+  try {
+    const c = JSON.parse(fs.readFileSync(MAINT_CONFIG_FILE, 'utf8'));
+    if (!c || !Array.isArray(c.printers) || !c.printers.filter(p => p && p.ip).length) return null;
+    return {
+      printers: c.printers.filter(p => p && p.ip),
+      time: (typeof c.time === 'string' && /^\d{1,2}:\d{2}$/.test(c.time)) ? c.time.padStart(5, '0') : '10:00',
+      tz: c.tz || 'America/Santiago',
+      calibrate: c.calibrate !== false,
+      dryRun: c.dryRun !== false,                       // por defecto TRUE
+      airtable: c.airtable || null,
+      mailUrl: c.mailUrl || process.env.MAINT_MAIL_URL || '',
+      mailKey: c.mailKey || process.env.MAINT_MAIL_KEY || '',
+      mailTo: c.mailTo || process.env.MAINT_MAIL_TO || '',
+    };
+  } catch (e) { return null; }
+}
+function nowInTz(tz) {
+  const parts = {};
+  for (const p of new Intl.DateTimeFormat('en-CA', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date())) parts[p.type] = p.value;
+  const hh = parts.hour === '24' ? '00' : parts.hour;
+  return { hm: `${hh}:${parts.minute}`, date: `${parts.year}-${parts.month}-${parts.day}` };
+}
+function moonraker(printer, method, mpath, timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    const headers = { 'x-forwarded-for': '127.0.0.1' };
+    if (printer.key) headers['X-Api-Key'] = printer.key;
+    const preq = http.request({ host: printer.ip, port: printer.port || 7125, path: mpath, method, headers, timeout: timeoutMs, agent: keepAliveAgent }, pres => {
+      let data = ''; pres.on('data', d => (data += d));
+      pres.on('end', () => { try { resolve({ ok: pres.statusCode < 400, status: pres.statusCode, json: data ? JSON.parse(data) : null }); } catch (e) { resolve({ ok: pres.statusCode < 400, status: pres.statusCode, json: null }); } });
+    });
+    preq.on('timeout', () => { preq.destroy(); resolve({ ok: false, status: 0, timeout: true }); });
+    preq.on('error', () => resolve({ ok: false, status: 0 }));
+    preq.end();
+  });
+}
+const _sleep = ms => new Promise(r => setTimeout(r, ms));
+async function auditPrinter(p) {
+  const name = p.name || p.ip;
+  const r = await moonraker(p, 'GET', '/printer/objects/query?print_stats&heater_bed&extruder&webhooks&toolhead&bed_mesh');
+  if (!r.ok || !r.json || !r.json.result || !r.json.result.status) return { name, ip: p.ip, p, state: 'offline', errored: false, busy: false, homed: false, meshOk: false };
+  const s = r.json.result.status, wh = s.webhooks || {}, ps = s.print_stats || {}, th = s.toolhead || {}, bm = s.bed_mesh || {}, ex = s.extruder || {}, hb = s.heater_bed || {};
+  const klState = wh.state || 'ready';
+  const errored = klState === 'shutdown' || klState === 'error';
+  let state = ps.state || 'standby'; if (errored) state = 'shutdown';
+  let klMsg = ''; if (wh.state_message) { try { klMsg = (JSON.parse(wh.state_message).msg) || wh.state_message; } catch (_) { klMsg = wh.state_message; } klMsg = String(klMsg).split('\n').map(x => x.trim()).filter(Boolean)[0] || ''; }
+  return { name, ip: p.ip, p, state, errored, busy: state === 'printing' || state === 'paused', homed: String(th.homed_axes || '').toLowerCase() === 'xyz', meshOk: !!(bm.profile_name || (bm.mesh_matrix && bm.mesh_matrix.length)), klState, klMsg, hotend: Math.round(ex.temperature || 0), bed: Math.round(hb.temperature || 0), filename: (ps.filename || '').replace(/\.gcode$/i, '') };
+}
+async function maintainPrinter(a, cfg) {
+  const acts = [];
+  if (a.state === 'offline') { a.acts = ['offline — sin acción']; return a; }
+  if (a.busy) { a.acts = ['imprimiendo — NO se tocó']; return a; }
+  if (a.errored) {
+    if (cfg.dryRun) acts.push('[dry-run] reiniciaría firmware');
+    else {
+      await moonraker(a.p, 'POST', '/printer/firmware_restart'); acts.push('firmware reiniciado'); await _sleep(8000);
+      const re = await auditPrinter(a.p); a.errored = re.errored; a.state = re.state; a.homed = re.homed; a.meshOk = re.meshOk;
+      if (re.errored) { acts.push('SIGUE EN ERROR tras reinicio — revisar hardware'); a.acts = acts; return a; }
+    }
+  }
+  if (cfg.calibrate && !a.errored && !a.busy) {
+    if (cfg.dryRun) acts.push('[dry-run] calibraría bed mesh');
+    else {
+      const sent = await moonraker(a.p, 'POST', '/printer/gcode/script?script=' + encodeURIComponent('G28\nBED_MESH_CALIBRATE'), 240000);
+      if (sent.ok) { acts.push('bed mesh calibrada'); await moonraker(a.p, 'POST', '/printer/gcode/script?script=' + encodeURIComponent('M104 S0\nM140 S0\nM84'), 15000); }
+      else acts.push('no se pudo calibrar (timeout/err)');
+    }
+  }
+  if (!acts.length) acts.push('lista — sin acción necesaria');
+  a.acts = acts; return a;
+}
+async function maintReport(cfg, stamp, resumen, detalle) {
+  const token = process.env.AIRTABLE_TOKEN, base = (cfg.airtable && cfg.airtable.base) || process.env.AIRTABLE_BASE_ID, table = (cfg.airtable && cfg.airtable.table) || 'Maquinas_Auditoria';
+  if (token && base) {
+    try { await fetch(`https://api.airtable.com/v0/${base}/${encodeURIComponent(table)}`, { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { Fecha: new Date().toISOString(), Resumen: resumen, Detalle: detalle }, typecast: true }) }); }
+    catch (e) { console.log('[mant] Airtable falló:', e.message); }
+  }
+  if (cfg.mailUrl && cfg.mailTo) {
+    try {
+      const esc = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+      const body = `<h2 style="font-family:system-ui">Auditoría 3D — ${stamp.date} ${stamp.hm}</h2><p><b>${esc(resumen)}</b></p><pre style="font-family:monospace;font-size:13px;white-space:pre-wrap">${esc(detalle)}</pre><p style="color:#888;font-size:12px">The Lab Solutions · printer-bridge</p>`;
+      const headers = { 'Content-Type': 'application/json' }; if (cfg.mailKey) headers['X-App-Key'] = cfg.mailKey;
+      await fetch(cfg.mailUrl, { method: 'POST', headers, body: JSON.stringify({ action: 'send', to: cfg.mailTo, subject: `Auditoría impresoras 3D — ${resumen}`, body, from_name: 'The Lab Solutions' }) });
+    } catch (e) { console.log('[mant] Email falló:', e.message); }
+  }
+}
+async function runMaintenance(cfg) {
+  const stamp = nowInTz(cfg.tz);
+  console.log(`[mant] ${stamp.date} ${stamp.hm} — auditoría${cfg.dryRun ? ' (DRY-RUN)' : ''} de ${cfg.printers.length} impresora(s)`);
+  const results = [];
+  for (const p of cfg.printers) { const r = await maintainPrinter(await auditPrinter(p), cfg); results.push(r); console.log(`[mant]  • ${r.name}: ${r.state}${r.errored ? ' ERROR' : ''} — ${(r.acts || []).join('; ')}`); }
+  const ok = results.filter(r => !r.errored && !r.busy && r.state !== 'offline').length;
+  const err = results.filter(r => r.errored).length, off = results.filter(r => r.state === 'offline').length, busy = results.filter(r => r.busy).length;
+  const resumen = `${ok} lista(s) · ${err} con error · ${busy} imprimiendo · ${off} offline · ${results.length} total${cfg.dryRun ? ' · DRY-RUN' : ''}`;
+  const detalle = results.map(r => `${r.name} (${r.ip}): ${r.errored ? 'ERROR Klipper' + (r.klMsg ? ' ' + r.klMsg : '') : r.busy ? 'imprimiendo' : r.state === 'offline' ? 'OFFLINE' : 'lista'} · home ${r.homed ? 'sí' : 'no'} · malla ${r.meshOk ? 'sí' : 'no'} → ${(r.acts || []).join('; ')}`).join('\n');
+  await maintReport(cfg, stamp, resumen, detalle);
+  console.log('[mant] listo —', resumen);
+  return { resumen, detalle };
+}
+let _maintLastRun = '';
+function startMaintScheduler() {
+  const cfg = loadMaintConfig();
+  if (!cfg) { console.log('  Mantención auto: APAGADA (crea maint-config.json para activarla — ver README)'); return; }
+  console.log(`  Mantención auto: ${cfg.time} ${cfg.tz} · ${cfg.printers.length} impresora(s) · calibrar=${cfg.calibrate} · dryRun=${cfg.dryRun}`);
+  const tick = async () => {
+    try {
+      const cur = loadMaintConfig(); if (!cur) return;
+      const now = nowInTz(cur.tz);
+      if (now.hm === cur.time && _maintLastRun !== now.date) { _maintLastRun = now.date; await runMaintenance(cur); }
+    } catch (e) { console.log('[mant] tick error:', e.message); }
+  };
+  const t = setInterval(tick, 30 * 1000); if (t.unref) t.unref();
 }

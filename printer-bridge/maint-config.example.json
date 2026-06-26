@@ -1,0 +1,29 @@
+{
+  "_comment": "Copia este archivo a maint-config.json para activar la auditoría y mantención diaria. Mientras no exista maint-config.json, la rutina automática queda APAGADA.",
+
+  "time": "10:00",
+  "tz": "America/Santiago",
+
+  "_calibrate": "true = corre G28 + BED_MESH_CALIBRATE en cada impresora libre. false = solo audita y arregla errores de Klipper.",
+  "calibrate": true,
+
+  "_dryRun": "IMPORTANTE: empieza en true. En dry-run NO manda ningún comando físico (no calienta ni mueve nada): solo audita y te manda el reporte. Cuando verifiques que el reporte de la mañana se ve bien, ponlo en false para que actúe de verdad.",
+  "dryRun": true,
+
+  "_printers": "Lista de impresoras (IP de la red local). name es opcional (para el reporte). key es la API Key de Moonraker si la tienes configurada.",
+  "printers": [
+    { "ip": "192.168.100.21", "name": "K1 #1" },
+    { "ip": "192.168.100.22", "name": "K1 #2" },
+    { "ip": "192.168.100.23", "name": "K1 #3" },
+    { "ip": "192.168.100.31", "name": "K2 #1" },
+    { "ip": "192.168.100.41", "name": "Ender-5 Max #1", "key": "" }
+  ],
+
+  "_airtable": "Opcional: dónde guardar el reporte para verlo en el dashboard (Máquinas). El token sale de la variable de entorno AIRTABLE_TOKEN del launchd. base es el ID de tu base; table por defecto Maquinas_Auditoria.",
+  "airtable": { "base": "appXXXXXXXXXXXXXX", "table": "Maquinas_Auditoria" },
+
+  "_mail": "Opcional: aviso por email al terminar. mailUrl = endpoint de tu Worker de correo (el mismo que usa el dashboard para 'Enviar prueba'). mailKey = su passphrase si aplica. mailTo = a quién avisar.",
+  "mailUrl": "",
+  "mailKey": "",
+  "mailTo": "hola@thelab.solutions"
+}

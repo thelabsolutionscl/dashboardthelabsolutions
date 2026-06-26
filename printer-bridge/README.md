@@ -244,3 +244,51 @@ las ráfagas de polling.
 | `BRIDGE_TOKEN` | (autogenerado) | Token fijo, si prefieres definirlo tú |
 | `BRIDGE_PORTS` | `7125,8080,4408,4409,80,1984` | Puertos de destino permitidos (1984 = go2rtc cámaras K2) |
 | `BRIDGE_ALLOW_ORIGIN` | `*` | Origen CORS (puedes restringirlo a la URL del dashboard) |
+
+---
+
+## 🤖 Auditoría y mantención automática (10 AM)
+
+El bridge puede **auditar, arreglar y calibrar** todas las impresoras cada
+mañana, para que al llegar estén listas para imprimir. Corre en el iMac (acceso
+LAN directo), sin depender del navegador ni del túnel.
+
+**Activarlo:**
+
+```bash
+cd printer-bridge
+cp maint-config.example.json maint-config.json
+# edita maint-config.json: pon las IPs reales de tus impresoras y, si quieres,
+# Airtable (para ver el reporte en el dashboard) y el email de aviso.
+```
+
+Reinicia el bridge (`./install-launchd.sh` o `node server.js`). En el arranque
+verás algo como:
+
+```
+  Mantención auto: 10:00 America/Santiago · 5 impresora(s) · calibrar=true · dryRun=true
+```
+
+**Importante — empieza en `dryRun: true`.** En ese modo NO manda ningún comando
+físico (no calienta ni mueve nada): solo audita y te envía el reporte. Cuando
+veas que el reporte de la mañana se ve bien, edita `maint-config.json` y pon
+`"dryRun": false` para que actúe de verdad (reiniciar firmware si hay error y
+calibrar bed mesh en las libres). El cambio se toma sin reiniciar el bridge.
+
+**Qué hace cada mañana, por impresora** (solo si está **libre** — nunca toca una
+imprimiendo o pausada):
+1. Audita estado (Klipper, home, malla de cama, temps).
+2. Si Klipper está en error → `FIRMWARE_RESTART` y reverifica (si reincide, avisa "revisar hardware").
+3. Si `calibrate: true` → `G28` + `BED_MESH_CALIBRATE`, y deja la máquina segura (calentadores a 0 + motores liberados).
+4. Reporta a Airtable (`Maquinas_Auditoria`, visible en el dashboard → Máquinas) y por email.
+
+**Probar sin esperar a las 10 AM** (token del bridge):
+
+```bash
+curl -X POST "http://localhost:8347/maint/run?bt=TU_TOKEN"
+curl "http://localhost:8347/maint/status?bt=TU_TOKEN"
+```
+
+> Seguridad: la calibración calienta y mueve la máquina sin nadie presente.
+> Por eso arranca en dry-run y solo opera impresoras libres. Revisa el primer
+> par de reportes antes de desactivar el dry-run.
