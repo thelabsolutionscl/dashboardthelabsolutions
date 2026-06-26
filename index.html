@@ -3735,6 +3735,22 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     <div id="maintTable"></div>
   </div>
 
+  <!-- ── AUDITORÍA Y MANTENCIÓN 3D (agente) ── -->
+  <div id="maquinaAuditView" class="maquina-section" style="margin-top:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg> Auditoría y mantención 3D</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="audit3DRun()" style="font-size:11px">🔍 Auditar ahora</button>
+        <button class="btn btn-ghost btn-sm" onclick="audit3DCalibrateAll()" style="font-size:11px" title="Lanza bed mesh en todas las impresoras libres">📐 Calibrar todas las libres</button>
+        <button class="btn btn-ghost btn-sm" onclick="audit3DReport()" style="font-size:11px">🧠 Reporte IA</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Revisa cada impresora (errores de Klipper, home, malla de cama, mantención) y corrige/calibra con un clic. Las acciones <b>nunca</b> tocan una máquina imprimiendo. La rutina automática de las 10 AM corre en el printer-bridge del taller.</div>
+    <div id="audit3DResult"><div style="padding:16px;color:var(--text3);font-size:12px">Pulsa “Auditar ahora” para revisar todas las impresoras.</div></div>
+    <div id="audit3DAiOut" style="display:none;margin-top:12px;padding:14px;background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.22);border-radius:10px;font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.6"></div>
+    <div id="audit3DDaily" style="margin-top:12px"></div>
+  </div>
+
   <!-- ── ANALÍTICA ── -->
   <div id="maquinaAnalyticsView" class="maquina-section" style="margin-top:28px">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:14px"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chart"/></svg> Analítica de producción</div>
@@ -6287,6 +6303,20 @@ ROL: generar instrucciones técnicas claras para el equipo operativo.
 FORMATO: lista numerada, concisa. Incluir: material, temperatura boquilla/cama, velocidad, relleno %, soporte (sí/no), cantidad por placa, tiempo estimado, postproceso (lija, pintura, ensamble, pegamento).`,
    pre:'Pedido: ',
    qs:['50 trofeos PLA blanco, alto 15cm, base separada, terminación pintura dorada','Neón LED letras script "Open", cable oculto por detrás, montaje pared','20 medallas bicolor PLA rojo/negro, cinta incluida, relieve logo','Señalética acrílico transparente 40×20cm, texto grabado, 5 unidades']},
+
+  {id:'MANTENCION3D',label:'AUDITOR_3D',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg>',badge:'badge-green',
+   sys:`Eres el AUDITOR_3D de The Lab Solutions: agente de auditoría y mantención de las impresoras 3D del taller (Klipper/Moonraker).
+PARQUE: 5× Creality K1, 2× K2, 1× K2 Plus, 4× Ender-5 Max.
+ROL: a partir de la auditoría en vivo de cada impresora, diagnosticar el estado del parque y dar acciones concretas para dejarlas listas para imprimir.
+SEGURIDAD (regla dura): NUNCA propongas calentar, mover ni calibrar una impresora que esté imprimiendo o pausada. Las calibraciones (bed mesh) y arreglos sólo aplican a máquinas libres. Si una máquina está en error de Klipper, el primer paso es reiniciar el firmware (FIRMWARE_RESTART) y verificar si vuelve; si reincide, es hardware (termistor/MCU/sensor) y hay que revisarla físicamente.
+ESTRUCTURA DE RESPUESTA:
+1. SEMÁFORO (cuántas listas, con error, offline, imprimiendo).
+2. ACCIONES URGENTES (máquinas con error o mantención vencida, con el paso concreto).
+3. CALIBRACIÓN (qué máquinas libres conviene calibrar y por qué).
+4. RECOMENDACIÓN para la rutina automática de las 10 AM.
+Sé concreto y operativo, sin relleno. No inventes datos que no estén en la auditoría.`,
+   pre:'',
+   qs:['Audita el parque y dime qué máquinas no están listas para imprimir','¿Qué impresoras necesitan calibración hoy y por qué?','Tengo una K1 en error de Klipper, ¿qué hago paso a paso?','Resume el estado para dejar todo listo mañana a las 10 AM']},
 
   {id:'QA',label:'QA_AGENT',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg>',badge:'badge-gray',
    sys:`Eres el QA_AGENT de The Lab Solutions.
@@ -12901,6 +12931,20 @@ function buildAgentContext(id){
     if(pedActivos.length){pedActivos.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Equipo: ${f['Equipo asignado']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);const req=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';if(req) lines.push(`    Solicitud: ${req.substring(0,100)}`);});}else lines.push('  Sin pedidos activos');
   }
 
+  if(id==='MANTENCION3D'){
+    const a=window._audit3D;
+    if(a&&a.printers&&a.printers.length){
+      const okN=a.printers.filter(p=>!p.errored&&!p.busy&&p.state!=='offline'&&p.state!=='noip'&&(p.issues||[]).every(i=>i.sev===0)).length;
+      lines.push(`\nAUDITORÍA DE IMPRESORAS 3D (hace ${Math.round((Date.now()-a.ts)/60000)} min) — ${okN}/${a.printers.length} listas:`);
+      a.printers.forEach(p=>{
+        const est=p.errored?('ERROR Klipper'+(p.klMsg?' ('+p.klMsg+')':'')):p.busy?'imprimiendo':p.state==='offline'?'OFFLINE':p.state==='noip'?'sin IP':'lista';
+        const obs=(p.issues||[]).map(i=>i.txt).join('; ')||'sin observaciones';
+        lines.push(`  • ${p.nombre} #${p.numG}: ${est}${(!p.busy&&p.state!=='offline'&&p.state!=='noip')?` · home ${p.homed?'sí':'NO'} · malla ${p.meshOk?'sí':'NO'} · ${p.hotend}°/${p.bed}°`:''} · ${obs}`);
+      });
+    } else lines.push('\nAUDITORÍA DE IMPRESORAS 3D: aún no ejecutada — corre "Auditar ahora" en Máquinas para tener datos en vivo.');
+    lines.push('\nREGLA DE SEGURIDAD: ninguna acción (calentar/mover/calibrar) sobre una máquina imprimiendo o pausada. Calibración = bed mesh sólo en libres.');
+  }
+
   if(id==='QA'){
     const listos=state.pedidos.filter(p=>p.fields['Estado pedido']==='Listo para despacho');
     lines.push('\nPEDIDOS LISTOS PARA QA:');
@@ -16559,6 +16603,7 @@ async function initMaquinas(){
   renderMonitorFilterTabs();
   renderMonitorKPIs();
   renderMaintenanceTable();
+  try{audit3DLoadDaily();}catch(_){}
   renderProductionAnalytics();
   requestNotificationPermission(false);
   if(!_monitorInterval){
@@ -17145,6 +17190,94 @@ async function printerFirmwareRestart(id){
 const PREHEAT_PRESETS={PLA:{h:210,b:60},PETG:{h:240,b:80},ABS:{h:250,b:100},TPU:{h:225,b:50}};
 function _isPrinterBusy(state){return state==='printing'||state==='paused';}
 function _pcState(id){return(_printerStatus[id]||{}).state||'offline';}
+// ── AGENTE: Auditoría y mantención 3D ──────────────────────────────────
+// Audita cada impresora vía Moonraker. SEGURIDAD: no propone ni ejecuta nada
+// sobre una máquina imprimiendo/pausada; las acciones reutilizan _sendGcode (gated).
+async function audit3DPrinter(m){
+  const id=m.id, ip=getPrinterIp(m);
+  if(!ip)return{id,nombre:m.nombre,numG:m.numG,state:'noip',issues:[{sev:1,txt:'Sin IP configurada'}],actions:[]};
+  const d=await _moonrakerGet(id,'/printer/objects/query?print_stats&heater_bed&extruder&webhooks&toolhead&bed_mesh',7000);
+  if(!d||!d.result||!d.result.status)return{id,nombre:m.nombre,numG:m.numG,state:'offline',issues:[{sev:2,txt:'No responde (offline o apagada)'}],actions:[]};
+  const s=d.result.status,wh=s.webhooks||{},ps=s.print_stats||{},th=s.toolhead||{},ex=s.extruder||{},hb=s.heater_bed||{},bm=s.bed_mesh||{};
+  const klState=wh.state||'ready';
+  let klMsg=''; if(wh.state_message){try{const j=JSON.parse(wh.state_message);klMsg=j.msg||wh.state_message;}catch(_){klMsg=wh.state_message;}klMsg=String(klMsg).split('\n').map(x=>x.trim()).filter(Boolean)[0]||'';}
+  const errored=(klState==='shutdown'||klState==='error');
+  let state=ps.state||'standby'; if(errored)state='shutdown';
+  const busy=(state==='printing'||state==='paused');
+  const homed=String(th.homed_axes||'').toLowerCase()==='xyz';
+  const meshOk=!!(bm.profile_name||(bm.mesh_matrix&&bm.mesh_matrix.length));
+  const issues=[],actions=[];
+  if(errored){issues.push({sev:1,txt:'Klipper detenido ('+klState+')'+(klMsg?': '+klMsg:'')});actions.push({key:'firmware',txt:'🔄 Reiniciar firmware'});}
+  if(busy)issues.push({sev:0,txt:'Imprimiendo'+(ps.filename?' · '+ps.filename.replace(/\.gcode$/i,''):'')+' — no se tocará'});
+  if(!busy&&!errored){
+    if(!homed){issues.push({sev:2,txt:'Sin home (ejes sin referenciar)'});actions.push({key:'home',txt:'🏠 Home'});}
+    if(!meshOk){issues.push({sev:2,txt:'Sin malla de cama activa'});actions.push({key:'mesh',txt:'📐 Calibrar malla'});}
+    else actions.push({key:'mesh',txt:'📐 Recalibrar malla'});
+  }
+  let fc=null; try{if(typeof getMaintForecast==='function')fc=getMaintForecast(m);}catch(_){}
+  if(fc&&fc.hoursLeft<=0)issues.push({sev:1,txt:'Mantención '+fc.tipo+' VENCIDA'});
+  else if(fc&&fc.rate>0&&fc.weeks<1.5)issues.push({sev:2,txt:'Mantención '+fc.tipo+' próxima (~'+Math.max(1,Math.round(fc.weeks*7))+'d)'});
+  return{id,nombre:m.nombre,numG:m.numG,state,busy,errored,klState,klMsg,homed,meshOk,hotend:Math.round(ex.temperature||0),bed:Math.round(hb.temperature||0),lastFile:(ps.filename||'').replace(/\.gcode$/i,''),issues,actions};
+}
+async function audit3DAll(){
+  const list=(typeof MAQUINAS!=='undefined'?MAQUINAS:[]).filter(m=>getPrinterIp(m));
+  const res=await Promise.all(list.map(m=>audit3DPrinter(m).catch(e=>({id:m.id,nombre:m.nombre,numG:m.numG,state:'error',issues:[{sev:2,txt:'Error auditando: '+(e&&e.message||e)}],actions:[]}))));
+  window._audit3D={ts:Date.now(),printers:res};
+  return res;
+}
+function _audit3DDot(sev){return sev===0?'var(--accent3)':sev===1?'var(--danger)':'var(--warn)';}
+async function audit3DRun(){
+  const el=document.getElementById('audit3DResult');if(el)el.innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div> Auditando impresoras…</div>';
+  audit3DRenderResult(await audit3DAll());
+  try{audit3DLoadDaily();}catch(_){}
+}
+function audit3DRenderResult(res){
+  const el=document.getElementById('audit3DResult');if(!el)return;
+  if(!res.length){el.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Sin impresoras con IP configurada. Configura las IPs en cada tarjeta del monitor.</div>';return;}
+  const okN=res.filter(a=>!a.errored&&!a.busy&&a.state!=='offline'&&a.state!=='noip'&&a.state!=='error'&&(a.issues||[]).every(i=>i.sev===0)).length;
+  const errN=res.filter(a=>a.errored).length,offN=res.filter(a=>a.state==='offline'||a.state==='noip').length;
+  const cards=res.map(a=>{
+    const stCol=a.errored?'var(--danger)':a.busy?'var(--accent)':(a.state==='offline'||a.state==='noip')?'var(--text3)':'var(--success)';
+    const stTxt=a.errored?'⚠ Detenida (Klipper)':a.busy?'🖨 Imprimiendo':a.state==='offline'?'⚫ Offline':a.state==='noip'?'Sin IP':'✓ Lista';
+    const issues=(a.issues||[]).map(i=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)"><span style="width:6px;height:6px;border-radius:50%;background:${_audit3DDot(i.sev)};flex-shrink:0"></span>${escapeHtml(i.txt)}</div>`).join('');
+    const acts=(a.actions||[]).map(ac=>{const fn=ac.key==='firmware'?`printerFirmwareRestart('${a.id}')`:ac.key==='home'?`printerHome('${a.id}')`:`audit3DCalibrate('${a.id}')`;return `<button class="btn btn-ghost btn-sm" onclick="${fn}" style="font-size:10px">${escapeHtml(ac.txt)}</button>`;}).join('');
+    return `<div style="padding:11px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--surface2)">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px">
+        <b style="font-size:12px">${escapeHtml(a.nombre)} <span style="color:var(--text3)">#${a.numG}</span></b>
+        <span style="font-size:11px;color:${stCol};font-weight:600">${stTxt}</span>
+        ${!a.busy&&a.state!=='offline'&&a.state!=='noip'&&a.state!=='error'?`<span style="font-size:10px;color:var(--text3)">🌡 ${a.hotend}°/${a.bed}°${a.homed?' · home ✓':''}${a.meshOk?' · malla ✓':''}</span>`:''}
+        <span style="margin-left:auto;display:flex;gap:5px;flex-wrap:wrap">${acts}</span>
+      </div>
+      ${issues||'<div style="font-size:11px;color:var(--success)">Sin observaciones — lista para imprimir.</div>'}
+    </div>`;}).join('');
+  el.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:10px">✓ <b style="color:var(--success)">${okN}</b> lista(s) · <b style="color:var(--danger)">${errN}</b> con error · ${offN} offline · ${res.length} total</div>`+cards;
+}
+async function audit3DCalibrate(id){
+  const m=(typeof MAQUINAS!=='undefined'?MAQUINAS:[]).find(x=>x.id===id);if(!m)return;
+  if(_isPrinterBusy(_pcState(id))){toast('🔒 Está imprimiendo — no se calibra','error');return;}
+  if(!confirm(`📐 Calibrar bed mesh en ${m.nombre} #${m.numG}?\n\nHará home + nivelación de cama (1-2 min). Asegúrate de que la cama esté despejada.`))return;
+  _sendGcode(id,'G28\nBED_MESH_CALIBRATE','📐 Calibrando bed mesh… (1-2 min)',{timeout:180000});
+}
+async function audit3DCalibrateAll(){
+  const free=(typeof MAQUINAS!=='undefined'?MAQUINAS:[]).filter(m=>getPrinterIp(m)&&!_isPrinterBusy(_pcState(m.id))&&_pcState(m.id)!=='offline'&&_pcState(m.id)!=='shutdown');
+  if(!free.length){toast('No hay impresoras libres y listas para calibrar','info');return;}
+  if(!confirm(`📐 Lanzar bed mesh en ${free.length} impresora(s) libre(s)?\n\n${free.map(m=>m.nombre+' #'+m.numG).join(', ')}\n\nCada una hace home + nivelación. No toca las que estén imprimiendo.`))return;
+  free.forEach(m=>_sendGcode(m.id,'G28\nBED_MESH_CALIBRATE',null,{timeout:180000}));
+  toast(`📐 Calibración lanzada en ${free.length} impresora(s)`,'success');
+}
+async function audit3DReport(){
+  const out=document.getElementById('audit3DAiOut');if(out){out.style.display='block';out.textContent='🧠 Analizando el estado del parque…';}
+  if(!window._audit3D)await audit3DRun();
+  try{const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id==='MANTENCION3D'):null;const resp=await callClaude(cfg?cfg.sys:'',buildAgentContext('MANTENCION3D'));if(out)out.textContent=resp;}
+  catch(e){if(out)out.textContent='Error IA: '+(e&&e.message||e);}
+}
+// Último reporte de la rutina automática de las 10 AM (lo escribe el printer-bridge en Airtable)
+async function audit3DLoadDaily(){
+  const el=document.getElementById('audit3DDaily');if(!el)return;
+  try{const r=await airtableFetch('Maquinas_Auditoria',1);const rec=(r.records||[])[0];if(!rec){el.innerHTML='';return;}
+    const f=rec.fields;el.innerHTML=`<div style="padding:11px 14px;border:1px dashed var(--border2);border-radius:10px;font-size:11px;color:var(--text3)"><b style="color:var(--text2)">📋 Última auditoría automática</b> · ${escapeHtml(String(f['Fecha']||rec.createdTime||''))}<br><span style="white-space:pre-wrap">${escapeHtml(String(f['Resumen']||f['Detalle']||'').slice(0,700))}</span></div>`;
+  }catch(_){el.innerHTML='';}
+}
 async function _moonrakerGet(id,path,timeout=6000){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return null;
   const ip=getPrinterIp(m);if(!ip)return null;
