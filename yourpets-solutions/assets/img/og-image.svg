@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="YOURPETS:SOLUTIONS — Diagnóstico veterinario molecular y genético">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a1626"/>
+      <stop offset="0.6" stop-color="#0f3038"/>
+      <stop offset="1" stop-color="#0f6e72"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#27c4b6"/>
+      <stop offset="1" stop-color="#0f6e72"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.8" cy="0.1" r="0.7">
+      <stop offset="0" stop-color="#ff6b4a" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#ff6b4a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <!-- logo mark -->
+  <g transform="translate(90,150)">
+    <rect width="120" height="120" rx="30" fill="url(#mark)"/>
+    <g fill="#ffffff" transform="translate(60,60) scale(0.95)">
+      <ellipse cx="-19" cy="-15" rx="10.5" ry="13"/>
+      <ellipse cx="19" cy="-15" rx="10.5" ry="13"/>
+      <ellipse cx="-36" cy="4" rx="9" ry="11"/>
+      <ellipse cx="36" cy="4" rx="9" ry="11"/>
+      <path d="M0 2c14 0 25 9.7 25 22 0 9-7 14-15.5 14-4.3 0-7-2-9.5-2s-5.2 2-9.5 2C-18 38-25 33-25 24-25 11.7-14 2 0 2Z"/>
+    </g>
+    <circle cx="60" cy="83" r="4" fill="#ff6b4a"/>
+  </g>
+  <!-- wordmark -->
+  <text x="240" y="205" font-family="Sora, Arial, sans-serif" font-size="62" font-weight="800" fill="#ffffff" letter-spacing="-1">YOURPETS<tspan fill="#27c4b6">:</tspan><tspan fill="#9fb6c0" font-weight="600">SOLUTIONS</tspan></text>
+  <text x="242" y="258" font-family="Inter, Arial, sans-serif" font-size="27" fill="#bcd1da">Diagnóstico veterinario molecular y genético</text>
+  <!-- tagline -->
+  <text x="90" y="400" font-family="Sora, Arial, sans-serif" font-size="52" font-weight="700" fill="#ffffff">Ciencia de vanguardia</text>
+  <text x="90" y="465" font-family="Sora, Arial, sans-serif" font-size="52" font-weight="700" fill="#27c4b6">al servicio de tus mascotas.</text>
+  <!-- chips -->
+  <g font-family="JetBrains Mono, monospace" font-size="22" fill="#9fb6c0">
+    <rect x="90" y="520" width="265" height="52" rx="26" fill="none" stroke="#27c4b6" stroke-opacity="0.4"/>
+    <text x="115" y="553">qPCR mismo día</text>
+    <rect x="375" y="520" width="300" height="52" rx="26" fill="none" stroke="#27c4b6" stroke-opacity="0.4"/>
+    <text x="400" y="553">256 marcadores genéticos</text>
+    <rect x="695" y="520" width="240" height="52" rx="26" fill="none" stroke="#27c4b6" stroke-opacity="0.4"/>
+    <text x="720" y="553">Cobertura nacional</text>
+  </g>
+</svg>

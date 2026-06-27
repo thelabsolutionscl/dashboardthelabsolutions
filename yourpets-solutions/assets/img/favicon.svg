@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="YOURPETS:SOLUTIONS">
+  <defs>
+    <linearGradient id="yps-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#27c4b6"/>
+      <stop offset="0.55" stop-color="#0ea5a4"/>
+      <stop offset="1" stop-color="#0f6e72"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#yps-g)"/>
+  <!-- paw pads -->
+  <g fill="#ffffff">
+    <ellipse cx="22" cy="24" rx="5.4" ry="6.6"/>
+    <ellipse cx="42" cy="24" rx="5.4" ry="6.6"/>
+    <ellipse cx="13.5" cy="34" rx="4.6" ry="5.6"/>
+    <ellipse cx="50.5" cy="34" rx="4.6" ry="5.6"/>
+    <path d="M32 33c7.2 0 13 5 13 11.4 0 4.6-3.6 7.3-8 7.3-2.2 0-3.6-1-5-1s-2.8 1-5 1c-4.4 0-8-2.7-8-7.3C19 38 24.8 33 32 33Z"/>
+  </g>
+  <!-- DNA accent dots -->
+  <g fill="#ff6b4a">
+    <circle cx="32" cy="44.5" r="2.1"/>
+  </g>
+</svg>
