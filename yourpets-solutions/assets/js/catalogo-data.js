@@ -1,0 +1,2090 @@
+/* Datos del catálogo de YOURPETS:SOLUTIONS — generado; editable a mano.
+   Cada item: { code, cat, name, sample, tat }. Consumido por catalogo.js */
+window.YPS_CATALOG = [
+ {
+  "code": "00-001",
+  "cat": "Packs y perfiles",
+  "name": "Hemograma + Perfil bioquímico",
+  "sample": "Tubo tapa lila, rojo y gris",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-002",
+  "cat": "Packs y perfiles",
+  "name": "Hemograma + Perfil bioquímico + Coagulación",
+  "sample": "Tubo tapa roja, lila, gris y celeste",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-003",
+  "cat": "Packs y perfiles",
+  "name": "Hemograma + Perfil bioquímico + Electrolitos",
+  "sample": "Tubo tapa lila, rojo y gris",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-004",
+  "cat": "Packs y perfiles",
+  "name": "Hemograma + Perfil bioquímico + Urianálisis",
+  "sample": "Tubo tapa lila, rojo y gris y frasco colector",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-005",
+  "cat": "Packs y perfiles",
+  "name": "Hemograma + Perfil bioquímico + Mycoplasma frotis",
+  "sample": "Tubo tapa lila, rojo y gris",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-006",
+  "cat": "Packs y perfiles",
+  "name": "Hemograma + Perfil bioquímico + T4Total + TSH",
+  "sample": "Tubo tapa lila, rojo y gris",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "00-007",
+  "cat": "Packs y perfiles",
+  "name": "Perfil bioquímico + Electrolitos",
+  "sample": "Tubo tapa roja y gris",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-008",
+  "cat": "Packs y perfiles",
+  "name": "Hemograma + Mycoplasma frotis",
+  "sample": "Tubo tapa lila",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-009",
+  "cat": "Packs y perfiles",
+  "name": "Urianálisis + Urocultivo + Antibiograma",
+  "sample": "Frasco colector o jeringa",
+  "tat": "12 hrs, cultivo 3-5 días"
+ },
+ {
+  "code": "00-010",
+  "cat": "Packs y perfiles",
+  "name": "Urianálisis + Urocultivo + Antibiograma + UPC",
+  "sample": "Frasco colector o jeringa",
+  "tat": "12 hrs, cultivo 3-5 días"
+ },
+ {
+  "code": "00-011",
+  "cat": "Packs y perfiles",
+  "name": "Urianálisis + UPC",
+  "sample": "Frasco colector",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-012",
+  "cat": "Packs y perfiles",
+  "name": "Urianálisis + UPC + Perfil renal",
+  "sample": "Tubo tapa roja + frasco colector",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-013",
+  "cat": "Packs y perfiles",
+  "name": "T4Total + TSH",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-014",
+  "cat": "Packs y perfiles",
+  "name": "Perfil Bioquímico (Creatinina, Urea, NUS, Glucosa, Fósforo, Calcio, Proteínas Totales, Albúmina, Globulinas, GOT, GPT, GGT, Fosfatasa Alcalina, Bilirrubina Total.)",
+  "sample": "Tubo tapa roja/amarilla y gris",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-015",
+  "cat": "Packs y perfiles",
+  "name": "Perfil Electrolitos (Cl-, Na+, K+)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-016",
+  "cat": "Packs y perfiles",
+  "name": "Perfil Hepático (Fosfatasa Alcalina, GOT, GPT, GGT, Bilirrubina Total, Bilirrubina Directa, Bilirrubina Indirecta.)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-017",
+  "cat": "Packs y perfiles",
+  "name": "Perfil Lipídico (Colesterol Total, Triglicéridos, Colesterol HDL, Colesterol LDL, Colesterol VLDL.)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-018",
+  "cat": "Packs y perfiles",
+  "name": "Perfil Pancreático (Lipasa, Amilasa)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-019",
+  "cat": "Packs y perfiles",
+  "name": "Perfil Renal (Creatinina, NUS, Urea, Calcio, Fósforo)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "00-020",
+  "cat": "Packs y perfiles",
+  "name": "Perfil Tiroideo (TSH, T4T, T4L, T3)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "01-001",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Duplex Felino: Virus Inmunodeficiencia + Virus Leucemia felina (RNA o DNA)",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-002",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Adopción Felinos (4): FIV+FeLV, ADN y ARN",
+  "sample": "Sangre tubo Lila + Hisopado secreciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-003",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Dermatológico Plus (9): Clostridium perfringens tipo C, Leishmania sp, Trichophyton spp, Microsporum, Staphylococcus aureus, Streptococcus agalactiae, Cryptococcus neoformans, Sporotrix brasilensis, S. schenki",
+  "sample": "Raspado de piel profundo en 1 ml de solución salina en tubo tapa roja, hisopado rectal, hisopado traqueal en 1 ml solución salina. Sangre EDTA.",
+  "tat": "8-24 hrs"
+ },
+ {
+  "code": "01-004",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Diarreico Felino (10): Tritrichomonas foetus, Cryptosporidium spp, Giardia spp, Coronavirus felino mutante, Coronavirus felino entérico, Panleucopenia viral felina, Rotavirus, Kobuvirus, Bufavirus, Astrovirus.",
+  "sample": "Fase efusiva: 1ml de líquido efusivo (pleural, peritoneal, LCR, pericárdico) en tubo tapa roja. Sangre EDTA. Hisopado rectal. Fase seca: orina, sangre EDTA.",
+  "tat": "8-24 hrs"
+ },
+ {
+  "code": "01-005",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Hemoparásitos Felino (5): Anaplasma sp, Cytauxzoon felis, Mycoplasma sp, Bartonella sp, Haemoplasmas",
+  "sample": "Sangre tubo Lila",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-006",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Infeccioso Felino (6): Leucemia felina, Inmunodeficiencia felina, Mycoplasma sp, Bartonella sp, Coronavirus entérico, Coronavirus mutante",
+  "sample": "Sangre tubo Lila - Hisopado secreciones, hisopado oral/nasal/ocular",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-007",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Neurológico Felino (10): Coronavirus felino mutante, Coronavirus felino entérico, Sarcocystis spp, Cryptococcus neoformans, Panleucopenia viral, Mycoplasma sp, Bartonella sp, Inmunodeficiencia viral felina, Leucemia viral felina, Haemoplasmas.",
+  "sample": "1ml de líquido efusivo (pleural, peritoneal, LCR, pericárdico) en tubo tapa roja. Sangre EDTA. Hisopado rectal. Lesión de piel o tejido sospechoso.",
+  "tat": "8-24 hrs"
+ },
+ {
+  "code": "01-008",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Reproductivo Felino (5): Coronavirus felino mutante, Coronavirus felino entérico, Tritrichomonas foetus, Virus Leucemia felina, Virus Inmunodeficiencia felina",
+  "sample": "1ml de líquido efusivo (pleural, peritoneal, LCR, pericárdico) en tubo tapa roja. Sangre EDTA. Opcional: heces en 1 ml solución salina",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-009",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Rinotraqueitis Felino (4): Herpes virus, Panleucopenia viral, Calicivirus felino, Chlamydophila felis",
+  "sample": "Hisopado conjuntiva, gingival, en 1 ml de solución salina - Sangre tubo Lila",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-010",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Rinotraqueitis Felino Plus (11): Herpes virus felino, Panleucopenia viral felina, Calicivirus felino, Chlamydophila felis, Histoplasma capsulatum, Listeria monocytogenes, Pasteurella multocida, Klebsiella spp, Aspergillus sp, Bufavirus, Kobuvirus.",
+  "sample": "Hisopado conjuntiva, gingival, en 1 ml de solución salina - Sangre tubo Lila, Aspirado médula en tapa lila, orina en tapa roja, lavado broncoalveolar y/o esputo, 3g de tejido sospechoso en 1ml de solución salina.",
+  "tat": "8-24 hrs"
+ },
+ {
+  "code": "01-011",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Perfil Definitivo Felino: Ehrlichia sp, Anaplasma sp, Hepatozoon sp, Babesia sp, Leptospiras, Rickettsia rickettsii, Toxoplasma gondii, Mycoplasma sp, Bartonella sp, Dirofilaria immitis, Dirofilaria repens, Herpesvirus felino, Cytauxzoon felis, Panleucopenia viral felina, Calicivirus felino, Leucemia viral felina (provirus), Inmunodeficiencia viral felina (provirus), Leucemia viral felina (virus ARN), Inmunodeficiencia viral felina (virus ARN), Coronavirus felino mutante, Coronavirus felino entérico, Tritrichomonas foetus, Haemoplasma.",
+  "sample": "Fase Aguda/Digestiva/respiratoria: Hisopado secreciones en 1 ml solución salina tubo tapa roja, Sangre EDTA, Orina en tapa roja, 3g materia fecal o hisopado rectal en 1 ml de solución salina. Fase nerviosa: sumar LCR en tapa roja.",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "01-101",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Duplex Canino: Ehrlichia canis + Anaplasma sp",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-102",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Duplex Canino 2: Parvovirus canino + Distemper canino",
+  "sample": "Hisopado nasal/bucal - Sangre con EDTA - heces",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-103",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Anémico Canino (7): Ehrlichia sp, Babesia sp, Anaplasma sp, Hepatozoon, Mycoplasma sp, Bartonella sp, Dirofilaria immitis.",
+  "sample": "Fase aguda: Sangre tubo Lila - Fase crónica: aspirado de ganglios, médula ósea, aspirado de bazo",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-104",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Cardiaco Plus (9): Dirofilaria immitis, Bartonella sp, Trypanosoma cruzi, Dirofilaria repens, Acanthocheilonema reconditum, Streptococcus agalactiae, Staphylococcus aureus, Escherichia coli, Erysipelothrix rhusiopathiae",
+  "sample": "3 muestras Sangre EDTA (mañana, tarde, noche), 1cm tejido sospechoso.",
+  "tat": "8-24 hrs"
+ },
+ {
+  "code": "01-105",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Dermatológico (3): Leishmania sp, Trichophyton spp, Microsporum canis",
+  "sample": "Raspado piel profundo en 1 ml solución salina en tubo tapa roja",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-106",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Hemoparásitos Canino (5): Ehrlichia sp, Anaplasma sp, Hepatozoon sp, Babesia sp, Haemoplasmas.",
+  "sample": "Fase aguda: Sangre tubo Lila - Fase crónica: aspirado de ganglios, médula ósea, aspirado de bazo",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-107",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Neurológico Canino (8): Ehrlichia sp, Anaplasma sp, Hepatozoon sp, Babesia sp, Distemper, Borrelia sp, Toxoplasma gondii, Neospora caninum.",
+  "sample": "Sangre tubo Lila - LCR - Hisopado secreciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-108",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Ortopédico Plus (10): Ehrlichia sp, Anaplasma sp, Hepatozoon sp, Babesia sp, Leptospiras, Borrelia sp, Escherichia coli, Klebsiella spp, Streptococcus agalactiae, Clostridium perfringens tipo C.",
+  "sample": "Sangre en tubo lila, orina, líquido sinovial en tapa lila.",
+  "tat": "8-24 hrs"
+ },
+ {
+  "code": "01-109",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Perfil Definitivo Canino Adulto (22): Ehrlichia sp, Anaplasma sp, Hepatozoon sp, Babesia sp, Leptospira spp, Rickettsia rickettsii, Toxoplasma gondii, Mycoplasma sp, Bartonella sp, Dirofilaria immitis, Dirofilaria repens, Distemper canino, Neospora caninum, Leishmania sp, Brucella sp, Adenovirus canino tipo I y II, Acanthocheilonema reconditum, Herpes virus canino, Borrelia sp, Histoplasma capsulatum, Haemoplasmas",
+  "sample": "Hisopado secreciones en 1 ml solución salina tubo tapa roja, Sangre EDTA, Orina, 3g materia fecal o hisopado rectal en 1 ml de solución salina.",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "01-110",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Perfil Definitivo Canino Cachorro (22): Ehrlichia sp, Anaplasma sp, Hepatozoon sp, Babesia sp, Leptospira spp, Rickettsia rickettsii, Mycoplasma sp, Bartonella sp, Toxoplasma gondii, Dirofilaria immitis, Dirofilaria repens, Distemper canino, Parvovirus canino, Brucella sp, Coronavirus canino, Adenovirus canino tipo I y II, Parainfluenza virus canino, Borrelia sp, Histoplasma capsulatum, Bordetella parapertussis, Haemoplasmas.",
+  "sample": "Hisopado secreciones en 1 ml solución salina tubo tapa roja, Sangre EDTA, Orina, 3g materia fecal o hisopado rectal en 1 ml de solución salina.",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "01-111",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Perfil Infeccioso Post Mordedura: Clostridium tetani, Pasteurella multocida, Streptococcus agalactiae, Staphylococcus aureus, Leishmania sp, Brucella sp, Leptospira, Toxoplasma gondii",
+  "sample": "Hisopado bucal, Mucosa bucal en 1ml solución salina tapa roja.",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-112",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Respiratorio Canino (7): Adenovirus I, Adenovirus II, Parainfluenza, Distemper, Herpes virus, Bordetella bronchiseptica, Histoplasma capsulatum",
+  "sample": "Hisopado secreciones - Sangre tubo Lila - Lavado broncoalveolar",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-113",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Reproductivo Canino (4): Leptospiras, Brucella sp, Distemper canino, Herpesvirus canino.",
+  "sample": "Hisopado secreciones - Tubo Lila - Orina - hisopado rectal.",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "01-114",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Diarreico Canino (10): Coronavirus canino, Parvovirus, Distemper, Cryptosporidium spp, Helicobacter sp, Giardia spp, Rotavirus, Kobuvirus, Bufavirus, Astrovirus.",
+  "sample": "3g de deposiciones, hisopado rectal. Fase efusiva: 1ml de líquido efusivo (pleural, peritoneal, LCR, pericárdico) en tubo tapa roja. Sangre EDTA.",
+  "tat": "8-24 hrs"
+ },
+ {
+  "code": "01-115",
+  "cat": "Paneles moleculares (qPCR)",
+  "name": "Diarreico Canino Plus (16): Coronavirus canino, Parvovirus, Distemper, Cryptosporidium spp, Helicobacter sp, Giardia spp, Rotavirus, Kobuvirus, Bufavirus, Astrovirus, Escherichia coli, Salmonella Typhimurium, Salmonella enteritidis, Salmonella Typhi, Listeria monocytogenes, Pasteurella multocida.",
+  "sample": "3g de deposiciones, hisopado rectal. Fase efusiva: 1ml de líquido efusivo (pleural, peritoneal, LCR, pericárdico) en tubo tapa roja. Sangre EDTA.",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "02-001",
+  "cat": "Pruebas IDEXX",
+  "name": "Ácidos Biliares IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-002",
+  "cat": "Pruebas IDEXX",
+  "name": "CK Total IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-003",
+  "cat": "Pruebas IDEXX",
+  "name": "Fenobarbital IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-004",
+  "cat": "Pruebas IDEXX",
+  "name": "Fructosamina IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-005",
+  "cat": "Pruebas IDEXX",
+  "name": "Lipasa pancreática cuantitativa IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-006",
+  "cat": "Pruebas IDEXX",
+  "name": "Perfil Bioquímico (15 parámetros) IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-007",
+  "cat": "Pruebas IDEXX",
+  "name": "SDMA IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-008",
+  "cat": "Pruebas IDEXX",
+  "name": "SNAP Combo FIV/FELV IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-009",
+  "cat": "Pruebas IDEXX",
+  "name": "Snap 4DX (Ehrlichia Ab, Anaplasma Ab, Lyme Ab, Dirofilaria Ag)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-010",
+  "cat": "Pruebas IDEXX",
+  "name": "T4 Total IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-011",
+  "cat": "Pruebas IDEXX",
+  "name": "UPC IDEXX",
+  "sample": "Frasco estéril",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "02-012",
+  "cat": "Pruebas IDEXX",
+  "name": "Lactato IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "02-013",
+  "cat": "Pruebas IDEXX",
+  "name": "Cortisol IDEXX",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "03-001",
+  "cat": "Genética",
+  "name": "PKD1 - Enfermedad poliquística renal felina",
+  "sample": "Sangre tubo lila",
+  "tat": "24-72 horas"
+ },
+ {
+  "code": "03-002",
+  "cat": "Genética",
+  "name": "MDR1 - Resistencia a Multidrogas",
+  "sample": "Sangre tubo lila",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "03-003",
+  "cat": "Genética",
+  "name": "Chequeo Genético Canino (256 marcadores)",
+  "sample": "Sangre tubo lila",
+  "tat": "< 3 meses"
+ },
+ {
+  "code": "03-004",
+  "cat": "Genética",
+  "name": "Chequeo Genético Felino (75 marcadores)",
+  "sample": "Sangre tubo lila",
+  "tat": "< 3 meses"
+ },
+ {
+  "code": "03-005",
+  "cat": "Genética",
+  "name": "Diversidad genética",
+  "sample": "Sangre tubo lila",
+  "tat": "< 3 meses"
+ },
+ {
+  "code": "03-006",
+  "cat": "Genética",
+  "name": "Informe paternidad + ISAG (por paciente)",
+  "sample": "Sangre tubo lila",
+  "tat": "1,5 meses"
+ },
+ {
+  "code": "03-007",
+  "cat": "Genética",
+  "name": "Determinación de Raza",
+  "sample": "Sangre tubo lila",
+  "tat": "< 3 meses"
+ },
+ {
+  "code": "03-008",
+  "cat": "Genética",
+  "name": "Perfil de ADN (ISAG 2020)",
+  "sample": "Sangre tubo lila",
+  "tat": "1,5 meses"
+ },
+ {
+  "code": "03-009",
+  "cat": "Genética",
+  "name": "Locus Merle",
+  "sample": "Sangre tubo lila",
+  "tat": "3 semanas"
+ },
+ {
+  "code": "03-010",
+  "cat": "Genética",
+  "name": "HemoCardio-Check (Panel Sangre-Coagulación-Cardiaco)",
+  "sample": "Sangre tubo lila",
+  "tat": "2 meses"
+ },
+ {
+  "code": "03-011",
+  "cat": "Genética",
+  "name": "Neuro-Check (Panel Neurológico)",
+  "sample": "Sangre tubo lila",
+  "tat": "2 meses"
+ },
+ {
+  "code": "03-012",
+  "cat": "Genética",
+  "name": "Ocu-Check (Panel oftalmológico)",
+  "sample": "Sangre tubo lila",
+  "tat": "2 meses"
+ },
+ {
+  "code": "03-013",
+  "cat": "Genética",
+  "name": "Chequeo genético + Diversidad + ISAG",
+  "sample": "Sangre tubo lila",
+  "tat": "< 3 meses"
+ },
+ {
+  "code": "03-014",
+  "cat": "Genética",
+  "name": "GenFull (Determinación de Raza + Chequeo Genético)",
+  "sample": "Sangre tubo lila",
+  "tat": "< 3 meses"
+ },
+ {
+  "code": "03-015",
+  "cat": "Genética",
+  "name": "Análisis de marcador individual",
+  "sample": "Sangre tubo lila",
+  "tat": "3 semanas"
+ },
+ {
+  "code": "04-001",
+  "cat": "Hematología",
+  "name": "Compatibilidad Sanguínea (Crossmatching)",
+  "sample": "Tubo tapa roja y lila",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "04-002",
+  "cat": "Hematología",
+  "name": "Coombs directo (test antiglobulinas)",
+  "sample": "Tubo tapa lila",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "04-003",
+  "cat": "Hematología",
+  "name": "Frotis sanguíneo",
+  "sample": "Tubo tapa lila - Frotis",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "04-004",
+  "cat": "Hematología",
+  "name": "Hemograma completo",
+  "sample": "Tubo tapa lila",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "04-005",
+  "cat": "Hematología",
+  "name": "Malassezia spp, recuento",
+  "sample": "Sobre o portaobjetos",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "04-006",
+  "cat": "Hematología",
+  "name": "Mycoplasma (frotis)",
+  "sample": "Tubo tapa roja y portaobjetos",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "04-007",
+  "cat": "Hematología",
+  "name": "Panel de coagulación (TP, TTPa)",
+  "sample": "Tubo tapa celeste",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "04-008",
+  "cat": "Hematología",
+  "name": "Plaquetas, recuento",
+  "sample": "Tubo tapa lila o portaobjetos",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "04-009",
+  "cat": "Hematología",
+  "name": "Reticulocitos Estudio",
+  "sample": "Tubo tapa lila",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "04-010",
+  "cat": "Hematología",
+  "name": "Tipificación Sanguínea",
+  "sample": "Tubo tapa lila",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "05-001",
+  "cat": "Microbiología",
+  "name": "Cultivo y antibiograma (8 ATB)",
+  "sample": "Tórula STUART (azul)",
+  "tat": "3-5 días"
+ },
+ {
+  "code": "05-002",
+  "cat": "Microbiología",
+  "name": "Cultivo y antibiograma (16 ATB)",
+  "sample": "Tórula STUART (azul)",
+  "tat": "3-5 días"
+ },
+ {
+  "code": "05-004",
+  "cat": "Microbiología",
+  "name": "Cultivo de Hongos",
+  "sample": "Sobres, tórulas STUART (azul)",
+  "tat": "21 días"
+ },
+ {
+  "code": "05-005",
+  "cat": "Microbiología",
+  "name": "Directo de pelo + Cultivo de hongos",
+  "sample": "Frasco o sobre",
+  "tat": "12 hrs, Cult. 15-20 días"
+ },
+ {
+  "code": "05-006",
+  "cat": "Microbiología",
+  "name": "Coprocultivo + antibiograma",
+  "sample": "Tórula Cary Blair (roja) o frasco colector",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "05-007",
+  "cat": "Microbiología",
+  "name": "Coprológico completo (parasitario + citoquímico)",
+  "sample": "Frasco colector",
+  "tat": "12 hrs, 3-5 días hábiles"
+ },
+ {
+  "code": "05-008",
+  "cat": "Microbiología",
+  "name": "Parasitológico seriado",
+  "sample": "Frasco colector (3 muestras)",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "05-009",
+  "cat": "Microbiología",
+  "name": "Estudio Fecal (Kinyoun, Giemsa, Gram, Azul metileno)",
+  "sample": "Frasco colector",
+  "tat": "24-72 hrs"
+ },
+ {
+  "code": "05-010",
+  "cat": "Microbiología",
+  "name": "Hemocultivo aerobio con ATB y Gram",
+  "sample": "Frasco con medio",
+  "tat": "5-7 días"
+ },
+ {
+  "code": "05-011",
+  "cat": "Microbiología",
+  "name": "Cultivo + Antibiograma + Cultivo hongos",
+  "sample": "Sobres, tórulas STUART (azul)",
+  "tat": "21 días"
+ },
+ {
+  "code": "05-012",
+  "cat": "Microbiología",
+  "name": "Urocultivo + Antibiograma",
+  "sample": "Frasco colector",
+  "tat": "3-5 días"
+ },
+ {
+  "code": "05-013",
+  "cat": "Microbiología",
+  "name": "Directo de pelo",
+  "sample": "Frasco o sobre",
+  "tat": "24 hrs"
+ },
+ {
+  "code": "06-001",
+  "cat": "Serología",
+  "name": "Estudio de Inmunidad Animal para Rabia por RFFIT (uso viajes internacionales) certificado por ISP.",
+  "sample": "2 Tubos tapa roja/amarillo",
+  "tat": "12 días hábiles"
+ },
+ {
+  "code": "06-002",
+  "cat": "Serología",
+  "name": "Test de Anaplasma IgG",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "06-003",
+  "cat": "Serología",
+  "name": "Test de Ehrlichia canino Acs",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "06-004",
+  "cat": "Serología",
+  "name": "Test de Ehrlichia + Anaplasma (Ab)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "06-005",
+  "cat": "Serología",
+  "name": "Test Retrovirales FeLV / FIV (Ag/Ab) (Bionote)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "06-006",
+  "cat": "Serología",
+  "name": "Test Parvovirus (Ag)",
+  "sample": "Heces frasco estéril, Hisopado rectal",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "06-007",
+  "cat": "Serología",
+  "name": "Test Leucemia viral felina (Ag)",
+  "sample": "Tubo tapa roja/amarillo / Lila / Hisopado",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "06-008",
+  "cat": "Serología",
+  "name": "Test Parvovirus - Distemper IgM",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "06-009",
+  "cat": "Serología",
+  "name": "Test Parvovirus - Distemper IgG",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "06-010",
+  "cat": "Serología",
+  "name": "Toxoplasma IgG",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "06-011",
+  "cat": "Serología",
+  "name": "Toxoplasma IgM",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "06-012",
+  "cat": "Serología",
+  "name": "Giardia (Ag)",
+  "sample": "Heces frasco estéril",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "07-001",
+  "cat": "Citología",
+  "name": "Citología simple",
+  "sample": "Portaobjetos",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "07-002",
+  "cat": "Citología",
+  "name": "Citología adicional mismo paciente",
+  "sample": "Portaobjetos",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "07-003",
+  "cat": "Citología",
+  "name": "Citología - URGENCIA",
+  "sample": "Portaobjetos",
+  "tat": "24 horas"
+ },
+ {
+  "code": "07-004",
+  "cat": "Citología",
+  "name": "Citoquímico de efusión, LCR, Articular",
+  "sample": "Tubo tapa lila + tubo tapa amarilla",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "07-005",
+  "cat": "Citología",
+  "name": "Lavado broncoalveolar",
+  "sample": "Jeringa / Frasco Estéril",
+  "tat": "5 días hábiles"
+ },
+ {
+  "code": "07-006",
+  "cat": "Citología",
+  "name": "Mielograma",
+  "sample": "Portaobjeto y Tubo lila",
+  "tat": "5 días hábiles"
+ },
+ {
+  "code": "07-007",
+  "cat": "Citología",
+  "name": "Contramuestra",
+  "sample": "Sólo si esta es solicitada en el informe o correo",
+  "tat": ""
+ },
+ {
+  "code": "08-001",
+  "cat": "Histopatología",
+  "name": "Biopsia simple",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-002",
+  "cat": "Histopatología",
+  "name": "Biopsia - URGENCIA",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "5 días hábiles"
+ },
+ {
+  "code": "08-003",
+  "cat": "Histopatología",
+  "name": "Biopsia Tejido adicional mismo paciente",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-004",
+  "cat": "Histopatología",
+  "name": "Biopsia Tejido adicional mismo paciente - URGENCIA",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "5 días hábiles"
+ },
+ {
+  "code": "08-005",
+  "cat": "Histopatología",
+  "name": "Biopsia Estudio de bordes",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-006",
+  "cat": "Histopatología",
+  "name": "Masas mamarias (2 masas)",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-007",
+  "cat": "Histopatología",
+  "name": "Masas mamarias (2 masas) - URGENCIA",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "5 días hábiles"
+ },
+ {
+  "code": "08-008",
+  "cat": "Histopatología",
+  "name": "Biopsia ósea",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10-20 días hábiles"
+ },
+ {
+  "code": "08-009",
+  "cat": "Histopatología",
+  "name": "Órganos pares (Testículos, ovarios, cuernos uterinos, tiroides, etc)",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-010",
+  "cat": "Histopatología",
+  "name": "Estudio de Linfoma (Incluye CD3 y CD20)",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-011",
+  "cat": "Histopatología",
+  "name": "Estudio de Linfoma (Incluye CD177 y Ki67)",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-012",
+  "cat": "Histopatología",
+  "name": "Tinción Histoquímica adicional: Azul alcian, azul de toluidina, gram, rojo congo, grocott, Masson, PAS, Ziehl-Neelsen, Giemsa",
+  "sample": "",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-013",
+  "cat": "Histopatología",
+  "name": "Inmunohistoquímica: Ki67, Melan A, vimentina, C-KIT, CD3, PAX5",
+  "sample": "Preguntar por disponibilidad de otros Ac",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-014",
+  "cat": "Histopatología",
+  "name": "Estudio de Bazo",
+  "sample": "Frasco con formalina bufferada al 10%",
+  "tat": "10 días hábiles"
+ },
+ {
+  "code": "08-015",
+  "cat": "Histopatología",
+  "name": "PARR (Análisis molecular de Clonalidad Linfocitaria). (NUEVO)",
+  "sample": "Aspirado de Ganglios + Sangre EDTA",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-001",
+  "cat": "Bioquímica clínica",
+  "name": "Ácido Úrico",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-002",
+  "cat": "Bioquímica clínica",
+  "name": "Ácido fólico (Folato)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-003",
+  "cat": "Bioquímica clínica",
+  "name": "ACTH Endógena (Corticotropina)",
+  "sample": "Plasma EDTA congelado",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-004",
+  "cat": "Bioquímica clínica",
+  "name": "ADH (Antidiurética)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-005",
+  "cat": "Bioquímica clínica",
+  "name": "Albúmina",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-006",
+  "cat": "Bioquímica clínica",
+  "name": "Aldosterona",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "24-48 hrs hábiles"
+ },
+ {
+  "code": "09-007",
+  "cat": "Bioquímica clínica",
+  "name": "Amilasa",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-008",
+  "cat": "Bioquímica clínica",
+  "name": "AST o GOT",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-009",
+  "cat": "Bioquímica clínica",
+  "name": "ALP o GPT",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-010",
+  "cat": "Bioquímica clínica",
+  "name": "Anticuerpos antinucleares (ANA)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-011",
+  "cat": "Bioquímica clínica",
+  "name": "Arsénico",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-012",
+  "cat": "Bioquímica clínica",
+  "name": "Bilirrubina Directa",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-013",
+  "cat": "Bioquímica clínica",
+  "name": "Bilirrubina Indirecta",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-014",
+  "cat": "Bioquímica clínica",
+  "name": "Bilirrubina Total",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-015",
+  "cat": "Bioquímica clínica",
+  "name": "Bromuro",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "24-72 hrs hábiles"
+ },
+ {
+  "code": "09-016",
+  "cat": "Bioquímica clínica",
+  "name": "Calcio Total",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-017",
+  "cat": "Bioquímica clínica",
+  "name": "Calcio iónico",
+  "sample": "Tubo tapa verde",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-018",
+  "cat": "Bioquímica clínica",
+  "name": "Calcio en orina",
+  "sample": "Frasco colector o jeringa",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-019",
+  "cat": "Bioquímica clínica",
+  "name": "Cálculo urorrenal (urolito) - por colorimetría",
+  "sample": "Frasco colector",
+  "tat": "3 hábiles"
+ },
+ {
+  "code": "09-020",
+  "cat": "Bioquímica clínica",
+  "name": "Cálculo urorrenal (urolito) - por FTIR",
+  "sample": "Frasco colector",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-097",
+  "cat": "Bioquímica clínica",
+  "name": "L-Carnitina",
+  "sample": "Tubo tapa roja/amarillo (cadena de frío)",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-021",
+  "cat": "Bioquímica clínica",
+  "name": "Cianuro en sangre",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-022",
+  "cat": "Bioquímica clínica",
+  "name": "CK - MB",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "09-066",
+  "cat": "Bioquímica clínica",
+  "name": "CK total",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "09-023",
+  "cat": "Bioquímica clínica",
+  "name": "Cobalamina (Cianocobalamina) B12",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-101",
+  "cat": "Bioquímica clínica",
+  "name": "Cobre",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "5 días hábiles"
+ },
+ {
+  "code": "09-024",
+  "cat": "Bioquímica clínica",
+  "name": "Colesterol",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-025",
+  "cat": "Bioquímica clínica",
+  "name": "Colesterol HDL",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-026",
+  "cat": "Bioquímica clínica",
+  "name": "Cortisol",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-027",
+  "cat": "Bioquímica clínica",
+  "name": "Cortisol en orina",
+  "sample": "Frasco colector o jeringa",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-028",
+  "cat": "Bioquímica clínica",
+  "name": "Creatinina sérica",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-029",
+  "cat": "Bioquímica clínica",
+  "name": "Creatinina en orina",
+  "sample": "Frasco colector o jeringa",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-030",
+  "cat": "Bioquímica clínica",
+  "name": "Cristales en orina (perfil)",
+  "sample": "Frasco colector o jeringa",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-031",
+  "cat": "Bioquímica clínica",
+  "name": "Cumarínicos (raticidas 1ra generación)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-032",
+  "cat": "Bioquímica clínica",
+  "name": "Curva de Cortisol (Estimulación ACTH 02 muestras)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-033",
+  "cat": "Bioquímica clínica",
+  "name": "Curva de Cortisol (Supresión con Dexametasona 03 muestras)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-034",
+  "cat": "Bioquímica clínica",
+  "name": "Densidad Urinaria",
+  "sample": "Frasco colector o jeringa",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-035",
+  "cat": "Bioquímica clínica",
+  "name": "Digoxina (niveles plasmáticos)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-036",
+  "cat": "Bioquímica clínica",
+  "name": "Dímero D",
+  "sample": "Tubo tapa celeste",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-037",
+  "cat": "Bioquímica clínica",
+  "name": "Electroforesis de proteínas",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "2 días hábiles"
+ },
+ {
+  "code": "09-038",
+  "cat": "Bioquímica clínica",
+  "name": "Electrolitos urinarios (Na, K, Cl)",
+  "sample": "Frasco colector o jeringa y tubo tapa roja",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-040",
+  "cat": "Bioquímica clínica",
+  "name": "Estrógeno o Estradiol",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "09-041",
+  "cat": "Bioquímica clínica",
+  "name": "Factor reumatoideo",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "2-3 días hábiles"
+ },
+ {
+  "code": "09-042",
+  "cat": "Bioquímica clínica",
+  "name": "Factor Von Willebrand",
+  "sample": "Tubo tapa celeste",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-043",
+  "cat": "Bioquímica clínica",
+  "name": "Fenobarbital",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "2-3 días hábiles"
+ },
+ {
+  "code": "09-044",
+  "cat": "Bioquímica clínica",
+  "name": "Fibrinógeno",
+  "sample": "Tubo tapa celeste",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-045",
+  "cat": "Bioquímica clínica",
+  "name": "Fosfatasa Alcalina",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-046",
+  "cat": "Bioquímica clínica",
+  "name": "Fósforo",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-047",
+  "cat": "Bioquímica clínica",
+  "name": "Fructosaminas",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-049",
+  "cat": "Bioquímica clínica",
+  "name": "Glicemia",
+  "sample": "Tubo tapa gris",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-050",
+  "cat": "Bioquímica clínica",
+  "name": "Glucosa, curva de tolerancia (4 muestras)",
+  "sample": "Tubo tapa gris",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-051",
+  "cat": "Bioquímica clínica",
+  "name": "GGT (Gamma Glutamil transferasa)",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-052",
+  "cat": "Bioquímica clínica",
+  "name": "Globulinas",
+  "sample": "Tubo tapa roja/amarillo",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-053",
+  "cat": "Bioquímica clínica",
+  "name": "Graham (scotch en portaobjetos)",
+  "sample": "Portaobjetos",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-054",
+  "cat": "Bioquímica clínica",
+  "name": "Hematocrito",
+  "sample": "Tubo tapa lila",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-055",
+  "cat": "Bioquímica clínica",
+  "name": "Hemoglobina",
+  "sample": "Tubo tapa lila",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-056",
+  "cat": "Bioquímica clínica",
+  "name": "Hemoglobina glucosilada",
+  "sample": "Tubo tapa lila",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-057",
+  "cat": "Bioquímica clínica",
+  "name": "Hormona paratiroidea (PTH)",
+  "sample": "Tubo tapa roja/amarillo o lila EDTA congelado",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-058",
+  "cat": "Bioquímica clínica",
+  "name": "Hormona IGF-1",
+  "sample": "Tubo tapa roja",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-059",
+  "cat": "Bioquímica clínica",
+  "name": "Insulina, especie específica",
+  "sample": "Tubo tapa verde",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "09-060",
+  "cat": "Bioquímica clínica",
+  "name": "Inmunoglobulina A",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-061",
+  "cat": "Bioquímica clínica",
+  "name": "Inmunoglobulina E",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "4 días hábiles"
+ },
+ {
+  "code": "09-062",
+  "cat": "Bioquímica clínica",
+  "name": "Inmunoglobulina G",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-063",
+  "cat": "Bioquímica clínica",
+  "name": "Inmunoglobulina M",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-064",
+  "cat": "Bioquímica clínica",
+  "name": "Inmunoglobulina Perfil (IgG, IgM, IgA)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-065",
+  "cat": "Bioquímica clínica",
+  "name": "LDH (Lactato deshidrogenasa)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-067",
+  "cat": "Bioquímica clínica",
+  "name": "Leucocitos, recuento absoluto",
+  "sample": "Tubo tapa lila",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "09-068",
+  "cat": "Bioquímica clínica",
+  "name": "Lipasa sérica",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-069",
+  "cat": "Bioquímica clínica",
+  "name": "Lipasa pancreática",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "09-070",
+  "cat": "Bioquímica clínica",
+  "name": "Microalbuminuria",
+  "sample": "Frasco colector o jeringa",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-071",
+  "cat": "Bioquímica clínica",
+  "name": "NUS (Nitrógeno ureico sanguíneo)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-100",
+  "cat": "Bioquímica clínica",
+  "name": "Péptido Natriurético (Pro BNP)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "48 hrs"
+ },
+ {
+  "code": "09-072",
+  "cat": "Bioquímica clínica",
+  "name": "Progesterona",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-073",
+  "cat": "Bioquímica clínica",
+  "name": "Prolactina",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3 días hábiles"
+ },
+ {
+  "code": "09-074",
+  "cat": "Bioquímica clínica",
+  "name": "Proteína C Reactiva canina",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "24-48 hrs"
+ },
+ {
+  "code": "09-075",
+  "cat": "Bioquímica clínica",
+  "name": "Proteína de Bence Jones",
+  "sample": "Recolector de orina",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-076",
+  "cat": "Bioquímica clínica",
+  "name": "Proteínas totales",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-077",
+  "cat": "Bioquímica clínica",
+  "name": "Relación Cortisol/Creatinina en orina",
+  "sample": "Frasco estéril o jeringa",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-078",
+  "cat": "Bioquímica clínica",
+  "name": "Relación Insulina / Glicemia",
+  "sample": "Tubo tapa roja y gris",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-079",
+  "cat": "Bioquímica clínica",
+  "name": "Rivalta, reacción de (fluidos)",
+  "sample": "Tubo tapa lila",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-080",
+  "cat": "Bioquímica clínica",
+  "name": "Sangre oculta, fecas (Guayaco)",
+  "sample": "Frasco colector",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-081",
+  "cat": "Bioquímica clínica",
+  "name": "Separación de suero",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-099",
+  "cat": "Bioquímica clínica",
+  "name": "SDMA",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-082",
+  "cat": "Bioquímica clínica",
+  "name": "T3",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "24-48 hrs hábiles"
+ },
+ {
+  "code": "09-083",
+  "cat": "Bioquímica clínica",
+  "name": "T4 Libre",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "24-48 hrs hábiles"
+ },
+ {
+  "code": "09-084",
+  "cat": "Bioquímica clínica",
+  "name": "T4 Total",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-039",
+  "cat": "Bioquímica clínica",
+  "name": "Taurina",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "4 días hábiles"
+ },
+ {
+  "code": "09-085",
+  "cat": "Bioquímica clínica",
+  "name": "Testosterona",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "24-48 hrs hábiles"
+ },
+ {
+  "code": "09-086",
+  "cat": "Bioquímica clínica",
+  "name": "TLI (Tripsina Inmunoreactiva)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "24-48 hrs hábiles"
+ },
+ {
+  "code": "09-087",
+  "cat": "Bioquímica clínica",
+  "name": "Toxicológico Perfil Metaloides (Mercurio, arsénico y cianuro)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-089",
+  "cat": "Bioquímica clínica",
+  "name": "Toxicológico Perfil Plaguicidas 3 Analitos (Cumarinas, Organofosforados, Piretroides)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-090",
+  "cat": "Bioquímica clínica",
+  "name": "Toxicológico Completo 5 Analitos (Cumarinas, Organofosforados, Piretroides, Metaldehido, Estricnina)",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-092",
+  "cat": "Bioquímica clínica",
+  "name": "Triglicéridos",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-093",
+  "cat": "Bioquímica clínica",
+  "name": "Troponina I",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "3-5 días hábiles"
+ },
+ {
+  "code": "09-094",
+  "cat": "Bioquímica clínica",
+  "name": "TSH",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "12-24 hrs"
+ },
+ {
+  "code": "09-095",
+  "cat": "Bioquímica clínica",
+  "name": "Urianálisis Convencional",
+  "sample": "Frasco estéril o jeringa",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "09-096",
+  "cat": "Bioquímica clínica",
+  "name": "Urianálisis funcional UPC (proteínas/creatinina y microalbuminuria)",
+  "sample": "Frasco estéril o jeringa",
+  "tat": "12 hrs"
+ },
+ {
+  "code": "09-098",
+  "cat": "Bioquímica clínica",
+  "name": "Vitamina D",
+  "sample": "Tubo tapa roja/amarilla",
+  "tat": "48 hrs hábiles"
+ },
+ {
+  "code": "10-001",
+  "cat": "Patógenos qPCR",
+  "name": "Acanthocheilonema reconditum",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-002",
+  "cat": "Patógenos qPCR",
+  "name": "Adenovirus Tipo I",
+  "sample": "Secreciones hisopado nasal/ocular/bucal",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-003",
+  "cat": "Patógenos qPCR",
+  "name": "Adenovirus Tipo II",
+  "sample": "Secreciones Hisopado nasal/bucal/ocular",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-004",
+  "cat": "Patógenos qPCR",
+  "name": "Anaplasma spp",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-005",
+  "cat": "Patógenos qPCR",
+  "name": "Anemia Infecciosa Equina",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-006",
+  "cat": "Patógenos qPCR",
+  "name": "Aspergillus spp",
+  "sample": "Hisopado rectal / Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-007",
+  "cat": "Patógenos qPCR",
+  "name": "Astrovirus",
+  "sample": "Hisopado secreciones en solución salina, Sangre tubo Lila, Hisopado rectal",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-008",
+  "cat": "Patógenos qPCR",
+  "name": "Babesia sp",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-009",
+  "cat": "Patógenos qPCR",
+  "name": "Bartonella sp",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-010",
+  "cat": "Patógenos qPCR",
+  "name": "Bordetella bronchiseptica",
+  "sample": "Secreciones Hisopado nasal",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-011",
+  "cat": "Patógenos qPCR",
+  "name": "Borrelia sp",
+  "sample": "Sangre con EDTA / LCR / Líq sinovial",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-012",
+  "cat": "Patógenos qPCR",
+  "name": "Brucella canis",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-013",
+  "cat": "Patógenos qPCR",
+  "name": "Brucella spp",
+  "sample": "Sangre con EDTA, Hisopado lesión, tejido",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-014",
+  "cat": "Patógenos qPCR",
+  "name": "Bufavirus",
+  "sample": "Hisopado secreciones en solución salina, Sangre tubo Lila, Hisopado rectal",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-015",
+  "cat": "Patógenos qPCR",
+  "name": "Calicivirus felino",
+  "sample": "Hisopado nasal/bucal - Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-016",
+  "cat": "Patógenos qPCR",
+  "name": "Chlamydia spp",
+  "sample": "Sangre con EDTA / Hisopado conjuntiva",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-017",
+  "cat": "Patógenos qPCR",
+  "name": "Chlamydophila felis",
+  "sample": "Sangre con EDTA / Hisopado conjuntiva",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-018",
+  "cat": "Patógenos qPCR",
+  "name": "Coronavirus felino entérico",
+  "sample": "Deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-019",
+  "cat": "Patógenos qPCR",
+  "name": "Coronavirus felino mutante",
+  "sample": "Sangre con EDTA / deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-020",
+  "cat": "Patógenos qPCR",
+  "name": "Coxiella burnetii",
+  "sample": "Sangre con EDTA o Orina o Hisopado o Deposiciones o Semen o Fluido",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-021",
+  "cat": "Patógenos qPCR",
+  "name": "Cryptococcus neoformans",
+  "sample": "Sangre con EDTA, hisopado rectal y traqueal, LCR",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-022",
+  "cat": "Patógenos qPCR",
+  "name": "Cryptosporidium spp",
+  "sample": "Deposiciones, Hisopado rectal en solución salina",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-023",
+  "cat": "Patógenos qPCR",
+  "name": "Dirofilaria immitis",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-024",
+  "cat": "Patógenos qPCR",
+  "name": "Dirofilaria repens",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-025",
+  "cat": "Patógenos qPCR",
+  "name": "Distemper canino",
+  "sample": "Hisopado nasal/bucal - Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-026",
+  "cat": "Patógenos qPCR",
+  "name": "Ehrlichia canis",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-027",
+  "cat": "Patógenos qPCR",
+  "name": "Ehrlichia sp",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-028",
+  "cat": "Patógenos qPCR",
+  "name": "Erysipelothrix rhusiopathiae",
+  "sample": "Sangre con EDTA, Líquido sinovial",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-029",
+  "cat": "Patógenos qPCR",
+  "name": "Escherichia coli",
+  "sample": "Sangre EDTA / Exudado uterino / Orina",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-030",
+  "cat": "Patógenos qPCR",
+  "name": "Giardia lamblia",
+  "sample": "Hisopado anal / deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-031",
+  "cat": "Patógenos qPCR",
+  "name": "Giardia spp",
+  "sample": "Hisopado anal / deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-032",
+  "cat": "Patógenos qPCR",
+  "name": "Hepatozoon sp",
+  "sample": "Sangre con EDTA / Aspirado de ganglios",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-033",
+  "cat": "Patógenos qPCR",
+  "name": "Herpesvirus canino",
+  "sample": "Sangre / Hisopado nasofaríngeo / Semen",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-034",
+  "cat": "Patógenos qPCR",
+  "name": "Herpesvirus felino",
+  "sample": "Hisopado nasal/bucal/conjuntival",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-035",
+  "cat": "Patógenos qPCR",
+  "name": "Herpesvirus equino tipo I",
+  "sample": "Sangre con EDTA / Hisopado secreciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-036",
+  "cat": "Patógenos qPCR",
+  "name": "Herpesvirus equino tipo IV",
+  "sample": "Sangre con EDTA / Hisopado secreciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-037",
+  "cat": "Patógenos qPCR",
+  "name": "Histoplasma capsulatum",
+  "sample": "Deposiciones / Orina / Sangre total",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-038",
+  "cat": "Patógenos qPCR",
+  "name": "Inmunodeficiencia felina provirus (ADN)",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-039",
+  "cat": "Patógenos qPCR",
+  "name": "Inmunodeficiencia felina virus (ARN)",
+  "sample": "Sangre con EDTA Hisopado oral/nasal/ocular",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-040",
+  "cat": "Patógenos qPCR",
+  "name": "Kobuvirus",
+  "sample": "Hisopado secreciones en solución salina, Sangre tubo Lila, Hisopado rectal",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-041",
+  "cat": "Patógenos qPCR",
+  "name": "Leishmania spp",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-042",
+  "cat": "Patógenos qPCR",
+  "name": "Leptospira sp",
+  "sample": "Sangre con EDTA - Orina",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-043",
+  "cat": "Patógenos qPCR",
+  "name": "Leucemia felina provirus (ADN)",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-044",
+  "cat": "Patógenos qPCR",
+  "name": "Leucemia felina virus (ARN)",
+  "sample": "Sangre con EDTA - Hisopado secreciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-045",
+  "cat": "Patógenos qPCR",
+  "name": "Listeria monocytogenes",
+  "sample": "Hisopado, deposiciones o Leche",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-046",
+  "cat": "Patógenos qPCR",
+  "name": "Microsporum canis",
+  "sample": "Raspado de piel profundo en 1 ml de solución salina",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-047",
+  "cat": "Patógenos qPCR",
+  "name": "Mycoplasma spp",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-048",
+  "cat": "Patógenos qPCR",
+  "name": "Mycoplasma hemotrópicos / Haemoplasmas",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-049",
+  "cat": "Patógenos qPCR",
+  "name": "Neospora caninum",
+  "sample": "Sangre con EDTA / LCR / Orina",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-050",
+  "cat": "Patógenos qPCR",
+  "name": "Panleucopenia viral felina",
+  "sample": "Sangre con EDTA / Hisopado conjuntiva / Deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-051",
+  "cat": "Patógenos qPCR",
+  "name": "Parainfluenza virus",
+  "sample": "Hisopado nasofaríngeo",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-052",
+  "cat": "Patógenos qPCR",
+  "name": "Parvovirus canino",
+  "sample": "Hisopado anal / Deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-053",
+  "cat": "Patógenos qPCR",
+  "name": "Pasteurella multocida",
+  "sample": "Sangre con EDTA o Hisopado Nasofaríngeo",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-054",
+  "cat": "Patógenos qPCR",
+  "name": "Rabia virus",
+  "sample": "Hisopado nasofaríngeo",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-055",
+  "cat": "Patógenos qPCR",
+  "name": "Rickettsia rickettsii",
+  "sample": "Sangre con EDTA o Líquido Sinovial o Tejido",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-056",
+  "cat": "Patógenos qPCR",
+  "name": "Rotavirus",
+  "sample": "Deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-057",
+  "cat": "Patógenos qPCR",
+  "name": "Salmonella enteritidis",
+  "sample": "Sangre con EDTA o Hisopado o Deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-069",
+  "cat": "Patógenos qPCR",
+  "name": "Salmonella typhi",
+  "sample": "Sangre con EDTA o Hisopado o Deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-058",
+  "cat": "Patógenos qPCR",
+  "name": "Salmonella typhimurium",
+  "sample": "Sangre con EDTA o Hisopado o Deposiciones",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-059",
+  "cat": "Patógenos qPCR",
+  "name": "Sarcocystis spp",
+  "sample": "Deposiciones frescas, LCR. Sangre EDTA (sólo en infección sistémica muy temprana)",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-060",
+  "cat": "Patógenos qPCR",
+  "name": "Sporothrix brasiliensis",
+  "sample": "Raspado de piel profundo en 1 ml de solución salina, Sangre EDTA, Hisopado rectal",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-068",
+  "cat": "Patógenos qPCR",
+  "name": "Sporothrix schenckii",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-061",
+  "cat": "Patógenos qPCR",
+  "name": "Staphylococcus aureus",
+  "sample": "3g tejido o fragmento sospechoso, 5 ml de Leche y/o cualquier otro similar",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-062",
+  "cat": "Patógenos qPCR",
+  "name": "Streptococcus agalactiae",
+  "sample": "Sangre con EDTA / Tejido",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-063",
+  "cat": "Patógenos qPCR",
+  "name": "Streptococcus equi",
+  "sample": "Sangre EDTA / Secreciones / Líq sinovial",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-064",
+  "cat": "Patógenos qPCR",
+  "name": "Toxoplasma gondii",
+  "sample": "Sangre con EDTA",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-065",
+  "cat": "Patógenos qPCR",
+  "name": "Tricomonas spp",
+  "sample": "Deposiciones / Hisopado anal",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-066",
+  "cat": "Patógenos qPCR",
+  "name": "Trichophyton spp",
+  "sample": "Hisopado nasofaríngeo",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-070",
+  "cat": "Patógenos qPCR",
+  "name": "Tritrichomonas foetus",
+  "sample": "Deposiciones / Hisopado anal",
+  "tat": "8-12 horas"
+ },
+ {
+  "code": "10-067",
+  "cat": "Patógenos qPCR",
+  "name": "Cuantificación Absoluta: Adicional Informe en Copias/mL",
+  "sample": "Según análisis",
+  "tat": "8-12 horas"
+ }
+];
