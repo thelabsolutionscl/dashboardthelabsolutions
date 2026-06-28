@@ -43,6 +43,23 @@ python3 -m http.server 8080
 # abre http://localhost:8080
 ```
 
+## Despliegue en Vercel
+
+Este sitio vive en el subdirectorio `yourpets-solutions/` de un repo más grande
+(el dashboard de The Lab Solutions se despliega aparte en GitHub Pages). Para
+publicar **solo este sitio** en Vercel:
+
+1. En [vercel.com](https://vercel.com) → **Add New… → Project** → importa el repo
+   `thelabsolutionscl/dashboardthelabsolutions`.
+2. En **Root Directory**, elige **`yourpets-solutions`** (botón *Edit*).
+3. **Framework Preset:** *Other* — no hay build (sitio estático).
+   - Build Command: *(vacío)* · Output Directory: *(vacío)* · Install: *(vacío)*
+4. (Opcional) En **Production Branch** elige la rama que quieras desplegar.
+5. **Deploy**. La configuración (`vercel.json`) ya define cache de assets y
+   cabeceras de seguridad.
+
+> No requiere variables de entorno: el sitio es 100% estático.
+
 ## Personalización
 
 - **Diseño:** todos los tokens (colores, tipografía, radios, sombras) están en
