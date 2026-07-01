@@ -525,14 +525,18 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .topbar-right{flex:1;display:flex;align-items:center;justify-content:center;gap:14px;margin-left:0;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
   .user-chip{display:none!important;}
-  .mobile-menu-btn{display:none;}
+  /* Menú móvil como la web nueva: hamburguesa arriba a la izquierda que abre el drawer lateral. */
+  .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;margin-left:10px;}
+  /* Oculta el ≡ de densidad en móvil (parecía menú y no lo era). */
+  #densityBtn{display:none;}
   #nuevoDropdown{display:none!important;}
   .logo img{height:21px;}
   .logo{flex:0 0 auto;}
   .topbar-kai-btn{margin-left:0;margin-right:0;}
   #notifBtnWrap{margin-right:0;}
-  .main{padding:14px;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));}
-  .mobile-bottom-dock{display:flex;animation:mbd-in .42s cubic-bezier(0.32,0.72,0,1) both;}
+  .main{padding:14px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));}
+  /* Sin dock inferior: la navegación vive en el drawer lateral (hamburguesa). */
+  .mobile-bottom-dock{display:none!important;}
   #jvs-fab{display:none!important;}
   .topbar-kai-btn{position:static;transform:none;flex-shrink:0;}
   .data-grid,.data-grid-3{grid-template-columns:1fr;}
@@ -1061,7 +1065,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* Mover chip al panel móvil: ocultarlo del topbar usando visibility (revertible en el hijo) en vez de opacity (que NO se puede revertir y dejaba el menú invisible) */
   #userChip{width:0!important;overflow:hidden!important;padding:0!important;border:none!important;visibility:hidden!important;pointer-events:none!important;}
   /* User menu se posiciona como sheet fija desde abajo en móvil — revierte visibility/pointer-events del padre */
-  .user-menu.open{position:fixed!important;inset:auto 12px calc(104px + env(safe-area-inset-bottom,0px)) 12px!important;width:auto!important;max-height:70vh;max-height:70dvh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
+  .user-menu.open{position:fixed!important;inset:auto 12px calc(24px + env(safe-area-inset-bottom,0px)) 12px!important;width:auto!important;max-height:70vh;max-height:70dvh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
 }
 
 /* ══ Finanzas — Mobile UX ═══════════════════════════════════════ */
@@ -1170,7 +1174,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     padding-right:max(14px,env(safe-area-inset-right))!important;
   }
   .main{
-    padding:12px max(12px,env(safe-area-inset-right)) calc(104px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left));
+    padding:12px max(12px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left));
   }
   .mobile-nav-panel{
     width:min(280px,85vw);
@@ -1403,7 +1407,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* ── Inputs de ajustes/config a 16px: evita el zoom automático de iOS al enfocar ── */
   #userMenu input,#userMenu textarea,#mobileConfigBody input,#mobileConfigBody textarea{font-size:16px!important;}
   /* ── Toasts por encima del dock inferior (antes quedaban tapados/encima del dock) ── */
-  .toast-container{bottom:calc(112px + env(safe-area-inset-bottom,0px))!important;left:12px;right:12px;align-items:flex-end;}
+  .toast-container{bottom:calc(24px + env(safe-area-inset-bottom,0px))!important;left:12px;right:12px;align-items:flex-end;}
   .toast{max-width:calc(100vw - 24px);}
   /* ── Panel de notificaciones: ancho adaptable para no salirse en pantallas angostas (≤354px) ── */
   .notif-panel{top:64px;left:10px;right:10px;width:auto;max-height:72dvh;}
@@ -1424,7 +1428,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   }
   .main{
     padding-top:8px!important;
-    padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;
+    padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))!important;
     padding-left:max(12px,env(safe-area-inset-left))!important;
     padding-right:max(12px,env(safe-area-inset-right))!important;
   }
