@@ -20,8 +20,17 @@
 :root{--black:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;--border:#2a2a2a;--border2:#333;--accent:#00d4cc;--accent2:#ff6b35;--accent3:#00d4aa;--accent4:#a78bfa;--text:#f0f0f0;--text2:#9a9a9a;--text3:#777;--danger:#ff4444;--warn:#ffaa00;--success:#00d4aa;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--black);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,204,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,204,0.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
-.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,10,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 20px;height:60px;display:flex;align-items:center;gap:16px;}
+/* Fondo global homogéneo con la web nueva: grilla "blueprint" que deriva + glows teal que respiran + viñeta inferior. */
+body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradient(to right,rgba(255,255,255,0.028) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.028) 1px,transparent 1px);background-size:64px 64px;pointer-events:none;z-index:-1;animation:grid-drift 30s linear infinite;-webkit-mask-image:radial-gradient(ellipse 130% 95% at 50% 0%,#000 50%,transparent 100%);mask-image:radial-gradient(ellipse 130% 95% at 50% 0%,#000 50%,transparent 100%);}
+.site-bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;}
+.site-bg-glow-a{position:absolute;left:-12%;top:-8%;width:60vh;height:60vh;border-radius:50%;background:radial-gradient(circle,rgba(0,212,204,0.10),transparent 68%);filter:blur(32px);animation:glow-breathe-a 24s ease-in-out infinite;}
+.site-bg-glow-b{position:absolute;right:-10%;top:40%;width:55vh;height:55vh;border-radius:50%;background:radial-gradient(circle,rgba(0,212,204,0.07),transparent 70%);filter:blur(42px);animation:glow-breathe-b 31s ease-in-out infinite;}
+.site-bg-vignette{position:absolute;left:0;right:0;bottom:0;height:40vh;background:linear-gradient(to top,#0a0a0a,transparent);}
+@keyframes grid-drift{from{transform:translate3d(0,0,0)}to{transform:translate3d(64px,64px,0)}}
+@keyframes glow-breathe-a{0%,100%{transform:translate3d(0,0,0) scale(1);opacity:.55}50%{transform:translate3d(6%,4%,0) scale(1.12);opacity:.9}}
+@keyframes glow-breathe-b{0%,100%{transform:translate3d(0,0,0) scale(1.05);opacity:.4}50%{transform:translate3d(-5%,-6%,0) scale(.95);opacity:.72}}
+@media(prefers-reduced-motion:reduce){body::before,.site-bg-glow-a,.site-bg-glow-b{animation:none!important}}
+.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,0.06);padding:0 20px;height:60px;display:flex;align-items:center;gap:16px;}
 .logo img{height:25px;width:auto;mix-blend-mode:screen;}
 .topbar-nav{display:flex;gap:3px;flex:1;margin-left:12px;overflow-x:auto;scrollbar-width:none;}
 .tab-btn{background:none;border:1px solid transparent;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;padding:5px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all 0.15s;}
@@ -347,6 +356,8 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .sl-subtitle{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;opacity:0;animation:slFadeUp 0.6s 0.5s ease forwards;}
 @keyframes slFadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .sl-progress-wrap{width:280px;display:flex;flex-direction:column;gap:8px;opacity:0;animation:slFadeUp 0.6s 0.8s ease forwards;}
+.sl-pct-row{display:flex;justify-content:flex-end;align-items:baseline;}
+.sl-pct{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;letter-spacing:1px;color:var(--accent);font-variant-numeric:tabular-nums;}
 .sl-progress-track{height:2px;background:var(--border2);border-radius:2px;overflow:hidden;}
 .sl-progress-bar{height:100%;background:linear-gradient(90deg,var(--accent3),var(--accent));border-radius:2px;width:0%;transition:width 0.5s cubic-bezier(0.4,0,0.2,1);box-shadow:0 0 8px var(--accent);}
 .sl-status{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;text-align:center;min-height:14px;transition:opacity 0.3s;}
@@ -897,7 +908,7 @@ body.kiosk #maquinaMonGrid .pbar{height:14px!important}
 
 /* Topbar stronger glass shadow */
 .topbar{
-  box-shadow:0 1px 0 var(--border),0 6px 32px rgba(0,0,0,0.45);
+  box-shadow:0 1px 0 rgba(255,255,255,0.06),0 6px 32px rgba(0,0,0,0.45);
 }
 
 /* Active tab glow */
@@ -1465,6 +1476,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+<div class="site-bg" aria-hidden="true"><div class="site-bg-glow-a"></div><div class="site-bg-glow-b"></div><div class="site-bg-vignette"></div></div>
 <svg style="display:none" aria-hidden="true" id="svgIcons"><defs>
 <symbol id="icon-overview" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
 <symbol id="icon-clientes" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path stroke-linecap="round" stroke-linejoin="round" d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></symbol>
@@ -1577,6 +1589,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="sl-subtitle">Centro de Comando</div>
     </div>
     <div class="sl-progress-wrap">
+      <div class="sl-pct-row"><span class="sl-pct" id="slPct">0%</span></div>
       <div class="sl-progress-track"><div class="sl-progress-bar" id="slBar"></div></div>
       <div class="sl-status" id="slStatus">Iniciando sistema...</div>
       <div class="sl-dots">
@@ -7624,8 +7637,10 @@ function setStatus(text,live){
   if(dm) dm.className='status-dot'+(live?' live':'');if(tm) tm.textContent=text;
 }
 function slProgress(pct,msg){
-  const bar=document.getElementById('slBar'),st=document.getElementById('slStatus');
-  if(bar) bar.style.width=Math.min(100,pct)+'%';
+  const bar=document.getElementById('slBar'),st=document.getElementById('slStatus'),pc=document.getElementById('slPct');
+  const v=Math.min(100,Math.round(pct));
+  if(bar) bar.style.width=v+'%';
+  if(pc) pc.textContent=v+'%';
   if(st){st.style.opacity='0';setTimeout(()=>{st.textContent=msg;st.style.opacity='1';},150);}
 }
 function hideSysLoader(){
