@@ -79,7 +79,7 @@ body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradi
 .gs-item mark{background:rgba(0,212,204,0.22);color:var(--accent);border-radius:3px;padding:0 1px;}
 .gs-empty{padding:22px 14px;text-align:center;color:var(--text3);font-size:12px;}
 /* ── Sidebar de navegación vertical (escritorio) ─────────────── */
-.icon-dock{position:fixed;left:0;top:0;bottom:0;width:64px;z-index:150;background:rgba(10,10,10,0.97);backdrop-filter:blur(20px);border-right:1px solid var(--border);box-shadow:2px 0 28px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:visible;}
+.icon-dock{position:fixed;left:0;top:0;bottom:0;width:64px;z-index:150;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-right:1px solid rgba(255,255,255,0.06);box-shadow:2px 0 28px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:visible;}
 .icon-dock-inner{display:flex;flex-direction:column;align-items:center;gap:2px;padding:72px 7px 20px;flex:1;overflow-y:auto;overflow-x:visible;scrollbar-width:none;}
 .icon-dock-inner::-webkit-scrollbar{display:none;}
 .dock-btn{position:relative;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;padding:5px;border-radius:12px;width:50px;height:50px;transition:background .12s;overflow:visible;flex-shrink:0;}
@@ -134,7 +134,11 @@ body.kiosk .icon-dock{display:none!important;}
 .mgn-btn{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:var(--text2);-webkit-tap-highlight-color:transparent;transition:background .12s;}
 .mgn-btn:active{background:rgba(0,212,204,0.12);border-color:var(--accent);color:var(--accent);}
 body.kiosk{padding-left:0!important;}
-@media(min-width:769px){body{padding-left:64px;}}
+@media(min-width:769px){
+  body{padding-left:64px;}
+  /* El topbar abarca todo el ancho (por encima del rail lateral) para que el rail arranque limpio debajo del topbar, sin franja negra arriba. El logo se mantiene en su posición con el padding-left. */
+  .topbar{margin-left:-64px;width:calc(100% + 64px);padding-left:84px;z-index:200;}
+}
 .mobile-nav-overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);}
 .mobile-nav-overlay.open{display:block;}
 .mobile-nav-panel{position:fixed;top:0;left:0;bottom:0;width:280px;z-index:201;background:var(--surface);border-right:1px solid var(--border2);display:flex;flex-direction:column;transform:translateX(-100%);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);}
