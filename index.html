@@ -54,6 +54,8 @@ body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradi
 /* MOBILE */
 .mobile-menu-btn{display:none;background:none;border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;}
 .mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);}
+/* Botón de densidad (≡) oculto en todas las versiones: parecía un menú y confundía. */
+#densityBtn{display:none!important;}
 /* ── Búsqueda global ─────────────────────────────────────────── */
 .global-search{position:relative;flex:1;max-width:720px;display:flex;align-items:center;}
 .global-search .gs-icon{position:absolute;left:13px;color:var(--text3);pointer-events:none;}
@@ -527,8 +529,6 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .user-chip{display:none!important;}
   /* Menú móvil como la web nueva: hamburguesa arriba a la izquierda que abre el drawer lateral. */
   .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;margin-left:10px;}
-  /* Oculta el ≡ de densidad en móvil (parecía menú y no lo era). */
-  #densityBtn{display:none;}
   #nuevoDropdown{display:none!important;}
   .logo img{height:21px;}
   .logo{flex:0 0 auto;}
