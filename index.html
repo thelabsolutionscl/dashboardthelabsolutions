@@ -21,8 +21,8 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--black);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
 /* Fondo global homogéneo con la web nueva: grilla "blueprint" que deriva + glows teal que respiran + viñeta inferior. */
-body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradient(to right,rgba(255,255,255,0.028) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.028) 1px,transparent 1px);background-size:64px 64px;pointer-events:none;z-index:0;animation:grid-drift 30s linear infinite;-webkit-mask-image:radial-gradient(ellipse 130% 95% at 50% 0%,#000 50%,transparent 100%);mask-image:radial-gradient(ellipse 130% 95% at 50% 0%,#000 50%,transparent 100%);}
-.site-bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradient(to right,rgba(255,255,255,0.028) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.028) 1px,transparent 1px);background-size:64px 64px;pointer-events:none;z-index:-1;animation:grid-drift 30s linear infinite;-webkit-mask-image:radial-gradient(ellipse 130% 95% at 50% 0%,#000 50%,transparent 100%);mask-image:radial-gradient(ellipse 130% 95% at 50% 0%,#000 50%,transparent 100%);}
+.site-bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;}
 .site-bg-glow-a{position:absolute;left:-12%;top:-8%;width:60vh;height:60vh;border-radius:50%;background:radial-gradient(circle,rgba(0,212,204,0.10),transparent 68%);filter:blur(32px);animation:glow-breathe-a 24s ease-in-out infinite;}
 .site-bg-glow-b{position:absolute;right:-10%;top:40%;width:55vh;height:55vh;border-radius:50%;background:radial-gradient(circle,rgba(0,212,204,0.07),transparent 70%);filter:blur(42px);animation:glow-breathe-b 31s ease-in-out infinite;}
 .site-bg-vignette{position:absolute;left:0;right:0;bottom:0;height:40vh;background:linear-gradient(to top,#0a0a0a,transparent);}
