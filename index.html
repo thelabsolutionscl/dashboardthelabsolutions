@@ -30,7 +30,7 @@ body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradi
 @keyframes glow-breathe-a{0%,100%{transform:translate3d(0,0,0) scale(1);opacity:.55}50%{transform:translate3d(6%,4%,0) scale(1.12);opacity:.9}}
 @keyframes glow-breathe-b{0%,100%{transform:translate3d(0,0,0) scale(1.05);opacity:.4}50%{transform:translate3d(-5%,-6%,0) scale(.95);opacity:.72}}
 @media(prefers-reduced-motion:reduce){body::before,.site-bg-glow-a,.site-bg-glow-b{animation:none!important}}
-.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:none;padding:0 20px;height:60px;display:flex;align-items:center;gap:16px;}
+.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:none;padding:0 20px;height:64px;display:flex;align-items:center;gap:16px;}
 .logo img{height:25px;width:auto;mix-blend-mode:screen;}
 .topbar-nav{display:flex;gap:3px;flex:1;margin-left:12px;overflow-x:auto;scrollbar-width:none;}
 .tab-btn{background:none;border:1px solid transparent;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;padding:5px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all 0.15s;}
@@ -1164,9 +1164,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
    ═══════════════════════════════════════════════════════════ */
 @media(max-width:768px){
 
-  /* ── Safe areas (notched phones) ────────────────────── */
+  /* ── Safe areas (notched phones) — altura de la franja igual que la web (64px) ── */
   .topbar{
-    height:54px;
     padding-left:max(14px,env(safe-area-inset-left))!important;
     padding-right:max(14px,env(safe-area-inset-right))!important;
   }
@@ -1407,7 +1406,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .toast-container{bottom:calc(112px + env(safe-area-inset-bottom,0px))!important;left:12px;right:12px;align-items:flex-end;}
   .toast{max-width:calc(100vw - 24px);}
   /* ── Panel de notificaciones: ancho adaptable para no salirse en pantallas angostas (≤354px) ── */
-  .notif-panel{top:60px;left:10px;right:10px;width:auto;max-height:72dvh;}
+  .notif-panel{top:64px;left:10px;right:10px;width:auto;max-height:72dvh;}
   /* ── Monitor de impresoras: botones de acción con mejor área táctil en móvil ── */
   #maquinaMonGrid .pcard-actions{flex-wrap:wrap;gap:6px;}
   #maquinaMonGrid .pcard-actions button{padding:7px 11px!important;font-size:13px!important;}
@@ -1418,9 +1417,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
    ═══════════════════════════════════════════════════════════ */
 @media(max-height:500px) and (orientation:landscape){
 
-  /* Topbar compacto */
+  /* Topbar: misma altura que la web (64px) también en landscape */
   .topbar{
-    height:46px!important;
     padding-left:max(12px,env(safe-area-inset-left))!important;
     padding-right:max(12px,env(safe-area-inset-right))!important;
   }
