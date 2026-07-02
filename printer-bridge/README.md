@@ -247,11 +247,14 @@ las ráfagas de polling.
 
 ---
 
-## 🤖 Auditoría y mantención automática (10 AM)
+## 🤖 Auditoría y mantención automática (9 AM)
 
-El bridge puede **auditar, arreglar y calibrar** todas las impresoras cada
-mañana, para que al llegar estén listas para imprimir. Corre en el iMac (acceso
-LAN directo), sin depender del navegador ni del túnel.
+El bridge puede **auditar, reiniciar el firmware y calibrar** todas las
+impresoras cada mañana (por defecto a las **9:00**), para que al llegar a las
+10:00 estén listas para imprimir. Corre en el iMac (acceso LAN directo), sin
+depender del navegador ni del túnel. Las impresoras se procesan **en
+paralelo**: el parque completo termina en lo que tarda la más lenta
+(típicamente 5–15 min, muy dentro de la ventana 9→10).
 
 **Activarlo:**
 
@@ -266,29 +269,46 @@ Reinicia el bridge (`./install-launchd.sh` o `node server.js`). En el arranque
 verás algo como:
 
 ```
-  Mantención auto: 10:00 America/Santiago · 5 impresora(s) · calibrar=true · dryRun=true
+  Mantención auto: 09:00 America/Santiago · 5 impresora(s) · calibrar=true · reinicioPreventivo=true · dryRun=true
 ```
 
 **Importante — empieza en `dryRun: true`.** En ese modo NO manda ningún comando
-físico (no calienta ni mueve nada): solo audita y te envía el reporte. Cuando
-veas que el reporte de la mañana se ve bien, edita `maint-config.json` y pon
-`"dryRun": false` para que actúe de verdad (reiniciar firmware si hay error y
-calibrar bed mesh en las libres). El cambio se toma sin reiniciar el bridge.
+físico (no calienta ni mueve nada): solo audita (incluida la consola) y te
+envía el reporte. Cuando veas que el reporte de la mañana se ve bien, edita
+`maint-config.json` y pon `"dryRun": false` para que actúe de verdad. El
+cambio se toma sin reiniciar el bridge.
 
 **Qué hace cada mañana, por impresora** (solo si está **libre** — nunca toca una
-imprimiendo o pausada):
-1. Audita estado (Klipper, home, malla de cama, temps).
-2. Si Klipper está en error → `FIRMWARE_RESTART` y reverifica (si reincide, avisa "revisar hardware").
-3. Si `calibrate: true` → `G28` + `BED_MESH_CALIBRATE`, y deja la máquina segura (calentadores a 0 + motores liberados).
-4. Reporta a Airtable (`Maquinas_Auditoria`, visible en el dashboard → Máquinas) y por email.
+imprimiendo, pausada, ni ejecutando G-code/macros, detectado vía `idle_timeout`):
+1. **Audita** estado (Klipper, home, malla de cama, temps) y **revisa la
+   consola** (`/server/gcode_store`): si hay errores `!!` de las últimas 24 h
+   —los mismos que verías en Fluidd/Mainsail— los incluye en el reporte.
+2. **Reinicia el firmware** (`FIRMWARE_RESTART`): a **todas** las libres si
+   `restartAll: true` (chequeo preventivo diario), o solo a las que estén en
+   error si `restartAll: false`. Espera a que Klipper vuelva a `ready` antes de
+   seguir; si reincide en error, avisa "revisar hardware" y no la calibra.
+3. Si `calibrate: true` → `G28` + `BED_MESH_CALIBRATE`, y deja la máquina
+   segura (calentadores a 0 + motores liberados). Puedes excluir una impresora
+   puntual con `"calibrate": false` en su entrada, y subir el tiempo máximo por
+   máquina con `calibrateTimeoutMs` (default 4 min; útil para camas gigantes).
+4. **Reporta** a Airtable (`Maquinas_Auditoria`, visible en el dashboard →
+   Máquinas) y por email.
 
-**Probar sin esperar a las 10 AM** (token del bridge):
+**Probar sin esperar a las 9 AM** (token del bridge):
 
 ```bash
 curl -X POST "http://localhost:8347/maint/run?bt=TU_TOKEN"
 curl "http://localhost:8347/maint/status?bt=TU_TOKEN"
 ```
 
+Solo puede haber **una corrida a la vez**: si lanzas `/maint/run` mientras otra
+corrida (manual o la de las 9:00) sigue en curso, responde `409` y no toca nada.
+
 > Seguridad: la calibración calienta y mueve la máquina sin nadie presente.
 > Por eso arranca en dry-run y solo opera impresoras libres. Revisa el primer
 > par de reportes antes de desactivar el dry-run.
+>
+> Requisitos para que corra a las 9:00: el **iMac debe estar encendido** (o
+> configurado para despertarse antes — Ajustes → Energía / `pmset repeat wake`)
+> y las **impresoras enchufadas y encendidas**. Una impresora apagada sale en
+> el reporte como OFFLINE y se salta — el bridge no puede encenderla remoto.
