@@ -14,6 +14,7 @@
 #   LEAD_KEY          X-Public-Lead-Key        (requerido para /lead)
 #   GOOGLE_ADS_KEY    X-Google-Ads-Webhook-Key (opcional, salta el test si falta)
 #   LINKEDIN_KEY      X-Linkedin-Webhook-Key   (default: $LEAD_KEY — el Worker acepta el fallback)
+#   VOICE_KEY         x-vapi-secret            (opcional — canal de voz VAPI; salta si falta)
 #
 # Levanta el Worker primero:  cd lead-worker && npx wrangler dev
 #
@@ -116,6 +117,34 @@ if [ -n "$LINKEDIN_KEY" ]; then
     "campaign":"linkedin-merch-b2b","linkedinClickId":"li-abc123"}'
 else
   echo; echo "${YEL}↷ LinkedIn: SKIP (define LINKEDIN_KEY o LEAD_KEY)${NC}"; SKIP=$((SKIP+1))
+fi
+
+# ── 3b) Voz (VAPI) — tool crear_lead + auth ──────────────────────────────
+VOICE_KEY="${VOICE_KEY:-}"
+if [ -n "$VOICE_KEY" ]; then
+  echo
+  echo "${DIM}── Voz (VAPI) → POST /webhooks/voice [tool-calls crear_lead]${NC}"
+  VRESP="$(curl -sS -w $'\n%{http_code}' -X POST "${BASE_URL}/webhooks/voice" \
+    -H "Content-Type: application/json" -H "x-vapi-secret: ${VOICE_KEY}" \
+    -d '{"message":{"type":"tool-calls","toolCallList":[{"id":"call_1","function":{"name":"crear_lead","arguments":"{\"company\":\"Retail Voz\",\"name\":\"Ana Voz\",\"email\":\"ana@retailvoz.cl\",\"phone\":\"+56911112222\",\"service\":\"Merchandising\",\"quantity\":\"500\",\"accountType\":\"estrategica\"}"}}]}}' 2>&1)"
+  VCODE="$(printf '%s' "$VRESP" | tail -n1)"
+  VJSON="$(printf '%s' "$VRESP" | sed '$d')"
+  echo "${DIM}${VJSON}${NC}"
+  if [ "$VCODE" = "200" ] && printf '%s' "$VJSON" | grep -q '"toolCallId":"call_1"'; then
+    echo "${GREEN}✓ Voz: crear_lead aceptado (HTTP ${VCODE})${NC}"; PASS=$((PASS+1))
+  else
+    echo "${RED}✗ Voz: respuesta inesperada (HTTP ${VCODE})${NC}"; FAIL=$((FAIL+1))
+  fi
+
+  echo
+  echo "${DIM}── Voz auth negativa → POST /webhooks/voice con secret malo [espera 401]${NC}"
+  VBAD="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${BASE_URL}/webhooks/voice" \
+    -H "Content-Type: application/json" -H "x-vapi-secret: malo" \
+    -d '{"message":{"type":"tool-calls"}}' 2>&1)"
+  if [ "$VBAD" = "401" ]; then echo "${GREEN}✓ Voz: secret inválido rechazado (401)${NC}"; PASS=$((PASS+1));
+  else echo "${YEL}~ Voz: esperaba 401, obtuve ${VBAD}${NC}"; SKIP=$((SKIP+1)); fi
+else
+  echo; echo "${YEL}↷ Voz (VAPI): SKIP (define VOICE_KEY)${NC}"; SKIP=$((SKIP+1))
 fi
 
 # ── 4) Auth negativa: llave incorrecta debe dar 401 ──────────────────────

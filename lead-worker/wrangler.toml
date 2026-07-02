@@ -42,6 +42,7 @@ id = "c148848321344f60939fa71a51d050c6"
 #   PUBLIC_LEAD_KEY         (clave compartida con la web — anti-bot básico)
 #   GOOGLE_ADS_WEBHOOK_KEY  (clave del webhook de Google Lead Form)
 #   LINKEDIN_WEBHOOK_KEY    (clave del webhook de LinkedIn vía Make/Zapier)
+#   VOICE_WEBHOOK_KEY       (clave del webhook del agente de voz VAPI — /webhooks/voice)
 #   TURNSTILE_SECRET        (opcional — verificación Cloudflare Turnstile)
 #   ANTHROPIC_API_KEY       (opcional — solo si AUTO_PROCESS_LEADS=true)
 #   RESEND_API_KEY          (opcional — auto-respuesta de leads + confirmación de newsletter)

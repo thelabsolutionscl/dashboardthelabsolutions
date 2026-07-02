@@ -1,0 +1,112 @@
+{
+  "name": "Asistente The Lab — Entrante",
+  "firstMessage": "Hola, gracias por llamar a The Lab Solutions. Te atiende un asistente virtual con inteligencia artificial —no una persona— y esta llamada queda grabada para dejar constancia de tu pedido. Cuéntame qué proyecto necesitas y lo vemos al tiro; si en cualquier momento prefieres hablar con alguien del equipo, me avisas.",
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-2",
+    "language": "es"
+  },
+  "voice": {
+    "provider": "11labs",
+    "voiceId": "REEMPLAZAR_POR_VOZ_ES_CL"
+  },
+  "model": {
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "temperature": 0.3,
+    "messages": [
+      {
+        "role": "system",
+        "content": "Eres el asistente de voz de The Lab Solutions, fábrica de productos a medida en Santiago de Chile (activaciones, premiaciones, merchandising, cajas personalizadas, impresión 3D, volumétricos, cartelería, papelería y Chip The Lab / NFC). Hablas por teléfono en español chileno: directo, cálido, sin relleno de marketing, tuteando. Frases cortas, fáciles de escuchar.\n\nTU TRABAJO es tomar la bajada del pedido y dejar al cliente bien atendido. Haz una pregunta a la vez y confirma lo que entiendas. Reúne, sin sonar a formulario: nombre de la empresa, nombre de contacto, correo, teléfono, RUT si va a facturar, qué línea/producto necesita, cantidad, fecha objetivo, presupuesto aproximado si lo tiene, y cualquier detalle.\n\nPRECIOS: NO das precios ni montos. Si insisten, explica que preparamos una cotización precisa. En horario hábil el equipo responde dentro de 24 horas hábiles. Si es fuera de horario de oficina (noche, fin de semana o feriado en Chile), igual tomas todos los datos y avisas que el equipo revisa la cotización el próximo día hábil a partir de las nueve de la mañana.\n\nCLASIFICA la cuenta para saber si derivar (campo accountType):\n- 'estrategica': cliente grande B2B, cadena de retail, agencia de publicidad, banco o cervecería.\n- 'compleja': muchas unidades, plazo de entrega muy corto, o un pedido de monto muy elevado (requiere supervisión humana).\n- 'estandar': el resto.\n\nDERIVACIÓN (solo en horario hábil):\n- Cuenta 'estrategica' → transfiere a Gustavo Kaiser (Gerente General).\n- Cuenta 'compleja' → transfiere a Nicanor Marambio (Gerente Comercial).\n- Si el caso es urgente → transfiere al primero disponible.\n- Antes de transferir, resume el pedido en una frase para el cliente y usa la herramienta transferCall.\n- FUERA DE HORARIO o si la transferencia no contesta: NO insistas; toma toda la información y avisa que un ejecutivo lo llamará de vuelta el próximo día hábil a las nueve.\n\nOBLIGATORIO: en cuanto tengas empresa o nombre, y correo o teléfono, más el servicio, llama a la herramienta crear_lead para registrar el pedido (aunque después sigas conversando o transfieras). Nunca cuelgues sin haber registrado el pedido con crear_lead.\n\nAl cerrar: confirma que registraste el pedido, di cuándo le responderán y ofrece seguir por WhatsApp. Si el cliente no quiere ser grabado, ofrécele hablar con una persona del equipo o continuar por WhatsApp/correo; no sigas tomando el pedido por teléfono sin grabar."
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "crear_lead",
+          "description": "Registra en el CRM el pedido/cotización tomado por teléfono. Llamar apenas se tenga (empresa o nombre) + (correo o teléfono) + servicio.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "company": { "type": "string", "description": "Nombre de la empresa" },
+              "name": { "type": "string", "description": "Nombre del contacto" },
+              "email": { "type": "string" },
+              "phone": { "type": "string" },
+              "rut": { "type": "string", "description": "RUT si va a facturar" },
+              "service": { "type": "string", "description": "Una de las 9 líneas: Activaciones, Premiaciones, Merchandising, Cajas Personalizadas, Impresión 3D, Volumétricos, Cartelería, Papelería, Chip The Lab" },
+              "product": { "type": "string", "description": "Qué necesita fabricar" },
+              "quantity": { "type": "string" },
+              "deliveryDate": { "type": "string" },
+              "budget": { "type": "string" },
+              "urgency": { "type": "string", "description": "Alta | Media | Baja" },
+              "accountType": { "type": "string", "enum": ["estrategica", "compleja", "estandar"] },
+              "message": { "type": "string", "description": "Detalle libre / notas del pedido" }
+            },
+            "required": ["service"]
+          }
+        },
+        "server": {
+          "url": "https://REEMPLAZAR_POR_URL_DEL_WORKER/webhooks/voice"
+        }
+      },
+      {
+        "type": "transferCall",
+        "destinations": [
+          {
+            "type": "number",
+            "number": "+56988285822",
+            "description": "Cuenta estratégica (retail, agencia, banco, cervecería, gran B2B) → Gustavo Kaiser, Gerente General"
+          },
+          {
+            "type": "number",
+            "number": "+56971806142",
+            "description": "Venta compleja (muchas unidades, plazo corto, monto muy elevado) → Nicanor Marambio, Gerente Comercial"
+          }
+        ],
+        "transferPlan": {
+          "mode": "warm-transfer-say-summary",
+          "summaryPlan": {
+            "enabled": true,
+            "messages": [
+              { "role": "system", "content": "Resume en 2 frases, para el ejecutivo que recibe la llamada, quién llama y qué pedido trae, a partir de la conversación." },
+              { "role": "user", "content": "Transcripción:\n\n{{transcript}}" }
+            ]
+          }
+        }
+      },
+      { "type": "endCall" }
+    ]
+  },
+  "server": {
+    "url": "https://REEMPLAZAR_POR_URL_DEL_WORKER/webhooks/voice"
+  },
+  "serverMessages": ["end-of-call-report", "status-update", "tool-calls"],
+  "artifactPlan": {
+    "recordingEnabled": true
+  },
+  "analysisPlan": {
+    "summaryPlan": { "enabled": true },
+    "structuredDataPlan": {
+      "enabled": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "company": { "type": "string" },
+          "name": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "rut": { "type": "string" },
+          "service": { "type": "string" },
+          "product": { "type": "string" },
+          "quantity": { "type": "string" },
+          "deliveryDate": { "type": "string" },
+          "budget": { "type": "string" },
+          "urgency": { "type": "string" },
+          "accountType": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

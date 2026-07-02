@@ -20,6 +20,7 @@
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
+ *   POST /webhooks/voice        (agente de voz IA — VAPI: tool-calls + end-of-call-report — clave VOICE_WEBHOOK_KEY)
  *
  * NINGÚN secreto vive en este archivo. Todo viene de `env` (wrangler secret put).
  */
@@ -96,6 +97,10 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/webhooks/social") {
         return await handleSocial(request, env, ctx, cors);
+      }
+
+      if (request.method === "POST" && url.pathname === "/webhooks/voice") {
+        return await handleVoice(request, env, ctx, cors);
       }
 
       return json({ ok: false, error: "Ruta no encontrada" }, 404, cors);
@@ -711,12 +716,134 @@ function socialIsComplaint(mensaje, intencion) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+ * RUTA: POST /webhooks/voice   (agente de voz IA — VAPI)
+ * Un solo endpoint recibe los server-messages de VAPI:
+ *   - "tool-calls"          → el asistente ejecuta crear_lead durante la llamada
+ *                             (crea Cliente + Agent_Queue) y respondemos en el
+ *                             formato results[] que espera VAPI.
+ *   - "end-of-call-report"  → al colgar, enriquece el Cliente con transcripción
+ *                             y grabación; si el asistente no llamó crear_lead,
+ *                             crea el lead como respaldo desde los datos
+ *                             estructurados del análisis (analysis.structuredData).
+ * Auth: header x-vapi-secret (o Authorization: Bearer) == VOICE_WEBHOOK_KEY.
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleVoice(request, env, ctx, cors) {
+  const provided =
+    request.headers.get("x-vapi-secret") ||
+    (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!env.VOICE_WEBHOOK_KEY || !timingSafeEqual(provided, env.VOICE_WEBHOOK_KEY)) {
+    return json({ ok: false, error: "No autorizado" }, 401, cors);
+  }
+
+  const body = await readJson(request);
+  if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
+  const msg = body.message || body;
+
+  // ── Tool call en vivo durante la llamada ──────────────────────────────
+  if (msg.type === "tool-calls") {
+    const results = [];
+    for (const c of voiceToolCalls(msg)) {
+      if (c.name === "crear_lead") {
+        try {
+          await persistLead(env, ctx, {
+            norm: normalizeVoice(c.args),
+            agente: "LEAD_AGENT",
+            evento: "voice.lead_received",
+            source: "voz",
+          });
+          results.push({
+            name: c.name,
+            toolCallId: c.id,
+            result: "Pedido registrado. Preparamos la cotización en menos de 24 horas hábiles.",
+          });
+        } catch (e) {
+          console.error("[leads-worker] voice crear_lead:", e.message);
+          results.push({ name: c.name, toolCallId: c.id, error: "No se pudo registrar el pedido." });
+        }
+      } else {
+        // Tool desconocida: responde algo para no bloquear el turno del modelo.
+        results.push({ name: c.name, toolCallId: c.id, result: "ok" });
+      }
+    }
+    return json({ results }, 200, cors);
+  }
+
+  // ── Fin de llamada: enriquecer / respaldo (no bloquea la respuesta) ────
+  if (msg.type === "end-of-call-report") {
+    ctx.waitUntil(
+      handleVoiceEndOfCall(env, ctx, msg).catch((e) =>
+        console.error("[leads-worker] voice end-of-call:", e.message)
+      )
+    );
+    return json({ ok: true }, 200, cors);
+  }
+
+  // Otros eventos (status-update, etc.): solo acuse.
+  return json({ ok: true }, 200, cors);
+}
+
+// Extrae los tool calls de un mensaje "tool-calls" de VAPI, tolerando las dos
+// formas del payload (toolCallList y toolWithToolCallList) y los argumentos
+// como objeto o como string JSON.
+function voiceToolCalls(msg) {
+  const raw =
+    (Array.isArray(msg.toolCallList) && msg.toolCallList) ||
+    (Array.isArray(msg.toolWithToolCallList) &&
+      msg.toolWithToolCallList.map((t) => t.toolCall || t)) ||
+    [];
+  return raw.map((tc) => {
+    const fn = tc.function || tc;
+    let args = fn.arguments ?? fn.parameters ?? {};
+    if (typeof args === "string") {
+      try { args = JSON.parse(args); } catch { args = {}; }
+    }
+    return { id: tc.id || tc.toolCallId, name: fn.name, args };
+  });
+}
+
+// Al colgar: enriquece el Cliente con transcripción + grabación. Si el asistente
+// no alcanzó a llamar crear_lead, crea el lead como respaldo desde los datos
+// estructurados del análisis (dedupe por email/teléfono evita duplicados).
+async function handleVoiceEndOfCall(env, ctx, msg) {
+  const sd = (msg.analysis && msg.analysis.structuredData) || {};
+  const transcript = (msg.artifact && msg.artifact.transcript) || "";
+  const recordingUrl = (msg.artifact && msg.artifact.recordingUrl) || "";
+  const email = str(sd.email);
+  const phone = str(sd.phone);
+
+  let clienteId =
+    email || phone ? await airtableFindCliente(env, { email, phone }) : null;
+
+  if (!clienteId && (email || phone) && str(sd.service)) {
+    const r = await persistLead(env, ctx, {
+      norm: normalizeVoice(sd),
+      agente: "LEAD_AGENT",
+      evento: "voice.lead_received",
+      source: "voz",
+    });
+    clienteId = r.clienteId;
+  }
+
+  if (clienteId && (transcript || recordingUrl)) {
+    await airtableUpdateTolerant(
+      env,
+      "Clientes",
+      clienteId,
+      stripEmpty({
+        Transcripción: transcript.slice(0, 95000),
+        "Grabación llamada": recordingUrl,
+      })
+    );
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
  * NÚCLEO: crear Cliente + tarea en Agent_Queue
  * ══════════════════════════════════════════════════════════════════════ */
 
 // Etiqueta "oficial" de Origen lead en el CRM: los leads del sitio quedan como
 // "Web" (la opción curada), no como la "web" en minúscula que generaba antes.
-const ORIGEN_LABEL = { web: "Web" };
+const ORIGEN_LABEL = { web: "Web", voz: "Teléfono (IA)" };
 function origenLabel(source) {
   return ORIGEN_LABEL[source] || source;
 }
@@ -747,9 +874,18 @@ function buildClienteFields(norm, source) {
   });
 }
 
-async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source, campaign }) {
+async function createLeadAndQueue(env, ctx, cors, opts) {
+  const r = await persistLead(env, ctx, opts);
+  return json(r.body, r.status, cors);
+}
+
+// Persiste el lead (Cliente + Agent_Queue + speed-to-lead + auto-proceso) y
+// devuelve { status, body, clienteId, queueId } para que el llamador arme su
+// propia respuesta: los webhooks devuelven JSON; el canal de voz (VAPI) devuelve
+// el formato results[] que espera el asistente.
+async function persistLead(env, ctx, { norm, agente, evento, source, campaign }) {
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
-    return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
+    return { status: 500, body: { ok: false, error: "Airtable no configurado" }, clienteId: null, queueId: null };
   }
 
   // 1) Cliente — campos tolerantes (si no existen en la base, se descartan)
@@ -783,7 +919,7 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     // No perder el lead: a buffer (KV) para reintento por cron + auto-reply igual
     await bufferDeadLetter(env, { norm, agente, evento, source, campaign });
     if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
-    return json({ ok: true, clienteId: null, queueId: null, buffered: true }, 200, cors);
+    return { status: 200, body: { ok: true, clienteId: null, queueId: null, buffered: true }, clienteId: null, queueId: null };
   }
 
   // 2) Agent_Queue — tabla bajo nuestro control (campos fijos)
@@ -821,7 +957,7 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     ctx.waitUntil(processLeadAgent(env, { clienteId, queueId, norm, agente }));
   }
 
-  return json({ ok: true, clienteId, queueId }, 200, cors);
+  return { status: 200, body: { ok: true, clienteId, queueId }, clienteId, queueId };
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -1100,6 +1236,29 @@ function normalizeLinkedin(b) {
     linkedinClickId: str(b.linkedinClickId),
     landingUrl: str(b.landingUrl),
     utmCampaign: str(b.campaign),
+  };
+}
+
+// VAPI (agente de voz) → forma interna. `accountType` (estrategica|compleja|
+// estandar) cae en "Tipo de cliente"; el resto del brief va a "Notas internas"
+// vía buildNotes. Si no viene empresa, se usa el nombre para no dejar vacío.
+function normalizeVoice(a) {
+  a = a || {};
+  return {
+    name: str(a.name),
+    company: str(a.company) || str(a.name),
+    email: str(a.email),
+    phone: str(a.phone),
+    rut: str(a.rut),
+    service: str(a.service),
+    product: str(a.product),
+    quantity: str(a.quantity),
+    deliveryDate: str(a.deliveryDate),
+    budget: str(a.budget),
+    urgency: str(a.urgency),
+    tipoCliente: str(a.accountType),
+    message: str(a.message),
+    source: "voz",
   };
 }
 
