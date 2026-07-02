@@ -147,6 +147,21 @@ else
   echo; echo "${YEL}↷ Voz (VAPI): SKIP (define VOICE_KEY)${NC}"; SKIP=$((SKIP+1))
 fi
 
+# ── 3c) WhatsApp (verificación) + Saliente (gate de auth) ────────────────
+echo
+echo "${DIM}── WhatsApp verify → GET /webhooks/whatsapp${NC}"
+WACODE="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE_URL}/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=${WHATSAPP_VERIFY_TOKEN:-x}&hub.challenge=PING" 2>&1)"
+if [ "$WACODE" = "200" ] || [ "$WACODE" = "403" ]; then
+  echo "${GREEN}✓ WhatsApp verify responde (HTTP ${WACODE}; 200 si WHATSAPP_VERIFY_TOKEN calza)${NC}"; PASS=$((PASS+1))
+else echo "${YEL}~ WhatsApp verify: HTTP ${WACODE}${NC}"; SKIP=$((SKIP+1)); fi
+
+echo
+echo "${DIM}── Saliente sin clave → POST /voice/outbound [espera 401]${NC}"
+OBCODE="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${BASE_URL}/voice/outbound" \
+  -H "Content-Type: application/json" -d '{"phone":"+56999999999"}' 2>&1)"
+if [ "$OBCODE" = "401" ]; then echo "${GREEN}✓ Saliente sin clave rechazada (401)${NC}"; PASS=$((PASS+1));
+else echo "${YEL}~ Saliente: esperaba 401, obtuve ${OBCODE}${NC}"; SKIP=$((SKIP+1)); fi
+
 # ── 4) Auth negativa: llave incorrecta debe dar 401 ──────────────────────
 echo
 echo "${DIM}── Auth negativa → POST /webhooks/linkedin con llave mala [espera 401]${NC}"

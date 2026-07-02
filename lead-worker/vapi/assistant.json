@@ -24,6 +24,9 @@
     "tools": [
       {
         "type": "function",
+        "messages": [
+          { "type": "request-start", "content": "Perfecto, lo estoy registrando." }
+        ],
         "function": {
           "name": "crear_lead",
           "description": "Registra en el CRM el pedido/cotización tomado por teléfono. Llamar apenas se tenga (empresa o nombre) + (correo o teléfono) + servicio.",
@@ -53,6 +56,9 @@
       },
       {
         "type": "function",
+        "messages": [
+          { "type": "request-start", "content": "Déjame revisar un rango de referencia, un segundo." }
+        ],
         "function": {
           "name": "estimar_cotizacion",
           "description": "Devuelve un rango de precio REFERENCIAL para una línea y cantidad. Usar solo si el cliente pide precio y ya se conoce el servicio (idealmente también la cantidad). El resultado es referencial y sujeto a confirmación; si no hay datos, no da cifras.",
@@ -82,6 +88,9 @@
       },
       {
         "type": "function",
+        "messages": [
+          { "type": "request-start", "content": "Dale, aviso al equipo y te comunico." }
+        ],
         "function": {
           "name": "derivar_socio",
           "description": "Avisa al socio correspondiente (con la ficha del pedido) antes de transferir, o para devolver el llamado fuera de horario. Usar al escalar por tipo de cuenta.",

@@ -20,7 +20,10 @@
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
- *   POST /webhooks/voice        (agente de voz IA — VAPI: tool-calls + end-of-call-report — clave VOICE_WEBHOOK_KEY)
+ *   POST /webhooks/voice        (agente de voz IA — VAPI: tool-calls + end-of-call-report — VOICE_WEBHOOK_KEY o HMAC)
+ *   GET  /webhooks/whatsapp     (Fase 3 — verificación de Meta — WHATSAPP_VERIFY_TOKEN)
+ *   POST /webhooks/whatsapp     (Fase 3 — WhatsApp Cloud API: texto + notas de voz; firma X-Hub-Signature-256)
+ *   POST /voice/outbound        (Fase 4 — llamada saliente vía VAPI — OUTBOUND_KEY / VOICE_WEBHOOK_KEY)
  *
  * NINGÚN secreto vive en este archivo. Todo viene de `env` (wrangler secret put).
  */
@@ -101,6 +104,18 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/webhooks/voice") {
         return await handleVoice(request, env, ctx, cors);
+      }
+
+      if (request.method === "GET" && url.pathname === "/webhooks/whatsapp") {
+        return handleWhatsappVerify(request, env, cors);
+      }
+
+      if (request.method === "POST" && url.pathname === "/webhooks/whatsapp") {
+        return await handleWhatsapp(request, env, ctx, cors);
+      }
+
+      if (request.method === "POST" && url.pathname === "/voice/outbound") {
+        return await handleOutbound(request, env, ctx, cors);
       }
 
       return json({ ok: false, error: "Ruta no encontrada" }, 404, cors);
@@ -725,20 +740,20 @@ function socialIsComplaint(mensaje, intencion) {
  *                             y grabación; si el asistente no llamó crear_lead,
  *                             crea el lead como respaldo desde los datos
  *                             estructurados del análisis (analysis.structuredData).
- * Auth: header x-vapi-secret (o Authorization: Bearer) == VOICE_WEBHOOK_KEY.
+ * Auth: firma HMAC (VOICE_HMAC_SECRET) o, si no, secreto compartido
+ * (header x-vapi-secret / Authorization: Bearer == VOICE_WEBHOOK_KEY).
  * ══════════════════════════════════════════════════════════════════════ */
 async function handleVoice(request, env, ctx, cors) {
-  const provided =
-    request.headers.get("x-vapi-secret") ||
-    (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!env.VOICE_WEBHOOK_KEY || !timingSafeEqual(provided, env.VOICE_WEBHOOK_KEY)) {
+  const raw = await request.text();
+  if (!(await voiceAuthorized(env, request, raw))) {
     return json({ ok: false, error: "No autorizado" }, 401, cors);
   }
 
   const limited = await rateLimited(env, request, "voice", 30, 60);
   if (limited) return json({ ok: false, error: "Demasiadas solicitudes" }, 429, cors);
 
-  const body = await readJson(request);
+  let body;
+  try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
   if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
   const msg = body.message || body;
   const callId = (msg.call && msg.call.id) || null;
@@ -867,6 +882,33 @@ async function handleVoiceEndOfCall(env, ctx, msg) {
         "Grabación llamada": recordingUrl,
       })
     );
+  }
+
+  // Histórico en la tabla `Llamadas` (opcional). Si la tabla no existe, se
+  // descarta sin romper — dormida hasta que el equipo la cree en Airtable.
+  try {
+    await airtableCreateTolerant(
+      env,
+      "Llamadas",
+      stripEmpty({
+        "Call ID": (msg.call && msg.call.id) || undefined,
+        Teléfono: phone || (msg.customer && msg.customer.number) || undefined,
+        "ID Cliente": clienteId || undefined,
+        "Duración (s)": typeof msg.durationSeconds === "number" ? msg.durationSeconds : undefined,
+        Estado: str(msg.endedReason) || undefined,
+        Resumen: str(msg.analysis && msg.analysis.summary) || undefined,
+        Transcripción: transcript ? transcript.slice(0, 95000) : undefined,
+        Grabación: recordingUrl || undefined,
+        Evaluación:
+          msg.analysis && msg.analysis.successEvaluation != null
+            ? String(msg.analysis.successEvaluation)
+            : undefined,
+        Canal: "Teléfono (IA)",
+        Fecha: new Date().toISOString(),
+      })
+    );
+  } catch (e) {
+    console.error("[leads-worker] Llamadas:", e.message);
   }
 }
 
@@ -1046,13 +1088,223 @@ async function notifySocios(env, dest, a, h) {
   });
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+ * Autenticación del webhook de voz: firma HMAC o secreto compartido.
+ * ──────────────────────────────────────────────────────────────────────── */
+async function voiceAuthorized(env, request, raw) {
+  if (env.VOICE_HMAC_SECRET) {
+    const header = env.VOICE_HMAC_HEADER || "x-vapi-signature";
+    return await verifyHmacSha256(env.VOICE_HMAC_SECRET, raw, request.headers.get(header) || "");
+  }
+  const provided =
+    request.headers.get("x-vapi-secret") ||
+    (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  return !!env.VOICE_WEBHOOK_KEY && timingSafeEqual(provided, env.VOICE_WEBHOOK_KEY);
+}
+
+// HMAC-SHA256 hex del cuerpo crudo, comparado (timing-safe) contra el header.
+// Acepta el valor con o sin prefijo "sha256=". Usa Web Crypto (Workers/Node18+).
+async function verifyHmacSha256(secret, raw, provided) {
+  if (!provided) return false;
+  try {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const mac = await crypto.subtle.sign("HMAC", key, enc.encode(raw || ""));
+    const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    return timingSafeEqual(hex, String(provided).replace(/^sha256=/i, "").trim());
+  } catch (_) {
+    return false;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: /webhooks/whatsapp   (Fase 3 — agente por WhatsApp: texto + notas de voz)
+ * GET  → verificación del webhook de Meta (hub.challenge).
+ * POST → mensajes entrantes (Cloud API). Reutiliza el pipeline: crea el lead
+ *        (source "whatsapp") y el LEAD_AGENT lo procesa; las notas de voz se
+ *        transcriben con Whisper si OPENAI_API_KEY está configurado. Responde
+ *        un acuse por WhatsApp si hay token. Todo gateado por env.
+ * ══════════════════════════════════════════════════════════════════════ */
+function handleWhatsappVerify(request, env, cors) {
+  const u = new URL(request.url);
+  const mode = u.searchParams.get("hub.mode");
+  const token = u.searchParams.get("hub.verify_token");
+  const challenge = u.searchParams.get("hub.challenge") || "";
+  if (mode === "subscribe" && env.WHATSAPP_VERIFY_TOKEN && token === env.WHATSAPP_VERIFY_TOKEN) {
+    return new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain", ...cors } });
+  }
+  return json({ ok: false, error: "No autorizado" }, 403, cors);
+}
+
+async function handleWhatsapp(request, env, ctx, cors) {
+  const raw = await request.text();
+  // Firma de Meta (si hay app secret): X-Hub-Signature-256: sha256=<hmac>
+  if (env.WHATSAPP_APP_SECRET) {
+    const sig = request.headers.get("x-hub-signature-256") || "";
+    if (!(await verifyHmacSha256(env.WHATSAPP_APP_SECRET, raw, sig))) {
+      return json({ ok: false, error: "Firma inválida" }, 401, cors);
+    }
+  }
+  let body;
+  try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
+  if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
+
+  // Meta exige 200 rápido → procesa en segundo plano.
+  ctx.waitUntil(
+    processWhatsapp(env, ctx, body).catch((e) => console.error("[leads-worker] whatsapp:", e.message))
+  );
+  return json({ ok: true }, 200, cors);
+}
+
+async function processWhatsapp(env, ctx, body) {
+  const entries = Array.isArray(body.entry) ? body.entry : [];
+  for (const entry of entries) {
+    for (const change of entry.changes || []) {
+      const value = change.value || {};
+      const profileName = value.contacts?.[0]?.profile?.name || "";
+      for (const m of value.messages || []) {
+        // Dedupe por id de mensaje (reintentos de Meta).
+        if (m.id && env.RL) {
+          if (await env.RL.get(`wamsg:${m.id}`)) continue;
+          await env.RL.put(`wamsg:${m.id}`, "1", { expirationTtl: 86400 });
+        }
+        const from = str(m.from);
+        let text = "";
+        if (m.type === "text") text = str(m.text?.body);
+        else if (m.type === "audio" || m.type === "voice")
+          text = (await whatsappTranscribe(env, m.audio?.id || m.voice?.id)) || "[nota de voz recibida]";
+        else if (m.type === "interactive")
+          text = str(m.interactive?.button_reply?.title || m.interactive?.list_reply?.title);
+        else text = `[mensaje ${m.type} recibido]`;
+        if (!from && !text) continue;
+
+        await persistLead(env, ctx, {
+          norm: {
+            name: profileName,
+            company: profileName || `WhatsApp ${from}`,
+            phone: from,
+            message: text,
+            source: "whatsapp",
+          },
+          agente: "LEAD_AGENT",
+          evento: "whatsapp.message_received",
+          source: "whatsapp",
+        });
+        ctx.waitUntil(
+          whatsappSendText(
+            env,
+            from,
+            "¡Hola! Recibimos tu mensaje en The Lab Solutions. Estamos preparando tu cotización y te respondemos a la brevedad. Si quieres, cuéntanos línea, cantidad y fecha."
+          ).catch(() => {})
+        );
+      }
+    }
+  }
+}
+
+// Descarga la nota de voz por su media ID y la transcribe con Whisper (OpenAI).
+// Requiere WHATSAPP_TOKEN + OPENAI_API_KEY; si faltan, devuelve "".
+async function whatsappTranscribe(env, mediaId) {
+  if (!mediaId || !env.WHATSAPP_TOKEN || !env.OPENAI_API_KEY) return "";
+  try {
+    const meta = await fetch(`https://graph.facebook.com/v20.0/${mediaId}`, {
+      headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN },
+    });
+    if (!meta.ok) return "";
+    const { url } = await meta.json();
+    if (!url) return "";
+    const bin = await fetch(url, { headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN } });
+    if (!bin.ok) return "";
+    const audio = await bin.arrayBuffer();
+    const form = new FormData();
+    form.append("file", new Blob([audio], { type: "audio/ogg" }), "nota.ogg");
+    form.append("model", env.OPENAI_STT_MODEL || "whisper-1");
+    form.append("language", "es");
+    const stt = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.OPENAI_API_KEY },
+      body: form,
+    });
+    if (!stt.ok) return "";
+    return str((await stt.json()).text);
+  } catch (e) {
+    console.error("[leads-worker] whatsappTranscribe:", e.message);
+    return "";
+  }
+}
+
+async function whatsappSendText(env, to, text) {
+  if (!to || !env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) return;
+  await fetch(`https://graph.facebook.com/v20.0/${env.WHATSAPP_PHONE_ID}/messages`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: text } }),
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: POST /voice/outbound   (Fase 4 — dispara una llamada saliente vía VAPI)
+ * Auth: header x-outbound-key / x-vapi-secret == OUTBOUND_KEY || VOICE_WEBHOOK_KEY.
+ * Respeta horario hábil (consentimiento/DND); force=true lo omite. Gateado:
+ * requiere VAPI_API_KEY + VAPI_PHONE_NUMBER_ID + VAPI_ASSISTANT_ID.
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleOutbound(request, env, ctx, cors) {
+  const provided =
+    request.headers.get("x-outbound-key") ||
+    request.headers.get("x-vapi-secret") ||
+    (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const expected = env.OUTBOUND_KEY || env.VOICE_WEBHOOK_KEY;
+  if (!expected || !timingSafeEqual(provided, expected)) {
+    return json({ ok: false, error: "No autorizado" }, 401, cors);
+  }
+  if (!env.VAPI_API_KEY || !env.VAPI_PHONE_NUMBER_ID || !env.VAPI_ASSISTANT_ID) {
+    return json(
+      { ok: false, error: "Saliente no configurada (faltan VAPI_API_KEY/VAPI_PHONE_NUMBER_ID/VAPI_ASSISTANT_ID)" },
+      501,
+      cors
+    );
+  }
+  const b = (await readJson(request)) || {};
+  const phone = str(b.phone);
+  if (!phone) return json({ ok: false, error: "Falta phone (E.164)" }, 400, cors);
+
+  // Respeto de horario (consentimiento/DND); override explícito con force=true.
+  const h = estadoHorarioChile(env);
+  if (!h.habil && b.force !== true) {
+    return json({ ok: false, error: "Fuera de horario hábil; usa force=true para forzar" }, 409, cors);
+  }
+  try {
+    const r = await fetch("https://api.vapi.ai/call", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.VAPI_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phoneNumberId: env.VAPI_PHONE_NUMBER_ID,
+        assistantId: env.VAPI_OUTBOUND_ASSISTANT_ID || env.VAPI_ASSISTANT_ID,
+        customer: { number: phone, name: str(b.name) || undefined },
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return json({ ok: false, error: `VAPI ${r.status}`, detail: data }, 502, cors);
+    return json({ ok: true, callId: data.id || null }, 200, cors);
+  } catch (e) {
+    console.error("[leads-worker] outbound:", e.message);
+    return json({ ok: false, error: "No se pudo iniciar la llamada" }, 502, cors);
+  }
+}
+
 /* ════════════════════════════════════════════════════════════════════════
  * NÚCLEO: crear Cliente + tarea en Agent_Queue
  * ══════════════════════════════════════════════════════════════════════ */
 
 // Etiqueta "oficial" de Origen lead en el CRM: los leads del sitio quedan como
 // "Web" (la opción curada), no como la "web" en minúscula que generaba antes.
-const ORIGEN_LABEL = { web: "Web", voz: "Teléfono (IA)" };
+const ORIGEN_LABEL = { web: "Web", voz: "Teléfono (IA)", whatsapp: "WhatsApp" };
 function origenLabel(source) {
   return ORIGEN_LABEL[source] || source;
 }
