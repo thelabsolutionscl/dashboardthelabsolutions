@@ -735,9 +735,13 @@ async function handleVoice(request, env, ctx, cors) {
     return json({ ok: false, error: "No autorizado" }, 401, cors);
   }
 
+  const limited = await rateLimited(env, request, "voice", 30, 60);
+  if (limited) return json({ ok: false, error: "Demasiadas solicitudes" }, 429, cors);
+
   const body = await readJson(request);
   if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
   const msg = body.message || body;
+  const callId = (msg.call && msg.call.id) || null;
 
   // ── Tool call en vivo durante la llamada ──────────────────────────────
   if (msg.type === "tool-calls") {
@@ -745,11 +749,19 @@ async function handleVoice(request, env, ctx, cors) {
     for (const c of voiceToolCalls(msg)) {
       if (c.name === "crear_lead") {
         try {
+          // Idempotencia por llamada: si ya registramos esta llamada (o VAPI
+          // reintenta el webhook), no dupliquemos la tarea en Agent_Queue.
+          let skipQueue = false;
+          if (callId && env.RL) {
+            if (await env.RL.get(`voicelead:${callId}`)) skipQueue = true;
+            else await env.RL.put(`voicelead:${callId}`, "1", { expirationTtl: 21600 });
+          }
           await persistLead(env, ctx, {
             norm: normalizeVoice(c.args),
             agente: "LEAD_AGENT",
             evento: "voice.lead_received",
             source: "voz",
+            skipQueue,
           });
           results.push({
             name: c.name,
@@ -769,6 +781,17 @@ async function handleVoice(request, env, ctx, cors) {
           toolCallId: c.id,
           result: await estimarCotizacion(env, c.args),
         });
+      } else if (c.name === "estado_horario") {
+        const h = estadoHorarioChile(env);
+        results.push({
+          name: c.name,
+          toolCallId: c.id,
+          result: h.habil
+            ? "Horario hábil: puedes derivar a un socio si corresponde."
+            : "Fuera de horario de oficina: NO derives; toma todos los datos y avisa que el equipo revisa la cotización el próximo día hábil a partir de las 9:00.",
+        });
+      } else if (c.name === "derivar_socio") {
+        results.push({ name: c.name, toolCallId: c.id, result: await derivarSocio(env, ctx, c.args) });
       } else {
         // Tool desconocida: responde algo para no bloquear el turno del modelo.
         results.push({ name: c.name, toolCallId: c.id, result: "ok" });
@@ -799,6 +822,7 @@ function voiceToolCalls(msg) {
     (Array.isArray(msg.toolCallList) && msg.toolCallList) ||
     (Array.isArray(msg.toolWithToolCallList) &&
       msg.toolWithToolCallList.map((t) => t.toolCall || t)) ||
+    (Array.isArray(msg.toolCalls) && msg.toolCalls) ||
     [];
   return raw.map((tc) => {
     const fn = tc.function || tc;
@@ -856,8 +880,9 @@ async function handleVoiceEndOfCall(env, ctx, msg) {
 // salvo Línea). Mientras la tabla esté vacía, esta tool no da montos.
 async function estimarCotizacion(env, args) {
   const FALLBACK = "Preparamos la cotización precisa y te respondemos en menos de 24 horas hábiles.";
-  const svc = str((args || {}).service);
-  if (!svc) return "Para estimar un rango necesito saber qué línea o producto necesitas.";
+  const rawSvc = str((args || {}).service);
+  if (!rawSvc) return "Para estimar un rango necesito saber qué línea o producto necesitas.";
+  const svc = canonicalService(rawSvc) || rawSvc;
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return FALLBACK;
 
   const toNum = (v) => {
@@ -891,7 +916,15 @@ async function estimarCotizacion(env, args) {
     const max = toNum(f["Cantidad máxima"]);
     return (min == null || qty >= min) && (max == null || qty <= max);
   };
-  const row = (qty != null && rows.find((r) => inRange(r.fields))) || rows[0];
+  // Con cantidad conocida, exige que calce un tramo; si ninguno calza, no
+  // arriesgues un rango engañoso → fallback. Sin cantidad, usa la primera fila.
+  let row;
+  if (qty != null) {
+    row = rows.find((r) => inRange(r.fields));
+    if (!row) return FALLBACK;
+  } else {
+    row = rows[0];
+  }
   const f = row.fields || {};
   const desde = toNum(f["Precio desde"]);
   const hasta = toNum(f["Precio hasta"]);
@@ -907,6 +940,110 @@ async function estimarCotizacion(env, args) {
     `Como referencia, el valor unitario va en torno a ${rango}${nota ? ` (${nota})` : ""}. ` +
     `Es un rango referencial y sujeto a confirmación; la cotización final la afinamos hoy.`
   );
+}
+
+// Horario hábil en Chile (America/Santiago). Lun–Vie, start–end (default 9–18,
+// override con env BUSINESS_START/BUSINESS_END). No depende del reloj del modelo:
+// el agente llama estado_horario y decide si transferir.
+function estadoHorarioChile(env) {
+  const start = parseInt((env && env.BUSINESS_START) || "9", 10);
+  const end = parseInt((env && env.BUSINESS_END) || "18", 10);
+  let day, hour;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Santiago",
+      weekday: "short",
+      hour: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date());
+    const wd = parts.find((p) => p.type === "weekday")?.value || "";
+    hour = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10);
+    day = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[wd];
+  } catch (_) {
+    // Fallback si Intl/timeZone no está disponible: UTC-4 (Chile continental).
+    const d = new Date(Date.now() - 4 * 3600 * 1000);
+    day = d.getUTCDay();
+    hour = d.getUTCHours();
+  }
+  const habil = day >= 1 && day <= 5 && hour >= start && hour < end;
+  return { habil, hour, day };
+}
+
+// Derivación a socio por tipo de cuenta (out-of-band): avisa al socio por email
+// (Resend) con la ficha del pedido, para que reciba el contexto aunque la
+// telefonía no soporte warm-transfer con resumen (p. ej. Telnyx/SIP). No bloquea.
+const SOCIOS = {
+  estrategica: { nombre: "Gustavo Kaiser", email: "gustavo@thelab.solutions", tel: "+56988285822" },
+  compleja: { nombre: "Nicanor Marambio", email: "nicanor@thelab.solutions", tel: "+56971806142" },
+};
+
+async function derivarSocio(env, ctx, args) {
+  args = args || {};
+  const tipo = str(args.accountType).toLowerCase();
+  const dest =
+    tipo === "estrategica"
+      ? [SOCIOS.estrategica]
+      : tipo === "compleja"
+      ? [SOCIOS.compleja]
+      : [SOCIOS.estrategica, SOCIOS.compleja]; // urgencia u otro → ambos
+  const h = estadoHorarioChile(env);
+  ctx.waitUntil(
+    notifySocios(env, dest, args, h).catch((e) => console.error("[leads-worker] derivarSocio:", e.message))
+  );
+  const nombres = dest.map((d) => d.nombre.split(" ")[0]).join(" y ");
+  return h.habil
+    ? `Le avisé el resumen del pedido a ${nombres}; procede a transferir la llamada.`
+    : `Fuera de horario: registré el pedido y avisé a ${nombres} para que devuelvan el llamado el próximo día hábil.`;
+}
+
+async function notifySocios(env, dest, a, h) {
+  const esc = (s) =>
+    String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+      c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"
+    );
+  const rows = [
+    ["Empresa", a.company],
+    ["Contacto", a.name],
+    ["Email", a.email],
+    ["Teléfono", a.phone],
+    ["Servicio", a.service],
+    ["Clasificación", a.accountType],
+    ["Resumen", a.summary],
+  ].filter(([, v]) => v);
+
+  // Sin Resend: intenta un webhook de alerta si está configurado.
+  if (!env.RESEND_API_KEY) {
+    if (env.ALERT_WEBHOOK_URL) {
+      await fetch(env.ALERT_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: `Derivación de llamada (${a.accountType || "?"}): ${a.company || a.name || "lead"} — ${a.summary || ""}`,
+        }),
+      });
+    }
+    return;
+  }
+
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  const html =
+    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px">` +
+    `<h2 style="margin:0 0 12px">📞 Derivación desde el agente de voz${h.habil ? "" : " (fuera de horario)"}</h2>` +
+    (h.habil
+      ? `<p>Te están transfiriendo esta llamada. Contexto del pedido:</p>`
+      : `<p>Llamada fuera de horario — datos para devolver el llamado el próximo día hábil:</p>`) +
+    rows.map(([k, v]) => `<p><strong>${esc(k)}:</strong> ${esc(v)}</p>`).join("") +
+    `<p style="color:#666;font-size:12px;margin-top:16px">— Agente de voz IA · The Lab Solutions</p></div>`;
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: dest.map((d) => d.email),
+      subject: `Derivación de llamada: ${a.company || a.name || "nuevo lead"}`,
+      html,
+    }),
+  });
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -934,6 +1071,7 @@ function buildClienteFields(norm, source) {
     "Origen lead": origenLabel(source),
     "Industria / Rubro": norm.industry,
     "Tipo de cliente": norm.tipoCliente,
+    "Clasificación IA": norm.clasificacion,
     RUT: norm.rut,
     "Sitio web": norm.website,
     Dirección: norm.address,
@@ -955,7 +1093,7 @@ async function createLeadAndQueue(env, ctx, cors, opts) {
 // devuelve { status, body, clienteId, queueId } para que el llamador arme su
 // propia respuesta: los webhooks devuelven JSON; el canal de voz (VAPI) devuelve
 // el formato results[] que espera el asistente.
-async function persistLead(env, ctx, { norm, agente, evento, source, campaign }) {
+async function persistLead(env, ctx, { norm, agente, evento, source, campaign, skipQueue }) {
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
     return { status: 500, body: { ok: false, error: "Airtable no configurado" }, clienteId: null, queueId: null };
   }
@@ -994,39 +1132,43 @@ async function persistLead(env, ctx, { norm, agente, evento, source, campaign })
     return { status: 200, body: { ok: true, clienteId: null, queueId: null, buffered: true }, clienteId: null, queueId: null };
   }
 
-  // 2) Agent_Queue — tabla bajo nuestro control (campos fijos)
+  // 2) Agent_Queue + speed-to-lead + auto-proceso. En reintentos o llamadas
+  // repetidas de crear_lead de una misma llamada (skipQueue) se omite para no
+  // crear tareas ni correos duplicados.
   let queueId = null;
-  const queueFields = stripEmpty({
-    Evento: evento,
-    Entidad: "Cliente",
-    "ID entidad": clienteId,
-    Agente: agente,
-    Estado: "Pendiente",
-    Prioridad: source === "google_ads" ? "Alta" : "Media",
-    "Input JSON": JSON.stringify(norm).slice(0, 95000),
-    Source: source,
-    Campaign: campaign,
-    "Fecha creación": new Date().toISOString(),
-  });
-  try {
-    const q = await airtableCreateTolerant(env, "Agent_Queue", queueFields);
-    queueId = q?.id || null;
-  } catch (e) {
-    // El lead ya se guardó; la cola es best-effort.
-    console.error("[leads-worker] Agent_Queue:", e.message);
-  }
+  if (!skipQueue) {
+    const queueFields = stripEmpty({
+      Evento: evento,
+      Entidad: "Cliente",
+      "ID entidad": clienteId,
+      Agente: agente,
+      Estado: "Pendiente",
+      Prioridad: source === "google_ads" ? "Alta" : "Media",
+      "Input JSON": JSON.stringify(norm).slice(0, 95000),
+      Source: source,
+      Campaign: campaign,
+      "Fecha creación": new Date().toISOString(),
+    });
+    try {
+      const q = await airtableCreateTolerant(env, "Agent_Queue", queueFields);
+      queueId = q?.id || null;
+    } catch (e) {
+      // El lead ya se guardó; la cola es best-effort.
+      console.error("[leads-worker] Agent_Queue:", e.message);
+    }
 
-  // Auto-respuesta al lead (speed-to-lead), best-effort, no bloquea la respuesta
-  if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
+    // Auto-respuesta al lead (speed-to-lead), best-effort, no bloquea la respuesta
+    if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
 
-  // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
-  if (
-    env.AUTO_PROCESS_LEADS === "true" &&
-    env.ANTHROPIC_API_KEY &&
-    queueId &&
-    (await autoProcessAllowed(env))
-  ) {
-    ctx.waitUntil(processLeadAgent(env, { clienteId, queueId, norm, agente }));
+    // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
+    if (
+      env.AUTO_PROCESS_LEADS === "true" &&
+      env.ANTHROPIC_API_KEY &&
+      queueId &&
+      (await autoProcessAllowed(env))
+    ) {
+      ctx.waitUntil(processLeadAgent(env, { clienteId, queueId, norm, agente }));
+    }
   }
 
   return { status: 200, body: { ok: true, clienteId, queueId }, clienteId, queueId };
@@ -1091,6 +1233,7 @@ Reglas de canal:
 - source=linkedin: tono B2B consultivo (evalúa cargo, empresa, industria).
 - source=web: orienta y educa sin extenderte.
 - source=whatsapp: directo y orientado a cotización.
+- source=voz: llamada telefónica; el brief viene hablado, prioriza calificar y detectar si requiere derivación a un socio.
 Detecta el servicio más probable. Detecta datos faltantes clave (cantidad, fecha, comuna, medidas, material, archivo, presupuesto). No inventes precios finales.
 Responde SOLO un objeto JSON con EXACTAMENTE estas claves:
 {
@@ -1311,25 +1454,54 @@ function normalizeLinkedin(b) {
   };
 }
 
+// Mapea un servicio hablado/libre a una de las 9 líneas canónicas (o "" si no hay
+// match claro), para no ensuciar el single-select "Servicio interés" de Airtable
+// (que con typecast:true crearía una opción nueva por cada variante hablada).
+const SERVICIOS_CANON = [
+  ["Activaciones", ["activacion", "activaciones", "stand", "stands", "feria", "activar"]],
+  ["Premiaciones", ["premiacion", "premiaciones", "galvano", "galvanos", "trofeo", "trofeos", "premio", "reconocimiento"]],
+  ["Merchandising", ["merchandising", "merch", "kit", "kits", "regalo corporativo", "llavero", "llaveros", "botella", "polera", "poleras", "gorro"]],
+  ["Cajas Personalizadas", ["caja", "cajas", "packaging", "empaque", "welcome kit", "welcomekit"]],
+  ["Impresión 3D", ["impresion 3d", "impresión 3d", "3d", "prototipo", "figura", "maqueta", "modelado"]],
+  ["Volumétricos", ["volumetrico", "volumetricos", "volumétrico", "volumétricos", "logo en volumen", "letras corporeas", "letras corpóreas", "letra corporea"]],
+  ["Cartelería", ["carteleria", "cartelería", "cartel", "letrero", "senaletica", "señaletica", "señalética", "caja de luz", "neon", "neón", "luminoso"]],
+  ["Papelería", ["papeleria", "papelería", "tarjeta de presentacion", "folleto", "flyer", "carpeta", "imprenta"]],
+  ["Chip The Lab", ["chip the lab", "chip", "nfc", "tarjeta nfc", "tarjeta inteligente"]],
+];
+function canonicalService(raw) {
+  const s = str(raw).toLowerCase();
+  if (!s) return "";
+  for (const [canon] of SERVICIOS_CANON) if (s === canon.toLowerCase()) return canon;
+  for (const [canon, kws] of SERVICIOS_CANON) if (kws.some((k) => s.includes(k))) return canon;
+  return "";
+}
+
 // VAPI (agente de voz) → forma interna. `accountType` (estrategica|compleja|
-// estandar) cae en "Tipo de cliente"; el resto del brief va a "Notas internas"
-// vía buildNotes. Si no viene empresa, se usa el nombre para no dejar vacío.
+// estandar) es clasificación de RUTEO → va a "Clasificación IA" y a las notas,
+// NO a "Tipo de cliente" (dato de negocio). El `service` se canonicaliza a una
+// de las 9 líneas; si no calza, el texto crudo se preserva en el mensaje. Si no
+// viene empresa, se usa el nombre para no dejar vacío.
 function normalizeVoice(a) {
   a = a || {};
+  const rawService = str(a.service);
+  const service = canonicalService(rawService);
+  const extras = [];
+  if (rawService && !service) extras.push(`Servicio (sin normalizar): ${rawService}`);
+  const message = [str(a.message), ...extras].filter(Boolean).join(" · ");
   return {
     name: str(a.name),
     company: str(a.company) || str(a.name),
     email: str(a.email),
     phone: str(a.phone),
     rut: str(a.rut),
-    service: str(a.service),
+    service,
     product: str(a.product),
     quantity: str(a.quantity),
     deliveryDate: str(a.deliveryDate),
     budget: str(a.budget),
     urgency: str(a.urgency),
-    tipoCliente: str(a.accountType),
-    message: str(a.message),
+    clasificacion: str(a.accountType),
+    message,
     source: "voz",
   };
 }
@@ -1338,6 +1510,7 @@ function buildNotes(n) {
   const lines = [];
   if (n.message) lines.push(n.message);
   const meta = [];
+  if (n.clasificacion) meta.push(`Clasificación IA: ${n.clasificacion}`);
   if (n.product) meta.push(`Proyecto: ${n.product}`);
   if (n.quantity) meta.push(`Cantidad: ${n.quantity}`);
   if (n.deliveryDate) meta.push(`Fecha: ${n.deliveryDate}`);

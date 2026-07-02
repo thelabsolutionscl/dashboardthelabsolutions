@@ -28,6 +28,11 @@ WHATSAPP_NUMBER = "56928785039"
 # Newsletter: doble opt-in. Con RESEND_API_KEY configurado, /newsletter envía un correo
 # de confirmación y NO suscribe hasta que el usuario hace clic. Poner "false" para alta directa.
 NEWSLETTER_DOUBLE_OPTIN = "true"
+# Agente de voz (VAPI): horario hábil en Chile para decidir si transferir a un socio
+# (tool estado_horario). Lun–Vie entre estas horas; fuera de eso el agente toma la
+# bajada y agenda callback al día hábil siguiente.
+BUSINESS_START = "9"
+BUSINESS_END = "18"
 
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL
