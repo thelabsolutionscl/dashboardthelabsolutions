@@ -4121,6 +4121,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <option value="90">Últimos 90 días</option>
         </select>
         <button class="btn btn-ghost btn-sm" onclick="toggleAdsConfig()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar</button>
+        <button class="btn btn-ghost btn-sm act-item-cyan" onclick="iaBuildCampaign()" id="btnIACampana">✨ Crear con IA</button>
         <button class="btn btn-ghost btn-sm" onclick="openCreateCampaign()" id="btnNuevaCampana">+ Nueva Campaña</button>
         <button class="btn btn-primary btn-sm" onclick="loadAdsData()">↺ Actualizar</button>
         <span id="adsLastSyncLabel" style="font-size:10px;color:var(--text3);white-space:nowrap;align-self:center;padding-left:2px"></span>
@@ -4405,12 +4406,19 @@ function _aplicarMutaciones(mutsJson) {
         // masiva (bulk upload) con el formato CSV del Editor de Google Ads.
         var _grupo = 'Grupo 1 - ' + m.data.nombre;
         var _kws = (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) ? m.data.palabrasClave : [];
+        var _mt = m.data.concordancia || 'FRASE';
+        function _wrapKw(k){ return (_mt === 'EXACTA') ? ('[' + k + ']') : (_mt === 'AMPLIA') ? k : ('"' + k + '"'); }
+        var _maxCpc = parseInt(m.data.maxCpc, 10) || 300;
+        var _bsMap = {MANUAL_CPC:'cpc', MAXIMIZE_CLICKS:'Maximize clicks', MAXIMIZE_CONVERSIONS:'Maximize conversions', TARGET_CPA:'Target CPA', TARGET_ROAS:'Target ROAS'};
+        var _bs = _bsMap[m.data.pujaEstrategia] || 'cpc';
         var _ad = m.data.anuncio || null;
         var _titulos = (_ad &amp;&amp; _ad.titulos &amp;&amp; _ad.titulos.length) ? _ad.titulos.slice(0, 15) : [];
         var _descs = (_ad &amp;&amp; _ad.descripciones &amp;&amp; _ad.descripciones.length) ? _ad.descripciones.slice(0, 4) : [];
         var _conAnuncio = !!(_ad &amp;&amp; _ad.finalUrl &amp;&amp; _titulos.length >= 3 &amp;&amp; _descs.length >= 2);
         var _cols = ['Campaign', 'Campaign status', 'Budget', 'Bid Strategy type',
                      'Campaign type', 'Ad group', 'Max CPC', 'Keyword'];
+        if (m.data.pujaEstrategia === 'TARGET_CPA') _cols.push('Target CPA');
+        if (m.data.pujaEstrategia === 'TARGET_ROAS') _cols.push('Target ROAS');
         if (_conAnuncio) {
           _cols = _cols.concat(['Ad type', 'Final URL', 'Path 1', 'Path 2']);
           for (var h = 0; h &lt; _titulos.length; h++) _cols.push('Headline ' + (h + 1));
@@ -4418,18 +4426,21 @@ function _aplicarMutaciones(mutsJson) {
         }
         var _up = AdsApp.bulkUploads().newCsvUpload(_cols, {moneyInMicros: false});
         // Fila de campaña (presupuesto y Max CPC en moneda de la cuenta, p. ej. CLP)
-        _up.append({
+        var _campRow = {
           'Campaign': m.data.nombre,
           'Campaign status': (m.data.estado === 'PAUSED') ? 'Paused' : 'Enabled',
           'Budget': m.data.presupuesto,
-          'Bid Strategy type': 'cpc',
+          'Bid Strategy type': _bs,
           'Campaign type': 'Search Only'
-        });
+        };
+        if (m.data.pujaEstrategia === 'TARGET_CPA' &amp;&amp; m.data.pujaObjetivo) _campRow['Target CPA'] = m.data.pujaObjetivo;
+        if (m.data.pujaEstrategia === 'TARGET_ROAS' &amp;&amp; m.data.pujaObjetivo) _campRow['Target ROAS'] = m.data.pujaObjetivo;
+        _up.append(_campRow);
         // Fila de grupo de anuncios
-        _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': 300});
-        // Filas de palabras clave (concordancia amplia por defecto)
+        _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': _maxCpc});
+        // Filas de palabras clave (concordancia segun m.data.concordancia: FRASE / EXACTA / AMPLIA)
         for (var kw = 0; kw &lt; _kws.length; kw++) {
-          _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Keyword': _kws[kw]});
+          _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Keyword': _wrapKw(_kws[kw])});
         }
         // Fila de anuncio responsivo de búsqueda (RSA), si hay datos suficientes
         if (_conAnuncio) {
@@ -4450,6 +4461,20 @@ function _aplicarMutaciones(mutsJson) {
           _up.apply();
           Logger.log('OK creada (bulk upload): ' + m.data.nombre + ' · ' + _kws.length +
                      ' keywords · ' + (_conAnuncio ? 'con anuncio RSA' : 'sin anuncio'));
+          // Palabras clave negativas (best-effort; si la campana aun no aparece, reintenta el proximo ciclo)
+          var _negs = (m.data.negativas &amp;&amp; m.data.negativas.length) ? m.data.negativas : [];
+          if (_negs.length) {
+            try {
+              var _cIt = AdsApp.campaigns().withCondition("campaign.name = '" + String(m.data.nombre).replace(/'/g, '') + "'").get();
+              if (_cIt.hasNext()) {
+                var _cNeg = _cIt.next();
+                for (var _n = 0; _n &lt; _negs.length; _n++) _cNeg.createNegativeKeyword(_negs[_n]);
+                Logger.log('OK ' + _negs.length + ' negativos agregados a ' + m.data.nombre);
+              } else {
+                Logger.log('Negativos pendientes: la campana aun no aparece — se agregaran a mano o al reintentar');
+              }
+            } catch(_eN) { Logger.log('No se pudieron agregar negativos: ' + _eN.message); }
+          }
         }
         muts[k].status = 'aplicado';
 
@@ -21108,6 +21133,7 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulo
     const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
     const tt=document.getElementById('adsCampaignModalTitulos');if(tt&&Array.isArray(titulos)&&titulos.length) tt.value=titulos.join('\n');
     const ds=document.getElementById('adsCampaignModalDescripciones');if(ds&&Array.isArray(descripciones)&&descripciones.length) ds.value=descripciones.join('\n');
+    const kw=document.getElementById('adsCampaignModalKeywords');if(kw&&_adsCreateKeywords.length) kw.value=_adsCreateKeywords.join('\n');
     const hint=document.getElementById('adsCampaignModalKwHint');
     if(hint){
       if(_adsCreateKeywords.length){hint.style.display='block';hint.textContent='✓ Se incluirán '+_adsCreateKeywords.length+' palabras clave y un anuncio responsivo en el grupo de anuncios al crear la campaña. Revisa o edita el anuncio abajo.';}
@@ -21348,6 +21374,20 @@ function openCreateCampaign(){
   document.getElementById('adsCampaignModalEstado').value='ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='';
   document.getElementById('adsCampaignModalAnuncioGroup').style.display='';
+  document.getElementById('adsCampaignModalCreateOpts').style.display='';
+  document.getElementById('adsCampaignModalConcordancia').value='FRASE';
+  document.getElementById('adsCampaignModalMaxCpc').value='800';
+  document.getElementById('adsCampaignModalPuja').value='MAXIMIZE_CLICKS';
+  document.getElementById('adsCampaignModalPujaObjetivo').value='';
+  document.getElementById('adsCampaignModalUbicaciones').value='Región Metropolitana, Chile';
+  document.getElementById('adsCampaignModalUbicModo').value='PRESENCE';
+  document.getElementById('adsCampaignModalRedSocios').checked=false;
+  document.getElementById('adsCampaignModalRedDisplay').checked=false;
+  document.getElementById('adsCampaignModalKeywords').value='';
+  document.getElementById('adsCampaignModalNegativas').value='';
+  _adsTogglePujaObjetivo();
+  const _iaInfo=document.getElementById('adsCampaignModalIAInfo');if(_iaInfo){_iaInfo.style.display='none';_iaInfo.innerHTML='';}
+  const _iaBtn=document.getElementById('adsCampaignModalCreateAI');if(_iaBtn) _iaBtn.style.display='';
   document.getElementById('adsCampaignModalFinalUrl').value=ADS_DEFAULT_URL;
   document.getElementById('adsCampaignModalPath1').value='';
   document.getElementById('adsCampaignModalPath2').value='';
@@ -21367,6 +21407,9 @@ function openEditCampaign(id, nombre, estado, presupuesto){
   document.getElementById('adsCampaignModalEstado').value=estado||'ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='none';
   document.getElementById('adsCampaignModalAnuncioGroup').style.display='none';
+  document.getElementById('adsCampaignModalCreateOpts').style.display='none';
+  const _iaInfoE=document.getElementById('adsCampaignModalIAInfo');if(_iaInfoE){_iaInfoE.style.display='none';_iaInfoE.innerHTML='';}
+  const _iaBtnE=document.getElementById('adsCampaignModalCreateAI');if(_iaBtnE) _iaBtnE.style.display='none';
   document.getElementById('adsCampaignModal').style.display='flex';
 }
 
@@ -21407,8 +21450,23 @@ function saveCampaignMutation(){
   if(!nombre){alert('El nombre de la campaña es obligatorio.');return;}
   if(presupuesto<1000){alert('El presupuesto debe ser al menos $1.000 CLP.');return;}
   const data={nombre,presupuesto,estado,tipo};
-  if(op==='create'&&_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.slice();
   if(op==='create'){
+    const kwText=(document.getElementById('adsCampaignModalKeywords').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    if(kwText.length) data.palabrasClave=kwText;
+    else if(_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.slice();
+    data.concordancia=document.getElementById('adsCampaignModalConcordancia').value;
+    data.maxCpc=parseInt(document.getElementById('adsCampaignModalMaxCpc').value)||800;
+    data.pujaEstrategia=document.getElementById('adsCampaignModalPuja').value;
+    const _pObj=parseInt(document.getElementById('adsCampaignModalPujaObjetivo').value)||0;
+    if(data.pujaEstrategia==='TARGET_CPA'||data.pujaEstrategia==='TARGET_ROAS'){
+      if(_pObj<=0){alert('Indica el objetivo de la estrategia de puja (CPA en CLP, o ROAS ej. 3).');return;}
+      data.pujaObjetivo=_pObj;
+    }
+    data.ubicaciones=(document.getElementById('adsCampaignModalUbicaciones').value||'').trim();
+    data.ubicModo=document.getElementById('adsCampaignModalUbicModo').value;
+    data.redSocios=document.getElementById('adsCampaignModalRedSocios').checked;
+    data.redDisplay=document.getElementById('adsCampaignModalRedDisplay').checked;
+    data.negativas=(document.getElementById('adsCampaignModalNegativas').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
     const finalUrl=(document.getElementById('adsCampaignModalFinalUrl').value||'').trim();
     const path1=(document.getElementById('adsCampaignModalPath1').value||'').trim();
     const path2=(document.getElementById('adsCampaignModalPath2').value||'').trim();
@@ -21435,6 +21493,99 @@ function saveCampaignMutation(){
   const mutation={op,id,data,timestamp:new Date().toISOString(),status:'pending'};
   closeAdsCampaignModal();
   _adsQueueMutation(mutation);
+}
+
+// ─── Generador de campañas con IA ───────────────────────────
+function _adsTogglePujaObjetivo(){
+  const sel=document.getElementById('adsCampaignModalPuja'); if(!sel) return;
+  const v=sel.value;
+  const g=document.getElementById('adsCampaignModalPujaObjetivoGroup');
+  const lb=document.getElementById('adsCampaignModalPujaObjetivoLabel');
+  const inp=document.getElementById('adsCampaignModalPujaObjetivo');
+  if(!g) return;
+  if(v==='TARGET_CPA'){g.style.display='';if(lb)lb.textContent='CPA objetivo (CLP)';if(inp)inp.placeholder='Ej: 8000';}
+  else if(v==='TARGET_ROAS'){g.style.display='';if(lb)lb.textContent='ROAS objetivo (ej: 3 = 300%)';if(inp)inp.placeholder='Ej: 3';}
+  else{g.style.display='none';}
+}
+
+const ADS_BUILDER_SYS=`Eres el generador experto de campañas de Google Ads de The Lab Solutions, fabricación digital B2B a medida en Santiago, Chile.
+NEGOCIO: la web convierte una visita en una cotización (WhatsApp o formulario). Comprador B2B (marketing, RRHH, productoras de eventos, retail) que cotiza con un proveedor y tiene plazo. Se optimiza por GANANCIA real del CRM, no por volumen de clics.
+9 LÍNEAS (usa el slug EXACTO en la URL final https://thelab.solutions/servicios/<slug>):
+- Activaciones (activaciones)
+- Premiaciones (premiaciones): trofeos, galvanos, medallas, reconocimientos
+- Merchandising (merchandising): regalos corporativos, artículos promocionales
+- Cajas Personalizadas (cajas-personalizadas): packaging
+- Impresión 3D (impresion-3d): piezas, prototipos, maquetas
+- Volumétricos (volumetricos): letras corpóreas, estructuras, neón/LED
+- Cartelería (carteleria): señalética, letreros acrílico
+- Papelería (papeleria): imprenta corporativa, tarjetas, membretes
+- Chip The Lab (chip-the-lab): tarjetas NFC
+REGLAS 2026 (aplícalas):
+- Concordancia por defecto FRASE (AMPLIA solo con puja inteligente y datos).
+- Puja: empieza en MAXIMIZE_CLICKS para juntar datos; usa TARGET_CPA o TARGET_ROAS solo si el brief dice que ya hay volumen de conversiones.
+- Geo: "Región Metropolitana, Chile", modo PRESENCE. Redes: socios y display en false.
+- Palabras clave con intención comercial chilena (cotizar, personalizado, para empresas, corporativo, por mayor, santiago); 10-15 por campaña.
+- Negativas: incluye empleo, trabajo, gratis, plantilla, pdf, como hacer, diy, tutorial, curso, usado, segunda mano; para impresión 3D agrega ademas steam, juego, render, blender, roblox, minecraft, lentes 3d.
+- RSA: 12-15 títulos ÚNICOS de máximo 30 caracteres (keyword, diferenciador premium, prueba/años, CTA "Cotiza por WhatsApp") y 4 descripciones de máximo 90 caracteres.
+- Presupuesto diario en CLP realista (3000-10000 por línea).
+Responde SOLO con este JSON, sin texto adicional y sin bloques de código:
+{"nombre":"","tipo":"SEARCH","presupuesto":6000,"concordancia":"FRASE","maxCpc":800,"pujaEstrategia":"MAXIMIZE_CLICKS","pujaObjetivo":0,"ubicaciones":"Región Metropolitana, Chile","ubicModo":"PRESENCE","redSocios":false,"redDisplay":false,"finalUrl":"https://thelab.solutions/servicios/premiaciones","path1":"","path2":"","palabrasClave":[],"negativas":[],"titulos":[],"descripciones":[],"metricas":{"ctr":">3%","cpc":"<$1.200 CLP","cpa":"<$8.000 CLP","roas":">3x (CRM)","convMes":"15-30"},"checklist":["Poner la etiqueta de conversión en la web antes de activar","Confirmar geo en modo Presencia (RM) en Google Ads","Importar conversiones offline del CRM (gclid) para optimizar por ganancia real","Adjuntar sitelinks a cada /servicios y asset de mensaje/WhatsApp"]}`;
+
+async function iaBuildCampaign(){
+  const brief=prompt('¿Qué campaña quieres que arme la IA?\nIndica la línea de producto y el objetivo.\n\nEj: Premiaciones — captar pedidos de galvanos y trofeos para empresas de fin de año');
+  if(brief===null) return;
+  const q=(brief||'').trim();
+  if(!q){toast('Describe la campaña que quieres crear','error');return;}
+  toast('✨ La IA está armando la campaña…','info');
+  try{
+    let ctx='';
+    try{ if(typeof state!=='undefined'&&state.loaded&&window._adsLastData&&!window._adsLastData.demo) ctx=('\n\nDATOS ACTUALES DE LA CUENTA (referencia):\n'+buildAgentContext('ADS')).slice(0,3500); }catch(e){}
+    const raw=await callClaude(ADS_BUILDER_SYS,'BRIEF: '+q+ctx+'\n\nDevuelve SOLO el JSON.');
+    const prop=_parseCampaignJSON(raw);
+    if(!prop||!prop.nombre){toast('La IA no devolvió una campaña válida — reintenta','error');return;}
+    _applyIACampaign(prop);
+    toast('✓ Campaña generada — revísala y guarda','success');
+  }catch(e){toast('Error IA: '+((e&&e.message)||e),'error');}
+}
+
+function _parseCampaignJSON(raw){
+  if(!raw) return null;
+  const s=String(raw).trim();
+  const a=s.indexOf('{'), b=s.lastIndexOf('}');
+  if(a<0||b<0) return null;
+  try{return JSON.parse(s.slice(a,b+1));}catch(e){return null;}
+}
+
+function _applyIACampaign(p){
+  openCreateCampaign();
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!=null&&v!=='') el.value=v;};
+  set('adsCampaignModalNombre',p.nombre);
+  set('adsCampaignModalTipo',(p.tipo||'SEARCH'));
+  set('adsCampaignModalPresupuesto',p.presupuesto);
+  set('adsCampaignModalConcordancia',(p.concordancia||'FRASE').toString().toUpperCase());
+  set('adsCampaignModalMaxCpc',p.maxCpc);
+  set('adsCampaignModalPuja',(p.pujaEstrategia||'MAXIMIZE_CLICKS').toString().toUpperCase());
+  _adsTogglePujaObjetivo();
+  if(p.pujaObjetivo) set('adsCampaignModalPujaObjetivo',p.pujaObjetivo);
+  set('adsCampaignModalUbicaciones',p.ubicaciones);
+  set('adsCampaignModalUbicModo',(p.ubicModo||'PRESENCE').toString().toUpperCase());
+  const rs=document.getElementById('adsCampaignModalRedSocios');if(rs) rs.checked=!!p.redSocios;
+  const rd=document.getElementById('adsCampaignModalRedDisplay');if(rd) rd.checked=!!p.redDisplay;
+  set('adsCampaignModalFinalUrl',p.finalUrl);
+  set('adsCampaignModalPath1',p.path1);
+  set('adsCampaignModalPath2',p.path2);
+  if(Array.isArray(p.titulos)) set('adsCampaignModalTitulos',p.titulos.join('\n'));
+  if(Array.isArray(p.descripciones)) set('adsCampaignModalDescripciones',p.descripciones.join('\n'));
+  if(Array.isArray(p.palabrasClave)){_adsCreateKeywords=p.palabrasClave.slice();set('adsCampaignModalKeywords',p.palabrasClave.join('\n'));}
+  if(Array.isArray(p.negativas)) set('adsCampaignModalNegativas',p.negativas.join('\n'));
+  const info=document.getElementById('adsCampaignModalIAInfo');
+  if(info){
+    const m=p.metricas||{};
+    const met=Object.keys(m).length?('<div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:4px">🎯 Métricas objetivo</div><div style="font-size:11px;color:var(--text2);line-height:1.7">'+Object.keys(m).map(k=>'<b>'+escapeHtml(k)+':</b> '+escapeHtml(String(m[k]))).join(' · ')+'</div>'):'';
+    const chk=(Array.isArray(p.checklist)&&p.checklist.length)?('<div style="font-weight:700;color:var(--warn);font-size:11px;margin:8px 0 4px">✅ Terminar en Google Ads</div><ul style="font-size:11px;color:var(--text2);margin:0;padding-left:16px;line-height:1.6">'+p.checklist.map(c=>'<li>'+escapeHtml(String(c))+'</li>').join('')+'</ul>'):'';
+    info.innerHTML='<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">'+(met||'')+(chk||'')+'</div>';
+    info.style.display=(met||chk)?'':'none';
+  }
 }
 
 function confirmDeleteCampaign(){
@@ -24760,6 +24911,8 @@ function qcalcClear(kind){
   <div class="modal-card">
     <div class="modal-title" id="adsCampaignModalTitle">Nueva Campaña</div>
     <div class="modal-desc" id="adsCampaignModalDesc">Los cambios se aplicarán en la próxima ejecución del Script 2.</div>
+    <div id="adsCampaignModalCreateAI" style="margin-top:10px"><button class="btn btn-ghost btn-sm act-item-cyan" onclick="iaBuildCampaign()">✨ Rellenar con IA</button></div>
+    <div id="adsCampaignModalIAInfo" style="display:none;margin-top:12px"></div>
     <input type="hidden" id="adsCampaignModalId">
     <input type="hidden" id="adsCampaignModalOp">
     <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
@@ -24787,6 +24940,67 @@ function qcalcClear(kind){
           <option value="ENABLED">Habilitada</option>
           <option value="PAUSED">Pausada</option>
         </select>
+      </div>
+      <div id="adsCampaignModalCreateOpts">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);margin:6px 0 2px">Segmentación y puja</div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Concordancia de palabras clave</label>
+            <select class="field-input" id="adsCampaignModalConcordancia">
+              <option value="FRASE" selected>Frase (recomendada)</option>
+              <option value="EXACTA">Exacta</option>
+              <option value="AMPLIA">Amplia (solo con puja inteligente)</option>
+            </select>
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">CPC máximo (CLP)</label>
+            <input class="field-input" id="adsCampaignModalMaxCpc" type="number" min="50" step="50" value="800" placeholder="Ej: 800">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Estrategia de puja</label>
+            <select class="field-input" id="adsCampaignModalPuja" onchange="_adsTogglePujaObjetivo()">
+              <option value="MAXIMIZE_CLICKS" selected>Maximizar clics (para partir)</option>
+              <option value="MANUAL_CPC">CPC manual</option>
+              <option value="MAXIMIZE_CONVERSIONS">Maximizar conversiones</option>
+              <option value="TARGET_CPA">CPA objetivo</option>
+              <option value="TARGET_ROAS">ROAS objetivo</option>
+            </select>
+          </div>
+          <div class="field-group" style="flex:1;display:none" id="adsCampaignModalPujaObjetivoGroup">
+            <label class="field-label" id="adsCampaignModalPujaObjetivoLabel">Objetivo</label>
+            <input class="field-input" id="adsCampaignModalPujaObjetivo" type="number" min="0" placeholder="Ej: 8000">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:2">
+            <label class="field-label">Ubicaciones</label>
+            <input class="field-input" id="adsCampaignModalUbicaciones" value="Región Metropolitana, Chile" placeholder="Ej: Región Metropolitana, Chile">
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Modo de ubicación</label>
+            <select class="field-input" id="adsCampaignModalUbicModo">
+              <option value="PRESENCE" selected>Presencia</option>
+              <option value="PRESENCE_OR_INTEREST">Presencia o interés</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Redes</label>
+          <div style="display:flex;gap:18px;font-size:12px;color:var(--text2);padding:4px 0">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsCampaignModalRedSocios"> Socios de búsqueda</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsCampaignModalRedDisplay"> Red de Display</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Palabras clave (una por línea)</label>
+          <textarea class="field-input" id="adsCampaignModalKeywords" rows="4" placeholder="galvanos personalizados&#10;trofeos corporativos&#10;premios para empresa" style="resize:vertical"></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Palabras clave negativas (una por línea)</label>
+          <textarea class="field-input" id="adsCampaignModalNegativas" rows="3" placeholder="empleo&#10;gratis&#10;cómo hacer&#10;curso" style="resize:vertical"></textarea>
+        </div>
       </div>
       <div class="field-group" id="adsCampaignModalAnuncioGroup">
         <label class="field-label">Anuncio responsivo (se publica con la campaña)</label>
