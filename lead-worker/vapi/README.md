@@ -15,6 +15,9 @@ Llamada +56  ─►  VAPI (voz + Claude + Deepgram)
 
 - **`crear_lead`** (durante la llamada): crea/deduplica el Cliente y encola al `LEAD_AGENT`
   (reutiliza el mismo pipeline que web/Google Ads/LinkedIn). Origen lead = `Teléfono (IA)`.
+- **`estimar_cotizacion`** (Fase 2): devuelve un rango de precio **referencial** desde la
+  tabla `Precios_Referencia` (ver [`precios-referencia.md`](./precios-referencia.md)).
+  Inactiva hasta que la tabla tenga filas: con la tabla vacía no da montos.
 - **`transferCall`**: cuenta estratégica → Gustavo; venta compleja → Nicanor; urgencia →
   el primero disponible. Solo en horario hábil.
 - **`end-of-call-report`**: al colgar guarda transcripción y grabación en el Cliente; si
@@ -70,6 +73,9 @@ curl -sS -X POST http://localhost:8787/webhooks/voice \
 - **Legal (Chile):** el aviso "asistente con IA + llamada grabada" ya va en `firstMessage`
   (exigible hoy por SERNAC; grabación obligatoria en venta telefónica, Ley 21.398).
   Textos alternativos y notas de cumplimiento en el documento de contexto (§7).
-- **Precios:** Fase 1 no entrega montos. El rango referencial es Fase 2 (requiere tabla de
-  precios).
+- **Precios (Fase 2):** la tool `estimar_cotizacion` ya está implementada y queda
+  **inactiva** hasta que exista la tabla `Precios_Referencia`
+  ([`precios-referencia.md`](./precios-referencia.md)). Con la tabla vacía el agente no da
+  montos (comportamiento Fase 1); al cargarla, empieza a leer rangos referenciales **sin
+  tocar código**.
 </content>

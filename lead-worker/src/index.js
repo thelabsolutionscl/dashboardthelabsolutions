@@ -760,6 +760,15 @@ async function handleVoice(request, env, ctx, cors) {
           console.error("[leads-worker] voice crear_lead:", e.message);
           results.push({ name: c.name, toolCallId: c.id, error: "No se pudo registrar el pedido." });
         }
+      } else if (c.name === "estimar_cotizacion") {
+        // Fase 2: rango referencial. Devuelve texto listo para que el agente lo
+        // lea. Si no hay tabla/fila de precios, cae al mensaje de "cotización en
+        // <24 h" (comportamiento Fase 1) — nunca inventa montos.
+        results.push({
+          name: c.name,
+          toolCallId: c.id,
+          result: await estimarCotizacion(env, c.args),
+        });
       } else {
         // Tool desconocida: responde algo para no bloquear el turno del modelo.
         results.push({ name: c.name, toolCallId: c.id, result: "ok" });
@@ -835,6 +844,69 @@ async function handleVoiceEndOfCall(env, ctx, msg) {
       })
     );
   }
+}
+
+// Fase 2 — rango referencial. Busca en la tabla `Precios_Referencia` (Airtable)
+// la fila de la línea pedida cuyo rango de cantidad contenga `quantity`, y
+// devuelve un texto "referencial y sujeto a confirmación" para que el agente lo
+// lea. Diseño a prueba de fallos: si no hay tabla, ni fila, ni precio, devuelve
+// el mensaje de "cotización en <24 h" (comportamiento Fase 1) — nunca inventa.
+// Campos esperados en Precios_Referencia: Línea, "Cantidad mínima",
+// "Cantidad máxima", "Precio desde", "Precio hasta", Nota (todos opcionales
+// salvo Línea). Mientras la tabla esté vacía, esta tool no da montos.
+async function estimarCotizacion(env, args) {
+  const FALLBACK = "Preparamos la cotización precisa y te respondemos en menos de 24 horas hábiles.";
+  const svc = str((args || {}).service);
+  if (!svc) return "Para estimar un rango necesito saber qué línea o producto necesitas.";
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return FALLBACK;
+
+  const toNum = (v) => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const qty = toNum(String((args || {}).quantity ?? "").replace(/[^0-9]/g, ""));
+
+  const esc = (s) => String(s).replace(/'/g, "\\'");
+  const formula = `LOWER({Línea})=LOWER('${esc(svc)}')`;
+  const url =
+    `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Precios_Referencia")}` +
+    `?maxRecords=25&filterByFormula=${encodeURIComponent(formula)}`;
+
+  let rows = [];
+  try {
+    const r = await fetch(url, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+    if (r.ok) rows = (await r.json())?.records || [];
+  } catch (e) {
+    console.error("[leads-worker] estimarCotizacion:", e.message);
+    return FALLBACK;
+  }
+  if (!rows.length) return FALLBACK;
+
+  // Fila cuyo [Cantidad mínima, Cantidad máxima] contiene qty; si no hay qty o
+  // ninguna calza, usa la primera fila de la línea.
+  const inRange = (f) => {
+    if (qty == null) return false;
+    const min = toNum(f["Cantidad mínima"]);
+    const max = toNum(f["Cantidad máxima"]);
+    return (min == null || qty >= min) && (max == null || qty <= max);
+  };
+  const row = (qty != null && rows.find((r) => inRange(r.fields))) || rows[0];
+  const f = row.fields || {};
+  const desde = toNum(f["Precio desde"]);
+  const hasta = toNum(f["Precio hasta"]);
+  const nota = str(f["Nota"]);
+  if (desde == null && hasta == null) return FALLBACK;
+
+  const clp = (n) => "$" + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const rango =
+    desde != null && hasta != null
+      ? `${clp(desde)} a ${clp(hasta)} por unidad`
+      : `desde ${clp(desde != null ? desde : hasta)} por unidad`;
+  return (
+    `Como referencia, el valor unitario va en torno a ${rango}${nota ? ` (${nota})` : ""}. ` +
+    `Es un rango referencial y sujeto a confirmación; la cotización final la afinamos hoy.`
+  );
 }
 
 /* ════════════════════════════════════════════════════════════════════════
