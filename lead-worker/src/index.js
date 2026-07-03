@@ -98,6 +98,24 @@ export default {
         return await handleSocial(request, env, ctx, cors);
       }
 
+      // Piloto automático de Google Ads: aprobación/rechazo desde el email
+      if (url.pathname === "/ads/decision") {
+        return await handleAdsDecision(request, env);
+      }
+
+      // Disparo manual del piloto (para probar sin esperar el cron semanal).
+      // Requiere ADS_APPROVAL_SECRET (sin fallback: PUBLIC_LEAD_KEY viaja en el
+      // bundle de la web y no sirve para autorizar cambios de campañas).
+      if (request.method === "POST" && url.pathname === "/ads/autopilot/run") {
+        const key = request.headers.get("X-Autopilot-Key") || "";
+        const expected = env.ADS_APPROVAL_SECRET || "";
+        if (!expected || !timingSafeEqual(key, expected)) {
+          return json({ ok: false, error: "No autorizado" }, 401, cors);
+        }
+        const res = await adsAutopilotRun(env, { force: true });
+        return json({ ok: true, ...res }, 200, cors);
+      }
+
       return json({ ok: false, error: "Ruta no encontrada" }, 404, cors);
     } catch (e) {
       console.error("[leads-worker]", e?.stack || e?.message || String(e));
@@ -105,8 +123,12 @@ export default {
     }
   },
 
-  // Cron: reintenta los leads que quedaron en buffer si Airtable falló
+  // Crons: cada hora reintenta dead-letters; el lunes corre el piloto de Ads
   async scheduled(event, env, ctx) {
+    if (event.cron === "0 12 * * 1") {
+      ctx.waitUntil(adsAutopilotRun(env, {}).catch((e) => console.error("[ads-autopilot]", e.message)));
+      return;
+    }
     ctx.waitUntil(retryDeadLetters(env));
   },
 };
@@ -919,7 +941,7 @@ Responde SOLO un objeto JSON con EXACTAMENTE estas claves:
  "resumen": "<resumen interno breve>"
 }`;
 
-async function callClaude(env, system, user) {
+async function callClaude(env, system, user, opts = {}) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -928,8 +950,8 @@ async function callClaude(env, system, user) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
-      max_tokens: 1200,
+      model: opts.model || env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
+      max_tokens: opts.maxTokens || 1200,
       system,
       messages: [{ role: "user", content: user }],
     }),
@@ -1447,4 +1469,528 @@ async function ofHeartbeat(env, id) {
       typecast: true,
     }),
   });
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * PILOTO AUTOMÁTICO GOOGLE ADS (semanal, con aprobación por email)
+ *
+ * Cron (lunes) → lee señales (ventas por línea, capacidad de producción,
+ * campañas desde el endpoint del Script 1) → Claude propone ajustes →
+ * guardrails duros filtran → guarda la propuesta en Agent_Queue (Pendiente)
+ * → email con botones Aprobar / Rechazar → al aprobar, las mutaciones se
+ * encolan en el Script 1 y el Script 2 las aplica en Google Ads.
+ *
+ * Config (wrangler.toml / secrets):
+ *   ADS_AUTOPILOT=true            interruptor maestro
+ *   ADS_ENDPOINT=<URL Script 1>   lectura de campañas + cola de mutaciones
+ *   ADS_SCRIPT_SECRET             secret del Script 1 (default thelab2025)
+ *   ADS_APPROVAL_SECRET           firma los links de aprobación (fallback PUBLIC_LEAD_KEY)
+ *   ADS_AUTOPILOT_EMAIL           destinatario (fallback LEADS_NOTIFY_TO)
+ *   WORKER_PUBLIC_URL             URL pública del worker (para los links del email)
+ * Kill-switch sin deploy: registro "ADS_AUTOPILOT" en Monitor Sistema con
+ * Notes = {"enabled":false}. Ahí también se pueden ajustar los límites.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+// Las 9 líneas: nombre visible (= "Servicio interés" en Clientes), términos para
+// matchear campañas por nombre, y plantilla para crear campaña si falta cobertura.
+const AP_LINEAS = [
+  { slug: "chip-the-lab", nombre: "Chip The Lab", match: ["nfc", "chip"], presupuesto: 3000,
+    kws: ["tarjetas nfc", "tarjeta de presentacion nfc", "tarjetas nfc empresa", "tarjeta digital nfc"],
+    titulos: ["Tarjetas NFC", "Tarjeta Digital NFC", "NFC para Empresas", "The Lab Solutions"],
+    descs: ["Tarjetas de presentación NFC personalizadas: comparte tu contacto al tocar.", "Tarjetas inteligentes NFC para tu equipo. Cotiza las tuyas online."] },
+  { slug: "impresion-3d", nombre: "Impresión 3D", match: ["3d"], presupuesto: 8000,
+    kws: ["impresión 3d santiago", "servicio de impresion 3d", "piezas 3d a medida", "prototipo 3d"],
+    titulos: ["Impresión 3D en Santiago", "Piezas y Prototipos 3D", "Impresión 3D a Medida", "The Lab Solutions"],
+    descs: ["Impresión 3D profesional: piezas, prototipos y repuestos a medida.", "Llevamos tu idea a una pieza real. Cotiza tu proyecto 3D en Santiago."] },
+  { slug: "premiaciones", nombre: "Premiaciones", match: ["premiacion", "trofeo", "galvano", "medalla"], presupuesto: 6000,
+    kws: ["galvanos personalizados", "trofeos corporativos", "medallas personalizadas", "premios para empresa"],
+    titulos: ["Galvanos y Trofeos", "Premiaciones Corporativas", "Trofeos Personalizados", "The Lab Solutions"],
+    descs: ["Galvanos, trofeos y medallas personalizados para premiar a tu equipo.", "Fabricación a medida para tu premiación. Cotiza online."] },
+  { slug: "volumetricos", nombre: "Volumétricos", match: ["volumetric", "corpore", "neon", "neón"], presupuesto: 5000,
+    kws: ["letras corporeas", "letrero neon led", "logo corporeo", "letreros luminosos led"],
+    titulos: ["Letras Corpóreas y Neón", "Volumétricos a Medida", "Letreros Neón LED", "The Lab Solutions"],
+    descs: ["Letras corpóreas, logos 3D y neón LED personalizados para tu marca.", "Volumétricos y estructuras para oficina o evento. Cotiza a medida."] },
+  { slug: "carteleria", nombre: "Cartelería", match: ["carteler", "señalet", "senalet", "letrero", "acril"], presupuesto: 6000,
+    kws: ["señaletica corporativa", "letrero acrilico", "señalizacion empresa", "placas acrilico"],
+    titulos: ["Cartelería y Señalética", "Señalética en Acrílico", "Letreros para Empresas", "The Lab Solutions"],
+    descs: ["Cartelería y señalética corporativa en acrílico con corte láser.", "Letreros, rótulos y placas a medida para tu empresa. Cotiza online."] },
+  { slug: "activaciones", nombre: "Activaciones", match: ["activacion", "activación", "btl"], presupuesto: 6000,
+    kws: ["activaciones de marca", "activaciones btl", "stands para activacion", "activacion marca santiago"],
+    titulos: ["Activaciones de Marca", "Activaciones BTL a Medida", "Producción de Activaciones", "The Lab Solutions"],
+    descs: ["Activaciones de marca y BTL producidas end-to-end para tu campaña o evento.", "Diseño, fabricación y montaje. Cotiza tu activación en Santiago."] },
+  { slug: "merchandising", nombre: "Merchandising", match: ["merch", "regalo", "promocional"], presupuesto: 6000,
+    kws: ["merchandising corporativo", "regalos corporativos", "articulos promocionales", "regalos corporativos por mayor"],
+    titulos: ["Merchandising Corporativo", "Regalos Corporativos", "Artículos Promocionales", "The Lab Solutions"],
+    descs: ["Merchandising y regalos corporativos personalizados para tu marca.", "Kits, artículos promocionales y packs por mayor. Cotiza para tu empresa."] },
+  { slug: "cajas-personalizadas", nombre: "Cajas Personalizadas", match: ["caja", "packaging"], presupuesto: 4000,
+    kws: ["cajas personalizadas", "packaging personalizado", "packaging corporativo", "cajas con logo empresa"],
+    titulos: ["Cajas Personalizadas", "Packaging a Medida", "Cajas con tu Logo", "The Lab Solutions"],
+    descs: ["Cajas y packaging personalizados para regalo o producto corporativo.", "Diseño y fabricación de cajas a medida con tu marca. Cotiza online."] },
+  { slug: "papeleria", nombre: "Papelería", match: ["papeler", "imprenta", "tarjeta", "membrete"], presupuesto: 3000,
+    kws: ["papeleria corporativa", "tarjetas de presentacion", "imprenta corporativa", "membrete personalizado"],
+    titulos: ["Papelería Corporativa", "Tarjetas y Membretes", "Imprenta para Empresas", "The Lab Solutions"],
+    descs: ["Papelería corporativa: tarjetas, membretes, sellos y carpetas.", "Imagen profesional para tu empresa. Cotiza tu papelería online."] },
+];
+
+const AP_DEFAULTS = {
+  maxChangePct: 0.3,     // cambio máx de presupuesto por semana
+  capTotalDiario: 60000, // tope de presupuesto diario total (CLP) tras los cambios
+  minConv: 8,            // bajo esto no se toman decisiones agresivas
+  cpaSano: 8000,         // CLP — no pausar campañas con CPA bajo esto
+  maxAcciones: 6,
+  maxCrear: 1,
+  presupuestoNuevoMax: 10000, // CLP/día máx para una campaña creada por el piloto
+};
+
+function apNorm(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Asigna cada campaña a lo más una línea (prioridad = orden de AP_LINEAS)
+function apMatchCampaigns(campanas) {
+  const porLinea = {}; const usadas = new Set();
+  for (const l of AP_LINEAS) {
+    for (const c of campanas || []) {
+      if (usadas.has(c.id)) continue;
+      const n = apNorm(c.nombre);
+      if (l.match.some((t) => n.includes(apNorm(t)))) { porLinea[l.slug] = c; usadas.add(c.id); break; }
+    }
+  }
+  return porLinea;
+}
+
+async function apAirtableList(env, table, params = {}) {
+  const q = new URLSearchParams();
+  if (params.filterByFormula) q.set("filterByFormula", params.filterByFormula);
+  (params.fields || []).forEach((f) => q.append("fields[]", f));
+  q.set("pageSize", "100");
+  let all = [], offset = null;
+  do {
+    const url = `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent(table)}?${q.toString()}${offset ? "&offset=" + encodeURIComponent(offset) : ""}`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${env.AIRTABLE_TOKEN}` } });
+    if (!r.ok) throw new Error(`Airtable ${table} ${r.status}`);
+    const d = await r.json();
+    all = all.concat(d.records || []);
+    offset = d.offset || null;
+  } while (offset && all.length < (params.maxRecords || 2000));
+  return all;
+}
+
+async function apHmacHex(secret, msg) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(msg));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Huella corta de las mutaciones: va dentro de la firma del link de aprobación,
+// así un token no puede aplicar un payload distinto al que se propuso (TOCTOU).
+async function apMutHash(mutaciones) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(mutaciones || [])));
+  return [...new Uint8Array(d)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Config editable sin deploy: Monitor Sistema → registro Name="ADS_AUTOPILOT",
+// Notes = JSON {enabled, maxChangePct, capTotalDiario, minConv, cpaSano, email}
+async function apLoadConfig(env) {
+  const cfg = { ...AP_DEFAULTS, enabled: true, email: env.ADS_AUTOPILOT_EMAIL || env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com" };
+  try {
+    const recs = await apAirtableList(env, "Monitor Sistema", {
+      filterByFormula: `{Name}='ADS_AUTOPILOT'`, maxRecords: 1,
+    });
+    if (recs[0]?.fields?.Notes) Object.assign(cfg, JSON.parse(recs[0].fields.Notes));
+  } catch (e) { /* sin config remota → defaults */ }
+  return cfg;
+}
+
+// ── Señales por línea: leads, ingresos, ocupación, campaña asociada ──────
+async function apGatherSignals(env) {
+  const DAYS = 28;
+  const cutoff = new Date(Date.now() - DAYS * 86400000);
+
+  // Campañas (cache del Script 1)
+  const adsRes = await fetch(`${env.ADS_ENDPOINT}?days=30`);
+  const ads = await adsRes.json().catch(() => null);
+  if (!ads || ads.ok === false || !Array.isArray(ads.campanas)) {
+    throw new Error("Sin datos de campañas en el endpoint (ejecuta el Script 2 primero)");
+  }
+
+  const [clientes, pedidos, maquinas, eventos] = await Promise.all([
+    apAirtableList(env, "Clientes", { fields: ["Servicio interés"] }),
+    apAirtableList(env, "Pedidos", { fields: ["Estado pedido", "Monto total (CLP)", "Cliente"] }),
+    apAirtableList(env, "Maquinas", { fields: ["id", "modelo", "estado"] }).catch(() => []),
+    apAirtableList(env, "Maquinas_Eventos", {
+      fields: ["maquina_id", "fecha", "tipo"],
+      filterByFormula: `IS_AFTER({fecha}, DATEADD(TODAY(), -8, 'days'))`,
+    }).catch(() => []),
+  ]);
+
+  const servicioDeCliente = {};
+  clientes.forEach((c) => { servicioDeCliente[c.id] = apNorm(c.fields?.["Servicio interés"]); });
+
+  // Ocupación 3D: slots de máquinas FDM esta semana (mismo cálculo del dashboard)
+  const ids3d = maquinas.filter((m) => ["K1", "K2", "K2 Plus", "Ender-5 Max", "Giga"].includes(m.fields?.modelo)).map((m) => m.fields?.id).filter(Boolean);
+  const enMantGlobal = maquinas.filter((m) => ["K1", "K2", "K2 Plus", "Ender-5 Max", "Giga"].includes(m.fields?.modelo) && m.fields?.estado === "mantencion").length;
+  const slots = Math.max(ids3d.length * 5 - enMantGlobal * 5, 1);
+  let enUso3d = 0;
+  eventos.forEach((e) => { if (e.fields?.tipo === "uso" && ids3d.includes(e.fields?.maquina_id)) enUso3d++; });
+  const occ3d = ids3d.length ? Math.min(Math.round((enUso3d / slots) * 100), 100) : null;
+
+  // Ocupación general: pedidos activos (proxy, igual que el dashboard)
+  const activos = pedidos.filter((p) => !["Despachado", "Cancelado"].includes(p.fields?.["Estado pedido"] || "")).length;
+  const occGeneral = Math.min(Math.round((activos / 20) * 100), 100);
+
+  const porLinea = apMatchCampaigns(ads.campanas);
+  const lineas = AP_LINEAS.map((l) => {
+    const nombreNorm = apNorm(l.nombre);
+    const leads28 = clientes.filter((c) => {
+      const d = c.createdTime ? new Date(c.createdTime) : null;
+      return d && d >= cutoff && apNorm(c.fields?.["Servicio interés"]) === nombreNorm;
+    }).length;
+    let revenue28 = 0, pedidos28 = 0;
+    pedidos.forEach((p) => {
+      const f = p.fields || {};
+      if ((f["Estado pedido"] || "") === "Cancelado") return;
+      const d = p.createdTime ? new Date(p.createdTime) : null;
+      if (!d || d < cutoff) return;
+      const cid = Array.isArray(f.Cliente) ? f.Cliente[0] : null;
+      if (cid && servicioDeCliente[cid] === nombreNorm) {
+        revenue28 += Math.round((f["Monto total (CLP)"] || 0) / 1.19);
+        pedidos28++;
+      }
+    });
+    const camp = porLinea[l.slug] || null;
+    return {
+      slug: l.slug, nombre: l.nombre,
+      ocupacion: l.slug === "impresion-3d" && occ3d != null ? occ3d : occGeneral,
+      leads28, revenue28, pedidos28,
+      camp: camp ? {
+        id: String(camp.id), nombre: camp.nombre, estado: camp.estado,
+        presupuesto: camp.presupuesto || 0, gasto: camp.gasto || 0,
+        clics: camp.clics || 0, conversiones: camp.conversiones || 0,
+      } : null,
+    };
+  });
+
+  return { lineas, totals: { gasto: ads.gasto || 0, conversiones: ads.conversiones || 0, activos, occGeneral, occ3d }, guardado: ads.guardado };
+}
+
+// ── Guardrails duros (puros, testeables) ─────────────────────────────────
+export function applyAutopilotGuardrails(acciones, lineas, cfg) {
+  const c = { ...AP_DEFAULTS, ...cfg };
+  const porSlug = {}; lineas.forEach((l) => { porSlug[l.slug] = l; });
+  const aprobadas = [], descartadas = [];
+  let creadas = 0;
+  const lineasTocadas = new Set(); // una sola acción por línea por semana (evita contradicciones)
+  const desc = (a, motivo) => descartadas.push({ ...a, descarte: motivo });
+
+  for (const a0 of Array.isArray(acciones) ? acciones : []) {
+    if (aprobadas.length >= c.maxAcciones) { desc(a0, "tope de acciones por semana"); continue; }
+    const a = { ...a0, tipo: apNorm(a0.tipo) };
+    const linea = porSlug[a.linea];
+    if (!linea) { desc(a, "línea desconocida"); continue; }
+    if (lineasTocadas.has(a.linea)) { desc(a, "ya hay una acción sobre esta línea"); continue; }
+    const camp = linea.camp;
+
+    if (a.tipo === "presupuesto") {
+      if (!camp || !camp.id) { desc(a, "sin campaña asociada"); continue; }
+      const old = camp.presupuesto || 0;
+      let nuevo = Math.round(Number(a.nuevo) || 0);
+      if (nuevo < 1000) { desc(a, "presupuesto bajo el mínimo"); continue; }
+      if (old > 0) {
+        const lo = Math.round(old * (1 - c.maxChangePct)), hi = Math.round(old * (1 + c.maxChangePct));
+        nuevo = Math.min(Math.max(nuevo, lo), hi);
+      } else if (nuevo > c.presupuestoNuevoMax) nuevo = c.presupuestoNuevoMax;
+      if (nuevo === old) { desc(a, "sin cambio tras aplicar límites"); continue; }
+      if (nuevo > old && linea.ocupacion >= 85) { desc(a, "línea saturada — no escalar"); continue; }
+      if (nuevo > old && (camp.conversiones || 0) < 1 && linea.leads28 < 3) { desc(a, "sin señal de conversión para escalar"); continue; }
+      aprobadas.push({ ...a, nuevo, anterior: old, id: camp.id, campana: camp.nombre }); lineasTocadas.add(a.linea);
+
+    } else if (a.tipo === "pausar") {
+      if (!camp || !camp.id) { desc(a, "sin campaña asociada"); continue; }
+      if (camp.estado !== "ENABLED") { desc(a, "ya está pausada"); continue; }
+      const cpa = camp.conversiones > 0 ? camp.gasto / camp.conversiones : Infinity;
+      const rentableGoogle = camp.conversiones >= c.minConv && cpa < c.cpaSano;
+      // ROAS-real (proxy): ingresos CRM de la línea vs gasto de la campaña — manda sobre el CPA de Google
+      const rentableCRM = camp.gasto > 0 && (linea.revenue28 || 0) / camp.gasto >= 1.5;
+      if ((rentableGoogle || rentableCRM) && linea.ocupacion < 85) {
+        desc(a, "campaña rentable — no pausar"); continue;
+      }
+      aprobadas.push({ ...a, id: camp.id, campana: camp.nombre }); lineasTocadas.add(a.linea);
+
+    } else if (a.tipo === "activar") {
+      if (!camp || !camp.id) { desc(a, "sin campaña asociada"); continue; }
+      if (camp.estado === "ENABLED") { desc(a, "ya está activa"); continue; }
+      if (linea.ocupacion >= 65) { desc(a, "carga alta — no reactivar"); continue; }
+      aprobadas.push({ ...a, id: camp.id, campana: camp.nombre }); lineasTocadas.add(a.linea);
+
+    } else if (a.tipo === "crear") {
+      if (camp) { desc(a, "la línea ya tiene campaña"); continue; }
+      if (creadas >= c.maxCrear) { desc(a, "tope de campañas nuevas por semana"); continue; }
+      if (linea.ocupacion >= 65) { desc(a, "carga alta — no abrir demanda"); continue; }
+      creadas++;
+      aprobadas.push({ ...a, campana: a.campana || `Búsqueda - ${linea.nombre}` }); lineasTocadas.add(a.linea);
+
+    } else desc(a, "tipo de acción no permitido");
+  }
+
+  // Tope de presupuesto diario total tras los cambios
+  const budgets = {};
+  lineas.forEach((l) => { if (l.camp && l.camp.estado === "ENABLED") budgets[l.camp.id] = l.camp.presupuesto || 0; });
+  const proyectar = () => {
+    const b = { ...budgets };
+    let extra = 0;
+    for (const a of aprobadas) {
+      if (a.tipo === "presupuesto") b[a.id] = a.nuevo;
+      else if (a.tipo === "pausar") delete b[a.id];
+      else if (a.tipo === "activar") b[a.id] = porSlug[a.linea]?.camp?.presupuesto || 0;
+      else if (a.tipo === "crear") extra += porSlug[a.linea] ? (AP_LINEAS.find((x) => x.slug === a.linea)?.presupuesto || 0) : 0;
+    }
+    return Object.values(b).reduce((s, v) => s + v, 0) + extra;
+  };
+  while (proyectar() > c.capTotalDiario) {
+    const i = aprobadas.map((a, idx) => ({ a, idx }))
+      .filter(({ a }) => a.tipo === "crear" || a.tipo === "activar" || (a.tipo === "presupuesto" && a.nuevo > (a.anterior || 0)))
+      .pop();
+    if (!i) break;
+    desc(aprobadas[i.idx], "tope de gasto diario total");
+    aprobadas.splice(i.idx, 1);
+  }
+
+  return { aprobadas, descartadas };
+}
+
+// Acciones aprobadas → mutaciones del Script 1/2 (se guardan junto a la propuesta)
+function apBuildMutations(aprobadas) {
+  const ts = () => new Date().toISOString();
+  return aprobadas.map((a) => {
+    if (a.tipo === "presupuesto") return { op: "edit", id: a.id, data: { presupuesto: a.nuevo }, timestamp: ts(), status: "pending" };
+    if (a.tipo === "pausar") return { op: "edit", id: a.id, data: { estado: "PAUSED" }, timestamp: ts(), status: "pending" };
+    if (a.tipo === "activar") return { op: "edit", id: a.id, data: { estado: "ENABLED" }, timestamp: ts(), status: "pending" };
+    if (a.tipo === "crear") {
+      const l = AP_LINEAS.find((x) => x.slug === a.linea);
+      return { op: "create", id: "", timestamp: ts(), status: "pending", data: {
+        nombre: a.campana, presupuesto: l.presupuesto, estado: "ENABLED", tipo: "SEARCH",
+        concordancia: "FRASE", maxCpc: 800, pujaEstrategia: "MAXIMIZE_CLICKS",
+        palabrasClave: l.kws,
+        negativas: ["empleo", "trabajo", "gratis", "curso", "como hacer", "plantilla", "pdf", "usado"],
+        anuncio: { finalUrl: `https://thelab.solutions/servicios/${l.slug}`, titulos: l.titulos, descripciones: l.descs },
+      } };
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+// ── Corrida semanal ──────────────────────────────────────────────────────
+async function adsAutopilotRun(env, { force = false } = {}) {
+  if (!force && env.ADS_AUTOPILOT !== "true") return { skipped: "ADS_AUTOPILOT desactivado" };
+  if (!env.ADS_ENDPOINT) return { skipped: "falta ADS_ENDPOINT" };
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return { skipped: "falta Airtable" };
+  if (!env.ANTHROPIC_API_KEY) return { skipped: "falta ANTHROPIC_API_KEY" };
+
+  const cfg = await apLoadConfig(env);
+  if (cfg.enabled === false && !force) return { skipped: "kill-switch en Monitor Sistema" };
+
+  const { lineas, totals, guardado } = await apGatherSignals(env);
+  if (guardado && Date.now() - new Date(guardado).getTime() > 3 * 86400000) {
+    await apSendEmail(env, cfg.email, "⚠ Piloto Ads: datos desactualizados",
+      `<p>Los datos de Google Ads tienen más de 3 días (última sync: ${guardado}). Ejecuta el Script 2 en Google Ads y vuelve a correr el piloto.</p>`);
+    return { skipped: "datos de campañas desactualizados" };
+  }
+
+  const sys = `Eres el piloto automático de Google Ads de The Lab Solutions (fabricación digital B2B, Santiago de Chile).
+Cada semana ajustas los presupuestos de campañas de búsqueda según DEMANDA real (leads e ingresos del CRM por línea) y CAPACIDAD de producción.
+REGLAS:
+- Sube presupuesto (máx +30%) solo si la línea tiene demanda (leads/ventas), la campaña convierte y la ocupación es <65%.
+- Baja presupuesto o pausa si la línea está saturada (ocupación >=85%) o la campaña gasta sin convertir.
+- Con <8 conversiones no tomes decisiones agresivas, salvo gasto alto con 0 conversiones.
+- Propón "crear" SOLO si una línea con demanda clara (leads28 >= 3) no tiene campaña y su ocupación es <65%.
+- Máximo 6 acciones. Si no hay nada claro que hacer, devuelve acciones: [].
+Responde SOLO un objeto JSON: {"resumen":"<2-3 líneas del razonamiento>","acciones":[{"tipo":"presupuesto|pausar|activar|crear","linea":"<slug>","nuevo":<CLP entero o null>,"motivo":"<corto, con números>"}]}`;
+
+  const user = `SEÑALES (últimos 28 días, ocupación = semana actual):\n` +
+    lineas.map((l) => `- ${l.slug} (${l.nombre}): leads=${l.leads28} · pedidos=${l.pedidos28} · ingresos_neto=$${l.revenue28.toLocaleString("es-CL")} · ocupación=${l.ocupacion}%` +
+      (l.camp ? ` · campaña="${l.camp.nombre}" [${l.camp.estado}] ppto=$${l.camp.presupuesto}/día gasto=$${Math.round(l.camp.gasto)} conv=${l.camp.conversiones}` : " · SIN CAMPAÑA")).join("\n") +
+    `\nTOTALES: gasto=$${Math.round(totals.gasto)} · conversiones=${totals.conversiones} · pedidos activos=${totals.activos} · tope diario total=$${cfg.capTotalDiario}`;
+
+  const raw = await callClaude(env, sys, user, { maxTokens: 2000, model: env.ADS_AUTOPILOT_MODEL || undefined });
+  let prop = null;
+  try { prop = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); } catch (e) { /* abajo */ }
+  if (!prop || !Array.isArray(prop.acciones)) return { skipped: "respuesta IA inválida" };
+
+  const { aprobadas, descartadas } = applyAutopilotGuardrails(prop.acciones, lineas, cfg);
+
+  if (!aprobadas.length) {
+    await apSendEmail(env, cfg.email, "Piloto Ads semanal — sin cambios",
+      `<p>${prop.resumen ? escHtml(prop.resumen) : "Sin acciones recomendadas esta semana."}</p>` +
+      (descartadas.length ? `<p style="color:#888;font-size:13px">Descartadas por guardrails: ${descartadas.map((d) => `${escHtml(d.tipo)} ${escHtml(d.linea)} (${escHtml(d.descarte)})`).join(" · ")}</p>` : ""));
+    return { ok: true, acciones: 0, descartadas: descartadas.length };
+  }
+
+  const mutaciones = apBuildMutations(aprobadas);
+
+  // Propuesta → Agent_Queue (Pendiente) para aprobar desde email o dashboard
+  const rec = await airtableCreateTolerant(env, "Agent_Queue", stripEmpty({
+    Evento: "ads.autopilot_proposal",
+    Entidad: "GoogleAds",
+    Agente: "ADS_AUTOPILOT",
+    Estado: "Pendiente",
+    Prioridad: "Alta",
+    "Input JSON": JSON.stringify({ lineas, totals }).slice(0, 95000),
+    Output: JSON.stringify({ resumen: prop.resumen || "", acciones: aprobadas, mutaciones, descartadas }).slice(0, 95000),
+    Source: "autopilot",
+    "Fecha creación": new Date().toISOString(),
+  }));
+  const recId = rec?.id;
+
+  // Email con botones Aprobar / Rechazar. Los links van firmados con
+  // ADS_APPROVAL_SECRET (sin fallback a claves públicas) e incluyen la huella
+  // del payload: si las mutaciones cambian después, el link deja de servir.
+  const base = (env.WORKER_PUBLIC_URL || "").replace(/\/$/, "");
+  const secret = env.ADS_APPROVAL_SECRET || "";
+  let botones = `<p style="color:#888">Aprueba o rechaza desde el dashboard → Web → Google Ads → Piloto automático.</p>`;
+  if (base && secret && recId) {
+    const mh = await apMutHash(mutaciones);
+    const tA = await apHmacHex(secret, `${recId}:approve:${mh}`);
+    const tR = await apHmacHex(secret, `${recId}:reject:${mh}`);
+    botones =
+      `<p style="margin:20px 0">` +
+      `<a href="${base}/ads/decision?id=${recId}&a=approve&t=${tA}" style="background:#0a7d5c;color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none;font-weight:600">✓ Aprobar y aplicar</a>` +
+      `&nbsp;&nbsp;<a href="${base}/ads/decision?id=${recId}&a=reject&t=${tR}" style="background:#555;color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none">✗ Rechazar</a></p>` +
+      `<p style="color:#888;font-size:12px">También puedes revisarla en el dashboard → Web → Google Ads → Piloto automático.</p>`;
+  }
+  const filas = aprobadas.map((a) => {
+    const det = a.tipo === "presupuesto" ? `$${(a.anterior || 0).toLocaleString("es-CL")} → <strong>$${a.nuevo.toLocaleString("es-CL")}</strong>/día` : a.tipo;
+    return `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${escHtml(a.linea)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${escHtml(a.campana || "")}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${det}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#555">${escHtml(a.motivo || "")}</td></tr>`;
+  }).join("");
+  await apSendEmail(env, cfg.email, `Piloto Ads semanal — ${aprobadas.length} cambio(s) propuesto(s)`,
+    `<p>${escHtml(prop.resumen || "")}</p>` +
+    `<table style="border-collapse:collapse;font-size:13px;width:100%"><tr><th style="text-align:left;padding:6px 10px">Línea</th><th style="text-align:left;padding:6px 10px">Campaña</th><th style="text-align:left;padding:6px 10px">Cambio</th><th style="text-align:left;padding:6px 10px">Motivo</th></tr>${filas}</table>` +
+    (descartadas.length ? `<p style="color:#888;font-size:12px;margin-top:10px">Descartadas por guardrails: ${descartadas.map((d) => `${escHtml(d.tipo)} ${escHtml(d.linea)} (${escHtml(d.descarte)})`).join(" · ")}</p>` : "") +
+    botones +
+    `<p style="color:#aaa;font-size:11px">Nada se aplica sin tu aprobación. Los cambios aprobados se ejecutan en Google Ads en la próxima corrida del Script 2 (cada hora).</p>`);
+
+  return { ok: true, acciones: aprobadas.length, descartadas: descartadas.length, queueId: recId };
+}
+
+function escHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;");
+}
+
+async function apSendEmail(env, to, subject, htmlBody) {
+  if (!env.RESEND_API_KEY || !to) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject,
+        html: `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:640px">` +
+          `<h2 style="margin:0 0 12px">🤖 Piloto automático — Google Ads</h2>${htmlBody}` +
+          `<p style="color:#666;font-size:12px;margin-top:18px">— The Lab Solutions · piloto semanal de campañas</p></div>` }),
+    });
+  } catch (e) { console.error("[ads-autopilot] email:", e.message); }
+}
+
+// ── Aprobación desde el email (GET = página de confirmación, POST = aplica) ──
+function apHtmlPage(title, body) {
+  return new Response(
+    `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(title)}</title></head>` +
+    `<body style="font-family:system-ui,Arial,sans-serif;background:#0d1117;color:#e6edf3;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0">` +
+    `<div style="max-width:520px;padding:32px;background:#161b22;border:1px solid #30363d;border-radius:12px;margin:16px">` +
+    `<h2 style="margin:0 0 14px">${escHtml(title)}</h2>${body}</div></body></html>`,
+    { headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+
+async function handleAdsDecision(request, env) {
+  const url = new URL(request.url);
+  const isPost = request.method === "POST";
+  let id, a, t;
+  if (isPost) {
+    const form = await request.formData().catch(() => null);
+    id = form?.get("id"); a = form?.get("a"); t = form?.get("t");
+  } else {
+    id = url.searchParams.get("id"); a = url.searchParams.get("a"); t = url.searchParams.get("t");
+  }
+  const secret = env.ADS_APPROVAL_SECRET || "";
+  if (!id || !/^rec[A-Za-z0-9]{14}$/.test(id) || !["approve", "reject"].includes(a) || !secret) {
+    return apHtmlPage("Solicitud inválida", `<p>El enlace no es válido.</p>`);
+  }
+
+  // Estado actual del registro (se necesita antes de validar: la firma incluye
+  // la huella de las mutaciones guardadas — si alguien las cambió, no calza)
+  const recRes = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Agent_Queue/${id}`, {
+    headers: { Authorization: `Bearer ${env.AIRTABLE_TOKEN}` },
+  });
+  if (!recRes.ok) return apHtmlPage("No encontrada", `<p>La propuesta ya no existe.</p>`);
+  const rec = await recRes.json();
+
+  let recMuts = [];
+  try { recMuts = JSON.parse(rec.fields?.Output || "{}").mutaciones || []; } catch (e) { /* vacío */ }
+  const mh = await apMutHash(recMuts);
+  const expected = await apHmacHex(secret, `${id}:${a}:${mh}`);
+  if (!timingSafeEqual(String(t || ""), expected)) {
+    return apHtmlPage("Enlace no autorizado", `<p>La firma del enlace no es válida (o la propuesta cambió después de enviarse el email).</p>`);
+  }
+
+  // Expiración: una propuesta de hace semanas ya no refleja la realidad
+  const creada = rec.fields?.["Fecha creación"] || rec.createdTime;
+  if (creada && Date.now() - new Date(creada).getTime() > 15 * 86400000) {
+    return apHtmlPage("Propuesta expirada", `<p>Esta propuesta tiene más de 15 días. El piloto generará una nueva el próximo lunes.</p>`);
+  }
+
+  const estado = rec.fields?.Estado || "";
+  if (estado !== "Pendiente") {
+    return apHtmlPage("Propuesta ya procesada", `<p>Esta propuesta está en estado <strong>${escHtml(estado)}</strong>. No hay nada más que hacer.</p>`);
+  }
+
+  // GET → página de confirmación (evita que un prefetch de email apruebe solo)
+  if (!isPost) {
+    let detalle = "";
+    try {
+      const out = JSON.parse(rec.fields?.Output || "{}");
+      detalle = `<ul style="color:#9da7b3;font-size:14px;line-height:1.7">` +
+        (out.acciones || []).map((x) => `<li><strong>${escHtml(x.tipo)}</strong> · ${escHtml(x.linea)}${x.campana ? " · " + escHtml(x.campana) : ""}${x.nuevo ? ` · $${Number(x.nuevo).toLocaleString("es-CL")}/día` : ""}</li>`).join("") + `</ul>`;
+    } catch (e) { /* sin detalle */ }
+    const label = a === "approve" ? "✓ Confirmar y aplicar en Google Ads" : "✗ Confirmar rechazo";
+    const color = a === "approve" ? "#0a7d5c" : "#8b3a3a";
+    return apHtmlPage(a === "approve" ? "Aprobar cambios del piloto" : "Rechazar propuesta",
+      detalle +
+      `<form method="POST" action="/ads/decision">` +
+      `<input type="hidden" name="id" value="${escHtml(id)}"><input type="hidden" name="a" value="${escHtml(a)}"><input type="hidden" name="t" value="${escHtml(t)}">` +
+      `<button type="submit" style="background:${color};color:#fff;border:none;padding:12px 22px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">${label}</button></form>`);
+  }
+
+  // POST → ejecutar la decisión
+  if (a === "reject") {
+    await airtableUpdateTolerant(env, "Agent_Queue", id, {
+      Estado: "Error", Error: `Rechazado por el usuario (${new Date().toISOString().slice(0, 16)})`,
+    });
+    return apHtmlPage("Propuesta rechazada", `<p>No se aplicará ningún cambio. El piloto volverá a proponer la próxima semana.</p>`);
+  }
+
+  const mutaciones = recMuts; // ya verificadas: su huella va dentro de la firma del link
+  if (!mutaciones.length) return apHtmlPage("Sin mutaciones", `<p>La propuesta no contiene cambios aplicables.</p>`);
+
+  let ok = 0, err = 0;
+  for (const m of mutaciones) {
+    try {
+      const r = await fetch(env.ADS_ENDPOINT, {
+        method: "POST", headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ secret: env.ADS_SCRIPT_SECRET || "thelab2025", type: "mutation", ...m }),
+      });
+      const d = await r.json().catch(() => ({}));
+      d && d.ok ? ok++ : err++;
+    } catch (e) { err++; }
+  }
+  await airtableUpdateTolerant(env, "Agent_Queue", id, {
+    Estado: err ? "Error" : "Completado",
+    Error: err ? `${err} mutación(es) no se pudieron encolar` : "",
+    "Fecha ejecución": new Date().toISOString(),
+    "Accion sugerida": `Aprobado por email: ${ok}/${mutaciones.length} mutaciones encoladas`,
+  });
+  return apHtmlPage(err ? "Aplicado con errores" : "✓ Cambios aprobados",
+    `<p>${ok} de ${mutaciones.length} cambio(s) encolado(s). Google Ads los aplicará en la próxima corrida del Script 2 (cada hora).</p>` +
+    (err ? `<p style="color:#e5534b">${err} cambio(s) fallaron al encolarse — reintenta desde el dashboard.</p>` : ""));
 }

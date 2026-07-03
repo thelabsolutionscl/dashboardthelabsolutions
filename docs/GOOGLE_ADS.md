@@ -249,7 +249,54 @@ Cj0abc...,Venta CRM,2026-06-28 09:00:00,1000000,CLP
 
 ---
 
-## 6. Checklist rápido de puesta en marcha
+## 6. Piloto automático semanal (semi-autónomo, con aprobación)
+
+Cada **lunes** un cron del `lead-worker` analiza la semana y propone ajustes de
+campañas según **demanda y capacidad**. **Nada se aplica sin tu aprobación.**
+
+```
+Cron lunes (Worker) → señales por línea (leads 28d, ingresos CRM, ocupación
+de producción, campañas del Script 1) → Claude propone → guardrails filtran →
+propuesta en Agent_Queue (Pendiente) → EMAIL con ✓ Aprobar / ✗ Rechazar
+→ al aprobar: mutaciones → Script 1 → Script 2 las aplica en Google Ads
+```
+
+**Qué puede proponer:** subir/bajar presupuesto por línea, pausar (saturación o
+gasto sin conversión), reactivar (capacidad libre) y crear campaña para una
+línea con demanda sin cobertura (máx. 1/semana).
+
+**Guardrails duros (código, no prompt):** cambio máx **±30%** de presupuesto por
+semana · tope de gasto diario total (default $60.000, configurable) · **no
+escalar** líneas con ocupación ≥85% (ej. Impresión 3D saturada) · **no pausar**
+campañas rentables (CPA sano o ROAS-real CRM ≥1.5x) · sin decisiones agresivas
+con <8 conversiones · una sola acción por línea/semana · presupuesto mínimo
+$1.000.
+
+**Aprobación:** desde el email (links firmados HMAC con página de confirmación,
+a prueba de prefetch) o desde el dashboard → Web → Google Ads → **Piloto
+automático** (botones Aprobar/Rechazar).
+
+**Activación (una vez), en `lead-worker`:**
+1. En `wrangler.toml`: `ADS_AUTOPILOT="true"`, `ADS_ENDPOINT=<URL del Script 1>`,
+   `WORKER_PUBLIC_URL=<URL pública del worker>`, `ADS_AUTOPILOT_EMAIL=<tu correo>`.
+2. Secrets: `npx wrangler secret put ADS_APPROVAL_SECRET` (clave larga aleatoria)
+   y, si cambiaste el secret del Script 1, `ADS_SCRIPT_SECRET`.
+   Requiere además `ANTHROPIC_API_KEY` y `RESEND_API_KEY` ya configurados.
+3. `npx wrangler deploy`.
+4. Probar sin esperar al lunes:
+   `curl -X POST <worker>/ads/autopilot/run -H "X-Autopilot-Key: <ADS_APPROVAL_SECRET>"`.
+
+**Kill-switch sin deploy:** en Airtable → *Monitor Sistema*, registro con
+`Name=ADS_AUTOPILOT` y `Notes={"enabled":false}`. En ese mismo JSON se pueden
+ajustar límites: `maxChangePct`, `capTotalDiario`, `minConv`, `cpaSano`, `email`.
+
+**Límites conocidos:** la atribución ingresos→línea usa el "Servicio interés"
+del cliente (proxy); la ocupación no-3D usa pedidos activos (proxy global). Las
+señales mejoran solas cuando el loop offline (§4.4) esté activo.
+
+---
+
+## 7. Checklist rápido de puesta en marcha
 
 - [ ] `NEXT_PUBLIC_GADS_CONVERSION` con la etiqueta real (§4.1)
 - [ ] Script 1 desplegado + endpoint guardado en el dashboard (§4.2)
@@ -259,3 +306,4 @@ Cj0abc...,Venta CRM,2026-06-28 09:00:00,1000000,CLP
 - [ ] Etiquetado automático activado en Google Ads (§4.4)
 - [ ] Primeras 3–4 campañas Search creadas (§3.2) y terminadas en Google Ads (§3.3)
 - [ ] Rutina semanal: ⚡ Análisis IA + ⬇ Conversiones offline (§3.4–3.5)
+- [ ] (Opcional) Piloto automático semanal activado en el worker (§6)

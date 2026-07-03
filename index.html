@@ -4649,6 +4649,19 @@ function _reportarResultados(muts) {
       </div>
     </div>
 
+    <!-- Piloto automático: propuestas semanales pendientes de aprobación -->
+    <div id="adsAutopilotPanel" style="display:none;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🤖 Piloto automático — propuesta semanal</span>
+          <span id="adsAutopilotBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span>
+          <button onclick="renderAdsAutopilot()" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px">↻ Actualizar</button>
+        </div>
+        <div id="adsAutopilotList" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px"></div>
+        <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">El piloto corre cada lunes en el Worker: analiza ventas por línea, capacidad de producción y ROAS-real, y propone ajustes de presupuesto/pausa/creación. Nada se aplica sin aprobar (aquí o desde el email).</div>
+      </div>
+    </div>
+
     <!-- Tabla campañas -->
     <div id="adsCampaignsArea">
       <div class="empty-state" style="padding:40px 0">
@@ -21614,6 +21627,65 @@ function confirmDeleteCampaign(){
   _adsQueueMutation(mutation);
 }
 
+// ─── Piloto automático (propuestas semanales del Worker) ────
+let _adsAutopilotProps=[];
+async function renderAdsAutopilot(){
+  const panel=document.getElementById('adsAutopilotPanel');
+  const list=document.getElementById('adsAutopilotList');
+  const badge=document.getElementById('adsAutopilotBadge');
+  if(!panel||!list) return;
+  try{
+    const cfg=_airtableConfig();
+    const formula=encodeURIComponent("AND({Agente}='ADS_AUTOPILOT',{Estado}='Pendiente')");
+    const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue?filterByFormula=${formula}&pageSize=10`,{headers:cfg.headers});
+    if(!r.ok) throw new Error('Airtable '+r.status);
+    const d=await r.json();
+    _adsAutopilotProps=(d.records||[]).map(rec=>{
+      let out={};try{out=JSON.parse(rec.fields?.Output||'{}');}catch(e){}
+      return{id:rec.id,fecha:rec.fields?.['Fecha creación']||rec.createdTime,resumen:out.resumen||'',acciones:out.acciones||[],mutaciones:out.mutaciones||[],descartadas:out.descartadas||[]};
+    }).filter(p=>p.mutaciones.length);
+  }catch(e){ panel.style.display='none'; return; }
+  if(!_adsAutopilotProps.length){ panel.style.display='none'; return; }
+  if(badge) badge.textContent=_adsAutopilotProps.length+' pendiente'+(_adsAutopilotProps.length!==1?'s':'');
+  list.innerHTML=_adsAutopilotProps.map((p,i)=>{
+    const filas=p.acciones.map(a=>{
+      const det=a.tipo==='presupuesto'?`$${(a.anterior||0).toLocaleString('es-CL')} → <b>$${(a.nuevo||0).toLocaleString('es-CL')}</b>/día`:a.tipo;
+      return `<div style="display:flex;gap:8px;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border2)"><span style="min-width:120px;color:var(--accent)">${escapeHtml(a.linea||'')}</span><span style="flex:1;color:var(--text2)">${escapeHtml(a.campana||'')} · ${det}</span><span style="flex:1;color:var(--text3)">${escapeHtml(a.motivo||'')}</span></div>`;
+    }).join('');
+    return `<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;border-left:3px solid var(--accent)">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:4px">${escapeHtml((p.fecha||'').slice(0,16).replace('T',' '))}</div>
+      ${p.resumen?`<div style="font-size:11px;color:var(--text);margin-bottom:6px">${escapeHtml(p.resumen)}</div>`:''}
+      ${filas}
+      ${p.descartadas.length?`<div style="font-size:10px;color:var(--text3);margin-top:6px">Descartadas por guardrails: ${p.descartadas.map(x=>escapeHtml((x.tipo||'')+' '+(x.linea||'')+' ('+(x.descarte||'')+')')).join(' · ')}</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-primary btn-sm" style="font-size:11px" onclick="adsAutopilotDecide(${i},true)">✓ Aprobar y aplicar</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--danger)" onclick="adsAutopilotDecide(${i},false)">✗ Rechazar</button>
+      </div>
+    </div>`;
+  }).join('');
+  panel.style.display='block';
+}
+async function adsAutopilotDecide(i,aprobar){
+  const p=_adsAutopilotProps[i]; if(!p) return;
+  // Re-verifica el estado justo antes (pudo aprobarse por email hace un momento):
+  // evita encolar dos veces las mismas mutaciones (un "create" duplicaría la campaña).
+  try{
+    const cfg=_airtableConfig();
+    const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue/${p.id}`,{headers:cfg.headers});
+    if(r.ok){const rec=await r.json();if((rec.fields?.Estado||'')!=='Pendiente'){toast('Esta propuesta ya fue procesada ('+(rec.fields?.Estado||'—')+')','info');renderAdsAutopilot();return;}}
+  }catch(e){}
+  if(aprobar){
+    if(!confirm(`¿Aprobar ${p.mutaciones.length} cambio(s) del piloto? Se aplicarán en Google Ads en la próxima corrida del Script 2.`)) return;
+    p.mutaciones.forEach(m=>_adsQueueMutation({...m,timestamp:m.timestamp||new Date().toISOString(),status:'pending'}));
+    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Completado','Fecha ejecución':new Date().toISOString(),'Accion sugerida':`Aprobado desde dashboard: ${p.mutaciones.length} mutaciones encoladas`});}catch(e){}
+    toast('✓ '+p.mutaciones.length+' cambio(s) del piloto encolados','success');
+  }else{
+    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Error',Error:'Rechazado desde el dashboard ('+new Date().toISOString().slice(0,16)+')'});}catch(e){}
+    toast('Propuesta del piloto rechazada','info');
+  }
+  renderAdsAutopilot();
+}
+
 // ─── Conversiones offline (CRM → Google Ads) ────────────────
 function _adsOffSyncNames(){
   const l=(document.getElementById('adsOffLeadName').value||'Lead calificado CRM').trim();
@@ -21895,6 +21967,7 @@ async function loadAdsData(){
     renderPendingMutations();
     // Refleja en el dashboard lo que el Script 2 ya aplicó en Google Ads
     syncMutationStatuses();
+    try{renderAdsAutopilot();}catch(err){}
     const _aw=document.getElementById('adsAutoWeekly');if(_aw)_aw.checked=localStorage.getItem('ads_auto_weekly')==='1';
     setTimeout(()=>{try{adsAutoWeeklyCheck();}catch(e){}},1200);
     const dot=document.getElementById('adsStatusDot');
