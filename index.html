@@ -4121,6 +4121,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <option value="90">Últimos 90 días</option>
         </select>
         <button class="btn btn-ghost btn-sm" onclick="toggleAdsConfig()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar</button>
+        <button class="btn btn-ghost btn-sm act-item-cyan" onclick="iaBuildCampaign()" id="btnIACampana">✨ Crear con IA</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAdsOfflineModal()" id="btnAdsOffline" title="Exporta las conversiones del CRM (leads calificados y ventas) con su gclid para subirlas a Google Ads y optimizar por ganancia real">⬇ Conversiones offline</button>
         <button class="btn btn-ghost btn-sm" onclick="openCreateCampaign()" id="btnNuevaCampana">+ Nueva Campaña</button>
         <button class="btn btn-primary btn-sm" onclick="loadAdsData()">↺ Actualizar</button>
         <span id="adsLastSyncLabel" style="font-size:10px;color:var(--text3);white-space:nowrap;align-self:center;padding-left:2px"></span>
@@ -4405,12 +4407,19 @@ function _aplicarMutaciones(mutsJson) {
         // masiva (bulk upload) con el formato CSV del Editor de Google Ads.
         var _grupo = 'Grupo 1 - ' + m.data.nombre;
         var _kws = (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) ? m.data.palabrasClave : [];
+        var _mt = m.data.concordancia || 'FRASE';
+        function _wrapKw(k){ return (_mt === 'EXACTA') ? ('[' + k + ']') : (_mt === 'AMPLIA') ? k : ('"' + k + '"'); }
+        var _maxCpc = parseInt(m.data.maxCpc, 10) || 300;
+        var _bsMap = {MANUAL_CPC:'cpc', MAXIMIZE_CLICKS:'Maximize clicks', MAXIMIZE_CONVERSIONS:'Maximize conversions', TARGET_CPA:'Target CPA', TARGET_ROAS:'Target ROAS'};
+        var _bs = _bsMap[m.data.pujaEstrategia] || 'cpc';
         var _ad = m.data.anuncio || null;
         var _titulos = (_ad &amp;&amp; _ad.titulos &amp;&amp; _ad.titulos.length) ? _ad.titulos.slice(0, 15) : [];
         var _descs = (_ad &amp;&amp; _ad.descripciones &amp;&amp; _ad.descripciones.length) ? _ad.descripciones.slice(0, 4) : [];
         var _conAnuncio = !!(_ad &amp;&amp; _ad.finalUrl &amp;&amp; _titulos.length >= 3 &amp;&amp; _descs.length >= 2);
         var _cols = ['Campaign', 'Campaign status', 'Budget', 'Bid Strategy type',
                      'Campaign type', 'Ad group', 'Max CPC', 'Keyword'];
+        if (m.data.pujaEstrategia === 'TARGET_CPA') _cols.push('Target CPA');
+        if (m.data.pujaEstrategia === 'TARGET_ROAS') _cols.push('Target ROAS');
         if (_conAnuncio) {
           _cols = _cols.concat(['Ad type', 'Final URL', 'Path 1', 'Path 2']);
           for (var h = 0; h &lt; _titulos.length; h++) _cols.push('Headline ' + (h + 1));
@@ -4418,18 +4427,21 @@ function _aplicarMutaciones(mutsJson) {
         }
         var _up = AdsApp.bulkUploads().newCsvUpload(_cols, {moneyInMicros: false});
         // Fila de campaña (presupuesto y Max CPC en moneda de la cuenta, p. ej. CLP)
-        _up.append({
+        var _campRow = {
           'Campaign': m.data.nombre,
           'Campaign status': (m.data.estado === 'PAUSED') ? 'Paused' : 'Enabled',
           'Budget': m.data.presupuesto,
-          'Bid Strategy type': 'cpc',
+          'Bid Strategy type': _bs,
           'Campaign type': 'Search Only'
-        });
+        };
+        if (m.data.pujaEstrategia === 'TARGET_CPA' &amp;&amp; m.data.pujaObjetivo) _campRow['Target CPA'] = m.data.pujaObjetivo;
+        if (m.data.pujaEstrategia === 'TARGET_ROAS' &amp;&amp; m.data.pujaObjetivo) _campRow['Target ROAS'] = m.data.pujaObjetivo;
+        _up.append(_campRow);
         // Fila de grupo de anuncios
-        _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': 300});
-        // Filas de palabras clave (concordancia amplia por defecto)
+        _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': _maxCpc});
+        // Filas de palabras clave (concordancia segun m.data.concordancia: FRASE / EXACTA / AMPLIA)
         for (var kw = 0; kw &lt; _kws.length; kw++) {
-          _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Keyword': _kws[kw]});
+          _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Keyword': _wrapKw(_kws[kw])});
         }
         // Fila de anuncio responsivo de búsqueda (RSA), si hay datos suficientes
         if (_conAnuncio) {
@@ -4450,6 +4462,20 @@ function _aplicarMutaciones(mutsJson) {
           _up.apply();
           Logger.log('OK creada (bulk upload): ' + m.data.nombre + ' · ' + _kws.length +
                      ' keywords · ' + (_conAnuncio ? 'con anuncio RSA' : 'sin anuncio'));
+          // Palabras clave negativas (best-effort; si la campana aun no aparece, reintenta el proximo ciclo)
+          var _negs = (m.data.negativas &amp;&amp; m.data.negativas.length) ? m.data.negativas : [];
+          if (_negs.length) {
+            try {
+              var _cIt = AdsApp.campaigns().withCondition("campaign.name = '" + String(m.data.nombre).replace(/'/g, '') + "'").get();
+              if (_cIt.hasNext()) {
+                var _cNeg = _cIt.next();
+                for (var _n = 0; _n &lt; _negs.length; _n++) _cNeg.createNegativeKeyword(_negs[_n]);
+                Logger.log('OK ' + _negs.length + ' negativos agregados a ' + m.data.nombre);
+              } else {
+                Logger.log('Negativos pendientes: la campana aun no aparece — se agregaran a mano o al reintentar');
+              }
+            } catch(_eN) { Logger.log('No se pudieron agregar negativos: ' + _eN.message); }
+          }
         }
         muts[k].status = 'aplicado';
 
@@ -20927,31 +20953,44 @@ function adsLastSyncStr(){
 }
 // ── Líneas de producción ↔ campañas Google Ads ───────────
 const ADS_DEFAULT_URL='https://thelab.solutions';
+// id === slug de la landing /servicios/<slug>. finalUrl se arma en openCreateCampaignByLineaId.
 const ADS_LINEAS=[
-  {id:'3d_small',label:'Impresión 3D — K1/K2',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
-   palabrasClave:['impresión 3d santiago','impresión 3d','impresora 3d','piezas 3d','prototipo 3d','fabricación 3d','figuras 3d','modelos 3d','carcasas 3d','repuestos plásticos'],
-   titulos:['Impresión 3D en Santiago','Piezas y Prototipos 3D','Fabricación 3D a Medida','Repuestos y Figuras 3D','The Lab Solutions'],
-   descripciones:['Impresión 3D profesional en Santiago: piezas, prototipos y repuestos a medida.','Cotiza online y recibe tu pieza impresa en 3D con calidad garantizada.']},
-  {id:'3d_large',label:'Impresión 3D — Giga',campañaSugerida:'Búsqueda - Impresión 3D Grande',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['impresión 3d grande','maqueta arquitectura','modelos a escala','pieza industrial grande','prototipo tamaño real','impresión gran formato'],
-   titulos:['Impresión 3D Gran Formato','Maquetas y Modelos a Escala','Piezas 3D de Gran Tamaño','Prototipos a Tamaño Real','The Lab Solutions'],
-   descripciones:['Impresión 3D de gran formato para maquetas, prototipos y piezas industriales.','Llevamos tus ideas a escala real. Cotiza tu proyecto 3D hoy mismo.']},
-  {id:'laser',label:'Láser y Señalética',campañaSugerida:'Búsqueda - Señalética Acrílico',tipo:'SEARCH',presupuesto:6000,
-   palabrasClave:['señalética corporativa','señalética acrílico','corte láser','grabado láser','letrero acrílico','placa grabada','señalización empresa','rótulo acrílico'],
-   titulos:['Señalética en Acrílico','Corte y Grabado Láser','Letreros y Placas a Medida','Rótulos para Empresas','The Lab Solutions'],
-   descripciones:['Señalética corporativa en acrílico con corte y grabado láser de alta precisión.','Letreros, placas y rótulos a medida para tu empresa. Cotiza online.']},
-  {id:'neon',label:'Neon LED y Rótulos',campañaSugerida:'Búsqueda - Neon LED Personalizado',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['neon led personalizado','letrero neon','cartel neon','rótulo led','neon decorativo','letreros luminosos','neon para negocio','carteles de neon'],
-   titulos:['Letreros Neon LED','Neon Personalizado','Rótulos Luminosos a Medida','Carteles Neon a Pedido','The Lab Solutions'],
-   descripciones:['Letreros y carteles neon LED personalizados para tu negocio o decoración.','Diseñamos tu rótulo luminoso a medida. Cotiza tu letrero neon hoy.']},
-  {id:'trofeos',label:'Trofeos y Reconocimientos',campañaSugerida:'Búsqueda - Trofeos Corporativos',tipo:'SEARCH',presupuesto:4000,
-   palabrasClave:['trofeos personalizados','medallas empresa','reconocimiento corporativo','galvano personalizado','premio empresa','trofeos corporativos','placa reconocimiento'],
-   titulos:['Trofeos Personalizados','Galvanos y Medallas','Reconocimientos a Medida','Premios para tu Equipo','The Lab Solutions'],
-   descripciones:['Trofeos, galvanos y medallas personalizados para premiar a tu equipo.','Reconocimientos corporativos a medida. Cotiza tu pedido de trofeos online.']},
-  {id:'papeleria',label:'Papelería Corporativa',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000,
-   palabrasClave:['papelería corporativa','tarjetas presentación','sello empresa','membrete personalizado','carpetas corporativas','impresión corporativa'],
-   titulos:['Papelería Corporativa','Tarjetas y Membretes','Sellos y Carpetas','Imagen para tu Empresa','The Lab Solutions'],
-   descripciones:['Papelería corporativa: tarjetas, membretes, sellos y carpetas personalizadas.','Imagen profesional para tu empresa. Cotiza tu papelería corporativa online.']},
+  {id:'activaciones',slug:'activaciones',label:'Activaciones',campañaSugerida:'Búsqueda - Activaciones de Marca',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['activaciones de marca','activaciones btl','activacion de marca empresa','stands para activacion','activaciones publicitarias','produccion de eventos btl','activacion marca santiago','montaje de activaciones'],
+   titulos:['Activaciones de Marca','Activaciones BTL a Medida','Stands y Montajes de Marca','Producción de Activaciones','The Lab Solutions'],
+   descripciones:['Activaciones de marca y BTL producidas end-to-end para tu campaña o evento.','Diseño, fabricación y montaje. Cotiza tu activación en Santiago.']},
+  {id:'premiaciones',slug:'premiaciones',label:'Premiaciones',campañaSugerida:'Búsqueda - Premiaciones y Galvanos',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['galvanos personalizados','trofeos personalizados','trofeos corporativos','medallas personalizadas','galvano de reconocimiento','premios para empresa','reconocimientos corporativos','trofeos para premiacion','placa de reconocimiento'],
+   titulos:['Galvanos y Trofeos','Premiaciones Corporativas','Trofeos Personalizados','Medallas y Reconocimientos','The Lab Solutions'],
+   descripciones:['Galvanos, trofeos y medallas personalizados para premiar a tu equipo.','Fabricación a medida para tu premiación de fin de año. Cotiza online.']},
+  {id:'merchandising',slug:'merchandising',label:'Merchandising',campañaSugerida:'Búsqueda - Merchandising Corporativo',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['merchandising corporativo','regalos corporativos','articulos promocionales','regalos corporativos por mayor','merchandising personalizado','productos promocionales empresa','kit de bienvenida corporativo','regalos para empresas'],
+   titulos:['Merchandising Corporativo','Regalos Corporativos','Artículos Promocionales','Kits para Empresas','The Lab Solutions'],
+   descripciones:['Merchandising y regalos corporativos personalizados para tu marca.','Kits, artículos promocionales y packs por mayor. Cotiza para tu empresa.']},
+  {id:'cajas-personalizadas',slug:'cajas-personalizadas',label:'Cajas Personalizadas',campañaSugerida:'Búsqueda - Cajas y Packaging',tipo:'SEARCH',presupuesto:4000,
+   palabrasClave:['cajas personalizadas','packaging personalizado','cajas para packaging','cajas de regalo personalizadas','packaging corporativo','cajas con logo empresa','cajas rigidas personalizadas','packaging a medida'],
+   titulos:['Cajas Personalizadas','Packaging a Medida','Cajas con tu Logo','Packaging Corporativo','The Lab Solutions'],
+   descripciones:['Cajas y packaging personalizados para regalo o producto corporativo.','Diseño y fabricación de cajas a medida con tu marca. Cotiza online.']},
+  {id:'impresion-3d',slug:'impresion-3d',label:'Impresión 3D',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
+   palabrasClave:['impresión 3d santiago','impresión 3d','servicio de impresion 3d','piezas 3d a medida','prototipo 3d','fabricacion 3d','impresion 3d para empresas','modelos y maquetas 3d','repuestos impresos 3d'],
+   titulos:['Impresión 3D en Santiago','Piezas y Prototipos 3D','Impresión 3D a Medida','Fabricación 3D Empresas','The Lab Solutions'],
+   descripciones:['Impresión 3D profesional: piezas, prototipos y repuestos a medida.','Llevamos tu idea a una pieza real. Cotiza tu proyecto 3D en Santiago.']},
+  {id:'volumetricos',slug:'volumetricos',label:'Volumétricos',campañaSugerida:'Búsqueda - Volumétricos y Neón LED',tipo:'SEARCH',presupuesto:5000,
+   palabrasClave:['letras corporeas','letras volumetricas','logo corporeo','letrero neon led','letras 3d para empresa','letreros luminosos led','estructuras para eventos','letras corporeas acrilico','neon personalizado'],
+   titulos:['Letras Corpóreas y Neón','Volumétricos a Medida','Letreros Neón LED','Logos Corpóreos 3D','The Lab Solutions'],
+   descripciones:['Letras corpóreas, logos 3D y neón LED personalizados para tu marca.','Volumétricos y estructuras para oficina o evento. Cotiza a medida.']},
+  {id:'carteleria',slug:'carteleria',label:'Cartelería',campañaSugerida:'Búsqueda - Cartelería y Señalética',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['señaletica corporativa','señaletica acrilico','letrero acrilico','carteleria empresa','señalizacion empresa','rotulos corporativos','corte y grabado laser','placas acrilico','letreros para oficina'],
+   titulos:['Cartelería y Señalética','Señalética en Acrílico','Letreros para Empresas','Rótulos y Placas a Medida','The Lab Solutions'],
+   descripciones:['Cartelería y señalética corporativa en acrílico con corte láser.','Letreros, rótulos y placas a medida para tu empresa. Cotiza online.']},
+  {id:'papeleria',slug:'papeleria',label:'Papelería',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000,
+   palabrasClave:['papeleria corporativa','tarjetas de presentacion','imprenta corporativa','membrete personalizado','carpetas corporativas','sellos para empresa','impresion corporativa santiago','tarjetas de presentacion empresa'],
+   titulos:['Papelería Corporativa','Tarjetas y Membretes','Imprenta para Empresas','Sellos y Carpetas','The Lab Solutions'],
+   descripciones:['Papelería corporativa: tarjetas, membretes, sellos y carpetas.','Imagen profesional para tu empresa. Cotiza tu papelería online.']},
+  {id:'chip-the-lab',slug:'chip-the-lab',label:'Chip The Lab (NFC)',campañaSugerida:'Búsqueda - Tarjetas NFC',tipo:'SEARCH',presupuesto:3000,
+   palabrasClave:['tarjetas nfc','tarjeta de presentacion nfc','tarjeta digital nfc','tarjetas nfc empresa','tarjeta nfc personalizada','tarjeta de contacto nfc','tarjetas inteligentes nfc','nfc chile'],
+   titulos:['Tarjetas NFC','Tarjeta Digital NFC','Tarjetas NFC a Medida','NFC para Empresas','The Lab Solutions'],
+   descripciones:['Tarjetas de presentación NFC personalizadas: comparte tu contacto al tocar.','Tarjetas inteligentes NFC para tu equipo. Cotiza las tuyas online.']},
 ];
 function _adsMatchCampaign(campanas,linea){
   if(!campanas||!campanas.length) return null;
@@ -21006,10 +21045,10 @@ function getCapacidadLineas(){
   };
   const mkRow=(id,label,pct,info,lids)=>({id,label,pct,info,lineasIds:lids,...sem(pct)});
   return[
-    mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['3d_small']),
-    mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['3d_large']),
-    mkRow('laser','Láser / Señalética',pedPct,activos+' pedidos activos en cola',['laser']),
-    mkRow('manual','Manual (Neon · Trofeos · Papelería)',pedPct,activos+' pedidos activos en cola',['neon','trofeos','papeleria']),
+    mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['impresion-3d']),
+    mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['impresion-3d']),
+    mkRow('laser','Láser / Cartelería',pedPct,activos+' pedidos activos en cola',['carteleria']),
+    mkRow('manual','Manual (Premiaciones · Merch · Papelería · otros)',pedPct,activos+' pedidos activos en cola',['premiaciones','merchandising','papeleria','activaciones','cajas-personalizadas','volumetricos','chip-the-lab']),
   ];
 }
 function renderAdsCapacidad(data){
@@ -21098,7 +21137,7 @@ function renderAdsSugerencias(data){
 }
 // Palabras clave a incluir en la próxima campaña creada (Script 2 las usará para armar el grupo de anuncios)
 let _adsCreateKeywords=[];
-function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulos,descripciones){
+function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulos,descripciones,finalUrl){
   openCreateCampaign();
   _adsCreateKeywords=Array.isArray(palabrasClave)?palabrasClave.slice():[];
   setTimeout(()=>{
@@ -21106,8 +21145,10 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulo
     const bd=document.getElementById('adsCampaignModalPresupuesto');if(bd) bd.value=presupuesto;
     const st=document.getElementById('adsCampaignModalEstado');if(st) st.value='ENABLED';
     const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
+    const fu=document.getElementById('adsCampaignModalFinalUrl');if(fu&&finalUrl) fu.value=finalUrl;
     const tt=document.getElementById('adsCampaignModalTitulos');if(tt&&Array.isArray(titulos)&&titulos.length) tt.value=titulos.join('\n');
     const ds=document.getElementById('adsCampaignModalDescripciones');if(ds&&Array.isArray(descripciones)&&descripciones.length) ds.value=descripciones.join('\n');
+    const kw=document.getElementById('adsCampaignModalKeywords');if(kw&&_adsCreateKeywords.length) kw.value=_adsCreateKeywords.join('\n');
     const hint=document.getElementById('adsCampaignModalKwHint');
     if(hint){
       if(_adsCreateKeywords.length){hint.style.display='block';hint.textContent='✓ Se incluirán '+_adsCreateKeywords.length+' palabras clave y un anuncio responsivo en el grupo de anuncios al crear la campaña. Revisa o edita el anuncio abajo.';}
@@ -21117,7 +21158,10 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulo
 }
 function openCreateCampaignByLineaId(lineaId){
   const l=ADS_LINEAS.find(x=>x.id===lineaId);
-  if(l) openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave,l.titulos,l.descripciones);
+  if(l){
+    const finalUrl=l.slug?(ADS_DEFAULT_URL+'/servicios/'+l.slug):ADS_DEFAULT_URL;
+    openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave,l.titulos,l.descripciones,finalUrl);
+  }
 }
 let _adsCapBtnStore=[];
 function _adsCapBtn(idx){
@@ -21348,6 +21392,20 @@ function openCreateCampaign(){
   document.getElementById('adsCampaignModalEstado').value='ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='';
   document.getElementById('adsCampaignModalAnuncioGroup').style.display='';
+  document.getElementById('adsCampaignModalCreateOpts').style.display='';
+  document.getElementById('adsCampaignModalConcordancia').value='FRASE';
+  document.getElementById('adsCampaignModalMaxCpc').value='800';
+  document.getElementById('adsCampaignModalPuja').value='MAXIMIZE_CLICKS';
+  document.getElementById('adsCampaignModalPujaObjetivo').value='';
+  document.getElementById('adsCampaignModalUbicaciones').value='Región Metropolitana, Chile';
+  document.getElementById('adsCampaignModalUbicModo').value='PRESENCE';
+  document.getElementById('adsCampaignModalRedSocios').checked=false;
+  document.getElementById('adsCampaignModalRedDisplay').checked=false;
+  document.getElementById('adsCampaignModalKeywords').value='';
+  document.getElementById('adsCampaignModalNegativas').value='';
+  _adsTogglePujaObjetivo();
+  const _iaInfo=document.getElementById('adsCampaignModalIAInfo');if(_iaInfo){_iaInfo.style.display='none';_iaInfo.innerHTML='';}
+  const _iaBtn=document.getElementById('adsCampaignModalCreateAI');if(_iaBtn) _iaBtn.style.display='';
   document.getElementById('adsCampaignModalFinalUrl').value=ADS_DEFAULT_URL;
   document.getElementById('adsCampaignModalPath1').value='';
   document.getElementById('adsCampaignModalPath2').value='';
@@ -21367,6 +21425,9 @@ function openEditCampaign(id, nombre, estado, presupuesto){
   document.getElementById('adsCampaignModalEstado').value=estado||'ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='none';
   document.getElementById('adsCampaignModalAnuncioGroup').style.display='none';
+  document.getElementById('adsCampaignModalCreateOpts').style.display='none';
+  const _iaInfoE=document.getElementById('adsCampaignModalIAInfo');if(_iaInfoE){_iaInfoE.style.display='none';_iaInfoE.innerHTML='';}
+  const _iaBtnE=document.getElementById('adsCampaignModalCreateAI');if(_iaBtnE) _iaBtnE.style.display='none';
   document.getElementById('adsCampaignModal').style.display='flex';
 }
 
@@ -21407,8 +21468,23 @@ function saveCampaignMutation(){
   if(!nombre){alert('El nombre de la campaña es obligatorio.');return;}
   if(presupuesto<1000){alert('El presupuesto debe ser al menos $1.000 CLP.');return;}
   const data={nombre,presupuesto,estado,tipo};
-  if(op==='create'&&_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.slice();
   if(op==='create'){
+    const kwText=(document.getElementById('adsCampaignModalKeywords').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    if(kwText.length) data.palabrasClave=kwText;
+    else if(_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.slice();
+    data.concordancia=document.getElementById('adsCampaignModalConcordancia').value;
+    data.maxCpc=parseInt(document.getElementById('adsCampaignModalMaxCpc').value)||800;
+    data.pujaEstrategia=document.getElementById('adsCampaignModalPuja').value;
+    const _pObj=parseInt(document.getElementById('adsCampaignModalPujaObjetivo').value)||0;
+    if(data.pujaEstrategia==='TARGET_CPA'||data.pujaEstrategia==='TARGET_ROAS'){
+      if(_pObj<=0){alert('Indica el objetivo de la estrategia de puja (CPA en CLP, o ROAS ej. 3).');return;}
+      data.pujaObjetivo=_pObj;
+    }
+    data.ubicaciones=(document.getElementById('adsCampaignModalUbicaciones').value||'').trim();
+    data.ubicModo=document.getElementById('adsCampaignModalUbicModo').value;
+    data.redSocios=document.getElementById('adsCampaignModalRedSocios').checked;
+    data.redDisplay=document.getElementById('adsCampaignModalRedDisplay').checked;
+    data.negativas=(document.getElementById('adsCampaignModalNegativas').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
     const finalUrl=(document.getElementById('adsCampaignModalFinalUrl').value||'').trim();
     const path1=(document.getElementById('adsCampaignModalPath1').value||'').trim();
     const path2=(document.getElementById('adsCampaignModalPath2').value||'').trim();
@@ -21437,12 +21513,180 @@ function saveCampaignMutation(){
   _adsQueueMutation(mutation);
 }
 
+// ─── Generador de campañas con IA ───────────────────────────
+function _adsTogglePujaObjetivo(){
+  const sel=document.getElementById('adsCampaignModalPuja'); if(!sel) return;
+  const v=sel.value;
+  const g=document.getElementById('adsCampaignModalPujaObjetivoGroup');
+  const lb=document.getElementById('adsCampaignModalPujaObjetivoLabel');
+  const inp=document.getElementById('adsCampaignModalPujaObjetivo');
+  if(!g) return;
+  if(v==='TARGET_CPA'){g.style.display='';if(lb)lb.textContent='CPA objetivo (CLP)';if(inp)inp.placeholder='Ej: 8000';}
+  else if(v==='TARGET_ROAS'){g.style.display='';if(lb)lb.textContent='ROAS objetivo (ej: 3 = 300%)';if(inp)inp.placeholder='Ej: 3';}
+  else{g.style.display='none';}
+}
+
+const ADS_BUILDER_SYS=`Eres el generador experto de campañas de Google Ads de The Lab Solutions, fabricación digital B2B a medida en Santiago, Chile.
+NEGOCIO: la web convierte una visita en una cotización (WhatsApp o formulario). Comprador B2B (marketing, RRHH, productoras de eventos, retail) que cotiza con un proveedor y tiene plazo. Se optimiza por GANANCIA real del CRM, no por volumen de clics.
+9 LÍNEAS (usa el slug EXACTO en la URL final https://thelab.solutions/servicios/<slug>):
+- Activaciones (activaciones)
+- Premiaciones (premiaciones): trofeos, galvanos, medallas, reconocimientos
+- Merchandising (merchandising): regalos corporativos, artículos promocionales
+- Cajas Personalizadas (cajas-personalizadas): packaging
+- Impresión 3D (impresion-3d): piezas, prototipos, maquetas
+- Volumétricos (volumetricos): letras corpóreas, estructuras, neón/LED
+- Cartelería (carteleria): señalética, letreros acrílico
+- Papelería (papeleria): imprenta corporativa, tarjetas, membretes
+- Chip The Lab (chip-the-lab): tarjetas NFC
+REGLAS 2026 (aplícalas):
+- Concordancia por defecto FRASE (AMPLIA solo con puja inteligente y datos).
+- Puja: empieza en MAXIMIZE_CLICKS para juntar datos; usa TARGET_CPA o TARGET_ROAS solo si el brief dice que ya hay volumen de conversiones.
+- Geo: "Región Metropolitana, Chile", modo PRESENCE. Redes: socios y display en false.
+- Palabras clave con intención comercial chilena (cotizar, personalizado, para empresas, corporativo, por mayor, santiago); 10-15 por campaña.
+- Negativas: incluye empleo, trabajo, gratis, plantilla, pdf, como hacer, diy, tutorial, curso, usado, segunda mano; para impresión 3D agrega ademas steam, juego, render, blender, roblox, minecraft, lentes 3d.
+- RSA: 12-15 títulos ÚNICOS de máximo 30 caracteres (keyword, diferenciador premium, prueba/años, CTA "Cotiza por WhatsApp") y 4 descripciones de máximo 90 caracteres.
+- Presupuesto diario en CLP realista (3000-10000 por línea).
+Responde SOLO con este JSON, sin texto adicional y sin bloques de código:
+{"nombre":"","tipo":"SEARCH","presupuesto":6000,"concordancia":"FRASE","maxCpc":800,"pujaEstrategia":"MAXIMIZE_CLICKS","pujaObjetivo":0,"ubicaciones":"Región Metropolitana, Chile","ubicModo":"PRESENCE","redSocios":false,"redDisplay":false,"finalUrl":"https://thelab.solutions/servicios/premiaciones","path1":"","path2":"","palabrasClave":[],"negativas":[],"titulos":[],"descripciones":[],"metricas":{"ctr":">3%","cpc":"<$1.200 CLP","cpa":"<$8.000 CLP","roas":">3x (CRM)","convMes":"15-30"},"checklist":["Poner la etiqueta de conversión en la web antes de activar","Confirmar geo en modo Presencia (RM) en Google Ads","Importar conversiones offline del CRM (gclid) para optimizar por ganancia real","Adjuntar sitelinks a cada /servicios y asset de mensaje/WhatsApp"]}`;
+
+async function iaBuildCampaign(){
+  const brief=prompt('¿Qué campaña quieres que arme la IA?\nIndica la línea de producto y el objetivo.\n\nEj: Premiaciones — captar pedidos de galvanos y trofeos para empresas de fin de año');
+  if(brief===null) return;
+  const q=(brief||'').trim();
+  if(!q){toast('Describe la campaña que quieres crear','error');return;}
+  toast('✨ La IA está armando la campaña…','info');
+  try{
+    let ctx='';
+    try{ if(typeof state!=='undefined'&&state.loaded&&window._adsLastData&&!window._adsLastData.demo) ctx=('\n\nDATOS ACTUALES DE LA CUENTA (referencia):\n'+buildAgentContext('ADS')).slice(0,3500); }catch(e){}
+    const raw=await callClaude(ADS_BUILDER_SYS,'BRIEF: '+q+ctx+'\n\nDevuelve SOLO el JSON.');
+    const prop=_parseCampaignJSON(raw);
+    if(!prop||!prop.nombre){toast('La IA no devolvió una campaña válida — reintenta','error');return;}
+    _applyIACampaign(prop);
+    toast('✓ Campaña generada — revísala y guarda','success');
+  }catch(e){toast('Error IA: '+((e&&e.message)||e),'error');}
+}
+
+function _parseCampaignJSON(raw){
+  if(!raw) return null;
+  const s=String(raw).trim();
+  const a=s.indexOf('{'), b=s.lastIndexOf('}');
+  if(a<0||b<0) return null;
+  try{return JSON.parse(s.slice(a,b+1));}catch(e){return null;}
+}
+
+function _applyIACampaign(p){
+  openCreateCampaign();
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!=null&&v!=='') el.value=v;};
+  set('adsCampaignModalNombre',p.nombre);
+  set('adsCampaignModalTipo',(p.tipo||'SEARCH'));
+  set('adsCampaignModalPresupuesto',p.presupuesto);
+  set('adsCampaignModalConcordancia',(p.concordancia||'FRASE').toString().toUpperCase());
+  set('adsCampaignModalMaxCpc',p.maxCpc);
+  set('adsCampaignModalPuja',(p.pujaEstrategia||'MAXIMIZE_CLICKS').toString().toUpperCase());
+  _adsTogglePujaObjetivo();
+  if(p.pujaObjetivo) set('adsCampaignModalPujaObjetivo',p.pujaObjetivo);
+  set('adsCampaignModalUbicaciones',p.ubicaciones);
+  set('adsCampaignModalUbicModo',(p.ubicModo||'PRESENCE').toString().toUpperCase());
+  const rs=document.getElementById('adsCampaignModalRedSocios');if(rs) rs.checked=!!p.redSocios;
+  const rd=document.getElementById('adsCampaignModalRedDisplay');if(rd) rd.checked=!!p.redDisplay;
+  set('adsCampaignModalFinalUrl',p.finalUrl);
+  set('adsCampaignModalPath1',p.path1);
+  set('adsCampaignModalPath2',p.path2);
+  if(Array.isArray(p.titulos)) set('adsCampaignModalTitulos',p.titulos.join('\n'));
+  if(Array.isArray(p.descripciones)) set('adsCampaignModalDescripciones',p.descripciones.join('\n'));
+  if(Array.isArray(p.palabrasClave)){_adsCreateKeywords=p.palabrasClave.slice();set('adsCampaignModalKeywords',p.palabrasClave.join('\n'));}
+  if(Array.isArray(p.negativas)) set('adsCampaignModalNegativas',p.negativas.join('\n'));
+  const info=document.getElementById('adsCampaignModalIAInfo');
+  if(info){
+    const m=p.metricas||{};
+    const met=Object.keys(m).length?('<div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:4px">🎯 Métricas objetivo</div><div style="font-size:11px;color:var(--text2);line-height:1.7">'+Object.keys(m).map(k=>'<b>'+escapeHtml(k)+':</b> '+escapeHtml(String(m[k]))).join(' · ')+'</div>'):'';
+    const chk=(Array.isArray(p.checklist)&&p.checklist.length)?('<div style="font-weight:700;color:var(--warn);font-size:11px;margin:8px 0 4px">✅ Terminar en Google Ads</div><ul style="font-size:11px;color:var(--text2);margin:0;padding-left:16px;line-height:1.6">'+p.checklist.map(c=>'<li>'+escapeHtml(String(c))+'</li>').join('')+'</ul>'):'';
+    info.innerHTML='<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">'+(met||'')+(chk||'')+'</div>';
+    info.style.display=(met||chk)?'':'none';
+  }
+}
+
 function confirmDeleteCampaign(){
   const id=document.getElementById('adsDeleteModalId').value;
   const nombre=document.getElementById('adsDeleteModalNombre').textContent.replace('Campaña: ','');
   const mutation={op:'delete',id,data:{nombre},timestamp:new Date().toISOString(),status:'pending'};
   closeAdsDeleteModal();
   _adsQueueMutation(mutation);
+}
+
+// ─── Conversiones offline (CRM → Google Ads) ────────────────
+function _adsOffSyncNames(){
+  const l=(document.getElementById('adsOffLeadName').value||'Lead calificado CRM').trim();
+  const v=(document.getElementById('adsOffVentaName').value||'Venta CRM').trim();
+  const e1=document.getElementById('adsOffNameEcho1'); if(e1) e1.textContent=l||'Lead calificado CRM';
+  const e2=document.getElementById('adsOffNameEcho2'); if(e2) e2.textContent=v||'Venta CRM';
+}
+function openAdsOfflineModal(){
+  const r=document.getElementById('adsOffResult'); if(r){r.style.display='none';r.innerHTML='';}
+  _adsOffSyncNames();
+  document.getElementById('adsOfflineModal').style.display='flex';
+}
+function closeAdsOfflineModal(){ document.getElementById('adsOfflineModal').style.display='none'; }
+function _adsOfflineTime(d){
+  try{ return d.toLocaleString('sv-SE',{timeZone:'America/Santiago'}).replace('T',' ').slice(0,19); }
+  catch(e){ return d.toISOString().slice(0,19).replace('T',' '); }
+}
+function _adsCsvCell(v){ const s=String(v==null?'':v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+function _adsDownloadCSV(name,text){
+  const blob=new Blob([text],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{try{document.body.removeChild(a);}catch(e){} URL.revokeObjectURL(url);},150);
+}
+function _adsGetGclid(c){
+  if(!c||!c.fields) return '';
+  const g=c.fields['GCLID']; if(g) return String(g).trim();
+  const notas=c.fields['Notas internas']||''; const m=String(notas).match(/gclid=([^\s]+)/i);
+  return m?m[1]:'';
+}
+function adsExportOfflineConversions(){
+  if(typeof state==='undefined'||!state.loaded){toast('Carga primero los datos de Airtable','error');return;}
+  const days=Math.max(1,Math.min(90,parseInt(document.getElementById('adsOffDays').value)||90));
+  const thr=parseInt(document.getElementById('adsOffScore').value)||6;
+  const leadVal=parseInt(document.getElementById('adsOffLeadVal').value)||0;
+  const incLeads=document.getElementById('adsOffIncLeads').checked;
+  const incVentas=document.getElementById('adsOffIncVentas').checked;
+  const nLead=(document.getElementById('adsOffLeadName').value||'Lead calificado CRM').trim();
+  const nVenta=(document.getElementById('adsOffVentaName').value||'Venta CRM').trim();
+  const cutoff=new Date(Date.now()-days*86400000);
+  const etapasCalif=['Propuesta enviada','Negociación','Cliente activo'];
+  const rows=[]; let sinGclid=0, nLeads=0, nVentas=0;
+  if(incLeads){
+    (state.clientes||[]).forEach(c=>{
+      const f=c.fields||{}; const dd=c.createdTime?new Date(c.createdTime):null; if(!dd||dd<cutoff) return;
+      const score=Number(f['Lead Score IA']||f['Lead Score']||0);
+      const etapa=f['Etapa venta']||'';
+      if(!(score>=thr||etapasCalif.includes(etapa))) return;
+      const g=_adsGetGclid(c); if(!g){sinGclid++;return;}
+      rows.push([g,nLead,_adsOfflineTime(dd),leadVal>0?leadVal:'','CLP']); nLeads++;
+    });
+  }
+  if(incVentas){
+    (state.pedidos||[]).forEach(p=>{
+      const f=p.fields||{}; if((f['Estado pedido']||'')==='Cancelado') return;
+      const dd=p.createdTime?new Date(p.createdTime):null; if(!dd||dd<cutoff) return;
+      const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:(typeof f['Cliente']==='string'?f['Cliente']:null);
+      const cli=(cid&&state.clientesByIdRec)?state.clientesByIdRec[cid]:null;
+      const g=_adsGetGclid(cli); if(!g){sinGclid++;return;}
+      const val=Math.round((f['Monto total (CLP)']||0)/1.19);
+      rows.push([g,nVenta,_adsOfflineTime(dd),val>0?val:'','CLP']); nVentas++;
+    });
+  }
+  const out=document.getElementById('adsOffResult'); if(out) out.style.display='block';
+  if(!rows.length){
+    if(out) out.innerHTML='<span style="color:var(--warn)">No se encontraron conversiones con gclid en el período. Revisa que la columna <b>GCLID</b> exista en Clientes y que estén llegando leads desde Google Ads (o que el gclid quede en Notas internas).</span>';
+    return;
+  }
+  const header='Parameters:TimeZone=America/Santiago\nGoogle Click ID,Conversion Name,Conversion Time,Conversion Value,Conversion Currency';
+  const csv=header+'\n'+rows.map(r=>r.map(_adsCsvCell).join(',')).join('\n')+'\n';
+  _adsDownloadCSV('conversiones_offline_'+new Date().toISOString().slice(0,10)+'.csv',csv);
+  if(out) out.innerHTML='✓ CSV generado: <b>'+rows.length+'</b> conversiones ('+nLeads+' leads · '+nVentas+' ventas)'+(sinGclid?' · <span style="color:var(--warn)">'+sinGclid+' sin gclid omitidas</span>':'')+'.<br>Súbelo en Google Ads → Objetivos → Conversiones → Cargas → Subir.';
 }
 
 async function adsDiagnostico(){
@@ -24760,6 +25004,8 @@ function qcalcClear(kind){
   <div class="modal-card">
     <div class="modal-title" id="adsCampaignModalTitle">Nueva Campaña</div>
     <div class="modal-desc" id="adsCampaignModalDesc">Los cambios se aplicarán en la próxima ejecución del Script 2.</div>
+    <div id="adsCampaignModalCreateAI" style="margin-top:10px"><button class="btn btn-ghost btn-sm act-item-cyan" onclick="iaBuildCampaign()">✨ Rellenar con IA</button></div>
+    <div id="adsCampaignModalIAInfo" style="display:none;margin-top:12px"></div>
     <input type="hidden" id="adsCampaignModalId">
     <input type="hidden" id="adsCampaignModalOp">
     <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
@@ -24787,6 +25033,67 @@ function qcalcClear(kind){
           <option value="ENABLED">Habilitada</option>
           <option value="PAUSED">Pausada</option>
         </select>
+      </div>
+      <div id="adsCampaignModalCreateOpts">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);margin:6px 0 2px">Segmentación y puja</div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Concordancia de palabras clave</label>
+            <select class="field-input" id="adsCampaignModalConcordancia">
+              <option value="FRASE" selected>Frase (recomendada)</option>
+              <option value="EXACTA">Exacta</option>
+              <option value="AMPLIA">Amplia (solo con puja inteligente)</option>
+            </select>
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">CPC máximo (CLP)</label>
+            <input class="field-input" id="adsCampaignModalMaxCpc" type="number" min="50" step="50" value="800" placeholder="Ej: 800">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Estrategia de puja</label>
+            <select class="field-input" id="adsCampaignModalPuja" onchange="_adsTogglePujaObjetivo()">
+              <option value="MAXIMIZE_CLICKS" selected>Maximizar clics (para partir)</option>
+              <option value="MANUAL_CPC">CPC manual</option>
+              <option value="MAXIMIZE_CONVERSIONS">Maximizar conversiones</option>
+              <option value="TARGET_CPA">CPA objetivo</option>
+              <option value="TARGET_ROAS">ROAS objetivo</option>
+            </select>
+          </div>
+          <div class="field-group" style="flex:1;display:none" id="adsCampaignModalPujaObjetivoGroup">
+            <label class="field-label" id="adsCampaignModalPujaObjetivoLabel">Objetivo</label>
+            <input class="field-input" id="adsCampaignModalPujaObjetivo" type="number" min="0" placeholder="Ej: 8000">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:2">
+            <label class="field-label">Ubicaciones</label>
+            <input class="field-input" id="adsCampaignModalUbicaciones" value="Región Metropolitana, Chile" placeholder="Ej: Región Metropolitana, Chile">
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Modo de ubicación</label>
+            <select class="field-input" id="adsCampaignModalUbicModo">
+              <option value="PRESENCE" selected>Presencia</option>
+              <option value="PRESENCE_OR_INTEREST">Presencia o interés</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Redes</label>
+          <div style="display:flex;gap:18px;font-size:12px;color:var(--text2);padding:4px 0">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsCampaignModalRedSocios"> Socios de búsqueda</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsCampaignModalRedDisplay"> Red de Display</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Palabras clave (una por línea)</label>
+          <textarea class="field-input" id="adsCampaignModalKeywords" rows="4" placeholder="galvanos personalizados&#10;trofeos corporativos&#10;premios para empresa" style="resize:vertical"></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Palabras clave negativas (una por línea)</label>
+          <textarea class="field-input" id="adsCampaignModalNegativas" rows="3" placeholder="empleo&#10;gratis&#10;cómo hacer&#10;curso" style="resize:vertical"></textarea>
+        </div>
       </div>
       <div class="field-group" id="adsCampaignModalAnuncioGroup">
         <label class="field-label">Anuncio responsivo (se publica con la campaña)</label>
@@ -24818,6 +25125,61 @@ function qcalcClear(kind){
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost btn-sm" onclick="closeAdsDeleteModal()">Cancelar</button>
       <button class="btn btn-sm" style="background:var(--danger);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600" onclick="confirmDeleteCampaign()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONVERSIONES OFFLINE MODAL ─────────────────────────── -->
+<div id="adsOfflineModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeAdsOfflineModal()"></div>
+  <div class="modal-card">
+    <div class="modal-title">⬇ Conversiones offline → Google Ads</div>
+    <div class="modal-desc">Genera el CSV con las conversiones reales del CRM (leads calificados y ventas) usando el <code>gclid</code> de cada cliente, para que Google Ads optimice por ganancia real y no por volumen de clics.</div>
+
+    <details style="margin-top:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--accent)">Cómo configurarlo en Google Ads (1 vez)</summary>
+      <ol style="font-size:11px;color:var(--text2);line-height:1.7;margin:8px 0 0;padding-left:18px">
+        <li>Crea la columna <b>GCLID</b> en la tabla <b>Clientes</b> de Airtable (texto). El worker ya la rellena en cada lead de Google Ads.</li>
+        <li>En Google Ads → <b>Objetivos → Conversiones → + Acción de conversión → Importar → Subir conversiones desde un archivo (CSV)</b>. Crea dos acciones con estos nombres exactos: <b id="adsOffNameEcho1">Lead calificado CRM</b> y <b id="adsOffNameEcho2">Venta CRM</b>. Marca "Venta CRM" como <b>primaria</b> y usa valores.</li>
+        <li>Genera el CSV acá y súbelo en <b>Conversiones → Cargas → Subir</b>. Repite semanalmente (dentro de los 90 días del clic).</li>
+      </ol>
+    </details>
+
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+      <div style="display:flex;gap:8px">
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Días hacia atrás</label>
+          <input class="field-input" id="adsOffDays" type="number" min="1" max="90" value="90">
+        </div>
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Lead Score mínimo para "calificado"</label>
+          <input class="field-input" id="adsOffScore" type="number" min="1" max="10" value="6">
+        </div>
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Valor por lead (CLP, opcional)</label>
+          <input class="field-input" id="adsOffLeadVal" type="number" min="0" step="1000" placeholder="0">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Nombre acción · Leads</label>
+          <input class="field-input" id="adsOffLeadName" value="Lead calificado CRM" oninput="_adsOffSyncNames()">
+        </div>
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Nombre acción · Ventas</label>
+          <input class="field-input" id="adsOffVentaName" value="Venta CRM" oninput="_adsOffSyncNames()">
+        </div>
+      </div>
+      <div style="display:flex;gap:18px;font-size:12px;color:var(--text2)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsOffIncLeads" checked> Incluir leads calificados</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsOffIncVentas" checked> Incluir ventas (pedidos)</label>
+      </div>
+      <div id="adsOffResult" style="display:none;font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;line-height:1.6"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-ghost btn-sm" onclick="closeAdsOfflineModal()">Cerrar</button>
+      <button class="btn btn-primary btn-sm" onclick="adsExportOfflineConversions()">⬇ Generar CSV</button>
     </div>
   </div>
 </div>
