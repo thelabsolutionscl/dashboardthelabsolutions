@@ -3764,7 +3764,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-ghost btn-sm" onclick="audit3DReport()" style="font-size:11px">🧠 Reporte IA</button>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Revisa cada impresora (errores de Klipper, home, malla de cama, mantención) y corrige/calibra con un clic. Las acciones <b>nunca</b> tocan una máquina imprimiendo. La rutina automática de las 10 AM corre en el printer-bridge del taller.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Revisa cada impresora (errores de Klipper, consola, home, malla de cama, mantención) y corrige/calibra con un clic. Las acciones <b>nunca</b> tocan una máquina imprimiendo. La rutina automática de las 9 AM (auditoría + reinicio de firmware + calibración) corre en el printer-bridge del taller.</div>
     <div id="audit3DResult"><div style="padding:16px;color:var(--text3);font-size:12px">Pulsa “Auditar ahora” para revisar todas las impresoras.</div></div>
     <div id="audit3DAiOut" style="display:none;margin-top:12px;padding:14px;background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.22);border-radius:10px;font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.6"></div>
     <div id="audit3DDaily" style="margin-top:12px"></div>
@@ -6332,7 +6332,7 @@ ESTRUCTURA DE RESPUESTA:
 1. SEMÁFORO (cuántas listas, con error, offline, imprimiendo).
 2. ACCIONES URGENTES (máquinas con error o mantención vencida, con el paso concreto).
 3. CALIBRACIÓN (qué máquinas libres conviene calibrar y por qué).
-4. RECOMENDACIÓN para la rutina automática de las 10 AM.
+4. RECOMENDACIÓN para la rutina automática de las 9 AM (auditoría + reinicio preventivo de firmware + calibración, para que el parque esté listo a las 10).
 Sé concreto y operativo, sin relleno. No inventes datos que no estén en la auditoría.`,
    pre:'',
    qs:['Audita el parque y dime qué máquinas no están listas para imprimir','¿Qué impresoras necesitan calibración hoy y por qué?','Tengo una K1 en error de Klipper, ¿qué hago paso a paso?','Resume el estado para dejar todo listo mañana a las 10 AM']},
@@ -17292,7 +17292,7 @@ async function audit3DReport(){
   try{const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id==='MANTENCION3D'):null;const resp=await callClaude(cfg?cfg.sys:'',buildAgentContext('MANTENCION3D'));if(out)out.textContent=resp;}
   catch(e){if(out)out.textContent='Error IA: '+(e&&e.message||e);}
 }
-// Último reporte de la rutina automática de las 10 AM (lo escribe el printer-bridge en Airtable)
+// Último reporte de la rutina automática de la mañana (lo escribe el printer-bridge en Airtable)
 async function audit3DLoadDaily(){
   const el=document.getElementById('audit3DDaily');if(!el)return;
   try{const r=await airtableFetch('Maquinas_Auditoria',1);const rec=(r.records||[])[0];if(!rec){el.innerHTML='';return;}
