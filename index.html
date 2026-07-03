@@ -4480,10 +4480,9 @@ function _aplicarMutaciones(mutsJson) {
         muts[k].status = 'aplicado';
 
       } else if (m.op === 'edit') {
-        var iter = AdsApp.campaigns().withIds([m.id]).get();
-        if (iter.hasNext()) {
-          var camp = iter.next();
-          if (m.data.nombre) camp.setName(m.data.nombre);
+        var camp = _buscarCampana(m.id, m.data &amp;&amp; m.data.nombre);
+        if (camp) {
+          if (m.data.nombre &amp;&amp; camp.setName &amp;&amp; camp.getName() !== m.data.nombre) { try { camp.setName(m.data.nombre); } catch(_eN2) {} }
           if (m.data.estado === 'ENABLED') camp.enable();
           if (m.data.estado === 'PAUSED') camp.pause();
           if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto);
@@ -4491,14 +4490,14 @@ function _aplicarMutaciones(mutsJson) {
           Logger.log('OK editada: ' + m.id);
         } else {
           muts[k].status = 'error';
-          muts[k].error = 'Campaña no encontrada: ' + m.id;
+          muts[k].error = 'Campaña no encontrada: ' + m.id + ' (si es una campaña Smart/inteligente, Scripts no puede editarla — pausala en ads.google.com)';
         }
 
       } else if (m.op === 'negative') {
         // Agrega palabra clave negativa: a la campaña (por id o nombre) o a nivel cuenta
         var term = m.data && m.data.termino; var added = false;
         if (term) {
-          var itN = m.id ? AdsApp.campaigns().withIds([m.id]).get()
+          var itN = m.id ? AdsApp.campaigns().withIds([Number(m.id)]).get()
                          : AdsApp.campaigns().withCondition("campaign.name = '" + (m.data.campana||'').replace(/'/g,"") + "'").get();
           if (itN.hasNext()) { itN.next().createNegativeKeyword('[' + term + ']'); added = true; }
         }
@@ -4521,14 +4520,14 @@ function _aplicarMutaciones(mutsJson) {
         Logger.log((paused > 0 ? 'OK' : 'ERR') + ' pausar keyword: ' + kwt + ' (' + paused + ')');
 
       } else if (m.op === 'delete') {
-        var iter2 = AdsApp.campaigns().withIds([m.id]).get();
-        if (iter2.hasNext()) {
-          iter2.next().pause();
+        var campD = _buscarCampana(m.id, m.data &amp;&amp; m.data.nombre);
+        if (campD) {
+          campD.pause();
           muts[k].status = 'aplicado';
           Logger.log('OK pausada: ' + m.id);
         } else {
           muts[k].status = 'error';
-          muts[k].error = 'Campaña no encontrada: ' + m.id;
+          muts[k].error = 'Campaña no encontrada: ' + m.id + ' (si es una campaña Smart/inteligente, Scripts no puede pausarla — hazlo en ads.google.com)';
         }
       }
     } catch(e) {
@@ -4538,6 +4537,33 @@ function _aplicarMutaciones(mutsJson) {
     }
   }
   return JSON.stringify(muts);
+}
+
+// Busca una campaña por ID (numérico) o por nombre, en todos los tipos que
+// Ads Scripts puede mutar: estándar (Search/Display), Performance Max, Video
+// y Shopping. Nota: los reportes GAQL listan también campañas Smart, pero
+// esas NO son accesibles para mutación desde Scripts.
+function _buscarCampana(id, nombre) {
+  var factories = [function(){ return AdsApp.campaigns(); }];
+  if (AdsApp.performanceMaxCampaigns) factories.push(function(){ return AdsApp.performanceMaxCampaigns(); });
+  if (AdsApp.videoCampaigns) factories.push(function(){ return AdsApp.videoCampaigns(); });
+  if (AdsApp.shoppingCampaigns) factories.push(function(){ return AdsApp.shoppingCampaigns(); });
+  var i, it;
+  var idNum = Number(id);
+  if (idNum) {
+    for (i = 0; i &lt; factories.length; i++) {
+      try { it = factories[i]().withIds([idNum]).get(); if (it.hasNext()) return it.next(); } catch(e) {}
+    }
+  }
+  if (nombre) {
+    for (i = 0; i &lt; factories.length; i++) {
+      try {
+        it = factories[i]().withCondition("campaign.name = '" + String(nombre).replace(/'/g, '') + "'").get();
+        if (it.hasNext()) return it.next();
+      } catch(e) {}
+    }
+  }
+  return null;
 }
 
 // Callback de executeInParallel: recibe array de ManagedAccountStats
