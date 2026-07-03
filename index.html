@@ -20952,31 +20952,44 @@ function adsLastSyncStr(){
 }
 // ── Líneas de producción ↔ campañas Google Ads ───────────
 const ADS_DEFAULT_URL='https://thelab.solutions';
+// id === slug de la landing /servicios/<slug>. finalUrl se arma en openCreateCampaignByLineaId.
 const ADS_LINEAS=[
-  {id:'3d_small',label:'Impresión 3D — K1/K2',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
-   palabrasClave:['impresión 3d santiago','impresión 3d','impresora 3d','piezas 3d','prototipo 3d','fabricación 3d','figuras 3d','modelos 3d','carcasas 3d','repuestos plásticos'],
-   titulos:['Impresión 3D en Santiago','Piezas y Prototipos 3D','Fabricación 3D a Medida','Repuestos y Figuras 3D','The Lab Solutions'],
-   descripciones:['Impresión 3D profesional en Santiago: piezas, prototipos y repuestos a medida.','Cotiza online y recibe tu pieza impresa en 3D con calidad garantizada.']},
-  {id:'3d_large',label:'Impresión 3D — Giga',campañaSugerida:'Búsqueda - Impresión 3D Grande',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['impresión 3d grande','maqueta arquitectura','modelos a escala','pieza industrial grande','prototipo tamaño real','impresión gran formato'],
-   titulos:['Impresión 3D Gran Formato','Maquetas y Modelos a Escala','Piezas 3D de Gran Tamaño','Prototipos a Tamaño Real','The Lab Solutions'],
-   descripciones:['Impresión 3D de gran formato para maquetas, prototipos y piezas industriales.','Llevamos tus ideas a escala real. Cotiza tu proyecto 3D hoy mismo.']},
-  {id:'laser',label:'Láser y Señalética',campañaSugerida:'Búsqueda - Señalética Acrílico',tipo:'SEARCH',presupuesto:6000,
-   palabrasClave:['señalética corporativa','señalética acrílico','corte láser','grabado láser','letrero acrílico','placa grabada','señalización empresa','rótulo acrílico'],
-   titulos:['Señalética en Acrílico','Corte y Grabado Láser','Letreros y Placas a Medida','Rótulos para Empresas','The Lab Solutions'],
-   descripciones:['Señalética corporativa en acrílico con corte y grabado láser de alta precisión.','Letreros, placas y rótulos a medida para tu empresa. Cotiza online.']},
-  {id:'neon',label:'Neon LED y Rótulos',campañaSugerida:'Búsqueda - Neon LED Personalizado',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['neon led personalizado','letrero neon','cartel neon','rótulo led','neon decorativo','letreros luminosos','neon para negocio','carteles de neon'],
-   titulos:['Letreros Neon LED','Neon Personalizado','Rótulos Luminosos a Medida','Carteles Neon a Pedido','The Lab Solutions'],
-   descripciones:['Letreros y carteles neon LED personalizados para tu negocio o decoración.','Diseñamos tu rótulo luminoso a medida. Cotiza tu letrero neon hoy.']},
-  {id:'trofeos',label:'Trofeos y Reconocimientos',campañaSugerida:'Búsqueda - Trofeos Corporativos',tipo:'SEARCH',presupuesto:4000,
-   palabrasClave:['trofeos personalizados','medallas empresa','reconocimiento corporativo','galvano personalizado','premio empresa','trofeos corporativos','placa reconocimiento'],
-   titulos:['Trofeos Personalizados','Galvanos y Medallas','Reconocimientos a Medida','Premios para tu Equipo','The Lab Solutions'],
-   descripciones:['Trofeos, galvanos y medallas personalizados para premiar a tu equipo.','Reconocimientos corporativos a medida. Cotiza tu pedido de trofeos online.']},
-  {id:'papeleria',label:'Papelería Corporativa',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000,
-   palabrasClave:['papelería corporativa','tarjetas presentación','sello empresa','membrete personalizado','carpetas corporativas','impresión corporativa'],
-   titulos:['Papelería Corporativa','Tarjetas y Membretes','Sellos y Carpetas','Imagen para tu Empresa','The Lab Solutions'],
-   descripciones:['Papelería corporativa: tarjetas, membretes, sellos y carpetas personalizadas.','Imagen profesional para tu empresa. Cotiza tu papelería corporativa online.']},
+  {id:'activaciones',slug:'activaciones',label:'Activaciones',campañaSugerida:'Búsqueda - Activaciones de Marca',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['activaciones de marca','activaciones btl','activacion de marca empresa','stands para activacion','activaciones publicitarias','produccion de eventos btl','activacion marca santiago','montaje de activaciones'],
+   titulos:['Activaciones de Marca','Activaciones BTL a Medida','Stands y Montajes de Marca','Producción de Activaciones','The Lab Solutions'],
+   descripciones:['Activaciones de marca y BTL producidas end-to-end para tu campaña o evento.','Diseño, fabricación y montaje. Cotiza tu activación en Santiago.']},
+  {id:'premiaciones',slug:'premiaciones',label:'Premiaciones',campañaSugerida:'Búsqueda - Premiaciones y Galvanos',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['galvanos personalizados','trofeos personalizados','trofeos corporativos','medallas personalizadas','galvano de reconocimiento','premios para empresa','reconocimientos corporativos','trofeos para premiacion','placa de reconocimiento'],
+   titulos:['Galvanos y Trofeos','Premiaciones Corporativas','Trofeos Personalizados','Medallas y Reconocimientos','The Lab Solutions'],
+   descripciones:['Galvanos, trofeos y medallas personalizados para premiar a tu equipo.','Fabricación a medida para tu premiación de fin de año. Cotiza online.']},
+  {id:'merchandising',slug:'merchandising',label:'Merchandising',campañaSugerida:'Búsqueda - Merchandising Corporativo',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['merchandising corporativo','regalos corporativos','articulos promocionales','regalos corporativos por mayor','merchandising personalizado','productos promocionales empresa','kit de bienvenida corporativo','regalos para empresas'],
+   titulos:['Merchandising Corporativo','Regalos Corporativos','Artículos Promocionales','Kits para Empresas','The Lab Solutions'],
+   descripciones:['Merchandising y regalos corporativos personalizados para tu marca.','Kits, artículos promocionales y packs por mayor. Cotiza para tu empresa.']},
+  {id:'cajas-personalizadas',slug:'cajas-personalizadas',label:'Cajas Personalizadas',campañaSugerida:'Búsqueda - Cajas y Packaging',tipo:'SEARCH',presupuesto:4000,
+   palabrasClave:['cajas personalizadas','packaging personalizado','cajas para packaging','cajas de regalo personalizadas','packaging corporativo','cajas con logo empresa','cajas rigidas personalizadas','packaging a medida'],
+   titulos:['Cajas Personalizadas','Packaging a Medida','Cajas con tu Logo','Packaging Corporativo','The Lab Solutions'],
+   descripciones:['Cajas y packaging personalizados para regalo o producto corporativo.','Diseño y fabricación de cajas a medida con tu marca. Cotiza online.']},
+  {id:'impresion-3d',slug:'impresion-3d',label:'Impresión 3D',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
+   palabrasClave:['impresión 3d santiago','impresión 3d','servicio de impresion 3d','piezas 3d a medida','prototipo 3d','fabricacion 3d','impresion 3d para empresas','modelos y maquetas 3d','repuestos impresos 3d'],
+   titulos:['Impresión 3D en Santiago','Piezas y Prototipos 3D','Impresión 3D a Medida','Fabricación 3D Empresas','The Lab Solutions'],
+   descripciones:['Impresión 3D profesional: piezas, prototipos y repuestos a medida.','Llevamos tu idea a una pieza real. Cotiza tu proyecto 3D en Santiago.']},
+  {id:'volumetricos',slug:'volumetricos',label:'Volumétricos',campañaSugerida:'Búsqueda - Volumétricos y Neón LED',tipo:'SEARCH',presupuesto:5000,
+   palabrasClave:['letras corporeas','letras volumetricas','logo corporeo','letrero neon led','letras 3d para empresa','letreros luminosos led','estructuras para eventos','letras corporeas acrilico','neon personalizado'],
+   titulos:['Letras Corpóreas y Neón','Volumétricos a Medida','Letreros Neón LED','Logos Corpóreos 3D','The Lab Solutions'],
+   descripciones:['Letras corpóreas, logos 3D y neón LED personalizados para tu marca.','Volumétricos y estructuras para oficina o evento. Cotiza a medida.']},
+  {id:'carteleria',slug:'carteleria',label:'Cartelería',campañaSugerida:'Búsqueda - Cartelería y Señalética',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['señaletica corporativa','señaletica acrilico','letrero acrilico','carteleria empresa','señalizacion empresa','rotulos corporativos','corte y grabado laser','placas acrilico','letreros para oficina'],
+   titulos:['Cartelería y Señalética','Señalética en Acrílico','Letreros para Empresas','Rótulos y Placas a Medida','The Lab Solutions'],
+   descripciones:['Cartelería y señalética corporativa en acrílico con corte láser.','Letreros, rótulos y placas a medida para tu empresa. Cotiza online.']},
+  {id:'papeleria',slug:'papeleria',label:'Papelería',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000,
+   palabrasClave:['papeleria corporativa','tarjetas de presentacion','imprenta corporativa','membrete personalizado','carpetas corporativas','sellos para empresa','impresion corporativa santiago','tarjetas de presentacion empresa'],
+   titulos:['Papelería Corporativa','Tarjetas y Membretes','Imprenta para Empresas','Sellos y Carpetas','The Lab Solutions'],
+   descripciones:['Papelería corporativa: tarjetas, membretes, sellos y carpetas.','Imagen profesional para tu empresa. Cotiza tu papelería online.']},
+  {id:'chip-the-lab',slug:'chip-the-lab',label:'Chip The Lab (NFC)',campañaSugerida:'Búsqueda - Tarjetas NFC',tipo:'SEARCH',presupuesto:3000,
+   palabrasClave:['tarjetas nfc','tarjeta de presentacion nfc','tarjeta digital nfc','tarjetas nfc empresa','tarjeta nfc personalizada','tarjeta de contacto nfc','tarjetas inteligentes nfc','nfc chile'],
+   titulos:['Tarjetas NFC','Tarjeta Digital NFC','Tarjetas NFC a Medida','NFC para Empresas','The Lab Solutions'],
+   descripciones:['Tarjetas de presentación NFC personalizadas: comparte tu contacto al tocar.','Tarjetas inteligentes NFC para tu equipo. Cotiza las tuyas online.']},
 ];
 function _adsMatchCampaign(campanas,linea){
   if(!campanas||!campanas.length) return null;
@@ -21031,10 +21044,10 @@ function getCapacidadLineas(){
   };
   const mkRow=(id,label,pct,info,lids)=>({id,label,pct,info,lineasIds:lids,...sem(pct)});
   return[
-    mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['3d_small']),
-    mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['3d_large']),
-    mkRow('laser','Láser / Señalética',pedPct,activos+' pedidos activos en cola',['laser']),
-    mkRow('manual','Manual (Neon · Trofeos · Papelería)',pedPct,activos+' pedidos activos en cola',['neon','trofeos','papeleria']),
+    mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['impresion-3d']),
+    mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['impresion-3d']),
+    mkRow('laser','Láser / Cartelería',pedPct,activos+' pedidos activos en cola',['carteleria']),
+    mkRow('manual','Manual (Premiaciones · Merch · Papelería · otros)',pedPct,activos+' pedidos activos en cola',['premiaciones','merchandising','papeleria','activaciones','cajas-personalizadas','volumetricos','chip-the-lab']),
   ];
 }
 function renderAdsCapacidad(data){
@@ -21123,7 +21136,7 @@ function renderAdsSugerencias(data){
 }
 // Palabras clave a incluir en la próxima campaña creada (Script 2 las usará para armar el grupo de anuncios)
 let _adsCreateKeywords=[];
-function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulos,descripciones){
+function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulos,descripciones,finalUrl){
   openCreateCampaign();
   _adsCreateKeywords=Array.isArray(palabrasClave)?palabrasClave.slice():[];
   setTimeout(()=>{
@@ -21131,6 +21144,7 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulo
     const bd=document.getElementById('adsCampaignModalPresupuesto');if(bd) bd.value=presupuesto;
     const st=document.getElementById('adsCampaignModalEstado');if(st) st.value='ENABLED';
     const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
+    const fu=document.getElementById('adsCampaignModalFinalUrl');if(fu&&finalUrl) fu.value=finalUrl;
     const tt=document.getElementById('adsCampaignModalTitulos');if(tt&&Array.isArray(titulos)&&titulos.length) tt.value=titulos.join('\n');
     const ds=document.getElementById('adsCampaignModalDescripciones');if(ds&&Array.isArray(descripciones)&&descripciones.length) ds.value=descripciones.join('\n');
     const kw=document.getElementById('adsCampaignModalKeywords');if(kw&&_adsCreateKeywords.length) kw.value=_adsCreateKeywords.join('\n');
@@ -21143,7 +21157,10 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulo
 }
 function openCreateCampaignByLineaId(lineaId){
   const l=ADS_LINEAS.find(x=>x.id===lineaId);
-  if(l) openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave,l.titulos,l.descripciones);
+  if(l){
+    const finalUrl=l.slug?(ADS_DEFAULT_URL+'/servicios/'+l.slug):ADS_DEFAULT_URL;
+    openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave,l.titulos,l.descripciones,finalUrl);
+  }
 }
 let _adsCapBtnStore=[];
 function _adsCapBtn(idx){
