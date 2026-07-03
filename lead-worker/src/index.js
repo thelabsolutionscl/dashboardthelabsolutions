@@ -741,6 +741,10 @@ function buildClienteFields(norm, source) {
     Región: norm.region,
     Comuna: norm.comuna,
     "Servicio interés": norm.service,
+    // Tracking estructurado para importar conversiones offline a Google Ads.
+    // Columnas tolerantes: si no existen en la base, se descartan sin romper.
+    GCLID: norm.gclid,
+    "Campaña Ads": norm.utmCampaign,
     "Etapa venta": "Lead nuevo",
     "Notas internas": buildNotes(norm),
     "Fecha primer contacto": today(),
@@ -772,6 +776,10 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
         stripEmpty({
           "Servicio interés": norm.service,
           "Cargo contacto": norm.jobTitle,
+          // Refresca el gclid/campaña si el lead recurrente llega por un clic de Ads
+          // (stripEmpty descarta los vacíos → no borra un gclid previo).
+          GCLID: norm.gclid,
+          "Campaña Ads": norm.utmCampaign,
         })
       );
     } else {
