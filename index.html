@@ -21514,9 +21514,10 @@ function saveCampaignMutation(){
   if(presupuesto<1000){alert('El presupuesto debe ser al menos $1.000 CLP.');return;}
   const data={nombre,presupuesto,estado,tipo};
   if(op==='create'){
-    const kwText=(document.getElementById('adsCampaignModalKeywords').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    // Sin comillas/corchetes: la concordancia la aplica el Script 2 según el selector
+    const kwText=(document.getElementById('adsCampaignModalKeywords').value||'').split('\n').map(_adsCleanKw).filter(Boolean);
     if(kwText.length) data.palabrasClave=kwText;
-    else if(_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.slice();
+    else if(_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.map(_adsCleanKw).filter(Boolean);
     data.concordancia=document.getElementById('adsCampaignModalConcordancia').value;
     data.maxCpc=parseInt(document.getElementById('adsCampaignModalMaxCpc').value)||800;
     data.pujaEstrategia=document.getElementById('adsCampaignModalPuja').value;
@@ -21587,9 +21588,9 @@ REGLAS 2026 (aplícalas):
 - Concordancia por defecto FRASE (AMPLIA solo con puja inteligente y datos).
 - Puja: empieza en MAXIMIZE_CLICKS para juntar datos; usa TARGET_CPA o TARGET_ROAS solo si el brief dice que ya hay volumen de conversiones.
 - Geo: "Región Metropolitana, Chile", modo PRESENCE. Redes: socios y display en false.
-- Palabras clave con intención comercial chilena (cotizar, personalizado, para empresas, corporativo, por mayor, santiago); 10-15 por campaña.
+- Palabras clave con intención comercial chilena (cotizar, personalizado, para empresas, corporativo, por mayor, santiago); 10-15 por campaña. SIN comillas ni corchetes: la concordancia se define en un campo aparte, no en el texto.
 - Negativas: incluye empleo, trabajo, gratis, plantilla, pdf, como hacer, diy, tutorial, curso, usado, segunda mano; para impresión 3D agrega ademas steam, juego, render, blender, roblox, minecraft, lentes 3d.
-- RSA: 12-15 títulos ÚNICOS de máximo 30 caracteres (keyword, diferenciador premium, prueba/años, CTA "Cotiza por WhatsApp") y 4 descripciones de máximo 90 caracteres.
+- RSA: 12-15 títulos ÚNICOS de máximo 30 caracteres (keyword, diferenciador premium, prueba/años, CTA "Cotiza por WhatsApp") y 4 descripciones de máximo 90 caracteres. LOS LÍMITES SON ESTRICTOS: cuenta los caracteres de cada título y descripción antes de incluirlos; si uno se pasa, reescríbelo más corto (no lo entregues largo).
 - Presupuesto diario en CLP realista (3000-10000 por línea).
 Responde SOLO con este JSON, sin texto adicional y sin bloques de código:
 {"nombre":"","tipo":"SEARCH","presupuesto":6000,"concordancia":"FRASE","maxCpc":800,"pujaEstrategia":"MAXIMIZE_CLICKS","pujaObjetivo":0,"ubicaciones":"Región Metropolitana, Chile","ubicModo":"PRESENCE","redSocios":false,"redDisplay":false,"finalUrl":"https://thelab.solutions/servicios/premiaciones","path1":"","path2":"","palabrasClave":[],"negativas":[],"titulos":[],"descripciones":[],"metricas":{"ctr":">3%","cpc":"<$1.200 CLP","cpa":"<$8.000 CLP","roas":">3x (CRM)","convMes":"15-30"},"checklist":["Poner la etiqueta de conversión en la web antes de activar","Confirmar geo en modo Presencia (RM) en Google Ads","Importar conversiones offline del CRM (gclid) para optimizar por ganancia real","Adjuntar sitelinks a cada /servicios y asset de mensaje/WhatsApp"]}`;
@@ -21619,7 +21620,22 @@ function _parseCampaignJSON(raw){
   try{return JSON.parse(s.slice(a,b+1));}catch(e){return null;}
 }
 
+// Sanitiza la salida de la IA a los límites reales de Google Ads:
+// keywords sin comillas/corchetes (la concordancia la pone el Script 2),
+// títulos ≤30 y descripciones ≤90 recortados en el último espacio.
+function _adsCleanKw(s){return String(s||'').trim().replace(/^["'“”\[\]]+|["'“”\[\]]+$/g,'').trim();}
+function _adsTrimLen(s,max){
+  s=String(s||'').trim();
+  if(s.length<=max) return s;
+  const cut=s.slice(0,max);
+  const sp=cut.lastIndexOf(' ');
+  return (sp>Math.floor(max*0.5)?cut.slice(0,sp):cut).replace(/[\s,;:.]+$/,'');
+}
 function _applyIACampaign(p){
+  if(Array.isArray(p.palabrasClave)) p.palabrasClave=p.palabrasClave.map(_adsCleanKw).filter(Boolean);
+  if(Array.isArray(p.negativas)) p.negativas=p.negativas.map(_adsCleanKw).filter(Boolean);
+  if(Array.isArray(p.titulos)) p.titulos=p.titulos.map(t=>_adsTrimLen(t,30)).filter(Boolean);
+  if(Array.isArray(p.descripciones)) p.descripciones=p.descripciones.map(d=>_adsTrimLen(d,90)).filter(Boolean);
   openCreateCampaign();
   const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!=null&&v!=='') el.value=v;};
   set('adsCampaignModalNombre',p.nombre);
