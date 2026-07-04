@@ -4668,6 +4668,7 @@ function _reportarResultados(muts) {
           <button onclick="retryAllErrors()" id="adsRetryAllBtn" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px;color:var(--danger);display:none" title="Reintentar todas las mutaciones con error">↻ Reintentar errores</button>
           <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
           <button onclick="adsDiagnostico()" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--warn)" title="Diagnóstico completo del pipeline de mutaciones"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Diagnosticar</button>
+          <button onclick="adsLimpiarHistorialMutaciones()" class="btn btn-ghost btn-sm" style="font-size:10px" title="Borra del servidor las mutaciones ya aplicadas o con error (conserva las pendientes)">🧹 Limpiar historial</button>
         </div>
         <div id="adsDiagOutput" style="display:none;padding:10px 16px;background:var(--surface3);border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace"></div>
         <div id="adsPendingList" style="padding:12px 16px;display:flex;flex-direction:column;gap:6px"></div>
@@ -21673,6 +21674,29 @@ function confirmDeleteCampaign(){
   const mutation={op:'delete',id,data:{nombre},timestamp:new Date().toISOString(),status:'pending'};
   closeAdsDeleteModal();
   _adsQueueMutation(mutation);
+}
+
+// Purga del servidor (Script 1) las mutaciones ya resueltas; conserva las pendientes.
+// El almacén crece para siempre (errores viejos, duplicados) y ensucia el diagnóstico.
+async function adsLimpiarHistorialMutaciones(){
+  const cfg=getAdsConfig();
+  if(!cfg.endpoint){toast('No hay endpoint configurado','error');return;}
+  try{
+    const r=await fetch(cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now());
+    const d=await r.json();
+    const todas=(d&&d.mutations)||[];
+    const pendientes=todas.filter(m=>m.status==='pending');
+    const resueltas=todas.length-pendientes.length;
+    if(!resueltas){toast('No hay mutaciones resueltas que limpiar','info');return;}
+    if(!confirm(`Se eliminarán ${resueltas} mutaciones ya resueltas (aplicadas o con error) del historial del servidor. Se conservan las ${pendientes.length} pendientes. ¿Continuar?`)) return;
+    const res=await fetch(cfg.endpoint,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({secret:'thelab2025',type:'update_mutations',mutations:pendientes})});
+    const dr=await res.json().catch(()=>({}));
+    if(dr&&dr.ok){
+      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status==='pending'||m.status==='enviado');
+      savePendingToStorage();renderPendingMutations();
+      toast('✓ Historial limpio — '+resueltas+' eliminadas, '+pendientes.length+' pendientes conservadas','success');
+    } else toast('No se pudo limpiar: '+((dr&&dr.error)||'el servidor no respondió ok'),'error');
+  }catch(e){toast('Error limpiando historial: '+e.message,'error');}
 }
 
 // ─── Piloto automático (propuestas semanales del Worker) ────
