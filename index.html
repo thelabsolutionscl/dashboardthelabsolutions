@@ -7526,15 +7526,21 @@ function _applyMonitorSistema(recs){
   if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){logErr('monitorSistema:fin',e);}}
   renderWatiConfigBtn();
 }
+// Render protegido: si una sección falla por un registro con datos inesperados,
+// las demás igual se pintan (antes una excepción dejaba todo lo siguiente en blanco).
+function _safeRender(name,fn){
+  try{fn();}
+  catch(e){console.error('[render:'+name+']',e);try{logErr('render:'+name,e);}catch(_e){}}
+}
 // Asigna el resultado de un fetch COMPLETO a state. render=true repinta cada lista.
 function _assignCoreState(res,render){
   const [cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=res;
   if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
-  if(cRes.status==='fulfilled'){ state.clientes=cRes.value.records||[]; _rebuildClientesById(); if(render) renderClientes(); }
-  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; _rebuildCotizacionesById(); if(render) renderCotizaciones(); }
-  if(pRes.status==='fulfilled'){ state.pedidos=pRes.value.records||[]; _rebuildPedidosById(); if(render){ renderPedidos(); if(document.getElementById('tab-remuneraciones')?.classList.contains('active')) renderRemuneraciones(); } }
-  if(rRes.status==='fulfilled'){ state.reportes=rRes.value.records||[]; if(render) renderReportes(); }
-  if(pvRes.status==='fulfilled'){ state.proveedores=pvRes.value.records||[]; if(render){ renderProveedores(); fillCatSelects(); } }
+  if(cRes.status==='fulfilled'){ state.clientes=cRes.value.records||[]; _rebuildClientesById(); if(render) _safeRender('clientes',renderClientes); }
+  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; _rebuildCotizacionesById(); if(render) _safeRender('cotizaciones',renderCotizaciones); }
+  if(pRes.status==='fulfilled'){ state.pedidos=pRes.value.records||[]; _rebuildPedidosById(); if(render){ _safeRender('pedidos',renderPedidos); if(document.getElementById('tab-remuneraciones')?.classList.contains('active')) _safeRender('remuneraciones',renderRemuneraciones); } }
+  if(rRes.status==='fulfilled'){ state.reportes=rRes.value.records||[]; if(render) _safeRender('reportes',renderReportes); }
+  if(pvRes.status==='fulfilled'){ state.proveedores=pvRes.value.records||[]; if(render){ _safeRender('proveedores',renderProveedores); _safeRender('catSelects',fillCatSelects); } }
   if(monRes.status==='fulfilled') _applyMonitorSistema(monRes.value.records||[]);
 }
 // Mezcla (upsert) el resultado de un fetch INCREMENTAL a state.
@@ -7585,7 +7591,7 @@ async function loadAllData(){
     state.loaded=true;state.lastUpdateTs=Date.now();state._silentN=0;setStatus('en vivo',true);
     _saveDataCache();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
-    renderOverview();
+    _safeRender('overview',renderOverview);
     // Tras hidratar desde caché, el primer fetch es un refresco silencioso: no
     // mostramos el toast (se limpia la marca para que los refrescos manuales sí avisen).
     if(!isFirst && !state._hydrated) toast('Datos actualizados ✓','success');
