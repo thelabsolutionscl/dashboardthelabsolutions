@@ -4409,17 +4409,20 @@ function _aplicarMutaciones(mutsJson) {
         var _kws = (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) ? m.data.palabrasClave : [];
         var _mt = m.data.concordancia || 'FRASE';
         function _wrapKw(k){ return (_mt === 'EXACTA') ? ('[' + k + ']') : (_mt === 'AMPLIA') ? k : ('"' + k + '"'); }
-        var _maxCpc = parseInt(m.data.maxCpc, 10) || 300;
-        var _bsMap = {MANUAL_CPC:'cpc', MAXIMIZE_CLICKS:'Maximize clicks', MAXIMIZE_CONVERSIONS:'Maximize conversions', TARGET_CPA:'Target CPA', TARGET_ROAS:'Target ROAS'};
-        var _bs = _bsMap[m.data.pujaEstrategia] || 'cpc';
+        var _maxCpc = parseInt(m.data.maxCpc, 10) || 800;
+        // El CSV de carga masiva solo acepta de forma fiable 'cpc' (CPC manual).
+        // La estrategia elegida (Maximizar clics/conversiones, tCPA, tROAS) se
+        // activa a mano en Google Ads al revisar la campaña recién creada.
+        var _bs = 'cpc';
+        if (m.data.pujaEstrategia &amp;&amp; m.data.pujaEstrategia !== 'MANUAL_CPC') {
+          Logger.log('Nota: activar la estrategia ' + m.data.pujaEstrategia + ' a mano en la campaña "' + m.data.nombre + '" (el CSV la crea con CPC manual + tope).');
+        }
         var _ad = m.data.anuncio || null;
         var _titulos = (_ad &amp;&amp; _ad.titulos &amp;&amp; _ad.titulos.length) ? _ad.titulos.slice(0, 15) : [];
         var _descs = (_ad &amp;&amp; _ad.descripciones &amp;&amp; _ad.descripciones.length) ? _ad.descripciones.slice(0, 4) : [];
         var _conAnuncio = !!(_ad &amp;&amp; _ad.finalUrl &amp;&amp; _titulos.length >= 3 &amp;&amp; _descs.length >= 2);
         var _cols = ['Campaign', 'Campaign status', 'Budget', 'Bid Strategy type',
                      'Campaign type', 'Ad group', 'Max CPC', 'Keyword'];
-        if (m.data.pujaEstrategia === 'TARGET_CPA') _cols.push('Target CPA');
-        if (m.data.pujaEstrategia === 'TARGET_ROAS') _cols.push('Target ROAS');
         if (_conAnuncio) {
           _cols = _cols.concat(['Ad type', 'Final URL', 'Path 1', 'Path 2']);
           for (var h = 0; h &lt; _titulos.length; h++) _cols.push('Headline ' + (h + 1));
@@ -4427,16 +4430,13 @@ function _aplicarMutaciones(mutsJson) {
         }
         var _up = AdsApp.bulkUploads().newCsvUpload(_cols, {moneyInMicros: false});
         // Fila de campaña (presupuesto y Max CPC en moneda de la cuenta, p. ej. CLP)
-        var _campRow = {
+        _up.append({
           'Campaign': m.data.nombre,
           'Campaign status': (m.data.estado === 'PAUSED') ? 'Paused' : 'Enabled',
           'Budget': m.data.presupuesto,
           'Bid Strategy type': _bs,
           'Campaign type': 'Search Only'
-        };
-        if (m.data.pujaEstrategia === 'TARGET_CPA' &amp;&amp; m.data.pujaObjetivo) _campRow['Target CPA'] = m.data.pujaObjetivo;
-        if (m.data.pujaEstrategia === 'TARGET_ROAS' &amp;&amp; m.data.pujaObjetivo) _campRow['Target ROAS'] = m.data.pujaObjetivo;
-        _up.append(_campRow);
+        });
         // Fila de grupo de anuncios
         _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': _maxCpc});
         // Filas de palabras clave (concordancia segun m.data.concordancia: FRASE / EXACTA / AMPLIA)
@@ -25211,6 +25211,7 @@ function qcalcClear(kind){
             <input class="field-input" id="adsCampaignModalPujaObjetivo" type="number" min="0" placeholder="Ej: 8000">
           </div>
         </div>
+        <div style="font-size:10px;color:var(--text3);margin:-6px 0 4px;line-height:1.4">La campaña se crea con CPC manual + el tope indicado (límite del formato de carga). La estrategia elegida se activa en Google Ads al revisar la campaña: Configuración → Ofertas.</div>
         <div style="display:flex;gap:8px">
           <div class="field-group" style="flex:2">
             <label class="field-label">Ubicaciones</label>
