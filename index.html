@@ -4421,8 +4421,11 @@ function _aplicarMutaciones(mutsJson) {
         var _titulos = (_ad &amp;&amp; _ad.titulos &amp;&amp; _ad.titulos.length) ? _ad.titulos.slice(0, 15) : [];
         var _descs = (_ad &amp;&amp; _ad.descripciones &amp;&amp; _ad.descripciones.length) ? _ad.descripciones.slice(0, 4) : [];
         var _conAnuncio = !!(_ad &amp;&amp; _ad.finalUrl &amp;&amp; _titulos.length >= 3 &amp;&amp; _descs.length >= 2);
+        // 'EU political ads': declaración obligatoria desde sept 2025 (regulación UE)
+        // aunque la campaña solo sirva en Chile. Sin la columna, la carga entera falla
+        // con "Falta un valor en 'Anuncios políticos de la UE'".
         var _cols = ['Campaign', 'Campaign status', 'Budget', 'Bid Strategy type',
-                     'Campaign type', 'Ad group', 'Max CPC', 'Keyword'];
+                     'Campaign type', 'EU political ads', 'Ad group', 'Max CPC', 'Keyword'];
         if (_conAnuncio) {
           _cols = _cols.concat(['Ad type', 'Final URL', 'Path 1', 'Path 2']);
           for (var h = 0; h &lt; _titulos.length; h++) _cols.push('Headline ' + (h + 1));
@@ -4435,7 +4438,8 @@ function _aplicarMutaciones(mutsJson) {
           'Campaign status': (m.data.estado === 'PAUSED') ? 'Paused' : 'Enabled',
           'Budget': m.data.presupuesto,
           'Bid Strategy type': _bs,
-          'Campaign type': 'Search Only'
+          'Campaign type': 'Search Only',
+          'EU political ads': 'no'
         });
         // Fila de grupo de anuncios
         _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': _maxCpc});
