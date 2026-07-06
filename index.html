@@ -4410,6 +4410,17 @@ function _aplicarMutaciones(mutsJson) {
         var _mt = m.data.concordancia || 'FRASE';
         function _wrapKw(k){ return (_mt === 'EXACTA') ? ('[' + k + ']') : (_mt === 'AMPLIA') ? k : ('"' + k + '"'); }
         var _maxCpc = parseInt(m.data.maxCpc, 10) || 800;
+
+        // PLAN B: si la campaña YA EXISTE (cascarón creado a mano en la UI —
+        // que sí permite responder la pregunta de anuncios políticos UE),
+        // la COMPLETAMOS con builders nativos (grupo, keywords, RSA,
+        // negativas, presupuesto) sin pasar por el CSV.
+        var _existente = _buscarCampana(null, m.data.nombre);
+        if (_existente) {
+          _completarCampana(_existente, m, _grupo, _kws, _mt, _maxCpc);
+          muts[k].status = 'aplicado';
+          continue;
+        }
         // El CSV de carga masiva solo acepta de forma fiable 'cpc' (CPC manual).
         // La estrategia elegida (Maximizar clics/conversiones, tCPA, tROAS) se
         // activa a mano en Google Ads al revisar la campaña recién creada.
@@ -4468,6 +4479,9 @@ function _aplicarMutaciones(mutsJson) {
           _up.apply();
           Logger.log('OK creada (bulk upload): ' + m.data.nombre + ' · ' + _kws.length +
                      ' keywords · ' + (_conAnuncio ? 'con anuncio RSA' : 'sin anuncio'));
+          Logger.log('Si en 3 min no aparece en Campañas (revisa Subidas): crea a mano una campaña de Búsqueda ' +
+                     'vacía con el nombre EXACTO "' + m.data.nombre + '" en la UI, vuelve a guardar la campaña ' +
+                     'desde el dashboard y ejecuta este script: la completará con keywords y anuncio sin usar CSV.');
           // Palabras clave negativas (best-effort; si la campana aun no aparece, reintenta el proximo ciclo)
           var _negs = (m.data.negativas &amp;&amp; m.data.negativas.length) ? m.data.negativas : [];
           if (_negs.length) {
@@ -4570,6 +4584,65 @@ function _buscarCampana(id, nombre) {
     }
   }
   return null;
+}
+
+// PLAN B de creación: completa una campaña EXISTENTE (cascarón hecho en la UI)
+// con grupo de anuncios, keywords, anuncio RSA, negativas y presupuesto,
+// usando builders nativos de Ads Scripts (sin CSV, sin campo político UE).
+function _completarCampana(camp, m, grupoNombre, kws, mt, maxCpc) {
+  try { if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto); } catch(e) {}
+  try {
+    if (m.data.estado === 'PAUSED') camp.pause();
+    else if (m.data.estado === 'ENABLED') camp.enable();
+  } catch(e) {}
+
+  // Grupo de anuncios: reutiliza si ya existe (idempotente para reintentos)
+  var ag = null;
+  try {
+    var agIt = camp.adGroups().withCondition("ad_group.name = '" + grupoNombre.replace(/'/g, '') + "'").get();
+    if (agIt.hasNext()) ag = agIt.next();
+  } catch(e) {}
+  if (!ag) {
+    try {
+      var agOp = camp.newAdGroupBuilder().withName(grupoNombre).withCpc(maxCpc).build();
+      if (agOp.isSuccessful()) ag = agOp.getResult();
+      else Logger.log('Grupo de anuncios: ' + agOp.getErrors().join('; '));
+    } catch(e) { Logger.log('Grupo de anuncios: ' + e.message); }
+  }
+  if (!ag) { Logger.log('ERR no se pudo crear/encontrar el grupo en "' + camp.getName() + '"'); return; }
+
+  // Palabras clave con la concordancia elegida
+  var kwOk = 0;
+  for (var i = 0; i &lt; kws.length; i++) {
+    var kw = (mt === 'EXACTA') ? ('[' + kws[i] + ']') : (mt === 'AMPLIA') ? kws[i] : ('"' + kws[i] + '"');
+    try { var kOp = ag.newKeywordBuilder().withText(kw).build(); if (kOp.isSuccessful()) kwOk++; } catch(e) {}
+  }
+
+  // Anuncio responsivo (RSA)
+  var ad = m.data.anuncio;
+  var conAd = false;
+  if (ad &amp;&amp; ad.finalUrl &amp;&amp; ad.titulos &amp;&amp; ad.titulos.length >= 3 &amp;&amp; ad.descripciones &amp;&amp; ad.descripciones.length >= 2) {
+    try {
+      var b = ag.newAd().responsiveSearchAdBuilder()
+        .withHeadlines(ad.titulos.slice(0, 15))
+        .withDescriptions(ad.descripciones.slice(0, 4))
+        .withFinalUrl(ad.finalUrl);
+      if (ad.path1) b = b.withPath1(ad.path1);
+      if (ad.path2) b = b.withPath2(ad.path2);
+      var adOp = b.build();
+      conAd = adOp.isSuccessful();
+      if (!conAd) Logger.log('RSA: ' + adOp.getErrors().join('; '));
+    } catch(e) { Logger.log('RSA: ' + e.message); }
+  }
+
+  // Palabras clave negativas
+  var negs = (m.data.negativas &amp;&amp; m.data.negativas.length) ? m.data.negativas : [];
+  for (var n = 0; n &lt; negs.length; n++) {
+    try { camp.createNegativeKeyword(negs[n]); } catch(e) {}
+  }
+
+  Logger.log('OK completada sobre campaña existente "' + camp.getName() + '": ' + kwOk + '/' + kws.length +
+             ' keywords · ' + (conAd ? 'con anuncio RSA' : 'SIN anuncio') + ' · ' + negs.length + ' negativas');
 }
 
 // Callback de executeInParallel: recibe array de ManagedAccountStats
