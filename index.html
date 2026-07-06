@@ -204,6 +204,12 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .badge-red{background:rgba(255,68,68,0.15);color:var(--danger);border:1px solid rgba(255,68,68,0.3);}
 .badge-purple{background:rgba(167,139,250,0.15);color:var(--accent4);border:1px solid rgba(167,139,250,0.3);}
 .badge-gray{background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border2);}
+/* Badge Delta — indicador de tendencia (reconstrucción de 21st.dev/serafim, estilo Tremor). up=verde, down=rojo, flat=neutro. */
+.badge-delta{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;line-height:1;padding:3px 7px;border-radius:999px;border:1px solid;letter-spacing:0.2px;white-space:nowrap;margin-top:6px;}
+.badge-delta .bd-ico{font-size:7px;line-height:1;transform:translateY(-0.5px);}
+.badge-delta.up{color:var(--accent3);background:rgba(0,212,170,0.13);border-color:rgba(0,212,170,0.32);}
+.badge-delta.down{color:var(--danger);background:rgba(255,68,68,0.13);border-color:rgba(255,68,68,0.32);}
+.badge-delta.flat{color:var(--text2);background:rgba(255,255,255,0.05);border-color:var(--border2);}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;}
 .form-full{grid-column:1/-1;}
 .field-group{display:flex;flex-direction:column;gap:5px;}
@@ -8067,25 +8073,38 @@ function renderKPIs(){
   const alertasPrev=_prevH?_prevH.alertas:null;
 
 
-  // ── Delta helpers ─────────────────────────────────────────────────────
-  // Percentage change badge (revenue)
+  // ── Delta helpers → badge-delta (pill de tendencia, estilo Tremor) ─────
+  const _bd=(dir,ico,txt)=>`<span class="badge-delta ${dir}"><span class="bd-ico">${ico}</span>${txt}</span>`;
+  // % de cambio (revenue)
   const pctBadge=(cur,prev)=>{
     if(!prev) return '';
     const p=Math.round(((cur-prev)/prev)*100);
-    const col=p>=0?'var(--accent3)':'var(--danger)';
-    return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${p>=0?'↑':'↓'} ${p>=0?'+':''}${p}% vs sem. ant.</div>`;
+    const dir=p>0?'up':p<0?'down':'flat',ico=p>0?'▲':p<0?'▼':'—';
+    return _bd(dir,ico,`${p>=0?'+':''}${p}% vs sem. ant.`);
   };
-  // Count change badge (pedidos, cots, clientes)
+  // Cambio en conteo (pedidos, cots, clientes)
   const cntBadge=(cur,prev,label)=>{
     const d=cur-prev;
     if(cur===0&&prev===0) return '';
-    const col=d>0?'var(--accent3)':d<0?'var(--danger)':'var(--text3)';
-    const arrow=d>0?'↑ ':d<0?'↓ ':'';
-    return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${arrow}${d>=0?'+':''}${d} ${label}</div>`;
+    const dir=d>0?'up':d<0?'down':'flat',ico=d>0?'▲':d<0?'▼':'—';
+    return _bd(dir,ico,`${d>=0?'+':''}${d} ${label}`);
   };
-  // Puntos porcentuales (margen, más=mejor) y alertas (menos=mejor, color invertido)
-  const ptsBadge=(cur,prev,hasPrev)=>{if(!hasPrev) return '';const d=Math.round(cur-prev);if(d===0) return '<div style="font-size:9px;color:var(--text3);font-weight:700;margin-top:4px">= vs sem. ant.</div>';const col=d>0?'var(--accent3)':'var(--danger)';return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${d>0?'↑ +':'↓ '}${d} pts vs sem. ant.</div>`;};
-  const alertBadge=(cur,prev)=>{if(prev==null) return '';const d=cur-prev;if(d===0) return '<div style="font-size:9px;color:var(--text3);font-weight:700;margin-top:4px">= vs sem. ant.</div>';const col=d<0?'var(--accent3)':'var(--danger)';return `<div style="font-size:9px;color:${col};font-weight:700;margin-top:4px">${d<0?'↓ ':'↑ +'}${d} vs sem. ant.</div>`;};
+  // Puntos porcentuales (margen, más=mejor)
+  const ptsBadge=(cur,prev,hasPrev)=>{
+    if(!hasPrev) return '';
+    const d=Math.round(cur-prev);
+    if(d===0) return _bd('flat','—','= vs sem. ant.');
+    const dir=d>0?'up':'down',ico=d>0?'▲':'▼';
+    return _bd(dir,ico,`${d>0?'+':''}${d} pts vs sem. ant.`);
+  };
+  // Alertas (menos = mejor: color verde aunque la flecha baje)
+  const alertBadge=(cur,prev)=>{
+    if(prev==null) return '';
+    const d=cur-prev;
+    if(d===0) return _bd('flat','—','= vs sem. ant.');
+    const dir=d<0?'up':'down',ico=d<0?'▼':'▲';
+    return _bd(dir,ico,`${d<0?'':'+'}${d} vs sem. ant.`);
+  };
 
   // ── Metas semanal + mensual ───────────────────────────────────────────
   const revMeta=parseInt(localStorage.getItem('revMetaSemanal'))||0;
