@@ -112,12 +112,13 @@ const server = http.createServer((req, res) => {
   if (rawPath === '/maint/status') {
     const cfg = loadMaintConfig();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(cfg ? { ok: true, enabled: true, time: cfg.time, tz: cfg.tz, printers: cfg.printers.length, calibrate: cfg.calibrate, dryRun: cfg.dryRun, lastRun: _maintLastRun } : { ok: true, enabled: false }));
+    res.end(JSON.stringify(cfg ? { ok: true, enabled: true, time: cfg.time, tz: cfg.tz, printers: cfg.printers.length, calibrate: cfg.calibrate, restartAll: cfg.restartAll, dryRun: cfg.dryRun, lastRun: _maintLastRun } : { ok: true, enabled: false }));
     return;
   }
   if (rawPath === '/maint/run' && req.method === 'POST') {
     const cfg = loadMaintConfig();
     if (!cfg) { jsonError(res, 400, 'maint-config.json no encontrado — ver README'); return; }
+    if (_maintRunning) { jsonError(res, 409, 'mantención ya en curso — espera a que termine'); return; }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     runMaintenance(cfg).then(r => res.end(JSON.stringify({ ok: true, ...r }))).catch(e => res.end(JSON.stringify({ ok: false, error: e.message })));
     return;
@@ -281,9 +282,16 @@ function startHeartbeat() {
 // Lee maint-config.json (junto a este archivo). Si no existe, queda APAGADO.
 // A la hora configurada (zona horaria del taller) audita cada impresora vía
 // Moonraker y, SOLO sobre las que estén LIBRES (jamás imprimiendo/pausada):
-//   1) si Klipper está en error → reinicia el firmware y reverifica.
-//   2) si quedó OK y calibrate=true → corre G28 + BED_MESH_CALIBRATE y deja la
-//      máquina segura (calentadores a 0 + motores liberados).
+//   1) Audita estado (Klipper, home, malla, temps) + consola (errores `!!`
+//      recientes en /server/gcode_store).
+//   2) Reinicia el firmware: siempre si restartAll=true (chequeo matinal
+//      preventivo), o solo si Klipper está en error. Espera a que Klipper
+//      vuelva a "ready" antes de seguir; si reincide en error, avisa
+//      "revisar hardware" y no calibra.
+//   3) Si calibrate=true → corre G28 + BED_MESH_CALIBRATE y deja la máquina
+//      segura (calentadores a 0 + motores liberados).
+// Las impresoras se procesan EN PARALELO (cada una trabaja por su cuenta),
+// así el parque completo queda listo en lo que tarda la más lenta.
 // Reporta a Airtable (tabla Maquinas_Auditoria) y por email (webhook opcional).
 // SEGURIDAD: arranca en dryRun (no manda comandos físicos) hasta que pongas
 // "dryRun": false en el config — así pruebas la auditoría antes de actuar solo.
@@ -294,9 +302,11 @@ function loadMaintConfig() {
     if (!c || !Array.isArray(c.printers) || !c.printers.filter(p => p && p.ip).length) return null;
     return {
       printers: c.printers.filter(p => p && p.ip),
-      time: (typeof c.time === 'string' && /^\d{1,2}:\d{2}$/.test(c.time)) ? c.time.padStart(5, '0') : '10:00',
+      time: (typeof c.time === 'string' && /^\d{1,2}:\d{2}$/.test(c.time)) ? c.time.padStart(5, '0') : '09:00',
       tz: c.tz || 'America/Santiago',
       calibrate: c.calibrate !== false,
+      restartAll: c.restartAll === true,                // reinicio de firmware preventivo a TODAS las libres
+      calibrateTimeoutMs: (Number.isFinite(+c.calibrateTimeoutMs) && +c.calibrateTimeoutMs > 0) ? +c.calibrateTimeoutMs : 240000,
       dryRun: c.dryRun !== false,                       // por defecto TRUE
       airtable: c.airtable || null,
       mailUrl: c.mailUrl || process.env.MAINT_MAIL_URL || '',
@@ -325,35 +335,91 @@ function moonraker(printer, method, mpath, timeoutMs = 12000) {
   });
 }
 const _sleep = ms => new Promise(r => setTimeout(r, ms));
-async function auditPrinter(p) {
+async function auditPrinter(p, opts = {}) {
   const name = p.name || p.ip;
-  const r = await moonraker(p, 'GET', '/printer/objects/query?print_stats&heater_bed&extruder&webhooks&toolhead&bed_mesh');
-  if (!r.ok || !r.json || !r.json.result || !r.json.result.status) return { name, ip: p.ip, p, state: 'offline', errored: false, busy: false, homed: false, meshOk: false };
+  const r = await moonraker(p, 'GET', '/printer/objects/query?print_stats&heater_bed&extruder&webhooks&toolhead&bed_mesh&idle_timeout');
+  if (!r.ok || !r.json || !r.json.result || !r.json.result.status) return { name, ip: p.ip, p, state: 'offline', errored: false, busy: false, busyGcode: false, homed: false, meshOk: false, consoleErrs: [] };
   const s = r.json.result.status, wh = s.webhooks || {}, ps = s.print_stats || {}, th = s.toolhead || {}, bm = s.bed_mesh || {}, ex = s.extruder || {}, hb = s.heater_bed || {};
   const klState = wh.state || 'ready';
   const errored = klState === 'shutdown' || klState === 'error';
   let state = ps.state || 'standby'; if (errored) state = 'shutdown';
   let klMsg = ''; if (wh.state_message) { try { klMsg = (JSON.parse(wh.state_message).msg) || wh.state_message; } catch (_) { klMsg = wh.state_message; } klMsg = String(klMsg).split('\n').map(x => x.trim()).filter(Boolean)[0] || ''; }
-  return { name, ip: p.ip, p, state, errored, busy: state === 'printing' || state === 'paused', homed: String(th.homed_axes || '').toLowerCase() === 'xyz', meshOk: !!(bm.profile_name || (bm.mesh_matrix && bm.mesh_matrix.length)), klState, klMsg, hotend: Math.round(ex.temperature || 0), bed: Math.round(hb.temperature || 0), filename: (ps.filename || '').replace(/\.gcode$/i, '') };
+  // Ocupada = imprimiendo/pausada (print_stats) O ejecutando cualquier G-code
+  // (idle_timeout "Printing"): print_stats solo refleja trabajos del virtual
+  // SD, no macros, movimientos manuales ni calibraciones lanzadas por script.
+  const busyPrint = state === 'printing' || state === 'paused';
+  const busyGcode = !busyPrint && !errored && String((s.idle_timeout || {}).state || '') === 'Printing';
+  // Chequeo de consola: errores de las últimas 24 h (líneas `!!` que Klipper
+  // imprime en la consola, las mismas que se ven en Fluidd/Mainsail). Solo en
+  // la auditoría inicial (opts.console) — no en los re-chequeos tras reinicio.
+  let consoleErrs = [];
+  if (opts.console) {
+    const g = await moonraker(p, 'GET', '/server/gcode_store?count=100');
+    const items = (g.ok && g.json && g.json.result && g.json.result.gcode_store) || [];
+    const cutoff = Date.now() / 1000 - 24 * 3600;
+    consoleErrs = [...new Set(items
+      .filter(i => i && i.type === 'response' && (!i.time || i.time >= cutoff) && /^!!/.test(String(i.message || '').trim()))
+      .map(i => String(i.message).trim().replace(/^!!\s*/, '').split('\n')[0]))].slice(-3);
+  }
+  return { name, ip: p.ip, p, state, errored, busy: busyPrint || busyGcode, busyGcode, homed: String(th.homed_axes || '').toLowerCase() === 'xyz', meshOk: !!(bm.profile_name || (bm.mesh_matrix && bm.mesh_matrix.length)), klState, klMsg, consoleErrs, hotend: Math.round(ex.temperature || 0), bed: Math.round(hb.temperature || 0), filename: (ps.filename || '').replace(/\.gcode$/i, '') };
+}
+// Tras un FIRMWARE_RESTART Klipper pasa por "startup" unos segundos antes de
+// quedar "ready" — mandar G-code en ese lapso falla. Además, mientras Klippy
+// se reconecta, Moonraker responde 503 y la auditoría lo lee como "offline"
+// TRANSITORIO — por eso offline no corta la espera: se sigue sondeando hasta
+// ver "ready", un error definitivo, o agotar maxMs.
+async function waitKlippyReady(p, maxMs = 90000) {
+  const t0 = Date.now();
+  let a = await auditPrinter(p);
+  while (!a.errored && a.klState !== 'ready' && Date.now() - t0 < maxMs) {
+    await _sleep(3000);
+    a = await auditPrinter(p);
+  }
+  return a;
+}
+function _copyAudit(a, re) {
+  a.errored = re.errored; a.busy = re.busy; a.busyGcode = re.busyGcode;
+  a.state = re.state; a.homed = re.homed; a.meshOk = re.meshOk;
+  a.klState = re.klState; a.klMsg = re.klMsg;
 }
 async function maintainPrinter(a, cfg) {
   const acts = [];
   if (a.state === 'offline') { a.acts = ['offline — sin acción']; return a; }
-  if (a.busy) { a.acts = ['imprimiendo — NO se tocó']; return a; }
-  if (a.errored) {
-    if (cfg.dryRun) acts.push('[dry-run] reiniciaría firmware');
+  if (a.busy) { a.acts = [a.busyGcode ? 'ocupada (G-code/macro en curso) — NO se tocó' : 'imprimiendo — NO se tocó']; return a; }
+  if (a.consoleErrs && a.consoleErrs.length) acts.push('consola con error reciente: "' + a.consoleErrs[a.consoleErrs.length - 1] + '"');
+  // Reinicio de firmware: preventivo a todas las libres (restartAll) o solo si
+  // Klipper está en error. Siempre reverifica antes de calibrar.
+  if (cfg.restartAll || a.errored) {
+    const motivo = a.errored ? 'Klipper en error' : 'preventivo';
+    if (cfg.dryRun) acts.push(`[dry-run] reiniciaría firmware (${motivo})`);
     else {
-      await moonraker(a.p, 'POST', '/printer/firmware_restart'); acts.push('firmware reiniciado'); await _sleep(8000);
-      const re = await auditPrinter(a.p); a.errored = re.errored; a.state = re.state; a.homed = re.homed; a.meshOk = re.meshOk;
-      if (re.errored) { acts.push('SIGUE EN ERROR tras reinicio — revisar hardware'); a.acts = acts; return a; }
+      const rr = await moonraker(a.p, 'POST', '/printer/firmware_restart');
+      if (!rr.ok) { acts.push(`no se pudo enviar el reinicio de firmware (${motivo}) — sin respuesta de Moonraker`); a.acts = acts; return a; }
+      await _sleep(3000);
+      const re = await waitKlippyReady(a.p);
+      _copyAudit(a, re);
+      if (re.errored) { acts.push(`firmware reiniciado (${motivo}) — SIGUE EN ERROR, revisar hardware`); a.acts = acts; return a; }
+      if (re.busy) { acts.push(`firmware reiniciado (${motivo}) — empezó a imprimir/moverse justo después, no se calibra`); a.acts = acts; return a; }
+      if (re.state === 'offline' || re.klState !== 'ready') { acts.push(`firmware reiniciado (${motivo}) — Klipper no volvió a "ready", no se calibra`); a.acts = acts; return a; }
+      acts.push(`firmware reiniciado (${motivo}) ✓`);
     }
+  } else if (!cfg.dryRun && a.klState === 'startup') {
+    // Sin reinicio de por medio, una impresora recién encendida puede seguir
+    // arrancando: espera a "ready" antes de calibrar.
+    _copyAudit(a, await waitKlippyReady(a.p));
+    if (a.errored) { acts.push('Klipper terminó en error al arrancar — revisar'); a.acts = acts; return a; }
   }
-  if (cfg.calibrate && !a.errored && !a.busy) {
+  // Calibración: global (calibrate) con opción de excluir una impresora
+  // puntual poniéndole "calibrate": false en su entrada del config.
+  if (cfg.calibrate && a.p.calibrate !== false && !a.errored && !a.busy) {
     if (cfg.dryRun) acts.push('[dry-run] calibraría bed mesh');
+    else if (a.klState !== 'ready') acts.push(`Klipper no está "ready" (${a.klState || 'sin estado'}) — no se calibra`);
     else {
-      const sent = await moonraker(a.p, 'POST', '/printer/gcode/script?script=' + encodeURIComponent('G28\nBED_MESH_CALIBRATE'), 240000);
-      if (sent.ok) { acts.push('bed mesh calibrada'); await moonraker(a.p, 'POST', '/printer/gcode/script?script=' + encodeURIComponent('M104 S0\nM140 S0\nM84'), 15000); }
-      else acts.push('no se pudo calibrar (timeout/err)');
+      const sent = await moonraker(a.p, 'POST', '/printer/gcode/script?script=' + encodeURIComponent('G28\nBED_MESH_CALIBRATE'), cfg.calibrateTimeoutMs);
+      acts.push(sent.ok ? 'bed mesh calibrada' : 'no se pudo calibrar (timeout/err)');
+      // Dejar la máquina segura pase lo que pase: calentadores a 0 y motores
+      // liberados. Si la calibración sigue corriendo, esto se encola detrás.
+      await moonraker(a.p, 'POST', '/printer/gcode/script?script=' + encodeURIComponent('M104 S0\nM140 S0\nM84'), 15000);
     }
   }
   if (!acts.length) acts.push('lista — sin acción necesaria');
@@ -375,28 +441,51 @@ async function maintReport(cfg, stamp, resumen, detalle) {
   }
 }
 async function runMaintenance(cfg) {
-  const stamp = nowInTz(cfg.tz);
-  console.log(`[mant] ${stamp.date} ${stamp.hm} — auditoría${cfg.dryRun ? ' (DRY-RUN)' : ''} de ${cfg.printers.length} impresora(s)`);
-  const results = [];
-  for (const p of cfg.printers) { const r = await maintainPrinter(await auditPrinter(p), cfg); results.push(r); console.log(`[mant]  • ${r.name}: ${r.state}${r.errored ? ' ERROR' : ''} — ${(r.acts || []).join('; ')}`); }
-  const ok = results.filter(r => !r.errored && !r.busy && r.state !== 'offline').length;
-  const err = results.filter(r => r.errored).length, off = results.filter(r => r.state === 'offline').length, busy = results.filter(r => r.busy).length;
-  const resumen = `${ok} lista(s) · ${err} con error · ${busy} imprimiendo · ${off} offline · ${results.length} total${cfg.dryRun ? ' · DRY-RUN' : ''}`;
-  const detalle = results.map(r => `${r.name} (${r.ip}): ${r.errored ? 'ERROR Klipper' + (r.klMsg ? ' ' + r.klMsg : '') : r.busy ? 'imprimiendo' : r.state === 'offline' ? 'OFFLINE' : 'lista'} · home ${r.homed ? 'sí' : 'no'} · malla ${r.meshOk ? 'sí' : 'no'} → ${(r.acts || []).join('; ')}`).join('\n');
-  await maintReport(cfg, stamp, resumen, detalle);
-  console.log('[mant] listo —', resumen);
-  return { resumen, detalle };
+  // Exclusión mutua: una segunda corrida (POST /maint/run solapado con la de
+  // las 9:00, o doble clic) vería "libres" a impresoras a media calibración y
+  // les mandaría FIRMWARE_RESTART en pleno movimiento.
+  if (_maintRunning) return { resumen: 'mantención ya en curso — no se lanzó otra', detalle: '', skipped: true };
+  _maintRunning = true;
+  try {
+    const stamp = nowInTz(cfg.tz);
+    console.log(`[mant] ${stamp.date} ${stamp.hm} — auditoría${cfg.dryRun ? ' (DRY-RUN)' : ''} de ${cfg.printers.length} impresora(s)${cfg.restartAll ? ' · reinicio preventivo' : ''}`);
+    // En paralelo: cada impresora se audita/reinicia/calibra por su cuenta, así
+    // el parque completo queda listo en lo que tarda la más lenta (secuencial,
+    // con reinicio + calibración por máquina, podría pasarse de la hora).
+    const results = await Promise.all(cfg.printers.map(async p => {
+      const r = await maintainPrinter(await auditPrinter(p, { console: true }), cfg);
+      console.log(`[mant]  • ${r.name}: ${r.state}${r.errored ? ' ERROR' : ''} — ${(r.acts || []).join('; ')}`);
+      return r;
+    }));
+    const ok = results.filter(r => !r.errored && !r.busy && r.state !== 'offline' && (!r.klState || r.klState === 'ready')).length;
+    const err = results.filter(r => r.errored).length, off = results.filter(r => r.state === 'offline').length, busy = results.filter(r => r.busy).length;
+    const resumen = `${ok} lista(s) · ${err} con error · ${busy} ocupada(s) · ${off} offline · ${results.length} total${cfg.dryRun ? ' · DRY-RUN' : ''}`;
+    const detalle = results.map(r => {
+      const estado = r.errored ? 'ERROR Klipper' + (r.klMsg ? ' ' + r.klMsg : '')
+        : r.busy ? (r.busyGcode ? 'ocupada (G-code/macro)' : 'imprimiendo')
+        : r.state === 'offline' ? 'OFFLINE'
+        : (r.klState && r.klState !== 'ready') ? `NO LISTA (Klipper ${r.klState})`
+        : 'lista';
+      return `${r.name} (${r.ip}): ${estado} · home ${r.homed ? 'sí' : 'no'} · malla ${r.meshOk ? 'sí' : 'no'}${r.consoleErrs && r.consoleErrs.length ? ' · consola: "' + r.consoleErrs[r.consoleErrs.length - 1] + '"' : ''} → ${(r.acts || []).join('; ')}`;
+    }).join('\n');
+    await maintReport(cfg, stamp, resumen, detalle);
+    console.log('[mant] listo —', resumen);
+    return { resumen, detalle };
+  } finally { _maintRunning = false; }
 }
 let _maintLastRun = '';
+let _maintRunning = false;
 function startMaintScheduler() {
   const cfg = loadMaintConfig();
   if (!cfg) { console.log('  Mantención auto: APAGADA (crea maint-config.json para activarla — ver README)'); return; }
-  console.log(`  Mantención auto: ${cfg.time} ${cfg.tz} · ${cfg.printers.length} impresora(s) · calibrar=${cfg.calibrate} · dryRun=${cfg.dryRun}`);
+  console.log(`  Mantención auto: ${cfg.time} ${cfg.tz} · ${cfg.printers.length} impresora(s) · calibrar=${cfg.calibrate} · reinicioPreventivo=${cfg.restartAll} · dryRun=${cfg.dryRun}`);
   const tick = async () => {
     try {
       const cur = loadMaintConfig(); if (!cur) return;
       const now = nowInTz(cur.tz);
-      if (now.hm === cur.time && _maintLastRun !== now.date) { _maintLastRun = now.date; await runMaintenance(cur); }
+      // Si hay una corrida manual en vuelo a la hora agendada, cuenta como la
+      // corrida del día (se marca la fecha igual) y no se lanza otra encima.
+      if (now.hm === cur.time && _maintLastRun !== now.date) { _maintLastRun = now.date; if (!_maintRunning) await runMaintenance(cur); }
     } catch (e) { console.log('[mant] tick error:', e.message); }
   };
   const t = setInterval(tick, 30 * 1000); if (t.unref) t.unref();

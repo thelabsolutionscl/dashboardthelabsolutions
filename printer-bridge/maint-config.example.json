@@ -1,13 +1,20 @@
 {
   "_comment": "Copia este archivo a maint-config.json para activar la auditoría y mantención diaria. Mientras no exista maint-config.json, la rutina automática queda APAGADA.",
 
-  "time": "10:00",
+  "_time": "Hora local del taller a la que corre la rutina. A las 09:00 el parque queda listo mucho antes de las 10:00 (las impresoras se procesan en paralelo).",
+  "time": "09:00",
   "tz": "America/Santiago",
 
-  "_calibrate": "true = corre G28 + BED_MESH_CALIBRATE en cada impresora libre. false = solo audita y arregla errores de Klipper.",
+  "_restartAll": "true = reinicia el firmware (FIRMWARE_RESTART) de TODAS las impresoras libres cada mañana, como chequeo preventivo. false = solo reinicia las que estén en error de Klipper.",
+  "restartAll": true,
+
+  "_calibrate": "true = corre G28 + BED_MESH_CALIBRATE en cada impresora libre (tras el reinicio de firmware). false = solo audita y arregla errores de Klipper. Para excluir UNA impresora puntual, agrégale \"calibrate\": false en su entrada de printers.",
   "calibrate": true,
 
-  "_dryRun": "IMPORTANTE: empieza en true. En dry-run NO manda ningún comando físico (no calienta ni mueve nada): solo audita y te manda el reporte. Cuando verifiques que el reporte de la mañana se ve bien, ponlo en false para que actúe de verdad.",
+  "_calibrateTimeoutMs": "Opcional: tiempo máximo de espera por la calibración de cada impresora, en ms (default 240000 = 4 min). Súbelo si tienes camas grandes que tardan más (p. ej. 600000 para la Giga).",
+  "calibrateTimeoutMs": 240000,
+
+  "_dryRun": "IMPORTANTE: empieza en true. En dry-run NO manda ningún comando físico (no calienta ni mueve nada): solo audita (incluida la consola) y te manda el reporte. Cuando verifiques que el reporte de la mañana se ve bien, ponlo en false para que actúe de verdad.",
   "dryRun": true,
 
   "_printers": "Lista de impresoras (IP de la red local). name es opcional (para el reporte). key es la API Key de Moonraker si la tienes configurada.",

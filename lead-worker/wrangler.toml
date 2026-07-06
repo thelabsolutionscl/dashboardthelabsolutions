@@ -11,8 +11,9 @@ compatibility_date = "2024-11-01"
 enabled = true
 
 # Reintento de leads en buffer (dead-letter) cada hora
+# + Piloto automático de Google Ads: lunes 12:00 UTC (08/09h en Chile)
 [triggers]
-crons = ["17 * * * *"]
+crons = ["17 * * * *", "0 12 * * 1"]
 
 # ── Variables NO secretas ──────────────────────────────────────────────
 # El Base ID de Airtable NO es secreto (aparece en URLs), por eso va aquí.
@@ -28,6 +29,16 @@ WHATSAPP_NUMBER = "56928785039"
 # Newsletter: doble opt-in. Con RESEND_API_KEY configurado, /newsletter envía un correo
 # de confirmación y NO suscribe hasta que el usuario hace clic. Poner "false" para alta directa.
 NEWSLETTER_DOUBLE_OPTIN = "true"
+
+# ── Piloto automático de Google Ads (semanal, con aprobación por email) ──
+# "true" activa la corrida del lunes. Nada se aplica sin aprobar el email.
+ADS_AUTOPILOT = "false"
+# URL del endpoint del Script 1 (Apps Script) — la misma del dashboard.
+ADS_ENDPOINT = ""
+# URL pública de ESTE worker (para los links Aprobar/Rechazar del email).
+WORKER_PUBLIC_URL = ""
+# Destinatario del email semanal (fallback: LEADS_NOTIFY_TO).
+ADS_AUTOPILOT_EMAIL = "thelabsolutionscl@gmail.com"
 
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL
@@ -46,3 +57,6 @@ id = "c148848321344f60939fa71a51d050c6"
 #   ANTHROPIC_API_KEY       (opcional — solo si AUTO_PROCESS_LEADS=true)
 #   RESEND_API_KEY          (opcional — auto-respuesta de leads + confirmación de newsletter)
 #   NEWSLETTER_SECRET       (opcional — firma tokens de confirmación/baja; si falta usa PUBLIC_LEAD_KEY)
+#   ADS_APPROVAL_SECRET     (piloto Ads — OBLIGATORIO para los links Aprobar/Rechazar del email
+#                            y el disparo manual; sin él solo se aprueba desde el dashboard)
+#   ADS_SCRIPT_SECRET       (piloto Ads — secret del Script 1; si falta usa el default del Script)

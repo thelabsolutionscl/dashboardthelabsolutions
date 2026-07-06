@@ -20,8 +20,17 @@
 :root{--black:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;--border:#2a2a2a;--border2:#333;--accent:#00d4cc;--accent2:#ff6b35;--accent3:#00d4aa;--accent4:#a78bfa;--text:#f0f0f0;--text2:#9a9a9a;--text3:#777;--danger:#ff4444;--warn:#ffaa00;--success:#00d4aa;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--black);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,204,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,204,0.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
-.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,10,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 20px;height:60px;display:flex;align-items:center;gap:16px;}
+/* Fondo global homogéneo con la web nueva: grilla "blueprint" que deriva + glows teal que respiran + viñeta inferior. */
+body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradient(to right,rgba(255,255,255,0.028) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.028) 1px,transparent 1px);background-size:64px 64px;pointer-events:none;z-index:-1;animation:grid-drift 30s linear infinite;-webkit-mask-image:radial-gradient(ellipse 130% 95% at 50% 0%,#000 50%,transparent 100%);mask-image:radial-gradient(ellipse 130% 95% at 50% 0%,#000 50%,transparent 100%);}
+.site-bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;}
+.site-bg-glow-a{position:absolute;left:-12%;top:-8%;width:60vh;height:60vh;border-radius:50%;background:radial-gradient(circle,rgba(0,212,204,0.10),transparent 68%);filter:blur(32px);animation:glow-breathe-a 24s ease-in-out infinite;}
+.site-bg-glow-b{position:absolute;right:-10%;top:40%;width:55vh;height:55vh;border-radius:50%;background:radial-gradient(circle,rgba(0,212,204,0.07),transparent 70%);filter:blur(42px);animation:glow-breathe-b 31s ease-in-out infinite;}
+.site-bg-vignette{position:absolute;left:0;right:0;bottom:0;height:40vh;background:linear-gradient(to top,#0a0a0a,transparent);}
+@keyframes grid-drift{from{transform:translate3d(0,0,0)}to{transform:translate3d(64px,64px,0)}}
+@keyframes glow-breathe-a{0%,100%{transform:translate3d(0,0,0) scale(1);opacity:.55}50%{transform:translate3d(6%,4%,0) scale(1.12);opacity:.9}}
+@keyframes glow-breathe-b{0%,100%{transform:translate3d(0,0,0) scale(1.05);opacity:.4}50%{transform:translate3d(-5%,-6%,0) scale(.95);opacity:.72}}
+@media(prefers-reduced-motion:reduce){body::before,.site-bg-glow-a,.site-bg-glow-b{animation:none!important}}
+.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:none;padding:0 20px;height:64px;display:flex;align-items:center;gap:16px;}
 .logo img{height:25px;width:auto;mix-blend-mode:screen;}
 .topbar-nav{display:flex;gap:3px;flex:1;margin-left:12px;overflow-x:auto;scrollbar-width:none;}
 .tab-btn{background:none;border:1px solid transparent;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;padding:5px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all 0.15s;}
@@ -45,6 +54,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 /* MOBILE */
 .mobile-menu-btn{display:none;background:none;border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;}
 .mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);}
+/* Botón de densidad (≡) oculto en todas las versiones: parecía un menú y confundía. */
+#densityBtn{display:none!important;}
 /* ── Búsqueda global ─────────────────────────────────────────── */
 .global-search{position:relative;flex:1;max-width:720px;display:flex;align-items:center;}
 .global-search .gs-icon{position:absolute;left:13px;color:var(--text3);pointer-events:none;}
@@ -68,7 +79,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .gs-item mark{background:rgba(0,212,204,0.22);color:var(--accent);border-radius:3px;padding:0 1px;}
 .gs-empty{padding:22px 14px;text-align:center;color:var(--text3);font-size:12px;}
 /* ── Sidebar de navegación vertical (escritorio) ─────────────── */
-.icon-dock{position:fixed;left:0;top:0;bottom:0;width:64px;z-index:150;background:rgba(10,10,10,0.97);backdrop-filter:blur(20px);border-right:1px solid var(--border);box-shadow:2px 0 28px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:visible;}
+.icon-dock{position:fixed;left:0;top:0;bottom:0;width:64px;z-index:150;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-right:1px solid rgba(255,255,255,0.06);box-shadow:2px 0 28px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:visible;}
 .icon-dock-inner{display:flex;flex-direction:column;align-items:center;gap:2px;padding:72px 7px 20px;flex:1;overflow-y:auto;overflow-x:visible;scrollbar-width:none;}
 .icon-dock-inner::-webkit-scrollbar{display:none;}
 .dock-btn{position:relative;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;padding:5px;border-radius:12px;width:50px;height:50px;transition:background .12s;overflow:visible;flex-shrink:0;}
@@ -123,7 +134,11 @@ body.kiosk .icon-dock{display:none!important;}
 .mgn-btn{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:var(--text2);-webkit-tap-highlight-color:transparent;transition:background .12s;}
 .mgn-btn:active{background:rgba(0,212,204,0.12);border-color:var(--accent);color:var(--accent);}
 body.kiosk{padding-left:0!important;}
-@media(min-width:769px){body{padding-left:64px;}}
+@media(min-width:769px){
+  body{padding-left:64px;}
+  /* El topbar abarca todo el ancho (por encima del rail lateral) para que el rail arranque limpio debajo del topbar, sin franja negra arriba. El logo se mantiene en su posición con el padding-left. */
+  .topbar{margin-left:-64px;width:calc(100% + 64px);padding-left:84px;z-index:200;}
+}
 .mobile-nav-overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);}
 .mobile-nav-overlay.open{display:block;}
 .mobile-nav-panel{position:fixed;top:0;left:0;bottom:0;width:280px;z-index:201;background:var(--surface);border-right:1px solid var(--border2);display:flex;flex-direction:column;transform:translateX(-100%);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);}
@@ -347,6 +362,8 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .sl-subtitle{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;opacity:0;animation:slFadeUp 0.6s 0.5s ease forwards;}
 @keyframes slFadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .sl-progress-wrap{width:280px;display:flex;flex-direction:column;gap:8px;opacity:0;animation:slFadeUp 0.6s 0.8s ease forwards;}
+.sl-pct-row{display:flex;justify-content:flex-end;align-items:baseline;}
+.sl-pct{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;letter-spacing:1px;color:var(--accent);font-variant-numeric:tabular-nums;}
 .sl-progress-track{height:2px;background:var(--border2);border-radius:2px;overflow:hidden;}
 .sl-progress-bar{height:100%;background:linear-gradient(90deg,var(--accent3),var(--accent));border-radius:2px;width:0%;transition:width 0.5s cubic-bezier(0.4,0,0.2,1);box-shadow:0 0 8px var(--accent);}
 .sl-status{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;text-align:center;min-height:14px;transition:opacity 0.3s;}
@@ -514,14 +531,16 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .topbar-right{flex:1;display:flex;align-items:center;justify-content:center;gap:14px;margin-left:0;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
   .user-chip{display:none!important;}
-  .mobile-menu-btn{display:none;}
+  /* Menú móvil como la web nueva: hamburguesa arriba a la izquierda que abre el drawer lateral. */
+  .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;margin-left:10px;}
   #nuevoDropdown{display:none!important;}
   .logo img{height:21px;}
   .logo{flex:0 0 auto;}
   .topbar-kai-btn{margin-left:0;margin-right:0;}
   #notifBtnWrap{margin-right:0;}
-  .main{padding:14px;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));}
-  .mobile-bottom-dock{display:flex;animation:mbd-in .42s cubic-bezier(0.32,0.72,0,1) both;}
+  .main{padding:14px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));}
+  /* Sin dock inferior: la navegación vive en el drawer lateral (hamburguesa). */
+  .mobile-bottom-dock{display:none!important;}
   #jvs-fab{display:none!important;}
   .topbar-kai-btn{position:static;transform:none;flex-shrink:0;}
   .data-grid,.data-grid-3{grid-template-columns:1fr;}
@@ -895,9 +914,9 @@ body.kiosk #maquinaMonGrid .pbar{height:14px!important}
   box-shadow:0 0 0 3px rgba(0,212,204,0.12);
 }
 
-/* Topbar stronger glass shadow */
+/* Topbar continuo con el contenido (como la web nueva): sin línea divisoria ni sombra. */
 .topbar{
-  box-shadow:0 1px 0 var(--border),0 6px 32px rgba(0,0,0,0.45);
+  box-shadow:none;
 }
 
 /* Active tab glow */
@@ -1050,7 +1069,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* Mover chip al panel móvil: ocultarlo del topbar usando visibility (revertible en el hijo) en vez de opacity (que NO se puede revertir y dejaba el menú invisible) */
   #userChip{width:0!important;overflow:hidden!important;padding:0!important;border:none!important;visibility:hidden!important;pointer-events:none!important;}
   /* User menu se posiciona como sheet fija desde abajo en móvil — revierte visibility/pointer-events del padre */
-  .user-menu.open{position:fixed!important;inset:auto 12px calc(104px + env(safe-area-inset-bottom,0px)) 12px!important;width:auto!important;max-height:70vh;max-height:70dvh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
+  .user-menu.open{position:fixed!important;inset:auto 12px calc(24px + env(safe-area-inset-bottom,0px)) 12px!important;width:auto!important;max-height:70vh;max-height:70dvh;overflow-y:auto;border-radius:14px!important;box-shadow:0 -8px 48px rgba(0,0,0,0.65)!important;visibility:visible!important;pointer-events:auto!important;}
 }
 
 /* ══ Finanzas — Mobile UX ═══════════════════════════════════════ */
@@ -1153,14 +1172,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
    ═══════════════════════════════════════════════════════════ */
 @media(max-width:768px){
 
-  /* ── Safe areas (notched phones) ────────────────────── */
+  /* ── Safe areas (notched phones) — altura de la franja igual que la web (64px) ── */
   .topbar{
-    height:54px;
     padding-left:max(14px,env(safe-area-inset-left))!important;
     padding-right:max(14px,env(safe-area-inset-right))!important;
   }
   .main{
-    padding:12px max(12px,env(safe-area-inset-right)) calc(104px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left));
+    padding:12px max(12px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left));
   }
   .mobile-nav-panel{
     width:min(280px,85vw);
@@ -1393,10 +1411,10 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* ── Inputs de ajustes/config a 16px: evita el zoom automático de iOS al enfocar ── */
   #userMenu input,#userMenu textarea,#mobileConfigBody input,#mobileConfigBody textarea{font-size:16px!important;}
   /* ── Toasts por encima del dock inferior (antes quedaban tapados/encima del dock) ── */
-  .toast-container{bottom:calc(112px + env(safe-area-inset-bottom,0px))!important;left:12px;right:12px;align-items:flex-end;}
+  .toast-container{bottom:calc(24px + env(safe-area-inset-bottom,0px))!important;left:12px;right:12px;align-items:flex-end;}
   .toast{max-width:calc(100vw - 24px);}
   /* ── Panel de notificaciones: ancho adaptable para no salirse en pantallas angostas (≤354px) ── */
-  .notif-panel{top:60px;left:10px;right:10px;width:auto;max-height:72dvh;}
+  .notif-panel{top:64px;left:10px;right:10px;width:auto;max-height:72dvh;}
   /* ── Monitor de impresoras: botones de acción con mejor área táctil en móvil ── */
   #maquinaMonGrid .pcard-actions{flex-wrap:wrap;gap:6px;}
   #maquinaMonGrid .pcard-actions button{padding:7px 11px!important;font-size:13px!important;}
@@ -1407,15 +1425,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
    ═══════════════════════════════════════════════════════════ */
 @media(max-height:500px) and (orientation:landscape){
 
-  /* Topbar compacto */
+  /* Topbar: misma altura que la web (64px) también en landscape */
   .topbar{
-    height:46px!important;
     padding-left:max(12px,env(safe-area-inset-left))!important;
     padding-right:max(12px,env(safe-area-inset-right))!important;
   }
   .main{
     padding-top:8px!important;
-    padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;
+    padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))!important;
     padding-left:max(12px,env(safe-area-inset-left))!important;
     padding-right:max(12px,env(safe-area-inset-right))!important;
   }
@@ -1465,6 +1482,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+<div class="site-bg" aria-hidden="true"><div class="site-bg-glow-a"></div><div class="site-bg-glow-b"></div><div class="site-bg-vignette"></div></div>
 <svg style="display:none" aria-hidden="true" id="svgIcons"><defs>
 <symbol id="icon-overview" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
 <symbol id="icon-clientes" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path stroke-linecap="round" stroke-linejoin="round" d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></symbol>
@@ -1577,6 +1595,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="sl-subtitle">Centro de Comando</div>
     </div>
     <div class="sl-progress-wrap">
+      <div class="sl-pct-row"><span class="sl-pct" id="slPct">0%</span></div>
       <div class="sl-progress-track"><div class="sl-progress-bar" id="slBar"></div></div>
       <div class="sl-status" id="slStatus">Iniciando sistema...</div>
       <div class="sl-dots">
@@ -3745,7 +3764,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <button class="btn btn-ghost btn-sm" onclick="audit3DReport()" style="font-size:11px">🧠 Reporte IA</button>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Revisa cada impresora (errores de Klipper, home, malla de cama, mantención) y corrige/calibra con un clic. Las acciones <b>nunca</b> tocan una máquina imprimiendo. La rutina automática de las 10 AM corre en el printer-bridge del taller.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Revisa cada impresora (errores de Klipper, consola, home, malla de cama, mantención) y corrige/calibra con un clic. Las acciones <b>nunca</b> tocan una máquina imprimiendo. La rutina automática de las 9 AM (auditoría + reinicio de firmware + calibración) corre en el printer-bridge del taller.</div>
     <div id="audit3DResult"><div style="padding:16px;color:var(--text3);font-size:12px">Pulsa “Auditar ahora” para revisar todas las impresoras.</div></div>
     <div id="audit3DAiOut" style="display:none;margin-top:12px;padding:14px;background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.22);border-radius:10px;font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.6"></div>
     <div id="audit3DDaily" style="margin-top:12px"></div>
@@ -4102,6 +4121,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <option value="90">Últimos 90 días</option>
         </select>
         <button class="btn btn-ghost btn-sm" onclick="toggleAdsConfig()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar</button>
+        <button class="btn btn-ghost btn-sm act-item-cyan" onclick="iaBuildCampaign()" id="btnIACampana">✨ Crear con IA</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAdsOfflineModal()" id="btnAdsOffline" title="Exporta las conversiones del CRM (leads calificados y ventas) con su gclid para subirlas a Google Ads y optimizar por ganancia real">⬇ Conversiones offline</button>
         <button class="btn btn-ghost btn-sm" onclick="openCreateCampaign()" id="btnNuevaCampana">+ Nueva Campaña</button>
         <button class="btn btn-primary btn-sm" onclick="loadAdsData()">↺ Actualizar</button>
         <span id="adsLastSyncLabel" style="font-size:10px;color:var(--text3);white-space:nowrap;align-self:center;padding-left:2px"></span>
@@ -4269,7 +4290,7 @@ function _enviarStats() {
       'metrics.cost_micros, metrics.conversions, metrics.conversions_value, ' +
       'metrics.search_impression_share, metrics.search_budget_lost_impression_share, ' +
       'metrics.search_rank_lost_impression_share ' +
-      'FROM campaign WHERE segments.date DURING LAST_30_DAYS'
+      "FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date DURING LAST_30_DAYS"
     );
     var rows = report.rows();
     while (rows.hasNext()) {
@@ -4386,12 +4407,36 @@ function _aplicarMutaciones(mutsJson) {
         // masiva (bulk upload) con el formato CSV del Editor de Google Ads.
         var _grupo = 'Grupo 1 - ' + m.data.nombre;
         var _kws = (m.data.palabrasClave &amp;&amp; m.data.palabrasClave.length) ? m.data.palabrasClave : [];
+        var _mt = m.data.concordancia || 'FRASE';
+        function _wrapKw(k){ return (_mt === 'EXACTA') ? ('[' + k + ']') : (_mt === 'AMPLIA') ? k : ('"' + k + '"'); }
+        var _maxCpc = parseInt(m.data.maxCpc, 10) || 800;
+
+        // PLAN B: si la campaña YA EXISTE (cascarón creado a mano en la UI —
+        // que sí permite responder la pregunta de anuncios políticos UE),
+        // la COMPLETAMOS con builders nativos (grupo, keywords, RSA,
+        // negativas, presupuesto) sin pasar por el CSV.
+        var _existente = _buscarCampana(null, m.data.nombre);
+        if (_existente) {
+          _completarCampana(_existente, m, _grupo, _kws, _mt, _maxCpc);
+          muts[k].status = 'aplicado';
+          continue;
+        }
+        // El CSV de carga masiva solo acepta de forma fiable 'cpc' (CPC manual).
+        // La estrategia elegida (Maximizar clics/conversiones, tCPA, tROAS) se
+        // activa a mano en Google Ads al revisar la campaña recién creada.
+        var _bs = 'cpc';
+        if (m.data.pujaEstrategia &amp;&amp; m.data.pujaEstrategia !== 'MANUAL_CPC') {
+          Logger.log('Nota: activar la estrategia ' + m.data.pujaEstrategia + ' a mano en la campaña "' + m.data.nombre + '" (el CSV la crea con CPC manual + tope).');
+        }
         var _ad = m.data.anuncio || null;
         var _titulos = (_ad &amp;&amp; _ad.titulos &amp;&amp; _ad.titulos.length) ? _ad.titulos.slice(0, 15) : [];
         var _descs = (_ad &amp;&amp; _ad.descripciones &amp;&amp; _ad.descripciones.length) ? _ad.descripciones.slice(0, 4) : [];
         var _conAnuncio = !!(_ad &amp;&amp; _ad.finalUrl &amp;&amp; _titulos.length >= 3 &amp;&amp; _descs.length >= 2);
+        // 'EU political ads': declaración obligatoria desde sept 2025 (regulación UE)
+        // aunque la campaña solo sirva en Chile. Sin la columna, la carga entera falla
+        // con "Falta un valor en 'Anuncios políticos de la UE'".
         var _cols = ['Campaign', 'Campaign status', 'Budget', 'Bid Strategy type',
-                     'Campaign type', 'Ad group', 'Max CPC', 'Keyword'];
+                     'Campaign type', 'EU political ads', 'Ad group', 'Max CPC', 'Keyword'];
         if (_conAnuncio) {
           _cols = _cols.concat(['Ad type', 'Final URL', 'Path 1', 'Path 2']);
           for (var h = 0; h &lt; _titulos.length; h++) _cols.push('Headline ' + (h + 1));
@@ -4403,14 +4448,17 @@ function _aplicarMutaciones(mutsJson) {
           'Campaign': m.data.nombre,
           'Campaign status': (m.data.estado === 'PAUSED') ? 'Paused' : 'Enabled',
           'Budget': m.data.presupuesto,
-          'Bid Strategy type': 'cpc',
-          'Campaign type': 'Search Only'
+          'Bid Strategy type': _bs,
+          'Campaign type': 'Search Only',
+          // Declaración obligatoria (regulación UE): booleano según los docs de
+          // Ads Scripts — 'false' = no contiene publicidad política de la UE.
+          'EU political ads': 'false'
         });
         // Fila de grupo de anuncios
-        _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': 300});
-        // Filas de palabras clave (concordancia amplia por defecto)
+        _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': _maxCpc});
+        // Filas de palabras clave (concordancia segun m.data.concordancia: FRASE / EXACTA / AMPLIA)
         for (var kw = 0; kw &lt; _kws.length; kw++) {
-          _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Keyword': _kws[kw]});
+          _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Keyword': _wrapKw(_kws[kw])});
         }
         // Fila de anuncio responsivo de búsqueda (RSA), si hay datos suficientes
         if (_conAnuncio) {
@@ -4431,14 +4479,30 @@ function _aplicarMutaciones(mutsJson) {
           _up.apply();
           Logger.log('OK creada (bulk upload): ' + m.data.nombre + ' · ' + _kws.length +
                      ' keywords · ' + (_conAnuncio ? 'con anuncio RSA' : 'sin anuncio'));
+          Logger.log('Si en 3 min no aparece en Campañas (revisa Subidas): crea a mano una campaña de Búsqueda ' +
+                     'vacía con el nombre EXACTO "' + m.data.nombre + '" en la UI, vuelve a guardar la campaña ' +
+                     'desde el dashboard y ejecuta este script: la completará con keywords y anuncio sin usar CSV.');
+          // Palabras clave negativas (best-effort; si la campana aun no aparece, reintenta el proximo ciclo)
+          var _negs = (m.data.negativas &amp;&amp; m.data.negativas.length) ? m.data.negativas : [];
+          if (_negs.length) {
+            try {
+              var _cIt = AdsApp.campaigns().withCondition("campaign.name = '" + String(m.data.nombre).replace(/'/g, '') + "'").get();
+              if (_cIt.hasNext()) {
+                var _cNeg = _cIt.next();
+                for (var _n = 0; _n &lt; _negs.length; _n++) _cNeg.createNegativeKeyword(_negs[_n]);
+                Logger.log('OK ' + _negs.length + ' negativos agregados a ' + m.data.nombre);
+              } else {
+                Logger.log('Negativos pendientes: la campana aun no aparece — se agregaran a mano o al reintentar');
+              }
+            } catch(_eN) { Logger.log('No se pudieron agregar negativos: ' + _eN.message); }
+          }
         }
         muts[k].status = 'aplicado';
 
       } else if (m.op === 'edit') {
-        var iter = AdsApp.campaigns().withIds([m.id]).get();
-        if (iter.hasNext()) {
-          var camp = iter.next();
-          if (m.data.nombre) camp.setName(m.data.nombre);
+        var camp = _buscarCampana(m.id, m.data &amp;&amp; m.data.nombre);
+        if (camp) {
+          if (m.data.nombre &amp;&amp; camp.setName &amp;&amp; camp.getName() !== m.data.nombre) { try { camp.setName(m.data.nombre); } catch(_eN2) {} }
           if (m.data.estado === 'ENABLED') camp.enable();
           if (m.data.estado === 'PAUSED') camp.pause();
           if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto);
@@ -4446,14 +4510,14 @@ function _aplicarMutaciones(mutsJson) {
           Logger.log('OK editada: ' + m.id);
         } else {
           muts[k].status = 'error';
-          muts[k].error = 'Campaña no encontrada: ' + m.id;
+          muts[k].error = 'Campaña no encontrada: ' + m.id + ' (si es una campaña Smart/inteligente, Scripts no puede editarla — pausala en ads.google.com)';
         }
 
       } else if (m.op === 'negative') {
         // Agrega palabra clave negativa: a la campaña (por id o nombre) o a nivel cuenta
         var term = m.data && m.data.termino; var added = false;
         if (term) {
-          var itN = m.id ? AdsApp.campaigns().withIds([m.id]).get()
+          var itN = m.id ? AdsApp.campaigns().withIds([Number(m.id)]).get()
                          : AdsApp.campaigns().withCondition("campaign.name = '" + (m.data.campana||'').replace(/'/g,"") + "'").get();
           if (itN.hasNext()) { itN.next().createNegativeKeyword('[' + term + ']'); added = true; }
         }
@@ -4476,14 +4540,14 @@ function _aplicarMutaciones(mutsJson) {
         Logger.log((paused > 0 ? 'OK' : 'ERR') + ' pausar keyword: ' + kwt + ' (' + paused + ')');
 
       } else if (m.op === 'delete') {
-        var iter2 = AdsApp.campaigns().withIds([m.id]).get();
-        if (iter2.hasNext()) {
-          iter2.next().pause();
+        var campD = _buscarCampana(m.id, m.data &amp;&amp; m.data.nombre);
+        if (campD) {
+          campD.pause();
           muts[k].status = 'aplicado';
           Logger.log('OK pausada: ' + m.id);
         } else {
           muts[k].status = 'error';
-          muts[k].error = 'Campaña no encontrada: ' + m.id;
+          muts[k].error = 'Campaña no encontrada: ' + m.id + ' (si es una campaña Smart/inteligente, Scripts no puede pausarla — hazlo en ads.google.com)';
         }
       }
     } catch(e) {
@@ -4493,6 +4557,92 @@ function _aplicarMutaciones(mutsJson) {
     }
   }
   return JSON.stringify(muts);
+}
+
+// Busca una campaña por ID (numérico) o por nombre, en todos los tipos que
+// Ads Scripts puede mutar: estándar (Search/Display), Performance Max, Video
+// y Shopping. Nota: los reportes GAQL listan también campañas Smart, pero
+// esas NO son accesibles para mutación desde Scripts.
+function _buscarCampana(id, nombre) {
+  var factories = [function(){ return AdsApp.campaigns(); }];
+  if (AdsApp.performanceMaxCampaigns) factories.push(function(){ return AdsApp.performanceMaxCampaigns(); });
+  if (AdsApp.videoCampaigns) factories.push(function(){ return AdsApp.videoCampaigns(); });
+  if (AdsApp.shoppingCampaigns) factories.push(function(){ return AdsApp.shoppingCampaigns(); });
+  var i, it;
+  var idNum = Number(id);
+  if (idNum) {
+    for (i = 0; i &lt; factories.length; i++) {
+      try { it = factories[i]().withIds([idNum]).get(); if (it.hasNext()) return it.next(); } catch(e) {}
+    }
+  }
+  if (nombre) {
+    for (i = 0; i &lt; factories.length; i++) {
+      try {
+        it = factories[i]().withCondition("campaign.name = '" + String(nombre).replace(/'/g, '') + "'").get();
+        if (it.hasNext()) return it.next();
+      } catch(e) {}
+    }
+  }
+  return null;
+}
+
+// PLAN B de creación: completa una campaña EXISTENTE (cascarón hecho en la UI)
+// con grupo de anuncios, keywords, anuncio RSA, negativas y presupuesto,
+// usando builders nativos de Ads Scripts (sin CSV, sin campo político UE).
+function _completarCampana(camp, m, grupoNombre, kws, mt, maxCpc) {
+  try { if (m.data.presupuesto) camp.getBudget().setAmount(m.data.presupuesto); } catch(e) {}
+  try {
+    if (m.data.estado === 'PAUSED') camp.pause();
+    else if (m.data.estado === 'ENABLED') camp.enable();
+  } catch(e) {}
+
+  // Grupo de anuncios: reutiliza si ya existe (idempotente para reintentos)
+  var ag = null;
+  try {
+    var agIt = camp.adGroups().withCondition("ad_group.name = '" + grupoNombre.replace(/'/g, '') + "'").get();
+    if (agIt.hasNext()) ag = agIt.next();
+  } catch(e) {}
+  if (!ag) {
+    try {
+      var agOp = camp.newAdGroupBuilder().withName(grupoNombre).withCpc(maxCpc).build();
+      if (agOp.isSuccessful()) ag = agOp.getResult();
+      else Logger.log('Grupo de anuncios: ' + agOp.getErrors().join('; '));
+    } catch(e) { Logger.log('Grupo de anuncios: ' + e.message); }
+  }
+  if (!ag) { Logger.log('ERR no se pudo crear/encontrar el grupo en "' + camp.getName() + '"'); return; }
+
+  // Palabras clave con la concordancia elegida
+  var kwOk = 0;
+  for (var i = 0; i &lt; kws.length; i++) {
+    var kw = (mt === 'EXACTA') ? ('[' + kws[i] + ']') : (mt === 'AMPLIA') ? kws[i] : ('"' + kws[i] + '"');
+    try { var kOp = ag.newKeywordBuilder().withText(kw).build(); if (kOp.isSuccessful()) kwOk++; } catch(e) {}
+  }
+
+  // Anuncio responsivo (RSA)
+  var ad = m.data.anuncio;
+  var conAd = false;
+  if (ad &amp;&amp; ad.finalUrl &amp;&amp; ad.titulos &amp;&amp; ad.titulos.length >= 3 &amp;&amp; ad.descripciones &amp;&amp; ad.descripciones.length >= 2) {
+    try {
+      var b = ag.newAd().responsiveSearchAdBuilder()
+        .withHeadlines(ad.titulos.slice(0, 15))
+        .withDescriptions(ad.descripciones.slice(0, 4))
+        .withFinalUrl(ad.finalUrl);
+      if (ad.path1) b = b.withPath1(ad.path1);
+      if (ad.path2) b = b.withPath2(ad.path2);
+      var adOp = b.build();
+      conAd = adOp.isSuccessful();
+      if (!conAd) Logger.log('RSA: ' + adOp.getErrors().join('; '));
+    } catch(e) { Logger.log('RSA: ' + e.message); }
+  }
+
+  // Palabras clave negativas
+  var negs = (m.data.negativas &amp;&amp; m.data.negativas.length) ? m.data.negativas : [];
+  for (var n = 0; n &lt; negs.length; n++) {
+    try { camp.createNegativeKeyword(negs[n]); } catch(e) {}
+  }
+
+  Logger.log('OK completada sobre campaña existente "' + camp.getName() + '": ' + kwOk + '/' + kws.length +
+             ' keywords · ' + (conAd ? 'con anuncio RSA' : 'SIN anuncio') + ' · ' + negs.length + ' negativas');
 }
 
 // Callback de executeInParallel: recibe array de ManagedAccountStats
@@ -4597,10 +4747,24 @@ function _reportarResultados(muts) {
           <button onclick="retryAllErrors()" id="adsRetryAllBtn" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px;color:var(--danger);display:none" title="Reintentar todas las mutaciones con error">↻ Reintentar errores</button>
           <button onclick="syncMutationStatuses().then(()=>toast('Estado actualizado','info'))" class="btn btn-ghost btn-sm" style="font-size:10px" title="Verificar si Script 2 aplicó los cambios">↻ Verificar</button>
           <button onclick="adsDiagnostico()" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--warn)" title="Diagnóstico completo del pipeline de mutaciones"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Diagnosticar</button>
+          <button onclick="adsLimpiarHistorialMutaciones()" class="btn btn-ghost btn-sm" style="font-size:10px" title="Borra del servidor las mutaciones ya aplicadas o con error (conserva las pendientes)">🧹 Limpiar historial</button>
         </div>
         <div id="adsDiagOutput" style="display:none;padding:10px 16px;background:var(--surface3);border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace"></div>
         <div id="adsPendingList" style="padding:12px 16px;display:flex;flex-direction:column;gap:6px"></div>
         <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">Los cambios se aplicarán la próxima vez que el Script 2 se ejecute en Google Ads (cada hora si está programado). <button onclick="window.open('https://ads.google.com','_blank')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">Abrir Google Ads para ejecutarlo ahora →</button></div>
+      </div>
+    </div>
+
+    <!-- Piloto automático: propuestas semanales pendientes de aprobación -->
+    <div id="adsAutopilotPanel" style="display:none;margin-bottom:16px">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🤖 Piloto automático — propuesta semanal</span>
+          <span id="adsAutopilotBadge" style="font-size:10px;background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px">—</span>
+          <button onclick="renderAdsAutopilot()" class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px">↻ Actualizar</button>
+        </div>
+        <div id="adsAutopilotList" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px"></div>
+        <div style="padding:0 16px 12px;font-size:10px;color:var(--text3)">El piloto corre cada lunes en el Worker: analiza ventas por línea, capacidad de producción y ROAS-real, y propone ajustes de presupuesto/pausa/creación. Nada se aplica sin aprobar (aquí o desde el email).</div>
       </div>
     </div>
 
@@ -6313,7 +6477,7 @@ ESTRUCTURA DE RESPUESTA:
 1. SEMÁFORO (cuántas listas, con error, offline, imprimiendo).
 2. ACCIONES URGENTES (máquinas con error o mantención vencida, con el paso concreto).
 3. CALIBRACIÓN (qué máquinas libres conviene calibrar y por qué).
-4. RECOMENDACIÓN para la rutina automática de las 10 AM.
+4. RECOMENDACIÓN para la rutina automática de las 9 AM (auditoría + reinicio preventivo de firmware + calibración, para que el parque esté listo a las 10).
 Sé concreto y operativo, sin relleno. No inventes datos que no estén en la auditoría.`,
    pre:'',
    qs:['Audita el parque y dime qué máquinas no están listas para imprimir','¿Qué impresoras necesitan calibración hoy y por qué?','Tengo una K1 en error de Klipper, ¿qué hago paso a paso?','Resume el estado para dejar todo listo mañana a las 10 AM']},
@@ -7442,15 +7606,21 @@ function _applyMonitorSistema(recs){
   if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){logErr('monitorSistema:fin',e);}}
   renderWatiConfigBtn();
 }
+// Render protegido: si una sección falla por un registro con datos inesperados,
+// las demás igual se pintan (antes una excepción dejaba todo lo siguiente en blanco).
+function _safeRender(name,fn){
+  try{fn();}
+  catch(e){console.error('[render:'+name+']',e);try{logErr('render:'+name,e);}catch(_e){}}
+}
 // Asigna el resultado de un fetch COMPLETO a state. render=true repinta cada lista.
 function _assignCoreState(res,render){
   const [cRes,coRes,pRes,rRes,pvRes,monRes,facRes]=res;
   if(facRes.status==='fulfilled') state.facturas=facRes.value.records||[];
-  if(cRes.status==='fulfilled'){ state.clientes=cRes.value.records||[]; _rebuildClientesById(); if(render) renderClientes(); }
-  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; _rebuildCotizacionesById(); if(render) renderCotizaciones(); }
-  if(pRes.status==='fulfilled'){ state.pedidos=pRes.value.records||[]; _rebuildPedidosById(); if(render){ renderPedidos(); if(document.getElementById('tab-remuneraciones')?.classList.contains('active')) renderRemuneraciones(); } }
-  if(rRes.status==='fulfilled'){ state.reportes=rRes.value.records||[]; if(render) renderReportes(); }
-  if(pvRes.status==='fulfilled'){ state.proveedores=pvRes.value.records||[]; if(render){ renderProveedores(); fillCatSelects(); } }
+  if(cRes.status==='fulfilled'){ state.clientes=cRes.value.records||[]; _rebuildClientesById(); if(render) _safeRender('clientes',renderClientes); }
+  if(coRes.status==='fulfilled'){ state.cotizaciones=coRes.value.records||[]; _rebuildCotizacionesById(); if(render) _safeRender('cotizaciones',renderCotizaciones); }
+  if(pRes.status==='fulfilled'){ state.pedidos=pRes.value.records||[]; _rebuildPedidosById(); if(render){ _safeRender('pedidos',renderPedidos); if(document.getElementById('tab-remuneraciones')?.classList.contains('active')) _safeRender('remuneraciones',renderRemuneraciones); } }
+  if(rRes.status==='fulfilled'){ state.reportes=rRes.value.records||[]; if(render) _safeRender('reportes',renderReportes); }
+  if(pvRes.status==='fulfilled'){ state.proveedores=pvRes.value.records||[]; if(render){ _safeRender('proveedores',renderProveedores); _safeRender('catSelects',fillCatSelects); } }
   if(monRes.status==='fulfilled') _applyMonitorSistema(monRes.value.records||[]);
 }
 // Mezcla (upsert) el resultado de un fetch INCREMENTAL a state.
@@ -7501,7 +7671,7 @@ async function loadAllData(){
     state.loaded=true;state.lastUpdateTs=Date.now();state._silentN=0;setStatus('en vivo',true);
     _saveDataCache();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
-    renderOverview();
+    _safeRender('overview',renderOverview);
     // Tras hidratar desde caché, el primer fetch es un refresco silencioso: no
     // mostramos el toast (se limpia la marca para que los refrescos manuales sí avisen).
     if(!isFirst && !state._hydrated) toast('Datos actualizados ✓','success');
@@ -7624,8 +7794,10 @@ function setStatus(text,live){
   if(dm) dm.className='status-dot'+(live?' live':'');if(tm) tm.textContent=text;
 }
 function slProgress(pct,msg){
-  const bar=document.getElementById('slBar'),st=document.getElementById('slStatus');
-  if(bar) bar.style.width=Math.min(100,pct)+'%';
+  const bar=document.getElementById('slBar'),st=document.getElementById('slStatus'),pc=document.getElementById('slPct');
+  const v=Math.min(100,Math.round(pct));
+  if(bar) bar.style.width=v+'%';
+  if(pc) pc.textContent=v+'%';
   if(st){st.style.opacity='0';setTimeout(()=>{st.textContent=msg;st.style.opacity='1';},150);}
 }
 function hideSysLoader(){
@@ -17271,7 +17443,7 @@ async function audit3DReport(){
   try{const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id==='MANTENCION3D'):null;const resp=await callClaude(cfg?cfg.sys:'',buildAgentContext('MANTENCION3D'));if(out)out.textContent=resp;}
   catch(e){if(out)out.textContent='Error IA: '+(e&&e.message||e);}
 }
-// Último reporte de la rutina automática de las 10 AM (lo escribe el printer-bridge en Airtable)
+// Último reporte de la rutina automática de la mañana (lo escribe el printer-bridge en Airtable)
 async function audit3DLoadDaily(){
   const el=document.getElementById('audit3DDaily');if(!el)return;
   try{const r=await airtableFetch('Maquinas_Auditoria',1);const rec=(r.records||[])[0];if(!rec){el.innerHTML='';return;}
@@ -20906,31 +21078,48 @@ function adsLastSyncStr(){
 }
 // ── Líneas de producción ↔ campañas Google Ads ───────────
 const ADS_DEFAULT_URL='https://thelab.solutions';
+// Webhook de Make que crea el "cascarón" de campaña vía la API real de Google
+// Ads (con la declaración de anuncios políticos UE que el CSV no puede setear).
+// El Script 2 completa la campaña (keywords/RSA/negativas) en su próxima corrida.
+const ADS_MAKE_SHELL={url:'https://hook.us2.make.com/4lvyro1ddp3nkqbiwteb1wmg5442dspk',clave:'tl-cascaron-9f27c4a1'};
+// id === slug de la landing /servicios/<slug>. finalUrl se arma en openCreateCampaignByLineaId.
 const ADS_LINEAS=[
-  {id:'3d_small',label:'Impresión 3D — K1/K2',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
-   palabrasClave:['impresión 3d santiago','impresión 3d','impresora 3d','piezas 3d','prototipo 3d','fabricación 3d','figuras 3d','modelos 3d','carcasas 3d','repuestos plásticos'],
-   titulos:['Impresión 3D en Santiago','Piezas y Prototipos 3D','Fabricación 3D a Medida','Repuestos y Figuras 3D','The Lab Solutions'],
-   descripciones:['Impresión 3D profesional en Santiago: piezas, prototipos y repuestos a medida.','Cotiza online y recibe tu pieza impresa en 3D con calidad garantizada.']},
-  {id:'3d_large',label:'Impresión 3D — Giga',campañaSugerida:'Búsqueda - Impresión 3D Grande',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['impresión 3d grande','maqueta arquitectura','modelos a escala','pieza industrial grande','prototipo tamaño real','impresión gran formato'],
-   titulos:['Impresión 3D Gran Formato','Maquetas y Modelos a Escala','Piezas 3D de Gran Tamaño','Prototipos a Tamaño Real','The Lab Solutions'],
-   descripciones:['Impresión 3D de gran formato para maquetas, prototipos y piezas industriales.','Llevamos tus ideas a escala real. Cotiza tu proyecto 3D hoy mismo.']},
-  {id:'laser',label:'Láser y Señalética',campañaSugerida:'Búsqueda - Señalética Acrílico',tipo:'SEARCH',presupuesto:6000,
-   palabrasClave:['señalética corporativa','señalética acrílico','corte láser','grabado láser','letrero acrílico','placa grabada','señalización empresa','rótulo acrílico'],
-   titulos:['Señalética en Acrílico','Corte y Grabado Láser','Letreros y Placas a Medida','Rótulos para Empresas','The Lab Solutions'],
-   descripciones:['Señalética corporativa en acrílico con corte y grabado láser de alta precisión.','Letreros, placas y rótulos a medida para tu empresa. Cotiza online.']},
-  {id:'neon',label:'Neon LED y Rótulos',campañaSugerida:'Búsqueda - Neon LED Personalizado',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['neon led personalizado','letrero neon','cartel neon','rótulo led','neon decorativo','letreros luminosos','neon para negocio','carteles de neon'],
-   titulos:['Letreros Neon LED','Neon Personalizado','Rótulos Luminosos a Medida','Carteles Neon a Pedido','The Lab Solutions'],
-   descripciones:['Letreros y carteles neon LED personalizados para tu negocio o decoración.','Diseñamos tu rótulo luminoso a medida. Cotiza tu letrero neon hoy.']},
-  {id:'trofeos',label:'Trofeos y Reconocimientos',campañaSugerida:'Búsqueda - Trofeos Corporativos',tipo:'SEARCH',presupuesto:4000,
-   palabrasClave:['trofeos personalizados','medallas empresa','reconocimiento corporativo','galvano personalizado','premio empresa','trofeos corporativos','placa reconocimiento'],
-   titulos:['Trofeos Personalizados','Galvanos y Medallas','Reconocimientos a Medida','Premios para tu Equipo','The Lab Solutions'],
-   descripciones:['Trofeos, galvanos y medallas personalizados para premiar a tu equipo.','Reconocimientos corporativos a medida. Cotiza tu pedido de trofeos online.']},
-  {id:'papeleria',label:'Papelería Corporativa',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000,
-   palabrasClave:['papelería corporativa','tarjetas presentación','sello empresa','membrete personalizado','carpetas corporativas','impresión corporativa'],
-   titulos:['Papelería Corporativa','Tarjetas y Membretes','Sellos y Carpetas','Imagen para tu Empresa','The Lab Solutions'],
-   descripciones:['Papelería corporativa: tarjetas, membretes, sellos y carpetas personalizadas.','Imagen profesional para tu empresa. Cotiza tu papelería corporativa online.']},
+  {id:'activaciones',slug:'activaciones',label:'Activaciones',campañaSugerida:'Búsqueda - Activaciones de Marca',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['activaciones de marca','activaciones btl','activacion de marca empresa','stands para activacion','activaciones publicitarias','produccion de eventos btl','activacion marca santiago','montaje de activaciones'],
+   titulos:['Activaciones de Marca','Activaciones BTL a Medida','Stands y Montajes de Marca','Producción de Activaciones','The Lab Solutions'],
+   descripciones:['Activaciones de marca y BTL producidas end-to-end para tu campaña o evento.','Diseño, fabricación y montaje. Cotiza tu activación en Santiago.']},
+  {id:'premiaciones',slug:'premiaciones',label:'Premiaciones',campañaSugerida:'Búsqueda - Premiaciones y Galvanos',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['galvanos personalizados','trofeos personalizados','trofeos corporativos','medallas personalizadas','galvano de reconocimiento','premios para empresa','reconocimientos corporativos','trofeos para premiacion','placa de reconocimiento'],
+   titulos:['Galvanos y Trofeos','Premiaciones Corporativas','Trofeos Personalizados','Medallas y Reconocimientos','The Lab Solutions'],
+   descripciones:['Galvanos, trofeos y medallas personalizados para premiar a tu equipo.','Fabricación a medida para tu premiación de fin de año. Cotiza online.']},
+  {id:'merchandising',slug:'merchandising',label:'Merchandising',campañaSugerida:'Búsqueda - Merchandising Corporativo',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['merchandising corporativo','regalos corporativos','articulos promocionales','regalos corporativos por mayor','merchandising personalizado','productos promocionales empresa','kit de bienvenida corporativo','regalos para empresas'],
+   titulos:['Merchandising Corporativo','Regalos Corporativos','Artículos Promocionales','Kits para Empresas','The Lab Solutions'],
+   descripciones:['Merchandising y regalos corporativos personalizados para tu marca.','Kits, artículos promocionales y packs por mayor. Cotiza para tu empresa.']},
+  {id:'cajas-personalizadas',slug:'cajas-personalizadas',label:'Cajas Personalizadas',campañaSugerida:'Búsqueda - Cajas y Packaging',tipo:'SEARCH',presupuesto:4000,
+   palabrasClave:['cajas personalizadas','packaging personalizado','cajas para packaging','cajas de regalo personalizadas','packaging corporativo','cajas con logo empresa','cajas rigidas personalizadas','packaging a medida'],
+   titulos:['Cajas Personalizadas','Packaging a Medida','Cajas con tu Logo','Packaging Corporativo','The Lab Solutions'],
+   descripciones:['Cajas y packaging personalizados para regalo o producto corporativo.','Diseño y fabricación de cajas a medida con tu marca. Cotiza online.']},
+  {id:'impresion-3d',slug:'impresion-3d',label:'Impresión 3D',campañaSugerida:'Búsqueda - Impresión 3D Santiago',tipo:'SEARCH',presupuesto:8000,
+   palabrasClave:['impresión 3d santiago','impresión 3d','servicio de impresion 3d','piezas 3d a medida','prototipo 3d','fabricacion 3d','impresion 3d para empresas','modelos y maquetas 3d','repuestos impresos 3d'],
+   titulos:['Impresión 3D en Santiago','Piezas y Prototipos 3D','Impresión 3D a Medida','Fabricación 3D Empresas','The Lab Solutions'],
+   descripciones:['Impresión 3D profesional: piezas, prototipos y repuestos a medida.','Llevamos tu idea a una pieza real. Cotiza tu proyecto 3D en Santiago.']},
+  {id:'volumetricos',slug:'volumetricos',label:'Volumétricos',campañaSugerida:'Búsqueda - Volumétricos y Neón LED',tipo:'SEARCH',presupuesto:5000,
+   palabrasClave:['letras corporeas','letras volumetricas','logo corporeo','letrero neon led','letras 3d para empresa','letreros luminosos led','estructuras para eventos','letras corporeas acrilico','neon personalizado'],
+   titulos:['Letras Corpóreas y Neón','Volumétricos a Medida','Letreros Neón LED','Logos Corpóreos 3D','The Lab Solutions'],
+   descripciones:['Letras corpóreas, logos 3D y neón LED personalizados para tu marca.','Volumétricos y estructuras para oficina o evento. Cotiza a medida.']},
+  {id:'carteleria',slug:'carteleria',label:'Cartelería',campañaSugerida:'Búsqueda - Cartelería y Señalética',tipo:'SEARCH',presupuesto:6000,
+   palabrasClave:['señaletica corporativa','señaletica acrilico','letrero acrilico','carteleria empresa','señalizacion empresa','rotulos corporativos','corte y grabado laser','placas acrilico','letreros para oficina'],
+   titulos:['Cartelería y Señalética','Señalética en Acrílico','Letreros para Empresas','Rótulos y Placas a Medida','The Lab Solutions'],
+   descripciones:['Cartelería y señalética corporativa en acrílico con corte láser.','Letreros, rótulos y placas a medida para tu empresa. Cotiza online.']},
+  {id:'papeleria',slug:'papeleria',label:'Papelería',campañaSugerida:'Búsqueda - Papelería Corporativa',tipo:'SEARCH',presupuesto:3000,
+   palabrasClave:['papeleria corporativa','tarjetas de presentacion','imprenta corporativa','membrete personalizado','carpetas corporativas','sellos para empresa','impresion corporativa santiago','tarjetas de presentacion empresa'],
+   titulos:['Papelería Corporativa','Tarjetas y Membretes','Imprenta para Empresas','Sellos y Carpetas','The Lab Solutions'],
+   descripciones:['Papelería corporativa: tarjetas, membretes, sellos y carpetas.','Imagen profesional para tu empresa. Cotiza tu papelería online.']},
+  {id:'chip-the-lab',slug:'chip-the-lab',label:'Chip The Lab (NFC)',campañaSugerida:'Búsqueda - Tarjetas NFC',tipo:'SEARCH',presupuesto:3000,
+   palabrasClave:['tarjetas nfc','tarjeta de presentacion nfc','tarjeta digital nfc','tarjetas nfc empresa','tarjeta nfc personalizada','tarjeta de contacto nfc','tarjetas inteligentes nfc','nfc chile'],
+   titulos:['Tarjetas NFC','Tarjeta Digital NFC','Tarjetas NFC a Medida','NFC para Empresas','The Lab Solutions'],
+   descripciones:['Tarjetas de presentación NFC personalizadas: comparte tu contacto al tocar.','Tarjetas inteligentes NFC para tu equipo. Cotiza las tuyas online.']},
 ];
 function _adsMatchCampaign(campanas,linea){
   if(!campanas||!campanas.length) return null;
@@ -20985,10 +21174,10 @@ function getCapacidadLineas(){
   };
   const mkRow=(id,label,pct,info,lids)=>({id,label,pct,info,lineasIds:lids,...sem(pct)});
   return[
-    mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['3d_small']),
-    mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['3d_large']),
-    mkRow('laser','Láser / Señalética',pedPct,activos+' pedidos activos en cola',['laser']),
-    mkRow('manual','Manual (Neon · Trofeos · Papelería)',pedPct,activos+' pedidos activos en cola',['neon','trofeos','papeleria']),
+    mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['impresion-3d']),
+    mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['impresion-3d']),
+    mkRow('laser','Láser / Cartelería',pedPct,activos+' pedidos activos en cola',['carteleria']),
+    mkRow('manual','Manual (Premiaciones · Merch · Papelería · otros)',pedPct,activos+' pedidos activos en cola',['premiaciones','merchandising','papeleria','activaciones','cajas-personalizadas','volumetricos','chip-the-lab']),
   ];
 }
 function renderAdsCapacidad(data){
@@ -21077,7 +21266,7 @@ function renderAdsSugerencias(data){
 }
 // Palabras clave a incluir en la próxima campaña creada (Script 2 las usará para armar el grupo de anuncios)
 let _adsCreateKeywords=[];
-function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulos,descripciones){
+function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulos,descripciones,finalUrl){
   openCreateCampaign();
   _adsCreateKeywords=Array.isArray(palabrasClave)?palabrasClave.slice():[];
   setTimeout(()=>{
@@ -21085,8 +21274,10 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulo
     const bd=document.getElementById('adsCampaignModalPresupuesto');if(bd) bd.value=presupuesto;
     const st=document.getElementById('adsCampaignModalEstado');if(st) st.value='ENABLED';
     const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
+    const fu=document.getElementById('adsCampaignModalFinalUrl');if(fu&&finalUrl) fu.value=finalUrl;
     const tt=document.getElementById('adsCampaignModalTitulos');if(tt&&Array.isArray(titulos)&&titulos.length) tt.value=titulos.join('\n');
     const ds=document.getElementById('adsCampaignModalDescripciones');if(ds&&Array.isArray(descripciones)&&descripciones.length) ds.value=descripciones.join('\n');
+    const kw=document.getElementById('adsCampaignModalKeywords');if(kw&&_adsCreateKeywords.length) kw.value=_adsCreateKeywords.join('\n');
     const hint=document.getElementById('adsCampaignModalKwHint');
     if(hint){
       if(_adsCreateKeywords.length){hint.style.display='block';hint.textContent='✓ Se incluirán '+_adsCreateKeywords.length+' palabras clave y un anuncio responsivo en el grupo de anuncios al crear la campaña. Revisa o edita el anuncio abajo.';}
@@ -21096,7 +21287,10 @@ function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulo
 }
 function openCreateCampaignByLineaId(lineaId){
   const l=ADS_LINEAS.find(x=>x.id===lineaId);
-  if(l) openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave,l.titulos,l.descripciones);
+  if(l){
+    const finalUrl=l.slug?(ADS_DEFAULT_URL+'/servicios/'+l.slug):ADS_DEFAULT_URL;
+    openCreateCampaignTemplate(l.campañaSugerida,l.presupuesto,l.tipo,l.palabrasClave,l.titulos,l.descripciones,finalUrl);
+  }
 }
 let _adsCapBtnStore=[];
 function _adsCapBtn(idx){
@@ -21327,6 +21521,20 @@ function openCreateCampaign(){
   document.getElementById('adsCampaignModalEstado').value='ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='';
   document.getElementById('adsCampaignModalAnuncioGroup').style.display='';
+  document.getElementById('adsCampaignModalCreateOpts').style.display='';
+  document.getElementById('adsCampaignModalConcordancia').value='FRASE';
+  document.getElementById('adsCampaignModalMaxCpc').value='800';
+  document.getElementById('adsCampaignModalPuja').value='MAXIMIZE_CLICKS';
+  document.getElementById('adsCampaignModalPujaObjetivo').value='';
+  document.getElementById('adsCampaignModalUbicaciones').value='Región Metropolitana, Chile';
+  document.getElementById('adsCampaignModalUbicModo').value='PRESENCE';
+  document.getElementById('adsCampaignModalRedSocios').checked=false;
+  document.getElementById('adsCampaignModalRedDisplay').checked=false;
+  document.getElementById('adsCampaignModalKeywords').value='';
+  document.getElementById('adsCampaignModalNegativas').value='';
+  _adsTogglePujaObjetivo();
+  const _iaInfo=document.getElementById('adsCampaignModalIAInfo');if(_iaInfo){_iaInfo.style.display='none';_iaInfo.innerHTML='';}
+  const _iaBtn=document.getElementById('adsCampaignModalCreateAI');if(_iaBtn) _iaBtn.style.display='';
   document.getElementById('adsCampaignModalFinalUrl').value=ADS_DEFAULT_URL;
   document.getElementById('adsCampaignModalPath1').value='';
   document.getElementById('adsCampaignModalPath2').value='';
@@ -21346,6 +21554,9 @@ function openEditCampaign(id, nombre, estado, presupuesto){
   document.getElementById('adsCampaignModalEstado').value=estado||'ENABLED';
   document.getElementById('adsCampaignModalTipoGroup').style.display='none';
   document.getElementById('adsCampaignModalAnuncioGroup').style.display='none';
+  document.getElementById('adsCampaignModalCreateOpts').style.display='none';
+  const _iaInfoE=document.getElementById('adsCampaignModalIAInfo');if(_iaInfoE){_iaInfoE.style.display='none';_iaInfoE.innerHTML='';}
+  const _iaBtnE=document.getElementById('adsCampaignModalCreateAI');if(_iaBtnE) _iaBtnE.style.display='none';
   document.getElementById('adsCampaignModal').style.display='flex';
 }
 
@@ -21386,8 +21597,24 @@ function saveCampaignMutation(){
   if(!nombre){alert('El nombre de la campaña es obligatorio.');return;}
   if(presupuesto<1000){alert('El presupuesto debe ser al menos $1.000 CLP.');return;}
   const data={nombre,presupuesto,estado,tipo};
-  if(op==='create'&&_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.slice();
   if(op==='create'){
+    // Sin comillas/corchetes: la concordancia la aplica el Script 2 según el selector
+    const kwText=(document.getElementById('adsCampaignModalKeywords').value||'').split('\n').map(_adsCleanKw).filter(Boolean);
+    if(kwText.length) data.palabrasClave=kwText;
+    else if(_adsCreateKeywords.length) data.palabrasClave=_adsCreateKeywords.map(_adsCleanKw).filter(Boolean);
+    data.concordancia=document.getElementById('adsCampaignModalConcordancia').value;
+    data.maxCpc=parseInt(document.getElementById('adsCampaignModalMaxCpc').value)||800;
+    data.pujaEstrategia=document.getElementById('adsCampaignModalPuja').value;
+    const _pObj=parseInt(document.getElementById('adsCampaignModalPujaObjetivo').value)||0;
+    if(data.pujaEstrategia==='TARGET_CPA'||data.pujaEstrategia==='TARGET_ROAS'){
+      if(_pObj<=0){alert('Indica el objetivo de la estrategia de puja (CPA en CLP, o ROAS ej. 3).');return;}
+      data.pujaObjetivo=_pObj;
+    }
+    data.ubicaciones=(document.getElementById('adsCampaignModalUbicaciones').value||'').trim();
+    data.ubicModo=document.getElementById('adsCampaignModalUbicModo').value;
+    data.redSocios=document.getElementById('adsCampaignModalRedSocios').checked;
+    data.redDisplay=document.getElementById('adsCampaignModalRedDisplay').checked;
+    data.negativas=(document.getElementById('adsCampaignModalNegativas').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
     const finalUrl=(document.getElementById('adsCampaignModalFinalUrl').value||'').trim();
     const path1=(document.getElementById('adsCampaignModalPath1').value||'').trim();
     const path2=(document.getElementById('adsCampaignModalPath2').value||'').trim();
@@ -21411,9 +21638,125 @@ function saveCampaignMutation(){
       return;
     }
   }
+  // Cascarón automático vía Make: crea la campaña real en Google Ads (pausada,
+  // con la declaración UE); el Script 2 la completará al procesar esta orden.
+  if(op==='create'&&ADS_MAKE_SHELL.url){
+    const qs='?clave='+encodeURIComponent(ADS_MAKE_SHELL.clave)+'&nombre='+encodeURIComponent(data.nombre)+'&presupuesto='+(data.presupuesto||1000);
+    fetch(ADS_MAKE_SHELL.url+qs,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({clave:ADS_MAKE_SHELL.clave,nombre:data.nombre,presupuesto:data.presupuesto||1000})})
+      .then(r=>{if(r.ok)toast('✓ Cascarón pedido a Make — el Script 2 completará la campaña en su próxima corrida','success');else toast('Make respondió '+r.status+' al pedir el cascarón — si la campaña no aparece, créala a mano','info');})
+      .catch(()=>toast('No se pudo contactar el webhook de Make — crea el cascarón a mano si no existe','info'));
+  }
   const mutation={op,id,data,timestamp:new Date().toISOString(),status:'pending'};
   closeAdsCampaignModal();
   _adsQueueMutation(mutation);
+}
+
+// ─── Generador de campañas con IA ───────────────────────────
+function _adsTogglePujaObjetivo(){
+  const sel=document.getElementById('adsCampaignModalPuja'); if(!sel) return;
+  const v=sel.value;
+  const g=document.getElementById('adsCampaignModalPujaObjetivoGroup');
+  const lb=document.getElementById('adsCampaignModalPujaObjetivoLabel');
+  const inp=document.getElementById('adsCampaignModalPujaObjetivo');
+  if(!g) return;
+  if(v==='TARGET_CPA'){g.style.display='';if(lb)lb.textContent='CPA objetivo (CLP)';if(inp)inp.placeholder='Ej: 8000';}
+  else if(v==='TARGET_ROAS'){g.style.display='';if(lb)lb.textContent='ROAS objetivo (ej: 3 = 300%)';if(inp)inp.placeholder='Ej: 3';}
+  else{g.style.display='none';}
+}
+
+const ADS_BUILDER_SYS=`Eres el generador experto de campañas de Google Ads de The Lab Solutions, fabricación digital B2B a medida en Santiago, Chile.
+NEGOCIO: la web convierte una visita en una cotización (WhatsApp o formulario). Comprador B2B (marketing, RRHH, productoras de eventos, retail) que cotiza con un proveedor y tiene plazo. Se optimiza por GANANCIA real del CRM, no por volumen de clics.
+9 LÍNEAS (usa el slug EXACTO en la URL final https://thelab.solutions/servicios/<slug>):
+- Activaciones (activaciones)
+- Premiaciones (premiaciones): trofeos, galvanos, medallas, reconocimientos
+- Merchandising (merchandising): regalos corporativos, artículos promocionales
+- Cajas Personalizadas (cajas-personalizadas): packaging
+- Impresión 3D (impresion-3d): piezas, prototipos, maquetas
+- Volumétricos (volumetricos): letras corpóreas, estructuras, neón/LED
+- Cartelería (carteleria): señalética, letreros acrílico
+- Papelería (papeleria): imprenta corporativa, tarjetas, membretes
+- Chip The Lab (chip-the-lab): tarjetas NFC
+REGLAS 2026 (aplícalas):
+- Concordancia por defecto FRASE (AMPLIA solo con puja inteligente y datos).
+- Puja: empieza en MAXIMIZE_CLICKS para juntar datos; usa TARGET_CPA o TARGET_ROAS solo si el brief dice que ya hay volumen de conversiones.
+- Geo: "Región Metropolitana, Chile", modo PRESENCE. Redes: socios y display en false.
+- Palabras clave con intención comercial chilena (cotizar, personalizado, para empresas, corporativo, por mayor, santiago); 10-15 por campaña. SIN comillas ni corchetes: la concordancia se define en un campo aparte, no en el texto.
+- Negativas: incluye empleo, trabajo, gratis, plantilla, pdf, como hacer, diy, tutorial, curso, usado, segunda mano; para impresión 3D agrega ademas steam, juego, render, blender, roblox, minecraft, lentes 3d.
+- RSA: 12-15 títulos ÚNICOS de máximo 30 caracteres (keyword, diferenciador premium, prueba/años, CTA "Cotiza por WhatsApp") y 4 descripciones de máximo 90 caracteres. LOS LÍMITES SON ESTRICTOS: cuenta los caracteres de cada título y descripción antes de incluirlos; si uno se pasa, reescríbelo más corto (no lo entregues largo).
+- Presupuesto diario en CLP realista (3000-10000 por línea).
+Responde SOLO con este JSON, sin texto adicional y sin bloques de código:
+{"nombre":"","tipo":"SEARCH","presupuesto":6000,"concordancia":"FRASE","maxCpc":800,"pujaEstrategia":"MAXIMIZE_CLICKS","pujaObjetivo":0,"ubicaciones":"Región Metropolitana, Chile","ubicModo":"PRESENCE","redSocios":false,"redDisplay":false,"finalUrl":"https://thelab.solutions/servicios/premiaciones","path1":"","path2":"","palabrasClave":[],"negativas":[],"titulos":[],"descripciones":[],"metricas":{"ctr":">3%","cpc":"<$1.200 CLP","cpa":"<$8.000 CLP","roas":">3x (CRM)","convMes":"15-30"},"checklist":["Poner la etiqueta de conversión en la web antes de activar","Confirmar geo en modo Presencia (RM) en Google Ads","Importar conversiones offline del CRM (gclid) para optimizar por ganancia real","Adjuntar sitelinks a cada /servicios y asset de mensaje/WhatsApp"]}`;
+
+async function iaBuildCampaign(){
+  const brief=prompt('¿Qué campaña quieres que arme la IA?\nIndica la línea de producto y el objetivo.\n\nEj: Premiaciones — captar pedidos de galvanos y trofeos para empresas de fin de año');
+  if(brief===null) return;
+  const q=(brief||'').trim();
+  if(!q){toast('Describe la campaña que quieres crear','error');return;}
+  toast('✨ La IA está armando la campaña…','info');
+  try{
+    let ctx='';
+    try{ if(typeof state!=='undefined'&&state.loaded&&window._adsLastData&&!window._adsLastData.demo) ctx=('\n\nDATOS ACTUALES DE LA CUENTA (referencia):\n'+buildAgentContext('ADS')).slice(0,3500); }catch(e){}
+    const raw=await callClaude(ADS_BUILDER_SYS,'BRIEF: '+q+ctx+'\n\nDevuelve SOLO el JSON.');
+    const prop=_parseCampaignJSON(raw);
+    if(!prop||!prop.nombre){toast('La IA no devolvió una campaña válida — reintenta','error');return;}
+    _applyIACampaign(prop);
+    toast('✓ Campaña generada — revísala y guarda','success');
+  }catch(e){toast('Error IA: '+((e&&e.message)||e),'error');}
+}
+
+function _parseCampaignJSON(raw){
+  if(!raw) return null;
+  const s=String(raw).trim();
+  const a=s.indexOf('{'), b=s.lastIndexOf('}');
+  if(a<0||b<0) return null;
+  try{return JSON.parse(s.slice(a,b+1));}catch(e){return null;}
+}
+
+// Sanitiza la salida de la IA a los límites reales de Google Ads:
+// keywords sin comillas/corchetes (la concordancia la pone el Script 2),
+// títulos ≤30 y descripciones ≤90 recortados en el último espacio.
+function _adsCleanKw(s){return String(s||'').trim().replace(/^["'“”\[\]]+|["'“”\[\]]+$/g,'').trim();}
+function _adsTrimLen(s,max){
+  s=String(s||'').trim();
+  if(s.length<=max) return s;
+  const cut=s.slice(0,max);
+  const sp=cut.lastIndexOf(' ');
+  return (sp>Math.floor(max*0.5)?cut.slice(0,sp):cut).replace(/[\s,;:.]+$/,'');
+}
+function _applyIACampaign(p){
+  if(Array.isArray(p.palabrasClave)) p.palabrasClave=p.palabrasClave.map(_adsCleanKw).filter(Boolean);
+  if(Array.isArray(p.negativas)) p.negativas=p.negativas.map(_adsCleanKw).filter(Boolean);
+  if(Array.isArray(p.titulos)) p.titulos=p.titulos.map(t=>_adsTrimLen(t,30)).filter(Boolean);
+  if(Array.isArray(p.descripciones)) p.descripciones=p.descripciones.map(d=>_adsTrimLen(d,90)).filter(Boolean);
+  openCreateCampaign();
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!=null&&v!=='') el.value=v;};
+  set('adsCampaignModalNombre',p.nombre);
+  set('adsCampaignModalTipo',(p.tipo||'SEARCH'));
+  set('adsCampaignModalPresupuesto',p.presupuesto);
+  set('adsCampaignModalConcordancia',(p.concordancia||'FRASE').toString().toUpperCase());
+  set('adsCampaignModalMaxCpc',p.maxCpc);
+  set('adsCampaignModalPuja',(p.pujaEstrategia||'MAXIMIZE_CLICKS').toString().toUpperCase());
+  _adsTogglePujaObjetivo();
+  if(p.pujaObjetivo) set('adsCampaignModalPujaObjetivo',p.pujaObjetivo);
+  set('adsCampaignModalUbicaciones',p.ubicaciones);
+  set('adsCampaignModalUbicModo',(p.ubicModo||'PRESENCE').toString().toUpperCase());
+  const rs=document.getElementById('adsCampaignModalRedSocios');if(rs) rs.checked=!!p.redSocios;
+  const rd=document.getElementById('adsCampaignModalRedDisplay');if(rd) rd.checked=!!p.redDisplay;
+  set('adsCampaignModalFinalUrl',p.finalUrl);
+  set('adsCampaignModalPath1',p.path1);
+  set('adsCampaignModalPath2',p.path2);
+  if(Array.isArray(p.titulos)) set('adsCampaignModalTitulos',p.titulos.join('\n'));
+  if(Array.isArray(p.descripciones)) set('adsCampaignModalDescripciones',p.descripciones.join('\n'));
+  if(Array.isArray(p.palabrasClave)){_adsCreateKeywords=p.palabrasClave.slice();set('adsCampaignModalKeywords',p.palabrasClave.join('\n'));}
+  if(Array.isArray(p.negativas)) set('adsCampaignModalNegativas',p.negativas.join('\n'));
+  const info=document.getElementById('adsCampaignModalIAInfo');
+  if(info){
+    const m=p.metricas||{};
+    const met=Object.keys(m).length?('<div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:4px">🎯 Métricas objetivo</div><div style="font-size:11px;color:var(--text2);line-height:1.7">'+Object.keys(m).map(k=>'<b>'+escapeHtml(k)+':</b> '+escapeHtml(String(m[k]))).join(' · ')+'</div>'):'';
+    const chk=(Array.isArray(p.checklist)&&p.checklist.length)?('<div style="font-weight:700;color:var(--warn);font-size:11px;margin:8px 0 4px">✅ Terminar en Google Ads</div><ul style="font-size:11px;color:var(--text2);margin:0;padding-left:16px;line-height:1.6">'+p.checklist.map(c=>'<li>'+escapeHtml(String(c))+'</li>').join('')+'</ul>'):'';
+    info.innerHTML='<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">'+(met||'')+(chk||'')+'</div>';
+    info.style.display=(met||chk)?'':'none';
+  }
 }
 
 function confirmDeleteCampaign(){
@@ -21422,6 +21765,163 @@ function confirmDeleteCampaign(){
   const mutation={op:'delete',id,data:{nombre},timestamp:new Date().toISOString(),status:'pending'};
   closeAdsDeleteModal();
   _adsQueueMutation(mutation);
+}
+
+// Purga del servidor (Script 1) las mutaciones ya resueltas; conserva las pendientes.
+// El almacén crece para siempre (errores viejos, duplicados) y ensucia el diagnóstico.
+async function adsLimpiarHistorialMutaciones(){
+  const cfg=getAdsConfig();
+  if(!cfg.endpoint){toast('No hay endpoint configurado','error');return;}
+  try{
+    const r=await fetch(cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now());
+    const d=await r.json();
+    const todas=(d&&d.mutations)||[];
+    const pendientes=todas.filter(m=>m.status==='pending');
+    const resueltas=todas.length-pendientes.length;
+    if(!resueltas){toast('No hay mutaciones resueltas que limpiar','info');return;}
+    if(!confirm(`Se eliminarán ${resueltas} mutaciones ya resueltas (aplicadas o con error) del historial del servidor. Se conservan las ${pendientes.length} pendientes. ¿Continuar?`)) return;
+    const res=await fetch(cfg.endpoint,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({secret:'thelab2025',type:'update_mutations',mutations:pendientes})});
+    const dr=await res.json().catch(()=>({}));
+    if(dr&&dr.ok){
+      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status==='pending'||m.status==='enviado');
+      savePendingToStorage();renderPendingMutations();
+      toast('✓ Historial limpio — '+resueltas+' eliminadas, '+pendientes.length+' pendientes conservadas','success');
+    } else toast('No se pudo limpiar: '+((dr&&dr.error)||'el servidor no respondió ok'),'error');
+  }catch(e){toast('Error limpiando historial: '+e.message,'error');}
+}
+
+// ─── Piloto automático (propuestas semanales del Worker) ────
+let _adsAutopilotProps=[];
+async function renderAdsAutopilot(){
+  const panel=document.getElementById('adsAutopilotPanel');
+  const list=document.getElementById('adsAutopilotList');
+  const badge=document.getElementById('adsAutopilotBadge');
+  if(!panel||!list) return;
+  try{
+    const cfg=_airtableConfig();
+    const formula=encodeURIComponent("AND({Agente}='ADS_AUTOPILOT',{Estado}='Pendiente')");
+    const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue?filterByFormula=${formula}&pageSize=10`,{headers:cfg.headers});
+    if(!r.ok) throw new Error('Airtable '+r.status);
+    const d=await r.json();
+    _adsAutopilotProps=(d.records||[]).map(rec=>{
+      let out={};try{out=JSON.parse(rec.fields?.Output||'{}');}catch(e){}
+      return{id:rec.id,fecha:rec.fields?.['Fecha creación']||rec.createdTime,resumen:out.resumen||'',acciones:out.acciones||[],mutaciones:out.mutaciones||[],descartadas:out.descartadas||[]};
+    }).filter(p=>p.mutaciones.length);
+  }catch(e){ panel.style.display='none'; return; }
+  if(!_adsAutopilotProps.length){ panel.style.display='none'; return; }
+  if(badge) badge.textContent=_adsAutopilotProps.length+' pendiente'+(_adsAutopilotProps.length!==1?'s':'');
+  list.innerHTML=_adsAutopilotProps.map((p,i)=>{
+    const filas=p.acciones.map(a=>{
+      const det=a.tipo==='presupuesto'?`$${(a.anterior||0).toLocaleString('es-CL')} → <b>$${(a.nuevo||0).toLocaleString('es-CL')}</b>/día`:a.tipo;
+      return `<div style="display:flex;gap:8px;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border2)"><span style="min-width:120px;color:var(--accent)">${escapeHtml(a.linea||'')}</span><span style="flex:1;color:var(--text2)">${escapeHtml(a.campana||'')} · ${det}</span><span style="flex:1;color:var(--text3)">${escapeHtml(a.motivo||'')}</span></div>`;
+    }).join('');
+    return `<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;border-left:3px solid var(--accent)">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:4px">${escapeHtml((p.fecha||'').slice(0,16).replace('T',' '))}</div>
+      ${p.resumen?`<div style="font-size:11px;color:var(--text);margin-bottom:6px">${escapeHtml(p.resumen)}</div>`:''}
+      ${filas}
+      ${p.descartadas.length?`<div style="font-size:10px;color:var(--text3);margin-top:6px">Descartadas por guardrails: ${p.descartadas.map(x=>escapeHtml((x.tipo||'')+' '+(x.linea||'')+' ('+(x.descarte||'')+')')).join(' · ')}</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-primary btn-sm" style="font-size:11px" onclick="adsAutopilotDecide(${i},true)">✓ Aprobar y aplicar</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--danger)" onclick="adsAutopilotDecide(${i},false)">✗ Rechazar</button>
+      </div>
+    </div>`;
+  }).join('');
+  panel.style.display='block';
+}
+async function adsAutopilotDecide(i,aprobar){
+  const p=_adsAutopilotProps[i]; if(!p) return;
+  // Re-verifica el estado justo antes (pudo aprobarse por email hace un momento):
+  // evita encolar dos veces las mismas mutaciones (un "create" duplicaría la campaña).
+  try{
+    const cfg=_airtableConfig();
+    const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue/${p.id}`,{headers:cfg.headers});
+    if(r.ok){const rec=await r.json();if((rec.fields?.Estado||'')!=='Pendiente'){toast('Esta propuesta ya fue procesada ('+(rec.fields?.Estado||'—')+')','info');renderAdsAutopilot();return;}}
+  }catch(e){}
+  if(aprobar){
+    if(!confirm(`¿Aprobar ${p.mutaciones.length} cambio(s) del piloto? Se aplicarán en Google Ads en la próxima corrida del Script 2.`)) return;
+    p.mutaciones.forEach(m=>_adsQueueMutation({...m,timestamp:m.timestamp||new Date().toISOString(),status:'pending'}));
+    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Completado','Fecha ejecución':new Date().toISOString(),'Accion sugerida':`Aprobado desde dashboard: ${p.mutaciones.length} mutaciones encoladas`});}catch(e){}
+    toast('✓ '+p.mutaciones.length+' cambio(s) del piloto encolados','success');
+  }else{
+    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Error',Error:'Rechazado desde el dashboard ('+new Date().toISOString().slice(0,16)+')'});}catch(e){}
+    toast('Propuesta del piloto rechazada','info');
+  }
+  renderAdsAutopilot();
+}
+
+// ─── Conversiones offline (CRM → Google Ads) ────────────────
+function _adsOffSyncNames(){
+  const l=(document.getElementById('adsOffLeadName').value||'Lead calificado CRM').trim();
+  const v=(document.getElementById('adsOffVentaName').value||'Venta CRM').trim();
+  const e1=document.getElementById('adsOffNameEcho1'); if(e1) e1.textContent=l||'Lead calificado CRM';
+  const e2=document.getElementById('adsOffNameEcho2'); if(e2) e2.textContent=v||'Venta CRM';
+}
+function openAdsOfflineModal(){
+  const r=document.getElementById('adsOffResult'); if(r){r.style.display='none';r.innerHTML='';}
+  _adsOffSyncNames();
+  document.getElementById('adsOfflineModal').style.display='flex';
+}
+function closeAdsOfflineModal(){ document.getElementById('adsOfflineModal').style.display='none'; }
+function _adsOfflineTime(d){
+  try{ return d.toLocaleString('sv-SE',{timeZone:'America/Santiago'}).replace('T',' ').slice(0,19); }
+  catch(e){ return d.toISOString().slice(0,19).replace('T',' '); }
+}
+function _adsCsvCell(v){ const s=String(v==null?'':v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+function _adsDownloadCSV(name,text){
+  const blob=new Blob([text],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{try{document.body.removeChild(a);}catch(e){} URL.revokeObjectURL(url);},150);
+}
+function _adsGetGclid(c){
+  if(!c||!c.fields) return '';
+  const g=c.fields['GCLID']; if(g) return String(g).trim();
+  const notas=c.fields['Notas internas']||''; const m=String(notas).match(/gclid=([^\s]+)/i);
+  return m?m[1]:'';
+}
+function adsExportOfflineConversions(){
+  if(typeof state==='undefined'||!state.loaded){toast('Carga primero los datos de Airtable','error');return;}
+  const days=Math.max(1,Math.min(90,parseInt(document.getElementById('adsOffDays').value)||90));
+  const thr=parseInt(document.getElementById('adsOffScore').value)||6;
+  const leadVal=parseInt(document.getElementById('adsOffLeadVal').value)||0;
+  const incLeads=document.getElementById('adsOffIncLeads').checked;
+  const incVentas=document.getElementById('adsOffIncVentas').checked;
+  const nLead=(document.getElementById('adsOffLeadName').value||'Lead calificado CRM').trim();
+  const nVenta=(document.getElementById('adsOffVentaName').value||'Venta CRM').trim();
+  const cutoff=new Date(Date.now()-days*86400000);
+  const etapasCalif=['Propuesta enviada','Negociación','Cliente activo'];
+  const rows=[]; let sinGclid=0, nLeads=0, nVentas=0;
+  if(incLeads){
+    (state.clientes||[]).forEach(c=>{
+      const f=c.fields||{}; const dd=c.createdTime?new Date(c.createdTime):null; if(!dd||dd<cutoff) return;
+      const score=Number(f['Lead Score IA']||f['Lead Score']||0);
+      const etapa=f['Etapa venta']||'';
+      if(!(score>=thr||etapasCalif.includes(etapa))) return;
+      const g=_adsGetGclid(c); if(!g){sinGclid++;return;}
+      rows.push([g,nLead,_adsOfflineTime(dd),leadVal>0?leadVal:'','CLP']); nLeads++;
+    });
+  }
+  if(incVentas){
+    (state.pedidos||[]).forEach(p=>{
+      const f=p.fields||{}; if((f['Estado pedido']||'')==='Cancelado') return;
+      const dd=p.createdTime?new Date(p.createdTime):null; if(!dd||dd<cutoff) return;
+      const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:(typeof f['Cliente']==='string'?f['Cliente']:null);
+      const cli=(cid&&state.clientesByIdRec)?state.clientesByIdRec[cid]:null;
+      const g=_adsGetGclid(cli); if(!g){sinGclid++;return;}
+      const val=Math.round((f['Monto total (CLP)']||0)/1.19);
+      rows.push([g,nVenta,_adsOfflineTime(dd),val>0?val:'','CLP']); nVentas++;
+    });
+  }
+  const out=document.getElementById('adsOffResult'); if(out) out.style.display='block';
+  if(!rows.length){
+    if(out) out.innerHTML='<span style="color:var(--warn)">No se encontraron conversiones con gclid en el período. Revisa que la columna <b>GCLID</b> exista en Clientes y que estén llegando leads desde Google Ads (o que el gclid quede en Notas internas).</span>';
+    return;
+  }
+  const header='Parameters:TimeZone=America/Santiago\nGoogle Click ID,Conversion Name,Conversion Time,Conversion Value,Conversion Currency';
+  const csv=header+'\n'+rows.map(r=>r.map(_adsCsvCell).join(',')).join('\n')+'\n';
+  _adsDownloadCSV('conversiones_offline_'+new Date().toISOString().slice(0,10)+'.csv',csv);
+  if(out) out.innerHTML='✓ CSV generado: <b>'+rows.length+'</b> conversiones ('+nLeads+' leads · '+nVentas+' ventas)'+(sinGclid?' · <span style="color:var(--warn)">'+sinGclid+' sin gclid omitidas</span>':'')+'.<br>Súbelo en Google Ads → Objetivos → Conversiones → Cargas → Subir.';
 }
 
 async function adsDiagnostico(){
@@ -21630,6 +22130,7 @@ async function loadAdsData(){
     renderPendingMutations();
     // Refleja en el dashboard lo que el Script 2 ya aplicó en Google Ads
     syncMutationStatuses();
+    try{renderAdsAutopilot();}catch(err){}
     const _aw=document.getElementById('adsAutoWeekly');if(_aw)_aw.checked=localStorage.getItem('ads_auto_weekly')==='1';
     setTimeout(()=>{try{adsAutoWeeklyCheck();}catch(e){}},1200);
     const dot=document.getElementById('adsStatusDot');
@@ -24739,6 +25240,8 @@ function qcalcClear(kind){
   <div class="modal-card">
     <div class="modal-title" id="adsCampaignModalTitle">Nueva Campaña</div>
     <div class="modal-desc" id="adsCampaignModalDesc">Los cambios se aplicarán en la próxima ejecución del Script 2.</div>
+    <div id="adsCampaignModalCreateAI" style="margin-top:10px"><button class="btn btn-ghost btn-sm act-item-cyan" onclick="iaBuildCampaign()">✨ Rellenar con IA</button></div>
+    <div id="adsCampaignModalIAInfo" style="display:none;margin-top:12px"></div>
     <input type="hidden" id="adsCampaignModalId">
     <input type="hidden" id="adsCampaignModalOp">
     <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
@@ -24766,6 +25269,68 @@ function qcalcClear(kind){
           <option value="ENABLED">Habilitada</option>
           <option value="PAUSED">Pausada</option>
         </select>
+      </div>
+      <div id="adsCampaignModalCreateOpts">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);margin:6px 0 2px">Segmentación y puja</div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Concordancia de palabras clave</label>
+            <select class="field-input" id="adsCampaignModalConcordancia">
+              <option value="FRASE" selected>Frase (recomendada)</option>
+              <option value="EXACTA">Exacta</option>
+              <option value="AMPLIA">Amplia (solo con puja inteligente)</option>
+            </select>
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">CPC máximo (CLP)</label>
+            <input class="field-input" id="adsCampaignModalMaxCpc" type="number" min="50" step="50" value="800" placeholder="Ej: 800">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Estrategia de puja</label>
+            <select class="field-input" id="adsCampaignModalPuja" onchange="_adsTogglePujaObjetivo()">
+              <option value="MAXIMIZE_CLICKS" selected>Maximizar clics (para partir)</option>
+              <option value="MANUAL_CPC">CPC manual</option>
+              <option value="MAXIMIZE_CONVERSIONS">Maximizar conversiones</option>
+              <option value="TARGET_CPA">CPA objetivo</option>
+              <option value="TARGET_ROAS">ROAS objetivo</option>
+            </select>
+          </div>
+          <div class="field-group" style="flex:1;display:none" id="adsCampaignModalPujaObjetivoGroup">
+            <label class="field-label" id="adsCampaignModalPujaObjetivoLabel">Objetivo</label>
+            <input class="field-input" id="adsCampaignModalPujaObjetivo" type="number" min="0" placeholder="Ej: 8000">
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin:-6px 0 4px;line-height:1.4">La campaña se crea con CPC manual + el tope indicado (límite del formato de carga). La estrategia elegida se activa en Google Ads al revisar la campaña: Configuración → Ofertas.</div>
+        <div style="display:flex;gap:8px">
+          <div class="field-group" style="flex:2">
+            <label class="field-label">Ubicaciones</label>
+            <input class="field-input" id="adsCampaignModalUbicaciones" value="Región Metropolitana, Chile" placeholder="Ej: Región Metropolitana, Chile">
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Modo de ubicación</label>
+            <select class="field-input" id="adsCampaignModalUbicModo">
+              <option value="PRESENCE" selected>Presencia</option>
+              <option value="PRESENCE_OR_INTEREST">Presencia o interés</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Redes</label>
+          <div style="display:flex;gap:18px;font-size:12px;color:var(--text2);padding:4px 0">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsCampaignModalRedSocios"> Socios de búsqueda</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsCampaignModalRedDisplay"> Red de Display</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Palabras clave (una por línea)</label>
+          <textarea class="field-input" id="adsCampaignModalKeywords" rows="4" placeholder="galvanos personalizados&#10;trofeos corporativos&#10;premios para empresa" style="resize:vertical"></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Palabras clave negativas (una por línea)</label>
+          <textarea class="field-input" id="adsCampaignModalNegativas" rows="3" placeholder="empleo&#10;gratis&#10;cómo hacer&#10;curso" style="resize:vertical"></textarea>
+        </div>
       </div>
       <div class="field-group" id="adsCampaignModalAnuncioGroup">
         <label class="field-label">Anuncio responsivo (se publica con la campaña)</label>
@@ -24797,6 +25362,61 @@ function qcalcClear(kind){
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost btn-sm" onclick="closeAdsDeleteModal()">Cancelar</button>
       <button class="btn btn-sm" style="background:var(--danger);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600" onclick="confirmDeleteCampaign()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONVERSIONES OFFLINE MODAL ─────────────────────────── -->
+<div id="adsOfflineModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeAdsOfflineModal()"></div>
+  <div class="modal-card">
+    <div class="modal-title">⬇ Conversiones offline → Google Ads</div>
+    <div class="modal-desc">Genera el CSV con las conversiones reales del CRM (leads calificados y ventas) usando el <code>gclid</code> de cada cliente, para que Google Ads optimice por ganancia real y no por volumen de clics.</div>
+
+    <details style="margin-top:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--accent)">Cómo configurarlo en Google Ads (1 vez)</summary>
+      <ol style="font-size:11px;color:var(--text2);line-height:1.7;margin:8px 0 0;padding-left:18px">
+        <li>Crea la columna <b>GCLID</b> en la tabla <b>Clientes</b> de Airtable (texto). El worker ya la rellena en cada lead de Google Ads.</li>
+        <li>En Google Ads → <b>Objetivos → Conversiones → + Acción de conversión → Importar → Subir conversiones desde un archivo (CSV)</b>. Crea dos acciones con estos nombres exactos: <b id="adsOffNameEcho1">Lead calificado CRM</b> y <b id="adsOffNameEcho2">Venta CRM</b>. Marca "Venta CRM" como <b>primaria</b> y usa valores.</li>
+        <li>Genera el CSV acá y súbelo en <b>Conversiones → Cargas → Subir</b>. Repite semanalmente (dentro de los 90 días del clic).</li>
+      </ol>
+    </details>
+
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+      <div style="display:flex;gap:8px">
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Días hacia atrás</label>
+          <input class="field-input" id="adsOffDays" type="number" min="1" max="90" value="90">
+        </div>
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Lead Score mínimo para "calificado"</label>
+          <input class="field-input" id="adsOffScore" type="number" min="1" max="10" value="6">
+        </div>
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Valor por lead (CLP, opcional)</label>
+          <input class="field-input" id="adsOffLeadVal" type="number" min="0" step="1000" placeholder="0">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Nombre acción · Leads</label>
+          <input class="field-input" id="adsOffLeadName" value="Lead calificado CRM" oninput="_adsOffSyncNames()">
+        </div>
+        <div class="field-group" style="flex:1">
+          <label class="field-label">Nombre acción · Ventas</label>
+          <input class="field-input" id="adsOffVentaName" value="Venta CRM" oninput="_adsOffSyncNames()">
+        </div>
+      </div>
+      <div style="display:flex;gap:18px;font-size:12px;color:var(--text2)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsOffIncLeads" checked> Incluir leads calificados</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="adsOffIncVentas" checked> Incluir ventas (pedidos)</label>
+      </div>
+      <div id="adsOffResult" style="display:none;font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;line-height:1.6"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-ghost btn-sm" onclick="closeAdsOfflineModal()">Cerrar</button>
+      <button class="btn btn-primary btn-sm" onclick="adsExportOfflineConversions()">⬇ Generar CSV</button>
     </div>
   </div>
 </div>
