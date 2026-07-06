@@ -4439,7 +4439,9 @@ function _aplicarMutaciones(mutsJson) {
           'Budget': m.data.presupuesto,
           'Bid Strategy type': _bs,
           'Campaign type': 'Search Only',
-          'EU political ads': 'no'
+          // Declaración obligatoria (regulación UE): booleano según los docs de
+          // Ads Scripts — 'false' = no contiene publicidad política de la UE.
+          'EU political ads': 'false'
         });
         // Fila de grupo de anuncios
         _up.append({'Campaign': m.data.nombre, 'Ad group': _grupo, 'Max CPC': _maxCpc});
