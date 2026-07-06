@@ -345,7 +345,7 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .nota-del:hover{color:var(--danger);}
 .nota-badge{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--black);border-radius:8px;font-size:9px;font-weight:800;padding:1px 5px;margin-left:4px;line-height:1.4;}
 .loading-state{display:flex;align-items:center;justify-content:center;gap:8px;padding:36px;color:var(--text3);font-size:12px;}
-.spinner{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;}
+.spinner{width:16px;height:16px;border-radius:50%;background:conic-gradient(from 90deg,transparent 0%,var(--accent) 100%);-webkit-mask:radial-gradient(farthest-side,#0000 calc(100% - 2px),#000 calc(100% - 1.5px));mask:radial-gradient(farthest-side,#0000 calc(100% - 2px),#000 calc(100% - 1.5px));animation:spin 0.7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 /* Luma Spin — loader de anillo con degradado (reconstrucción de 21st.dev, adaptado al cian de la marca). Uso: <div class="luma-spin"></div> */
 .luma-spin{width:40px;height:40px;border-radius:50%;background:conic-gradient(from 90deg,transparent 0%,rgba(0,212,204,0.15) 12%,var(--accent) 100%);-webkit-mask:radial-gradient(farthest-side,#0000 calc(100% - 4px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,#0000 calc(100% - 4px),#000 calc(100% - 3px));animation:spin 0.9s linear infinite;filter:drop-shadow(0 0 6px rgba(0,212,204,0.35));}
