@@ -21078,6 +21078,10 @@ function adsLastSyncStr(){
 }
 // ── Líneas de producción ↔ campañas Google Ads ───────────
 const ADS_DEFAULT_URL='https://thelab.solutions';
+// Webhook de Make que crea el "cascarón" de campaña vía la API real de Google
+// Ads (con la declaración de anuncios políticos UE que el CSV no puede setear).
+// El Script 2 completa la campaña (keywords/RSA/negativas) en su próxima corrida.
+const ADS_MAKE_SHELL={url:'https://hook.us2.make.com/4lvyro1ddp3nkqbiwteb1wmg5442dspk',clave:'tl-cascaron-9f27c4a1'};
 // id === slug de la landing /servicios/<slug>. finalUrl se arma en openCreateCampaignByLineaId.
 const ADS_LINEAS=[
   {id:'activaciones',slug:'activaciones',label:'Activaciones',campañaSugerida:'Búsqueda - Activaciones de Marca',tipo:'SEARCH',presupuesto:6000,
@@ -21633,6 +21637,14 @@ function saveCampaignMutation(){
     } else if(!confirm('La campaña se creará SIN anuncios y no se publicará hasta que agregues uno en Google Ads. ¿Continuar de todos modos?')){
       return;
     }
+  }
+  // Cascarón automático vía Make: crea la campaña real en Google Ads (pausada,
+  // con la declaración UE); el Script 2 la completará al procesar esta orden.
+  if(op==='create'&&ADS_MAKE_SHELL.url){
+    const qs='?clave='+encodeURIComponent(ADS_MAKE_SHELL.clave)+'&nombre='+encodeURIComponent(data.nombre)+'&presupuesto='+(data.presupuesto||1000);
+    fetch(ADS_MAKE_SHELL.url+qs,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({clave:ADS_MAKE_SHELL.clave,nombre:data.nombre,presupuesto:data.presupuesto||1000})})
+      .then(r=>{if(r.ok)toast('✓ Cascarón pedido a Make — el Script 2 completará la campaña en su próxima corrida','success');else toast('Make respondió '+r.status+' al pedir el cascarón — si la campaña no aparece, créala a mano','info');})
+      .catch(()=>toast('No se pudo contactar el webhook de Make — crea el cascarón a mano si no existe','info'));
   }
   const mutation={op,id,data,timestamp:new Date().toISOString(),status:'pending'};
   closeAdsCampaignModal();
