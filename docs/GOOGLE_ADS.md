@@ -119,17 +119,38 @@ keywords, negativas):
 - **+ Nueva Campaña** — desde cero, control total.
 
 Al guardar, la campaña se encola en **Cambios pendientes** y el **Script 2** la
-crea (como borrador si `PREVIEW_NUEVAS_CAMPANAS=true`, recomendado al inicio).
-Luego **↻ Verificar** confirma que se aplicó.
+procesa en su próxima corrida.
 
 > Valores por defecto seguros del modal: concordancia **FRASE**, CPC **800 CLP**,
 > puja **Maximizar clics**, geo **RM / Presencia**, redes **off**.
 
+**⚠️ Cómo crea el Script 2 (flujo probado — "cascarón + completado"):** desde
+sept. 2025 Google exige declarar "Anuncios políticos de la UE" en toda campaña
+nueva, y esa declaración **no se puede hacer vía carga masiva CSV** de forma
+confiable (la carga entera falla con «Falta un valor en 'Anuncios políticos de
+la UE'»). El flujo que funciona:
+
+1. **Cascarón en la UI de Google Ads** (30 seg por campaña): Nueva campaña →
+   *sin objetivo* → Búsqueda → **nombre exacto** (se usará como llave) →
+   redes OFF → ubicación RM + **Presencia** → **UE: "No contiene"** →
+   IA Max OFF → sin keywords ni anuncios → Publicar → **Pausar**.
+2. **Orden en el dashboard**: ✨ Crear con IA → pegar **el mismo nombre
+   exacto** (¡ojo con guiones/tildes!) → Pausada → 💾 Guardar.
+3. **▶ Ejecutar el Script 2**: al encontrar la campaña existente por nombre,
+   la **completa con builders nativos** (sin CSV): grupo de anuncios,
+   keywords con concordancia, anuncio RSA, negativas y presupuesto.
+   Registro esperado: `OK completada sobre campaña existente "..." : N/N
+   keywords · con anuncio RSA · N negativas`.
+4. En Google Ads: eliminar el grupo vacío del asistente → revisar → **Activar**.
+
+Si la campaña NO existe, el Script intenta igualmente el camino CSV (columna
+`EU political ads`), pero a la fecha Google rechaza/ignora los valores
+probados — usar siempre el flujo cascarón.
+
 ### 3.3 — Terminar en Google Ads
-El borrador se revisa en **Acciones masivas → Cargas** y se publica. Lo que el
-Script no aplica de forma confiable (modo de ubicación **Presencia**, socios de
-búsqueda) se confirma a mano; la IA lo deja en el checklist con los valores
-listos.
+Tras el completado: revisar el grupo/keywords/anuncio creados, confirmar el
+modo de ubicación **Presencia** y (opcional) cambiar la puja de CPC manual a
+Maximizar clics en Configuración → Ofertas. Luego activar la campaña.
 
 ### 3.4 — Rutina semanal con el ADS_AGENT
 **↺ Actualizar** → revisar KPIs y **ROAS Real** (panel *Ads vs Ventas CRM*) →
