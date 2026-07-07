@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://thelab.solutions">
 <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-<link rel="icon" type="image/png" href="https://thelabsolutionscl.github.io/dashboardthelabsolutions/isotipo-thelab.png">
+<link rel="icon" type="image/png" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{--black:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;--border:#2a2a2a;--border2:#333;--accent:#00d4cc;--accent2:#ff6b35;--accent3:#00d4aa;--accent4:#a78bfa;--text:#f0f0f0;--text2:#9a9a9a;--text3:#777;--danger:#ff4444;--warn:#ffaa00;--success:#00d4aa;}
@@ -1600,7 +1600,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div id="loginPage">
   <div class="lp-glow"></div>
   <div class="login-card">
-    <img loading="lazy" decoding="async" class="login-logo" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" alt="The Lab Solutions">
+    <img loading="lazy" decoding="async" class="login-logo" src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab Solutions">
     <div class="login-title">Centro de Comando</div>
     <div class="login-subtitle">Acceso restringido</div>
     <form class="login-form" onsubmit="handleLogin(event)" autocomplete="on">
@@ -1629,7 +1629,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div class="sl-veil"></div>
   <div class="sl-content">
     <div class="sl-logo-wrap">
-      <img loading="lazy" decoding="async" class="sl-logo" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" alt="The Lab Solutions" style="height:36px;mix-blend-mode:normal;filter:brightness(0) invert(1);">
+      <img loading="lazy" decoding="async" class="sl-logo" src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab Solutions" style="height:36px;mix-blend-mode:normal;filter:brightness(0) invert(1);">
       <div class="sl-subtitle">Centro de Comando</div>
     </div>
     <div class="sl-progress-wrap">
@@ -1661,7 +1661,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 })();
 </script>
 <div class="topbar">
-  <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img loading="lazy" decoding="async" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" alt="The Lab Solutions"></div>
+  <div class="logo" onclick="switchTab('overview')" style="cursor:pointer"><img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab Solutions"></div>
   <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
   <button id="mobilePlusBtn" class="mobile-menu-btn" onclick="toggleNuevoMenuMobile(event)" style="display:none;font-size:20px;font-weight:300;padding:6px 12px">＋</button>
   <div class="global-search" id="globalSearch">
@@ -1828,7 +1828,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <div class="mobile-nav-overlay" id="mobileOverlay" onclick="closeMobileMenu()"></div>
 <div class="mobile-nav-panel" id="mobileNavPanel">
   <div class="mobile-nav-header">
-    <img loading="lazy" decoding="async" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" alt="The Lab" onclick="closeMobileMenu();switchTab('overview')" style="cursor:pointer">
+    <img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab" onclick="closeMobileMenu();switchTab('overview')" style="cursor:pointer">
     <button class="mobile-nav-close" onclick="closeMobileMenu()">✕</button>
   </div>
   <div class="mobile-status"><div class="status-dot" id="statusDotMobile"></div><span id="statusTextMobile">iniciando...</span></div>
@@ -6040,7 +6040,7 @@ function _reportarResultados(muts) {
 
 
 <div class="footer"><div class="footer-inner">
-  <div style="display:flex;align-items:center;gap:10px"><img loading="lazy" decoding="async" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" style="height:14px;opacity:0.4;mix-blend-mode:screen"><span class="footer-text">v5.1 · Centro de Comando</span></div>
+  <div style="display:flex;align-items:center;gap:10px"><img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" style="height:14px;opacity:0.4;mix-blend-mode:screen"><span class="footer-text">v5.1 · Centro de Comando</span></div>
   <div style="display:flex;gap:8px;align-items:center"><span class="footer-text">Atajos:</span><kbd>1-8</kbd><span class="footer-text">tabs</span><kbd>Ctrl+R</kbd><span class="footer-text">refresh</span></div>
   <span class="footer-text">Auto-refresh: 90s</span>
 </div></div>
@@ -9442,7 +9442,7 @@ function buildCotizacionDoc(id){
   const itemsHTML=lineas.length>0?lineas.map((l,i)=>`<tr style="background:${i%2===0?'#f9f9f9':'#fff'}"><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px">${escHtml(l.desc)}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:center;color:#555">${l.und}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:right">${formatCLP(l.ventaUnit)}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:right;font-weight:600">${formatCLP(l.ventaTotal)}</td></tr>`).join(''):`<tr><td colspan="4" style="padding:12px;text-align:center;color:#999;font-size:10px">Sin detalle</td></tr>`;
   const infoRow=(label,val)=>val&&val!=='—'?`<tr><td style="padding:3px 0;font-size:10px;color:#888;width:80px;vertical-align:top">${label}</td><td style="padding:3px 0;font-size:10px;color:#1a1a1a;font-weight:500">${escHtml(val)}</td></tr>`:'';
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Cotización ${escHtml(num)}</title>
-<link rel="icon" href="https://thelabsolutionscl.github.io/dashboardthelabsolutions/isotipo-thelab.png">
+<link rel="icon" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
 <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:18px 24px;font-size:10px;}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #00d4cc;}
 .logo-area img{height:28px;filter:brightness(0);}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
@@ -9472,7 +9472,7 @@ table.items thead th:nth-child(2){text-align:center;}table.items thead th:nth-ch
 .footer .left{font-size:8px;color:#bbb;line-height:1.7;}.footer .validity{background:#f8f8f8;border-radius:5px;padding:5px 10px;font-size:9px;color:#555;}
 .footer .validity strong{color:#0a0a0a;}
 @media print{body{padding:10px 14px;}@page{margin:8mm;size:A4;}}</style></head><body>
-<div class="header"><div class="logo-area"><img loading="lazy" decoding="async" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
+<div class="header"><div class="logo-area"><img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
 <div class="cot-meta"><h1>Cotización</h1><div class="num">${escHtml(num)}</div><div class="fechas">Emitida: <strong>${escHtml(fecha)}</strong><br>Válida hasta: <strong>${escHtml(vto)}</strong></div></div></div>
 ${urgente?'<div class="urgente-strip">⚡ Cotización con urgencia — se aplica recargo del 25%</div>':''}
 <div class="info-grid">
@@ -9586,7 +9586,7 @@ function buildFichaDoc(pedidoId){
   const qaList=qaItems.length>0?`<ul style="margin:6px 0 0 16px;padding:0;font-size:9px;color:#555;line-height:1.8">${qaItems.map(it=>`<li>${it.checked?'✓':'✗'} ${escH(it.text||String(it))}</li>`).join('')}</ul>`:'';
 
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Ficha Técnica ${escH(num)}</title>
-<link rel="icon" href="https://thelabsolutionscl.github.io/dashboardthelabsolutions/isotipo-thelab.png">
+<link rel="icon" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:18px 24px;font-size:10px;}
@@ -9619,7 +9619,7 @@ table.items thead th{padding:6px 10px;font-size:8px;font-weight:700;letter-spaci
 </style></head><body>
 <div class="header">
   <div class="logo-area">
-    <img loading="lazy" decoding="async" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" onerror="this.style.display='none'">
+    <img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" onerror="this.style.display='none'">
     <div class="tagline">Impresión 3D · Neones · Trofeos</div>
   </div>
   <div class="doc-meta">
@@ -10662,7 +10662,7 @@ function buildFichaPropuestaDoc(cotId){
     ?'<div class="fbox"><div class="flbl">'+label+'</div><img loading="lazy" decoding="async" src="'+src+'" class="fimg"></div>'
     :'<div class="fbox"><div class="flbl">'+label+'</div><div class="fph"><span style="font-size:22px">📷</span><span>'+label+'</span></div></div>';
 
-  const theLabLogo='https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png';
+  const theLabLogo='https://dashboard.thelab.solutions/logo-thelab.png';
   const contacto='thelab.solutions  ·  hola@thelab.solutions  ·  +56 9 7180 6142';
 
   const portada=`<div class="pagina">
@@ -10735,7 +10735,7 @@ function buildFichaPropuestaDoc(cotId){
   }).join('');
 
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Ficha Técnica ${escH(num)}</title>
-<link rel="icon" href="https://thelabsolutionscl.github.io/dashboardthelabsolutions/isotipo-thelab.png">
+<link rel="icon" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e0e0;}
@@ -10852,7 +10852,7 @@ function descargarReporteCotizaciones(){
   const pendientes=cots.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
   const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'});
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Cotizaciones — The Lab Solutions</title>
-<link rel="icon" href="https://thelabsolutionscl.github.io/dashboardthelabsolutions/isotipo-thelab.png">
+<link rel="icon" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
 <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:20px 28px;font-size:10px;}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:14px;border-bottom:3px solid #00d4cc;}
 .logo-area img{height:26px;filter:brightness(0);}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
@@ -10871,7 +10871,7 @@ tfoot tr{background:#0a0a0a;color:#00d4cc;} tfoot td{padding:8px 10px;font-size:
 .footer .left{font-size:8px;color:#bbb;line-height:1.7;}.footer .right{font-size:8px;color:#bbb;}
 @media print{body{padding:10px 14px;}@page{margin:8mm;size:A4 landscape;}}</style></head><body>
 <div class="header">
-  <div class="logo-area"><img loading="lazy" decoding="async" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
+  <div class="logo-area"><img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
   <div class="report-meta"><h1>Reporte de Cotizaciones</h1><div class="sub">Generado el ${escH(now)} · ${cots.length} cotizaciones</div></div>
 </div>
 <div class="kpis">
@@ -14450,7 +14450,7 @@ function _nlEmailHtml(f){
   (pre?`<span style="display:none;max-height:0;overflow:hidden;opacity:0">${pre}</span>`:'')+
   `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5"><tr><td align="center" style="padding:24px 12px">`+
   `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e6e6e9">`+
-  `<tr><td style="background:#0b0b0c;padding:18px 28px"><img src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" alt="The Lab Solutions" height="28" style="height:28px;width:auto;max-width:220px;display:block;border:0;outline:none;text-decoration:none" onerror="this.style.display='none';var t=this.parentNode.querySelector('.nl-brand-txt');if(t)t.style.display='inline'"><span class="nl-brand-txt" style="display:none;color:#fff;font-weight:800;font-size:16px;letter-spacing:.04em">THE LAB <span style="color:#00d4cc">SOLUTIONS</span></span></td></tr>`+
+  `<tr><td style="background:#0b0b0c;padding:18px 28px"><img src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab Solutions" height="28" style="height:28px;width:auto;max-width:220px;display:block;border:0;outline:none;text-decoration:none" onerror="this.style.display='none';var t=this.parentNode.querySelector('.nl-brand-txt');if(t)t.style.display='inline'"><span class="nl-brand-txt" style="display:none;color:#fff;font-weight:800;font-size:16px;letter-spacing:.04em">THE LAB <span style="color:#00d4cc">SOLUTIONS</span></span></td></tr>`+
   `<tr><td style="padding:28px;font-family:system-ui,Arial,sans-serif;color:#18181b;font-size:15px;line-height:1.65">${_nlMdToHtml(f['Cuerpo (Markdown)']||'')}</td></tr>`+
   `<tr><td style="padding:18px 28px;background:#fafafa;border-top:1px solid #eee;font-family:system-ui,Arial,sans-serif;color:#9a9aa2;font-size:11px;line-height:1.6">`+
   `The Lab Solutions · Fabricación digital · Las Condes, Santiago, Chile<br>`+
@@ -16501,7 +16501,7 @@ function _ofRenderIso(ia,auto,extras){
   const _lW=132,_lH=30;
   const logo=`<g transform="matrix(${_lux.toFixed(4)},${_luy.toFixed(4)},0,1,${_lorg[0].toFixed(1)},${_lorg[1].toFixed(1)})">`
     +`<rect x="-9" y="-8" width="${_lW+18}" height="${_lH+16}" rx="9" fill="#0e1116" opacity="0.9"/>`
-    +`<image href="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" x="0" y="0" width="${_lW}" height="${_lH}" preserveAspectRatio="xMidYMid meet"/>`
+    +`<image href="https://dashboard.thelab.solutions/logo-thelab.png" x="0" y="0" width="${_lW}" height="${_lH}" preserveAspectRatio="xMidYMid meet"/>`
     +`</g>`;
   // Reloj de pared con hora real
   const clk=lp(0.3,wallH*0.55), now=new Date(), hr=now.getHours()%12, mn=now.getMinutes();
@@ -19746,7 +19746,7 @@ function showOsNotif(title, body, onClick){
   try{
     const n=new Notification(title,{
       body,
-      icon:'https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png',
+      icon:'https://dashboard.thelab.solutions/logo-thelab.png',
       tag:'thelab-mail',
       renotify:true,
     });
@@ -25188,7 +25188,7 @@ function checkClientePortal(){
   overlay.id='clientePortalOverlay';
   overlay.style.cssText='position:fixed;inset:0;background:var(--black);z-index:9999;display:flex;flex-direction:column;overflow:hidden';
   overlay.innerHTML=`<div style="padding:16px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
-    <img loading="lazy" decoding="async" src="https://thelabsolutionscl.github.io/dashboardthelabsolutions/logo-thelab.png" style="height:28px;object-fit:contain" onerror="this.style.display='none'">
+    <img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" style="height:28px;object-fit:contain" onerror="this.style.display='none'">
     <div><div style="font-size:14px;font-weight:700;color:var(--text)">The Lab Solutions</div><div style="font-size:11px;color:var(--text3)">Portal de seguimiento de pedidos</div></div>
   </div>
   <div style="flex:1;overflow-y:auto;padding:20px;max-width:800px;margin:0 auto;width:100%">
