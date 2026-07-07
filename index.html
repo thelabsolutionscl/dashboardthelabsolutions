@@ -4139,6 +4139,38 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   </div>
 
   <!-- ══════════════════════════════════════════════════════ -->
+  <!-- TRÁFICO DEL SITIO WEB (GA4 vía Script 1) -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div id="webTrafficPanel" style="margin-bottom:24px">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Tráfico del sitio web</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="webKpiAhoraBadge" style="display:none;font-size:10px;background:rgba(0,255,136,0.08);color:var(--success);border:1px solid rgba(0,255,136,0.25);border-radius:4px;padding:2px 8px">● <span id="web-kpi-ahora">0</span> en el sitio ahora</span>
+          <span style="font-size:10px;color:var(--text3)">Google Analytics 4</span>
+        </div>
+      </div>
+      <div id="webTrafficHint" style="display:none;padding:14px 16px;font-size:11px;color:var(--text2);line-height:1.7"></div>
+      <div id="webTrafficBody" style="display:none;padding:14px 16px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:14px">
+          <div class="stat-card"><div class="stat-label">Visitantes</div><div class="stat-value" id="web-kpi-usuarios" style="color:var(--accent)">—</div><div class="stat-sub" id="web-kpi-periodo"></div></div>
+          <div class="stat-card"><div class="stat-label">Nuevos</div><div class="stat-value" id="web-kpi-nuevos">—</div><div class="stat-sub">primera visita</div></div>
+          <div class="stat-card"><div class="stat-label">Sesiones</div><div class="stat-value" id="web-kpi-sesiones">—</div></div>
+          <div class="stat-card"><div class="stat-label">Páginas vistas</div><div class="stat-value" id="web-kpi-vistas">—</div></div>
+          <div class="stat-card"><div class="stat-label">Duración media</div><div class="stat-value" id="web-kpi-duracion" style="color:var(--text2)">—</div><div class="stat-sub">por sesión</div></div>
+        </div>
+        <div id="webTrafficChart" style="display:flex;align-items:flex-end;gap:2px;height:70px;margin-bottom:4px"></div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:14px"><span id="webChartDesde"></span><span>visitantes por día</span><span id="webChartHasta"></span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+          <div><div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:0.5px">DE DÓNDE VIENEN</div><div id="webTrafficCanales"></div></div>
+          <div><div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:0.5px">PÁGINAS MÁS VISTAS</div><div id="webTrafficPaginas"></div></div>
+        </div>
+        <div id="webTrafficDemo" style="display:none;font-size:10px;color:var(--warn);margin-top:10px">⚠ Datos de ejemplo — configura el endpoint y GA4 para ver datos reales.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
   <!-- GOOGLE ADS AGENT -->
   <!-- ══════════════════════════════════════════════════════ -->
   <div style="margin-bottom:28px;border-bottom:1px solid var(--border);padding-bottom:24px">
@@ -4779,36 +4811,6 @@ function _reportarResultados(muts) {
       <div class="stat-card"><div class="stat-label">Conversiones</div><div class="stat-value" id="ads-kpi-conv" style="color:var(--success)">—</div><div class="stat-sub" id="ads-kpi-conv-trend"></div></div>
       <div class="stat-card"><div class="stat-label">Costo/Conv.</div><div class="stat-value" id="ads-kpi-cpa" style="color:var(--text2)">—</div></div>
       <div class="stat-card"><div class="stat-label">ROAS</div><div class="stat-value" id="ads-kpi-roas" style="color:var(--success)">—</div><div class="stat-sub" id="ads-kpi-roas-trend"></div></div>
-    </div>
-
-    <!-- Tráfico del sitio web (GA4 vía Script 1) -->
-    <div id="webTrafficPanel" style="margin-bottom:16px">
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Tráfico del sitio web</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span id="webKpiAhoraBadge" style="display:none;font-size:10px;background:rgba(0,255,136,0.08);color:var(--success);border:1px solid rgba(0,255,136,0.25);border-radius:4px;padding:2px 8px">● <span id="web-kpi-ahora">0</span> en el sitio ahora</span>
-            <span style="font-size:10px;color:var(--text3)">Google Analytics 4</span>
-          </div>
-        </div>
-        <div id="webTrafficHint" style="display:none;padding:14px 16px;font-size:11px;color:var(--text2);line-height:1.7"></div>
-        <div id="webTrafficBody" style="display:none;padding:14px 16px">
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:14px">
-            <div class="stat-card"><div class="stat-label">Visitantes</div><div class="stat-value" id="web-kpi-usuarios" style="color:var(--accent)">—</div><div class="stat-sub" id="web-kpi-periodo"></div></div>
-            <div class="stat-card"><div class="stat-label">Nuevos</div><div class="stat-value" id="web-kpi-nuevos">—</div><div class="stat-sub">primera visita</div></div>
-            <div class="stat-card"><div class="stat-label">Sesiones</div><div class="stat-value" id="web-kpi-sesiones">—</div></div>
-            <div class="stat-card"><div class="stat-label">Páginas vistas</div><div class="stat-value" id="web-kpi-vistas">—</div></div>
-            <div class="stat-card"><div class="stat-label">Duración media</div><div class="stat-value" id="web-kpi-duracion" style="color:var(--text2)">—</div><div class="stat-sub">por sesión</div></div>
-          </div>
-          <div id="webTrafficChart" style="display:flex;align-items:flex-end;gap:2px;height:70px;margin-bottom:4px"></div>
-          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:14px"><span id="webChartDesde"></span><span>visitantes por día</span><span id="webChartHasta"></span></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
-            <div><div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:0.5px">DE DÓNDE VIENEN</div><div id="webTrafficCanales"></div></div>
-            <div><div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:0.5px">PÁGINAS MÁS VISTAS</div><div id="webTrafficPaginas"></div></div>
-          </div>
-          <div id="webTrafficDemo" style="display:none;font-size:10px;color:var(--warn);margin-top:10px">⚠ Datos de ejemplo — configura el endpoint y GA4 para ver datos reales.</div>
-        </div>
-      </div>
     </div>
 
     <!-- Ads vs CRM -->
