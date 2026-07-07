@@ -2107,44 +2107,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       </div>
     </div>
 
-    <!-- Web / SEO snapshot -->
-    <div class="card" id="overview-web-card" onclick="switchTab('web')" style="cursor:pointer">
-      <div class="card-header">
-        <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Web · SEO</span>
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('web')" style="margin-left:auto">Ver todo →</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr)">
-        <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
-          <div class="kpi-label">Páginas & Posts</div>
-          <div style="font-size:22px;font-weight:700;color:var(--accent);line-height:1.2;margin:2px 0" id="ov-web-total">—</div>
-          <div style="font-size:10px;color:var(--text3)">thelab.solutions</div>
-        </div>
-        <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
-          <div class="kpi-label">SEO Completo</div>
-          <div style="font-size:22px;font-weight:700;color:var(--accent3);line-height:1.2;margin:2px 0" id="ov-web-ok">—</div>
-          <div style="font-size:10px;color:var(--text3)" id="ov-web-oks">—</div>
-        </div>
-        <div style="padding:10px 12px;border-right:1px solid var(--border)">
-          <div class="kpi-label">Sin Title SEO</div>
-          <div style="font-size:22px;font-weight:700;color:var(--danger);line-height:1.2;margin:2px 0" id="ov-web-title">—</div>
-          <div style="font-size:10px;color:var(--text3)">páginas</div>
-        </div>
-        <div style="padding:10px 12px">
-          <div class="kpi-label">Sin Descripción</div>
-          <div style="font-size:22px;font-weight:700;color:#ffaa00;line-height:1.2;margin:2px 0" id="ov-web-desc">—</div>
-          <div style="font-size:10px;color:var(--text3)">páginas</div>
-        </div>
-      </div>
-      <div style="padding:8px 16px 12px">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:10px;font-style:italic" id="ov-web-status">Abre la sección Web y haz clic en Actualizar para ver datos SEO</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <a href="https://search.google.com/search-console" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Search Console</a>
-          <a href="https://ads.google.com" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-megaphone"/></svg> Google Ads</a>
-          <a href="https://thelab.solutions/wp-admin" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="event.stopPropagation()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> WP Admin</a>
-        </div>
-      </div>
-    </div>
-
     <!-- Google Ads snapshot -->
     <div class="card" id="overview-ads-card" onclick="switchTab('web')" style="cursor:pointer">
       <div class="card-header">
@@ -4130,12 +4092,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- WEB TAB -->
 <div class="tab-panel" id="tab-web">
   <div class="section-header">
-    <div><div class="section-title">Web · thelab.solutions</div><div class="section-desc">Gestiona el SEO de tu sitio web: optimiza títulos, meta descriptions y campañas de Google Ads. Usa IA para mejorar el posicionamiento en Google.</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="toggleWPConfig()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar WP</button>
-      <button class="btn btn-ghost btn-sm" onclick="openSEODiag()">🔬 Diagnóstico SEO</button>
-      <button class="btn btn-primary btn-sm" onclick="loadWPPages()">↺ Actualizar</button>
-    </div>
+    <div><div class="section-title">Web · thelab.solutions</div><div class="section-desc">Tráfico del sitio y campañas de Google Ads: mide cuántas personas entran, de dónde vienen y qué rinde cada campaña. Usa IA para crear y optimizar campañas.</div></div>
   </div>
 
   <!-- ══ AUDITOR SEO ON-PAGE (sitio nuevo, sin WordPress) ══ -->
@@ -4932,69 +4889,8 @@ function _reportarResultados(muts) {
   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
     <a href="https://search.google.com/search-console" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">🔍</span>Search Console</a>
     <a href="https://analytics.google.com" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-chart"/></svg>Google Analytics</a>
-    <a href="https://thelab.solutions/wp-admin" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><span style="font-size:16px">⚙️</span>WordPress Admin</a>
     <a href="https://thelab.solutions" target="_blank" style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;text-decoration:none;color:var(--text);font-size:12px;font-weight:600;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'"><svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-web"/></svg>Ver sitio</a>
   </div>
-
-  <!-- KPIs -->
-  <div id="webKPIs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px">
-    <div class="stat-card"><div class="stat-label">Páginas + Posts</div><div class="stat-value" id="kpi-total">—</div></div>
-    <div class="stat-card"><div class="stat-label">SEO Completo</div><div class="stat-value" id="kpi-completo" style="color:var(--success)">—</div><div class="stat-sub" id="kpi-completo-sub"></div></div>
-    <div class="stat-card"><div class="stat-label">Sin Title</div><div class="stat-value" id="kpi-sin-title" style="color:var(--danger)">—</div></div>
-    <div class="stat-card"><div class="stat-label">Sin Descripción</div><div class="stat-value" id="kpi-sin-desc" style="color:var(--warn)">—</div></div>
-    <div class="stat-card"><div class="stat-label">Títulos Óptimos</div><div class="stat-value" id="kpi-title-ok" style="color:var(--accent)">—</div><div class="stat-sub" style="font-size:9px;color:var(--text3)">40–60 car.</div></div>
-    <div class="stat-card"><div class="stat-label">Desc. Óptimas</div><div class="stat-value" id="kpi-desc-ok" style="color:var(--accent)">—</div><div class="stat-sub" style="font-size:9px;color:var(--text3)">120–155 car.</div></div>
-  </div>
-
-  <!-- Config WP (colapsable) -->
-  <div id="wpConfigPanel" style="display:none;margin-bottom:16px">
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-header"><span class="card-title">Credenciales WordPress</span></div>
-      <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="field-group"><label class="field-label">URL del sitio</label><input class="field-input" id="wp-url" placeholder="https://thelab.solutions"></div>
-        <div class="field-group"><label class="field-label">Usuario</label><input class="field-input" id="wp-user" placeholder="thelabsolu"></div>
-        <div class="field-group"><label class="field-label">Application Password</label><input class="field-input" id="wp-pass" type="password" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"></div>
-      </div>
-      <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-primary btn-sm" onclick="saveWPConfig()">💾 Guardar</button>
-        <button class="btn btn-ghost btn-sm" onclick="testWPConnection()">🔌 Probar conexión</button>
-        <button class="btn btn-ghost btn-sm" onclick="testYoastWrite()">🧪 Verificar guardado SEO</button>
-        <span id="yoastWriteStatus" style="font-size:11px;color:var(--text3);margin-left:4px"></span>
-      </div>
-    </div>
-    <div class="card" id="phpSnippetCard" style="display:none">
-      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
-        <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Requerido: activar escritura SEO en WordPress</span>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('phpSnippetCard').style.display='none'">✕</button>
-      </div>
-      <div style="padding:12px 16px">
-        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Para que el botón "Guardar" funcione, debes agregar este código a <strong>functions.php</strong> de tu tema en WordPress (Apariencia → Editor de temas → functions.php):</p>
-        <div style="position:relative">
-          <pre id="phpSnippetCode" style="background:#0d1117;color:#e6edf3;font-family:monospace;font-size:11px;padding:14px;border-radius:8px;overflow-x:auto;border:1px solid var(--border2);margin:0;line-height:1.6">add_action( 'rest_api_init', function () {
-    foreach ( [ 'post', 'page' ] as $post_type ) {
-        register_post_meta( $post_type, '_yoast_wpseo_title', [
-            'show_in_rest'  => true,
-            'single'        => true,
-            'type'          => 'string',
-            'auth_callback' => function() { return current_user_can( 'edit_posts' ); },
-        ] );
-        register_post_meta( $post_type, '_yoast_wpseo_metadesc', [
-            'show_in_rest'  => true,
-            'single'        => true,
-            'type'          => 'string',
-            'auth_callback' => function() { return current_user_can( 'edit_posts' ); },
-        ] );
-    }
-} );</pre>
-          <button onclick="copyPhpSnippet()" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;font-size:10px;background:rgba(255,255,255,0.08)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-copy"/></svg> Copiar</button>
-        </div>
-        <p style="font-size:11px;color:var(--text3);margin-top:8px">Después de agregar el código, haz clic en "Verificar guardado SEO" para confirmar que funciona.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Tabla SEO -->
-  <div id="seoPagesList"><div class="empty-state" style="padding:60px 0"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-web"/></svg></div><div>Haz clic en "Actualizar" para cargar las páginas de WordPress</div></div></div>
 
 </div>
 
@@ -7997,7 +7893,7 @@ function switchTab(name){
   if(name==='oficina'){ofSetView(_ofView);startOficinaPolling();}
   else stopOficinaPolling();
   if(name==='remuneraciones') renderRemuneraciones();
-  if(name==='web'){const cfg=getWPConfig();if(cfg.url) loadWPPages();loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
+  if(name==='web'){loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='correo') MAIL.init();
   if(name==='redes') initRedes();
@@ -20767,7 +20663,8 @@ function initDashboard(){
     if(s&&(!allowed||allowed.includes(s))) switchTab(s);
     else if(s) sessionStorage.removeItem('thelab_active_tab');
   }catch(e){}
-  if(!localStorage.getItem('wp_config')) localStorage.setItem('wp_config',JSON.stringify({url:'https://thelab.solutions',user:'',pass:''}));
+  // El sitio ya no usa WordPress: limpiar credenciales antiguas (evita 401 y fugas)
+  try{localStorage.removeItem('wp_config');}catch(e){}
   // Auto-seed tokens — sobreescribe si el valor es un placeholder no reemplazado
   const _isPlaceholder=v=>!v||v.startsWith('%%');
   if(_isPlaceholder(lsGet('airtable_token'))) lsSet('airtable_token',_DEFAULTS.AIRTABLE_TOKEN);
@@ -20783,7 +20680,7 @@ function initDashboard(){
   if(_useDemoMode){
     enableDemoMode();
     slProgress(5,'Cargando datos demo...');
-    loadAllData().then(()=>{setStatus('modo demo',true);startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
+    loadAllData().then(()=>{setStatus('modo demo',true);startAutoRefresh();});
     initMobileTableLabels();
     window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
     document.addEventListener('keydown',e=>{
@@ -20811,7 +20708,7 @@ function initDashboard(){
       setStatus('actualizando…',false);
       try{_renderOverviewNow();_reRenderActiveList();}catch(e){logErr('hydrateRender',e);}
     }
-    loadAllData().then(()=>{startAutoRefresh();const cfg=getWPConfig();if(cfg.url)setTimeout(loadWPPages,2000);});
+    loadAllData().then(()=>{startAutoRefresh();});
   }
   initMobileTableLabels();
   checkClientePortal();
