@@ -12,7 +12,10 @@
  * REQUISITOS: PHP 7.4+ con extensión IMAP habilitada
  */
 
-header('Access-Control-Allow-Origin: https://thelabsolutionscl.github.io');
+$_origins = ['https://thelabsolutionscl.github.io', 'https://dashboard.thelab.solutions'];
+$_origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
+header('Access-Control-Allow-Origin: ' . (in_array($_origin, $_origins, true) ? $_origin : $_origins[0]));
+header('Vary: Origin');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Content-Type: application/json; charset=utf-8');
