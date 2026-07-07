@@ -28,13 +28,13 @@ jobs:
 
       - name: Inject secrets into index.html
         env:
-          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
-          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}       # el secret se llama AIRTABLE
+          OPENAI_KEY: ${{ secrets.OPENAI }}             # el secret se llama OPENAI
+          GOOGLE_CLIENT_ID: ${{ secrets.DRIVE }}        # el secret se llama DRIVE
           SII_WORKER_URL: ${{ secrets.SII_WORKER_URL }}
           SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
-          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          ANTHROPIC_KEY: ${{ secrets.CLAUDE }}          # el secret se llama CLAUDE
           PROXY_URL: ${{ secrets.PROXY_URL }}
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
           PRINTER_TUNNEL: ${{ secrets.PRINTER_TUNNEL }}
