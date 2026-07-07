@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch: {} # permite lanzar el deploy a mano desde la pestaña Actions
+  # Nota: tras crear/cambiar un secret (PROXY_URL, PROXY_KEY, ADS_WEBAPP…), hay que
+  # relanzar este deploy para re-hornear los valores nuevos en index.html.
 
 permissions:
   contents: read
