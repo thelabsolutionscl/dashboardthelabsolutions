@@ -6332,7 +6332,9 @@ const _DEFAULTS={
   ANTHROPIC_KEY:'%%ANTHROPIC_KEY%%',
   PROXY_URL:'%%PROXY_URL%%',
   PROXY_KEY:'%%PROXY_KEY%%',
-  PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%'
+  PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%',
+  ADS_WEBAPP:'%%ADS_WEBAPP%%',
+  ADS_CUSTOMER:'%%ADS_CUSTOMER%%'
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},clientesByIdRec:{},pedidosById:{},cotizacionesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
@@ -21565,7 +21567,7 @@ function adsExportKeywordsCSV(){
   a.click();
   toast('✓ CSV de palabras clave descargado','success');
 }
-function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s) return JSON.parse(s);}catch(e){}return{endpoint:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:'757-781-2099'};}
+function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s) return JSON.parse(s);}catch(e){}const _dw=_DEFAULTS.ADS_WEBAPP,_dc=_DEFAULTS.ADS_CUSTOMER;return{endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099'};}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();

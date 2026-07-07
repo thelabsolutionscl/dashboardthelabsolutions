@@ -1,14 +1,28 @@
 const AIRTABLE_BASE = 'https://api.airtable.com';
 const ANTHROPIC_BASE = 'https://api.anthropic.com';
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
+// Solo se aceptan peticiones desde estos orígenes (el dashboard). Así, si la
+// APP_KEY se filtrara (va horneada en el HTML público), no sirve desde otro sitio.
+const ALLOWED_ORIGINS = [
+  'https://dashboard.thelab.solutions',
+  'https://thelabsolutionscl.github.io',
+];
+const CORS_BASE = {
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,anthropic-version,x-api-key',
+  'Vary': 'Origin',
 };
+// Headers CORS reflejando el origen permitido (si no, el principal).
+function cors(origin) {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return { 'Access-Control-Allow-Origin': allow, ...CORS_BASE };
+}
 
 export default {
   async fetch(request, env, ctx) {
+    const origin = request.headers.get('Origin') || '';
+    const CORS = cors(origin);
+
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS });
     }
@@ -16,13 +30,18 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
-      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, airtable: !!env.AIRTABLE_TOKEN });
+      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, airtable: !!env.AIRTABLE_TOKEN }, 200, CORS);
+    }
+
+    // Allowlist de origen: un navegador en otro sitio (Origin distinto) se rechaza.
+    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+      return json({ error: 'Forbidden origin' }, 403, CORS);
     }
 
     // Auth — la passphrase nunca sale al cliente como un token de servicio real
     const appKey = request.headers.get('X-App-Key');
     if (!appKey || appKey !== env.APP_KEY) {
-      return json({ error: 'Unauthorized' }, 403);
+      return json({ error: 'Unauthorized' }, 403, CORS);
     }
 
     // Latido para la "Oficina Virtual": marca este Worker como Activo en la tabla
@@ -77,10 +96,10 @@ export default {
   },
 };
 
-function json(data, status = 200) {
+function json(data, status = 200, corsHeaders = cors('')) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...CORS },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
   });
 }
 
