@@ -4198,7 +4198,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
               <strong style="color:#e6edf3">Script 1 — Apps Script</strong> (script.google.com) = el endpoint web:<br>
               Crea un proyecto nuevo → pega el código → <em>Desplegar → App Web → Ejecutar como: Yo → Acceso: Cualquier persona</em> → copia la URL al campo Endpoint arriba.<br><br>
               <strong style="color:#e6edf3">Script 2 — Google Ads Script</strong> (ads.google.com → Herramientas → Scripts):<br>
-              Crea un nuevo script → pega el 2° bloque → actualiza <code>ENDPOINT</code> con la URL del Script 1 → ejecútalo manualmente una vez y programa diario.
+              Crea un nuevo script → pega el 2° bloque → actualiza <code>ENDPOINT</code> con la URL del Script 1 → ejecútalo manualmente una vez y programa diario.<br><br>
+              <strong style="color:#e6edf3">Tráfico web — GA4 (opcional)</strong>: en el editor del Script 1 → menú <em>Servicios (+)</em> → añade <em>Google Analytics Data API</em> → pega el ID numérico de tu propiedad GA4 en <code>GA4_PROPERTY</code> (analytics.google.com → Administrar → Detalles de la propiedad) → <em>Desplegar → Administrar implementaciones → ✏ → Nueva versión</em>. El panel "Tráfico del sitio web" se llena solo.
             </div>
             <div style="position:relative">
               <div style="font-size:10px;font-weight:600;color:#e6edf3;margin-bottom:6px">Script 1 — Apps Script (script.google.com) — el endpoint web</div>
@@ -4207,6 +4208,11 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 // Ejecutar como: Yo  |  Quién tiene acceso: Cualquier persona
 
 var SECRET = 'thelab2025';
+
+// ── Tráfico web (GA4) — opcional ──
+// 1) En el editor: menú izquierdo → Servicios (+) → "Google Analytics Data API" → Añadir.
+// 2) Pega aquí el ID NUMÉRICO de la propiedad GA4 (analytics.google.com → Administrar → Detalles de la propiedad).
+var GA4_PROPERTY = '';
 
 function doPost(e) {
   try {
@@ -4242,6 +4248,9 @@ function doGet(e) {
       var muts = JSON.parse(PropertiesService.getScriptProperties().getProperty('ads_mutations') || '[]');
       return json({ok:true, mutations:muts});
     }
+    if (action === 'web') {
+      return json(webStats(parseInt((e &amp;&amp; e.parameter &amp;&amp; e.parameter.days) || 30)));
+    }
     var days = parseInt((e &amp;&amp; e.parameter &amp;&amp; e.parameter.days) || 30);
     var raw = PropertiesService.getScriptProperties().getProperty('ads_cache');
     if (!raw) return json({ok:false, error:'Sin datos aún — ejecuta el Script 2 en Google Ads primero'});
@@ -4250,6 +4259,51 @@ function doGet(e) {
     data.periodo = days + ' días';
     return json(data);
   } catch(err) { return json({ok:false, error:err.message}); }
+}
+
+// Tráfico del sitio desde GA4 (Analytics Data API). Cachea 30 min; tiempo real 60 s.
+function webStats(days) {
+  try {
+    if (!GA4_PROPERTY) return {ok:false, web:true, error:'no-config'};
+    if (typeof AnalyticsData === 'undefined') return {ok:false, web:true, error:'no-service'};
+    var cache = CacheService.getScriptCache();
+    var hit = cache.get('web_stats_' + days);
+    var out = hit ? JSON.parse(hit) : null;
+    if (!out) {
+      var prop = 'properties/' + GA4_PROPERTY;
+      var rango = [{startDate: days + 'daysAgo', endDate: 'today'}];
+      var res = AnalyticsData.Properties.batchRunReports({requests: [
+        {dateRanges: rango, metrics: [{name:'activeUsers'},{name:'newUsers'},{name:'sessions'},{name:'screenPageViews'},{name:'averageSessionDuration'}]},
+        {dateRanges: rango, dimensions: [{name:'date'}], metrics: [{name:'activeUsers'},{name:'sessions'}], orderBys: [{dimension:{dimensionName:'date'}}], limit: 120},
+        {dateRanges: rango, dimensions: [{name:'sessionDefaultChannelGroup'}], metrics: [{name:'activeUsers'},{name:'sessions'}], orderBys: [{metric:{metricName:'activeUsers'}, desc:true}], limit: 8},
+        {dateRanges: rango, dimensions: [{name:'pagePath'}], metrics: [{name:'screenPageViews'},{name:'activeUsers'}], orderBys: [{metric:{metricName:'screenPageViews'}, desc:true}], limit: 10}
+      ]}, prop);
+      var reps = res.reports || [];
+      var filas = function(rep){ return (rep &amp;&amp; rep.rows) || []; };
+      var mv = function(row, i){ return Number((row.metricValues &amp;&amp; row.metricValues[i] &amp;&amp; row.metricValues[i].value) || 0); };
+      var dv = function(row, i){ return (row.dimensionValues &amp;&amp; row.dimensionValues[i] &amp;&amp; row.dimensionValues[i].value) || ''; };
+      var tot = filas(reps[0])[0] || {};
+      out = {
+        ok: true, web: true,
+        usuarios: mv(tot,0), nuevos: mv(tot,1), sesiones: mv(tot,2), vistas: mv(tot,3), duracion: mv(tot,4),
+        dias: filas(reps[1]).map(function(r){ return {fecha: dv(r,0), usuarios: mv(r,0), sesiones: mv(r,1)}; }),
+        canales: filas(reps[2]).map(function(r){ return {canal: dv(r,0), usuarios: mv(r,0), sesiones: mv(r,1)}; }),
+        paginas: filas(reps[3]).map(function(r){ return {ruta: dv(r,0), vistas: mv(r,0), usuarios: mv(r,1)}; }),
+        guardado: new Date().toISOString()
+      };
+      cache.put('web_stats_' + days, JSON.stringify(out), 1800);
+    }
+    var rt = cache.get('web_rt');
+    if (rt === null) {
+      try {
+        var rres = AnalyticsData.Properties.runRealtimeReport({metrics:[{name:'activeUsers'}]}, 'properties/' + GA4_PROPERTY);
+        rt = String((rres.rows &amp;&amp; rres.rows[0] &amp;&amp; rres.rows[0].metricValues[0].value) || 0);
+      } catch(e2) { rt = '-1'; }
+      cache.put('web_rt', rt, 60);
+    }
+    out.ahora = Number(rt);
+    return out;
+  } catch(err) { return {ok:false, web:true, error:err.message}; }
 }
 
 function json(obj) {
@@ -4725,6 +4779,36 @@ function _reportarResultados(muts) {
       <div class="stat-card"><div class="stat-label">Conversiones</div><div class="stat-value" id="ads-kpi-conv" style="color:var(--success)">—</div><div class="stat-sub" id="ads-kpi-conv-trend"></div></div>
       <div class="stat-card"><div class="stat-label">Costo/Conv.</div><div class="stat-value" id="ads-kpi-cpa" style="color:var(--text2)">—</div></div>
       <div class="stat-card"><div class="stat-label">ROAS</div><div class="stat-value" id="ads-kpi-roas" style="color:var(--success)">—</div><div class="stat-sub" id="ads-kpi-roas-trend"></div></div>
+    </div>
+
+    <!-- Tráfico del sitio web (GA4 vía Script 1) -->
+    <div id="webTrafficPanel" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Tráfico del sitio web</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="webKpiAhoraBadge" style="display:none;font-size:10px;background:rgba(0,255,136,0.08);color:var(--success);border:1px solid rgba(0,255,136,0.25);border-radius:4px;padding:2px 8px">● <span id="web-kpi-ahora">0</span> en el sitio ahora</span>
+            <span style="font-size:10px;color:var(--text3)">Google Analytics 4</span>
+          </div>
+        </div>
+        <div id="webTrafficHint" style="display:none;padding:14px 16px;font-size:11px;color:var(--text2);line-height:1.7"></div>
+        <div id="webTrafficBody" style="display:none;padding:14px 16px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:14px">
+            <div class="stat-card"><div class="stat-label">Visitantes</div><div class="stat-value" id="web-kpi-usuarios" style="color:var(--accent)">—</div><div class="stat-sub" id="web-kpi-periodo"></div></div>
+            <div class="stat-card"><div class="stat-label">Nuevos</div><div class="stat-value" id="web-kpi-nuevos">—</div><div class="stat-sub">primera visita</div></div>
+            <div class="stat-card"><div class="stat-label">Sesiones</div><div class="stat-value" id="web-kpi-sesiones">—</div></div>
+            <div class="stat-card"><div class="stat-label">Páginas vistas</div><div class="stat-value" id="web-kpi-vistas">—</div></div>
+            <div class="stat-card"><div class="stat-label">Duración media</div><div class="stat-value" id="web-kpi-duracion" style="color:var(--text2)">—</div><div class="stat-sub">por sesión</div></div>
+          </div>
+          <div id="webTrafficChart" style="display:flex;align-items:flex-end;gap:2px;height:70px;margin-bottom:4px"></div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:14px"><span id="webChartDesde"></span><span>visitantes por día</span><span id="webChartHasta"></span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+            <div><div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:0.5px">DE DÓNDE VIENEN</div><div id="webTrafficCanales"></div></div>
+            <div><div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:0.5px">PÁGINAS MÁS VISTAS</div><div id="webTrafficPaginas"></div></div>
+          </div>
+          <div id="webTrafficDemo" style="display:none;font-size:10px;color:var(--warn);margin-top:10px">⚠ Datos de ejemplo — configura el endpoint y GA4 para ver datos reales.</div>
+        </div>
+      </div>
     </div>
 
     <!-- Ads vs CRM -->
@@ -22155,6 +22239,7 @@ async function loadAdsData(){
     renderAdsCapacidad(demo);
     renderAdsSugerencias(demo);
     renderPendingMutations();
+    try{loadWebStats();}catch(err){console.error('loadWebStats',err);}
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--warn)';dot.title='Modo demo — configura tu endpoint real';}
     return;
@@ -22174,6 +22259,7 @@ async function loadAdsData(){
     try{ renderAdsAgent(data); }catch(err){ console.error('renderAdsAgent',err); }
     try{ renderAdsCapacidad(data); }catch(err){ console.error('renderAdsCapacidad',err); }
     try{ renderAdsSugerencias(data); }catch(err){ console.error('renderAdsSugerencias',err); }
+    try{ loadWebStats(); }catch(err){ console.error('loadWebStats',err); }
     renderPendingMutations();
     // Refleja en el dashboard lo que el Script 2 ya aplicó en Google Ads
     syncMutationStatuses();
@@ -22198,6 +22284,7 @@ async function loadAdsData(){
       try{ renderAdsCapacidad(demo); }catch(err){}
       try{ renderAdsSugerencias(demo); }catch(err){}
       renderPendingMutations();
+      try{ renderWebStats(getWebDemoData(days),days); }catch(err){}
       const dot=document.getElementById('adsStatusDot');
       if(dot){dot.style.background='var(--warn)';dot.title='Modo demo — endpoint no disponible ('+e.message+')';}
       return;
@@ -22207,6 +22294,90 @@ async function loadAdsData(){
     const dot=document.getElementById('adsStatusDot');
     if(dot){dot.style.background='var(--danger)';dot.title='Error: '+e.message;}
   }
+}
+// ── Tráfico del sitio web (GA4 vía Script 1, action=web) ──────────────
+const WEB_CANAL_ES={'Organic Search':'Búsqueda orgánica','Paid Search':'Google Ads (búsqueda)','Direct':'Directo','Organic Social':'Redes sociales','Paid Social':'Redes sociales (pago)','Referral':'Referidos','Email':'Email','Display':'Display','Cross-network':'Multired','Organic Video':'Video orgánico','Paid Video':'Video (pago)','Unassigned':'Sin asignar'};
+async function loadWebStats(){
+  const panel=document.getElementById('webTrafficPanel');if(!panel)return;
+  const cfg=getAdsConfig();
+  const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+  if(!cfg.endpoint){renderWebStats(getWebDemoData(days),days);return;}
+  try{
+    const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=web&days='+days+'&_t='+Date.now();
+    const r=await fetch(url);
+    const data=await r.json().catch(()=>null);
+    if(data&&data.ok&&data.web){renderWebStats(data,days);return;}
+    if(!data||!data.web){showWebTrafficHint('script');return;}
+    if(data.error==='no-config'){showWebTrafficHint('property');return;}
+    if(data.error==='no-service'){showWebTrafficHint('service');return;}
+    showWebTrafficHint('error',data.error);
+  }catch(e){showWebTrafficHint('error',e.message);}
+}
+function showWebTrafficHint(tipo,detalle){
+  const hint=document.getElementById('webTrafficHint'),body=document.getElementById('webTrafficBody');
+  if(!hint)return;
+  body.style.display='none';hint.style.display='block';
+  document.getElementById('webKpiAhoraBadge').style.display='none';
+  const pasos={
+    script:'<b style="color:var(--warn)">El Script 1 necesita actualizarse</b> para mostrar el tráfico web:<br>1. Botón <b>⚙ Configurar</b> (arriba) → <b>Ver Apps Script</b> → copia el bloque del <b>Script 1</b>.<br>2. En <b>script.google.com</b> abre tu proyecto y reemplaza TODO el código por el nuevo.<br>3. <b>Desplegar → Administrar implementaciones → ✏ → Versión: Nueva versión → Desplegar</b>.<br>4. Sigue los pasos de GA4 que vienen en los comentarios del script.',
+    service:'<b style="color:var(--warn)">Falta el servicio de Analytics en el Script 1</b>:<br>En el editor de Apps Script → menú izquierdo <b>Servicios (+)</b> → busca <b>Google Analytics Data API</b> → Añadir → autoriza cuando lo pida → <b>Desplegar → nueva versión</b>.',
+    property:'<b style="color:var(--warn)">Falta el ID de la propiedad GA4</b>:<br>1. En <b>analytics.google.com</b> → ⚙ Administrar → <b>Detalles de la propiedad</b> → copia el <b>ID de la propiedad</b> (número, ej. 123456789).<br>2. En el Script 1 pégalo en la línea <code>var GA4_PROPERTY = \'\';</code><br>3. <b>Desplegar → Administrar implementaciones → ✏ → Nueva versión</b>.',
+    error:'<b style="color:var(--danger)">No se pudo leer GA4:</b> '+escapeHtml(detalle||'error desconocido')+'<br>Verifica que la cuenta del Script 1 tenga acceso a la propiedad GA4 y que el ID en <code>GA4_PROPERTY</code> sea el numérico.'
+  };
+  hint.innerHTML='📈 '+ (pasos[tipo]||pasos.error);
+}
+function renderWebStats(data,days){
+  const hint=document.getElementById('webTrafficHint'),body=document.getElementById('webTrafficBody');
+  if(!body)return;
+  hint.style.display='none';body.style.display='block';
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('web-kpi-usuarios',fmtNum(data.usuarios||0));
+  set('web-kpi-periodo',(data.demo?'demo · ':'')+days+' días');
+  set('web-kpi-nuevos',fmtNum(data.nuevos||0));
+  set('web-kpi-sesiones',fmtNum(data.sesiones||0));
+  set('web-kpi-vistas',fmtNum(data.vistas||0));
+  const dur=Math.round(data.duracion||0);
+  set('web-kpi-duracion',dur>0?Math.floor(dur/60)+'m '+String(dur%60).padStart(2,'0')+'s':'—');
+  const badge=document.getElementById('webKpiAhoraBadge');
+  if(badge){const ok=typeof data.ahora==='number'&&data.ahora>=0;badge.style.display=ok?'inline-block':'none';if(ok)set('web-kpi-ahora',data.ahora);}
+  // Barras por día
+  const chart=document.getElementById('webTrafficChart');
+  const dias=data.dias||[];
+  if(chart){
+    const max=Math.max(1,...dias.map(d=>d.usuarios||0));
+    const fmtF=f=>f&&f.length>=8?f.slice(6,8)+'/'+f.slice(4,6):f;
+    chart.innerHTML=dias.map(d=>{
+      const h=Math.max(4,Math.round((d.usuarios||0)/max*100));
+      return '<div title="'+fmtF(d.fecha)+': '+(d.usuarios||0)+' visitantes · '+(d.sesiones||0)+' sesiones" style="flex:1;height:'+h+'%;background:'+((d.usuarios||0)===max&&max>1?'var(--accent)':'rgba(0,212,204,0.35)')+';border-radius:2px 2px 0 0;min-width:2px"></div>';
+    }).join('');
+    set('webChartDesde',dias.length?fmtF(dias[0].fecha):'');
+    set('webChartHasta',dias.length?fmtF(dias[dias.length-1].fecha):'');
+  }
+  // Canales y páginas
+  const fila=(nombre,valor,pct)=>'<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px"><span style="flex:1;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+escapeHtml(nombre)+'">'+escapeHtml(nombre)+'</span><div style="width:70px;height:5px;border-radius:3px;background:var(--surface3);overflow:hidden;flex-shrink:0"><div style="width:'+pct+'%;height:100%;background:var(--accent)"></div></div><span style="width:44px;text-align:right;color:var(--text1);font-weight:600;flex-shrink:0">'+fmtNum(valor)+'</span></div>';
+  const canales=data.canales||[];
+  const maxC=Math.max(1,...canales.map(c=>c.usuarios||0));
+  const elC=document.getElementById('webTrafficCanales');
+  if(elC)elC.innerHTML=canales.length?canales.map(c=>fila(WEB_CANAL_ES[c.canal]||c.canal,c.usuarios||0,Math.round((c.usuarios||0)/maxC*100))).join(''):'<div style="font-size:11px;color:var(--text3)">Sin datos aún</div>';
+  const paginas=data.paginas||[];
+  const maxP=Math.max(1,...paginas.map(p=>p.vistas||0));
+  const elP=document.getElementById('webTrafficPaginas');
+  if(elP)elP.innerHTML=paginas.length?paginas.map(p=>fila(p.ruta||'/',p.vistas||0,Math.round((p.vistas||0)/maxP*100))).join(''):'<div style="font-size:11px;color:var(--text3)">Sin datos aún</div>';
+  const demoEl=document.getElementById('webTrafficDemo');
+  if(demoEl)demoEl.style.display=data.demo?'block':'none';
+}
+function getWebDemoData(days){
+  const dias=[];const hoy=new Date();let u=0,s=0,v=0;
+  for(let i=days-1;i>=0;i--){
+    const d=new Date(hoy);d.setDate(d.getDate()-i);
+    const finde=d.getDay()===0||d.getDay()===6;
+    const du=Math.max(3,18+((i*7)%13)+(finde?-9:4));const ds=Math.round(du*1.25);
+    const f=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+    dias.push({fecha:f,usuarios:du,sesiones:ds});u+=du;s+=ds;v+=du*3;
+  }
+  return {ok:true,web:true,demo:true,ahora:2,usuarios:u,nuevos:Math.round(u*0.78),sesiones:s,vistas:v,duracion:96,dias,
+    canales:[{canal:'Organic Search',usuarios:Math.round(u*0.36)},{canal:'Direct',usuarios:Math.round(u*0.27)},{canal:'Paid Search',usuarios:Math.round(u*0.19)},{canal:'Organic Social',usuarios:Math.round(u*0.11)},{canal:'Referral',usuarios:Math.round(u*0.07)}],
+    paginas:[{ruta:'/',vistas:Math.round(v*0.34)},{ruta:'/servicios/impresion-3d',vistas:Math.round(v*0.14)},{ruta:'/servicios/volumetricos',vistas:Math.round(v*0.11)},{ruta:'/servicios/premiaciones',vistas:Math.round(v*0.09)},{ruta:'/contacto',vistas:Math.round(v*0.08)}]};
 }
 function renderAdsKPIs(data,days){
   const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;

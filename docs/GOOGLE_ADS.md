@@ -215,6 +215,24 @@ Requiere acceso a la cuenta de Google Ads (hazlo tú).
 3. Subir el CSV en **Conversiones → Cargas → + → Subir archivo**. Repetir
    semanalmente (dentro de los **90 días** del clic).
 
+### 4.5 — Panel "Tráfico del sitio web" (GA4 en el dashboard)
+
+La sección WEB muestra visitantes, sesiones, páginas vistas, duración media,
+usuarios en tiempo real, canales de origen y páginas más vistas. Los datos
+salen de **GA4 vía el Script 1** (`?action=web`), con caché de 30 min
+(tiempo real: 60 s). Setup una vez:
+
+1. Tener la propiedad GA4 creada y midiendo (variable `NEXT_PUBLIC_GA_ID`
+   en GitHub → repo web → Settings → Actions → Variables + redeploy).
+2. En el **editor del Script 1**: menú izquierdo **Servicios (+)** →
+   **Google Analytics Data API** → Añadir (autorizar cuando lo pida).
+3. Pegar el **ID numérico de la propiedad** (analytics.google.com → ⚙
+   Administrar → Detalles de la propiedad) en `var GA4_PROPERTY = '...';`.
+4. **Desplegar → Administrar implementaciones → ✏ → Nueva versión**.
+
+Si falta algo, el panel muestra el paso exacto pendiente. La cuenta que
+"Ejecuta como: Yo" el Script 1 debe tener acceso de lectura a la propiedad GA4.
+
 ---
 
 ## 5. Referencia
