@@ -44,6 +44,24 @@ export default {
       return json({ error: 'Unauthorized' }, 403, CORS);
     }
 
+    // ── SEO fetch — trae el HTML de una página del PROPIO sitio para auditarla ──
+    // Restringido a thelab.solutions (sin SSRF). Evita el CORS del navegador.
+    if (url.pathname === '/seo-fetch') {
+      let t;
+      try { t = new URL(url.searchParams.get('url') || ''); } catch { return json({ error: 'URL inválida' }, 400, CORS); }
+      const okHost = t.hostname === 'thelab.solutions' || t.hostname === 'www.thelab.solutions';
+      if (t.protocol !== 'https:' || !okHost) {
+        return json({ error: 'Solo se permite auditar thelab.solutions' }, 403, CORS);
+      }
+      try {
+        const up = await fetch(t.toString(), { headers: { 'User-Agent': 'TheLab-SEO-Auditor/1.0' }, redirect: 'follow' });
+        const html = await up.text();
+        return json({ ok: true, status: up.status, finalUrl: up.url || t.toString(), html }, 200, CORS);
+      } catch (e) {
+        return json({ error: 'No se pudo traer la página: ' + (e && e.message || e) }, 502, CORS);
+      }
+    }
+
     // Latido para la "Oficina Virtual": marca este Worker como Activo en la tabla
     // Automations. Best-effort, throttled y fuera del camino crítico (waitUntil),
     // por lo que no añade latencia ni puede romper la respuesta.

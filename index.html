@@ -4138,6 +4138,25 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
 
+  <!-- ══ AUDITOR SEO ON-PAGE (sitio nuevo, sin WordPress) ══ -->
+  <div id="seoAuditPanel" style="margin-bottom:24px">
+    <div class="card">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text)">🔍 Auditor SEO on-page</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">Revisa título, meta description, H1, canonical, Open Graph, alt e indexación de cada página del sitio.</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <span id="seoAuditScore" style="font-size:11px;color:var(--text2)"></span>
+          <button class="btn btn-primary btn-sm" id="seoAuditBtn" onclick="runSeoAudit()">Analizar sitio</button>
+        </div>
+      </div>
+      <div id="seoAuditBody" style="padding:14px 16px">
+        <div style="font-size:12px;color:var(--text2)">Pulsa <strong>Analizar sitio</strong> para revisar todas las páginas del sitemap de thelab.solutions y ver qué mejorar.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════════════════════════════════════════════════ -->
   <!-- TRÁFICO DEL SITIO WEB (GA4 vía Script 1) -->
   <!-- ══════════════════════════════════════════════════════ -->
@@ -20881,6 +20900,100 @@ function loadWPConfigForm(){
   if(cfg.user) document.getElementById('wp-user').value=cfg.user;
   if(cfg.pass) document.getElementById('wp-pass').value=cfg.pass;
 }
+// ══════════════════════════════════════════════════════════════
+// AUDITOR SEO ON-PAGE — analiza las páginas del sitio (Next.js, sin WordPress)
+// vía el proxy /seo-fetch (evita CORS; el Worker restringe a thelab.solutions).
+// ══════════════════════════════════════════════════════════════
+function _seoProxy(){
+  const u=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
+  const k=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
+  return u&&k?{base:u.replace(/\/$/,''),key:k}:null;
+}
+async function _seoFetch(pageUrl){
+  const p=_seoProxy();
+  if(!p) throw new Error('Configura el proxy (Mi cuenta → Proxy) para usar el auditor.');
+  const r=await fetch(p.base+'/seo-fetch?url='+encodeURIComponent(pageUrl),{headers:{'X-App-Key':p.key}});
+  const d=await r.json().catch(function(){return{};});
+  if(!r.ok||!d.ok) throw new Error(d.error||('HTTP '+r.status));
+  return d.html||'';
+}
+async function _seoSitemap(){
+  try{
+    const xml=await _seoFetch('https://thelab.solutions/sitemap.xml');
+    const urls=[].slice.call(xml.matchAll(/<loc>([^<]+)<\/loc>/g)).map(function(m){return m[1].trim();});
+    return Array.from(new Set(urls));
+  }catch(e){ return []; }
+}
+function _seoChip(c){
+  const bg=c.level==='ok'?'rgba(46,160,67,0.15)':c.level==='warn'?'rgba(255,193,7,0.15)':'rgba(248,81,73,0.15)';
+  const fg=c.level==='ok'?'#2ea043':c.level==='warn'?'#ffc107':'#f85149';
+  const ic=c.level==='ok'?'✓':c.level==='warn'?'!':'✕';
+  return '<span title="'+String(c.detail||'').replace(/["<>]/g,'')+'" style="display:inline-block;font-size:9.5px;padding:2px 6px;border-radius:5px;margin:2px 3px 2px 0;background:'+bg+';color:'+fg+'">'+ic+' '+c.label+'</span>';
+}
+function _seoAnalyze(html,pageUrl){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const q=function(s){return doc.querySelector(s);};
+  const title=((q('title')&&q('title').textContent)||'').trim();
+  const dEl=q('meta[name="description"]'); const desc=((dEl&&dEl.getAttribute('content'))||'').trim();
+  const h1s=doc.querySelectorAll('h1');
+  const cEl=q('link[rel="canonical"]'); const canonical=(cEl&&cEl.getAttribute('href'))||'';
+  const rEl=q('meta[name="robots"]'); const robots=((rEl&&rEl.getAttribute('content'))||'').toLowerCase();
+  const ogT=q('meta[property="og:title"]'),ogD=q('meta[property="og:description"]'),ogI=q('meta[property="og:image"]');
+  const viewport=q('meta[name="viewport"]');
+  const lang=doc.documentElement.getAttribute('lang')||'';
+  const imgs=[].slice.call(doc.querySelectorAll('img'));
+  const noAlt=imgs.filter(function(i){return !((i.getAttribute('alt')||'').trim());}).length;
+  const txt=((doc.body&&doc.body.textContent)||'').replace(/\s+/g,' ').trim();
+  const words=txt?txt.split(' ').length:0;
+  const checks=[];
+  const add=function(ok,warn,label,detail){checks.push({level:ok?'ok':(warn?'warn':'bad'),label:label,detail:detail});};
+  add(title.length>=30&&title.length<=65, title.length>0, 'Título', title?(title.length+' car — '+title.slice(0,60)):'FALTA');
+  add(desc.length>=110&&desc.length<=165, desc.length>0, 'Meta desc', desc?(desc.length+' car'):'FALTA');
+  add(h1s.length===1, h1s.length>1, 'H1', h1s.length+' H1');
+  add(!!canonical, false, 'Canonical', canonical?'sí':'FALTA');
+  add(!robots.includes('noindex'), false, 'Indexable', robots.includes('noindex')?'NOINDEX':'sí');
+  add(!!(ogT&&ogD&&ogI), !!(ogT||ogD||ogI), 'Open Graph', ((ogT?'T':'')+(ogD?'D':'')+(ogI?'I':''))||'FALTA');
+  add(!!viewport, false, 'Viewport', viewport?'sí':'FALTA');
+  add(!!lang, false, 'Lang', lang||'FALTA');
+  add(noAlt===0, noAlt<=2, 'Alt imágenes', noAlt===0?'todas':(noAlt+' sin alt'));
+  add(words>=250, words>=120, 'Contenido', words+' palabras');
+  const bad=checks.filter(function(c){return c.level==='bad';}).length;
+  const warn=checks.filter(function(c){return c.level==='warn';}).length;
+  const score=Math.max(0,Math.round(100-(bad*12)-(warn*5)));
+  return {url:pageUrl,score:score,checks:checks,bad:bad,warn:warn};
+}
+async function runSeoAudit(){
+  const btn=document.getElementById('seoAuditBtn'),body=document.getElementById('seoAuditBody'),scoreEl=document.getElementById('seoAuditScore');
+  if(!_seoProxy()){ toast('Configura el proxy primero (Mi cuenta → Proxy)','error'); return; }
+  btn.disabled=true; btn.textContent='Analizando…'; scoreEl.textContent='';
+  body.innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div> Leyendo sitemap…</div>';
+  let urls=await _seoSitemap();
+  if(!urls.length){ urls=['https://thelab.solutions/','https://thelab.solutions/nosotros','https://thelab.solutions/contacto','https://thelab.solutions/servicios','https://thelab.solutions/blog']; }
+  urls=urls.slice(0,25);
+  const rows=[];
+  for(let i=0;i<urls.length;i++){
+    body.innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div> Analizando '+(i+1)+'/'+urls.length+'…</div>';
+    try{ const html=await _seoFetch(urls[i]); rows.push(_seoAnalyze(html,urls[i])); }
+    catch(e){ rows.push({url:urls[i],score:0,checks:[{level:'bad',label:'Error',detail:String(e&&e.message||e)}],bad:1,warn:0}); }
+  }
+  rows.sort(function(a,b){return a.score-b.score;});
+  const avg=Math.round(rows.reduce(function(s,r){return s+r.score;},0)/(rows.length||1));
+  const withIssues=rows.filter(function(r){return r.bad>0;}).length;
+  const col=avg>=80?'#2ea043':avg>=60?'#ffc107':'#f85149';
+  scoreEl.innerHTML='Promedio: <strong style="color:'+col+'">'+avg+'/100</strong> · '+withIssues+' con problemas';
+  body.innerHTML=rows.map(function(r){
+    const path=r.url.replace('https://thelab.solutions','')||'/';
+    const c=r.score>=80?'#2ea043':r.score>=60?'#ffc107':'#f85149';
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--border2)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+      +'<a href="'+r.url+'" target="_blank" style="font-size:12px;color:var(--text);text-decoration:none;font-weight:600">'+path+'</a>'
+      +'<span style="font-size:12px;font-weight:700;color:'+c+'">'+r.score+'</span></div>'
+      +'<div style="margin-top:5px">'+r.checks.map(_seoChip).join('')+'</div></div>';
+  }).join('');
+  btn.disabled=false; btn.textContent='Analizar sitio';
+  toast('✓ Auditoría SEO completa','success');
+}
+
 function toggleWPConfig(){
   const p=document.getElementById('wpConfigPanel');
   const visible=p.style.display!=='none';
