@@ -3,7 +3,8 @@
  * mail-api.php — API de correo para The Lab Solutions Dashboard
  *
  * INSTALACIÓN:
- *   1. Subir este archivo a https://thelab.solutions/mail-api.php
+ *   1. Subir este archivo a https://mail-api.thelab.solutions/mail-api.php
+ *      (subdominio del cPanel — el sitio principal ya no corre PHP: vive en Vercel)
  *   2. Verificar que PHP IMAP esté habilitado en cPanel > PHP Extensions
  *   3. El servidor de correo se conecta a mail.thelab.solutions:993 (IMAP SSL)
  *      y mail.thelab.solutions:465 (SMTP SSL)

@@ -19828,7 +19828,7 @@ function startMailPolling(){
 
 // ── CORREO ────────────────────────────────────────────────────
 const MAIL={
-  API:'https://thelab.solutions/mail-api.php',
+  API:'https://mail-api.thelab.solutions/mail-api.php',
   folder:'INBOX',
   page:1,
   pages:1,
@@ -19887,7 +19887,7 @@ const MAIL={
     }catch(e){
       this._init=false;
       document.getElementById('mailConnStatus').textContent='Error de conexión';
-      document.getElementById('mailList').innerHTML='<div style="padding:20px;text-align:center;color:var(--danger);font-size:13px">No se pudo conectar al servidor de correo.<br><span style="font-size:11px;color:var(--text3)">Verifica que mail-api.php esté instalado en thelab.solutions</span></div>';
+      document.getElementById('mailList').innerHTML='<div style="padding:20px;text-align:center;color:var(--danger);font-size:13px">No se pudo conectar al servidor de correo.<br><span style="font-size:11px;color:var(--text3)">Verifica que mail-api.php esté instalado en mail-api.thelab.solutions</span></div>';
     }
   },
 
