@@ -21578,7 +21578,7 @@ function adsExportKeywordsCSV(){
   a.click();
   toast('✓ CSV de palabras clave descargado','success');
 }
-function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s) return JSON.parse(s);}catch(e){}const _dw=_DEFAULTS.ADS_WEBAPP,_dc=_DEFAULTS.ADS_CUSTOMER;return{endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbwO5lvW2iRtKuoRazvCtUWDL8V61l77ROHc9uiiJ-a3wlhxirA8ztOELHSfAFezBGGB/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099'};}
+function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s) return JSON.parse(s);}catch(e){}const _dw=_DEFAULTS.ADS_WEBAPP,_dc=_DEFAULTS.ADS_CUSTOMER;return{endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbzepd4w_8meCRmOCsx-pngGHyQ_BqUXAaWAFE8WpIFtTO6zRmFPDukNarCXUNzmfLdt/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099'};}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
