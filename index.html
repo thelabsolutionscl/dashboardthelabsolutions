@@ -16873,7 +16873,7 @@ const _MONITOR_INTERVAL_MS=20000;   // sondeo base (el WebSocket lo hace casi ir
 const _STATUS_TIMEOUT_MS=9000;      // túnel/WiFi lento del taller necesita margen (la histéresis evita falsos Offline)
 const _THUMB_TIMEOUT_MS=2000;       // antes 3000
 const _OFFLINE_AFTER_FAILS=3;       // fallos consecutivos antes de declarar Offline
-function getPrinterTunnel(){const d=_DEFAULTS.PRINTER_TUNNEL.startsWith('%%')?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
+function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 function getPrinterTunnelToken(){const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';return localStorage.getItem('printer_tunnel_token')||d;}
 function _appendBridgeToken(u){const tk=getPrinterTunnelToken();return tk?u+(u.includes('?')?'&':'?')+'bt='+encodeURIComponent(tk):u;}
 // Diagnóstico del túnel/bridge desde el propio dashboard (Mi cuenta → Túnel Impresoras)
