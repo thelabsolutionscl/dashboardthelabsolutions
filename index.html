@@ -5943,7 +5943,7 @@ function _reportarResultados(muts) {
   <div class="mail-sig-modal" id="mailSigModal" style="display:none">
     <div class="mail-sig-box">
       <div style="padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
-        <div style="font-size:15px;font-weight:700;color:var(--text)">✍ Editar Firma</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text)">✍ Editar Firma <span id="mailSigAcct" style="font-size:11px;font-weight:600;color:var(--accent)"></span></div>
         <button onclick="MAIL.closeSigModal()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button>
       </div>
       <div style="padding:0 20px 8px;display:flex;gap:5px;flex-wrap:wrap;flex-shrink:0">
@@ -20328,7 +20328,10 @@ const MAIL={
   },
   closeCompose(){document.getElementById('mailComposePanel').style.display='none';},
 
-  _sigKey(){const u=AUTH.getUser();return u?'thelab_mail_sig_'+u.username:null;},
+  // Firma independiente por cuenta: se guarda con la casilla activa, no con el
+  // usuario del dashboard. Como la cuenta por defecto es la del usuario logueado,
+  // la firma ya existente se conserva para esa casilla (misma clave).
+  _sigKey(){const a=this.activeAccount();return a?'thelab_mail_sig_'+a:null;},
   getSig(){const k=this._sigKey();return k?localStorage.getItem(k)||'':null;},
   setSig(html){const k=this._sigKey();if(k) localStorage.setItem(k,html);},
 
@@ -20348,6 +20351,7 @@ const MAIL={
 
   openSigModal(){
     const ed=document.getElementById('mailSigEditor'),code=document.getElementById('mailSigCode');
+    const acct=document.getElementById('mailSigAcct'); if(acct) acct.textContent='· '+(this.activeAccount()||'');
     ed.innerHTML=this.getSig()||'';
     if(code){code.style.display='none';code.value='';}
     ed.style.display='block';
