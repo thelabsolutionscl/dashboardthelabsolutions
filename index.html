@@ -4106,11 +4106,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <span id="seoAuditScore" style="font-size:11px;color:var(--text2)"></span>
           <button class="btn btn-primary btn-sm" id="seoAuditBtn" onclick="runSeoAudit()">Analizar sitio</button>
+          <button class="btn btn-ghost btn-sm act-item-cyan" id="seoIABtn" onclick="seoOptimizeIA()" style="font-size:11px">✨ Optimizar con IA</button>
         </div>
       </div>
       <div id="seoAuditBody" style="padding:14px 16px">
-        <div style="font-size:12px;color:var(--text2)">Pulsa <strong>Analizar sitio</strong> para revisar todas las páginas del sitemap de thelab.solutions y ver qué mejorar.</div>
+        <div style="font-size:12px;color:var(--text2)">Pulsa <strong>Analizar sitio</strong> para revisar todas las páginas del sitemap de thelab.solutions y ver qué mejorar — o <strong>✨ Optimizar con IA</strong> para que la IA proponga los textos exactos que faltan para llegar a 100.</div>
       </div>
+      <div id="seoIAResults" style="display:none;padding:0 16px 16px"></div>
     </div>
   </div>
 
@@ -20875,6 +20877,7 @@ async function runSeoAudit(){
     catch(e){ rows.push({url:urls[i],score:0,checks:[{level:'bad',label:'Error',detail:String(e&&e.message||e)}],bad:1,warn:0}); }
   }
   rows.sort(function(a,b){return a.score-b.score;});
+  window._seoLastRows=rows;
   const avg=Math.round(rows.reduce(function(s,r){return s+r.score;},0)/(rows.length||1));
   const withIssues=rows.filter(function(r){return r.bad>0;}).length;
   const col=avg>=80?'#2ea043':avg>=60?'#ffc107':'#f85149';
@@ -20890,6 +20893,74 @@ async function runSeoAudit(){
   }).join('');
   btn.disabled=false; btn.textContent='Analizar sitio';
   toast('✓ Auditoría SEO completa','success');
+}
+
+// ── ✨ Optimizar SEO con IA ──────────────────────────────────────────
+// Audita (si hace falta), manda las páginas con problemas a Claude y
+// devuelve los textos exactos (título 30-65c, meta 120-158c, alt, OG…).
+const SEO_IA_SYS='Eres el SEO senior de The Lab Solutions, estudio B2B de fabricación digital en Santiago de Chile (impresión 3D, letras volumétricas, cartelería y neones, premiaciones y galvanos, merchandising corporativo, activaciones y stands, papelería, cajas personalizadas). Recibes un JSON de páginas con sus problemas SEO. Propón la corrección EXACTA de cada problema. REGLAS DURAS: campo title debe quedar de 30 a 65 caracteres INCLUYENDO el sufijo " · The Lab Solutions" cuando corresponda (todas las páginas menos la home lo llevan — inclúyelo tú en el texto propuesto); campo metaDescription de 120 a 158 caracteres, con la keyword principal de la página y un llamado a la acción; español de Chile, tono profesional B2B, sin emojis. Para problemas de altImagenes, h1, openGraph o contenido, escribe en "propuesto" la corrección concreta (ej: el texto alt sugerido, o qué H1 eliminar). Responde SOLO un JSON válido sin markdown ni texto extra: {"paginas":[{"url":"...","cambios":[{"campo":"title|metaDescription|openGraph|altImagenes|h1|contenido","propuesto":"...","nota":"..."}]}]}';
+async function seoOptimizeIA(){
+  const btn=document.getElementById('seoIABtn'),out=document.getElementById('seoIAResults');
+  btn.disabled=true;btn.textContent='✨ Optimizando…';
+  try{
+    if(!window._seoLastRows) await runSeoAudit();
+    const rows=(window._seoLastRows||[]).filter(function(r){return r.checks&&r.checks.some(function(c){return c.level!=='ok';});});
+    if(!rows.length){ toast('✓ El sitio ya está al 100% — nada que optimizar','success'); btn.disabled=false;btn.textContent='✨ Optimizar con IA'; return; }
+    out.style.display='block';
+    const props=[];
+    for(let i=0;i<rows.length;i+=3){
+      out.innerHTML='<div class="loading-state" style="padding:14px 0"><div class="spinner"></div> La IA está redactando propuestas… '+Math.min(i+3,rows.length)+'/'+rows.length+' páginas</div>';
+      const batch=rows.slice(i,i+3).map(function(r){return {url:r.url,score:r.score,problemas:r.checks.filter(function(c){return c.level!=='ok';}).map(function(c){return c.label+': '+(c.detail||'');})};});
+      const raw=await callClaude(SEO_IA_SYS,JSON.stringify(batch));
+      const start=raw.indexOf('{');
+      if(start<0) throw new Error('la IA no devolvió JSON');
+      const j=JSON.parse(raw.slice(start,raw.lastIndexOf('}')+1));
+      (j.paginas||[]).forEach(function(p){props.push(p);});
+    }
+    window._seoIAProps=props;
+    renderSeoIAProps(props);
+    toast('✓ Propuestas listas — cópialas o baja el informe','success');
+  }catch(e){
+    out.style.display='block';
+    out.innerHTML='<div style="font-size:12px;color:var(--danger)">Error generando propuestas: '+escapeHtml(e.message)+'</div>';
+  }
+  btn.disabled=false;btn.textContent='✨ Optimizar con IA';
+}
+function renderSeoIAProps(props){
+  const out=document.getElementById('seoIAResults');
+  const CAMPOS={title:'Título',metaDescription:'Meta description',openGraph:'Open Graph',altImagenes:'Alt de imágenes',h1:'H1',contenido:'Contenido'};
+  out.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--accent)">✨ Propuestas de la IA ('+props.length+' páginas)</div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="seoCopyIAReport()" style="font-size:10px">📋 Copiar informe para aplicar</button></div>'
+    +'<div style="font-size:10px;color:var(--text3);margin-bottom:8px">Copia el informe y pégaselo a Claude Code con: «aplica este informe SEO al repo de la web» — o copia cada texto y aplícalo a mano.</div>'
+    +props.map(function(p,i){
+      const path=(p.url||'').replace('https://thelab.solutions','')||'/';
+      return '<div style="padding:8px 0;border-top:1px solid var(--border2)"><div style="font-size:12px;font-weight:600;margin-bottom:2px">'+escapeHtml(path)+'</div>'
+        +(p.cambios||[]).map(function(c,j){
+          const len=(c.propuesto||'').length;
+          const esTexto=c.campo==='title'||c.campo==='metaDescription';
+          const okLen=c.campo==='title'?(len>=30&&len<=65):(len>=110&&len<=165);
+          return '<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:11.5px">'
+            +'<span style="flex-shrink:0;min-width:118px;color:var(--text3)">'+(CAMPOS[c.campo]||escapeHtml(c.campo||''))+(esTexto?' <span style="color:'+(okLen?'var(--success)':'var(--warn)')+'">('+len+'c)</span>':'')+'</span>'
+            +'<span style="flex:1;color:var(--text);word-break:break-word">'+escapeHtml(c.propuesto||'')+(c.nota?' <span style="color:var(--text3)">— '+escapeHtml(c.nota)+'</span>':'')+'</span>'
+            +'<button class="btn btn-ghost btn-sm" style="font-size:9px;padding:1px 7px;flex-shrink:0" onclick="seoCopyProp('+i+','+j+')">Copiar</button></div>';
+        }).join('')+'</div>';
+    }).join('');
+}
+function seoCopyProp(i,j){
+  const p=(window._seoIAProps||[])[i];const c=p&&p.cambios&&p.cambios[j];
+  if(!c)return;
+  navigator.clipboard.writeText(c.propuesto||'').then(function(){toast('✓ Copiado','success');}).catch(function(){toast('No se pudo copiar','error');});
+}
+function seoCopyIAReport(){
+  const props=window._seoIAProps||[];
+  let md='# Informe SEO — thelab.solutions ('+new Date().toLocaleDateString('es-CL')+')\n\nAplica estos cambios en el repo `thelabsolutionscl/web-thelab-solutions` (metadata/contenido de cada página). Reglas: título 30-65 caracteres, meta description 110-165, OG completo con imagen, todas las imágenes con alt, un solo H1 por página.\n\n';
+  props.forEach(function(p){
+    md+='## '+p.url+'\n';
+    (p.cambios||[]).forEach(function(c){ md+='- **'+c.campo+'**: '+(c.propuesto||'')+(c.nota?'  _('+c.nota+')_':'')+'\n'; });
+    md+='\n';
+  });
+  navigator.clipboard.writeText(md).then(function(){toast('✓ Informe copiado — pégaselo a Claude Code para aplicarlo','success');}).catch(function(){toast('No se pudo copiar','error');});
 }
 
 function toggleWPConfig(){
