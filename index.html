@@ -17102,7 +17102,7 @@ async function fetchPrinterStatus(m){
 // Fluidd/Mainsail). En remoto el bridge hace de proxy WS. Esto da estado en
 // tiempo real SIN sondear; si el WS se cae, el polling toma el relevo solo.
 // Desactivable con localStorage 'printer_ws_enabled'='0'.
-function _wsEnabled(){return !window._DEMO_MODE && localStorage.getItem('printer_ws_enabled')!=='0';}
+function _wsEnabled(){if(window._DEMO_MODE)return false;const ov=localStorage.getItem('printer_ws_enabled');if(ov!==null)return ov!=='0';return (typeof _isLocalMode==='function')?_isLocalMode():true;/* por defecto WS solo en modo local; en remoto el WS del túnel es inestable, se usa polling */}
 function _printerWsUrl(ip){
   if(typeof _isLocalMode==='function'&&_isLocalMode())return `ws://${ip}:${MOONRAKER_PORT}/websocket`;
   const base=getPrinterTunnel().replace(/^http/,'ws');   // https→wss, http→ws
