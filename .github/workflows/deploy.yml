@@ -41,6 +41,7 @@ jobs:
           ADS_WEBAPP: ${{ secrets.ADS_WEBAPP }}
           ADS_CUSTOMER: ${{ secrets.ADS_CUSTOMER }}
           ELEVENLABS: ${{ secrets.ELEVENLABS }}
+          PRINTER_TUNNEL_TOKEN: ${{ secrets.PRINTER_TUNNEL_TOKEN }}
         run: |
           sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
           sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
@@ -55,6 +56,7 @@ jobs:
           sed -i "s|%%ADS_WEBAPP%%|${ADS_WEBAPP}|g" index.html
           sed -i "s|%%ADS_CUSTOMER%%|${ADS_CUSTOMER}|g" index.html
           sed -i "s|%%ELEVENLABS%%|${ELEVENLABS}|g" index.html
+          sed -i "s|%%PRINTER_TUNNEL_TOKEN%%|${PRINTER_TUNNEL_TOKEN}|g" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
