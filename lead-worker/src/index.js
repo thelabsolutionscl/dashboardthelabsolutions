@@ -1375,10 +1375,7 @@ function corsHeaders(origin, env) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  // Permite los orígenes configurados + los deploys de Vercel de este proyecto
-  // (web-thelab-solutions*.vercel.app) para previsualización. No es wildcard general.
-  const isVercel = /^https:\/\/web-thelab-solutions[a-z0-9-]*\.vercel\.app$/.test(origin);
-  const allow = allowed.includes(origin) || isVercel ? origin : allowed[0] || "";
+  const allow = allowed.includes(origin) ? origin : allowed[0] || "";
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
