@@ -794,6 +794,10 @@ body.kiosk #maquinaMonGrid .pbar{height:14px!important}
 
 /* ── MAIL CLIENT ──────────────────────────────────────────── */
 .mail-client{display:grid;grid-template-columns:200px 320px 1fr;height:calc(100vh - 190px);height:calc(100dvh - 190px);min-height:520px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;gap:0;}
+.mail-client.fullscreen{position:fixed;inset:0;z-index:420;height:100vh;height:100dvh;min-height:0;border-radius:0;border:none;}
+body.mail-fs-on{overflow:hidden;}
+#mailFsExit{position:fixed;top:12px;right:14px;z-index:430;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45);}
+.mail-acct-sel{background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:5px 8px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;max-width:220px;}
 .mail-folders{background:var(--surface2);border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;}
 .mail-compose-btn{background:var(--accent);color:#000;border:none;border-radius:8px;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:6px;justify-content:center;transition:opacity .15s;width:100%;}
 .mail-compose-btn:hover{opacity:.85;}
@@ -5776,11 +5780,16 @@ function _reportarResultados(muts) {
     </div>
     <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
       <span id="mailConnStatus" style="font-size:11px;color:var(--text3)"></span>
+      <select class="mail-acct-sel" id="mailAcctSel" onchange="MAIL.onAcctChange(this.value)" title="Cuenta de correo activa"></select>
       <button class="btn btn-ghost btn-sm" onclick="MAIL.refresh()"><svg class="dashboard-icon" width="13" height="13" stroke-width="1.5"><use href="#icon-refresh"/></svg> Recargar</button>
       <button class="btn btn-ghost btn-sm" onclick="MAIL.openSigModal()">✍ Firma</button>
+      <button class="btn btn-ghost btn-sm" id="mailFsBtn" onclick="MAIL.toggleFullscreen()" title="Pantalla completa">⛶ Pantalla completa</button>
       <button class="btn btn-ghost btn-sm" onclick="MAIL.clearMailPass();MAIL._init=false;MAIL.showPassModal()"><svg class="dashboard-icon" width="13" height="13" stroke-width="1.5"><use href="#icon-settings"/></svg> Cambiar clave</button>
     </div>
   </div>
+
+  <!-- Botón flotante para salir de pantalla completa (solo visible en ese modo) -->
+  <button id="mailFsExit" style="display:none" onclick="MAIL.toggleFullscreen()" title="Salir de pantalla completa (Esc)">⛶ Salir de pantalla completa</button>
 
   <!-- Navegación móvil (solo visible en pantallas pequeñas) -->
   <div class="mail-mob-nav" style="display:none;gap:0;margin-bottom:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
@@ -19772,17 +19781,44 @@ const MAIL={
   _readSeq:0,
   _sending:false,
 
-  _mailPassKey(){const u=AUTH.getUser();return u?'thelab_mail_pass_'+u.username:null;},
+  // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
+  // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
+  // agregar hola@ u otras casillas y alternar entre ellas. La clave se guarda
+  // por-casilla, así cada cuenta recuerda la suya. Por defecto la cuenta activa
+  // es la del usuario logueado, de modo que las claves ya guardadas siguen igual.
+  _acctsKey(){const u=AUTH.getUser();return u?'thelab_mail_accts_'+u.username:null;},
+  _activeKey(){const u=AUTH.getUser();return u?'thelab_mail_active_'+u.username:null;},
+  accounts(){
+    const u=AUTH.getUser(); if(!u) return [];
+    let list=[]; try{list=JSON.parse(localStorage.getItem(this._acctsKey())||'[]');}catch(e){list=[];}
+    if(!Array.isArray(list)) list=[];
+    if(!list.some(a=>a&&a.email===u.username)) list.unshift({email:u.username,name:u.name||''});
+    return list.filter(a=>a&&a.email);
+  },
+  setAccounts(list){const k=this._acctsKey();if(k) localStorage.setItem(k,JSON.stringify(list));},
+  activeAccount(){
+    const u=AUTH.getUser(); if(!u) return null;
+    const k=this._activeKey(); let a=k?localStorage.getItem(k):null;
+    const list=this.accounts();
+    if(!a || !list.some(x=>x.email===a)) a=u.username;
+    return a;
+  },
+  activeAccountObj(){
+    const a=this.activeAccount();
+    return this.accounts().find(x=>x.email===a)||{email:a,name:(AUTH.getUser()?.name||'')};
+  },
+
+  _mailPassKey(){const a=this.activeAccount();return a?'thelab_mail_pass_'+a:null;},
   getMailPass(){const k=this._mailPassKey();return k?localStorage.getItem(k)||'':null;},
   setMailPass(p){const k=this._mailPassKey();if(k) localStorage.setItem(k,p);},
   clearMailPass(){const k=this._mailPassKey();if(k) localStorage.removeItem(k);},
 
   auth(){
-    const u=AUTH.getUser();
+    const o=this.activeAccountObj();
     return {
-      user:u?.username||'',
+      user:o.email||'',
       pass:this.getMailPass()||'',
-      from_name:u?.name||''
+      from_name:o.name||''
     };
   },
 
@@ -19804,6 +19840,7 @@ const MAIL={
   },
 
   async init(){
+    this.renderAccounts();
     if(this._init) return;
     if(!this.getMailPass()){this.showPassModal();return;}
     this._init=true;
@@ -19822,8 +19859,7 @@ const MAIL={
   },
 
   showPassModal(msg){
-    const u=AUTH.getUser();
-    document.getElementById('mailPassEmail').textContent=u?.username||'';
+    document.getElementById('mailPassEmail').textContent=this.activeAccount()||'';
     document.getElementById('mailPassInput').value='';
     document.getElementById('mailPassError').textContent=msg||'';
     document.getElementById('mailPassModal').style.display='flex';
@@ -20066,6 +20102,71 @@ const MAIL={
     document.getElementById('mailReaderEmpty').style.display='flex';
     document.getElementById('mailReaderContent').style.display='none';
     await this.init();
+  },
+
+  // ── Selector de cuentas ──────────────────────────────────────────
+  renderAccounts(){
+    const sel=document.getElementById('mailAcctSel'); if(!sel) return;
+    const list=this.accounts(), active=this.activeAccount();
+    let html=list.map(a=>`<option value="${this.esc(a.email)}"${a.email===active?' selected':''}>${this.esc(a.email)}</option>`).join('');
+    html+=`<option value="__add__">＋ Agregar cuenta…</option>`;
+    if(list.length>1) html+=`<option value="__remove__">✕ Quitar cuenta actual…</option>`;
+    sel.innerHTML=html;
+  },
+  onAcctChange(v){
+    if(v==='__add__'){ this.renderAccounts(); this.addAccount(); return; }
+    if(v==='__remove__'){ this.renderAccounts(); this.removeAccount(); return; }
+    if(v && v!==this.activeAccount()) this.switchAccount(v);
+  },
+  addAccount(){
+    let email=prompt('Correo de la cuenta a agregar:','@thelab.solutions');
+    if(email===null) return;
+    email=email.trim().toLowerCase();
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Correo inválido','error'); return; }
+    const list=this.accounts();
+    if(list.some(a=>a.email===email)){ toast('Esa cuenta ya está agregada','info'); this.switchAccount(email); return; }
+    let name=prompt('Nombre para mostrar al enviar (remitente):','The Lab Solutions');
+    if(name===null) return;
+    list.push({email,name:name.trim()});
+    this.setAccounts(list);
+    this.switchAccount(email); // pedirá la contraseña de esa casilla
+  },
+  removeAccount(){
+    const active=this.activeAccount(), u=AUTH.getUser();
+    let list=this.accounts();
+    if(list.length<=1){ toast('Debe quedar al menos una cuenta','info'); return; }
+    if(!confirm('¿Quitar '+active+' de la lista? (no borra el buzón, solo lo saca de aquí)')){ this.renderAccounts(); return; }
+    this.clearMailPass(); // borra la clave guardada de esa casilla
+    list=list.filter(a=>a.email!==active);
+    this.setAccounts(list);
+    const next=(list.find(a=>a.email===u?.username)||list[0]).email;
+    this.switchAccount(next);
+  },
+  switchAccount(email){
+    const k=this._activeKey(); if(k) localStorage.setItem(k,email);
+    this._init=false; this.folder='INBOX'; this.page=1; this.msgs=[]; this.selUid=null; this._currentMsg=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    document.getElementById('mailList').innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
+    document.getElementById('mailConnStatus').textContent='';
+    this.renderAccounts();
+    if(!this.getMailPass()){ this.showPassModal(); return; }
+    this.init();
+  },
+
+  // ── Pantalla completa ────────────────────────────────────────────
+  toggleFullscreen(){
+    if(!this._fsWired){
+      this._fsWired=true;
+      document.addEventListener('keydown',e=>{
+        if(e.key==='Escape'){ const c=document.getElementById('mailClient'); if(c&&c.classList.contains('fullscreen')) MAIL.toggleFullscreen(); }
+      });
+    }
+    const c=document.getElementById('mailClient'); if(!c) return;
+    const on=c.classList.toggle('fullscreen');
+    document.body.classList.toggle('mail-fs-on',on);
+    const ex=document.getElementById('mailFsExit'); if(ex) ex.style.display=on?'inline-flex':'none';
+    const b=document.getElementById('mailFsBtn'); if(b) b.innerHTML=on?'⛶ Salir':'⛶ Pantalla completa';
   },
 
   onSearchInput(val){
