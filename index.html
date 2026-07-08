@@ -6067,7 +6067,8 @@ const _DEFAULTS={
   ANTHROPIC_KEY:'%%ANTHROPIC_KEY%%',
   PROXY_URL:'%%PROXY_URL%%',
   PROXY_KEY:'%%PROXY_KEY%%',
-  PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%'
+  PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%',
+  PRINTER_TUNNEL_TOKEN:'%%PRINTER_TUNNEL_TOKEN%%'
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},clientesByIdRec:{},pedidosById:{},cotizacionesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
@@ -16645,7 +16646,7 @@ const _STATUS_TIMEOUT_MS=9000;      // túnel/WiFi lento del taller necesita mar
 const _THUMB_TIMEOUT_MS=2000;       // antes 3000
 const _OFFLINE_AFTER_FAILS=3;       // fallos consecutivos antes de declarar Offline
 function getPrinterTunnel(){const d=_DEFAULTS.PRINTER_TUNNEL.startsWith('%%')?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
-function getPrinterTunnelToken(){return localStorage.getItem('printer_tunnel_token')||'';}
+function getPrinterTunnelToken(){const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';return localStorage.getItem('printer_tunnel_token')||d;}
 function _appendBridgeToken(u){const tk=getPrinterTunnelToken();return tk?u+(u.includes('?')?'&':'?')+'bt='+encodeURIComponent(tk):u;}
 // Diagnóstico del túnel/bridge desde el propio dashboard (Mi cuenta → Túnel Impresoras)
 async function testPrinterBridge(statusId){

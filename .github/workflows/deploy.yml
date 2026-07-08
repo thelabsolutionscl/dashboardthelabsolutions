@@ -35,6 +35,7 @@ jobs:
           PROXY_URL: ${{ secrets.PROXY_URL }}
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
           PRINTER_TUNNEL: ${{ secrets.PRINTER_TUNNEL }}
+          PRINTER_TUNNEL_TOKEN: ${{ secrets.PRINTER_TUNNEL_TOKEN }}
         run: |
           sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
           sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
@@ -46,6 +47,7 @@ jobs:
           sed -i "s|%%PROXY_URL%%|${PROXY_URL}|g" index.html
           sed -i "s|%%PROXY_KEY%%|${PROXY_KEY}|g" index.html
           sed -i "s|%%PRINTER_TUNNEL%%|${PRINTER_TUNNEL}|g" index.html
+          sed -i "s|%%PRINTER_TUNNEL_TOKEN%%|${PRINTER_TUNNEL_TOKEN}|g" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
