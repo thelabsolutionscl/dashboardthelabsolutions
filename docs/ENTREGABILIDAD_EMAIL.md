@@ -64,10 +64,35 @@ el SMTP compartido, para cortar el volumen de inmediato:
 Los otros 3 (`5561882`, `5561885`, `5562653`) ya estaban inactivos. **A partir de
 ahora no sale ningún correo automático por el hosting compartido.**
 
-> ⚠️ Consecuencia temporal: mientras estén desactivados, el equipo **no** recibe
-> los avisos internos (cliente bloqueado, cotizaciones por vencer, lead caliente,
-> worker caído) ni los clientes reciben avisos de estado. Se restauran al
-> completar la migración (sección 4) y reactivar.
+## 2.bis Migración a Resend YA APLICADA (2026-07-09)
+
+Se migraron **8 de los 9 escenarios** del SMTP compartido a **Resend (HTTP)**,
+directo en Make. En cada uno se reemplazó el módulo **Email (SMTP)** por dos
+módulos: **Create JSON** (arma el cuerpo escapando los valores, a prueba de
+comillas) → **HTTP** (`POST https://api.resend.com/emails`). Se creó una
+estructura de datos reutilizable **"Resend Email Payload"** (`id 423714`).
+
+| Escenario | ID | Estado tras migrar |
+|---|---|---|
+| Email · Cotización enviada → Cliente | `5561832` | migrado · **inactivo** |
+| Email · Pedido en producción → Cliente | `5561882` | migrado · **inactivo** |
+| Email · Pedido listo para despacho → Cliente | `5561885` | migrado · **inactivo** |
+| Email · Pedido despachado → Cliente | `5561888` | migrado · **inactivo** |
+| ALERT_AGENT Cliente bloqueado | `4930454` | migrado · **inactivo** |
+| ALERT_AGENT Cotizaciones por vencer | `4931482` | migrado · **inactivo** |
+| Lead caliente (score ≥ 8) → aviso | `5399550` | migrado · **inactivo** |
+| Monitor · Worker de leads (health check) | `5567610` | migrado · **inactivo** |
+
+> **Falta 1:** `5562653` (Backup semanal Airtable → Email) sigue en el SMTP
+> compartido pero está **inactivo**; embebe un volcado enorme de Airtable, así que
+> se deja para migrar aparte (o pasar a la conexión Gmail). No envía a clientes.
+
+**Los 8 quedaron INACTIVOS a propósito**: falta pegar la API key de Resend
+(sección 4.2) y probar antes de reactivar. El `from` de todos es
+`hola@thelab.solutions` (dominio ya verificado en Resend).
+
+> ⚠️ Consecuencia temporal: hasta que pegues la key y reactives, el equipo **no**
+> recibe los avisos internos ni los clientes los de estado. Es el último paso.
 
 ---
 
@@ -99,14 +124,25 @@ dominio con registros DNS. Es **gratis** y es el **paso 0** de la migración.
 
 ---
 
-## 4. Migración de cada escenario: SMTP → Resend (HTTP)
+## 4. Cómo terminar (pegar API key → probar → activar)
 
-La conversión es **siempre la misma**: se reemplaza el módulo **Email (SMTP)**
-por un módulo **HTTP → `POST https://api.resend.com/emails`**, idéntico al que ya
-usa el escenario **Newsletter · Envío** (`5438569`). Recomendado hacerlo en el
-**editor de Make** (maneja el escapado del HTML automáticamente).
+La migración **ya está hecha** (sección 2.bis). Falta solo esto, una vez por
+escenario (8 en total):
 
-### 4.1 Config del módulo HTTP (referencia que ya funciona)
+1. **Pegar la API key de Resend.** Abre el escenario en Make → módulo **HTTP** →
+   header `Authorization` → reemplaza `Bearer re_PEGA_AQUI_TU_API_KEY_DE_RESEND`
+   por `Bearer re_<tu_api_key_real>` (créala en Resend → *API Keys* si no la tienes).
+2. **Probar con "Run once"** con un registro de prueba (una cotización/pedido con
+   tu propio email como Cliente, o forzando la condición) y confirma que el correo
+   llega bien y con el diseño correcto.
+3. **Activar** el escenario (toggle ON).
+
+> El `data` del módulo HTTP es `{{4.json}}` (o `{{3.json}}`/`{{2.json}}` según el
+> escenario): el módulo **Create JSON** previo arma el cuerpo y **escapa los
+> valores automáticamente**, por lo que un campo con comillas o saltos de línea
+> (ej. "Detalle" o texto de IA) ya no rompe el envío.
+
+### 4.1 Config del módulo HTTP (referencia — ya aplicada)
 
 ```jsonc
 {
@@ -164,11 +200,14 @@ opciones**:
 
 ## 5. Checklist de go-live
 
-- [ ] Verificar `thelab.solutions` en Resend (SPF/DKIM/MX/DMARC) — sección 3.
-- [ ] Confirmar/crear la API key de Resend.
-- [ ] Migrar los 4 escenarios a cliente a HTTP/Resend + **Run once** de prueba.
-- [ ] Migrar los 5 internos (Gmail recomendado) y reactivarlos.
-- [ ] Reactivar los escenarios de cliente que quieras dejar corriendo.
+- [x] Cortar el envío por el SMTP compartido (6 escenarios desactivados).
+- [x] Verificar `thelab.solutions` en Resend (SPF/DKIM/MX/DMARC) — **Verified**.
+- [x] Migrar los 8 escenarios (4 cliente + 4 internos) a Create JSON → Resend.
+- [ ] Pegar la API key de Resend en el header `Authorization` de cada uno (8).
+- [ ] **Run once** de prueba en cada escenario y confirmar que el correo llega.
+- [ ] **Activar** los escenarios (los 6 que estaban corriendo, y los de cliente
+      que quieras dejar automáticos).
+- [ ] (Pendiente aparte) Migrar el Backup semanal `5562653` (o pasarlo a Gmail).
 - [ ] (Opcional) Configurar el webhook de tracking de Resend del escenario
       `5439094` para medir entregas/rebotes.
 - [ ] Responder a SilverHost confirmando que los envíos automáticos migraron a
