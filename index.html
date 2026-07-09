@@ -521,6 +521,13 @@ body.compact .ov-zone{margin:18px 0 10px;}
 .fac-chip:hover{border-color:var(--accent);color:var(--accent);}
 .fac-chip-active{background:rgba(0,212,204,0.12);border-color:var(--accent);color:var(--accent);}
 .fac-chip-n{display:inline-block;background:rgba(255,255,255,0.12);border-radius:8px;padding:0 5px;font-size:9px;font-weight:700;margin-left:2px;}
+.cli-cat-chip{background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:5px 13px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:4px;}
+.cli-cat-chip:hover{border-color:var(--accent);color:var(--text);}
+.cli-cat-chip.active{background:rgba(0,212,204,0.12);border-color:var(--accent);color:var(--accent);}
+.cli-cat-chip .cli-cat-n{display:inline-block;background:rgba(255,255,255,0.12);border-radius:8px;padding:0 6px;font-size:10px;font-weight:700;}
+.cli-cat-chip.active .cli-cat-n{background:rgba(0,212,204,0.22);}
+.badge-lead{background:rgba(0,150,255,0.14);border:1px solid rgba(0,150,255,0.35);color:#4db4ff;border-radius:6px;padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+.badge-cliente{background:rgba(0,200,120,0.14);border:1px solid rgba(0,200,120,0.35);color:#2ecc82;border-radius:6px;padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
 .fac-btn-cobrar{background:rgba(0,212,170,0.15)!important;border:1px solid rgba(0,212,170,0.4)!important;color:var(--success)!important;font-weight:700!important;}
 .fac-btn-cobrar:hover{background:rgba(0,212,170,0.3)!important;}
 /* ─────────────────────────────────────────────────────────────── */
@@ -2169,14 +2176,20 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <span id="bulkCount" style="font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace"></span>
           <select id="bulkEtapaSelect" class="field-select" style="font-size:11px;padding:4px 8px;width:auto;border-color:var(--accent)">
             <option value="">— Cambiar etapa —</option>
-            <option>Lead nuevo</option><option>Contactado</option><option>Propuesta enviada</option><option>Negociación</option><option>Cliente activo</option><option>Cliente inactivo</option><option>Perdido</option>
+            <option>Contactado</option><option>Propuesta enviada</option><option>Negociación</option><option>Cliente activo</option><option>Cliente inactivo</option><option>Perdido</option>
           </select>
           <button id="bulkApplyBtn" class="btn btn-sm" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.3);color:var(--accent)" onclick="bulkChangeEtapa()">✓ Aplicar etapa</button>
+          <button id="bulkValidarBtn" class="btn btn-sm" style="background:rgba(0,200,120,0.15);border:1px solid rgba(0,200,120,0.35);color:#2ecc82" onclick="bulkValidarClientes()">✅ Validar como clientes</button>
           <button id="bulkDelBtn" class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="deleteSelectedClientes()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
           <button class="btn btn-ghost btn-sm" onclick="clearSelection()">✕ Cancelar</button>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="exportToCSV('clientes')">⬇ CSV</button>
       </div>
+    </div>
+    <div class="cli-cat-bar" id="cliCatBar" style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:0 4px 12px">
+      <button class="cli-cat-chip" data-cat="lead" onclick="setCliCat('lead')">🎯 Leads <span class="cli-cat-n" id="cliCatN-lead">—</span></button>
+      <button class="cli-cat-chip" data-cat="cliente" onclick="setCliCat('cliente')">✅ Clientes <span class="cli-cat-n" id="cliCatN-cliente">—</span></button>
+      <button class="cli-cat-chip" data-cat="todos" onclick="setCliCat('todos')">Todos <span class="cli-cat-n" id="cliCatN-todos">—</span></button>
     </div>
     <div class="table-wrap sticky-head">
       <table>
@@ -3991,7 +4004,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="ecWeb"></div>
       <div class="field-group"><label class="field-label">Industria</label><select class="field-select" id="ecIndustria"><option value="">— seleccionar —</option><option>Agencia / Marketing</option><option>Retail</option><option>Tecnología</option><option>Educación</option><option>Eventos</option><option>Otro</option></select></div>
       <div class="field-group"><label class="field-label">Origen</label><select class="field-select" id="ecOrigen"><option>Referido</option><option>Instagram</option><option>LinkedIn</option><option>Google</option><option>Contacto directo</option><option>Otro</option></select></div>
-      <div class="field-group"><label class="field-label">Etapa venta</label><select class="field-select" id="ecEtapa"><option>Lead nuevo</option><option>Contactado</option><option>Propuesta enviada</option><option>Negociación</option><option>Cliente activo</option><option>Cliente inactivo</option><option>Perdido</option></select></div>
+      <div class="field-group"><label class="field-label">Etapa venta</label><select class="field-select" id="ecEtapa"><option value="">— sin etapa —</option><option>Contactado</option><option>Propuesta enviada</option><option>Negociación</option><option>Cliente activo</option><option>Cliente inactivo</option><option>Perdido</option></select></div>
       <div class="field-group"><label class="field-label">Estado cuenta</label><select class="field-select" id="ecEstado"><option>Al día</option><option>Con deuda</option><option>Bloqueado</option></select></div>
       <div class="field-group"><label class="field-label">Valoración (1-5)</label><input class="field-input" id="ecValoracion" type="number" min="1" max="5"></div>
       <div class="field-group"><label class="field-label">Facturas vencidas</label><input class="field-input" id="ecFactVenc" type="number" min="0"></div>
@@ -6189,6 +6202,33 @@ function _reRenderActiveList(){const a=(document.querySelector('.tab-panel.activ
 // La selección (Sets por id) y la búsqueda (basada en datos) se preservan.
 const TABLE_PAGE=80;
 let _cliCap=TABLE_PAGE,_cliQuery='',_cotCap=TABLE_PAGE,_pedCap=TABLE_PAGE;
+// Categoría activa en la sección Clientes: 'lead' | 'cliente' | 'todos'.
+let _cliCat='todos';
+// ── Categoría LEAD vs CLIENTE ────────────────────────────────────────────────
+// Un registro es CLIENTE cuando el equipo lo validó (campo 'Validado' en Airtable).
+// Mientras no esté validado es un LEAD (registro nuevo de formulario/web/etc.).
+// Fallback para registros previos a la migración (campo 'Validado' aún vacío):
+// se consideran clientes los que ya estaban en una etapa de cliente real.
+const _ETAPAS_CLIENTE=['Cliente activo','Cliente inactivo','Inactivo'];
+function esClienteValidado(c){
+  const f=(c&&c.fields)||{};
+  if(f['Validado']===true) return true;
+  if(f['Validado']===false) return false;
+  return _ETAPAS_CLIENTE.includes(f['Etapa venta']||'');
+}
+function esLeadCat(c){return !esClienteValidado(c);}
+// Opciones de etapa de venta ofrecidas en la UI (ya sin 'Lead nuevo': ese estado
+// lo reemplaza la categoría LEAD). Fuente única para todos los desplegables.
+const ETAPA_VENTA_OPTS=['Contactado','Propuesta enviada','Negociación','Cliente activo','Cliente inactivo','Perdido'];
+function _etapaOptionsHtml(current){
+  const cur=current||'';
+  const inList=ETAPA_VENTA_OPTS.includes(cur);
+  // Si el valor actual no está en la lista (p. ej. 'Lead nuevo' heredado o vacío),
+  // mostramos un placeholder seleccionado para no perder el estado visual.
+  let html=`<option value="" ${!inList?'selected':''}>— sin etapa —</option>`;
+  html+=ETAPA_VENTA_OPTS.map(op=>`<option value="${op}" ${cur===op?'selected':''}>${op}</option>`).join('');
+  return html;
+}
 // Ids del conjunto actualmente vigente (filtrado/ordenado) de cada tabla, para que
 // "seleccionar todo" abarque TODO el set y no solo las filas pintadas por paginación.
 let _cliRowIds=[],_pedRowIds=[];
@@ -6209,12 +6249,13 @@ function pedShowMore(){_pedCap+=TABLE_PAGE;renderPedidos(state.pedidoFilter);}
 function applyDensity(){const c=localStorage.getItem('ui_density')==='compact';document.body.classList.toggle('compact',c);const b=document.getElementById('densityBtn');if(b){b.textContent=c?'≣':'≡';b.title=c?'Vista compacta — clic para cómoda':'Vista cómoda — clic para compacta';}}
 function toggleDensity(){const c=localStorage.getItem('ui_density')==='compact';localStorage.setItem('ui_density',c?'comfortable':'compact');applyDensity();}
 // ── Persistencia de orden/búsqueda por pestaña ──
-function _saveUIState(){try{localStorage.setItem('ui_state',JSON.stringify({cli:clientesSort,cot:cotizacionesSort,prov:proveedoresSort,q:_cliQuery,ped:state.pedidoFilter}));}catch(e){}}
+function _saveUIState(){try{localStorage.setItem('ui_state',JSON.stringify({cli:clientesSort,cot:cotizacionesSort,prov:proveedoresSort,q:_cliQuery,ped:state.pedidoFilter,cliCat:_cliCat}));}catch(e){}}
 function _restoreUIState(){try{const s=JSON.parse(localStorage.getItem('ui_state')||'{}');
   if(s.cli&&'key' in s.cli){clientesSort.key=s.cli.key;clientesSort.dir=s.cli.dir||1;}
   if(s.cot&&'key' in s.cot){cotizacionesSort.key=s.cot.key;cotizacionesSort.dir=s.cot.dir||1;}
   if(s.prov&&'key' in s.prov){proveedoresSort.key=s.prov.key;proveedoresSort.dir=s.prov.dir||1;}
   if(s.q){_cliQuery=s.q;const i=document.getElementById('clienteSearch');if(i)i.value=s.q;}
+  if(s.cliCat&&['lead','cliente','todos'].includes(s.cliCat))_cliCat=s.cliCat;
   if(s.ped)state.pedidoFilter=s.ped;
 }catch(e){}}
 // Sincroniza las flechas asc/desc de los encabezados con el orden vigente
@@ -7744,7 +7785,7 @@ async function loadAllData(){
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
-    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}}
+    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarLeadNuevo();}catch(e){logErr('migrarLeadNuevo',e);}},2500);}
   }catch(e){
     console.error('loadAllData error:',e);
     // Si ya hay datos en pantalla (de la caché o de una carga previa), el fallo
@@ -7954,7 +7995,7 @@ function renderAccionesHoy(){
   // 4) Cotizaciones por vencer / sin respuesta → seguimiento
   _cot.forEach(c=>{const f=c.fields,est=f['Estado cotización']||'';if(!['Enviada','Solicitada'].includes(est))return;const vto=f['Fecha vencimiento'],fc=f['Fecha cotización'];let urge=false,sub='';if(vto){const dd=Math.round((new Date(vto+'T00:00:00')-today)/86400000);if(dd<=3){urge=true;sub=dd<0?`vencida ${Math.abs(dd)}d`:`vence en ${dd}d`;}}if(!urge&&fc&&new Date(fc+'T00:00:00')<ago5){urge=true;const dd=Math.round((today-new Date(fc+'T00:00:00'))/86400000);sub=`${dd}d sin respuesta`;}if(urge)push('cot',2,'✍',`<b>${escapeHtml(f['N° Cotización']||'—')}</b> (${escapeHtml(resolveClienteName(f['Cliente']))}) · ${sub}`,'Seguir IA',`runFollowupAgent('${c.id}')`,'var(--accent)');});
   // 5) Leads nuevos / contactados recientes → estrategia de venta
-  _cli.forEach(c=>{const f=c.fields,et=f['Etapa venta']||'';if(['Lead nuevo','Contactado'].includes(et)){const cr=c.createdTime?new Date(c.createdTime):null;if(cr&&cr>=ago90)push('lead',2,'🎯',`<b>${escapeHtml(f['Empresa']||f['Contacto']||'—')}</b> · ${escapeHtml(et)}`,'Estrategia IA',`runSalesAgent('${c.id}')`,'var(--accent4)');}});
+  _cli.forEach(c=>{const f=c.fields,et=f['Etapa venta']||'';if(esLeadCat(c)){const cr=c.createdTime?new Date(c.createdTime):null;if(cr&&cr>=ago90)push('lead',2,'🎯',`<b>${escapeHtml(f['Empresa']||f['Contacto']||'—')}</b> · ${escapeHtml(et||'Nuevo lead')}`,'Estrategia IA',`runSalesAgent('${c.id}')`,'var(--accent4)');}});
   // 6) Pedidos listos para QA
   _ped.forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Listo para despacho'&&(f['Resultado QA']||'Pendiente')==='Pendiente')push('qa',2,'✅',`<b>${escapeHtml(f['N° Pedido']||'—')}</b> · QA pendiente antes de despachar`,'Checklist QA',`openQAModal('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')`,'var(--accent3)');});
   // 7) Ads — señales del agente (sólo datos reales): anomalía de ROAS, gasto sin convertir, waste, anuncio débil
@@ -8427,6 +8468,21 @@ async function bulkChangeEtapa(){
   fail>0?toast(`${ok} actualizados · ${fail} fallaron`,'info'):toast(`✓ ${ok} cliente${ok>1?'s':''} → "${etapa}"`,'success');
   if(ab){ab.disabled=false;ab.textContent='✓ Aplicar etapa';}if(db) db.disabled=false;
 }
+async function bulkValidarClientes(){
+  const ids=[...selectedClientes];if(!ids.length) return;
+  if(!confirm(`¿Validar ${ids.length} registro${ids.length>1?'s':''} como cliente${ids.length>1?'s':''}?`)) return;
+  const vb=document.getElementById('bulkValidarBtn');if(vb){vb.disabled=true;vb.textContent='Validando...';}
+  let ok=0,fail=0;
+  for(const id of ids){try{
+    const c=state.clientesByIdRec[id];if(!c){fail++;continue;}
+    const fields={'Validado':true};
+    if(!_ETAPAS_CLIENTE.includes(c.fields['Etapa venta']||'')) fields['Etapa venta']='Cliente activo';
+    await airtableWrite('Clientes','PATCH',id,fields);Object.assign(c.fields,fields);ok++;
+  }catch(e){fail++;}}
+  clearSelection();renderClientes();renderOverview();
+  fail>0?toast(`${ok} validados · ${fail} fallaron`,'info'):toast(`✅ ${ok} registro${ok>1?'s':''} validado${ok>1?'s':''} como cliente`,'success');
+  if(vb){vb.disabled=false;vb.textContent='✅ Validar como clientes';}
+}
 async function deleteSelectedClientes(){
   const ids=[...selectedClientes];if(!ids.length) return;const nombres=ids.map(id=>state.clientesByIdRec[id]?.fields['Empresa']||id);if(!confirm(`¿Eliminar ${ids.length} cliente${ids.length>1?'s':''}?\n\n${nombres.join('\n')}`)) return;
   let ok=0,fail=0;for(const id of ids){try{await airtableDelete('Clientes',id);state.clientes=state.clientes.filter(x=>x.id!==id);delete state.clientesById[id];delete state.clientesByIdRec[id];ok++;}catch(e){fail++;}}
@@ -8511,16 +8567,20 @@ document.addEventListener('click',()=>document.querySelectorAll('.act-menu.open'
 function buildClienteRow(c){
   const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0));
   const tel=f['Teléfono']||'';
-  const esLead=['Lead nuevo','Contactado'].includes(f['Etapa venta']||'');
-  const esInactivo=['Cliente inactivo','Perdido'].includes(f['Etapa venta']||'');
+  const esLead=esLeadCat(c);
+  const esInactivo=['Cliente inactivo','Inactivo','Perdido'].includes(f['Etapa venta']||'');
   const tieneDeuda=(f['Facturas vencidas']||0)>=1;
+  const catBadge=esLead?'<span class="badge-lead" title="Registro nuevo aún no validado">Lead</span>':'<span class="badge-cliente" title="Cliente validado por el equipo">Cliente</span>';
+  const validarItem=esLead
+    ?`<button class="act-item act-item-green" onclick="validarCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check"/></svg> &nbsp;✅ Validar como cliente</button>`
+    :`<button class="act-item" onclick="revertirALead('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;↩ Volver a lead</button>`;
   const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(esInactivo?`<button class="act-item act-item-cyan" onclick="runClienteWinbackAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reconectar IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
   return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}${_flashCls(c.id)}">
     <td class="td-chk" style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
-    <td class="td-empresa"><strong>${escapeHtml(f['Empresa']||'—')}</strong><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
+    <td class="td-empresa"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong>${escapeHtml(f['Empresa']||'—')}</strong>${catBadge}</div><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
     <td class="td-contacto" data-label="Contacto">${escapeHtml(f['Contacto']||'—')}</td>
     <td class="td-tel" data-label="Teléfono">${tel?`<a href="tel:${tel.replace(/\s/g,'')}" style="color:var(--accent);text-decoration:none;font-weight:600" title="Llamar">📞 ${escapeHtml(tel)}</a>`:'<span style="color:var(--text3)">—</span>'}</td>
-    <td class="td-etapa" data-label="Etapa"><select onchange="updateEtapaCliente('${c.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;text-transform:uppercase">${['Lead nuevo','Contactado','Propuesta enviada','Negociación','Cliente activo','Cliente inactivo','Perdido'].map(op=>`<option value="${op}" ${(f['Etapa venta']||'')===op?'selected':''}>${op}</option>`).join('')}</select></td>
+    <td class="td-etapa" data-label="Etapa"><select onchange="updateEtapaCliente('${c.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;text-transform:uppercase">${_etapaOptionsHtml(f['Etapa venta'])}</select></td>
     <td class="td-revenue clp" data-label="Revenue">${formatCLP(f['Revenue total cliente (CLP)']||0)}</td>
     <td class="td-val" data-label="Val.">${'★'.repeat(val)}${'☆'.repeat(5-val)}</td>
     <td class="td-estado" data-label="Estado">${estadoBadge(f['Estado cuenta']||'Al día')}</td>
@@ -8531,6 +8591,7 @@ function buildClienteRow(c){
         <div class="act-menu" id="actmenu-cli-${c.id}">
           <button class="act-item" onclick="openClienteDetalle('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver detalle</button>
           <button class="act-item" onclick="startEditClientFlow('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;✏️ Editar (guiado)</button>
+          ${validarItem}
           <button class="act-item act-item-yellow" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="verCotizacionesCliente('${c.id}',this.dataset.empresa)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ver cotizaciones</button>
           <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
           <button class="act-item act-item-green" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="startQuoteFlow('${c.id}',this.dataset.empresa)">💰 &nbsp;Cotizar con KAI (guiado)</button>
@@ -8543,21 +8604,31 @@ function buildClienteRow(c){
 }
 function renderClientes(skipAnalytics){
   if(!skipAnalytics) _cliSearchCache.clear();
-  const sorted=getSortedClientes();
+  // Conjunto base (según modo vendedor + orden), antes de aplicar la categoría.
+  const catBase=getSortedClientes();
+  _updateCliCatCounts(catBase);
+  // Filtro por categoría LEAD / CLIENTE (chips superiores).
+  const sorted=_cliCat==='lead'?catBase.filter(esLeadCat)
+              :_cliCat==='cliente'?catBase.filter(esClienteValidado)
+              :catBase;
   const tbody=document.getElementById('clientesTableBody');
   const countEl=document.getElementById('clientesCount');
   if(!sorted.length){
-    if(countEl) countEl.textContent=isVendorMode()?'0 mis clientes':`${state.clientes.length} clientes en CRM`;
-    const emptyMsg=isVendorMode()&&state.clientes.length
-      ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>Aún no tienes clientes asignados<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>'
-      :'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>Aún no hay clientes<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>';
-    _setRows(tbody,'<tr><td colspan="10">'+emptyMsg+'</td></tr>');return;
+    const catLabel=_cliCat==='lead'?'leads':_cliCat==='cliente'?'clientes':'clientes';
+    if(countEl) countEl.textContent=isVendorMode()?`0 mis ${catLabel}`:`${catBase.length} en CRM`;
+    const emptyMsg=catBase.length
+      ?`<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>No hay ${catLabel} en esta categoría</div>`
+      :(isVendorMode()&&state.clientes.length
+        ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>Aún no tienes clientes asignados<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>'
+        :'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>Aún no hay clientes<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>');
+    _setRows(tbody,'<tr><td colspan="10">'+emptyMsg+'</td></tr>');updateBulkBar();return;
   }
   // Búsqueda basada en datos: replica el texto exacto que veía el filtro por DOM
   // (textContent de la fila) sin tener que pintar las ~1000 filas primero.
   const matched=_cliQuery?sorted.filter(c=>{let t=_cliSearchCache.get(c.id);if(t===undefined){t=_rowText(buildClienteRow(c));_cliSearchCache.set(c.id,t);}return t.includes(_cliQuery);}):sorted;
   _cliRowIds=matched.map(c=>c.id);
-  if(countEl) countEl.textContent=_cliQuery?`${matched.length} de ${sorted.length}`:(isVendorMode()?`${sorted.length} mis clientes`:`${state.clientes.length} clientes en CRM`);
+  const _catN=_cliCat==='lead'?'mis leads':'mis clientes';
+  if(countEl) countEl.textContent=_cliQuery?`${matched.length} de ${sorted.length}`:(isVendorMode()?`${sorted.length} ${_catN}`:`${sorted.length}${_cliCat==='todos'?' clientes en CRM':(_cliCat==='lead'?' leads':' clientes')}`);
   if(!matched.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state" style="padding:20px">Sin resultados para "${escapeHtml(_cliQuery)}"</div></td></tr>`);updateBulkBar();return;}
   const shown=_cliQuery?matched:matched.slice(0,_cliCap);
   let html=shown.map(c=>buildClienteRow(c)).join('');
@@ -8571,7 +8642,74 @@ function renderClientes(skipAnalytics){
   _applySortIndicators();
 }
 function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes(true);_saveUIState();}
+function _updateCliCatCounts(base){
+  const list=base||getSortedClientes();
+  const leads=list.filter(esLeadCat).length;
+  const clientes=list.length-leads;
+  const set=(k,v)=>{const el=document.getElementById('cliCatN-'+k);if(el)el.textContent=v;};
+  set('lead',leads);set('cliente',clientes);set('todos',list.length);
+  document.querySelectorAll('#cliCatBar .cli-cat-chip').forEach(b=>b.classList.toggle('active',b.getAttribute('data-cat')===_cliCat));
+}
+function setCliCat(cat){
+  if(_cliCat===cat) return;
+  _cliCat=cat;_cliCap=TABLE_PAGE;
+  clearSelection();
+  renderClientes(true);
+  _saveUIState();
+}
 async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientesByIdRec[id];if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+// Migración one-time: los registros heredados con etapa 'Lead nuevo' quedan como
+// LEAD sin etapa (la categoría reemplaza a esa etapa). Se ejecuta una sola vez y
+// solo limpia registros que aún tengan ese valor, así se autolimita.
+async function _migrarLeadNuevo(){
+  if(localStorage.getItem('_leadNuevoMigrated_v1')==='1') return;
+  // Evita que varios usuarios/vendedores escriban en paralelo; solo escribe quien
+  // tenga permiso de escritura sobre Clientes.
+  const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;
+  if(u&&typeof RBAC!=='undefined'&&RBAC.canWriteTable&&!RBAC.canWriteTable(u.role,'Clientes')) return;
+  const pend=state.clientes.filter(c=>(c.fields['Etapa venta']||'')==='Lead nuevo');
+  if(!pend.length){localStorage.setItem('_leadNuevoMigrated_v1','1');return;}
+  let ok=0,fail=0;
+  for(const c of pend){
+    try{
+      await airtableWrite('Clientes','PATCH',c.id,{'Etapa venta':null,'Validado':false});
+      c.fields['Etapa venta']=null;c.fields['Validado']=false;ok++;
+    }catch(e){fail++;}
+  }
+  if(!fail) localStorage.setItem('_leadNuevoMigrated_v1','1');
+  if(ok){
+    try{if((document.querySelector('.tab-panel.active')||{}).id==='tab-clientes')renderClientes();renderOverview();}catch(e){}
+    toast(`🔄 ${ok} lead${ok>1?'s':''} migrado${ok>1?'s':''} a la nueva categoría`,'info');
+  }
+}
+// Marca un LEAD como CLIENTE validado por el equipo.
+async function validarCliente(id){
+  const c=state.clientesByIdRec[id];if(!c) return;
+  const nombre=c.fields['Empresa']||c.fields['Contacto']||'registro';
+  const fields={'Validado':true};
+  // Si aún no tiene etapa de cliente, lo dejamos como 'Cliente activo'.
+  if(!_ETAPAS_CLIENTE.includes(c.fields['Etapa venta']||'')) fields['Etapa venta']='Cliente activo';
+  try{
+    await airtableWrite('Clientes','PATCH',id,fields);
+    Object.assign(c.fields,fields);
+    toast(`✅ "${nombre}" validado como cliente`,'success');
+    renderClientes();renderOverview();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+// Devuelve un CLIENTE validado al estado de LEAD.
+async function revertirALead(id){
+  const c=state.clientesByIdRec[id];if(!c) return;
+  const nombre=c.fields['Empresa']||c.fields['Contacto']||'registro';
+  const fields={'Validado':false};
+  // Si su etapa es de cliente, la bajamos para que la categoría quede en LEAD.
+  if(_ETAPAS_CLIENTE.includes(c.fields['Etapa venta']||'')) fields['Etapa venta']='Contactado';
+  try{
+    await airtableWrite('Clientes','PATCH',id,fields);
+    Object.assign(c.fields,fields);
+    toast(`↩ "${nombre}" devuelto a leads`,'info');
+    renderClientes();renderOverview();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
 function verCotizacionesCliente(clienteId,empresa){
   switchTab('cotizaciones');
   setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`);return;}_setRows(tbody,cots.map(c=>buildCotRow(c)).join(''));},50);
@@ -9050,7 +9188,7 @@ async function confirmarImportarDtes(){
 }
 function openEditCliente(id){
   const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields;
-  document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Comuna']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'Referido';document.getElementById('ecEtapa').value=f['Etapa venta']||'Lead nuevo';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
+  document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Comuna']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'Referido';document.getElementById('ecEtapa').value=f['Etapa venta']||'';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
   const _ecV=document.getElementById('ec-vendedor');if(_ecV) _ecV.value=f['Vendedor']||'';
   document.getElementById('editClienteModal').style.display='flex';
 }
@@ -9188,7 +9326,7 @@ async function updateCotizacionEstado(id,estado){
     if(estado==='Aprobada'){
       const _cot=state.cotizacionesById[id];
       const _cid=Array.isArray(_cot?.fields['Cliente'])?_cot.fields['Cliente'][0]:null;
-      await _advanceEtapaCliente(_cid,'Cliente activo',['Lead nuevo','Contactado','Propuesta enviada','Negociación']);
+      await _advanceEtapaCliente(_cid,'Cliente activo',['','Lead nuevo','Contactado','Propuesta enviada','Negociación']);
       await crearPedidoDesdeCotizacion(id);
       // Crea/actualiza la carpeta del cliente + carpeta de cotización en Drive.
       // Solo si ya hay sesión de Drive activa (evita un popup bloqueado a mitad
@@ -11770,7 +11908,7 @@ async function createLead(){
   if(rut&&!validRUT(rut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
   if(rut&&rutEl) rutEl.value=formatRUT(rut);
   btn.disabled=true;btn.textContent='Creando...';
-  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Etapa venta':'Lead nuevo','Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
+  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
   if(document.getElementById('nl-industria').value) fields['Industria / Rubro']=document.getElementById('nl-industria').value;
   if(document.getElementById('nl-rut').value) fields['RUT']=document.getElementById('nl-rut').value;
   if(document.getElementById('nl-web').value) fields['Sitio web']=document.getElementById('nl-web').value;
@@ -11868,7 +12006,7 @@ async function createCotizacion(){
     if(isVendorMode()){fields['Vendedor']=currentVendorId();}else{const vv=document.getElementById('cot-vendedor')?.value;if(vv) fields['Vendedor']=vv;}
     try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
     toast(`✓ Cotización ${num} guardada`,'success');
-    await _advanceEtapaCliente(clienteId,'Propuesta enviada',['Lead nuevo','Contactado']);
+    await _advanceEtapaCliente(clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
     clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
     const _newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
     if(_newCot) syncCotizacionADrive(_newCot.id);
@@ -11998,7 +12136,7 @@ async function gfClientCreate(){
   if(!empresa){toast('Empresa requerida','error');return;}
   try{
     toast('Creando cliente…','info');
-    const f={'Empresa':empresa,'Contacto':contacto||'','Etapa venta':'Lead nuevo','Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
+    const f={'Empresa':empresa,'Contacto':contacto||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
     if(isVendorMode())f['Vendedor']=currentVendorId();
     const rec=await airtableWrite('Clientes','POST',null,f);
     if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=empresa;state.clientesByIdRec[rec.id]=rec;}
@@ -12070,7 +12208,7 @@ async function crearCotizacionGuiada(d){
   if(isVendorMode())fields['Vendedor']=currentVendorId();
   try{await airtableWrite('Cotizaciones','POST',null,fields);}
   catch(e){if(!e.message.toLowerCase().includes('unknown'))throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
-  if(d.clienteId)await _advanceEtapaCliente(d.clienteId,'Propuesta enviada',['Lead nuevo','Contactado']);
+  if(d.clienteId)await _advanceEtapaCliente(d.clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
   await loadAllDataSilent();renderCotizaciones();renderOverview();
   const newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
   if(newCot)syncCotizacionADrive(newCot.id);
@@ -12149,7 +12287,7 @@ async function actualizarPedido(id,fields){const r=await airtableWrite('Pedidos'
 
 const _CLI_SUM=[{label:'Empresa',key:'empresa'},{label:'Contacto',key:'contacto'},{label:'Cargo',key:'cargo'},{label:'Teléfono',key:'telefono'},{label:'Email',key:'email'},{label:'RUT',key:'rut'},{label:'Ciudad',key:'ciudad'},{label:'Sitio web',key:'web'},{label:'Origen',key:'origen'},{label:'Etapa',key:'etapa'},{label:'Notas',key:'notas'}];
 const _ORIGEN_OPTS=[{label:'Referido',value:'Referido'},{label:'Instagram',value:'Instagram'},{label:'LinkedIn',value:'LinkedIn'},{label:'Google',value:'Google'},{label:'Contacto directo',value:'Contacto directo'},{label:'Otro',value:'Otro'}];
-const _ETAPA_OPTS=['Lead nuevo','Contactado','Propuesta enviada','Negociación','Cliente activo','Perdido'].map(v=>({label:v,value:v}));
+const _ETAPA_OPTS=['Contactado','Propuesta enviada','Negociación','Cliente activo','Perdido'].map(v=>({label:v,value:v}));
 // ── Crear cliente (guiado) ──
 function startNewClientFlow(){
   gfStart({title:'➕ Nuevo cliente',draft:true,flowKey:'newclient',finishLabel:'✓ Crear cliente',steps:[
@@ -12166,7 +12304,7 @@ function startNewClientFlow(){
     {key:'_sum',type:'summary',q:'Revisa y confirma',sub:'Verifica los datos antes de crear el cliente.',fields:_CLI_SUM},
   ],onComplete:async(a)=>{
     if(!a.empresa){toast('La empresa es obligatoria','error');return;}
-    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Origen lead':a.origen||'','Notas internas':a.notas||'','Etapa venta':'Lead nuevo','Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
+    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Origen lead':a.origen||'','Notas internas':a.notas||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
     if(isVendorMode())f['Vendedor']=currentVendorId();
     toast('Creando cliente…','info');
     let rec;
@@ -12181,7 +12319,7 @@ function startNewClientFlow(){
 function startEditClientFlow(id){
   const c=state.clientesByIdRec[id];if(!c){toast('Cliente no encontrado','error');return;}
   const f=c.fields;
-  gfStart({title:'✏️ Editar cliente',finishLabel:'✓ Guardar cambios',initial:{empresa:f['Empresa']||'',contacto:f['Contacto']||'',cargo:f['Cargo contacto']||'',telefono:f['Teléfono']||'',email:f['Email']||'',rut:f['RUT']||'',ciudad:f['Comuna']||'',web:f['Sitio web']||'',etapa:f['Etapa venta']||'Lead nuevo',notas:f['Notas internas']||''},steps:[
+  gfStart({title:'✏️ Editar cliente',finishLabel:'✓ Guardar cambios',initial:{empresa:f['Empresa']||'',contacto:f['Contacto']||'',cargo:f['Cargo contacto']||'',telefono:f['Teléfono']||'',email:f['Email']||'',rut:f['RUT']||'',ciudad:f['Comuna']||'',web:f['Sitio web']||'',etapa:f['Etapa venta']||'',notas:f['Notas internas']||''},steps:[
     {key:'empresa',type:'text',q:'Empresa',rows:1,required:true},
     {key:'contacto',type:'text',q:'Contacto',rows:1},
     {key:'cargo',type:'text',q:'Cargo del contacto',rows:1},
@@ -13204,7 +13342,7 @@ function buildAgentContext(id){
   if(id==='SALES'){
     lines.push('\nCOTIZACIONES ABIERTAS:');
     cotAbiertas.slice(0,8).forEach(c=>{const f=c.fields;const vto=f['Fecha vencimiento']?Math.round((new Date(f['Fecha vencimiento']+'T00:00:00')-today)/86400000):null;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado cotización']||'—'}${vto!==null?` | vence en ${vto}d`:''}${f['Canal solicitud']?` | Canal: ${f['Canal solicitud']}`:''}`);});
-    const leads=state.clientes.filter(c=>['Lead nuevo','Contactado'].includes(c.fields['Etapa venta']||'')).slice(0,6);
+    const leads=state.clientes.filter(esLeadCat).slice(0,6);
     if(leads.length){lines.push('\nLEADS EN PIPELINE:');leads.forEach(c=>{const f=c.fields;lines.push(`  • ${f['Empresa']||'—'} | ${f['Contacto']||'—'} | ${f['Etapa venta']||'—'} | ${f['Teléfono']||f['Email']||'—'}`);});}
   }
 
@@ -13892,7 +14030,7 @@ async function redesInteractionToLead(id){
   try{
     const cli=await airtableWriteTolerant('Clientes','POST',null,{
       'Contacto':f['Usuario']||'Lead redes','Empresa':f['Usuario']?('@'+f['Usuario']):'Lead redes sociales',
-      'Etapa venta':'Lead nuevo','Origen lead':'Redes sociales',
+      'Validado':false,'Origen lead':'Redes sociales',
       'Notas internas':`Lead desde ${f['Red']||'redes'} (${f['Tipo']||'interacción'}):\n"${f['Mensaje']||''}"`
     });
     _redesLeadCreated.add(id);
@@ -14190,7 +14328,7 @@ async function nlSubSave(){
         const res=await airtableWrite('Clientes','PATCH',exist.id,fields);Object.assign(exist.fields,res.fields||fields);
         toast('Cliente existente suscrito al newsletter ✓','success');
       } else {
-        const fields={'Empresa':nombre||email,'Email':email,'Suscrito newsletter':true,'Etapa venta':'Lead nuevo'};if(rubro)fields['Industria / Rubro']=rubro;
+        const fields={'Empresa':nombre||email,'Email':email,'Suscrito newsletter':true,'Validado':false};if(rubro)fields['Industria / Rubro']=rubro;
         const res=await airtableWrite('Clientes','POST',null,fields);
         state.clientes=state.clientes||[];state.clientes.unshift(res);if(state.clientesByIdRec)state.clientesByIdRec[res.id]=res;
         toast('Destinatario agregado ✓','success');
@@ -14985,8 +15123,7 @@ function runLeadGenAgent(){
 function runLeadRankingAgent(){
   if(!state.loaded){toast('Carga los datos primero (↺ Actualizar)','error');return;}
   const _t=new Date();_t.setHours(0,0,0,0);
-  const etapasLead=['Lead nuevo','Contactado','Propuesta enviada','Negociación'];
-  const leads=state.clientes.filter(c=>etapasLead.includes(c.fields['Etapa venta']||''));
+  const leads=state.clientes.filter(c=>esLeadCat(c)&&(c.fields['Etapa venta']||'')!=='Perdido');
   if(!leads.length){toast('No hay leads en el pipeline','info');return;}
   const lineas=leads.map(c=>{
     const f=c.fields;
@@ -14996,7 +15133,7 @@ function runLeadRankingAgent(){
     const montoAbierto=abiertas.reduce((s,x)=>s+Math.round((x.fields['Total final (CLP)']||0)/1.19),0);
     return `  • ${f['Empresa']||'—'} | ${f['Etapa venta']} | ${dias}d en pipeline | Industria: ${f['Industria / Rubro']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)} | Cotizaciones abiertas: ${abiertas.length}${montoAbierto?' por '+formatCLP(montoAbierto)+' neto':''}`;
   });
-  const ctx=`MIS LEADS EN PIPELINE (${leads.length}):\n${lineas.join('\n')}\n\nTAREA: rankea TODOS estos leads de mayor a menor prioridad de contacto HOY. Criterios: monto en juego, días sin avance (más días = más urgente hasta los 14d, después baja probabilidad), etapa (Negociación > Propuesta enviada > Contactado > Lead nuevo) e industria con historial de conversión. Para cada uno: posición, empresa, score 1-10, POR QUÉ, y la acción concreta de hoy (1 línea).`;
+  const ctx=`MIS LEADS EN PIPELINE (${leads.length}):\n${lineas.join('\n')}\n\nTAREA: rankea TODOS estos leads de mayor a menor prioridad de contacto HOY. Criterios: monto en juego, días sin avance (más días = más urgente hasta los 14d, después baja probabilidad), etapa (Negociación > Propuesta enviada > Contactado > lead sin etapa) e industria con historial de conversión. Para cada uno: posición, empresa, score 1-10, POR QUÉ, y la acción concreta de hoy (1 línea).`;
   runAgentInline('SALES',ctx,()=>`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();switchTab('clientes')">👥 Ir a Clientes</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`);
 }
 
@@ -16706,7 +16843,7 @@ function checkAgentSuggestions(){
     seen.winback=todayStr;
   }
   // SALES: ranking diario de leads (si hay al menos 2 en pipeline)
-  const _leadsRank=state.clientes.filter(c=>['Lead nuevo','Contactado','Propuesta enviada','Negociación'].includes(c.fields['Etapa venta']||''));
+  const _leadsRank=state.clientes.filter(c=>esLeadCat(c)&&(c.fields['Etapa venta']||'')!=='Perdido');
   if(_leadsRank.length>=2&&seen.salesrank!==todayStr){
     NOTIFY.add('info',`📊 SALES: ${_leadsRank.length} leads en pipeline`,'Toca para ver el ranking de prioridad de hoy','@runLeadRankingAgent',{silent:true});
     seen.salesrank=todayStr;
@@ -19155,7 +19292,7 @@ const DEMO_DATA={
   Clientes:{records:[
     {id:'recC001',createdTime:'2026-03-15T10:00:00.000Z',fields:{'Empresa':'Agencia Creativa DG','RUT':'76.123.456-7','Email':'contacto@agenciadg.cl','Contacto':'Diego González','Teléfono':'+56 9 8823 4411','Dirección':'Av. Providencia 1234 Of. 301','Ciudad':'Santiago','Comuna':'Providencia','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':2540000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Agencia / Marketing','Origen':'Instagram','Notas':'Cliente premium. Pedidos recurrentes cada 6-8 semanas. Prefiere comunicación por WhatsApp.'}},
     {id:'recC002',createdTime:'2026-04-02T10:00:00.000Z',fields:{'Empresa':'Universidad de Chile','RUT':'60.910.000-1','Email':'compras@uchile.cl','Contacto':'Patricia Vega','Teléfono':'+56 2 2978 2000','Dirección':'Av. Bello 2007 Piso 4','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Negociación','Revenue total cliente (CLP)':850000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Educación','Origen':'Contacto directo','Notas':'Licitación en proceso. Decisión estimada para julio 2026. Contactar a Patricia antes del 20/06.','Vendedor':'florencia'}},
-    {id:'recC003',createdTime:'2026-05-10T10:00:00.000Z',fields:{'Empresa':'Corporación Eventos XYZ','RUT':'77.345.678-9','Email':'info@eventosxyz.cl','Contacto':'Rodrigo Méndez','Teléfono':'+56 9 7712 3344','Dirección':'Teatinos 120 Of. 805','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Lead nuevo','Revenue total cliente (CLP)':0,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Referido','Notas':'Referido por Diego González (Agencia DG). Necesita trofeos para torneo empresarial Q3.','Vendedor':'florencia'}},
+    {id:'recC003',createdTime:'2026-05-10T10:00:00.000Z',fields:{'Empresa':'Corporación Eventos XYZ','RUT':'77.345.678-9','Email':'info@eventosxyz.cl','Contacto':'Rodrigo Méndez','Teléfono':'+56 9 7712 3344','Dirección':'Teatinos 120 Of. 805','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'','Validado':false,'Revenue total cliente (CLP)':0,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Referido','Notas':'Referido por Diego González (Agencia DG). Necesita trofeos para torneo empresarial Q3.','Vendedor':'florencia'}},
     {id:'recC004',createdTime:'2026-02-20T10:00:00.000Z',fields:{'Empresa':'Retail Sur SpA','RUT':'76.890.123-4','Email':'pedidos@retailsur.cl','Contacto':'Carmen López','Teléfono':'+56 9 9900 1122','Dirección':'Av. Las Industrias 4500','Ciudad':'San Bernardo','Comuna':'San Bernardo','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':1820000,'Valoración cliente':4,'Estado cuenta':'Al día','Industria':'Retail','Origen':'Google','Notas':'Cadena de tiendas retail. Encargos de señalética y letreros LED para sucursales. Paga con OC a 30 días.'}},
     {id:'recC005',createdTime:'2026-04-18T10:00:00.000Z',fields:{'Empresa':'Tech Solutions Ltda','RUT':'76.456.789-0','Email':'compras@techsol.cl','Contacto':'Felipe Ríos','Teléfono':'+56 9 6688 9900','Dirección':'Isidora Goyenechea 3000 Of. 1102','Ciudad':'Santiago','Comuna':'Las Condes','Región':'Región Metropolitana','Etapa venta':'Cliente activo','Revenue total cliente (CLP)':3240000,'Valoración cliente':5,'Estado cuenta':'Al día','Industria':'Tecnología','Origen':'LinkedIn','Notas':'Empresa de tecnología con proyectos de prototipado mensual. Valora rapidez y tolerancias precisas.','Vendedor':'florencia'}},
     {id:'recC006',createdTime:'2026-05-05T10:00:00.000Z',fields:{'Empresa':'Eventos Santiago','RUT':'77.567.890-1','Email':'admin@eventossantiago.cl','Contacto':'Valentina Araya','Teléfono':'+56 9 5544 7788','Dirección':'Monjitas 565 Of. 302','Ciudad':'Santiago','Comuna':'Santiago','Región':'Región Metropolitana','Etapa venta':'Propuesta enviada','Revenue total cliente (CLP)':450000,'Valoración cliente':3,'Estado cuenta':'Al día','Industria':'Eventos','Origen':'Instagram','Notas':'Organizadora de eventos corporativos. Cotización enviada para neones decorativos para gala de fin de año.','Vendedor':'florencia'}},

@@ -767,7 +767,9 @@ function buildClienteFields(norm, source) {
     // Columnas tolerantes: si no existen en la base, se descartan sin romper.
     GCLID: norm.gclid,
     "Campaña Ads": norm.utmCampaign,
-    "Etapa venta": "Lead nuevo",
+    // Los registros nuevos entran como LEAD (categoría). El equipo los valida
+    // luego marcando el campo "Validado" en el dashboard, que los pasa a CLIENTE.
+    Validado: false,
     "Notas internas": buildNotes(norm),
     "Fecha primer contacto": today(),
   });
