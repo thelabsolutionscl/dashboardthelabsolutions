@@ -1,0 +1,80 @@
+# Pendientes de go-live — pasos finales (2026-07-10)
+
+Todo lo automatizable ya quedó hecho (9 escenarios de correo migrados a Resend y
+activos, con reintento anti-429; Newsletter armado; Worker blindado en el repo;
+CRM limpio). Faltan **6 acciones cortas** que requieren tus accesos (Cloudflare,
+DNS, dashboard de Resend). Marca cada casilla al completarla.
+
+---
+
+## 1. Re-desplegar el Worker de leads
+Activa la firma de Andrea en la auto-respuesta + los fixes anti-pérdida de leads.
+
+- [ ] Abre Terminal en tu Mac.
+- [ ] Corre:
+  ```
+  cd ~/dashboardthelabsolutions
+  git pull origin claude/email-deliverability-fix-x4r726
+  cd lead-worker
+  npx wrangler deploy
+  ```
+- [ ] Confirma que diga **"Deployed thelab-leads-worker"**.
+
+## 2. Tracking de Resend (aperturas / clics / rebotes → Airtable)
+- [ ] En **resend.com → Webhooks → Add Endpoint**, pega la URL:
+  ```
+  https://hook.us2.make.com/yvji9pvbnoozrrn2eejw1eurmjpt7nfg
+  ```
+- [ ] Marca los eventos: `email.delivered`, `email.opened`, `email.clicked`,
+  `email.bounced`, `email.complained`.
+- [ ] Guarda.
+- [ ] En **make.com**, abre el escenario **"The Lab — Newsletter · Tracking (Resend webhook)"**
+  y ponlo en **ON** (toggle).
+
+## 3. DMARC (reputación del dominio)
+En el panel DNS de `thelab.solutions` (Cloudflare), agrega un registro:
+
+- [ ] Tipo: **TXT**
+- [ ] Nombre: `_dmarc`
+- [ ] Valor:
+  ```
+  v=DMARC1; p=quarantine; rua=mailto:hola@thelab.solutions
+  ```
+- [ ] Guardar. *(Si prefieres ir con calma, parte con `p=none` y súbelo a
+  `quarantine` en 2–3 semanas.)*
+
+## 4. Monitoreo externo gratis (que nunca se caiga el formulario sin avisar)
+- [ ] Entra a **uptimerobot.com** (plan gratis) → **New Monitor**.
+- [ ] Tipo: **HTTP(s)**. URL:
+  ```
+  https://thelab-leads-worker.wast3dspa.workers.dev/health
+  ```
+- [ ] Intervalo: 5 min. Alerta a tu email. Guardar.
+
+## 5. Revisar el plan de Resend
+- [ ] En **resend.com → Usage**, revisa cuánto llevas.
+  - Plan Free = **100 correos/día**, 3.000/mes.
+  - Si te quedas corto, **Pro US$20/mes** = 50.000/mes.
+- [ ] *(El 429 que vimos era tope/ráfaga; el reintento lo absorbe, pero conviene saber si llegaste al límite diario.)*
+
+## 6. Responder a SilverHost (hosting)
+- [ ] Copia el correo de **`docs/ENTREGABILIDAD_EMAIL.md`** (sección 8) y envíaselo a
+  Gonzalo, confirmando que migraste los envíos automáticos a Resend y ya no salen
+  por el hosting compartido.
+
+---
+
+## Decisión ya tomada (referencia)
+- **"Cotización enviada"** quedó **activo**. Si tu equipo además manda el PDF con el
+  botón manual del dashboard y cambia el estado a "Enviada", el cliente recibe 2
+  correos. Recomendado: usar el botón manual **solo para reenvíos**.
+
+## Estado de los escenarios de Make (todos por Resend, con reintento)
+| Escenario | Estado |
+|---|---|
+| Monitor worker · Lead caliente · ALERT ×2 | 🟢 Activo |
+| Pedido producción / listo / despachado | 🟢 Activo |
+| Cotización enviada | 🟢 Activo (0 pendientes) |
+| Backup semanal | 🟢 Activo |
+| Newsletter · Envío | 🟢 Activo (armado; envía al programar campaña) |
+| Newsletter · Tracking | ⚪ Falta activar (paso 2) |
