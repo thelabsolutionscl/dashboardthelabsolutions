@@ -980,18 +980,27 @@ async function sendLeadAutoReply(env, norm) {
   const wa = env.WHATSAPP_NUMBER ? `https://wa.me/${env.WHATSAPP_NUMBER}` : null;
   const name = norm.name ? norm.name.split(" ")[0] : "";
   const svc = norm.service ? ` sobre <strong>${norm.service}</strong>` : "";
+  const waBlock = wa
+    ? `<p style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#3f454b;margin:0 0 16px;">¿Prefieres adelantar? Escríbenos por WhatsApp: <a href="${wa}" style="color:#009c94;text-decoration:none;font-weight:600;">${wa.replace("https://", "")}</a></p>`
+    : "";
+  // Mismo template de marca que los correos de estado (cotización/pedido): tarjeta
+  // blanca con cabecera, franja turquesa, chip, cuerpo y firma de Andrea.
   const html =
-    `<div style="font-family:'DM Sans',system-ui,Arial,sans-serif;color:#111;line-height:1.6;max-width:560px">` +
-    `<h2 style="margin:0 0 12px">¡Recibimos tu solicitud! 👋</h2>` +
-    `<p>Hola ${name},</p>` +
-    `<p>Gracias por escribirnos. Recibimos tu solicitud${svc} y te contactaremos en ` +
-    `<strong>menos de 24 horas hábiles</strong> con una cotización (material, plazo y precio).</p>` +
-    (wa
-      ? `<p>Si quieres adelantar, escríbenos por WhatsApp: <a href="${wa}">${wa.replace("https://", "")}</a></p>`
-      : "") +
-    `<div style="margin:22px 0 16px;color:#3f454b">Un saludo,</div>` +
+    `<div style="margin:0;padding:0;background:#eef1f4;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f4;"><tr><td align="center" style="padding:26px 12px;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e9ee;box-shadow:0 2px 12px rgba(20,30,40,.06);">` +
+    `<tr><td style="background:#ffffff;padding:26px 36px 18px;"><img src="https://dashboard.thelab.solutions/logo-thelab-black.png" width="272" height="25" alt="The Lab Solutions" style="display:block;border:0;outline:none;text-decoration:none;width:272px;height:25px;max-width:74%;" /></td></tr>` +
+    `<tr><td style="height:3px;background:#00d4cc;line-height:3px;font-size:0;">&nbsp;</td></tr>` +
+    `<tr><td style="padding:26px 36px 30px;">` +
+    `<div style="display:inline-block;background:#e7f7f6;color:#00807a;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;padding:5px 12px;border-radius:20px;">Solicitud recibida</div>` +
+    `<div style="font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;font-size:22px;line-height:1.3;font-weight:700;color:#141719;margin:14px 0 8px;">¡Recibimos tu solicitud!</div>` +
+    `<div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:16.5px;font-weight:700;color:#2a2f34;margin:0 0 18px;">Hola ${name} 👋</div>` +
+    `<p style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#3f454b;margin:0 0 16px;">Gracias por escribirnos y por considerar a <strong>The Lab Solutions</strong> para tu proyecto. Recibimos tu solicitud${svc} y ya la estamos revisando.</p>` +
+    `<p style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#3f454b;margin:0 0 16px;">Te contactaremos en <strong>menos de 24 horas hábiles</strong> con una cotización (material, plazo y precio). Cualquier duda, puedes responder directamente este correo.</p>` +
+    waBlock +
+    `<div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.6;color:#3f454b;margin:22px 0 20px;">Un saludo,</div>` +
     FIRMA_ANDREA +
-    `</div>`;
+    `<div style="border-top:1px solid #eef1f4;margin:24px 0 0;padding-top:16px;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:11px;line-height:1.6;color:#9aa0a6;">Este correo fue enviado por <span style="color:#6b7178;">The Lab Solutions</span> · Fabricación digital · Santiago, Chile<br>¿No esperabas este mensaje? Respóndenos y lo revisamos.</div>` +
+    `</td></tr></table></td></tr></table></div>`;
   try {
     await fetch("https://api.resend.com/emails", {
       method: "POST",
