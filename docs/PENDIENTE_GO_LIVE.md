@@ -11,14 +11,25 @@ DNS, dashboard de Resend). Marca cada casilla al completarla.
 Activa la firma de Andrea en la auto-respuesta + los fixes anti-pérdida de leads.
 
 - [ ] Abre Terminal en tu Mac.
-- [ ] Corre:
+- [ ] Corre (esto **alinea** tu copia con la del servidor, sin el error de
+  "divergent branches"; todo el código bueno ya está en el servidor):
   ```
   cd ~/dashboardthelabsolutions
-  git pull origin claude/email-deliverability-fix-x4r726
+  git fetch origin
+  git checkout claude/email-deliverability-fix-x4r726
+  git reset --hard origin/claude/email-deliverability-fix-x4r726
   cd lead-worker
   npx wrangler deploy
   ```
-- [ ] Confirma que diga **"Deployed thelab-leads-worker"**.
+- [ ] Confirma que el último commit sea `7763c9b` (con `git log --oneline -1`).
+- [ ] Confirma que el deploy diga **"Deployed thelab-leads-worker"** y que en las
+  variables aparezca `RESEND_FROM_CLIENTE: "Andrea Garrido - The Lab Solutions..."`.
+
+> **¿Por qué `reset --hard` y no `git pull`?** Tu Mac quedó con commits viejos que
+> "divergieron" de los que subí. `git pull` pide que elijas cómo mezclarlos y da el
+> error que viste. Como **el código correcto y completo ya está en el servidor**
+> (yo lo escribí y lo empujé), `reset --hard origin/...` simplemente hace que tu Mac
+> sea idéntico al servidor. No pierdes nada tuyo: no habías escrito código local.
 
 ## 2. Tracking de Resend (aperturas / clics / rebotes → Airtable)
 - [ ] En **resend.com → Webhooks → Add Endpoint**, pega la URL:
