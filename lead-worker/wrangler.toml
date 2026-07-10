@@ -25,6 +25,8 @@ ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,http://
 AUTO_PROCESS_LEADS = "true"
 # Auto-respuesta al lead (requiere secret RESEND_API_KEY). From debe ser dominio verificado en Resend.
 RESEND_FROM = "The Lab Solutions <hola@thelab.solutions>"
+# Remitente VISIBLE de la auto-respuesta al cliente (nombre de quien atiende). Dominio verificado en Resend.
+RESEND_FROM_CLIENTE = "Andrea Garrido - The Lab Solutions <hola@thelab.solutions>"
 WHATSAPP_NUMBER = "56928785039"
 # Newsletter: doble opt-in. Con RESEND_API_KEY configurado, /newsletter envía un correo
 # de confirmación y NO suscribe hasta que el usuario hace clic. Poner "false" para alta directa.

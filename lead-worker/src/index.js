@@ -966,15 +966,22 @@ async function callClaude(env, system, user, opts = {}) {
   return data.content?.find((b) => b.type === "text")?.text || "";
 }
 
+// Firma HTML de Andrea Garrido (Atención al Cliente) — la misma marca que usan los
+// correos de estado de cotización/pedido, para que todo lo que ve el cliente sea consistente.
+const FIRMA_ANDREA =
+  `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0;"><tr><td bgcolor="#0a0a0a" style="background-color:#0a0a0a;border:1px solid #262626;border-radius:14px;padding:20px 24px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr><td valign="middle" style="padding-right:22px;"><img src="https://dashboard.thelab.solutions/logo-footer-thelab.png" width="88" height="83" alt="The Lab Solutions" style="display:block;border:0;outline:none;text-decoration:none;width:88px;height:83px;" /></td><td valign="middle" style="padding-left:22px;border-left:2px solid #00d4cc;"><div style="font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.2;font-weight:700;color:#ffffff;letter-spacing:0.3px;">Andrea Garrido</div><div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:10.5px;line-height:1.3;font-weight:600;color:#00d4cc;letter-spacing:1px;text-transform:uppercase;padding-top:5px;">Atención al Cliente</div><div style="height:11px;line-height:11px;font-size:0;">&nbsp;</div><div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.9;color:#c7ccd1;"><span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="https://wa.me/56928785039" style="color:#c7ccd1;text-decoration:none;">+56 9 2878 5039</a><br /><span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="https://thelab.solutions" style="color:#00d4cc;text-decoration:none;font-weight:500;">www.thelab.solutions</a><br /><span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="mailto:hola@thelab.solutions" style="color:#c7ccd1;text-decoration:none;">hola@thelab.solutions</a></div></td></tr></table></td></tr></table>`;
+
 // Auto-respuesta al lead (speed-to-lead). Best-effort vía Resend. Requiere RESEND_API_KEY.
 async function sendLeadAutoReply(env, norm) {
   if (!env.RESEND_API_KEY || !norm.email) return;
-  const from = env.RESEND_FROM || "The Lab Solutions <contacto@thelab.solutions>";
+  // Remitente de cara al cliente: Andrea Garrido (Atención al Cliente).
+  const from =
+    env.RESEND_FROM_CLIENTE || "Andrea Garrido - The Lab Solutions <hola@thelab.solutions>";
   const wa = env.WHATSAPP_NUMBER ? `https://wa.me/${env.WHATSAPP_NUMBER}` : null;
   const name = norm.name ? norm.name.split(" ")[0] : "";
   const svc = norm.service ? ` sobre <strong>${norm.service}</strong>` : "";
   const html =
-    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:520px">` +
+    `<div style="font-family:'DM Sans',system-ui,Arial,sans-serif;color:#111;line-height:1.6;max-width:560px">` +
     `<h2 style="margin:0 0 12px">¡Recibimos tu solicitud! 👋</h2>` +
     `<p>Hola ${name},</p>` +
     `<p>Gracias por escribirnos. Recibimos tu solicitud${svc} y te contactaremos en ` +
@@ -982,7 +989,8 @@ async function sendLeadAutoReply(env, norm) {
     (wa
       ? `<p>Si quieres adelantar, escríbenos por WhatsApp: <a href="${wa}">${wa.replace("https://", "")}</a></p>`
       : "") +
-    `<p style="color:#666;font-size:13px;margin-top:18px">— Equipo The Lab Solutions · fabricación digital, Santiago</p>` +
+    `<div style="margin:22px 0 16px;color:#3f454b">Un saludo,</div>` +
+    FIRMA_ANDREA +
     `</div>`;
   try {
     await fetch("https://api.resend.com/emails", {
@@ -994,6 +1002,7 @@ async function sendLeadAutoReply(env, norm) {
       body: JSON.stringify({
         from,
         to: [norm.email],
+        reply_to: "hola@thelab.solutions",
         subject: "Recibimos tu solicitud — The Lab Solutions",
         html,
       }),
