@@ -810,9 +810,11 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     }
   } catch (e) {
     console.error("[leads-worker] Clientes:", e.message);
-    // No perder el lead: a buffer (KV) para reintento por cron + auto-reply igual
-    await bufferDeadLetter(env, { norm, agente, evento, source, campaign });
+    // No perder el lead: a buffer (KV) para reintento por cron + auto-reply igual +
+    // aviso interno para rescatarlo a mano (antes fallaba en silencio).
+    await bufferDeadLetter(env, { norm, agente, evento, source, campaign, reason: e.message });
     if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
+    ctx.waitUntil(sendLeadSaveFailedAlert(env, norm, e.message));
     return json({ ok: true, clienteId: null, queueId: null, buffered: true }, 200, cors);
   }
 
@@ -998,6 +1000,56 @@ async function sendLeadAutoReply(env, norm) {
     });
   } catch (e) {
     console.error("[leads-worker] auto-reply:", e.message);
+  }
+}
+
+// Aviso interno cuando un lead NO se pudo guardar en Airtable (cayó al buffer de
+// reintentos). Antes esto fallaba en silencio: el lead recibía el "te contactaremos"
+// pero no entraba al CRM y nadie se enteraba. Ahora llega el dato completo + el
+// motivo exacto del rechazo, para rescatarlo a mano. Best-effort vía Resend.
+async function sendLeadSaveFailedAlert(env, norm, reason) {
+  if (!env.RESEND_API_KEY) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  const to = env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com";
+  const esc = (s) =>
+    String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+      c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"
+    );
+  const rows = [
+    ["Nombre", norm.name],
+    ["Empresa", norm.company],
+    ["Email", norm.email],
+    ["Teléfono", norm.phone],
+    ["Servicio", norm.service],
+    ["Mensaje", norm.message],
+  ].filter(([, v]) => v);
+  const html =
+    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px">` +
+    `<h2 style="margin:0 0 12px;color:#b00020">⚠️ Lead NO se guardó en el CRM</h2>` +
+    `<p>Se envió la auto-respuesta al lead, pero <strong>Airtable rechazó el registro</strong>. ` +
+    `Quedó en el buffer de reintentos (cada hora). <strong>Si no aparece en el CRM en ~1 hora, ` +
+    `regístralo a mano</strong> con estos datos para no perderlo.</p>` +
+    `<p style="background:#fff3f3;border:1px solid #f3caca;border-radius:8px;padding:8px 12px;color:#a00"><strong>Motivo (Airtable):</strong> ${esc(reason)}</p>` +
+    rows.map(([k, v]) => `<p><strong>${esc(k)}:</strong> ${esc(v)}</p>`).join("") +
+    `<p style="color:#666;font-size:13px;margin-top:18px">— Worker de leads · The Lab Solutions</p>` +
+    `</div>`;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + env.RESEND_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        reply_to: norm.email || undefined,
+        subject: `⚠️ Lead NO guardado (rescatar): ${norm.name || norm.email || "sin nombre"}`,
+        html,
+      }),
+    });
+  } catch (e) {
+    console.error("[leads-worker] alerta lead no guardado:", e.message);
   }
 }
 
@@ -1261,8 +1313,17 @@ async function airtableUpdateTolerant(env, table, recordId, fields, maxTries = 8
 async function unknownFieldFrom(r) {
   const data = await r.clone().json().catch(() => null);
   const msg = data?.error?.message || "";
-  // "Unknown field name: \"Servicio interés\""
-  const m = msg.match(/Unknown field name:?\s*"?([^"]+)"?/i);
+  // Devuelve el nombre de un campo que conviene descartar y reintentar sin él, para
+  // no perder el registro completo por un solo campo problemático. Cubre:
+  //  - "Unknown field name: \"X\""          → el campo no existe en la base
+  //  - "Field \"X\" cannot accept ..."       → valor/tipo inválido o campo computado
+  //  - "... for field \"X\""                 → no se pudo parsear el valor de X
+  // Los errores sin nombre de campo (p. ej. rate-limit 429) devuelven null → se
+  // relanzan y el lead va al buffer de reintentos (no se descarta ningún dato).
+  const m =
+    msg.match(/Unknown field name:?\s*"?([^"]+)"?/i) ||
+    msg.match(/Field\s+"([^"]+)"\s+cannot/i) ||
+    msg.match(/for field\s+"([^"]+)"/i);
   return m ? m[1] : null;
 }
 
