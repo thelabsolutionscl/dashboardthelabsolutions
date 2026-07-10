@@ -47,12 +47,13 @@ En el panel DNS de `thelab.solutions` (Cloudflare), agrega un registro:
 
 - [ ] Tipo: **TXT**
 - [ ] Nombre: `_dmarc`
-- [ ] Valor:
+- [ ] Valor (**decidido: arranque suave con `p=none`**):
   ```
-  v=DMARC1; p=quarantine; rua=mailto:hola@thelab.solutions
+  v=DMARC1; p=none; rua=mailto:hola@thelab.solutions
   ```
-- [ ] Guardar. *(Si prefieres ir con calma, parte con `p=none` y súbelo a
-  `quarantine` en 2–3 semanas.)*
+- [ ] Guardar.
+- [ ] **En 2–3 semanas** (si todo llega bien): edita el registro y sube a
+  `p=quarantine` cambiando solo esa palabra.
 
 ## 4. Monitoreo externo gratis (que nunca se caiga el formulario sin avisar)
 - [ ] Entra a **uptimerobot.com** (plan gratis) → **New Monitor**.
