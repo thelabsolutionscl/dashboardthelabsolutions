@@ -43,8 +43,11 @@ export default {
         ctx.waitUntil(ofHeartbeat(env, "lead-worker").catch(() => {}));
       }
 
-      // ── GET /health ────────────────────────────────────────────────
-      if (request.method === "GET" && url.pathname === "/health") {
+      // ── GET/HEAD /health ───────────────────────────────────────────
+      // HEAD lo usan los monitores de uptime (p. ej. UptimeRobot free) que
+      // solo hacen HEAD; sin esto devolvía 404 y marcaba "caído" en falso.
+      if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/health") {
+        if (request.method === "HEAD") return new Response(null, { status: 200, headers: cors });
         return json(
           {
             ok: true,
