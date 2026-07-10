@@ -836,8 +836,28 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     const q = await airtableCreateTolerant(env, "Agent_Queue", queueFields);
     queueId = q?.id || null;
   } catch (e) {
-    // El lead ya se guardó; la cola es best-effort.
+    // El cliente ya se guardó, pero la tarea del pipeline no: NO fallar en silencio.
+    // Al buffer (el cron reintenta crear la tarea — el cliente ya existe, no se duplica)
+    // + aviso al equipo, para que el lead no se quede sin procesar sin que nadie lo sepa.
     console.error("[leads-worker] Agent_Queue:", e.message);
+    await bufferDeadLetter(env, {
+      norm,
+      agente,
+      evento,
+      source,
+      campaign,
+      reason: "Agent_Queue: " + e.message,
+    });
+    ctx.waitUntil(
+      sendLeadSaveFailedAlert(env, norm, e.message, {
+        title: "⚠️ Lead guardado, pero SIN tarea de seguimiento",
+        intro:
+          "El cliente <strong>sí</strong> quedó en el CRM, pero no se pudo crear su tarea en el " +
+          "pipeline (Agent_Queue), así que no se auto-procesa ni se le asigna seguimiento al vendedor. " +
+          "Quedó en el buffer de reintentos (cada hora); si en ~1 hora sigue sin tarea, créala a mano.",
+        subject: `⚠️ Lead sin tarea de seguimiento: ${norm.name || norm.email || "sin nombre"}`,
+      })
+    );
   }
 
   // Auto-respuesta al lead (speed-to-lead), best-effort, no bloquea la respuesta
@@ -1025,10 +1045,18 @@ async function sendLeadAutoReply(env, norm) {
 // reintentos). Antes esto fallaba en silencio: el lead recibía el "te contactaremos"
 // pero no entraba al CRM y nadie se enteraba. Ahora llega el dato completo + el
 // motivo exacto del rechazo, para rescatarlo a mano. Best-effort vía Resend.
-async function sendLeadSaveFailedAlert(env, norm, reason) {
+async function sendLeadSaveFailedAlert(env, norm, reason, opts = {}) {
   if (!env.RESEND_API_KEY) return;
   const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
   const to = env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com";
+  const title = opts.title || "⚠️ Lead NO se guardó en el CRM";
+  const intro =
+    opts.intro ||
+    "Se envió la auto-respuesta al lead, pero <strong>Airtable rechazó el registro</strong>. " +
+      "Quedó en el buffer de reintentos (cada hora). <strong>Si no aparece en el CRM en ~1 hora, " +
+      "regístralo a mano</strong> con estos datos para no perderlo.";
+  const subject =
+    opts.subject || `⚠️ Lead NO guardado (rescatar): ${norm.name || norm.email || "sin nombre"}`;
   const esc = (s) =>
     String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
       c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"
@@ -1043,10 +1071,8 @@ async function sendLeadSaveFailedAlert(env, norm, reason) {
   ].filter(([, v]) => v);
   const html =
     `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px">` +
-    `<h2 style="margin:0 0 12px;color:#b00020">⚠️ Lead NO se guardó en el CRM</h2>` +
-    `<p>Se envió la auto-respuesta al lead, pero <strong>Airtable rechazó el registro</strong>. ` +
-    `Quedó en el buffer de reintentos (cada hora). <strong>Si no aparece en el CRM en ~1 hora, ` +
-    `regístralo a mano</strong> con estos datos para no perderlo.</p>` +
+    `<h2 style="margin:0 0 12px;color:#b00020">${title}</h2>` +
+    `<p>${intro}</p>` +
     `<p style="background:#fff3f3;border:1px solid #f3caca;border-radius:8px;padding:8px 12px;color:#a00"><strong>Motivo (Airtable):</strong> ${esc(reason)}</p>` +
     rows.map(([k, v]) => `<p><strong>${esc(k)}:</strong> ${esc(v)}</p>`).join("") +
     `<p style="color:#666;font-size:13px;margin-top:18px">— Worker de leads · The Lab Solutions</p>` +
@@ -1062,7 +1088,7 @@ async function sendLeadSaveFailedAlert(env, norm, reason) {
         from,
         to: [to],
         reply_to: norm.email || undefined,
-        subject: `⚠️ Lead NO guardado (rescatar): ${norm.name || norm.email || "sin nombre"}`,
+        subject,
         html,
       }),
     });
@@ -1273,24 +1299,46 @@ async function airtableFindCliente(env, { email, phone }) {
   const url =
     `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Clientes")}` +
     `?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
-  try {
-    const r = await fetch(url, {
-      headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
-    });
-    if (!r.ok) return null;
-    const data = await r.json();
-    return data?.records?.[0]?.id || null;
-  } catch (_) {
-    return null;
+  // Reintenta ante rate-limit / transitorio: un blip acá haría que se cree un
+  // Cliente DUPLICADO en vez de actualizar el existente. Best-effort (null si no se pudo).
+  for (let i = 0; i < 5; i++) {
+    try {
+      const r = await fetch(url, {
+        headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
+      });
+      if (r.ok) {
+        const data = await r.json();
+        return data?.records?.[0]?.id || null;
+      }
+      if (r.status === 429 || r.status >= 500) {
+        await sleep(300 * (i + 1));
+        continue;
+      }
+      return null; // 4xx no transitorio (formula/permiso): no insistir
+    } catch (_) {
+      await sleep(300 * (i + 1));
+    }
   }
+  console.error("[leads-worker] dedup Clientes: sin respuesta tras reintentos");
+  return null;
 }
 
-// Crea reintentando: si Airtable rechaza un campo desconocido, lo quita y reintenta.
+// Espera breve para el backoff de reintentos ante errores transitorios de Airtable.
+function sleep(ms) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+// Crea reintentando: descarta campos que Airtable rechaza (desconocidos o inválidos)
+// y reintenta con backoff ante rate-limit / errores transitorios (429 / 5xx).
 async function airtableCreateTolerant(env, table, fields, maxTries = 8) {
   let f = { ...fields };
   for (let i = 0; i < maxTries; i++) {
     const r = await airtableCreate(env, table, f);
     if (r.ok) return await r.json();
+    if (r.status === 429 || r.status >= 500) {
+      await sleep(300 * (i + 1)); // rate-limit / transitorio → esperar y reintentar
+      continue;
+    }
     const bad = await unknownFieldFrom(r);
     if (bad && bad in f) {
       delete f[bad];
@@ -1298,7 +1346,7 @@ async function airtableCreateTolerant(env, table, fields, maxTries = 8) {
     }
     throw new Error(await airtableErr(r));
   }
-  throw new Error(`Airtable: demasiados campos desconocidos en ${table}`);
+  throw new Error(`Airtable: reintentos agotados creando en ${table}`);
 }
 
 async function airtableUpdateTolerant(env, table, recordId, fields, maxTries = 8) {
@@ -1317,6 +1365,10 @@ async function airtableUpdateTolerant(env, table, recordId, fields, maxTries = 8
       }
     );
     if (r.ok) return await r.json();
+    if (r.status === 429 || r.status >= 500) {
+      await sleep(300 * (i + 1)); // rate-limit / transitorio → esperar y reintentar
+      continue;
+    }
     const bad = await unknownFieldFrom(r);
     if (bad && bad in f) {
       delete f[bad];
