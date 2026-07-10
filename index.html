@@ -579,14 +579,14 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .topbar-nav{display:none;}
   .global-search{display:none;}
   .icon-dock{display:none;}
-  .topbar-right{flex:1;display:flex;align-items:center;justify-content:center;gap:14px;margin-left:0;}
+  .topbar-right{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:14px;margin-left:0;order:1;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
   .user-chip{display:none!important;}
-  /* Menú móvil como la web nueva: hamburguesa arriba a la izquierda que abre el drawer lateral. */
-  .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;margin-left:10px;}
+  /* Menú móvil (hamburguesa) alineado al extremo derecho, después de correos y notificaciones. */
+  .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;margin-left:14px;order:2;}
   #nuevoDropdown{display:none!important;}
   .logo img{height:21px;}
-  .logo{flex:0 0 auto;}
+  .logo{flex:0 0 auto;margin-right:auto;order:0;}
   .topbar-kai-btn{margin-left:0;margin-right:0;}
   #notifBtnWrap{margin-right:0;}
   .main{padding:14px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));}
