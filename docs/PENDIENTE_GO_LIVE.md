@@ -1,9 +1,20 @@
 # Pendientes de go-live — pasos finales (2026-07-10)
 
+> ## ✅ COMPLETADO — 100% (2026-07-10)
+> Los 6 pasos quedaron hechos. Migración a Resend terminada; el dominio ya no
+> manda correos automáticos por el hosting compartido de SilverHost.
+> - **1. Worker desplegado** — código correcto en producción (`/health` responde 200).
+> - **2. Tracking Resend** — webhook + escenario de Make activos.
+> - **3. DMARC** — TXT `_dmarc` con `p=none` (subir a `quarantine` en 2–3 semanas).
+> - **4. UptimeRobot** — 2 monitores (worker + web) vigilando cada 5 min.
+> - **5. Plan Resend** — Free alcanza de sobra (~2 correos/día vs. tope 100/día).
+>   *Vigilar bounce rate (~5.7%, apenas sobre el umbral de riesgo).*
+> - **6. Respuesta a SilverHost** — enviada.
+
 Todo lo automatizable ya quedó hecho (9 escenarios de correo migrados a Resend y
 activos, con reintento anti-429; Newsletter armado; Worker blindado en el repo;
-CRM limpio). Faltan **6 acciones cortas** que requieren tus accesos (Cloudflare,
-DNS, dashboard de Resend). Marca cada casilla al completarla.
+CRM limpio). Las **6 acciones** que requerían tus accesos (Cloudflare, DNS,
+dashboard de Resend) ya están completadas.
 
 ---
 
@@ -89,4 +100,4 @@ En el panel DNS de `thelab.solutions` (Cloudflare), agrega un registro:
 | Cotización enviada | 🟢 Activo (0 pendientes) |
 | Backup semanal | 🟢 Activo |
 | Newsletter · Envío | 🟢 Activo (armado; envía al programar campaña) |
-| Newsletter · Tracking | ⚪ Falta activar (paso 2) |
+| Newsletter · Tracking | 🟢 Activo |
