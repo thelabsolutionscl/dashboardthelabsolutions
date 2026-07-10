@@ -82,10 +82,13 @@ estructura de datos reutilizable **"Resend Email Payload"** (`id 423714`).
 | ALERT_AGENT Cotizaciones por vencer | `4931482` | migrado · **inactivo** |
 | Lead caliente (score ≥ 8) → aviso | `5399550` | migrado · **inactivo** |
 | Monitor · Worker de leads (health check) | `5567610` | migrado · **inactivo** |
+| Backup semanal Airtable → Email | `5562653` | migrado · **inactivo** |
 
-> **Falta 1:** `5562653` (Backup semanal Airtable → Email) sigue en el SMTP
-> compartido pero está **inactivo**; embebe un volcado enorme de Airtable, así que
-> se deja para migrar aparte (o pasar a la conexión Gmail). No envía a clientes.
+> **9/9 migrados.** El Backup (`5562653`) enviaba 3 CSV **adjuntos**; como los
+> adjuntos en Resend requieren base64, se migró poniendo los 3 CSV **en el cuerpo**
+> del correo (bloques `<pre>` copiables) en vez de adjuntos. Sigue siendo un
+> snapshot recuperable y ya no usa el SMTP compartido. La conexión SMTP `8660580`
+> quedó **sin uso**.
 
 **Los 8 quedaron INACTIVOS a propósito**: falta pegar la API key de Resend
 (sección 4.2) y probar antes de reactivar. El `from` de todos es
@@ -202,12 +205,11 @@ opciones**:
 
 - [x] Cortar el envío por el SMTP compartido (6 escenarios desactivados).
 - [x] Verificar `thelab.solutions` en Resend (SPF/DKIM/MX/DMARC) — **Verified**.
-- [x] Migrar los 8 escenarios (4 cliente + 4 internos) a Create JSON → Resend.
-- [ ] Pegar la API key de Resend en el header `Authorization` de cada uno (8).
+- [x] Migrar los **9** escenarios (4 cliente + 4 internos + backup) a Create JSON → Resend.
+- [ ] Pegar la API key de Resend en el header `Authorization` de cada uno (9).
 - [ ] **Run once** de prueba en cada escenario y confirmar que el correo llega.
 - [ ] **Activar** los escenarios (los 6 que estaban corriendo, y los de cliente
       que quieras dejar automáticos).
-- [ ] (Pendiente aparte) Migrar el Backup semanal `5562653` (o pasarlo a Gmail).
 - [ ] (Opcional) Configurar el webhook de tracking de Resend del escenario
       `5439094` para medir entregas/rebotes.
 - [ ] Responder a SilverHost confirmando que los envíos automáticos migraron a
@@ -228,3 +230,30 @@ opciones**:
 - El **envío de prueba del newsletter** (`nlSendTest`) usa `mail-api.php`; es un
   único correo a tu propia casilla, no es volumen. El envío **masivo** ya va por
   Resend (Make).
+
+## 8. Borrador de respuesta a SilverHost
+
+> Enviar una vez completadas las Fases 1–4 (key + prueba + activar), para poder
+> afirmar que ya no sale nada por el hosting compartido.
+
+```
+Asunto: Re: Volumen de correos automáticos — migración a plataforma transaccional
+
+Estimado Gonzalo:
+
+Gracias por el aviso y por el detalle. Revisamos el origen y, efectivamente,
+correspondía a notificaciones automáticas de nuestro sistema interno que salían
+por el servidor de correo compartido.
+
+Ya migramos la totalidad de esos envíos automáticos a Resend, una plataforma
+especializada en correo transaccional, con nuestro dominio thelab.solutions
+verificado (SPF, DKIM y DMARC). A partir de ahora ese tráfico ya no sale por el
+hosting compartido ni por su IP, por lo que no debería seguir afectando la
+reputación del servidor.
+
+El buzón hola@thelab.solutions seguirá usándose solo para correo manual 1:1
+(volumen bajo). Quedamos atentos a cualquier otra observación de su parte.
+
+Saludos cordiales,
+Gustavo Kaiser — The Lab Solutions
+```
