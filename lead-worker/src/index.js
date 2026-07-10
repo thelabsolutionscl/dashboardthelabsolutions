@@ -812,9 +812,11 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     }
   } catch (e) {
     console.error("[leads-worker] Clientes:", e.message);
-    // No perder el lead: a buffer (KV) para reintento por cron + auto-reply igual
-    await bufferDeadLetter(env, { norm, agente, evento, source, campaign });
+    // No perder el lead: a buffer (KV) para reintento por cron + auto-reply igual +
+    // aviso interno para rescatarlo a mano (antes fallaba en silencio).
+    await bufferDeadLetter(env, { norm, agente, evento, source, campaign, reason: e.message });
     if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
+    ctx.waitUntil(sendLeadSaveFailedAlert(env, norm, e.message));
     return json({ ok: true, clienteId: null, queueId: null, buffered: true }, 200, cors);
   }
 
@@ -836,8 +838,28 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     const q = await airtableCreateTolerant(env, "Agent_Queue", queueFields);
     queueId = q?.id || null;
   } catch (e) {
-    // El lead ya se guardó; la cola es best-effort.
+    // El cliente ya se guardó, pero la tarea del pipeline no: NO fallar en silencio.
+    // Al buffer (el cron reintenta crear la tarea — el cliente ya existe, no se duplica)
+    // + aviso al equipo, para que el lead no se quede sin procesar sin que nadie lo sepa.
     console.error("[leads-worker] Agent_Queue:", e.message);
+    await bufferDeadLetter(env, {
+      norm,
+      agente,
+      evento,
+      source,
+      campaign,
+      reason: "Agent_Queue: " + e.message,
+    });
+    ctx.waitUntil(
+      sendLeadSaveFailedAlert(env, norm, e.message, {
+        title: "⚠️ Lead guardado, pero SIN tarea de seguimiento",
+        intro:
+          "El cliente <strong>sí</strong> quedó en el CRM, pero no se pudo crear su tarea en el " +
+          "pipeline (Agent_Queue), así que no se auto-procesa ni se le asigna seguimiento al vendedor. " +
+          "Quedó en el buffer de reintentos (cada hora); si en ~1 hora sigue sin tarea, créala a mano.",
+        subject: `⚠️ Lead sin tarea de seguimiento: ${norm.name || norm.email || "sin nombre"}`,
+      })
+    );
   }
 
   // Auto-respuesta al lead (speed-to-lead), best-effort, no bloquea la respuesta
@@ -966,24 +988,41 @@ async function callClaude(env, system, user, opts = {}) {
   return data.content?.find((b) => b.type === "text")?.text || "";
 }
 
+// Firma HTML de Andrea Garrido (Atención al Cliente) — la misma marca que usan los
+// correos de estado de cotización/pedido, para que todo lo que ve el cliente sea consistente.
+const FIRMA_ANDREA =
+  `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0;"><tr><td bgcolor="#0a0a0a" style="background-color:#0a0a0a;border:1px solid #262626;border-radius:14px;padding:20px 24px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr><td valign="middle" style="padding-right:22px;"><img src="https://dashboard.thelab.solutions/logo-footer-thelab.png" width="88" height="83" alt="The Lab Solutions" style="display:block;border:0;outline:none;text-decoration:none;width:88px;height:83px;" /></td><td valign="middle" style="padding-left:22px;border-left:2px solid #00d4cc;"><div style="font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.2;font-weight:700;color:#ffffff;letter-spacing:0.3px;">Andrea Garrido</div><div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:10.5px;line-height:1.3;font-weight:600;color:#00d4cc;letter-spacing:1px;text-transform:uppercase;padding-top:5px;">Atención al Cliente</div><div style="height:11px;line-height:11px;font-size:0;">&nbsp;</div><div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.9;color:#c7ccd1;"><span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="https://wa.me/56928785039" style="color:#c7ccd1;text-decoration:none;">+56 9 2878 5039</a><br /><span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="https://thelab.solutions" style="color:#00d4cc;text-decoration:none;font-weight:500;">www.thelab.solutions</a><br /><span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="mailto:hola@thelab.solutions" style="color:#c7ccd1;text-decoration:none;">hola@thelab.solutions</a></div></td></tr></table></td></tr></table>`;
+
 // Auto-respuesta al lead (speed-to-lead). Best-effort vía Resend. Requiere RESEND_API_KEY.
 async function sendLeadAutoReply(env, norm) {
   if (!env.RESEND_API_KEY || !norm.email) return;
-  const from = env.RESEND_FROM || "The Lab Solutions <contacto@thelab.solutions>";
+  // Remitente de cara al cliente: Andrea Garrido (Atención al Cliente).
+  const from =
+    env.RESEND_FROM_CLIENTE || "Andrea Garrido - The Lab Solutions <hola@thelab.solutions>";
   const wa = env.WHATSAPP_NUMBER ? `https://wa.me/${env.WHATSAPP_NUMBER}` : null;
   const name = norm.name ? norm.name.split(" ")[0] : "";
   const svc = norm.service ? ` sobre <strong>${norm.service}</strong>` : "";
+  const waBlock = wa
+    ? `<p style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#3f454b;margin:0 0 16px;">¿Prefieres adelantar? Escríbenos por WhatsApp: <a href="${wa}" style="color:#009c94;text-decoration:none;font-weight:600;">${wa.replace("https://", "")}</a></p>`
+    : "";
+  // Mismo template de marca que los correos de estado (cotización/pedido): tarjeta
+  // blanca con cabecera, franja turquesa, chip, cuerpo y firma de Andrea.
   const html =
-    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:520px">` +
-    `<h2 style="margin:0 0 12px">¡Recibimos tu solicitud! 👋</h2>` +
-    `<p>Hola ${name},</p>` +
-    `<p>Gracias por escribirnos. Recibimos tu solicitud${svc} y te contactaremos en ` +
-    `<strong>menos de 24 horas hábiles</strong> con una cotización (material, plazo y precio).</p>` +
-    (wa
-      ? `<p>Si quieres adelantar, escríbenos por WhatsApp: <a href="${wa}">${wa.replace("https://", "")}</a></p>`
-      : "") +
-    `<p style="color:#666;font-size:13px;margin-top:18px">— Equipo The Lab Solutions · fabricación digital, Santiago</p>` +
-    `</div>`;
+    `<div style="margin:0;padding:0;background:#eef1f4;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f4;"><tr><td align="center" style="padding:26px 12px;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e9ee;box-shadow:0 2px 12px rgba(20,30,40,.06);">` +
+    `<tr><td style="background:#ffffff;padding:26px 36px 18px;"><img src="https://dashboard.thelab.solutions/logo-thelab-black.png" width="272" height="25" alt="The Lab Solutions" style="display:block;border:0;outline:none;text-decoration:none;width:272px;height:25px;max-width:74%;" /></td></tr>` +
+    `<tr><td style="height:3px;background:#00d4cc;line-height:3px;font-size:0;">&nbsp;</td></tr>` +
+    `<tr><td style="padding:26px 36px 30px;">` +
+    `<div style="display:inline-block;background:#e7f7f6;color:#00807a;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;padding:5px 12px;border-radius:20px;">Solicitud recibida</div>` +
+    `<div style="font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;font-size:22px;line-height:1.3;font-weight:700;color:#141719;margin:14px 0 8px;">¡Recibimos tu solicitud!</div>` +
+    `<div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:16.5px;font-weight:700;color:#2a2f34;margin:0 0 18px;">Hola ${name} 👋</div>` +
+    `<p style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#3f454b;margin:0 0 16px;">Gracias por escribirnos y por considerar a <strong>The Lab Solutions</strong> para tu proyecto. Recibimos tu solicitud${svc} y ya la estamos revisando.</p>` +
+    `<p style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#3f454b;margin:0 0 16px;">Te contactaremos en <strong>menos de 24 horas hábiles</strong> con una cotización (material, plazo y precio). Cualquier duda, puedes responder directamente este correo.</p>` +
+    waBlock +
+    `<div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.6;color:#3f454b;margin:22px 0 20px;">Un saludo,</div>` +
+    FIRMA_ANDREA +
+    `<div style="border-top:1px solid #eef1f4;margin:24px 0 0;padding-top:16px;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:11px;line-height:1.6;color:#9aa0a6;">Este correo fue enviado por <span style="color:#6b7178;">The Lab Solutions</span> · Fabricación digital · Santiago, Chile<br>¿No esperabas este mensaje? Respóndenos y lo revisamos.</div>` +
+    `</td></tr></table></td></tr></table></div>`;
   try {
     await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -994,12 +1033,69 @@ async function sendLeadAutoReply(env, norm) {
       body: JSON.stringify({
         from,
         to: [norm.email],
+        reply_to: "hola@thelab.solutions",
         subject: "Recibimos tu solicitud — The Lab Solutions",
         html,
       }),
     });
   } catch (e) {
     console.error("[leads-worker] auto-reply:", e.message);
+  }
+}
+
+// Aviso interno cuando un lead NO se pudo guardar en Airtable (cayó al buffer de
+// reintentos). Antes esto fallaba en silencio: el lead recibía el "te contactaremos"
+// pero no entraba al CRM y nadie se enteraba. Ahora llega el dato completo + el
+// motivo exacto del rechazo, para rescatarlo a mano. Best-effort vía Resend.
+async function sendLeadSaveFailedAlert(env, norm, reason, opts = {}) {
+  if (!env.RESEND_API_KEY) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  const to = env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com";
+  const title = opts.title || "⚠️ Lead NO se guardó en el CRM";
+  const intro =
+    opts.intro ||
+    "Se envió la auto-respuesta al lead, pero <strong>Airtable rechazó el registro</strong>. " +
+      "Quedó en el buffer de reintentos (cada hora). <strong>Si no aparece en el CRM en ~1 hora, " +
+      "regístralo a mano</strong> con estos datos para no perderlo.";
+  const subject =
+    opts.subject || `⚠️ Lead NO guardado (rescatar): ${norm.name || norm.email || "sin nombre"}`;
+  const esc = (s) =>
+    String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+      c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"
+    );
+  const rows = [
+    ["Nombre", norm.name],
+    ["Empresa", norm.company],
+    ["Email", norm.email],
+    ["Teléfono", norm.phone],
+    ["Servicio", norm.service],
+    ["Mensaje", norm.message],
+  ].filter(([, v]) => v);
+  const html =
+    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px">` +
+    `<h2 style="margin:0 0 12px;color:#b00020">${title}</h2>` +
+    `<p>${intro}</p>` +
+    `<p style="background:#fff3f3;border:1px solid #f3caca;border-radius:8px;padding:8px 12px;color:#a00"><strong>Motivo (Airtable):</strong> ${esc(reason)}</p>` +
+    rows.map(([k, v]) => `<p><strong>${esc(k)}:</strong> ${esc(v)}</p>`).join("") +
+    `<p style="color:#666;font-size:13px;margin-top:18px">— Worker de leads · The Lab Solutions</p>` +
+    `</div>`;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + env.RESEND_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        reply_to: norm.email || undefined,
+        subject,
+        html,
+      }),
+    });
+  } catch (e) {
+    console.error("[leads-worker] alerta lead no guardado:", e.message);
   }
 }
 
@@ -1205,24 +1301,46 @@ async function airtableFindCliente(env, { email, phone }) {
   const url =
     `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Clientes")}` +
     `?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
-  try {
-    const r = await fetch(url, {
-      headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
-    });
-    if (!r.ok) return null;
-    const data = await r.json();
-    return data?.records?.[0]?.id || null;
-  } catch (_) {
-    return null;
+  // Reintenta ante rate-limit / transitorio: un blip acá haría que se cree un
+  // Cliente DUPLICADO en vez de actualizar el existente. Best-effort (null si no se pudo).
+  for (let i = 0; i < 5; i++) {
+    try {
+      const r = await fetch(url, {
+        headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
+      });
+      if (r.ok) {
+        const data = await r.json();
+        return data?.records?.[0]?.id || null;
+      }
+      if (r.status === 429 || r.status >= 500) {
+        await sleep(300 * (i + 1));
+        continue;
+      }
+      return null; // 4xx no transitorio (formula/permiso): no insistir
+    } catch (_) {
+      await sleep(300 * (i + 1));
+    }
   }
+  console.error("[leads-worker] dedup Clientes: sin respuesta tras reintentos");
+  return null;
 }
 
-// Crea reintentando: si Airtable rechaza un campo desconocido, lo quita y reintenta.
+// Espera breve para el backoff de reintentos ante errores transitorios de Airtable.
+function sleep(ms) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+// Crea reintentando: descarta campos que Airtable rechaza (desconocidos o inválidos)
+// y reintenta con backoff ante rate-limit / errores transitorios (429 / 5xx).
 async function airtableCreateTolerant(env, table, fields, maxTries = 8) {
   let f = { ...fields };
   for (let i = 0; i < maxTries; i++) {
     const r = await airtableCreate(env, table, f);
     if (r.ok) return await r.json();
+    if (r.status === 429 || r.status >= 500) {
+      await sleep(300 * (i + 1)); // rate-limit / transitorio → esperar y reintentar
+      continue;
+    }
     const bad = await unknownFieldFrom(r);
     if (bad && bad in f) {
       delete f[bad];
@@ -1230,7 +1348,7 @@ async function airtableCreateTolerant(env, table, fields, maxTries = 8) {
     }
     throw new Error(await airtableErr(r));
   }
-  throw new Error(`Airtable: demasiados campos desconocidos en ${table}`);
+  throw new Error(`Airtable: reintentos agotados creando en ${table}`);
 }
 
 async function airtableUpdateTolerant(env, table, recordId, fields, maxTries = 8) {
@@ -1249,6 +1367,10 @@ async function airtableUpdateTolerant(env, table, recordId, fields, maxTries = 8
       }
     );
     if (r.ok) return await r.json();
+    if (r.status === 429 || r.status >= 500) {
+      await sleep(300 * (i + 1)); // rate-limit / transitorio → esperar y reintentar
+      continue;
+    }
     const bad = await unknownFieldFrom(r);
     if (bad && bad in f) {
       delete f[bad];
@@ -1263,8 +1385,17 @@ async function airtableUpdateTolerant(env, table, recordId, fields, maxTries = 8
 async function unknownFieldFrom(r) {
   const data = await r.clone().json().catch(() => null);
   const msg = data?.error?.message || "";
-  // "Unknown field name: \"Servicio interés\""
-  const m = msg.match(/Unknown field name:?\s*"?([^"]+)"?/i);
+  // Devuelve el nombre de un campo que conviene descartar y reintentar sin él, para
+  // no perder el registro completo por un solo campo problemático. Cubre:
+  //  - "Unknown field name: \"X\""          → el campo no existe en la base
+  //  - "Field \"X\" cannot accept ..."       → valor/tipo inválido o campo computado
+  //  - "... for field \"X\""                 → no se pudo parsear el valor de X
+  // Los errores sin nombre de campo (p. ej. rate-limit 429) devuelven null → se
+  // relanzan y el lead va al buffer de reintentos (no se descarta ningún dato).
+  const m =
+    msg.match(/Unknown field name:?\s*"?([^"]+)"?/i) ||
+    msg.match(/Field\s+"([^"]+)"\s+cannot/i) ||
+    msg.match(/for field\s+"([^"]+)"/i);
   return m ? m[1] : null;
 }
 

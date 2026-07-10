@@ -1,5 +1,12 @@
 # Correos automáticos de estado al cliente (Make + SMTP)
 
+> ⚠️ **DEPRECADO — migrar a Resend (2026-07-09).** El proveedor de hosting
+> (SilverHost) reportó volumen elevado de correos por el **SMTP compartido**
+> (`hola@thelab.solutions`) y riesgo de bloqueo. Estos 4 escenarios se
+> **desactivaron** y deben migrarse del SMTP compartido a **Resend (HTTP)**.
+> Plan, DNS y checklist en **[`ENTREGABILIDAD_EMAIL.md`](./ENTREGABILIDAD_EMAIL.md)**.
+> Lo de abajo describe el diseño original por SMTP (referencia histórica).
+
 Automatización que **avisa por email al cliente** cuando su cotización o pedido
 cambia a un estado clave: **cotización enviada → pedido en producción → listo
 para despacho → despachado**. Antes de esto, el único correo automático que
