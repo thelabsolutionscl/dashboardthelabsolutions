@@ -526,6 +526,12 @@ body.compact .ov-zone{margin:18px 0 10px;}
 .cli-cat-chip.active{background:rgba(0,212,204,0.12);border-color:var(--accent);color:var(--accent);}
 .cli-cat-chip .cli-cat-n{display:inline-block;background:rgba(255,255,255,0.12);border-radius:8px;padding:0 6px;font-size:10px;font-weight:700;}
 .cli-cat-chip.active .cli-cat-n{background:rgba(0,212,204,0.22);}
+.cli-origen-bar{border-left:2px solid var(--accent);margin-left:2px;}
+.cli-origen-lbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-right:2px;}
+.cli-origen-chip{background:transparent;border:1px solid var(--border2);border-radius:14px;padding:3px 10px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s;}
+.cli-origen-chip:hover{border-color:var(--accent);color:var(--text);}
+.cli-origen-chip.active{background:rgba(0,150,255,0.14);border-color:#4db4ff;color:#4db4ff;}
+.cli-origen-chip .n{opacity:.6;font-weight:700;margin-left:3px;}
 .badge-lead{background:rgba(0,150,255,0.14);border:1px solid rgba(0,150,255,0.35);color:#4db4ff;border-radius:6px;padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
 .badge-cliente{background:rgba(0,200,120,0.14);border:1px solid rgba(0,200,120,0.35);color:#2ecc82;border-radius:6px;padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
 .fac-btn-cobrar{background:rgba(0,212,170,0.15)!important;border:1px solid rgba(0,212,170,0.4)!important;color:var(--success)!important;font-weight:700!important;}
@@ -2191,6 +2197,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       <button class="cli-cat-chip" data-cat="cliente" onclick="setCliCat('cliente')">✅ Clientes <span class="cli-cat-n" id="cliCatN-cliente">—</span></button>
       <button class="cli-cat-chip" data-cat="todos" onclick="setCliCat('todos')">Todos <span class="cli-cat-n" id="cliCatN-todos">—</span></button>
     </div>
+    <div class="cli-origen-bar" id="cliOrigenBar" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;padding:0 4px 12px"></div>
     <div class="table-wrap sticky-head">
       <table>
         <thead><tr>
@@ -6204,6 +6211,8 @@ const TABLE_PAGE=80;
 let _cliCap=TABLE_PAGE,_cliQuery='',_cotCap=TABLE_PAGE,_pedCap=TABLE_PAGE;
 // Categoría activa en la sección Clientes: 'lead' | 'cliente' | 'todos'.
 let _cliCat='todos';
+// Sub-filtro por Origen lead (solo en vista Leads). '' = todos los orígenes.
+let _cliOrigen='';
 // ── Categoría LEAD vs CLIENTE ────────────────────────────────────────────────
 // Un registro es CLIENTE cuando el equipo lo validó (campo 'Validado' en Airtable).
 // Mientras no esté validado es un LEAD (registro nuevo de formulario/web/etc.).
@@ -6249,13 +6258,14 @@ function pedShowMore(){_pedCap+=TABLE_PAGE;renderPedidos(state.pedidoFilter);}
 function applyDensity(){const c=localStorage.getItem('ui_density')==='compact';document.body.classList.toggle('compact',c);const b=document.getElementById('densityBtn');if(b){b.textContent=c?'≣':'≡';b.title=c?'Vista compacta — clic para cómoda':'Vista cómoda — clic para compacta';}}
 function toggleDensity(){const c=localStorage.getItem('ui_density')==='compact';localStorage.setItem('ui_density',c?'comfortable':'compact');applyDensity();}
 // ── Persistencia de orden/búsqueda por pestaña ──
-function _saveUIState(){try{localStorage.setItem('ui_state',JSON.stringify({cli:clientesSort,cot:cotizacionesSort,prov:proveedoresSort,q:_cliQuery,ped:state.pedidoFilter,cliCat:_cliCat}));}catch(e){}}
+function _saveUIState(){try{localStorage.setItem('ui_state',JSON.stringify({cli:clientesSort,cot:cotizacionesSort,prov:proveedoresSort,q:_cliQuery,ped:state.pedidoFilter,cliCat:_cliCat,cliOrigen:_cliOrigen}));}catch(e){}}
 function _restoreUIState(){try{const s=JSON.parse(localStorage.getItem('ui_state')||'{}');
   if(s.cli&&'key' in s.cli){clientesSort.key=s.cli.key;clientesSort.dir=s.cli.dir||1;}
   if(s.cot&&'key' in s.cot){cotizacionesSort.key=s.cot.key;cotizacionesSort.dir=s.cot.dir||1;}
   if(s.prov&&'key' in s.prov){proveedoresSort.key=s.prov.key;proveedoresSort.dir=s.prov.dir||1;}
   if(s.q){_cliQuery=s.q;const i=document.getElementById('clienteSearch');if(i)i.value=s.q;}
   if(s.cliCat&&['lead','cliente','todos'].includes(s.cliCat))_cliCat=s.cliCat;
+  if(s.cliOrigen&&_cliCat==='lead')_cliOrigen=s.cliOrigen;
   if(s.ped)state.pedidoFilter=s.ped;
 }catch(e){}}
 // Sincroniza las flechas asc/desc de los encabezados con el orden vigente
@@ -7785,7 +7795,7 @@ async function loadAllData(){
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
-    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarLeadNuevo();}catch(e){logErr('migrarLeadNuevo',e);}},2500);}
+    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarCategorias();}catch(e){logErr('migrarCategorias',e);}},2500);}
   }catch(e){
     console.error('loadAllData error:',e);
     // Si ya hay datos en pantalla (de la caché o de una carga previa), el fallo
@@ -8230,7 +8240,8 @@ function renderKPIs(){
       <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver mis pedidos"><div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">mis pedidos</div>${pctBadge(revSemana,revAnterior)}</div>
       <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos activos"><div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'al día'}</div></div>
       <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes"><div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div></div>
-      <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver mis clientes"><div class="kpi-label">Mis Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">cartera asignada</div></div>
+      <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes');setCliCat('lead')" title="Ver mis leads sin validar"><div class="kpi-label">Mis Leads</div><div class="kpi-value" style="color:#4db4ff">${_cli.filter(esLeadCat).length}</div><div class="kpi-sub">sin validar</div></div>
+      <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes');setCliCat('cliente')" title="Ver mis clientes validados"><div class="kpi-label">Mis Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.filter(esClienteValidado).length}</div><div class="kpi-sub">validados</div></div>
       <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('remuneraciones')" title="Ver remuneraciones"><div class="kpi-label">Comisión Mes</div><div class="kpi-value" style="color:var(--accent3)">${formatCLP(comisionMes)}</div><div class="kpi-sub">3.5% de ${formatCLP(revDespMes)}</div></div>
       <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('remuneraciones')" title="Ver remuneraciones"><div class="kpi-label">Pipeline Potencial</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(pipelineTotal)}</div><div class="kpi-sub">comisión pot.: ${formatCLP(comisionPipeline)}</div></div>`;
     return;
@@ -8241,11 +8252,17 @@ function renderKPIs(){
   const spCot=_weeklySeries(_cot,c=>c.createdTime,()=>1);
   const spCli=_weeklySeries(_cli,c=>c.createdTime,()=>1);
   const _ki=(id)=>`<div class="kpi-icon"><svg class="dashboard-icon" width="20" height="20" stroke-width="1.5"><use href="#${id}"/></svg></div>`;
+  // Leads sin validar (categoría LEAD) y cuántos llevan +7 días sin promover.
+  const _leadsAll=_cli.filter(esLeadCat);
+  const _leadsSinValidar=_leadsAll.length;
+  const _ago7d=Date.now()-7*86400000;
+  const _leadsFrios=_leadsAll.filter(c=>{const t=c.createdTime?new Date(c.createdTime).getTime():0;return t&&t<_ago7d;}).length;
   document.getElementById('kpiGrid').innerHTML=`
     <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos">${_ki('icon-trending')}<div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${_sparkline(spRev,'var(--accent)')}${metaHtml}</div>
     <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}">` + _ki('icon-pedidos') + `<div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}${_sparkline(spPed,'var(--accent3)')}</div>
     <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes">${_ki('icon-message')}<div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}${_sparkline(spCot,'var(--accent2)')}</div>
-    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes')" title="Ver clientes">${_ki('icon-clientes')}<div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.length}</div><div class="kpi-sub">en CRM</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}${_sparkline(spCli,'var(--accent4)')}</div>
+    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes');setCliCat('lead')" title="Ver leads sin validar">${_ki('icon-user-plus')}<div class="kpi-label">Leads sin validar</div><div class="kpi-value" style="color:#4db4ff">${_leadsSinValidar}</div><div class="kpi-sub">${_leadsFrios>0?`<span style="color:var(--accent2)">⏳ ${_leadsFrios} +7d sin avance</span>`:'✓ al día'}</div></div>
+    <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes');setCliCat('cliente')" title="Ver clientes validados">${_ki('icon-clientes')}<div class="kpi-label">Clientes</div><div class="kpi-value" style="color:var(--accent4)">${_cli.filter(esClienteValidado).length}</div><div class="kpi-sub">validados</div>${cntBadge(clientesNuevos,clientesPrev,'nuevos vs sem. ant.')}${_sparkline(spCli,'var(--accent4)')}</div>
     <div class="kpi-card ${alertas>0?'red':'green'}" style="${kpiStyle}" onclick="document.getElementById('alertasArea').scrollIntoView({behavior:'smooth',block:'start'})" title="Ver alertas">${_ki('icon-warning')}<div class="kpi-label">Alertas</div><div class="kpi-value" style="color:${alertas>0?'var(--danger)':'var(--accent3)'}">${alertas}</div><div class="kpi-sub">${alertas>0?'requieren atención':'✓ todo ok'}</div>${alertBadge(alertas,alertasPrev)}</div>
     <div class="kpi-card ${avgM>=35?'green':avgM>=20?'orange':'red'}" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones">${_ki('icon-trending')}<div class="kpi-label">Margen Prom.</div><div class="kpi-value" style="color:${avgM>=35?'var(--accent3)':avgM>=20?'var(--accent2)':'var(--danger)'}">${avgM.toFixed(0)}%</div><div class="kpi-sub">objetivo 35–45%</div>${ptsBadge(avgMSem,avgMPrev,mPrevN>0)}</div>`;
   updateDockBadges();
@@ -8608,9 +8625,12 @@ function renderClientes(skipAnalytics){
   const catBase=getSortedClientes();
   _updateCliCatCounts(catBase);
   // Filtro por categoría LEAD / CLIENTE (chips superiores).
-  const sorted=_cliCat==='lead'?catBase.filter(esLeadCat)
+  let sorted=_cliCat==='lead'?catBase.filter(esLeadCat)
               :_cliCat==='cliente'?catBase.filter(esClienteValidado)
               :catBase;
+  // Sub-filtro por Origen lead (solo en vista Leads).
+  _renderOrigenChips(_cliCat==='lead'?sorted:null);
+  if(_cliCat==='lead'&&_cliOrigen) sorted=sorted.filter(c=>(c.fields['Origen lead']||'(sin origen)')===_cliOrigen);
   const tbody=document.getElementById('clientesTableBody');
   const countEl=document.getElementById('clientesCount');
   if(!sorted.length){
@@ -8653,33 +8673,70 @@ function _updateCliCatCounts(base){
 function setCliCat(cat){
   if(_cliCat===cat) return;
   _cliCat=cat;_cliCap=TABLE_PAGE;
+  if(cat!=='lead')_cliOrigen='';
   clearSelection();
   renderClientes(true);
   _saveUIState();
 }
-async function updateEtapaCliente(id,etapa){try{await airtableWrite('Clientes','PATCH',id,{'Etapa venta':etapa});const c=state.clientesByIdRec[id];if(c) c.fields['Etapa venta']=etapa;toast(`Etapa → ${etapa}`,'success');renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
-// Migración one-time: los registros heredados con etapa 'Lead nuevo' quedan como
-// LEAD sin etapa (la categoría reemplaza a esa etapa). Se ejecuta una sola vez y
-// solo limpia registros que aún tengan ese valor, así se autolimita.
-async function _migrarLeadNuevo(){
-  if(localStorage.getItem('_leadNuevoMigrated_v1')==='1') return;
-  // Evita que varios usuarios/vendedores escriban en paralelo; solo escribe quien
-  // tenga permiso de escritura sobre Clientes.
+function setCliOrigen(o){
+  _cliOrigen=(_cliOrigen===o?'':o);_cliCap=TABLE_PAGE;
+  clearSelection();
+  renderClientes(true);
+  _saveUIState();
+}
+// Pinta los chips de Origen lead sobre el subconjunto de leads visible.
+function _renderOrigenChips(leadList){
+  const bar=document.getElementById('cliOrigenBar');if(!bar) return;
+  if(!leadList){bar.style.display='none';_cliOrigen='';return;}
+  const counts=new Map();
+  leadList.forEach(c=>{const o=c.fields['Origen lead']||'(sin origen)';counts.set(o,(counts.get(o)||0)+1);});
+  if(counts.size<=1){bar.style.display='none';_cliOrigen='';bar.innerHTML='';return;}
+  const origenes=[...counts.entries()].sort((a,b)=>b[1]-a[1]);
+  const chip=(val,label,n,active)=>`<button class="cli-origen-chip${active?' active':''}" onclick="setCliOrigen('${(val||'').replace(/'/g,"\\'")}')">${escapeHtml(label)}<span class="n">${n}</span></button>`;
+  bar.innerHTML=`<span class="cli-origen-lbl">Origen</span>`+
+    chip('','Todos',leadList.length,!_cliOrigen)+
+    origenes.map(([o,n])=>chip(o,o,n,_cliOrigen===o)).join('');
+  bar.style.display='flex';
+}
+async function updateEtapaCliente(id,etapa){try{const patch={'Etapa venta':etapa};
+  // Al mover a una etapa de cliente, el registro se valida automáticamente (LEAD→CLIENTE).
+  const _promueve=_ETAPAS_CLIENTE.includes(etapa)&&!esClienteValidado(state.clientesByIdRec[id]||{fields:{}});
+  if(_ETAPAS_CLIENTE.includes(etapa))patch['Validado']=true;
+  await airtableWrite('Clientes','PATCH',id,patch);const c=state.clientesByIdRec[id];if(c) Object.assign(c.fields,patch);toast(_promueve?`✅ Validado como cliente → ${etapa}`:`Etapa → ${etapa}`,'success');renderClientes();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+// Consolida etapas heredadas hacia el set canónico del embudo.
+const ETAPA_REMAP={'Lead nuevo':null,'Prospecto':'Contactado','Primer contacto':'Contactado','Cotización enviada':'Propuesta enviada','Inactivo':'Cliente inactivo'};
+// Migración one-time (resumible y auto-limitada): 1) limpia la etapa 'Lead nuevo';
+// 2) consolida etapas heredadas al set canónico; 3) respalda 'Validado'=true en los
+// registros que ya estaban en una etapa de cliente, para que la categoría no dependa
+// solo de la derivación. Se ejecuta en segundo plano; solo toca lo que falta migrar.
+function _patchMigracionEtapa(c){
+  const et=c.fields['Etapa venta']||'';
+  const patch={};
+  if(Object.prototype.hasOwnProperty.call(ETAPA_REMAP,et)) patch['Etapa venta']=ETAPA_REMAP[et];
+  const finalEt=('Etapa venta' in patch)?(patch['Etapa venta']||''):et;
+  if(_ETAPAS_CLIENTE.includes(finalEt)&&c.fields['Validado']!==true) patch['Validado']=true;
+  else if(et==='Lead nuevo'&&c.fields['Validado']===true) patch['Validado']=false;
+  return Object.keys(patch).length?patch:null;
+}
+async function _migrarCategorias(){
+  if(localStorage.getItem('_catMigrated_v2')==='1') return;
+  // Evita que varios usuarios escriban en paralelo; solo escribe quien tenga
+  // permiso de escritura sobre Clientes.
   const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;
   if(u&&typeof RBAC!=='undefined'&&RBAC.canWriteTable&&!RBAC.canWriteTable(u.role,'Clientes')) return;
-  const pend=state.clientes.filter(c=>(c.fields['Etapa venta']||'')==='Lead nuevo');
-  if(!pend.length){localStorage.setItem('_leadNuevoMigrated_v1','1');return;}
+  const pend=state.clientes.map(c=>[c,_patchMigracionEtapa(c)]).filter(([,p])=>p);
+  if(!pend.length){localStorage.setItem('_catMigrated_v2','1');return;}
   let ok=0,fail=0;
-  for(const c of pend){
+  for(const [c,patch] of pend){
     try{
-      await airtableWrite('Clientes','PATCH',c.id,{'Etapa venta':null,'Validado':false});
-      c.fields['Etapa venta']=null;c.fields['Validado']=false;ok++;
+      await airtableWrite('Clientes','PATCH',c.id,patch);
+      Object.assign(c.fields,patch);ok++;
     }catch(e){fail++;}
   }
-  if(!fail) localStorage.setItem('_leadNuevoMigrated_v1','1');
+  if(!fail) localStorage.setItem('_catMigrated_v2','1');
   if(ok){
     try{if((document.querySelector('.tab-panel.active')||{}).id==='tab-clientes')renderClientes();renderOverview();}catch(e){}
-    toast(`🔄 ${ok} lead${ok>1?'s':''} migrado${ok>1?'s':''} a la nueva categoría`,'info');
+    toast(`🔄 ${ok} registro${ok>1?'s':''} normalizado${ok>1?'s':''} a la nueva categoría`,'info');
   }
 }
 // Marca un LEAD como CLIENTE validado por el equipo.
@@ -9313,10 +9370,14 @@ async function _advanceEtapaCliente(clienteId,nuevaEtapa,desde){
   const c=state.clientes.find(x=>x.id===clienteId);if(!c) return;
   const actual=c.fields['Etapa venta']||'';
   if(actual===nuevaEtapa||!desde.includes(actual)) return;
+  const patch={'Etapa venta':nuevaEtapa};
+  // Auto-promoción: al pasar a una etapa de cliente (p. ej. tras confirmar el
+  // primer pedido) el registro queda validado como CLIENTE de forma explícita.
+  if(_ETAPAS_CLIENTE.includes(nuevaEtapa)) patch['Validado']=true;
   try{
-    await airtableWrite('Clientes','PATCH',clienteId,{'Etapa venta':nuevaEtapa});
-    c.fields['Etapa venta']=nuevaEtapa;
-    toast(`Etapa cliente → ${nuevaEtapa}`,'info');
+    await airtableWrite('Clientes','PATCH',clienteId,patch);
+    Object.assign(c.fields,patch);
+    toast(patch['Validado']?`✅ Cliente validado → ${nuevaEtapa}`:`Etapa cliente → ${nuevaEtapa}`,'info');
   }catch(e){}
 }
 async function updateCotizacionEstado(id,estado){
