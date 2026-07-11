@@ -22,7 +22,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-11-overview-list');
+define('MAIL_API_BUILD', '2026-07-11-lazy-snippets');
 
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
 // Las páginas con correos pesados podían agotar la memoria y provocar un
@@ -353,6 +353,46 @@ case 'list':
         'pages'    => max(1, (int)ceil($total / $perpage)),
         'build'    => MAIL_API_BUILD,
     ]);
+    break;
+
+// ── snippets ──────────────────────────────────────────────────
+// Vista previa (preview) de un LOTE pequeño de correos, pedida aparte por el
+// cliente en segundo plano. Va separada de 'list' a propósito: si un correo
+// corrupto hiciera fallar esta lectura, la bandeja ya cargó igual — solo ese
+// lote se queda sin preview. Acotada por tamaño y por tiempo.
+case 'snippets':
+    $folder = $_POST['folder'] ?? 'INBOX';
+    $uids   = (string)($_POST['uids'] ?? '');
+
+    $conn = open_imap($user, $pass, $folder);
+    if (is_array($conn)) { echo json_encode($conn); exit; }
+
+    $ids = array_slice(array_filter(array_map('intval', explode(',', $uids))), 0, 15);
+    $out = [];
+    $deadline = microtime(true) + 8.0;
+    foreach ($ids as $uid) {
+        $snippet = '';
+        try {
+            if (microtime(true) >= $deadline) break;
+            $msgno = @imap_msgno($conn, $uid);
+            if ($msgno) {
+                $struct = @imap_fetchstructure($conn, $msgno);
+                if ($struct) {
+                    $tp = find_text_part($struct);
+                    if ($tp && $tp[3] <= 200000) { // no bajar partes de texto enormes
+                        $raw = @imap_fetchbody($conn, $msgno, $tp[0], FT_PEEK);
+                        if ($raw !== false && $raw !== '') {
+                            $decoded = decode_body($raw, $tp[1], get_charset($tp[2]));
+                            $snippet = mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($decoded))), 0, 140);
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) { $snippet = ''; }
+        $out[(string)$uid] = $snippet;
+    }
+    imap_close($conn);
+    echo json_encode(['snippets' => $out, 'build' => MAIL_API_BUILD]);
     break;
 
 // ── read ─────────────────────────────────────────────────────

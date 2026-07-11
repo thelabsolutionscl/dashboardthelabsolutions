@@ -20362,6 +20362,37 @@ const MAIL={
       </div>`;
     }).join('');
     this._updateSelBar();
+    this.loadSnippets(msgs);
+  },
+
+  // Carga los previews (snippets) en segundo plano, por lotes pequeños y aislados.
+  // La lista ya está en pantalla; esto solo rellena el textito bajo el asunto.
+  // Va aparte del listado a propósito: si un correo corrupto hace fallar un lote,
+  // se ignora y la bandeja no se ve afectada (nunca vuelve a caerse por el preview).
+  async loadSnippets(msgs){
+    const pend=(msgs||[]).filter(m=>m&&!m.snippet).map(m=>m.uid);
+    if(!pend.length) return;
+    const seq=(this._snipSeq=(this._snipSeq||0)+1);
+    const folder=this.folder, chunk=12;
+    for(let i=0;i<pend.length;i+=chunk){
+      if(seq!==this._snipSeq||folder!==this.folder) return; // la lista cambió → aborta
+      const uids=pend.slice(i,i+chunk);
+      let data; try{ data=await this.post({action:'snippets',folder,uids:uids.join(',')}); }catch(e){ continue; }
+      if(seq!==this._snipSeq||folder!==this.folder) return;
+      const snips=(data&&data.snippets)||{};
+      for(const uid of uids){
+        const s=snips[uid]||snips[String(uid)]||'';
+        if(!s) continue;
+        const m=(this.msgs||[]).find(x=>x&&String(x.uid)===String(uid));
+        if(m) m.snippet=s; // cachea para re-renders (no se vuelve a pedir)
+        const main=document.querySelector(`.mail-item[data-uid="${uid}"] .mail-item-main`);
+        if(main){
+          let el=main.querySelector('.mail-item-snippet');
+          if(!el){ el=document.createElement('div'); el.className='mail-item-snippet'; main.appendChild(el); }
+          el.textContent=s;
+        }
+      }
+    }
   },
 
   async readMsg(uid){
