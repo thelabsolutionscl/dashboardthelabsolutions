@@ -322,6 +322,11 @@ case 'list':
     $msgs  = ($total > 0 && $start <= $end) ? (imap_fetch_overview($conn, "$start:$end", 0) ?: []) : [];
     $msgs  = array_reverse($msgs);
 
+    // Presupuesto de tiempo para los snippets: la lista siempre responde rápido.
+    // Si un buzón grande/lento (p.ej. Papelera con cientos de correos) se pasa del
+    // presupuesto, los correos restantes salen sin preview en vez de colgar la carga.
+    $snippet_deadline = microtime(true) + 8.0;
+
     $result = [];
     foreach ($msgs as $m) {
         // Snippet: primeras palabras del primer texto del correo.
@@ -330,6 +335,7 @@ case 'list':
         // no agotan la memoria). Protegido para que un correo raro no tumbe todo.
         $snippet = '';
         try {
+            if (microtime(true) >= $snippet_deadline) throw new \RuntimeException('snippet budget');
             $struct = @imap_fetchstructure($conn, $m->msgno);
             if ($struct) {
                 $tp = find_text_part($struct);
