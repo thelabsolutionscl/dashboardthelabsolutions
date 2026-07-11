@@ -15842,8 +15842,10 @@ const AGENT_LOG={
     document.getElementById('agentInlineTitle').textContent='📜 '+r.agent+' — '+NOTIFY._fmtFull(r.time);
     const resultEl=document.getElementById('agentInlineResult');
     resultEl.className='agent-modal-result';
-    resultEl.style.whiteSpace='';
-    resultEl.textContent=(r.input?'▸ CONSULTA:\n'+r.input+'\n\n':'')+r.output;
+    resultEl.style.whiteSpace='normal';
+    // Consulta como cabecera ligera + salida procesada (suave y estructurada, igual que en Agentes).
+    const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
+    resultEl.innerHTML=consultaHtml+formatAgentReport(r.output||'');
     _agentInlineText=r.output;
     document.getElementById('agentInlineActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();AGENT_LOG.open()">← Volver al historial</button>';
     document.getElementById('agentInlineModal').style.display='flex';
