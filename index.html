@@ -3076,6 +3076,19 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .apw-bar>i{display:block;height:100%;width:40%;border-radius:3px;background:linear-gradient(90deg,transparent,var(--apw-col,var(--accent)),transparent);animation:apwBar 1.3s linear infinite;}
 @keyframes apwBar{0%{transform:translateX(-120%);}100%{transform:translateX(320%);}}
 @media(prefers-reduced-motion:reduce){.apw-bolt,.apw-dots i,.apw-bar>i{animation:none;}}
+/* ── Reporte de agente: semáforo de urgencia + modo TL;DR ── */
+.agent-report{border-left:3px solid var(--agr-col,var(--border2));border-radius:3px 10px 10px 3px;padding-left:12px;}
+.agent-report.agr-green{--agr-col:#00d4aa;--agr-bg:rgba(0,212,170,0.12);}
+.agent-report.agr-amber{--agr-col:#ffaa00;--agr-bg:rgba(255,170,0,0.13);}
+.agent-report.agr-red{--agr-col:#ff4444;--agr-bg:rgba(255,68,68,0.13);}
+.agr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:11px;}
+.agr-chip{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:var(--agr-bg,var(--surface3));color:var(--agr-col,var(--text2));border:1px solid var(--agr-col,var(--border2));}
+.agr-tldr-btn{display:inline-flex;align-items:center;gap:5px;font-family:'DM Sans',sans-serif;font-size:10.5px;font-weight:600;color:var(--text2);background:var(--surface3);border:1px solid var(--border2);border-radius:7px;padding:3px 10px;cursor:pointer;transition:border-color .12s,color .12s,background .12s;}
+.agr-tldr-btn:hover{border-color:var(--accent);color:var(--accent);}
+.agr-tldr-btn.on{background:var(--accent);color:#04121a;border-color:var(--accent);}
+.agr-body{display:flex;flex-direction:column;gap:12px;}
+.agent-report.agr-tldr .agr-sec[data-essential="0"]{display:none;}
+.agent-report.agr-tldr .agr-body::after{content:'Mostrando solo lo esencial · pulsa “Ver todo” para el detalle';display:block;font-size:10px;color:var(--text3);font-style:italic;margin-top:-2px;}
 #tab-oficina .of-iso-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:10.5px;color:var(--text2);align-items:center;}
 #tab-oficina .of-iso-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle;}
 #tab-oficina .of-iso-cats{margin-top:-4px;gap:12px;opacity:.92;}
@@ -12783,15 +12796,42 @@ function formatAgentReport(raw){
         html+=`<div style="margin:5px 0;line-height:1.6">${inl(l)}</div>`;}
     return html;};
   if(!sections.length) return `<div style="font-size:12.5px;color:var(--text2);line-height:1.65">${renderBody(intro)||`<span style="white-space:pre-wrap">${escapeHtml(txt)}</span>`}</div>`;
-  let out='<div style="display:flex;flex-direction:column;gap:12px">';
+  // Semáforo de urgencia del reporte completo (verde/ámbar/rojo) + botón TL;DR.
+  const urg=_reportUrgency(txt);
+  let out=`<div class="agent-report agr-${urg.level}">`;
+  out+=`<div class="agr-toolbar"><span class="agr-chip" title="Nivel de urgencia estimado a partir del contenido">${urg.icon} ${urg.label}</span>`
+     +`<button type="button" class="agr-tldr-btn" onclick="toggleReportTLDR(this)" title="Muestra solo el resumen y los próximos pasos">⚡ TL;DR</button></div>`;
+  out+='<div class="agr-body">';
   if(intro.some(l=>l.trim())) out+=`<div style="font-size:12.5px;color:var(--text);line-height:1.65;background:linear-gradient(135deg,rgba(0,212,204,0.08),rgba(0,212,204,0));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 14px">${renderBody(intro)}</div>`;
-  sections.forEach(s=>{const mt=metaFor(s.title);
-    out+=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${mt.color};border-radius:9px;padding:12px 14px">`
+  sections.forEach(s=>{const mt=metaFor(s.title);const ess=_agrEssential(s.title)?1:0;
+    out+=`<div class="agr-sec" data-essential="${ess}" style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${mt.color};border-radius:9px;padding:12px 14px">`
       +`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:700;font-size:12px;letter-spacing:.3px;color:var(--text);text-transform:capitalize"><span style="font-size:14px">${mt.ico}</span>${escapeHtml(s.title.toLowerCase().replace(/_/g,' '))}</div>`
       +`<div style="font-size:12px;color:var(--text2)">${renderBody(s.body)||'<span style="color:var(--text3)">—</span>'}</div></div>`;});
-  out+='</div>';
+  out+='</div></div>';
   return out;
 }
+// Urgencia del reporte a partir del texto (heurística): rojo = requiere acción ya,
+// ámbar = con observaciones, verde = todo en orden. Espeja el criterio del CEO_REPORT.
+function _reportUrgency(raw){
+  const t=' '+String(raw||'').toLowerCase()+' ';
+  const RED=/(cr[ií]tic|urgent|riesgo|atrasad|vencid|p[eé]rdida|perdiendo|impag|moros|en mora|quiebre|grave|inmediat|se cae|alarm|rojo\b|no alcanza|incumpl|caduc)/;
+  const AMBER=/(alerta|ojo\b|ojo con|atenci[oó]n|precauci[oó]n|revisar|pendiente|demora|retras|advertenc|cuidado|a tiempo justo|apretad|amarillo|ámbar|conviene apurar)/;
+  if(RED.test(t)) return {level:'red',icon:'🔴',label:'Requiere atención'};
+  if(AMBER.test(t)) return {level:'amber',icon:'🟡',label:'Con observaciones'};
+  return {level:'green',icon:'🟢',label:'Todo en orden'};
+}
+// ¿La sección es "esencial" para el modo TL;DR? (resumen + próximos pasos/prioridades)
+function _agrEssential(title){
+  return /(resumen|ejecutiv|conclusi|s[ií]ntesis|pr[oó]xim|siguiente|\bpaso|prioridad|acci[oó]n|recomend|qu[eé] hacer|plan de)/i.test(String(title||''));
+}
+// Alterna el modo TL;DR de un reporte (colapsa lo no esencial).
+function toggleReportTLDR(btn){
+  const box=btn.closest('.agent-report'); if(!box) return;
+  const on=box.classList.toggle('agr-tldr');
+  btn.classList.toggle('on',on);
+  btn.innerHTML=on?'📄 Ver todo':'⚡ TL;DR';
+}
+window.toggleReportTLDR=toggleReportTLDR;
 // Alias retro-compatible: el reporte CEO usa el mismo motor genérico.
 function formatCeoReport(raw){return formatAgentReport(raw);}
 // Formateador LIGERO para texto conversacional / notas: negrita, código, enlaces,
