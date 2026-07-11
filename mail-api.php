@@ -20,6 +20,20 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Content-Type: application/json; charset=utf-8');
 
+// ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
+// Las páginas con correos pesados podían agotar la memoria y provocar un
+// fatal de PHP (respuesta no-JSON → "Respuesta inválida del servidor (500)").
+// Subimos límites y capturamos cualquier fatal para responder JSON limpio.
+@ini_set('memory_limit', '512M');
+@set_time_limit(120);
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        if (!headers_sent()) { http_response_code(200); header('Content-Type: application/json; charset=utf-8'); }
+        echo json_encode(['error' => 'El servidor se quedó sin recursos procesando esta página. Reintenta; si persiste, esa carpeta tiene correos muy pesados.']);
+    }
+});
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit(0); }
 
 $user   = trim($_POST['user']   ?? '');
@@ -102,6 +116,30 @@ function get_charset($params) {
         if (strtolower($p->attribute) === 'charset') return $p->value;
     }
     return 'UTF-8';
+}
+
+// Encuentra la primera parte de TEXTO (prefiere text/plain) para el snippet,
+// devolviendo [partno, encoding, parameters, bytes, subtype]. NO baja adjuntos:
+// así el listado nunca descarga el mensaje completo (evita agotar la memoria).
+function find_text_part($structure, $prefix = '') {
+    $type = (int)($structure->type ?? 0);
+    if ($type === 0) { // text
+        $partno = $prefix === '' ? '1' : $prefix;
+        return [$partno, (int)($structure->encoding ?? 0), $structure->parameters ?? [], (int)($structure->bytes ?? 0), strtolower($structure->subtype ?? '')];
+    }
+    if ($type === 1 && !empty($structure->parts)) { // multipart
+        $fallback = null;
+        foreach ($structure->parts as $i => $part) {
+            $pno   = $prefix === '' ? (string)($i + 1) : $prefix . '.' . ($i + 1);
+            $found = find_text_part($part, $pno);
+            if ($found) {
+                if ($found[4] === 'plain') return $found; // preferimos texto plano
+                if ($fallback === null) $fallback = $found;
+            }
+        }
+        return $fallback;
+    }
+    return null;
 }
 
 function parse_part($conn, $msgno, $structure, $partno, &$html, &$text, &$atts) {
@@ -286,18 +324,24 @@ case 'list':
 
     $result = [];
     foreach ($msgs as $m) {
-        // Snippet: primeras palabras del cuerpo en texto plano
+        // Snippet: primeras palabras del primer texto del correo.
+        // Localiza la parte de texto y la baja SOLO si es de tamaño razonable;
+        // nunca descarga el mensaje completo (así páginas con adjuntos pesados
+        // no agotan la memoria). Protegido para que un correo raro no tumbe todo.
         $snippet = '';
-        $struct = @imap_fetchstructure($conn, $m->msgno);
-        if ($struct) {
-            $part_no = ((int)$struct->type === 1) ? '1' : '';
-            $raw = @imap_fetchbody($conn, $m->msgno, $part_no ?: '1', FT_PEEK);
-            if ($raw === false || $raw === '') $raw = @imap_body($conn, $m->msgno, FT_PEEK);
-            $enc = $part_no && isset($struct->parts[0]) ? $struct->parts[0]->encoding : ($struct->encoding ?? 0);
-            $cs  = get_charset(($part_no && isset($struct->parts[0]) ? $struct->parts[0]->parameters : $struct->parameters) ?? []);
-            $decoded = decode_body($raw, $enc, $cs);
-            $snippet = mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($decoded))), 0, 140);
-        }
+        try {
+            $struct = @imap_fetchstructure($conn, $m->msgno);
+            if ($struct) {
+                $tp = find_text_part($struct);
+                if ($tp && $tp[3] <= 200000) { // no bajar partes de texto enormes
+                    $raw = @imap_fetchbody($conn, $m->msgno, $tp[0], FT_PEEK);
+                    if ($raw !== false && $raw !== '') {
+                        $decoded = decode_body($raw, $tp[1], get_charset($tp[2]));
+                        $snippet = mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($decoded))), 0, 140);
+                    }
+                }
+            }
+        } catch (\Throwable $e) { $snippet = ''; }
         $result[] = [
             'uid'      => (int)$m->uid,
             'msgno'    => (int)$m->msgno,
