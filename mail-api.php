@@ -22,20 +22,36 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-11-lazy-snippets');
+define('MAIL_API_BUILD', '2026-07-11-diagnostics');
 
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
-// Las páginas con correos pesados podían agotar la memoria y provocar un
-// fatal de PHP (respuesta no-JSON → "Respuesta inválida del servidor (500)").
-// Subimos límites y capturamos cualquier fatal para responder JSON limpio.
+// Bufferizamos TODA la salida: si ocurre un fatal de PHP, descartamos lo que
+// hubiera a medias y respondemos un JSON limpio que incluye el error REAL
+// (tipo, mensaje y línea) para poder diagnosticar la causa exacta.
 @ini_set('memory_limit', '512M');
 @set_time_limit(120);
+@ini_set('display_errors', '0');
+ob_start();
 register_shutdown_function(function () {
     $e = error_get_last();
-    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_RECOVERABLE_ERROR], true)) {
+        while (ob_get_level() > 0) { @ob_end_clean(); }   // descarta salida a medias
         if (!headers_sent()) { http_response_code(200); header('Content-Type: application/json; charset=utf-8'); }
-        echo json_encode(['error' => 'El servidor se quedó sin recursos procesando esta página. Reintenta; si persiste, esa carpeta tiene correos muy pesados.']);
+        $detail = sprintf('[tipo %d] %s en %s:%d', $e['type'], $e['message'], basename($e['file'] ?? '?'), $e['line'] ?? 0);
+        echo json_encode([
+            'error'  => 'Error interno del servidor de correo — detalle técnico: ' . mb_substr($detail, 0, 400),
+            'build'  => MAIL_API_BUILD,
+        ]);
+    } else {
+        while (ob_get_level() > 0) { @ob_end_flush(); }   // respuesta normal
     }
+});
+set_exception_handler(function ($ex) {
+    while (ob_get_level() > 0) { @ob_end_clean(); }
+    if (!headers_sent()) { http_response_code(200); header('Content-Type: application/json; charset=utf-8'); }
+    $detail = get_class($ex) . ': ' . $ex->getMessage() . ' en ' . basename($ex->getFile()) . ':' . $ex->getLine();
+    echo json_encode(['error' => 'Error interno del servidor de correo — detalle técnico: ' . mb_substr($detail, 0, 400), 'build' => MAIL_API_BUILD]);
+    exit;
 });
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit(0); }
