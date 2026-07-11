@@ -20,6 +20,10 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Content-Type: application/json; charset=utf-8');
 
+// Marcador de versión: permite confirmar qué código está realmente desplegado
+// (abre la URL en el navegador y mira "build" en el JSON).
+define('MAIL_API_BUILD', '2026-07-11-overview-list');
+
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
 // Las páginas con correos pesados podían agotar la memoria y provocar un
 // fatal de PHP (respuesta no-JSON → "Respuesta inválida del servidor (500)").
@@ -41,7 +45,7 @@ $pass   =      $_POST['pass']   ?? '';
 $action = trim($_POST['action'] ?? '');
 
 if (!$user || !$pass) {
-    echo json_encode(['error' => 'Credenciales requeridas']);
+    echo json_encode(['error' => 'Credenciales requeridas', 'build' => MAIL_API_BUILD]);
     exit;
 }
 
@@ -322,42 +326,23 @@ case 'list':
     $msgs  = ($total > 0 && $start <= $end) ? (imap_fetch_overview($conn, "$start:$end", 0) ?: []) : [];
     $msgs  = array_reverse($msgs);
 
-    // Presupuesto de tiempo para los snippets: la lista siempre responde rápido.
-    // Si un buzón grande/lento (p.ej. Papelera con cientos de correos) se pasa del
-    // presupuesto, los correos restantes salen sin preview en vez de colgar la carga.
-    $snippet_deadline = microtime(true) + 8.0;
-
     $result = [];
     foreach ($msgs as $m) {
-        // Snippet: primeras palabras del primer texto del correo.
-        // Localiza la parte de texto y la baja SOLO si es de tamaño razonable;
-        // nunca descarga el mensaje completo (así páginas con adjuntos pesados
-        // no agotan la memoria). Protegido para que un correo raro no tumbe todo.
-        $snippet = '';
-        try {
-            if (microtime(true) >= $snippet_deadline) throw new \RuntimeException('snippet budget');
-            $struct = @imap_fetchstructure($conn, $m->msgno);
-            if ($struct) {
-                $tp = find_text_part($struct);
-                if ($tp && $tp[3] <= 200000) { // no bajar partes de texto enormes
-                    $raw = @imap_fetchbody($conn, $m->msgno, $tp[0], FT_PEEK);
-                    if ($raw !== false && $raw !== '') {
-                        $decoded = decode_body($raw, $tp[1], get_charset($tp[2]));
-                        $snippet = mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($decoded))), 0, 140);
-                    }
-                }
-            }
-        } catch (\Throwable $e) { $snippet = ''; }
+        // SOLO datos de cabecera (envelope) que entrega imap_fetch_overview:
+        // NO se lee la estructura ni el cuerpo de cada correo. Así el listado es
+        // inmune a correos corruptos o pesados, que antes podían agotar la memoria
+        // o incluso crashear la extensión IMAP de PHP → 500 en páginas profundas.
+        // (El preview/snippet se sacrifica a cambio de que la bandeja nunca falle.)
         $result[] = [
-            'uid'      => (int)$m->uid,
-            'msgno'    => (int)$m->msgno,
+            'uid'      => (int)($m->uid ?? 0),
+            'msgno'    => (int)($m->msgno ?? 0),
             'from'     => decode_str($m->from ?? ''),
             'subject'  => decode_str($m->subject ?? '(Sin asunto)'),
             'date'     => $m->date ?? '',
             'seen'     => (int)($m->seen     ?? 0),
             'answered' => (int)($m->answered ?? 0),
             'flagged'  => (int)($m->flagged  ?? 0),
-            'snippet'  => $snippet,
+            'snippet'  => '',
         ];
     }
     imap_close($conn);
@@ -366,6 +351,7 @@ case 'list':
         'total'    => $total,
         'page'     => $page,
         'pages'    => max(1, (int)ceil($total / $perpage)),
+        'build'    => MAIL_API_BUILD,
     ]);
     break;
 
