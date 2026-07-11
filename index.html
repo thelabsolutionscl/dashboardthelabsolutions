@@ -6468,10 +6468,12 @@ async function runSupplierSearch(prefix='ss'){
   if(res) res.innerHTML=`<div class="loading-state"><div class="spinner"></div> Investigando proveedores para <strong style="color:var(--accent2);margin-left:4px">${escapeHtml(producto)}</strong>...</div>`;
   const mercadoLabel={'ambos':'Chile e Internacional','chile':'Chile (nacional)','internacional':'Internacional','china':'China / Alibaba'}[mercado]||mercado;
   const query=`PRODUCTO: ${producto}\nCATEGORÍA: ${cat||'Sin especificar'}\nMERCADO: ${mercadoLabel}\nCANTIDAD REQUERIDA: ${cantidad||'No especificada'}\nPRESUPUESTO MÁX: ${presupuesto||'No especificado'}\nPRIORIDAD: ${prioridad}`;
+  try{showAgentWorking('SUPPLIER',{name:'Sourcing',emoji:'🔍',verb:'está buscando proveedores para ti…',messages:['Rastreando catálogos y marketplaces…','Comparando precios y plazos…','Filtrando por calidad y MOQ…','Armando la recomendación…']});}catch(e){}
   try{
     const raw=await callClaude(SUPPLIER_SYS,query);
     renderSupplierResults(raw,producto,prefix);
   }catch(e){if(res) res.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-x-circle"/></svg></div>${escapeHtml(e.message)}</div>`;}
+  finally{try{hideAgentWorking();}catch(e){}}
   if(btn){btn.disabled=false;btn.textContent='🔍 Buscar Proveedores';}
 }
 
@@ -11546,6 +11548,7 @@ async function rellenarQAconIA(){
   const p=state.pedidosById[id];const f=p?.fields||{};
   if(!desc&&!f['Detalle productos']&&!f['Solicitud cliente (texto libre)']){toast('Describe el producto a revisar','error');descEl?.focus();return;}
   const btn=document.getElementById('qaIABtn');const prev=btn.innerHTML;btn.disabled=true;btn.innerHTML='⏳ Generando…';
+  try{showAgentWorking('QA',{verb:'está armando el checklist de calidad…'});}catch(e){}
   try{
     const sys=AGENTES_CFG.find(a=>a.id==='QA').sys;
     const ctx=[
@@ -11567,7 +11570,7 @@ async function rellenarQAconIA(){
     await _qaPersist(id,{silent:true});
     toast(`✓ Checklist IA guardado en Airtable: ${parsed.items.length} ítems${parsed.resultado?' · '+parsed.resultado:''}`,'success');
   }catch(e){toast('Error IA: '+e.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML=prev;}
+  finally{try{hideAgentWorking();}catch(e){}btn.disabled=false;btn.innerHTML=prev;}
 }
 function setQAResultado(r){qaResultadoActual=r;updateQAResultadoBtns();}
 function updateQAResultadoBtns(){document.getElementById('qaAprobadoBtn').style.opacity=qaResultadoActual==='QA aprobado'?'1':'0.4';document.getElementById('qaRechazadoBtn').style.opacity=qaResultadoActual==='Rechazado'?'1':'0.4';document.getElementById('qaPendienteBtn').style.opacity=qaResultadoActual==='Pendiente'?'1':'0.4';}
@@ -11811,6 +11814,7 @@ async function processAgentQueueItem(recordId){
   try{
     const sys=resolveAgentSys(agentId);
     if(!sys)throw new Error('Agente no encontrado: '+(agentId||'(vacío)'));
+    try{showAgentWorking(agentId,{verb:'está procesando la tarea de la cola…',messages:['Leyendo los datos del lead…','Calificando y puntuando…','Sugiriendo la próxima acción…']});}catch(e){}
     await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,{'Estado':'Procesando'});
     rec.fields.Estado='Procesando';renderAgentQueue();
 
@@ -11836,7 +11840,7 @@ async function processAgentQueueItem(recordId){
     try{await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,{'Estado':'Error','Error':String(e.message).slice(0,1000),'Fecha ejecución':new Date().toISOString()});}catch(_){}
     if(rec){rec.fields.Estado='Error';rec.fields.Error=e.message;}
     toast('Error procesando '+agentId+': '+e.message,'error');renderAgentQueue();
-  }
+  }finally{try{hideAgentWorking();}catch(e){}}
 }
 
 async function processAllPendingAgentQueue(){
@@ -11958,11 +11962,13 @@ PASOS:
 1. [acción concreta hoy]
 2. [acción días 2-3]
 3. [seguimiento siguiente semana]`;
+  try{showAgentWorking('LEADGEN',{name:'Prospección',emoji:'🎯',verb:'está analizando el lead…',messages:['Calificando el potencial…','Detectando qué necesita…','Redactando mensajes de contacto…','Definiendo los próximos pasos…']});}catch(e){}
   try{
     const raw=await callClaude(LEAD_AGENT_SYS,query);
     _leadAgentResponse=raw;
     renderLeadAgentResult(raw);
   }catch(e){toast('Error IA: '+e.message,'error');}
+  finally{try{hideAgentWorking();}catch(e){}}
   btn.disabled=false;btn.innerHTML='<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Analizar con IA';
 }
 function renderLeadAgentResult(raw){
@@ -12239,6 +12245,7 @@ async function _gfSuggest(){
   try{
     const key=(typeof getAnthropicKey==='function')?getAnthropicKey():'';
     if(typeof callClaude==='function'&&key&&!key.startsWith('%%')){
+      try{showAgentWorking('QUOTE',{verb:'está estimando el precio…',messages:['Estimando costos…','Calculando el precio de venta…']});}catch(e){}
       const sys='Eres un cotizador experto de The Lab Solutions (impresion 3D, letreros neon, trofeos) en Chile. Moneda CLP. Devuelve SOLO un JSON {"desc":"descripcion corta del item","costo":NUM,"venta":NUM} con costo y venta UNITARIOS netos (sin IVA) realistas para el mercado chileno, considerando la urgencia si aplica. Sin texto adicional fuera del JSON.';
       const user='Producto: '+tipo+'\nDescripcion: '+desc+'\nMaterial: '+mat+'\nColor/acabado: '+color+'\nCantidad: '+qty+'\nUrgente: '+(urg?'si (+25%)':'no');
       const txt=await callClaude(sys,user);
@@ -12246,6 +12253,7 @@ async function _gfSuggest(){
       if(m){const j=JSON.parse(m[0]);item={desc:String(j.desc||item.desc).slice(0,120),und:qty,costoUnit:Math.round(+j.costo||0),ventaUnit:Math.round(+j.venta||0)};}
     }
   }catch(e){console.warn('KAI estimate:',e);}
+  finally{try{hideAgentWorking();}catch(e){}}
   GF.answers._items=[item];
 }
 function _gfItemsTotal(){let v=0;(GF.answers._items||[]).forEach(it=>v+=(it.ventaUnit||0)*(it.und||1));return Math.round(v*1.19);}
@@ -12660,6 +12668,7 @@ function prefillReporte(){
 }
 async function crearReporte(){
   const btn=document.getElementById('createReporteBtn');btn.disabled=true;btn.textContent='Generando...';const out=document.getElementById('reporteOutput');out.classList.remove('empty');out.textContent='⏳ CEO_AGENT procesando...';
+  try{showAgentWorking('CEO',{verb:'está preparando tu reporte ejecutivo…',messages:['Revisando revenue y márgenes…','Detectando alertas y prioridades…','Redactando el reporte ejecutivo…','Puliendo los detalles…']});}catch(e){}
   try{const s=document.getElementById('rep-semana').value,rev=document.getElementById('rep-revenue').value,ce=document.getElementById('rep-cot-env').value,ca=document.getElementById('rep-cot-apr').value,pa=document.getElementById('rep-ped-act').value,pd=document.getElementById('rep-ped-des').value,n=document.getElementById('rep-notas').value;const conv=parseFloat(ce)>0?parseFloat(ca)/parseFloat(ce):0;
   const ceoCfg=typeof AGENTES_CFG!=='undefined'?AGENTES_CFG.find(a=>a.id==='CEO'):null;
   const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
@@ -12669,6 +12678,7 @@ async function crearReporte(){
   try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response);}catch(e){}
   const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':new Date().toISOString().split('T')[0],'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
   catch(e){toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;}
+  finally{try{hideAgentWorking();}catch(e){}}
   btn.disabled=false;btn.innerHTML='<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar y Guardar';
 }
 async function crearReporteAuto(){
@@ -13688,21 +13698,43 @@ function _apwCharSVG(col,em){
     <g class="of-iso-char of-iso-bob"><g transform="scale(1.04)">${seat}</g>${monitor}</g>
   </svg>`;
 }
-function showAgentWorking(cfg){
-  const modal=document.getElementById('agentWorkingModal'); if(!modal||!cfg) return;
-  const col=((typeof _ofCat==='function'?(_ofCat({id:cfg.id})||{}).color:null))||'#00d4aa';
-  const em=(typeof _ofAgentEmoji==='function')?_ofAgentEmoji(cfg.label):'🤖';
-  const name=(typeof _ofPretty==='function')?_ofPretty(cfg.label):(cfg.label||'El agente');
+// Resuelve una referencia flexible de agente → {id,label} usable por el popup.
+// ref puede ser: un objeto cfg, un id ('CEO'), un label ('CEO_AGENT') o {id,label}.
+function _apwResolve(ref){
+  if(!ref) return {};
+  if(typeof ref==='object' && (ref.id||ref.label)) return ref;
+  if(typeof ref==='string'){
+    const c=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id===ref||a.label===ref):null;
+    return c||{id:ref,label:ref};
+  }
+  return {};
+}
+// showAgentWorking(ref, opts?) — opts: {name, emoji, color, verb, messages[]}
+function showAgentWorking(ref,opts){
+  opts=opts||{};
+  const modal=document.getElementById('agentWorkingModal'); if(!modal) return;
+  const cfg=_apwResolve(ref);
+  const col=opts.color||((typeof _ofCat==='function'?(_ofCat({id:cfg.id||''})||{}).color:null))||'#00d4aa';
+  const em=opts.emoji||((typeof _ofAgentEmoji==='function')?_ofAgentEmoji(cfg.label||cfg.id||''):'🤖');
+  const name=opts.name||((typeof _ofPretty==='function')?_ofPretty(cfg.label||cfg.id||''):(cfg.label||cfg.id))||'El agente';
   const card=modal.querySelector('.apw-card'); if(card) card.style.setProperty('--apw-col',col);
   const agEl=document.getElementById('apwAgent'); if(agEl) agEl.textContent=em+' '+name;
+  const vbEl=document.getElementById('apwVerb'); if(vbEl) vbEl.textContent=opts.verb||'está procesando tu solicitud…';
   const stage=document.getElementById('apwStage'); if(stage) stage.innerHTML=_apwCharSVG(col,em);
+  const msgs=(Array.isArray(opts.messages)&&opts.messages.length)?opts.messages:_APW_MSGS;
   const st=document.getElementById('apwStatus');
   clearInterval(_apwTimer); _apwTimer=null;
-  if(st){ let i=0; st.style.opacity='1'; st.textContent=_APW_MSGS[0];
-    _apwTimer=setInterval(()=>{ i=(i+1)%_APW_MSGS.length; st.style.opacity='0';
-      setTimeout(()=>{ st.textContent=_APW_MSGS[i]; st.style.opacity='1'; },260); }, 2200); }
+  if(st){ let i=0; st.style.opacity='1'; st.textContent=msgs[0];
+    _apwTimer=setInterval(()=>{ i=(i+1)%msgs.length; st.style.opacity='0';
+      setTimeout(()=>{ st.textContent=msgs[i]; st.style.opacity='1'; },260); }, 2200); }
   modal.style.display='flex';
 }
+// Envoltorio cómodo: muestra el popup mientras corre fn() y lo oculta al terminar.
+async function withAgentWorking(ref,fn,opts){
+  try{ showAgentWorking(ref,opts); return await fn(); }
+  finally{ try{hideAgentWorking();}catch(e){} }
+}
+window.showAgentWorking=showAgentWorking; window.withAgentWorking=withAgentWorking;
 function hideAgentWorking(){
   const modal=document.getElementById('agentWorkingModal'); if(modal) modal.style.display='none';
   clearInterval(_apwTimer); _apwTimer=null;
@@ -14135,9 +14167,10 @@ async function redesReply(id){
   if(_redesReplyBusy){toast('Espera a que termine la operación en curso','info');return;}
   const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
   _redesReplyBusy=true; toast('Generando respuesta…','info');
+  try{showAgentWorking('COMMUNITY_AGENT',{verb:'está redactando la respuesta…',messages:['Leyendo el mensaje…','Detectando la intención…','Redactando una respuesta cercana…']});}catch(e){}
   try{ await _redesSuggestReply(i); toast('Respuesta lista ✓','success'); renderRedesKpis(); renderRedesInbox(); }
   catch(e){ toast('Error: '+e.message,'error'); }
-  finally{ _redesReplyBusy=false; }
+  finally{ try{hideAgentWorking();}catch(e){} _redesReplyBusy=false; }
 }
 // Sugiere respuesta para TODAS las interacciones pendientes sin respuesta (secuencial, para no saturar la API).
 async function redesReplyAllPending(){
@@ -14147,11 +14180,13 @@ async function redesReplyAllPending(){
   _redesReplyBusy=true;
   const btn=document.getElementById('redesInbBulkBtn'); const prev=btn?btn.textContent:'';
   if(btn){btn.disabled=true;}
+  try{showAgentWorking('COMMUNITY_AGENT',{verb:`está respondiendo ${pend.length} mensajes…`,messages:['Revisando la bandeja…','Redactando respuestas cercanas…','Detectando posibles leads…']});}catch(e){}
   let ok=0,fail=0;
   for(let k=0;k<pend.length;k++){
     if(btn) btn.textContent=`⏳ ${k+1}/${pend.length}…`;
     try{ await _redesSuggestReply(pend[k]); ok++; }catch(e){ fail++; }
   }
+  try{hideAgentWorking();}catch(e){}
   _redesReplyBusy=false;
   if(btn){btn.disabled=false;btn.textContent=prev;}
   renderRedesKpis(); renderRedesInbox();   // un solo re-render al final (antes O(N²) en DOM)
@@ -14229,6 +14264,7 @@ async function _redesRunGenerate(agentId,input,media,pedidoNum){
   const btn=document.getElementById('redesGenBtn'); if(btn) btn.disabled=true;
   const res=document.getElementById('redesGenResult');
   res.innerHTML='<div style="color:var(--text3);font-size:12px">⏳ Generando contenido…</div>';
+  try{showAgentWorking(cfg,{verb:'está creando tu contenido…',messages:['Pensando el ángulo…','Escribiendo el copy…','Sumando hashtags y CTA…','Puliendo el tono…']});}catch(e){}
   try{
     const ctx=state.loaded?buildAgentContext(agentId):'';
     const full=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
@@ -14245,6 +14281,7 @@ async function _redesRunGenerate(agentId,input,media,pedidoNum){
         ${multiNet?'':'<span style="font-size:10px;color:var(--text3);align-self:center">El Estratega y Tendencias generan planes/ideas — usa Caption o Content para crear posts guardables.</span>'}
       </div>`;
   }catch(e){res.innerHTML=`<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`;toast('Error: '+e.message,'error');}
+  finally{try{hideAgentWorking();}catch(e){}}
   if(btn) btn.disabled=false;
 }
 function _redesBaseFields(agentId){
@@ -14344,12 +14381,14 @@ async function redesWeeklyReport(){
   const btn=document.getElementById('redesReportBtn'); if(btn) btn.disabled=true;
   const modal=document.getElementById('redesReportModal'), body=document.getElementById('redesReportBody');
   body.innerHTML='<div style="color:var(--text3)">⏳ Generando reporte…</div>'; modal.style.display='flex';
+  try{showAgentWorking(cfg,{verb:'está preparando el reporte de redes…',messages:['Revisando métricas de la semana…','Detectando qué funcionó mejor…','Redactando el reporte…']});}catch(e){}
   try{
     const out=await callClaude(cfg.sys,_redesBuildMetricsContext());
     _redesReportText=out;
     body.innerHTML=`<div class="ai-response" style="white-space:normal">${formatAgentReport(out)}</div>`;
     try{AGENT_LOG.add('REPORT_SOCIAL_AGENT','Reporte semanal de redes',out);}catch(_){}
   }catch(e){ body.innerHTML=`<div style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; toast('Error: '+e.message,'error'); }
+  finally{try{hideAgentWorking();}catch(e){}}
   if(btn) btn.disabled=false;
 }
 async function redesEmailReport(){
@@ -14839,6 +14878,7 @@ async function nlGenerate(){
   const seg=document.getElementById('nlGenSegment')?.value||'';
   const btn=document.getElementById('nlGenBtn'); if(btn) btn.disabled=true;
   const res=document.getElementById('nlGenResult'); res.innerHTML='<div style="color:var(--text3);font-size:12px">⏳ Redactando newsletter…</div>';
+  try{showAgentWorking(cfg,{verb:'está redactando el newsletter…',messages:['Pensando el asunto…','Escribiendo el cuerpo…','Ajustando el tono al segmento…']});}catch(e){}
   try{
     const ctx=_nlBuildContext(seg);
     const full=`${ctx}\n\nCONSULTA: ${cfg.pre}${input}${seg?(' | Segmento: '+seg):''}`;
@@ -14857,6 +14897,7 @@ async function nlGenerate(){
         <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(_nlLastGen).then(()=>toast('Copiado ✓','success'))">Copiar todo</button>
       </div>`;
   }catch(e){res.innerHTML=`<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`;toast('Error: '+e.message,'error');}
+  finally{try{hideAgentWorking();}catch(e){}}
   if(btn) btn.disabled=false;
 }
 async function nlSaveDraft(){
@@ -15072,6 +15113,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
   actionsEl.innerHTML='';
   _agentInlineText='';
   modal.style.display='flex';
+  try{showAgentWorking(cfg);}catch(e){}
   const ctx=state.loaded?buildAgentContext(agentId):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${contextText}`:contextText;
   try{
@@ -15085,7 +15127,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
     resultEl.className='agent-modal-result';
     resultEl.textContent='❌ Error: '+e.message;
     toast('Error agente: '+e.message,'error');
-  }
+  }finally{try{hideAgentWorking();}catch(e){}}
 }
 
 // — FOLLOWUP desde cotización
@@ -15432,6 +15474,7 @@ Responde SOLO con un objeto JSON válido, sin texto adicional ni markdown, con e
 {"titulos":["...", ... 12 ítems], "descripciones":["...", ...4 ítems], "rutas":["...","..."]}`;
   const user=`Palabra clave objetivo: "${kw}"${campana?`\nCampaña: ${campana}`:''}
 Genera 12 títulos, 4 descripciones y 2 rutas para esta keyword. Respeta los límites de caracteres al pie de la letra.`;
+  try{showAgentWorking('ADS',{verb:'está escribiendo tus anuncios…',messages:['Analizando la palabra clave…','Redactando títulos que convierten…','Cuidando los límites de caracteres…']});}catch(e){}
   try{
     const raw=await callClaude(sys,user);
     let obj=null;
@@ -15457,7 +15500,7 @@ Genera 12 títulos, 4 descripciones y 2 rutas para esta keyword. Respeta los lí
   }catch(e){
     const body=document.getElementById('adsCopyBody');
     if(body)body.innerHTML=`<div style="color:var(--danger);font-size:12px">Error generando anuncios: ${escapeHtml(e.message||String(e))}</div>`;
-  }
+  }finally{try{hideAgentWorking();}catch(e){}}
 }
 function runAdsAgent(){
   if(!window._adsLastData){toast('Carga primero los datos de Google Ads','error');return;}
@@ -15576,6 +15619,7 @@ async function rellenarFichaNotasIA(){
   const sol=(f['Solicitud cliente (texto libre)']||f['Detalle productos']||'').trim();
   if(!sol&&!mat&&!col){toast('Indica al menos material o la solicitud del pedido','error');return;}
   const btn=document.getElementById('fichaIABtn');const prev=btn.innerHTML;btn.disabled=true;btn.innerHTML='⏳…';
+  try{showAgentWorking('PRODUCTION',{verb:'está redactando las notas de producción…'});}catch(e){}
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='PRODUCTION');
     const ctx=[
@@ -15589,7 +15633,7 @@ async function rellenarFichaNotasIA(){
     ta.value=(ta.value.trim()?ta.value.trim()+'\n\n':'')+raw.trim();
     toast('✓ Notas generadas con IA','success');
   }catch(e){toast('Error IA: '+e.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML=prev;}
+  finally{try{hideAgentWorking();}catch(e){}btn.disabled=false;btn.innerHTML=prev;}
 }
 
 // — QA desde pedido
@@ -15640,6 +15684,7 @@ async function runAgentChain(pedidoId,solicitudOverride){
   const steps={prod:'⏳ Generando Ficha Técnica (PRODUCTION_AGENT)...',qa:'· Checklist QA — en espera'};
   const paint=()=>{resultEl.textContent=steps.prod+'\n'+steps.qa;};
   paint();
+  try{showAgentWorking('PRODUCTION',{verb:'está generando la ficha técnica…',messages:['Leyendo el pedido…','Definiendo materiales y parámetros…','Escribiendo las instrucciones de producción…']});}catch(e){}
   let ficha='',checklist='';
   // Paso 1: PRODUCTION
   try{
@@ -15659,10 +15704,12 @@ async function runAgentChain(pedidoId,solicitudOverride){
     steps.prod='❌ Ficha Técnica: '+e.message;
     steps.qa='· Checklist QA — cancelado';
     paint();
+    try{hideAgentWorking();}catch(e){}
     actionsEl.innerHTML='<button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal()">Cerrar</button>';
     return;
   }
   // Paso 2: QA
+  try{showAgentWorking('QA',{verb:'está armando el checklist de calidad…',messages:['Revisando la ficha técnica…','Definiendo puntos de control…','Escribiendo el checklist QA…']});}catch(e){}
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='QA');
     const ctx=state.loaded?buildAgentContext('QA'):'';
@@ -15675,6 +15722,7 @@ async function runAgentChain(pedidoId,solicitudOverride){
   }catch(e){
     steps.qa='❌ Checklist QA: '+e.message;
   }
+  try{hideAgentWorking();}catch(e){}
   paint();
   renderPedidos();
   _agentInlineText='═══ FICHA TÉCNICA ═══\n'+ficha+(checklist?'\n\n═══ CHECKLIST QA ═══\n'+checklist:'');
@@ -17799,8 +17847,10 @@ async function audit3DCalibrateAll(){
 async function audit3DReport(){
   const out=document.getElementById('audit3DAiOut');if(out){out.style.display='block';out.textContent='🧠 Analizando el estado del parque…';}
   if(!window._audit3D)await audit3DRun();
+  try{showAgentWorking('MANTENCION3D',{verb:'está auditando el parque de impresoras…',messages:['Revisando el estado de cada máquina…','Detectando errores y mantenciones…','Sugiriendo calibraciones…']});}catch(e){}
   try{const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id==='MANTENCION3D'):null;const resp=await callClaude(cfg?cfg.sys:'',buildAgentContext('MANTENCION3D'));if(out)out.textContent=resp;}
   catch(e){if(out)out.textContent='Error IA: '+(e&&e.message||e);}
+  finally{try{hideAgentWorking();}catch(e){}}
 }
 // Último reporte de la rutina automática de la mañana (lo escribe el printer-bridge en Airtable)
 async function audit3DLoadDaily(){
@@ -21340,6 +21390,7 @@ const SEO_IA_SYS='Eres el SEO senior de The Lab Solutions, estudio B2B de fabric
 async function seoOptimizeIA(){
   const btn=document.getElementById('seoIABtn'),out=document.getElementById('seoIAResults');
   btn.disabled=true;btn.textContent='✨ Optimizando…';
+  try{showAgentWorking('SEO',{name:'SEO',emoji:'🧭',color:'#ff6b35',verb:'está optimizando tu sitio…',messages:['Auditando las páginas…','Reescribiendo títulos y metas…','Sugiriendo alt y Open Graph…','Puliendo cada propuesta…']});}catch(e){}
   try{
     if(!window._seoLastRows) await runSeoAudit();
     const rows=(window._seoLastRows||[]).filter(function(r){return r.checks&&r.checks.some(function(c){return c.level!=='ok';});});
@@ -21362,6 +21413,7 @@ async function seoOptimizeIA(){
     out.style.display='block';
     out.innerHTML='<div style="font-size:12px;color:var(--danger)">Error generando propuestas: '+escapeHtml(e.message)+'</div>';
   }
+  try{hideAgentWorking();}catch(e){}
   btn.disabled=false;btn.textContent='✨ Optimizar con IA';
 }
 function renderSeoIAProps(props){
@@ -21492,6 +21544,7 @@ async function optimizarSEOPage(wpId,pageTitle,wpType){
   const curDesc=document.getElementById(did)?.value||'';
   const btn=document.querySelector(`tr[data-wpid="${wpId}"] button`);
   if(btn){btn.disabled=true;btn.textContent='Analizando...';}
+  try{showAgentWorking('SEO',{name:'SEO',emoji:'🧭',color:'#ff6b35',verb:'está optimizando la página…',messages:['Analizando el título y la meta…','Reescribiendo con la keyword…','Ajustando a los límites de Google…']});}catch(e){}
   try{
     const system=`Eres un experto en SEO para The Lab Solutions, empresa chilena de impresión 3D, neones y trofeos personalizados ubicada en Santiago de Chile. Tu tarea es optimizar títulos y meta descripciones para Google, enfocados en búsquedas locales chilenas. Siempre responde SOLO con JSON válido, sin markdown.`;
     const user=`Optimiza el SEO de esta página:
@@ -21511,6 +21564,7 @@ Responde SOLO en JSON: {"title":"...","description":"..."}`;
     if(json.description){document.getElementById(did).value=json.description;seoCounter(document.getElementById(did),155,did+'-cnt');}
     toast('✓ SEO optimizado con IA — revisa y guarda','success');
   }catch(e){toast('Error: '+e.message,'error');}
+  finally{try{hideAgentWorking();}catch(e){}}
   if(btn){btn.disabled=false;btn.textContent='✨ Optimizar IA';}
 }
 async function saveYoastFields(wpId,wpType,pageUrl){
@@ -22348,6 +22402,7 @@ async function iaBuildCampaign(){
   const q=(brief||'').trim();
   if(!q){toast('Describe la campaña que quieres crear','error');return;}
   toast('✨ La IA está armando la campaña…','info');
+  try{showAgentWorking('ADS',{verb:'está armando tu campaña de Google Ads…',messages:['Definiendo estructura y puja…','Eligiendo palabras clave y negativas…','Escribiendo títulos y descripciones…','Ajustando métricas objetivo…']});}catch(e){}
   try{
     let ctx='';
     try{ if(typeof state!=='undefined'&&state.loaded&&window._adsLastData&&!window._adsLastData.demo) ctx=('\n\nDATOS ACTUALES DE LA CUENTA (referencia):\n'+buildAgentContext('ADS')).slice(0,3500); }catch(e){}
@@ -22357,6 +22412,7 @@ async function iaBuildCampaign(){
     _applyIACampaign(prop);
     toast('✓ Campaña generada — revísala y guarda','success');
   }catch(e){toast('Error IA: '+((e&&e.message)||e),'error');}
+  finally{try{hideAgentWorking();}catch(e){}}
 }
 
 function _parseCampaignJSON(raw){
@@ -23939,13 +23995,14 @@ async function finPlanCobranzaIA(){
   const out=document.getElementById('finCobranzaIAout'),btn=document.getElementById('finCobranzaIABtn'),prev=btn.innerHTML;
   btn.disabled=true;btn.innerHTML='⏳ Analizando…';
   if(out){out.style.display='block';out.textContent='⏳ FINANCE_AGENT priorizando la cobranza…';}
+  try{showAgentWorking('FINANCE',{verb:'está priorizando tu cobranza…',messages:['Revisando la cartera por cobrar…','Ordenando por mora y monto…','Definiendo canal y acción por cliente…']});}catch(e){}
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='FINANCE');
     const resp=await callClaude(cfg.sys,ctx);
     if(out){out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(resp);}
     try{AGENT_LOG.add('FINANCE_AGENT','Plan de cobranza ('+lista.length+' clientes)',resp);}catch(e){}
   }catch(e){if(out)out.textContent='Error: '+e.message;}
-  finally{btn.disabled=false;btn.innerHTML=prev;}
+  finally{try{hideAgentWorking();}catch(e){}btn.disabled=false;btn.innerHTML=prev;}
 }
 
 /* ── Antigüedad de cuentas por cobrar ── */
@@ -27505,6 +27562,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     if(!S.stats)return;
     if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
     const btn=el('slBtnIA');btn.disabled=true;btn.textContent='⏳ Analizando…';
+    try{showAgentWorking('PRODUCTION',{name:'KAI-Slicer',emoji:'🖨️',verb:'está calculando los parámetros de impresión…',messages:['Analizando la geometría de la pieza…','Eligiendo capas, relleno y soportes…','Ajustando velocidad y temperatura…']});}catch(e){}
     try{
       const out=await callClaude(IA_SYS,resumen());
       const a=out.indexOf('{'),b=out.lastIndexOf('}');
@@ -27516,7 +27574,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     }catch(e){
       toast('IA no disponible ('+e.message+') — usando perfil base','error');
       usarPerfilBase();
-    }finally{btn.disabled=false;btn.textContent='✨ Analizar con IA';}
+    }finally{try{hideAgentWorking();}catch(e){}btn.disabled=false;btn.textContent='✨ Analizar con IA';}
   }
   function usarPerfilBase(){
     if(!S.stats)return;
@@ -29927,7 +29985,7 @@ trusted_clients:
   <div class="apw-card" onclick="event.stopPropagation()">
     <div class="apw-glow"></div>
     <div class="apw-eyebrow"><span class="apw-bolt">⚡</span> TRABAJANDO PARA TI</div>
-    <div class="apw-sub"><b id="apwAgent">El agente</b> está procesando tu solicitud…</div>
+    <div class="apw-sub"><b id="apwAgent">El agente</b> <span id="apwVerb">está procesando tu solicitud…</span></div>
     <div class="apw-stage" id="apwStage"></div>
     <div class="apw-status" id="apwStatus">Analizando tus datos…</div>
     <div class="apw-dots"><i></i><i></i><i></i></div>
