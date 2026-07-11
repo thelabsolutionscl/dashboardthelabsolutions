@@ -15257,7 +15257,7 @@ function runQuoteFormAgent(){
     if(qm){
       try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
       const stripped=result.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
-      document.getElementById('agentInlineResult').textContent=stripped;
+      document.getElementById('agentInlineResult').innerHTML=formatAgentReport(stripped);
       _agentInlineText=stripped;
       if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length)
         insBtn=`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();quoteInsertItems()">→ Insertar ${_quoteParsedItems.length} ítem${_quoteParsedItems.length>1?'s':''} en el formulario</button>`;
@@ -15279,7 +15279,7 @@ function runQuoteCotAgent(cotId){
     if(qm){
       try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
       const stripped=result.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
-      document.getElementById('agentInlineResult').textContent=stripped;
+      document.getElementById('agentInlineResult').innerHTML=formatAgentReport(stripped);
       _agentInlineText=stripped;
       if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length)
         insBtn=`<button class="btn btn-primary btn-sm" onclick="quoteInsertItemsToEdit('${cotId}')">→ Insertar ${_quoteParsedItems.length} ítem${_quoteParsedItems.length>1?'s':''} y editar</button>`;
@@ -16043,8 +16043,10 @@ function ofAgentViewRun(idx){
   closeOfAgent();
   document.getElementById('agentInlineTitle').textContent='📜 '+(r.agent||'Agente')+' — '+NOTIFY._fmtFull(r.time);
   const resultEl=document.getElementById('agentInlineResult');
-  resultEl.className='agent-modal-result'; resultEl.style.whiteSpace='';
-  resultEl.textContent=(r.input?'▸ CONSULTA:\n'+r.input+'\n\n':'')+(r.output||'(sin resultado guardado)');
+  resultEl.className='agent-modal-result'; resultEl.style.whiteSpace='normal';
+  // Consulta como cabecera ligera + salida procesada (suave y estructurada, igual que en Agentes).
+  const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
+  resultEl.innerHTML=consultaHtml+(r.output?formatAgentReport(r.output):'<span style="color:var(--text3)">(sin resultado guardado)</span>');
   _agentInlineText=r.output||'';
   document.getElementById('agentInlineActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
   document.getElementById('agentInlineModal').style.display='flex';
