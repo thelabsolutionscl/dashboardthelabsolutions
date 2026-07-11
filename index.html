@@ -3054,6 +3054,28 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .of-type-r{animation:ofType .85s cubic-bezier(.36,0,.64,1) infinite;animation-delay:-.425s;}
 @keyframes ofType{0%,100%{transform:translateY(0) scaleY(1);}50%{transform:translateY(2.4px) scaleY(.88);}}
 @media(prefers-reduced-motion:reduce){.of-type-l,.of-type-r,.of-iso-blink{animation:none;}}
+/* ── Popup "TRABAJANDO PARA TI" (sección Agentes) ── */
+#agentWorkingModal{z-index:10050;}
+.apw-card{position:relative;background:radial-gradient(ellipse at 50% -10%,var(--surface2),var(--surface) 68%);border:1px solid var(--border2);border-radius:20px;padding:26px 30px 24px;max-width:400px;width:calc(100% - 40px);text-align:center;box-shadow:0 24px 70px -18px rgba(0,0,0,0.8),inset 0 1px 0 rgba(255,255,255,0.05);overflow:hidden;animation:modalPop .3s cubic-bezier(.16,1,.3,1);}
+.apw-card::before{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,var(--apw-col,var(--accent)),transparent);}
+.apw-eyebrow{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:var(--apw-col,var(--accent));line-height:1;text-shadow:0 0 22px color-mix(in srgb,var(--apw-col,var(--accent)) 45%,transparent);}
+.apw-eyebrow .apw-bolt{display:inline-block;animation:apwBolt 1.4s ease-in-out infinite;}
+@keyframes apwBolt{0%,100%{transform:scale(1) rotate(0);opacity:.9;}50%{transform:scale(1.18) rotate(-8deg);opacity:1;}}
+.apw-sub{font-size:12.5px;color:var(--text2);margin-top:4px;line-height:1.5;}
+.apw-sub b{color:var(--text);}
+.apw-stage{width:190px;height:200px;margin:8px auto 2px;display:block;}
+.apw-stage svg{width:100%;height:100%;overflow:visible;}
+.apw-glow{position:absolute;left:50%;top:120px;width:230px;height:230px;transform:translate(-50%,-50%);background:radial-gradient(circle,var(--apw-col,var(--accent)) 0%,transparent 62%);opacity:.14;pointer-events:none;filter:blur(6px);}
+.apw-status{font-size:12px;color:var(--text2);min-height:18px;transition:opacity .3s;font-weight:500;}
+.apw-dots{display:inline-flex;gap:5px;justify-content:center;margin-top:12px;}
+.apw-dots i{width:7px;height:7px;border-radius:50%;background:var(--apw-col,var(--accent));display:inline-block;animation:apwDot 1.1s ease-in-out infinite;}
+.apw-dots i:nth-child(2){animation-delay:.18s;}
+.apw-dots i:nth-child(3){animation-delay:.36s;}
+@keyframes apwDot{0%,100%{transform:translateY(0);opacity:.35;}50%{transform:translateY(-5px);opacity:1;}}
+.apw-bar{height:4px;border-radius:3px;background:var(--surface3);overflow:hidden;margin-top:16px;}
+.apw-bar>i{display:block;height:100%;width:40%;border-radius:3px;background:linear-gradient(90deg,transparent,var(--apw-col,var(--accent)),transparent);animation:apwBar 1.3s linear infinite;}
+@keyframes apwBar{0%{transform:translateX(-120%);}100%{transform:translateX(320%);}}
+@media(prefers-reduced-motion:reduce){.apw-bolt,.apw-dots i,.apw-bar>i{animation:none;}}
 #tab-oficina .of-iso-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:10.5px;color:var(--text2);align-items:center;}
 #tab-oficina .of-iso-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle;}
 #tab-oficina .of-iso-cats{margin-top:-4px;gap:12px;opacity:.92;}
@@ -12667,11 +12689,13 @@ async function crearReporteAuto(){
 const AGENT_TONE=`
 
 ESTILO DE RESPUESTA (prioritario — no cambia el contenido técnico, solo cómo lo comunicas):
-- Habla en español chileno cercano y humano, como un colega del equipo. Nada de tono robótico.
-- Abre SIEMPRE con una frase breve y cálida que resuma la conclusión o recomendación principal.
-- Cuando des cifras o métricas, acompáñalas de una lectura en una frase ("esto significa…", "conviene porque…"). No listes datos crudos sin explicar qué implican.
-- Organiza con encabezados de sección cortos y viñetas claras; frases breves, sin jerga innecesaria.
-- Cierra con un próximo paso concreto y en tono motivador.
+Comunica como el CEO_REPORT del panel: suave, procesado y fácil de leer de un vistazo. El usuario NO quiere un volcado de datos, quiere una lectura clara y humana de lo que pasa y qué hacer.
+- Habla en español chileno cercano y humano, como un colega de confianza del equipo. Cero tono robótico, cero listados fríos de datos.
+- Abre SIEMPRE con un "En resumen:" de 1–2 frases cálidas que entreguen la conclusión o recomendación principal antes de cualquier detalle. Que si el usuario lee solo eso, ya entienda lo esencial.
+- DIGIERE los datos: no repitas cifras crudas sin interpretarlas. Cada número relevante va acompañado de su lectura en lenguaje simple ("esto significa…", "vas bien porque…", "ojo con esto porque…"). Prioriza lo que importa; omite el ruido.
+- Suaviza el lenguaje técnico: traduce la jerga a palabras cotidianas. Frases breves, tono tranquilo y seguro, sin alarmismo pero honesto.
+- Estructura ligera: pocos encabezados de sección cortos y viñetas claras. Nada de párrafos densos ni tablas gigantes salvo que aporten de verdad.
+- Cierra SIEMPRE con un bloque corto de "Próximo paso" concreto y en tono motivador (1–3 acciones máximo, priorizadas).
 - Conserva intactos los bloques técnicos [ITEMS]…[/ITEMS] y [ACTIONS]…[/ACTIONS] si tu rol los usa.`;
 function formatAgentReport(raw){
   if(!raw||!String(raw).trim()) return '';
@@ -13632,6 +13656,59 @@ function renderAgentesGrid(){
   }).join('');
 }
 
+// ── Popup "TRABAJANDO PARA TI" ─────────────────────────────────
+// Reutiliza EXACTAMENTE el mismo personaje animado de la Oficina Virtual
+// (agente sentado + monitor + tecleo) para que "sea el mismo agente".
+let _apwTimer=null;
+const _APW_MSGS=['Analizando tus datos…','Procesando la información…','Conectando los puntos…','Redactando una respuesta clara…','Puliendo los detalles…','Casi listo…'];
+function _apwCharSVG(col,em){
+  const dark=(typeof _ofShade==='function')?_ofShade(col,0.72):'#0a5';
+  const _my=62*0.20;               // mismo mesón que la Oficina
+  const f=n=>n.toFixed(1);
+  const monitor=`<rect x="-13" y="${f(_my-20)}" width="26" height="16.5" rx="1.8" fill="#0f1114"/><rect x="-11.1" y="${f(_my-18.1)}" width="22.2" height="12.7" rx="1" fill="${col}" opacity="0.96"/>`
+    +`<polyline points="-8,${f(_my-10)} -3,${f(_my-14)} 1,${f(_my-9)} 5,${f(_my-15)} 8,${f(_my-11)}" fill="none" stroke="#0c100e" stroke-width="1.1" opacity="0.5"/>`
+    +`<rect x="-2.4" y="${f(_my-3.5)}" width="4.8" height="3.4" fill="#0f1114"/><rect x="-8" y="${f(_my)}" width="16" height="3" rx="1.4" fill="#1a1d22"/>`
+    +`<rect x="-11" y="${f(_my+4)}" width="22" height="3.6" rx="1.6" fill="#d3dae2"/>`;
+  const seat=`<g class="of-iso-body">
+      <rect class="of-type-l" x="-16" y="-15" width="6.5" height="16" rx="3.2" fill="${dark}"/>
+      <rect class="of-type-r" x="9.5" y="-15" width="6.5" height="16" rx="3.2" fill="${dark}"/>
+      <rect x="-13" y="-23" width="26" height="26" rx="12" fill="${col}"/>
+      <rect x="-13" y="-23" width="26" height="26" rx="12" fill="url(#apwShine)"/>
+      <circle cx="0" cy="-35" r="15" fill="#fff7ec" stroke="${col}" stroke-width="3"/>
+      <ellipse cx="-5" cy="-40" rx="4.2" ry="2.8" fill="#fff" opacity="0.6"/>
+      <text x="0" y="-29" text-anchor="middle" font-size="17">${em}</text>
+      <circle cx="12" cy="-46" r="3.8" fill="${col}" stroke="#fff" stroke-width="1.1" class="of-iso-blink"/>
+    </g>`;
+  return `<svg viewBox="-28 -58 56 70" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="apwShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.3"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      <radialGradient id="apwShadow"><stop offset="0" stop-color="#000" stop-opacity="0.4"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    </defs>
+    <ellipse cx="0" cy="4" rx="20" ry="7" fill="url(#apwShadow)"/>
+    <g class="of-iso-char of-iso-bob"><g transform="scale(1.04)">${seat}</g>${monitor}</g>
+  </svg>`;
+}
+function showAgentWorking(cfg){
+  const modal=document.getElementById('agentWorkingModal'); if(!modal||!cfg) return;
+  const col=((typeof _ofCat==='function'?(_ofCat({id:cfg.id})||{}).color:null))||'#00d4aa';
+  const em=(typeof _ofAgentEmoji==='function')?_ofAgentEmoji(cfg.label):'🤖';
+  const name=(typeof _ofPretty==='function')?_ofPretty(cfg.label):(cfg.label||'El agente');
+  const card=modal.querySelector('.apw-card'); if(card) card.style.setProperty('--apw-col',col);
+  const agEl=document.getElementById('apwAgent'); if(agEl) agEl.textContent=em+' '+name;
+  const stage=document.getElementById('apwStage'); if(stage) stage.innerHTML=_apwCharSVG(col,em);
+  const st=document.getElementById('apwStatus');
+  clearInterval(_apwTimer); _apwTimer=null;
+  if(st){ let i=0; st.style.opacity='1'; st.textContent=_APW_MSGS[0];
+    _apwTimer=setInterval(()=>{ i=(i+1)%_APW_MSGS.length; st.style.opacity='0';
+      setTimeout(()=>{ st.textContent=_APW_MSGS[i]; st.style.opacity='1'; },260); }, 2200); }
+  modal.style.display='flex';
+}
+function hideAgentWorking(){
+  const modal=document.getElementById('agentWorkingModal'); if(modal) modal.style.display='none';
+  clearInterval(_apwTimer); _apwTimer=null;
+}
+window.hideAgentWorking=hideAgentWorking;
+
 async function runAgent(id){
   const cfg=AGENTES_CFG.find(a=>a.id===id);if(!cfg) return;
   const inp=document.getElementById(`input_${id}`);
@@ -13641,6 +13718,7 @@ async function runAgent(id){
   const cardIdx=AGENTES_CFG.findIndex(a=>a.id===id)+1;
   const btn=document.querySelector(`#agentesGrid .card:nth-child(${cardIdx}) .btn-primary`);
   if(btn) btn.disabled=true;
+  try{showAgentWorking(cfg);}catch(e){}   // popup "Trabajando para ti" con el agente tecleando
   _ofActive.add(cfg.label);   // Oficina Virtual: marca el agente como "trabajando" en vivo
   if(typeof renderOficina==='function'&&document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
   const ctx=state.loaded?buildAgentContext(id):'';
@@ -13664,6 +13742,7 @@ async function runAgent(id){
   }
   catch(e){out.style.whiteSpace='';out._rawText='';out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
   finally{
+    try{hideAgentWorking();}catch(e){}
     _ofActive.delete(cfg.label);   // Oficina Virtual: el agente terminó
     if(btn) btn.disabled=false;
     if(typeof renderOficina==='function'&&document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
@@ -29840,6 +29919,19 @@ trusted_clients:
       </div>
     </div>
     <div id="agentLogList" style="flex:1;overflow-y:auto;padding:6px 10px"></div>
+  </div>
+</div>
+
+<!-- ══ POPUP "TRABAJANDO PARA TI" (sección Agentes) ══════════════ -->
+<div class="modal-overlay" id="agentWorkingModal" style="display:none" onclick="if(event.target===this)hideAgentWorking()">
+  <div class="apw-card" onclick="event.stopPropagation()">
+    <div class="apw-glow"></div>
+    <div class="apw-eyebrow"><span class="apw-bolt">⚡</span> TRABAJANDO PARA TI</div>
+    <div class="apw-sub"><b id="apwAgent">El agente</b> está procesando tu solicitud…</div>
+    <div class="apw-stage" id="apwStage"></div>
+    <div class="apw-status" id="apwStatus">Analizando tus datos…</div>
+    <div class="apw-dots"><i></i><i></i><i></i></div>
+    <div class="apw-bar"><i></i></div>
   </div>
 </div>
 
