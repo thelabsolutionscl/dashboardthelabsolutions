@@ -6261,6 +6261,30 @@ function _hydrateFromCache(){
     return (state.clientes.length+state.cotizaciones.length+state.pedidos.length)>0;
   }catch(e){ return false; }
 }
+// ── MODO OFFLINE (PWA) ─────────────────────────────────────────
+// El service worker sirve el shell sin conexión y _hydrateFromCache() pinta el
+// último snapshot del CRM. Esto agrega lo que faltaba: un banner persistente
+// con la ANTIGÜEDAD de los datos (el toast desaparece) y re-sincronización
+// automática al recuperar la conexión.
+function _offlineAgeTxt(){
+  const ts=state._cacheTs||state.lastUpdateTs;
+  if(!ts) return '';
+  const m=Math.max(1,Math.round((Date.now()-ts)/60000));
+  return m<60?`${m} min`:m<1440?`${Math.round(m/60)} h`:`${Math.round(m/1440)} día${Math.round(m/1440)>1?'s':''}`;
+}
+function _setOfflineBanner(on){
+  let b=document.getElementById('offlineBanner');
+  if(!on){if(b)b.remove();return;}
+  const age=_offlineAgeTxt();
+  if(!b){
+    b=document.createElement('div');b.id='offlineBanner';
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:10000;background:#2b2000;color:#ffaa00;border-bottom:1px solid rgba(255,170,0,.4);font-size:12px;font-weight:600;text-align:center;padding:7px 12px;font-family:inherit';
+    document.body.appendChild(b);
+  }
+  b.textContent=`📴 Sin conexión — mostrando datos guardados${age?` de hace ${age}`:''}. Los cambios que hagas podrían no guardarse.`;
+}
+window.addEventListener('offline',()=>{try{_setOfflineBanner(true);setStatus('sin conexión',false);}catch(e){}});
+window.addEventListener('online',()=>{try{_setOfflineBanner(false);toast('Conexión recuperada — sincronizando…','success');loadAllData();}catch(e){}});
 // Aplica config desde la tabla 'Monitor Sistema' (META_REVENUE / WATI_CONFIG / FIN_VENTAS).
 function _applyMonitorSistema(recs){
   recs=recs||[];
@@ -6335,6 +6359,7 @@ async function loadAllData(){
     _assignCoreState(res,true);
     if(isFirst) slProgress(92,'Calculando resumen...');
     state.loaded=true;state.lastUpdateTs=Date.now();state._silentN=0;setStatus('en vivo',true);
+    try{_setOfflineBanner(false);}catch(e){}
     _saveDataCache();
     document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
     _safeRender('overview',renderOverview);
@@ -6353,6 +6378,7 @@ async function loadAllData(){
     if(state.clientes.length||state.pedidos.length||state.cotizaciones.length){
       setStatus('sin conexión',false);
       toast('Sin conexión — mostrando datos guardados','info');
+      if(!navigator.onLine) try{_setOfflineBanner(true);}catch(e2){}
     }else{
       setStatus('error',false);
       toast('Error cargando datos: '+e.message,'error');
@@ -12163,6 +12189,7 @@ function initDashboard(){
       hideSysLoader();
       setStatus('actualizando…',false);
       try{_renderOverviewNow();_reRenderActiveList();}catch(e){logErr('hydrateRender',e);}
+      if(!navigator.onLine) try{_setOfflineBanner(true);}catch(e){}
     }
     loadAllData().then(()=>{startAutoRefresh();});
   }
