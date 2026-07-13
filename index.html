@@ -16570,7 +16570,7 @@ function _ofDeskLaptop(x,y,working,col){
   return `<g transform="translate(${f(x)},${f(y)})">${glow}<polygon points="-11,0 0,5 11,0 0,-5" fill="#cfd6de"/><polygon points="-11,0 0,5 0,-5" fill="#bcc5cf"/><rect x="-9" y="-13.5" width="18" height="12" rx="1.6" fill="#15171a"/><rect x="-7.4" y="-11.9" width="14.8" height="8.8" rx="1" fill="${scr}" opacity="${working?'0.97':'0.5'}"/><rect x="-7.4" y="-11.9" width="14.8" height="3.4" rx="1" fill="#ffffff" opacity="0.18"/></g>`;
 }
 // Agente SENTADO alrededor de la mesa (mira a cámara)
-function _ofRingAgent(m,x,y){
+function _ofRingAgent(m,x,y,facing){
   const col=_OF_STATUS[m.cls]||'#7c8590', dark=_ofShade(col,0.72), working=m.cls==='of-work', em=_ofEmoji(m);
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
   const f=n=>n.toFixed(1), bob=working?' of-iso-bob':' of-iso-breathe';
@@ -16589,7 +16589,15 @@ function _ofRingAgent(m,x,y){
     <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
     <ellipse cx="0" cy="3" rx="13" ry="5.5" fill="url(#ofShadow)"/>
     ${halo}
-    <g class="of-iso-body">
+    ${(()=>{
+      // Sprite pixel-art propio: reemplaza al personaje genérico. Los agentes del
+      // lado frontal de la mesa miran hacia ella (de espaldas al espectador).
+      const spr=m.clickIA?_ofSprite(m):null;
+      if(spr) return `<g class="of-iso-body">
+      <image href="${facing==='back'?spr.back:spr.front}" x="-13" y="-55" width="26" height="64" preserveAspectRatio="xMidYMid meet"/>
+      <circle cx="12" cy="-50" r="3.6" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
+    </g>`;
+      return `<g class="of-iso-body">
       <rect ${working?'class="of-type-l"':''} x="-14" y="-13" width="6" height="15" rx="3" fill="${dark}"/>
       <rect ${working?'class="of-type-r"':''} x="8" y="-13" width="6" height="15" rx="3" fill="${dark}"/>
       <rect x="-12" y="-22" width="24" height="25" rx="11" fill="${col}"/>
@@ -16598,7 +16606,7 @@ function _ofRingAgent(m,x,y){
       <ellipse cx="-5" cy="-39" rx="4" ry="2.6" fill="#fff" opacity="0.6"/>
       ${m.img?`<image href="${m.img}" x="-12" y="-46" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-29" text-anchor="middle" font-size="16">${em}</text>`}
       <circle cx="11" cy="-45" r="3.6" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
-    </g>`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+crown+reaction+`
+    </g>`;})()}`+(working?`<g transform="translate(0,-58)"><rect x="-13" y="-9" width="26" height="15" rx="7" fill="#fff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,5 4,5 0,11" fill="#fff"/><text x="0" y="2.5" text-anchor="middle" font-size="9">⌨️</text></g>`:'')+crown+reaction+`
   </g>`;
 }
 // MARCO de puerta (vano ABIERTO, SIN HOJA): va sobre el MURO frontal-derecho (borde R→F),
@@ -16799,18 +16807,21 @@ function _ofRenderIso(ia,auto,extras){
     const ang=i=>-Math.PI/2 + 2*Math.PI*(i+0.5)/Math.max(N,1);
     const pos=seats.map((m,i)=>{ const a=ang(i); return {m,a,sx:ctr[0]+ringRx*Math.cos(a),sy:ctr[1]+ringRy*Math.sin(a)}; });
     pos.forEach(p=>{ _ofPos[p.m.id]=[p.sx,p.sy]; });   // puesto del agente (para enfocar/ubicar)
-    // ¿quién sale a una pausa? sólo agentes en reposo (no trabajando); a lo más ~40% de la sala
-    const _cand=pos.filter(p=>p.m.cls!=='of-work' && _ofHash(p.m.id+'brk')%3===0);
-    const _away=new Set(_cand.slice(0,Math.round(N*0.4)).map(p=>p.m.id));
+    // ¿quién sale a una pausa? sólo agentes en reposo (no trabajando); a lo más ~40% de la sala.
+    // Los agentes con sprite pixel-art propio (p.ej. Gerente de Ventas) SIEMPRE salen a
+    // recorrer la oficina cuando están libres — así su personaje se ve caminando en vivo.
+    const _sprC=pos.filter(p=>p.m.cls!=='of-work' && _ofSprite(p.m));
+    const _cand=pos.filter(p=>p.m.cls!=='of-work' && !_ofSprite(p.m) && _ofHash(p.m.id+'brk')%3===0);
+    const _away=new Set([..._sprC,..._cand].slice(0,Math.max(_sprC.length,Math.round(N*0.4))).map(p=>p.m.id));
     pos.forEach(p=>{ p.brk=_away.has(p.m.id); if(p.brk) p.kind=(_ofHash(p.m.id+'k')%2)?'wc':'coffee'; });
     const _seated=pos.filter(p=>!p.brk);
     const back=_seated.filter(p=>p.sy<ctr[1]).sort((a,b)=>a.sy-b.sy);
     const front=_seated.filter(p=>p.sy>=ctr[1]).sort((a,b)=>a.sy-b.sy);
     // 1) agentes del fondo · 2) mesón al centro · 3) laptops sobre el mesón · 4) agentes del frente
-    back.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy); tags+=_rtag(p.m,p.sx,p.sy); });
+    back.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy,'front'); tags+=_rtag(p.m,p.sx,p.sy); });
     chars+=_ofMeetingTable(ctr[0],ctr[1],tRx,tRy,R.color,tableH);
     pos.forEach(p=>{ const lx=ctr[0]+tRx*0.74*Math.cos(p.a), ly=(ctr[1]-tableH)+tRy*0.74*Math.sin(p.a); chars+=_ofDeskLaptop(lx,ly,p.m.cls==='of-work',_OF_STATUS[p.m.cls]||'#7c8590'); });
-    front.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy); tags+=_rtag(p.m,p.sx,p.sy); });
+    front.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy,'back'); tags+=_rtag(p.m,p.sx,p.sy); });
     // 5) agentes en pausa → cruzan al frente (cafetería/baño) y vuelven; se dibujan al final (primer plano)
     pos.forEach(p=>{ if(!p.brk) return; const dest=p.kind==='wc'?wcPt:coffeePt, dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur)); _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],dest,p.kind,dur,dl); });
   });
