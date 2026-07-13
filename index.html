@@ -10438,11 +10438,14 @@ function ovRenderUltimoReporteCEO(){
   const mp=f['Margen promedio semana (%)']||0,marg=mp<=1?mp*100:mp;
   const cp=f['Tasa conversión (%)']||0,conv=cp<=1?cp*100:cp;
   const chips=[];
-  if(f['Revenue semana (CLP)']) chips.push({l:'Revenue',v:formatCLP(f['Revenue semana (CLP)']),c:'var(--accent)'});
+  // Delta vs reporte anterior (dirección de un vistazo)
+  let dRev='';try{const prev=reps[1]?.fields['Revenue semana (CLP)']||0;const cur=f['Revenue semana (CLP)']||0;
+    if(prev>0&&cur>0){const p=Math.round((cur-prev)/prev*100);if(p) dRev=` <span style="font-size:10px;color:${p>0?'var(--success)':'var(--danger)'}">${p>0?'▲+':'▼'}${Math.abs(p)}%</span>`;}}catch(e){}
+  if(f['Revenue semana (CLP)']) chips.push({l:'Revenue',v:formatCLP(f['Revenue semana (CLP)']),c:'var(--accent)',extra:dRev});
   if(conv) chips.push({l:'Conversión',v:conv.toFixed(0)+'%',c:'var(--accent4)'});
   if(f['Pedidos activos']!=null||f['Pedidos despachados']!=null) chips.push({l:'Pedidos',v:(f['Pedidos activos']||0)+' act · '+(f['Pedidos despachados']||0)+' desp',c:'var(--text)'});
   if(marg) chips.push({l:'Margen',v:marg.toFixed(0)+'%',c:marg>=35?'var(--success)':marg>=20?'var(--warn)':'var(--danger)'});
-  const chipsHtml=chips.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">${chips.map(c=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:78px"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:2px">${escapeHtml(c.l)}</div><div style="font-size:13px;font-weight:700;color:${c.c}">${escapeHtml(c.v)}</div></div>`).join('')}</div>`:'';
+  const chipsHtml=chips.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">${chips.map(c=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:78px"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:2px">${escapeHtml(c.l)}</div><div style="font-size:13px;font-weight:700;color:${c.c}">${escapeHtml(c.v)}${c.extra||''}</div></div>`).join('')}</div>`:'';
   const head=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700;color:var(--text)">${escapeHtml(semana||'Reporte semanal')}</span>${fecha?`<span style="font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);padding:2px 8px;border-radius:20px">Generado · ${escapeHtml(String(fecha))}</span>`:''}</div>`;
   body.style.whiteSpace='normal';
   body.innerHTML=head+chipsHtml+formatCeoReport(f['Resumen ejecutivo']);
@@ -10487,6 +10490,32 @@ function _resumenPendientesTexto(){
     return L.length?('\n\n———————————————\nPENDIENTES ACCIONABLES ESTA SEMANA\n'+L.join('\n')+'\n\nEntra al dashboard para gestionarlos con 1 clic: https://dashboard.thelab.solutions'):'';
   }catch(e){return'';}
 }
+// Últimas N semanas desde la tabla Reportes (del más reciente al más antiguo),
+// normalizando la conversión que a veces viene como fracción (0.38) y a veces en %.
+function _histSemanas(n){
+  return (state.reportes||[]).slice()
+    .sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')))
+    .slice(0,n||8)
+    .map(r=>{const f=r.fields;const cv=f['Tasa conversión (%)']||0;
+      return {sem:f['Semana']||f['Fecha generación']||'—',fecha:f['Fecha generación']||'',rev:f['Revenue semana (CLP)']||0,conv:cv<=1?cv*100:cv,ce:f['Cotizaciones enviadas']||0,ca:f['Cotizaciones aprobadas']||0,pa:f['Pedidos activos']||0,pd:f['Pedidos despachados']||0};});
+}
+// Bloque de dirección para el correo semanal: esta semana contra la anterior.
+function _tendenciaTexto(){
+  try{
+    const h=_histSemanas(2);
+    if(h.length<2) return '';
+    const [act,ant]=h;
+    const L=[];
+    const pct=(a,b)=>b>0?Math.round((a-b)/b*100):null;
+    const flecha=v=>v>0?('▲ +'+v+'%'):v<0?('▼ '+v+'%'):'= sin cambio';
+    const pRev=pct(act.rev,ant.rev);
+    if(pRev!==null) L.push(`• Revenue: ${formatCLP(act.rev)} (${flecha(pRev)} vs ${formatCLP(ant.rev)} la semana anterior)`);
+    if(act.conv||ant.conv){const d=Math.round(act.conv-ant.conv);L.push(`• Conversión: ${act.conv.toFixed(0)}% (${d>0?'▲ +':d<0?'▼ ':'='}${d?Math.abs(d)+' pts':' igual'} vs ${ant.conv.toFixed(0)}%)`);}
+    if(act.ce||ant.ce) L.push(`• Cotizaciones enviadas: ${act.ce} (antes ${ant.ce}) · aprobadas: ${act.ca} (antes ${ant.ca})`);
+    if(act.pd||ant.pd) L.push(`• Pedidos despachados: ${act.pd} (antes ${ant.pd})`);
+    return L.length?('\n\n———————————————\nTENDENCIA VS SEMANA ANTERIOR ('+ant.sem+')\n'+L.join('\n')):'';
+  }catch(e){return'';}
+}
 async function ceoAutoWeeklyCheck(){
   if(localStorage.getItem('ceo_auto_weekly')!=='1'||!state.loaded||_ceoAutoRunning)return;
   const wk=_isoWeekKey();
@@ -10501,7 +10530,7 @@ async function ceoAutoWeeklyCheck(){
     const body=reps[0]?.fields['Resumen ejecutivo']||'';
     if(to&&body&&typeof MAIL!=='undefined'){
       try{
-        const full=body+_resumenPendientesTexto();
+        const full=body+_tendenciaTexto()+_resumenPendientesTexto();
         await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:`Reporte ejecutivo ${wk} — The Lab Solutions`,body:full,from_name:AGENT_CTA_FROM.name});
         toast('✓ Reporte semanal generado y enviado','success');
       }catch(e){toast('Reporte generado (no se pudo enviar el correo)','info');}
@@ -11036,6 +11065,16 @@ function buildAgentContext(id){
     if(top5.length){lines.push('\nPEDIDOS ACTIVOS:');top5.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);});}
     const cotTop=cotAbiertas.slice(0,5);
     if(cotTop.length){lines.push('\nCOTIZACIONES SIN RESPUESTA:');cotTop.forEach(c=>{const f=c.fields;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Vto: ${f['Fecha vencimiento']||'—'}`);});}
+    // Histórico de reportes semanales: le da al agente la DIRECCIÓN del negocio,
+    // no sólo la foto de hoy (compara, detecta rachas y lo dice en el informe).
+    try{
+      const hist=_histSemanas(8);
+      if(hist.length>=2){
+        lines.push('\nHISTÓRICO SEMANAL (reportes anteriores, del más reciente al más antiguo):');
+        hist.forEach(h=>lines.push(`  • ${h.sem}: revenue ${fmtCLP(h.rev)} | conversión ${h.conv.toFixed(0)}% | cot ${h.ce} env / ${h.ca} apr | ${h.pd} despachados`));
+        lines.push('Usa este histórico para comentar la tendencia (¿mejorando, estancado o cayendo?) y comparar la semana actual contra el promedio.');
+      }
+    }catch(e){}
   }
 
   if(id==='FINANCE'){
