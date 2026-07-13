@@ -13831,6 +13831,10 @@ async function runAgent(id){
       }
     }
     out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(_r);
+    // CTA: si la respuesta trae un mensaje enviable (WhatsApp/correo), ofrece enviarlo
+    document.getElementById('cta_'+id)?.remove();
+    const _ctaHtml=agentCtaButtonsHtml('out_'+id,_r);
+    if(_ctaHtml) out.insertAdjacentHTML('afterend',`<div id="cta_${id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${_ctaHtml}</div>`);
   }
   catch(e){out.style.whiteSpace='';out._rawText='';out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
   finally{
@@ -15182,6 +15186,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
     resultEl.className='agent-modal-result';
     resultEl.style.whiteSpace='normal';resultEl.innerHTML=formatAgentReport(result);
     if(actionsFn) actionsEl.innerHTML=actionsFn(result);
+    else actionsEl.innerHTML=agentCtaButtonsHtml('',result)+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
     try{AGENT_LOG.add(cfg.label,contextText,result);}catch(e){}
   }catch(e){
     resultEl.className='agent-modal-result';
@@ -15216,16 +15221,71 @@ function openFollowupWA(phone){
   window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(waPart),'_blank');
 }
 
+// ── CTA universal de agentes: enviar el resultado por WhatsApp o correo ──
+// Identidad comercial de los envíos: salen SIEMPRE desde la casilla corporativa
+// con la firma de Andrea, sin importar qué usuario del dashboard esté logueado.
+const AGENT_CTA_FROM={email:'hola@thelab.solutions',name:'Andrea Garrido - The Lab Solutions'};
+// Extrae la sección cuyo encabezado calza con re (misma noción de encabezado que
+// formatAgentReport: #, **negrita**, o LÍNEA EN MAYÚSCULAS corta).
+function _agentSection(raw,re){
+  const lines=String(raw||'').replace(/\r/g,'').split('\n');
+  const isHead=l=>{const t=l.trim();if(!t)return false;
+    if(/^#{1,4}\s+/.test(t)||/^\*\*[^*]+\*\*:?\s*$/.test(t))return true;
+    const c=t.replace(/^\d+[\.\)]\s*/,'').replace(/:\s*$/,'');
+    return c===c.toUpperCase()&&/[A-ZÁÉÍÓÚÜÑ]/.test(c)&&c.split(/\s+/).length<=10&&c.length<=64;};
+  let start=-1;
+  for(let i=0;i<lines.length;i++){ if(isHead(lines[i])&&re.test(lines[i])){start=i+1;break;} }
+  if(start<0)return'';
+  const out=[];
+  for(let i=start;i<lines.length;i++){ if(isHead(lines[i]))break; out.push(lines[i]); }
+  return out.join('\n').trim();
+}
+// Texto crudo de la fuente: un output del grid (por id) o el modal inline.
+function _agentCtaRaw(srcId){
+  const el=srcId?document.getElementById(srcId):null;
+  return (el&&el._rawText)||_agentInlineText||'';
+}
+function _agentCtaClean(raw){return String(raw||'').replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/gi,'').replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/gi,'').trim();}
+function agentCtaWA(srcId,phone){
+  const raw=_agentCtaRaw(srcId); if(!raw){toast('Sin contenido','error');return;}
+  const msg=_agentSection(raw,/whatsapp|\bwsp\b/i)||_agentCtaClean(raw);
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg.slice(0,1800)),'_blank');
+}
+async function agentCtaEmail(srcId,btn,toEmail){
+  const raw=_agentCtaRaw(srcId); if(!raw){toast('Sin contenido','error');return;}
+  let to=toEmail||prompt('¿A qué correo lo enviamos?','');
+  if(!to)return; to=to.trim();
+  if(!validEmail(to)){toast('Correo inválido','error');return;}
+  const body=(_agentSection(raw,/e-?mail|correo/i)||_agentCtaClean(raw)).replace(/^\s*\**asunto\s*[:\-][^\n]*\n+/i,'');
+  const subjM=raw.match(/asunto\s*[:\-]\s*\**([^\n*]+)/i);
+  const subject=(subjM?subjM[1].trim():'The Lab Solutions');
+  const prev=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.textContent='Enviando…';}
+  try{
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject,body,from_name:AGENT_CTA_FROM.name});
+    if(r&&!r.error) toast('✓ Enviado a '+to+' desde '+AGENT_CTA_FROM.email,'success');
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
+}
+// Botones CTA según el contenido de la respuesta (WhatsApp / correo detectados).
+function agentCtaButtonsHtml(srcId,raw){
+  raw=raw||_agentCtaRaw(srcId);
+  const hasWA=/whatsapp|\bwsp\b/i.test(raw);
+  const hasMail=/asunto\s*[:\-]|e-?mail|correo/i.test(raw);
+  if(!hasWA&&!hasMail)return'';
+  return (hasWA?`<button class="btn btn-primary btn-sm" onclick="agentCtaWA('${srcId||''}')">📲 Enviar por WhatsApp</button>`:'')
+       +(hasMail?`<button class="btn ${hasWA?'btn-ghost':'btn-primary'} btn-sm" onclick="agentCtaEmail('${srcId||''}',this)">📧 Enviar por correo</button>`:'');
+}
+
 async function _sendFollowupEmail(cotId,toEmail){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
   const c=state.cotizacionesById[cotId];if(!c) return;
   const emailText=_extractEmailPart(_agentInlineText)||_agentInlineText;
-  const u=AUTH.getUser();
-  const from_name=u?.name||'The Lab Solutions';
   const btnEl=document.querySelector('#agentInlineActions button:nth-child(2)');
   if(btnEl){btnEl.disabled=true;btnEl.textContent='Enviando...';}
   try{
-    const r=await MAIL.post({action:'send',to:toEmail,subject:`Seguimiento — Cotización ${c.fields['N° Cotización']||''}`,body:emailText,from_name});
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to:toEmail,subject:`Seguimiento — Cotización ${c.fields['N° Cotización']||''}`,body:emailText,from_name:AGENT_CTA_FROM.name});
     if(r&&!r.error){toast('✓ Correo enviado','success');closeAgentInlineModal();}
     else throw new Error(r?.error||'Error desconocido');
   }catch(e){toast('Error: '+e.message,'error');}
@@ -15333,10 +15393,9 @@ function runWinbackAgent(cotId){
 async function _sendAgentEmail(toEmail,subject,btnEl){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
   const emailText=_extractEmailPart(_agentInlineText)||_agentInlineText;
-  const u=AUTH.getUser();
   if(btnEl){btnEl.disabled=true;btnEl.dataset.orig=btnEl.textContent;btnEl.textContent='Enviando...';}
   try{
-    const r=await MAIL.post({action:'send',to:toEmail,subject,body:emailText,from_name:u?.name||'The Lab Solutions'});
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to:toEmail,subject,body:emailText,from_name:AGENT_CTA_FROM.name});
     if(r&&!r.error){toast('✓ Correo enviado','success');closeAgentInlineModal();}
     else throw new Error(r?.error||'Error desconocido');
   }catch(e){toast('Error: '+e.message,'error');}
@@ -15867,7 +15926,7 @@ const AGENT_LOG={
     const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
     resultEl.innerHTML=consultaHtml+formatAgentReport(r.output||'');
     _agentInlineText=r.output;
-    document.getElementById('agentInlineActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();AGENT_LOG.open()">← Volver al historial</button>';
+    document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();AGENT_LOG.open()">← Volver al historial</button>';
     document.getElementById('agentInlineModal').style.display='flex';
   },
   clear(){if(!confirm('¿Borrar el historial local de agentes? (el historial compartido en Airtable no se borra)')) return;this._runs=[];this._merged=null;try{localStorage.removeItem(this._key);}catch(e){}this.render();}
@@ -16054,7 +16113,7 @@ function ofAgentViewRun(idx){
   const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
   resultEl.innerHTML=consultaHtml+(r.output?formatAgentReport(r.output):'<span style="color:var(--text3)">(sin resultado guardado)</span>');
   _agentInlineText=r.output||'';
-  document.getElementById('agentInlineActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
+  document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
   document.getElementById('agentInlineModal').style.display='flex';
 }
 function ofSetView(v){
@@ -20268,6 +20327,31 @@ const MAIL={
     const fd=new FormData();
     const a=this.auth();
     fd.append('user',a.user); fd.append('pass',a.pass);
+    for(const[k,v] of Object.entries(params)) fd.append(k,v);
+    const ctrl=new AbortController();
+    const timeout=setTimeout(()=>ctrl.abort(),30000);
+    try{
+      const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
+      const text=await r.text();
+      try{return JSON.parse(text);}
+      catch(e){return{error:'Respuesta inválida del servidor ('+r.status+')'};}
+    }catch(e){
+      return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
+    }finally{clearTimeout(timeout);}
+  },
+
+  // Envía autenticando como OTRA casilla (p.ej. hola@) usando su clave guardada
+  // por-cuenta. Si esa clave no está, cae a la cuenta activa conservando el
+  // from_name pedido, y avisa desde qué casilla salió realmente.
+  async postAs(fromEmail,params){
+    const pass=localStorage.getItem('thelab_mail_pass_'+fromEmail)||'';
+    if(!pass){
+      const a=this.activeAccount();
+      try{toast('Enviado desde '+a+' — guarda la clave de '+fromEmail+' en Correos para enviar desde esa casilla','info');}catch(e){}
+      return this.post(params);
+    }
+    const fd=new FormData();
+    fd.append('user',fromEmail); fd.append('pass',pass);
     for(const[k,v] of Object.entries(params)) fd.append(k,v);
     const ctrl=new AbortController();
     const timeout=setTimeout(()=>ctrl.abort(),30000);
