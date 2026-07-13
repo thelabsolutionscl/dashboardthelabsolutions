@@ -10676,6 +10676,92 @@ async function clearRevenueMeta(){
   closeMetaModal();renderKPIs();toast('Metas eliminadas','info');
 }
 
+// ── MODO TV / TALLER ──────────────────────────────────────────────────
+// Pantalla completa de SOLO LECTURA para una TV en el taller: rota cada 20 s
+// entre (1) pedidos por etapa, (2) estado de impresoras y (3) entregas de hoy.
+// Sale con Escape o doble clic. El auto-refresh silencioso sigue corriendo,
+// así que los datos se mantienen al día solos.
+let _tvTimer=null,_tvClock=null,_tvView=0;
+function _tvCard(t,sub,warn){return `<div style="background:var(--surface2);border:1px solid ${warn?'rgba(255,68,68,.5)':'var(--border)'};border-radius:10px;padding:12px 14px;margin-bottom:10px"><div style="font-size:20px;font-weight:700;color:${warn?'var(--danger)':'var(--text)'};line-height:1.2">${t}</div><div style="font-size:14px;color:var(--text3);margin-top:3px">${sub}</div></div>`;}
+function _tvViewPedidos(){
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const etapas=[['Confirmado','var(--accent)'],['En producción','var(--accent2)'],['Listo para despacho','var(--accent3)'],['Despachado','var(--accent4)']];
+  const cols=etapas.map(([est,col])=>{
+    let peds=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===est);
+    if(est==='Despachado') peds=peds.filter(p=>{const d=p.fields['Fecha despacho']||p.fields['Fecha entrega'];return d&&new Date(d+'T00:00:00')>=new Date(Date.now()-7*864e5);});
+    const cards=peds.slice(0,6).map(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<hoy&&est!=='Despachado';
+      return _tvCard(escapeHtml(f['N° Pedido']||'—')+' · '+escapeHtml(resolveClienteName(f['Cliente'])),(f['Fecha entrega']?'Entrega '+f['Fecha entrega']:'Sin fecha')+(atr?' ⚠ ATRASADO':''),atr);}).join('');
+    return `<div style="flex:1;min-width:0"><div style="font-family:'Bebas Neue';font-size:26px;letter-spacing:1px;color:${col};border-bottom:3px solid ${col};padding-bottom:6px;margin-bottom:14px">${est.toUpperCase()} <span style="color:var(--text3);font-size:20px">${peds.length}</span></div>${cards||'<div style="color:var(--text3);font-size:14px">—</div>'}${peds.length>6?`<div style="color:var(--text3);font-size:13px">+${peds.length-6} más</div>`:''}</div>`;
+  }).join('');
+  return `<div style="display:flex;gap:26px;height:100%">${cols}</div>`;
+}
+function _tvViewMaquinas(){
+  const cards=(typeof MAQUINAS!=='undefined'?MAQUINAS:[]).map(m=>{
+    const st=(typeof _printerStatus!=='undefined'?_printerStatus[m.id]:null)||{};
+    const s=st.state||'offline';
+    const map={printing:['IMPRIMIENDO','var(--accent3)'],paused:['PAUSADA','var(--warn)'],error:['ERROR','var(--danger)'],shutdown:['APAGADA','#888'],offline:['OFFLINE','#888'],noip:['SIN IP','#666'],idle:['LIBRE','var(--accent)'],standby:['LIBRE','var(--accent)'],complete:['LISTA ✓','var(--accent3)']};
+    const [lbl,col]=map[s]||['LIBRE','var(--accent)'];
+    const prog=s==='printing'&&st.progress!=null?Math.round(st.progress*(st.progress<=1?100:1)):null;
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:5px solid ${col};border-radius:10px;padding:16px 18px">
+      <div style="font-size:19px;font-weight:700;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</div>
+      <div style="font-family:'Bebas Neue';font-size:26px;letter-spacing:1px;color:${col};margin-top:4px">${lbl}${prog!=null?` · ${prog}%`:''}</div>
+      ${st.filename?`<div style="font-size:13px;color:var(--text3);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(String(st.filename))}</div>`:''}
+      ${prog!=null?`<div style="height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;margin-top:10px"><div style="height:100%;width:${prog}%;background:${col}"></div></div>`:''}
+    </div>`;
+  }).join('');
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;align-content:start">${cards||'<div style="color:var(--text3)">Sin impresoras configuradas</div>'}</div>`;
+}
+function _tvViewHoy(){
+  const hoy=new Date();hoy.setHours(0,0,0,0);const hoyStr=fmtDate(hoy);
+  const activos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+  const deHoy=activos.filter(p=>p.fields['Fecha entrega']===hoyStr);
+  const atrasados=activos.filter(p=>p.fields['Fecha entrega']&&new Date(p.fields['Fecha entrega']+'T00:00:00')<hoy);
+  const semana=activos.filter(p=>{const d=p.fields['Fecha entrega'];if(!d)return false;const dd=new Date(d+'T00:00:00');return dd>hoy&&dd<=new Date(hoy.getTime()+7*864e5);}).sort((a,b)=>String(a.fields['Fecha entrega']).localeCompare(String(b.fields['Fecha entrega'])));
+  const kpi=(n,l,c)=>`<div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center"><div style="font-family:'Bebas Neue';font-size:64px;line-height:1;color:${c}">${n}</div><div style="font-size:15px;color:var(--text3);margin-top:6px">${l}</div></div>`;
+  const lista=(peds,titulo,col)=>`<div style="flex:1;min-width:0"><div style="font-family:'Bebas Neue';font-size:24px;color:${col};border-bottom:3px solid ${col};padding-bottom:6px;margin-bottom:12px">${titulo}</div>${peds.slice(0,7).map(p=>{const f=p.fields;return _tvCard(escapeHtml(f['N° Pedido']||'—')+' · '+escapeHtml(resolveClienteName(f['Cliente'])),escapeHtml(f['Estado pedido']||'—')+(f['Fecha entrega']?' · '+f['Fecha entrega']:''),titulo.includes('ATRAS'));}).join('')||'<div style="color:var(--text3);font-size:14px">Nada pendiente ✓</div>'}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:22px;height:100%">
+    <div style="display:flex;gap:18px">${kpi(deHoy.length,'entregas HOY','var(--warn)')}${kpi(atrasados.length,'atrasados',atrasados.length?'var(--danger)':'var(--accent3)')}${kpi(activos.length,'pedidos activos','var(--accent)')}</div>
+    <div style="display:flex;gap:26px;flex:1;min-height:0">${lista(deHoy,'ENTREGAS DE HOY','var(--warn)')}${lista(atrasados,'⚠ ATRASADOS','var(--danger)')}${lista(semana,'PRÓXIMOS 7 DÍAS','var(--accent)')}</div>
+  </div>`;
+}
+const _TV_VIEWS=[['PEDIDOS POR ETAPA',_tvViewPedidos],['IMPRESORAS',_tvViewMaquinas],['ENTREGAS',_tvViewHoy]];
+function _tvRender(){
+  const body=document.getElementById('tvBody');if(!body)return;
+  const [titulo,fn]=_TV_VIEWS[_tvView%_TV_VIEWS.length];
+  document.getElementById('tvViewTitle').textContent=titulo;
+  document.getElementById('tvDots').innerHTML=_TV_VIEWS.map((_,i)=>`<span style="width:10px;height:10px;border-radius:50%;background:${i===_tvView%_TV_VIEWS.length?'var(--accent)':'var(--surface3)'};display:inline-block;margin:0 4px"></span>`).join('');
+  try{body.innerHTML=fn();}catch(e){body.innerHTML='<div style="color:var(--text3)">Sin datos aún…</div>';}
+}
+function tvStart(){
+  if(document.getElementById('tvOverlay'))return;
+  const ov=document.createElement('div');ov.id='tvOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:11000;background:var(--black);display:flex;flex-direction:column;padding:28px 36px;cursor:none';
+  ov.innerHTML=`<div style="display:flex;align-items:baseline;gap:20px;margin-bottom:22px">
+      <div style="font-family:'Bebas Neue';font-size:34px;letter-spacing:2px;color:var(--text)">THE LAB <span style="color:var(--accent)">SOLUTIONS</span></div>
+      <div id="tvViewTitle" style="font-family:'Bebas Neue';font-size:26px;letter-spacing:1.5px;color:var(--text3)"></div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:18px"><span id="tvDots"></span><span id="tvClock" style="font-family:'Bebas Neue';font-size:38px;color:var(--accent)"></span></div>
+    </div>
+    <div id="tvBody" style="flex:1;min-height:0;overflow:hidden"></div>
+    <div style="text-align:center;font-size:11px;color:var(--text3);margin-top:12px">Rota automáticamente · Escape o doble clic para salir</div>`;
+  ov.ondblclick=tvStop;
+  document.body.appendChild(ov);
+  const clock=()=>{const el=document.getElementById('tvClock');if(el)el.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});};
+  clock();_tvClock=setInterval(clock,1000);
+  _tvView=0;_tvRender();
+  _tvTimer=setInterval(()=>{_tvView++;_tvRender();},20000);
+  document.addEventListener('keydown',_tvEsc);
+  try{document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}catch(e){}
+}
+function _tvEsc(e){if(e.key==='Escape')tvStop();}
+function tvStop(){
+  const ov=document.getElementById('tvOverlay');if(ov)ov.remove();
+  if(_tvTimer){clearInterval(_tvTimer);_tvTimer=null;}
+  if(_tvClock){clearInterval(_tvClock);_tvClock=null;}
+  document.removeEventListener('keydown',_tvEsc);
+  try{document.fullscreenElement&&document.exitFullscreen();}catch(e){}
+}
+window.tvStart=tvStart;window.tvStop=tvStop;
+
 // ── KANBAN PEDIDOS ────────────────────────────────────────────────────
 function renderPedidosKanban(){
   const today=new Date();today.setHours(0,0,0,0);

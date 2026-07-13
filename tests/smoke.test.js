@@ -83,6 +83,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'buildPostEntregaTray', 'pdMarkDone', 'buildWinbackTray', 'wbReactivar',
     'finRenderCobranzaActions', 'cobRegistrar', 'renderClienteTimeline',
     'renderMorningBrief', 'renderMaqOcupacion', 'renderPedidosKanban', 'advancePedido',
+    'tvStart', 'tvStop',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

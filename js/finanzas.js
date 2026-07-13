@@ -1806,6 +1806,7 @@ const GS_ACTIONS=[
   {tab:'overview',    icon:'icon-target',   title:'Definir metas de revenue',     kw:'meta objetivo mensual semanal proyeccion goal',           run:()=>{switchTab('overview');setTimeout(()=>{try{openMetaModal();}catch(e){}},250);}},
   {icon:'icon-download',   title:'Respaldar CRM ahora',        kw:'backup respaldo airtable copia seguridad',   run:()=>{try{backupAirtable();}catch(e){}}},
   {icon:'icon-chat',       title:'Abrir KAI (asistente)',      kw:'kai asistente chat ia ayuda hablar',         run:()=>{try{openKai();}catch(e){}}},
+  {icon:'icon-laptop',     title:'Modo TV (taller)',           kw:'tv taller pantalla fullscreen monitor kiosco rotacion', run:()=>{try{tvStart();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
