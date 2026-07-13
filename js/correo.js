@@ -718,7 +718,9 @@ const MAIL={
   sigHtml(){
     const s=this.getSig();
     if(!s) return '';
-    return `<br><br><div style="border-top:1px solid #333;margin-top:12px;padding-top:10px">${s}</div>`;
+    // Sin línea separadora: las firmas con diseño propio (tarjeta) traen su
+    // borde, y en las de texto el espacio en blanco basta como separación.
+    return `<br><br><div style="margin-top:12px">${s}</div>`;
   },
 
   insertSignature(){
