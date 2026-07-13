@@ -12,7 +12,11 @@ Worker **dedicado y separado** de `sii-worker`. Ningún secreto vive en el repo.
 | POST | `/webhooks/linkedin` | `X-Linkedin-Webhook-Key` | LinkedIn vía Make/Zapier |
 
 ## Variables y secretos
-No-secretas (`wrangler.toml [vars]`): `AIRTABLE_BASE_ID`, `ALLOWED_ORIGINS`, `AUTO_PROCESS_LEADS`.
+No-secretas (`wrangler.toml [vars]`): `AIRTABLE_BASE_ID`, `ALLOWED_ORIGINS`, `AUTO_PROCESS_LEADS`,
+`ATTACH_FIELD` (opcional: campo de attachments en Clientes donde se sube la
+foto/PDF de referencia del cotizador público; por defecto `Adjuntos`. Créalo como
+campo tipo *Attachment* en la tabla Clientes — si no existe, el adjunto se descarta
+con un log y el lead sigue igual).
 
 Secretos (`npx wrangler secret put NOMBRE`):
 `AIRTABLE_TOKEN`, `PUBLIC_LEAD_KEY`, `GOOGLE_ADS_WEBHOOK_KEY`, `LINKEDIN_WEBHOOK_KEY`,

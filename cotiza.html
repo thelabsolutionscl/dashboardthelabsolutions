@@ -81,6 +81,13 @@ button:disabled{opacity:.55;cursor:default}
     </div>
     <label for="fMsg">Cuéntanos tu proyecto <b>*</b></label>
     <textarea id="fMsg" name="message" maxlength="2000" placeholder="Medidas, materiales, referencias, dónde se instala…"></textarea>
+    <label for="fFile">Foto o referencia (opcional, imagen o PDF hasta 4 MB)</label>
+    <input id="fFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" style="padding:8px 12px">
+    <div id="filePrev" style="display:none;margin-top:8px;align-items:center;gap:10px">
+      <img id="filePrevImg" alt="" style="max-height:64px;max-width:110px;border-radius:6px;border:1px solid var(--border);display:none">
+      <span id="filePrevName" style="font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <span onclick="_fileClear()" style="cursor:pointer;color:var(--danger);font-size:13px;padding:4px 8px" title="Quitar archivo">✕</span>
+    </div>
     <!-- honeypot anti-bot: los humanos no lo ven; los bots lo rellenan -->
     <div class="hp" aria-hidden="true"><label>Website</label><input name="company_website" tabindex="-1" autocomplete="off"></div>
     <div id="tsBox"></div>
@@ -124,6 +131,30 @@ function _utm(){
 }
 function _show(cls,html){const m=document.getElementById('formMsg');m.className='msg '+cls;m.innerHTML=html;}
 let _navigate=u=>{location.href=u;};
+
+// Adjunto opcional: se manda en base64 dentro del JSON (el worker lo valida
+// de nuevo y lo sube al CRM). Máx 4 MB — más que eso mejor mandarlo por correo.
+let _fileAtt=null;
+const _MAX_FILE=4*1024*1024;
+document.getElementById('fFile').addEventListener('change',ev=>{
+  const f=ev.target.files&&ev.target.files[0];
+  if(!f){_fileClear();return;}
+  if(f.size>_MAX_FILE){_show('err','El archivo pesa más de 4 MB — comprímelo o adjúntalo respondiendo nuestro correo.');ev.target.value='';return;}
+  const rd=new FileReader();
+  rd.onload=()=>{
+    _fileAtt={name:f.name,type:f.type,data:String(rd.result).split(',')[1]||''};
+    const box=document.getElementById('filePrev');box.style.display='flex';
+    const img=document.getElementById('filePrevImg');
+    if(/^image\//.test(f.type)){img.src=rd.result;img.style.display='block';}else{img.style.display='none';}
+    document.getElementById('filePrevName').textContent=f.name+' ('+Math.round(f.size/1024)+' KB)';
+  };
+  rd.readAsDataURL(f);
+});
+function _fileClear(){
+  _fileAtt=null;
+  document.getElementById('fFile').value='';
+  document.getElementById('filePrev').style.display='none';
+}
 function _mailtoFallback(d){
   const body=encodeURIComponent(`Nombre: ${d.name}\nEmpresa: ${d.company}\nEmail: ${d.email}\nTeléfono: ${d.phone}\nServicio: ${d.service}\nCantidad: ${d.quantity}\nFecha deseada: ${d.deliveryDate}\nPresupuesto: ${d.budget}\n\n${d.message}`);
   return `mailto:hola@thelab.solutions?subject=${encodeURIComponent('Solicitud de cotización — '+(d.company||d.name))}&body=${body}`;
@@ -142,6 +173,7 @@ document.getElementById('cotForm').addEventListener('submit',async ev=>{
   const hp=document.querySelector('[name="company_website"]').value;
   if(hp) d.company_website=hp;
   if(_tsToken) d.turnstileToken=_tsToken;
+  if(_fileAtt) d.attachment=_fileAtt;
 
   if(!_cfgOk(CFG.url)){
     // Sin endpoint configurado: respaldo por correo con todo pre-rellenado

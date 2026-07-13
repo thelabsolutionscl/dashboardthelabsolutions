@@ -179,12 +179,27 @@ async function handleLead(request, env, ctx, cors) {
   }
 
   const norm = normalizeWeb(body);
+
+  // 6) Adjunto opcional (imagen o PDF de referencia del cotizador público).
+  //    Validación estricta: tipo permitido y ≤ ~4 MB decodificado (el límite
+  //    del endpoint uploadAttachment de Airtable es 5 MB).
+  let attachment = null;
+  if (body.attachment && body.attachment.data) {
+    const a = body.attachment;
+    const okType = /^(image\/(png|jpe?g|webp|gif)|application\/pdf)$/.test(a.type || "");
+    const b64 = String(a.data).replace(/^data:[^;]+;base64,/, "");
+    if (okType && b64.length <= 5_600_000 && /^[A-Za-z0-9+/=]+$/.test(b64)) {
+      attachment = { name: (str(a.name) || "referencia").slice(0, 120), type: a.type, data: b64 };
+    }
+  }
+
   return await createLeadAndQueue(env, ctx, cors, {
     norm,
     agente: "LEAD_AGENT",
     evento: "lead.created",
     source: norm.source || "web",
     campaign: norm.utmCampaign,
+    attachment,
   });
 }
 
@@ -778,7 +793,7 @@ function buildClienteFields(norm, source) {
   });
 }
 
-async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source, campaign }) {
+async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source, campaign, attachment }) {
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
     return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
   }
@@ -821,6 +836,12 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
     ctx.waitUntil(sendLeadSaveFailedAlert(env, norm, e.message));
     return json({ ok: true, clienteId: null, queueId: null, buffered: true }, 200, cors);
+  }
+
+  // 1b) Adjunto → campo de attachments del Cliente (best-effort: si el campo
+  //     no existe en la base, se loguea y el lead sigue su curso normal).
+  if (attachment && clienteId && ctx) {
+    ctx.waitUntil(uploadAttachmentToCliente(env, clienteId, attachment));
   }
 
   // 2) Agent_Queue — tabla bajo nuestro control (campos fijos)
@@ -1153,6 +1174,34 @@ async function sendProveedorNotification(env, p) {
 /* ════════════════════════════════════════════════════════════════════════
  * Normalizadores de payload por canal → forma interna única
  * ══════════════════════════════════════════════════════════════════════ */
+// Sube un adjunto (base64) al campo de attachments del Cliente usando el
+// endpoint de contenido de Airtable (acepta el archivo directo, sin URL pública).
+// Campo destino: env.ATTACH_FIELD o "Adjuntos". Best-effort: nunca tumba el lead.
+async function uploadAttachmentToCliente(env, recordId, att) {
+  if (!recordId || !att || !att.data) return;
+  try {
+    const field = env.ATTACH_FIELD || "Adjuntos";
+    const r = await fetch(
+      `https://content.airtable.com/v0/${env.AIRTABLE_BASE_ID}/${recordId}/${encodeURIComponent(field)}/uploadAttachment`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.AIRTABLE_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contentType: att.type || "application/octet-stream",
+          file: att.data,
+          filename: att.name || "referencia",
+        }),
+      }
+    );
+    if (!r.ok) console.error("[leads-worker] uploadAttachment:", r.status, (await r.text()).slice(0, 200));
+  } catch (e) {
+    console.error("[leads-worker] uploadAttachment:", e.message);
+  }
+}
+
 function normalizeWeb(b) {
   return {
     name: str(b.name),
