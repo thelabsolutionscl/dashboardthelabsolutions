@@ -14,7 +14,11 @@ const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
 
-const SRC = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+// SRC = index.html + módulos externos js/*.js (extraídos del monolito):
+// los tests siguen viendo TODO el código como una sola fuente.
+const _jsDir = path.join(__dirname, '..', 'js');
+const _jsExtra = fs.existsSync(_jsDir) ? fs.readdirSync(_jsDir).filter(f => f.endsWith('.js')).sort().map(f => fs.readFileSync(path.join(_jsDir, f), 'utf8')).join('\n') : '';
+const SRC = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8') + '\n<script>\n' + _jsExtra + '\n</scr' + 'ipt>';
 
 // ── Extractor: balancea {} y [] saltando strings (', ", `) y comentarios ──
 function balancedEnd(s, openIdx) {
