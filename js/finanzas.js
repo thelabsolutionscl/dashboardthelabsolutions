@@ -1640,7 +1640,7 @@ function populateMobileConfig(){
   const pk=document.getElementById('mbProxyKey');
   if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const ps=document.getElementById('mbProxyStatus');
-  if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo':'Sin proxy — token local';}
+  if(ps){const v=(typeof _proxyCfg==='function')&&_proxyCfg();ps.textContent=v?'✓ Proxy activo':'Sin proxy — token local';}
   const pt=document.getElementById('mbPrinterTunnel');if(pt) pt.value=localStorage.getItem('printer_tunnel')||'';
   const ptk=document.getElementById('mbPrinterToken');if(ptk){const v=localStorage.getItem('printer_tunnel_token');ptk.value=v?'••••••••'+v.slice(-4):'';ptk.onfocus=()=>{if(ptk.value.startsWith('••'))ptk.value='';};ptk.onblur=()=>{if(!ptk.value){const vv=localStorage.getItem('printer_tunnel_token');ptk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const pts=document.getElementById('mbPrinterTunnelStatus');

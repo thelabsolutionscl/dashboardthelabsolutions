@@ -5580,7 +5580,7 @@ function openUserMenu(){
   const ds=document.getElementById('umDriveStatus');if(ds){const v=localStorage.getItem('google_drive_client_id');ds.textContent=v?'✓ Client ID configurado':'Sin configurar — necesitas un Client ID de Google Cloud';}
   const pu=document.getElementById('umProxyUrl');if(pu){pu.value=localStorage.getItem('proxy_url')||'';}
   const pk=document.getElementById('umProxyKey');if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
-  const ps=document.getElementById('umProxyStatus');if(ps){const v=localStorage.getItem('proxy_url');ps.textContent=v?'✓ Proxy activo — Airtable y Claude viven en el Worker':'Sin proxy — claves guardadas localmente en el navegador';}
+  const ps=document.getElementById('umProxyStatus');if(ps){const v=(typeof _proxyCfg==='function')&&_proxyCfg();ps.textContent=v?'✓ Proxy activo — Airtable y Claude viven en el Worker':'Sin proxy — claves guardadas localmente en el navegador';}
   const pt=document.getElementById('umPrinterTunnel');if(pt){pt.value=localStorage.getItem('printer_tunnel')||'';}
   const ptk=document.getElementById('umPrinterToken');if(ptk){const v=localStorage.getItem('printer_tunnel_token');ptk.value=v?'••••••••'+v.slice(-4):'';ptk.onfocus=()=>{if(ptk.value.startsWith('••')){ptk.value='';}};ptk.onblur=()=>{if(!ptk.value){const vv=localStorage.getItem('printer_tunnel_token');ptk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const pts=document.getElementById('umPrinterTunnelStatus');if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=(v?`✓ Túnel personalizado: ${v}`:'Default: https://printers.thelab.solutions')+(localStorage.getItem('printer_tunnel_token')?' · 🔑 token':'');}
@@ -6344,7 +6344,7 @@ async function loadAllData(){
     // Detectar token inválido (401) — solo avisa, no bloquea el dashboard
     const tokenErr=msg=>/401|403|Sin token/.test(msg||'');
     if(cRes.status==='rejected'&&tokenErr(cRes.reason?.message)){
-      const usingProxy=!!(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key'));
+      const usingProxy=!!_proxyCfg();
       if(usingProxy){
         setStatus('proxy error',false);
         toast('⚠ Error de autenticación en el proxy — verifica la clave en Mi cuenta','error');
@@ -6393,7 +6393,7 @@ async function loadAllData(){
 // modificados desde el último refresco) y reconcilia con un fetch COMPLETO cada
 // 4 ciclos (~2 h) para capturar eliminaciones, que el delta no detecta.
 async function loadAllDataSilent(){
-  const hasAuth=!!(getToken()||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));
+  const hasAuth=!!(getToken()||_proxyCfg());  // _proxyCfg incluye el proxy horneado en el deploy, no solo localStorage
   if(!hasAuth) return;
   if(Date.now()-(state.lastUpdateTs||0)<MIN_REFRESH_MS) return; // throttle
   state._silentN=(state._silentN||0)+1;
@@ -12243,7 +12243,7 @@ function initDashboard(){
   _seed('anthropic_key',_DEFAULTS.ANTHROPIC_KEY);
   initDates();
   fillCatSelects();
-  const _noRealToken=_isPlaceholder(lsGet('airtable_token'))&&!localStorage.getItem('proxy_url');
+  const _noRealToken=_isPlaceholder(lsGet('airtable_token'))&&!_proxyCfg();
   const _useDemoMode=user&&(user.role==='demo'||(user.role==='comercial'&&_noRealToken));
   if(_useDemoMode){
     enableDemoMode();
@@ -12261,7 +12261,7 @@ function initDashboard(){
     return;
   }
   slProgress(5,'Verificando credenciales...');
-  const hasAuth=!!(getToken()||(localStorage.getItem('proxy_url')&&localStorage.getItem('proxy_key')));
+  const hasAuth=!!(getToken()||_proxyCfg());  // _proxyCfg incluye el proxy horneado en el deploy, no solo localStorage
   if(!hasAuth){
     hideSysLoader();
     showTokenModal();
