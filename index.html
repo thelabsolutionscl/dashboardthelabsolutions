@@ -20808,21 +20808,47 @@ const MAIL={
     }
   },
 
+  // ── Vínculo correo ↔ CRM: matching del remitente contra la cartera ──
+  _fromEmail(s){const m=String(s||'').match(/<([^>]+)>/);const e=(m?m[1]:String(s||'')).trim();return /@/.test(e)?e.toLowerCase():'';},
+  _cliEmailMap(){
+    const map={};
+    (state.clientes||[]).forEach(c=>{const e=(c.fields['Email']||'').trim().toLowerCase();if(e&&!map[e])map[e]=c;});
+    return map;
+  },
+  crearLeadDesdeCorreo(){
+    const d=this._currentMsg; if(!d){toast('Abre un correo primero','error');return;}
+    switchTab('nuevo-lead');
+    setTimeout(()=>{
+      const set=(id,v)=>{const el=document.getElementById(id);if(el&&v)el.value=v;};
+      const dom=(this._fromEmail(d.from_email)||'').split('@')[1]||'';
+      const empresa=(d.from_name||'').trim()||(dom?dom.split('.')[0].replace(/^./,ch=>ch.toUpperCase()):'');
+      set('nl-email',d.from_email||'');
+      set('nl-contacto',d.from_name||'');
+      set('nl-empresa',empresa);
+      set('nl-origen','Contacto directo');
+      set('nl-notas','Contacto por correo — asunto: "'+(d.subject||'')+'"');
+      toast('Formulario prellenado desde el correo ✓','success');
+    },150);
+  },
+
   renderMsgList(msgs){
     const list=document.getElementById('mailList');
     if(!msgs.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">Sin mensajes</div>';this._updateSelBar();return;}
     this._sel=this._sel||new Set();
+    const cmap=this._cliEmailMap();
     list.innerHTML=msgs.map(m=>{
       const from=this.parseFrom(m.from);
       const date=this.fmtDate(m.date);
       const unread=!m.seen?'unread':'';
       const sel=m.uid===this.selUid?'selected':'';
       const checked=this._sel.has(m.uid);
+      const cli=cmap[this._fromEmail(m.from)];
+      const cliChip=cli?`<span title="Cliente en CRM: ${this.esc(cli.fields['Empresa']||cli.fields['Contacto']||'')} — clic para abrir la ficha" onclick="event.stopPropagation();openClienteDetalle('${cli.id}')" style="flex-shrink:0;font-size:11px;cursor:pointer;line-height:1">👤</span> `:'';
       return `<div class="mail-item ${unread} ${sel} ${checked?'sel-checked':''}" data-uid="${m.uid}" onclick="MAIL.readMsg(${m.uid})">
         <input type="checkbox" class="mail-item-chk" ${checked?'checked':''} onclick="event.stopPropagation();MAIL.toggleSelect(${m.uid},this.checked)" title="Seleccionar">
         <div class="mail-item-main">
           <div class="mail-item-row1">
-            <span class="mail-item-from">${m.flagged?'<span class="mail-item-star">★</span> ':''}${this.esc(from)}</span>
+            <span class="mail-item-from">${m.flagged?'<span class="mail-item-star">★</span> ':''}${cliChip}${this.esc(from)}</span>
             <span class="mail-item-date">${date}</span>
           </div>
           <div class="mail-item-subject">${this.esc(m.subject)}</div>
@@ -20881,10 +20907,16 @@ const MAIL={
     if(data.error){this._currentMsg=null;document.getElementById('mailRdrBody').innerHTML=`<div style="color:var(--danger)">${this.esc(data.error)}</div>`;return;}
     this._currentMsg=data;
     document.getElementById('mailRdrSubject').textContent=data.subject;
+    // Vínculo con el CRM: ¿el remitente es un cliente conocido?
+    const _cli=this._cliEmailMap()[this._fromEmail(data.from_email)];
+    const _propio=/@thelab\.solutions$/i.test(this._fromEmail(data.from_email));
+    const _crmLine=_cli
+      ?`<div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="badge-cliente">👤 Cliente: ${this.esc(_cli.fields['Empresa']||_cli.fields['Contacto']||'—')}</span><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="openClienteDetalle('${_cli.id}')">Ver ficha CRM →</button></div>`
+      :(!_propio&&this._fromEmail(data.from_email)?`<div style="margin-top:7px"><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="MAIL.crearLeadDesdeCorreo()" title="Crea un lead en el CRM con los datos de este correo">➕ Crear lead desde este correo</button></div>`:'');
     document.getElementById('mailRdrMeta').innerHTML=
       `<strong>${this.esc(data.from_name||data.from_email)}</strong> &lt;${this.esc(data.from_email)}&gt;<br>`+
       `Para: ${data.to.map(t=>this.esc(t)).join(', ')}<br>`+
-      `${data.date}`;
+      `${data.date}`+_crmLine;
     // Render body
     const bodyDiv=document.getElementById('mailRdrBody');
     bodyDiv.innerHTML='';
