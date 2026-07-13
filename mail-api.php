@@ -22,7 +22,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-11-diagnostics');
+define('MAIL_API_BUILD', '2026-07-13-bcc');
 
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
 // Bufferizamos TODA la salida: si ocurre un fatal de PHP, descartamos lo que
@@ -194,7 +194,7 @@ function parse_part($conn, $msgno, $structure, $partno, &$html, &$text, &$atts) 
 }
 
 // ── Envío SMTP ────────────────────────────────────────────────
-function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments = []) {
+function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments = [], $bcc = '') {
     $sock = @fsockopen('ssl://' . SMTP_HOST, SMTP_PORT, $errno, $errstr, 15);
     if (!$sock) return "No se pudo conectar al servidor SMTP ($errstr)";
 
@@ -227,9 +227,12 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $at
         $r = $smtp_cmd("MAIL FROM:<$user>");
         if (!str_starts_with($r, '250')) throw new Exception("MAIL FROM: $r");
 
+        // BCC: entra como RCPT TO (recibe el correo) pero NO va en las cabeceras,
+        // así los demás destinatarios no lo ven — comportamiento estándar de copia oculta.
         $recipients = array_filter(array_map('trim', array_merge(
             explode(',', $to),
-            $cc ? explode(',', $cc) : []
+            $cc  ? explode(',', $cc)  : [],
+            $bcc ? explode(',', $bcc) : []
         )));
         foreach ($recipients as $rcpt) {
             $addr = preg_match('/<(.+)>/', $rcpt, $m) ? $m[1] : $rcpt;
@@ -469,6 +472,7 @@ case 'read':
 case 'send':
     $to        = trim($_POST['to']        ?? '');
     $cc        = trim($_POST['cc']        ?? '');
+    $bcc       = trim($_POST['bcc']       ?? '');
     $subject   = trim($_POST['subject']   ?? '');
     $body_html = $_POST['body']           ?? '';
     $from_name = trim($_POST['from_name'] ?? '');
@@ -491,7 +495,7 @@ case 'send':
         }
     }
 
-    $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments);
+    $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments, $bcc);
     if ($err) { echo json_encode(['error' => $err]); exit; }
 
     // Guardar en carpeta Enviados via IMAP APPEND

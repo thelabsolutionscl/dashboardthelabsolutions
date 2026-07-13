@@ -4492,10 +4492,15 @@ function _reportarResultados(muts) {
       <span class="mail-compose-lbl">CC</span>
       <input id="mailCmpCc" type="email" placeholder="">
     </div>
+    <div class="mail-compose-field" id="mailBccRow" style="display:none">
+      <span class="mail-compose-lbl">CCO</span>
+      <input id="mailCmpBcc" type="email" placeholder="copia oculta — los demás no lo ven">
+    </div>
     <div class="mail-compose-field">
       <span class="mail-compose-lbl">Asunto</span>
       <input id="mailCmpSubject" type="text" placeholder="Asunto del mensaje">
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px" onclick="MAIL.toggleCc()">CC</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px" onclick="MAIL.toggleBcc()" title="Copia oculta">CCO</button>
     </div>
     <div class="mail-compose-toolbar">
       <button class="mail-cmp-tool" onclick="document.execCommand('bold')" title="Negrita"><b>B</b></button>
@@ -6294,6 +6299,16 @@ function _applyMonitorSistema(recs){
   if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){logErr('monitorSistema:wati',e);}}
   const finRec=recs.find(r=>r.fields['Name']==='FIN_VENTAS');
   if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){logErr('monitorSistema:fin',e);}}
+  // Firmas de correo respaldadas: restaura las que falten localmente (una firma
+  // recién editada en este navegador no se pisa — lo local gana hasta guardarse).
+  const sigRec=recs.find(r=>r.fields['Name']==='MAIL_SIGNATURES');
+  if(sigRec){
+    state.mailSigsRecordId=sigRec.id;state._mailSigsRemote=sigRec.fields['Notes']||'{}';
+    try{
+      const sigs=JSON.parse(sigRec.fields['Notes']||'{}');
+      Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
+    }catch(e){logErr('monitorSistema:sigs',e);}
+  }
   renderWatiConfigBtn();
 }
 // Render protegido: si una sección falla por un registro con datos inesperados,

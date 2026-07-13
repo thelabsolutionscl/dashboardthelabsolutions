@@ -26,6 +26,9 @@ const MAIL={
     let list=[]; try{list=JSON.parse(localStorage.getItem(this._acctsKey())||'[]');}catch(e){list=[];}
     if(!Array.isArray(list)) list=[];
     if(!list.some(a=>a&&a.email===u.username)) list.unshift({email:u.username,name:u.name||''});
+    // hola@ es la casilla comercial compartida: siempre disponible en el selector
+    // (al elegirla por primera vez pide su clave, que queda guardada por-casilla).
+    if(!list.some(a=>a&&a.email==='hola@thelab.solutions')) list.push({email:'hola@thelab.solutions',name:'The Lab Solutions'});
     return list.filter(a=>a&&a.email);
   },
   setAccounts(list){const k=this._acctsKey();if(k) localStorage.setItem(k,JSON.stringify(list));},
@@ -654,6 +657,10 @@ const MAIL={
     this.fillContactsDatalist();
     document.getElementById('mailCmpTo').value=opts.to||'';
     document.getElementById('mailCmpCc').value=opts.cc||'';
+    const bccEl=document.getElementById('mailCmpBcc'); if(bccEl) bccEl.value=opts.bcc||'';
+    // Muestra las filas CC/CCO solo si traen valor (el botón las abre a mano)
+    const ccRow=document.getElementById('mailCcRow'); if(ccRow) ccRow.style.display=opts.cc?'flex':'none';
+    const bccRow=document.getElementById('mailBccRow'); if(bccRow) bccRow.style.display=opts.bcc?'flex':'none';
     document.getElementById('mailCmpSubject').value=opts.subject||'';
     const sig=this.sigHtml();
     document.getElementById('mailCmpBody').innerHTML=(opts.body||'')+sig;
@@ -672,7 +679,29 @@ const MAIL={
   // la firma ya existente se conserva para esa casilla (misma clave).
   _sigKey(){const a=this.activeAccount();return a?'thelab_mail_sig_'+a:null;},
   getSig(){const k=this._sigKey();return k?localStorage.getItem(k)||'':null;},
-  setSig(html){const k=this._sigKey();if(k) localStorage.setItem(k,html);},
+  setSig(html){
+    const k=this._sigKey();if(k) localStorage.setItem(k,html);
+    // Respaldo permanente: la firma queda también en Airtable (sobrevive a
+    // limpiar el caché y aparece igual en otros dispositivos).
+    this._saveSigsAirtable();
+  },
+  async _saveSigsAirtable(){
+    try{
+      // Junta las firmas locales de todas las cuentas y las mezcla sobre lo ya
+      // respaldado (así no se pisan firmas guardadas desde otro computador).
+      let prev={};try{prev=JSON.parse(state._mailSigsRemote||'{}');}catch(e){}
+      const all={...prev};
+      this.accounts().forEach(a=>{const v=localStorage.getItem('thelab_mail_sig_'+a.email);if(v) all[a.email]=v;});
+      const notes=JSON.stringify(all).slice(0,95000);
+      if(state.mailSigsRecordId){
+        await airtableWrite('Monitor Sistema','PATCH',state.mailSigsRecordId,{'Notes':notes});
+      }else{
+        const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'MAIL_SIGNATURES','Notes':notes});
+        if(r?.id) state.mailSigsRecordId=r.id;
+      }
+      state._mailSigsRemote=notes;
+    }catch(e){console.warn('[Firmas] no se pudo respaldar en Airtable (queda local):',e.message);}
+  },
 
   sigHtml(){
     const s=this.getSig();
@@ -748,6 +777,7 @@ const MAIL={
   },
   toggleCompose(){document.getElementById('mailComposePanel').classList.toggle('collapsed');},
   toggleCc(){const r=document.getElementById('mailCcRow');r.style.display=r.style.display==='none'?'flex':'none';},
+  toggleBcc(){const r=document.getElementById('mailBccRow');r.style.display=r.style.display==='none'?'flex':'none';},
 
   reply(){
     if(!this._currentMsg) return;
@@ -779,6 +809,7 @@ const MAIL={
     if(this._sending) return;
     const to=document.getElementById('mailCmpTo').value.trim();
     const cc=document.getElementById('mailCmpCc').value.trim();
+    const bcc=(document.getElementById('mailCmpBcc')?.value||'').trim();
     const subject=document.getElementById('mailCmpSubject').value.trim();
     const body=document.getElementById('mailCmpBody').innerHTML;
     const status=document.getElementById('mailSendStatus');
@@ -786,6 +817,7 @@ const MAIL={
     if(!to) return err('Falta el destinatario');
     if(!this._validEmails(to)) return err('Email de destinatario inválido');
     if(cc&&!this._validEmails(cc)) return err('Email en CC inválido');
+    if(bcc&&!this._validEmails(bcc)) return err('Email en CCO inválido');
     if(!subject) return err('Falta el asunto');
     this._sending=true;
     const btn=document.getElementById('mailSendBtn');
@@ -793,7 +825,7 @@ const MAIL={
     status.textContent='Enviando...';status.style.color='var(--text3)';
     try{
       const a=this.auth();
-      const params={action:'send',to,cc,subject,body,from_name:a.from_name};
+      const params={action:'send',to,cc,bcc,subject,body,from_name:a.from_name};
       if(this._cmpAtts.length) params.atts=JSON.stringify(this._cmpAtts.map(x=>({name:x.name,type:x.type,data:x.data})));
       const data=await this.post(params);
       if(data.error) err(data.error);
