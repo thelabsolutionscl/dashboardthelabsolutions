@@ -43,13 +43,21 @@ jobs:
           ELEVENLABS: ${{ secrets.ELEVENLABS }}
           PRINTER_TUNNEL_TOKEN: ${{ secrets.PRINTER_TUNNEL_TOKEN }}
         run: |
-          sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
+          # MODO PROXY (ver SECURITY.md): con PROXY_URL+PROXY_KEY configurados, los
+          # tokens de Airtable y Anthropic NO se hornean en el HTML público — quedan
+          # como %%…%% (el cliente los neutraliza) y todas las llamadas van por el
+          # Worker, que guarda los tokens reales como secretos server-side.
+          if [ -n "${PROXY_URL}" ] && [ -n "${PROXY_KEY}" ]; then
+            echo "Modo proxy: AIRTABLE_TOKEN y ANTHROPIC_KEY no se inyectan en el HTML."
+          else
+            sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
+            sed -i "s|%%ANTHROPIC_KEY%%|${ANTHROPIC_KEY}|g" index.html
+          fi
           sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
           sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
           sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
           sed -i "s|%%SII_RUT_EMISOR%%|${SII_RUT_EMISOR}|g" index.html
           sed -i "s|%%SII_RAZON_SOCIAL%%|${SII_RAZON_SOCIAL}|g" index.html
-          sed -i "s|%%ANTHROPIC_KEY%%|${ANTHROPIC_KEY}|g" index.html
           sed -i "s|%%PROXY_URL%%|${PROXY_URL}|g" index.html
           sed -i "s|%%PROXY_KEY%%|${PROXY_KEY}|g" index.html
           sed -i "s|%%PRINTER_TUNNEL%%|${PRINTER_TUNNEL}|g" index.html

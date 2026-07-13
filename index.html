@@ -5554,12 +5554,14 @@ function generarNumeroCotizacion(){
 // Migra automáticamente cualquier valor antiguo guardado en sessionStorage.
 function lsGet(k){return localStorage.getItem(k)||sessionStorage.getItem(k)||'';}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){toast('Sin espacio de almacenamiento local','error');}sessionStorage.removeItem(k);}
-function getAnthropicKey(){return lsGet('anthropic_key')||_DEFAULTS.ANTHROPIC_KEY;}
+// Un %%PLACEHOLDER%% sin reemplazar (deploy en modo proxy) jamás debe viajar como credencial.
+function _realKey(v){return(v&&!String(v).startsWith('%%'))?v:'';}
+function getAnthropicKey(){return _realKey(lsGet('anthropic_key'))||_realKey(_DEFAULTS.ANTHROPIC_KEY);}
 function showAnthropicModal(cb){window._anthropicCb=cb||null;const m=document.getElementById('anthropicModal');m.style.display='flex';setTimeout(()=>{const i=document.getElementById('anthropicKeyInput');i.value=lsGet('anthropic_key');i.focus();i.onkeydown=e=>{if(e.key==='Enter') saveAnthropicKey();if(e.key==='Escape') closeAnthropicModal();};},50);}
 function closeAnthropicModal(){document.getElementById('anthropicModal').style.display='none';}
 function saveAnthropicKey(){const v=(document.getElementById('anthropicKeyInput').value||'').trim();if(!v){toast('API Key requerida','error');return;}lsSet('anthropic_key',v);closeAnthropicModal();toast('✓ API Key guardada','success');if(window._anthropicCb){window._anthropicCb(v);window._anthropicCb=null;}}
-function getToken(){return lsGet('airtable_token')||(_DEFAULTS.AIRTABLE_TOKEN.startsWith('%%')?'':_DEFAULTS.AIRTABLE_TOKEN);}
-function getOpenAIKey(){return localStorage.getItem('fp_openai_key')||_DEFAULTS.OPENAI_KEY;}
+function getToken(){return _realKey(lsGet('airtable_token'))||_realKey(_DEFAULTS.AIRTABLE_TOKEN);}
+function getOpenAIKey(){return _realKey(localStorage.getItem('fp_openai_key'))||_realKey(_DEFAULTS.OPENAI_KEY);}
 // ── VENDOR LAYER ─────────────────────────────────────────────
 function currentVendorId(){const u=AUTH.getUser();return u?u.username.split('@')[0].toLowerCase():null;}
 function isVendorMode(){const u=AUTH.getUser();return!!(u&&u.role==='comercial');}
@@ -6414,6 +6416,9 @@ function _proxyCfg(){
   const key=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
   return(url&&key)?{url:url.replace(/\/$/,''),key}:null;
 }
+// ¿Hay CÓMO llamar a Claude? (proxy configurado O key local) — las compuertas de
+// features IA deben preguntar esto, no si existe una key en el navegador.
+function hasClaudeAccess(){return !!(_proxyCfg()||getAnthropicKey());}
 async function callClaude(system,user){
   // Con proxy: la API key de Anthropic vive en el Worker, no en el navegador
   const px=_proxyCfg();
@@ -9807,8 +9812,7 @@ async function _gfSuggest(){
   const tipo=a.tipo||'producto',desc=a.descripcion||'',mat=a.material||'a elección',color=a.color||'',qty=a.cantidad||1,urg=a.urgencia==='urgente';
   let item={desc:(desc||tipo).slice(0,120),und:qty,costoUnit:0,ventaUnit:0};
   try{
-    const key=(typeof getAnthropicKey==='function')?getAnthropicKey():'';
-    if(typeof callClaude==='function'&&key&&!key.startsWith('%%')){
+    if(typeof callClaude==='function'&&typeof hasClaudeAccess==='function'&&hasClaudeAccess()){
       try{showAgentWorking('QUOTE',{verb:'está estimando el precio…',messages:['Estimando costos…','Calculando el precio de venta…']});}catch(e){}
       const sys='Eres un cotizador experto de The Lab Solutions (impresion 3D, letreros neon, trofeos) en Chile. Moneda CLP. Devuelve SOLO un JSON {"desc":"descripcion corta del item","costo":NUM,"venta":NUM} con costo y venta UNITARIOS netos (sin IVA) realistas para el mercado chileno, considerando la urgencia si aplica. Sin texto adicional fuera del JSON.';
       const user='Producto: '+tipo+'\nDescripcion: '+desc+'\nMaterial: '+mat+'\nColor/acabado: '+color+'\nCantidad: '+qty+'\nUrgente: '+(urg?'si (+25%)':'no');
@@ -12061,14 +12065,20 @@ function initDashboard(){
   }catch(e){}
   // El sitio ya no usa WordPress: limpiar credenciales antiguas (evita 401 y fugas)
   try{localStorage.removeItem('wp_config');}catch(e){}
-  // Auto-seed tokens — sobreescribe si el valor es un placeholder no reemplazado
+  // Auto-seed tokens — sobreescribe si el valor es un placeholder no reemplazado.
+  // En modo proxy el deploy deja %%…%% a propósito: en ese caso NO se siembra y
+  // además se limpia cualquier placeholder que una versión antigua haya guardado.
   const _isPlaceholder=v=>!v||v.startsWith('%%');
-  if(_isPlaceholder(lsGet('airtable_token'))) lsSet('airtable_token',_DEFAULTS.AIRTABLE_TOKEN);
-  if(_isPlaceholder(localStorage.getItem('fp_openai_key'))) localStorage.setItem('fp_openai_key',_DEFAULTS.OPENAI_KEY);
-  if(_isPlaceholder(localStorage.getItem('google_drive_client_id'))) localStorage.setItem('google_drive_client_id',_DEFAULTS.GOOGLE_CLIENT_ID);
-  if(_isPlaceholder(localStorage.getItem('sii_worker_url'))) localStorage.setItem('sii_worker_url',_DEFAULTS.SII_WORKER_URL);
-  if(_isPlaceholder(localStorage.getItem('sii_cfg'))) localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL}));
-  if(_isPlaceholder(lsGet('anthropic_key'))) lsSet('anthropic_key',_DEFAULTS.ANTHROPIC_KEY);
+  const _seed=(k,v)=>{
+    if(!_isPlaceholder(v)){ if(_isPlaceholder(lsGet(k))) lsSet(k,v); }
+    else if((localStorage.getItem(k)||'').startsWith('%%')){ try{localStorage.removeItem(k);sessionStorage.removeItem(k);}catch(e){} }
+  };
+  _seed('airtable_token',_DEFAULTS.AIRTABLE_TOKEN);
+  _seed('fp_openai_key',_DEFAULTS.OPENAI_KEY);
+  _seed('google_drive_client_id',_DEFAULTS.GOOGLE_CLIENT_ID);
+  _seed('sii_worker_url',_DEFAULTS.SII_WORKER_URL);
+  if(!_isPlaceholder(_DEFAULTS.SII_WORKER_URL)&&_isPlaceholder(localStorage.getItem('sii_cfg'))) localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL}));
+  _seed('anthropic_key',_DEFAULTS.ANTHROPIC_KEY);
   initDates();
   fillCatSelects();
   const _noRealToken=_isPlaceholder(lsGet('airtable_token'))&&!localStorage.getItem('proxy_url');

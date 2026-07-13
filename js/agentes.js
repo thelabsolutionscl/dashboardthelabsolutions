@@ -901,8 +901,7 @@ async function runAgentChain(pedidoId,solicitudOverride){
 
 function _offerAgentChain(numPedido,solicitud){
   try{
-    const k=typeof getAnthropicKey==='function'?getAnthropicKey():null;
-    if(!k||k.startsWith('%%')) return;
+    if(typeof hasClaudeAccess!=='function'||!hasClaudeAccess()) return;
     const nuevo=state.pedidos.find(x=>x.fields['N° Pedido']===numPedido);
     if(!nuevo) return;
     if(confirm(`⚡ ¿Generar Ficha Técnica + Checklist QA con IA para ${numPedido}?`)) runAgentChain(nuevo.id,solicitud);

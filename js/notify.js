@@ -319,8 +319,7 @@ const NOTIFY={
     let ceoHtml='';
     if(this._prefs.dailySummaryCEO){
       try{
-        const k=typeof getAnthropicKey==='function'?getAnthropicKey():null;
-        if(k&&!k.startsWith('%%')&&typeof AGENTES_CFG!=='undefined'){
+        if(typeof hasClaudeAccess==='function'&&hasClaudeAccess()&&typeof AGENTES_CFG!=='undefined'){
           const ceoCfg=AGENTES_CFG.find(a=>a.id==='CEO');
           if(ceoCfg){
             const ctx=state.loaded?buildAgentContext('CEO'):'';

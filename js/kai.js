@@ -341,12 +341,14 @@ CAPACIDADES Y REGLAS:
     const to=setTimeout(()=>{ timedOut=true; try{ctrl.abort();}catch(e){} },60000);
 
     try{
+      // Con proxy configurado, la key de Anthropic vive en el Worker (streaming pasa igual)
+      const px = (typeof window._proxyCfg==='function') ? window._proxyCfg() : null;
       // reuse dashboard's stored Anthropic key
       let key = (typeof window.getAnthropicKey==='function') ? window.getAnthropicKey() : null;
       if(!key){ key = localStorage.getItem('anthropic_key'); }
       // Strip non-printable-ASCII chars that break fetch headers (ISO-8859-1 enforcement)
       if(key) key = key.replace(/[^\x20-\x7E]/g,'').trim();
-      if(!key||key.startsWith('%%')||key==='undefined'){
+      if(!px && (!key||key.startsWith('%%')||key==='undefined')){
         clearTimeout(to); JV.ctrl=null; popUser();
         $typ.classList.remove('jvs-cursor');
         $typ.textContent='No hay API Key configurada. Configúrala desde el dashboard (botón de ajustes) y vuelve a intentar.';
@@ -368,7 +370,9 @@ CAPACIDADES Y REGLAS:
         const reqBody=new Blob([JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, system:SYS_BLOCKS(), tools:KAI_TOOLS, messages:convo })],{type:'application/json'});
         const RETRY=[429,500,502,503,529]; let r=null;
         for(let attempt=0; attempt<3 && !timedOut; attempt++){
-          r=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST', signal:ctrl.signal, headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}, body:reqBody });
+          r=await fetch(px ? px.url+'/anthropic/v1/messages' : 'https://api.anthropic.com/v1/messages',{ method:'POST', signal:ctrl.signal,
+            headers: px ? {'Content-Type':'application/json','X-App-Key':px.key}
+                        : {'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}, body:reqBody });
           if(r.ok || !RETRY.includes(r.status) || attempt===2) break;
           $typ.textContent='Reintentando conexión…';
           await new Promise(res=>setTimeout(res,700*(attempt+1)));

@@ -534,7 +534,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
 {"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|lightning|adaptive|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
-    if(!getAnthropicKey()){showAnthropicModal(()=>analizarIA());return;}
+    if(!(typeof hasClaudeAccess==='function'?hasClaudeAccess():getAnthropicKey())){showAnthropicModal(()=>analizarIA());return;}
     const btn=el('slBtnIA');btn.disabled=true;btn.textContent='⏳ Analizando…';
     try{showAgentWorking('PRODUCTION',{name:'KAI-Slicer',emoji:'🖨️',verb:'está calculando los parámetros de impresión…',messages:['Analizando la geometría de la pieza…','Eligiendo capas, relleno y soportes…','Ajustando velocidad y temperatura…']});}catch(e){}
     try{
