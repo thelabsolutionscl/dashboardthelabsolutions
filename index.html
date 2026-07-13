@@ -2047,6 +2047,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- OVERVIEW -->
 <div class="tab-panel active" id="tab-overview">
   <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Meta</button><div style="position:relative"><button class="btn btn-ghost btn-sm" onclick="openOvCustomize(event)" title="Personalizar overview" style="font-size:14px;line-height:1">⚙</button></div></div></div>
+  <!-- SALUDO DE LA MAÑANA: top 3 urgencias del día, 1 vez al día, descartable -->
+  <div id="morningBrief" style="display:none;margin-bottom:18px;background:linear-gradient(135deg,rgba(0,212,204,0.09),rgba(0,212,204,0.02));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:14px 16px"></div>
   <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-card yellow"><div class="kpi-label">Revenue Semana</div><div class="kpi-skeleton"></div></div>
     <div class="kpi-card green"><div class="kpi-label">Pedidos Activos</div><div class="kpi-skeleton"></div></div>
@@ -8053,6 +8055,45 @@ function switchTab(name){
 
 // ── OVERVIEW ──────────────────────────────────────────────────
 // ── Centro de acciones del día: junta lo accionable de todos los agentes en una lista priorizada ──
+// ── SALUDO DE LA MAÑANA ────────────────────────────────────────
+// Al abrir el dashboard, una vez al día: saludo + las 3 urgencias más
+// importantes (reutiliza los items ya calculados por renderAccionesHoy).
+function _briefKey(){const u=(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser())||{};return 'thelab_brief_'+(u.username||'guest');}
+function dismissMorningBrief(){
+  try{localStorage.setItem(_briefKey(),new Date().toISOString().slice(0,10));}catch(e){}
+  const el=document.getElementById('morningBrief');if(el)el.style.display='none';
+}
+function morningBriefIA(){
+  const hoy=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+  runAgentInline('CEO',`Hoy es ${hoy}. Dame el resumen ejecutivo de HOY para arrancar el día: las 3 prioridades más urgentes según los datos (y por qué cada una), en formato breve y accionable.`);
+}
+function renderMorningBrief(){
+  const el=document.getElementById('morningBrief');if(!el)return;
+  const today=new Date().toISOString().slice(0,10);
+  let seen='';try{seen=localStorage.getItem(_briefKey())||'';}catch(e){}
+  if(seen===today){el.style.display='none';return;}
+  const u=(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser())||{};
+  const nombre=(u.name||'').trim().split(/\s+/)[0]||'';
+  const h=new Date().getHours();
+  const saludo=h<12?'Buenos días':h<20?'Buenas tardes':'Buenas noches';
+  const items=(window._accionesHoyItems||[]).slice().sort((a,b)=>a.prio-b.prio).slice(0,3);
+  const top=items.length?items.map((it,i)=>`<div style="display:flex;align-items:center;gap:9px;padding:6px 0${i<items.length-1?';border-bottom:1px dashed var(--border)':''}">
+      <span style="flex-shrink:0;min-width:18px;height:18px;border-radius:5px;background:var(--surface3);color:${it.color};font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">${i+1}</span>
+      <span style="font-size:14px;flex-shrink:0">${it.icon}</span>
+      <span style="flex:1;font-size:12px;color:var(--text2);min-width:0">${it.txt}</span>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:3px 10px;color:${it.color}" onclick="${it.fn}">${it.btn}</button>
+    </div>`).join('')
+    :'<div style="font-size:12px;color:var(--accent3);padding:4px 0">✅ Sin urgencias pendientes — buen momento para prospectar o adelantar producción.</div>';
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-size:18px">🌅</span>
+      <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;color:var(--text)">${saludo}${nombre?', '+escapeHtml(nombre):''} 👋</div>
+      <div style="font-size:11px;color:var(--text3)">${items.length?'Lo más importante de hoy, en orden:':'Así arranca el día:'}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="morningBriefIA()" title="Análisis completo del día con el CEO_AGENT" style="flex-shrink:0">🤖 Análisis IA</button>
+      <button class="btn btn-ghost btn-sm" onclick="dismissMorningBrief()" title="Ocultar hasta mañana" style="flex-shrink:0;padding:3px 9px">✕</button>
+    </div>${top}`;
+  el.style.display='';
+}
+
 function renderAccionesHoy(){
   const card=document.getElementById('accionesHoyCard'),list=document.getElementById('accionesHoyList');
   if(!card||!list)return;
@@ -8108,6 +8149,8 @@ function renderAccionesHoy(){
       else if(fc.rate>0&&fc.weeks<1.5)push('maq',2,'🔧',`${escapeHtml(mq.nombre)}: <b>${escapeHtml(fc.tipo)}</b> en ~${Math.max(1,Math.round(fc.weeks*7))} días`,'Ver máquinas',`switchTab('maquinas')`,'var(--warn)');
     });}catch(e){}
   }
+  window._accionesHoyItems=items.slice();   // reutilizado por el saludo de la mañana (top 3)
+  try{renderMorningBrief();}catch(e){}
   if(!items.length){card.style.display='none';return;}
   card.style.display='';
   const cnt=document.getElementById('accionesHoyCount');if(cnt)cnt.textContent=`· ${items.length} pendiente${items.length!==1?'s':''}`;
