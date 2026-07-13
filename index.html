@@ -7022,6 +7022,7 @@ function renderAlertas(){
   try{NOTIFY.syncAlertas(alertas);}catch(e){}
   try{checkAgentSuggestions();}catch(e){}
   try{checkBackupReminder();}catch(e){}
+  try{_pruneLocalLogs();}catch(e){}
 
   // agrupación: >=3 del mismo tipo → una sola fila
   const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
@@ -9424,6 +9425,55 @@ function checkBackupReminder(){
   }catch(e){}
 }
 window.backupAirtable=backupAirtable;
+// ── PODA DE REGISTROS LOCALES ──────────────────────────────────
+// localStorage da ~5MB por dominio y los registros operativos (seguimientos,
+// cobranzas, post-entrega, corridas de agentes) crecen sin tope. Una vez al día
+// se sueltan las entradas de más de 180 días para que el espacio lo ocupe
+// siempre lo reciente (las notas de clientes/pedidos NO se tocan: son datos).
+function _pruneLocalLogs(){
+  const hoy=new Date().toISOString().slice(0,10);
+  if(localStorage.getItem('thelab_prune_last')===hoy) return;
+  try{localStorage.setItem('thelab_prune_last',hoy);}catch(e){}
+  const lim=Date.now()-180*864e5;
+  // Seguimientos y post-entrega: mapas {recId:{ts,via}}
+  ['thelab_fu_log_v1','thelab_postdel_log_v1'].forEach(k=>{
+    try{
+      const log=JSON.parse(localStorage.getItem(k)||'{}');let n=0;
+      Object.keys(log).forEach(id=>{const ts=log[id]&&log[id].ts;if(typeof ts==='number'&&ts<lim){delete log[id];n++;}});
+      if(n) localStorage.setItem(k,JSON.stringify(log));
+    }catch(e){}
+  });
+  // Cobranza: {empresa:[{ts,via},…]} — se filtra cada lista; vacía → fuera
+  try{
+    const log=JSON.parse(localStorage.getItem('thelab_cob_log_v1')||'{}');let n=0;
+    Object.keys(log).forEach(emp=>{
+      const arr=Array.isArray(log[emp])?log[emp].filter(e=>e&&!(typeof e.ts==='number'&&e.ts<lim)):[];
+      if(arr.length!==(log[emp]||[]).length) n++;
+      if(arr.length) log[emp]=arr; else delete log[emp];
+    });
+    if(n) localStorage.setItem('thelab_cob_log_v1',JSON.stringify(log));
+  }catch(e){}
+  // Historial de agentes: al escribir ya se acota a 100 corridas; aquí además
+  // se sueltan las de +180 días y se recorta el texto de las de +30 días
+  // (el informe completo solo importa mientras es reciente).
+  try{
+    const runs=JSON.parse(localStorage.getItem('thelab_agent_runs_v1')||'[]');
+    const lim30=Date.now()-30*864e5;let n=0;
+    const out=runs.filter(r=>{
+      const t=Date.parse(r&&r.time||'');
+      if(!isNaN(t)&&t<lim){n++;return false;}
+      return true;
+    }).map(r=>{
+      const t=Date.parse(r&&r.time||'');
+      if(!isNaN(t)&&t<lim30&&(r.output||'').length>2000){n++;return Object.assign({},r,{output:r.output.slice(0,2000)+'…'});}
+      return r;
+    });
+    if(n){
+      localStorage.setItem('thelab_agent_runs_v1',JSON.stringify(out));
+      if(typeof AGENT_LOG!=='undefined'){AGENT_LOG._runs=null;AGENT_LOG._merged=null;}
+    }
+  }catch(e){}
+}
 // Conecta Google Drive una vez por sesión (gesto directo → OAuth sin bloqueos).
 // Tras esto, aprobar cotizaciones crea la carpeta sola y "Ver adjuntos" no re-pide login.
 async function connectDrive(){
