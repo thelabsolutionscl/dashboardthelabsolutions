@@ -58,8 +58,8 @@ jobs:
           sed -i "s|%%ELEVENLABS%%|${ELEVENLABS}|g" index.html
           sed -i "s|%%PRINTER_TUNNEL_TOKEN%%|${PRINTER_TUNNEL_TOKEN}|g" index.html
 
-      - name: Stamp build version (cache-busting de styles.css y futuros .js)
-        run: sed -i "s|%%BUILD%%|${GITHUB_SHA::8}|g" index.html
+      - name: Stamp build version (cache-busting de styles.css, js/* y service worker)
+        run: sed -i "s|%%BUILD%%|${GITHUB_SHA::8}|g" index.html sw.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
