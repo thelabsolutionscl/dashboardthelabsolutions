@@ -1,0 +1,69 @@
+name: Automatización semanal
+
+# Corre solo en el servidor (GitHub Actions) — no necesita que nadie abra el dashboard.
+# 1) Respalda TODAS las tablas de Airtable a un JSON y lo guarda como artifact (90 días).
+# 2) (Opcional) Envía un resumen por correo vía mail-api.thelab.solutions.
+#
+# Secrets que usa:
+#   AIRTABLE        (ya existe — el mismo del deploy)
+#   MAIL_USER       (opcional: casilla que envía, p. ej. hola@thelab.solutions)
+#   MAIL_PASS       (opcional: contraseña de esa casilla en cPanel)
+#   REPORT_EMAIL    (opcional: destinatario del resumen; sin él no se envía correo)
+
+on:
+  schedule:
+    # Lunes 12:00 UTC = 08:00 en Chile en invierno (UTC-4); 09:00 en horario de verano (UTC-3).
+    - cron: '0 12 * * 1'
+  workflow_dispatch: {} # también se puede lanzar a mano desde la pestaña Actions
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Backup Airtable → JSON
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
+        run: node scripts/backup-airtable.mjs
+
+      - name: Guardar backup como artifact (90 días)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-crm-${{ github.run_id }}
+          path: backup/
+          retention-days: 90
+
+      - name: Enviar resumen por correo (solo si hay secrets de correo)
+        env:
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          REPORT_EMAIL: ${{ secrets.REPORT_EMAIL }}
+        run: |
+          if [ -z "${MAIL_USER}" ] || [ -z "${MAIL_PASS}" ] || [ -z "${REPORT_EMAIL}" ]; then
+            echo "Secrets de correo no configurados (MAIL_USER/MAIL_PASS/REPORT_EMAIL) — resumen omitido."
+            exit 0
+          fi
+          BODY=$(sed 's/$/<br>/' backup/resumen.txt)
+          HTTP=$(curl -s -o /tmp/mail-out.json -w "%{http_code}" \
+            --data-urlencode "user=${MAIL_USER}" \
+            --data-urlencode "pass=${MAIL_PASS}" \
+            --data-urlencode "action=send" \
+            --data-urlencode "to=${REPORT_EMAIL}" \
+            --data-urlencode "subject=💾 Backup semanal CRM — $(date -u +%Y-%m-%d)" \
+            --data-urlencode "body=${BODY}" \
+            --data-urlencode "from_name=The Lab Solutions (automático)" \
+            https://mail-api.thelab.solutions/mail-api.php)
+          cat /tmp/mail-out.json; echo
+          if [ "${HTTP}" != "200" ]; then
+            echo "::warning::El envío del resumen devolvió HTTP ${HTTP} (el backup igual quedó como artifact)."
+          fi
