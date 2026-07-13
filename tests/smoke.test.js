@@ -104,5 +104,15 @@ const ok = msg => console.log('  ✓ ' + msg);
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');
 }
 
+// ── 4. HOJA DE ESTILOS EXTERNA ─────────────────────────────────────────────
+{
+  const cssPath = path.join(__dirname, '..', 'styles.css');
+  const linkOk = /<link rel="stylesheet" href="styles\.css\?v=%%BUILD%%">/.test(SRC);
+  const cssOk = fs.existsSync(cssPath) && fs.readFileSync(cssPath, 'utf8').includes(':root{');
+  if (!linkOk) fail('index.html no referencia styles.css?v=%%BUILD%% (el deploy estampa la versión)');
+  else if (!cssOk) fail('styles.css ausente o sin las variables :root del tema');
+  else ok('styles.css presente y enlazada con cache-busting');
+}
+
 console.log(fails ? ('\n✗ Smoke: ' + fails + ' problema(s)') : '\n✓ Smoke: todo OK');
 process.exit(fails ? 1 : 0);
