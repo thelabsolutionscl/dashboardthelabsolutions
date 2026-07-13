@@ -1769,6 +1769,7 @@ document.addEventListener('click',function(e){
 //  BÚSQUEDA GLOBAL  (command palette — secciones, acciones y datos)
 // ══════════════════════════════════════════════════════════════
 let _gsResults=[];   // funciones a ejecutar, indexadas (para teclado)
+let _gsExtras=[];    // acciones secundarias por fila (chips), fuera del ciclo de teclado
 let _gsActive=-1;    // índice activo (navegación con flechas)
 let _gsInited=false;
 
@@ -1796,6 +1797,15 @@ const GS_ACTIONS=[
   {nuevo:'libro-diario',   icon:'icon-book',         title:'Nuevo Registro (Diario)', kw:'libro diario contabilidad asiento',          run:()=>{try{irALibroDiario();}catch(e){}}},
   {icon:'icon-refresh',    title:'Actualizar datos',           kw:'refrescar recargar sync sincronizar update', run:()=>{try{loadAllData();}catch(e){}}},
   {icon:'icon-settings',   title:'Mi cuenta / Configuración',  kw:'ajustes tokens api keys config cuenta',      run:()=>{try{openUserMenu();}catch(e){}}},
+  {tab:'cotizaciones',icon:'icon-correo',   title:'Seguimientos pendientes',      kw:'seguimiento followup bandeja cotizaciones sin respuesta', run:()=>{switchTab('cotizaciones');setTimeout(()=>{try{document.getElementById('fuTrayCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},300);}},
+  {tab:'finanzas',    icon:'icon-dollar',   title:'Cobranza pendiente',           kw:'cobrar cobranza facturas vencidas mora deuda',            run:()=>{switchTab('finanzas');setTimeout(()=>{try{document.getElementById('finCobranzaActions')?.scrollIntoView({behavior:'smooth'});}catch(e){}},300);}},
+  {tab:'clientes',    icon:'icon-repeat',   title:'Leads dormidos (win-back)',    kw:'dormidos inactivos reactivar winback reconectar',         run:()=>{switchTab('clientes');setTimeout(()=>{try{document.getElementById('wbTrayCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},300);}},
+  {tab:'pedidos',     icon:'icon-send',     title:'Post-entrega pendientes',      kw:'post entrega satisfaccion resena review fidelizar',       run:()=>{switchTab('pedidos');setTimeout(()=>{try{document.getElementById('pdTrayCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},300);}},
+  {tab:'pedidos',     icon:'icon-warning',  title:'Ver pedidos atrasados',        kw:'atrasados retraso urgente pendientes',                    run:()=>{switchTab('pedidos');setTimeout(()=>{try{renderPedidos('atrasados');}catch(e){}},200);}},
+  {tab:'overview',    icon:'icon-chart',    title:'Generar reporte CEO',          kw:'reporte ceo ejecutivo ia generar semanal analisis',       run:()=>{switchTab('overview');setTimeout(()=>{try{ovGenerarReporteCEO();}catch(e){}},300);}},
+  {tab:'overview',    icon:'icon-target',   title:'Definir metas de revenue',     kw:'meta objetivo mensual semanal proyeccion goal',           run:()=>{switchTab('overview');setTimeout(()=>{try{openMetaModal();}catch(e){}},250);}},
+  {icon:'icon-download',   title:'Respaldar CRM ahora',        kw:'backup respaldo airtable copia seguridad',   run:()=>{try{backupAirtable();}catch(e){}}},
+  {icon:'icon-chat',       title:'Abrir KAI (asistente)',      kw:'kai asistente chat ia ayuda hablar',         run:()=>{try{openKai();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
@@ -1833,7 +1843,7 @@ function globalSearchOnInput(raw){
   if(secs.length) groups.push({cat:'Secciones',items:secs.map(s=>({icon:s.icon,bg:s.c,title:s.title,sub:'',go:'Ir →',run:()=>switchTab(s.tab)}))});
 
   // 2. Acciones rápidas
-  const acts=GS_ACTIONS.filter(a=>!a.nuevo||_gsAllowed(a.nuevo)).filter(a=>!q||_gsNorm(a.title).includes(nq)||_gsNorm(a.kw).includes(nq));
+  const acts=GS_ACTIONS.filter(a=>(!a.nuevo||_gsAllowed(a.nuevo))&&(!a.tab||_gsAllowed(a.tab))).filter(a=>!q||_gsNorm(a.title).includes(nq)||_gsNorm(a.kw).includes(nq));
   if(acts.length) groups.push({cat:'Acciones',items:acts.map(a=>({icon:a.icon,bg:'',title:a.title,sub:'',go:'',run:a.run}))});
 
   // 3. Datos (sólo con 2+ caracteres)
@@ -1842,18 +1852,30 @@ function globalSearchOnInput(raw){
     const push=(cat,it)=>{(byCat[cat]=byCat[cat]||[]).push(it);};
     if(_gsAllowed('clientes')) (st.clientes||[]).forEach(c=>{
       const nom=c.fields['Empresa']||c.fields['Contacto']||'—';
-      if(_gsNorm(nom).includes(nq)||_gsNorm(c.fields['Contacto']||'').includes(nq))
-        push('Clientes',{icon:'icon-clientes',bg:'#3b82f6',title:nom,sub:'Cliente',go:'Abrir →',run:()=>{switchTab('clientes');setTimeout(()=>_gsFocusRow(c.id),250);}});
+      if(_gsNorm(nom).includes(nq)||_gsNorm(c.fields['Contacto']||'').includes(nq)){
+        // Acciones directas sobre el cliente, sin salir del palette
+        const email=c.fields['Email']||'';
+        const extras=[];
+        if(email&&_gsAllowed('correos')) extras.push({e:'✉',t:'Escribir correo',run:()=>{switchTab('correos');setTimeout(()=>{try{MAIL.openCompose({to:email});}catch(x){}},400);}});
+        extras.push({e:'💬',t:'Estrategia de venta IA',run:()=>{try{runSalesAgent(c.id);}catch(x){}}});
+        extras.push({e:'♻',t:'Reactivar / reconectar IA',run:()=>{try{runClienteWinbackAgent(c.id);}catch(x){}}});
+        if((c.fields['Facturas vencidas']||0)>0&&_gsAllowed('finanzas')) extras.push({e:'💰',t:'Cobrar (recordatorio IA)',run:()=>{try{runFinanceAgent(c.id);}catch(x){}}});
+        push('Clientes',{icon:'icon-clientes',bg:'#3b82f6',title:nom,sub:'Cliente',go:'Abrir →',extras,run:()=>{switchTab('clientes');setTimeout(()=>_gsFocusRow(c.id),250);}});
+      }
     });
     if(_gsAllowed('pedidos')) (st.pedidos||[]).forEach(p=>{
       const num=p.fields['N° Pedido']||p.id; const cli=_gsClienteNombre(p);
       if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq))
-        push('Pedidos',{icon:'icon-pedidos',bg:'#ff6b35',title:num,sub:'Pedido'+(p.fields['Estado pedido']?' · '+p.fields['Estado pedido']:'')+(cli?' · '+cli:''),go:'Abrir →',run:()=>switchTab('pedidos')});
+        push('Pedidos',{icon:'icon-pedidos',bg:'#ff6b35',title:num,sub:'Pedido'+(p.fields['Estado pedido']?' · '+p.fields['Estado pedido']:'')+(cli?' · '+cli:''),go:'Abrir →',run:()=>{switchTab('pedidos');setTimeout(()=>_gsFocusRow(p.id),250);}});
     });
     if(_gsAllowed('cotizaciones')) (st.cotizaciones||[]).forEach(co=>{
       const num=co.fields['N° Cotización']||co.id; const cli=_gsClienteNombre(co);
-      if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq))
-        push('Cotizaciones',{icon:'icon-cotizaciones',bg:'#a78bfa',title:num,sub:'Cotización'+(cli?' · '+cli:''),go:'Abrir →',run:()=>switchTab('cotizaciones')});
+      if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq)){
+        const extras=[];
+        if((co.fields['Estado cotización']||'')==='Enviada') extras.push({e:'✨',t:'Seguimiento IA',run:()=>{try{runFollowupAgent(co.id);}catch(x){}}});
+        extras.push({e:'📄',t:'Ver PDF',run:()=>{try{generarPDFCotizacion(co.id);}catch(x){}}});
+        push('Cotizaciones',{icon:'icon-cotizaciones',bg:'#a78bfa',title:num,sub:'Cotización'+(cli?' · '+cli:'')+(co.fields['Estado cotización']?' · '+co.fields['Estado cotización']:''),go:'Abrir →',extras,run:()=>{switchTab('cotizaciones');setTimeout(()=>_gsFocusRow(co.id),250);}});
+      }
     });
     if(_gsAllowed('proveedores')) (st.proveedores||[]).forEach(pv=>{
       const nom=pv.fields['Nombre']||'—';
@@ -1873,7 +1895,7 @@ function globalSearchOnInput(raw){
     });
   }
 
-  _gsResults=[]; _gsActive=-1;
+  _gsResults=[]; _gsExtras=[]; _gsActive=-1;
   if(!groups.length){
     box.innerHTML='<div class="gs-empty">Sin resultados para “'+escapeHtml(q)+'”</div>';
     box.classList.add('open'); return;
@@ -1885,9 +1907,16 @@ function globalSearchOnInput(raw){
       const idx=_gsResults.length; _gsResults.push(it.run);
       const emojiStyle=it.bg?('background:'+it.bg):'';
       const iconSvg=it.icon?'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+(it.bg?'#fff':'var(--accent)')+'" stroke-width="1.5" style="overflow:visible;flex-shrink:0"><use href="#'+it.icon+'"/></svg>':'';
+      // Chips de acción directa (correo, IA, cobrar, PDF…) sobre la misma fila
+      let chips='';
+      (it.extras||[]).forEach(x=>{
+        const xi=_gsExtras.length; _gsExtras.push(x.run);
+        chips+='<span title="'+escapeHtml(x.t)+'" onmousedown="event.preventDefault();event.stopPropagation();_gsRunExtra('+xi+')" style="flex-shrink:0;font-size:12px;padding:3px 8px;border-radius:6px;background:var(--surface2);border:1px solid var(--border2);cursor:pointer;margin-left:4px">'+x.e+'</span>';
+      });
       html+='<div class="gs-item" data-gsi="'+idx+'" onmousedown="event.preventDefault();_gsRun('+idx+')" onmouseenter="_gsSetActive('+idx+')">'
         +'<span class="gs-emoji" style="'+emojiStyle+'">'+iconSvg+'</span>'
         +'<span class="gs-txt"><span class="gs-title">'+_gsHi(it.title,q)+'</span>'+(it.sub?'<span class="gs-sub">'+escapeHtml(it.sub)+'</span>':'')+'</span>'
+        +chips
         +(it.go?'<span class="gs-go">'+escapeHtml(it.go)+'</span>':'')
       +'</div>';
     });
@@ -1897,6 +1926,10 @@ function globalSearchOnInput(raw){
 }
 function _gsRun(idx){
   const fn=_gsResults[idx];
+  if(typeof fn==='function'){ globalSearchClear(true); fn(); }
+}
+function _gsRunExtra(idx){
+  const fn=_gsExtras[idx];
   if(typeof fn==='function'){ globalSearchClear(true); fn(); }
 }
 function _gsSetActive(idx){
