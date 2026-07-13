@@ -15479,6 +15479,44 @@ async function pdMarkDone(pedidoId,via,silent){
   buildPostEntregaTray();
 }
 
+// ── MEMORIA DE AGENTES ─────────────────────────────────────────
+// Bloque compacto con los contactos previos al cliente (mensajes redactados por
+// agentes, seguimientos, cobranzas y post-entregas registrados) para que el
+// agente dé continuidad a la conversación y no se repita.
+function agentMemoriaCliente(empresa,cliId){
+  try{
+    const emp=String(empresa||'').trim();
+    if(emp.length<4&&!cliId) return '';
+    const ev=[];
+    const push=(ts,txt)=>{if(ts&&txt)ev.push({ts,txt});};
+    try{
+      AGENT_LOG._load();
+      const el=emp.toLowerCase();
+      if(el.length>=4)(AGENT_LOG._runs||[]).forEach(r=>{
+        if(!r||!r.time)return;
+        if((((r.input||'')+' '+(r.output||'')).toLowerCase()).includes(el)){
+          const snip=String(r.output||'').replace(/\s+/g,' ').slice(0,110);
+          push(r.time,`${(typeof _ofPretty==='function'?_ofPretty(r.agent):r.agent)||'Agente'} redactó: "${snip}…"`);
+        }
+      });
+    }catch(e){}
+    try{
+      if(cliId){const fl=_fuLog();
+        (state.cotizaciones||[]).forEach(c=>{const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;if(cid!==cliId)return;const e=fl[c.id];if(e&&e.ts)push(e.ts,`Seguimiento enviado por ${e.via||'—'} (cot ${c.fields['N° Cotización']||'—'})`);});}
+    }catch(e){}
+    try{(_cobLog()[emp.toLowerCase()]||[]).forEach(e=>push(e.ts,`Recordatorio de cobranza por ${e.via||'—'}`));}catch(e){}
+    try{
+      if(cliId){const pl=_pdLog();
+        (state.pedidos||[]).forEach(p=>{const cid=Array.isArray(p.fields['Cliente'])?p.fields['Cliente'][0]:null;if(cid!==cliId)return;const e=pl[p.id];if(e&&e.ts)push(e.ts,`Mensaje post-entrega por ${e.via||'—'} (${p.fields['N° Pedido']||'—'})`);});}
+    }catch(e){}
+    if(!ev.length)return'';
+    ev.sort((a,b)=>b.ts-a.ts);
+    const fch=ts=>new Date(ts).toISOString().slice(0,10);
+    return '\nCONTACTOS PREVIOS CON ESTE CLIENTE (dales continuidad — NO repitas el mismo saludo ni los mismos argumentos; si ayuda, alude brevemente al contacto anterior):\n'
+      +ev.slice(0,5).map(e=>`- [${fch(e.ts)}] ${e.txt}`).join('\n');
+  }catch(e){return'';}
+}
+
 function runFollowupAgent(cotId){
   const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;
@@ -15491,7 +15529,7 @@ function runFollowupAgent(cotId){
   const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'';
   const waPhone=_getClienteWAPhone(cliRec);
   const email=cliRec?.fields['Email']||'';
-  const ctx=`Cliente: ${nombre}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nCotización: ${f['N° Cotización']||'—'}${monto?' | Monto neto: '+monto:''}\nDías sin respuesta: ${dias}${vto!=null?' | Vence en: '+vto+'d':''}\nProducto/Servicio: ${sol||'No especificado'}`;
+  const ctx=`Cliente: ${nombre}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nCotización: ${f['N° Cotización']||'—'}${monto?' | Monto neto: '+monto:''}\nDías sin respuesta: ${dias}${vto!=null?' | Vence en: '+vto+'d':''}\nProducto/Servicio: ${sol||'No especificado'}`+agentMemoriaCliente(nombre,cliRec?.id);
   runAgentInline('FOLLOWUP',ctx,(result)=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendFollowupEmail('${cotId}','${email.replace(/'/g,'')}')">📧 Enviar por correo</button>`:'';
@@ -15666,7 +15704,7 @@ function runWinbackAgent(cotId){
   const sol=(f['Solicitud cliente (texto libre)']||f['Solicitud / detalle']||'').substring(0,150);
   const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'—';
   const motivo=estado==='Rechazada'?`\nMotivo de rechazo: ${String(f['Motivo rechazo']||'no registrado').substring(0,150)}`:'';
-  const ctx=`Cotización ${estado==='Rechazada'?'RECHAZADA':'VENCIDA'}: ${f['N° Cotización']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Monto neto: ${monto} | Vencía: ${f['Fecha vencimiento']||'—'}${motivo}\nProducto: ${sol}\nTAREA: redacta un mensaje de REACTIVACIÓN (win-back): ofrecer actualizar la cotización${estado==='Rechazada'?', abordando con tacto el motivo del rechazo si ayuda a recuperar la venta':''}, sin presionar. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`;
+  const ctx=`Cotización ${estado==='Rechazada'?'RECHAZADA':'VENCIDA'}: ${f['N° Cotización']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Monto neto: ${monto} | Vencía: ${f['Fecha vencimiento']||'—'}${motivo}\nProducto: ${sol}\nTAREA: redacta un mensaje de REACTIVACIÓN (win-back): ofrecer actualizar la cotización${estado==='Rechazada'?', abordando con tacto el motivo del rechazo si ayuda a recuperar la venta':''}, sin presionar. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`+agentMemoriaCliente(resolveClienteName(f['Cliente']),cliRec?.id);
   runAgentInline('FOLLOWUP',ctx,()=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Retomemos tu cotización — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
@@ -15737,7 +15775,7 @@ function runClienteWinbackAgent(cliId){
   const ultCot=cotsCli.length?cotsCli[cotsCli.length-1]:null;
   const pedsCli=state.pedidos.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
   const ultPed=pedsCli.length?pedsCli[pedsCli.length-1]:null;
-  const ctx=`Cliente ${f['Etapa venta']==='Perdido'?'PERDIDO':'INACTIVO'}: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nIndustria: ${f['Industria / Rubro']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}\n${ultPed?'Último pedido: '+(ultPed.fields['Descripción del pedido']||ultPed.fields['Solicitud cliente (texto libre)']||'—').substring(0,120):''}${ultCot?'\nÚltima cotización: '+(ultCot.fields['N° Cotización']||'—')+' ('+(ultCot.fields['Estado cotización']||'—')+')':''}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}\nTAREA: redacta un mensaje de RECONEXIÓN para recuperar a este cliente. Referencia lo que compró antes, ofrece algo concreto (novedad de producto o revisión de precios), sin sonar desesperado. DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`;
+  const ctx=`Cliente ${f['Etapa venta']==='Perdido'?'PERDIDO':'INACTIVO'}: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nIndustria: ${f['Industria / Rubro']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}\n${ultPed?'Último pedido: '+(ultPed.fields['Descripción del pedido']||ultPed.fields['Solicitud cliente (texto libre)']||'—').substring(0,120):''}${ultCot?'\nÚltima cotización: '+(ultCot.fields['N° Cotización']||'—')+' ('+(ultCot.fields['Estado cotización']||'—')+')':''}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}\nTAREA: redacta un mensaje de RECONEXIÓN para recuperar a este cliente. Referencia lo que compró antes, ofrece algo concreto (novedad de producto o revisión de precios), sin sonar desesperado. DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`+agentMemoriaCliente(f['Empresa'],cliId);
   runAgentInline('SALES',ctx,()=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Tenemos novedades para ti — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
@@ -15765,7 +15803,7 @@ function runFinanceAgent(cliId){
   const f=c.fields;
   const waPhone=_getClienteWAPhone(c);
   const email=f['Email']||'';
-  const ctx=`Cliente con deuda: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nFacturas vencidas: ${f['Facturas vencidas']||0} | Estado cuenta: ${f['Estado cuenta']||'—'}\nTAREA: redacta un recordatorio de pago para este cliente. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (formal con firma The Lab Solutions).`;
+  const ctx=`Cliente con deuda: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nFacturas vencidas: ${f['Facturas vencidas']||0} | Estado cuenta: ${f['Estado cuenta']||'—'}\nTAREA: redacta un recordatorio de pago para este cliente. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (formal con firma The Lab Solutions).`+agentMemoriaCliente(f['Empresa'],cliId);
   runAgentInline('FINANCE',ctx,()=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Recordatorio de pago — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
