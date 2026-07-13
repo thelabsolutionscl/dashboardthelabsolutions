@@ -6405,12 +6405,13 @@ let MAQUINAS=[
   {id:'e5-5',nombre:'Creality Ender-5 Max',num:5,numG:10,modelo:'Ender-5 Max',color:'#ffaa00',ip:'192.168.100.162'},
   {id:'giga-1',nombre:'Elegoo OrangeStorm Giga',num:1,numG:14,modelo:'Giga',color:'#ff4444',ip:'192.168.100.44'},
 ];
+// Imágenes locales del repo (el WordPress viejo ya no existe; el sitio vive en Vercel)
 const MODELO_IMGS={
-  'K1':'https://thelab.solutions/wp-content/uploads/2026/05/K1-_02-2.png.png',
-  'K2':'https://thelab.solutions/wp-content/uploads/2026/05/creality-k2-pro-combo-impresora-3d-filamento-multicolor-con-sistema-cfs.png',
-  'K2 Plus':'https://thelab.solutions/wp-content/uploads/2026/05/standard_resolution-260.png',
-  'Ender-5 Max':'https://thelab.solutions/wp-content/uploads/2026/05/imagen-creality-ender-5-max.png',
-  'Giga':'https://thelab.solutions/wp-content/uploads/2026/05/elegoo-orangestorm-giga-impresora-3d-fdm.jpg.png',
+  'K1':'K1.png',
+  'K2':'k2.png',
+  'K2 Plus':'k2plus.png',
+  'Ender-5 Max':'ender5max.png',
+  'Giga':'orangestorm.png',
 };
 const MODEL_SPECS={
   'K1':'PLA / PETG · 220×220×250mm · Velocidad alta',
@@ -15939,7 +15940,7 @@ function _ofModelImg(modelo,nombre){
   return '';
 }
 // Defensa en profundidad: solo deja pasar URLs de imagen seguras (bloquea javascript:/data:text/… en href/src)
-function _ofSafeUrl(u){ u=String(u||'').trim(); return /^(https?:\/\/|data:image\/)/i.test(u)?u:''; }
+function _ofSafeUrl(u){ u=String(u||'').trim(); return (/^(https?:\/\/|data:image\/)/i.test(u)||/^[\w\-\/]+\.(png|jpe?g|webp|gif|svg)$/i.test(u))?u:''; }
 function _ofPrinterLbl(estado){ const e=(estado||'').toString().toLowerCase();
   if(/imprim|ocupad|print|busy|trabaj|en uso/.test(e)) return 'Imprimiendo';
   if(/manten|repar/.test(e)) return 'Mantención';
