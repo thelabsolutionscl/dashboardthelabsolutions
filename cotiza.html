@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cotiza tu proyecto — The Lab Solutions</title>
+<meta name="description" content="Cuéntanos qué necesitas fabricar y te enviamos una cotización. Cartelería, cajas de luz, neón LED, impresión 3D, merchandising y más.">
+<link rel="icon" type="image/png" href="isotipo-thelab.png">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--black:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;--border:#2a2a2a;--accent:#00d4cc;--accent2:#ff6b35;--text:#f0f0f0;--text2:#9a9a9a;--text3:#777;--danger:#ff4444;--success:#00d4aa}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--black);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:28px 16px 60px}
+.glow{position:fixed;inset:0;pointer-events:none;background:radial-gradient(600px 300px at 20% -5%,rgba(0,212,204,.10),transparent),radial-gradient(500px 280px at 90% 10%,rgba(255,107,53,.07),transparent)}
+.wrap{width:100%;max-width:620px;position:relative}
+.logo{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:6px}
+.logo img{width:44px;height:44px}
+h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(30px,6vw,42px);letter-spacing:1.5px;text-align:center}
+h1 span{color:var(--accent)}
+.sub{color:var(--text2);font-size:13.5px;text-align:center;margin:4px 0 26px;line-height:1.5}
+form{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 20px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:520px){.row{grid-template-columns:1fr}}
+label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin:14px 0 5px}
+label b{color:var(--accent2);font-weight:700}
+input,select,textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13.5px;padding:10px 12px;outline:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:88px}
+.hp{position:absolute;left:-9999px;opacity:0;height:0;overflow:hidden}
+button{width:100%;margin-top:20px;background:var(--accent);color:#00302e;border:none;border-radius:9px;padding:13px;font-family:inherit;font-size:14.5px;font-weight:700;letter-spacing:.3px;cursor:pointer;transition:filter .15s}
+button:hover{filter:brightness(1.1)}
+button:disabled{opacity:.55;cursor:default}
+.msg{margin-top:14px;font-size:13px;line-height:1.55;border-radius:9px;padding:12px 14px;display:none}
+.msg.ok{display:block;background:rgba(0,212,170,.09);border:1px solid rgba(0,212,170,.35);color:var(--success)}
+.msg.err{display:block;background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.3);color:var(--danger)}
+.alt{margin-top:22px;text-align:center;font-size:12.5px;color:var(--text3);line-height:1.7}
+.alt a{color:var(--accent);text-decoration:none}
+.foot{margin-top:34px;font-size:11px;color:var(--text3);text-align:center}
+#tsBox{margin-top:16px;display:flex;justify-content:center}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<div class="wrap">
+  <div class="logo"><img src="isotipo-thelab.png" alt="The Lab Solutions"></div>
+  <h1>COTIZA TU <span>PROYECTO</span></h1>
+  <p class="sub">Cuéntanos qué necesitas fabricar y te respondemos con una cotización.<br>Sin compromiso — normalmente en menos de 24 horas hábiles.</p>
+
+  <form id="cotForm" novalidate>
+    <div class="row">
+      <div><label for="fName">Nombre <b>*</b></label><input id="fName" name="name" autocomplete="name" maxlength="120"></div>
+      <div><label for="fCompany">Empresa</label><input id="fCompany" name="company" autocomplete="organization" maxlength="120"></div>
+    </div>
+    <div class="row">
+      <div><label for="fEmail">Email <b>*</b></label><input id="fEmail" name="email" type="email" autocomplete="email" maxlength="160"></div>
+      <div><label for="fPhone">Teléfono / WhatsApp</label><input id="fPhone" name="phone" type="tel" autocomplete="tel" placeholder="+56 9 …" maxlength="30"></div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="fService">¿Qué necesitas?</label>
+        <select id="fService" name="service">
+          <option value="">Selecciona…</option>
+          <option>Cartelería / letreros</option>
+          <option>Caja de luz</option>
+          <option>Neón LED</option>
+          <option>Impresión 3D / prototipado</option>
+          <option>Merchandising / trofeos</option>
+          <option>Señalética</option>
+          <option>Packaging</option>
+          <option>Otro</option>
+        </select>
+      </div>
+      <div><label for="fQty">Cantidad aprox.</label><input id="fQty" name="quantity" inputmode="numeric" placeholder="ej: 10" maxlength="20"></div>
+    </div>
+    <div class="row">
+      <div><label for="fDate">¿Para cuándo lo necesitas?</label><input id="fDate" name="deliveryDate" type="date"></div>
+      <div><label for="fBudget">Presupuesto aprox. (opcional)</label><input id="fBudget" name="budget" placeholder="ej: $500.000" maxlength="40"></div>
+    </div>
+    <label for="fMsg">Cuéntanos tu proyecto <b>*</b></label>
+    <textarea id="fMsg" name="message" maxlength="2000" placeholder="Medidas, materiales, referencias, dónde se instala…"></textarea>
+    <!-- honeypot anti-bot: los humanos no lo ven; los bots lo rellenan -->
+    <div class="hp" aria-hidden="true"><label>Website</label><input name="company_website" tabindex="-1" autocomplete="off"></div>
+    <div id="tsBox"></div>
+    <button id="btnSend" type="submit">Enviar solicitud de cotización →</button>
+    <div id="formMsg" class="msg"></div>
+  </form>
+
+  <p class="alt">¿Prefieres hablar directo?<br>
+    Escríbenos a <a href="mailto:hola@thelab.solutions">hola@thelab.solutions</a> o por
+    <a href="https://wa.me/56920546235?text=Hola%2C%20quiero%20cotizar%20un%20proyecto" target="_blank" rel="noopener">WhatsApp</a>.
+  </p>
+  <p class="foot">The Lab Solutions · Fabricación digital · Santiago de Chile</p>
+</div>
+
+<script>
+// El deploy inyecta estos valores desde los secrets del repositorio. Si quedan
+// como %%…%% (o vacíos) el formulario cae al respaldo por correo, sin romperse.
+const CFG={
+  url:'%%LEAD_WORKER_URL%%',
+  key:'%%PUBLIC_LEAD_KEY%%',
+  tsSiteKey:'%%TURNSTILE_SITE_KEY%%'
+};
+const _cfgOk=v=>v&&!v.startsWith('%%');
+let _tsToken='';
+
+// Turnstile solo si hay site key configurada (el worker lo exige solo si tiene TURNSTILE_SECRET)
+if(_cfgOk(CFG.tsSiteKey)){
+  window._tsReady=function(){
+    turnstile.render('#tsBox',{sitekey:CFG.tsSiteKey,theme:'dark',callback:t=>{_tsToken=t;}});
+  };
+  const s=document.createElement('script');
+  s.src='https://challenges.cloudflare.com/turnstile/api.js?onload=_tsReady';
+  s.async=true;s.defer=true;document.head.appendChild(s);
+}
+
+// UTM y click-ids de la URL → viajan con el lead para atribución en el CRM
+function _utm(){
+  const p=new URLSearchParams(location.search),g=k=>p.get(k)||'';
+  return {utmSource:g('utm_source'),utmMedium:g('utm_medium'),utmCampaign:g('utm_campaign'),
+          utmTerm:g('utm_term'),utmContent:g('utm_content'),gclid:g('gclid'),landingUrl:location.href.split('?')[0]};
+}
+function _show(cls,html){const m=document.getElementById('formMsg');m.className='msg '+cls;m.innerHTML=html;}
+let _navigate=u=>{location.href=u;};
+function _mailtoFallback(d){
+  const body=encodeURIComponent(`Nombre: ${d.name}\nEmpresa: ${d.company}\nEmail: ${d.email}\nTeléfono: ${d.phone}\nServicio: ${d.service}\nCantidad: ${d.quantity}\nFecha deseada: ${d.deliveryDate}\nPresupuesto: ${d.budget}\n\n${d.message}`);
+  return `mailto:hola@thelab.solutions?subject=${encodeURIComponent('Solicitud de cotización — '+(d.company||d.name))}&body=${body}`;
+}
+
+document.getElementById('cotForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const g=id=>document.getElementById(id).value.trim();
+  const d={name:g('fName'),company:g('fCompany'),email:g('fEmail'),phone:g('fPhone'),
+           service:g('fService'),quantity:g('fQty'),deliveryDate:g('fDate'),budget:g('fBudget'),
+           message:g('fMsg'),source:'web-cotizador',..._utm()};
+  if(!d.name){_show('err','Escribe tu nombre para poder responderte.');return;}
+  if(!d.email&&!d.phone){_show('err','Déjanos un email o un teléfono de contacto.');return;}
+  if(d.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)){_show('err','Ese email no parece válido.');return;}
+  if(!d.message){_show('err','Cuéntanos brevemente qué necesitas cotizar.');return;}
+  const hp=document.querySelector('[name="company_website"]').value;
+  if(hp) d.company_website=hp;
+  if(_tsToken) d.turnstileToken=_tsToken;
+
+  if(!_cfgOk(CFG.url)){
+    // Sin endpoint configurado: respaldo por correo con todo pre-rellenado
+    _navigate(_mailtoFallback(d));
+    _show('ok','Se abrió tu correo con la solicitud lista para enviar a <b>hola@thelab.solutions</b>.');
+    return;
+  }
+  const btn=document.getElementById('btnSend');
+  btn.disabled=true;const prev=btn.textContent;btn.textContent='Enviando…';
+  try{
+    const headers={'Content-Type':'application/json'};
+    if(_cfgOk(CFG.key)) headers['X-Public-Lead-Key']=CFG.key;
+    const r=await fetch(CFG.url.replace(/\/+$/,'')+'/lead',{method:'POST',headers,body:JSON.stringify(d)});
+    const res=await r.json().catch(()=>null);
+    if(r.ok&&res&&res.ok){
+      document.getElementById('cotForm').reset();_tsToken='';
+      _show('ok','✓ ¡Recibido! Tu solicitud ya está en nuestro sistema.<br>Te contactaremos a la brevedad — normalmente dentro de 24 horas hábiles.');
+    }else{
+      _show('err',(res&&res.error?res.error+'. ':'No pudimos registrar tu solicitud. ')+`También puedes <a style="color:var(--accent)" href="${_mailtoFallback(d)}">enviarla por correo</a>.`);
+    }
+  }catch(e){
+    _show('err',`Problema de conexión. Puedes <a style="color:var(--accent)" href="${_mailtoFallback(d)}">enviarla por correo</a> o escribirnos por WhatsApp.`);
+  }finally{btn.disabled=false;btn.textContent=prev;}
+});
+</script>
+</body>
+</html>

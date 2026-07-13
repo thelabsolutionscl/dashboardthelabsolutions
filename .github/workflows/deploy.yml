@@ -58,6 +58,17 @@ jobs:
           sed -i "s|%%ELEVENLABS%%|${ELEVENLABS}|g" index.html
           sed -i "s|%%PRINTER_TUNNEL_TOKEN%%|${PRINTER_TUNNEL_TOKEN}|g" index.html
 
+      - name: Inject secrets into cotiza.html (cotizador público)
+        env:
+          LEAD_WORKER_URL: ${{ secrets.LEAD_WORKER_URL }}
+          PUBLIC_LEAD_KEY: ${{ secrets.PUBLIC_LEAD_KEY }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+        run: |
+          # Sin secrets configurados, los %%…%% quedan y el formulario cae a mailto: — no se rompe.
+          if [ -n "${LEAD_WORKER_URL}" ]; then sed -i "s|%%LEAD_WORKER_URL%%|${LEAD_WORKER_URL}|g" cotiza.html; fi
+          if [ -n "${PUBLIC_LEAD_KEY}" ]; then sed -i "s|%%PUBLIC_LEAD_KEY%%|${PUBLIC_LEAD_KEY}|g" cotiza.html; fi
+          if [ -n "${TURNSTILE_SITE_KEY}" ]; then sed -i "s|%%TURNSTILE_SITE_KEY%%|${TURNSTILE_SITE_KEY}|g" cotiza.html; fi
+
       - name: Stamp build version (cache-busting de styles.css, js/* y service worker)
         run: sed -i "s|%%BUILD%%|${GITHUB_SHA::8}|g" index.html sw.js
 
