@@ -2226,6 +2226,19 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- COTIZACIONES -->
 <div class="tab-panel" id="tab-cotizaciones">
   <div class="section-header"><div><div class="section-title">Cotizaciones</div><div class="section-desc">Crea y gestiona presupuestos para tus clientes. Controla estado, fechas de vencimiento y convierte cotizaciones aprobadas en pedidos con un clic.</div></div><button class="btn btn-primary btn-sm" onclick="startQuoteFlow()" title="Cotizador guiado paso a paso con KAI">💰 Cotizar con KAI</button></div>
+  <!-- BANDEJA DE SEGUIMIENTOS: cotizaciones enviadas sin respuesta, listas para 1 clic -->
+  <div class="card" id="fuTrayCard" style="margin-bottom:20px;border-color:rgba(255,170,0,0.35);display:none">
+    <div class="card-header">
+      <span class="card-title">📬 Seguimientos pendientes <span class="badge badge-yellow" id="fuTrayCount">0</span></span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:10px;color:var(--text3)">sin respuesta hace</span>
+        <select class="field-select" id="fuTrayDays" style="width:auto;padding:3px 8px;font-size:11px" onchange="fuSetDays(this.value)">
+          <option value="3">3+ días</option><option value="5">5+ días</option><option value="7">7+ días</option><option value="10">10+ días</option>
+        </select>
+      </div>
+    </div>
+    <div id="fuTrayList" style="padding:2px 0 8px"></div>
+  </div>
   <div class="card">
     <div class="card-header">
       <span class="card-title" id="cotTableTitle">Todas las Cotizaciones</span>
@@ -4011,6 +4024,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <button onclick="cdTimelineFilter('todos')" id="cdTLbtnTodos" class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px;font-weight:700">Todo</button>
           <button onclick="cdTimelineFilter('cotizaciones')" id="cdTLbtnCotizaciones" class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px">Cotiz.</button>
           <button onclick="cdTimelineFilter('pedidos')" id="cdTLbtnPedidos" class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px">Pedidos</button>
+          <button onclick="cdTimelineFilter('gestion')" id="cdTLbtnGestion" class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 7px" title="Agentes IA, seguimientos y cobranza">Gestión</button>
         </div>
       </div>
       <div id="cdTimeline" style="font-size:12px"></div>
@@ -5264,6 +5278,7 @@ function _reportarResultados(muts) {
     <div class="card">
       <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro</span><button class="btn btn-ghost btn-sm" onclick="finExportCobranza()" style="margin-left:auto">⬇ CSV</button><button class="btn btn-primary btn-sm" id="finCobranzaIABtn" onclick="finPlanCobranzaIA()">📋 Plan de cobranza IA</button></div>
       <div id="finCobranzaIAout" style="display:none;margin:12px 16px 0;padding:14px;background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.22);border-radius:9px;font-size:12px;color:var(--text2);white-space:pre-wrap;word-break:break-word;overflow-x:auto;line-height:1.6"></div>
+      <div id="finCobranzaActions" style="display:none;margin:12px 16px 0;border:1px solid rgba(255,170,0,0.28);border-radius:9px;padding:10px 0 4px;background:rgba(255,170,0,0.04)"></div>
       <div style="padding:12px 16px 0">
         <div id="fin-cobrar-aging"></div>
       </div>
@@ -9177,20 +9192,43 @@ let _cdTimelineMode='todos';
 function renderClienteTimeline(clienteId,empresaNombre){
   const cots=(state.cotizaciones||[]).filter(c=>{const campo=c.fields['Cliente'];if(!campo)return false;if(Array.isArray(campo))return campo.includes(clienteId);return campo===empresaNombre;});
   const peds=(state.pedidos||[]).filter(p=>{const campo=p.fields['Cliente'];if(!campo)return false;if(Array.isArray(campo))return campo.includes(clienteId);return campo===empresaNombre;});
+  // Gestión: ejecuciones de agentes que mencionan al cliente, seguimientos de
+  // cotizaciones hechos (bandeja 📬) y recordatorios de cobranza enviados.
+  const gest=[];
+  try{
+    const emp=(empresaNombre||'').toLowerCase();
+    if(emp.length>=4&&typeof AGENT_LOG!=='undefined'){
+      AGENT_LOG._load();
+      (AGENT_LOG._runs||[]).filter(r=>r&&r.time&&(((r.input||'')+' '+(r.output||'')).toLowerCase().includes(emp))).slice(0,15).forEach(r=>{
+        gest.push({type:'ia',date:new Date(r.time).toISOString().slice(0,10),label:'🤖 '+(typeof _ofPretty==='function'?_ofPretty(r.agent):r.agent),sub:escapeHtml(String(r.input||'').slice(0,90)),color:'#00d4cc',icon:'🤖'});
+      });
+    }
+  }catch(e){}
+  try{
+    const fl=(typeof _fuLog==='function')?_fuLog():{};
+    cots.forEach(c=>{const e=fl[c.id];if(!e||!e.ts)return;
+      gest.push({type:'ia',date:new Date(e.ts).toISOString().slice(0,10),label:'📬 Seguimiento enviado',sub:escapeHtml((c.fields['N° Cotización']||'—')+' · vía '+(e.via||'—')),color:'#00d4aa',icon:'📬'});});
+  }catch(e){}
+  try{
+    const cl=(typeof _cobLog==='function')?_cobLog():{};
+    ((cl[(empresaNombre||'').toLowerCase()])||[]).forEach(e=>{
+      gest.push({type:'ia',date:new Date(e.ts).toISOString().slice(0,10),label:'💰 Recordatorio de cobranza',sub:escapeHtml('vía '+(e.via||'—')),color:'#ffaa00',icon:'💰'});});
+  }catch(e){}
   _cdTimelineData=[
     ...cots.map(c=>({type:'cot',date:c.fields['Fecha cotización']||c.createdTime?.slice(0,10)||'',label:c.fields['N° Cotización']||'—',sub:estadoBadge(c.fields['Estado cotización']||'—')+' · '+formatCLP(c.fields['Total final (CLP)']||0),color:'#a78bfa',icon:'📋',id:c.id})),
-    ...peds.map(p=>({type:'ped',date:p.fields['Fecha entrega']||p.createdTime?.slice(0,10)||'',label:p.fields['N° Pedido']||'—',sub:estadoBadge(p.fields['Estado pedido']||'—')+' · '+formatCLP(p.fields['Monto total (CLP)']||0),color:'#ff6b35',icon:'📦',id:p.id}))
+    ...peds.map(p=>({type:'ped',date:p.fields['Fecha entrega']||p.createdTime?.slice(0,10)||'',label:p.fields['N° Pedido']||'—',sub:estadoBadge(p.fields['Estado pedido']||'—')+' · '+formatCLP(p.fields['Monto total (CLP)']||0),color:'#ff6b35',icon:'📦',id:p.id})),
+    ...gest
   ].sort((a,b)=>b.date.localeCompare(a.date));
   cdTimelineFilter('todos');
 }
 function cdTimelineFilter(mode){
   _cdTimelineMode=mode;
-  ['todos','cotizaciones','pedidos'].forEach(m=>{
+  ['todos','cotizaciones','pedidos','gestion'].forEach(m=>{
     const key=m.charAt(0).toUpperCase()+m.slice(1);
     const btn=document.getElementById('cdTLbtn'+key);
     if(btn){btn.style.fontWeight=m===mode?'700':'400';btn.style.background=m===mode?'var(--accent)':'';btn.style.color=m===mode?'#fff':'';}
   });
-  const items=mode==='todos'?_cdTimelineData:_cdTimelineData.filter(i=>mode==='cotizaciones'?i.type==='cot':i.type==='ped');
+  const items=mode==='todos'?_cdTimelineData:_cdTimelineData.filter(i=>mode==='cotizaciones'?i.type==='cot':(mode==='pedidos'?i.type==='ped':i.type==='ia'));
   const el=document.getElementById('cdTimeline');if(!el)return;
   if(!items.length){el.innerHTML='<div style="color:var(--text3);font-size:11px;padding:8px 0">Sin historial</div>';return;}
   el.innerHTML=items.map((it,i)=>`<div style="display:flex;gap:10px;padding:7px 0;${i<items.length-1?'border-bottom:1px solid var(--border);':''}align-items:flex-start">
@@ -9385,6 +9423,7 @@ function renderCotizaciones(skipAnalytics){
     if(sorted.length>_cotCap) html+=_loadMoreRow(sorted.length-_cotCap,11,'cotShowMore()');
   }
   _setRows(tbody,html);if(!skipAnalytics)renderCotAnalytics();_applySortIndicators();
+  try{buildFollowupTray();}catch(e){}
 }
 function resolveVendedorName(vid){if(!vid) return '—';const p=PERSONAS.find(x=>x.id===vid.toLowerCase().trim());return p?p.nombre:vid;}
 function buildCotRow(c){
@@ -15167,6 +15206,7 @@ function _extractEmailPart(text){
 
 async function runAgentInline(agentId,contextText,actionsFn){
   const cfg=AGENTES_CFG.find(a=>a.id===agentId);if(!cfg) return;
+  window._fuCotId=null;   // evita registrar seguimientos de una cotización anterior
   const modal=document.getElementById('agentInlineModal');
   const resultEl=document.getElementById('agentInlineResult');
   const actionsEl=document.getElementById('agentInlineActions');
@@ -15196,6 +15236,58 @@ async function runAgentInline(agentId,contextText,actionsFn){
 }
 
 // — FOLLOWUP desde cotización
+// ── BANDEJA DE SEGUIMIENTOS ────────────────────────────────────
+// Detecta cotizaciones 'Enviada' sin respuesta hace N+ días y las deja listas
+// para hacer seguimiento con 1 clic (FOLLOWUP_AGENT + CTA WhatsApp/correo).
+// El registro de seguimientos hechos vive en localStorage (thelab_fu_log_v1)
+// y, best-effort, en el campo 'Último seguimiento' de la cotización si existe.
+const _FU_LOG_KEY='thelab_fu_log_v1';
+function _fuLog(){try{return JSON.parse(localStorage.getItem(_FU_LOG_KEY)||'{}');}catch(e){return{};}}
+function _fuDays(){const v=parseInt(localStorage.getItem('thelab_fu_days'));return [3,5,7,10].includes(v)?v:5;}
+function fuSetDays(v){localStorage.setItem('thelab_fu_days',v);buildFollowupTray();}
+function buildFollowupTray(){
+  const card=document.getElementById('fuTrayCard'); if(!card) return;
+  const sel=document.getElementById('fuTrayDays'); if(sel) sel.value=String(_fuDays());
+  const th=_fuDays(), log=_fuLog(), now=Date.now();
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const cands=(state.cotizaciones||[]).map(c=>{
+    const f=c.fields;
+    if((f['Estado cotización']||'')!=='Enviada') return null;
+    const fecha=f['Fecha cotización']||(c.createdTime||'').slice(0,10);
+    if(!fecha) return null;
+    const dias=Math.floor((_t-new Date(fecha+'T00:00:00'))/864e5);
+    if(dias<th) return null;
+    const last=log[c.id]&&log[c.id].ts;
+    if(last && now-last<7*864e5) return null;   // ya se le hizo seguimiento hace <7 días
+    return {c,f,dias};
+  }).filter(Boolean).sort((a,b)=>b.dias-a.dias);
+  const cnt=document.getElementById('fuTrayCount'); if(cnt) cnt.textContent=cands.length;
+  if(!cands.length){card.style.display='none';return;}
+  card.style.display='';
+  const list=document.getElementById('fuTrayList'); if(!list) return;
+  list.innerHTML=cands.slice(0,12).map(x=>{
+    const neto=x.f['Total final (CLP)']?formatCLP(Math.round(x.f['Total final (CLP)']/1.19)):'—';
+    const vto=x.f['Fecha vencimiento']?Math.round((new Date(x.f['Fecha vencimiento']+'T00:00:00')-_t)/864e5):null;
+    const vtoChip=vto==null?'':(vto<0?` · <span style="color:var(--danger)">vencida hace ${-vto}d</span>`:` · vence en ${vto}d`);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+      <span class="badge ${x.dias>=10?'badge-red':'badge-yellow'}" style="flex-shrink:0" title="Días sin respuesta">${x.dias} d</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(x.f['Cliente']))}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${escapeHtml(x.f['N° Cotización']||'—')} · ${neto} neto${vtoChip}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runFollowupAgent('${x.c.id}')">✨ Seguimiento IA</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionada sin enviar" onclick="fuMarkDone('${x.c.id}','manual')">✓</button>
+    </div>`;
+  }).join('')+(cands.length>12?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-12} más (baja el umbral de días para verlas todas de a poco)</div>`:'');
+}
+async function fuMarkDone(cotId,via){
+  const log=_fuLog(); log[cotId]={ts:Date.now(),via:via||'manual'};
+  try{localStorage.setItem(_FU_LOG_KEY,JSON.stringify(log));}catch(e){}
+  try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,{'Último seguimiento':new Date().toISOString().slice(0,10)});}catch(e){}
+  if(via&&via!=='manual') toast('✓ Seguimiento registrado ('+via+')','success');
+  buildFollowupTray();
+}
+
 function runFollowupAgent(cotId){
   const c=state.cotizacionesById[cotId];if(!c) return;
   const f=c.fields;
@@ -15214,11 +15306,13 @@ function runFollowupAgent(cotId){
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendFollowupEmail('${cotId}','${email.replace(/'/g,'')}')">📧 Enviar por correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar todo</button>`;
   });
+  window._fuCotId=cotId;   // para auto-registrar el seguimiento al enviar por WA/correo
 }
 
 function openFollowupWA(phone){
   const waPart=_extractWAPart(_agentInlineText)||_agentInlineText;
   window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(waPart),'_blank');
+  if(window._fuCotId){try{fuMarkDone(window._fuCotId,'WhatsApp');}catch(e){}window._fuCotId=null;}
 }
 
 // ── CTA universal de agentes: enviar el resultado por WhatsApp o correo ──
@@ -15286,7 +15380,7 @@ async function _sendFollowupEmail(cotId,toEmail){
   if(btnEl){btnEl.disabled=true;btnEl.textContent='Enviando...';}
   try{
     const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to:toEmail,subject:`Seguimiento — Cotización ${c.fields['N° Cotización']||''}`,body:emailText,from_name:AGENT_CTA_FROM.name});
-    if(r&&!r.error){toast('✓ Correo enviado','success');closeAgentInlineModal();}
+    if(r&&!r.error){toast('✓ Correo enviado','success');try{fuMarkDone(cotId,'correo');}catch(e){}window._fuCotId=null;closeAgentInlineModal();}
     else throw new Error(r?.error||'Error desconocido');
   }catch(e){toast('Error: '+e.message,'error');}
   finally{if(btnEl){btnEl.disabled=false;btnEl.textContent='📧 Enviar por correo';}}
@@ -24175,6 +24269,7 @@ function finRenderCobrar(){
   });
   if(!html)html='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro registradas</td></tr>';
   document.getElementById('fin-cobrar-body').innerHTML=html;
+  try{finRenderCobranzaActions();}catch(e){}
 }
 // Exporta la cartera por cobrar (ordenada por mora) a CSV para trabajarla aparte o pasarla a cobranza
 function finExportCobranza(){
@@ -24190,6 +24285,95 @@ function finExportCobranza(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cobranza_pendiente_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   toast('✓ Cobranza exportada a CSV','success');
 }
+// ── COBRANZA SEMI-AUTOMÁTICA ───────────────────────────────────
+// Lista accionable de la cartera priorizada por mora: cada cliente con botones
+// de recordatorio (WhatsApp / correo desde hola@ con la firma de Andrea) y
+// registro de cuándo se le cobró (localStorage + nota en el cliente).
+const _COB_LOG_KEY='thelab_cob_log_v1';
+function _cobLog(){try{return JSON.parse(localStorage.getItem(_COB_LOG_KEY)||'{}');}catch(e){return{};}}
+function _cobLast(empresa){const l=_cobLog()[(empresa||'').toLowerCase()];return l&&l.length?l[l.length-1]:null;}
+function _cobCliente(empresa){
+  const k=(empresa||'').toLowerCase(); if(!k||k==='—') return null;
+  return (state.clientes||[]).find(c=>((c.fields['Empresa']||'').toLowerCase()===k)||((c.fields['Contacto']||'').toLowerCase()===k))||null;
+}
+function _cobGrupos(){
+  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const hoy=Date.now(),byCli=new Map();
+  data.forEach(r=>{
+    const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));
+    const k=(r.empresa&&r.empresa!=='—')?r.empresa:(r.nombre||'—');
+    const e=byCli.get(k)||{empresa:k,total:0,maxDias:0,n:0};
+    e.total+=r.porCobrar;e.maxDias=Math.max(e.maxDias,dias);e.n++;byCli.set(k,e);
+  });
+  return [...byCli.values()].sort((a,b)=>b.maxDias-a.maxDias||b.total-a.total);
+}
+function _cobMsg(g,contacto){
+  const facts=g.n>1?`${g.n} facturas pendientes`:'una factura pendiente';
+  return `Hola${contacto?' '+contacto:''} 👋 Te saludo de The Lab Solutions. Te escribo por ${facts} por un total de ${clp(g.total)}${g.maxDias>0?` (la más antigua lleva ${g.maxDias} días vencida)`:''}. ¿Me confirmas si el pago ya está programado o necesitas que te reenviemos los documentos? ¡Muchas gracias! 💙\n— Andrea Garrido · The Lab Solutions`;
+}
+function finRenderCobranzaActions(){
+  const box=document.getElementById('finCobranzaActions'); if(!box) return;
+  const gs=_cobGrupos().slice(0,10);
+  if(!gs.length){box.style.display='none';box.innerHTML='';return;}
+  box.style.display='block';
+  box.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--warn);padding:0 14px 6px">📞 Acciones de cobranza · prioridad por mora</div>'+gs.map(g=>{
+    const cli=_cobCliente(g.empresa);
+    const tienePhone=!!(cli&&_getClienteWAPhone(cli));
+    const last=_cobLast(g.empresa);
+    const lastChip=last?`<span class="badge badge-gray" style="flex-shrink:0" title="Último recordatorio (${last.via})">✓ hace ${Math.max(0,Math.floor((Date.now()-last.ts)/864e5))}d</span>`:'';
+    const emp=escapeHtml(g.empresa);
+    return `<div style="display:flex;align-items:center;gap:9px;padding:8px 14px;border-top:1px solid var(--border)">
+      <span class="badge ${g.maxDias>60?'badge-red':(g.maxDias>30?'badge-orange':'badge-yellow')}" style="flex-shrink:0" title="Mora máxima">${g.maxDias} d</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${emp}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${clp(g.total)} · ${g.n} factura${g.n>1?'s':''}${cli?'':' · <span style="color:var(--warn)">sin ficha de cliente</span>'}</div>
+      </div>
+      ${lastChip}
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" data-emp="${emp}" onclick="cobWhatsApp(this.dataset.emp)" ${tienePhone?'':'title="Sin teléfono en la ficha — se abrirá WhatsApp para elegir contacto"'}>📲</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" data-emp="${emp}" onclick="cobEmail(this.dataset.emp,this)">📧</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" data-emp="${emp}" title="Registrar gestión de cobro sin enviar" onclick="cobRegistrar(this.dataset.emp,'gestión manual')">✓</button>
+    </div>`;
+  }).join('');
+}
+function cobWhatsApp(empresa){
+  const g=_cobGrupos().find(x=>x.empresa===empresa); if(!g){toast('Sin datos de esa empresa','error');return;}
+  const cli=_cobCliente(empresa);
+  const phone=cli?_getClienteWAPhone(cli):'';
+  const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_cobMsg(g,nombre)),'_blank');
+  cobRegistrar(empresa,'WhatsApp',true);
+}
+async function cobEmail(empresa,btn){
+  const g=_cobGrupos().find(x=>x.empresa===empresa); if(!g){toast('Sin datos de esa empresa','error');return;}
+  const cli=_cobCliente(empresa);
+  let to=cli?.fields['Email']||prompt('¿A qué correo enviamos el recordatorio a '+empresa+'?','');
+  if(!to)return; to=String(to).trim();
+  if(!validEmail(to)){toast('Correo inválido','error');return;}
+  const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const prev=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  try{
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:'Recordatorio de pago — The Lab Solutions',body:_cobMsg(g,nombre),from_name:AGENT_CTA_FROM.name});
+    if(r&&!r.error){toast('✓ Recordatorio enviado a '+to,'success');cobRegistrar(empresa,'correo',true);}
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
+}
+async function cobRegistrar(empresa,via,silent){
+  const k=(empresa||'').toLowerCase();
+  const log=_cobLog(); (log[k]=log[k]||[]).push({ts:Date.now(),via:via||'—'});
+  try{localStorage.setItem(_COB_LOG_KEY,JSON.stringify(log));}catch(e){}
+  // Deja constancia en la ficha del cliente (best-effort)
+  const cli=_cobCliente(empresa);
+  if(cli){
+    const nota=`[${new Date().toISOString().slice(0,10)}] Recordatorio de cobranza enviado por ${via} (Andrea)`;
+    const nuevo=(cli.fields['Notas internas']?String(cli.fields['Notas internas']).trim()+'\n':'')+nota;
+    try{await airtableWriteTolerant('Clientes','PATCH',cli.id,{'Notas internas':nuevo});cli.fields['Notas internas']=nuevo;}catch(e){}
+  }
+  if(!silent) toast('✓ Gestión de cobro registrada','success');
+  finRenderCobranzaActions();
+}
+
 // Plan de cobranza con IA: prioriza toda la cartera por mora y monto (FINANCE_AGENT)
 async function finPlanCobranzaIA(){
   const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
