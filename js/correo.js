@@ -308,22 +308,8 @@ const MAIL={
       `<strong>${this.esc(data.from_name||data.from_email)}</strong> &lt;${this.esc(data.from_email)}&gt;<br>`+
       `Para: ${data.to.map(t=>this.esc(t)).join(', ')}<br>`+
       `${data.date}`+_crmLine;
-    // Render body
-    const bodyDiv=document.getElementById('mailRdrBody');
-    bodyDiv.innerHTML='';
-    if(data.has_html){
-      const ifr=document.createElement('iframe');
-      ifr.setAttribute('sandbox','allow-same-origin allow-popups');
-      ifr.style.cssText='width:100%;border:none;display:block;';
-      const styledHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"><base target="_blank"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:14px;color:#ccc;background:#111;margin:0;padding:16px;line-height:1.6}a{color:#00f3ff}img{max-width:100%;height:auto}</style></head><body>${data.body_html}</body></html>`;
-      ifr.srcdoc=styledHtml;
-      bodyDiv.appendChild(ifr);
-      ifr.onload=()=>{
-        try{const h=ifr.contentDocument.body.scrollHeight;ifr.style.height=(h+32)+'px';}catch(e){}
-      };
-    } else {
-      bodyDiv.innerHTML=`<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;color:var(--text2);line-height:1.65">${this.esc(data.body_text||'(Sin contenido)')}</pre>`;
-    }
+    // Render body (respeta el modo claro/oscuro compartido con el editor)
+    this._renderMsgBody(data);
     // Adjuntos del mensaje
     const attsDiv=document.getElementById('mailRdrAtts');
     if(data.attachments&&data.attachments.length){
@@ -338,6 +324,32 @@ const MAIL={
     // Mark read in list
     const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
     if(item) item.classList.remove('unread');
+  },
+
+  // Pinta el cuerpo del mensaje en el preview usando la misma preferencia
+  // claro/oscuro del editor (mail_editor_light). Muchos correos comerciales
+  // están diseñados para fondo blanco: en claro se ven como los pensaron.
+  _renderMsgBody(data){
+    const bodyDiv=document.getElementById('mailRdrBody');
+    if(!bodyDiv||!data) return;
+    const light=localStorage.getItem('mail_editor_light')==='1';
+    bodyDiv.innerHTML='';
+    bodyDiv.style.background=light?'#ffffff':'';
+    if(data.has_html){
+      const ifr=document.createElement('iframe');
+      ifr.setAttribute('sandbox','allow-same-origin allow-popups');
+      ifr.style.cssText='width:100%;border:none;display:block;'+(light?'background:#fff;':'');
+      const css=light
+        ?'*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;background:#fff;margin:0;padding:16px;line-height:1.6}a{color:#0068c9}img{max-width:100%;height:auto}'
+        :'*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:14px;color:#ccc;background:#111;margin:0;padding:16px;line-height:1.6}a{color:#00f3ff}img{max-width:100%;height:auto}';
+      ifr.srcdoc=`<!DOCTYPE html><html><head><meta charset="UTF-8"><base target="_blank"><style>${css}</style></head><body>${data.body_html}</body></html>`;
+      bodyDiv.appendChild(ifr);
+      ifr.onload=()=>{
+        try{const h=ifr.contentDocument.body.scrollHeight;ifr.style.height=(h+32)+'px';}catch(e){}
+      };
+    } else {
+      bodyDiv.innerHTML=`<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;color:${light?'#1a1a1a':'var(--text2)'};line-height:1.65;margin:0;padding:${light?'16px':'0'}">${this.esc(data.body_text||'(Sin contenido)')}</pre>`;
+    }
   },
 
   _updateFlagBtn(flagged){
@@ -753,6 +765,8 @@ const MAIL={
     const light=localStorage.getItem('mail_editor_light')!=='1';
     localStorage.setItem('mail_editor_light',light?'1':'0');
     this._applyEditorBg();
+    // El preview comparte la preferencia: re-pinta el mensaje abierto al instante
+    if(this._currentMsg) this._renderMsgBody(this._currentMsg);
   },
   _applyEditorBg(){
     const light=localStorage.getItem('mail_editor_light')==='1';
