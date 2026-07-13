@@ -1782,6 +1782,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <div id="umDriveStatus" style="font-size:9px;color:#888;margin-top:4px"></div>
         </div>
         <div class="user-menu-token">
+          <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> Backup del CRM</div>
+          <div class="user-menu-token-actions">
+            <button class="btn btn-primary btn-sm" onclick="backupAirtable(this)">💾 Respaldar ahora</button>
+          </div>
+          <div id="umBackupInfo" style="font-size:9px;color:#888;margin-top:4px"></div>
+        </div>
+        <div class="user-menu-token">
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-lock"/></svg> Proxy Worker <span style="font-size:9px;color:var(--text3);font-weight:400">(opcional)</span></div>
           <input type="text" id="umProxyUrl" placeholder="https://airtable-proxy.xxx.workers.dev" autocomplete="off" style="font-size:9px">
           <input type="password" id="umProxyKey" placeholder="clave-secreta" autocomplete="off" style="margin-top:4px">
@@ -7098,6 +7105,7 @@ function openUserMenu(){
   const at=document.getElementById('umAirtableToken');if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado — clic para cambiar)':'patXXX...';at.onfocus=()=>{if(at.value.startsWith('••')){at.value='';at.placeholder='patXXX...';}};at.onblur=()=>{if(!at.value){const vv=lsGet('airtable_token');at.value=vv?'••••••••'+vv.slice(-4):'';at.placeholder=vv?'(guardado — clic para cambiar)':'patXXX...';}}}
   const oi=document.getElementById('umOpenaiKey');if(oi){const v=localStorage.getItem('fp_openai_key');oi.value=v?'••••••••'+v.slice(-4):'';oi.placeholder=v?'(guardado)':'sk-proj-...';}
   const gc=document.getElementById('umGoogleClientId');if(gc){const v=localStorage.getItem('google_drive_client_id')||'';gc.value=v?v.slice(0,12)+'…'+v.slice(-8):'';}
+  try{_updateBackupInfo();}catch(e){}
   const ds=document.getElementById('umDriveStatus');if(ds){const v=localStorage.getItem('google_drive_client_id');ds.textContent=v?'✓ Client ID configurado':'Sin configurar — necesitas un Client ID de Google Cloud';}
   const pu=document.getElementById('umProxyUrl');if(pu){pu.value=localStorage.getItem('proxy_url')||'';}
   const pk=document.getElementById('umProxyKey');if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
@@ -8537,6 +8545,7 @@ function renderAlertas(){
   // Sincronizar con la campana de notificaciones (solo alertas nuevas)
   try{NOTIFY.syncAlertas(alertas);}catch(e){}
   try{checkAgentSuggestions();}catch(e){}
+  try{checkBackupReminder();}catch(e){}
 
   // agrupación: >=3 del mismo tipo → una sola fila
   const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
@@ -11588,6 +11597,65 @@ let qaFotoData=null,qaFotoLink=null;
 function _qaFotoKey(){const id=document.getElementById('qaModalPedidoId').value;return id?'qa_foto_'+id:null;}
 function _qaFotoLinkKey(){const id=document.getElementById('qaModalPedidoId').value;return id?'qa_foto_link_'+id:null;}
 function _driveConnected(){return _driveAccessToken&&_driveTokenExpiry>Date.now()+5000;}
+// ── BACKUP DEL CRM ─────────────────────────────────────────────
+// Respalda todas las tablas de Airtable en un JSON con fecha: a Google Drive
+// (carpeta Backups CRM) si está conectado, o como descarga local si no.
+// Recordatorio automático si pasan 7+ días sin respaldo.
+const BACKUP_TABLES=['Clientes','Cotizaciones','Pedidos','Proveedores','Facturas','Reportes','Maquinas','Automations','Social_Posts','Social_Interactions','Agent_Log'];
+async function backupAirtable(btn){
+  if(typeof getToken!=='function'||!getToken()){toast('Conecta Airtable primero','error');return;}
+  btn=(btn&&btn.tagName)?btn:null;
+  const prev=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='⏳ Respaldando…';}
+  try{
+    const data={generado:new Date().toISOString(),tablas:{}};
+    let tot=0;const fallos=[];
+    for(const t of BACKUP_TABLES){
+      if(btn)btn.textContent='⏳ '+t+'…';
+      try{const r=await airtableFetch(t,100000);data.tablas[t]=r.records||[];tot+=(r.records||[]).length;}
+      catch(e){fallos.push(t);}
+    }
+    if(!tot) throw new Error('No se pudo leer ninguna tabla');
+    const json=JSON.stringify(data);
+    const fname='backup-crm-'+new Date().toISOString().slice(0,10)+'.json';
+    let dest='';
+    if(typeof _driveConnected==='function'&&_driveConnected()){
+      try{
+        const rootId=await _driveGetOrCreateFolder('The Lab Solutions',null);
+        const bkId=await _driveGetOrCreateFolder('Backups CRM',rootId);
+        await _driveUploadText(fname,json,'application/json',bkId);
+        dest='Google Drive → The Lab Solutions/Backups CRM';
+      }catch(e){/* sin drama: cae a descarga local */}
+    }
+    if(!dest){
+      const blob=new Blob([json],{type:'application/json'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+      dest='descarga local ('+fname+')';
+    }
+    try{localStorage.setItem('thelab_backup_last',String(Date.now()));}catch(e){}
+    toast(`💾 Backup listo: ${tot.toLocaleString('es-CL')} registros de ${Object.keys(data.tablas).length} tablas → ${dest}${fallos.length?' · no disponibles: '+fallos.join(', '):''}`,'success');
+    try{_updateBackupInfo();}catch(e){}
+  }catch(e){toast('Error en backup: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.textContent=prev||'💾 Respaldar ahora';}}
+}
+function _updateBackupInfo(){
+  const el=document.getElementById('umBackupInfo');if(!el)return;
+  const last=parseInt(localStorage.getItem('thelab_backup_last'))||0;
+  el.textContent=last?('Último backup: '+new Date(last).toLocaleDateString('es-CL')+' ('+Math.floor((Date.now()-last)/864e5)+'d)') :'Sin backups aún — respalda tu CRM al menos 1 vez por semana';
+  el.style.color=(!last||(Date.now()-last)/864e5>=7)?'var(--warn)':'#888';
+}
+function checkBackupReminder(){
+  try{
+    const last=parseInt(localStorage.getItem('thelab_backup_last'))||0;
+    if(last&&(Date.now()-last)/864e5<7)return;
+    const today=new Date().toISOString().slice(0,10);
+    if(localStorage.getItem('thelab_backup_nag')===today)return;
+    localStorage.setItem('thelab_backup_nag',today);
+    NOTIFY.add('info',last?('💾 Backup del CRM: '+Math.floor((Date.now()-last)/864e5)+' días sin respaldo'):'💾 Aún no has respaldado tu CRM','Toca para respaldar todas las tablas de Airtable','@backupAirtable',{silent:true});
+  }catch(e){}
+}
+window.backupAirtable=backupAirtable;
 // Conecta Google Drive una vez por sesión (gesto directo → OAuth sin bloqueos).
 // Tras esto, aprobar cotizaciones crea la carpeta sola y "Ver adjuntos" no re-pide login.
 async function connectDrive(){
