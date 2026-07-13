@@ -2270,6 +2270,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 <!-- PEDIDOS -->
 <div class="tab-panel" id="tab-pedidos">
   <div class="section-header"><div><div class="section-title">Pedidos en Producción</div><div class="section-desc">Seguimiento completo de cada orden: estado de producción, fecha de entrega comprometida, control de calidad (QA) y equipo responsable.</div></div><button class="btn btn-ghost btn-sm drive-conn-btn" onclick="connectDrive()" title="Conecta Google Drive una vez por sesión: así las carpetas se crean solas al aprobar cotizaciones y puedes ver adjuntos sin volver a iniciar sesión">🔗 Conectar Drive</button></div>
+  <!-- POST-ENTREGA: pedidos despachados hace 3+ días listos para mensaje de satisfacción + reseña -->
+  <div class="card" id="pdTrayCard" style="margin-bottom:20px;border-color:rgba(0,212,170,0.35);display:none">
+    <div class="card-header">
+      <span class="card-title">💚 Post-entrega pendiente <span class="badge badge-green" id="pdTrayCount">0</span></span>
+      <button class="btn btn-ghost btn-sm" onclick="pdSetReviewUrl()" title="Configura el enlace de reseña de Google que se incluye en los mensajes">⚙️ Link reseña</button>
+    </div>
+    <div id="pdTrayList" style="padding:2px 0 8px"></div>
+  </div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Atrasados</button>
@@ -9236,6 +9244,11 @@ function renderClienteTimeline(clienteId,empresaNombre){
     ((cl[(empresaNombre||'').toLowerCase()])||[]).forEach(e=>{
       gest.push({type:'ia',date:new Date(e.ts).toISOString().slice(0,10),label:'💰 Recordatorio de cobranza',sub:escapeHtml('vía '+(e.via||'—')),color:'#ffaa00',icon:'💰'});});
   }catch(e){}
+  try{
+    const pl=(typeof _pdLog==='function')?_pdLog():{};
+    peds.forEach(p=>{const e=pl[p.id];if(!e||!e.ts)return;
+      gest.push({type:'ia',date:new Date(e.ts).toISOString().slice(0,10),label:'💚 Post-entrega enviado',sub:escapeHtml((p.fields['N° Pedido']||'—')+' · vía '+(e.via||'—')),color:'#00d4aa',icon:'💚'});});
+  }catch(e){}
   _cdTimelineData=[
     ...cots.map(c=>({type:'cot',date:c.fields['Fecha cotización']||c.createdTime?.slice(0,10)||'',label:c.fields['N° Cotización']||'—',sub:estadoBadge(c.fields['Estado cotización']||'—')+' · '+formatCLP(c.fields['Total final (CLP)']||0),color:'#a78bfa',icon:'📋',id:c.id})),
     ...peds.map(p=>({type:'ped',date:p.fields['Fecha entrega']||p.createdTime?.slice(0,10)||'',label:p.fields['N° Pedido']||'—',sub:estadoBadge(p.fields['Estado pedido']||'—')+' · '+formatCLP(p.fields['Monto total (CLP)']||0),color:'#ff6b35',icon:'📦',id:p.id})),
@@ -11341,6 +11354,7 @@ function renderPedidos(filter){
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
     <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
   }).join('')+(data.length>_pedCap?_loadMoreRow(data.length-_pedCap,12,'pedShowMore()'):''));
+  try{buildPostEntregaTray();}catch(e){}
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
 function renderEquipoCell(pedidoId,equipoStr){
@@ -15308,6 +15322,95 @@ async function fuMarkDone(cotId,via){
   try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,{'Último seguimiento':new Date().toISOString().slice(0,10)});}catch(e){}
   if(via&&via!=='manual') toast('✓ Seguimiento registrado ('+via+')','success');
   buildFollowupTray();
+}
+
+// ── POST-ENTREGA ───────────────────────────────────────────────
+// Pedidos despachados hace 3+ días (hasta 30): mensaje de satisfacción con
+// invitación a dejar reseña en Google, por WhatsApp o correo (Andrea).
+const _PD_LOG_KEY='thelab_postdel_log_v1';
+function _pdLog(){try{return JSON.parse(localStorage.getItem(_PD_LOG_KEY)||'{}');}catch(e){return{};}}
+function _pdReviewUrl(){return localStorage.getItem('thelab_greview_url')||'';}
+function pdSetReviewUrl(){
+  const cur=_pdReviewUrl();
+  const v=prompt('Enlace de reseña de Google (se incluye en los mensajes post-entrega).\nEn Google Maps: tu negocio → Compartir → "Escribir una reseña".',cur||'https://g.page/r/');
+  if(v===null) return;
+  const t=v.trim();
+  if(t&&!/^https?:\/\//i.test(t)){toast('Debe ser un enlace https://','error');return;}
+  if(t) localStorage.setItem('thelab_greview_url',t); else localStorage.removeItem('thelab_greview_url');
+  toast(t?'✓ Enlace de reseña guardado':'Enlace de reseña eliminado','success');
+}
+function _pdCliRec(p){const c=p.fields['Cliente'];const id=Array.isArray(c)?c[0]:null;return id?(state.clientesByIdRec||{})[id]||null:null;}
+function _pdMsg(p){
+  const f=p.fields;
+  const cli=_pdCliRec(p);
+  const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const prod=String(f['Detalle productos']||f['Solicitud cliente (texto libre)']||'').trim().slice(0,60);
+  const rev=_pdReviewUrl();
+  return `Hola${nombre?' '+nombre:''} 👋 Soy Andrea de The Lab Solutions. Hace unos días te entregamos ${prod?('tu pedido ('+prod+')'):'tu pedido'} y queríamos saber cómo llegó todo — ¿quedaste conforme? 😊 Si hubo cualquier detalle, cuéntame y lo resolvemos de inmediato.${rev?`\n\nY si quedaste contento/a, nos ayudarías un montón dejándonos una reseña en Google: ${rev}`:''}\n¡Gracias por preferirnos! 💙`;
+}
+function buildPostEntregaTray(){
+  const card=document.getElementById('pdTrayCard'); if(!card) return;
+  const log=_pdLog();
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const cands=(state.pedidos||[]).map(p=>{
+    const f=p.fields;
+    if((f['Estado pedido']||'')!=='Despachado') return null;
+    const fecha=f['Fecha despacho']||f['Fecha entrega']||'';
+    if(!fecha) return null;
+    const dias=Math.floor((_t-new Date(fecha+'T00:00:00'))/864e5);
+    if(dias<3||dias>30) return null;   // ventana útil: ni muy pronto ni pedidos antiguos
+    if(log[p.id]) return null;
+    return {p,f,dias};
+  }).filter(Boolean).sort((a,b)=>a.dias-b.dias);
+  const cnt=document.getElementById('pdTrayCount'); if(cnt) cnt.textContent=cands.length;
+  if(!cands.length){card.style.display='none';return;}
+  card.style.display='';
+  const list=document.getElementById('pdTrayList'); if(!list) return;
+  list.innerHTML=cands.slice(0,10).map(x=>{
+    const cli=_pdCliRec(x.p);
+    const tieneTel=!!(cli&&_getClienteWAPhone(cli));
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+      <span class="badge badge-green" style="flex-shrink:0" title="Días desde el despacho">${x.dias} d</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(x.f['Cliente']))}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${escapeHtml(x.f['N° Pedido']||'—')} · despachado el ${formatFecha(x.f['Fecha despacho']||x.f['Fecha entrega'])}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="pdWhatsApp('${x.p.id}')" ${tieneTel?'':'title="Sin teléfono en la ficha — se abrirá WhatsApp para elegir contacto"'}>📲</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="pdEmail('${x.p.id}',this)">📧</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado sin enviar" onclick="pdMarkDone('${x.p.id}','manual')">✓</button>
+    </div>`;
+  }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-10} más</div>`:'');
+}
+function pdWhatsApp(pedidoId){
+  const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
+  const cli=_pdCliRec(p);
+  const phone=cli?_getClienteWAPhone(cli):'';
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_pdMsg(p)),'_blank');
+  pdMarkDone(pedidoId,'WhatsApp',true);
+}
+async function pdEmail(pedidoId,btn){
+  const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
+  const cli=_pdCliRec(p);
+  let to=cli?.fields['Email']||prompt('¿A qué correo enviamos el mensaje post-entrega?','');
+  if(!to)return; to=String(to).trim();
+  if(!validEmail(to)){toast('Correo inválido','error');return;}
+  const prev=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  try{
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:'¿Cómo llegó tu pedido? — The Lab Solutions',body:_pdMsg(p),from_name:AGENT_CTA_FROM.name});
+    if(r&&!r.error){toast('✓ Mensaje post-entrega enviado a '+to,'success');pdMarkDone(pedidoId,'correo',true);}
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
+}
+async function pdMarkDone(pedidoId,via,silent){
+  const log=_pdLog(); log[pedidoId]={ts:Date.now(),via:via||'manual'};
+  try{localStorage.setItem(_PD_LOG_KEY,JSON.stringify(log));}catch(e){}
+  // Nota en el pedido (aparece en Notas internas del pedido, best-effort)
+  try{const arr=_getNotas('ped',pedidoId);arr.push({id:'n'+Date.now(),ts:Date.now(),text:'💚 Mensaje post-entrega enviado por '+(via||'—')+' (Andrea)'});_saveNotas('ped',pedidoId,arr);}catch(e){}
+  if(!silent&&via==='manual') toast('✓ Post-entrega marcado como gestionado','success');
+  else if(!silent) toast('✓ Post-entrega registrado ('+via+')','success');
+  buildPostEntregaTray();
 }
 
 function runFollowupAgent(cotId){
