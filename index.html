@@ -11355,6 +11355,8 @@ function renderPedidos(filter){
     <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
   }).join('')+(data.length>_pedCap?_loadMoreRow(data.length-_pedCap,12,'pedShowMore()'):''));
   try{buildPostEntregaTray();}catch(e){}
+  // Si la vista Kanban está activa, refléjale los cambios (antes quedaba desactualizada)
+  try{const kb=document.getElementById('pedidosKanban');if(kb&&kb.style.display!=='none')renderPedidosKanban();}catch(e){}
 }
 function equipoStr2Arr(s){return(s||'').split(',').map(x=>x.trim()).filter(Boolean);}
 function renderEquipoCell(pedidoId,equipoStr){
@@ -11779,7 +11781,7 @@ async function advancePedido(id,estado){
   } else {
     if(!confirm(`¿Avanzar a "${estado}"?`)) return;
   }
-  try{const flds={'Estado pedido':estado};if(estado==='Despachado') flds['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,flds);toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+  try{const flds={'Estado pedido':estado};if(estado==='Despachado') flds['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,flds);Object.assign(p.fields,flds);renderPedidos();toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 
 // ── NUEVO LEAD + LEAD_AGENT ───────────────────────────────────
 let _leadAgentResponse=null;
@@ -13186,7 +13188,7 @@ function renderPedidosKanban(){
     const cards=items.map(p=>{
       const f=p.fields,entrega=f['Fecha entrega']||'',atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&stage!=='Despachado';
       const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
-      return`<div onclick="goToAlert('pedidos','${p.id}')" style="background:var(--surface);border:1px solid ${atrasado?'rgba(255,68,68,0.45)':'var(--border)'};border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='${colores[stage]}'" onmouseleave="this.style.borderColor='${atrasado?'rgba(255,68,68,0.45)':'var(--border)'}'">
+      return`<div draggable="true" ondragstart="kbDragStart(event,'${p.id}')" ondragend="kbDragEnd(this)" onclick="goToAlert('pedidos','${p.id}')" title="Arrastra a otra columna para cambiar el estado" style="background:var(--surface);border:1px solid ${atrasado?'rgba(255,68,68,0.45)':'var(--border)'};border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:grab;transition:border-color .15s" onmouseenter="this.style.borderColor='${colores[stage]}'" onmouseleave="this.style.borderColor='${atrasado?'rgba(255,68,68,0.45)':'var(--border)'}'">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
           <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${colores[stage]};font-weight:700">${escapeHtml(f['N° Pedido']||'—')}</span>
           ${atrasado?'<span style="font-size:9px;color:var(--danger);font-weight:700;background:rgba(255,68,68,0.12);padding:1px 5px;border-radius:3px">⚠ ATRAS.</span>':(pedPagoEstado(f)===2?'<span style="font-size:9px;color:var(--accent3)">✓ Pago total</span>':pedPagoEstado(f)===1?'<span style="font-size:9px;color:var(--accent2)">◐ Anticipo</span>':'<span style="font-size:9px;color:var(--danger)">✕ Sin pago</span>')}
@@ -13198,7 +13200,7 @@ function renderPedidosKanban(){
       </div>`;
     }).join('');
     const colTotal=items.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-    return`<div style="flex:1;min-width:210px;max-width:285px">
+    return`<div data-stage="${stage}" ondragover="kbDragOver(event,this)" ondragleave="kbDragLeave(this)" ondrop="kbDrop(event,this)" style="flex:1;min-width:210px;max-width:285px;border-radius:11px;transition:background .12s">
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:9px 12px;background:var(--surface2);border-radius:9px;border-left:3px solid ${colores[stage]}">
         <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${colores[stage]};flex:1">${stage}</span>
         <span style="font-size:10px;color:var(--text3);background:var(--surface3);border-radius:4px;padding:1px 6px">${items.length}</span>
@@ -13208,6 +13210,26 @@ function renderPedidosKanban(){
     </div>`;
   }).join('');
   document.getElementById('pedidosKanban').innerHTML=`<div style="display:flex;gap:12px;overflow-x:auto;padding:4px 0 16px;align-items:flex-start">${cols}</div>`;
+}
+// ── Kanban: drag & drop de pedidos entre columnas ──────────────
+// El drop pasa por advancePedido(), así respeta las mismas compuertas que el
+// botón "→" (bloqueo sin saldo, QA rechazado, confirmaciones de pago).
+let _kbDragPid=null;
+function kbDragStart(ev,pid){
+  _kbDragPid=pid;
+  try{ev.dataTransfer.setData('text/plain',pid);ev.dataTransfer.effectAllowed='move';}catch(e){}
+  ev.target.style.opacity='0.45';
+}
+function kbDragEnd(el){ el.style.opacity=''; document.querySelectorAll('#pedidosKanban [data-stage]').forEach(c=>c.style.background=''); }
+function kbDragOver(ev,el){ ev.preventDefault(); try{ev.dataTransfer.dropEffect='move';}catch(e){} el.style.background='rgba(0,212,204,0.06)'; }
+function kbDragLeave(el){ el.style.background=''; }
+async function kbDrop(ev,el){
+  ev.preventDefault(); el.style.background='';
+  const pid=_kbDragPid||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain'))||''; _kbDragPid=null;
+  const stage=el.getAttribute('data-stage'); if(!pid||!stage) return;
+  const p=state.pedidosById[pid]; if(!p) return;
+  if((p.fields['Estado pedido']||'')===stage) return;
+  await advancePedido(pid,stage);
 }
 
 // ── ATAJO TECLADO ─────────────────────────────────────────────────────
