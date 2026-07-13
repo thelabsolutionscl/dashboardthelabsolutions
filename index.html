@@ -3701,6 +3701,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
     <div id="monitorFilterTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
     <div id="monitorKPIs" style="margin-bottom:12px"></div>
+    <div id="maqOcupacion" style="display:none;margin-bottom:14px;background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:12px 14px"></div>
     <div id="maquinaMonGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
   </div>
 
@@ -17993,6 +17994,65 @@ function renderMonitorKPIs(){
     ${noip>0?`<span style="color:#ff6b35">❓ ${noip} Sin IP</span>`:''}
     <span style="margin-left:auto;font-weight:700;color:${utilPct>0?'#00d4aa':'var(--text3)'}">Utilización ${utilPct}%</span>
   </div>`;
+  try{renderMaqOcupacion();}catch(e){}
+}
+
+// ── OCUPACIÓN DE MÁQUINAS ──────────────────────────────────────
+// Línea de tiempo por impresora con la telemetría viva del bridge: qué imprime
+// cada una y a qué hora queda libre (ETA real). Para prometer fechas de entrega
+// con datos, no con intuición. Se refresca junto con los KPIs del monitor.
+function renderMaqOcupacion(){
+  const el=document.getElementById('maqOcupacion');if(!el)return;
+  const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
+  if(!lista.length){el.style.display='none';return;}
+  const clasif=st=>st==='printing'?'print':st==='paused'?'paused':(st==='error'||st==='shutdown')?'error':(st==='offline'||st==='noip')?'off':'idle';
+  const rows=lista.map(m=>{const s=_printerStatus[m.id]||{state:'offline'};return{m,s,k:clasif(s.state),eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
+  const etas=rows.filter(r=>r.eta>0).map(r=>r.eta);
+  const horizon=Math.max(4*3600,Math.min(12*3600,etas.length?Math.max(...etas)*1.15:4*3600));
+  const libres=rows.filter(r=>r.k==='idle').length;
+  const imprimiendo=rows.filter(r=>r.k==='print').length;
+  const hhmm=seg=>new Date(Date.now()+seg*1000).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+  const proxima=etas.length?hhmm(Math.min(...etas)):null;
+  // Eje: marcas de hora sobre el horizonte
+  const marks=[];const stepH=horizon>6*3600?2:1;
+  for(let hh=stepH;hh*3600<horizon;hh+=stepH) marks.push(`<span style="position:absolute;left:${(hh*3600/horizon*100).toFixed(1)}%;transform:translateX(-50%);font-size:8.5px;color:var(--text3)">+${hh}h</span>`);
+  const fila=r=>{
+    const nom=`${escapeHtml(r.m.nombre||'—')} <span style="color:var(--text3)">#${r.m.numG||r.m.num||''}</span>`;
+    let bar='',lbl='';
+    if(r.k==='print'&&r.eta>0){
+      const w=Math.min(100,r.eta/horizon*100).toFixed(1);
+      const pct=(typeof r.s.progress==='number'&&r.s.progress>=0)?Math.round(r.s.progress<=1?r.s.progress*100:r.s.progress):null;
+      bar=`<div title="${escapeHtml(r.s.filename||'Imprimiendo')}${pct!=null?' · '+pct+'%':''}" style="height:100%;width:${w}%;background:linear-gradient(90deg,#00d4aa,#00d4cc);border-radius:5px;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;min-width:52px"><span style="font-size:9px;font-weight:700;color:#04121a;white-space:nowrap">${pct!=null?pct+'% · ':''}libre ${hhmm(r.eta)}</span></div>`;
+      lbl=`<span style="color:#00d4aa">🟢</span>`;
+    }else if(r.k==='print'){
+      bar=`<div title="Imprimiendo — sin ETA del bridge" style="height:100%;width:100%;background:repeating-linear-gradient(45deg,rgba(0,212,170,0.5),rgba(0,212,170,0.5) 8px,rgba(0,212,170,0.25) 8px,rgba(0,212,170,0.25) 16px);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:#04121a">en curso · sin ETA</span></div>`;
+      lbl=`<span style="color:#00d4aa">🟢</span>`;
+    }else if(r.k==='paused'){
+      bar=`<div style="height:100%;width:45%;background:rgba(255,170,0,0.6);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:#1a1206">⏸ en pausa</span></div>`;
+      lbl=`<span style="color:#ffaa00">⏸</span>`;
+    }else if(r.k==='error'){
+      bar=`<div style="height:100%;width:100%;background:rgba(255,68,68,0.14);border:1px dashed rgba(255,68,68,0.5);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:var(--danger)">⚠ con falla — revisar</span></div>`;
+      lbl=`<span style="color:var(--danger)">🔴</span>`;
+    }else if(r.k==='off'){
+      bar=`<div style="height:100%;width:100%;background:var(--surface3);border-radius:5px;display:flex;align-items:center;padding-left:8px;opacity:.55"><span style="font-size:9px;color:var(--text3)">sin conexión</span></div>`;
+      lbl=`<span style="color:var(--text3)">⚫</span>`;
+    }else{
+      bar=`<div style="height:100%;width:100%;background:rgba(0,212,170,0.08);border:1px dashed rgba(0,212,170,0.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:#00d4aa">✓ libre ahora</span></div>`;
+      lbl=`<span style="color:#00d4aa">⚪</span>`;
+    }
+    return`<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
+      <span style="flex-shrink:0;width:14px;text-align:center;font-size:11px">${lbl}</span>
+      <span style="flex-shrink:0;width:158px;font-size:10.5px;font-weight:600;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</span>
+      <div style="flex:1;height:20px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:2px;position:relative">${bar}</div>
+    </div>`;
+  };
+  el.style.display='';
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:700;color:var(--text)">⏱️ Ocupación de máquinas</span>
+      <span style="font-size:10px;color:var(--text3)">${libres} libre${libres!==1?'s':''} ahora · ${imprimiendo} imprimiendo${proxima?' · próxima máquina libre ~'+proxima:''}</span>
+    </div>
+    <div style="position:relative;height:12px;margin:0 0 4px 181px">${marks.join('')}</div>
+    ${rows.sort((a,b)=>(a.eta||(a.k==='idle'?-1:1e9))-(b.eta||(b.k==='idle'?-1:1e9))).map(fila).join('')}`;
 }
 
 function renderMonitorGrid(){
