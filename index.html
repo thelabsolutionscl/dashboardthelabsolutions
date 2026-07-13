@@ -6827,8 +6827,11 @@ function renderKPIs(){
   const metaMPct=revMetaMensual>0?Math.min(Math.round((revMes/revMetaMensual)*100),100):0;
   const metaMColor=metaMPct>=100?'var(--accent3)':metaMPct>=70?'var(--accent)':'var(--warn)';
   const metaBar=(actual,meta,pct,color,label)=>`<div style="margin-top:4px"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:9px;color:var(--text3)">${label} <span style="color:${color};font-weight:700">${formatCLP(actual)}</span> / ${formatCLP(meta)}</span><span style="font-size:9px;font-weight:700;color:${color}">${pct}%${pct>=100?' ✓':''}</span></div><div style="height:4px;background:var(--surface3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:width .5s ease"></div></div></div>`;
+  // Proyección de cierre de mes por ritmo real (revenue/día corrido → fin de mes)
+  const proj=proyeccionMes(revMes,revMetaMensual,today);
+  const projHtml=proj?`<div style="font-size:9px;margin-top:4px;line-height:1.5;color:var(--text3)">${proj.emoji} Proyección: <span style="color:${proj.color};font-weight:700">${formatCLP(proj.proyeccion)}</span> (${proj.pct}% de la meta) · faltan ${proj.diasRestantes}d${proj.necesarioDiario>0?` · necesitas <span style="color:${proj.color};font-weight:700">${formatCLP(proj.necesarioDiario)}/día</span>`:' · 🎯 meta asegurada al ritmo actual'}</div>`:'';
   const metaHtml=(revMeta>0||revMetaMensual>0)
-    ?`<div style="margin-top:6px;cursor:pointer" onclick="event.stopPropagation();openMetaModal()">${revMeta>0?metaBar(revSemana,revMeta,metaPct,metaColor,'Sem.'):''}${revMetaMensual>0?metaBar(revMes,revMetaMensual,metaMPct,metaMColor,'Mes'):''}${metaPct>=100?`<div style="font-size:9px;color:var(--accent3);font-weight:700;margin-top:3px;text-align:center">🎯 ¡Meta semanal alcanzada!</div>`:''}</div>`
+    ?`<div style="margin-top:6px;cursor:pointer" onclick="event.stopPropagation();openMetaModal()">${revMeta>0?metaBar(revSemana,revMeta,metaPct,metaColor,'Sem.'):''}${revMetaMensual>0?metaBar(revMes,revMetaMensual,metaMPct,metaMColor,'Mes'):''}${projHtml}${metaPct>=100?`<div style="font-size:9px;color:var(--accent3);font-weight:700;margin-top:3px;text-align:center">🎯 ¡Meta semanal alcanzada!</div>`:''}</div>`
     :`<div style="font-size:9px;color:var(--text3);margin-top:4px;cursor:pointer" onclick="event.stopPropagation();openMetaModal()">+ definir meta semanal</div>`;
 
   const kpiStyle='cursor:pointer;transition:border-color .15s' ;
@@ -10644,6 +10647,22 @@ function runGlobalSearch(q){
 function goToSearchResult(tab,id){closeGlobalSearch();goToAlert(tab,id);}
 
 // ── META SEMANAL + MENSUAL ────────────────────────────────────────────
+// Proyección de cierre de mes: extrapola el revenue acumulado por el ritmo
+// diario real (mes a la fecha / días corridos × días del mes) y calcula
+// cuánto hay que vender por día para llegar a la meta. Pura → testeable.
+function proyeccionMes(revMes,meta,hoy){
+  if(!(meta>0)) return null;
+  const d=hoy?new Date(hoy):new Date();
+  const diasMes=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  const diaActual=d.getDate();
+  const diasRestantes=diasMes-diaActual;
+  const proyeccion=Math.round((revMes||0)/diaActual*diasMes);
+  const pct=Math.round(proyeccion/meta*100);
+  const necesarioDiario=diasRestantes>0?Math.max(0,Math.ceil((meta-(revMes||0))/diasRestantes)):0;
+  const color=pct>=100?'var(--accent3)':pct>=85?'var(--warn)':'var(--danger)';
+  const emoji=pct>=100?'🟢':pct>=85?'🟡':'🔴';
+  return {proyeccion,pct,diasRestantes,necesarioDiario,color,emoji};
+}
 async function saveMetaAirtable(metaSemanal,metaMensual){
   const notes=JSON.stringify({metaSemanal,metaMensual,updatedAt:new Date().toISOString()});
   if(state.metaRecordId){
@@ -11068,6 +11087,13 @@ function buildAgentContext(id){
     lines.push(`- Pedidos sin pago: ${sinPago.length} | Clientes con fact. vencidas: ${fv.length}`);
     lines.push('\nFINANCIERO:');
     lines.push(`- Margen promedio: ${avgM.toFixed(1)}% | Conversión: ${enviadas>0?(aprobadas/(aprobadas+enviadas)*100).toFixed(0):'—'}%`);
+    try{
+      const metaM=parseInt(localStorage.getItem('revMetaMensual'))||0;
+      const mStart=new Date(today.getFullYear(),today.getMonth(),1);
+      const rMes=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=mStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
+      const pj=proyeccionMes(rMes,metaM,today);
+      if(pj) lines.push(`- Meta mensual: ${fmtCLP(metaM)} | Mes a la fecha: ${fmtCLP(rMes)} | Proyección de cierre: ${fmtCLP(pj.proyeccion)} (${pj.pct}% de la meta) | Faltan ${pj.diasRestantes} días | Ritmo necesario: ${fmtCLP(pj.necesarioDiario)}/día`);
+    }catch(e){}
     const top5=pedActivos.slice(0,5);
     if(top5.length){lines.push('\nPEDIDOS ACTIVOS:');top5.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);});}
     const cotTop=cotAbiertas.slice(0,5);
