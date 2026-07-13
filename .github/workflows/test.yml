@@ -37,3 +37,17 @@ jobs:
 
       - name: Run calculation tests
         run: node tests/calc.test.js
+
+      - name: Run redes tests
+        run: node tests/redes.test.js
+
+      - name: Smoke tests (wiring UI, funciones críticas, IDs del DOM)
+        run: node tests/smoke.test.js
+
+      - name: PHP lint (mail-api)
+        run: |
+          if command -v php >/dev/null 2>&1; then
+            php -l mail-api.php
+          else
+            echo "php no disponible en el runner — lint omitido"
+          fi
