@@ -10982,6 +10982,89 @@ function renderPedidosCalendario(){
   </table></div></div>`;
 }
 
+// ── RENTABILIDAD REAL (por cliente y por tipo de producto) ────────────
+// Quién deja PLATA (utilidad), no solo revenue. La utilidad de un pedido se
+// estima con el margen de su cotización vinculada; si no la tiene, se usa el
+// margen promedio global (marcado como estimado).
+function _margenPromedioGlobal(){
+  const ms=(state.cotizaciones||[]).map(c=>getMargenCot(c.fields)).filter(m=>m!==null);
+  return ms.length?ms.reduce((a,b)=>a+b,0)/ms.length:null;
+}
+function rentabilidadClientes(){
+  const avg=_margenPromedioGlobal();
+  const byCli=new Map();
+  (state.pedidos||[]).forEach(p=>{
+    const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;
+    const venta=(f['Monto total (CLP)']||0)/1.19;if(venta<=0)return;
+    let margen=null,estimado=false;
+    const cotIds=f['Cotizaciones'];
+    if(Array.isArray(cotIds)&&cotIds.length){const cot=(state.cotizacionesById||{})[cotIds[0]];if(cot)margen=getMargenCot(cot.fields);}
+    if(margen===null){margen=avg;estimado=true;}
+    if(margen===null)return;
+    const cliIds=Array.isArray(f['Cliente'])?f['Cliente']:[];
+    const cliId=cliIds[0]||('nom:'+String(f['Cliente']||'—'));
+    const e=byCli.get(cliId)||{cliId,nombre:(state.clientesById||{})[cliId]||String(f['Cliente']||'—'),rev:0,util:0,n:0,est:0};
+    e.rev+=venta;e.util+=venta*margen/100;e.n++;if(estimado)e.est++;
+    byCli.set(cliId,e);
+  });
+  return [...byCli.values()].map(e=>({...e,margen:e.rev>0?e.util/e.rev*100:0})).sort((a,b)=>b.util-a.util);
+}
+// Clasificador de tipo de producto por palabras clave (el orden importa:
+// "caja de luz" debe ganar antes que "caja"→packaging).
+const _PROD_TIPOS=[
+  {k:'Neón LED',re:/ne[oó]n/i},
+  {k:'Caja de luz',re:/caja\s*de\s*luz|backlight/i},
+  {k:'Letrero / señalética',re:/letrero|cartel|se[nñ]al[eé]tica|t[oó]tem|corp[oó]reo/i},
+  {k:'Trofeo / merch',re:/trofeo|medalla|galvano|merch|llavero|premio/i},
+  {k:'Impresión 3D',re:/\b3d\b|prototip|filamento|\bpla\b|\bpetg\b|resina/i},
+  {k:'Packaging',re:/packaging|empaque|estuche|caja/i},
+  {k:'Corte / grabado',re:/corte|grabado|l[aá]ser|mdf|acr[ií]lico/i},
+];
+function _prodTipo(txt){for(const t of _PROD_TIPOS)if(t.re.test(txt||''))return t.k;return 'Otro';}
+function rentabilidadProductos(){
+  const map=new Map();
+  const add=(tipo,venta,costo)=>{if(venta<=0)return;const e=map.get(tipo)||{tipo,rev:0,util:0,n:0};e.rev+=venta;e.util+=venta-costo;e.n++;map.set(tipo,e);};
+  (state.cotizaciones||[]).forEach(c=>{
+    const f=c.fields;
+    // Preferencia: línea a línea del detalle ("desc | und | Costo: X | Venta: Y")
+    let parsed=false;
+    (f['Detalle productos']||'').split('\n').filter(Boolean).forEach(l=>{
+      const parts=l.split('|').map(s=>s.trim());
+      if(parts.length<4)return;
+      const costo=Math.round(parseFloat((parts[2]||'').replace(/[^0-9]/g,''))||0);
+      const venta=Math.round(parseFloat((parts[3]||'').replace(/[^0-9]/g,''))||0);
+      if(venta>0){add(_prodTipo(parts[0]),venta,costo);parsed=true;}
+    });
+    if(!parsed){
+      const m=getMargenCot(f);if(m===null)return;
+      const venta=(f['Total final (CLP)']||0)/1.19;
+      add(_prodTipo(f['Solicitud cliente (texto libre)']||f['Detalle productos']||f['Alias / Título']||''),venta,venta*(1-m/100));
+    }
+  });
+  return [...map.values()].map(e=>({...e,margen:e.rev>0?e.util/e.rev*100:0})).sort((a,b)=>b.util-a.util);
+}
+function _margenChip(m){const c=m>=35?'var(--accent3)':m>=20?'var(--warn)':'var(--danger)';return `<span style="color:${c};font-weight:700">${m.toFixed(0)}%</span>`;}
+function renderRentabilidad(el){
+  const cli=rentabilidadClientes().slice(0,5);
+  const prod=rentabilidadProductos();
+  if(!cli.length&&!prod.length){el.innerHTML='';return;}
+  const maxU=cli.length?Math.max(cli[0].util,1):1;
+  const cliHtml=cli.map(c=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+    <div style="font-size:10px;color:var(--text2);min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</div>
+    <div style="flex:1;height:14px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(c.util/maxU*100)}%;background:var(--accent3);border-radius:4px"></div></div>
+    <div style="font-size:10px;font-family:'JetBrains Mono',monospace;min-width:120px;text-align:right;color:var(--accent3)">${formatCLP(Math.round(c.util))} <span style="color:var(--text3)">·</span> ${_margenChip(c.margen)}${c.est?` <span title="${c.est} pedido(s) sin cotización vinculada: margen estimado" style="color:var(--text3)">≈</span>`:''}</div>
+  </div>`).join('');
+  const maxP=prod.length?Math.max(...prod.map(p=>p.util),1):1;
+  const prodHtml=prod.slice(0,7).map(p=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+    <div style="font-size:10px;color:var(--text2);min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.tipo)} <span style="color:var(--text3)">(${p.n})</span></div>
+    <div style="flex:1;height:14px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(Math.max(p.util,0)/maxP*100)}%;background:var(--accent4);border-radius:4px"></div></div>
+    <div style="font-size:10px;font-family:'JetBrains Mono',monospace;min-width:120px;text-align:right;color:var(--accent4)">${formatCLP(Math.round(p.util))} <span style="color:var(--text3)">·</span> ${_margenChip(p.margen)}</div>
+  </div>`).join('');
+  el.innerHTML=`<div class="data-grid" style="margin-top:16px">
+    <div class="card"><div class="card-header"><span class="card-title">💰 Top clientes por UTILIDAD</span><span style="font-size:10px;color:var(--text3)">utilidad estimada · margen efectivo</span></div><div style="padding:14px 16px">${cliHtml||'<div class="empty-state">Sin datos de margen aún</div>'}</div></div>
+    <div class="card"><div class="card-header"><span class="card-title">🏷️ Margen por tipo de producto</span><span style="font-size:10px;color:var(--text3)">de las cotizaciones con costo/venta</span></div><div style="padding:14px 16px">${prodHtml||'<div class="empty-state">Sin detalle de productos aún</div>'}</div></div>
+  </div>`;
+}
 // ── ANALYTICS DE CLIENTES ─────────────────────────────────────────────
 function renderClientesAnalytics(){
   const el=document.getElementById('clientesAnalytics');if(!el||!state.clientes.length) return;
@@ -10999,6 +11082,10 @@ function renderClientesAnalytics(){
   const funnelSteps=[{l:'Total clientes',n:total,pct:100,col:'var(--accent4)'},{l:'Con cotización',n:withCot.size,pct:total?Math.round((withCot.size/total)*100):0,col:'var(--accent)'},{l:'Con pedido',n:withPed.size,pct:total?Math.round((withPed.size/total)*100):0,col:'var(--accent3)'}];
   const funnelHtml=funnelSteps.map(f=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:10px;color:var(--text2)">${f.l}</span><span style="font-size:10px;font-weight:700;color:${f.col}">${f.n} <span style="color:var(--text3);font-weight:400">(${f.pct}%)</span></span></div><div style="height:5px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${f.pct}%;background:${f.col};border-radius:3px"></div></div></div>`).join('');
   el.innerHTML=`<div class="data-grid" style="margin-top:16px"><div class="card"><div class="card-header"><span class="card-title">🏆 Top Clientes por Revenue</span></div><div style="padding:14px 16px">${top5.length?barsHtml:'<div class="empty-state">Sin pedidos asociados a clientes</div>'}</div></div><div class="card"><div class="card-header"><span class="card-title">🔄 Funnel de Conversión</span></div><div style="padding:14px 16px">${funnelHtml}</div></div></div>`;
+  // Rentabilidad real (utilidad) debajo del funnel
+  let rb=document.getElementById('rentabilidadBlock');
+  if(!rb){rb=document.createElement('div');rb.id='rentabilidadBlock';el.after(rb);}
+  try{renderRentabilidad(rb);}catch(e){logErr('rentabilidad',e);}
 }
 
 // ── ANALYTICS DE COTIZACIONES ─────────────────────────────────────────
@@ -11098,6 +11185,14 @@ function buildAgentContext(id){
     if(top5.length){lines.push('\nPEDIDOS ACTIVOS:');top5.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);});}
     const cotTop=cotAbiertas.slice(0,5);
     if(cotTop.length){lines.push('\nCOTIZACIONES SIN RESPUESTA:');cotTop.forEach(c=>{const f=c.fields;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Vto: ${f['Fecha vencimiento']||'—'}`);});}
+    // Rentabilidad: quién y qué deja utilidad de verdad (no solo revenue)
+    try{
+      const rc=rentabilidadClientes().slice(0,3);
+      if(rc.length){lines.push('\nRENTABILIDAD (utilidad estimada):');rc.forEach(c=>lines.push(`  • ${c.nombre}: utilidad ${fmtCLP(c.util)} (margen efectivo ${c.margen.toFixed(0)}%, ${c.n} pedidos)`));}
+      const rp=rentabilidadProductos();
+      if(rp.length>=2){const best=rp.slice().sort((a,b)=>b.margen-a.margen)[0];const worst=rp.slice().sort((a,b)=>a.margen-b.margen)[0];
+        lines.push(`- Mejor margen por producto: ${best.tipo} (${best.margen.toFixed(0)}%) | Peor: ${worst.tipo} (${worst.margen.toFixed(0)}%)`);}
+    }catch(e){}
     // Histórico de reportes semanales: le da al agente la DIRECCIÓN del negocio,
     // no sólo la foto de hoy (compara, detecta rachas y lo dice en el informe).
     try{
