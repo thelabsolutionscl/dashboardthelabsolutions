@@ -58,7 +58,40 @@ const MAIL={
     };
   },
 
+  // ── FRENO DE ENVÍOS ────────────────────────────────────────────
+  // El hosting suspende la casilla si se excede su tope de correos/hora (ya
+  // pasó una vez). Ventana móvil de 60 min compartida por TODOS los flujos
+  // (manual, agentes IA, cobranza, reportes) y todas las casillas: al llegar
+  // al límite, el envío se bloquea con un aviso claro en vez de arriesgar
+  // otra suspensión. Límite por defecto 50/hora, ajustable con el botón 🛡.
+  _SEND_LIMIT_KEY:'thelab_mail_hourly_limit',
+  _SEND_LOG_KEY:'thelab_mail_send_ts',
+  hourlyLimit(){const v=parseInt(localStorage.getItem(this._SEND_LIMIT_KEY));return v>0?v:50;},
+  setHourlyLimit(){
+    const v=prompt('Freno de envíos: máximo de correos por hora.\nTu hosting suspende la casilla si se excede su tope — pregúntales el límite del plan y deja esto por debajo.',String(this.hourlyLimit()));
+    if(v===null) return;
+    const n=parseInt(v);
+    if(!(n>0)){toast('Debe ser un número mayor a 0','error');return;}
+    localStorage.setItem(this._SEND_LIMIT_KEY,String(n));
+    toast('🛡 Freno: máximo '+n+' correos/hora','success');
+  },
+  _sendGate(){
+    try{
+      const now=Date.now();
+      const ts=(JSON.parse(localStorage.getItem(this._SEND_LOG_KEY)||'[]')).filter(t=>now-t<3600e3);
+      const lim=this.hourlyLimit();
+      if(ts.length>=lim){
+        const min=Math.ceil((3600e3-(now-ts[0]))/60000);
+        return {error:`🛡 Freno de envíos: ya van ${ts.length} correos en la última hora (límite ${lim}). Reintenta en ~${min} min o ajusta el límite con el botón 🛡 en Correos.`};
+      }
+      ts.push(now);
+      localStorage.setItem(this._SEND_LOG_KEY,JSON.stringify(ts));
+      return null;
+    }catch(e){return null;} // el freno jamás debe romper un envío legítimo
+  },
+
   async post(params){
+    if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
     const fd=new FormData();
     const a=this.auth();
     fd.append('user',a.user); fd.append('pass',a.pass);
@@ -85,6 +118,7 @@ const MAIL={
       try{toast('Enviado desde '+a+' — guarda la clave de '+fromEmail+' en Correos para enviar desde esa casilla','info');}catch(e){}
       return this.post(params);
     }
+    if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
     const fd=new FormData();
     fd.append('user',fromEmail); fd.append('pass',pass);
     for(const[k,v] of Object.entries(params)) fd.append(k,v);
