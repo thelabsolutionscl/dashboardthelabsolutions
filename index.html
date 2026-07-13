@@ -5734,6 +5734,19 @@ function _airtableConfig(){
   const t=getToken();if(!t) throw new Error('Sin token');
   return{base:'https://api.airtable.com/v0',headers:{'Authorization':'Bearer '+_hdrSafe(t,'El token de Airtable')}};
 }
+// Mismo camino para CUALQUIER llamada a Airtable (records o meta): con proxy va
+// al Worker (que reenvía /meta/... igual que /records con su token server-side);
+// sin proxy, directo con el token local. path SIN prefijo /v0.
+function _atFetch(path,opts={}){
+  const cfg=_airtableConfig();
+  return fetch(cfg.base+path,{...opts,headers:{...(opts.headers||{}),...cfg.headers}});
+}
+function _atHttp(path,opts={}){
+  const cfg=_airtableConfig();
+  return airtableHttp(cfg.base+path,{...opts,headers:{...(opts.headers||{}),...cfg.headers}});
+}
+// ¿Hay CÓMO hablar con Airtable? (token local O proxy) — para los guards
+function hasAirtableAccess(){try{_airtableConfig();return true;}catch(e){return false;}}
 async function airtableFetch(table,max=100){
   const cfg=_airtableConfig();
   let all=[],offset=null;
@@ -5780,15 +5793,15 @@ async function testAirtableWrite(){
   const btn=document.getElementById('testWriteBtn');if(btn){btn.disabled=true;btn.textContent='Probando...';}
   // 1. Test read
   try{
-    const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Proveedores?pageSize=1`,{headers:{'Authorization':'Bearer '+getToken()}});
+    const r=await _atFetch(`/${BASE_ID}/Proveedores?pageSize=1`,{headers:{}});
     if(!r.ok){const j=await r.json().catch(()=>({}));toast(`✕ Lectura falló (${r.status}): ${j.error?.message||''}`, 'error');if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}return;}
   }catch(e){toast('✕ Error de red: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}return;}
   // 2. Test write — PATCH with no changes on first record (or try creating empty)
   try{
-    const rd=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Proveedores?pageSize=1`,{headers:{'Authorization':'Bearer '+getToken()}});
+    const rd=await _atFetch(`/${BASE_ID}/Proveedores?pageSize=1`,{headers:{}});
     const rj=await rd.json();const firstId=rj.records?.[0]?.id;
     if(!firstId){toast('Sin registros para probar PATCH — intenta crear uno','info');if(btn){btn.disabled=false;btn.textContent='🔍 Probar escritura';}return;}
-    const pw=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Proveedores/${firstId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({fields:{}})});
+    const pw=await _atFetch(`/${BASE_ID}/Proveedores/${firstId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{}})});
     if(pw.ok){toast('✅ Lectura ✓ y Escritura ✓ — el token funciona correctamente','success');}
     else{const pj=await pw.json().catch(()=>({}));toast(`✕ Escritura falló (HTTP ${pw.status}): ${pj.error?.message||pj.error?.type||'sin detalle'}`, 'error');}
   }catch(e){toast('✕ Error: '+e.message,'error');}
@@ -5804,39 +5817,39 @@ async function airtableDelete(table,recordId){
 
 // ── CREAR CAMPOS ──────────────────────────────────────────────
 async function ensureCotizacionFields(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   const tableId='tblvVAc4TtiERA0Tc';
   const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'}];
-  for(const c of needed){try{await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
+  for(const c of needed){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
 }
 async function ensureFichaTecnicaField(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
-    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
     if(!r.ok) return;
     const d=await r.json();
     const tbl=d.tables?.find(x=>x.name==='Pedidos');
     if(!tbl) return;
     if(tbl.fields?.some(x=>x.name==='Ficha Tecnica')) return;
-    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Tecnica',type:'multilineText'})});
+    await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Tecnica',type:'multilineText'})});
   }catch(e){}
 }
 async function ensureFichaPropuestaField(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
-    const r=await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await _atHttp(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
     if(!r.ok) return;
     const d=await r.json();
     const tbl=d.tables?.find(x=>x.name==='Cotizaciones');
     if(!tbl) return;
     if(tbl.fields?.some(x=>x.name==='Ficha Propuesta')) return;
-    await airtableHttp(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Propuesta',type:'multilineText'})});
+    await _atHttp(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Propuesta',type:'multilineText'})});
   }catch(e){}
 }
 async function crearCamposItemsAirtable(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   let existingFields=[],realTableId='tblvVAc4TtiERA0Tc';
-  try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(r.ok){const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Cotizaciones');existingFields=(tbl?.fields||[]).map(f=>f.name);if(tbl?.id) realTableId=tbl.id;}}catch(e){}
+  try{const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});if(r.ok){const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Cotizaciones');existingFields=(tbl?.fields||[]).map(f=>f.name);if(tbl?.id) realTableId=tbl.id;}}catch(e){}
   const campos=[];
   for(let i=1;i<=20;i++){if(!existingFields.includes(`ITEM${i}`)) campos.push({name:`ITEM${i}`,type:'singleLineText'});if(!existingFields.includes(`UNIDADES${i}`)) campos.push({name:`UNIDADES${i}`,type:'number',options:{precision:0}});if(!existingFields.includes(`COSTO NETO${i}`)) campos.push({name:`COSTO NETO${i}`,type:'currency',options:{precision:0,symbol:'$'}});if(!existingFields.includes(`VALOR NETO${i}`)) campos.push({name:`VALOR NETO${i}`,type:'currency',options:{precision:0,symbol:'$'}});}
   if(!existingFields.includes('SUBTOTAL')) campos.push({name:'SUBTOTAL',type:'currency',options:{precision:0,symbol:'$'}});
@@ -5846,7 +5859,7 @@ async function crearCamposItemsAirtable(){
   if(!existingFields.includes('Forma de pago')) campos.push({name:'Forma de pago',type:'singleSelect'});
   if(!campos.length){toast('✓ Todos los campos ya existen','info');return;}
   toast(`Creando ${campos.length} campos...`,'info');let ok=0,fail=0;
-  for(const c of campos){try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${realTableId}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(c)});if(r.ok) ok++;else fail++;}catch(e){fail++;}}
+  for(const c of campos){try{const r=await _atFetch(`/meta/bases/${BASE_ID}/tables/${realTableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});if(r.ok) ok++;else fail++;}catch(e){fail++;}}
   fail>0?toast(`${ok} creados · ${fail} fallaron`,'info'):toast(`✓ ${ok} campos creados`,'success');
 }
 
@@ -5870,13 +5883,13 @@ const MAQUINAS_HARDCODED=[
 const MODELO_COLORES={'K1':'#00d4cc','K2':'#a78bfa','K2 Plus':'#ff6b35','Ender-5 Max':'#ffaa00','Giga':'#ff4444'};
 
 async function crearTablaMaquinas(){
-  const t=getToken();if(!t) return false;
+  const t=getToken();if(!t&&!_proxyCfg()) return false;
   try{
-    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
     if(!r.ok) return false;
     const d=await r.json();
     if(d.tables?.find(x=>x.name==='Maquinas')) return true;
-    const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas',fields:[
+    const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas',fields:[
       {name:'id',type:'singleLineText'},
       {name:'nombre',type:'singleLineText'},
       {name:'num',type:'number',options:{precision:0}},
@@ -5892,20 +5905,20 @@ async function crearTablaMaquinas(){
 }
 
 async function ensureCamFieldMaquinas(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
-    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
     if(!r.ok) return;
     const d=await r.json();
     const tbl=d.tables?.find(x=>x.name==='Maquinas');
     if(!tbl) return;
     if(tbl.fields?.find(f=>f.name==='cam')) return;
-    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'cam',type:'singleLineText'})});
+    await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'cam',type:'singleLineText'})});
   }catch(e){}
 }
 
 async function loadMaquinasAirtable(){
-  const t=getToken();if(!t){MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));return;}
+  const t=getToken();if(!t&&!_proxyCfg()){MAQUINAS=MAQUINAS_HARDCODED.map(m=>({...m,estado:'disponible'}));return;}
   try{
     await ensureCamFieldMaquinas();
     const res=await airtableFetch('Maquinas',200);
@@ -5915,7 +5928,7 @@ async function loadMaquinasAirtable(){
       await crearTablaMaquinas();
       const batch=MAQUINAS_HARDCODED.map(m=>({fields:{id:m.id,nombre:m.nombre,num:m.num,numG:m.numG,modelo:m.modelo,color:m.color,ip:m.ip||'',cam:localStorage.getItem('printer_cam_'+m.id)||'',estado:'disponible'}}));
       for(let i=0;i<batch.length;i+=10){
-        await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:batch.slice(i,i+10),typecast:true})});
+        await _atFetch(`/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:batch.slice(i,i+10),typecast:true})});
       }
       // Recargar para obtener _airtableId de cada registro
       const reloaded=await airtableFetch('Maquinas',200);
@@ -5940,8 +5953,8 @@ async function loadMaquinasAirtable(){
       const _t=getToken();
       MAQUINAS=MAQUINAS.map(m=>{
         const finalIp=_hcIp[m.id]||localStorage.getItem('printer_ip_'+m.id)||m.ip;
-        if(finalIp&&finalIp!==m.ip&&m._airtableId&&_t)
-          fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+_t,'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:finalIp}})});
+        if(finalIp&&finalIp!==m.ip&&m._airtableId&&(_t||_proxyCfg()))
+          _atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:finalIp}})});
         return {...m,ip:finalIp};
       });
       // Sincroniza IPs y cam desde Airtable/código a localStorage
@@ -5961,27 +5974,27 @@ async function loadMaquinasAirtable(){
 }
 
 async function saveMaquinaEstadoAirtable(id,estado){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   const m=MAQUINAS.find(x=>x.id===id);
   if(!m?._airtableId) return;
-  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{estado}})});
+  await _atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{estado}})});
 }
 
 async function saveMaquinaToAirtable(maquina){
-  const t=getToken();if(!t) return null;
+  const t=getToken();if(!t&&!_proxyCfg()) return null;
   const fields={id:maquina.id,nombre:maquina.nombre,num:maquina.num,numG:maquina.numG,modelo:maquina.modelo,color:maquina.color,ip:maquina.ip||'',estado:maquina.estado||'disponible'};
   if(maquina._airtableId){
-    const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${maquina._airtableId}`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields})});
+    const r=await _atFetch(`/${BASE_ID}/Maquinas/${maquina._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields})});
     return r.ok?maquina._airtableId:null;
   }else{
-    const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields}],typecast:true})});
+    const r=await _atFetch(`/${BASE_ID}/Maquinas`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:[{fields}],typecast:true})});
     const d=await r.json();return d.records?.[0]?.id||null;
   }
 }
 
 async function deleteMaquinaFromAirtable(airtableId){
-  const t=getToken();if(!t) return;
-  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas/${airtableId}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});
+  const t=getToken();if(!t&&!_proxyCfg()) return;
+  await _atFetch(`/${BASE_ID}/Maquinas/${airtableId}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});
 }
 
 // ── GESTOR DE MÁQUINAS ────────────────────────────────────────
@@ -6064,20 +6077,20 @@ async function addMaquinaDesdeForm(){
 
 // ── MAQUINAS PERSISTENCE ──────────────────────────────────────
 async function crearTablaMaquinasEventos(){
-  const t=getToken();if(!t) return false;
-  try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Maquinas_Eventos')) return true;const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Eventos',fields:[{name:'maquina_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'tiempo',type:'number',options:{precision:1}}]})});return cr.ok;}catch(e){return false;}
+  const t=getToken();if(!t&&!_proxyCfg()) return false;
+  try{const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Maquinas_Eventos')) return true;const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Eventos',fields:[{name:'maquina_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'tiempo',type:'number',options:{precision:1}}]})});return cr.ok;}catch(e){return false;}
 }
 async function saveMaquinaEventosAirtable(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
     const res=await airtableFetch('Maquinas_Eventos',500);const existentes=res.records||[];const existMap={};existentes.forEach(r=>{existMap[`${r.fields.maquina_id}_${r.fields.fecha}`]=r.id;});
     const toUpsert=Object.entries(maquinaState.eventos).map(([key,ev])=>{const[maqId,...dp]=key.split('_');return{key,maqId,fecha:dp.join('_'),ev};});
     const toCreate=toUpsert.filter(x=>!existMap[`${x.maqId}_${x.fecha}`]);
-    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{maquina_id:x.maqId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',tiempo:x.ev.tiempo||0,pedido_id:x.ev.pedidoId||''}})),typecast:true})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}}
+    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);const r=await _atFetch(`/${BASE_ID}/Maquinas_Eventos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{maquina_id:x.maqId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',tiempo:x.ev.tiempo||0,pedido_id:x.ev.pedidoId||''}})),typecast:true})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}}
     const toUpdate=toUpsert.filter(x=>existMap[`${x.maqId}_${x.fecha}`]);
-    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);const r=await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.maqId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',tiempo:x.ev.tiempo||0,pedido_id:x.ev.pedidoId||''}}))})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}}
+    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);const r=await _atFetch(`/${BASE_ID}/Maquinas_Eventos`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.maqId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',tiempo:x.ev.tiempo||0,pedido_id:x.ev.pedidoId||''}}))})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}}
     const toDelete=existentes.filter(r=>!maquinaState.eventos[`${r.fields.maquina_id}_${r.fields.fecha}`]);
-    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
+    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await _atFetch(`/${BASE_ID}/Maquinas_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
   }catch(e){
     const isNotFound=e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')||e.message?.includes('not found');
     if(isNotFound){const ok=await crearTablaMaquinasEventos();if(ok){toast('Tabla Maquinas_Eventos creada ✓','success');await saveMaquinaEventosAirtable();}else{toast('No se pudo crear tabla Maquinas_Eventos','error');}}
@@ -6085,19 +6098,19 @@ async function saveMaquinaEventosAirtable(){
   }
 }
 async function loadMaquinaEventosAirtable(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{const res=await airtableFetch('Maquinas_Eventos',500);maquinaState.eventos={};(res.records||[]).forEach(r=>{const f=r.fields;if(f.maquina_id&&f.fecha) maquinaState.eventos[`${f.maquina_id}_${f.fecha}`]={tipo:f.tipo||'uso',desc:f.desc||'',tiempo:f.tiempo||null};});}
   catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaMaquinasEventos();}
 }
 
 async function crearTablaMaquinasMant(){
-  const t=getToken();if(!t) return false;
+  const t=getToken();if(!t&&!_proxyCfg()) return false;
   try{
-    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
     if(!r.ok) return false;
     const d=await r.json();
     if(d.tables?.find(x=>x.name==='Maquinas_Mant')) return true;
-    const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Mant',fields:[
+    const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Mant',fields:[
       {name:'maquina_id',type:'singleLineText'},
       {name:'tipo',type:'singleLineText'},
       {name:'notas',type:'multilineText'},
@@ -6110,7 +6123,7 @@ async function crearTablaMaquinasMant(){
 }
 
 async function loadMaintLogAirtable(){
-  const t=getToken();if(!t){
+  const t=getToken();if(!t&&!_proxyCfg()){
     maquinaState.maintLog=getMaintLogLocal();return;
   }
   try{
@@ -6136,8 +6149,8 @@ async function loadMaintLogAirtable(){
 }
 
 async function saveMaintRecordAirtable(rec){
-  const t=getToken();if(!t) return;
-  await fetch(`https://api.airtable.com/v0/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:[{fields:{maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()}}],typecast:true})});
+  const t=getToken();if(!t&&!_proxyCfg()) return;
+  await _atFetch(`/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:[{fields:{maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()}}],typecast:true})});
 }
 
 let _maintRaw=null,_maintParsed=[];
@@ -6145,24 +6158,24 @@ function getMaintLogLocal(){const raw=localStorage.getItem(MAINT_KEY)||'[]';if(r
 
 // ── EQUIPO PERSISTENCE ────────────────────────────────────────
 async function crearTablaEquipoEventos(){
-  const t=getToken();if(!t) return false;
-  try{const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Equipo_Eventos')) return true;const cr=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Equipo_Eventos',fields:[{name:'persona_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'hora_inicio',type:'singleLineText'},{name:'hora_fin',type:'singleLineText'}]})});return cr.ok;}catch(e){return false;}
+  const t=getToken();if(!t&&!_proxyCfg()) return false;
+  try{const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Equipo_Eventos')) return true;const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Equipo_Eventos',fields:[{name:'persona_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'hora_inicio',type:'singleLineText'},{name:'hora_fin',type:'singleLineText'}]})});return cr.ok;}catch(e){return false;}
 }
 async function saveEquipoEventosAirtable(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
     const res=await airtableFetch('Equipo_Eventos',500);const existentes=res.records||[];const existMap={};existentes.forEach(r=>{existMap[`${r.fields.persona_id}_${r.fields.fecha}`]=r.id;});
     const toUpsert=Object.entries(equipoState.eventos).map(([key,ev])=>{const[pid,...dp]=key.split('_');return{key,personaId:pid,fecha:dp.join('_'),ev};});
     const toCreate=toUpsert.filter(x=>!existMap[`${x.personaId}_${x.fecha}`]);
-    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);await fetch(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{persona_id:x.personaId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}})),typecast:true})});}
+    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);await _atFetch(`/${BASE_ID}/Equipo_Eventos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{persona_id:x.personaId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}})),typecast:true})});}
     const toUpdate=toUpsert.filter(x=>existMap[`${x.personaId}_${x.fecha}`]);
-    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);await fetch(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos`,{method:'PATCH',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.personaId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}}))})});}
+    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);await _atFetch(`/${BASE_ID}/Equipo_Eventos`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.personaId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}}))})});}
     const toDelete=existentes.filter(r=>!equipoState.eventos[`${r.fields.persona_id}_${r.fields.fecha}`]);
-    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await fetch(`https://api.airtable.com/v0/${BASE_ID}/Equipo_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
+    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await _atFetch(`/${BASE_ID}/Equipo_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
   }catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('unknown')){const ok=await crearTablaEquipoEventos();if(ok){toast('Tabla Equipo_Eventos creada ✓','success');await saveEquipoEventosAirtable();}}}
 }
 async function loadEquipoEventosAirtable(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{const res=await airtableFetch('Equipo_Eventos',500);equipoState.eventos={};(res.records||[]).forEach(r=>{const f=r.fields;if(f.persona_id&&f.fecha) equipoState.eventos[`${f.persona_id}_${f.fecha}`]={tipo:f.tipo||'ocupado',desc:f.desc||'',horaInicio:f.hora_inicio||'',horaFin:f.hora_fin||''};});}
   catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaEquipoEventos();}
 }
@@ -7714,13 +7727,13 @@ function openFacturaModal(clienteId,facturaId){
 function closeFacturaModal(){document.getElementById('facturaModal').style.display='none';}
 // Crea la tabla "Facturas" en Airtable si no existe (una sola vez).
 async function ensureFacturasTable(){
-  const t=getToken();if(!t) return;
+  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
-    const r=await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{headers:{'Authorization':'Bearer '+t}});
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
     if(!r.ok) return;
     const d=await r.json();
     if(d.tables?.find(x=>x.name==='Facturas')) return;
-    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({name:'Facturas',fields:[
+    await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Facturas',fields:[
       {name:'Cliente',type:'singleLineText'},
       {name:'Cliente ID',type:'singleLineText'},
       {name:'Tipo DTE',type:'singleLineText'},
@@ -13071,13 +13084,12 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
     const u=navUser();return u?'thelab_nav_order_'+u:null;
   }
 
-  // ── Airtable write-behind ─────────────────────────────────────
-  async function _atFetch(filterFormula){
+  // ── Airtable write-behind (vía _atFetch global: proxy o token, según el modo) ──
+  async function _upFind(filterFormula){
     try{
-      const t=typeof getToken==='function'?getToken():'';if(!t) return null;
+      if(typeof hasAirtableAccess!=='function'||!hasAirtableAccess()) return null;
       const base=typeof BASE_ID!=='undefined'?BASE_ID:'app1YtD74AqiPWQhy';
-      const url=`https://api.airtable.com/v0/${base}/${encodeURIComponent(UP_TABLE)}?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=1`;
-      const r=await fetch(url,{headers:{'Authorization':'Bearer '+t}});
+      const r=await _atFetch(`/${base}/${encodeURIComponent(UP_TABLE)}?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=1`);
       if(!r.ok) return null;
       const d=await r.json();
       return d.records?.[0]||null;
@@ -13085,21 +13097,21 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
   }
   async function _atUpsert(username,orderJson){
     try{
-      const t=typeof getToken==='function'?getToken():'';if(!t) return;
+      if(typeof hasAirtableAccess!=='function'||!hasAirtableAccess()) return;
       const base=typeof BASE_ID!=='undefined'?BASE_ID:'app1YtD74AqiPWQhy';
       const cacheKey=UP_RECORD_KEY+username;
       let recId=localStorage.getItem(cacheKey);
       const fields={'Usuario':username,'Orden Menú':orderJson,'Actualizado':new Date().toISOString()};
       if(!recId){
         // try to find existing record first
-        const existing=await _atFetch(`{Usuario}="${username}"`);
+        const existing=await _upFind(`{Usuario}="${username}"`);
         if(existing) recId=existing.id;
       }
-      const url=recId
-        ?`https://api.airtable.com/v0/${base}/${encodeURIComponent(UP_TABLE)}/${recId}`
-        :`https://api.airtable.com/v0/${base}/${encodeURIComponent(UP_TABLE)}`;
+      const path=recId
+        ?`/${base}/${encodeURIComponent(UP_TABLE)}/${recId}`
+        :`/${base}/${encodeURIComponent(UP_TABLE)}`;
       const method=recId?'PATCH':'POST';
-      const r=await fetch(url,{method,headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields})});
+      const r=await _atFetch(path,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify({fields})});
       if(r.ok){const d=await r.json();if(d.id) localStorage.setItem(cacheKey,d.id);}
     }catch(e){}
   }
@@ -13115,7 +13127,7 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
   // Load order from Airtable on login; update localStorage + DOM if found
   window.loadNavOrderFromAirtable=async function(){
     const u=navUser();if(!u) return;
-    const rec=await _atFetch(`{Usuario}="${u}"`);
+    const rec=await _upFind(`{Usuario}="${u}"`);
     if(!rec) return;
     // Cache record ID
     localStorage.setItem(UP_RECORD_KEY+u, rec.id);
