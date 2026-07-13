@@ -2173,7 +2173,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 
 <!-- CLIENTES -->
 <div class="tab-panel" id="tab-clientes">
-  <div class="section-header"><div><div class="section-title">Clientes</div><div class="section-desc">Gestiona tu cartera de clientes: historial de compras, estado de cuenta, cotizaciones activas y datos de contacto.</div></div><div style="display:flex;align-items:center;gap:10px"><button class="btn btn-primary btn-sm" onclick="startNewClientFlow()" title="Crear cliente paso a paso">➕ Cliente guiado</button><div class="section-subtitle" id="clientesCount">—</div></div></div>
+  <div class="section-header"><div><div class="section-title">Clientes</div><div class="section-desc">Gestiona tu cartera de clientes: historial de compras, estado de cuenta, cotizaciones activas y datos de contacto.</div></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="clientesSort.key='score';clientesSort.dir=-1;renderClientes();_saveUIState()" title="Ordenar por Lead Score IA (mayor primero)">🔥 Por score</button><button class="btn btn-ghost btn-sm" onclick="clientesSort.key='silencio';clientesSort.dir=-1;renderClientes();_saveUIState()" title="Clientes sin actividad hace más tiempo primero">😴 Inactivos</button><button class="btn btn-primary btn-sm" onclick="startNewClientFlow()" title="Crear cliente paso a paso">➕ Cliente guiado</button><div class="section-subtitle" id="clientesCount">—</div></div></div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Base CRM</span>
@@ -8566,7 +8566,23 @@ async function deleteSelectedClientes(){
   selectedClientes.clear();renderClientes();renderOverview();fail>0?toast(`${ok} eliminados, ${fail} con error`,'info'):toast(`✓ ${ok} eliminados`,'success');
 }
 function sortClientes(key){if(clientesSort.key===key) clientesSort.dir*=-1;else{clientesSort.key=key;clientesSort.dir=1;}document.querySelectorAll('#tab-clientes .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(/sortClientes\('(\w+)'\)/)?.[1];th.classList.remove('asc','desc');if(k===key) th.classList.add(clientesSort.dir===1?'asc':'desc');});renderClientes();_saveUIState();}
-function getSortValue(c,key){const f=c.fields;switch(key){case 'empresa':return(f['Empresa']||'').toLowerCase();case 'contacto':return(f['Contacto']||'').toLowerCase();case 'etapa':return(f['Etapa venta']||'').toLowerCase();case 'revenue':return f['Revenue total cliente (CLP)']||0;case 'val':return parseInt(f['Valoración cliente'])||0;case 'estado':return(f['Estado cuenta']||'').toLowerCase();case 'venc':return f['Facturas vencidas']||0;default:return '';}}
+function getSortValue(c,key){const f=c.fields;switch(key){case 'empresa':return(f['Empresa']||'').toLowerCase();case 'contacto':return(f['Contacto']||'').toLowerCase();case 'etapa':return(f['Etapa venta']||'').toLowerCase();case 'revenue':return f['Revenue total cliente (CLP)']||0;case 'val':return parseInt(f['Valoración cliente'])||0;case 'estado':return(f['Estado cuenta']||'').toLowerCase();case 'venc':return f['Facturas vencidas']||0;case 'score':return Number(f['Lead Score IA']||f['Lead Score'])||0;case 'silencio':{const d=_cliSilencioDias(c);return d==null?-1:d;}default:return '';}}
+// ── Salud del cliente: última actividad (cotización o pedido) por cliente ──
+// Mapa precomputado una vez por render: clienteId → timestamp de la última
+// cotización/pedido. Evita recorrer todo por cada fila de la tabla.
+let _cliLastAct=null;
+function _buildCliLastAct(){
+  const m={};
+  const upd=(campo,ts)=>{if(!campo||!ts)return;const id=Array.isArray(campo)?campo[0]:null;if(!id)return;if(!m[id]||ts>m[id])m[id]=ts;};
+  (state.cotizaciones||[]).forEach(c=>{const f=c.fields;const d=f['Fecha cotización']||(c.createdTime||'').slice(0,10);if(d)upd(f['Cliente'],new Date(d+'T00:00:00').getTime());});
+  (state.pedidos||[]).forEach(p=>{const f=p.fields;const d=f['Fecha despacho']||f['Fecha entrega']||(p.createdTime||'').slice(0,10);if(d)upd(f['Cliente'],new Date(d+'T00:00:00').getTime());});
+  _cliLastAct=m;
+}
+function _cliSilencioDias(c){
+  if(!_cliLastAct)_buildCliLastAct();
+  const ts=_cliLastAct[c.id];if(!ts)return null;   // sin actividad registrada → no opinamos
+  return Math.max(0,Math.floor((Date.now()-ts)/864e5));
+}
 function getSortedClientes(){const base=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;if(!clientesSort.key) return base;return[...base].sort((a,b)=>{const va=getSortValue(a,clientesSort.key),vb=getSortValue(b,clientesSort.key);if(typeof va==='number') return(va-vb)*clientesSort.dir;return va.localeCompare(vb,'es')*clientesSort.dir;});}
 // ── NOTAS INTERNAS ──────────────────────────────────────────
 let _notasType='',_notasId='';
@@ -8648,13 +8664,18 @@ function buildClienteRow(c){
   const esInactivo=['Cliente inactivo','Inactivo','Perdido'].includes(f['Etapa venta']||'');
   const tieneDeuda=(f['Facturas vencidas']||0)>=1;
   const catBadge=esLead?'<span class="badge-lead" title="Registro nuevo aún no validado">Lead</span>':'<span class="badge-cliente" title="Cliente validado por el equipo">Cliente</span>';
+  // Salud del cliente: score IA del lead (🔥/⚡/❄) y silencio comercial (😴 60d+)
+  const _score=Number(f['Lead Score IA']||f['Lead Score'])||0;
+  const scoreChip=_score>0?`<span class="badge ${_score>=70?'badge-orange':_score>=40?'badge-yellow':'badge-gray'}" style="font-size:9px" title="Lead Score IA: ${_score}/100 — potencial ${_score>=70?'alto':_score>=40?'medio':'bajo'}">${_score>=70?'🔥':_score>=40?'⚡':'❄'} ${_score}</span>`:'';
+  const _sil=!esLead?_cliSilencioDias(c):null;
+  const silChip=(_sil!=null&&_sil>=60)?`<span class="badge ${_sil>=90?'badge-red':'badge-orange'}" style="font-size:9px;cursor:pointer" title="Sin cotizaciones ni pedidos hace ${_sil} días — clic para reconectar con IA" onclick="event.stopPropagation();runClienteWinbackAgent('${c.id}')">😴 ${_sil}d</span>`:'';
   const validarItem=esLead
     ?`<button class="act-item act-item-green" onclick="validarCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check"/></svg> &nbsp;✅ Validar como cliente</button>`
     :`<button class="act-item" onclick="revertirALead('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;↩ Volver a lead</button>`;
   const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(esInactivo?`<button class="act-item act-item-cyan" onclick="runClienteWinbackAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reconectar IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
   return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}${_flashCls(c.id)}">
     <td class="td-chk" style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
-    <td class="td-empresa"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong>${escapeHtml(f['Empresa']||'—')}</strong>${catBadge}</div><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
+    <td class="td-empresa"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong>${escapeHtml(f['Empresa']||'—')}</strong>${catBadge}${scoreChip}${silChip}</div><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
     <td class="td-contacto" data-label="Contacto">${escapeHtml(f['Contacto']||'—')}</td>
     <td class="td-tel" data-label="Teléfono">${tel?`<a href="tel:${tel.replace(/\s/g,'')}" style="color:var(--accent);text-decoration:none;font-weight:600" title="Llamar">📞 ${escapeHtml(tel)}</a>`:'<span style="color:var(--text3)">—</span>'}</td>
     <td class="td-etapa" data-label="Etapa"><select onchange="updateEtapaCliente('${c.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;text-transform:uppercase">${_etapaOptionsHtml(f['Etapa venta'])}</select></td>
@@ -8681,6 +8702,7 @@ function buildClienteRow(c){
 }
 function renderClientes(skipAnalytics){
   if(!skipAnalytics) _cliSearchCache.clear();
+  _buildCliLastAct();   // refresca el mapa de última actividad (chips 😴 y orden por silencio)
   // Conjunto base (según modo vendedor + orden), antes de aplicar la categoría.
   const catBase=getSortedClientes();
   _updateCliCatCounts(catBase);
