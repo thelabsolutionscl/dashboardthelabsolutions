@@ -114,5 +114,26 @@ const ok = msg => console.log('  ✓ ' + msg);
   else ok('styles.css presente y enlazada con cache-busting');
 }
 
+// ── 5. WORKFLOWS DE GITHUB: YAML válido ────────────────────────────────────
+// Un ':' suelto en un nombre de step invalida el YAML y el deploy falla en
+// silencio hasta que miras Actions. Esto lo caza antes del push.
+{
+  const wfDir = path.join(__dirname, '..', '.github', 'workflows');
+  const files = fs.existsSync(wfDir) ? fs.readdirSync(wfDir).filter(f => /\.ya?ml$/.test(f)) : [];
+  const { spawnSync } = require('child_process');
+  const probe = spawnSync('python3', ['-c', 'import yaml'], { stdio: 'pipe' });
+  if (probe.status !== 0) {
+    console.log('  – Workflows YAML: python3/yaml no disponible — check omitido (CI de GitHub lo valida igual)');
+  } else {
+    const bad = [];
+    files.forEach(f => {
+      const r = spawnSync('python3', ['-c', 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))', path.join(wfDir, f)], { stdio: 'pipe' });
+      if (r.status !== 0) bad.push(f + ' → ' + String(r.stderr).split('\n').filter(Boolean).pop());
+    });
+    if (bad.length) fail('Workflows con YAML inválido: ' + bad.join(' | '));
+    else ok('Workflows YAML válidos: ' + files.join(', '));
+  }
+}
+
 console.log(fails ? ('\n✗ Smoke: ' + fails + ' problema(s)') : '\n✓ Smoke: todo OK');
 process.exit(fails ? 1 : 0);
