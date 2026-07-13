@@ -236,6 +236,26 @@ las ráfagas de polling.
 - El token vive en `.bridge-token` (no se sube a git) y en el `localStorage` del navegador.
 - Si el token se filtra: borra `.bridge-token`, reinicia el bridge (genera uno nuevo) y actualiza el dashboard.
 
+> **Token por header (recomendado, ya activo):** el dashboard manda el token de las
+> llamadas REST por el header `X-Bridge-Token` en vez de la query `?bt=`, para no
+> dejarlo en los logs del túnel. Las cámaras (`<img>`) y el WebSocket, que no pueden
+> enviar headers, siguen usando `?bt=`. El bridge acepta **ambos** desde siempre, así
+> que es retrocompatible (no rompe nada al actualizar).
+
+### Restringir CORS a tu dashboard (opcional, recomendado)
+
+`BRIDGE_ALLOW_ORIGIN` acepta una **lista de orígenes** separados por coma. Con una
+lista, el bridge solo refleja el `Origin` de la petición si está permitido (y añade
+`Vary: Origin`); con el default `*` permite cualquiera (la auth real es el token):
+
+```bash
+# en el .plist de launchd, o exportado antes de arrancar:
+export BRIDGE_ALLOW_ORIGIN="https://thelabsolutionscl.github.io,https://dash.thelab.solutions"
+```
+
+> Tras cambiar esta variable, **reinicia el bridge** para que tome efecto
+> (`launchctl unload/load` o `./install-launchd.sh`).
+
 ## Variables de entorno
 
 | Variable | Default | Descripción |
