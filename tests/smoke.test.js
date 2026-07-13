@@ -80,7 +80,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'showAgentWorking', 'hideAgentWorking', 'agentCtaButtonsHtml', 'agentMemoriaCliente',
     // bandejas y flujos construidos en esta serie
     'buildFollowupTray', 'fuMarkDone', 'runFollowupAgent',
-    'buildPostEntregaTray', 'pdMarkDone',
+    'buildPostEntregaTray', 'pdMarkDone', 'buildWinbackTray', 'wbReactivar',
     'finRenderCobranzaActions', 'cobRegistrar', 'renderClienteTimeline',
     'renderMorningBrief', 'renderMaqOcupacion', 'renderPedidosKanban', 'advancePedido',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
@@ -100,7 +100,7 @@ const ok = msg => console.log('  ✓ ' + msg);
 // ── 3. IDs CRÍTICOS del DOM ────────────────────────────────────────────────
 {
   const IDS = ['tab-overview', 'tab-clientes', 'tab-cotizaciones', 'tab-pedidos', 'tab-agentes',
-    'tab-oficina', 'agentesGrid', 'fuTrayCard', 'pdTrayCard', 'finCobranzaActions',
+    'tab-oficina', 'agentesGrid', 'fuTrayCard', 'pdTrayCard', 'wbTrayCard', 'finCobranzaActions',
     'morningBrief', 'maqOcupacion', 'pedidosKanban', 'agentWorkingModal', 'agentInlineModal',
     'cdTimeline', 'mailList', 'umBackupInfo'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));

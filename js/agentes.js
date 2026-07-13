@@ -117,6 +117,71 @@ async function fuMarkDone(cotId,via){
   buildFollowupTray();
 }
 
+// ── LEADS DORMIDOS (win-back accionable) ───────────────────────
+// Dos perfiles: "nunca compró" (2+ cotizaciones, 0 pedidos, 30+ días quieto)
+// y "ex-cliente" (compró alguna vez y lleva 60+ días sin actividad). Se
+// excluye a quien tiene una cotización abierta reciente, está bloqueado o ya
+// fue gestionado hace <30 días (registro en thelab_wb_log_v1).
+const _WB_LOG_KEY='thelab_wb_log_v1';
+function _wbLog(){try{return JSON.parse(localStorage.getItem(_WB_LOG_KEY)||'{}');}catch(e){return{};}}
+function _wbCands(){
+  const now=Date.now(),log=_wbLog();
+  const cotsByCli={},pedsByCli={};
+  (state.cotizaciones||[]).forEach(c=>(Array.isArray(c.fields['Cliente'])?c.fields['Cliente']:[]).forEach(id=>(cotsByCli[id]=cotsByCli[id]||[]).push(c)));
+  (state.pedidos||[]).forEach(p=>(Array.isArray(p.fields['Cliente'])?p.fields['Cliente']:[]).forEach(id=>(pedsByCli[id]=pedsByCli[id]||[]).push(p)));
+  const lastTs=r=>{const f=r.fields;const d=f['Fecha cotización']||f['Fecha entrega']||f['Fecha despacho']||(r.createdTime||'').slice(0,10);return d?new Date(d+(d.length===10?'T00:00:00':'')).getTime():0;};
+  return (state.clientes||[]).map(c=>{
+    const f=c.fields;
+    if((f['Estado cuenta']||'')==='Bloqueado') return null;
+    const cots=cotsByCli[c.id]||[],peds=pedsByCli[c.id]||[];
+    const acts=[...cots,...peds].map(lastTs).filter(Boolean);
+    if(!acts.length) return null;
+    const dias=Math.floor((now-Math.max(...acts))/864e5);
+    if(cots.some(x=>['Enviada','Solicitada'].includes(x.fields['Estado cotización']||'')&&now-lastTs(x)<45*864e5)) return null;
+    const l=log[c.id]&&log[c.id].ts; if(l&&now-l<30*864e5) return null;
+    let tipo=null;
+    if(!peds.length&&cots.length>=2&&dias>=30) tipo='nunca';
+    else if(peds.length&&dias>=60) tipo='ex';
+    if(!tipo) return null;
+    return {c,f,dias,tipo,rev:f['Revenue total cliente (CLP)']||0,nCots:cots.length,nPeds:peds.length};
+  }).filter(Boolean).sort((a,b)=>b.rev-a.rev||b.dias-a.dias);
+}
+function buildWinbackTray(){
+  const card=document.getElementById('wbTrayCard'); if(!card) return;
+  const cands=_wbCands();
+  const cnt=document.getElementById('wbTrayCount'); if(cnt) cnt.textContent=cands.length;
+  if(!cands.length){card.style.display='none';return;}
+  card.style.display='';
+  const list=document.getElementById('wbTrayList'); if(!list) return;
+  list.innerHTML=cands.slice(0,10).map(x=>{
+    const chip=x.tipo==='ex'
+      ?`<span class="badge badge-purple" style="flex-shrink:0" title="Compró antes y desapareció">💎 ex-cliente</span>`
+      :`<span class="badge badge-yellow" style="flex-shrink:0" title="Cotizó ${x.nCots} veces y nunca compró">🌱 nunca compró</span>`;
+    const sub=x.tipo==='ex'?`${formatCLP(x.rev)} histórico · ${x.nPeds} pedido${x.nPeds!==1?'s':''}`:`${x.nCots} cotizaciones sin cierre`;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+      ${chip}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.f['Empresa']||x.f['Contacto']||'—')}</div>
+        <div style="font-size:10.5px;color:var(--text3)">😴 ${x.dias} días sin actividad · ${sub}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="wbReactivar('${x.c.id}')">♻ Reactivar IA</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado sin enviar" onclick="wbMarkDone('${x.c.id}')">✓</button>
+    </div>`;
+  }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-10} más (se muestran primero los de mayor revenue histórico)</div>`:'');
+}
+function wbReactivar(cliId){
+  const log=_wbLog(); log[cliId]={ts:Date.now(),via:'ia'};
+  try{localStorage.setItem(_WB_LOG_KEY,JSON.stringify(log));}catch(e){}
+  runClienteWinbackAgent(cliId);
+  buildWinbackTray();
+}
+function wbMarkDone(cliId){
+  const log=_wbLog(); log[cliId]={ts:Date.now(),via:'manual'};
+  try{localStorage.setItem(_WB_LOG_KEY,JSON.stringify(log));}catch(e){}
+  toast('✓ Gestionado — no volverá a aparecer por 30 días','success');
+  buildWinbackTray();
+}
+
 // ── POST-ENTREGA ───────────────────────────────────────────────
 // Pedidos despachados hace 3+ días (hasta 30): mensaje de satisfacción con
 // invitación a dejar reseña en Google, por WhatsApp o correo (Andrea).

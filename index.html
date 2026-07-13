@@ -662,6 +662,14 @@
 <!-- CLIENTES -->
 <div class="tab-panel" id="tab-clientes">
   <div class="section-header"><div><div class="section-title">Clientes</div><div class="section-desc">Gestiona tu cartera de clientes: historial de compras, estado de cuenta, cotizaciones activas y datos de contacto.</div></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="clientesSort.key='score';clientesSort.dir=-1;renderClientes();_saveUIState()" title="Ordenar por Lead Score IA (mayor primero)">🔥 Por score</button><button class="btn btn-ghost btn-sm" onclick="clientesSort.key='silencio';clientesSort.dir=-1;renderClientes();_saveUIState()" title="Clientes sin actividad hace más tiempo primero">😴 Inactivos</button><button class="btn btn-primary btn-sm" onclick="startNewClientFlow()" title="Crear cliente paso a paso">➕ Cliente guiado</button><div class="section-subtitle" id="clientesCount">—</div></div></div>
+  <!-- BANDEJA DE LEADS DORMIDOS: cotizaron y nunca compraron, o compraron y desaparecieron -->
+  <div class="card" id="wbTrayCard" style="margin-bottom:20px;border-color:rgba(167,139,250,0.35);display:none">
+    <div class="card-header">
+      <span class="card-title">😴 Leads dormidos <span class="badge badge-purple" id="wbTrayCount">0</span></span>
+      <span style="font-size:10px;color:var(--text3)">cotizaron sin comprar (30+ días) o eran clientes y desaparecieron (60+ días)</span>
+    </div>
+    <div id="wbTrayList"></div>
+  </div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Base CRM</span>
@@ -7290,6 +7298,7 @@ function renderClientes(skipAnalytics){
   // paginación). Se omite en los renders de búsqueda y "ver más" para no rehacer
   // 3 pasadas sobre pedidos/cotizaciones en cada tecla.
   if(!skipAnalytics) renderClientesAnalytics();
+  try{buildWinbackTray();}catch(e){}
   _applySortIndicators();
 }
 function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes(true);_saveUIState();}
@@ -8983,8 +8992,8 @@ function _pruneLocalLogs(){
   if(localStorage.getItem('thelab_prune_last')===hoy) return;
   try{localStorage.setItem('thelab_prune_last',hoy);}catch(e){}
   const lim=Date.now()-180*864e5;
-  // Seguimientos y post-entrega: mapas {recId:{ts,via}}
-  ['thelab_fu_log_v1','thelab_postdel_log_v1'].forEach(k=>{
+  // Seguimientos, post-entrega y win-back: mapas {recId:{ts,via}}
+  ['thelab_fu_log_v1','thelab_postdel_log_v1','thelab_wb_log_v1'].forEach(k=>{
     try{
       const log=JSON.parse(localStorage.getItem(k)||'{}');let n=0;
       Object.keys(log).forEach(id=>{const ts=log[id]&&log[id].ts;if(typeof ts==='number'&&ts<lim){delete log[id];n++;}});
