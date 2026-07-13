@@ -133,8 +133,49 @@ export default {
       return;
     }
     ctx.waitUntil(retryDeadLetters(env));
+    // Una vez al día (07:17 UTC ≈ madrugada en Chile): poda de la cola de agentes
+    if (new Date(event.scheduledTime || Date.now()).getUTCHours() === 7) {
+      ctx.waitUntil(cleanupAgentQueue(env));
+    }
   },
 };
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Limpieza de Agent_Queue: las tareas "Completado" con más de
+ * CLEANUP_QUEUE_DAYS días (30 por defecto; "0" desactiva) se borran solas.
+ * La cola queda como semáforo: casi vacía = todo bien. Pendiente, Procesando
+ * y Error se conservan SIEMPRE — son las que piden atención humana.
+ * ══════════════════════════════════════════════════════════════════════ */
+async function cleanupAgentQueue(env) {
+  try {
+    if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return;
+    const days = parseInt(env.CLEANUP_QUEUE_DAYS ?? "30", 10);
+    if (!days || days < 1) return;
+    const formula = `AND({Estado}='Completado', IS_BEFORE({Fecha creación}, DATEADD(NOW(), -${days}, 'days')))`;
+    const H = { Authorization: `Bearer ${env.AIRTABLE_TOKEN}` };
+    let borradas = 0;
+    // Borra-y-repite: al eliminar la página, la consulta siguiente trae lo que
+    // queda (sin cursores que invalidar). Tope de 10 rondas = 1000 filas/día.
+    for (let round = 0; round < 10; round++) {
+      const q = new URLSearchParams({ filterByFormula: formula, pageSize: "100" });
+      q.append("fields[]", "Estado");
+      const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Agent_Queue?${q}`, { headers: H });
+      if (!r.ok) { console.error("[cleanup-queue] list:", r.status, (await r.text()).slice(0, 200)); return; }
+      const ids = ((await r.json()).records || []).map((x) => x.id);
+      if (!ids.length) break;
+      for (let i = 0; i < ids.length; i += 10) {
+        const del = new URLSearchParams();
+        ids.slice(i, i + 10).forEach((id) => del.append("records[]", id));
+        const dr = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Agent_Queue?${del}`, { method: "DELETE", headers: H });
+        if (!dr.ok) { console.error("[cleanup-queue] delete:", dr.status, (await dr.text()).slice(0, 200)); return; }
+        borradas += ids.slice(i, i + 10).length;
+      }
+    }
+    if (borradas) console.log(`[cleanup-queue] ${borradas} tareas Completado de +${days} días eliminadas`);
+  } catch (e) {
+    console.error("[cleanup-queue]", e.message);
+  }
+}
 
 /* ════════════════════════════════════════════════════════════════════════
  * RUTA: POST /lead   (formulario de la web pública)

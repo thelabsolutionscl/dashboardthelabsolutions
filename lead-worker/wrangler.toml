@@ -23,6 +23,9 @@ AIRTABLE_BASE_ID = "app1YtD74AqiPWQhy"
 ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,https://dashboard.thelab.solutions,https://thelabsolutionscl.github.io,http://localhost:3000"
 # "true" para que el Worker llame a Claude y deje el lead pre-scoreado.
 AUTO_PROCESS_LEADS = "true"
+# Poda diaria de Agent_Queue: borra tareas "Completado" con más de N días
+# (Pendiente/Procesando/Error se conservan siempre). "0" la desactiva.
+CLEANUP_QUEUE_DAYS = "30"
 # Auto-respuesta al lead (requiere secret RESEND_API_KEY). From debe ser dominio verificado en Resend.
 RESEND_FROM = "The Lab Solutions <hola@thelab.solutions>"
 # Remitente VISIBLE de la auto-respuesta al cliente (nombre de quien atiende). Dominio verificado en Resend.
