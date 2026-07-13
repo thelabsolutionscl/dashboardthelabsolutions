@@ -13725,7 +13725,7 @@ function renderAgentesGrid(){
 // (agente sentado + monitor + tecleo) para que "sea el mismo agente".
 let _apwTimer=null;
 const _APW_MSGS=['Analizando tus datos…','Procesando la información…','Conectando los puntos…','Redactando una respuesta clara…','Puliendo los detalles…','Casi listo…'];
-function _apwCharSVG(col,em){
+function _apwCharSVG(col,em,spr){
   const dark=(typeof _ofShade==='function')?_ofShade(col,0.72):'#0a5';
   const _my=62*0.20;               // mismo mesón que la Oficina
   const f=n=>n.toFixed(1);
@@ -13733,7 +13733,11 @@ function _apwCharSVG(col,em){
     +`<polyline points="-8,${f(_my-10)} -3,${f(_my-14)} 1,${f(_my-9)} 5,${f(_my-15)} 8,${f(_my-11)}" fill="none" stroke="#0c100e" stroke-width="1.1" opacity="0.5"/>`
     +`<rect x="-2.4" y="${f(_my-3.5)}" width="4.8" height="3.4" fill="#0f1114"/><rect x="-8" y="${f(_my)}" width="16" height="3" rx="1.4" fill="#1a1d22"/>`
     +`<rect x="-11" y="${f(_my+4)}" width="22" height="3.6" rx="1.6" fill="#d3dae2"/>`;
-  const seat=`<g class="of-iso-body">
+  // Con sprite propio (p.ej. Gerente de Ventas), el personaje pixel-art reemplaza al genérico.
+  const seat=spr?`<g class="of-iso-body">
+      <image href="${spr.front}" x="-15" y="-60" width="30" height="74" preserveAspectRatio="xMidYMid meet"/>
+      <circle cx="14" cy="-54" r="3.8" fill="${col}" stroke="#fff" stroke-width="1.1" class="of-iso-blink"/>
+    </g>`:`<g class="of-iso-body">
       <rect class="of-type-l" x="-16" y="-15" width="6.5" height="16" rx="3.2" fill="${dark}"/>
       <rect class="of-type-r" x="9.5" y="-15" width="6.5" height="16" rx="3.2" fill="${dark}"/>
       <rect x="-13" y="-23" width="26" height="26" rx="12" fill="${col}"/>
@@ -13743,12 +13747,12 @@ function _apwCharSVG(col,em){
       <text x="0" y="-29" text-anchor="middle" font-size="17">${em}</text>
       <circle cx="12" cy="-46" r="3.8" fill="${col}" stroke="#fff" stroke-width="1.1" class="of-iso-blink"/>
     </g>`;
-  return `<svg viewBox="-28 -58 56 70" xmlns="http://www.w3.org/2000/svg">
+  return `<svg viewBox="-28 ${spr?'-62':'-58'} 56 ${spr?'80':'70'}" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="apwShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.3"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
       <radialGradient id="apwShadow"><stop offset="0" stop-color="#000" stop-opacity="0.4"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
     </defs>
-    <ellipse cx="0" cy="4" rx="20" ry="7" fill="url(#apwShadow)"/>
+    <ellipse cx="0" cy="${spr?'12':'4'}" rx="20" ry="7" fill="url(#apwShadow)"/>
     <g class="of-iso-char of-iso-bob"><g transform="scale(1.04)">${seat}</g>${monitor}</g>
   </svg>`;
 }
@@ -13774,7 +13778,8 @@ function showAgentWorking(ref,opts){
   const card=modal.querySelector('.apw-card'); if(card) card.style.setProperty('--apw-col',col);
   const agEl=document.getElementById('apwAgent'); if(agEl) agEl.textContent=em+' '+name;
   const vbEl=document.getElementById('apwVerb'); if(vbEl) vbEl.textContent=opts.verb||'está procesando tu solicitud…';
-  const stage=document.getElementById('apwStage'); if(stage) stage.innerHTML=_apwCharSVG(col,em);
+  const spr=(typeof _ofSprite==='function')?_ofSprite(cfg):null;
+  const stage=document.getElementById('apwStage'); if(stage) stage.innerHTML=_apwCharSVG(col,em,spr);
   const msgs=(Array.isArray(opts.messages)&&opts.messages.length)?opts.messages:_APW_MSGS;
   const st=document.getElementById('apwStatus');
   clearInterval(_apwTimer); _apwTimer=null;
@@ -16269,7 +16274,9 @@ function _ofWorkerCard(m){
   const cat=m.isPrinter?{name:'Impresora 3D',color:'#3aa0ff'}:(m.clickIA?_ofCat(m):{name:'Automatización',color:'#a78bfa'});
   const ac=cat.color;
   const avStyle=`background:radial-gradient(circle at 35% 28%,${ac}33,${ac}12);border-color:${ac}59;color:${ac}`;
-  const avInner=m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:5px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:m.icon;
+  const _wspr=m.clickIA?_ofSprite(m):null;
+  const avInner=_wspr?`<img src="${_wspr.front}" alt="" style="width:100%;height:100%;object-fit:contain;padding:2px">`
+    :m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:5px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:m.icon;
   return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
     <div class="of-avatar" style="${avStyle}">${avInner}</div>
     <div class="of-body">
@@ -16296,7 +16303,9 @@ function _ofDesk(m){
   const ac=cat.color;
   const em=m.clickIA?_ofAgentEmoji(m.label):((m.icon&&!m.icon.startsWith('<'))?m.icon:'⚙️');
   const seatStyle=`background:radial-gradient(circle at 35% 28%,${ac}2e,${ac}10);border-color:${ac}55`;
-  const seatInner=m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:6px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:em;
+  const _dspr=m.clickIA?_ofSprite(m):null;
+  const seatInner=_dspr?`<img src="${_dspr.front}" alt="" style="width:100%;height:100%;object-fit:contain;padding:3px">`
+    :m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:6px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:em;
   return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label)+' · '+cat.name+' — '+m.lbl)}">
     <div class="of-seat" style="${seatStyle}"><span class="of-seat-light"></span>${seatInner}</div>
     <div class="of-desk-name">${escapeHtml(_ofPretty(m.label))}</div>
@@ -16319,6 +16328,17 @@ function _ofRenderFloor(ia,auto,extras){
 
 // ── Vista isométrica 2.5D (estilo Habbo Hotel) ─────────────────────────
 const _OF_EMOJI={SALES:'💬',QUOTE:'📝',PRODUCTION:'🔧',QA:'✅',FOLLOWUP:'🔁',CEO:'📊',LEADGEN:'🎯',ONBOARDING:'🚀',FINANCE:'💰',ADS:'📣',COMMUNITY:'📷',NEWSLETTER:'📰',REPORT:'📈',SUPPLIER:'🔍'};
+// ── Sprites pixel-art de agentes (personajes con arte propio en la Oficina) ──
+// Cada set: front (parado, de cara), frontWalk, back, backWalk. El lookup es por
+// id/label (contains), así cubre LEADGEN, LEAD_GEN_AGENT y LEAD_AGENT por igual.
+const _OF_SPRITES=[
+  {re:/LEAD/i, set:{front:'avatars/leads-front.png',frontWalk:'avatars/leads-front-walk.png',back:'avatars/leads-back.png',backWalk:'avatars/leads-back-walk.png'}},
+];
+function _ofSprite(m){
+  const s=(((m&&m.id)||'')+' '+((m&&m.label)||'')).toUpperCase();
+  for(const e of _OF_SPRITES){ if(e.re.test(s)) return e.set; }
+  return null;
+}
 function _ofEmoji(m){
   if(!m.clickIA) return (m.icon && !m.icon.startsWith('<')) ? m.icon : '⚙️';
   const id=(m.id||'').toUpperCase();
@@ -16336,11 +16356,11 @@ function _ofAgentEmoji(label){
 // Nombre de agente para MOSTRAR en español (solo visual; la etiqueta real no cambia).
 const _OF_NAME_ES={
   'SALES_AGENT':'Ventas','QUOTE_AGENT':'Cotizador','PRODUCTION_AGENT':'Producción','QA_AGENT':'Calidad',
-  'FOLLOWUP_AGENT':'Seguimiento','CEO_AGENT':'CEO','LEAD_GEN_AGENT':'Prospección','ONBOARDING_AGENT':'Bienvenida',
+  'FOLLOWUP_AGENT':'Seguimiento','CEO_AGENT':'CEO','LEAD_GEN_AGENT':'Gerente de Ventas','ONBOARDING_AGENT':'Bienvenida',
   'FINANCE_AGENT':'Finanzas','REPORTE_CLIENTE':'Reporte Cliente','CONTENT_AGENT':'Contenido','ADS_AGENT':'Publicidad',
   'LINKEDIN_AGENT':'LinkedIn','SOCIAL_STRATEGIST':'Estratega Social','CAPTION_AGENT':'Copys','COMMUNITY_AGENT':'Community',
   'SOCIAL_ADS_AGENT':'Ads Sociales','TREND_AGENT':'Tendencias','REPORT_SOCIAL_AGENT':'Reporte Social','NEWSLETTER_AGENT':'Newsletter',
-  'LEAD_AGENT':'Prospección'
+  'LEAD_AGENT':'Gerente de Ventas'
 };
 function _ofPretty(label){
   if(_OF_NAME_ES[label]) return _OF_NAME_ES[label];
@@ -16420,7 +16440,14 @@ function _ofIsoStation(m,x,y){
     +`<rect x="-2.4" y="${_f(_my-3.5)}" width="4.8" height="3.4" fill="#0f1114"/><rect x="-8" y="${_f(_my)}" width="16" height="3" rx="1.4" fill="#1a1d22"/>`
     +`<rect x="-11" y="${_f(_my+4)}" width="22" height="3.6" rx="1.6" fill="#d3dae2"/>`;
   // Agente SENTADO en el mesón común (sin piernas; asoma torso y cabeza)
-  const seat=`<g class="of-iso-body">
+  // Si el agente tiene sprite pixel-art propio (p.ej. Gerente de Ventas), el
+  // personaje completo reemplaza al genérico: de pie tras el mesón, mismo
+  // halo/luz/burbuja y mismas animaciones (bob/breathe sobre .of-iso-body).
+  const spr=m.clickIA?_ofSprite(m):null;
+  const seat=spr?`<g class="of-iso-body">
+      <image href="${spr.front}" x="-14" y="-58" width="28" height="70" preserveAspectRatio="xMidYMid meet"/>
+      <circle cx="13" cy="-52" r="3.8" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
+    </g>`:`<g class="of-iso-body">
       <rect ${working?'class="of-type-l"':''} x="-16" y="-15" width="6.5" height="16" rx="3.2" fill="${dark}"/>
       <rect ${working?'class="of-type-r"':''} x="9.5" y="-15" width="6.5" height="16" rx="3.2" fill="${dark}"/>
       <rect x="-13" y="-23" width="26" height="26" rx="12" fill="${col}"/>
@@ -16465,16 +16492,17 @@ function _ofWalker(p1,p2,dur,delay,em){
 function _ofCommWalker(m,p1,p2,dur,delay){
   const col=_OF_STATUS[m.cls]||_OF_STATUS['of-work'];
   const dark=_ofShade(col,0.72), em=_ofEmoji(m);
-  return `<g class="of-iso-walker" style="--x1:${p1[0].toFixed(1)}px;--y1:${p1[1].toFixed(1)}px;--x2:${p2[0].toFixed(1)}px;--y2:${p2[1].toFixed(1)}px;--dur:${(dur||4.6)}s;animation-delay:${delay||0}s">
-    <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
-    <g class="of-iso-body">
-      <rect x="-6.5" y="-9" width="5" height="9" rx="2.5" fill="${dark}"/>
+  const spr=_ofSprite(m);
+  const body=spr?`<image href="${p2[1]<p1[1]?spr.backWalk:spr.frontWalk}" x="-11" y="-48" width="22" height="50" preserveAspectRatio="xMidYMid meet"/>`
+    :`<rect x="-6.5" y="-9" width="5" height="9" rx="2.5" fill="${dark}"/>
       <rect x="1.5" y="-9" width="5" height="9" rx="2.5" fill="${dark}"/>
       <rect x="-8.5" y="-28" width="17" height="21" rx="8" fill="${col}"/>
       <rect x="-8.5" y="-28" width="17" height="21" rx="8" fill="url(#ofShine)"/>
       <circle cx="0" cy="-36" r="10.5" fill="#fff7ec" stroke="${col}" stroke-width="2.6"/>
-      <text x="0" y="-32" text-anchor="middle" font-size="12">${em}</text>
-    </g>
+      <text x="0" y="-32" text-anchor="middle" font-size="12">${em}</text>`;
+  return `<g class="of-iso-walker" style="--x1:${p1[0].toFixed(1)}px;--y1:${p1[1].toFixed(1)}px;--x2:${p2[0].toFixed(1)}px;--y2:${p2[1].toFixed(1)}px;--dur:${(dur||4.6)}s;animation-delay:${delay||0}s">
+    <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
+    <g class="of-iso-body">${body}</g>
     <g transform="translate(0,-56)"><rect x="-11" y="-9" width="22" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-width="1.3"/><polygon points="-4,6 4,6 0,12" fill="#fff"/><text x="0" y="3" text-anchor="middle" font-size="10">💬</text></g>
   </g>`;
 }
@@ -16486,17 +16514,18 @@ function _ofBreakWalker(m,home,dest,kind,dur,delay){
   const col=_OF_STATUS[m.cls]||'#7c8590', dark=_ofShade(col,0.72), em=_ofEmoji(m), f=n=>n.toFixed(1);
   const bub=kind==='wc'?'🚻':'☕', lbl=kind==='wc'?'en una pausa':'por un café';
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
-  return `<g class="of-iso-errand" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" style="--hx:${f(home[0])}px;--hy:${f(home[1])}px;--ax:${f(dest[0])}px;--ay:${f(dest[1])}px;--dur:${dur}s;--dl:${delay}s">
-    <title>${escapeHtml(m.label+' — '+lbl)}</title>
-    <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
-    <g class="of-iso-body">
-      <rect x="-6.5" y="-9" width="5" height="9" rx="2.5" fill="${dark}"/>
+  const spr=m.clickIA?_ofSprite(m):null;
+  const body=spr?`<image href="${dest[1]<home[1]?spr.backWalk:spr.frontWalk}" x="-11" y="-48" width="22" height="50" preserveAspectRatio="xMidYMid meet"/>`
+    :`<rect x="-6.5" y="-9" width="5" height="9" rx="2.5" fill="${dark}"/>
       <rect x="1.5" y="-9" width="5" height="9" rx="2.5" fill="${dark}"/>
       <rect x="-8.5" y="-28" width="17" height="21" rx="8" fill="${col}"/>
       <rect x="-8.5" y="-28" width="17" height="21" rx="8" fill="url(#ofShine)"/>
       <circle cx="0" cy="-36" r="10.5" fill="#fff7ec" stroke="${col}" stroke-width="2.6"/>
-      ${m.img?`<image href="${m.img}" x="-9" y="-45.5" width="18" height="18" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-32" text-anchor="middle" font-size="12">${em}</text>`}
-    </g>
+      ${m.img?`<image href="${m.img}" x="-9" y="-45.5" width="18" height="18" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-32" text-anchor="middle" font-size="12">${em}</text>`}`;
+  return `<g class="of-iso-errand" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" style="--hx:${f(home[0])}px;--hy:${f(home[1])}px;--ax:${f(dest[0])}px;--ay:${f(dest[1])}px;--dur:${dur}s;--dl:${delay}s">
+    <title>${escapeHtml(m.label+' — '+lbl)}</title>
+    <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
+    <g class="of-iso-body">${body}</g>
     <g class="of-iso-errand-bubble" transform="translate(0,-52)"><rect x="-11" y="-9" width="22" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-width="1.3"/><polygon points="-4,6 4,6 0,12" fill="#fff"/><text x="0" y="3" text-anchor="middle" font-size="10">${bub}</text></g>
   </g>`;
 }
