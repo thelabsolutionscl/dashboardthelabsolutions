@@ -315,6 +315,35 @@ function _npsLink(p){
   const rev=_pdReviewUrl(); if(rev) url+='&g='+encodeURIComponent(rev);
   return url;
 }
+// ── COMPROBANTE DE ENTREGA / POD (Q7) ──────────────────────────────────
+// Pide al cliente confirmar la recepción con un enlace de 1 clic (worker /pod),
+// que marca "Recepción confirmada" en el pedido. Mismo patrón que el NPS (N4).
+function _podLink(p){const base=_npsWorkerUrl();if(!base||!p||!p.id)return '';return base+'/pod?p='+encodeURIComponent(btoa(p.id));}
+function _podConfirmado(p){return !!(p&&p.fields&&p.fields['Recepción confirmada']);}
+async function ensurePodFields(){
+  try{
+    if(typeof getToken==='function'&&!getToken()&&!(typeof _proxyCfg==='function'&&_proxyCfg())) return;
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return;const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Pedidos');if(!tbl) return;
+    const have=new Set((tbl.fields||[]).map(x=>x.name));
+    const want=[{name:'Recepción confirmada',type:'checkbox',options:{icon:'check',color:'greenBright'}},{name:'Recepción fecha',type:'singleLineText'}];
+    for(const w of want){if(have.has(w.name))continue;try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(w)});}catch(e){}}
+  }catch(e){}
+}
+function _podMsg(p){
+  const f=p.fields;const cli=_pdCliRec(p);
+  const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const link=_podLink(p);
+  return `Hola${nombre?' '+nombre:''} 👋 Soy de The Lab Solutions. Te despachamos tu pedido ${f['N° Pedido']?('('+f['N° Pedido']+')'):''} y queremos confirmar que llegó todo bien. ¿Nos confirmas la recepción con un clic aquí? ${link}\n¡Gracias! 💙`;
+}
+function pedirPOD(pedidoId){
+  const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
+  if(!_podLink(p)){toast('Configura el lead-worker para enviar el comprobante','info');return;}
+  try{ensurePodFields();}catch(e){}
+  const cli=_pdCliRec(p);const phone=cli?_getClienteWAPhone(cli):'';
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_podMsg(p)),'_blank');
+  toast('Enviando solicitud de confirmación de entrega','success');
+}
 function _pdMsg(p){
   const f=p.fields;
   const cli=_pdCliRec(p);
@@ -405,6 +434,7 @@ function buildPostEntregaTray(){
         <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(x.f['Cliente']))}</div>
         <div style="font-size:10.5px;color:var(--text3)">${escapeHtml(x.f['N° Pedido']||'—')} · despachado el ${formatFecha(x.f['Fecha despacho']||x.f['Fecha entrega'])}</div>
       </div>
+      ${_podLink(x.p)?(_podConfirmado(x.p)?'<span class="badge badge-green" style="flex-shrink:0" title="El cliente confirmó la recepción">✅ recibido</span>':`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="pedirPOD('${x.p.id}')" title="Pedir confirmación de recepción">📦</button>`):''}
       <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="pdWhatsApp('${x.p.id}')" ${tieneTel?'':'title="Sin teléfono en la ficha — se abrirá WhatsApp para elegir contacto"'}>📲</button>
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="pdEmail('${x.p.id}',this)">📧</button>
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado sin enviar" onclick="pdMarkDone('${x.p.id}','manual')">✓</button>

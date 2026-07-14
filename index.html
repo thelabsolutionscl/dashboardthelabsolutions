@@ -8464,6 +8464,11 @@ function renderClienteTimeline(clienteId,empresaNombre){
       gest.push({type:'ia',date:new Date(e.ts).toISOString().slice(0,10),label:'💚 Post-entrega enviado',sub:escapeHtml((p.fields['N° Pedido']||'—')+' · vía '+(e.via||'—')),color:'#00d4aa',icon:'💚'});});
   }catch(e){}
   try{
+    peds.forEach(p=>{if(!(typeof _podConfirmado==='function'&&_podConfirmado(p)))return;
+      const fecha=p.fields['Recepción fecha']||p.fields['Fecha despacho']||'';
+      gest.push({type:'ia',date:(fecha||'').slice(0,10),label:'📦 Entrega confirmada',sub:escapeHtml((p.fields['N° Pedido']||'—')+' · el cliente confirmó la recepción'),color:'#00d4aa',icon:'📦'});});
+  }catch(e){}
+  try{
     const emoNps={1:'😞',2:'🙁',3:'😐',4:'🙂',5:'😍'};
     peds.forEach(p=>{const s=(typeof _npsScore==='function')?_npsScore(p):null;if(s==null)return;
       const fecha=p.fields['NPS fecha']||p.fields['Fecha entrega']||'';const com=p.fields['NPS comentario']||'';

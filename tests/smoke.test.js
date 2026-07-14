@@ -105,6 +105,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'openOCModal', 'guardarOC', 'generarOCPDF', 'renderOCList', 'crearOCDesdeReorden',
     'renderEstacionalidad', '_estacionalidad',
     'renderOnboarding', '_onboardingSteps', 'toggleOnboarding',
+    '_podLink', 'pedirPOD', 'ensurePodFields', '_podConfirmado',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

@@ -80,6 +80,11 @@ export default {
         return await handleNps(request, env, ctx, cors);
       }
 
+      // Comprobante de entrega (POD): el cliente confirma la recepción con un clic.
+      if (url.pathname === "/pod") {
+        return await handlePod(request, env, ctx, cors);
+      }
+
       if (request.method === "GET" && url.pathname === "/blog") {
         return await handleBlogList(request, env, cors);
       }
@@ -419,6 +424,63 @@ async function sendNpsAlert(env, { pedId, score, comentario, comentarioOnly }) {
     });
   } catch (e) {
     console.error("[leads-worker] alerta NPS:", e.message);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: GET /pod  (comprobante de entrega — el cliente confirma la recepción)
+ *   GET /pod?p=base64(pedidoRecId)        → página con botón de confirmación
+ *   GET /pod?p=...&c=1                     → registra la recepción y agradece
+ * Escribe en Pedidos: "Recepción confirmada" (checkbox) y "Recepción fecha".
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handlePod(request, env, ctx, cors) {
+  const url = new URL(request.url);
+  const pedId = _npsDecodeToken(url.searchParams.get("p"));
+  if (!pedId) return htmlPage("Enlace inválido", "Este enlace de confirmación no es válido o ya expiró.", false);
+  const confirm = url.searchParams.get("c") === "1";
+  if (!confirm) return podConfirmPage(pedId);
+  if (env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
+    try {
+      await airtableUpdateTolerant(env, "Pedidos", pedId, {
+        "Recepción confirmada": true,
+        "Recepción fecha": new Date().toISOString().slice(0, 10),
+      });
+    } catch (e) {}
+    ctx.waitUntil(sendPodAlert(env, pedId));
+  }
+  return htmlPage("¡Recepción confirmada! ✅", "Gracias por confirmar que recibiste tu pedido conforme. ¡Fue un gusto trabajar contigo!", true);
+}
+function podConfirmPage(pedId) {
+  const tok = btoa(pedId);
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirmar recepción — The Lab Solutions</title></head>
+<body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
+<div style="max-width:460px;padding:40px 24px;text-align:center">
+<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:18px">The Lab Solutions</div>
+<div style="font-size:44px;margin-bottom:8px">📦</div>
+<h1 style="font-size:22px;margin:0 0 12px">¿Recibiste tu pedido?</h1>
+<p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 24px">Confírmanos que llegó todo en orden. Nos tomas 1 segundo y nos ayuda a cerrar el pedido.</p>
+<a href="/pod?p=${tok}&c=1" style="display:inline-block;background:#00b3a4;color:#06231f;font-weight:700;text-decoration:none;padding:13px 26px;border-radius:10px;font-size:15px">✅ Sí, lo recibí conforme</a>
+</div></body></html>`;
+  return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+async function sendPodAlert(env, pedId) {
+  if (!env.RESEND_API_KEY) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  const to = env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com";
+  let numPed = pedId;
+  try {
+    const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Pedidos/${pedId}`, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+    if (r.ok) { const rec = await r.json(); numPed = (rec.fields && rec.fields["N° Pedido"]) || pedId; }
+  } catch (e) {}
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"));
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject: `✅ Entrega confirmada — Pedido ${numPed}`, html: `<div style="font-family:system-ui,Arial,sans-serif;color:#111"><h2 style="color:#0a8f6a">✅ El cliente confirmó la recepción</h2><p>Pedido <strong>${esc(numPed)}</strong> recibido conforme. Puedes cerrarlo.</p></div>` }),
+    });
+  } catch (e) {
+    console.error("[leads-worker] alerta POD:", e.message);
   }
 }
 
