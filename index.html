@@ -673,6 +673,14 @@
     </div>
     <div id="wbTrayList"></div>
   </div>
+  <!-- BANDEJA DE RECOMPRA: clientes con cadencia que ya toca renovar (proactivo, antes de que se enfríen) -->
+  <div class="card" id="recompraTrayCard" style="margin-bottom:20px;border-color:rgba(0,212,204,0.35);display:none">
+    <div class="card-header">
+      <span class="card-title" style="color:var(--accent)">🔁 Toca recomprar <span class="badge" style="background:rgba(0,212,204,0.15);color:var(--accent)" id="recompraTrayCount">0</span></span>
+      <span style="margin-left:auto;font-size:10.5px;color:var(--text3)">clientes recurrentes que, por su cadencia de compra, ya deberían reponer</span>
+    </div>
+    <div id="recompraTrayList"></div>
+  </div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Base CRM</span>
@@ -7517,6 +7525,7 @@ function renderClientes(skipAnalytics){
   // 3 pasadas sobre pedidos/cotizaciones en cada tecla.
   if(!skipAnalytics) renderClientesAnalytics();
   try{buildWinbackTray();}catch(e){}
+  try{buildRecompraTray();}catch(e){}
   _applySortIndicators();
 }
 function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes(true);_saveUIState();}

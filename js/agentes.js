@@ -191,6 +191,98 @@ function wbMarkDone(cliId){
   buildWinbackTray();
 }
 
+// ── RECOMPRA PREDICTIVA (O3) ───────────────────────────────────
+// Clientes recurrentes (2+ pedidos) con una cadencia de compra estimada: cuando
+// el tiempo desde el último pedido alcanza ~su cadencia habitual, es momento de
+// invitarlos a reponer — proactivo, ANTES de que se enfríen (eso lo cubre winback).
+const _RECOMPRA_LOG_KEY='thelab_recompra_log_v1';
+function _recompraLog(){try{return JSON.parse(localStorage.getItem(_RECOMPRA_LOG_KEY)||'{}');}catch(e){return{};}}
+function _clientePedidos(cli){
+  const emp=cli.fields['Empresa']||cli.fields['Contacto']||'';
+  return (state.pedidos||[]).filter(p=>{
+    const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;
+    const c=f['Cliente'];const match=Array.isArray(c)?c.includes(cli.id):(String(c||'').toLowerCase()===String(emp).toLowerCase());
+    if(!match)return false;
+    return !!(p.createdTime||f['Fecha entrega']||f['Fecha ingreso']);
+  });
+}
+function _recompraInfo(cli){
+  // Fechas de compra (createdTime como referencia principal) ordenadas asc.
+  const fechas=_clientePedidos(cli).map(p=>new Date(p.createdTime||p.fields['Fecha entrega']||p.fields['Fecha ingreso']).getTime()).filter(t=>!isNaN(t)).sort((a,b)=>a-b);
+  if(fechas.length<2) return null;                          // sin cadencia no se predice
+  const intervalos=[];for(let i=1;i<fechas.length;i++)intervalos.push((fechas[i]-fechas[i-1])/864e5);
+  const cadencia=intervalos.reduce((a,b)=>a+b,0)/intervalos.length;
+  if(!(cadencia>=7&&cadencia<=400)) return null;            // cadencia razonable (semana a ~año)
+  const last=fechas[fechas.length-1];
+  const diasDesde=Math.floor((Date.now()-last)/864e5);
+  const ratio=diasDesde/cadencia;
+  return {cadencia:Math.round(cadencia),diasDesde,ratio,nPeds:fechas.length,last};
+}
+function _recompraCands(){
+  const log=_recompraLog();
+  return (state.clientes||[]).map(c=>{
+    if(log[c.id]&&(Date.now()-log[c.id].ts<30*864e5)) return null;   // gestionado hace <30 días
+    const info=_recompraInfo(c);if(!info) return null;
+    // "toca" desde el 85% de la cadencia y hasta 2.5× (más allá es winback, no recompra)
+    if(info.ratio<0.85||info.ratio>2.5) return null;
+    return {c,f:c.fields,...info};
+  }).filter(Boolean).sort((a,b)=>b.ratio-a.ratio);
+}
+function _recompraMsg(cand){
+  const nombre=cand.f['Contacto']?String(cand.f['Contacto']).trim().split(/\s+/)[0]:'';
+  const emp=cand.f['Empresa']||'';
+  return `Hola${nombre?' '+nombre:''} 👋 Te saludo de The Lab Solutions. Vimos que sueles renovar con nosotros cada ~${cand.cadencia} días y ya pasó un tiempo desde tu último pedido${emp?` (${emp})`:''}. ¿Te preparamos una nueva producción o cotización? Cuéntanos qué necesitas y lo dejamos listo. 💙`;
+}
+function buildRecompraTray(){
+  const card=document.getElementById('recompraTrayCard'); if(!card) return;
+  const cands=_recompraCands();
+  const cnt=document.getElementById('recompraTrayCount'); if(cnt) cnt.textContent=cands.length;
+  if(!cands.length){card.style.display='none';return;}
+  card.style.display='';
+  const list=document.getElementById('recompraTrayList'); if(!list) return;
+  list.innerHTML=cands.slice(0,10).map(x=>{
+    const cli=x.c;const tienePhone=!!_getClienteWAPhone(cli);
+    const vencido=x.ratio>=1;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+      <span class="badge ${vencido?'badge-orange':'badge-yellow'}" style="flex-shrink:0" title="Días desde el último pedido vs. cadencia habitual">${x.diasDesde}d / ~${x.cadencia}d</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.f['Empresa']||x.f['Contacto']||'—')}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${x.nPeds} pedidos · compra cada ~${x.cadencia} días${vencido?' · <span style="color:var(--warn)">ya toca reponer</span>':' · a punto'}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="recompraWhatsApp('${cli.id}')" ${tienePhone?'':'title="Sin teléfono en la ficha — se abrirá WhatsApp para elegir contacto"'}>📲</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="recompraEmail('${cli.id}',this)">📧</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado (no reaparece por 30 días)" onclick="recompraSnooze('${cli.id}')">✓</button>
+    </div>`;
+  }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-10} más</div>`:'');
+}
+function _recompraMark(cliId,via){
+  const log=_recompraLog(); log[cliId]={ts:Date.now(),via:via||'manual'};
+  try{localStorage.setItem(_RECOMPRA_LOG_KEY,JSON.stringify(log));}catch(e){}
+  buildRecompraTray();
+}
+function recompraWhatsApp(cliId){
+  const cli=(state.clientes||[]).find(c=>c.id===cliId); if(!cli){toast('Cliente no encontrado','error');return;}
+  const cand=_recompraCands().find(x=>x.c.id===cliId)||{c:cli,f:cli.fields,cadencia:_recompraInfo(cli)?.cadencia||30};
+  const phone=_getClienteWAPhone(cli)||'';
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(_recompraMsg(cand)),'_blank');
+  _recompraMark(cliId,'WhatsApp');
+}
+async function recompraEmail(cliId,btn){
+  const cli=(state.clientes||[]).find(c=>c.id===cliId); if(!cli){toast('Cliente no encontrado','error');return;}
+  const cand=_recompraCands().find(x=>x.c.id===cliId)||{c:cli,f:cli.fields,cadencia:_recompraInfo(cli)?.cadencia||30};
+  let to=cli.fields['Email']||prompt('¿A qué correo enviamos la invitación de recompra?','');
+  if(!to)return; to=String(to).trim();
+  if(!validEmail(to)){toast('Correo inválido','error');return;}
+  const prev=btn?btn.innerHTML:'';if(btn){btn.disabled=true;btn.textContent='…';}
+  try{
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:'¿Preparamos tu próxima producción? — The Lab Solutions',body:_recompraMsg(cand),from_name:AGENT_CTA_FROM.name});
+    if(r&&!r.error){toast('✓ Invitación de recompra enviada a '+to,'success');_recompraMark(cliId,'correo');}
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
+}
+function recompraSnooze(cliId){_recompraMark(cliId,'manual');toast('✓ Gestionado — no reaparece por 30 días','success');}
+
 // ── POST-ENTREGA ───────────────────────────────────────────────
 // Pedidos despachados hace 3+ días (hasta 30): mensaje de satisfacción con
 // invitación a dejar reseña en Google, por WhatsApp o correo (Andrea).

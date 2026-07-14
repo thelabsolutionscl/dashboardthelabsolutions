@@ -81,6 +81,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     // bandejas y flujos construidos en esta serie
     'buildFollowupTray', 'fuMarkDone', 'runFollowupAgent',
     'buildPostEntregaTray', 'pdMarkDone', 'buildWinbackTray', 'wbReactivar',
+    'buildRecompraTray', '_recompraCands', 'recompraWhatsApp', 'recompraSnooze',
     'renderCsatSummary', 'ensureNpsFields', '_npsStats', '_npsLink',
     'renderMejorPrecio', 'addPrecioProv', 'delPrecioProv', '_mejorPrecioPorItem',
     'generarCierrePDF', 'enviarCierreMes',
