@@ -97,6 +97,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'openCatalogoModal', 'renderCatalogoModal', 'addCatalogoItem', 'insertarCatalogo',
     'margenBadge', '_margenPiso', 'setMargenPiso',
     'renderComisiones', '_ventasVendedor', 'setComisionCfg', 'setMetaVendedores',
+    'openReclamoModal', 'guardarReclamo', 'renderReclamos', 'setReclamoEstado',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

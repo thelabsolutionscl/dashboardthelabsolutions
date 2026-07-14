@@ -1964,6 +1964,7 @@ const GS_ACTIONS=[
   {tab:'overview',icon:'icon-reporte', title:'Enviar resumen semanal por correo', kw:'digest resumen semanal semana correo enviar operativo acciones pendientes', run:()=>{try{enviarDigestSemanal();}catch(e){}}},
   {icon:'icon-pedidos', title:'Catálogo de productos', kw:'catalogo productos precio base servicios lista items cotizar', run:()=>{try{openCatalogoModal();}catch(e){}}},
   {tab:'cotizaciones',icon:'icon-cotizaciones', title:'Configurar piso de margen', kw:'margen minimo piso rentabilidad alerta cotizacion precio objetivo', run:()=>{try{setMargenPiso();}catch(e){}}},
+  {tab:'pedidos',icon:'icon-pedidos', title:'Registrar reclamo / garantía', kw:'reclamo garantia postventa rma defecto devolucion problema queja', run:()=>{try{openReclamoModal();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}

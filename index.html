@@ -794,6 +794,7 @@
     <div id="pdTrayList" style="padding:2px 0 8px"></div>
   </div>
   <div id="pdCsatBar" style="display:none;margin-bottom:16px"></div>
+  <div id="reclamosCard" style="margin-bottom:16px"></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Atrasados</button>
@@ -4721,6 +4722,26 @@ function _reportarResultados(muts) {
   </div>
 </div>
 
+<!-- GARANTÍAS / RECLAMO POSTVENTA (P5) -->
+<div id="reclamoModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeReclamoModal()"></div>
+  <div class="modal-card" style="max-width:440px">
+    <div class="modal-title">🛡️ Reclamo / garantía</div>
+    <input type="hidden" id="reclamoId">
+    <div style="display:flex;flex-direction:column;gap:10px;padding:0 0 14px">
+      <div class="field-group"><label class="field-label">Pedido</label><select class="field-select" id="reclamoPedido"></select></div>
+      <div class="field-group"><label class="field-label">Tipo</label><select class="field-select" id="reclamoTipo"><option>Defecto de fabricación</option><option>Daño en despacho</option><option>No corresponde a lo pedido</option><option>Fuera de dimensión / tolerancia</option><option>Atraso</option><option>Otro</option></select></div>
+      <div class="field-group"><label class="field-label">Descripción del problema</label><textarea class="field-textarea" id="reclamoMotivo" rows="3" placeholder="Qué pasó, cómo lo detectó el cliente..."></textarea></div>
+      <div class="field-group"><label class="field-label">Estado</label><select class="field-select" id="reclamoEstado"><option>Abierto</option><option>En proceso</option><option>Resuelto</option><option>Rechazado</option></select></div>
+      <div class="field-group"><label class="field-label">Resolución / acción</label><textarea class="field-textarea" id="reclamoResol" rows="2" placeholder="Qué se hizo para resolverlo (reimpresión, reembolso, etc.)"></textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeReclamoModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="guardarReclamo()">💾 Guardar reclamo</button>
+    </div>
+  </div>
+</div>
+
 <!-- INVENTARIO DE MATERIALES -->
 <div class="tab-panel" id="tab-inventario">
   <div class="section-header"><div><div class="section-title">Inventario de materiales</div><div class="section-desc">Stock de insumos (filamento, planchas, resina, vinilo…). Cuando un material baja de su punto de reorden, aparece en las alertas del sistema.</div></div><button class="btn btn-primary btn-sm" onclick="addMaterial()">＋ Material</button></div>
@@ -6570,6 +6591,12 @@ function _applyMonitorSistema(recs){
       const sigs=JSON.parse(sigRec.fields['Notes']||'{}');
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
+  }
+  // Reclamos / garantías respaldados (registro compartido).
+  const rclRec=recs.find(r=>r.fields['Name']==='RECLAMOS');
+  if(rclRec){
+    state.reclamosRecordId=rclRec.id;
+    try{const arr=JSON.parse(rclRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_reclamos_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:reclamos',e);}
   }
   // Catálogo de productos respaldado (registro compartido).
   const catRec=recs.find(r=>r.fields['Name']==='CATALOGO');
@@ -9163,6 +9190,7 @@ function exportRemCSV(){
 }
 
 function renderPedidos(filter){
+  try{renderReclamos();}catch(e){}
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
   try{document.querySelectorAll('#pedidosFilterBar button[onclick*="filterPedidos("]').forEach(b=>{const k=/filterPedidos\('([^']+)'/.exec(b.getAttribute('onclick')||'')?.[1];b.classList.toggle('active-filter',k===filter);});}catch(e){}
   _refreshDriveBtns();
@@ -10211,6 +10239,82 @@ function renderCatalogoModal(){
       <span id="catmg-${it.id}" style="text-align:center;font-size:11px;font-weight:700;color:${_catMargen(it)>=35?'var(--accent3)':_catMargen(it)>=20?'var(--warn)':'var(--danger)'}">${_catMargen(it)}%</span>
       <span style="display:flex;gap:4px;justify-content:flex-end">${cotOpen?`<button class="btn btn-primary btn-sm" style="padding:3px 7px;font-size:10px" onclick="insertarCatalogo('${it.id}')" title="Insertar en la cotización">＋</button>`:''}<button class="btn btn-ghost btn-sm" style="padding:3px 6px;color:var(--danger)" onclick="delCatalogoItem('${it.id}')" title="Eliminar">✕</button></span>
     </div>`).join('');
+}
+
+// ── GARANTÍAS / POSTVENTA (P5) ─────────────────────────────────────────
+// Registro de reclamos/RMA por pedido con estado y resolución. localStorage +
+// respaldo en Monitor Sistema (RECLAMOS). Los abiertos aparecen en Pedidos.
+const _RECLAMOS_KEY='thelab_reclamos_v1';
+function _reclamos(){try{return JSON.parse(localStorage.getItem(_RECLAMOS_KEY)||'[]');}catch(e){return[];}}
+function _reclamosSaveArr(arr){try{localStorage.setItem(_RECLAMOS_KEY,JSON.stringify(arr||[]));}catch(e){}_reclamosBackup();}
+async function _reclamosBackup(){
+  try{
+    const notes=localStorage.getItem(_RECLAMOS_KEY)||'[]';
+    if(state.reclamosRecordId) await airtableWrite('Monitor Sistema','PATCH',state.reclamosRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'RECLAMOS','Notes':notes});if(r&&r.id)state.reclamosRecordId=r.id;}
+  }catch(e){}
+}
+const _RECLAMO_COL={'Abierto':'var(--danger)','En proceso':'var(--warn)','Resuelto':'var(--accent3)','Rechazado':'var(--text3)'};
+function openReclamoModal(pedidoId,reclamoId){
+  // Poblar el select de pedidos con los activos/recientes
+  const peds=(state.pedidos||[]).slice().sort((a,b)=>String(b.createdTime||'').localeCompare(String(a.createdTime||''))).slice(0,120);
+  const sel=document.getElementById('reclamoPedido');
+  sel.innerHTML=peds.map(p=>`<option value="${p.id}">${escapeHtml(p.fields['N° Pedido']||p.id.slice(-6))} · ${escapeHtml(resolveClienteName(p.fields['Cliente']))}</option>`).join('');
+  const rec=reclamoId?_reclamos().find(x=>x.id===reclamoId):null;
+  document.getElementById('reclamoId').value=reclamoId||'';
+  if(rec){sel.value=rec.pedidoId;document.getElementById('reclamoTipo').value=rec.tipo||'Otro';document.getElementById('reclamoMotivo').value=rec.motivo||'';document.getElementById('reclamoEstado').value=rec.estado||'Abierto';document.getElementById('reclamoResol').value=rec.resolucion||'';}
+  else{if(pedidoId)sel.value=pedidoId;document.getElementById('reclamoTipo').value='Defecto de fabricación';document.getElementById('reclamoMotivo').value='';document.getElementById('reclamoEstado').value='Abierto';document.getElementById('reclamoResol').value='';}
+  document.getElementById('reclamoModal').style.display='flex';
+}
+function closeReclamoModal(){document.getElementById('reclamoModal').style.display='none';}
+function guardarReclamo(){
+  const pedidoId=document.getElementById('reclamoPedido').value;
+  const motivo=(document.getElementById('reclamoMotivo').value||'').trim();
+  if(!pedidoId){toast('Selecciona un pedido','error');return;}
+  if(!motivo){toast('Describe el problema','error');return;}
+  const p=state.pedidosById[pedidoId];
+  const arr=_reclamos();const id=document.getElementById('reclamoId').value;
+  const base={
+    pedidoId,numPedido:p?.fields['N° Pedido']||'',cliente:p?resolveClienteName(p.fields['Cliente']):'',
+    tipo:document.getElementById('reclamoTipo').value,motivo,
+    estado:document.getElementById('reclamoEstado').value,resolucion:(document.getElementById('reclamoResol').value||'').trim()
+  };
+  if(id){const r=arr.find(x=>x.id===id);if(r)Object.assign(r,base);}
+  else{arr.push({id:'rcl'+Date.now()+'_'+arr.length,ts:Date.now(),...base});}
+  _reclamosSaveArr(arr);closeReclamoModal();toast('✓ Reclamo guardado','success');
+  try{renderReclamos();}catch(e){}try{renderPedidos();}catch(e){}
+}
+function setReclamoEstado(id,estado){const arr=_reclamos();const r=arr.find(x=>x.id===id);if(!r)return;r.estado=estado;_reclamosSaveArr(arr);renderReclamos();}
+function delReclamo(id){if(!confirm('¿Eliminar este reclamo?'))return;_reclamosSaveArr(_reclamos().filter(x=>x.id!==id));renderReclamos();}
+function renderReclamos(){
+  const el=document.getElementById('reclamosCard');if(!el)return;
+  const arr=_reclamos();
+  const abiertos=arr.filter(r=>r.estado==='Abierto'||r.estado==='En proceso').sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const resueltos=arr.filter(r=>r.estado==='Resuelto').length;
+  if(!arr.length){el.innerHTML='';return;}
+  if(!abiertos.length){
+    el.innerHTML=`<div class="card" style="padding:11px 16px;display:flex;align-items:center;gap:10px"><span style="font-size:15px">🛡️</span><span style="font-size:12px;color:var(--text2)">Sin reclamos abiertos · <b style="color:var(--accent3)">${resueltos}</b> resuelto${resueltos!==1?'s':''} históricos</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openReclamoModal()">＋ Reclamo</button></div>`;
+    el.style.display='';return;
+  }
+  el.innerHTML=`<div class="card" style="border-color:rgba(255,68,68,0.35)">
+    <div class="card-header"><span class="card-title" style="color:var(--danger)">🛡️ Garantías / reclamos <span class="badge badge-red">${abiertos.length}</span></span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openReclamoModal()">＋ Reclamo</button></div>
+    <div style="padding:2px 0 8px">${abiertos.map(r=>{
+      const col=_RECLAMO_COL[r.estado]||'var(--text3)';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+        <span class="badge" style="flex-shrink:0;color:${col};border-color:${col}">${escapeHtml(r.estado)}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.numPedido||'—')} · ${escapeHtml(r.cliente||'—')} <span style="color:var(--text3);font-weight:400">· ${escapeHtml(r.tipo||'')}</span></div>
+          <div style="font-size:10.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.motivo||'')}</div>
+        </div>
+        ${r.estado==='Abierto'?`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar en proceso" data-id="${r.id}" onclick="setReclamoEstado(this.dataset.id,'En proceso')">▶</button>`:''}
+        <button class="btn btn-primary btn-sm" style="flex-shrink:0" title="Editar / resolver" data-id="${r.id}" onclick="openReclamoModal(null,this.dataset.id)">✎</button>
+        <button class="btn btn-ghost btn-sm" style="flex-shrink:0;color:var(--accent3)" title="Marcar resuelto" data-id="${r.id}" onclick="setReclamoEstado(this.dataset.id,'Resuelto')">✓</button>
+      </div>`;
+    }).join('')}</div>
+    ${resueltos?`<div style="padding:6px 16px 10px;font-size:10.5px;color:var(--text3)">${resueltos} reclamo${resueltos!==1?'s':''} resuelto${resueltos!==1?'s':''} en el historial</div>`:''}
+  </div>`;
+  el.style.display='';
 }
 function cotPopulaComunas(regionSelId,comunaSelId,valorActual){
   const region=document.getElementById(regionSelId)?.value||'';
