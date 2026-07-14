@@ -74,10 +74,16 @@ const _FU_LOG_KEY='thelab_fu_log_v1';
 function _fuLog(){try{return JSON.parse(localStorage.getItem(_FU_LOG_KEY)||'{}');}catch(e){return{};}}
 function _fuDays(){const v=parseInt(localStorage.getItem('thelab_fu_days'));return [3,5,7,10].includes(v)?v:5;}
 function fuSetDays(v){localStorage.setItem('thelab_fu_days',v);buildFollowupTray();}
+// Secuencia de 3 toques a partir del día base elegido: base, base+3, base+8.
+// El log guarda cuántos toques se hicieron ({ts,via,toques}); tras 3 sin
+// respuesta la cotización sale de la bandeja (queda para el win-back al vencer).
+function _fuSched(){const b=_fuDays();return [b,b+3,b+8];}
+function _fuToques(cotId){const e=_fuLog()[cotId];return (e&&e.toques)||0;}
+const _FU_ETIQ=['1er toque','2º toque','3er toque (último)'];
 function buildFollowupTray(){
   const card=document.getElementById('fuTrayCard'); if(!card) return;
   const sel=document.getElementById('fuTrayDays'); if(sel) sel.value=String(_fuDays());
-  const th=_fuDays(), log=_fuLog(), now=Date.now();
+  const sched=_fuSched(), log=_fuLog(), now=Date.now();
   const _t=new Date();_t.setHours(0,0,0,0);
   const cands=(state.cotizaciones||[]).map(c=>{
     const f=c.fields;
@@ -85,11 +91,12 @@ function buildFollowupTray(){
     const fecha=f['Fecha cotización']||(c.createdTime||'').slice(0,10);
     if(!fecha) return null;
     const dias=Math.floor((_t-new Date(fecha+'T00:00:00'))/864e5);
-    if(dias<th) return null;
-    const last=log[c.id]&&log[c.id].ts;
-    if(last && now-last<7*864e5) return null;   // ya se le hizo seguimiento hace <7 días
-    return {c,f,dias};
-  }).filter(Boolean).sort((a,b)=>b.dias-a.dias);
+    const e=log[c.id]||{}, toques=e.toques||0;
+    if(toques>=3) return null;                       // secuencia agotada
+    if(dias<sched[toques]) return null;              // aún no toca este toque
+    if(e.ts && now-e.ts<2*864e5) return null;        // <2 días desde el último toque
+    return {c,f,dias,toque:toques};
+  }).filter(Boolean).sort((a,b)=>b.toque-a.toque||b.dias-a.dias);
   const cnt=document.getElementById('fuTrayCount'); if(cnt) cnt.textContent=cands.length;
   if(!cands.length){card.style.display='none';return;}
   card.style.display='';
@@ -98,22 +105,24 @@ function buildFollowupTray(){
     const neto=x.f['Total final (CLP)']?formatCLP(Math.round(x.f['Total final (CLP)']/1.19)):'—';
     const vto=x.f['Fecha vencimiento']?Math.round((new Date(x.f['Fecha vencimiento']+'T00:00:00')-_t)/864e5):null;
     const vtoChip=vto==null?'':(vto<0?` · <span style="color:var(--danger)">vencida hace ${-vto}d</span>`:` · vence en ${vto}d`);
+    const tCol=x.toque===2?'badge-red':x.toque===1?'badge-orange':'badge-yellow';
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
-      <span class="badge ${x.dias>=10?'badge-red':'badge-yellow'}" style="flex-shrink:0" title="Días sin respuesta">${x.dias} d</span>
+      <span class="badge ${tCol}" style="flex-shrink:0" title="${x.dias} días sin respuesta">${_FU_ETIQ[x.toque]}</span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(x.f['Cliente']))}</div>
-        <div style="font-size:10.5px;color:var(--text3)">${escapeHtml(x.f['N° Cotización']||'—')} · ${neto} neto${vtoChip}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${escapeHtml(x.f['N° Cotización']||'—')} · ${neto} neto · ${x.dias}d${vtoChip}</div>
       </div>
       <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="runFollowupAgent('${x.c.id}')">✨ Seguimiento IA</button>
-      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionada sin enviar" onclick="fuMarkDone('${x.c.id}','manual')">✓</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar este toque como hecho sin enviar" onclick="fuMarkDone('${x.c.id}','manual')">✓</button>
     </div>`;
-  }).join('')+(cands.length>12?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-12} más (baja el umbral de días para verlas todas de a poco)</div>`:'');
+  }).join('')+(cands.length>12?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-12} más</div>`:'');
 }
 async function fuMarkDone(cotId,via){
-  const log=_fuLog(); log[cotId]={ts:Date.now(),via:via||'manual'};
+  const log=_fuLog(); const prev=log[cotId]||{};
+  log[cotId]={ts:Date.now(),via:via||'manual',toques:Math.min((prev.toques||0)+1,3)};
   try{localStorage.setItem(_FU_LOG_KEY,JSON.stringify(log));}catch(e){}
   try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,{'Último seguimiento':new Date().toISOString().slice(0,10)});}catch(e){}
-  if(via&&via!=='manual') toast('✓ Seguimiento registrado ('+via+')','success');
+  if(via&&via!=='manual') toast('✓ Seguimiento registrado ('+via+') — toque '+log[cotId].toques+'/3','success');
   buildFollowupTray();
 }
 
@@ -321,7 +330,11 @@ function runFollowupAgent(cotId){
   const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'';
   const waPhone=_getClienteWAPhone(cliRec);
   const email=cliRec?.fields['Email']||'';
-  const ctx=`Cliente: ${nombre}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nCotización: ${f['N° Cotización']||'—'}${monto?' | Monto neto: '+monto:''}\nDías sin respuesta: ${dias}${vto!=null?' | Vence en: '+vto+'d':''}\nProducto/Servicio: ${sol||'No especificado'}`+agentMemoriaCliente(nombre,cliRec?.id);
+  const _toque=Math.min(_fuToques(cotId)+1,3);
+  const _guia=_toque===1?'recordatorio breve y amable, sin presión'
+    :_toque===2?'aporta valor: resuelve dudas típicas, ofrece ajustar el alcance o una alternativa, refuerza el beneficio'
+    :'último contacto de la secuencia: crea urgencia suave (vencimiento, cupo de producción) y facilita el cierre con una pregunta directa';
+  const ctx=`Cliente: ${nombre}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nCotización: ${f['N° Cotización']||'—'}${monto?' | Monto neto: '+monto:''}\nDías sin respuesta: ${dias}${vto!=null?' | Vence en: '+vto+'d':''}\nProducto/Servicio: ${sol||'No especificado'}\nToque de la secuencia: ${_toque} de 3 — enfoque: ${_guia}. No repitas el mismo texto de un toque anterior.`+agentMemoriaCliente(nombre,cliRec?.id);
   runAgentInline('FOLLOWUP',ctx,(result)=>{
     const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
     const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendFollowupEmail('${cotId}','${email.replace(/'/g,'')}')">📧 Enviar por correo</button>`:'';
