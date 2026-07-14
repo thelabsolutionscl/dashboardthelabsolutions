@@ -1393,6 +1393,7 @@ function ldInit(){
   if(hasta&&!hasta.value)hasta.value=hoy;
   ldSwitchTipo();
   ldFiltrar();
+  try{renderArqueo();}catch(e){}
 }
 
 /* ── Overview Google Ads snapshot ── */
@@ -1966,6 +1967,7 @@ const GS_ACTIONS=[
   {tab:'cotizaciones',icon:'icon-cotizaciones', title:'Configurar piso de margen', kw:'margen minimo piso rentabilidad alerta cotizacion precio objetivo', run:()=>{try{setMargenPiso();}catch(e){}}},
   {tab:'pedidos',icon:'icon-pedidos', title:'Registrar reclamo / garantía', kw:'reclamo garantia postventa rma defecto devolucion problema queja', run:()=>{try{openReclamoModal();}catch(e){}}},
   {tab:'clientes',icon:'icon-clientes', title:'Contrato recurrente (retainer)', kw:'contrato recurrente retainer mensual suscripcion abono fijo pedido automatico', run:()=>{try{openRetainerModal();}catch(e){}}},
+  {icon:'icon-dollar', title:'Arqueo de caja del día', kw:'arqueo caja efectivo cuadre diario cierre conteo dinero', run:()=>{try{finSwitchTab('diario');setTimeout(()=>{try{renderArqueo();document.getElementById('arqueoCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
@@ -2972,4 +2974,85 @@ function renderComisiones(){
       </div>
     </div>
   </div>`;
+}
+
+// ── ARQUEO DE CAJA DIARIO (P7) ─────────────────────────────────────────
+// Cuadra la caja de un día contra el Libro Diario: ingresos y egresos por
+// método de pago, efectivo esperado (fondo + ingresos efvo − egresos efvo) y
+// diferencia contra el efectivo contado. Guarda el arqueo por fecha.
+const _ARQUEO_KEY='thelab_arqueos_v1';
+const _CAJA_FONDO_KEY='thelab_caja_fondo_v1';
+function _arqueos(){try{return JSON.parse(localStorage.getItem(_ARQUEO_KEY)||'{}');}catch(e){return{};}}
+function _arqueosSave(o){try{localStorage.setItem(_ARQUEO_KEY,JSON.stringify(o||{}));}catch(e){}}
+function _cajaFondo(){const v=parseFloat(localStorage.getItem(_CAJA_FONDO_KEY));return isNaN(v)?0:v;}
+function setCajaFondo(v){localStorage.setItem(_CAJA_FONDO_KEY,String(parseFloat(v)||0));try{renderArqueo();}catch(e){}}
+function _esEfectivo(m){return /efec|caja|contado/i.test(String(m||''));}
+function _arqueoDia(fecha){
+  const items=(typeof ldGetAll==='function'?ldGetAll():[]).filter(e=>String(e.fecha||'')===fecha);
+  const porMetodo={};let ingEf=0,gasEf=0,ingTot=0,gasTot=0;
+  items.forEach(e=>{
+    const met=e.metodo||'Sin método',monto=+e.monto||0,ing=e.tipo!=='gasto';
+    porMetodo[met]=porMetodo[met]||{ing:0,gas:0};
+    if(ing){porMetodo[met].ing+=monto;ingTot+=monto;if(_esEfectivo(met))ingEf+=monto;}
+    else{porMetodo[met].gas+=monto;gasTot+=monto;if(_esEfectivo(met))gasEf+=monto;}
+  });
+  const fondo=_cajaFondo();
+  return {items:items.length,porMetodo,ingEf,gasEf,ingTot,gasTot,fondo,efectivoEsperado:fondo+ingEf-gasEf};
+}
+function renderArqueo(){
+  const el=document.getElementById('arqueoCard');if(!el)return;
+  let fecha=el.dataset.fecha;
+  if(!fecha){fecha=(document.getElementById('ld-fecha')?.value)||new Date().toISOString().slice(0,10);el.dataset.fecha=fecha;}
+  const a=_arqueoDia(fecha);
+  const saved=_arqueos()[fecha];
+  const contado=(el.dataset.contado!=null&&el.dataset.contado!=='')?parseFloat(el.dataset.contado):(saved?saved.contado:'');
+  const dif=(contado!==''&&!isNaN(contado))?(contado-a.efectivoEsperado):null;
+  const metodos=Object.entries(a.porMetodo).sort((x,y)=>(y[1].ing+y[1].gas)-(x[1].ing+x[1].gas));
+  const metHtml=metodos.length?metodos.map(([m,v])=>`<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:5px 0;border-top:1px solid var(--border)">
+      <span style="flex:1">${_esEfectivo(m)?'💵 ':'🏦 '}${escapeHtml(m)}</span>
+      <span style="color:var(--accent3);font-family:'JetBrains Mono',monospace">+${formatCLP(v.ing)}</span>
+      <span style="color:var(--danger);font-family:'JetBrains Mono',monospace">-${formatCLP(v.gas)}</span>
+    </div>`).join(''):'<div style="font-size:11.5px;color:var(--text3);padding:6px 0">Sin movimientos este día</div>';
+  const difCol=dif===null?'var(--text3)':Math.abs(dif)<1?'var(--accent3)':dif>0?'var(--warn)':'var(--danger)';
+  const difTxt=dif===null?'—':(dif===0?'✓ Cuadra':`${dif>0?'sobra ':'falta '}${formatCLP(Math.abs(dif))}`);
+  el.innerHTML=`<div class="card" style="border-color:rgba(0,212,204,0.28)">
+    <div class="card-header"><span class="card-title">💵 Arqueo de caja</span>
+      <input type="date" value="${fecha}" onchange="_arqueoSetFecha(this.value)" style="margin-left:auto;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px">
+    </div>
+    <div style="padding:12px 16px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="fac-kpi" style="flex:1;min-width:100px"><span class="fac-kpi-lbl">Ingresos día</span><span class="fac-kpi-val" style="color:var(--accent3)">${formatCLP(a.ingTot)}</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:100px"><span class="fac-kpi-lbl">Egresos día</span><span class="fac-kpi-val" style="color:var(--danger)">${formatCLP(a.gasTot)}</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:100px"><span class="fac-kpi-lbl">Efectivo esperado</span><span class="fac-kpi-val">${formatCLP(a.efectivoEsperado)}</span></div>
+      </div>
+      <div style="margin-bottom:12px">${metHtml}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px">
+        <span style="font-size:11px;color:var(--text3)">Fondo inicial</span>
+        <input type="number" value="${a.fondo}" onchange="setCajaFondo(this.value)" style="width:110px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace">
+        <span style="font-size:11px;color:var(--text3);margin-left:8px">Efectivo contado</span>
+        <input type="number" id="arqueoContado" value="${contado}" placeholder="0" oninput="_arqueoSetContado(this.value)" style="width:130px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace">
+        <span style="font-size:13px;font-weight:700;color:${difCol};margin-left:6px">${difTxt}</span>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="guardarArqueo()">💾 Guardar arqueo</button>
+      </div>
+      ${saved?`<div style="font-size:10px;color:var(--text3);margin-top:8px">Último arqueo de este día: contado ${formatCLP(saved.contado)} · dif ${formatCLP((saved.contado||0)-a.efectivoEsperado)}</div>`:''}
+    </div>
+  </div>`;
+}
+function _arqueoSetFecha(f){const el=document.getElementById('arqueoCard');if(el){el.dataset.fecha=f;el.dataset.contado='';}renderArqueo();}
+function _arqueoSetContado(v){const el=document.getElementById('arqueoCard');if(el)el.dataset.contado=v;
+  // actualiza solo el texto de diferencia sin re-render completo (mantiene foco)
+  try{const fecha=el.dataset.fecha;const a=_arqueoDia(fecha);const dif=(v!==''&&!isNaN(parseFloat(v)))?(parseFloat(v)-a.efectivoEsperado):null;}catch(e){}
+}
+function guardarArqueo(){
+  const el=document.getElementById('arqueoCard');if(!el)return;
+  const fecha=el.dataset.fecha||new Date().toISOString().slice(0,10);
+  const contadoRaw=document.getElementById('arqueoContado')?.value;
+  const contado=parseFloat(contadoRaw);
+  if(isNaN(contado)){toast('Ingresa el efectivo contado','error');return;}
+  const a=_arqueoDia(fecha);
+  const o=_arqueos();o[fecha]={contado,esperado:a.efectivoEsperado,dif:contado-a.efectivoEsperado,ts:Date.now()};
+  _arqueosSave(o);
+  const d=contado-a.efectivoEsperado;
+  toast(Math.abs(d)<1?'✓ Caja cuadrada':`Arqueo guardado · ${d>0?'sobran ':'faltan '}${formatCLP(Math.abs(d))}`, Math.abs(d)<1?'success':'info');
+  renderArqueo();
 }

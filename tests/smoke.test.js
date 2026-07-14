@@ -99,6 +99,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'renderComisiones', '_ventasVendedor', 'setComisionCfg', 'setMetaVendedores',
     'openReclamoModal', 'guardarReclamo', 'renderReclamos', 'setReclamoEstado',
     'openRetainerModal', 'guardarRetainer', 'generarRetainer', 'retainersAutoCheck', 'renderRetainers',
+    'renderArqueo', '_arqueoDia', 'guardarArqueo',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',
@@ -119,7 +120,8 @@ const ok = msg => console.log('  ✓ ' + msg);
     'tab-oficina', 'tab-inventario', 'inventarioTableBody', 'agentesGrid', 'fuTrayCard', 'pdTrayCard', 'wbTrayCard', 'finCobranzaActions',
     'morningBrief', 'maqOcupacion', 'pedidosKanban', 'agentWorkingModal', 'agentInlineModal',
     'cdTimeline', 'mailList', 'umBackupInfo', 'agendaModal', 'finFlujoCaja', 'pdCsatBar', 'cotToOrderTray',
-    'recompraTrayCard', 'invReordenCard', 'cargaMaquinas', 'catalogoModal', 'comisionesRanking'];
+    'recompraTrayCard', 'invReordenCard', 'cargaMaquinas', 'catalogoModal', 'comisionesRanking',
+    'reclamoModal', 'reclamosCard', 'retainerModal', 'retainersCard', 'arqueoCard'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
   if (missing.length) fail('IDs del DOM ausentes: ' + missing.join(', '));
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');
