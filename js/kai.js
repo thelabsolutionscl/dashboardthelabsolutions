@@ -99,8 +99,9 @@ CAPACIDADES Y REGLAS:
   - asistente(tipo): abre un asistente guiado. Tipos: cliente, proveedor, pago, mantencion, cotizar.
   - delegar(agente, instruccion): delega a un agente y recibes su resultado para resumirlo. Agentes: SALES, QUOTE, PRODUCTION, QA, FOLLOWUP, CEO, LEADGEN, FINANCE, ONBOARDING, REPCLIENTE, CONTENT, ADS, SOCIAL_STRATEGIST, CAPTION_AGENT, COMMUNITY_AGENT, SOCIAL_ADS_AGENT, TREND_AGENT, REPORT_SOCIAL_AGENT. Usalo cuando pidan redactar, cotizar, generar checklist, reporte, analisis o contenido de redes sociales.
   - sugerir_acciones(botones): cuando sea util, ofrece 1 a 3 botones de seguimiento; cada boton tiene texto (2-4 palabras que ve el usuario) y comando (lo que recibirias si lo pulsa).
+  - consultar_crm(consulta, nombre, periodo): consulta datos precisos del CRM. Usala SIEMPRE que pregunten por algo concreto: un cliente o proveedor por nombre (consulta=cliente/proveedor con nombre), pedidos atrasados, cartera por cobrar, finanzas o top de clientes de un mes (periodo actual o anterior), cotizaciones pendientes o inventario bajo. Responde con las cifras que te devuelva, sin inventar.
 - Acompana SIEMPRE el uso de una herramienta con una frase breve hablada que diga lo que estas haciendo.
-- Usa los DATOS EN VIVO del dashboard (que recibes a continuacion) para responder sobre pedidos/cotizaciones/clientes.
+- Para preguntas sobre datos especificos (saldos, un cliente, un mes) usa consultar_crm; el resumen de DATOS EN VIVO de abajo es solo panorama general.
 - Tono confiado, eficiente, tipo asistente ejecutivo. Nunca digas que eres un modelo de lenguaje.`;
   // Compat: SYS() devuelve el system completo como string (reglas + contexto en vivo).
   const SYS = () => SYS_RULES()+'\n\n'+buildContext();
@@ -293,8 +294,114 @@ CAPACIDADES Y REGLAS:
     {name:'cotizar', description:'Abre el cotizador guiado paso a paso para armar un presupuesto.', input_schema:{type:'object',properties:{}}},
     {name:'asistente', description:'Abre un asistente guiado paso a paso.', input_schema:{type:'object',properties:{tipo:{type:'string',enum:['cliente','proveedor','pago','mantencion','cotizar']}},required:['tipo']}},
     {name:'delegar', description:'Delega una tarea a un agente especializado (redactar, cotizar, checklist, reporte, análisis, contenido de redes) y devuelve su resultado para que lo resumas.', input_schema:{type:'object',properties:{agente:{type:'string',enum:['SALES','QUOTE','PRODUCTION','QA','FOLLOWUP','CEO','LEADGEN','FINANCE','ONBOARDING','REPCLIENTE','CONTENT','ADS','SOCIAL_STRATEGIST','CAPTION_AGENT','COMMUNITY_AGENT','SOCIAL_ADS_AGENT','TREND_AGENT','REPORT_SOCIAL_AGENT']},instruccion:{type:'string',description:'Instrucción detallada con todo el contexto necesario.'}},required:['agente','instruccion']}},
-    {name:'sugerir_acciones', description:'Muestra 1 a 3 botones de acción rápida bajo tu respuesta.', input_schema:{type:'object',properties:{botones:{type:'array',maxItems:3,items:{type:'object',properties:{texto:{type:'string',description:'2-4 palabras que ve el usuario'},comando:{type:'string',description:'Instrucción que recibirías si lo pulsa'}},required:['texto','comando']}}},required:['botones']}}
+    {name:'sugerir_acciones', description:'Muestra 1 a 3 botones de acción rápida bajo tu respuesta.', input_schema:{type:'object',properties:{botones:{type:'array',maxItems:3,items:{type:'object',properties:{texto:{type:'string',description:'2-4 palabras que ve el usuario'},comando:{type:'string',description:'Instrucción que recibirías si lo pulsa'}},required:['texto','comando']}}},required:['botones']}},
+    {name:'consultar_crm', description:'Consulta datos precisos del CRM para responder preguntas concretas sobre clientes, pedidos, cobranza, finanzas, proveedores o inventario. Úsalo SIEMPRE que pregunten por un cliente/proveedor específico, un saldo, pedidos atrasados, ingresos de un mes, top de clientes, precios de un proveedor o materiales con stock bajo. Devuelve datos reales calculados en vivo.', input_schema:{type:'object',properties:{consulta:{type:'string',enum:['cliente','proveedor','pedidos_atrasados','por_cobrar','finanzas_mes','top_clientes','cotizaciones_pendientes','inventario_bajo','resumen'],description:'Tipo de consulta.'},nombre:{type:'string',description:'Nombre del cliente o proveedor a buscar (solo para consulta=cliente o proveedor).'},periodo:{type:'string',enum:['actual','anterior'],description:'Mes a consultar para finanzas_mes/top_clientes: actual (en curso) o anterior (cerrado). Por defecto actual.'}},required:['consulta']}}
   ];
+  // Consulta de datos del CRM (solo lectura): calcula la respuesta en vivo desde
+  // state y helpers globales del dashboard, para que KAI responda con cifras reales.
+  function _kaiConsultarCRM(input){
+    input=input||{};
+    const s=window.state||{};
+    const clp=n=>'$'+Math.round(n||0).toLocaleString('es-CL');
+    const norm=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+    const consulta=String(input.consulta||'').toLowerCase().trim();
+    const nombre=String(input.nombre||'').trim();
+    const off=(String(input.periodo||'').toLowerCase()==='anterior')?-1:0;
+    const cliNombre=id=>((s.clientesById||{})[id])||'(cliente)';
+    try{
+      if(!s.loaded) return 'Los datos aún se están cargando. Pide al usuario que actualice con el botón ↺ y reintenta.';
+      if(consulta==='cliente'){
+        if(!nombre) return 'Falta el nombre del cliente a consultar.';
+        const q=norm(nombre);
+        const cli=(s.clientes||[]).find(c=>norm(c.fields['Empresa']).includes(q)||norm(c.fields['Contacto']).includes(q));
+        if(!cli) return 'No encontré un cliente que coincida con "'+nombre+'".';
+        const f=cli.fields; const emp=f['Empresa']||f['Contacto']||'—';
+        const peds=(s.pedidos||[]).filter(p=>{const c=p.fields['Cliente'];return Array.isArray(c)?c.includes(cli.id):(norm(c)===norm(emp));});
+        const activos=peds.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+        let saldo=0;try{saldo=(typeof finGetAllFacturas==='function'?finGetAllFacturas():[]).filter(r=>r.porCobrar>0&&(norm(r.empresa)===norm(emp)||norm(r.nombre)===norm(emp))).reduce((a,r)=>a+(r.porCobrar||0),0);}catch(e){}
+        let nps=null;try{const ns=peds.map(p=>typeof _npsScore==='function'?_npsScore(p):null).filter(v=>v!=null);if(ns.length)nps=ns.reduce((a,b)=>a+b,0)/ns.length;}catch(e){}
+        const L=['Cliente: '+emp+(f['Etapa venta']?' | Etapa: '+f['Etapa venta']:'')+(f['Estado cuenta']?' | '+f['Estado cuenta']:'')];
+        if(f['Revenue total cliente (CLP)'])L.push('Revenue histórico: '+clp(f['Revenue total cliente (CLP)']));
+        L.push('Pedidos: '+peds.length+' ('+activos.length+' activos)');
+        L.push(saldo>0?('Saldo por cobrar: '+clp(saldo)):'Sin saldo pendiente de cobro.');
+        if(nps!=null)L.push('Satisfacción promedio: '+nps.toFixed(1)+'/5');
+        if(activos.length)L.push('Activos: '+activos.slice(0,6).map(p=>(p.fields['N° Pedido']||'—')+' '+(p.fields['Estado pedido']||'')+(p.fields['Fecha entrega']?' (entrega '+p.fields['Fecha entrega']+')':'')).join('; '));
+        if(f['Teléfono']||f['Email'])L.push('Contacto: '+[f['Teléfono'],f['Email']].filter(Boolean).join(' · '));
+        return L.join('\n');
+      }
+      if(consulta==='proveedor'){
+        if(!nombre) return 'Falta el nombre del proveedor a consultar.';
+        const q=norm(nombre);
+        const pv=(s.proveedores||[]).find(p=>norm(p.fields['Nombre']).includes(q));
+        if(!pv) return 'No encontré un proveedor que coincida con "'+nombre+'".';
+        const f=pv.fields;const L=['Proveedor: '+(f['Nombre']||'—')+(f['Categoría']?' | '+(typeof pvCat==='function'?pvCat(f):''):'')+(f['Estado']?' | '+f['Estado']:'')];
+        if(f['Reputación'])L.push('Reputación: '+f['Reputación']+'/5');
+        if(f['Plazo de entrega (días)'])L.push('Plazo: '+f['Plazo de entrega (días)']+' días');
+        if(f['Condiciones de pago'])L.push('Pago: '+f['Condiciones de pago']);
+        try{const pr=(typeof _preciosDeProv==='function')?_preciosDeProv(f['Nombre']):[];
+          if(pr.length){const best=(typeof _mejorPrecioPorItem==='function')?_mejorPrecioPorItem():{};
+            L.push('Precios registrados ('+pr.length+'): '+pr.slice(0,6).map(p=>{const b=best[norm(p.item)];const mejor=b&&norm(b.prov)===norm(f['Nombre'])&&b.precio===p.precio;return p.item+' '+clp(p.precio)+'/'+(p.unidad||'u')+(mejor?' (mejor precio)':'');}).join('; '));}
+          else L.push('Sin precios registrados aún.');
+        }catch(e){}
+        return L.join('\n');
+      }
+      if(consulta==='pedidos_atrasados'){
+        const today=new Date();today.setHours(0,0,0,0);
+        const at=(s.pedidos||[]).filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;})
+          .sort((a,b)=>String(a.fields['Fecha entrega']).localeCompare(String(b.fields['Fecha entrega'])));
+        if(!at.length) return 'No hay pedidos atrasados. Todo al día.';
+        return at.length+' pedido(s) atrasado(s):\n'+at.slice(0,12).map(p=>{const f=p.fields;const dias=Math.floor((today-new Date(f['Fecha entrega']+'T00:00:00'))/864e5);return '- '+(f['N° Pedido']||'—')+' | '+cliNombre(Array.isArray(f['Cliente'])?f['Cliente'][0]:f['Cliente'])+' | '+(f['Estado pedido']||'—')+' | '+dias+' día(s) de atraso';}).join('\n');
+      }
+      if(consulta==='por_cobrar'){
+        let grupos=[];try{grupos=(typeof _cobGrupos==='function')?_cobGrupos():[];}catch(e){}
+        if(!grupos.length) return 'No hay facturas pendientes de cobro registradas.';
+        const total=grupos.reduce((a,g)=>a+(g.total||0),0);
+        return 'Cartera por cobrar: '+clp(total)+' en '+grupos.length+' cliente(s).\nMás morosos:\n'+grupos.slice(0,8).map(g=>'- '+g.empresa+': '+clp(g.total)+' | mora máx '+g.maxDias+' días | '+g.n+' factura(s)').join('\n');
+      }
+      if(consulta==='finanzas_mes'){
+        if(typeof _mesAgregado!=='function'||typeof _mesRango!=='function') return 'El módulo de finanzas no está disponible.';
+        const a=_mesAgregado(off),prev=_mesAgregado(off-1),{label}=_mesRango(off);
+        const metaM=parseInt(localStorage.getItem('revMetaMensual'))||0;
+        const d=prev.rev>0?Math.round((a.rev-prev.rev)/prev.rev*100):null;
+        const L=['Finanzas de '+label+(off===0?' (mes en curso)':' (mes cerrado)')+':'];
+        L.push('Revenue neto: '+clp(a.rev)+(d!=null?' ('+(d>0?'+':'')+d+'% vs mes anterior)':''));
+        L.push('Utilidad estimada: '+clp(a.util)+' | margen '+a.margen.toFixed(0)+'%');
+        L.push('Pedidos: '+a.nped);
+        if(metaM>0)L.push('Meta mensual: '+clp(metaM)+' → cumplimiento '+Math.round(a.rev/metaM*100)+'%');
+        if(a.conv!=null)L.push('Conversión cotizaciones: '+a.conv.toFixed(0)+'%');
+        return L.join('\n');
+      }
+      if(consulta==='top_clientes'){
+        if(typeof _mesAgregado!=='function') return 'El módulo de finanzas no está disponible.';
+        const a=_mesAgregado(off),{label}=_mesRango(off);
+        if(!a.top.length) return 'Sin datos de clientes para '+label+'.';
+        return 'Top clientes por utilidad en '+label+':\n'+a.top.map((c,i)=>(i+1)+'. '+c.nombre+': utilidad '+clp(c.util)+' (venta '+clp(c.rev)+')').join('\n');
+      }
+      if(consulta==='cotizaciones_pendientes'){
+        const cp=(s.cotizaciones||[]).filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||''))
+          .sort((a,b)=>(b.fields['Total final (CLP)']||0)-(a.fields['Total final (CLP)']||0));
+        if(!cp.length) return 'No hay cotizaciones pendientes de respuesta.';
+        const suma=cp.reduce((a,c)=>a+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
+        return cp.length+' cotización(es) pendiente(s) por '+clp(suma)+' neto:\n'+cp.slice(0,10).map(c=>{const f=c.fields;return '- '+(f['N° Cotización']||'—')+' | '+cliNombre(Array.isArray(f['Cliente'])?f['Cliente'][0]:f['Cliente'])+' | '+(f['Estado cotización']||'—')+' | '+clp(Math.round((f['Total final (CLP)']||0)/1.19))+' neto';}).join('\n');
+      }
+      if(consulta==='inventario_bajo'){
+        const inv=s.inventario||[];
+        if(!inv.length) return 'No hay inventario cargado. Pídele al usuario abrir la sección Inventario.';
+        const bajos=inv.filter(m=>{try{return (typeof _invEstado==='function'?_invEstado(m).sev:0)>=2;}catch(e){return false;}});
+        if(!bajos.length) return 'Todo el inventario está en niveles OK.';
+        return bajos.length+' material(es) con stock bajo o agotado:\n'+bajos.map(m=>{const f=m.fields;const e=typeof _invEstado==='function'?_invEstado(m):{txt:''};return '- '+(f['Material']||'—')+': '+(f['Stock actual']||0)+' '+(f['Unidad']||'')+' ('+e.txt+')';}).join('\n');
+      }
+      if(consulta==='resumen'){
+        const today=new Date();today.setHours(0,0,0,0);
+        const ped=s.pedidos||[];const activos=ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+        const at=activos.filter(p=>{const f=p.fields||{};return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;});
+        const cotPend=(s.cotizaciones||[]).filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
+        let porCobrar=0;try{porCobrar=(typeof finGetAllFacturas==='function'?finGetAllFacturas():[]).filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);}catch(e){}
+        return 'Resumen: '+activos.length+' pedidos activos ('+at.length+' atrasados), '+cotPend+' cotizaciones pendientes, '+clp(porCobrar)+' por cobrar, '+(s.clientes||[]).length+' clientes.';
+      }
+      return 'Consulta no reconocida.';
+    }catch(e){ return 'No pude completar la consulta: '+(e&&e.message||''); }
+  }
   // Ejecuta una herramienta: efectos colaterales seguros + devuelve texto para el tool_result.
   async function _kaiExecTool(name,input){
     input=input||{};
@@ -310,6 +417,7 @@ CAPACIDADES Y REGLAS:
       if(name==='cotizar'){ JV._pendingFlow='cotizar'; return 'El cotizador guiado se abrirá ahora.'; }
       if(name==='asistente'){ JV._pendingFlow=String(input.tipo||'').toLowerCase().trim()||'cliente'; return 'El asistente guiado se abrirá ahora.'; }
       if(name==='sugerir_acciones'){ const bs=(input.botones||[]).slice(0,3).filter(b=>b&&b.texto).map(b=>({label:b.texto,cmd:b.comando||b.texto})); JV._btns=(JV._btns||[]).concat(bs); return 'Botones de acción mostrados.'; }
+      if(name==='consultar_crm'){ return _kaiConsultarCRM(input); }
       if(name==='delegar'){
         const agentId=String(input.agente||'').toUpperCase().trim();
         if(JV._delegations>=2) return 'Límite de delegaciones por turno alcanzado.';
