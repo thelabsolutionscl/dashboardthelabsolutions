@@ -1965,6 +1965,7 @@ const GS_ACTIONS=[
   {icon:'icon-pedidos', title:'Catálogo de productos', kw:'catalogo productos precio base servicios lista items cotizar', run:()=>{try{openCatalogoModal();}catch(e){}}},
   {tab:'cotizaciones',icon:'icon-cotizaciones', title:'Configurar piso de margen', kw:'margen minimo piso rentabilidad alerta cotizacion precio objetivo', run:()=>{try{setMargenPiso();}catch(e){}}},
   {tab:'pedidos',icon:'icon-pedidos', title:'Registrar reclamo / garantía', kw:'reclamo garantia postventa rma defecto devolucion problema queja', run:()=>{try{openReclamoModal();}catch(e){}}},
+  {tab:'clientes',icon:'icon-clientes', title:'Contrato recurrente (retainer)', kw:'contrato recurrente retainer mensual suscripcion abono fijo pedido automatico', run:()=>{try{openRetainerModal();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}

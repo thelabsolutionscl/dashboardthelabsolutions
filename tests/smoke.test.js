@@ -98,6 +98,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'margenBadge', '_margenPiso', 'setMargenPiso',
     'renderComisiones', '_ventasVendedor', 'setComisionCfg', 'setMetaVendedores',
     'openReclamoModal', 'guardarReclamo', 'renderReclamos', 'setReclamoEstado',
+    'openRetainerModal', 'guardarRetainer', 'generarRetainer', 'retainersAutoCheck', 'renderRetainers',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

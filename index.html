@@ -681,6 +681,7 @@
     </div>
     <div id="recompraTrayList"></div>
   </div>
+  <div id="retainersCard" style="margin-bottom:20px"></div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Base CRM</span>
@@ -4742,6 +4743,28 @@ function _reportarResultados(muts) {
   </div>
 </div>
 
+<!-- CONTRATO RECURRENTE / RETAINER (P6) -->
+<div id="retainerModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeRetainerModal()"></div>
+  <div class="modal-card" style="max-width:440px">
+    <div class="modal-title">🔄 Contrato recurrente</div>
+    <input type="hidden" id="retainerId">
+    <div style="display:flex;flex-direction:column;gap:10px;padding:0 0 14px">
+      <div class="field-group"><label class="field-label">Cliente</label><select class="field-select" id="retainerCliente"></select></div>
+      <div class="field-group"><label class="field-label">Concepto (qué se entrega cada mes)</label><input class="field-input" id="retainerConcepto" placeholder="Ej: Mantención de letreros, 20 trofeos mensuales..."></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field-group"><label class="field-label">Monto mensual (CLP, con IVA)</label><input class="field-input" id="retainerMonto" type="number" min="0" step="1000" placeholder="0"></div>
+        <div class="field-group"><label class="field-label">Día del mes</label><input class="field-input" id="retainerDia" type="number" min="1" max="28" value="1"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" id="retainerActivo" checked style="accent-color:var(--accent)"> Activo (genera el pedido automáticamente cada mes)</label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeRetainerModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="guardarRetainer()">💾 Guardar contrato</button>
+    </div>
+  </div>
+</div>
+
 <!-- INVENTARIO DE MATERIALES -->
 <div class="tab-panel" id="tab-inventario">
   <div class="section-header"><div><div class="section-title">Inventario de materiales</div><div class="section-desc">Stock de insumos (filamento, planchas, resina, vinilo…). Cuando un material baja de su punto de reorden, aparece en las alertas del sistema.</div></div><button class="btn btn-primary btn-sm" onclick="addMaterial()">＋ Material</button></div>
@@ -6592,6 +6615,12 @@ function _applyMonitorSistema(recs){
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
   }
+  // Contratos recurrentes respaldados (registro compartido).
+  const retRec=recs.find(r=>r.fields['Name']==='RETAINERS');
+  if(retRec){
+    state.retainersRecordId=retRec.id;
+    try{const arr=JSON.parse(retRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_retainers_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:retainers',e);}
+  }
   // Reclamos / garantías respaldados (registro compartido).
   const rclRec=recs.find(r=>r.fields['Name']==='RECLAMOS');
   if(rclRec){
@@ -6686,7 +6715,7 @@ async function loadAllData(){
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
-    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);setTimeout(()=>{try{ceoAutoMonthlyCheck();}catch(e){}},1800);setTimeout(()=>{try{loadInventario();}catch(e){}},2200);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarCategorias();}catch(e){logErr('migrarCategorias',e);}},2500);}
+    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);setTimeout(()=>{try{ceoAutoMonthlyCheck();}catch(e){}},1800);setTimeout(()=>{try{loadInventario();}catch(e){}},2200);setTimeout(()=>{try{retainersAutoCheck();}catch(e){}},2600);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarCategorias();}catch(e){logErr('migrarCategorias',e);}},2500);}
   }catch(e){
     console.error('loadAllData error:',e);
     // Si ya hay datos en pantalla (de la caché o de una carga previa), el fallo
@@ -7713,6 +7742,7 @@ function renderClientes(skipAnalytics){
   if(!skipAnalytics) renderClientesAnalytics();
   try{buildWinbackTray();}catch(e){}
   try{buildRecompraTray();}catch(e){}
+  try{renderRetainers();}catch(e){}
   _applySortIndicators();
 }
 function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes(true);_saveUIState();}
@@ -10315,6 +10345,114 @@ function renderReclamos(){
     ${resueltos?`<div style="padding:6px 16px 10px;font-size:10.5px;color:var(--text3)">${resueltos} reclamo${resueltos!==1?'s':''} resuelto${resueltos!==1?'s':''} en el historial</div>`:''}
   </div>`;
   el.style.display='';
+}
+
+// ── CONTRATOS RECURRENTES / RETAINERS (P6) ─────────────────────────────
+// Clientes con un pedido mensual fijo: cada mes (desde el día indicado) se
+// genera el pedido automáticamente, una sola vez por mes (idempotente).
+const _RETAINERS_KEY='thelab_retainers_v1';
+function _retainers(){try{return JSON.parse(localStorage.getItem(_RETAINERS_KEY)||'[]');}catch(e){return[];}}
+function _retainersSaveArr(arr){try{localStorage.setItem(_RETAINERS_KEY,JSON.stringify(arr||[]));}catch(e){}_retainersBackup();}
+async function _retainersBackup(){
+  try{
+    const notes=localStorage.getItem(_RETAINERS_KEY)||'[]';
+    if(state.retainersRecordId) await airtableWrite('Monitor Sistema','PATCH',state.retainersRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'RETAINERS','Notes':notes});if(r&&r.id)state.retainersRecordId=r.id;}
+  }catch(e){}
+}
+function _mesActualKey(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
+function openRetainerModal(id){
+  const sel=document.getElementById('retainerCliente');
+  const cls=(state.clientes||[]).slice().sort((a,b)=>String(a.fields['Empresa']||a.fields['Contacto']||'').localeCompare(String(b.fields['Empresa']||b.fields['Contacto']||'')));
+  sel.innerHTML=cls.map(c=>`<option value="${c.id}">${escapeHtml(c.fields['Empresa']||c.fields['Contacto']||c.id.slice(-6))}</option>`).join('');
+  const ret=id?_retainers().find(x=>x.id===id):null;
+  document.getElementById('retainerId').value=id||'';
+  if(ret){if(ret.clienteId)sel.value=ret.clienteId;document.getElementById('retainerConcepto').value=ret.concepto||'';document.getElementById('retainerMonto').value=ret.monto||'';document.getElementById('retainerDia').value=ret.dia||1;document.getElementById('retainerActivo').checked=ret.activo!==false;}
+  else{document.getElementById('retainerConcepto').value='';document.getElementById('retainerMonto').value='';document.getElementById('retainerDia').value=1;document.getElementById('retainerActivo').checked=true;}
+  document.getElementById('retainerModal').style.display='flex';
+}
+function closeRetainerModal(){document.getElementById('retainerModal').style.display='none';}
+function guardarRetainer(){
+  const clienteId=document.getElementById('retainerCliente').value;
+  const concepto=(document.getElementById('retainerConcepto').value||'').trim();
+  const monto=Math.round(parseFloat(document.getElementById('retainerMonto').value)||0);
+  const dia=Math.max(1,Math.min(28,parseInt(document.getElementById('retainerDia').value)||1));
+  const activo=document.getElementById('retainerActivo').checked;
+  if(!clienteId){toast('Selecciona un cliente','error');return;}
+  if(!concepto){toast('Indica el concepto','error');return;}
+  if(!(monto>0)){toast('Monto inválido','error');return;}
+  const cli=state.clientesById?null:null;const cliRec=(state.clientes||[]).find(c=>c.id===clienteId);
+  const clienteNombre=cliRec?(cliRec.fields['Empresa']||cliRec.fields['Contacto']||''):'';
+  const arr=_retainers();const id=document.getElementById('retainerId').value;
+  const base={clienteId,clienteNombre,concepto,monto,dia,activo};
+  if(id){const r=arr.find(x=>x.id===id);if(r)Object.assign(r,base);}
+  else{arr.push({id:'ret'+Date.now()+'_'+arr.length,...base,ultimoGenerado:''});}
+  _retainersSaveArr(arr);closeRetainerModal();toast('✓ Contrato recurrente guardado','success');
+  try{renderRetainers();}catch(e){}
+}
+function delRetainer(id){if(!confirm('¿Eliminar este contrato recurrente?'))return;_retainersSaveArr(_retainers().filter(x=>x.id!==id));renderRetainers();}
+function toggleRetainer(id){const arr=_retainers();const r=arr.find(x=>x.id===id);if(!r)return;r.activo=!r.activo;_retainersSaveArr(arr);renderRetainers();}
+async function _retainerCrearPedido(ret){
+  const year=new Date().getFullYear();let maxNum=0;(state.pedidos||[]).forEach(p=>{const m=(p.fields['N° Pedido']||'').toString().match(new RegExp(`PED-${year}-(\\d+)`));if(m) maxNum=Math.max(maxNum,parseInt(m[1]));});
+  const numPedido=`PED-${year}-${String(maxNum+1).padStart(3,'0')}`;
+  const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0,'Detalle productos':ret.concepto||'','Solicitud cliente (texto libre)':'[Contrato recurrente] '+(ret.concepto||'')};
+  if(ret.clienteId) fields['Cliente']=[ret.clienteId];
+  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0};if(fields['Cliente'])base['Cliente']=fields['Cliente'];
+  try{await airtableWrite('Pedidos','POST',null,fields);}
+  catch(e){const m=(e.message||'').toLowerCase();if(/unknown|field|cliente|invalid|422/.test(m)){try{await airtableWrite('Pedidos','POST',null,base);}catch(e2){return false;}}else return false;}
+  try{const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
+  try{renderPedidos();}catch(e){}
+  return numPedido;
+}
+async function generarRetainer(id,silent){
+  const arr=_retainers();const ret=arr.find(x=>x.id===id);if(!ret)return false;
+  const mk=_mesActualKey();
+  if(ret.ultimoGenerado===mk){if(!silent)toast('Este contrato ya generó el pedido de este mes','info');return false;}
+  const num=await _retainerCrearPedido(ret);
+  if(!num){if(!silent)toast('No se pudo generar el pedido','error');return false;}
+  ret.ultimoGenerado=mk;_retainersSaveArr(arr);
+  if(!silent)toast(`✓ Pedido ${num} generado para ${ret.clienteNombre||'el cliente'}`,'success');
+  try{renderRetainers();}catch(e){}
+  return true;
+}
+// Chequeo automático: genera los pedidos de los contratos activos cuyo día ya
+// pasó y que aún no se generaron este mes. Idempotente.
+let _retainersRunning=false;
+async function retainersAutoCheck(){
+  if(_retainersRunning||!state.loaded)return;
+  const arr=_retainers();const hoy=new Date().getDate();const mk=_mesActualKey();
+  const pend=arr.filter(r=>r.activo!==false&&r.ultimoGenerado!==mk&&hoy>=(r.dia||1));
+  if(!pend.length)return;
+  _retainersRunning=true;
+  try{for(const r of pend){await generarRetainer(r.id,true);}toast(`✓ ${pend.length} contrato(s) recurrente(s) generaron su pedido del mes`,'success');}
+  catch(e){console.error('retainersAutoCheck',e);}
+  finally{_retainersRunning=false;}
+}
+function renderRetainers(){
+  const el=document.getElementById('retainersCard');if(!el)return;
+  const arr=_retainers();
+  const mk=_mesActualKey();
+  if(!arr.length){el.innerHTML=`<div class="card" style="padding:11px 16px;display:flex;align-items:center;gap:10px"><span style="font-size:15px">🔄</span><span style="font-size:12px;color:var(--text2)">Sin contratos recurrentes</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openRetainerModal()">＋ Contrato</button></div>`;return;}
+  const totalMes=arr.filter(r=>r.activo!==false).reduce((s,r)=>s+(r.monto||0),0);
+  el.innerHTML=`<div class="card" style="border-color:rgba(0,212,170,0.3)">
+    <div class="card-header"><span class="card-title" style="color:var(--accent3)">🔄 Contratos recurrentes <span class="badge badge-green">${arr.filter(r=>r.activo!==false).length}</span></span>
+      <span style="margin-left:auto;font-size:10.5px;color:var(--text3)">${formatCLP(totalMes)}/mes recurrente</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:10px" onclick="openRetainerModal()">＋ Contrato</button></div>
+    <div style="padding:2px 0 8px">${arr.map(r=>{
+      const gen=r.ultimoGenerado===mk;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border);${r.activo===false?'opacity:.55':''}">
+        <span class="badge ${gen?'badge-green':'badge-gray'}" style="flex-shrink:0" title="${gen?'Ya generó el pedido de este mes':'Pendiente de generar este mes'}">${gen?'✓ mes':'día '+(r.dia||1)}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.clienteNombre||'—')}</div>
+          <div style="font-size:10.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.concepto||'')} · ${formatCLP(r.monto||0)}/mes</div>
+        </div>
+        ${!gen&&r.activo!==false?`<button class="btn btn-primary btn-sm" style="flex-shrink:0" title="Generar el pedido de este mes ahora" data-id="${r.id}" onclick="generarRetainer(this.dataset.id)">▶ Generar</button>`:''}
+        <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="${r.activo===false?'Activar':'Pausar'}" data-id="${r.id}" onclick="toggleRetainer(this.dataset.id)">${r.activo===false?'▷':'⏸'}</button>
+        <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Editar" data-id="${r.id}" onclick="openRetainerModal(this.dataset.id)">✎</button>
+        <button class="btn btn-ghost btn-sm" style="flex-shrink:0;color:var(--danger)" title="Eliminar" data-id="${r.id}" onclick="delRetainer(this.dataset.id)">✕</button>
+      </div>`;
+    }).join('')}</div>
+  </div>`;
 }
 function cotPopulaComunas(regionSelId,comunaSelId,valorActual){
   const region=document.getElementById(regionSelId)?.value||'';
