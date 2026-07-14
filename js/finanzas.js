@@ -3094,7 +3094,7 @@ function renderArqueo(){
         <input type="number" value="${a.fondo}" onchange="setCajaFondo(this.value)" style="width:110px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace">
         <span style="font-size:11px;color:var(--text3);margin-left:8px">Efectivo contado</span>
         <input type="number" id="arqueoContado" value="${contado}" placeholder="0" oninput="_arqueoSetContado(this.value)" style="width:130px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace">
-        <span style="font-size:13px;font-weight:700;color:${difCol};margin-left:6px">${difTxt}</span>
+        <span id="arqueoDif" data-esperado="${a.efectivoEsperado}" style="font-size:13px;font-weight:700;color:${difCol};margin-left:6px">${difTxt}</span>
         <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="guardarArqueo()">💾 Guardar arqueo</button>
       </div>
       ${saved?`<div style="font-size:10px;color:var(--text3);margin-top:8px">Último arqueo de este día: contado ${formatCLP(saved.contado)} · dif ${formatCLP((saved.contado||0)-a.efectivoEsperado)}</div>`:''}
@@ -3103,8 +3103,14 @@ function renderArqueo(){
 }
 function _arqueoSetFecha(f){const el=document.getElementById('arqueoCard');if(el){el.dataset.fecha=f;el.dataset.contado='';}renderArqueo();}
 function _arqueoSetContado(v){const el=document.getElementById('arqueoCard');if(el)el.dataset.contado=v;
-  // actualiza solo el texto de diferencia sin re-render completo (mantiene foco)
-  try{const fecha=el.dataset.fecha;const a=_arqueoDia(fecha);const dif=(v!==''&&!isNaN(parseFloat(v)))?(parseFloat(v)-a.efectivoEsperado):null;}catch(e){}
+  // Actualiza el texto de diferencia en vivo sin re-render (mantiene el foco en el input).
+  const d=document.getElementById('arqueoDif');if(!d)return;
+  const esperado=parseFloat(d.dataset.esperado)||0;
+  const n=parseFloat(v);
+  if(v===''||isNaN(n)){d.textContent='—';d.style.color='var(--text3)';return;}
+  const dif=n-esperado;
+  d.style.color=Math.abs(dif)<1?'var(--accent3)':dif>0?'var(--warn)':'var(--danger)';
+  d.textContent=dif===0?'✓ Cuadra':(dif>0?'sobra ':'falta ')+formatCLP(Math.abs(dif));
 }
 function guardarArqueo(){
   const el=document.getElementById('arqueoCard');if(!el)return;

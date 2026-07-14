@@ -10606,7 +10606,7 @@ function guardarRetainer(){
   if(!clienteId){toast('Selecciona un cliente','error');return;}
   if(!concepto){toast('Indica el concepto','error');return;}
   if(!(monto>0)){toast('Monto inválido','error');return;}
-  const cli=state.clientesById?null:null;const cliRec=(state.clientes||[]).find(c=>c.id===clienteId);
+  const cliRec=(state.clientes||[]).find(c=>c.id===clienteId);
   const clienteNombre=cliRec?(cliRec.fields['Empresa']||cliRec.fields['Contacto']||''):'';
   const arr=_retainers();const id=document.getElementById('retainerId').value;
   const base={clienteId,clienteNombre,concepto,monto,dia,activo};
@@ -12025,8 +12025,11 @@ function renderEstacionalidad(){
       <span style="font-size:9px;color:${hoy?'var(--text)':'var(--text3)'};font-weight:${hoy?'700':'400'}">${m.label}</span>
     </div>`;
   }).join('');
-  const fuertes=e.meses.filter(m=>m.years>0).slice().sort((a,b)=>b.idx-a.idx).slice(0,3).map(m=>m.label).join(', ');
-  const debiles=e.meses.filter(m=>m.years>0).slice().sort((a,b)=>a.idx-b.idx).slice(0,3).map(m=>m.label).join(', ');
+  // Fuertes = sobre el promedio (idx≥1); débiles = bajo el promedio. Disjuntos:
+  // así un mes nunca aparece en ambas listas cuando hay pocos meses con datos.
+  const _act=e.meses.filter(m=>m.years>0);
+  const fuertes=_act.filter(m=>m.idx>=1).sort((a,b)=>b.idx-a.idx).slice(0,3).map(m=>m.label).join(', ');
+  const debiles=_act.filter(m=>m.idx<1).sort((a,b)=>a.idx-b.idx).slice(0,3).map(m=>m.label).join(', ');
   el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">📈 Estacionalidad y pronóstico</span><span style="font-size:10px;color:var(--text3)">promedio de venta neta por mes · índice de temporada</span></div>
     <div style="padding:14px 16px">
       <div style="display:flex;gap:4px;align-items:flex-end;margin-bottom:10px">${bars}</div>
