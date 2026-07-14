@@ -1127,6 +1127,7 @@
     </div>
   </div>
   <div id="proveedoresAnalytics"></div>
+  <div id="mejorPrecioProv"></div>
 
   <!-- BÚSQUEDA IA -->
   <div class="card" style="margin-top:16px;border-color:rgba(255,107,53,0.3)">
@@ -6404,6 +6405,12 @@ function _applyMonitorSistema(recs){
       const sigs=JSON.parse(sigRec.fields['Notes']||'{}');
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
+  }
+  // Historial de precios de proveedores respaldado (registro compartido).
+  const ppRec=recs.find(r=>r.fields['Name']==='PRECIOS_PROV');
+  if(ppRec){
+    state.preciosProvRecordId=ppRec.id;
+    try{const arr=JSON.parse(ppRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_precios_prov_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:precios',e);}
   }
   renderWatiConfigBtn();
 }

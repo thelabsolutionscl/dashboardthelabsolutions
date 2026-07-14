@@ -212,6 +212,7 @@ function renderProveedores(skipAnalytics){
   if(!sorted.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
   if(!skipAnalytics) renderProveedoresAnalytics();
+  try{renderMejorPrecio();}catch(e){}
   _applySortIndicators();
 }
 function buildProveedorRow(p){
@@ -274,6 +275,10 @@ function buildProveedorRow(p){
           <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();saveProvMotivo('${id}')" style="font-size:11px">Guardar motivo</button></div>
         </div>
         ${pedCount>0?`<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:6px">Pedidos activos vinculados</div><div style="display:flex;flex-direction:column;gap:4px">${pedidosActivos.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:11px;background:var(--surface3);border-radius:5px;padding:5px 10px"><span class="mono" style="color:var(--accent)">${escapeHtml(x.fields['N° Pedido']||'—')}</span><span style="color:var(--text2)">${escapeHtml(resolveClienteName(x.fields['Cliente']))}</span><span style="color:var(--text3)">${x.fields['Estado pedido']||'—'}</span>${x.fields['Fecha entrega']?`<span style="color:var(--text3);margin-left:auto">📅 ${x.fields['Fecha entrega']}</span>`:''}</div>`).join('')}</div></div>`:''}
+        <div style="border-top:1px solid var(--border2);padding-top:12px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:8px">🏷️ Historial de precios</div>
+          <div id="preciosProv-${id}" onclick="event.stopPropagation()">${_preciosProvFichaHtml(nombre)}</div>
+        </div>
       </div>
     </td>
   </tr>`;
@@ -555,4 +560,116 @@ function exportToCSV(t){
   if(!rows.length){toast('Sin datos','error');return;}
   const csv=[headers.join(','),...rows.map(r=>r.map(v=>{const s=String(v).replace(/"/g,'""');return/[",\n]/.test(s)?`"${s}"`:s;}).join(','))].join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${t}-${new Date().toISOString().split('T')[0]}.csv`;a.click();URL.revokeObjectURL(url);toast(`✓ ${t}.csv descargado`,'success');
+}
+
+// ── HISTORIAL DE PRECIOS DE PROVEEDORES (N5) ──────────────────────────
+// Registro compartido de cotizaciones/precios por proveedor e ítem, para
+// comparar y elegir el mejor precio por ítem. localStorage + respaldo en
+// Airtable (Monitor Sistema · PRECIOS_PROV) para sobrevivir a limpiar caché.
+const _PRECIOS_PROV_KEY='thelab_precios_prov_v1';
+function _preciosProv(){try{return JSON.parse(localStorage.getItem(_PRECIOS_PROV_KEY)||'[]');}catch(e){return[];}}
+function _preciosProvSaveArr(arr){try{localStorage.setItem(_PRECIOS_PROV_KEY,JSON.stringify(arr||[]));}catch(e){}_preciosProvBackup();}
+async function _preciosProvBackup(){
+  try{
+    const notes=localStorage.getItem(_PRECIOS_PROV_KEY)||'[]';
+    if(state.preciosProvRecordId) await airtableWrite('Monitor Sistema','PATCH',state.preciosProvRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'PRECIOS_PROV','Notes':notes});if(r&&r.id)state.preciosProvRecordId=r.id;}
+  }catch(e){}
+}
+// Normaliza el nombre de ítem para agrupar (minúsculas, sin tildes ni espacios extra)
+function _normItem(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();}
+function _preciosDeProv(prov){
+  const k=String(prov||'').toLowerCase();
+  return _preciosProv().filter(p=>String(p.prov||'').toLowerCase()===k).sort((a,b)=>_normItem(a.item).localeCompare(_normItem(b.item))||String(b.fecha||'').localeCompare(String(a.fecha||'')));
+}
+function addPrecioProv(prov){
+  const nombre=String(prov||'').trim();
+  const item=(prompt('Ítem o material cotizado (ej: PLA 1kg negro, Impresión A3, Corte láser MDF 3mm):')||'').trim();
+  if(!item)return;
+  const precioRaw=prompt('Precio unitario cotizado (CLP, sin IVA):','');if(precioRaw==null)return;
+  const precio=Math.round(parseFloat(String(precioRaw).replace(/[^\d.-]/g,''))||0);
+  if(!(precio>0)){toast('Precio inválido','error');return;}
+  const unidad=(prompt('Unidad (ej: kg, unidad, m², hora):','unidad')||'').trim()||'unidad';
+  const hoyISO=new Date().toISOString().slice(0,10);
+  const fecha=(prompt('Fecha de la cotización (AAAA-MM-DD):',hoyISO)||'').trim()||hoyISO;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){toast('Fecha inválida (AAAA-MM-DD)','error');return;}
+  const nota=(prompt('Nota opcional (condición, mínimo de compra, etc.):','')||'').trim();
+  const p=(state.proveedores||[]).find(x=>String(x.fields['Nombre']||'').toLowerCase()===nombre.toLowerCase());
+  const cat=p?pvCat(p.fields):'';
+  const arr=_preciosProv();
+  arr.push({id:'pp'+arr.length+'_'+item.length+'_'+precio,prov:nombre,cat,item,precio,unidad,fecha,nota});
+  _preciosProvSaveArr(arr);
+  toast('✓ Precio registrado','success');
+  try{renderProveedores();}catch(e){}
+  const box=document.getElementById('preciosProv-'+(p?p.id:''));
+  if(p) try{const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(nombre);}catch(e){}
+}
+function delPrecioProv(id){
+  const arr=_preciosProv();const rec=arr.find(x=>x.id===id);
+  _preciosProvSaveArr(arr.filter(x=>x.id!==id));
+  try{renderProveedores();}catch(e){}
+  if(rec){const p=(state.proveedores||[]).find(x=>String(x.fields['Nombre']||'').toLowerCase()===String(rec.prov||'').toLowerCase());if(p){const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(rec.prov);}}
+}
+// HTML del historial de precios de un proveedor (con tendencia vs. registro anterior del mismo ítem)
+function _preciosProvFichaHtml(prov){
+  const list=_preciosDeProv(prov);
+  const add=`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();addPrecioProv('${escapeHtml(prov).replace(/'/g,"\\'")}')" style="font-size:11px">＋ Registrar precio</button>`;
+  if(!list.length) return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text3)">Sin precios registrados para este proveedor.</span>${add}</div>`;
+  // mejor precio por ítem (global) para marcar cuándo este proveedor es el más barato
+  const best=_mejorPrecioPorItem();
+  const rows=list.map(p=>{
+    // tendencia: precio anterior del MISMO ítem de este proveedor
+    const mismos=list.filter(x=>_normItem(x.item)===_normItem(p.item)).sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
+    const idx=mismos.findIndex(x=>x.id===p.id);const prev=idx>0?mismos[idx-1]:null;
+    let trend='';
+    if(prev){const d=p.precio-prev.precio;if(d>0)trend=`<span style="color:var(--danger);font-size:10px" title="Subió desde ${formatCLP(prev.precio)}">▲ ${formatCLP(Math.abs(d))}</span>`;else if(d<0)trend=`<span style="color:var(--accent3);font-size:10px" title="Bajó desde ${formatCLP(prev.precio)}">▼ ${formatCLP(Math.abs(d))}</span>`;else trend=`<span style="color:var(--text3);font-size:10px">=</span>`;}
+    const b=best[_normItem(p.item)];
+    const esMejor=b&&b.prov.toLowerCase()===String(prov).toLowerCase()&&b.precio===p.precio;
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;background:var(--surface3);border-radius:5px;padding:6px 10px">
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.item)}${esMejor?' <span class="badge badge-green" style="font-size:8px" title="Mejor precio registrado para este ítem">mejor precio</span>':''}${p.nota?` <span style="color:var(--text3)" title="${escapeHtml(p.nota)}">🛈</span>`:''}</span>
+      <span style="color:var(--text3);flex-shrink:0">${escapeHtml(p.fecha||'')}</span>
+      ${trend}
+      <span style="font-weight:700;color:var(--text1);flex-shrink:0">${formatCLP(p.precio)}<span style="color:var(--text3);font-weight:400;font-size:9px">/${escapeHtml(p.unidad||'u')}</span></span>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;padding:1px 7px" onclick="event.stopPropagation();delPrecioProv('${p.id}')" title="Eliminar">✕</button>
+    </div>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:10px;color:var(--text3)">${list.length} registro${list.length!==1?'s':''}</span>${add}</div><div style="display:flex;flex-direction:column;gap:4px">${rows}</div>`;
+}
+// Mejor precio por ítem entre TODOS los proveedores (mapa normItem → {prov,precio,unidad,fecha,item})
+function _mejorPrecioPorItem(){
+  const best={};
+  _preciosProv().forEach(p=>{
+    const k=_normItem(p.item);if(!k)return;
+    if(!best[k]||p.precio<best[k].precio) best[k]={prov:p.prov,precio:p.precio,unidad:p.unidad,fecha:p.fecha,item:p.item};
+  });
+  return best;
+}
+// Panel comparativo: por cada ítem con 2+ proveedores, muestra el más barato y el ahorro vs. el más caro.
+function renderMejorPrecio(){
+  const el=document.getElementById('mejorPrecioProv');if(!el)return;
+  const all=_preciosProv();
+  if(!all.length){el.innerHTML='';return;}
+  const byItem={};
+  all.forEach(p=>{const k=_normItem(p.item);if(!k)return;(byItem[k]=byItem[k]||{item:p.item,ofertas:[]}).ofertas.push(p);});
+  // último precio por proveedor por ítem (no acumular históricos del mismo proveedor)
+  const filas=Object.values(byItem).map(g=>{
+    const ultimoPorProv={};
+    g.ofertas.forEach(o=>{const kp=String(o.prov||'').toLowerCase();if(!ultimoPorProv[kp]||String(o.fecha||'')>String(ultimoPorProv[kp].fecha||''))ultimoPorProv[kp]=o;});
+    const ofs=Object.values(ultimoPorProv).sort((a,b)=>a.precio-b.precio);
+    return {item:g.item,ofs};
+  }).filter(f=>f.ofs.length>=2).sort((a,b)=>b.ofs.length-a.ofs.length);
+  if(!filas.length){el.innerHTML='';return;}
+  const rows=filas.map(f=>{
+    const min=f.ofs[0],max=f.ofs[f.ofs.length-1];
+    const ahorro=max.precio-min.precio;const pct=max.precio?Math.round(ahorro/max.precio*100):0;
+    const chips=f.ofs.map((o,i)=>`<span class="badge ${i===0?'badge-green':'badge-gray'}" style="font-size:9px" title="${escapeHtml(o.fecha||'')}">${escapeHtml(o.prov||'—')}: ${formatCLP(o.precio)}</span>`).join(' ');
+    return `<div style="padding:9px 14px;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="flex:1;min-width:0;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.item)}</span>
+        ${ahorro>0?`<span style="font-size:10.5px;color:var(--accent3)" title="Ahorro del más barato frente al más caro">ahorro hasta ${formatCLP(ahorro)} (${pct}%)</span>`:''}
+      </div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${chips}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="card" style="margin-top:16px"><div class="card-header"><span class="card-title">🏷️ Mejor precio por ítem</span><span style="margin-left:auto;font-size:10.5px;color:var(--text3)">${filas.length} ítem${filas.length!==1?'s':''} con 2+ proveedores</span></div><div style="padding:2px 0 8px">${rows}</div></div>`;
 }
