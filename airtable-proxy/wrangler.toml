@@ -5,6 +5,7 @@ compatibility_date = "2024-09-01"
 # Secrets — ejecutar una vez después del deploy:
 #   wrangler secret put AIRTABLE_TOKEN    ← tu PAT de Airtable (patXXX...)
 #   wrangler secret put ANTHROPIC_TOKEN   ← tu API key de Anthropic (sk-ant-...)
+#   wrangler secret put OPENAI_TOKEN      ← tu API key de OpenAI (sk-...) para las vistas de la ficha
 #   wrangler secret put APP_KEY           ← passphrase que elijas (mínimo 20 chars)
 #
 # Deploy:
@@ -17,6 +18,7 @@ compatibility_date = "2024-09-01"
 # Con esto, ni el PAT de Airtable ni la API key de Anthropic salen al navegador:
 #   - Airtable:  <worker>/<base>/<tabla>           (el dashboard ya lo usa)
 #   - Claude:    <worker>/anthropic/v1/messages    (callClaude lo usa automáticamente)
+#   - OpenAI:    <worker>/openai/v1/...            (vistas IA de la ficha propuesta)
 #
 # Oficina Virtual — latido automático:
 #   Tras el deploy, el proxy marca su fila ID="airtable-proxy" en la tabla

@@ -1,5 +1,6 @@
 const AIRTABLE_BASE = 'https://api.airtable.com';
 const ANTHROPIC_BASE = 'https://api.anthropic.com';
+const OPENAI_BASE = 'https://api.openai.com';
 
 // Solo se aceptan peticiones desde estos orígenes (el dashboard). Así, si la
 // APP_KEY se filtrara (va horneada en el HTML público), no sirve desde otro sitio.
@@ -30,7 +31,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
-      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, airtable: !!env.AIRTABLE_TOKEN }, 200, CORS);
+      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN }, 200, CORS);
     }
 
     // Allowlist de origen: un navegador en otro sitio (Origin distinto) se rechaza.
@@ -78,6 +79,31 @@ export default {
       headers.set('x-api-key', env.ANTHROPIC_TOKEN);
       headers.set('anthropic-version', request.headers.get('anthropic-version') || '2023-06-01');
       headers.set('Content-Type', 'application/json');
+      const upstream = await fetch(target, {
+        method: request.method,
+        headers,
+        body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+      });
+      const respHeaders = new Headers(upstream.headers);
+      Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
+      return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+    }
+
+    // ── OpenAI (visión + generación de imágenes de la ficha propuesta) ──
+    // La API key vive como secreto del Worker; el navegador NO puede llamar a
+    // api.openai.com directo (OpenAI no habilita CORS de navegador, a diferencia de
+    // Anthropic). El dashboard llama a:  <worker>/openai/v1/{chat/completions,images/generations,images/edits}
+    if (url.pathname.startsWith('/openai/')) {
+      if (!env.OPENAI_TOKEN) {
+        return json({ error: 'Worker misconfigured: missing OPENAI_TOKEN secret' }, 500, CORS);
+      }
+      const target = OPENAI_BASE + url.pathname.replace(/^\/openai/, '') + url.search;
+      const headers = new Headers();
+      headers.set('Authorization', 'Bearer ' + env.OPENAI_TOKEN);
+      // Preserva el Content-Type ORIGINAL: en images/edits es multipart/form-data con
+      // su boundary — forzarlo a JSON rompería el cuerpo. En el resto es application/json.
+      const ct = request.headers.get('Content-Type');
+      if (ct) headers.set('Content-Type', ct);
       const upstream = await fetch(target, {
         method: request.method,
         headers,

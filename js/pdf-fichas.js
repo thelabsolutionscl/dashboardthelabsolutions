@@ -359,8 +359,7 @@ async function testIAKey(){
   const lines=[];
   // Test 1: chat completions (GPT-4o mini — barato)
   try{
-    const r=await fetch('https://api.openai.com/v1/chat/completions',{
-      method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+    const r=await _openaiFetch('/v1/chat/completions',{directKey:key,
       body:JSON.stringify({model:'gpt-4o-mini',max_tokens:5,messages:[{role:'user',content:'hi'}]})
     });
     if(r.ok) lines.push('✅ GPT-4o-mini: OK');
@@ -369,15 +368,13 @@ async function testIAKey(){
   // Test 2: gpt-image-1 (nuevo modelo), con fallback a dall-e-3
   res.innerHTML='🔄 Probando generación de imágenes...';
   try{
-    const r=await fetch('https://api.openai.com/v1/images/generations',{
-      method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+    const r=await _openaiFetch('/v1/images/generations',{directKey:key,
       body:JSON.stringify({model:'gpt-image-1',prompt:'a red apple on white background',n:1,size:'1024x1024',quality:'low'})
     });
     if(r.ok){lines.push('✅ gpt-image-1: OK — imágenes funcionan');}
     else{
       const e=await r.json();const msg=e.error?.message||r.status;
-      const r2=await fetch('https://api.openai.com/v1/images/generations',{
-        method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      const r2=await _openaiFetch('/v1/images/generations',{directKey:key,
         body:JSON.stringify({model:'dall-e-3',prompt:'a red apple',n:1,size:'1024x1024',quality:'standard'})
       });
       if(r2.ok){lines.push('✅ dall-e-3: OK — imágenes funcionan');}
@@ -420,8 +417,23 @@ function handleFPRawImage(evt,idx){
   reader.readAsDataURL(file);
 }
 
+// Llama a OpenAI vía el proxy Worker si está configurado (la key vive server-side y
+// evita el CORS del navegador: OpenAI NO habilita CORS directo, a diferencia de
+// Anthropic). Sin proxy, cae a la llamada directa con la key local (solo dev).
+// isForm=true para multipart (images/edits): el FormData fija su propio Content-Type.
+function _openaiFetch(path,{method='POST',body=null,isForm=false,directKey=null}={}){
+  const px=(typeof _proxyCfg==='function')?_proxyCfg():null;
+  const headers=px?{'X-App-Key':px.key}:{'Authorization':'Bearer '+(directKey||getOpenAIKey())};
+  if(!isForm) headers['Content-Type']='application/json';
+  const url=(px?px.url+'/openai':'https://api.openai.com')+path;
+  return fetch(url,{method,headers,body});
+}
+// ¿Hay CÓMO llamar a OpenAI? (proxy configurado O key local) — las compuertas IA
+// deben preguntar esto, no si hay una key en el navegador.
+function _openaiAvailable(){return !!(getOpenAIKey()||(typeof _proxyCfg==='function'&&_proxyCfg()));}
 async function generarVistasIA(idx){
   const openaiKey=getOpenAIKey();
+  const aiOk=_openaiAvailable();
   const rawImg=_fpRawImages[idx];
   const statusEl=document.getElementById('fpAiStatus-'+idx);
   const setStatus=msg=>{if(statusEl){statusEl.style.display='block';statusEl.innerHTML=msg;}};
@@ -429,12 +441,10 @@ async function generarVistasIA(idx){
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     let descripcion='';
-    if(rawImg&&openaiKey){
+    if(rawImg&&aiOk){
       setStatus('🔍 Analizando imagen con GPT-4o...');
       try{
-        const visionRes=await fetch('https://api.openai.com/v1/chat/completions',{
-          method:'POST',
-          headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+        const visionRes=await _openaiFetch('/v1/chat/completions',{
           body:JSON.stringify({model:'gpt-4o',max_tokens:150,messages:[{role:'user',content:[
             {type:'image_url',image_url:{url:rawImg.dataUrl,detail:'low'}},
             {type:'text',text:'Describe this product concisely for a luxury product photography prompt. Include: product type, materials, colors, shape, key features. English only, max 50 words, no punctuation at end.'}
@@ -518,7 +528,7 @@ async function generarVistasIA(idx){
       if(btn) btn.textContent='Vista '+v.label+'...';
       setStatus('🎨 Generando '+v.label+'...');
       let imgData=null;
-      if(openaiKey){
+      if(aiOk){
         // Bloque 1: edits con foto del producto (para consistencia entre vistas)
         if(rawImg){
           try{
@@ -530,9 +540,7 @@ async function generarVistasIA(idx){
             fd.append('model','gpt-image-1');
             fd.append('n','1');
             fd.append('size','1024x1024');
-            const r=await fetch('https://api.openai.com/v1/images/edits',{
-              method:'POST',headers:{'Authorization':'Bearer '+openaiKey},body:fd
-            });
+            const r=await _openaiFetch('/v1/images/edits',{body:fd,isForm:true});
             if(r.ok){
               const d=await r.json();
               imgData='data:image/png;base64,'+d.data[0].b64_json;
@@ -553,15 +561,13 @@ async function generarVistasIA(idx){
           try{
             setStatus('🎨 Generando '+v.label+' desde texto...');
             const fullPrompt='Entire product fully visible, NOT cropped, generous white margins on all sides, product centered at 65% of frame. '+v.prompt+'. Pure white background (#FFFFFF), background removed, no shadows. Product: '+descripcion.slice(0,200);
-            let r=await fetch('https://api.openai.com/v1/images/generations',{
-              method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
+            let r=await _openaiFetch('/v1/images/generations',{
               body:JSON.stringify({model:'gpt-image-1',prompt:fullPrompt,n:1,size:'1024x1024',quality:'low'})
             });
             if(!r.ok){
               const e1=await r.json();
-              r=await fetch('https://api.openai.com/v1/images/generations',{
-                method:'POST',headers:{'Authorization':'Bearer '+openaiKey,'Content-Type':'application/json'},
-                body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',quality:'standard'})
+              r=await _openaiFetch('/v1/images/generations',{
+                body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',quality:'standard',response_format:'b64_json'})
               });
               if(!r.ok){const e2=await r.json();throw new Error('gpt-image-1: '+(e1.error?.message||'?')+' / dall-e-3: '+(e2.error?.message||r.statusText));}
             }
