@@ -104,6 +104,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     '_descCliente', 'setDescCliente', '_renderCdDescChip',
     'openOCModal', 'guardarOC', 'generarOCPDF', 'renderOCList', 'crearOCDesdeReorden',
     'renderEstacionalidad', '_estacionalidad',
+    'renderOnboarding', '_onboardingSteps', 'toggleOnboarding',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

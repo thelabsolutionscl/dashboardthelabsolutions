@@ -2562,6 +2562,7 @@
   <div class="modal-card wide">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div id="cdCrumb" style="font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.3px"><span style="cursor:pointer" onclick="closeClienteDetalle();switchTab('clientes')">Clientes</span> <span style="opacity:.55">›</span> <span style="color:var(--text2)" id="cdCrumbName"></span></div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div><div id="cdDescChip" style="margin-top:7px"></div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="cdBadges"></div>
+    <div id="cdOnboarding" style="margin-bottom:14px"></div>
     <div id="cdTabs" style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto">
       <button class="cd-tab active" data-t="datos" onclick="cdTab('datos')">Datos</button>
       <button class="cd-tab" data-t="actividad" onclick="cdTab('actividad')">Actividad</button>
@@ -6652,6 +6653,12 @@ function _applyMonitorSistema(recs){
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
   }
+  // Onboarding de clientes respaldado (registro compartido).
+  const obRec=recs.find(r=>r.fields['Name']==='ONBOARDING');
+  if(obRec){
+    state.onboardingRecordId=obRec.id;
+    try{const o=JSON.parse(obRec.fields['Notes']||'{}');if(o&&typeof o==='object') localStorage.setItem('thelab_onboarding_v1',JSON.stringify(o));}catch(e){logErr('monitorSistema:onboarding',e);}
+  }
   // Órdenes de compra respaldadas (registro compartido).
   const ocRec=recs.find(r=>r.fields['Name']==='ORDENES_COMPRA');
   if(ocRec){
@@ -7939,10 +7946,69 @@ function _renderCdDescChip(clienteId){
     ?`<span class="badge badge-purple" style="cursor:pointer" onclick="setDescCliente('${clienteId}')" title="Descuento automático al cotizar — clic para cambiar">🏷️ ${d}% de descuento</span>`
     :`<span style="font-size:11px;color:var(--text3);cursor:pointer;border:1px dashed var(--border2);border-radius:6px;padding:2px 8px" onclick="setDescCliente('${clienteId}')" title="Asignar un descuento por defecto">🏷️ + descuento cliente</span>`;
 }
+// ── ONBOARDING DE CLIENTE NUEVO (Q5) ───────────────────────────────────
+// Checklist de captación: pasos auto-detectados (datos, rubro, 1a cotización,
+// validado) + manuales (bienvenida, carpeta). Overrides en localStorage con
+// respaldo en Monitor Sistema (ONBOARDING). Se muestra en la ficha del cliente.
+const _ONBOARDING_KEY='thelab_onboarding_v1';
+const _ONBOARDING_STEPS=[
+  {key:'datos',label:'Datos de contacto (email y teléfono)',auto:(f)=>!!((f['Email']||f['Correo'])&&(f['Teléfono']||f['Telefono']))},
+  {key:'empresa',label:'Empresa y rubro registrados',auto:(f)=>!!(f['Empresa']&&f['Industria / Rubro'])},
+  {key:'bienvenida',label:'Mensaje de bienvenida enviado'},
+  {key:'carpeta',label:'Carpeta de archivos creada'},
+  {key:'cotizacion',label:'Primera cotización enviada',auto:(f,id)=>(state.cotizaciones||[]).some(c=>{const cl=c.fields['Cliente'];return Array.isArray(cl)?cl.includes(id):cl===f['Empresa'];})},
+  {key:'validado',label:'Cliente validado',auto:(f)=>!!f['Validado']},
+];
+function _onboarding(){try{return JSON.parse(localStorage.getItem(_ONBOARDING_KEY)||'{}');}catch(e){return{};}}
+async function _onboardingBackup(){
+  try{const notes=localStorage.getItem(_ONBOARDING_KEY)||'{}';
+    if(state.onboardingRecordId) await airtableWrite('Monitor Sistema','PATCH',state.onboardingRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'ONBOARDING','Notes':notes});if(r&&r.id)state.onboardingRecordId=r.id;}
+  }catch(e){}
+}
+function _onboardingSteps(clienteId){
+  const c=(state.clientesByIdRec||{})[clienteId]||(state.clientes||[]).find(x=>x.id===clienteId);
+  const f=c?c.fields:{};
+  const manual=(_onboarding()[clienteId])||{};
+  return _ONBOARDING_STEPS.map(s=>{
+    const autoDone=s.auto?!!s.auto(f,clienteId):false;
+    const done=(manual[s.key]!==undefined)?!!manual[s.key]:autoDone;
+    return {...s,done,autoDone};
+  });
+}
+function toggleOnboarding(clienteId,key){
+  const all=_onboarding();const cur=all[clienteId]||{};
+  const steps=_onboardingSteps(clienteId);const st=steps.find(s=>s.key===key);
+  cur[key]=!(st&&st.done);
+  all[clienteId]=cur;
+  try{localStorage.setItem(_ONBOARDING_KEY,JSON.stringify(all));}catch(e){}_onboardingBackup();
+  renderOnboarding(clienteId);
+}
+function renderOnboarding(clienteId){
+  const el=document.getElementById('cdOnboarding');if(!el)return;
+  const steps=_onboardingSteps(clienteId);
+  const done=steps.filter(s=>s.done).length,total=steps.length;
+  const pct=Math.round(done/total*100);
+  if(done===total){el.innerHTML=`<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--accent3);background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.22);border-radius:8px;padding:8px 12px">✅ Onboarding completo — cliente listo</div>`;return;}
+  el.innerHTML=`<div style="border:1px solid var(--border2);border-radius:9px;padding:11px 13px;background:var(--surface2)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)">🚀 Onboarding</span>
+      <div style="flex:1;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent3);border-radius:3px"></div></div>
+      <span style="font-size:10.5px;color:var(--text3);font-weight:700">${done}/${total}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">${steps.map(s=>`
+      <label style="display:flex;align-items:center;gap:9px;font-size:12px;cursor:pointer;color:${s.done?'var(--text3)':'var(--text)'}">
+        <input type="checkbox" ${s.done?'checked':''} onchange="toggleOnboarding('${clienteId}','${s.key}')" style="accent-color:var(--accent3);width:15px;height:15px;flex-shrink:0">
+        <span style="${s.done?'text-decoration:line-through':''}">${escapeHtml(s.label)}</span>
+        ${s.auto&&s.autoDone&&s.done?'<span style="font-size:9px;color:var(--text3)">auto</span>':''}
+      </label>`).join('')}</div>
+  </div>`;
+}
 function openClienteDetalle(id){
   const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Comuna']||''}`:f['Comuna']||'';
   try{_renderCdDescChip(id);}catch(e){}
+  try{renderOnboarding(id);}catch(e){}
   {const _cc=document.getElementById('cdCrumbName');if(_cc)_cc.textContent=f['Empresa']||f['Contacto']||'Cliente';}
   // Última actividad: fecha más reciente entre cotizaciones, pedidos y primer contacto
   const _cliCots=(state.cotizaciones||[]).filter(x=>{const ca=x.fields['Cliente'];return Array.isArray(ca)?ca.includes(id):ca===f['Empresa'];});
