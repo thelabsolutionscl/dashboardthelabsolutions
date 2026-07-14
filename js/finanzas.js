@@ -1807,6 +1807,7 @@ const GS_ACTIONS=[
   {icon:'icon-download',   title:'Respaldar CRM ahora',        kw:'backup respaldo airtable copia seguridad',   run:()=>{try{backupAirtable();}catch(e){}}},
   {icon:'icon-chat',       title:'Abrir KAI (asistente)',      kw:'kai asistente chat ia ayuda hablar',         run:()=>{try{openKai();}catch(e){}}},
   {icon:'icon-laptop',     title:'Modo TV (taller)',           kw:'tv taller pantalla fullscreen monitor kiosco rotacion', run:()=>{try{tvStart();}catch(e){}}},
+  {icon:'icon-calendar',   title:'Agendar compromiso',         kw:'agenda compromiso recordatorio tarea pendiente fecha llamar', run:()=>{try{openAgendaModal();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}

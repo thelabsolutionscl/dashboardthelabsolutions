@@ -548,7 +548,8 @@
   <div class="card" id="accionesHoyCard" style="margin-bottom:16px;display:none">
     <div class="card-header">
       <span class="card-title">⚡ Acciones de hoy <span id="accionesHoyCount" style="font-size:10px;color:var(--text3);font-weight:400"></span></span>
-      <button class="btn btn-ghost btn-sm" onclick="renderAccionesHoy()" style="margin-left:auto" title="Recalcular">↻</button>
+      <button class="btn btn-ghost btn-sm" onclick="openAgendaModal()" style="margin-left:auto" title="Agregar un compromiso con fecha">📅 Compromiso</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderAccionesHoy()" title="Recalcular">↻</button>
     </div>
     <div id="accionesHoyList" style="padding:8px 12px;display:flex;flex-direction:column;gap:6px"></div>
   </div>
@@ -4642,6 +4643,23 @@ function _reportarResultados(muts) {
   </div>
 </div>
 
+<!-- AGENDA DE COMPROMISOS -->
+<div id="agendaModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeAgendaModal()"></div>
+  <div class="modal-card" style="max-width:440px">
+    <div class="modal-title">📅 Agenda de compromisos</div>
+    <div style="padding:0 0 14px;display:flex;flex-direction:column;gap:10px">
+      <div id="agendaCliChip" style="display:none;font-size:11px;color:var(--accent);background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.2);border-radius:6px;padding:6px 10px"></div>
+      <div class="field-group"><label class="field-label">¿Qué te comprometiste a hacer?</label><input class="field-input" id="agendaTexto" placeholder="ej. Llamar a Miguel para cerrar la cotización" onkeydown="if(event.key==='Enter')agendaSave()"></div>
+      <div class="field-group"><label class="field-label">¿Para cuándo?</label><input class="field-input" id="agendaFecha" type="date"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-primary" id="agendaSaveBtn" onclick="agendaSave()">＋ Agregar compromiso</button>
+      </div>
+      <div id="agendaList" style="border-top:1px solid var(--border);padding-top:8px;max-height:240px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
 <!-- SII / DTE CONFIG MODAL -->
 <div id="siiConfigModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeSIIConfigModal()"></div>
@@ -6314,6 +6332,17 @@ function _applyMonitorSistema(recs){
   if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){logErr('monitorSistema:wati',e);}}
   const finRec=recs.find(r=>r.fields['Name']==='FIN_VENTAS');
   if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){logErr('monitorSistema:fin',e);}}
+  // Agenda de compromisos respaldada: restaura la del usuario si local está vacía.
+  const agRec=recs.find(r=>r.fields['Name']==='AGENDA');
+  if(agRec){
+    state.agendaRecordId=agRec.id;state._agendaRemote=agRec.fields['Notes']||'{}';
+    try{
+      const all=JSON.parse(agRec.fields['Notes']||'{}');
+      const u=(AUTH.getUser&&AUTH.getUser())||{};
+      const mine=u.username&&all[u.username];
+      if(Array.isArray(mine)&&mine.length&&!_agenda().length) localStorage.setItem(_AGENDA_KEY,JSON.stringify(mine));
+    }catch(e){logErr('monitorSistema:agenda',e);}
+  }
   // Firmas de correo respaldadas: restaura las que falten localmente (una firma
   // recién editada en este navegador no se pisa — lo local gana hasta guardarse).
   const sigRec=recs.find(r=>r.fields['Name']==='MAIL_SIGNATURES');
@@ -6606,6 +6635,77 @@ function morningBriefIA(){
   const hoy=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
   runAgentInline('CEO',`Hoy es ${hoy}. Dame el resumen ejecutivo de HOY para arrancar el día: las 3 prioridades más urgentes según los datos (y por qué cada una), en formato breve y accionable.`);
 }
+// ── AGENDA DE COMPROMISOS ──────────────────────────────────────
+// Recordatorios con fecha (y cliente opcional) que el usuario se anota. Los que
+// vencen hoy o antes aparecen en Acciones de Hoy y el brief matinal. Respaldo
+// en Airtable (Monitor Sistema · AGENDA) para que sobrevivan a limpiar caché.
+const _AGENDA_KEY='thelab_agenda_v1';
+function _agenda(){try{return JSON.parse(localStorage.getItem(_AGENDA_KEY)||'[]');}catch(e){return[];}}
+function _agendaSaveArr(arr){try{localStorage.setItem(_AGENDA_KEY,JSON.stringify(arr));}catch(e){}_agendaBackup();}
+async function _agendaBackup(){
+  try{
+    const u=(AUTH.getUser&&AUTH.getUser())||{};if(!u.username)return;
+    let all={};try{all=JSON.parse(state._agendaRemote||'{}');}catch(e){}
+    all[u.username]=_agenda();
+    const notes=JSON.stringify(all).slice(0,95000);
+    if(state.agendaRecordId) await airtableWrite('Monitor Sistema','PATCH',state.agendaRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'AGENDA','Notes':notes});if(r?.id)state.agendaRecordId=r.id;}
+    state._agendaRemote=notes;
+  }catch(e){}
+}
+function openAgendaModal(cliId){
+  const chip=document.getElementById('agendaCliChip');
+  window._agendaCli=null;
+  if(cliId){const c=(state.clientes||[]).find(x=>x.id===cliId);if(c){window._agendaCli={id:cliId,nombre:c.fields['Empresa']||c.fields['Contacto']||'—'};chip.style.display='';chip.textContent='Para: '+window._agendaCli.nombre;}}
+  else if(chip){chip.style.display='none';}
+  const f=document.getElementById('agendaFecha');if(f&&!f.value)f.value=new Date(Date.now()+864e5).toISOString().slice(0,10);
+  document.getElementById('agendaTexto').value='';
+  renderAgendaList();
+  document.getElementById('agendaModal').style.display='flex';
+  setTimeout(()=>document.getElementById('agendaTexto').focus(),60);
+}
+function closeAgendaModal(){document.getElementById('agendaModal').style.display='none';window._agendaCli=null;}
+function agendaSave(){
+  const texto=(document.getElementById('agendaTexto').value||'').trim();
+  const fecha=document.getElementById('agendaFecha').value;
+  if(!texto){toast('Escribe el compromiso','error');return;}
+  if(!fecha){toast('Elige una fecha','error');return;}
+  const arr=_agenda();
+  arr.push({id:'ag'+Date.now(),texto,fecha,cliId:window._agendaCli?.id||null,cliNombre:window._agendaCli?.nombre||null,done:false,ts:Date.now()});
+  _agendaSaveArr(arr);
+  document.getElementById('agendaTexto').value='';
+  toast('✓ Compromiso agendado','success');
+  renderAgendaList();
+  try{renderAccionesHoy();}catch(e){}
+}
+function agendaDone(id){const arr=_agenda();const it=arr.find(x=>x.id===id);if(it)it.done=true;_agendaSaveArr(arr);renderAgendaList();try{renderAccionesHoy();}catch(e){}}
+function agendaDel(id){_agendaSaveArr(_agenda().filter(x=>x.id!==id));renderAgendaList();try{renderAccionesHoy();}catch(e){}}
+function renderAgendaList(){
+  const el=document.getElementById('agendaList');if(!el)return;
+  const hoy=new Date().toISOString().slice(0,10);
+  const pend=_agenda().filter(x=>!x.done).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  if(!pend.length){el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:8px 2px">Sin compromisos pendientes.</div>';return;}
+  el.innerHTML=pend.map(x=>{
+    const venc=x.fecha<hoy,hoyEs=x.fecha===hoy;
+    const col=venc?'var(--danger)':hoyEs?'var(--warn)':'var(--text3)';
+    const etq=venc?'atrasado':hoyEs?'hoy':x.fecha;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 2px;border-top:1px solid var(--border)">
+      <span style="font-size:9px;font-weight:700;color:${col};min-width:60px">${etq}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--text2)">${escapeHtml(x.texto)}</div>${x.cliNombre?`<div style="font-size:10px;color:var(--text3)">👤 ${escapeHtml(x.cliNombre)}</div>`:''}</div>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:2px 8px" title="Hecho" onclick="agendaDone('${x.id}')">✓</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:2px 8px;color:var(--danger)" title="Eliminar" onclick="agendaDel('${x.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+// Compromisos que vencen hoy o antes → items de Acciones de Hoy
+function _agendaDueItems(){
+  const hoy=new Date().toISOString().slice(0,10);
+  return _agenda().filter(x=>!x.done&&String(x.fecha)<=hoy).map(x=>({
+    cat:'agenda',prio:1,icon:'📅',
+    txt:`<b>${escapeHtml(x.texto)}</b>${x.cliNombre?' · '+escapeHtml(x.cliNombre):''}${x.fecha<hoy?' · <span style="color:var(--danger)">atrasado</span>':''}`,
+    btn:'Hecho',fn:`agendaDone('${x.id}')`,color:x.fecha<hoy?'var(--danger)':'var(--warn)'
+  }));
+}
 function renderMorningBrief(){
   const el=document.getElementById('morningBrief');if(!el)return;
   const today=new Date().toISOString().slice(0,10);
@@ -6627,6 +6727,7 @@ function renderMorningBrief(){
       <span style="font-size:18px">🌅</span>
       <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;color:var(--text)">${saludo}${nombre?', '+escapeHtml(nombre):''} 👋</div>
       <div style="font-size:11px;color:var(--text3)">${items.length?'Lo más importante de hoy, en orden:':'Así arranca el día:'}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="openAgendaModal()" title="Agendar un compromiso" style="flex-shrink:0">📅</button>
       <button class="btn btn-ghost btn-sm" onclick="morningBriefIA()" title="Análisis completo del día con el CEO_AGENT" style="flex-shrink:0">🤖 Análisis IA</button>
       <button class="btn btn-ghost btn-sm" onclick="dismissMorningBrief()" title="Ocultar hasta mañana" style="flex-shrink:0;padding:3px 9px">✕</button>
     </div>${top}`;
@@ -6644,6 +6745,8 @@ function renderAccionesHoy(){
   const _cot=vendor?(state.cotizaciones||[]).filter(vendorOwnsRecord):(state.cotizaciones||[]);
   const _ped=vendor?(state.pedidos||[]).filter(vendorOwnsRecord):(state.pedidos||[]);
   const items=[];const cap={};const push=(cat,prio,icon,txt,btn,fn,color)=>{cap[cat]=(cap[cat]||0)+1;if(cap[cat]<=4)items.push({cat,prio,icon,txt,btn,fn,color});};
+  // 0) Agenda — compromisos que vencen hoy o antes (lo que el usuario prometió)
+  try{_agendaDueItems().forEach(it=>push(it.cat,it.prio,it.icon,it.txt,it.btn,it.fn,it.color));}catch(e){}
   // 1) Cobranza — clientes con facturas vencidas (no vendedor)
   if(!vendor)_cli.forEach(c=>{const v=c.fields['Facturas vencidas']||0;if(v>=2)push('cob',1,'💰',`<b>${escapeHtml(c.fields['Empresa']||'—')}</b> · ${v} facturas vencidas`,'Cobrar IA',`runFinanceAgent('${c.id}')`,'var(--danger)');});
   // 2) Pedidos atrasados → update al cliente
@@ -6694,8 +6797,8 @@ function renderAccionesHoy(){
   card.style.display='';
   const cnt=document.getElementById('accionesHoyCount');if(cnt)cnt.textContent=`· ${items.length} pendiente${items.length!==1?'s':''}`;
   // Agrupado por área de negocio, ordenado por prioridad de impacto
-  const GMAP={cob:'Cobranza',ped:'Producción',pago:'Producción',qa:'Producción',cot:'Ventas',lead:'Ventas',ads:'Ads',maq:'Máquinas'};
-  const GORDER=['Cobranza','Producción','Ventas','Ads','Máquinas'];
+  const GMAP={agenda:'Agenda',cob:'Cobranza',ped:'Producción',pago:'Producción',qa:'Producción',cot:'Ventas',lead:'Ventas',ads:'Ads',maq:'Máquinas'};
+  const GORDER=['Agenda','Cobranza','Producción','Ventas','Ads','Máquinas'];
   const GICON={Cobranza:'💰',Producción:'🏭',Ventas:'📈',Ads:'📣',Máquinas:'🔧'};
   const row=it=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 8px;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid ${it.color};border-radius:7px"><span style="font-size:14px;flex-shrink:0">${it.icon}</span><span style="flex:1;font-size:12px;color:var(--text2);min-width:0">${it.txt}</span><button class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;padding:3px 10px;color:${it.color}" onclick="${it.fn}">${it.btn}</button></div>`;
   let _h='';
