@@ -42,6 +42,8 @@ jobs:
           ADS_CUSTOMER: ${{ secrets.ADS_CUSTOMER }}
           ELEVENLABS: ${{ secrets.ELEVENLABS }}
           PRINTER_TUNNEL_TOKEN: ${{ secrets.PRINTER_TUNNEL_TOKEN }}
+          LEAD_WORKER_URL: ${{ secrets.LEAD_WORKER_URL }}
+          PUBLIC_LEAD_KEY: ${{ secrets.PUBLIC_LEAD_KEY }}
         run: |
           # MODO PROXY (ver SECURITY.md): con PROXY_URL+PROXY_KEY configurados, los
           # tokens de Airtable y Anthropic NO se hornean en el HTML público — quedan
@@ -55,6 +57,9 @@ jobs:
           fi
           sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
           sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
+          # Portal cliente → aprobación de cotizaciones (mismos secrets del cotizador)
+          if [ -n "${LEAD_WORKER_URL}" ]; then sed -i "s|%%LEAD_WORKER_URL%%|${LEAD_WORKER_URL}|g" index.html; fi
+          if [ -n "${PUBLIC_LEAD_KEY}" ]; then sed -i "s|%%PUBLIC_LEAD_KEY%%|${PUBLIC_LEAD_KEY}|g" index.html; fi
           sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
           sed -i "s|%%SII_RUT_EMISOR%%|${SII_RUT_EMISOR}|g" index.html
           sed -i "s|%%SII_RAZON_SOCIAL%%|${SII_RAZON_SOCIAL}|g" index.html

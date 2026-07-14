@@ -69,6 +69,10 @@ export default {
         return await handleProveedor(request, env, ctx, cors);
       }
 
+      if (request.method === "POST" && url.pathname === "/cotizacion/decision") {
+        return await handleCotDecision(request, env, ctx, cors);
+      }
+
       if (request.method === "GET" && url.pathname === "/blog") {
         return await handleBlogList(request, env, cors);
       }
@@ -174,6 +178,89 @@ async function cleanupAgentQueue(env) {
     if (borradas) console.log(`[cleanup-queue] ${borradas} tareas Completado de +${days} días eliminadas`);
   } catch (e) {
     console.error("[cleanup-queue]", e.message);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: POST /cotizacion/decision  (el cliente aprueba/rechaza desde el portal)
+ * Body: { token: base64(cotizacionRecId), decision: 'Aprobada'|'Rechazada', comentario }
+ * Seguridad: clave pública (anti-bot) + el recId no adivinable + se verifica que
+ * la cotización siga ABIERTA antes de escribir (un link viejo no puede re-decidir).
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleCotDecision(request, env, ctx, cors) {
+  if (env.PUBLIC_LEAD_KEY) {
+    const key = request.headers.get("X-Public-Lead-Key") || "";
+    if (!timingSafeEqual(key, env.PUBLIC_LEAD_KEY)) {
+      return json({ ok: false, error: "No autorizado" }, 401, cors);
+    }
+  }
+  const body = await readJson(request);
+  if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
+
+  let cotId;
+  try { cotId = atob(String(body.token || "")); } catch (e) { return json({ ok: false, error: "Token inválido" }, 400, cors); }
+  if (!/^rec[A-Za-z0-9]{14}$/.test(cotId)) return json({ ok: false, error: "Token inválido" }, 400, cors);
+
+  const decision = String(body.decision || "");
+  if (decision !== "Aprobada" && decision !== "Rechazada") return json({ ok: false, error: "Decisión inválida" }, 400, cors);
+
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return json({ ok: false, error: "No configurado" }, 500, cors);
+
+  // Verifica el estado actual: solo se decide sobre cotizaciones abiertas.
+  let rec;
+  try {
+    const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Cotizaciones/${cotId}`, {
+      headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
+    });
+    if (r.status === 404) return json({ ok: false, error: "Cotización no encontrada" }, 404, cors);
+    if (!r.ok) return json({ ok: false, error: "No se pudo leer la cotización" }, 502, cors);
+    rec = await r.json();
+  } catch (e) {
+    return json({ ok: false, error: "Error de conexión" }, 502, cors);
+  }
+  const estado = (rec.fields && rec.fields["Estado cotización"]) || "";
+  if (!["Enviada", "Solicitada"].includes(estado)) {
+    // Ya fue decidida (o venció): idempotente, no error.
+    return json({ ok: true, alreadyDecided: true, estado }, 200, cors);
+  }
+
+  const comentario = String(body.comentario || "").slice(0, 2000);
+  const fields = { "Estado cotización": decision };
+  if (decision === "Rechazada" && comentario) fields["Motivo rechazo"] = comentario;
+  try {
+    await airtableUpdateTolerant(env, "Cotizaciones", cotId, fields);
+  } catch (e) {
+    return json({ ok: false, error: "No se pudo registrar" }, 502, cors);
+  }
+
+  // Aviso al equipo (best-effort, no bloquea la respuesta)
+  const numCot = (rec.fields && rec.fields["N° Cotización"]) || cotId;
+  ctx.waitUntil(sendCotDecisionAlert(env, { numCot, decision, comentario }));
+
+  return json({ ok: true, decision }, 200, cors);
+}
+
+async function sendCotDecisionAlert(env, { numCot, decision, comentario }) {
+  if (!env.RESEND_API_KEY) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  const to = env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com";
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"));
+  const aprob = decision === "Aprobada";
+  const html =
+    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px">` +
+    `<h2 style="margin:0 0 12px;color:${aprob ? "#0a8f6a" : "#b00020"}">${aprob ? "✅" : "🚫"} Cotización ${esc(numCot)} ${aprob ? "APROBADA" : "RECHAZADA"} por el cliente</h2>` +
+    `<p>El cliente ${aprob ? "aprobó" : "rechazó"} la cotización <strong>${esc(numCot)}</strong> desde el portal.</p>` +
+    (comentario ? `<p style="background:#f6f6f6;border-radius:8px;padding:8px 12px"><strong>Comentario:</strong> ${esc(comentario)}</p>` : "") +
+    `<p>${aprob ? "Ponte en marcha: confirma el anticipo y crea el pedido." : "Considera un win-back o ajustar la propuesta."}</p>` +
+    `<p style="color:#666;font-size:13px;margin-top:18px">— Portal de clientes · The Lab Solutions</p></div>`;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject: `${aprob ? "✅" : "🚫"} Cotización ${numCot} ${aprob ? "aprobada" : "rechazada"} por el cliente`, html }),
+    });
+  } catch (e) {
+    console.error("[leads-worker] alerta decisión cotización:", e.message);
   }
 }
 

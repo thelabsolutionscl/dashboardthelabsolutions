@@ -2357,6 +2357,30 @@ function presExportCSV(){
 }
 
 // ── PORTAL DE CLIENTE ─────────────────────────────────────────────────
+// El cliente aprueba/rechaza su cotización desde el portal. Va por el lead-worker
+// (público): el token es el recId de la cotización en base64; el worker verifica
+// que siga abierta antes de escribir y avisa al equipo. Best-effort en el cliente.
+async function portalDecidirCot(cotId,decision){
+  const url=(typeof _DEFAULTS!=='undefined'&&_DEFAULTS.LEAD_WORKER_URL)||'';
+  const key=(typeof _DEFAULTS!=='undefined'&&_DEFAULTS.PUBLIC_LEAD_KEY)||'';
+  const ok=v=>v&&!String(v).startsWith('%%');
+  let comentario='';
+  if(decision==='Rechazada'){const m=prompt('¿Nos cuentas por qué? (opcional — nos ayuda a mejorar la propuesta)');if(m===null)return;comentario=m||'';}
+  else if(!confirm('¿Confirmas que APRUEBAS esta cotización? Nos pondremos en marcha de inmediato.'))return;
+  const card=document.getElementById('cotcard-'+cotId);if(card)card.style.opacity='0.55';
+  const done=(html)=>{if(card){card.style.opacity='1';card.innerHTML=html;}};
+  if(!ok(url)){done('<div style="font-size:12px;color:var(--text2);padding:4px 0">¡Gracias! Escríbenos a <a href="mailto:hola@thelab.solutions" style="color:var(--accent)">hola@thelab.solutions</a> para confirmar los siguientes pasos.</div>');return;}
+  try{
+    const headers={'Content-Type':'application/json'};if(ok(key))headers['X-Public-Lead-Key']=key;
+    const r=await fetch(url.replace(/\/+$/,'')+'/cotizacion/decision',{method:'POST',headers,body:JSON.stringify({token:btoa(cotId),decision,comentario})});
+    const res=await r.json().catch(()=>null);
+    if(r.ok&&res&&res.ok){
+      done(decision==='Aprobada'
+        ?'<div style="font-size:13px;font-weight:700;color:var(--accent3);padding:4px 0">✓ ¡Cotización aprobada! Gracias — comenzamos de inmediato y te contactaremos con los próximos pasos.</div>'
+        :'<div style="font-size:12px;color:var(--text2);padding:4px 0">Cotización rechazada. Gracias por avisarnos; si podemos ajustar algo, escríbenos a <a href="mailto:hola@thelab.solutions" style="color:var(--accent)">hola@thelab.solutions</a>.</div>');
+    }else{if(card)card.style.opacity='1';alert((res&&res.error)||'No se pudo registrar. Escríbenos a hola@thelab.solutions y lo resolvemos.');}
+  }catch(e){if(card)card.style.opacity='1';alert('Problema de conexión. Escríbenos a hola@thelab.solutions.');}
+}
 function checkClientePortal(){
   const params=new URLSearchParams(window.location.search);
   const portalToken=params.get('portal');
@@ -2412,10 +2436,16 @@ function checkClientePortal(){
     const cotHTML=cotsAbiertas.length?cotsAbiertas.map(c=>{const cf=c.fields;
       const total=cf['Total final (CLP)']?formatCLP(cf['Total final (CLP)']):'';
       const vto=cf['Fecha vencimiento']||'';
-      return`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:11px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--accent)">${escapeHtml(cf['N° Cotización']||'—')}</span>
-        ${total?`<span style="font-size:12px;color:var(--text);font-weight:700;margin-left:10px">${total} <span style="font-size:9px;color:var(--text3)">IVA incl.</span></span>`:''}</div>
-        <div style="font-size:10px;color:var(--text3)">${vto?'Válida hasta '+vto+' · ':''}¿Dudas? Escríbenos 💬</div>
+      return`<div id="cotcard-${c.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 16px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--accent)">${escapeHtml(cf['N° Cotización']||'—')}</span>
+          ${total?`<span style="font-size:12px;color:var(--text);font-weight:700;margin-left:10px">${total} <span style="font-size:9px;color:var(--text3)">IVA incl.</span></span>`:''}</div>
+          <div style="font-size:10px;color:var(--text3)">${vto?'Válida hasta '+vto:''}</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:11px">
+          <button onclick="portalDecidirCot('${c.id}','Aprobada')" style="flex:1;background:var(--accent3);color:#0a0a0a;border:none;border-radius:8px;padding:10px;font-weight:700;font-size:13px;cursor:pointer">✓ Aprobar cotización</button>
+          <button onclick="portalDecidirCot('${c.id}','Rechazada')" style="background:transparent;color:var(--text3);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;font-size:12px;cursor:pointer">Rechazar</button>
+        </div>
       </div>`;
     }).join(''):'';
     document.getElementById('portalContent').innerHTML=`
