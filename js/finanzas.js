@@ -2097,6 +2097,19 @@ async function emitirDTE(){
     if(dteNum){
       try{await airtableWrite('Pedidos','PATCH',pedidoId,{'DTE N°':String(dteNum)});}catch(e){}
       const p=state.pedidosById[pedidoId];if(p) p.fields['DTE N°']=String(dteNum);
+      // Materializa el DTE como Factura ligada al pedido (para cobranza y reportes)
+      try{
+        if(typeof ensureFacturasTable==='function') await ensureFacturasTable();
+        const cid=p?(Array.isArray(p.fields['Cliente'])?p.fields['Cliente'][0]:p.fields['Cliente']):'';
+        const venc=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
+        await airtableWrite('Facturas','POST',null,{
+          'Cliente':razonSocial,'Cliente ID':cid||'','Tipo DTE':tipoDTE,'Folio':Number(dteNum)||0,
+          'Fecha':new Date().toISOString().slice(0,10),'Neto':neto,'IVA':iva,'Total':neto+iva,
+          'Track ID':resp.trackid||resp.track_id||'','Estado SII':resp.estado_sii||resp.estado||'Enviado',
+          'Estado Pago':'Pendiente','Fecha Vencimiento':venc,'N° Pedido':p?.fields['N° Pedido']||''
+        });
+        try{await loadAllDataSilent();}catch(e){}
+      }catch(e){console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);}
       renderPedidos();
     }
     toast('\u2705 DTE emitido'+(dteNum?' \u2014 N\u00b0 '+dteNum:'')+(pdfUrl?' \u00b7 <a href="'+escapeHtml(pdfUrl)+'" target="_blank" style="color:var(--accent)">Ver PDF</a>':''),'success');
