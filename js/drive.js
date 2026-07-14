@@ -76,32 +76,80 @@ async function _driveUploadText(filename,content,mimeType,folderId){
   return r.json();
 }
 
+// Reescribe los selectores de un CSS para que apliquen SOLO bajo rootSel. Evita
+// que el CSS del documento a exportar se filtre a la app, y (con el escudo de
+// abajo) que el CSS de la app se filtre al documento. Soporta @media/@supports
+// (recursivo) y deja intactos @page/@font-face/@keyframes.
+function _scopeCss(css,rootSel){
+  let out='',i=0;const n=css.length;
+  const ws=()=>{while(i<n&&/\s/.test(css[i]))i++;};
+  while(i<n){
+    ws(); if(i>=n) break;
+    if(css[i]==='/'&&css[i+1]==='*'){const e=css.indexOf('*/',i);i=e<0?n:e+2;continue;}
+    if(css[i]==='@'){
+      let s=i; while(i<n&&css[i]!=='{'&&css[i]!==';')i++;
+      const prelude=css.slice(s,i).trim();
+      if(css[i]===';'){out+=prelude+';';i++;continue;}
+      if(i>=n) break;
+      i++; let depth=1;const cs=i;
+      while(i<n&&depth>0){if(css[i]==='{')depth++;else if(css[i]==='}')depth--;if(depth>0)i++;}
+      const inner=css.slice(cs,i); i++;
+      out+=(/^@media|^@supports/i.test(prelude))?prelude+'{'+_scopeCss(inner,rootSel)+'}':prelude+'{'+inner+'}';
+    } else {
+      const s=i; while(i<n&&css[i]!=='{')i++;
+      const sel=css.slice(s,i); if(i>=n)break; i++;
+      let depth=1;const ds=i;
+      while(i<n&&depth>0){if(css[i]==='{')depth++;else if(css[i]==='}')depth--;if(depth>0)i++;}
+      const decls=css.slice(ds,i); i++;
+      const scoped=sel.split(',').map(x=>{
+        x=x.trim(); if(!x) return '';
+        if(/^(html|body)$/i.test(x)) return rootSel;
+        if(x==='*') return rootSel+' *';
+        if(/^(html|body)\b/i.test(x)) return rootSel+x.replace(/^(html|body)\b/i,'');
+        return rootSel+' '+x;
+      }).filter(Boolean).join(',');
+      out+=scoped+'{'+decls+'}';
+    }
+  }
+  return out;
+}
+function _extractDocParts(htmlDoc){
+  const css=[...String(htmlDoc).matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map(m=>m[1]).join('\n');
+  const bm=String(htmlDoc).match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return {css,body:bm?bm[1]:htmlDoc};
+}
+// Rasteriza un documento HTML (cotización / ficha / propuesta) a un PDF Blob.
+// Antes se escribía el HTML en un iframe y se pasaba su <body> a html2pdf; pero
+// html2pdf CLONA ese body dentro del documento de la app, perdiendo el <style>
+// del iframe y aplicándole el CSS de la app → el PDF salía sin estilos / con el
+// diseño de la app encima ("cualquier cosa"). Ahora se monta el contenido en el
+// propio documento con el CSS scopeado bajo un id y un escudo `all:revert` que
+// neutraliza el CSS de la app dentro de ese subárbol: el clon conserva su estilo
+// y queda aislado en ambos sentidos.
 async function _fichaHTMLtoPdfBlob(htmlDoc){
-  return new Promise(async(resolve,reject)=>{
-    const iframe=document.createElement('iframe');
-    iframe.style.cssText='position:fixed;top:-99999px;left:-99999px;width:794px;height:1123px;border:none;visibility:hidden;';
-    document.body.appendChild(iframe);
-    try{
-      iframe.contentDocument.open();
-      iframe.contentDocument.write(htmlDoc);
-      iframe.contentDocument.close();
-      // wait for images inside the iframe
-      await new Promise(r=>{
-        const imgs=[...iframe.contentDocument.querySelectorAll('img')];
-        if(!imgs.length){r();return;}
-        let done=0;const check=()=>{if(++done>=imgs.length) r();};
-        imgs.forEach(img=>{if(img.complete) check();else{img.onload=check;img.onerror=check;}});
-        setTimeout(r,4000);
-      });
-      const blob=await html2pdf().set({
-        margin:0,
-        image:{type:'jpeg',quality:0.93},
-        html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,backgroundColor:'#ffffff'},
-        jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-      }).from(iframe.contentDocument.body).outputPdf('blob');
-      resolve(blob);
-    }catch(e){reject(e);}finally{document.body.removeChild(iframe);}
-  });
+  const ROOT='cotpdf-render-root';
+  const {css,body}=_extractDocParts(htmlDoc);
+  const shield='#'+ROOT+',#'+ROOT+' *{all:revert;}';
+  const root=document.createElement('div');
+  root.id=ROOT;
+  root.style.cssText='position:fixed;top:0;left:-100000px;width:794px;background:#fff;z-index:-1;';
+  root.innerHTML='<style>'+shield+_scopeCss(css,'#'+ROOT)+'</style>'+body;
+  document.body.appendChild(root);
+  try{
+    await new Promise(r=>{
+      const imgs=[...root.querySelectorAll('img')];
+      if(!imgs.length){r();return;}
+      let done=0;const check=()=>{if(++done>=imgs.length) r();};
+      imgs.forEach(img=>{if(img.complete) check();else{img.onload=check;img.onerror=check;}});
+      setTimeout(r,4000);
+    });
+    return await html2pdf().set({
+      margin:0,
+      image:{type:'jpeg',quality:0.93},
+      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,backgroundColor:'#ffffff'},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(root).outputPdf('blob');
+  }finally{document.body.removeChild(root);}
 }
 
 async function subirFactura(pedidoId){
