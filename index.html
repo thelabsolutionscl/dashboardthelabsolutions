@@ -4637,6 +4637,20 @@ function _reportarResultados(muts) {
 </div>
 
 <!-- META SEMANAL -->
+<!-- CONSUMO DE MATERIALES (descuento de stock por pedido) -->
+<div id="consumoModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeConsumoModal()"></div>
+  <div class="modal-card" style="max-width:440px">
+    <div class="modal-title" id="consumoModalTitle">📦 Descontar material</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Anota cuánto de cada material usó este pedido. Se descuenta del stock al confirmar.</div>
+    <div id="consumoBody" style="max-height:320px;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-ghost btn-sm" onclick="closeConsumoModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="consumoAplicarBtn" onclick="aplicarConsumo()">✓ Descontar del stock</button>
+    </div>
+  </div>
+</div>
+
 <!-- INVENTARIO DE MATERIALES -->
 <div class="tab-panel" id="tab-inventario">
   <div class="section-header"><div><div class="section-title">Inventario de materiales</div><div class="section-desc">Stock de insumos (filamento, planchas, resina, vinilo…). Cuando un material baja de su punto de reorden, aparece en las alertas del sistema.</div></div><button class="btn btn-primary btn-sm" onclick="addMaterial()">＋ Material</button></div>
@@ -8888,7 +8902,8 @@ function renderPedidos(filter){
     const repClienteItem=estado!=='Despachado'?`<button class="act-item act-item-cyan" onclick="runRepClienteAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> &nbsp;📢 Update cliente IA</button>`:'';
     const contentItem=estado==='Despachado'?`<button class="act-item act-item-cyan" onclick="runContentAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> &nbsp;🎬 Contenido IA</button>`:'';
     const facturarItem=estado==='Despachado'?`<button class="act-item act-item-green" onclick="openDTEModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;🧾 Facturar (DTE SII)${f['DTE N°']?' ✓ N° '+escapeHtml(String(f['DTE N°'])):''}</button>`:'';
-    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button><button class="act-item act-item-yellow" onclick="startManagePedidoFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📦 Gestionar (guiado)</button><button class="act-item" onclick="startPedidoOnboardingFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;🚀 Iniciar producción</button><button class="act-item act-item-cyan" onclick="startQAFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🎬 QA (guiado)</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}${facturarItem}<button class="act-item act-item-blue" onclick="openAdjuntosModal('ped','${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;Ver adjuntos</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
+    const consumoItem=estado!=='Cancelado'?`<button class="act-item" onclick="openConsumoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-nut"/></svg> &nbsp;📦 Descontar material${_pedConsumoN(f)?' <span class="nota-badge">'+_pedConsumoN(f)+'</span>':''}</button>`:'';
+    const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button><button class="act-item act-item-yellow" onclick="startManagePedidoFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📦 Gestionar (guiado)</button><button class="act-item" onclick="startPedidoOnboardingFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;🚀 Iniciar producción</button><button class="act-item act-item-cyan" onclick="startQAFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🎬 QA (guiado)</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}${facturarItem}${consumoItem}<button class="act-item act-item-blue" onclick="openAdjuntosModal('ped','${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;Ver adjuntos</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
     if(!formaActual&&f['Cotizaciones']?.length){const cotVinc=state.cotizacionesById[f['Cotizaciones'][0]];if(cotVinc) formaActual=cotVinc.fields['Forma de pago']||'';}
@@ -10891,6 +10906,65 @@ async function deleteMaterial(id){
   try{await airtableDelete('Inventario',id);}catch(e){toast('No se pudo eliminar','error');return;}
   state.inventario=(state.inventario||[]).filter(x=>x.id!==id);
   renderInventario();try{renderAlertas();}catch(e){}
+}
+// ── CONSUMO DE MATERIALES POR PEDIDO ───────────────────────────
+// Registra qué material y cuánto consumió un pedido y lo descuenta del stock.
+// El consumo aplicado queda en el campo 'Consumo materiales' (JSON) del pedido,
+// como historial y para no perder trazabilidad; cada aplicación es un evento.
+function _pedConsumo(f){try{return JSON.parse(f['Consumo materiales']||'[]');}catch(e){return[];}}
+function _pedConsumoN(f){return _pedConsumo(f).length;}
+async function ensureConsumoField(){
+  const t=getToken();if(!t&&!_proxyCfg()) return;
+  try{
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return;const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Pedidos');if(!tbl) return;
+    if(tbl.fields?.some(x=>x.name==='Consumo materiales')) return;
+    await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Consumo materiales',type:'multilineText'})});
+  }catch(e){}
+}
+async function openConsumoModal(pedidoId){
+  await loadInventario();   // asegura state.inventario
+  const p=state.pedidosById[pedidoId];if(!p)return;
+  window._consumoPedId=pedidoId;
+  const inv=(state.inventario||[]).slice().sort((a,b)=>String(a.fields['Material']||'').localeCompare(String(b.fields['Material']||'')));
+  const hist=_pedConsumo(p.fields);
+  const rows=inv.length?inv.map(m=>{const f=m.fields;const s=+f['Stock actual']||0;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--text)">${escapeHtml(f['Material']||'—')}</div><div style="font-size:10px;color:var(--text3)">stock: ${s} ${escapeHtml(f['Unidad']||'')}</div></div>
+      <input type="number" min="0" step="0.5" placeholder="0" data-mat="${m.id}" style="width:90px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 8px">
+      <span style="font-size:10px;color:var(--text3);width:34px">${escapeHtml(f['Unidad']||'')}</span>
+    </div>`;}).join(''):'<div style="font-size:12px;color:var(--text3);padding:10px 0">No hay materiales en inventario. Agrégalos en la sección Inventario.</div>';
+  const histHtml=hist.length?`<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:5px">Ya descontado en este pedido</div>${hist.map(h=>`<div style="font-size:11px;color:var(--text2)">− ${h.cantidad} ${escapeHtml(h.unidad||'')} de ${escapeHtml(h.material||'')} <span style="color:var(--text3)">(${(h.ts||'').slice(0,10)})</span></div>`).join('')}</div>`:'';
+  document.getElementById('consumoBody').innerHTML=rows+histHtml;
+  document.getElementById('consumoModalTitle').textContent='📦 Descontar material — '+(p.fields['N° Pedido']||'');
+  document.getElementById('consumoModal').style.display='flex';
+}
+function closeConsumoModal(){document.getElementById('consumoModal').style.display='none';window._consumoPedId=null;}
+async function aplicarConsumo(){
+  const pedidoId=window._consumoPedId;const p=state.pedidosById[pedidoId];if(!p)return;
+  const inputs=[...document.querySelectorAll('#consumoBody input[data-mat]')];
+  const aplicar=inputs.map(i=>({id:i.getAttribute('data-mat'),qty:parseFloat(i.value)||0})).filter(x=>x.qty>0);
+  if(!aplicar.length){toast('Ingresa al menos una cantidad','error');return;}
+  const btn=document.getElementById('consumoAplicarBtn');if(btn){btn.disabled=true;btn.textContent='Descontando...';}
+  const nuevos=[];
+  try{
+    for(const a of aplicar){
+      const m=(state.inventario||[]).find(x=>x.id===a.id);if(!m)continue;
+      const s=+m.fields['Stock actual']||0;const nuevo=Math.round((s-a.qty)*100)/100;
+      m.fields['Stock actual']=nuevo;
+      try{await airtableWrite('Inventario','PATCH',a.id,{'Stock actual':nuevo});}catch(e){}
+      nuevos.push({material:m.fields['Material']||'',cantidad:a.qty,unidad:m.fields['Unidad']||'',ts:new Date().toISOString()});
+    }
+    const hist=_pedConsumo(p.fields).concat(nuevos);
+    const json=JSON.stringify(hist).slice(0,95000);
+    p.fields['Consumo materiales']=json;
+    try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Consumo materiales':json});}
+    catch(err){if(/field|unknown|422|INVALID|UNKNOWN/i.test(err.message||'')){await ensureConsumoField();await airtableWrite('Pedidos','PATCH',pedidoId,{'Consumo materiales':json});}}
+    toast('✓ Material descontado del stock','success');
+    closeConsumoModal();
+    try{renderInventario();}catch(e){}try{renderPedidos();}catch(e){}try{renderAlertas();}catch(e){}
+  }catch(e){toast('Error: '+e.message,'error');}
+  if(btn){btn.disabled=false;btn.textContent='✓ Descontar del stock';}
 }
 function renderReportes(){
   const tbody=document.getElementById('reportesTableBody');
