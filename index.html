@@ -10897,6 +10897,56 @@ async function ceoAutoWeeklyCheck(){
   }catch(e){console.error('ceoAutoWeeklyCheck:',e);}
   finally{_ceoAutoRunning=false;}
 }
+// ── DIGEST SEMANAL OPERATIVO (O5) ──────────────────────────────
+// Resumen determinista (sin IA, instantáneo) de la semana: números clave +
+// lista accionable que integra las bandejas (atrasos, cobranza, aprobadas sin
+// pedido, recompra, reorden). Complementa al reporte ejecutivo IA.
+function _digestSemanalTexto(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const ws=new Date(today);const dow=(ws.getDay()+6)%7;ws.setDate(ws.getDate()-dow);ws.setHours(0,0,0,0); // lunes
+  const wsT=ws.getTime();
+  const neto=v=>Math.round((v||0)/1.19), clp=n=>formatCLP(Math.round(n||0));
+  const ped=state.pedidos||[], cot=state.cotizaciones||[];
+  const nuevos=ped.filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;return p.createdTime&&new Date(p.createdTime).getTime()>=wsT;});
+  const revSem=nuevos.reduce((s,p)=>s+neto(p.fields['Monto total (CLP)']),0);
+  const despachados=ped.filter(p=>{const f=p.fields;const d=f['Fecha despacho']||f['Fecha entrega'];return (f['Estado pedido']||'')==='Despachado'&&d&&new Date(d+'T00:00:00').getTime()>=wsT;});
+  const atrasados=ped.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;});
+  const cotEnv=cot.filter(c=>c.createdTime&&new Date(c.createdTime).getTime()>=wsT);
+  const cotApr=cot.filter(c=>(c.fields['Estado cotización']||'')==='Aprobada'&&c.createdTime&&new Date(c.createdTime).getTime()>=wsT);
+  const byCli={};nuevos.forEach(p=>{const c=p.fields['Cliente'];const id=Array.isArray(c)?c[0]:('n:'+c);byCli[id]=(byCli[id]||0)+neto(p.fields['Monto total (CLP)']);});
+  const top=Object.entries(byCli).sort((a,b)=>b[1]-a[1])[0];
+  let porCobrar=0,nMoros=0;try{const g=_cobGrupos();nMoros=g.length;porCobrar=g.reduce((s,x)=>s+(x.total||0),0);}catch(e){}
+  let nRecompra=0,nReorden=0,nAprob=0;
+  try{nRecompra=_recompraCands().length;}catch(e){}
+  try{nReorden=_reordenSugerencias().length;}catch(e){}
+  try{nAprob=_cotAprobadasSinPedido().length;}catch(e){}
+  const meta=parseInt(localStorage.getItem('revMetaSemanal'))||0;
+  const L=['RESUMEN SEMANAL — The Lab Solutions',`Semana del ${ws.toLocaleDateString('es-CL')}`,''];
+  L.push('NÚMEROS DE LA SEMANA');
+  L.push(`• Revenue neto: ${clp(revSem)}`+(meta>0?` · meta ${clp(meta)} → ${Math.round(revSem/meta*100)}%${revSem>=meta?' 🎯':''}`:''));
+  L.push(`• Pedidos: ${nuevos.length} nuevos · ${despachados.length} despachados`+(atrasados.length?` · ⚠ ${atrasados.length} atrasados`:''));
+  L.push(`• Cotizaciones: ${cotEnv.length} nuevas · ${cotApr.length} aprobadas`);
+  if(top)L.push(`• Top cliente de la semana: ${(state.clientesById||{})[top[0]]||resolveClienteName(top[0])||'—'} (${clp(top[1])})`);
+  L.push('','PARA ACTUAR ESTA SEMANA');
+  const acc=[];
+  if(atrasados.length)acc.push(`• ${atrasados.length} pedido(s) atrasado(s) — priorizar entrega`);
+  if(porCobrar>0)acc.push(`• Cobrar ${clp(porCobrar)} a ${nMoros} cliente(s)`);
+  if(nAprob)acc.push(`• ${nAprob} cotización(es) aprobada(s) sin pedido — convertir a 1 clic`);
+  if(nRecompra)acc.push(`• ${nRecompra} cliente(s) listos para recompra`);
+  if(nReorden)acc.push(`• ${nReorden} material(es) bajo stock — reponer`);
+  if(!acc.length)acc.push('• Todo al día ✓ ¡Buen trabajo!');
+  acc.forEach(a=>L.push(a));
+  L.push('','Abre el dashboard: https://dashboard.thelab.solutions');
+  return L.join('\n');
+}
+async function enviarDigestSemanal(){
+  if(!state.loaded){toast('Pulsa ↺ Actualizar primero','error');return;}
+  const to=localStorage.getItem('ceo_auto_email')||(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser()?.email)||'';
+  if(!to){toast('Configura el correo del reporte (⚙ junto a Meta)','info');return;}
+  const body=_digestSemanalTexto();
+  try{await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:'Resumen semanal — The Lab Solutions',body,from_name:AGENT_CTA_FROM.name});toast('✓ Resumen semanal enviado a '+to,'success');}
+  catch(e){toast('No se pudo enviar: '+e.message,'error');}
+}
 // ── CIERRE DE MES AUTOMÁTICO ───────────────────────────────────
 // El día 1-3 de cada mes arma un informe ejecutivo del mes CERRADO (revenue vs
 // meta, margen, top clientes por utilidad, conversión) comparado con el mes
