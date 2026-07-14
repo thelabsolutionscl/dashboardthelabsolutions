@@ -460,23 +460,45 @@ function _cobGrupos(){
   });
   return [...byCli.values()].sort((a,b)=>b.maxDias-a.maxDias||b.total-a.total);
 }
-function _cobMsg(g,contacto){
+// Secuencia de cobranza: toque 1 a los 3 días de mora, toque 2 a los 7, toque 3
+// (y siguientes) a los 15. El número de toques = cuántos recordatorios se enviaron.
+const COB_SCHED=[3,7,15];
+function _cobToques(emp){const l=_cobLog()[(emp||'').toLowerCase()];return l?l.length:0;}
+function _cobDue(g){
+  const toques=_cobToques(g.empresa);
+  const umbral=COB_SCHED[Math.min(toques,COB_SCHED.length-1)];
+  const last=_cobLast(g.empresa);
+  const recent=last&&(Date.now()-last.ts<2*864e5);   // no molestar 2 veces en <2 días
+  return {toque:toques+1,due:g.maxDias>=umbral&&!recent};
+}
+function _cobMsg(g,contacto,toque){
   const facts=g.n>1?`${g.n} facturas pendientes`:'una factura pendiente';
-  return `Hola${contacto?' '+contacto:''} 👋 Te saludo de The Lab Solutions. Te escribo por ${facts} por un total de ${clp(g.total)}${g.maxDias>0?` (la más antigua lleva ${g.maxDias} días vencida)`:''}. ¿Me confirmas si el pago ya está programado o necesitas que te reenviemos los documentos? ¡Muchas gracias! 💙\n— Andrea Garrido · The Lab Solutions`;
+  const base=`Hola${contacto?' '+contacto:''} 👋 Te saludo de The Lab Solutions.`;
+  const monto=`${clp(g.total)}${g.maxDias>0?` (la más antigua lleva ${g.maxDias} días vencida)`:''}`;
+  const firma='\n— Andrea Garrido · The Lab Solutions';
+  if(toque>=3) return `${base} Este es un tercer recordatorio por ${facts} por ${monto}. Necesitamos regularizar el pago esta semana para no afectar tu línea de crédito con nosotros. ¿Lo coordinamos hoy? Quedo muy atenta y con la mejor disposición.${firma}`;
+  if(toque===2) return `${base} Te reitero el recordatorio por ${facts} por ${monto}. ¿Nos confirmas la fecha de pago o prefieres que reenviemos los documentos? Agradezco regularizar a la brevedad.${firma}`;
+  return `${base} Te escribo por ${facts} por un total de ${monto}. ¿Me confirmas si el pago ya está programado o necesitas que te reenviemos los documentos? ¡Muchas gracias! 💙${firma}`;
 }
 function finRenderCobranzaActions(){
   const box=document.getElementById('finCobranzaActions'); if(!box) return;
-  const gs=_cobGrupos().slice(0,10);
+  // Prioriza los que "toca" contactar hoy (según la secuencia), luego por mora.
+  const gs=_cobGrupos().map(g=>({...g,_d:_cobDue(g)})).sort((a,b)=>(b._d.due-a._d.due)||(b.maxDias-a.maxDias)||(b.total-a.total)).slice(0,12);
   if(!gs.length){box.style.display='none';box.innerHTML='';return;}
+  const dueN=gs.filter(g=>g._d.due).length;
   box.style.display='block';
-  box.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--warn);padding:0 14px 6px">📞 Acciones de cobranza · prioridad por mora</div>'+gs.map(g=>{
+  const _ETQ=['1er toque','2º toque','3er toque'];
+  box.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--warn);padding:0 14px 6px">📞 Secuencia de cobranza'+(dueN?` · ${dueN} para contactar hoy`:' · al día')+'</div>'+gs.map(g=>{
     const cli=_cobCliente(g.empresa);
     const tienePhone=!!(cli&&_getClienteWAPhone(cli));
     const last=_cobLast(g.empresa);
-    const lastChip=last?`<span class="badge badge-gray" style="flex-shrink:0" title="Último recordatorio (${last.via})">✓ hace ${Math.max(0,Math.floor((Date.now()-last.ts)/864e5))}d</span>`:'';
     const emp=escapeHtml(g.empresa);
-    return `<div style="display:flex;align-items:center;gap:9px;padding:8px 14px;border-top:1px solid var(--border)">
+    const due=g._d.due,toque=Math.min(g._d.toque,3);
+    const tChip=`<span class="badge ${due?(toque>=3?'badge-red':toque===2?'badge-orange':'badge-yellow'):'badge-gray'}" style="flex-shrink:0" title="${due?'Corresponde este toque':'En pausa — contactado hace <2 días o aún no toca'}">${_ETQ[toque-1]||'toque '+toque}</span>`;
+    const lastChip=(!due&&last)?`<span style="font-size:9px;color:var(--text3);flex-shrink:0">hace ${Math.max(0,Math.floor((Date.now()-last.ts)/864e5))}d</span>`:'';
+    return `<div style="display:flex;align-items:center;gap:9px;padding:8px 14px;border-top:1px solid var(--border);${due?'':'opacity:.6'}">
       <span class="badge ${g.maxDias>60?'badge-red':(g.maxDias>30?'badge-orange':'badge-yellow')}" style="flex-shrink:0" title="Mora máxima">${g.maxDias} d</span>
+      ${tChip}
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${emp}</div>
         <div style="font-size:10.5px;color:var(--text3)">${clp(g.total)} · ${g.n} factura${g.n>1?'s':''}${cli?'':' · <span style="color:var(--warn)">sin ficha de cliente</span>'}</div>
@@ -493,7 +515,7 @@ function cobWhatsApp(empresa){
   const cli=_cobCliente(empresa);
   const phone=cli?_getClienteWAPhone(cli):'';
   const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
-  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_cobMsg(g,nombre)),'_blank');
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_cobMsg(g,nombre,_cobToques(empresa)+1)),'_blank');
   cobRegistrar(empresa,'WhatsApp',true);
 }
 async function cobEmail(empresa,btn){
@@ -506,7 +528,8 @@ async function cobEmail(empresa,btn){
   const prev=btn?btn.innerHTML:'';
   if(btn){btn.disabled=true;btn.textContent='…';}
   try{
-    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:'Recordatorio de pago — The Lab Solutions',body:_cobMsg(g,nombre),from_name:AGENT_CTA_FROM.name});
+    const _tq=_cobToques(empresa)+1;
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:(_tq>=3?'3er recordatorio de pago':_tq===2?'2º recordatorio de pago':'Recordatorio de pago')+' — The Lab Solutions',body:_cobMsg(g,nombre,_tq),from_name:AGENT_CTA_FROM.name});
     if(r&&!r.error){toast('✓ Recordatorio enviado a '+to,'success');cobRegistrar(empresa,'correo',true);}
     else throw new Error(r?.error||'Error desconocido');
   }catch(e){toast('Error: '+e.message,'error');}
