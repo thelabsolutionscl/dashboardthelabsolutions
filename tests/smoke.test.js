@@ -109,7 +109,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     '_podLink', 'pedirPOD', 'ensurePodFields', '_podConfirmado',
     '_seguimientoLink', 'compartirSeguimiento',
     'renderBreakEven', '_puntoEquilibrio', 'setCostosFijos',
-    'renderIvaMensual', '_ivaMes',
+    'renderIvaMensual', '_ivaMes', 'renderPerdidas', '_cotizacionesPerdidas', '_perdidaCat',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

@@ -782,6 +782,7 @@
     <tbody id="cotsTableBodyFull"><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr></tbody></table></div>
   </div>
   <div id="cotAnalytics"></div>
+  <div id="perdidasCard"></div>
 </div>
 
 <!-- PEDIDOS -->
@@ -8687,7 +8688,7 @@ function renderCotizaciones(skipAnalytics){
     html=shown.map(c=>buildCotRow(c)).join('');
     if(sorted.length>_cotCap) html+=_loadMoreRow(sorted.length-_cotCap,11,'cotShowMore()');
   }
-  _setRows(tbody,html);if(!skipAnalytics)renderCotAnalytics();_applySortIndicators();
+  _setRows(tbody,html);if(!skipAnalytics){renderCotAnalytics();try{renderPerdidas();}catch(e){}}_applySortIndicators();
   try{buildFollowupTray();}catch(e){}
   try{renderCotToOrderTray();}catch(e){}
 }
@@ -12700,6 +12701,43 @@ function renderClientesAnalytics(){
   try{renderRentabilidad(rb);}catch(e){logErr('rentabilidad',e);}
 }
 
+// ── ANÁLISIS DE COTIZACIONES PERDIDAS (S4) ─────────────────────────────
+// Agrupa las cotizaciones rechazadas por motivo (categorizado desde el texto
+// libre / portal) para entender por qué se pierden y cuánto revenue se va.
+const _PERDIDA_CATS=[
+  {k:'Precio',re:/precio|caro|costos?|presupuesto|barat|econ[oó]mic|dinero|plata/i},
+  {k:'Plazo / tiempo',re:/plazo|tiempo|demor|urg|r[aá]pid|fecha|entrega|tarde/i},
+  {k:'Se fue a la competencia',re:/competencia|otro proveedor|otra empresa|otra cotiz|mejor oferta/i},
+  {k:'Ya no lo necesita',re:/no.*necesit|desist|posterg|m[aá]s adelante|cancel|otro momento|despu[eé]s/i},
+];
+function _perdidaCat(txt){for(const c of _PERDIDA_CATS)if(c.re.test(txt||''))return c.k;return (txt&&txt.trim())?'Otro':'Sin motivo';}
+function _cotizacionesPerdidas(){
+  const rech=(state.cotizaciones||[]).filter(c=>(c.fields['Estado cotización']||'')==='Rechazada');
+  const totalNeto=rech.reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
+  const cats=new Map();
+  rech.forEach(c=>{const k=_perdidaCat(c.fields['Motivo rechazo']);const e=cats.get(k)||{cat:k,n:0,valor:0,ej:[]};e.n++;e.valor+=Math.round((c.fields['Total final (CLP)']||0)/1.19);if(c.fields['Motivo rechazo']&&e.ej.length<3)e.ej.push(String(c.fields['Motivo rechazo']).slice(0,80));cats.set(k,e);});
+  const arr=[...cats.values()].sort((a,b)=>b.n-a.n);
+  return {n:rech.length,totalNeto,cats:arr};
+}
+function renderPerdidas(){
+  const el=document.getElementById('perdidasCard');if(!el)return;
+  const d=_cotizacionesPerdidas();
+  if(!d.n){el.innerHTML='';return;}
+  const maxN=Math.max(1,...d.cats.map(c=>c.n));
+  const col={'Precio':'var(--danger)','Plazo / tiempo':'var(--warn)','Se fue a la competencia':'var(--accent2)','Ya no lo necesita':'var(--accent4)','Otro':'var(--text3)','Sin motivo':'var(--border2)'};
+  el.innerHTML=`<div class="card" style="margin-top:16px"><div class="card-header"><span class="card-title">📉 Por qué se pierden las cotizaciones</span><span style="font-size:11px;color:var(--text3)">${d.n} rechazada${d.n!==1?'s':''} · ${formatCLP(d.totalNeto)} neto no cerrado</span></div>
+    <div style="padding:14px 16px">${d.cats.map(c=>{
+      const pct=Math.round(c.n/maxN*100);const cc=col[c.cat]||'var(--text3)';
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:11.5px;color:var(--text2);min-width:150px">${escapeHtml(c.cat)}</span>
+          <div style="flex:1;height:13px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${cc};border-radius:4px"></div></div>
+          <span style="font-size:11px;font-weight:700;color:${cc};min-width:80px;text-align:right">${c.n} · ${formatCLP(c.valor)}</span>
+        </div>
+        ${c.ej.length?`<div style="font-size:10px;color:var(--text3);padding-left:158px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(c.ej.join(' | '))}">“${escapeHtml(c.ej[0])}”</div>`:''}
+      </div>`;
+    }).join('')}</div></div>`;
+}
 // ── ANALYTICS DE COTIZACIONES ─────────────────────────────────────────
 function renderCotAnalytics(){
   const el=document.getElementById('cotAnalytics');if(!el) return;
