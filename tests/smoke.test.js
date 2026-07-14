@@ -83,6 +83,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'buildPostEntregaTray', 'pdMarkDone', 'buildWinbackTray', 'wbReactivar',
     'renderCsatSummary', 'ensureNpsFields', '_npsStats', '_npsLink',
     'renderMejorPrecio', 'addPrecioProv', 'delPrecioProv', '_mejorPrecioPorItem',
+    'generarCierrePDF', 'enviarCierreMes',
     'finRenderCobranzaActions', 'cobRegistrar', 'renderClienteTimeline',
     'finRenderFlujoCaja', 'addPagoProgramado', 'delPagoProgramado',
     'renderMorningBrief', 'renderMaqOcupacion', 'renderPedidosKanban', 'advancePedido',

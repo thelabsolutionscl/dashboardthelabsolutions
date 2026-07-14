@@ -4686,6 +4686,10 @@ function _reportarResultados(muts) {
       <div class="field-group"><label class="field-label">Meta semanal (CLP neto)</label><input class="field-input" id="metaInput" type="number" placeholder="ej. 3000000" onkeydown="if(event.key==='Enter')saveRevenueMeta()"></div>
       <div class="field-group"><label class="field-label">Meta mensual (CLP neto)</label><input class="field-input" id="metaInputMensual" type="number" placeholder="ej. 12000000" onkeydown="if(event.key==='Enter')saveRevenueMeta()"></div>
       <div style="font-size:11px;color:var(--text3)">Guardado en Airtable — disponible en todos los dispositivos.</div>
+      <div style="display:flex;gap:8px;border-top:1px solid var(--border);padding-top:12px">
+        <button class="btn btn-ghost btn-sm" onclick="generarCierrePDF(0)" style="flex:1" title="Reporte del mes en curso (parcial)">📄 PDF mes en curso</button>
+        <button class="btn btn-ghost btn-sm" onclick="generarCierrePDF(-1)" style="flex:1" title="Reporte del último mes cerrado">📄 PDF mes cerrado</button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost btn-sm" onclick="clearRevenueMeta()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Borrar todo</button>
@@ -10858,6 +10862,88 @@ async function ceoAutoMonthlyCheck(){
     }
   }catch(e){console.error('ceoAutoMonthlyCheck:',e);}
   finally{_ceoMesRunning=false;}
+}
+// PDF ejecutivo del cierre de mes: una página imprimible/compartible con KPIs,
+// cumplimiento de meta, top clientes y tendencia de 6 meses (SVG inline, sin libs).
+// off=0 mes en curso (parcial), off=-1 mes cerrado. Abre ventana e imprime → "Guardar como PDF".
+function generarCierrePDF(off){
+  if(!state.loaded){toast('Pulsa ↺ Actualizar primero','error');return;}
+  const o=(off===undefined)?0:off;
+  const {label}=_mesRango(o);
+  const a=_mesAgregado(o), prev=_mesAgregado(o-1);
+  const metaM=parseInt(localStorage.getItem('revMetaMensual'))||0;
+  const parcial=(o===0);
+  const esc=s=>escapeHtml(String(s==null?'':s));
+  const clp=n=>formatCLP(Math.round(n||0));
+  const delta=(cur,ant)=>{if(!(ant>0))return{txt:'—',col:'#8a8a92'};const d=Math.round((cur-ant)/ant*100);return{txt:(d>0?'▲ +':d<0?'▼ ':'= ')+d+'%',col:d>0?'#00b3a4':d<0?'#e5484d':'#8a8a92'};};
+  // Tendencia 6 meses (incluye el mes objetivo como último)
+  const serie=[];for(let i=5;i>=0;i--){const m=_mesRango(o-i);const ag=_mesAgregado(o-i);serie.push({label:m.label.split(' ')[0].slice(0,3),rev:ag.rev,util:ag.util});}
+  const maxRev=Math.max(1,...serie.map(s=>s.rev));
+  const barW=64,gap=20,chartH=150,padL=8;
+  const bars=serie.map((s,i)=>{
+    const h=Math.round(s.rev/maxRev*chartH);const x=padL+i*(barW+gap);const y=chartH-h+18;
+    const hu=Math.round((s.util/(s.rev||1))*h);
+    return `<g>
+      <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="5" fill="#00b3a4" opacity="0.28"/>
+      <rect x="${x}" y="${chartH+18-hu}" width="${barW}" height="${hu}" rx="5" fill="#00b3a4"/>
+      <text x="${x+barW/2}" y="${chartH+34}" text-anchor="middle" font-size="12" fill="#6b6b73">${esc(s.label)}</text>
+      <text x="${x+barW/2}" y="${y-6}" text-anchor="middle" font-size="10.5" fill="#3a3a42" font-weight="700">${s.rev>=1e6?(s.rev/1e6).toFixed(1)+'M':Math.round(s.rev/1000)+'k'}</text>
+    </g>`;
+  }).join('');
+  const chartW=padL*2+serie.length*(barW+gap)-gap;
+  const kpi=(lbl,val,sub,col)=>`<div style="flex:1;min-width:150px;border:1px solid #ececf0;border-radius:12px;padding:16px 18px">
+    <div style="font-size:11px;color:#8a8a92;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${esc(lbl)}</div>
+    <div style="font-size:26px;font-weight:800;color:${col||'#111'};line-height:1.1">${val}</div>
+    ${sub?`<div style="font-size:12px;color:#6b6b73;margin-top:5px">${sub}</div>`:''}</div>`;
+  const dRev=delta(a.rev,prev.rev), dUtil=delta(a.util,prev.util);
+  const cumpl=metaM>0?Math.round(a.rev/metaM*100):null;
+  const topHtml=a.top.length?a.top.map((c,i)=>`<tr>
+    <td style="padding:8px 10px;border-bottom:1px solid #f0f0f3;font-weight:700;color:#8a8a92;width:28px">${i+1}</td>
+    <td style="padding:8px 10px;border-bottom:1px solid #f0f0f3">${esc(c.nombre)}</td>
+    <td style="padding:8px 10px;border-bottom:1px solid #f0f0f3;text-align:right;color:#00947f;font-weight:700">${clp(c.util)}</td>
+    <td style="padding:8px 10px;border-bottom:1px solid #f0f0f3;text-align:right;color:#6b6b73">${clp(c.rev)}</td>
+  </tr>`).join(''):'<tr><td colspan="4" style="padding:14px;text-align:center;color:#8a8a92">Sin datos de clientes este mes</td></tr>';
+  const hoy=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'});
+  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cierre ${esc(label)} — The Lab Solutions</title>
+<style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:-apple-system,system-ui,'Segoe UI',Arial,sans-serif;color:#111;margin:0;padding:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head>
+<body>
+<div style="max-width:760px;margin:0 auto;padding:8px 4px">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #00b3a4;padding-bottom:12px;margin-bottom:20px">
+    <div>
+      <div style="font-size:11px;letter-spacing:.22em;color:#8a8a92;text-transform:uppercase">The Lab Solutions</div>
+      <div style="font-size:26px;font-weight:800;margin-top:4px">Cierre de ${esc(label)}${parcial?' <span style="font-size:13px;font-weight:600;color:#f5a623">· parcial (mes en curso)</span>':''}</div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#8a8a92">Generado<br>${esc(hoy)}</div>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+    ${kpi('Revenue neto',clp(a.rev),`<span style="color:${dRev.col};font-weight:700">${dRev.txt}</span> vs mes anterior`,'#111')}
+    ${kpi('Utilidad estimada',clp(a.util),`Margen efectivo ${a.margen.toFixed(0)}% · <span style="color:${dUtil.col};font-weight:700">${dUtil.txt}</span>`,'#00947f')}
+    ${kpi('Pedidos',a.nped,prev.nped?`Mes anterior: ${prev.nped}`:'',' #111')}
+    ${kpi('Meta mensual',cumpl!=null?cumpl+'%':'—',cumpl!=null?(clp(a.rev)+' de '+clp(metaM)+(a.rev>=metaM?' 🎯':'')):'Sin meta configurada',cumpl!=null?(a.rev>=metaM?'#00947f':'#f5a623'):'#8a8a92')}
+    ${a.conv!=null?kpi('Conversión cotizaciones',a.conv.toFixed(0)+'%',prev.conv!=null?`Mes anterior: ${prev.conv.toFixed(0)}%`:'','#111'):''}
+  </div>
+  <div style="border:1px solid #ececf0;border-radius:12px;padding:16px 18px;margin-bottom:18px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:6px">Tendencia de 6 meses</div>
+    <div style="font-size:11px;color:#8a8a92;margin-bottom:8px">Barra clara = revenue neto · barra sólida = utilidad estimada</div>
+    <svg viewBox="0 0 ${chartW} ${chartH+44}" width="100%" style="max-width:${chartW}px">${bars}</svg>
+  </div>
+  <div style="border:1px solid #ececf0;border-radius:12px;padding:16px 18px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px">Top clientes por utilidad</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="color:#8a8a92;font-size:11px;text-transform:uppercase;letter-spacing:.04em">
+        <th style="text-align:left;padding:0 10px 6px">#</th><th style="text-align:left;padding:0 10px 6px">Cliente</th>
+        <th style="text-align:right;padding:0 10px 6px">Utilidad</th><th style="text-align:right;padding:0 10px 6px">Venta</th></tr></thead>
+      <tbody>${topHtml}</tbody>
+    </table>
+  </div>
+  <div style="margin-top:22px;text-align:center;font-size:10.5px;color:#a0a0a8">The Lab Solutions · dashboard.thelab.solutions · reporte generado automáticamente</div>
+</div>
+<script>window.onload=function(){window.focus();setTimeout(function(){window.print();},250);};<\/script>
+</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('Permite las ventanas emergentes para generar el PDF','error');return;}
+  w.document.open();w.document.write(html);w.document.close();
+  toast('📄 PDF ejecutivo generado — usa "Guardar como PDF"','success');
 }
 // Envío manual del cierre del mes en curso (command palette / botón)
 async function enviarCierreMes(){
