@@ -683,6 +683,7 @@
   </div>
   <div id="retainersCard" style="margin-bottom:20px"></div>
   <div id="churnCard" style="margin-bottom:20px"></div>
+  <div id="fechasClaveCard" style="margin-bottom:20px"></div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Base CRM</span>
@@ -2562,7 +2563,7 @@
 <div id="clienteDetalleModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeClienteDetalle()"></div>
   <div class="modal-card wide">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div id="cdCrumb" style="font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.3px"><span style="cursor:pointer" onclick="closeClienteDetalle();switchTab('clientes')">Clientes</span> <span style="opacity:.55">›</span> <span style="color:var(--text2)" id="cdCrumbName"></span></div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div><div id="cdDescChip" style="margin-top:7px"></div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div id="cdCrumb" style="font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.3px"><span style="cursor:pointer" onclick="closeClienteDetalle();switchTab('clientes')">Clientes</span> <span style="opacity:.55">›</span> <span style="color:var(--text2)" id="cdCrumbName"></span></div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div><div id="cdDescChip" style="margin-top:7px"></div><div id="cdFechaChip" style="margin-top:6px"></div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="cdBadges"></div>
     <div id="cdOnboarding" style="margin-bottom:14px"></div>
     <div id="cdTabs" style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto">
@@ -6658,6 +6659,12 @@ function _applyMonitorSistema(recs){
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
   }
+  // Fechas clave de clientes respaldadas (registro compartido).
+  const fcRec=recs.find(r=>r.fields['Name']==='FECHAS_CLIENTE');
+  if(fcRec){
+    state.fechasCliRecordId=fcRec.id;
+    try{const o=JSON.parse(fcRec.fields['Notes']||'{}');if(o&&typeof o==='object') localStorage.setItem('thelab_fechas_cliente_v1',JSON.stringify(o));}catch(e){logErr('monitorSistema:fechasCli',e);}
+  }
   // Onboarding de clientes respaldado (registro compartido).
   const obRec=recs.find(r=>r.fields['Name']==='ONBOARDING');
   if(obRec){
@@ -7805,6 +7812,7 @@ function renderClientes(skipAnalytics){
   try{buildRecompraTray();}catch(e){}
   try{renderRetainers();}catch(e){}
   try{renderChurn();}catch(e){}
+  try{renderFechasClave();}catch(e){}
   _applySortIndicators();
 }
 function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes(true);_saveUIState();}
@@ -7952,6 +7960,90 @@ function _renderCdDescChip(clienteId){
     ?`<span class="badge badge-purple" style="cursor:pointer" onclick="setDescCliente('${clienteId}')" title="Descuento automático al cotizar — clic para cambiar">🏷️ ${d}% de descuento</span>`
     :`<span style="font-size:11px;color:var(--text3);cursor:pointer;border:1px dashed var(--border2);border-radius:6px;padding:2px 8px" onclick="setDescCliente('${clienteId}')" title="Asignar un descuento por defecto">🏷️ + descuento cliente</span>`;
 }
+// ── FECHAS CLAVE DEL CLIENTE (S5) ──────────────────────────────────────
+// Cumpleaños del contacto (MM-DD) + aniversario de cliente (auto, desde su
+// primer pedido). Recuerda las próximas para reconectar. Respaldo en Monitor.
+const _FECHAS_CLI_KEY='thelab_fechas_cliente_v1';
+function _fechasCliente(){try{return JSON.parse(localStorage.getItem(_FECHAS_CLI_KEY)||'{}');}catch(e){return{};}}
+async function _fechasClienteBackup(){
+  try{const notes=localStorage.getItem(_FECHAS_CLI_KEY)||'{}';
+    if(state.fechasCliRecordId) await airtableWrite('Monitor Sistema','PATCH',state.fechasCliRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'FECHAS_CLIENTE','Notes':notes});if(r&&r.id)state.fechasCliRecordId=r.id;}
+  }catch(e){}
+}
+function setFechaCliente(clienteId){
+  const all=_fechasCliente();const cur=(all[clienteId]||{}).cumple||'';
+  const v=prompt('Cumpleaños del contacto (formato MM-DD, ej: 03-25). Vacío para quitar.',cur);
+  if(v===null)return;const t=v.trim();
+  if(t&&!/^\d{2}-\d{2}$/.test(t)){toast('Formato inválido — usa MM-DD (ej: 03-25)','error');return;}
+  const o=all[clienteId]||{};if(t)o.cumple=t;else delete o.cumple;
+  if(Object.keys(o).length)all[clienteId]=o;else delete all[clienteId];
+  try{localStorage.setItem(_FECHAS_CLI_KEY,JSON.stringify(all));}catch(e){}_fechasClienteBackup();
+  toast(t?'✓ Cumpleaños guardado':'Cumpleaños quitado','success');
+  try{_renderCdFechaChip(clienteId);}catch(e){}
+}
+function _primerPedidoFecha(clienteId,empresa){
+  const ds=(state.pedidos||[]).filter(p=>{const c=p.fields['Cliente'];return Array.isArray(c)?c.includes(clienteId):(String(c||'')===empresa);}).map(p=>p.createdTime).filter(Boolean).sort();
+  return ds[0]||null;
+}
+function _renderCdFechaChip(clienteId){
+  const el=document.getElementById('cdFechaChip');if(!el)return;
+  const c=(_fechasCliente()[clienteId]||{}).cumple;
+  el.innerHTML=c
+    ?`<span class="badge" style="background:rgba(167,139,250,0.15);color:var(--accent4);cursor:pointer" onclick="setFechaCliente('${clienteId}')" title="Cumpleaños del contacto — clic para cambiar">🎂 ${escapeHtml(c)}</span>`
+    :`<span style="font-size:11px;color:var(--text3);cursor:pointer;border:1px dashed var(--border2);border-radius:6px;padding:2px 8px" onclick="setFechaCliente('${clienteId}')" title="Agregar cumpleaños del contacto">🎂 + cumpleaños</span>`;
+}
+// Días hasta la próxima ocurrencia de un MM-DD (0 = hoy)
+function _diasHastaMMDD(mmdd){
+  if(!/^\d{2}-\d{2}$/.test(mmdd))return null;
+  const now=new Date();now.setHours(0,0,0,0);
+  const [m,d]=mmdd.split('-').map(Number);
+  let next=new Date(now.getFullYear(),m-1,d);if(next<now)next=new Date(now.getFullYear()+1,m-1,d);
+  return Math.round((next-now)/864e5);
+}
+function _fechasProximas(dias){
+  const lim=dias||30;const out=[];
+  const fc=_fechasCliente();
+  (state.clientes||[]).forEach(c=>{
+    const emp=c.fields['Empresa']||c.fields['Contacto']||'';
+    const nombre=c.fields['Contacto']||emp;
+    const cumple=(fc[c.id]||{}).cumple;
+    if(cumple){const dh=_diasHastaMMDD(cumple);if(dh!=null&&dh<=lim)out.push({c,emp,nombre,tipo:'🎂 Cumpleaños',dias:dh});}
+    const prim=_primerPedidoFecha(c.id,emp);
+    if(prim){const pd=new Date(prim);const mm=String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');const dh=_diasHastaMMDD(mm);const anios=new Date().getFullYear()-pd.getFullYear();if(dh!=null&&dh<=lim&&anios>=1)out.push({c,emp,nombre,tipo:`🎉 ${anios} año${anios!==1?'s':''} como cliente`,dias:dh});}
+  });
+  return out.sort((a,b)=>a.dias-b.dias);
+}
+function renderFechasClave(){
+  const el=document.getElementById('fechasClaveCard');if(!el)return;
+  const list=_fechasProximas(30);
+  if(!list.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="card" style="border-color:rgba(167,139,250,0.35)">
+    <div class="card-header"><span class="card-title" style="color:var(--accent4)">🎂 Fechas clave próximas <span class="badge badge-purple">${list.length}</span></span>
+      <span style="margin-left:auto;font-size:10.5px;color:var(--text3)">cumpleaños y aniversarios — un buen momento para reconectar</span></div>
+    <div>${list.slice(0,10).map(x=>{
+      const cli=x.c;const phone=_getClienteWAPhone(cli);
+      const cuando=x.dias===0?'hoy 🎉':x.dias===1?'mañana':`en ${x.dias} días`;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+        <span class="badge ${x.dias<=1?'badge-purple':'badge-gray'}" style="flex-shrink:0">${cuando}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.emp)}</div>
+          <div style="font-size:10.5px;color:var(--text3)">${escapeHtml(x.tipo)}</div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="saludarFecha('${cli.id}','${x.tipo.includes('Cumple')?'cumple':'aniv'}')" ${phone?'':'title="Sin teléfono — se abrirá WhatsApp para elegir contacto"'}>💬 Saludar</button>
+      </div>`;
+    }).join('')}</div>
+  </div>`;
+}
+function saludarFecha(cliId,tipo){
+  const cli=(state.clientes||[]).find(c=>c.id===cliId);if(!cli)return;
+  const nombre=cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const msg=tipo==='cumple'
+    ?`¡Feliz cumpleaños${nombre?' '+nombre:''}! 🎂 De parte de todo el equipo de The Lab Solutions, te deseamos un gran día. 🎉`
+    :`Hola${nombre?' '+nombre:''} 👋 ¡Gracias por este tiempo trabajando juntos! 🎉 En The Lab Solutions valoramos mucho tu confianza. ¿Preparamos algo nuevo?`;
+  const phone=_getClienteWAPhone(cli)||'';
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
+}
 // ── ONBOARDING DE CLIENTE NUEVO (Q5) ───────────────────────────────────
 // Checklist de captación: pasos auto-detectados (datos, rubro, 1a cotización,
 // validado) + manuales (bienvenida, carpeta). Overrides en localStorage con
@@ -8014,6 +8106,7 @@ function openClienteDetalle(id){
   const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Comuna']||''}`:f['Comuna']||'';
   try{_renderCdDescChip(id);}catch(e){}
+  try{_renderCdFechaChip(id);}catch(e){}
   try{renderOnboarding(id);}catch(e){}
   {const _cc=document.getElementById('cdCrumbName');if(_cc)_cc.textContent=f['Empresa']||f['Contacto']||'Cliente';}
   // Última actividad: fecha más reciente entre cotizaciones, pedidos y primer contacto
