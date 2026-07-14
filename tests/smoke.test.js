@@ -95,6 +95,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'crearPedidoDesdeCotizacion', 'renderCotToOrderTray', 'convertirCotAPedido', '_pedidoDeCot',
     'rentabilidadLineas', '_prodLinea', 'renderPresupuesto', '_presEjecutadoReal',
     'openCatalogoModal', 'renderCatalogoModal', 'addCatalogoItem', 'insertarCatalogo',
+    'margenBadge', '_margenPiso', 'setMargenPiso',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

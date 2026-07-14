@@ -6740,7 +6740,17 @@ async function _callClaudeRaw(system,user,k){const sk=k.replace(/[^\x20-\x7E]/g,
 
 // ── HELPERS ───────────────────────────────────────────────────
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
-function margenBadge(m){if(m===null) return '—';return`<span class="badge ${m>=35?'badge-green':m>=20?'badge-yellow':'badge-red'}">${m.toFixed(0)}%</span>`;}
+// Piso de margen configurable (P4): bajo este umbral la cotización se marca en rojo.
+function _margenPiso(){const v=parseFloat(localStorage.getItem('cot_margen_min'));return(v>=0&&v<=90)?v:25;}
+function setMargenPiso(){
+  const cur=_margenPiso();
+  const v=prompt('Piso de margen (%). Las cotizaciones por debajo se marcan en rojo y el cotizador te avisa al armarlas.',String(cur));
+  if(v===null)return;const n=parseFloat(String(v).replace(/[^\d.]/g,''));
+  if(!(n>=0&&n<=90)){toast('Ingresa un porcentaje entre 0 y 90','error');return;}
+  localStorage.setItem('cot_margen_min',String(n));toast('✓ Piso de margen: '+n+'%','success');
+  try{renderCotizaciones();}catch(e){}try{renderOverview();}catch(e){}
+}
+function margenBadge(m){if(m===null) return '—';const piso=_margenPiso();const bajo=m<piso;return`<span class="badge ${bajo?'badge-red':m>=35?'badge-green':'badge-yellow'}"${bajo?` title="Bajo el piso de margen (${piso}%)"`:''}>${m.toFixed(0)}%${bajo?' ⚠':''}</span>`;}
 function resolveClienteName(f){if(!f) return '—';if(typeof f==='string') return f;if(Array.isArray(f)&&f.length>0) return(state.clientesById&&state.clientesById[f[0]])||'(cliente)';return '—';}
 function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-yellow','Confirmado':'badge-yellow','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Listo para despacho':'badge-green','Pendiente':'badge-gray','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green','Cancelado':'badge-red','Cancelada':'badge-red','Anulada':'badge-red','Negociación':'badge-yellow','Contactado':'badge-yellow','Propuesta enviada':'badge-yellow','Cliente activo':'badge-green','Cliente inactivo':'badge-gray','Perdido':'badge-gray','Con deuda':'badge-yellow','Cobrada':'badge-green','Pagada':'badge-green','Pagado':'badge-green','Vencida':'badge-red','QA rechazado':'badge-red','QA pendiente':'badge-yellow'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
 function formatCLP(v){if(!v) return '$0';return '$'+_NF_CL.format(Math.round(v));}
