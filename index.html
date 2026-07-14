@@ -4671,6 +4671,7 @@ function _reportarResultados(muts) {
 <!-- INVENTARIO DE MATERIALES -->
 <div class="tab-panel" id="tab-inventario">
   <div class="section-header"><div><div class="section-title">Inventario de materiales</div><div class="section-desc">Stock de insumos (filamento, planchas, resina, vinilo…). Cuando un material baja de su punto de reorden, aparece en las alertas del sistema.</div></div><button class="btn btn-primary btn-sm" onclick="addMaterial()">＋ Material</button></div>
+  <div id="invReordenCard"></div>
   <div class="card">
     <div class="card-header"><span class="card-title">Materiales <span class="badge badge-gray" id="invCount">0</span></span><button class="btn btn-ghost btn-sm" onclick="loadInventario(true)" title="Recargar">↻</button></div>
     <div class="table-wrap"><table><thead><tr><th style="min-width:160px">Material</th><th>Stock</th><th>Unidad</th><th>Reorden</th><th>Estado</th><th></th></tr></thead><tbody id="inventarioTableBody"></tbody></table></div>
@@ -10997,6 +10998,71 @@ function renderInventario(){
       <td><span class="badge" style="color:${e.col};border-color:${e.col}">${e.txt}</span></td>
       <td><button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:3px 8px" title="Eliminar" onclick="deleteMaterial('${m.id}')">✕</button></td>
     </tr>`;}).join('');
+  try{renderReordenInventario();}catch(e){}
+}
+// ── REORDEN INTELIGENTE (O1) ───────────────────────────────────
+// Para cada material bajo/sin stock sugiere cuánto comprar (hasta 2× el punto
+// de reorden) y el proveedor con mejor precio registrado (historial N5),
+// con botón para pedirlo por WhatsApp/correo.
+function _reordenMatch(materialNombre){
+  // Busca el mejor precio registrado (cualquier proveedor) cuyo ítem se relacione
+  // con el material. Coincide por token compartido (≥3 letras) o por inclusión:
+  // «PLA negro» ↔ «PLA 1kg» comparten "pla".
+  if(typeof _preciosProv!=='function'||typeof _normItem!=='function') return null;
+  const toks=s=>_normItem(s).split(/\s+/).filter(t=>t.length>=3&&!/^\d/.test(t));
+  const q=_normItem(materialNombre);const mt=toks(materialNombre);if(!q) return null;
+  let best=null;
+  _preciosProv().forEach(p=>{
+    const it=_normItem(p.item);if(!it) return;
+    const match=it.includes(q)||q.includes(it)||mt.some(t=>toks(p.item).includes(t));
+    if(!match) return;
+    if(!best||p.precio<best.precio) best={prov:p.prov,precio:p.precio,unidad:p.unidad,item:p.item};
+  });
+  return best;
+}
+function _reordenSugerencias(){
+  return (state.inventario||[]).map(m=>{
+    const e=_invEstado(m);if(e.sev<2) return null;                 // solo BAJO / SIN STOCK
+    const f=m.fields;const stock=+f['Stock actual']||0;const ro=+f['Punto de reorden']||0;
+    const objetivo=ro>0?ro*2:Math.max(1,stock+1);                  // reponer hasta 2× el reorden
+    const comprar=Math.max(ro>0?ro:1,Math.ceil(objetivo-stock));   // al menos cubrir el reorden
+    const prov=_reordenMatch(f['Material']||'');
+    return {id:m.id,material:f['Material']||'—',stock,ro,unidad:f['Unidad']||'',comprar,estado:e,prov};
+  }).filter(Boolean).sort((a,b)=>b.estado.sev-a.estado.sev||String(a.material).localeCompare(String(b.material)));
+}
+function renderReordenInventario(){
+  const box=document.getElementById('invReordenCard');if(!box) return;
+  const sug=_reordenSugerencias();
+  if(!sug.length){box.innerHTML='';return;}
+  const conProv=sug.filter(s=>s.prov).length;
+  box.innerHTML=`<div class="card" style="margin-bottom:16px;border-color:rgba(255,170,0,0.35)">
+    <div class="card-header"><span class="card-title" style="color:var(--warn)">🛒 Sugerencias de compra <span class="badge badge-orange">${sug.length}</span></span>
+      <span style="margin-left:auto;font-size:10.5px;color:var(--text3)">${conProv} con proveedor sugerido por precio</span></div>
+    <div style="padding:2px 0 8px">${sug.map(s=>{
+      const costo=s.prov?s.prov.precio*s.comprar:0;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+        <span class="badge" style="flex-shrink:0;color:${s.estado.col};border-color:${s.estado.col}">${s.estado.txt}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(s.material)}</div>
+          <div style="font-size:10.5px;color:var(--text3)">stock ${s.stock} ${escapeHtml(s.unidad)}${s.ro>0?` · reorden ${s.ro}`:''} → <b style="color:var(--warn)">comprar ~${s.comprar} ${escapeHtml(s.unidad)}</b>${s.prov?` · ${escapeHtml(s.prov.prov)} a ${formatCLP(s.prov.precio)}/${escapeHtml(s.prov.unidad||'u')}${costo>0?` ≈ ${formatCLP(costo)}`:''}`:' · <span style="color:var(--text3)">sin precio registrado</span>'}</div>
+        </div>
+        ${s.prov?`<button class="btn btn-primary btn-sm" style="flex-shrink:0" data-id="${s.id}" onclick="pedirReorden(this.dataset.id)" title="Pedir a ${escapeHtml(s.prov.prov)}">🛒 Pedir</button>`:`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="switchTab('proveedores')" title="Registra precios en Proveedores para sugerir el mejor">Ver proveedores</button>`}
+      </div>`;}).join('')}</div>
+  </div>`;
+}
+function pedirReorden(materialId){
+  const m=(state.inventario||[]).find(x=>x.id===materialId);if(!m){toast('Material no encontrado','error');return;}
+  const s=_reordenSugerencias().find(x=>x.id===materialId);
+  if(!s||!s.prov){toast('Sin proveedor sugerido — registra un precio en Proveedores','info');return;}
+  const pv=(state.proveedores||[]).find(p=>String(p.fields['Nombre']||'').toLowerCase()===String(s.prov.prov).toLowerCase());
+  const contacto=pv&&pv.fields['Contacto']?String(pv.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const msg=`Hola${contacto?' '+contacto:''} 👋 Te escribo de The Lab Solutions. Necesitamos reponer stock: ${s.comprar} ${s.unidad} de ${s.material}${s.prov.precio?` (última cotización ${formatCLP(s.prov.precio)}/${s.prov.unidad||'u'})`:''}. ¿Tienes disponibilidad y en cuánto nos quedaría? ¡Gracias!`;
+  const wa=pv?((pv.fields['WhatsApp']||pv.fields['Teléfono']||'').replace(/\s/g,'')):'';
+  if(wa){window.open('https://wa.me/'+wa.replace(/^\+/,'')+'?text='+encodeURIComponent(msg),'_blank');toast('Abriendo WhatsApp a '+s.prov.prov,'success');return;}
+  const email=pv&&pv.fields['Email']?pv.fields['Email']:'';
+  if(email){window.open('mailto:'+email+'?subject='+encodeURIComponent('Reposición de stock — '+s.material)+'&body='+encodeURIComponent(msg),'_blank');toast('Abriendo correo a '+s.prov.prov,'success');return;}
+  // Sin contacto: al menos copia el mensaje
+  try{navigator.clipboard.writeText(msg);toast('Proveedor sin teléfono/correo — mensaje copiado','info');}catch(e){toast('Proveedor sin contacto en su ficha','info');}
 }
 async function addMaterial(){
   const nombre=prompt('Nombre del material (ej. Filamento PLA negro):');if(!nombre||!nombre.trim())return;

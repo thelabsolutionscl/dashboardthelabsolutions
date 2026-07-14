@@ -89,6 +89,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'renderMorningBrief', 'renderMaqOcupacion', 'renderPedidosKanban', 'advancePedido',
     'tvStart', 'tvStop', 'openAgendaModal', 'agendaSave',
     'renderInventario', 'addMaterial', 'editMaterial', 'openConsumoModal', 'aplicarConsumo',
+    'renderReordenInventario', '_reordenSugerencias', 'pedirReorden',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',
