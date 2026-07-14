@@ -101,6 +101,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'openRetainerModal', 'guardarRetainer', 'generarRetainer', 'retainersAutoCheck', 'renderRetainers',
     'renderArqueo', '_arqueoDia', 'guardarArqueo',
     'generarEstadoCuentaPDF', 'enviarEstadoCuenta', '_estadoCuentaData',
+    '_descCliente', 'setDescCliente', '_renderCdDescChip',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

@@ -2559,7 +2559,7 @@
 <div id="clienteDetalleModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeClienteDetalle()"></div>
   <div class="modal-card wide">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div id="cdCrumb" style="font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.3px"><span style="cursor:pointer" onclick="closeClienteDetalle();switchTab('clientes')">Clientes</span> <span style="opacity:.55">›</span> <span style="color:var(--text2)" id="cdCrumbName"></span></div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div id="cdCrumb" style="font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.3px"><span style="cursor:pointer" onclick="closeClienteDetalle();switchTab('clientes')">Clientes</span> <span style="opacity:.55">›</span> <span style="color:var(--text2)" id="cdCrumbName"></span></div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div><div id="cdDescChip" style="margin-top:7px"></div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="cdBadges"></div>
     <div id="cdTabs" style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto">
       <button class="cd-tab active" data-t="datos" onclick="cdTab('datos')">Datos</button>
@@ -6620,6 +6620,12 @@ function _applyMonitorSistema(recs){
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
   }
+  // Descuentos por cliente respaldados (registro compartido).
+  const dcRec=recs.find(r=>r.fields['Name']==='DESC_CLIENTE');
+  if(dcRec){
+    state.descClienteRecordId=dcRec.id;
+    try{const o=JSON.parse(dcRec.fields['Notes']||'{}');if(o&&typeof o==='object') localStorage.setItem('thelab_desc_cliente_v1',JSON.stringify(o));}catch(e){logErr('monitorSistema:descCliente',e);}
+  }
   // Contratos recurrentes respaldados (registro compartido).
   const retRec=recs.find(r=>r.fields['Name']==='RETAINERS');
   if(retRec){
@@ -7866,9 +7872,39 @@ function compartirPortalCliente(clienteId){
   if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast('🔗 URL copiada al portapapeles','success')).catch(()=>{prompt('Copia esta URL para el cliente:',url);});}
   else{prompt('Copia esta URL para el cliente:',url);}
 }
+// ── PRECIOS / DESCUENTO POR CLIENTE (Q3) ───────────────────────────────
+// Descuento porcentual por cliente que se aplica automáticamente al cotizar.
+// localStorage + respaldo en Monitor Sistema (DESC_CLIENTE).
+const _DESC_CLIENTE_KEY='thelab_desc_cliente_v1';
+function _descClientes(){try{return JSON.parse(localStorage.getItem(_DESC_CLIENTE_KEY)||'{}');}catch(e){return{};}}
+function _descCliente(clienteId){const v=parseFloat(_descClientes()[clienteId]);return(v>0&&v<=90)?v:0;}
+async function _descClienteBackup(){
+  try{const notes=localStorage.getItem(_DESC_CLIENTE_KEY)||'{}';
+    if(state.descClienteRecordId) await airtableWrite('Monitor Sistema','PATCH',state.descClienteRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'DESC_CLIENTE','Notes':notes});if(r&&r.id)state.descClienteRecordId=r.id;}
+  }catch(e){}
+}
+function setDescCliente(clienteId){
+  const cur=_descCliente(clienteId);
+  const v=prompt('Descuento por defecto para este cliente (%). Se aplica solo al cotizarle.',String(cur));
+  if(v===null)return;const n=parseFloat(String(v).replace(/[^\d.]/g,''))||0;
+  if(!(n>=0&&n<=90)){toast('Ingresa un porcentaje entre 0 y 90','error');return;}
+  const m=_descClientes();if(n>0)m[clienteId]=n;else delete m[clienteId];
+  try{localStorage.setItem(_DESC_CLIENTE_KEY,JSON.stringify(m));}catch(e){}_descClienteBackup();
+  toast(n>0?`✓ Descuento ${n}% para este cliente`:'Descuento quitado','success');
+  try{_renderCdDescChip(clienteId);}catch(e){}
+}
+function _renderCdDescChip(clienteId){
+  const el=document.getElementById('cdDescChip');if(!el)return;
+  const d=_descCliente(clienteId);
+  el.innerHTML=d>0
+    ?`<span class="badge badge-purple" style="cursor:pointer" onclick="setDescCliente('${clienteId}')" title="Descuento automático al cotizar — clic para cambiar">🏷️ ${d}% de descuento</span>`
+    :`<span style="font-size:11px;color:var(--text3);cursor:pointer;border:1px dashed var(--border2);border-radius:6px;padding:2px 8px" onclick="setDescCliente('${clienteId}')" title="Asignar un descuento por defecto">🏷️ + descuento cliente</span>`;
+}
 function openClienteDetalle(id){
   const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0)),venc=f['Facturas vencidas']||0;
   document.getElementById('cdNombre').textContent=f['Empresa']||'Sin nombre';document.getElementById('cdRol').textContent=f['Industria / Rubro']?`${f['Industria / Rubro']} · ${f['Comuna']||''}`:f['Comuna']||'';
+  try{_renderCdDescChip(id);}catch(e){}
   {const _cc=document.getElementById('cdCrumbName');if(_cc)_cc.textContent=f['Empresa']||f['Contacto']||'Cliente';}
   // Última actividad: fecha más reciente entre cotizaciones, pedidos y primer contacto
   const _cliCots=(state.cotizaciones||[]).filter(x=>{const ca=x.fields['Cliente'];return Array.isArray(ca)?ca.includes(id):ca===f['Empresa'];});
