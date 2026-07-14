@@ -25,6 +25,7 @@ async function initMaquinas(){
   renderMaintenanceTable();
   try{audit3DLoadDaily();}catch(_){}
   renderProductionAnalytics();
+  try{renderCargaMaquinas();}catch(e){}
   requestNotificationPermission(false);
   if(!_monitorInterval){
     pollPrinters();
