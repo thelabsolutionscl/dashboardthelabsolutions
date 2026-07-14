@@ -2717,6 +2717,7 @@
 <!-- REPORTES -->
 <div class="tab-panel" id="tab-reporte">
   <div class="section-header"><div><div class="section-title">Reportes Ejecutivos</div><div class="section-desc">Informes semanales de revenue, conversión y margen operativo. Historial completo para analizar tendencias y tomar decisiones estratégicas.</div></div></div>
+  <div id="estacionalidadCard" style="margin-bottom:16px"></div>
   <div class="data-grid">
     <div class="card"><div class="card-header"><span class="card-title">Historial</span><span style="font-size:11px;color:var(--text3)">clic en fila para ver resumen</span></div><div class="table-wrap"><table><thead><tr><th>Semana</th><th>Revenue</th><th>Pedidos</th><th>Margen</th><th>Conv.</th><th>Estado</th><th style="width:28px"></th></tr></thead><tbody id="reportesTableBody"></tbody></table></div></div>
     <div class="card"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar Reporte</span></div>
@@ -11907,7 +11908,70 @@ async function aplicarConsumo(){
   }catch(e){toast('Error: '+e.message,'error');}
   if(btn){btn.disabled=false;btn.textContent='✓ Descontar del stock';}
 }
+// ── PRONÓSTICO DE DEMANDA ESTACIONAL (Q4) ──────────────────────────────
+// Analiza los pedidos históricos por mes calendario para detectar temporadas
+// fuertes/débiles (índice de estacionalidad) y proyectar los próximos meses
+// combinando el índice del mes con el ritmo reciente (últimos 3 meses).
+function _estacionalidad(){
+  const MES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const bucket=Array.from({length:12},()=>({rev:0,n:0,years:new Set()}));
+  (state.pedidos||[]).forEach(p=>{
+    const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;
+    const d=p.createdTime?new Date(p.createdTime):null;if(!d||isNaN(d))return;
+    const neto=(f['Monto total (CLP)']||0)/1.19;if(neto<=0)return;
+    const m=d.getMonth();bucket[m].rev+=neto;bucket[m].n++;bucket[m].years.add(d.getFullYear());
+  });
+  // promedio por mes (revenue por año-observado del mes)
+  const meses=bucket.map((b,i)=>({mes:i,label:MES[i],avg:b.years.size?b.rev/b.years.size:0,n:b.n,years:b.years.size}));
+  const activos=meses.filter(m=>m.years>0);
+  const media=activos.length?activos.reduce((s,m)=>s+m.avg,0)/activos.length:0;
+  meses.forEach(m=>m.idx=media>0?m.avg/media:0);   // índice de estacionalidad (1 = promedio)
+  // ritmo reciente: promedio de revenue neto de los últimos 3 meses con datos
+  const now=new Date();const recent=[];
+  for(let k=1;k<=3;k++){const dt=new Date(now.getFullYear(),now.getMonth()-k,1);const mm=dt.getMonth(),yy=dt.getFullYear();
+    const rev=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const d=p.createdTime?new Date(p.createdTime):null;return d&&d.getMonth()===mm&&d.getFullYear()===yy;}).reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
+    recent.push(rev);}
+  const ritmo=recent.filter(x=>x>0).length?recent.reduce((a,b)=>a+b,0)/recent.filter(x=>x>0).length:media;
+  // pronóstico próximos 3 meses = ritmo × (idx del mes / idx promedio reciente)
+  const idxReciente=[1,2,3].map(k=>{const mm=(now.getMonth()-k+12)%12;return meses[mm].idx||1;});
+  const baseIdx=idxReciente.filter(x=>x>0).length?idxReciente.reduce((a,b)=>a+b,0)/idxReciente.filter(x=>x>0).length:1;
+  const fc=[1,2,3].map(k=>{const dt=new Date(now.getFullYear(),now.getMonth()+k,1);const mm=dt.getMonth();const idx=meses[mm].idx||1;return {label:MES[mm]+' '+dt.getFullYear(),proy:Math.round(ritmo*(baseIdx>0?idx/baseIdx:1)),idx};});
+  return {meses,media,ritmo,fc,tieneDatos:activos.length>=3};
+}
+function renderEstacionalidad(){
+  const el=document.getElementById('estacionalidadCard');if(!el)return;
+  const e=_estacionalidad();
+  if(!e.tieneDatos){el.innerHTML='';return;}
+  const maxAvg=Math.max(1,...e.meses.map(m=>m.avg));
+  const mesActual=new Date().getMonth();
+  const bars=e.meses.map(m=>{
+    const h=Math.round(m.avg/maxAvg*100);
+    const col=m.idx>=1.15?'var(--accent3)':m.idx>=0.85?'var(--accent)':'var(--warn)';
+    const hoy=m.mes===mesActual;
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0">
+      <div style="width:100%;height:80px;display:flex;align-items:flex-end"><div style="width:100%;background:${col};border-radius:4px 4px 0 0;height:${Math.max(3,h)}%;${hoy?'outline:2px solid var(--text);outline-offset:1px':''}" title="${m.label}: promedio ${formatCLP(Math.round(m.avg))} · índice ${m.idx.toFixed(2)}${m.years?' ('+m.years+' año'+(m.years!==1?'s':'')+')':''}"></div></div>
+      <span style="font-size:9px;color:${hoy?'var(--text)':'var(--text3)'};font-weight:${hoy?'700':'400'}">${m.label}</span>
+    </div>`;
+  }).join('');
+  const fuertes=e.meses.filter(m=>m.years>0).slice().sort((a,b)=>b.idx-a.idx).slice(0,3).map(m=>m.label).join(', ');
+  const debiles=e.meses.filter(m=>m.years>0).slice().sort((a,b)=>a.idx-b.idx).slice(0,3).map(m=>m.label).join(', ');
+  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">📈 Estacionalidad y pronóstico</span><span style="font-size:10px;color:var(--text3)">promedio de venta neta por mes · índice de temporada</span></div>
+    <div style="padding:14px 16px">
+      <div style="display:flex;gap:4px;align-items:flex-end;margin-bottom:10px">${bars}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-bottom:12px">
+        <span>🔥 Meses fuertes: <b style="color:var(--accent3)">${fuertes||'—'}</b></span>
+        <span>❄️ Meses débiles: <b style="color:var(--warn)">${debiles||'—'}</b></span>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px">Proyección próximos 3 meses</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${e.fc.map(f=>`<div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">${escapeHtml(f.label)}${f.idx>=1.15?' 🔥':f.idx<0.85?' ❄️':''}</span><span class="fac-kpi-val">${formatCLP(f.proy)}</span></div>`).join('')}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:8px">Proyección = ritmo reciente (${formatCLP(Math.round(e.ritmo))}/mes) ajustado por el índice de cada mes. Úsala para planificar producción, compras y personal.</div>
+      </div>
+    </div>
+  </div>`;
+}
 function renderReportes(){
+  try{renderEstacionalidad();}catch(e){}
   const tbody=document.getElementById('reportesTableBody');
   if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:28px"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-chart"/></svg></div><div style="margin-bottom:8px">Sin reportes aún</div><div style="font-size:11px;color:var(--text3)">Los reportes se generan automáticamente cada semana con el Agente CEO</div><button onclick="switchTab(\'agentes\')" style="margin-top:12px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ir a Agentes IA</button></div></td></tr>';return;}
   tbody.innerHTML=state.reportes.map((r,i)=>{

@@ -103,6 +103,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'generarEstadoCuentaPDF', 'enviarEstadoCuenta', '_estadoCuentaData',
     '_descCliente', 'setDescCliente', '_renderCdDescChip',
     'openOCModal', 'guardarOC', 'generarOCPDF', 'renderOCList', 'crearOCDesdeReorden',
+    'renderEstacionalidad', '_estacionalidad',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',
