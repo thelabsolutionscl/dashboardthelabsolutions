@@ -82,6 +82,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'buildFollowupTray', 'fuMarkDone', 'runFollowupAgent',
     'buildPostEntregaTray', 'pdMarkDone', 'buildWinbackTray', 'wbReactivar',
     'buildRecompraTray', '_recompraCands', 'recompraWhatsApp', 'recompraSnooze',
+    'renderChurn', '_churnRiesgo', 'churnReactivar',
     'renderCsatSummary', 'ensureNpsFields', '_npsStats', '_npsLink',
     'renderMejorPrecio', 'addPrecioProv', 'delPrecioProv', '_mejorPrecioPorItem',
     'generarCierrePDF', 'enviarCierreMes', 'enviarDigestSemanal', '_digestSemanalTexto',

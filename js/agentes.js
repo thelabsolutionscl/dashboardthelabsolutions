@@ -283,6 +283,65 @@ async function recompraEmail(cliId,btn){
 }
 function recompraSnooze(cliId){_recompraMark(cliId,'manual');toast('✓ Gestionado — no reaparece por 30 días','success');}
 
+// ── CLIENTES EN RIESGO DE FUGA / CHURN (S3) ────────────────────────────
+// Combina señales para detectar clientes recurrentes que se están enfriando o
+// tienen problemas: muy pasados de su cadencia, reclamo abierto, NPS bajo o
+// facturas vencidas. Distinto de recompra (ventana normal) y winback (leads).
+function _churnRiesgo(){
+  const log=_recompraLog();
+  const reclamos=(typeof _reclamos==='function')?_reclamos():[];
+  return (state.clientes||[]).map(c=>{
+    const info=_recompraInfo(c);if(!info)return null;          // necesita historial (2+ pedidos)
+    const emp=c.fields['Empresa']||c.fields['Contacto']||'';
+    const peds=_clientePedidos(c);
+    let score=0;const razones=[];
+    // 1) muy pasado de su cadencia habitual (más allá de la ventana de recompra)
+    if(info.ratio>=2.5){score+=2;razones.push(`${info.diasDesde}d sin comprar (compra cada ~${info.cadencia}d)`);}
+    else if(info.ratio>=1.5){score+=1;razones.push('atrasado en su recompra');}
+    // 2) reclamo abierto
+    const rc=reclamos.find(r=>peds.some(p=>p.id===r.pedidoId)&&(r.estado==='Abierto'||r.estado==='En proceso'));
+    if(rc){score+=2;razones.push('reclamo sin resolver');}
+    // 3) NPS bajo en algún pedido
+    const npsBajo=peds.some(p=>{const s=(typeof _npsScore==='function')?_npsScore(p):null;return s!=null&&s<=2;});
+    if(npsBajo){score+=2;razones.push('calificó bajo (NPS ≤2)');}
+    // 4) facturas vencidas
+    const venc=c.fields['Facturas vencidas']||0;if(venc>=2){score+=1;razones.push(`${venc} facturas vencidas`);}
+    if(score<2)return null;
+    const gestionado=log[c.id]&&(Date.now()-log[c.id].ts<30*864e5);
+    if(gestionado)return null;
+    const rev=c.fields['Revenue total cliente (CLP)']||0;
+    return {c,emp,score,razones,rev,dias:info.diasDesde};
+  }).filter(Boolean).sort((a,b)=>b.score-a.score||b.rev-a.rev);
+}
+function renderChurn(){
+  const el=document.getElementById('churnCard');if(!el)return;
+  const list=_churnRiesgo();
+  if(!list.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="card" style="border-color:rgba(255,68,68,0.4)">
+    <div class="card-header"><span class="card-title" style="color:var(--danger)">🚨 Clientes en riesgo de fuga <span class="badge badge-red">${list.length}</span></span>
+      <span style="margin-left:auto;font-size:10.5px;color:var(--text3)">recurrentes que se enfrían o con problemas — reactívalos antes de perderlos</span></div>
+    <div>${list.slice(0,10).map(x=>{
+      const cli=x.c;const tienePhone=!!_getClienteWAPhone(cli);
+      const sev=x.score>=4?'badge-red':'badge-orange';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+        <span class="badge ${sev}" style="flex-shrink:0" title="Nivel de riesgo">riesgo ${x.score}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.emp)}${x.rev>0?` <span style="font-size:10px;color:var(--text3)">· ${formatCLP(x.rev)} histórico</span>`:''}</div>
+          <div style="font-size:10.5px;color:var(--warn);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.razones.join(' · '))}</div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="churnReactivar('${cli.id}')" title="Reactivar con IA">♻ Reactivar</button>
+        <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar gestionado (30 días)" onclick="recompraSnooze('${cli.id}')">✓</button>
+      </div>`;
+    }).join('')}${list.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${list.length-10} más</div>`:''}</div>
+  </div>`;
+}
+function churnReactivar(cliId){
+  _recompraMark(cliId,'churn');
+  if(typeof runClienteWinbackAgent==='function') runClienteWinbackAgent(cliId);
+  else if(typeof recompraWhatsApp==='function') recompraWhatsApp(cliId);
+  renderChurn();
+}
+
 // ── POST-ENTREGA ───────────────────────────────────────────────
 // Pedidos despachados hace 3+ días (hasta 30): mensaje de satisfacción con
 // invitación a dejar reseña en Google, por WhatsApp o correo (Andrea).

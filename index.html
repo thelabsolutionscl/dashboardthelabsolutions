@@ -682,6 +682,7 @@
     <div id="recompraTrayList"></div>
   </div>
   <div id="retainersCard" style="margin-bottom:20px"></div>
+  <div id="churnCard" style="margin-bottom:20px"></div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Base CRM</span>
@@ -7802,6 +7803,7 @@ function renderClientes(skipAnalytics){
   try{buildWinbackTray();}catch(e){}
   try{buildRecompraTray();}catch(e){}
   try{renderRetainers();}catch(e){}
+  try{renderChurn();}catch(e){}
   _applySortIndicators();
 }
 function filterClientes(){_cliQuery=(document.getElementById('clienteSearch').value||'').toLowerCase().trim();_cliCap=TABLE_PAGE;renderClientes(true);_saveUIState();}
