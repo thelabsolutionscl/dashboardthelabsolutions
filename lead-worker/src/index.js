@@ -73,6 +73,13 @@ export default {
         return await handleCotDecision(request, env, ctx, cors);
       }
 
+      // Encuesta de satisfacción post-entrega (NPS/CSAT). El cliente llega desde
+      // el mensaje post-entrega: GET muestra/registra la calificación (página
+      // HTML), POST guarda el comentario opcional.
+      if (url.pathname === "/nps") {
+        return await handleNps(request, env, ctx, cors);
+      }
+
       if (request.method === "GET" && url.pathname === "/blog") {
         return await handleBlogList(request, env, cors);
       }
@@ -261,6 +268,157 @@ async function sendCotDecisionAlert(env, { numCot, decision, comentario }) {
     });
   } catch (e) {
     console.error("[leads-worker] alerta decisión cotización:", e.message);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: /nps   (encuesta de satisfacción post-entrega, 1 clic desde el mensaje)
+ *   GET  /nps?p=base64(pedidoRecId)             → página con 5 caritas
+ *   GET  /nps?p=...&s=1..5[&g=urlReseña]        → registra la nota y agradece
+ *   POST /nps  {token, comentario}              → guarda el comentario opcional
+ * Seguridad: el recId no es adivinable; la nota es del propio cliente (puede
+ * corregirla reenviando). Escribe en Pedidos: "NPS score", "NPS fecha",
+ * "NPS comentario" (los crea el dashboard bajo demanda).
+ * ══════════════════════════════════════════════════════════════════════ */
+function _npsDecodeToken(t) {
+  let id;
+  try { id = atob(String(t || "")); } catch (e) { return null; }
+  return /^rec[A-Za-z0-9]{14}$/.test(id) ? id : null;
+}
+async function handleNps(request, env, ctx, cors) {
+  const url = new URL(request.url);
+
+  // POST → comentario opcional
+  if (request.method === "POST") {
+    const body = await readJson(request);
+    if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
+    const pedId = _npsDecodeToken(body.token);
+    if (!pedId) return json({ ok: false, error: "Token inválido" }, 400, cors);
+    if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return json({ ok: false, error: "No configurado" }, 500, cors);
+    const comentario = String(body.comentario || "").slice(0, 2000);
+    if (comentario) {
+      try { await airtableUpdateTolerant(env, "Pedidos", pedId, { "NPS comentario": comentario }); } catch (e) {}
+      ctx.waitUntil(sendNpsAlert(env, { pedId, comentario, comentarioOnly: true }));
+    }
+    return json({ ok: true }, 200, cors);
+  }
+
+  // GET
+  const pedId = _npsDecodeToken(url.searchParams.get("p"));
+  if (!pedId) return htmlPage("Enlace inválido", "Este enlace de encuesta no es válido o ya expiró.", false);
+  const gRaw = url.searchParams.get("g") || "";
+  const gUrl = /^https?:\/\//i.test(gRaw) ? gRaw : "";
+  const sRaw = url.searchParams.get("s");
+
+  // Sin score → mostrar la página de calificación
+  if (sRaw == null) return npsRatingPage(pedId, gUrl);
+
+  const score = parseInt(sRaw, 10);
+  if (!(score >= 1 && score <= 5)) return htmlPage("Calificación inválida", "Elige una nota del 1 al 5.", false);
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return npsThanksPage(score, pedId, gUrl);
+
+  try {
+    await airtableUpdateTolerant(env, "Pedidos", pedId, {
+      "NPS score": score,
+      "NPS fecha": new Date().toISOString().slice(0, 10),
+    });
+  } catch (e) {
+    // best-effort: igual agradecemos para no frustrar al cliente
+  }
+  ctx.waitUntil(sendNpsAlert(env, { pedId, score }));
+  return npsThanksPage(score, pedId, gUrl);
+}
+function npsRatingPage(pedId, gUrl) {
+  const tok = btoa(pedId);
+  const g = gUrl ? "&g=" + encodeURIComponent(gUrl) : "";
+  const faces = [
+    { n: 1, e: "😞", t: "Muy malo" },
+    { n: 2, e: "🙁", t: "Malo" },
+    { n: 3, e: "😐", t: "Regular" },
+    { n: 4, e: "🙂", t: "Bueno" },
+    { n: 5, e: "😍", t: "Excelente" },
+  ];
+  const btns = faces.map((f) =>
+    `<a href="/nps?p=${tok}&s=${f.n}${g}" style="display:flex;flex-direction:column;align-items:center;gap:6px;text-decoration:none;padding:12px 8px;border-radius:12px;background:#151518;border:1px solid #26262b;min-width:58px;transition:transform .1s">
+       <span style="font-size:34px">${f.e}</span>
+       <span style="font-size:10px;color:#8a8a92">${f.t}</span></a>`
+  ).join("");
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>¿Cómo lo hicimos? — The Lab Solutions</title></head>
+<body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
+<div style="max-width:480px;padding:40px 24px;text-align:center">
+<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:18px">The Lab Solutions</div>
+<h1 style="font-size:22px;margin:0 0 8px">¿Cómo fue tu experiencia?</h1>
+<p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 24px">Tu opinión nos toma 5 segundos y nos ayuda un montón 💙</p>
+<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">${btns}</div>
+</div></body></html>`;
+  return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+function npsThanksPage(score, pedId, gUrl) {
+  const tok = btoa(pedId);
+  const feliz = score >= 4;
+  const color = feliz ? "#00b3a4" : score === 3 ? "#f5a623" : "#e5484d";
+  const titulo = feliz ? "¡Gracias por tu nota! 🙌" : "Gracias, lo tomamos muy en serio";
+  const msg = feliz
+    ? "Nos alegra mucho que la hayas pasado bien. ¡Seguimos trabajando para ti!"
+    : "Lamentamos no haber estado a la altura. Cuéntanos qué pasó y lo resolvemos:";
+  // Para notas altas y con enlace de reseña: invitar a Google. Para bajas: caja de comentario.
+  const extra = feliz && gUrl
+    ? `<a href="${escapeHtmlW(gUrl)}" style="display:inline-block;background:#00b3a4;color:#06231f;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:9px;font-size:14px;margin-top:8px">⭐ Déjanos una reseña en Google</a>`
+    : (!feliz
+      ? `<form id="cf" style="margin-top:8px;text-align:left">
+           <textarea id="cm" rows="4" placeholder="¿Qué podríamos mejorar?" style="width:100%;box-sizing:border-box;background:#151518;border:1px solid #26262b;border-radius:10px;color:#e8e8ea;padding:12px;font-size:14px;font-family:inherit"></textarea>
+           <button type="submit" style="width:100%;margin-top:10px;background:#00b3a4;color:#06231f;font-weight:700;border:0;padding:12px;border-radius:9px;font-size:14px;cursor:pointer">Enviar comentario</button>
+         </form>
+         <div id="okmsg" style="display:none;color:#00b3a4;margin-top:12px;font-weight:600">¡Gracias! Lo revisaremos enseguida.</div>
+         <script>
+           document.getElementById('cf').addEventListener('submit',async function(ev){ev.preventDefault();
+             var t=document.getElementById('cm').value.trim();if(!t)return;
+             try{await fetch('/nps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:${JSON.stringify(tok)},comentario:t})});}catch(e){}
+             document.getElementById('cf').style.display='none';document.getElementById('okmsg').style.display='block';});
+         </script>`
+      : "");
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gracias — The Lab Solutions</title></head>
+<body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
+<div style="max-width:460px;padding:40px 24px;text-align:center">
+<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:18px">The Lab Solutions</div>
+<div style="font-size:44px;margin-bottom:8px">${feliz ? "🎉" : "🙏"}</div>
+<h1 style="font-size:22px;margin:0 0 12px;color:${color}">${titulo}</h1>
+<p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 20px">${msg}</p>
+${extra}
+</div></body></html>`;
+  return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+async function sendNpsAlert(env, { pedId, score, comentario, comentarioOnly }) {
+  if (!env.RESEND_API_KEY) return;
+  const from = env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>";
+  const to = env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com";
+  // Nº de pedido para el aviso (best-effort)
+  let numPed = pedId;
+  try {
+    const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Pedidos/${pedId}`, {
+      headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
+    });
+    if (r.ok) { const rec = await r.json(); numPed = (rec.fields && rec.fields["N° Pedido"]) || pedId; }
+  } catch (e) {}
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"));
+  const faces = { 1: "😞", 2: "🙁", 3: "😐", 4: "🙂", 5: "😍" };
+  let subject, html;
+  if (comentarioOnly) {
+    subject = `💬 Comentario de satisfacción — Pedido ${numPed}`;
+    html = `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px"><h2 style="margin:0 0 12px">💬 Nuevo comentario post-entrega</h2><p>Pedido <strong>${esc(numPed)}</strong>:</p><p style="background:#f6f6f6;border-radius:8px;padding:8px 12px">${esc(comentario)}</p></div>`;
+  } else {
+    const bajo = score <= 3;
+    subject = `${faces[score] || "⭐"} Satisfacción ${score}/5 — Pedido ${numPed}${bajo ? " (requiere atención)" : ""}`;
+    html = `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px"><h2 style="margin:0 0 12px;color:${bajo ? "#b00020" : "#0a8f6a"}">${faces[score] || "⭐"} El cliente calificó ${score}/5</h2><p>Pedido <strong>${esc(numPed)}</strong>.</p>${bajo ? '<p style="color:#b00020"><strong>Nota baja:</strong> contacta al cliente para recuperar la relación.</p>' : "<p>¡Buen trabajo! Buen momento para pedir una reseña o referidos.</p>"}</div>`;
+  }
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject, html }),
+    });
+  } catch (e) {
+    console.error("[leads-worker] alerta NPS:", e.message);
   }
 }
 

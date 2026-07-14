@@ -81,6 +81,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     // bandejas y flujos construidos en esta serie
     'buildFollowupTray', 'fuMarkDone', 'runFollowupAgent',
     'buildPostEntregaTray', 'pdMarkDone', 'buildWinbackTray', 'wbReactivar',
+    'renderCsatSummary', 'ensureNpsFields', '_npsStats', '_npsLink',
     'finRenderCobranzaActions', 'cobRegistrar', 'renderClienteTimeline',
     'finRenderFlujoCaja', 'addPagoProgramado', 'delPagoProgramado',
     'renderMorningBrief', 'renderMaqOcupacion', 'renderPedidosKanban', 'advancePedido',
@@ -105,7 +106,7 @@ const ok = msg => console.log('  ✓ ' + msg);
   const IDS = ['tab-overview', 'tab-clientes', 'tab-cotizaciones', 'tab-pedidos', 'tab-agentes',
     'tab-oficina', 'tab-inventario', 'inventarioTableBody', 'agentesGrid', 'fuTrayCard', 'pdTrayCard', 'wbTrayCard', 'finCobranzaActions',
     'morningBrief', 'maqOcupacion', 'pedidosKanban', 'agentWorkingModal', 'agentInlineModal',
-    'cdTimeline', 'mailList', 'umBackupInfo', 'agendaModal', 'finFlujoCaja'];
+    'cdTimeline', 'mailList', 'umBackupInfo', 'agendaModal', 'finFlujoCaja', 'pdCsatBar'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
   if (missing.length) fail('IDs del DOM ausentes: ' + missing.join(', '));
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');

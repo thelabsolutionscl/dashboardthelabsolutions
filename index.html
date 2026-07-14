@@ -777,6 +777,7 @@
     </div>
     <div id="pdTrayList" style="padding:2px 0 8px"></div>
   </div>
+  <div id="pdCsatBar" style="display:none;margin-bottom:16px"></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Atrasados</button>
@@ -7996,6 +7997,12 @@ function renderClienteTimeline(clienteId,empresaNombre){
     const pl=(typeof _pdLog==='function')?_pdLog():{};
     peds.forEach(p=>{const e=pl[p.id];if(!e||!e.ts)return;
       gest.push({type:'ia',date:new Date(e.ts).toISOString().slice(0,10),label:'💚 Post-entrega enviado',sub:escapeHtml((p.fields['N° Pedido']||'—')+' · vía '+(e.via||'—')),color:'#00d4aa',icon:'💚'});});
+  }catch(e){}
+  try{
+    const emoNps={1:'😞',2:'🙁',3:'😐',4:'🙂',5:'😍'};
+    peds.forEach(p=>{const s=(typeof _npsScore==='function')?_npsScore(p):null;if(s==null)return;
+      const fecha=p.fields['NPS fecha']||p.fields['Fecha entrega']||'';const com=p.fields['NPS comentario']||'';
+      gest.push({type:'ia',date:(fecha||'').slice(0,10),label:(emoNps[s]||'⭐')+' Calificó '+s+'/5',sub:escapeHtml((p.fields['N° Pedido']||'—')+(com?' · «'+String(com).slice(0,60)+'»':'')),color:s>=4?'#00d4aa':(s===3?'#ffaa00':'#ff4444'),icon:emoNps[s]||'⭐'});});
   }catch(e){}
   _cdTimelineData=[
     ...cots.map(c=>({type:'cot',date:c.fields['Fecha cotización']||c.createdTime?.slice(0,10)||'',label:c.fields['N° Cotización']||'—',sub:estadoBadge(c.fields['Estado cotización']||'—')+' · '+formatCLP(c.fields['Total final (CLP)']||0),color:'#a78bfa',icon:'📋',id:c.id})),

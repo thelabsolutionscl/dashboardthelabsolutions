@@ -207,15 +207,86 @@ function pdSetReviewUrl(){
   toast(t?'✓ Enlace de reseña guardado':'Enlace de reseña eliminado','success');
 }
 function _pdCliRec(p){const c=p.fields['Cliente'];const id=Array.isArray(c)?c[0]:null;return id?(state.clientesByIdRec||{})[id]||null:null;}
+// URL de la encuesta NPS 1-clic para un pedido (si el lead-worker está configurado).
+// La página del worker registra la nota en el pedido y, para notas altas, invita
+// a dejar reseña en Google (por eso se le pasa el enlace de reseña como &g).
+function _npsWorkerUrl(){
+  try{
+    const u=(typeof _DEFAULTS!=='undefined'&&_DEFAULTS.LEAD_WORKER_URL)||'';
+    if(!u||/^%%/.test(u)) return '';
+    return u.replace(/\/$/,'');
+  }catch(e){return '';}
+}
+function _npsLink(p){
+  const base=_npsWorkerUrl(); if(!base||!p||!p.id) return '';
+  let url=base+'/nps?p='+encodeURIComponent(btoa(p.id));
+  const rev=_pdReviewUrl(); if(rev) url+='&g='+encodeURIComponent(rev);
+  return url;
+}
 function _pdMsg(p){
   const f=p.fields;
   const cli=_pdCliRec(p);
   const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
   const prod=String(f['Detalle productos']||f['Solicitud cliente (texto libre)']||'').trim().slice(0,60);
+  const nps=_npsLink(p);
   const rev=_pdReviewUrl();
-  return `Hola${nombre?' '+nombre:''} 👋 Soy Andrea de The Lab Solutions. Hace unos días te entregamos ${prod?('tu pedido ('+prod+')'):'tu pedido'} y queríamos saber cómo llegó todo — ¿quedaste conforme? 😊 Si hubo cualquier detalle, cuéntame y lo resolvemos de inmediato.${rev?`\n\nY si quedaste contento/a, nos ayudarías un montón dejándonos una reseña en Google: ${rev}`:''}\n¡Gracias por preferirnos! 💙`;
+  const base=`Hola${nombre?' '+nombre:''} 👋 Soy Andrea de The Lab Solutions. Hace unos días te entregamos ${prod?('tu pedido ('+prod+')'):'tu pedido'} y queríamos saber cómo llegó todo — ¿quedaste conforme? 😊`;
+  // Con lead-worker: encuesta de 1 clic (registra la nota y ofrece la reseña si quedó feliz).
+  if(nps) return `${base}\n\nCalifícanos en 5 segundos (del 1 al 5): ${nps}\n\n¡Gracias por preferirnos! 💙`;
+  // Sin worker: cae al flujo anterior (comentario libre + reseña directa).
+  return `${base} Si hubo cualquier detalle, cuéntame y lo resolvemos de inmediato.${rev?`\n\nY si quedaste contento/a, nos ayudarías un montón dejándonos una reseña en Google: ${rev}`:''}\n¡Gracias por preferirnos! 💙`;
+}
+// Crea los campos NPS en Pedidos bajo demanda (nota, fecha, comentario) para que
+// las escrituras del worker persistan. Best-effort: requiere token/proxy con meta.
+async function ensureNpsFields(){
+  try{
+    if(typeof getToken==='function'&&!getToken()&&!(typeof _proxyCfg==='function'&&_proxyCfg())) return;
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return;const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Pedidos');if(!tbl) return;
+    const have=new Set((tbl.fields||[]).map(x=>x.name));
+    const want=[
+      {name:'NPS score',type:'number',options:{precision:0}},
+      {name:'NPS fecha',type:'singleLineText'},
+      {name:'NPS comentario',type:'multilineText'},
+    ];
+    for(const w of want){
+      if(have.has(w.name)) continue;
+      try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(w)});}catch(e){}
+    }
+  }catch(e){}
+}
+// Lectura/estadística de las notas ya recibidas (satisfacción tipo CSAT 1-5).
+function _npsScore(p){const v=p&&p.fields?parseInt(p.fields['NPS score'],10):NaN;return(v>=1&&v<=5)?v:null;}
+function _npsStats(){
+  const notas=(state.pedidos||[]).map(_npsScore).filter(v=>v!=null);
+  if(!notas.length) return null;
+  const n=notas.length,sum=notas.reduce((a,b)=>a+b,0);
+  const prom=notas.filter(v=>v>=4).length,detr=notas.filter(v=>v<=2).length;
+  return {n,avg:sum/n,promotores:prom,detractores:detr,nps:Math.round((prom-detr)/n*100),pctProm:Math.round(prom/n*100)};
+}
+// Resumen de satisfacción (CSAT/NPS) con las notas ya recibidas de los clientes.
+function renderCsatSummary(){
+  const bar=document.getElementById('pdCsatBar'); if(!bar) return;
+  const s=_npsStats();
+  if(!s){bar.style.display='none';bar.innerHTML='';return;}
+  const emo=s.avg>=4.5?'😍':s.avg>=4?'🙂':s.avg>=3?'😐':'🙁';
+  const npsCol=s.nps>=50?'var(--accent3)':s.nps>=0?'var(--warn)':'var(--danger)';
+  bar.style.display='';
+  bar.innerHTML=`<div class="card" style="padding:14px 16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span class="card-title" style="font-size:13px">${emo} Satisfacción post-entrega</span>
+      <span style="font-size:10.5px;color:var(--text3)">${s.n} calificación${s.n!==1?'es':''}</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Promedio</span><span class="fac-kpi-val">${s.avg.toFixed(1)} <span style="font-size:11px;color:var(--text3)">/5</span></span></div>
+      <div class="fac-kpi" style="flex:1;min-width:90px" title="Net Promoter Score: % de promotores (4-5) menos % de detractores (1-2)"><span class="fac-kpi-lbl">NPS</span><span class="fac-kpi-val" style="color:${npsCol}">${s.nps>0?'+':''}${s.nps}</span></div>
+      <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Promotores</span><span class="fac-kpi-val" style="color:var(--accent3)">${s.pctProm}%</span></div>
+      <div class="fac-kpi ${s.detractores?'fac-kpi-danger':''}" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Detractores</span><span class="fac-kpi-val">${s.detractores}</span></div>
+    </div>
+  </div>`;
 }
 function buildPostEntregaTray(){
+  try{renderCsatSummary();}catch(e){}
   const card=document.getElementById('pdTrayCard'); if(!card) return;
   const log=_pdLog();
   const _t=new Date();_t.setHours(0,0,0,0);
@@ -252,6 +323,7 @@ function pdWhatsApp(pedidoId){
   const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
   const cli=_pdCliRec(p);
   const phone=cli?_getClienteWAPhone(cli):'';
+  if(_npsLink(p)){try{ensureNpsFields();}catch(e){}}   // prepara los campos NPS (best-effort)
   window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_pdMsg(p)),'_blank');
   pdMarkDone(pedidoId,'WhatsApp',true);
 }
@@ -263,6 +335,7 @@ async function pdEmail(pedidoId,btn){
   if(!validEmail(to)){toast('Correo inválido','error');return;}
   const prev=btn?btn.innerHTML:'';
   if(btn){btn.disabled=true;btn.textContent='…';}
+  if(_npsLink(p)){try{await ensureNpsFields();}catch(e){}}   // prepara los campos NPS antes de enviar
   try{
     const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:'¿Cómo llegó tu pedido? — The Lab Solutions',body:_pdMsg(p),from_name:AGENT_CTA_FROM.name});
     if(r&&!r.error){toast('✓ Mensaje post-entrega enviado a '+to,'success');pdMarkDone(pedidoId,'correo',true);}
