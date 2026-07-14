@@ -478,13 +478,19 @@ const MAIL={
   renderAccounts(){
     const sel=document.getElementById('mailAcctSel'); if(!sel) return;
     const list=this.accounts(), active=this.activeAccount();
-    let html=list.map(a=>`<option value="${this.esc(a.email)}"${a.email===active?' selected':''}>${this.esc(a.email)}</option>`).join('');
+    // Se muestra "Nombre · correo" para que el remitente activo quede a la vista.
+    let html=list.map(a=>{
+      const label=a.name?`${this.esc(a.name)} · ${this.esc(a.email)}`:this.esc(a.email);
+      return `<option value="${this.esc(a.email)}"${a.email===active?' selected':''}>${label}</option>`;
+    }).join('');
+    html+=`<option value="__editname__">✎ Editar nombre del remitente…</option>`;
     html+=`<option value="__add__">＋ Agregar cuenta…</option>`;
     if(list.length>1) html+=`<option value="__remove__">✕ Quitar cuenta actual…</option>`;
     sel.innerHTML=html;
   },
   onAcctChange(v){
     if(v==='__add__'){ this.renderAccounts(); this.addAccount(); return; }
+    if(v==='__editname__'){ this.renderAccounts(); this.editAccountName(); return; }
     if(v==='__remove__'){ this.renderAccounts(); this.removeAccount(); return; }
     if(v && v!==this.activeAccount()) this.switchAccount(v);
   },
@@ -494,12 +500,42 @@ const MAIL={
     email=email.trim().toLowerCase();
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Correo inválido','error'); return; }
     const list=this.accounts();
-    if(list.some(a=>a.email===email)){ toast('Esa cuenta ya está agregada','info'); this.switchAccount(email); return; }
+    const existing=list.find(a=>a.email===email);
+    // Casillas como hola@ vienen precargadas: si ya está, igual dejamos ajustar
+    // su nombre de remitente en vez de bloquear con "ya agregada".
+    if(existing){
+      let name=prompt('Esa casilla ya está agregada.\nNombre del remitente (así aparece tu nombre al enviar):',existing.name||'');
+      if(name!==null){
+        existing.name=name.trim();
+        this.setAccounts(list);
+        this.renderAccounts();
+        toast('✓ Nombre del remitente actualizado','success');
+      }
+      this.switchAccount(email);
+      return;
+    }
     let name=prompt('Nombre para mostrar al enviar (remitente):','The Lab Solutions');
     if(name===null) return;
     list.push({email,name:name.trim()});
     this.setAccounts(list);
     this.switchAccount(email); // pedirá la contraseña de esa casilla
+  },
+  // Cambia el nombre del remitente (from_name) de la cuenta ACTIVA sin tocar la
+  // casilla ni su clave. Así hola@ puede salir como "Andrea Garrido - The Lab
+  // Solutions" en vez del nombre fijo por defecto.
+  editAccountName(){
+    const active=this.activeAccount(); if(!active) return;
+    const cur=this.activeAccountObj();
+    let name=prompt('Nombre del remitente para '+active+'\n(así aparece tu nombre al enviar correos desde esta casilla):',(cur&&cur.name)||'');
+    if(name===null) return;
+    name=name.trim();
+    const list=this.accounts();
+    const idx=list.findIndex(a=>a.email===active);
+    if(idx>=0) list[idx]={...list[idx],name};
+    else list.push({email:active,name});
+    this.setAccounts(list);
+    this.renderAccounts();
+    toast('✓ Nombre del remitente actualizado','success');
   },
   removeAccount(){
     const active=this.activeAccount(), u=AUTH.getUser();
