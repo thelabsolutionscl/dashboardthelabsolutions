@@ -7757,14 +7757,55 @@ function renderNotasList(){
   }).join('');
 }
 // ─────────────────────────────────────────────────────────────
+function _actMenuResetPos(m){m.style.position='';m.style.top='';m.style.left='';m.style.right='';m.style.bottom='';m.style.maxHeight='';m.style.overflowY='';}
+function _closeAllActMenus(){document.querySelectorAll('.act-menu.open').forEach(m=>{m.classList.remove('open');_actMenuResetPos(m);});}
+// Ancla el menú con position:fixed para que NO lo recorte el overflow del
+// contenedor de la tabla (con pocas filas el dropdown se cortaba). Abre hacia
+// abajo o hacia arriba según el espacio disponible en la pantalla.
+function _positionActMenu(menu,btn){
+  if(!btn||!btn.getBoundingClientRect) return;
+  const r=btn.getBoundingClientRect();
+  const vw=window.innerWidth,vh=window.innerHeight,M=8,GAP=4;
+  menu.style.position='fixed';menu.style.right='auto';menu.style.bottom='auto';
+  menu.style.maxHeight='none';menu.style.overflowY='';
+  menu.style.top='-9999px';menu.style.left='0';   // fuera de vista para medir
+  const mw=menu.offsetWidth,mh=menu.offsetHeight;
+  const left=Math.min(Math.max(M,r.right-mw),Math.max(M,vw-mw-M)); // alinea a la derecha del botón
+  const below=vh-r.bottom-GAP-M,above=r.top-GAP-M;
+  let top;
+  if(mh<=below||below>=above){
+    top=r.bottom+GAP;
+    if(mh>below){menu.style.maxHeight=Math.max(140,below)+'px';menu.style.overflowY='auto';}
+  }else{
+    top=r.top-GAP-Math.min(mh,above);
+    if(mh>above){menu.style.maxHeight=Math.max(140,above)+'px';menu.style.overflowY='auto';}
+  }
+  menu.style.left=Math.round(left)+'px';
+  menu.style.top=Math.round(top)+'px';
+}
 function toggleActMenu(evt,menuId){
   evt.stopPropagation();
   const menu=document.getElementById(menuId);if(!menu) return;
   const wasOpen=menu.classList.contains('open');
-  document.querySelectorAll('.act-menu.open').forEach(m=>m.classList.remove('open'));
-  if(!wasOpen) menu.classList.add('open');
+  _closeAllActMenus();
+  if(!wasOpen){
+    menu.classList.add('open');
+    // Móvil (≤768px): el CSS lo muestra como hoja inferior. Escritorio: fixed calculado.
+    if(!(window.matchMedia&&window.matchMedia('(max-width:768px)').matches)){
+      _positionActMenu(menu,evt.currentTarget||menu.previousElementSibling);
+    }
+  }
 }
-document.addEventListener('click',()=>document.querySelectorAll('.act-menu.open').forEach(m=>m.classList.remove('open')));
+document.addEventListener('click',_closeAllActMenus);
+// El menú es position:fixed en escritorio: al hacer scroll se despegaría del
+// botón. Se cierra al scrollear (salvo scroll dentro del propio menú) o al
+// redimensionar, para que nunca quede flotando fuera de lugar.
+window.addEventListener('scroll',function(e){
+  const t=e.target;
+  if(t&&t.nodeType===1&&t.closest&&t.closest('.act-menu')) return;
+  _closeAllActMenus();
+},true);
+window.addEventListener('resize',_closeAllActMenus);
 function buildClienteRow(c){
   const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0));
   const tel=f['Teléfono']||'';
