@@ -612,8 +612,45 @@ const MAIL={
     const div=document.getElementById('mailCmpAtts');
     if(!div) return;
     div.innerHTML=this._cmpAtts.map((a,i)=>
-      `<span class="mail-att-chip"><span class="att-name">📎 ${this.esc(a.name)}</span> <span style="color:var(--text3);font-size:10px">${(a.size/1024).toFixed(0)} KB</span> <span class="att-x" onclick="MAIL.removeAtt(${i})">✕</span></span>`
+      `<span class="mail-att-chip"><span class="att-name" onclick="MAIL.previewAtt(${i})" style="cursor:pointer" title="Clic para previsualizar">👁 ${this.esc(a.name)}</span> <span style="color:var(--text3);font-size:10px">${(a.size/1024).toFixed(0)} KB</span> <span class="att-x" onclick="MAIL.removeAtt(${i})">✕</span></span>`
     ).join('');
+  },
+
+  // Previsualiza un adjunto del correo en redacción (p.ej. el PDF de la cotización)
+  // ANTES de enviar, para revisar su contenido. Renderiza en un iframe (PDF) o
+  // <img> (imágenes); otros tipos se abren en pestaña.
+  _attPrevUrl:null,
+  previewAtt(i){
+    const a=this._cmpAtts[i]; if(!a||!a.data){toast('Adjunto no disponible','error');return;}
+    try{
+      if(this._attPrevUrl){URL.revokeObjectURL(this._attPrevUrl);this._attPrevUrl=null;}
+      const bin=atob(a.data);const bytes=new Uint8Array(bin.length);
+      for(let j=0;j<bin.length;j++) bytes[j]=bin.charCodeAt(j);
+      const blob=new Blob([bytes],{type:a.type||'application/octet-stream'});
+      const url=URL.createObjectURL(blob);this._attPrevUrl=url;
+      const modal=document.getElementById('mailAttPreviewModal');
+      const frame=document.getElementById('mailAttPreviewFrame');
+      const img=document.getElementById('mailAttPreviewImg');
+      const title=document.getElementById('mailAttPreviewTitle');
+      const openBtn=document.getElementById('mailAttPreviewOpen');
+      if(title) title.textContent=a.name||'Adjunto';
+      const isImg=/^image\//.test(a.type||'');
+      const isPdf=/pdf/i.test(a.type||'')||/\.pdf$/i.test(a.name||'');
+      if(openBtn) openBtn.onclick=()=>window.open(url,'_blank');
+      if(isImg){img.src=url;img.style.display='block';frame.style.display='none';frame.src='';}
+      else if(isPdf){frame.src=url;frame.style.display='block';img.style.display='none';img.src='';}
+      else{ // tipos no previsualizables: abrir en pestaña
+        window.open(url,'_blank');
+        return;
+      }
+      if(modal) modal.style.display='flex';
+    }catch(e){toast('No se pudo previsualizar el adjunto','error');}
+  },
+  closeAttPreview(){
+    const modal=document.getElementById('mailAttPreviewModal');if(modal) modal.style.display='none';
+    const frame=document.getElementById('mailAttPreviewFrame');if(frame) frame.src='';
+    const img=document.getElementById('mailAttPreviewImg');if(img) img.src='';
+    if(this._attPrevUrl){const u=this._attPrevUrl;this._attPrevUrl=null;setTimeout(()=>URL.revokeObjectURL(u),400);}
   },
 
   fillContactsDatalist(){

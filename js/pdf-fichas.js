@@ -12,6 +12,22 @@ function buildCotizacionDoc(id){
   const lineas=detalle.split('\n').filter(Boolean).map(l=>{const parts=l.split('|').map(s=>s.trim());const undStr=(parts[1]||'').replace(/[^\d.]/g,'');const und=parseFloat(undStr)||1;const ventaRaw=(parts[3]||parts[2]||'').replace(/[Vv]enta:\s*/,'').replace(/\./g,'').replace(/[^0-9]/g,'');const ventaTotal=parseFloat(ventaRaw)||0;const ventaUnit=und>0?Math.round(ventaTotal/und):ventaTotal;return{desc:parts[0]||'',und,ventaUnit,ventaTotal};});
   const itemsHTML=lineas.length>0?lineas.map((l,i)=>`<tr style="background:${i%2===0?'#f9f9f9':'#fff'}"><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px">${escHtml(l.desc)}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:center;color:#555">${l.und}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:right">${formatCLP(l.ventaUnit)}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:right;font-weight:600">${formatCLP(l.ventaTotal)}</td></tr>`).join(''):`<tr><td colspan="4" style="padding:12px;text-align:center;color:#999;font-size:10px">Sin detalle</td></tr>`;
   const infoRow=(label,val)=>val&&val!=='—'?`<tr><td style="padding:3px 0;font-size:10px;color:#888;width:80px;vertical-align:top">${label}</td><td style="padding:3px 0;font-size:10px;color:#1a1a1a;font-weight:500">${escHtml(val)}</td></tr>`:'';
+  // Totales: cuando hay descuento, los ítems suman el neto SIN descuento; hay que
+  // mostrar Subtotal → Descuento → Neto para que el documento cuadre y el cliente
+  // vea de dónde sale el total (antes solo se veía el neto ya descontado, sin
+  // línea de descuento, y no coincidía con la suma de los ítems).
+  const sumaNeto=lineas.reduce((s,l)=>s+(l.ventaTotal||0),0);
+  const descPct=Math.max(0,parseFloat(f['Descuento (%)'])||0);
+  const descMonto=sumaNeto-neto; // concilia el subtotal con el neto ya descontado
+  const hayDesc=descPct>0&&descMonto>0&&sumaNeto>0;
+  const descPctTxt=Number.isInteger(descPct)?String(descPct):descPct.toFixed(1).replace(/\.0$/,'');
+  const totalsRows=(hayDesc
+    ?`<div class="totals-row"><span>Subtotal neto</span><span>${formatCLP(sumaNeto)}</span></div>`
+      +`<div class="totals-row" style="color:#c0392b"><span>Descuento (${descPctTxt}%)</span><span>−${formatCLP(descMonto)}</span></div>`
+      +`<div class="totals-row"><span>Neto</span><span>${formatCLP(neto)}</span></div>`
+    :`<div class="totals-row"><span>Neto</span><span>${formatCLP(neto)}</span></div>`)
+    +`<div class="totals-row iva"><span>IVA (19%)</span><span>${formatCLP(iva)}</span></div>`
+    +`<div class="totals-row total-final"><span>TOTAL</span><span>${formatCLP(total)}</span></div>`;
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Cotización ${escHtml(num)}</title>
 <link rel="icon" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
 <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:18px 24px;font-size:10px;}
@@ -53,7 +69,7 @@ ${solicitud?`<div class="section-label">Solicitud del cliente</div><div class="s
 <div class="condiciones-box"><p style="margin-bottom:5px"><strong>PLAZO DE ENTREGA:</strong> ${plazotxt}</p>${formaHtml?`<p style="margin-bottom:2px;margin-top:5px"><strong>FORMA DE PAGO:</strong></p><p style="margin-bottom:5px">${formaHtml}</p>`:''}<p style="color:#888;font-style:italic">* Cotización válida por 10 días hábiles.</p></div>
 <div class="section-label" style="margin-top:10px">Detalle de productos / servicios</div>
 <table class="items"><thead><tr><th style="background:#0a0a0a;color:#fff">Descripción</th><th style="background:#0a0a0a;color:#fff;text-align:center">Cant.</th><th style="background:#0a0a0a;color:#fff;text-align:right">Precio Unit. Neto</th><th style="background:#0a0a0a;color:#fff;text-align:right">Total Neto</th></tr></thead><tbody>${itemsHTML}</tbody></table>
-<div class="totals"><div class="totals-box"><div class="totals-row"><span>Neto</span><span>${formatCLP(neto)}</span></div><div class="totals-row iva"><span>IVA (19%)</span><span>${formatCLP(iva)}</span></div><div class="totals-row total-final"><span>TOTAL</span><span>${formatCLP(total)}</span></div></div></div>
+<div class="totals"><div class="totals-box">${totalsRows}</div></div>
 <div class="transfer-box"><div class="transfer-title">Datos de Transferencia</div><table>
 <tr style="border-bottom:1px solid #e8e8e8"><td style="color:#888;width:120px;font-weight:600;text-transform:uppercase;font-size:8px">Razón Social</td><td style="font-weight:500">WAST3D SPA</td></tr>
 <tr style="border-bottom:1px solid #e8e8e8;background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Banco</td><td style="font-weight:500">BANCO ESTADO</td></tr>
