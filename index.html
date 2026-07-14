@@ -845,6 +845,15 @@
           <label class="field-label">Vendedor asignado</label>
           <select class="field-select" id="editPedidoVendedor"><option value="">— Sin asignar —</option></select>
         </div>
+        <div class="field-group form-full" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+          <label class="field-label">💰 Costo real (para medir el margen real vs el estimado)</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input class="field-input" id="editPedidoCostoMat" type="number" min="0" placeholder="Material $" style="flex:1;min-width:100px" oninput="_epCostoCalc()">
+            <input class="field-input" id="editPedidoHoras" type="number" min="0" step="0.5" placeholder="Horas máquina" style="flex:1;min-width:100px" oninput="_epCostoCalc()">
+            <input class="field-input" id="editPedidoMO" type="number" min="0" placeholder="Mano de obra $" style="flex:1;min-width:100px" oninput="_epCostoCalc()">
+          </div>
+          <div id="editPedidoCostoInfo" style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5"></div>
+        </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
         <button class="btn btn-ghost btn-sm" onclick="closeEditPedidoModal()">Cancelar</button>
@@ -9377,7 +9386,27 @@ function openEditPedidoModal(id){
   document.getElementById('editPedidoEquipo').value=f['Equipo asignado']||'';
   document.getElementById('editPedidoProveedor').value=f['Proveedor']||'';
   const _epV=document.getElementById('editPedidoVendedor');if(_epV) _epV.value=f['Vendedor']||'';
+  // Costos reales + referencia estimada (Subtotal de la cotización vinculada)
+  document.getElementById('editPedidoCostoMat').value=f['Costo material real (CLP)']||'';
+  document.getElementById('editPedidoHoras').value=f['Horas máquina reales']||'';
+  document.getElementById('editPedidoMO').value=f['Costo mano de obra (CLP)']||'';
+  window._epVentaNeta=Math.round((f['Monto total (CLP)']||0)/1.19);
+  let est=0;const _ci=f['Cotizaciones'];if(Array.isArray(_ci)&&_ci.length){const cot=(state.cotizacionesById||{})[_ci[0]];if(cot)est=cot.fields['Subtotal (CLP)']||0;}
+  window._epCostoEst=est;
+  _epCostoCalc();
   document.getElementById('editPedidoModal').style.display='flex';
+}
+function _epCostoCalc(){
+  const mat=+document.getElementById('editPedidoCostoMat').value||0,horas=+document.getElementById('editPedidoHoras').value||0,mo=+document.getElementById('editPedidoMO').value||0;
+  const real=mat+horas*TARIFA_HORA_MAQUINA+mo;
+  const info=document.getElementById('editPedidoCostoInfo');if(!info)return;
+  if(real<=0){info.textContent='Ingresa el costo real para comparar con el estimado de la cotización y ver el margen real.';return;}
+  const est=window._epCostoEst||0,venta=window._epVentaNeta||0;
+  const margenReal=venta>0?(venta-real)/venta*100:null;
+  let html=`Costo real: <b>${formatCLP(Math.round(real))}</b>${horas>0?` (incl. ${horas}h × ${formatCLP(TARIFA_HORA_MAQUINA)}/h)`:''}`;
+  if(est>0){const d=real-est;html+=` · estimado ${formatCLP(est)} → <b style="color:${d>0?'var(--danger)':'var(--accent3)'}">${d>0?'+':''}${formatCLP(d)}</b>`;}
+  if(margenReal!=null)html+=` · margen real <b style="color:${margenReal>=35?'var(--accent3)':margenReal>=20?'var(--warn)':'var(--danger)'}">${margenReal.toFixed(0)}%</b>`;
+  info.innerHTML=html;
 }
 function closeEditPedidoModal(){document.getElementById('editPedidoModal').style.display='none';}
 async function saveEditPedido(){
@@ -9388,7 +9417,17 @@ async function saveEditPedido(){
     const fp=document.getElementById('editPedidoFormaPago').value;if(fp) fields['Forma de pago']=fp;
     const _epVv=document.getElementById('editPedidoVendedor')?.value||'';fields['Vendedor']=_epVv||null;
     if(fields['Estado pedido']==='Despachado'&&!state.pedidosById[id]?.fields['Fecha despacho']) fields['Fecha despacho']=new Date().toISOString().split('T')[0];
-    await airtableWrite('Pedidos','PATCH',id,fields);
+    // Costos reales (crea los campos on-demand si aún no existen)
+    const _cm=+document.getElementById('editPedidoCostoMat').value||0,_ch=+document.getElementById('editPedidoHoras').value||0,_cmo=+document.getElementById('editPedidoMO').value||0;
+    if(_cm>0)fields['Costo material real (CLP)']=_cm;
+    if(_ch>0)fields['Horas máquina reales']=_ch;
+    if(_cmo>0)fields['Costo mano de obra (CLP)']=_cmo;
+    if(_cm>0||_ch>0||_cmo>0)fields['Costo real total (CLP)']=Math.round(_cm+_ch*TARIFA_HORA_MAQUINA+_cmo);
+    try{await airtableWrite('Pedidos','PATCH',id,fields);}
+    catch(err){
+      if(/field|unknown|422|INVALID|UNKNOWN/i.test(err.message||'')){await ensureCostosPedidoFields();await airtableWrite('Pedidos','PATCH',id,fields);}
+      else throw err;
+    }
     const p=state.pedidosById[id];if(p) Object.assign(p.fields,fields);
     toast('✓ Pedido actualizado','success');closeEditPedidoModal();renderPedidos();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
@@ -11234,6 +11273,31 @@ function _margenPromedioGlobal(){
   const ms=(state.cotizaciones||[]).map(c=>getMargenCot(c.fields)).filter(m=>m!==null);
   return ms.length?ms.reduce((a,b)=>a+b,0)/ms.length:null;
 }
+// Tarifa de máquina (CLP/hora: energía + desgaste). Ajustable; no es campo Airtable.
+const TARIFA_HORA_MAQUINA=1500;
+// Costo real TOTAL del pedido (material + horas×tarifa + mano de obra). null si
+// no se ha capturado ningún costo real todavía.
+function _costoRealPedido(f){
+  const mat=+f['Costo material real (CLP)']||0,horas=+f['Horas máquina reales']||0,mo=+f['Costo mano de obra (CLP)']||0;
+  if(mat<=0&&horas<=0&&mo<=0) return null;
+  return mat+horas*TARIFA_HORA_MAQUINA+mo;
+}
+async function ensureCostosPedidoFields(){
+  const t=getToken();if(!t&&!_proxyCfg()) return;
+  try{
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return;
+    const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Pedidos');if(!tbl) return;
+    const have=new Set((tbl.fields||[]).map(x=>x.name));
+    const want=[
+      {name:'Costo material real (CLP)',type:'currency',options:{precision:0,symbol:'$'}},
+      {name:'Horas máquina reales',type:'number',options:{precision:1}},
+      {name:'Costo mano de obra (CLP)',type:'currency',options:{precision:0,symbol:'$'}},
+      {name:'Costo real total (CLP)',type:'currency',options:{precision:0,symbol:'$'}},
+    ];
+    for(const fld of want){if(!have.has(fld.name)){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fld)});}catch(e){}}}
+  }catch(e){}
+}
 function rentabilidadClientes(){
   const avg=_margenPromedioGlobal();
   const byCli=new Map();
@@ -11241,9 +11305,13 @@ function rentabilidadClientes(){
     const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;
     const venta=(f['Monto total (CLP)']||0)/1.19;if(venta<=0)return;
     let margen=null,estimado=false;
-    const cotIds=f['Cotizaciones'];
-    if(Array.isArray(cotIds)&&cotIds.length){const cot=(state.cotizacionesById||{})[cotIds[0]];if(cot)margen=getMargenCot(cot.fields);}
-    if(margen===null){margen=avg;estimado=true;}
+    const costoReal=_costoRealPedido(f);
+    if(costoReal!=null){ margen=(venta-costoReal)/venta*100; }   // margen REAL (medido, no estimado)
+    else{
+      const cotIds=f['Cotizaciones'];
+      if(Array.isArray(cotIds)&&cotIds.length){const cot=(state.cotizacionesById||{})[cotIds[0]];if(cot)margen=getMargenCot(cot.fields);}
+      if(margen===null){margen=avg;estimado=true;}
+    }
     if(margen===null)return;
     const cliIds=Array.isArray(f['Cliente'])?f['Cliente']:[];
     const cliId=cliIds[0]||('nom:'+String(f['Cliente']||'—'));
