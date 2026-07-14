@@ -6247,6 +6247,28 @@ function _maqLive(maqId){try{return (typeof _printerStatus!=='undefined'?(_print
 function _pedidosActivosProd(){
   return (state.pedidos||[]).filter(p=>_MAQ_ESTADOS_ACTIVOS.includes(p.fields['Estado pedido']||''));
 }
+// ── CRONÓMETRO DE PRODUCCIÓN (S6) ──────────────────────────────────────
+// Registra inicio/fin de producción por pedido para medir el ciclo real.
+// localStorage + respaldo en Monitor Sistema (PROD_TIMERS).
+const _PROD_TIMER_KEY='thelab_prod_timer_v1';
+function _prodTimers(){try{return JSON.parse(localStorage.getItem(_PROD_TIMER_KEY)||'{}');}catch(e){return{};}}
+async function _prodTimersBackup(){
+  try{const notes=localStorage.getItem(_PROD_TIMER_KEY)||'{}';
+    if(state.prodTimersRecordId) await airtableWrite('Monitor Sistema','PATCH',state.prodTimersRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'PROD_TIMERS','Notes':notes});if(r&&r.id)state.prodTimersRecordId=r.id;}
+  }catch(e){}
+}
+function _prodState(pedidoId){const t=_prodTimers()[pedidoId];if(!t||!t.start)return null;return{running:!t.end,ms:(t.end||Date.now())-t.start};}
+function _fmtDur(ms){const h=Math.floor(ms/3.6e6),m=Math.floor((ms%3.6e6)/6e4);return h>0?`${h}h ${m}m`:`${m}m`;}
+function prodStart(pedidoId){const o=_prodTimers();o[pedidoId]={start:Date.now()};try{localStorage.setItem(_PROD_TIMER_KEY,JSON.stringify(o));}catch(e){}_prodTimersBackup();toast('▶ Cronómetro de producción iniciado','success');try{renderCargaMaquinas();}catch(e){}}
+function prodStop(pedidoId){const o=_prodTimers();if(!o[pedidoId]||!o[pedidoId].start){toast('Inicia el cronómetro primero','info');return;}o[pedidoId].end=Date.now();try{localStorage.setItem(_PROD_TIMER_KEY,JSON.stringify(o));}catch(e){}_prodTimersBackup();toast('⏹ Ciclo registrado: '+_fmtDur(o[pedidoId].end-o[pedidoId].start),'success');try{renderCargaMaquinas();}catch(e){}}
+function _cicloPromedio(){const ts=Object.values(_prodTimers()).filter(t=>t&&t.start&&t.end);if(!ts.length)return null;return ts.reduce((s,t)=>s+(t.end-t.start),0)/ts.length;}
+function _prodTimerBtn(p){
+  const st=_prodState(p.id);
+  if(!st) return `<button class="btn btn-ghost btn-sm" style="padding:1px 6px" title="Iniciar cronómetro de producción" data-id="${p.id}" onclick="prodStart(this.dataset.id)">▶</button>`;
+  if(st.running) return `<span style="color:var(--warn);font-size:9.5px" title="En producción">⏱ ${_fmtDur(st.ms)}</span><button class="btn btn-ghost btn-sm" style="padding:1px 6px" title="Terminar y registrar ciclo" data-id="${p.id}" onclick="prodStop(this.dataset.id)">⏹</button>`;
+  return `<span style="color:var(--accent3);font-size:9.5px" title="Ciclo registrado">✓ ${_fmtDur(st.ms)}</span>`;
+}
 function _maqCarga(){
   const byMaq=new Map();MAQUINAS.forEach(m=>byMaq.set(m.id,{maq:m,peds:[],horas:0,prox:null}));
   const sinAsignar=[];
@@ -6305,6 +6327,7 @@ function renderCargaMaquinas(){
         <span class="mono" style="color:var(--accent)">${escapeHtml(p.fields['N° Pedido']||'—')}</span>
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)">${escapeHtml(resolveClienteName(p.fields['Cliente']))}</span>
         <span style="color:var(--text3)">${_pedHorasEst(p.fields)}h</span>
+        ${_prodTimerBtn(p)}
         <button class="btn btn-ghost btn-sm" style="padding:1px 6px" title="Quitar de esta máquina" data-id="${p.id}" onclick="asignarMaquina(this.dataset.id,'')">✕</button>
       </div>`).join('')}${m.peds.length>5?`<div style="font-size:10px;color:var(--text3)">…y ${m.peds.length-5} más</div>`:''}</div>`:'<div style="font-size:10.5px;color:var(--text3)">Sin pedidos en cola</div>'}
     </div>`;
@@ -6325,6 +6348,7 @@ function renderCargaMaquinas(){
     <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Horas de trabajo</span><span class="fac-kpi-val">${totalH} h</span></div>
     <div class="fac-kpi ${totalPend?'fac-kpi-danger':''}" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Sin asignar</span><span class="fac-kpi-val">${totalPend}</span></div>
     <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Impresoras activas</span><span class="fac-kpi-val">${conCarga.length}/${MAQUINAS.length}</span></div>
+    ${(()=>{const cp=_cicloPromedio();return cp!=null?`<div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Ciclo promedio</span><span class="fac-kpi-val" style="color:var(--accent2)">${_fmtDur(cp)}</span></div>`:'';})()}
   </div>`;
   el.innerHTML=resumen+(cards?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${cards}</div>`:'<div class="empty-state" style="padding:16px">Sin pedidos en producción para distribuir</div>')+sinHtml;
 }
@@ -6658,6 +6682,12 @@ function _applyMonitorSistema(recs){
       const sigs=JSON.parse(sigRec.fields['Notes']||'{}');
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
+  }
+  // Cronómetros de producción respaldados (registro compartido).
+  const ptRec=recs.find(r=>r.fields['Name']==='PROD_TIMERS');
+  if(ptRec){
+    state.prodTimersRecordId=ptRec.id;
+    try{const o=JSON.parse(ptRec.fields['Notes']||'{}');if(o&&typeof o==='object') localStorage.setItem('thelab_prod_timer_v1',JSON.stringify(o));}catch(e){logErr('monitorSistema:prodTimers',e);}
   }
   // Fechas clave de clientes respaldadas (registro compartido).
   const fcRec=recs.find(r=>r.fields['Name']==='FECHAS_CLIENTE');

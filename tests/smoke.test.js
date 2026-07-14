@@ -94,6 +94,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'renderInventario', 'addMaterial', 'editMaterial', 'openConsumoModal', 'aplicarConsumo',
     'renderReordenInventario', '_reordenSugerencias', 'pedirReorden',
     'renderCargaMaquinas', '_maqCarga', 'asignarMaquina', 'sugerirMaquina', '_pedHorasEst',
+    'prodStart', 'prodStop', '_cicloPromedio', '_prodState',
     'crearPedidoDesdeCotizacion', 'renderCotToOrderTray', 'convertirCotAPedido', '_pedidoDeCot',
     'rentabilidadLineas', '_prodLinea', 'renderPresupuesto', '_presEjecutadoReal',
     'openCatalogoModal', 'renderCatalogoModal', 'addCatalogoItem', 'insertarCatalogo',
