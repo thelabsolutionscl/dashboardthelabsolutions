@@ -213,6 +213,7 @@ function renderProveedores(skipAnalytics){
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
   if(!skipAnalytics) renderProveedoresAnalytics();
   try{renderMejorPrecio();}catch(e){}
+  try{renderOCList();}catch(e){}
   _applySortIndicators();
 }
 function buildProveedorRow(p){
@@ -672,4 +673,127 @@ function renderMejorPrecio(){
     </div>`;
   }).join('');
   el.innerHTML=`<div class="card" style="margin-top:16px"><div class="card-header"><span class="card-title">🏷️ Mejor precio por ítem</span><span style="margin-left:auto;font-size:10.5px;color:var(--text3)">${filas.length} ítem${filas.length!==1?'s':''} con 2+ proveedores</span></div><div style="padding:2px 0 8px">${rows}</div></div>`;
+}
+
+// ── ÓRDENES DE COMPRA A PROVEEDORES (Q6) ───────────────────────────────
+// Genera órdenes de compra formales a un proveedor con ítems, totales (IVA),
+// PDF imprimible y envío. Reutiliza los precios registrados (N5) como ayuda.
+const _OC_KEY='thelab_oc_v1';
+function _ocAll(){try{return JSON.parse(localStorage.getItem(_OC_KEY)||'[]');}catch(e){return[];}}
+function _ocSaveArr(arr){try{localStorage.setItem(_OC_KEY,JSON.stringify(arr||[]));}catch(e){}_ocBackup();}
+async function _ocBackup(){
+  try{const notes=localStorage.getItem(_OC_KEY)||'[]';
+    if(state.ocRecordId) await airtableWrite('Monitor Sistema','PATCH',state.ocRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'ORDENES_COMPRA','Notes':notes});if(r&&r.id)state.ocRecordId=r.id;}
+  }catch(e){}
+}
+function _ocNextNum(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}
+function openOCModal(provNombre,ocId){
+  const sel=document.getElementById('ocProveedor');
+  const provs=(state.proveedores||[]).slice().sort((a,b)=>String(a.fields['Nombre']||'').localeCompare(String(b.fields['Nombre']||'')));
+  sel.innerHTML='<option value="">— Selecciona proveedor —</option>'+provs.map(p=>`<option value="${escapeHtml(p.fields['Nombre']||'')}">${escapeHtml(p.fields['Nombre']||'')}</option>`).join('');
+  document.getElementById('ocRows').innerHTML='';
+  document.getElementById('ocId').value=ocId||'';
+  const oc=ocId?_ocAll().find(x=>x.id===ocId):null;
+  if(oc){sel.value=oc.proveedor||'';document.getElementById('ocFecha').value=oc.fecha||new Date().toISOString().slice(0,10);document.getElementById('ocNotas').value=oc.notas||'';(oc.items||[]).forEach(it=>ocAddRow(it));}
+  else{sel.value=provNombre||'';document.getElementById('ocFecha').value=new Date().toISOString().slice(0,10);document.getElementById('ocNotas').value='';ocAddRow();}
+  ocProveedorChanged();ocCalc();
+  document.getElementById('ocModal').style.display='flex';
+}
+function closeOCModal(){document.getElementById('ocModal').style.display='none';}
+function ocProveedorChanged(){
+  const prov=document.getElementById('ocProveedor').value;
+  const hint=document.getElementById('ocPreciosHint');if(!hint)return;
+  let n=0;try{n=(typeof _preciosDeProv==='function'&&prov)?_preciosDeProv(prov).length:0;}catch(e){}
+  hint.textContent=n?`· ${n} precio(s) registrados de este proveedor`:'';
+}
+function ocAddRow(data){
+  const cont=document.getElementById('ocRows');const row=document.createElement('div');row.className='oc-row';
+  row.style.cssText='display:grid;grid-template-columns:1fr 70px 110px 90px 30px;gap:6px;align-items:center';
+  const inp='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:6px 8px;width:100%;box-sizing:border-box;font-family:inherit';
+  row.innerHTML=`<input class="oc-item" placeholder="Material / ítem" value="${escapeHtml(data?.item||'')}" style="${inp}" oninput="ocCalc()">
+    <input class="oc-cant" type="number" min="0" step="0.5" placeholder="Cant." value="${data?.cantidad||''}" style="${inp};text-align:center" oninput="ocCalc()">
+    <input class="oc-precio" type="number" min="0" placeholder="Precio unit." value="${data?.precio||''}" style="${inp};text-align:right" oninput="ocCalc()">
+    <span class="oc-sub" style="font-size:11px;font-family:'JetBrains Mono',monospace;text-align:right;color:var(--text2)">$0</span>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 6px;color:var(--danger)" onclick="this.closest('.oc-row').remove();ocCalc()">✕</button>`;
+  cont.appendChild(row);
+  // Autocompletar precio desde N5 al escribir el ítem (si coincide y el precio está vacío)
+  const itemInp=row.querySelector('.oc-item'),precioInp=row.querySelector('.oc-precio');
+  itemInp.addEventListener('change',()=>{
+    if(precioInp.value)return;const prov=document.getElementById('ocProveedor').value;if(!prov||typeof _preciosDeProv!=='function')return;
+    try{const q=_normItem(itemInp.value);const hit=_preciosDeProv(prov).find(p=>_normItem(p.item)===q||_normItem(p.item).includes(q)||q.includes(_normItem(p.item)));if(hit){precioInp.value=hit.precio;ocCalc();}}catch(e){}
+  });
+  ocCalc();
+}
+function _ocRows(){return [...document.querySelectorAll('#ocRows .oc-row')].map(r=>({item:(r.querySelector('.oc-item').value||'').trim(),cantidad:parseFloat(r.querySelector('.oc-cant').value)||0,precio:Math.round(parseFloat(r.querySelector('.oc-precio').value)||0),_el:r})).filter(x=>x.item||x.cantidad||x.precio);}
+function ocCalc(){
+  let neto=0;
+  document.querySelectorAll('#ocRows .oc-row').forEach(r=>{const c=parseFloat(r.querySelector('.oc-cant').value)||0,p=parseFloat(r.querySelector('.oc-precio').value)||0;const sub=Math.round(c*p);neto+=sub;const s=r.querySelector('.oc-sub');if(s)s.textContent=formatCLP(sub);});
+  const iva=Math.round(neto*0.19);
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=formatCLP(v);};
+  set('ocNeto',neto);set('ocIva',iva);set('ocTotal',neto+iva);
+  return {neto,iva,total:neto+iva};
+}
+function guardarOC(conPDF){
+  const proveedor=document.getElementById('ocProveedor').value;
+  if(!proveedor){toast('Selecciona un proveedor','error');return;}
+  const items=_ocRows().filter(x=>x.item&&x.cantidad>0).map(x=>({item:x.item,cantidad:x.cantidad,precio:x.precio}));
+  if(!items.length){toast('Agrega al menos un ítem con cantidad','error');return;}
+  const t=ocCalc();
+  const arr=_ocAll();const id=document.getElementById('ocId').value;
+  let oc;
+  const base={proveedor,fecha:document.getElementById('ocFecha').value||new Date().toISOString().slice(0,10),notas:(document.getElementById('ocNotas').value||'').trim(),items,neto:t.neto,total:t.total,estado:'Emitida'};
+  if(id){oc=arr.find(x=>x.id===id);if(oc)Object.assign(oc,base);}
+  else{oc={id:'oc'+Date.now()+'_'+arr.length,numero:_ocNextNum(),ts:Date.now(),...base};arr.push(oc);}
+  _ocSaveArr(arr);closeOCModal();toast(`✓ Orden de compra ${oc.numero} guardada`,'success');
+  try{renderOCList();}catch(e){}
+  if(conPDF) try{generarOCPDF(oc.id);}catch(e){}
+}
+function delOC(id){if(!confirm('¿Eliminar esta orden de compra?'))return;_ocSaveArr(_ocAll().filter(x=>x.id!==id));renderOCList();}
+function generarOCPDF(id){
+  const oc=_ocAll().find(x=>x.id===id);if(!oc){toast('OC no encontrada','error');return;}
+  const esc=s=>escapeHtml(String(s==null?'':s));const clp=n=>formatCLP(Math.round(n||0));
+  const pv=(state.proveedores||[]).find(p=>String(p.fields['Nombre']||'')===oc.proveedor);
+  const rows=(oc.items||[]).map(it=>`<tr><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3">${esc(it.item)}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:center">${it.cantidad}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:right">${clp(it.precio)}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:right">${clp(it.cantidad*it.precio)}</td></tr>`).join('');
+  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(oc.numero)} — ${esc(oc.proveedor)}</title>
+<style>@page{size:A4;margin:16mm}*{box-sizing:border-box}body{font-family:-apple-system,system-ui,'Segoe UI',Arial,sans-serif;color:#111;margin:0}</style></head><body>
+<div style="max-width:720px;margin:0 auto">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #00b3a4;padding-bottom:12px;margin-bottom:18px">
+    <div><div style="font-size:11px;letter-spacing:.2em;color:#8a8a92;text-transform:uppercase">The Lab Solutions</div><div style="font-size:24px;font-weight:800;margin-top:4px">Orden de compra</div></div>
+    <div style="text-align:right"><div style="font-size:16px;font-weight:800;color:#00947f">${esc(oc.numero)}</div><div style="font-size:11px;color:#8a8a92">${esc(oc.fecha)}</div></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px">
+    <div><div style="font-size:10px;color:#8a8a92;text-transform:uppercase">Proveedor</div><div style="font-weight:700;font-size:15px">${esc(oc.proveedor)}</div>${pv&&pv.fields['Email']?`<div style="color:#555">${esc(pv.fields['Email'])}</div>`:''}${pv&&pv.fields['Teléfono']?`<div style="color:#555">${esc(pv.fields['Teléfono'])}</div>`:''}</div>
+    <div style="text-align:right"><div style="font-size:10px;color:#8a8a92;text-transform:uppercase">Comprador</div><div style="font-weight:700">The Lab Solutions</div><div style="color:#555">hola@thelab.solutions</div></div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="color:#8a8a92;font-size:11px;text-transform:uppercase"><th style="text-align:left;padding:0 10px 6px">Ítem</th><th style="text-align:center;padding:0 10px 6px">Cant.</th><th style="text-align:right;padding:0 10px 6px">P. unit.</th><th style="text-align:right;padding:0 10px 6px">Subtotal</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div style="display:flex;justify-content:flex-end;margin-top:14px">
+    <table style="font-size:13px"><tr><td style="padding:3px 14px;color:#8a8a92">Neto</td><td style="padding:3px 0;text-align:right;font-weight:700">${clp(oc.neto)}</td></tr>
+    <tr><td style="padding:3px 14px;color:#8a8a92">IVA 19%</td><td style="padding:3px 0;text-align:right;font-weight:700">${clp(Math.round(oc.neto*0.19))}</td></tr>
+    <tr style="border-top:2px solid #111"><td style="padding:6px 14px;font-weight:800">TOTAL</td><td style="padding:6px 0;text-align:right;font-weight:800;color:#00947f;font-size:16px">${clp(oc.total)}</td></tr></table>
+  </div>
+  ${oc.notas?`<div style="margin-top:16px;padding:12px 16px;background:#f6f8fa;border-radius:10px;font-size:12.5px;color:#444"><b>Notas:</b> ${esc(oc.notas)}</div>`:''}
+  <div style="margin-top:22px;text-align:center;font-size:10.5px;color:#a0a0a8">The Lab Solutions · dashboard.thelab.solutions</div>
+</div>
+<script>window.onload=function(){window.focus();setTimeout(function(){window.print();},250);};<\/script></body></html>`;
+  const w=window.open('','_blank');if(!w){toast('Permite las ventanas emergentes para el PDF','error');return;}
+  w.document.open();w.document.write(html);w.document.close();
+  toast('🧾 Orden de compra generada','success');
+}
+function renderOCList(){
+  const el=document.getElementById('ocList');if(!el)return;
+  const arr=_ocAll().slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  if(!arr.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="card" style="margin-top:16px"><div class="card-header"><span class="card-title">🧾 Órdenes de compra</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openOCModal()">＋ Nueva OC</button></div>
+    <div style="padding:2px 0 8px">${arr.slice(0,15).map(o=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+      <span class="mono" style="color:var(--accent);flex-shrink:0">${escapeHtml(o.numero||'—')}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(o.proveedor||'—')}</div><div style="font-size:10.5px;color:var(--text3)">${escapeHtml(o.fecha||'')} · ${(o.items||[]).length} ítem(s) · ${escapeHtml(o.estado||'Emitida')}</div></div>
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent3);flex-shrink:0">${formatCLP(o.total||0)}</span>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="PDF" data-id="${o.id}" onclick="generarOCPDF(this.dataset.id)">📄</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Editar" data-id="${o.id}" onclick="openOCModal(null,this.dataset.id)">✎</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;color:var(--danger)" title="Eliminar" data-id="${o.id}" onclick="delOC(this.dataset.id)">✕</button>
+    </div>`).join('')}</div></div>`;
 }

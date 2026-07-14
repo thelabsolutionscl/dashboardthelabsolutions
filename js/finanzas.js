@@ -1968,6 +1968,7 @@ const GS_ACTIONS=[
   {tab:'pedidos',icon:'icon-pedidos', title:'Registrar reclamo / garantía', kw:'reclamo garantia postventa rma defecto devolucion problema queja', run:()=>{try{openReclamoModal();}catch(e){}}},
   {tab:'clientes',icon:'icon-clientes', title:'Contrato recurrente (retainer)', kw:'contrato recurrente retainer mensual suscripcion abono fijo pedido automatico', run:()=>{try{openRetainerModal();}catch(e){}}},
   {icon:'icon-dollar', title:'Arqueo de caja del día', kw:'arqueo caja efectivo cuadre diario cierre conteo dinero', run:()=>{try{finSwitchTab('diario');setTimeout(()=>{try{renderArqueo();document.getElementById('arqueoCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
+  {tab:'proveedores',icon:'icon-proveedores', title:'Nueva orden de compra', kw:'orden compra oc proveedor comprar insumos pedido materiales', run:()=>{try{openOCModal();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
