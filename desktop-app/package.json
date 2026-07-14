@@ -1,0 +1,15 @@
+{
+  "name": "thelab-crm-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Envoltorio de escritorio (Tauri v2) para el dashboard The Lab Solutions",
+  "scripts": {
+    "icon": "tauri icon ../icons/icon-512.png",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

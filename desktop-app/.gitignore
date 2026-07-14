@@ -1,0 +1,6 @@
+# Dependencias y artefactos de build (no se versionan)
+node_modules/
+src-tauri/target/
+src-tauri/gen/
+# Íconos generados por `npm run icon` a partir de ../icons/icon-512.png
+src-tauri/icons/
