@@ -92,6 +92,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'renderInventario', 'addMaterial', 'editMaterial', 'openConsumoModal', 'aplicarConsumo',
     'renderReordenInventario', '_reordenSugerencias', 'pedirReorden',
     'crearPedidoDesdeCotizacion', 'renderCotToOrderTray', 'convertirCotAPedido', '_pedidoDeCot',
+    'rentabilidadLineas', '_prodLinea',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

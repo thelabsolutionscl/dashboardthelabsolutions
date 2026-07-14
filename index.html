@@ -11784,6 +11784,44 @@ function rentabilidadProductos(){
   });
   return [...map.values()].map(e=>({...e,margen:e.rev>0?e.util/e.rev*100:0})).sort((a,b)=>b.util-a.util);
 }
+// ── RENTABILIDAD POR LÍNEA DE NEGOCIO (O4) ────────────────────────────
+// Agrupa los tipos granulares en las líneas comerciales reales (3D / neón /
+// trofeos / corte) y las calcula sobre PEDIDOS entregados usando el costo real
+// (M5) cuando existe; así responde "¿qué línea me deja más plata de verdad?".
+const _PROD_LINEAS=[
+  {k:'Neón y letreros',ic:'💡',re:/ne[oó]n|caja\s*de\s*luz|backlight|letrero|cartel|se[nñ]al|t[oó]tem|corp[oó]reo|luminoso|marquesina/i},
+  {k:'Trofeos y merch',ic:'🏆',re:/trofeo|medalla|galvano|merch|llavero|premio|reconocimiento|placa|distinci[oó]n/i},
+  {k:'Impresión 3D',ic:'🧊',re:/\b3d\b|prototip|filamento|\bpla\b|\bpetg\b|resina|impresi[oó]n\s*3|figura|maqueta/i},
+  {k:'Corte y grabado',ic:'✂️',re:/corte|grabado|l[aá]ser|mdf|acr[ií]lico|router|vinilo/i},
+];
+function _prodLinea(txt){for(const t of _PROD_LINEAS)if(t.re.test(txt||''))return t.k;return 'Otros';}
+function _lineaIcon(k){const t=_PROD_LINEAS.find(x=>x.k===k);return t?t.ic:'📦';}
+function rentabilidadLineas(){
+  const map=new Map();
+  const add=(linea,venta,costo)=>{if(venta<=0)return;const e=map.get(linea)||{linea,rev:0,util:0,n:0};e.rev+=venta;e.util+=venta-costo;e.n++;map.set(linea,e);};
+  (state.pedidos||[]).forEach(p=>{
+    const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;
+    const detalle=f['Detalle productos']||'';
+    const costoReal=_costoRealPedido(f);   // null si no hay costo real capturado
+    // Desglose por línea si el detalle trae ítems "desc | und | Costo: X | Venta: Y"
+    const items=detalle.split('\n').filter(Boolean).map(l=>{const parts=l.split('|').map(s=>s.trim());if(parts.length<4)return null;const costo=Math.round(parseFloat((parts[2]||'').replace(/[^0-9]/g,''))||0);const venta=Math.round(parseFloat((parts[3]||'').replace(/[^0-9]/g,''))||0);return venta>0?{linea:_prodLinea(parts[0]),venta,costo}:null;}).filter(Boolean);
+    if(items.length){
+      const sumV=items.reduce((s,x)=>s+x.venta,0)||1;
+      items.forEach(it=>{const costo=(costoReal>0)?costoReal*(it.venta/sumV):it.costo;add(it.linea,it.venta,costo);});
+      return;
+    }
+    // Sin desglose: todo el pedido a su línea dominante
+    const venta=(f['Monto total (CLP)']||0)/1.19;if(venta<=0)return;
+    let costo;
+    if(costoReal>0)costo=costoReal;
+    else{const cot=Array.isArray(f['Cotizaciones'])&&f['Cotizaciones'].length?(state.cotizacionesById||{})[f['Cotizaciones'][0]]:null;let m=cot?getMargenCot(cot.fields):null;if(m===null)m=_margenPromedioGlobal();if(m===null)m=0;costo=venta*(1-m/100);}
+    add(_prodLinea(detalle||f['Solicitud cliente (texto libre)']||f['Alias / Título']||''),venta,costo);
+  });
+  const arr=[...map.values()].map(e=>({...e,margen:e.rev>0?e.util/e.rev*100:0}));
+  const totRev=arr.reduce((s,e)=>s+e.rev,0)||1;
+  arr.forEach(e=>e.share=e.rev/totRev*100);
+  return arr.sort((a,b)=>b.util-a.util);
+}
 function _margenChip(m){const c=m>=35?'var(--accent3)':m>=20?'var(--warn)':'var(--danger)';return `<span style="color:${c};font-weight:700">${m.toFixed(0)}%</span>`;}
 function renderRentabilidad(el){
   const cli=rentabilidadClientes().slice(0,5);
@@ -11801,7 +11839,26 @@ function renderRentabilidad(el){
     <div style="flex:1;height:14px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(Math.max(p.util,0)/maxP*100)}%;background:var(--accent4);border-radius:4px"></div></div>
     <div style="font-size:10px;font-family:'JetBrains Mono',monospace;min-width:120px;text-align:right;color:var(--accent4)">${formatCLP(Math.round(p.util))} <span style="color:var(--text3)">·</span> ${_margenChip(p.margen)}</div>
   </div>`).join('');
-  el.innerHTML=`<div class="data-grid" style="margin-top:16px">
+  // Líneas de negocio (sobre pedidos entregados, con costo real cuando existe)
+  const lineas=rentabilidadLineas();
+  const maxL=lineas.length?Math.max(...lineas.map(l=>l.util),1):1;
+  const totRevL=lineas.reduce((s,l)=>s+l.rev,0);
+  const totUtilL=lineas.reduce((s,l)=>s+l.util,0);
+  const lineHtml=lineas.map(l=>`<div style="padding:10px 0;border-top:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:15px">${_lineaIcon(l.linea)}</span>
+      <span style="font-weight:600;font-size:12.5px;color:var(--text)">${escapeHtml(l.linea)}</span>
+      <span style="font-size:10px;color:var(--text3)">${l.n} pedido${l.n!==1?'s':''} · ${l.share.toFixed(0)}% de la venta</span>
+      <span style="margin-left:auto;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--accent3);font-weight:700">${formatCLP(Math.round(l.util))} <span style="color:var(--text3)">·</span> ${_margenChip(l.margen)}</span>
+    </div>
+    <div style="height:12px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(Math.max(l.util,0)/maxL*100)}%;background:var(--accent3);border-radius:4px"></div></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:3px">Venta neta ${formatCLP(Math.round(l.rev))}</div>
+  </div>`).join('');
+  el.innerHTML=`<div class="card" style="margin-top:16px">
+    <div class="card-header"><span class="card-title">🏭 Rentabilidad por línea de negocio</span><span style="font-size:10px;color:var(--text3)">pedidos entregados · costo real cuando existe (M5)</span></div>
+    <div style="padding:14px 16px">${lineas.length?lineHtml:'<div class="empty-state">Sin pedidos clasificables aún</div>'}${lineas.length?`<div style="display:flex;justify-content:space-between;border-top:2px solid var(--border2);margin-top:8px;padding-top:10px;font-size:11px"><span style="color:var(--text3)">Total</span><span style="font-family:'JetBrains Mono',monospace"><span style="color:var(--text2)">venta ${formatCLP(Math.round(totRevL))}</span> · <span style="color:var(--accent3);font-weight:700">utilidad ${formatCLP(Math.round(totUtilL))}</span></span></div>`:''}</div>
+  </div>
+  <div class="data-grid" style="margin-top:16px">
     <div class="card"><div class="card-header"><span class="card-title">💰 Top clientes por UTILIDAD</span><span style="font-size:10px;color:var(--text3)">utilidad estimada · margen efectivo</span></div><div style="padding:14px 16px">${cliHtml||'<div class="empty-state">Sin datos de margen aún</div>'}</div></div>
     <div class="card"><div class="card-header"><span class="card-title">🏷️ Margen por tipo de producto</span><span style="font-size:10px;color:var(--text3)">de las cotizaciones con costo/venta</span></div><div style="padding:14px 16px">${prodHtml||'<div class="empty-state">Sin detalle de productos aún</div>'}</div></div>
   </div>`;
