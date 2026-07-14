@@ -330,7 +330,7 @@ async function handleNps(request, env, ctx, cors) {
   try {
     await airtableUpdateTolerant(env, "Pedidos", pedId, {
       "NPS score": score,
-      "NPS fecha": new Date().toISOString().slice(0, 10),
+      "NPS fecha": today(),
     });
   } catch (e) {
     // best-effort: igual agradecemos para no frustrar al cliente
@@ -448,7 +448,7 @@ async function handlePod(request, env, ctx, cors) {
     try {
       await airtableUpdateTolerant(env, "Pedidos", pedId, {
         "Recepción confirmada": true,
-        "Recepción fecha": new Date().toISOString().slice(0, 10),
+        "Recepción fecha": today(),
       });
     } catch (e) {}
     ctx.waitUntil(sendPodAlert(env, pedId));
@@ -2015,7 +2015,13 @@ function safeJson(text) {
 }
 
 const str = (v) => (v == null ? "" : String(v).trim());
-const today = () => new Date().toISOString().slice(0, 10);
+// Fecha calendario en horario de Chile (America/Santiago). new Date().toISOString()
+// devuelve UTC y estampa el día siguiente en acciones de tarde-noche (UTC-4/-3),
+// descuadrando reportes mensuales cuando el cambio de día UTC cruza fin de mes.
+const today = () => {
+  try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago" }).format(new Date()); }
+  catch (_) { return new Date().toISOString().slice(0, 10); }
+};
 const numOrNull = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;

@@ -6654,6 +6654,16 @@ function _setOfflineBanner(on){
 }
 window.addEventListener('offline',()=>{try{_setOfflineBanner(true);setStatus('sin conexión',false);}catch(e){}});
 window.addEventListener('online',()=>{try{_setOfflineBanner(false);toast('Conexión recuperada — sincronizando…','success');loadAllData();}catch(e){}});
+// Restaura un registro compartido SIN dejar que un respaldo vacío pise datos
+// locales: si el backup remoto viene vacío ([] o {}) pero el local tiene datos,
+// se conserva el local. Los _XBackup() tragan sus errores en silencio, así que un
+// PATCH fallido deja el remoto desfasado; sin esta guarda, la siguiente carga
+// completa sobrescribía datos recién creados (reclamos, retainers, OCs, etc.).
+function _restoreShared(key,parsed){
+  const isEmpty=v=>v==null||(Array.isArray(v)?v.length===0:(typeof v==='object'?Object.keys(v).length===0:false));
+  if(isEmpty(parsed)){let local=null;try{local=JSON.parse(localStorage.getItem(key)||'null');}catch(e){}if(!isEmpty(local))return;}
+  localStorage.setItem(key,JSON.stringify(parsed));
+}
 // Aplica config desde la tabla 'Monitor Sistema' (META_REVENUE / WATI_CONFIG / FIN_VENTAS).
 function _applyMonitorSistema(recs){
   recs=recs||[];
@@ -6662,7 +6672,7 @@ function _applyMonitorSistema(recs){
   const watiRec=recs.find(r=>r.fields['Name']==='WATI_CONFIG');
   if(watiRec){state.watiRecordId=watiRec.id;try{const wcfg=JSON.parse(watiRec.fields['Notes']||'{}');if(wcfg.url&&wcfg.token) localStorage.setItem('wati_cfg',JSON.stringify({url:wcfg.url,token:wcfg.token}));}catch(e){logErr('monitorSistema:wati',e);}}
   const finRec=recs.find(r=>r.fields['Name']==='FIN_VENTAS');
-  if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('fin_ventas',JSON.stringify(arr));}catch(e){logErr('monitorSistema:fin',e);}}
+  if(finRec){state.finVentasRecordId=finRec.id;try{const arr=JSON.parse(finRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('fin_ventas',arr);}catch(e){logErr('monitorSistema:fin',e);}}
   // Agenda de compromisos respaldada: restaura la del usuario si local está vacía.
   const agRec=recs.find(r=>r.fields['Name']==='AGENDA');
   if(agRec){
@@ -6688,55 +6698,55 @@ function _applyMonitorSistema(recs){
   const ptRec=recs.find(r=>r.fields['Name']==='PROD_TIMERS');
   if(ptRec){
     state.prodTimersRecordId=ptRec.id;
-    try{const o=JSON.parse(ptRec.fields['Notes']||'{}');if(o&&typeof o==='object') localStorage.setItem('thelab_prod_timer_v1',JSON.stringify(o));}catch(e){logErr('monitorSistema:prodTimers',e);}
+    try{const o=JSON.parse(ptRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreShared('thelab_prod_timer_v1',o);}catch(e){logErr('monitorSistema:prodTimers',e);}
   }
   // Fechas clave de clientes respaldadas (registro compartido).
   const fcRec=recs.find(r=>r.fields['Name']==='FECHAS_CLIENTE');
   if(fcRec){
     state.fechasCliRecordId=fcRec.id;
-    try{const o=JSON.parse(fcRec.fields['Notes']||'{}');if(o&&typeof o==='object') localStorage.setItem('thelab_fechas_cliente_v1',JSON.stringify(o));}catch(e){logErr('monitorSistema:fechasCli',e);}
+    try{const o=JSON.parse(fcRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreShared('thelab_fechas_cliente_v1',o);}catch(e){logErr('monitorSistema:fechasCli',e);}
   }
   // Onboarding de clientes respaldado (registro compartido).
   const obRec=recs.find(r=>r.fields['Name']==='ONBOARDING');
   if(obRec){
     state.onboardingRecordId=obRec.id;
-    try{const o=JSON.parse(obRec.fields['Notes']||'{}');if(o&&typeof o==='object') localStorage.setItem('thelab_onboarding_v1',JSON.stringify(o));}catch(e){logErr('monitorSistema:onboarding',e);}
+    try{const o=JSON.parse(obRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreShared('thelab_onboarding_v1',o);}catch(e){logErr('monitorSistema:onboarding',e);}
   }
   // Órdenes de compra respaldadas (registro compartido).
   const ocRec=recs.find(r=>r.fields['Name']==='ORDENES_COMPRA');
   if(ocRec){
     state.ocRecordId=ocRec.id;
-    try{const arr=JSON.parse(ocRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_oc_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:oc',e);}
+    try{const arr=JSON.parse(ocRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_oc_v1',arr);}catch(e){logErr('monitorSistema:oc',e);}
   }
   // Descuentos por cliente respaldados (registro compartido).
   const dcRec=recs.find(r=>r.fields['Name']==='DESC_CLIENTE');
   if(dcRec){
     state.descClienteRecordId=dcRec.id;
-    try{const o=JSON.parse(dcRec.fields['Notes']||'{}');if(o&&typeof o==='object') localStorage.setItem('thelab_desc_cliente_v1',JSON.stringify(o));}catch(e){logErr('monitorSistema:descCliente',e);}
+    try{const o=JSON.parse(dcRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreShared('thelab_desc_cliente_v1',o);}catch(e){logErr('monitorSistema:descCliente',e);}
   }
   // Contratos recurrentes respaldados (registro compartido).
   const retRec=recs.find(r=>r.fields['Name']==='RETAINERS');
   if(retRec){
     state.retainersRecordId=retRec.id;
-    try{const arr=JSON.parse(retRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_retainers_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:retainers',e);}
+    try{const arr=JSON.parse(retRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_retainers_v1',arr);}catch(e){logErr('monitorSistema:retainers',e);}
   }
   // Reclamos / garantías respaldados (registro compartido).
   const rclRec=recs.find(r=>r.fields['Name']==='RECLAMOS');
   if(rclRec){
     state.reclamosRecordId=rclRec.id;
-    try{const arr=JSON.parse(rclRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_reclamos_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:reclamos',e);}
+    try{const arr=JSON.parse(rclRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_reclamos_v1',arr);}catch(e){logErr('monitorSistema:reclamos',e);}
   }
   // Catálogo de productos respaldado (registro compartido).
   const catRec=recs.find(r=>r.fields['Name']==='CATALOGO');
   if(catRec){
     state.catalogoRecordId=catRec.id;
-    try{const arr=JSON.parse(catRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_catalogo_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:catalogo',e);}
+    try{const arr=JSON.parse(catRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_catalogo_v1',arr);}catch(e){logErr('monitorSistema:catalogo',e);}
   }
   // Historial de precios de proveedores respaldado (registro compartido).
   const ppRec=recs.find(r=>r.fields['Name']==='PRECIOS_PROV');
   if(ppRec){
     state.preciosProvRecordId=ppRec.id;
-    try{const arr=JSON.parse(ppRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_precios_prov_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:precios',e);}
+    try{const arr=JSON.parse(ppRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_precios_prov_v1',arr);}catch(e){logErr('monitorSistema:precios',e);}
   }
   renderWatiConfigBtn();
 }
@@ -8041,7 +8051,7 @@ function _fechasProximas(dias){
     const cumple=(fc[c.id]||{}).cumple;
     if(cumple){const dh=_diasHastaMMDD(cumple);if(dh!=null&&dh<=lim)out.push({c,emp,nombre,tipo:'🎂 Cumpleaños',dias:dh});}
     const prim=_primerPedidoFecha(c.id,emp);
-    if(prim){const pd=new Date(prim);const mm=String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');const dh=_diasHastaMMDD(mm);const anios=new Date().getFullYear()-pd.getFullYear();if(dh!=null&&dh<=lim&&anios>=1)out.push({c,emp,nombre,tipo:`🎉 ${anios} año${anios!==1?'s':''} como cliente`,dias:dh});}
+    if(prim){const pd=new Date(prim);const mm=String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');const dh=_diasHastaMMDD(mm);const _n=new Date();_n.setHours(0,0,0,0);let _tgt=new Date(_n.getFullYear(),pd.getMonth(),pd.getDate());if(_tgt<_n)_tgt=new Date(_n.getFullYear()+1,pd.getMonth(),pd.getDate());const anios=_tgt.getFullYear()-pd.getFullYear();if(dh!=null&&dh<=lim&&anios>=1)out.push({c,emp,nombre,tipo:`🎉 ${anios} año${anios!==1?'s':''} como cliente`,dias:dh});}
   });
   return out.sort((a,b)=>a.dias-b.dias);
 }
@@ -8191,6 +8201,7 @@ function facturasForCliente(clienteId,empresa){
         'Folio':r.fact||'',
         'Fecha':`${r.year}-${r.mes}-01`,
         'Neto':neto,'IVA':iva,'Exento':0,'Total':neto+iva,
+        'Saldo':Math.max(0,r.porCobrar||0),
         'Estado SII':'','Estado Pago':r.porCobrar>0?'Pendiente':'Cobrada',
         'Notas':r.item||'','Track ID':'',
       }};
@@ -8226,10 +8237,14 @@ function estadoPagoBadge(estado,fecha,fechaVenc){
 function _estadoCuentaData(clienteId,empresa){
   const all=facturasForCliente(clienteId,empresa).sort((a,b)=>(a.fields['Fecha']||'').localeCompare(b.fields['Fecha']||''));
   const emitido=all.reduce((s,r)=>s+(r.fields['Total']||0),0);
-  const cobrado=all.filter(r=>r.fields['Estado Pago']==='Cobrada').reduce((s,r)=>s+(r.fields['Total']||0),0);
-  const pendiente=emitido-cobrado;
+  // Saldo real por factura: 0 si está Cobrada; el campo 'Saldo' (pago parcial del
+  // libro de finanzas) si existe; si no, el Total completo. Una factura parcialmente
+  // pagada ya no cuenta su total íntegro como pendiente.
+  const _saldoDe=r=>{const t=r.fields['Total']||0;if(r.fields['Estado Pago']==='Cobrada')return 0;const sal=r.fields['Saldo'];return (typeof sal==='number'&&sal>=0)?Math.min(t,sal):t;};
+  const pendiente=all.reduce((s,r)=>s+_saldoDe(r),0);
+  const cobrado=emitido-pendiente;
   let vencido=0,nVenc=0;
-  all.forEach(r=>{if(r.fields['Estado Pago']!=='Cobrada'){const d=calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento']);if(d>0){vencido+=(r.fields['Total']||0);nVenc++;}}});
+  all.forEach(r=>{const sal=_saldoDe(r);if(sal>0){const d=calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento']);if(d>0){vencido+=sal;nVenc++;}}});
   return {all,emitido,cobrado,pendiente,vencido,nVenc};
 }
 function _estadoCuentaTexto(clienteId,empresa){
@@ -9074,7 +9089,7 @@ function updateEditItemTotal(){
   if(!rows.length){if(totalRow) totalRow.style.display='none';return;}
   let costoTotal=0,ventaTotal=0;rows.forEach(row=>{const und=parseFloat(row.querySelector('.edit-item-und')?.value)||1;const costo=parseFloat(row.querySelector('.edit-item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.edit-item-venta')?.value)||0;costoTotal+=costo*und;ventaTotal+=venta*und;});
   costoTotal=Math.round(costoTotal);ventaTotal=Math.round(ventaTotal);const markup=ventaTotal>0?(ventaTotal-costoTotal)/ventaTotal*100:null;
-  const descPct=parseFloat(document.getElementById('editCotDescuento')?.value)||0;
+  const descPct=Math.min(100,Math.max(0,parseFloat(document.getElementById('editCotDescuento')?.value)||0));
   const descMonto=Math.round(ventaTotal*descPct/100);
   const netoDesc=ventaTotal-descMonto;
   const totalIva=Math.round(netoDesc*1.19);
@@ -9091,7 +9106,7 @@ async function saveEditCot(){
   try{
     const rows=document.querySelectorAll('#editItemsContainer .edit-item-row');let costoTotal=0,ventaTotal=0;
     rows.forEach(row=>{const und=parseFloat(row.querySelector('.edit-item-und')?.value)||1;const costo=parseFloat(row.querySelector('.edit-item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.edit-item-venta')?.value)||0;costoTotal+=costo*und;ventaTotal+=venta*und;});
-    costoTotal=Math.round(costoTotal);ventaTotal=Math.round(ventaTotal);const _descPctE=parseFloat(document.getElementById('editCotDescuento')?.value)||0;const _netoDescE=Math.round(ventaTotal*(1-_descPctE/100));const totalIva=Math.round(_netoDescE*1.19);const detalle=document.getElementById('editCotDetalle').value;
+    costoTotal=Math.round(costoTotal);ventaTotal=Math.round(ventaTotal);const _descPctE=Math.min(100,Math.max(0,parseFloat(document.getElementById('editCotDescuento')?.value)||0));const _netoDescE=Math.round(ventaTotal*(1-_descPctE/100));const totalIva=Math.round(_netoDescE*1.19);const detalle=document.getElementById('editCotDetalle').value;
     const _aliasValE=(document.getElementById('editCotAlias')?.value||'').trim();
     const fields={'N° Cotización':document.getElementById('editCotNum').value,'Alias / Título':_aliasValE||null,'Canal solicitud':document.getElementById('editCotCanal').value,'Estado cotización':document.getElementById('editCotEstado').value,'Urgencia (+25%)':document.getElementById('editCotUrgente').value==='true','Fecha cotización':document.getElementById('editCotFecha').value,'Fecha vencimiento':document.getElementById('editCotVto').value,'Solicitud cliente (texto libre)':document.getElementById('editCotSolicitud').value,'Detalle productos':detalle,'Notas cotización':document.getElementById('editCotNotas').value,'Subtotal (CLP)':costoTotal,'Total final (CLP)':totalIva};
     if(_descPctE>0) fields['Descuento (%)']=_descPctE;
@@ -10535,7 +10550,7 @@ function updateItemsTotal(){
   const rows=document.querySelectorAll('#itemsContainer .item-row');const totalRow=document.getElementById('itemsTotalRow');if(!rows.length){if(totalRow) totalRow.style.display='none';return;}
   const{costo,neto,totalIva,markup}=calcItemsTotals();if(totalRow) totalRow.style.display='block';
   const ce=document.getElementById('itemsCostoVal'),ne=document.getElementById('itemsNetoVal'),me=document.getElementById('itemsMarkupVal'),ie=document.getElementById('itemsTotalIvaVal'),de=document.getElementById('itemsDescuentoVal');
-  const descPct=parseFloat(document.getElementById('cot-descuento')?.value)||0;
+  const descPct=Math.min(100,Math.max(0,parseFloat(document.getElementById('cot-descuento')?.value)||0));
   const descMonto=Math.round(neto*descPct/100);
   const netoDesc=neto-descMonto;
   const totalIvaDesc=Math.round(netoDesc*1.19);
@@ -10819,7 +10834,7 @@ function cotPopulaComunas(regionSelId,comunaSelId,valorActual){
 async function createCotizacion(){
   const btn=document.getElementById('createCotBtn');const num=(document.getElementById('cot-num')?.value||'').trim();
   if(!num){toast('N° Cotización requerido','error');return;}const token=getToken();if(!token){toast('Token Airtable requerido','error');showTokenModal();return;}
-  updateItemsDetalle();const tots=calcItemsTotals();const s=tots.costo;const _descPctN=parseFloat(document.getElementById('cot-descuento')?.value)||0;const _netoDescN=Math.round(tots.neto*(1-_descPctN/100));const t=Math.round(_netoDescN*1.19);btn.disabled=true;btn.textContent='Guardando...';
+  updateItemsDetalle();const tots=calcItemsTotals();const s=tots.costo;const _descPctN=Math.min(100,Math.max(0,parseFloat(document.getElementById('cot-descuento')?.value)||0));const _netoDescN=Math.round(tots.neto*(1-_descPctN/100));const t=Math.round(_netoDescN*1.19);btn.disabled=true;btn.textContent='Guardando...';
   try{
     const clienteId=document.getElementById('cot-cliente-id')?.value||'';
     const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];
@@ -12096,18 +12111,22 @@ async function aplicarConsumo(){
       const m=(state.inventario||[]).find(x=>x.id===a.id);if(!m)continue;
       const s=+m.fields['Stock actual']||0;const nuevo=Math.round((s-a.qty)*100)/100;
       m.fields['Stock actual']=nuevo;
-      try{await airtableWrite('Inventario','PATCH',a.id,{'Stock actual':nuevo});}catch(e){}
+      // Si el descuento en Airtable falla, revertimos el stock local y abortamos:
+      // registrar el consumo con el inventario sin descontar deja la caja descuadrada.
+      try{await airtableWrite('Inventario','PATCH',a.id,{'Stock actual':nuevo});}
+      catch(e){m.fields['Stock actual']=s;throw new Error('No se pudo descontar '+(m.fields['Material']||'material')+': '+(e.message||e));}
       nuevos.push({material:m.fields['Material']||'',cantidad:a.qty,unidad:m.fields['Unidad']||'',ts:new Date().toISOString()});
     }
     const hist=_pedConsumo(p.fields).concat(nuevos);
     const json=JSON.stringify(hist).slice(0,95000);
+    const prevHist=p.fields['Consumo materiales'];
     p.fields['Consumo materiales']=json;
     try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Consumo materiales':json});}
-    catch(err){if(/field|unknown|422|INVALID|UNKNOWN/i.test(err.message||'')){await ensureConsumoField();await airtableWrite('Pedidos','PATCH',pedidoId,{'Consumo materiales':json});}}
+    catch(err){if(/field|unknown|422|INVALID|UNKNOWN/i.test(err.message||'')){await ensureConsumoField();await airtableWrite('Pedidos','PATCH',pedidoId,{'Consumo materiales':json});}else{p.fields['Consumo materiales']=prevHist;throw err;}}
     toast('✓ Material descontado del stock','success');
     closeConsumoModal();
     try{renderInventario();}catch(e){}try{renderPedidos();}catch(e){}try{renderAlertas();}catch(e){}
-  }catch(e){toast('Error: '+e.message,'error');}
+  }catch(e){toast('Error: '+e.message,'error');try{renderInventario();}catch(_e){}}
   if(btn){btn.disabled=false;btn.textContent='✓ Descontar del stock';}
 }
 // ── PRONÓSTICO DE DEMANDA ESTACIONAL (Q4) ──────────────────────────────

@@ -2217,7 +2217,7 @@ self.onmessage=function(ev){
     if(out)out.innerHTML=`<b style="color:var(--accent3);font-size:16px">${_money(tot)}</b> <span style="color:var(--text3);font-size:10px">= filamento ${_money(fc)} + máquina ${_money(tc)}</span>`;
     // Precio sugerido al margen objetivo del taller (precio = costo / (1 - margen))
     const mEl=el('slMargen');const m=Math.max(0,Math.min(95,+(mEl?.value)||0));
-    try{if(mEl)localStorage.setItem('cot_margen_min',m);}catch(e){}
+    try{if(mEl)localStorage.setItem('sl_margen_obj',m);}catch(e){}
     const sug=el('slPriceSuggest');
     if(sug){const precio=m<95?tot/(1-m/100):0;sug.innerHTML=precio>0?`<b style="color:var(--accent);font-size:14px">${_money(precio)}</b> <span style="color:var(--text3);font-size:9px">+ IVA = ${_money(precio*1.19)}</span>`:'—';}
   }
@@ -2377,7 +2377,7 @@ self.onmessage=function(ev){
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;font-size:10px;color:var(--text3)">
           <span>Margen objetivo</span>
-          <input id="slMargen" type="number" min="0" max="95" value="${localStorage.getItem('cot_margen_min')||25}" oninput="SL3D.costRecalc()" style="width:55px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 7px;color:var(--text);font-size:11px;text-align:center"> %
+          <input id="slMargen" type="number" min="0" max="95" value="${localStorage.getItem('sl_margen_obj')||25}" oninput="SL3D.costRecalc()" style="width:55px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 7px;color:var(--text);font-size:11px;text-align:center"> %
           <span style="margin-left:auto">Precio sugerido (neto):&nbsp;</span><span id="slPriceSuggest"></span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">

@@ -2412,7 +2412,7 @@ function remRenderLiquidacion(totalNeto,totalComision){
     const sueldo=sueldos[p.nombre]||0;
     const afp=Math.round(sueldo*0.10);
     const isapre=Math.round(sueldo*0.07);
-    const comision=typeof vendorOwnsRecord!=='undefined'?0:Math.round(sueldo>0?totalComision/personas.length:0);
+    const comision=Math.round(sueldo>0?totalComision/personas.length:0);
     const neto=sueldo-afp-isapre+comision;
     return{nombre:p.nombre,avatar:p.avatar,sueldo,afp,isapre,comision,neto};
   }).filter(x=>x.sueldo>0||x.comision>0);
@@ -2559,21 +2559,28 @@ function renderBreakEven(){
   const el=document.getElementById('breakEvenCard');if(!el)return;
   const e=_puntoEquilibrio();
   if(!e.fijos){el.innerHTML=`<div class="card" style="padding:11px 16px;display:flex;align-items:center;gap:10px"><span style="font-size:15px">⚖️</span><span style="font-size:12px;color:var(--text2)">Define tus costos fijos mensuales para calcular el punto de equilibrio</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="setCostosFijos()">Definir costos fijos</button></div>`;return;}
-  const cubierto=e.venta>=e.be;
+  // Con margen de contribución ≤0 el equilibrio es inalcanzable (be=fijos/0=∞): no
+  // se puede declarar "cubierto" aunque haya ventas. Se muestra alerta, no verde.
+  const sinMargen=e.margen<=0;
+  const cubierto=!sinMargen&&e.venta>=e.be;
   const utilProy=Math.round((e.venta*e.margen/100)-e.fijos);
-  el.innerHTML=`<div class="card" style="border-color:${cubierto?'rgba(0,212,170,0.3)':'rgba(255,170,0,0.3)'}">
+  const borde=cubierto?'rgba(0,212,170,0.3)':sinMargen?'rgba(255,90,90,0.35)':'rgba(255,170,0,0.3)';
+  const barra=cubierto?'var(--accent3)':sinMargen?'var(--danger)':'var(--warn)';
+  el.innerHTML=`<div class="card" style="border-color:${borde}">
     <div class="card-header"><span class="card-title">⚖️ Punto de equilibrio</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="setCostosFijos()">⚙️ Costos fijos</button></div>
     <div style="padding:14px 16px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Costos fijos/mes</span><span class="fac-kpi-val">${formatCLP(e.fijos)}</span></div>
-        <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Margen contrib.</span><span class="fac-kpi-val">${e.margen.toFixed(0)}%</span></div>
-        <div class="fac-kpi" style="flex:1;min-width:130px"><span class="fac-kpi-lbl">Punto de equilibrio</span><span class="fac-kpi-val" style="color:var(--accent2)">${formatCLP(Math.round(e.be))}</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Margen contrib.</span><span class="fac-kpi-val"${sinMargen?' style="color:var(--danger)"':''}>${e.margen.toFixed(0)}%</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:130px"><span class="fac-kpi-lbl">Punto de equilibrio</span><span class="fac-kpi-val" style="color:var(--accent2)">${sinMargen?'—':formatCLP(Math.round(e.be))}</span></div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px"><span>Venta del mes: ${formatCLP(Math.round(e.venta))}</span><span>${e.pct}% del equilibrio</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px"><span>Venta del mes: ${formatCLP(Math.round(e.venta))}</span><span>${sinMargen?'':e.pct+'% del equilibrio'}</span></div>
       <div style="height:12px;background:var(--surface3);border-radius:5px;overflow:hidden;position:relative">
-        <div style="height:100%;width:${Math.min(100,e.pct)}%;background:${cubierto?'var(--accent3)':'var(--warn)'};border-radius:5px"></div>
+        <div style="height:100%;width:${sinMargen?100:Math.min(100,e.pct)}%;background:${barra};border-radius:5px"></div>
       </div>
-      <div style="margin-top:10px;font-size:12px;color:var(--text2)">${cubierto
+      <div style="margin-top:10px;font-size:12px;color:var(--text2)">${sinMargen
+        ?`⚠️ Con el margen de contribución actual (${e.margen.toFixed(0)}%) no cubres los costos fijos: cada venta aporta $0 o menos al equilibrio. Revisa costos reales o precios. Utilidad proyectada del mes: <b style="color:var(--danger)">${formatCLP(utilProy)}</b>.`
+        :cubierto
         ?`✅ Equilibrio cubierto. Utilidad proyectada del mes: <b style="color:var(--accent3)">${formatCLP(utilProy)}</b>.`
         :`Faltan <b style="color:var(--warn)">${formatCLP(Math.round(e.falta))}</b> de venta neta para cubrir los costos fijos${e.margen>0?` (≈ ${formatCLP(Math.round(e.falta/(e.margen/100)))} en ventas al margen actual)`:''}.`}</div>
     </div>
@@ -3008,12 +3015,15 @@ function renderComisiones(){
   const totVenta=rows.reduce((s,r)=>s+r.venta,0),totCom=rows.reduce((s,r)=>s+r.comision,0),totUtil=rows.reduce((s,r)=>s+r.util,0);
   const maxVenta=Math.max(1,...rows.map(r=>r.venta));
   const medallas=['🥇','🥈','🥉'];
+  let _posReal=0; // ranking de medallas solo entre vendedores reales (la fila "Sin vendedor" no consume posición)
   const rankHtml=rows.map((r,i)=>{
     const pct=r.meta>0?Math.round(r.venta/r.meta*100):null;
     const pctCol=pct==null?'var(--text3)':pct>=100?'var(--accent3)':pct>=70?'var(--warn)':'var(--danger)';
+    const _rank=r.vid==='_sinasignar'?'—':(medallas[_posReal]||(_posReal+1));
+    if(r.vid!=='_sinasignar')_posReal++;
     return `<div style="padding:10px 0;border-top:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
-        <span style="font-size:15px;width:22px;text-align:center">${r.vid==='_sinasignar'?'—':(medallas[i]||(i+1))}</span>
+        <span style="font-size:15px;width:22px;text-align:center">${_rank}</span>
         <span style="font-weight:600;font-size:12.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.nombre)}</span>
         <span style="font-size:10.5px;color:var(--text3)">${r.n} venta${r.n!==1?'s':''}</span>
         <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--accent)">${formatCLP(Math.round(r.venta))}</span>
