@@ -130,11 +130,18 @@ async function _fichaHTMLtoPdfBlob(htmlDoc){
   const ROOT='cotpdf-render-root';
   const {css,body}=_extractDocParts(htmlDoc);
   const shield='#'+ROOT+',#'+ROOT+' *{all:revert;}';
+  // El contenedor va fuera de pantalla con position:fixed (para no mostrarlo),
+  // pero el elemento que se RASTERIZA va en FLUJO NORMAL dentro de él: html2pdf
+  // clona ese elemento y, si tuviera position:fixed, el clon quedaría fuera de
+  // flujo dentro de su propio contenedor y el PDF saldría EN BLANCO.
+  const holder=document.createElement('div');
+  holder.style.cssText='position:fixed;top:0;left:-100000px;width:794px;z-index:-1;';
   const root=document.createElement('div');
   root.id=ROOT;
-  root.style.cssText='position:fixed;top:0;left:-100000px;width:794px;background:#fff;z-index:-1;';
+  root.style.cssText='width:794px;background:#fff;';
   root.innerHTML='<style>'+shield+_scopeCss(css,'#'+ROOT)+'</style>'+body;
-  document.body.appendChild(root);
+  holder.appendChild(root);
+  document.body.appendChild(holder);
   try{
     await new Promise(r=>{
       const imgs=[...root.querySelectorAll('img')];
@@ -149,7 +156,7 @@ async function _fichaHTMLtoPdfBlob(htmlDoc){
       html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,backgroundColor:'#ffffff'},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
     }).from(root).outputPdf('blob');
-  }finally{document.body.removeChild(root);}
+  }finally{document.body.removeChild(holder);}
 }
 
 async function subirFactura(pedidoId){
