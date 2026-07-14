@@ -738,6 +738,14 @@
     </div>
     <div id="fuTrayList" style="padding:2px 0 8px"></div>
   </div>
+  <!-- BANDEJA: cotizaciones aprobadas (incl. desde el portal del cliente) sin pedido creado -->
+  <div class="card" id="cotToOrderTray" style="margin-bottom:20px;border-color:rgba(0,212,170,0.4);display:none">
+    <div class="card-header">
+      <span class="card-title" style="color:var(--accent3)">✅ Aprobadas sin pedido <span class="badge badge-green" id="cotToOrderCount">0</span></span>
+      <span style="margin-left:auto;font-size:10.5px;color:var(--text3)">Convierte a pedido en 1 clic (arrastra los datos de la cotización)</span>
+    </div>
+    <div id="cotToOrderList" style="padding:2px 0 8px"></div>
+  </div>
   <div class="card">
     <div class="card-header">
       <span class="card-title" id="cotTableTitle">Todas las Cotizaciones</span>
@@ -8226,6 +8234,7 @@ function renderCotizaciones(skipAnalytics){
   }
   _setRows(tbody,html);if(!skipAnalytics)renderCotAnalytics();_applySortIndicators();
   try{buildFollowupTray();}catch(e){}
+  try{renderCotToOrderTray();}catch(e){}
 }
 function resolveVendedorName(vid){if(!vid) return '—';const p=PERSONAS.find(x=>x.id===vid.toLowerCase().trim());return p?p.nombre:vid;}
 function buildCotRow(c){
@@ -8300,17 +8309,89 @@ async function toggleUrgenciaCotizacion(id){
   try{await airtableWrite('Cotizaciones','PATCH',id,{'Urgencia (+25%)':nuevo});toast(nuevo?'⚡ Marcada como urgente':'Urgencia quitada','info');}
   catch(e){c.fields['Urgencia (+25%)']=!nuevo;renderCotizaciones();toast('Error: '+e.message,'error');}
 }
-async function crearPedidoDesdeCotizacion(cotId){
-  const cot=state.cotizacionesById[cotId];if(!cot) return;const f=cot.fields;
+// ¿La cotización ya tiene un pedido creado? Evita duplicar cuando aprueban por
+// el portal y también desde el dashboard, o si se pulsa dos veces el botón.
+function _pedidoDeCot(numCot){
+  if(!numCot) return null;
+  return (state.pedidos||[]).find(p=>String(p.fields['N° Cotización']||'')===String(numCot))||null;
+}
+async function ensurePedidoCotField(){
+  const t=getToken();if(!t&&!_proxyCfg()) return;
+  try{
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return;const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Pedidos');if(!tbl) return;
+    if(tbl.fields?.some(x=>x.name==='N° Cotización')) return;
+    await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'N° Cotización',type:'singleLineText'})});
+  }catch(e){}
+}
+async function crearPedidoDesdeCotizacion(cotId,opts){
+  opts=opts||{};
+  const cot=state.cotizacionesById[cotId];if(!cot) return false;const f=cot.fields;
+  const numCot=f['N° Cotización']||'';
+  // Guard anti-duplicado: si ya existe un pedido para esta cotización, no crear otro.
+  const existente=_pedidoDeCot(numCot);
+  if(existente){ if(!opts.silent) toast(`Esta cotización ya tiene el pedido ${existente.fields['N° Pedido']||''}`,'info'); return false; }
   const year=new Date().getFullYear();let maxNum=0;state.pedidos.forEach(p=>{const m=(p.fields['N° Pedido']||'').toString().match(new RegExp(`PED-${year}-(\\d+)`));if(m) maxNum=Math.max(maxNum,parseInt(m[1]));});
   const numPedido=`PED-${year}-${String(maxNum+1).padStart(3,'0')}`;
   const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0};
   if(Array.isArray(f['Cliente'])&&f['Cliente'].length>0) fields['Cliente']=f['Cliente'];
   if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
   if(f['Vendedor']) fields['Vendedor']=f['Vendedor'];
+  if(numCot) fields['N° Cotización']=numCot;                              // backlink cotización→pedido
+  if(f['Detalle productos']) fields['Detalle productos']=f['Detalle productos'];
+  if(f['Tiempo de producción']) fields['Tiempo de producción']=f['Tiempo de producción'];
+  if(f['Tipo días producción']) fields['Tipo días producción']=f['Tipo días producción'];
   const solicitudCot=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';
-  try{await airtableWrite('Pedidos','POST',null,fields);toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();renderPedidos();_offerAgentChain(numPedido,solicitudCot);}
-  catch(e){if(e.message.toLowerCase().includes('unknown')||e.message.toLowerCase().includes('cliente')){try{await airtableWrite('Pedidos','POST',null,{'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']});toast(`✓ Pedido ${numPedido} creado`,'success');const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();renderPedidos();_offerAgentChain(numPedido,solicitudCot);}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');}}else{toast(`⚠ Error: ${e.message}`,'error');}}
+  if(numCot){try{await ensurePedidoCotField();}catch(e){}}   // asegura el campo backlink
+  // Reintento tolerante: si Airtable rechaza por un campo desconocido, reintenta
+  // dejando solo los campos base garantizados (no perder el pedido por un campo nuevo).
+  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']};
+  if(fields['Cliente']) base['Cliente']=fields['Cliente'];
+  try{
+    await airtableWrite('Pedidos','POST',null,fields);
+  }catch(e){
+    const m=(e.message||'').toLowerCase();
+    if(/unknown|field|cliente|invalid|422/.test(m)){ try{ await airtableWrite('Pedidos','POST',null,base); }catch(e2){ toast(`⚠ Error: ${e2.message}`,'error'); return false; } }
+    else { toast(`⚠ Error: ${e.message}`,'error'); return false; }
+  }
+  toast(`✓ Pedido ${numPedido} creado desde ${numCot||'la cotización'}`,'success');
+  try{const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
+  try{renderPedidos();}catch(e){}try{renderCotizaciones();}catch(e){}
+  if(!opts.silent) _offerAgentChain(numPedido,solicitudCot);
+  return true;
+}
+// Cotizaciones aprobadas que aún no tienen pedido (incluye las aprobadas desde el
+// portal del cliente). Base de la bandeja de conversión 1-clic.
+function _cotAprobadasSinPedido(){
+  return (state.cotizaciones||[]).filter(c=>{
+    const est=c.fields['Estado cotización']||'';
+    if(est!=='Aprobada') return false;
+    return !_pedidoDeCot(c.fields['N° Cotización']||'');
+  }).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));
+}
+function renderCotToOrderTray(){
+  const card=document.getElementById('cotToOrderTray');if(!card) return;
+  const list=_cotAprobadasSinPedido();
+  const cnt=document.getElementById('cotToOrderCount');if(cnt) cnt.textContent=list.length;
+  if(!list.length){card.style.display='none';return;}
+  card.style.display='';
+  const box=document.getElementById('cotToOrderList');if(!box) return;
+  box.innerHTML=list.slice(0,12).map(c=>{
+    const f=c.fields;const neto=Math.round((f['Total final (CLP)']||0)/1.19);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+      <span class="badge badge-green" style="flex-shrink:0">Aprobada</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f['N° Cotización']||'—')} · ${escapeHtml(resolveClienteName(f['Cliente']))}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${formatCLP(neto)} neto${f['Fecha cotización']?' · '+escapeHtml(f['Fecha cotización']):''}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" data-id="${c.id}" onclick="convertirCotAPedido(this.dataset.id,this)">📦 Crear pedido</button>
+    </div>`;
+  }).join('')+(list.length>12?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${list.length-12} más</div>`:'');
+}
+async function convertirCotAPedido(cotId,btn){
+  const prev=btn?btn.innerHTML:'';if(btn){btn.disabled=true;btn.textContent='Creando…';}
+  try{const ok=await crearPedidoDesdeCotizacion(cotId);if(ok){try{renderCotToOrderTray();}catch(e){}}}
+  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
 }
 function openEditCot(id){
   const c=state.cotizacionesById[id];if(!c) return;const f=c.fields;

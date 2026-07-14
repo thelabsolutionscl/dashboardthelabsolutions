@@ -90,6 +90,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'tvStart', 'tvStop', 'openAgendaModal', 'agendaSave',
     'renderInventario', 'addMaterial', 'editMaterial', 'openConsumoModal', 'aplicarConsumo',
     'renderReordenInventario', '_reordenSugerencias', 'pedirReorden',
+    'crearPedidoDesdeCotizacion', 'renderCotToOrderTray', 'convertirCotAPedido', '_pedidoDeCot',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',
@@ -109,7 +110,7 @@ const ok = msg => console.log('  ✓ ' + msg);
   const IDS = ['tab-overview', 'tab-clientes', 'tab-cotizaciones', 'tab-pedidos', 'tab-agentes',
     'tab-oficina', 'tab-inventario', 'inventarioTableBody', 'agentesGrid', 'fuTrayCard', 'pdTrayCard', 'wbTrayCard', 'finCobranzaActions',
     'morningBrief', 'maqOcupacion', 'pedidosKanban', 'agentWorkingModal', 'agentInlineModal',
-    'cdTimeline', 'mailList', 'umBackupInfo', 'agendaModal', 'finFlujoCaja', 'pdCsatBar'];
+    'cdTimeline', 'mailList', 'umBackupInfo', 'agendaModal', 'finFlujoCaja', 'pdCsatBar', 'cotToOrderTray'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
   if (missing.length) fail('IDs del DOM ausentes: ' + missing.join(', '));
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');
