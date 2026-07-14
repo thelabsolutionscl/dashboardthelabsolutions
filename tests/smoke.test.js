@@ -100,6 +100,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'openReclamoModal', 'guardarReclamo', 'renderReclamos', 'setReclamoEstado',
     'openRetainerModal', 'guardarRetainer', 'generarRetainer', 'retainersAutoCheck', 'renderRetainers',
     'renderArqueo', '_arqueoDia', 'guardarArqueo',
+    'generarEstadoCuentaPDF', 'enviarEstadoCuenta', '_estadoCuentaData',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

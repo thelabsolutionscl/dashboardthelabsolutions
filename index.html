@@ -2595,6 +2595,8 @@
         <div style="display:flex;gap:4px">
           <button class="btn btn-ghost btn-sm" onclick="actualizarTodosEstadosSII()" style="font-size:10px;padding:4px 8px" title="Consultar estado SII de todas las facturas pendientes"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-refresh"/></svg> SII</button>
           <button class="btn btn-ghost btn-sm" onclick="exportarFacturasCSV()" style="font-size:10px;padding:4px 8px" title="Exportar a CSV">⬇ CSV</button>
+          <button class="btn btn-ghost btn-sm" onclick="generarEstadoCuentaPDF(cdCurrentId,cdCurrentEmpresa)" style="font-size:10px;padding:4px 8px" title="Estado de cuenta en PDF">📄 Estado</button>
+          <button class="btn btn-ghost btn-sm" onclick="enviarEstadoCuenta(cdCurrentId,cdCurrentEmpresa)" style="font-size:10px;padding:4px 8px" title="Enviar estado de cuenta por correo">📧</button>
           <button class="btn btn-ghost btn-sm" onclick="abrirImportarDtes()" style="font-size:10px;padding:4px 8px" title="Importar DTEs del servidor SII">⬆ DTE</button>
           <button class="btn btn-ghost btn-sm" id="cdAddFacturaBtn" style="font-size:10px;padding:4px 8px">➕ Nueva</button>
         </div>
@@ -7947,6 +7949,80 @@ function estadoPagoBadge(estado,fecha,fechaVenc){
   const cls=e==='Cobrada'?'badge-green':dias>0?'badge-red':'badge-yellow';
   const mora=e!=='Cobrada'&&dias>0?` · ${dias}d`:'';
   return `<span class="badge ${cls}">${escapeHtml(e)}${mora}</span>`;
+}
+// ── ESTADO DE CUENTA DEL CLIENTE (Q1) ──────────────────────────────────
+// Resumen de facturas, pagos y saldo de un cliente, generable en PDF y por
+// correo. Reutiliza facturasForCliente y la aproximación de PDF de N6.
+function _estadoCuentaData(clienteId,empresa){
+  const all=facturasForCliente(clienteId,empresa).sort((a,b)=>(a.fields['Fecha']||'').localeCompare(b.fields['Fecha']||''));
+  const emitido=all.reduce((s,r)=>s+(r.fields['Total']||0),0);
+  const cobrado=all.filter(r=>r.fields['Estado Pago']==='Cobrada').reduce((s,r)=>s+(r.fields['Total']||0),0);
+  const pendiente=emitido-cobrado;
+  let vencido=0,nVenc=0;
+  all.forEach(r=>{if(r.fields['Estado Pago']!=='Cobrada'){const d=calcDiasMora(r.fields['Fecha'],r.fields['Fecha Vencimiento']);if(d>0){vencido+=(r.fields['Total']||0);nVenc++;}}});
+  return {all,emitido,cobrado,pendiente,vencido,nVenc};
+}
+function _estadoCuentaTexto(clienteId,empresa){
+  const d=_estadoCuentaData(clienteId,empresa);
+  const clp=n=>formatCLP(Math.round(n||0));
+  const L=[`ESTADO DE CUENTA — ${empresa||'Cliente'}`,`The Lab Solutions · ${new Date().toLocaleDateString('es-CL')}`,''];
+  L.push(`Total facturado: ${clp(d.emitido)}`);
+  L.push(`Pagado: ${clp(d.cobrado)}`);
+  L.push(`Saldo pendiente: ${clp(d.pendiente)}`+(d.nVenc?` (de los cuales ${clp(d.vencido)} vencidos en ${d.nVenc} factura${d.nVenc!==1?'s':''})`:''));
+  const pend=d.all.filter(r=>r.fields['Estado Pago']!=='Cobrada');
+  if(pend.length){L.push('','FACTURAS PENDIENTES:');pend.forEach(r=>{const f=r.fields;const mora=calcDiasMora(f['Fecha'],f['Fecha Vencimiento']);L.push(`  • Folio ${f['Folio']||'—'} · ${f['Fecha']||''} · ${clp(f['Total'])}${mora>0?` · vencida ${mora}d`:''}`);});}
+  else L.push('','✓ Sin facturas pendientes. ¡Gracias!');
+  L.push('','Cualquier consulta, con gusto la revisamos. — The Lab Solutions');
+  return L.join('\n');
+}
+function generarEstadoCuentaPDF(clienteId,empresa){
+  const d=_estadoCuentaData(clienteId,empresa);
+  if(!d.all.length){toast('Este cliente no tiene facturas registradas','info');return;}
+  const esc=s=>escapeHtml(String(s==null?'':s));
+  const clp=n=>formatCLP(Math.round(n||0));
+  const hoy=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'});
+  const rows=d.all.map(r=>{const f=r.fields;const pagada=f['Estado Pago']==='Cobrada';const mora=pagada?0:calcDiasMora(f['Fecha'],f['Fecha Vencimiento']);
+    return `<tr>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f3">${esc(f['Folio']||'—')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f3">${esc(f['Fecha']||'')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:right">${clp(f['Total'])}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:center;color:${pagada?'#0a8f6a':mora>0?'#b00020':'#b5860b'};font-weight:700">${pagada?'Pagada':(mora>0?'Vencida '+mora+'d':'Pendiente')}</td>
+    </tr>`;}).join('');
+  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Estado de cuenta — ${esc(empresa)}</title>
+<style>@page{size:A4;margin:16mm}*{box-sizing:border-box}body{font-family:-apple-system,system-ui,'Segoe UI',Arial,sans-serif;color:#111;margin:0}</style></head><body>
+<div style="max-width:720px;margin:0 auto">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #00b3a4;padding-bottom:12px;margin-bottom:20px">
+    <div><div style="font-size:11px;letter-spacing:.2em;color:#8a8a92;text-transform:uppercase">The Lab Solutions</div>
+    <div style="font-size:24px;font-weight:800;margin-top:4px">Estado de cuenta</div>
+    <div style="font-size:14px;color:#444;margin-top:2px">${esc(empresa||'Cliente')}</div></div>
+    <div style="text-align:right;font-size:11px;color:#8a8a92">${esc(hoy)}</div>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+    ${[['Facturado',clp(d.emitido),'#111'],['Pagado',clp(d.cobrado),'#0a8f6a'],['Saldo pendiente',clp(d.pendiente),d.pendiente>0?'#b00020':'#0a8f6a']].map(k=>`<div style="flex:1;min-width:150px;border:1px solid #ececf0;border-radius:12px;padding:14px 16px"><div style="font-size:11px;color:#8a8a92;text-transform:uppercase;letter-spacing:.06em">${k[0]}</div><div style="font-size:22px;font-weight:800;color:${k[2]};margin-top:5px">${k[1]}</div></div>`).join('')}
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="color:#8a8a92;font-size:11px;text-transform:uppercase;letter-spacing:.04em">
+      <th style="text-align:left;padding:0 10px 6px">Folio</th><th style="text-align:left;padding:0 10px 6px">Fecha</th>
+      <th style="text-align:right;padding:0 10px 6px">Total</th><th style="text-align:center;padding:0 10px 6px">Estado</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  ${d.pendiente>0?`<div style="margin-top:18px;padding:12px 16px;background:#fff6f6;border:1px solid #f3d0d0;border-radius:10px;font-size:13px;color:#7a2020">Saldo pendiente de pago: <b>${clp(d.pendiente)}</b>${d.nVenc?` · ${clp(d.vencido)} vencido`:''}. Agradecemos regularizar a la brevedad.</div>`:`<div style="margin-top:18px;padding:12px 16px;background:#f0faf6;border:1px solid #cfe9dd;border-radius:10px;font-size:13px;color:#0a6b4f">✓ Cuenta al día. ¡Gracias por tu preferencia!</div>`}
+  <div style="margin-top:22px;text-align:center;font-size:10.5px;color:#a0a0a8">The Lab Solutions · dashboard.thelab.solutions</div>
+</div>
+<script>window.onload=function(){window.focus();setTimeout(function(){window.print();},250);};<\/script></body></html>`;
+  const w=window.open('','_blank');if(!w){toast('Permite las ventanas emergentes para el PDF','error');return;}
+  w.document.open();w.document.write(html);w.document.close();
+  toast('📄 Estado de cuenta generado','success');
+}
+async function enviarEstadoCuenta(clienteId,empresa){
+  const d=_estadoCuentaData(clienteId,empresa);
+  if(!d.all.length){toast('Este cliente no tiene facturas','info');return;}
+  const cli=(state.clientes||[]).find(c=>c.id===clienteId)||(state.clientes||[]).find(c=>(c.fields['Empresa']||'')===empresa);
+  let to=cli?.fields['Email']||prompt('¿A qué correo enviamos el estado de cuenta?','');
+  if(!to)return;to=String(to).trim();
+  if(!validEmail(to)){toast('Correo inválido','error');return;}
+  try{await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:`Estado de cuenta — ${empresa||'The Lab Solutions'}`,body:_estadoCuentaTexto(clienteId,empresa),from_name:AGENT_CTA_FROM.name});toast('✓ Estado de cuenta enviado a '+to,'success');}
+  catch(e){toast('No se pudo enviar: '+e.message,'error');}
 }
 function renderClienteFacturas(clienteId,empresa){
   const cont=document.getElementById('cdFacturas');if(!cont) return;
