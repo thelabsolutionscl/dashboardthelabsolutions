@@ -737,25 +737,25 @@
 <div class="tab-panel" id="tab-cotizaciones">
   <div class="section-header"><div><div class="section-title">Cotizaciones</div><div class="section-desc">Crea y gestiona presupuestos para tus clientes. Controla estado, fechas de vencimiento y convierte cotizaciones aprobadas en pedidos con un clic.</div></div><button class="btn btn-primary btn-sm" onclick="startQuoteFlow()" title="Cotizador guiado paso a paso con KAI">💰 Cotizar con KAI</button></div>
   <!-- BANDEJA DE SEGUIMIENTOS: cotizaciones enviadas sin respuesta, listas para 1 clic -->
-  <div class="card" id="fuTrayCard" style="margin-bottom:20px;border-color:rgba(255,170,0,0.35);display:none">
-    <div class="card-header">
-      <span class="card-title">📬 Seguimientos pendientes <span class="badge badge-yellow" id="fuTrayCount">0</span></span>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+  <div class="card tray-collapsible collapsed" id="fuTrayCard" style="margin-bottom:20px;border-color:rgba(255,170,0,0.35);display:none">
+    <div class="card-header" onclick="toggleTray('fuTrayCard')" style="cursor:pointer" title="Mostrar / ocultar">
+      <span class="card-title"><span class="tray-chevron">▸</span> 📬 Seguimientos pendientes <span class="badge badge-yellow" id="fuTrayCount">0</span></span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap" onclick="event.stopPropagation()">
         <span style="font-size:10px;color:var(--text3)" title="Secuencia de 3 toques: base, base+3 y base+8 días">1er toque a los</span>
         <select class="field-select" id="fuTrayDays" style="width:auto;padding:3px 8px;font-size:11px" onchange="fuSetDays(this.value)">
           <option value="3">3 días</option><option value="5">5 días</option><option value="7">7 días</option><option value="10">10 días</option>
         </select>
       </div>
     </div>
-    <div id="fuTrayList" style="padding:2px 0 8px"></div>
+    <div id="fuTrayList" class="tray-body" style="padding:2px 0 8px"></div>
   </div>
   <!-- BANDEJA: cotizaciones aprobadas (incl. desde el portal del cliente) sin pedido creado -->
-  <div class="card" id="cotToOrderTray" style="margin-bottom:20px;border-color:rgba(0,212,170,0.4);display:none">
-    <div class="card-header">
-      <span class="card-title" style="color:var(--accent3)">✅ Aprobadas sin pedido <span class="badge badge-green" id="cotToOrderCount">0</span></span>
+  <div class="card tray-collapsible collapsed" id="cotToOrderTray" style="margin-bottom:20px;border-color:rgba(0,212,170,0.4);display:none">
+    <div class="card-header" onclick="toggleTray('cotToOrderTray')" style="cursor:pointer" title="Mostrar / ocultar">
+      <span class="card-title" style="color:var(--accent3)"><span class="tray-chevron">▸</span> ✅ Aprobadas sin pedido <span class="badge badge-green" id="cotToOrderCount">0</span></span>
       <span style="margin-left:auto;font-size:10.5px;color:var(--text3)">Convierte a pedido en 1 clic (arrastra los datos de la cotización)</span>
     </div>
-    <div id="cotToOrderList" style="padding:2px 0 8px"></div>
+    <div id="cotToOrderList" class="tray-body" style="padding:2px 0 8px"></div>
   </div>
   <div class="card">
     <div class="card-header">
@@ -5059,6 +5059,10 @@ function cliShowMore(){_cliCap+=TABLE_PAGE;renderClientes(true);}
 function cotShowMore(){_cotCap+=TABLE_PAGE;renderCotizaciones(true);}
 let _cotGroup=false;
 function toggleCotGroup(){_cotGroup=!_cotGroup;const b=document.getElementById('cotGroupBtn');if(b){b.classList.toggle('active-filter',_cotGroup);b.textContent=_cotGroup?'⊟ Desagrupar':'⊞ Agrupar';}renderCotizaciones(true);}
+// Despliega/pliega una bandeja (Seguimientos pendientes / Aprobadas sin pedido).
+// Parten cerradas (clase .collapsed en el HTML); la clase persiste entre
+// re-renders porque solo se re-genera la lista interna, no la tarjeta.
+function toggleTray(id){const c=document.getElementById(id);if(c) c.classList.toggle('collapsed');}
 function pedShowMore(){_pedCap+=TABLE_PAGE;renderPedidos(state.pedidoFilter);}
 // ── Densidad de la interfaz (compacto/cómodo), persistida ──
 function applyDensity(){const c=localStorage.getItem('ui_density')==='compact';document.body.classList.toggle('compact',c);const b=document.getElementById('densityBtn');if(b){b.textContent=c?'≣':'≡';b.title=c?'Vista compacta — clic para cómoda':'Vista cómoda — clic para compacta';}}

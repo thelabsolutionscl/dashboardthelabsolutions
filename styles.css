@@ -171,6 +171,12 @@ body.kiosk{padding-left:0!important;}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
 .card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
 .card-title{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;}
+/* Bandejas desplegables (Seguimientos pendientes / Aprobadas sin pedido): parten cerradas */
+.tray-collapsible .card-header{border-bottom:1px solid var(--border);}
+.tray-collapsible.collapsed .card-header{border-bottom:none;}
+.tray-chevron{display:inline-block;transition:transform .15s ease;color:var(--text3);font-size:10px;}
+.tray-collapsible:not(.collapsed) .tray-chevron{transform:rotate(90deg);}
+.tray-collapsible.collapsed .tray-body{display:none!important;}
 .card-badge{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);padding:2px 7px;border-radius:4px;}
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;}
