@@ -1,3 +1,6 @@
 .claude/worktrees/
 printer-bridge/.bridge-token
 printer-bridge/maint-config.json
+
+# Clave privada de Resend para mail-api.php (NO versionar)
+mail-api.config.php

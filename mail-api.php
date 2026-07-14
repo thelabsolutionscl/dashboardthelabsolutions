@@ -6,10 +6,14 @@
  *   1. Subir este archivo a https://mail-api.thelab.solutions/mail-api.php
  *      (subdominio del cPanel — el sitio principal ya no corre PHP: vive en Vercel)
  *   2. Verificar que PHP IMAP esté habilitado en cPanel > PHP Extensions
- *   3. El servidor de correo se conecta a mail.thelab.solutions:993 (IMAP SSL)
- *      y mail.thelab.solutions:465 (SMTP SSL)
+ *   3. La LECTURA de correo usa IMAP SSL (mail.thelab.solutions:993).
+ *   4. El ENVÍO sale por la API de Resend (dominio verificado), NO por el SMTP
+ *      del hosting — así no se cae si SilverHost suspende el saliente. Para
+ *      activarlo, subir junto a este archivo un `mail-api.config.php` con la
+ *      clave de Resend (ver `mail-api.config.example.php`). Sin esa clave, el
+ *      envío cae automáticamente al SMTP tradicional (mail.thelab.solutions:465).
  *
- * REQUISITOS: PHP 7.4+ con extensión IMAP habilitada
+ * REQUISITOS: PHP 7.4+ con extensión IMAP habilitada (y cURL, ya estándar)
  */
 
 $_origins = ['https://thelabsolutionscl.github.io', 'https://dashboard.thelab.solutions'];
@@ -48,6 +52,18 @@ define('IMAP_HOST', 'mail.thelab.solutions');
 define('IMAP_PORT', 993);
 define('SMTP_HOST', 'mail.thelab.solutions');
 define('SMTP_PORT', 465);
+
+// ── Resend (envío saliente sin depender del SMTP del hosting) ──
+// El SMTP compartido de SilverHost puede quedar suspendido por volumen. Para no
+// depender de él, el envío sale por la API de Resend usando el dominio ya
+// verificado (thelab.solutions). La clave NO se versiona: se lee de la variable
+// de entorno RESEND_API_KEY o de un archivo `mail-api.config.php` junto a este
+// script. Si no hay clave, se usa el SMTP tradicional como antes (respaldo).
+$__cfg = @include __DIR__ . '/mail-api.config.php';
+define('RESEND_API_KEY', trim(
+    (getenv('RESEND_API_KEY') ?: '')
+    ?: ((is_array($__cfg) && !empty($__cfg['RESEND_API_KEY'])) ? $__cfg['RESEND_API_KEY'] : '')
+));
 
 function imap_str($folder = 'INBOX') {
     return '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}' . $folder;
@@ -245,6 +261,84 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $at
     }
 }
 
+// ── Envío vía Resend (API HTTP) ───────────────────────────────
+// Envía usando el dominio verificado en Resend; no pasa por el SMTP del hosting.
+// Devuelve: null si OK · 'NO_RESEND' si no hay clave configurada · mensaje si error.
+function resend_send($from_email, $from_name, $to, $cc, $subject, $body_html, $attachments = []) {
+    if (!RESEND_API_KEY) return 'NO_RESEND';
+
+    // Convierte "Nombre <a@b.cl>, c@d.cl" en ['a@b.cl','c@d.cl']
+    $split = function($s) {
+        $out = [];
+        foreach (explode(',', (string)$s) as $x) {
+            $x = trim($x);
+            if ($x === '') continue;
+            $out[] = preg_match('/<(.+)>/', $x, $m) ? trim($m[1]) : $x;
+        }
+        return array_values($out);
+    };
+
+    $payload = [
+        'from'     => $from_name ? "$from_name <$from_email>" : $from_email,
+        'to'       => $split($to),
+        'subject'  => $subject,
+        'html'     => $body_html,
+        'reply_to' => $from_email,
+    ];
+    $ccArr = $cc ? $split($cc) : [];
+    if ($ccArr) $payload['cc'] = $ccArr;
+
+    if (!empty($attachments)) {
+        $payload['attachments'] = [];
+        foreach ($attachments as $a) {
+            if (empty($a['data'])) continue;
+            $payload['attachments'][] = [
+                'filename' => $a['name'] ?? 'archivo',
+                'content'  => $a['data'], // base64
+            ];
+        }
+    }
+
+    $url  = 'https://api.resend.com/emails';
+    $hdrs = ['Authorization: Bearer ' . RESEND_API_KEY, 'Content-Type: application/json'];
+    $json = json_encode($payload);
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_HTTPHEADER     => $hdrs,
+            CURLOPT_POSTFIELDS     => $json,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+        $resp = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $cerr = curl_error($ch);
+        curl_close($ch);
+        if ($resp === false) return 'Resend: ' . ($cerr ?: 'sin conexión');
+    } else {
+        $ctx = stream_context_create(['http' => [
+            'method'        => 'POST',
+            'header'        => implode("\r\n", $hdrs),
+            'content'       => $json,
+            'timeout'       => 30,
+            'ignore_errors' => true,
+        ]]);
+        $resp = @file_get_contents($url, false, $ctx);
+        $code = 0;
+        if (isset($http_response_header[0]) && preg_match('#\s(\d{3})\s#', $http_response_header[0], $m)) {
+            $code = (int)$m[1];
+        }
+        if ($resp === false) return 'Resend: sin conexión (stream)';
+    }
+
+    if ($code >= 200 && $code < 300) return null; // enviado
+    $j   = json_decode($resp, true);
+    $msg = $j['message'] ?? ($j['error']['message'] ?? $resp);
+    return 'Resend (' . $code . '): ' . $msg;
+}
+
 // ── Router ────────────────────────────────────────────────────
 switch ($action) {
 
@@ -399,7 +493,12 @@ case 'send':
         }
     }
 
-    $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments);
+    // Salida por Resend (dominio verificado, no pasa por el SMTP del hosting).
+    // Si no hay clave Resend configurada, cae al SMTP tradicional (respaldo).
+    $err = resend_send($user, $from_name, $to, $cc, $subject, $body_html, $attachments);
+    if ($err === 'NO_RESEND') {
+        $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments);
+    }
     if ($err) { echo json_encode(['error' => $err]); exit; }
 
     // Guardar en carpeta Enviados via IMAP APPEND
