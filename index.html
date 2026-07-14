@@ -6877,7 +6877,7 @@ async function loadAllDataSilent(){
     if(changed) renderOverview();
   }catch(e){ setStatus('error (auto)',false); logErr('loadAllDataSilent',e); }
 }
-function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&getToken()) loadAllDataSilent();},1800000);} // 30 min
+function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInterval);autoRefreshInterval=setInterval(()=>{if(document.visibilityState==='visible'&&(getToken()||_proxyCfg())) loadAllDataSilent();},1800000);} // 30 min
 
 // ── AI ────────────────────────────────────────────────────────
 // Config del proxy Worker (si está) — guarda los secretos en el servidor, no en el navegador
@@ -7010,7 +7010,7 @@ function switchTab(name){
   document.querySelector(`.mg-item[data-tab="${name}"]`)?.classList.add('active');
   try{closeGlobalSearch();}catch(e){}
   try{sessionStorage.setItem('thelab_active_tab',name);}catch(e){}
-  if(name==='agentes'){renderAgentesGrid();if(getToken()&&!_agentQueue.length) refreshAgentQueue();}
+  if(name==='agentes'){renderAgentesGrid();if((getToken()||_proxyCfg())&&!_agentQueue.length) refreshAgentQueue();}
   if(name==='oficina'){ofSetView(_ofView);startOficinaPolling();}
   else stopOficinaPolling();
   if(name==='remuneraciones') renderRemuneraciones();
@@ -9826,7 +9826,7 @@ function _driveConnected(){return _driveAccessToken&&_driveTokenExpiry>Date.now(
 // Recordatorio automático si pasan 7+ días sin respaldo.
 const BACKUP_TABLES=['Clientes','Cotizaciones','Pedidos','Proveedores','Facturas','Reportes','Maquinas','Automations','Social_Posts','Social_Interactions','Agent_Log'];
 async function backupAirtable(btn){
-  if(typeof getToken!=='function'||!getToken()){toast('Conecta Airtable primero','error');return;}
+  if(typeof hasAirtableAccess!=='function'||!hasAirtableAccess()){toast('Conecta Airtable primero','error');return;}
   btn=(btn&&btn.tagName)?btn:null;
   const prev=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='⏳ Respaldando…';}
@@ -10833,7 +10833,7 @@ function cotPopulaComunas(regionSelId,comunaSelId,valorActual){
 }
 async function createCotizacion(){
   const btn=document.getElementById('createCotBtn');const num=(document.getElementById('cot-num')?.value||'').trim();
-  if(!num){toast('N° Cotización requerido','error');return;}const token=getToken();if(!token){toast('Token Airtable requerido','error');showTokenModal();return;}
+  if(!num){toast('N° Cotización requerido','error');return;}if(!hasAirtableAccess()){toast('Conecta Airtable primero (token o proxy)','error');showTokenModal();return;}
   updateItemsDetalle();const tots=calcItemsTotals();const s=tots.costo;const _descPctN=Math.min(100,Math.max(0,parseFloat(document.getElementById('cot-descuento')?.value)||0));const _netoDescN=Math.round(tots.neto*(1-_descPctN/100));const t=Math.round(_netoDescN*1.19);btn.disabled=true;btn.textContent='Guardando...';
   try{
     const clienteId=document.getElementById('cot-cliente-id')?.value||'';
@@ -12587,7 +12587,7 @@ document.addEventListener('keydown',e=>{
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
     const sinceLastUpdate=Date.now()-(state.lastUpdateTs||0);
-    if(getToken()&&state.loaded&&sinceLastUpdate>MIN_REFRESH_MS) loadAllDataSilent();
+    if((getToken()||_proxyCfg())&&state.loaded&&sinceLastUpdate>MIN_REFRESH_MS) loadAllDataSilent();
     startAutoRefresh();
   } else {
     if(autoRefreshInterval){clearInterval(autoRefreshInterval);autoRefreshInterval=null;}
