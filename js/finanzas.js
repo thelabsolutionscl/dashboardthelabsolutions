@@ -1969,6 +1969,7 @@ const GS_ACTIONS=[
   {tab:'clientes',icon:'icon-clientes', title:'Contrato recurrente (retainer)', kw:'contrato recurrente retainer mensual suscripcion abono fijo pedido automatico', run:()=>{try{openRetainerModal();}catch(e){}}},
   {icon:'icon-dollar', title:'Arqueo de caja del día', kw:'arqueo caja efectivo cuadre diario cierre conteo dinero', run:()=>{try{finSwitchTab('diario');setTimeout(()=>{try{renderArqueo();document.getElementById('arqueoCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
   {tab:'proveedores',icon:'icon-proveedores', title:'Nueva orden de compra', kw:'orden compra oc proveedor comprar insumos pedido materiales', run:()=>{try{openOCModal();}catch(e){}}},
+  {icon:'icon-target', title:'Punto de equilibrio', kw:'punto equilibrio break even costos fijos cuanto vender rentabilidad', run:()=>{try{finSwitchTab('presupuesto');setTimeout(()=>{try{renderBreakEven();document.getElementById('breakEvenCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
@@ -2515,6 +2516,67 @@ function renderPresupuesto(){
   }).join('');
   const capEl=document.getElementById('pres-real-cap');
   if(capEl) capEl.innerHTML=totalReal>0?`Ejecutado real del Libro Diario este período: <b style="color:var(--danger)">${formatCLP(totalReal)}</b>. Deja "ajuste manual" vacío para usarlo automáticamente.`:'Registra gastos en el Libro Diario y el ejecutado se llena solo.';
+  try{renderBreakEven();}catch(e){}
+}
+// ── PUNTO DE EQUILIBRIO / COSTOS FIJOS (Q11) ───────────────────────────
+// Cuánto hay que vender (neto) al mes para cubrir los costos fijos, dado el
+// margen de contribución promedio. Break-even = costos fijos / margen%.
+const _COSTOS_FIJOS_KEY='thelab_costos_fijos_v1';
+function _costosFijos(){
+  const v=parseFloat(localStorage.getItem(_COSTOS_FIJOS_KEY));
+  if(v>0)return v;
+  // Fallback: presupuesto total del mes en curso (si está cargado)
+  try{const now=new Date();const key=presKey(now.getFullYear(),now.getMonth()+1);const pd=(presGetData()[key]||{}).cats||[];const t=pd.reduce((s,c)=>s+(c.budget||0),0);if(t>0)return t;}catch(e){}
+  return 0;
+}
+function setCostosFijos(){
+  const cur=_costosFijos();
+  const v=prompt('Costos fijos mensuales (CLP): arriendo, sueldos, servicios, software... (vacío = usar el total del presupuesto)',cur?String(cur):'');
+  if(v===null)return;const n=Math.round(parseFloat(String(v).replace(/[^\d.-]/g,''))||0);
+  if(n>0)localStorage.setItem(_COSTOS_FIJOS_KEY,String(n));else localStorage.removeItem(_COSTOS_FIJOS_KEY);
+  toast(n>0?'✓ Costos fijos: '+formatCLP(n):'Costos fijos: se usará el presupuesto','success');
+  try{renderBreakEven();}catch(e){}
+}
+function _margenContribucion(){
+  // Prefiere el margen real de las líneas de negocio; si no, el margen global.
+  try{if(typeof rentabilidadLineas==='function'){const L=rentabilidadLineas();const rev=L.reduce((s,l)=>s+l.rev,0),util=L.reduce((s,l)=>s+l.util,0);if(rev>0)return util/rev*100;}}catch(e){}
+  try{if(typeof _margenPromedioGlobal==='function'){const m=_margenPromedioGlobal();if(m!=null&&m>0)return m;}}catch(e){}
+  return 40;
+}
+function _ventaNetaMes(){
+  try{const now=new Date();const ini=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+    return (state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const d=p.createdTime?new Date(p.createdTime).getTime():0;return d>=ini;}).reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
+  }catch(e){return 0;}
+}
+function _puntoEquilibrio(){
+  const fijos=_costosFijos();const margen=_margenContribucion();
+  const be=margen>0?fijos/(margen/100):0;
+  const venta=_ventaNetaMes();
+  return {fijos,margen,be,venta,falta:Math.max(0,be-venta),pct:be>0?Math.round(venta/be*100):0};
+}
+function renderBreakEven(){
+  const el=document.getElementById('breakEvenCard');if(!el)return;
+  const e=_puntoEquilibrio();
+  if(!e.fijos){el.innerHTML=`<div class="card" style="padding:11px 16px;display:flex;align-items:center;gap:10px"><span style="font-size:15px">⚖️</span><span style="font-size:12px;color:var(--text2)">Define tus costos fijos mensuales para calcular el punto de equilibrio</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="setCostosFijos()">Definir costos fijos</button></div>`;return;}
+  const cubierto=e.venta>=e.be;
+  const utilProy=Math.round((e.venta*e.margen/100)-e.fijos);
+  el.innerHTML=`<div class="card" style="border-color:${cubierto?'rgba(0,212,170,0.3)':'rgba(255,170,0,0.3)'}">
+    <div class="card-header"><span class="card-title">⚖️ Punto de equilibrio</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="setCostosFijos()">⚙️ Costos fijos</button></div>
+    <div style="padding:14px 16px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Costos fijos/mes</span><span class="fac-kpi-val">${formatCLP(e.fijos)}</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Margen contrib.</span><span class="fac-kpi-val">${e.margen.toFixed(0)}%</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:130px"><span class="fac-kpi-lbl">Punto de equilibrio</span><span class="fac-kpi-val" style="color:var(--accent2)">${formatCLP(Math.round(e.be))}</span></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px"><span>Venta del mes: ${formatCLP(Math.round(e.venta))}</span><span>${e.pct}% del equilibrio</span></div>
+      <div style="height:12px;background:var(--surface3);border-radius:5px;overflow:hidden;position:relative">
+        <div style="height:100%;width:${Math.min(100,e.pct)}%;background:${cubierto?'var(--accent3)':'var(--warn)'};border-radius:5px"></div>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--text2)">${cubierto
+        ?`✅ Equilibrio cubierto. Utilidad proyectada del mes: <b style="color:var(--accent3)">${formatCLP(utilProy)}</b>.`
+        :`Faltan <b style="color:var(--warn)">${formatCLP(Math.round(e.falta))}</b> de venta neta para cubrir los costos fijos${e.margen>0?` (≈ ${formatCLP(Math.round(e.falta/(e.margen/100)))} en ventas al margen actual)`:''}.`}</div>
+    </div>
+  </div>`;
 }
 function presPreviewBar(i){
   const b=parseFloat(document.getElementById(`pres-cat-b-${i}`)?.value)||0;
