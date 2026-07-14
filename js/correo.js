@@ -773,6 +773,8 @@ const MAIL={
   openCompose(opts={}){
     if(!opts._keepAtts){this._cmpAtts=[];this.renderCmpAtts();}
     this._cmpCotId=opts._cotId||null;   // vínculo con la cotización (registro al enviar)
+    this._cmpReactivarCli=opts._reactivarCli||null;   // marcar cliente "Reactivado" al enviar
+    this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
     this.fillContactsDatalist();
     document.getElementById('mailCmpTo').value=opts.to||'';
     document.getElementById('mailCmpCc').value=opts.cc||'';
@@ -957,6 +959,9 @@ const MAIL={
         NOTIFY.add('sent','Correo enviado',to,'correo');
         // Cierre del ciclo cotización→PDF→correo: marca Enviada y deja registro
         if(this._cmpCotId){try{await this._registrarCotEnviada(this._cmpCotId,to);}catch(e){}this._cmpCotId=null;}
+        // Reactivación: si el borrador vino de un agente, marca al cliente Reactivado
+        if(this._cmpReactivarCli){try{if(typeof marcarReactivado==='function') marcarReactivado(this._cmpReactivarCli,'correo');}catch(e){}this._cmpReactivarCli=null;}
+        if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
         this._cmpAtts=[];this.renderCmpAtts();
         setTimeout(()=>this.closeCompose(),1500);
       }

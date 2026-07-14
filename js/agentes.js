@@ -33,6 +33,81 @@ function _extractEmailPart(text){
   return m?m[1].trim():text;
 }
 
+// ── Mensajes listos para enviar (naturales, sin emojis ni asteriscos) ──────
+// Regla que se anexa a los agentes de cliente para estandarizar los dos mensajes.
+const AGENT_MSG_RULES='\n\nFORMATO DE LOS MENSAJES LISTOS PARA ENVIAR (obligatorio): al final entrega DOS mensajes numerados, exactamente así:\n1. WhatsApp: (2 a 4 líneas)\n2. Email: (primera línea "Asunto: ..." y luego el cuerpo, con cierre cordial firmado "Equipo The Lab Solutions")\nAmbos en español chileno natural y cercano, como los escribiría a mano una persona del equipo. PROHIBIDO usar emojis, asteriscos, negritas o cualquier símbolo de formato (markdown, viñetas, comillas de bloque ">"): solo texto plano listo para copiar, pegar y enviar. No uses marcadores como [nombre] ni [empresa]: usa el dato real si lo tienes, o un saludo neutro si no.';
+
+// Limpia un mensaje para enviar: quita emojis y marcas de formato (asteriscos,
+// markdown, viñetas, citas) dejando texto plano y natural.
+function _cleanMsg(s){
+  let t=String(s||'');
+  t=t.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}\u{200D}\u{2190}-\u{21FF}]/gu,'');
+  t=t.replace(/\*\*([^*]+)\*\*/g,'$1').replace(/__([^_]+)__/g,'$1');
+  t=t.replace(/[*_`]+/g,'');
+  t=t.replace(/^\s{0,3}#{1,6}\s*/gm,'');
+  t=t.replace(/^\s{0,3}>\s?/gm,'');
+  t=t.replace(/^\s{0,3}[-•]\s+/gm,'');
+  t=t.replace(/[ \t]{2,}/g,' ').replace(/\n{3,}/g,'\n\n');
+  return t.trim();
+}
+
+// ── REACTIVADO: marca al cliente/lead tras enviarle un mensaje desde un agente ──
+async function marcarReactivado(cliId,via){
+  const c=state.clientes&&state.clientes.find(x=>x.id===cliId); if(!c) return;
+  const yaEstaba=!!c.fields['Reactivado'];
+  const fecha=new Date().toISOString().split('T')[0];
+  c.fields['Reactivado']=true; c.fields['Fecha reactivación']=fecha;   // optimista en local
+  try{if(typeof renderClientes==='function') renderClientes(true);}catch(e){}
+  try{_markAgentModalReactivado();}catch(e){}
+  if(!yaEstaba){try{toast('♻ '+(c.fields['Empresa']||'Cliente')+' marcado como Reactivado','success');}catch(e){}}
+  try{
+    await airtableWrite('Clientes','PATCH',cliId,{'Reactivado':true,'Fecha reactivación':fecha});
+  }catch(e){
+    if(String(e.message||'').toLowerCase().includes('unknown')){try{ensureClienteReactivadoFields();}catch(_){}}
+  }
+}
+async function ensureClienteReactivadoFields(){
+  try{
+    const t=(typeof getToken==='function'?getToken():'')||'';
+    if(!t&&typeof _proxyCfg==='function'&&!_proxyCfg()) return;
+    const tableId='tblKCNnXwAfDiKbQz';
+    const needed=[{name:'Reactivado',type:'checkbox',options:{icon:'check',color:'greenBright'}},{name:'Fecha reactivación',type:'date',options:{dateFormat:{name:'iso'}}}];
+    for(const c of needed){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
+  }catch(e){}
+}
+function _markAgentModalReactivado(){
+  const actions=document.getElementById('agentInlineActions');
+  if(!actions||actions.querySelector('.reactivado-chip')) return;
+  const chip=document.createElement('span');
+  chip.className='badge badge-green reactivado-chip';
+  chip.style.cssText='align-self:center;font-size:11px;padding:5px 9px';
+  chip.textContent='♻ Reactivado';
+  actions.appendChild(chip);
+}
+
+// Envía el mensaje de WhatsApp del agente (prellenado y limpio) y marca reactivado.
+function agentSendWA(phone,cliId){
+  const waPart=_cleanMsg(_extractWAPart(_agentInlineText)||_agentInlineText);
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(waPart),'_blank');
+  if(window._fuCotId){try{fuMarkDone(window._fuCotId,'WhatsApp');}catch(e){}window._fuCotId=null;}
+  if(cliId){try{marcarReactivado(cliId,'WhatsApp');}catch(e){}}
+}
+
+// Abre un BORRADOR de correo en la sección Correos con el mensaje del agente,
+// listo para revisar y enviar. Al enviarlo de verdad, marca al cliente Reactivado
+// (y registra el seguimiento de la cotización si aplica).
+function draftAgentEmail(toEmail,subject,cliId,fuCotId){
+  if(!_agentInlineText){toast('Sin contenido','error');return;}
+  let bodyText=_cleanMsg(_extractEmailPart(_agentInlineText)||_agentInlineText);
+  let subj=subject;
+  const ms=bodyText.match(/^\s*asunto\s*:\s*(.+)$/im);
+  if(ms){subj=ms[1].trim();bodyText=bodyText.replace(/^\s*asunto\s*:\s*.+$/im,'').trim();}
+  const bodyHtml=escapeHtml(bodyText).replace(/\n/g,'<br>');
+  closeAgentInlineModal();
+  if(typeof switchTab==='function') switchTab('correo');
+  setTimeout(()=>{try{MAIL.openCompose({to:toEmail,subject:subj,body:bodyHtml,title:'Enviar mensaje',_reactivarCli:cliId||'',_fuCotId:fuCotId||''});}catch(e){toast('No se pudo abrir el borrador','error');}},350);
+}
+
 async function runAgentInline(agentId,contextText,actionsFn){
   const cfg=AGENTES_CFG.find(a=>a.id===agentId);if(!cfg) return;
   window._fuCotId=null;   // evita registrar seguimientos de una cotización anterior
@@ -601,10 +676,10 @@ function runFollowupAgent(cotId){
   const _guia=_toque===1?'recordatorio breve y amable, sin presión'
     :_toque===2?'aporta valor: resuelve dudas típicas, ofrece ajustar el alcance o una alternativa, refuerza el beneficio'
     :'último contacto de la secuencia: crea urgencia suave (vencimiento, cupo de producción) y facilita el cierre con una pregunta directa';
-  const ctx=`Cliente: ${nombre}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nCotización: ${f['N° Cotización']||'—'}${monto?' | Monto neto: '+monto:''}\nDías sin respuesta: ${dias}${vto!=null?' | Vence en: '+vto+'d':''}\nProducto/Servicio: ${sol||'No especificado'}\nToque de la secuencia: ${_toque} de 3 — enfoque: ${_guia}. No repitas el mismo texto de un toque anterior.`+agentMemoriaCliente(nombre,cliRec?.id);
+  const ctx=`Cliente: ${nombre}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nCotización: ${f['N° Cotización']||'—'}${monto?' | Monto neto: '+monto:''}\nDías sin respuesta: ${dias}${vto!=null?' | Vence en: '+vto+'d':''}\nProducto/Servicio: ${sol||'No especificado'}\nToque de la secuencia: ${_toque} de 3 — enfoque: ${_guia}. No repitas el mismo texto de un toque anterior.`+agentMemoriaCliente(nombre,cliRec?.id)+AGENT_MSG_RULES;
   runAgentInline('FOLLOWUP',ctx,(result)=>{
-    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
-    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendFollowupEmail('${cotId}','${email.replace(/'/g,'')}')">📧 Enviar por correo</button>`:'';
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliRec?.id||''}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Seguimiento de tu cotización — The Lab Solutions','${cliRec?.id||''}','${cotId}')">✉️ Enviar correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar todo</button>`;
   });
   window._fuCotId=cotId;   // para auto-registrar el seguimiento al enviar por WA/correo
@@ -776,10 +851,10 @@ function runWinbackAgent(cotId){
   const sol=(f['Solicitud cliente (texto libre)']||f['Solicitud / detalle']||'').substring(0,150);
   const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'—';
   const motivo=estado==='Rechazada'?`\nMotivo de rechazo: ${String(f['Motivo rechazo']||'no registrado').substring(0,150)}`:'';
-  const ctx=`Cotización ${estado==='Rechazada'?'RECHAZADA':'VENCIDA'}: ${f['N° Cotización']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Monto neto: ${monto} | Vencía: ${f['Fecha vencimiento']||'—'}${motivo}\nProducto: ${sol}\nTAREA: redacta un mensaje de REACTIVACIÓN (win-back): ofrecer actualizar la cotización${estado==='Rechazada'?', abordando con tacto el motivo del rechazo si ayuda a recuperar la venta':''}, sin presionar. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`+agentMemoriaCliente(resolveClienteName(f['Cliente']),cliRec?.id);
+  const ctx=`Cotización ${estado==='Rechazada'?'RECHAZADA':'VENCIDA'}: ${f['N° Cotización']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Monto neto: ${monto} | Vencía: ${f['Fecha vencimiento']||'—'}${motivo}\nProducto: ${sol}\nTAREA: redacta un mensaje de REACTIVACIÓN (win-back): ofrecer actualizar la cotización${estado==='Rechazada'?', abordando con tacto el motivo del rechazo si ayuda a recuperar la venta':''}, sin presionar.`+agentMemoriaCliente(resolveClienteName(f['Cliente']),cliRec?.id)+AGENT_MSG_RULES;
   runAgentInline('FOLLOWUP',ctx,()=>{
-    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
-    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Retomemos tu cotización — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliRec?.id||''}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Retomemos tu cotización — The Lab Solutions','${cliRec?.id||''}')">✉️ Enviar correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
@@ -805,10 +880,11 @@ function runSalesAgent(cliId){
   const email=f['Email']||'';
   const cotsCli=state.cotizaciones.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
   const cotsTxt=cotsCli.length?cotsCli.slice(-3).map(x=>`${x.fields['N° Cotización']||'—'} (${x.fields['Estado cotización']||'—'})`).join(', '):'ninguna aún';
-  const ctx=`Lead: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'} | Origen: ${f['Origen lead']||'—'} | Industria: ${f['Industria / Rubro']||'—'}\nCotizaciones previas: ${cotsTxt}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,200):''}\nTAREA: dame la estrategia para avanzar este lead a la siguiente etapa: cómo abordarlo, qué producto ofrecerle según su industria, posibles objeciones y cómo responderlas, y un mensaje de apertura listo para WhatsApp (máx 4 líneas).`;
+  const ctx=`Lead: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'} | Origen: ${f['Origen lead']||'—'} | Industria: ${f['Industria / Rubro']||'—'}\nCotizaciones previas: ${cotsTxt}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,200):''}\nTAREA: dame la estrategia para avanzar este lead a la siguiente etapa: cómo abordarlo, qué producto ofrecerle según su industria, posibles objeciones y cómo responderlas, y los mensajes de apertura listos para enviar.`+AGENT_MSG_RULES;
   runAgentInline('SALES',ctx,()=>{
-    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
-    return `${waBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliId}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Conversemos — The Lab Solutions','${cliId}')">✉️ Enviar correo</button>`:'';
+    return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
 
@@ -847,10 +923,10 @@ function runClienteWinbackAgent(cliId){
   const ultCot=cotsCli.length?cotsCli[cotsCli.length-1]:null;
   const pedsCli=state.pedidos.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
   const ultPed=pedsCli.length?pedsCli[pedsCli.length-1]:null;
-  const ctx=`Cliente ${f['Etapa venta']==='Perdido'?'PERDIDO':'INACTIVO'}: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nIndustria: ${f['Industria / Rubro']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}\n${ultPed?'Último pedido: '+(ultPed.fields['Descripción del pedido']||ultPed.fields['Solicitud cliente (texto libre)']||'—').substring(0,120):''}${ultCot?'\nÚltima cotización: '+(ultCot.fields['N° Cotización']||'—')+' ('+(ultCot.fields['Estado cotización']||'—')+')':''}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}\nTAREA: redacta un mensaje de RECONEXIÓN para recuperar a este cliente. Referencia lo que compró antes, ofrece algo concreto (novedad de producto o revisión de precios), sin sonar desesperado. DOS versiones: 1. WhatsApp (corta) 2. Email (con firma The Lab Solutions).`+agentMemoriaCliente(f['Empresa'],cliId);
+  const ctx=`Cliente ${f['Etapa venta']==='Perdido'?'PERDIDO':'INACTIVO'}: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nIndustria: ${f['Industria / Rubro']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}\n${ultPed?'Último pedido: '+(ultPed.fields['Descripción del pedido']||ultPed.fields['Solicitud cliente (texto libre)']||'—').substring(0,120):''}${ultCot?'\nÚltima cotización: '+(ultCot.fields['N° Cotización']||'—')+' ('+(ultCot.fields['Estado cotización']||'—')+')':''}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}\nTAREA: redacta un mensaje de RECONEXIÓN para recuperar a este cliente. Referencia lo que compró antes, ofrece algo concreto (novedad de producto o revisión de precios), sin sonar desesperado.`+agentMemoriaCliente(f['Empresa'],cliId)+AGENT_MSG_RULES;
   runAgentInline('SALES',ctx,()=>{
-    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
-    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Tenemos novedades para ti — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliId}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Tenemos novedades para ti — The Lab Solutions','${cliId}')">✉️ Enviar correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
@@ -861,10 +937,10 @@ function runOnboardingAgent(cliId){
   const f=c.fields;
   const waPhone=_getClienteWAPhone(c);
   const email=f['Email']||'';
-  const ctx=`Cliente nuevo: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}`;
+  const ctx=`Cliente nuevo: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'—'}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}\nTAREA: prepara la bienvenida para este cliente nuevo: cómo darle la mejor primera impresión y los mensajes de bienvenida listos para enviar.`+AGENT_MSG_RULES;
   runAgentInline('ONBOARDING',ctx,()=>{
-    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
-    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Bienvenido a The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliId}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Bienvenido a The Lab Solutions','${cliId}')">✉️ Enviar correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
@@ -875,10 +951,10 @@ function runFinanceAgent(cliId){
   const f=c.fields;
   const waPhone=_getClienteWAPhone(c);
   const email=f['Email']||'';
-  const ctx=`Cliente con deuda: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nFacturas vencidas: ${f['Facturas vencidas']||0} | Estado cuenta: ${f['Estado cuenta']||'—'}\nTAREA: redacta un recordatorio de pago para este cliente. Entrega DOS versiones: 1. WhatsApp (corta) 2. Email (formal con firma The Lab Solutions).`+agentMemoriaCliente(f['Empresa'],cliId);
+  const ctx=`Cliente con deuda: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nFacturas vencidas: ${f['Facturas vencidas']||0} | Estado cuenta: ${f['Estado cuenta']||'—'}\nTAREA: redacta un recordatorio de pago para este cliente, formal pero cordial.`+agentMemoriaCliente(f['Empresa'],cliId)+AGENT_MSG_RULES;
   runAgentInline('FINANCE',ctx,()=>{
-    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 Abrir WhatsApp</button>`:'';
-    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Recordatorio de pago — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliId}')">📲 Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Recordatorio de pago — The Lab Solutions','${cliId}')">✉️ Enviar correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
@@ -1079,10 +1155,10 @@ function runRepClienteAgent(pedidoId){
   const today=new Date();today.setHours(0,0,0,0);
   const atrasado=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;
   const sol=(f['Solicitud cliente (texto libre)']||f['Descripción del pedido']||f['Detalle productos']||'Sin detalle').substring(0,200);
-  const ctx=`Pedido: ${f['N° Pedido']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Estado: ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atrasado?' ⚠ ATRASADO':''}\nProducto: ${sol}\nQA: ${f['Resultado QA']||'Pendiente'}\nTAREA: genera el update de estado para el cliente. Entrega DOS versiones:\n1. WhatsApp (max 8 líneas, emoji sutil)\n2. Email (más detallado con firma "The Lab Solutions").`;
+  const ctx=`Pedido: ${f['N° Pedido']||'—'} | Cliente: ${resolveClienteName(f['Cliente'])} | Estado: ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atrasado?' ⚠ ATRASADO':''}\nProducto: ${sol}\nQA: ${f['Resultado QA']||'Pendiente'}\nTAREA: genera el update de estado para el cliente, claro y tranquilizador.`+AGENT_MSG_RULES;
   runAgentInline('REPCLIENTE',ctx,()=>{
-    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="openFollowupWA('${waPhone}')">📲 WhatsApp cliente</button>`:'';
-    const mailBtn=email?`<button class="btn btn-ghost btn-sm" onclick="_sendAgentEmail('${email.replace(/'/g,'')}','Update de tu pedido — The Lab Solutions',this)">📧 Enviar por correo</button>`:'';
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','')">📲 WhatsApp cliente</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Update de tu pedido — The Lab Solutions','')">✉️ Enviar correo</button>`:'';
     return`${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
