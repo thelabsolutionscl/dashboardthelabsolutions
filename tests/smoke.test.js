@@ -106,6 +106,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'renderEstacionalidad', '_estacionalidad',
     'renderOnboarding', '_onboardingSteps', 'toggleOnboarding',
     '_podLink', 'pedirPOD', 'ensurePodFields', '_podConfirmado',
+    '_seguimientoLink', 'compartirSeguimiento',
     'renderBreakEven', '_puntoEquilibrio', 'setCostosFijos',
     'renderIvaMensual', '_ivaMes',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',

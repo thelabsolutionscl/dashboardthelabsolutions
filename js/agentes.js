@@ -315,6 +315,19 @@ function _npsLink(p){
   const rev=_pdReviewUrl(); if(rev) url+='&g='+encodeURIComponent(rev);
   return url;
 }
+// ── PORTAL DE SEGUIMIENTO DE PEDIDO (S2) ───────────────────────────────
+// Enlace público (worker /pedido) donde el cliente ve el estado de su pedido.
+function _seguimientoLink(p){const base=_npsWorkerUrl();if(!base||!p||!p.id)return '';return base+'/pedido?p='+encodeURIComponent(btoa(p.id));}
+function compartirSeguimiento(pedidoId){
+  const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
+  const link=_seguimientoLink(p);if(!link){toast('Configura el lead-worker para compartir seguimiento','info');return;}
+  const cli=_pdCliRec(p);const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const msg=`Hola${nombre?' '+nombre:''} 👋 Aquí puedes seguir el estado de tu pedido ${p.fields['N° Pedido']?('('+p.fields['N° Pedido']+')'):''} en tiempo real: ${link}\n— The Lab Solutions`;
+  const phone=cli?_getClienteWAPhone(cli):'';
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg),'_blank');
+  toast('Compartiendo seguimiento del pedido','success');
+}
+
 // ── COMPROBANTE DE ENTREGA / POD (Q7) ──────────────────────────────────
 // Pide al cliente confirmar la recepción con un enlace de 1 clic (worker /pod),
 // que marca "Recepción confirmada" en el pedido. Mismo patrón que el NPS (N4).

@@ -85,6 +85,11 @@ export default {
         return await handlePod(request, env, ctx, cors);
       }
 
+      // Portal de seguimiento: el cliente ve el estado de su pedido (solo lectura).
+      if (request.method === "GET" && url.pathname === "/pedido") {
+        return await handlePedidoEstado(request, env);
+      }
+
       if (request.method === "GET" && url.pathname === "/blog") {
         return await handleBlogList(request, env, cors);
       }
@@ -482,6 +487,59 @@ async function sendPodAlert(env, pedId) {
   } catch (e) {
     console.error("[leads-worker] alerta POD:", e.message);
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * RUTA: GET /pedido?p=base64(pedidoRecId)  (portal de seguimiento, solo lectura)
+ * Muestra al cliente el estado de su pedido en una línea de progreso.
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handlePedidoEstado(request, env) {
+  const url = new URL(request.url);
+  const pedId = _npsDecodeToken(url.searchParams.get("p"));
+  if (!pedId) return htmlPage("Enlace inválido", "Este enlace de seguimiento no es válido o ya expiró.", false);
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return htmlPage("No disponible", "El seguimiento no está disponible en este momento.", false);
+  let rec;
+  try {
+    const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Pedidos/${pedId}`, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+    if (r.status === 404) return htmlPage("Pedido no encontrado", "No pudimos encontrar este pedido.", false);
+    if (!r.ok) return htmlPage("No disponible", "No pudimos leer el estado ahora. Intenta más tarde.", false);
+    rec = await r.json();
+  } catch (e) {
+    return htmlPage("No disponible", "Error de conexión. Intenta más tarde.", false);
+  }
+  const f = rec.fields || {};
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"));
+  const estado = f["Estado pedido"] || "Confirmado";
+  if (estado === "Cancelado") return htmlPage("Pedido cancelado", "Este pedido figura como cancelado. Si crees que es un error, escríbenos.", false);
+  const stages = ["Confirmado", "En producción", "Listo para despacho", "Despachado"];
+  let idx = stages.indexOf(estado);
+  if (idx < 0) idx = f["Recepción confirmada"] ? 3 : 0;
+  const entrega = f["Fecha entrega"] || "";
+  const numPed = f["N° Pedido"] || "";
+  const recibido = !!f["Recepción confirmada"];
+  const steps = stages.map((s, i) => {
+    const done = i < idx || (i === idx);
+    const active = i === idx;
+    const color = done ? "#00b3a4" : "#2b323b";
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0">
+      <div style="width:26px;height:26px;border-radius:50%;flex-shrink:0;background:${done ? "#00b3a4" : "#151518"};border:2px solid ${done ? "#00b3a4" : "#33343a"};display:flex;align-items:center;justify-content:center;color:${done ? "#06231f" : "#7a7a82"};font-weight:800;font-size:13px">${i < idx ? "✓" : (i + 1)}</div>
+      <span style="font-size:15px;color:${active ? "#e8e8ea" : done ? "#b6b6bd" : "#6b6b73"};font-weight:${active ? "700" : "400"}">${esc(s)}${active ? " ·  ahora" : ""}</span>
+    </div>`;
+  }).join("");
+  const pct = Math.round(((idx + 1) / stages.length) * 100);
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seguimiento ${esc(numPed)} — The Lab Solutions</title></head>
+<body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
+<div style="max-width:440px;width:100%;padding:36px 26px">
+<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:6px">The Lab Solutions</div>
+<h1 style="font-size:22px;margin:0 0 4px">Seguimiento de tu pedido</h1>
+<div style="font-size:13px;color:#8a8a92;margin-bottom:20px">${numPed ? "N° " + esc(numPed) : ""}${entrega ? " · entrega estimada " + esc(entrega) : ""}</div>
+<div style="height:8px;background:#151518;border-radius:5px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:${pct}%;background:#00b3a4;border-radius:5px"></div></div>
+<div style="font-size:12px;color:#8a8a92;margin-bottom:18px">${pct}% del proceso</div>
+<div style="border:1px solid #26262b;border-radius:14px;padding:8px 18px">${steps}</div>
+${recibido ? '<div style="margin-top:16px;padding:11px 14px;background:#0f2b24;border:1px solid #1c4a3f;border-radius:10px;font-size:13px;color:#5fdcc4">✅ Recepción confirmada. ¡Gracias!</div>' : ""}
+<div style="margin-top:22px;text-align:center;font-size:11px;color:#6b6b73">¿Dudas? Escríbenos por WhatsApp o a hola@thelab.solutions</div>
+</div></body></html>`;
+  return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 /* ════════════════════════════════════════════════════════════════════════
