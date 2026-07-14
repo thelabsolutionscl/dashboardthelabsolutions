@@ -1343,6 +1343,7 @@
             </div>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" onclick="addItemRow()">+ Agregar ítem</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openCatalogoModal()" title="Insertar desde el catálogo de productos" style="border-color:rgba(167,139,250,0.4);color:var(--accent4)">📦 Catálogo</button>
           <button type="button" class="btn btn-primary btn-sm" onclick="runQuoteFormAgent()" title="Genera los ítems con IA a partir de la solicitud escrita en Observaciones">⚡ Cotizar con IA</button>
           <button type="button" class="btn btn-ghost btn-sm" id="c3d-toggle-btn" onclick="toggleC3dInline('n')" style="border-color:rgba(0,212,204,0.4);color:var(--accent)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-maquinas"/></svg> Calculadora 3D</button>
           <button type="button" class="btn btn-ghost btn-sm" id="lsr-btn-n" onclick="qcalcToggle('lsr','n')" style="border-color:rgba(245,158,11,0.4);color:#f59e0b">🔆 Calculadora Láser</button>
@@ -4694,6 +4695,22 @@ function _reportarResultados(muts) {
   </div>
 </div>
 
+<!-- CATÁLOGO DE PRODUCTOS (P3) -->
+<div id="catalogoModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="closeCatalogoModal()"></div>
+  <div class="modal-card" style="max-width:640px">
+    <div class="modal-title">📦 Catálogo de productos <span style="font-size:11px;color:var(--text3);font-weight:400">precios base para cotizar más rápido</span></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <input class="field-input" id="catalogoSearch" placeholder="Buscar en el catálogo..." oninput="renderCatalogoModal()" style="flex:1">
+      <button class="btn btn-primary btn-sm" onclick="addCatalogoItem()">＋ Producto</button>
+    </div>
+    <div id="catalogoBody" style="max-height:52vh;overflow-y:auto"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button class="btn btn-ghost btn-sm" onclick="closeCatalogoModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- INVENTARIO DE MATERIALES -->
 <div class="tab-panel" id="tab-inventario">
   <div class="section-header"><div><div class="section-title">Inventario de materiales</div><div class="section-desc">Stock de insumos (filamento, planchas, resina, vinilo…). Cuando un material baja de su punto de reorden, aparece en las alertas del sistema.</div></div><button class="btn btn-primary btn-sm" onclick="addMaterial()">＋ Material</button></div>
@@ -6543,6 +6560,12 @@ function _applyMonitorSistema(recs){
       const sigs=JSON.parse(sigRec.fields['Notes']||'{}');
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
+  }
+  // Catálogo de productos respaldado (registro compartido).
+  const catRec=recs.find(r=>r.fields['Name']==='CATALOGO');
+  if(catRec){
+    state.catalogoRecordId=catRec.id;
+    try{const arr=JSON.parse(catRec.fields['Notes']||'[]');if(Array.isArray(arr)) localStorage.setItem('thelab_catalogo_v1',JSON.stringify(arr));}catch(e){logErr('monitorSistema:catalogo',e);}
   }
   // Historial de precios de proveedores respaldado (registro compartido).
   const ppRec=recs.find(r=>r.fields['Name']==='PRECIOS_PROV');
@@ -10110,6 +10133,65 @@ function addItemRow(data){
 }
 function removeItemRow(btn){btn.closest('.item-row').remove();updateItemTotal();updateItemsDetalle();}
 function initItemsContainer(){const c=document.getElementById('itemsContainer');if(c) c.innerHTML='';const t=document.getElementById('itemsTotalRow');if(t) t.style.display='none';addItemRow();}
+
+// ── CATÁLOGO DE PRODUCTOS (P3) ─────────────────────────────────────────
+// Lista de productos/servicios con costo y precio base, para insertar en las
+// cotizaciones sin re-teclear. localStorage + respaldo en Monitor Sistema.
+const _CATALOGO_KEY='thelab_catalogo_v1';
+function _catalogo(){try{return JSON.parse(localStorage.getItem(_CATALOGO_KEY)||'[]');}catch(e){return[];}}
+function _catalogoSaveArr(arr){try{localStorage.setItem(_CATALOGO_KEY,JSON.stringify(arr||[]));}catch(e){}_catalogoBackup();}
+async function _catalogoBackup(){
+  try{
+    const notes=localStorage.getItem(_CATALOGO_KEY)||'[]';
+    if(state.catalogoRecordId) await airtableWrite('Monitor Sistema','PATCH',state.catalogoRecordId,{'Notes':notes});
+    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'CATALOGO','Notes':notes});if(r&&r.id)state.catalogoRecordId=r.id;}
+  }catch(e){}
+}
+function _catMargen(it){const c=+it.costo||0,p=+it.precio||0;return p>0?Math.round((p-c)/p*100):0;}
+function openCatalogoModal(){renderCatalogoModal();document.getElementById('catalogoModal').style.display='flex';}
+function closeCatalogoModal(){document.getElementById('catalogoModal').style.display='none';}
+function addCatalogoItem(){
+  const nombre=(prompt('Nombre del producto/servicio (ej: Trofeo acrílico 15 cm):')||'').trim();if(!nombre)return;
+  const unidad=(prompt('Unidad (unidad, hora, m², kg):','unidad')||'').trim()||'unidad';
+  const costoRaw=prompt('Costo unitario (CLP):','');if(costoRaw==null)return;
+  const costo=Math.round(parseFloat(String(costoRaw).replace(/[^\d.-]/g,''))||0);
+  const precioRaw=prompt('Precio de venta unitario (CLP, neto sin IVA):','');if(precioRaw==null)return;
+  const precio=Math.round(parseFloat(String(precioRaw).replace(/[^\d.-]/g,''))||0);
+  if(!(precio>0)){toast('Precio inválido','error');return;}
+  const arr=_catalogo();arr.push({id:'cat'+arr.length+'_'+nombre.length+'_'+precio,nombre,unidad,costo,precio});
+  _catalogoSaveArr(arr);renderCatalogoModal();toast('✓ Producto agregado al catálogo','success');
+}
+function delCatalogoItem(id){if(!confirm('¿Eliminar del catálogo?'))return;_catalogoSaveArr(_catalogo().filter(x=>x.id!==id));renderCatalogoModal();}
+function editCatalogoItem(id,campo,val){const arr=_catalogo();const it=arr.find(x=>x.id===id);if(!it)return;it[campo]=(campo==='costo'||campo==='precio')?Math.round(parseFloat(String(val).replace(/[^\d.-]/g,''))||0):val;_catalogoSaveArr(arr);const m=document.getElementById('catmg-'+id);if(m)m.textContent=_catMargen(it)+'%';}
+function insertarCatalogo(id){
+  const it=_catalogo().find(x=>x.id===id);if(!it)return;
+  const cont=document.getElementById('itemsContainer');
+  if(!cont){toast('Abre "Nueva cotización" primero','info');return;}
+  // Reemplaza una primera fila vacía; si no, agrega
+  const rows=cont.querySelectorAll('.item-row');
+  if(rows.length===1){const r=rows[0];const d=r.querySelector('.item-desc'),v=r.querySelector('.item-venta');if(d&&!d.value.trim()&&v&&!v.value){r.remove();}}
+  addItemRow({desc:it.nombre,und:1,costoUnit:it.costo,ventaUnit:it.precio});
+  toast('✓ '+it.nombre+' agregado a la cotización','success');
+}
+function renderCatalogoModal(){
+  const el=document.getElementById('catalogoBody');if(!el)return;
+  const q=(document.getElementById('catalogoSearch')?.value||'').toLowerCase().trim();
+  let arr=_catalogo().slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+  if(q) arr=arr.filter(it=>String(it.nombre||'').toLowerCase().includes(q));
+  const cotOpen=!!document.getElementById('itemsContainer');
+  if(!arr.length){el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">${_catalogo().length?'Sin resultados para la búsqueda.':'Catálogo vacío. Usa ＋ Producto para agregar tus productos y precios base.'}</div>`;return;}
+  const _in='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 7px;width:100%;box-sizing:border-box;font-family:inherit';
+  el.innerHTML=`<div style="display:grid;grid-template-columns:1fr 66px 96px 96px 52px ${cotOpen?'84px':'40px'};gap:6px;padding:0 2px 6px;font-size:9.5px;font-weight:700;text-transform:uppercase;color:var(--text3)">
+    <span>Producto</span><span>Unidad</span><span style="text-align:right">Costo</span><span style="text-align:right">Precio</span><span style="text-align:center">Margen</span><span></span></div>`+
+    arr.map(it=>`<div style="display:grid;grid-template-columns:1fr 66px 96px 96px 52px ${cotOpen?'84px':'40px'};gap:6px;align-items:center;padding:4px 2px;border-top:1px solid var(--border)">
+      <input style="${_in}" value="${escapeHtml(it.nombre||'')}" onchange="editCatalogoItem('${it.id}','nombre',this.value)">
+      <input style="${_in}" value="${escapeHtml(it.unidad||'')}" onchange="editCatalogoItem('${it.id}','unidad',this.value)">
+      <input type="number" style="${_in};text-align:right" value="${it.costo||0}" onchange="editCatalogoItem('${it.id}','costo',this.value)">
+      <input type="number" style="${_in};text-align:right" value="${it.precio||0}" onchange="editCatalogoItem('${it.id}','precio',this.value)">
+      <span id="catmg-${it.id}" style="text-align:center;font-size:11px;font-weight:700;color:${_catMargen(it)>=35?'var(--accent3)':_catMargen(it)>=20?'var(--warn)':'var(--danger)'}">${_catMargen(it)}%</span>
+      <span style="display:flex;gap:4px;justify-content:flex-end">${cotOpen?`<button class="btn btn-primary btn-sm" style="padding:3px 7px;font-size:10px" onclick="insertarCatalogo('${it.id}')" title="Insertar en la cotización">＋</button>`:''}<button class="btn btn-ghost btn-sm" style="padding:3px 6px;color:var(--danger)" onclick="delCatalogoItem('${it.id}')" title="Eliminar">✕</button></span>
+    </div>`).join('');
+}
 function cotPopulaComunas(regionSelId,comunaSelId,valorActual){
   const region=document.getElementById(regionSelId)?.value||'';
   const sel=document.getElementById(comunaSelId);if(!sel)return;

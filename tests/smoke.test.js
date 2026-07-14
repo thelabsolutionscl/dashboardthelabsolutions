@@ -94,6 +94,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'renderCargaMaquinas', '_maqCarga', 'asignarMaquina', 'sugerirMaquina', '_pedHorasEst',
     'crearPedidoDesdeCotizacion', 'renderCotToOrderTray', 'convertirCotAPedido', '_pedidoDeCot',
     'rentabilidadLineas', '_prodLinea', 'renderPresupuesto', '_presEjecutadoReal',
+    'openCatalogoModal', 'renderCatalogoModal', 'addCatalogoItem', 'insertarCatalogo',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

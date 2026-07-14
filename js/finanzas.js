@@ -1962,6 +1962,7 @@ const GS_ACTIONS=[
   {tab:'overview',icon:'icon-reporte', title:'Enviar cierre de mes por correo', kw:'cierre mes informe mensual ejecutivo revenue enviar reporte', run:()=>{try{enviarCierreMes();}catch(e){}}},
   {tab:'overview',icon:'icon-reporte', title:'PDF ejecutivo del cierre de mes', kw:'pdf cierre mes informe ejecutivo imprimir reporte descargar compartir', run:()=>{try{generarCierrePDF(0);}catch(e){}}},
   {tab:'overview',icon:'icon-reporte', title:'Enviar resumen semanal por correo', kw:'digest resumen semanal semana correo enviar operativo acciones pendientes', run:()=>{try{enviarDigestSemanal();}catch(e){}}},
+  {icon:'icon-pedidos', title:'Catálogo de productos', kw:'catalogo productos precio base servicios lista items cotizar', run:()=>{try{openCatalogoModal();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
