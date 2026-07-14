@@ -7078,6 +7078,7 @@ function renderAlertas(){
   // Sincronizar con la campana de notificaciones (solo alertas nuevas)
   try{NOTIFY.syncAlertas(alertas);}catch(e){}
   try{checkAgentSuggestions();}catch(e){}
+  try{checkAnomalias();}catch(e){}
   try{checkBackupReminder();}catch(e){}
   try{_pruneLocalLogs();}catch(e){}
 
@@ -11678,6 +11679,68 @@ function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classLi
 <script>
 // ── SUGERENCIAS PROACTIVAS DE AGENTES ──────────────────────────
 const _agentSuggestKey='thelab_agent_suggest_v1';
+// ── DETECTOR DE ANOMALÍAS ─────────────────────────────────────
+// Compara el presente contra TU histórico (reportes semanales y ritmo real de
+// pedidos/leads) y avisa cuando algo se sale de lo normal — en ambas
+// direcciones. Silencioso con poco historial (necesita 3+ semanas de datos).
+function detectarAnomalias(hoy){
+  const out=[];
+  try{
+    const d=hoy?new Date(hoy):new Date();
+    const _t=new Date(d);_t.setHours(0,0,0,0);
+    const weekStart=new Date(_t);weekStart.setDate(_t.getDate()-_t.getDay());
+    const hist=(typeof _histSemanas==='function'?_histSemanas(9):[]).filter(h=>h.rev>0);
+
+    // 1) Revenue de la semana vs promedio histórico (recién opina de jueves en adelante)
+    if(hist.length>=3){
+      const prom=hist.reduce((s,h)=>s+h.rev,0)/hist.length;
+      const revSem=(state.pedidos||[]).reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return s;const dd=p.createdTime?new Date(p.createdTime):null;return dd&&dd>=weekStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
+      if(d.getDay()>=4&&revSem<prom*0.4) out.push({tipo:'rev-baja',sev:'danger',msg:`📉 Revenue de la semana muy bajo: ${formatCLP(revSem)} vs ${formatCLP(prom)} de promedio histórico (${Math.round(revSem/prom*100)}%)`});
+      else if(revSem>prom*1.6) out.push({tipo:'rev-alta',sev:'success',msg:`🚀 Semana sobre lo normal: ${formatCLP(revSem)} ya supera 1,6× tu promedio histórico (${formatCLP(prom)})`});
+    }
+
+    // 2) Conversión del último reporte vs promedio (caída de 15+ puntos)
+    if(hist.length>=3){
+      const convs=hist.filter(h=>h.conv>0);
+      if(convs.length>=3){
+        const promC=convs.slice(1).reduce((s,h)=>s+h.conv,0)/Math.max(convs.length-1,1);
+        const ult=convs[0].conv;
+        if(ult<promC-15) out.push({tipo:'conv-caida',sev:'warn',msg:`⚠ La conversión cayó a ${ult.toFixed(0)}% (tu promedio es ${promC.toFixed(0)}%) — revisa qué cambió en las cotizaciones`});
+      }
+    }
+
+    // 3) Silencio de pedidos: días sin pedido nuevo vs el ritmo real del negocio
+    const fechas=(state.pedidos||[]).filter(p=>(p.fields['Estado pedido']||'')!=='Cancelado'&&p.createdTime).map(p=>new Date(p.createdTime).getTime()).sort((a,b)=>a-b);
+    if(fechas.length>=4){
+      let gaps=0;for(let i=1;i<fechas.length;i++)gaps+=fechas[i]-fechas[i-1];
+      const gapProm=gaps/(fechas.length-1)/864e5;
+      const diasSin=(d.getTime()-fechas[fechas.length-1])/864e5;
+      if(diasSin>Math.max(7,gapProm*2)) out.push({tipo:'ped-silencio',sev:'warn',msg:`😶 ${Math.floor(diasSin)} días sin pedidos nuevos — tu ritmo normal es uno cada ~${Math.max(1,Math.round(gapProm))} días`});
+    }
+
+    // 4) Leads: semana en cero cuando normalmente llegan
+    const clis=(state.clientes||[]).filter(c=>c.createdTime).map(c=>new Date(c.createdTime));
+    if(clis.length>=6){
+      const hace8s=new Date(_t.getTime()-56*864e5);
+      const promSem=clis.filter(x=>x>=hace8s&&x<weekStart).length/8;
+      const estaSem=clis.filter(x=>x>=weekStart).length;
+      if(promSem>=1.5&&estaSem===0&&d.getDay()>=4) out.push({tipo:'leads-cero',sev:'warn',msg:`🌵 Cero leads nuevos esta semana (normalmente llegan ~${promSem.toFixed(1)}/semana) — revisa campañas y el cotizador`});
+    }
+  }catch(e){}
+  return out;
+}
+const _anomSeenKey='thelab_anom_seen_v1';
+function checkAnomalias(){
+  let seen;try{seen=JSON.parse(localStorage.getItem(_anomSeenKey)||'{}');}catch(e){seen={};}
+  const todayStr=new Date().toISOString().slice(0,10);
+  let dirty=false;
+  detectarAnomalias().forEach(a=>{
+    if(seen[a.tipo]===todayStr) return;   // un aviso por tipo por día
+    NOTIFY.add(a.sev==='success'?'success':'warning',a.msg,'Detector de anomalías — comparado contra tu histórico','overview',{silent:true});
+    seen[a.tipo]=todayStr;dirty=true;
+  });
+  if(dirty) try{localStorage.setItem(_anomSeenKey,JSON.stringify(seen));}catch(e){}
+}
 function checkAgentSuggestions(){
   let seen;try{seen=JSON.parse(localStorage.getItem(_agentSuggestKey)||'{}');}catch(e){seen={};}
   const todayStr=new Date().toISOString().slice(0,10);
