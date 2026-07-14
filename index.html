@@ -328,6 +328,7 @@
     <button class="dock-btn" data-tab="agentes" onclick="switchTab('agentes')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-agentes"/></svg></span><span class="dock-label">Agentes</span></button>
     <button class="dock-btn" data-tab="oficina" onclick="switchTab('oficina')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-oficina"/></svg></span><span class="dock-label">Oficina</span></button>
     <button class="dock-btn" data-tab="maquinas" onclick="switchTab('maquinas')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-maquinas"/></svg></span><span class="dock-label">Máquinas</span></button>
+    <button class="dock-btn" data-tab="inventario" onclick="switchTab('inventario')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-nut"/></svg></span><span class="dock-label">Inventario</span></button>
     <button class="dock-btn" data-tab="equipo" onclick="switchTab('equipo')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-equipo"/></svg></span><span class="dock-label">Equipo</span></button>
     <button class="dock-btn" data-tab="reporte" onclick="switchTab('reporte')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-reporte"/></svg></span><span class="dock-label">Reportes</span></button>
     <button class="dock-btn" data-tab="web" onclick="switchTab('web')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-web"/></svg></span><span class="dock-label">Web</span></button>
@@ -370,6 +371,7 @@
     <button class="mobile-tab-btn" data-tab="agentes" onclick="switchTabMobile('agentes')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-agentes"/></svg></span>Agentes IA</button>
     <button class="mobile-tab-btn" data-tab="oficina" onclick="switchTabMobile('oficina')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-oficina"/></svg></span>Oficina Virtual</button>
     <button class="mobile-tab-btn" data-tab="maquinas" onclick="switchTabMobile('maquinas')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-maquinas"/></svg></span>Máquinas</button>
+    <button class="mobile-tab-btn" data-tab="inventario" onclick="switchTabMobile('inventario')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-nut"/></svg></span>Inventario</button>
     <button class="mobile-tab-btn" data-tab="equipo" onclick="switchTabMobile('equipo')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-equipo"/></svg></span>Equipo</button>
     <button class="mobile-tab-btn" data-tab="reporte" onclick="switchTabMobile('reporte')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-reporte"/></svg></span>Reportes</button>
     <button class="mobile-tab-btn" data-tab="web" onclick="switchTabMobile('web')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-web"/></svg></span>Web</button>
@@ -4635,6 +4637,15 @@ function _reportarResultados(muts) {
 </div>
 
 <!-- META SEMANAL -->
+<!-- INVENTARIO DE MATERIALES -->
+<div class="tab-panel" id="tab-inventario">
+  <div class="section-header"><div><div class="section-title">Inventario de materiales</div><div class="section-desc">Stock de insumos (filamento, planchas, resina, vinilo…). Cuando un material baja de su punto de reorden, aparece en las alertas del sistema.</div></div><button class="btn btn-primary btn-sm" onclick="addMaterial()">＋ Material</button></div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Materiales <span class="badge badge-gray" id="invCount">0</span></span><button class="btn btn-ghost btn-sm" onclick="loadInventario(true)" title="Recargar">↻</button></div>
+    <div class="table-wrap"><table><thead><tr><th style="min-width:160px">Material</th><th>Stock</th><th>Unidad</th><th>Reorden</th><th>Estado</th><th></th></tr></thead><tbody id="inventarioTableBody"></tbody></table></div>
+  </div>
+</div>
+
 <div id="metaModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeMetaModal()"></div>
   <div class="modal-card" style="max-width:400px">
@@ -6438,7 +6449,7 @@ async function loadAllData(){
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
-    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);setTimeout(()=>{try{ceoAutoMonthlyCheck();}catch(e){}},1800);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarCategorias();}catch(e){logErr('migrarCategorias',e);}},2500);}
+    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);setTimeout(()=>{try{ceoAutoMonthlyCheck();}catch(e){}},1800);setTimeout(()=>{try{loadInventario();}catch(e){}},2200);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarCategorias();}catch(e){logErr('migrarCategorias',e);}},2500);}
   }catch(e){
     console.error('loadAllData error:',e);
     // Si ya hay datos en pantalla (de la caché o de una carga previa), el fallo
@@ -6626,6 +6637,7 @@ function switchTab(name){
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;if(typeof disconnectAllPrinterWs==='function')disconnectAllPrinterWs();}
   if(name==='equipo') initEquipo();
+  if(name==='inventario') loadInventario();
   if(name==='nueva-cot'){const cn=document.getElementById('cot-num');if(cn) cn.value=generarNumeroCotizacion();updateVtoPreview();}
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -7185,6 +7197,9 @@ function renderAlertas(){
     });
   }catch(e){}
 
+  // sev 2/3 — materiales bajo el punto de reorden (inventario)
+  try{(state.inventario||[]).forEach(m=>{const e=_invEstado(m);if(e.sev>=2){const f=m.fields;alertas.push({sev:e.sev,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-warning"/></svg>',type:'material-bajo-stock',msg:`<strong>${escapeHtml(f['Material']||'Material')}</strong>: ${(+f['Stock actual']||0)} ${escapeHtml(f['Unidad']||'')} ${e.sev>=3?'— SIN STOCK':'· bajo el reorden ('+(+f['Punto de reorden']||0)+')'}`,id:m.id,tab:'inventario'});}});}catch(e){}
+
   alertas.sort((a,b)=>b.sev-a.sev);
 
   // Sincronizar con la campana de notificaciones (solo alertas nuevas)
@@ -7196,8 +7211,8 @@ function renderAlertas(){
 
   // agrupación: >=3 del mismo tipo → una sola fila
   const typeCount={};alertas.forEach(a=>{typeCount[a.type]=(typeCount[a.type]||0)+1;});
-  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa','cliente-inactivo':'clientes sin cotizar +90 días','proveedor-bloqueado':'proveedores bloqueados con pedidos activos','proveedor-sin-cobertura':'categorías sin proveedor activo','maquina-mant':'impresoras requieren mantención'};
-  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`,'cliente-inactivo':`goToAlert('clientes')`,'proveedor-bloqueado':`goToAlert('proveedores')`,'proveedor-sin-cobertura':`goToAlert('proveedores')`,'maquina-mant':`goToAlert('maquinas')`};
+  const typeLabel={'pedido-atrasado':'pedidos atrasados','pago-pendiente':'pedidos sin pago confirmado','cot-vencida':'cotizaciones vencidas','cot-por-vencer':'cotizaciones por vencer','cot-sin-enviar':'cotizaciones sin enviar +48h','pedido-urgente':'pedidos con entrega urgente','factura-vencida':'clientes con facturas vencidas','cliente-bloqueado':'clientes bloqueados con cot. activa','cliente-inactivo':'clientes sin cotizar +90 días','proveedor-bloqueado':'proveedores bloqueados con pedidos activos','proveedor-sin-cobertura':'categorías sin proveedor activo','maquina-mant':'impresoras requieren mantención','material-bajo-stock':'materiales bajo el punto de reorden'};
+  const typeTabFn={'pedido-atrasado':`goToAlert('pedidos');renderPedidos('atrasados')`,'pago-pendiente':`goToAlert('pedidos')`,'cot-vencida':`goToAlert('cotizaciones')`,'cot-por-vencer':`goToAlert('cotizaciones')`,'cot-sin-enviar':`goToAlert('cotizaciones')`,'pedido-urgente':`goToAlert('pedidos')`,'factura-vencida':`goToAlert('clientes')`,'cliente-bloqueado':`goToAlert('cotizaciones')`,'cliente-inactivo':`goToAlert('clientes')`,'proveedor-bloqueado':`goToAlert('proveedores')`,'proveedor-sin-cobertura':`goToAlert('proveedores')`,'maquina-mant':`goToAlert('maquinas')`,'material-bajo-stock':`goToAlert('inventario')`};
   const sevBorder=s=>s===3?'rgba(255,68,68,0.3)':s===2?'rgba(255,107,53,0.3)':'rgba(255,170,0,0.22)';
 
   const seen=new Set();const rows=[];
@@ -10808,6 +10823,73 @@ async function enviarCierreMes(){
   try{await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:`Cierre parcial de ${label} — The Lab Solutions`,body,from_name:AGENT_CTA_FROM.name});toast('✓ Cierre de mes enviado a '+to,'success');}
   catch(e){toast('No se pudo enviar: '+e.message,'error');}
 }
+// ── INVENTARIO DE MATERIALES ───────────────────────────────────
+async function ensureInventarioTable(){
+  const t=getToken();if(!t&&!_proxyCfg()) return;
+  try{
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return;const d=await r.json();
+    if(d.tables?.find(x=>x.name==='Inventario')) return;
+    await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Inventario',fields:[
+      {name:'Material',type:'singleLineText'},
+      {name:'Stock actual',type:'number',options:{precision:1}},
+      {name:'Unidad',type:'singleLineText'},
+      {name:'Punto de reorden',type:'number',options:{precision:1}},
+      {name:'Notas',type:'singleLineText'},
+    ]})});
+  }catch(e){}
+}
+let _invLoaded=false;
+async function loadInventario(force){
+  if(_invLoaded&&!force){renderInventario();return;}
+  try{const r=await airtableFetch('Inventario',500);state.inventario=r.records||[];_invLoaded=true;}
+  catch(e){state.inventario=state.inventario||[];}
+  renderInventario();
+}
+function _invEstado(m){const s=+m.fields['Stock actual']||0,ro=+m.fields['Punto de reorden']||0;
+  if(s<=0)return{txt:'SIN STOCK',col:'var(--danger)',sev:3};
+  if(ro>0&&s<=ro)return{txt:'BAJO',col:'var(--warn)',sev:2};
+  return{txt:'OK',col:'var(--accent3)',sev:0};}
+function renderInventario(){
+  const tb=document.getElementById('inventarioTableBody');if(!tb)return;
+  const inv=(state.inventario||[]).slice().sort((a,b)=>_invEstado(b).sev-_invEstado(a).sev||String(a.fields['Material']||'').localeCompare(String(b.fields['Material']||'')));
+  const cnt=document.getElementById('invCount');if(cnt)cnt.textContent=inv.length;
+  if(!inv.length){tb.innerHTML='<tr><td colspan="6"><div class="empty-state" style="padding:24px">Sin materiales aún — agrega el primero con ＋ Material.</div></td></tr>';return;}
+  const _in='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;font-size:12px;padding:5px 8px;width:100%;box-sizing:border-box';
+  tb.innerHTML=inv.map(m=>{const e=_invEstado(m),f=m.fields;
+    return `<tr>
+      <td><input style="${_in}" value="${escapeHtml(f['Material']||'')}" onchange="editMaterial('${m.id}','Material',this.value)"></td>
+      <td style="max-width:90px"><input type="number" step="0.5" style="${_in}" value="${f['Stock actual']??''}" onchange="editMaterial('${m.id}','Stock actual',this.value)"></td>
+      <td style="max-width:80px"><input style="${_in}" value="${escapeHtml(f['Unidad']||'')}" onchange="editMaterial('${m.id}','Unidad',this.value)"></td>
+      <td style="max-width:90px"><input type="number" step="0.5" style="${_in}" value="${f['Punto de reorden']??''}" onchange="editMaterial('${m.id}','Punto de reorden',this.value)"></td>
+      <td><span class="badge" style="color:${e.col};border-color:${e.col}">${e.txt}</span></td>
+      <td><button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:3px 8px" title="Eliminar" onclick="deleteMaterial('${m.id}')">✕</button></td>
+    </tr>`;}).join('');
+}
+async function addMaterial(){
+  const nombre=prompt('Nombre del material (ej. Filamento PLA negro):');if(!nombre||!nombre.trim())return;
+  const unidad=(prompt('Unidad (kg, und, m, L…):','kg')||'').trim();
+  try{
+    await ensureInventarioTable();
+    const flds={'Material':nombre.trim(),'Stock actual':0,'Unidad':unidad,'Punto de reorden':0};
+    const r=await airtableWrite('Inventario','POST',null,flds);
+    if(r?.id){state.inventario=state.inventario||[];state.inventario.push({id:r.id,fields:flds});_invLoaded=true;}
+    renderInventario();toast('✓ Material agregado — ajusta stock y punto de reorden','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+async function editMaterial(id,campo,val){
+  const m=(state.inventario||[]).find(x=>x.id===id);if(!m)return;
+  const v=(campo==='Stock actual'||campo==='Punto de reorden')?(parseFloat(val)||0):val;
+  m.fields[campo]=v;
+  try{await airtableWrite('Inventario','PATCH',id,{[campo]:v});}catch(e){toast('No se pudo guardar en Airtable','error');}
+  renderInventario();try{renderAlertas();}catch(e){}
+}
+async function deleteMaterial(id){
+  if(!confirm('¿Eliminar este material del inventario?'))return;
+  try{await airtableDelete('Inventario',id);}catch(e){toast('No se pudo eliminar','error');return;}
+  state.inventario=(state.inventario||[]).filter(x=>x.id!==id);
+  renderInventario();try{renderAlertas();}catch(e){}
+}
 function renderReportes(){
   const tbody=document.getElementById('reportesTableBody');
   if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:28px"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-chart"/></svg></div><div style="margin-bottom:8px">Sin reportes aún</div><div style="font-size:11px;color:var(--text3)">Los reportes se generan automáticamente cada semana con el Agente CEO</div><button onclick="switchTab(\'agentes\')" style="margin-top:12px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ir a Agentes IA</button></div></td></tr>';return;}
@@ -12386,13 +12468,13 @@ const AUTH={
 const RBAC={
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','equipo','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','equipo','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
     comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','oficina','remuneraciones','correo','redes','newsletter','nuevo-lead','nueva-cot','cot3d'],
-    produccion: ['overview','pedidos','maquinas','equipo','visual','correo'],
+    produccion: ['overview','pedidos','maquinas','inventario','equipo','visual','correo'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo'],
     marketing:  ['overview','web','agentes','oficina','reporte','correo','redes','newsletter'],
-    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','equipo','reporte','web','finanzas','visual','remuneraciones','redes','newsletter'],
+    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','reporte','web','finanzas','visual','remuneraciones','redes','newsletter'],
   },
   // Items del menú "Nuevo" visibles por rol
   nuevos:{

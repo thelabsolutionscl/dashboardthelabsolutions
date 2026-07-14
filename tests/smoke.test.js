@@ -84,6 +84,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'finRenderCobranzaActions', 'cobRegistrar', 'renderClienteTimeline',
     'renderMorningBrief', 'renderMaqOcupacion', 'renderPedidosKanban', 'advancePedido',
     'tvStart', 'tvStop', 'openAgendaModal', 'agendaSave',
+    'renderInventario', 'addMaterial', 'editMaterial',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',
@@ -101,7 +102,7 @@ const ok = msg => console.log('  ✓ ' + msg);
 // ── 3. IDs CRÍTICOS del DOM ────────────────────────────────────────────────
 {
   const IDS = ['tab-overview', 'tab-clientes', 'tab-cotizaciones', 'tab-pedidos', 'tab-agentes',
-    'tab-oficina', 'agentesGrid', 'fuTrayCard', 'pdTrayCard', 'wbTrayCard', 'finCobranzaActions',
+    'tab-oficina', 'tab-inventario', 'inventarioTableBody', 'agentesGrid', 'fuTrayCard', 'pdTrayCard', 'wbTrayCard', 'finCobranzaActions',
     'morningBrief', 'maqOcupacion', 'pedidosKanban', 'agentWorkingModal', 'agentInlineModal',
     'cdTimeline', 'mailList', 'umBackupInfo', 'agendaModal'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
