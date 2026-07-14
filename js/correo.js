@@ -90,6 +90,23 @@ const MAIL={
     }catch(e){return null;} // el freno jamás debe romper un envío legítimo
   },
 
+  // Traduce errores conocidos del servidor de correo a un aviso claro y accionable.
+  // OJO: la suspensión de la casilla es del HOSTING, no del dashboard; esto solo
+  // explica mejor el error, no reactiva el envío.
+  _friendlyErr(o){
+    if(o&&typeof o.error==='string'){
+      const e=o.error;
+      if(/suspend/i.test(e)){
+        const m=e.match(/from\s*"?([^"\s]+@[^"\s]+)"?/i);
+        const box=(m&&m[1])||this.activeAccount()||'esa casilla';
+        o.error='📵 El hosting suspendió el ENVÍO SALIENTE de '+box+' (suele pasar al superar el tope de correos/hora del plan). No es un problema del dashboard. Qué hacer: espera un rato y reintenta, baja el tope con el botón 🛡 Freno, envía desde otra casilla, o pídele al hosting que reactive el correo saliente de esa cuenta.';
+      } else if(/authenticat|535|user:|pass:/i.test(e)){
+        o.error='🔑 El servidor rechazó la clave de '+(this.activeAccount()||'la casilla')+'. Revísala con el botón "Cambiar clave".';
+      }
+    }
+    return o;
+  },
+
   async post(params){
     if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
     const fd=new FormData();
@@ -101,7 +118,7 @@ const MAIL={
     try{
       const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
       const text=await r.text();
-      try{return JSON.parse(text);}
+      try{return this._friendlyErr(JSON.parse(text));}
       catch(e){return{error:'Respuesta inválida del servidor ('+r.status+')'};}
     }catch(e){
       return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
@@ -127,7 +144,7 @@ const MAIL={
     try{
       const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
       const text=await r.text();
-      try{return JSON.parse(text);}
+      try{return this._friendlyErr(JSON.parse(text));}
       catch(e){return{error:'Respuesta inválida del servidor ('+r.status+')'};}
     }catch(e){
       return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
