@@ -3791,6 +3791,21 @@ function _reportarResultados(muts) {
       </div>
     </div>
 
+    <!-- Flujo de caja proyectado (N1) -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Flujo de caja proyectado · 8 semanas</span>
+        <span style="margin-left:auto;font-size:10.5px;color:var(--text3)" title="Proyecta la caja semana a semana: los ingresos son las facturas por cobrar ubicadas en la semana de su vencimiento (las vencidas caen en la semana actual); los egresos son los pagos programados que ingreses. El saldo acumulado parte del saldo inicial que declares.">ⓘ Ingresos por vencimiento − egresos programados</span>
+        <button class="btn btn-ghost btn-sm" onclick="addPagoProgramado()" style="margin-left:10px">＋ Pago programado</button>
+      </div>
+      <div style="padding:10px 16px 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text3)">
+        <span>Saldo inicial en caja:</span>
+        <input type="number" id="finSaldoInicial" value="0" onchange="setFinSaldoInicial(this.value)" style="width:130px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px;text-align:right" placeholder="0">
+        <span style="color:var(--text3)">CLP</span>
+      </div>
+      <div id="finFlujoCaja" style="padding:8px 16px 4px"></div>
+    </div>
+
     <!-- Cuentas por cobrar generales -->
     <div class="card">
       <div class="card-header"><span class="card-title">Facturas Pendientes de Cobro</span><button class="btn btn-ghost btn-sm" onclick="finExportCobranza()" style="margin-left:auto">⬇ CSV</button><button class="btn btn-primary btn-sm" id="finCobranzaIABtn" onclick="finPlanCobranzaIA()">📋 Plan de cobranza IA</button></div>

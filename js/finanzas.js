@@ -423,6 +423,134 @@ function finRenderCobrar(){
   if(!html)html='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--accent3)">✓ Sin facturas pendientes de cobro registradas</td></tr>';
   document.getElementById('fin-cobrar-body').innerHTML=html;
   try{finRenderCobranzaActions();}catch(e){}
+  try{finRenderFlujoCaja();}catch(e){}
+}
+
+/* ── FLUJO DE CAJA PROYECTADO (N1) ──────────────────────────────
+   Proyección semanal a 8 semanas: ingresos = facturas por cobrar
+   ubicadas en la semana de su vencimiento (las ya vencidas caen en la
+   semana actual, porque el dinero “se debería cobrar ya”); egresos =
+   pagos programados que el usuario ingresa (localStorage). El saldo
+   acumulado arranca del saldo inicial declarado y encadena semana a
+   semana; las semanas donde queda en rojo se resaltan como alerta. */
+const _PAGOS_PROG_KEY='thelab_pagos_prog_v1';
+const _SALDO_INI_KEY='thelab_saldo_inicial_v1';
+function _pagosProg(){try{return JSON.parse(localStorage.getItem(_PAGOS_PROG_KEY)||'[]');}catch(e){return[];}}
+function _pagosProgSave(arr){try{localStorage.setItem(_PAGOS_PROG_KEY,JSON.stringify(arr||[]));}catch(e){}}
+function finSaldoInicial(){const v=parseFloat(localStorage.getItem(_SALDO_INI_KEY));return isNaN(v)?0:v;}
+function setFinSaldoInicial(v){const n=parseFloat(v)||0;localStorage.setItem(_SALDO_INI_KEY,String(n));try{finRenderFlujoCaja();}catch(e){}}
+// Inicio (lunes 00:00) de la semana que contiene ts
+function _semanaInicio(ts){const d=new Date(ts);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;/*0=lunes*/d.setDate(d.getDate()-dow);return d.getTime();}
+function addPagoProgramado(){
+  const concepto=(prompt('Concepto del pago programado (ej: Arriendo, Sueldos, Proveedor filamento):')||'').trim();
+  if(!concepto)return;
+  const montoRaw=prompt('Monto del pago (CLP):','');if(montoRaw==null)return;
+  const monto=Math.round(parseFloat(String(montoRaw).replace(/[^\d.-]/g,''))||0);
+  if(!(monto>0)){toast('Monto inválido','error');return;}
+  const hoyISO=new Date().toISOString().slice(0,10);
+  const fecha=(prompt('Fecha del pago (AAAA-MM-DD):',hoyISO)||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){toast('Fecha inválida (usa AAAA-MM-DD)','error');return;}
+  const recurrente=confirm('¿Es un pago mensual recurrente? (Aceptar = se repite cada mes en las 8 semanas; Cancelar = pago único)');
+  const arr=_pagosProg();
+  arr.push({id:'pp'+_semanaInicio(Date.now())+'_'+arr.length+'_'+concepto.length,concepto,monto,fecha,recurrente:!!recurrente});
+  _pagosProgSave(arr);
+  toast('✓ Pago programado agregado','success');
+  try{finRenderFlujoCaja();}catch(e){}
+}
+function delPagoProgramado(id){
+  const arr=_pagosProg().filter(p=>p.id!==id);
+  _pagosProgSave(arr);
+  try{finRenderFlujoCaja();}catch(e){}
+}
+// Expande un pago recurrente a las ocurrencias que caen dentro del horizonte [ini,fin)
+function _pagoOcurrencias(p,horizIni,horizFin){
+  const base=new Date(p.fecha+'T00:00:00').getTime();
+  if(isNaN(base))return[];
+  if(!p.recurrente)return(base>=horizIni&&base<horizFin)?[base]:[];
+  const out=[];const d0=new Date(p.fecha+'T00:00:00');const dia=d0.getDate();
+  let d=new Date(d0.getTime());
+  // Retrocede/avanza hasta el inicio del horizonte
+  while(d.getTime()>=horizIni){d.setMonth(d.getMonth()-1);}
+  while(d.getTime()<horizFin){
+    if(d.getTime()>=horizIni){const cand=new Date(d.getFullYear(),d.getMonth(),dia);out.push(cand.getTime());}
+    d.setMonth(d.getMonth()+1);
+  }
+  return out.filter(t=>t>=horizIni&&t<horizFin);
+}
+function finRenderFlujoCaja(){
+  const box=document.getElementById('finFlujoCaja'); if(!box) return;
+  const SEMANAS=8;
+  const semIni=_semanaInicio(Date.now());
+  const horizIni=semIni, horizFin=semIni+SEMANAS*7*864e5;
+  // Buckets semanales
+  const weeks=[];for(let i=0;i<SEMANAS;i++){weeks.push({ini:semIni+i*7*864e5,ingreso:0,egreso:0,detIn:[],detEg:[]});}
+  const bucketFor=ts=>{let idx=Math.floor((ts-semIni)/(7*864e5));if(idx<0)idx=0;if(idx>SEMANAS-1)return-1;return idx;};
+  // Ingresos: facturas por cobrar, ubicadas por vencimiento (vencidas → semana 0)
+  const facturas=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  facturas.forEach(r=>{
+    const venc=finVenc(r).getTime();
+    const ts=venc<horizIni?horizIni:venc;   // vencidas/antiguas: se esperan cobrar ya
+    const idx=bucketFor(ts); if(idx<0)return;   // vencimientos más allá del horizonte quedan fuera
+    weeks[idx].ingreso+=r.porCobrar;
+    weeks[idx].detIn.push({nombre:(r.empresa&&r.empresa!=='—')?r.empresa:r.nombre,monto:r.porCobrar,vencido:venc<horizIni});
+  });
+  // Egresos: pagos programados (con recurrencia expandida)
+  const pagos=_pagosProg();
+  pagos.forEach(p=>{
+    _pagoOcurrencias(p,horizIni,horizFin).forEach(ts=>{
+      const idx=bucketFor(ts); if(idx<0)return;
+      weeks[idx].egreso+=p.monto;
+      weeks[idx].detEg.push({concepto:p.concepto,monto:p.monto,id:p.id,recurrente:p.recurrente});
+    });
+  });
+  const totIn=weeks.reduce((s,w)=>s+w.ingreso,0), totEg=weeks.reduce((s,w)=>s+w.egreso,0);
+  // Saldo acumulado
+  let saldo=finSaldoInicial();let minSaldo=saldo,minWeek=-1;
+  weeks.forEach((w,i)=>{saldo+=w.ingreso-w.egreso;w.saldo=saldo;if(saldo<minSaldo){minSaldo=saldo;minWeek=i;}});
+  const fmtRango=w=>{const a=new Date(w.ini),b=new Date(w.ini+6*864e5);const mm=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${a.getDate()} ${mm[a.getMonth()]}–${b.getDate()} ${mm[b.getMonth()]}`;};
+  // KPIs
+  let html=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Ingresos 8 sem.</span><span class="fac-kpi-val" style="color:var(--accent3)">${clp(totIn)}</span></div>
+    <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Egresos 8 sem.</span><span class="fac-kpi-val" style="color:var(--danger)">${clp(totEg)}</span></div>
+    <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Neto</span><span class="fac-kpi-val" style="color:${totIn-totEg>=0?'var(--accent3)':'var(--danger)'}">${clp(totIn-totEg)}</span></div>
+    <div class="fac-kpi ${minSaldo<0?'fac-kpi-danger':''}" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Saldo mínimo</span><span class="fac-kpi-val" style="${minSaldo<0?'':'color:var(--text2)'}">${clp(minSaldo)}</span></div>
+  </div>`;
+  if(minWeek>=0&&minSaldo<0){
+    html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:9px 12px;background:rgba(255,68,68,0.07);border:1px solid rgba(255,68,68,0.28);border-radius:8px;font-size:11.5px;color:var(--text2)">
+      <span style="font-size:15px">⚠️</span><span>La caja quedaría <b style="color:var(--danger)">negativa</b> la semana del <b>${fmtRango(weeks[minWeek])}</b> (${clp(minSaldo)}). Adelanta cobros o reprograma egresos de esa semana.</span></div>`;
+  }
+  // Tabla semanal
+  html+=`<div class="table-wrap"><table><thead><tr>
+    <th>Semana</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Egresos</th><th style="text-align:right">Neto</th><th style="text-align:right">Saldo acum.</th></tr></thead><tbody>`;
+  weeks.forEach((w,i)=>{
+    const neto=w.ingreso-w.egreso;const neg=w.saldo<0;
+    const inTitle=w.detIn.length?w.detIn.slice(0,8).map(d=>`${d.nombre}: ${clp(d.monto)}${d.vencido?' (vencida)':''}`).join('\n'):'Sin ingresos esta semana';
+    const egTitle=w.detEg.length?w.detEg.map(d=>`${d.concepto}: ${clp(d.monto)}`).join('\n'):'Sin egresos esta semana';
+    html+=`<tr style="${neg?'background:rgba(255,68,68,0.05)':''}">
+      <td data-label="Semana"${i===0?' style="font-weight:600"':''}>${fmtRango(w)}${i===0?' <span class="badge badge-gray" style="font-size:8px">actual</span>':''}</td>
+      <td data-label="Ingresos" style="text-align:right;color:${w.ingreso?'var(--accent3)':'var(--text3)'}" title="${escapeHtml(inTitle)}">${w.ingreso?clp(w.ingreso):'—'}</td>
+      <td data-label="Egresos" style="text-align:right;color:${w.egreso?'var(--danger)':'var(--text3)'}" title="${escapeHtml(egTitle)}">${w.egreso?'-'+clp(w.egreso):'—'}</td>
+      <td data-label="Neto" style="text-align:right;color:${neto>=0?'var(--text2)':'var(--danger)'}">${clp(neto)}</td>
+      <td data-label="Saldo acum." style="text-align:right;font-weight:700;color:${neg?'var(--danger)':'var(--accent3)'}">${clp(w.saldo)}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  // Lista de pagos programados (para poder borrarlos)
+  if(pagos.length){
+    html+=`<div style="margin-top:12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);padding:0 2px 6px">Pagos programados (${pagos.length})</div>
+    <div style="display:flex;flex-direction:column;gap:5px">`+pagos.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(p=>`
+      <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:11.5px">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.concepto)}${p.recurrente?' <span class="badge badge-gray" style="font-size:8px">mensual</span>':''}</span>
+        <span style="color:var(--text3);flex-shrink:0">${escapeHtml(p.fecha)}</span>
+        <span style="color:var(--danger);font-weight:600;flex-shrink:0">-${clp(p.monto)}</span>
+        <button class="btn btn-ghost btn-sm" style="flex-shrink:0;padding:2px 8px" data-id="${escapeHtml(p.id)}" onclick="delPagoProgramado(this.dataset.id)" title="Eliminar">✕</button>
+      </div>`).join('')+`</div>`;
+  }else{
+    html+=`<div style="margin-top:10px;padding:10px 12px;font-size:11px;color:var(--text3);text-align:center;border:1px dashed var(--border2);border-radius:8px">Sin egresos programados. Usa <b>＋ Pago programado</b> para incluir arriendo, sueldos o proveedores y ver el saldo real proyectado.</div>`;
+  }
+  box.innerHTML=html;
+  // Sincroniza el input de saldo inicial con lo guardado
+  const si=document.getElementById('finSaldoInicial'); if(si&&document.activeElement!==si) si.value=finSaldoInicial();
 }
 // Exporta la cartera por cobrar (ordenada por mora) a CSV para trabajarla aparte o pasarla a cobranza
 function finExportCobranza(){
