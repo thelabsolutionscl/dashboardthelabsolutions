@@ -107,6 +107,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'renderOnboarding', '_onboardingSteps', 'toggleOnboarding',
     '_podLink', 'pedirPOD', 'ensurePodFields', '_podConfirmado',
     'renderBreakEven', '_puntoEquilibrio', 'setCostosFijos',
+    'renderIvaMensual', '_ivaMes',
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',

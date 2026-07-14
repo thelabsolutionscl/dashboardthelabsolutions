@@ -128,7 +128,7 @@ function finSwitchTab(tab){
       btn.classList.toggle('active-filter',t===tab);
     }
   });
-  if(tab==='resumen'){finDrawChart();finDrawCanalDonut();finRenderResumenAnual();finRenderTopClientes();}
+  if(tab==='resumen'){finDrawChart();finDrawCanalDonut();finRenderResumenAnual();finRenderTopClientes();try{renderIvaMensual();}catch(e){}}
   if(tab==='facturas'){finRenderFacturas();}
   if(tab==='cobrar'){finRenderCobrar();}
   if(tab==='prestamos'){finRenderPrestamos();finDrawDeudaTimeline();}
@@ -1970,6 +1970,7 @@ const GS_ACTIONS=[
   {icon:'icon-dollar', title:'Arqueo de caja del día', kw:'arqueo caja efectivo cuadre diario cierre conteo dinero', run:()=>{try{finSwitchTab('diario');setTimeout(()=>{try{renderArqueo();document.getElementById('arqueoCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
   {tab:'proveedores',icon:'icon-proveedores', title:'Nueva orden de compra', kw:'orden compra oc proveedor comprar insumos pedido materiales', run:()=>{try{openOCModal();}catch(e){}}},
   {icon:'icon-target', title:'Punto de equilibrio', kw:'punto equilibrio break even costos fijos cuanto vender rentabilidad', run:()=>{try{finSwitchTab('presupuesto');setTimeout(()=>{try{renderBreakEven();document.getElementById('breakEvenCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
+  {icon:'icon-dollar', title:'IVA del mes (F29)', kw:'iva f29 impuesto sii debito credito fiscal pagar mensual', run:()=>{try{finSwitchTab('resumen');setTimeout(()=>{try{renderIvaMensual();document.getElementById('ivaMensualCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
@@ -3125,3 +3126,44 @@ function guardarArqueo(){
   toast(Math.abs(d)<1?'✓ Caja cuadrada':`Arqueo guardado · ${d>0?'sobran ':'faltan '}${formatCLP(Math.abs(d))}`, Math.abs(d)<1?'success':'info');
   renderArqueo();
 }
+
+// ── PROYECCIÓN DE IVA MENSUAL (S1) ─────────────────────────────────────
+// IVA débito (de las ventas del mes) − IVA crédito (de las compras/gastos
+// afectos del mes, tomados del Libro Diario) = IVA a pagar al SII. Los gastos
+// exentos típicos (sueldos/honorarios) no dan crédito fiscal.
+const _IVA_EXENTAS=new Set(['Sueldos y honorarios','Cuota préstamo','Contabilidad y legal']);
+function _ivaMes(off){
+  const now=new Date();const y=now.getFullYear(),m=now.getMonth()+(off||0);
+  const ini=new Date(y,m,1).getTime(),fin=new Date(y,m+1,1).getTime();
+  const label=(typeof _MES_NOMBRES!=='undefined'?_MES_NOMBRES[((m%12)+12)%12]:'')+' '+new Date(y,m,1).getFullYear();
+  // Débito: IVA de las ventas del mes (pedidos no cancelados creados en el mes)
+  let ventaNeta=0,debito=0;
+  (state.pedidos||[]).forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;const d=p.createdTime?new Date(p.createdTime).getTime():0;if(!(d>=ini&&d<fin))return;const total=f['Monto total (CLP)']||0;if(total<=0)return;const neto=total/1.19;ventaNeta+=neto;debito+=total-neto;});
+  // Crédito: IVA de los gastos afectos del mes (Libro Diario), montos brutos
+  let compraAfecta=0,credito=0;const pref=(typeof presKey==='function')?presKey(new Date(y,m,1).getFullYear(),((m%12)+12)%12+1):'';
+  (typeof ldGetAll==='function'?ldGetAll():[]).forEach(e=>{if(e.tipo!=='gasto')return;if(pref&&!String(e.fecha||'').startsWith(pref))return;if(_IVA_EXENTAS.has(e.categoria))return;const monto=+e.monto||0;compraAfecta+=monto;credito+=monto-monto/1.19;});
+  return {label,ventaNeta,debito:Math.round(debito),compraAfecta,credito:Math.round(credito),aPagar:Math.round(debito-credito)};
+}
+function renderIvaMensual(){
+  const el=document.getElementById('ivaMensualCard');if(!el)return;
+  const off=parseInt(el.dataset.off||'0');
+  const v=_ivaMes(off);
+  const pagar=v.aPagar>=0;
+  el.innerHTML=`<div class="card">
+    <div class="card-header"><span class="card-title">🧾 IVA de ${escapeHtml(v.label)}</span>
+      <div style="display:flex;gap:4px;margin-left:auto">
+        <button class="btn-mini${off===-1?' btn-mini-yellow':''}" onclick="_ivaSetOff(-1)">Mes cerrado</button>
+        <button class="btn-mini${off===0?' btn-mini-yellow':''}" onclick="_ivaSetOff(0)">Mes en curso</button>
+      </div>
+    </div>
+    <div style="padding:14px 16px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="fac-kpi" style="flex:1;min-width:120px"><span class="fac-kpi-lbl">IVA débito (ventas)</span><span class="fac-kpi-val" style="color:var(--accent3)">${formatCLP(v.debito)}</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:120px"><span class="fac-kpi-lbl">IVA crédito (compras)</span><span class="fac-kpi-val" style="color:var(--warn)">${formatCLP(v.credito)}</span></div>
+        <div class="fac-kpi ${pagar&&v.aPagar>0?'fac-kpi-danger':''}" style="flex:1;min-width:140px"><span class="fac-kpi-lbl">${pagar?'IVA a pagar':'Remanente a favor'}</span><span class="fac-kpi-val"${!pagar?' style="color:var(--accent3)"':''}>${formatCLP(Math.abs(v.aPagar))}</span></div>
+      </div>
+      <div style="font-size:10.5px;color:var(--text3);line-height:1.5">Débito = 19% de tus ventas del mes (${formatCLP(Math.round(v.ventaNeta))} neto). Crédito = IVA de gastos afectos del Libro Diario (${formatCLP(v.compraAfecta)} bruto; se excluyen sueldos/honorarios, préstamos y honorarios contables). ${pagar?`Provisiona <b style="color:var(--danger)">${formatCLP(v.aPagar)}</b> para el F29.`:`Tienes crédito fiscal a favor para el próximo mes.`}</div>
+    </div>
+  </div>`;
+}
+function _ivaSetOff(o){const el=document.getElementById('ivaMensualCard');if(el)el.dataset.off=o;renderIvaMensual();}
