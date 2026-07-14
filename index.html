@@ -2453,6 +2453,16 @@
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px" id="equipoResumenHoy"></div>
   <div class="card" style="margin-bottom:20px"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:700px"><thead id="equipoHeader"></thead><tbody id="equipoBody"></tbody></table></div></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px" id="equipoDetalleSemana"></div>
+  <!-- COMISIONES Y RANKING DE VENTAS (P1 + P2) -->
+  <div style="display:flex;align-items:center;gap:10px;margin:26px 0 12px;flex-wrap:wrap">
+    <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)">🏅 Ventas del equipo</span>
+    <select id="comMes" class="field-select" style="width:auto;font-size:12px;padding:4px 8px" onchange="renderComisiones()">
+      <option value="0">Mes actual</option><option value="-1">Mes anterior</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="setComisionCfg()" title="Configurar % de comisión y base de cálculo">⚙️ Comisión</button>
+    <button class="btn btn-ghost btn-sm" onclick="setMetaVendedores()" title="Fijar meta de venta mensual por vendedor">🎯 Metas</button>
+  </div>
+  <div id="comisionesRanking"></div>
 </div>
 
 <div id="equipoEventModal" class="modal-overlay" style="display:none">

@@ -2869,3 +2869,105 @@ function qcalcClear(kind){
   qcalcExtrasRender(kind);
   qcalcUpdate(kind);
 }
+
+// ── COMISIONES Y RANKING DE VENTAS (P1 + P2) ───────────────────────────
+// Calcula, por vendedor y mes, las ventas cerradas (pedidos no cancelados),
+// su comisión (% sobre venta neta o utilidad, configurable) y el avance
+// contra la meta mensual de cada vendedor. Todo determinista desde el CRM.
+const _COMISION_CFG_KEY='thelab_comision_cfg_v1';
+const _META_VEND_KEY='thelab_meta_vendedor_v1';
+function _comisionCfg(){try{const c=JSON.parse(localStorage.getItem(_COMISION_CFG_KEY)||'{}');return{rate:(c.rate>=0&&c.rate<=100)?c.rate:5,base:c.base==='utilidad'?'utilidad':'venta'};}catch(e){return{rate:5,base:'venta'};}}
+function setComisionCfg(){
+  const cfg=_comisionCfg();
+  const rRaw=prompt('Comisión de vendedores (%). Ej: 5',String(cfg.rate));if(rRaw===null)return;
+  const rate=parseFloat(String(rRaw).replace(/[^\d.]/g,''));if(!(rate>=0&&rate<=100)){toast('Porcentaje inválido (0–100)','error');return;}
+  const base=confirm('¿Calcular la comisión sobre la UTILIDAD? (Aceptar = utilidad · Cancelar = venta neta)')?'utilidad':'venta';
+  localStorage.setItem(_COMISION_CFG_KEY,JSON.stringify({rate,base}));
+  toast(`✓ Comisión ${rate}% sobre ${base==='utilidad'?'utilidad':'venta neta'}`,'success');
+  try{renderComisiones();}catch(e){}
+}
+function _metaVendedores(){try{return JSON.parse(localStorage.getItem(_META_VEND_KEY)||'{}');}catch(e){return{};}}
+function setMetaVendedores(){
+  const metas=_metaVendedores();
+  const lista=(typeof PERSONAS!=='undefined'?PERSONAS:[]);
+  if(!lista.length){toast('No hay personas configuradas','info');return;}
+  let cambios=false;
+  for(const p of lista){
+    const cur=metas[p.id]||'';
+    const v=prompt(`Meta de venta mensual (CLP neto) — ${p.nombre}\n(vacío o 0 = sin meta)`,cur?String(cur):'');
+    if(v===null)continue; // cancelar salta este, sigue con el resto
+    const n=Math.round(parseFloat(String(v).replace(/[^\d.-]/g,''))||0);
+    if(n>0)metas[p.id]=n;else delete metas[p.id];
+    cambios=true;
+  }
+  if(cambios){localStorage.setItem(_META_VEND_KEY,JSON.stringify(metas));toast('✓ Metas por vendedor guardadas','success');try{renderComisiones();}catch(e){}}
+}
+// Ventas por vendedor en el mes (offset): usa pedidos no cancelados creados en el
+// período; el vendedor viene del pedido o, si falta, de su cotización vinculada.
+function _ventasVendedor(off){
+  const mr=(typeof _mesRango==='function')?_mesRango(off):null;
+  const ini=mr?mr.ini.getTime():0, fin=mr?mr.fin.getTime():Infinity;
+  const cfg=_comisionCfg();
+  const by=new Map();
+  (state.pedidos||[]).forEach(p=>{
+    const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;
+    const t=p.createdTime?new Date(p.createdTime).getTime():0;if(!(t>=ini&&t<fin))return;
+    const venta=(f['Monto total (CLP)']||0)/1.19;if(venta<=0)return;
+    // vendedor: del pedido o de la cotización vinculada
+    let vid=(f['Vendedor']||'').toString().toLowerCase().trim();
+    if(!vid){const cot=Array.isArray(f['Cotizaciones'])&&f['Cotizaciones'].length?(state.cotizacionesById||{})[f['Cotizaciones'][0]]:null;if(cot)vid=(cot.fields['Vendedor']||'').toString().toLowerCase().trim();}
+    if(!vid)vid='_sinasignar';
+    // utilidad
+    let costo;const cr=(typeof _costoRealPedido==='function')?_costoRealPedido(f):null;
+    if(cr>0)costo=cr;else{const cot=Array.isArray(f['Cotizaciones'])&&f['Cotizaciones'].length?(state.cotizacionesById||{})[f['Cotizaciones'][0]]:null;let m=cot&&typeof getMargenCot==='function'?getMargenCot(cot.fields):null;if(m===null&&typeof _margenPromedioGlobal==='function')m=_margenPromedioGlobal();if(m===null)m=0;costo=venta*(1-m/100);}
+    const util=venta-costo;
+    const e=by.get(vid)||{vid,n:0,venta:0,util:0};e.n++;e.venta+=venta;e.util+=util;by.set(vid,e);
+  });
+  const metas=_metaVendedores();
+  return [...by.values()].map(e=>({
+    ...e,
+    nombre:(typeof resolveVendedorName==='function'&&e.vid!=='_sinasignar')?resolveVendedorName(e.vid):(e.vid==='_sinasignar'?'Sin vendedor':e.vid),
+    comision:Math.round((cfg.base==='utilidad'?e.util:e.venta)*cfg.rate/100),
+    meta:metas[e.vid]||0
+  })).sort((a,b)=>b.venta-a.venta);
+}
+function renderComisiones(){
+  const el=document.getElementById('comisionesRanking');if(!el)return;
+  const off=parseInt(document.getElementById('comMes')?.value||'0');
+  const cfg=_comisionCfg();
+  const rows=_ventasVendedor(off);
+  if(!rows.length){el.innerHTML='<div class="empty-state" style="padding:16px">Sin ventas registradas en el período.</div>';return;}
+  const totVenta=rows.reduce((s,r)=>s+r.venta,0),totCom=rows.reduce((s,r)=>s+r.comision,0),totUtil=rows.reduce((s,r)=>s+r.util,0);
+  const maxVenta=Math.max(1,...rows.map(r=>r.venta));
+  const medallas=['🥇','🥈','🥉'];
+  const rankHtml=rows.map((r,i)=>{
+    const pct=r.meta>0?Math.round(r.venta/r.meta*100):null;
+    const pctCol=pct==null?'var(--text3)':pct>=100?'var(--accent3)':pct>=70?'var(--warn)':'var(--danger)';
+    return `<div style="padding:10px 0;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
+        <span style="font-size:15px;width:22px;text-align:center">${r.vid==='_sinasignar'?'—':(medallas[i]||(i+1))}</span>
+        <span style="font-weight:600;font-size:12.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.nombre)}</span>
+        <span style="font-size:10.5px;color:var(--text3)">${r.n} venta${r.n!==1?'s':''}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--accent)">${formatCLP(Math.round(r.venta))}</span>
+      </div>
+      <div style="height:9px;background:var(--surface3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(r.venta/maxVenta*100)}%;background:var(--accent);border-radius:4px"></div></div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10.5px;color:var(--text3)">
+        <span>Comisión (${cfg.rate}% ${cfg.base==='utilidad'?'util.':'venta'}): <b style="color:var(--accent3)">${formatCLP(r.comision)}</b></span>
+        <span>${r.meta>0?`Meta ${formatCLP(r.meta)} · <b style="color:${pctCol}">${pct}%</b>${pct>=100?' 🎯':''}`:'sin meta'}</span>
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="data-grid">
+    <div class="card"><div class="card-header"><span class="card-title">🏆 Ranking de ventas</span><span style="font-size:10px;color:var(--text3)">venta neta del período · meta</span></div><div style="padding:8px 16px 12px">${rankHtml}</div></div>
+    <div class="card"><div class="card-header"><span class="card-title">💸 Comisiones a pagar</span><span style="font-size:10px;color:var(--text3)">${cfg.rate}% sobre ${cfg.base==='utilidad'?'utilidad':'venta neta'}</span></div>
+      <div style="padding:8px 16px 12px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Venta neta</span><span class="fac-kpi-val">${formatCLP(Math.round(totVenta))}</span></div>
+          <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Utilidad</span><span class="fac-kpi-val" style="color:var(--accent3)">${formatCLP(Math.round(totUtil))}</span></div>
+          <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Comisiones</span><span class="fac-kpi-val" style="color:var(--warn)">${formatCLP(totCom)}</span></div>
+        </div>
+        ${rows.filter(r=>r.vid!=='_sinasignar').map(r=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-top:1px solid var(--border)"><span>${escapeHtml(r.nombre)}</span><span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent3)">${formatCLP(r.comision)}</span></div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}

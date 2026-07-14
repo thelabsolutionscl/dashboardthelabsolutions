@@ -1647,6 +1647,7 @@ async function initEquipo(){
   const el=document.getElementById('gcalPersonasConfig');if(el) el.innerHTML=PERSONAS.map(p=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">${_avHtml(p,28)}<span style="min-width:140px;font-size:12px">${p.nombre}</span><input class="field-input" id="gcal_cid_${p.id}" placeholder="email@gmail.com" value="${p.gcalId}" style="font-size:11px;flex:1"><input class="field-input" id="gcal_key_${p.id}" placeholder="AIza... API Key" value="${sessionStorage.getItem('gcal_api_key')||''}" style="font-size:11px;flex:1"></div>`).join('');
   const anyGcal=PERSONAS.some(p=>sessionStorage.getItem('gcal_persona_'+p.id));if(anyGcal){PERSONAS.forEach(p=>{const cid=sessionStorage.getItem('gcal_persona_'+p.id);if(cid) p.gcalId=cid;});document.getElementById('gcalEquipoSyncBtn').style.display='inline-flex';}
   renderEquipoCalendar();
+  try{renderComisiones();}catch(e){}
 }
 function toggleGcalEquipoConfig(){const el=document.getElementById('gcalEquipoConfig');el.style.display=el.style.display==='none'?'block':'none';}
 function saveGcalEquipoConfig(){PERSONAS.forEach(p=>{const cid=document.getElementById(`gcal_cid_${p.id}`)?.value.trim();const key=document.getElementById(`gcal_key_${p.id}`)?.value.trim();if(cid){p.gcalId=cid;sessionStorage.setItem('gcal_persona_'+p.id,cid);}if(key) sessionStorage.setItem('gcal_api_key',key);});toggleGcalEquipoConfig();document.getElementById('gcalEquipoSyncBtn').style.display='inline-flex';toast('✓ Calendarios configurados','success');syncGcalEquipo();}
