@@ -2548,6 +2548,28 @@
   </div>
 </div>
 
+<!-- MODAL DESGLOSE DE COSTO UNITARIO (se abre al clickear "Costo unit." de una fila) -->
+<div id="costoDetalleModal" class="modal-overlay" style="display:none;z-index:10050">
+  <div class="modal-backdrop" onclick="closeCostoDetalle()"></div>
+  <div class="modal-card" style="max-width:480px;width:95%">
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Desglose de costo unitario</div>
+    <div id="costoDetalleItemName" style="font-size:11px;color:var(--text2);margin:2px 0 14px"></div>
+    <div style="display:grid;grid-template-columns:1fr 120px 30px;gap:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:0 2px 6px">
+      <span>Concepto</span><span style="text-align:right">Monto (CLP)</span><span></span>
+    </div>
+    <div id="costoDetalleList"></div>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="addCostoDetalleLine()" style="margin-top:2px">+ Agregar concepto</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--border2)">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)">Costo unitario total</span>
+      <span id="costoDetalleTotalVal" style="font-size:16px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent3)">$0</span>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-ghost btn-sm" data-modal-close onclick="closeCostoDetalle()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="applyCostoDetalle()">Aplicar costo</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL IMPORTAR COTIZACIÓN ANTERIOR -->
 <div id="copyCotPickerModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeCopyCotPicker()"></div>
@@ -9121,7 +9143,7 @@ function addEditItemRow(data){
   row.style.cssText='display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-bottom:1px solid var(--border2);';
   const inp="background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;width:100%";
   const inpM="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 8px;width:100%";
-  row.innerHTML=`<input class="edit-item-desc" type="text" placeholder="Descripción" value="${escHtml(data?.desc||'')}" oninput="updateEditItemTotal()" style="${inp}"><input class="edit-item-und" type="number" min="1" value="${data?.und||1}" oninput="updateEditItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text);text-align:center"><input class="edit-item-costo" type="number" min="0" placeholder="0" value="${data?.costoUnit||''}" oninput="updateEditItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text2);text-align:right"><input class="edit-item-venta" type="number" min="0" placeholder="0" value="${data?.ventaUnit||''}" oninput="updateEditItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--accent3);text-align:right"><button onclick="removeEditItemRow(this)" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
+  row.innerHTML=`<input class="edit-item-desc" type="text" placeholder="Descripción" value="${escHtml(data?.desc||'')}" oninput="updateEditItemTotal()" style="${inp}"><input class="edit-item-und" type="number" min="1" value="${data?.und||1}" oninput="updateEditItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text);text-align:center"><input class="edit-item-costo" type="number" min="0" placeholder="0" value="${data?.costoUnit||''}" readonly onclick="openCostoDetalle(this)" oninput="updateEditItemTotal()" title="Clic para desglosar el costo por concepto" style="${inpM};border-left:1px solid var(--border2);color:var(--text2);text-align:right;cursor:pointer"><input class="edit-item-venta" type="number" min="0" placeholder="0" value="${data?.ventaUnit||''}" oninput="updateEditItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--accent3);text-align:right"><button onclick="removeEditItemRow(this)" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
   container.appendChild(row);updateEditItemTotal();
 }
 function removeEditItemRow(btn){btn.closest('.edit-item-row').remove();updateEditItemTotal();}
@@ -10617,11 +10639,86 @@ function updateItemsDetalle(){const rows=document.querySelectorAll('#itemsContai
 function addItemRow(data){
   const container=document.getElementById('itemsContainer');const row=document.createElement('div');row.className='item-row';row.style.cssText='display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-bottom:1px solid var(--border2);';
   const inp="background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;width:100%";const inpM="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 8px;width:100%";
-  row.innerHTML=`<input class="item-desc" type="text" placeholder="Descripción" value="${escapeHtml(data?.desc||'')}" oninput="updateItemTotal()" style="${inp}"><input class="item-und" type="number" min="1" value="${data?.und||1}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text);text-align:center"><input class="item-costo" type="number" min="0" placeholder="0" value="${data?.costoUnit||''}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text2);text-align:right"><input class="item-venta" type="number" min="0" placeholder="0" value="${data?.ventaUnit||''}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--accent3);text-align:right"><button onclick="removeItemRow(this)" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
+  row.innerHTML=`<input class="item-desc" type="text" placeholder="Descripción" value="${escapeHtml(data?.desc||'')}" oninput="updateItemTotal()" style="${inp}"><input class="item-und" type="number" min="1" value="${data?.und||1}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text);text-align:center"><input class="item-costo" type="number" min="0" placeholder="0" value="${data?.costoUnit||''}" readonly onclick="openCostoDetalle(this)" oninput="updateItemTotal()" title="Clic para desglosar el costo por concepto" style="${inpM};border-left:1px solid var(--border2);color:var(--text2);text-align:right;cursor:pointer"><input class="item-venta" type="number" min="0" placeholder="0" value="${data?.ventaUnit||''}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--accent3);text-align:right"><button onclick="removeItemRow(this)" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
   container.appendChild(row);updateItemTotal();if(!data) row.querySelector('.item-desc').focus();
 }
 function removeItemRow(btn){btn.closest('.item-row').remove();updateItemTotal();updateItemsDetalle();}
 function initItemsContainer(){const c=document.getElementById('itemsContainer');if(c) c.innerHTML='';const t=document.getElementById('itemsTotalRow');if(t) t.style.display='none';addItemRow();}
+
+// ── DESGLOSE DE COSTO UNITARIO (popup) ─────────────────────────────────────
+// Al hacer clic en "Costo unit." de una fila (nueva o editar cotización) se abre
+// este popup para desglosar el costo en conceptos (material, mano de obra, etc.).
+// La suma se escribe como costo unitario de la fila y el desglose queda guardado
+// en la propia fila (dataset.detalle) para poder reabrirlo y editarlo.
+let _costoDetalleTarget=null;
+function _cdRowHtml(c,m){
+  const inp="background:var(--surface);border:1px solid var(--border2);border-radius:6px;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 9px;width:100%";
+  const inpM="background:var(--surface);border:1px solid var(--border2);border-radius:6px;outline:none;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:7px 9px;width:100%;text-align:right";
+  const mv=(m===''||m==null)?'':escapeHtml(String(m));
+  return `<div class="cd-row" style="display:grid;grid-template-columns:1fr 120px 30px;gap:6px;align-items:center;margin-bottom:6px">`
+    +`<input class="cd-concepto" type="text" placeholder="Concepto (ej. Material PLA)" value="${escapeHtml(c||'')}" style="${inp}">`
+    +`<input class="cd-monto" type="number" min="0" placeholder="0" value="${mv}" oninput="_costoDetalleTotal()" onkeydown="if(event.key==='Enter'){event.preventDefault();applyCostoDetalle();}" style="${inpM}">`
+    +`<button type="button" onclick="removeCostoDetalleLine(this)" title="Quitar concepto" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px">✕</button>`
+    +`</div>`;
+}
+function _renderCostoDetalleList(items){
+  const cont=document.getElementById('costoDetalleList');if(!cont)return;
+  cont.innerHTML=items.map(it=>_cdRowHtml(it.c,it.m)).join('');
+  _costoDetalleTotal();
+}
+function openCostoDetalle(inputEl){
+  if(!inputEl) return;
+  _costoDetalleTarget=inputEl;
+  const row=inputEl.closest('.item-row,.edit-item-row');
+  const desc=row?(row.querySelector('.item-desc,.edit-item-desc')?.value||'').trim():'';
+  const nameEl=document.getElementById('costoDetalleItemName');
+  if(nameEl) nameEl.textContent=desc?('Ítem: '+desc):'Detalla el costo por concepto; la suma será el costo unitario.';
+  let items=[];
+  try{items=JSON.parse(inputEl.dataset.detalle||'[]');}catch(e){items=[];}
+  if(!Array.isArray(items)) items=[];
+  if(!items.length){const cur=parseFloat(inputEl.value)||0;items=[{c:'',m:cur||''}];}
+  _renderCostoDetalleList(items);
+  document.getElementById('costoDetalleModal').style.display='flex';
+  setTimeout(()=>{const f=document.querySelector('#costoDetalleList .cd-concepto');if(f)f.focus();},30);
+}
+function addCostoDetalleLine(){
+  const cont=document.getElementById('costoDetalleList');if(!cont)return;
+  cont.insertAdjacentHTML('beforeend',_cdRowHtml('',''));
+  const rows=cont.querySelectorAll('.cd-row');rows[rows.length-1]?.querySelector('.cd-concepto')?.focus();
+  _costoDetalleTotal();
+}
+function removeCostoDetalleLine(btn){
+  const cont=document.getElementById('costoDetalleList');
+  btn.closest('.cd-row')?.remove();
+  if(cont&&!cont.querySelector('.cd-row')) cont.insertAdjacentHTML('beforeend',_cdRowHtml('',''));
+  _costoDetalleTotal();
+}
+function _cdReadItems(){
+  const items=[];
+  document.querySelectorAll('#costoDetalleList .cd-row').forEach(r=>{
+    const c=(r.querySelector('.cd-concepto')?.value||'').trim();
+    const m=parseFloat(r.querySelector('.cd-monto')?.value)||0;
+    if(c||m) items.push({c,m});
+  });
+  return items;
+}
+function _costoDetalleTotal(){
+  const total=Math.round(_cdReadItems().reduce((s,it)=>s+(it.m||0),0));
+  const el=document.getElementById('costoDetalleTotalVal');if(el) el.textContent=formatCLP(total);
+  return total;
+}
+function applyCostoDetalle(){
+  if(!_costoDetalleTarget){closeCostoDetalle();return;}
+  const items=_cdReadItems();
+  const total=Math.round(items.reduce((s,it)=>s+(it.m||0),0));
+  const t=_costoDetalleTarget;
+  t.value=total||'';
+  if(items.length) t.dataset.detalle=JSON.stringify(items); else delete t.dataset.detalle;
+  t.title=items.length?('Costo desglosado en '+items.length+' concepto(s) — clic para editar'):'Clic para desglosar el costo por concepto';
+  t.dispatchEvent(new Event('input',{bubbles:true})); // recalcula totales de la cotización
+  closeCostoDetalle();
+}
+function closeCostoDetalle(){const m=document.getElementById('costoDetalleModal');if(m) m.style.display='none';_costoDetalleTarget=null;}
 
 // ── CATÁLOGO DE PRODUCTOS (P3) ─────────────────────────────────────────
 // Lista de productos/servicios con costo y precio base, para insertar en las
