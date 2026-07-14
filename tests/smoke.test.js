@@ -106,7 +106,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'generarEstadoCuentaPDF', 'enviarEstadoCuenta', '_estadoCuentaData',
     '_descCliente', 'setDescCliente', '_renderCdDescChip',
     'openOCModal', 'guardarOC', 'generarOCPDF', 'renderOCList', 'crearOCDesdeReorden',
-    'renderEstacionalidad', '_estacionalidad',
+    'renderEstacionalidad', '_estacionalidad', 'renderCacCanal', '_canalStats', 'setGastoCanal',
     'renderOnboarding', '_onboardingSteps', 'toggleOnboarding',
     '_podLink', 'pedirPOD', 'ensurePodFields', '_podConfirmado',
     '_seguimientoLink', 'compartirSeguimiento',
@@ -134,7 +134,8 @@ const ok = msg => console.log('  ✓ ' + msg);
     'cdTimeline', 'mailList', 'umBackupInfo', 'agendaModal', 'finFlujoCaja', 'pdCsatBar', 'cotToOrderTray',
     'recompraTrayCard', 'invReordenCard', 'cargaMaquinas', 'catalogoModal', 'comisionesRanking',
     'reclamoModal', 'reclamosCard', 'retainerModal', 'retainersCard', 'arqueoCard',
-    'ocModal', 'ocList', 'cdDescChip', 'cdOnboarding', 'estacionalidadCard', 'breakEvenCard'];
+    'ocModal', 'ocList', 'cdDescChip', 'cdOnboarding', 'estacionalidadCard', 'breakEvenCard',
+    'ivaMensualCard', 'churnCard', 'fechasClaveCard', 'perdidasCard', 'cacCanalCard'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
   if (missing.length) fail('IDs del DOM ausentes: ' + missing.join(', '));
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');

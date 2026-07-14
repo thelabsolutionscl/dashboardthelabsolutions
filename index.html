@@ -2722,6 +2722,7 @@
 <div class="tab-panel" id="tab-reporte">
   <div class="section-header"><div><div class="section-title">Reportes Ejecutivos</div><div class="section-desc">Informes semanales de revenue, conversión y margen operativo. Historial completo para analizar tendencias y tomar decisiones estratégicas.</div></div></div>
   <div id="estacionalidadCard" style="margin-bottom:16px"></div>
+  <div id="cacCanalCard" style="margin-bottom:16px"></div>
   <div class="data-grid">
     <div class="card"><div class="card-header"><span class="card-title">Historial</span><span style="font-size:11px;color:var(--text3)">clic en fila para ver resumen</span></div><div class="table-wrap"><table><thead><tr><th>Semana</th><th>Revenue</th><th>Pedidos</th><th>Margen</th><th>Conv.</th><th>Estado</th><th style="width:28px"></th></tr></thead><tbody id="reportesTableBody"></tbody></table></div></div>
     <div class="card"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar Reporte</span></div>
@@ -12174,8 +12175,68 @@ function renderEstacionalidad(){
     </div>
   </div>`;
 }
+// ── CAC Y ROI POR CANAL (S7) ───────────────────────────────────────────
+// Por canal de captación: clientes nuevos, revenue generado, gasto (configurable)
+// → costo de adquisición (CAC = gasto/nuevos) y ROI (revenue/gasto). El canal
+// sale del "Canal solicitud" de las cotizaciones del período.
+const _GASTO_CANAL_KEY='thelab_gasto_canal_v1';
+function _gastoCanal(){try{return JSON.parse(localStorage.getItem(_GASTO_CANAL_KEY)||'{}');}catch(e){return{};}}
+function setGastoCanal(){
+  const canal=(prompt('¿Para qué canal registras el gasto? (ej: Google Ads, Instagram, WhatsApp)')||'').trim();
+  if(!canal)return;
+  const g=_gastoCanal();const cur=g[canal]||'';
+  const v=prompt(`Gasto mensual de marketing en "${canal}" (CLP):`,cur?String(cur):'');
+  if(v===null)return;const n=Math.round(parseFloat(String(v).replace(/[^\d.-]/g,''))||0);
+  if(n>0)g[canal]=n;else delete g[canal];
+  try{localStorage.setItem(_GASTO_CANAL_KEY,JSON.stringify(g));}catch(e){}
+  toast(n>0?`✓ Gasto de ${canal}: ${formatCLP(n)}`:'Gasto quitado','success');
+  try{renderCacCanal();}catch(e){}
+}
+function _canalStats(off){
+  const mr=(typeof _mesRango==='function')?_mesRango(off||0):null;
+  const ini=mr?mr.ini.getTime():0,fin=mr?mr.fin.getTime():Infinity;
+  const gasto=_gastoCanal();
+  const by=new Map();
+  (state.cotizaciones||[]).forEach(c=>{
+    const f=c.fields;const t=c.createdTime?new Date(c.createdTime).getTime():0;if(!(t>=ini&&t<fin))return;
+    const canal=(f['Canal solicitud']||'Directo').trim()||'Directo';
+    const e=by.get(canal)||{canal,clientes:new Set(),revenue:0,nCot:0};
+    e.nCot++;
+    const cid=Array.isArray(f['Cliente'])&&f['Cliente'].length?f['Cliente'][0]:(f['Cliente']||('cot:'+c.id));
+    e.clientes.add(cid);
+    if((f['Estado cotización']||'')==='Aprobada') e.revenue+=Math.round((f['Total final (CLP)']||0)/1.19);
+    by.set(canal,e);
+  });
+  return [...by.values()].map(e=>{const g=gasto[e.canal]||0;const nuevos=e.clientes.size;return {...e,nuevos,gasto:g,cac:g>0&&nuevos>0?Math.round(g/nuevos):0,roi:g>0?e.revenue/g:null};}).sort((a,b)=>b.revenue-a.revenue);
+}
+function renderCacCanal(){
+  const el=document.getElementById('cacCanalCard');if(!el)return;
+  const off=parseInt(el.dataset.off||'0');
+  const rows=_canalStats(off);
+  if(!rows.length){el.innerHTML='';return;}
+  const mr=(typeof _mesRango==='function')?_mesRango(off):{label:''};
+  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">📣 CAC y ROI por canal · ${escapeHtml(mr.label||'')}</span>
+    <div style="display:flex;gap:4px;margin-left:auto">
+      <button class="btn-mini${off===-1?' btn-mini-yellow':''}" onclick="_cacSetOff(-1)">Mes cerrado</button>
+      <button class="btn-mini${off===0?' btn-mini-yellow':''}" onclick="_cacSetOff(0)">Mes en curso</button>
+      <button class="btn btn-ghost btn-sm" onclick="setGastoCanal()" style="font-size:10px">⚙️ Gasto</button>
+    </div></div>
+    <div class="table-wrap"><table><thead><tr><th>Canal</th><th style="text-align:right">Clientes nuevos</th><th style="text-align:right">Revenue</th><th style="text-align:right">Gasto</th><th style="text-align:right">CAC</th><th style="text-align:right">ROI</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td data-label="Canal" style="font-weight:600">${escapeHtml(r.canal)}</td>
+      <td data-label="Nuevos" style="text-align:right">${r.nuevos}</td>
+      <td data-label="Revenue" style="text-align:right;color:var(--accent3)">${formatCLP(r.revenue)}</td>
+      <td data-label="Gasto" style="text-align:right;color:${r.gasto?'var(--warn)':'var(--text3)'}">${r.gasto?formatCLP(r.gasto):'—'}</td>
+      <td data-label="CAC" style="text-align:right">${r.cac?formatCLP(r.cac):'—'}</td>
+      <td data-label="ROI" style="text-align:right;font-weight:700;color:${r.roi==null?'var(--text3)':r.roi>=1?'var(--accent3)':'var(--danger)'}">${r.roi==null?'—':r.roi.toFixed(1)+'x'}</td>
+    </tr>`).join('')}</tbody></table></div>
+    <div style="padding:8px 16px;font-size:10px;color:var(--text3)">CAC = gasto ÷ clientes nuevos del canal. ROI = revenue ÷ gasto. Registra el gasto de marketing por canal con ⚙️ Gasto. Los canales orgánicos (sin gasto) muestran “—”.</div>
+  </div>`;
+}
+function _cacSetOff(o){const el=document.getElementById('cacCanalCard');if(el)el.dataset.off=o;renderCacCanal();}
 function renderReportes(){
   try{renderEstacionalidad();}catch(e){}
+  try{renderCacCanal();}catch(e){}
   const tbody=document.getElementById('reportesTableBody');
   if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:28px"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-chart"/></svg></div><div style="margin-bottom:8px">Sin reportes aún</div><div style="font-size:11px;color:var(--text3)">Los reportes se generan automáticamente cada semana con el Agente CEO</div><button onclick="switchTab(\'agentes\')" style="margin-top:12px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ir a Agentes IA</button></div></td></tr>';return;}
   tbody.innerHTML=state.reportes.map((r,i)=>{
