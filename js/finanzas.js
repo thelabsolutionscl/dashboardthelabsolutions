@@ -2433,6 +2433,26 @@ const PRES_CATS_DEFAULT=[
 function presGetData(){try{return JSON.parse(localStorage.getItem(PRES_KEY)||'{}');}catch(e){return{};}}
 function presSetData(d){localStorage.setItem(PRES_KEY,JSON.stringify(d));}
 function presKey(anio,mes){return`${anio}-${String(mes).padStart(2,'0')}`;}
+// O6: mapea las 14 categorías del Libro Diario a las 6 del presupuesto para
+// calcular el "ejecutado real" automáticamente (antes se tecleaba a mano).
+const _LD_A_PRES={
+  'Materiales e insumos':'proveedores','Filamentos / resinas':'proveedores',
+  'Maquinaria y equipos':'equipos','Software y tecnología':'equipos','Mantención':'equipos',
+  'Arriendo local':'arriendo','Servicios básicos':'arriendo','Internet y telecomunicaciones':'arriendo',
+  'Marketing y publicidad':'marketing','Sueldos y honorarios':'sueldos',
+  'Cuota préstamo':'otros','Transporte y logística':'otros','Contabilidad y legal':'otros','Otros gastos':'otros'
+};
+// Gasto real por categoría de presupuesto, tomado del Libro Diario del período.
+function _presEjecutadoReal(anio,mes){
+  const pref=presKey(anio,mes);const out={};
+  (typeof ldGetAll==='function'?ldGetAll():[]).forEach(e=>{
+    if(e.tipo!=='gasto')return;
+    if(!String(e.fecha||'').startsWith(pref))return;
+    const pid=_LD_A_PRES[e.categoria]||'otros';
+    out[pid]=(out[pid]||0)+(+e.monto||0);
+  });
+  return out;
+}
 function renderPresupuesto(){
   const anioSel=document.getElementById('pres-anio');
   const mesSel=document.getElementById('pres-mes');
@@ -2449,10 +2469,13 @@ function renderPresupuesto(){
   const data=presGetData();
   const periodoData=data[key]||{};
   const cats=periodoData.cats||PRES_CATS_DEFAULT.map(c=>({...c,budget:0,ejecutado:0}));
-  // Intentar poblar ejecutado desde libro diario
-  let ldData=[];try{ldData=JSON.parse(localStorage.getItem('ld_entries')||'[]');}catch(e){}
+  // O6: ejecutado REAL desde el Libro Diario del período. Si hay ajuste manual
+  // (> 0) manda ese; si no, se usa el real del diario automáticamente.
+  const real=_presEjecutadoReal(anio,mes);
+  cats.forEach(c=>{c._real=real[c.id]||0;c._ejec=(c.ejecutado>0)?c.ejecutado:c._real;});
   const totalBudget=cats.reduce((s,c)=>s+(c.budget||0),0);
-  const totalEjec=cats.reduce((s,c)=>s+(c.ejecutado||0),0);
+  const totalEjec=cats.reduce((s,c)=>s+(c._ejec||0),0);
+  const totalReal=cats.reduce((s,c)=>s+(c._real||0),0);
   const disp=totalBudget-totalEjec;
   const pct=totalBudget>0?Math.round(totalEjec/totalBudget*100):0;
   const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
@@ -2462,23 +2485,29 @@ function renderPresupuesto(){
   setText('pres-k-pct',pct+'%');
   const catsEl=document.getElementById('pres-cats');if(!catsEl) return;
   catsEl.innerHTML=cats.map((c,i)=>{
-    const pctC=c.budget>0?Math.round(c.ejecutado/c.budget*100):0;
+    const ejec=c._ejec||0;
+    const pctC=c.budget>0?Math.round(ejec/c.budget*100):0;
     const barColor=pctC>=100?'var(--danger)':pctC>=80?'var(--warn)':c.color;
-    return`<div style="border:1px solid var(--border2);border-radius:8px;padding:12px 14px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    const sobre=c.budget>0&&ejec>c.budget;
+    const realTag=c._real>0?`<span style="font-size:9.5px;color:var(--text3)" title="Gasto real registrado en el Libro Diario este mes">📒 real ${formatCLP(c._real)}${c.ejecutado>0?' · ajuste manual activo':''}</span>`:`<span style="font-size:9.5px;color:var(--text3)">sin gastos en el diario</span>`;
+    return`<div style="border:1px solid ${sobre?'var(--danger)':'var(--border2)'};border-radius:8px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <span style="font-size:16px">${c.icon}</span>
         <span style="font-weight:600;font-size:12px;flex:1">${escapeHtml(c.label)}</span>
-        <span style="font-size:10px;color:${barColor};font-weight:700;background:${barColor}22;padding:2px 6px;border-radius:3px">${pctC}%</span>
+        <span style="font-size:10px;color:${barColor};font-weight:700;background:${barColor}22;padding:2px 6px;border-radius:3px">${pctC}%${sobre?' ⚠':''}</span>
       </div>
+      <div style="margin-bottom:9px">${realTag}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="field-group" style="margin:0"><label class="field-label">Presupuesto (CLP)</label><input class="field-input" id="pres-cat-b-${i}" type="number" min="0" step="10000" value="${c.budget||''}" placeholder="0" oninput="presPreviewBar(${i})"></div>
-        <div class="field-group" style="margin:0"><label class="field-label">Ejecutado (CLP)</label><input class="field-input" id="pres-cat-e-${i}" type="number" min="0" step="10000" value="${c.ejecutado||''}" placeholder="0" oninput="presPreviewBar(${i})"></div>
+        <div class="field-group" style="margin:0"><label class="field-label">Ejecutado (ajuste manual)</label><input class="field-input" id="pres-cat-e-${i}" type="number" min="0" step="10000" value="${c.ejecutado||''}" placeholder="auto: ${c._real||0}" oninput="presPreviewBar(${i})"></div>
       </div>
       <div style="margin-top:8px;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden" id="pres-bar-${i}">
         <div style="height:100%;width:${Math.min(pctC,100)}%;background:${barColor};border-radius:3px;transition:width .3s"></div>
       </div>
     </div>`;
   }).join('');
+  const capEl=document.getElementById('pres-real-cap');
+  if(capEl) capEl.innerHTML=totalReal>0?`Ejecutado real del Libro Diario este período: <b style="color:var(--danger)">${formatCLP(totalReal)}</b>. Deja "ajuste manual" vacío para usarlo automáticamente.`:'Registra gastos en el Libro Diario y el ejecutado se llena solo.';
 }
 function presPreviewBar(i){
   const b=parseFloat(document.getElementById(`pres-cat-b-${i}`)?.value)||0;
