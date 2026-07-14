@@ -3,7 +3,7 @@
 function buildCotizacionDoc(id){
   const c=state.cotizacionesById[id];if(!c) return null;
   const f=c.fields;const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cf=(clienteId?state.clientes.find(x=>x.id===clienteId):null)?.fields||{};
-  const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||new Date().toISOString().split('T')[0],vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',notas=f['Notas cotización']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
+  const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||new Date().toISOString().split('T')[0],vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
   const tiempoProd=f['Tiempo de producción'];const tipoDias=(f['Tipo días producción']||'DÍAS HÁBILES').toLowerCase();
   const plazotxt=tiempoProd?`${tiempoProd} ${tipoDias} desde la confirmación del pedido. Plazo podría variar dependiendo de stock de productos, contingencias sanitarias o sociales.`:'A coordinar con el cliente.';
   const formaPago=f['Forma de pago']||'';
@@ -35,7 +35,6 @@ table.items thead th:nth-child(2){text-align:center;}table.items thead th:nth-ch
 .totals-box{min-width:220px;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;}
 .totals-row{display:flex;justify-content:space-between;padding:6px 12px;font-size:10px;border-bottom:1px solid #f0f0f0;background:#fff;}
 .totals-row.iva{color:#888;}.totals-row.total-final{background:#0a0a0a;color:#00d4cc;font-weight:700;font-size:12px;border-bottom:none;}
-.notas-box{background:#fffbf0;border:1px solid rgba(255,170,0,0.3);border-radius:6px;padding:8px 10px;font-size:9px;color:#555;line-height:1.6;margin-top:10px;}
 .transfer-box{margin-top:12px;border:1px solid #00d4cc;border-radius:6px;overflow:hidden;}
 .transfer-title{background:#00d4cc;color:#0a0a0a;font-weight:700;text-align:center;padding:5px;letter-spacing:1.5px;text-transform:uppercase;font-size:9px;}
 .transfer-box table{width:100%;border-collapse:collapse;}.transfer-box table td{padding:4px 10px;font-size:9px;}
@@ -55,7 +54,6 @@ ${solicitud?`<div class="section-label">Solicitud del cliente</div><div class="s
 <div class="section-label" style="margin-top:10px">Detalle de productos / servicios</div>
 <table class="items"><thead><tr><th style="background:#0a0a0a;color:#fff">Descripción</th><th style="background:#0a0a0a;color:#fff;text-align:center">Cant.</th><th style="background:#0a0a0a;color:#fff;text-align:right">Precio Unit. Neto</th><th style="background:#0a0a0a;color:#fff;text-align:right">Total Neto</th></tr></thead><tbody>${itemsHTML}</tbody></table>
 <div class="totals"><div class="totals-box"><div class="totals-row"><span>Neto</span><span>${formatCLP(neto)}</span></div><div class="totals-row iva"><span>IVA (19%)</span><span>${formatCLP(iva)}</span></div><div class="totals-row total-final"><span>TOTAL</span><span>${formatCLP(total)}</span></div></div></div>
-${notas?`<div class="notas-box"><strong>Notas:</strong> ${escHtml(notas)}</div>`:''}
 <div class="transfer-box"><div class="transfer-title">Datos de Transferencia</div><table>
 <tr style="border-bottom:1px solid #e8e8e8"><td style="color:#888;width:120px;font-weight:600;text-transform:uppercase;font-size:8px">Razón Social</td><td style="font-weight:500">WAST3D SPA</td></tr>
 <tr style="border-bottom:1px solid #e8e8e8;background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Banco</td><td style="font-weight:500">BANCO ESTADO</td></tr>

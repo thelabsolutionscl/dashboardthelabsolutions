@@ -6060,7 +6060,7 @@ async function airtableDelete(table,recordId){
 async function ensureCotizacionFields(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
   const tableId='tblvVAc4TtiERA0Tc';
-  const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'}];
+  const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'},{name:'Detalle JSON',type:'multilineText'}];
   for(const c of needed){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
 }
 async function ensureFichaTecnicaField(){
@@ -9064,8 +9064,12 @@ function openEditCot(id){
   const _evSel=document.getElementById('editCotVendedor');if(_evSel&&!_evSel.dataset.populated){_evSel.innerHTML='<option value="">— Sin asignar —</option>'+PERSONAS.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');_evSel.dataset.populated='1';}if(_evSel) _evSel.value=f['Vendedor']||'';
   const _ed=document.getElementById('editCotDescuento');if(_ed){_ed.value=f['Descuento (%)']||0;}const _edv=document.getElementById('editItemsDescuentoVal');if(_edv) _edv.textContent='';
   const container=document.getElementById('editItemsContainer');container.innerHTML='';document.getElementById('editItemsTotalRow').style.display='none';
-  const detalle=f['Detalle productos']||'';const lineas=detalle.split('\n').filter(Boolean).map(l=>{const parts=l.split('|').map(s=>s.trim());const desc=parts[0]||'',undStr=(parts[1]||'').replace(/[^\d.]/g,''),und=parseFloat(undStr)||1;const costoRaw=(parts[2]||'').replace(/Costo:\s*/i,'').replace(/\./g,'').replace(/[^0-9]/g,'');const ventaRaw=(parts[3]||'').replace(/Venta:\s*/i,'').replace(/\./g,'').replace(/[^0-9]/g,'');return{desc,und,costoUnit:und>0?Math.round(parseFloat(costoRaw)||0)/und:0,ventaUnit:und>0?Math.round(parseFloat(ventaRaw)||0)/und:0};});
-  if(lineas.length>0) lineas.forEach(l=>addEditItemRow(l));else addEditItemRow();
+  // Preferir el detalle estructurado (conserva desglose y valores unitarios
+  // exactos); si no existe (cotización antigua), reconstruir del texto.
+  if(!_restoreCotItems(f['Detalle JSON'],addEditItemRow)){
+    const detalle=f['Detalle productos']||'';const lineas=detalle.split('\n').filter(Boolean).map(l=>{const parts=l.split('|').map(s=>s.trim());const desc=parts[0]||'',undStr=(parts[1]||'').replace(/[^\d.]/g,''),und=parseFloat(undStr)||1;const costoRaw=(parts[2]||'').replace(/Costo:\s*/i,'').replace(/\./g,'').replace(/[^0-9]/g,'');const ventaRaw=(parts[3]||'').replace(/Venta:\s*/i,'').replace(/\./g,'').replace(/[^0-9]/g,'');return{desc,und,costoUnit:und>0?Math.round(parseFloat(costoRaw)||0)/und:0,ventaUnit:und>0?Math.round(parseFloat(ventaRaw)||0)/und:0};});
+    if(lineas.length>0) lineas.forEach(l=>addEditItemRow(l));else addEditItemRow();
+  }
   // Ocultar calculadoras inline de una edición anterior
   ['c3d','lsr','neo'].forEach(k=>{const p=document.getElementById(k+'-inline-panel');if(p)p.style.display='none';});
   ['c3d-btn-e','lsr-btn-e','neo-btn-e'].forEach(id=>{const b=document.getElementById(id);if(b)b.style.background='';});
@@ -9124,7 +9128,7 @@ function applyCopyCot(cotId){
     const tdv=f['Tipo días producción']||'DÍAS HÁBILES';const td=document.getElementById('cot-tipo-dias');if(td) td.value=tdv;const tdb=document.getElementById('cot-tipo-dias-btn');if(tdb){tdb.textContent=tdv;tdb.style.background=tdv==='DÍAS NORMALES'?'rgba(255,170,0,0.15)':'rgba(0,212,204,0.15)';tdb.style.borderColor=tdv==='DÍAS NORMALES'?'rgba(255,170,0,0.5)':'rgba(0,212,204,0.5)';tdb.style.color=tdv==='DÍAS NORMALES'?'var(--accent2)':'var(--accent)';}
     const disc=document.getElementById('cot-descuento');if(disc) disc.value=f['Descuento (%)']||0;
     const cont=document.getElementById('itemsContainer');if(cont) cont.innerHTML='';const tr=document.getElementById('itemsTotalRow');if(tr) tr.style.display='none';
-    if(lineas.length) lineas.forEach(l=>addItemRow(l));else addItemRow();
+    if(!_restoreCotItems(f['Detalle JSON'],addItemRow)){if(lineas.length) lineas.forEach(l=>addItemRow(l));else addItemRow();}
   } else {
     document.getElementById('editCotSolicitud').value=f['Solicitud cliente (texto libre)']||'';
     const fp=document.getElementById('editCotFormaPago');if(fp) fp.value=f['Forma de pago']||'';
@@ -9133,7 +9137,7 @@ function applyCopyCot(cotId){
     const tdv=f['Tipo días producción']||'DÍAS HÁBILES';const td=document.getElementById('editCotTipoDias');if(td) td.value=tdv;const tdb=document.getElementById('editCotTipoDiasBtn');if(tdb){tdb.textContent=tdv;tdb.style.background=tdv==='DÍAS NORMALES'?'rgba(255,170,0,0.15)':'rgba(0,212,204,0.15)';tdb.style.borderColor=tdv==='DÍAS NORMALES'?'rgba(255,170,0,0.5)':'rgba(0,212,204,0.5)';tdb.style.color=tdv==='DÍAS NORMALES'?'var(--accent2)':'var(--accent)';}
     const disc=document.getElementById('editCotDescuento');if(disc) disc.value=f['Descuento (%)']||0;
     const cont=document.getElementById('editItemsContainer');if(cont) cont.innerHTML='';const tr=document.getElementById('editItemsTotalRow');if(tr) tr.style.display='none';
-    if(lineas.length) lineas.forEach(l=>addEditItemRow(l));else addEditItemRow();
+    if(!_restoreCotItems(f['Detalle JSON'],addEditItemRow)){if(lineas.length) lineas.forEach(l=>addEditItemRow(l));else addEditItemRow();}
   }
   closeCopyCotPicker();
   toast(`✓ Datos importados de ${f['N° Cotización']||'cotización anterior'}`,'success');
@@ -9144,7 +9148,9 @@ function addEditItemRow(data){
   const inp="background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;width:100%";
   const inpM="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 8px;width:100%";
   row.innerHTML=`<input class="edit-item-desc" type="text" placeholder="Descripción" value="${escHtml(data?.desc||'')}" oninput="updateEditItemTotal()" style="${inp}"><input class="edit-item-und" type="number" min="1" value="${data?.und||1}" oninput="updateEditItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text);text-align:center"><input class="edit-item-costo" type="number" min="0" placeholder="0" value="${data?.costoUnit||''}" readonly onclick="openCostoDetalle(this)" oninput="updateEditItemTotal()" title="Clic para desglosar el costo por concepto" style="${inpM};border-left:1px solid var(--border2);color:var(--text2);text-align:right;cursor:pointer"><input class="edit-item-venta" type="number" min="0" placeholder="0" value="${data?.ventaUnit||''}" oninput="updateEditItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--accent3);text-align:right"><button onclick="removeEditItemRow(this)" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
-  container.appendChild(row);updateEditItemTotal();
+  container.appendChild(row);
+  if(data&&Array.isArray(data.detalle)&&data.detalle.length){const ce=row.querySelector('.edit-item-costo');if(ce){ce.dataset.detalle=JSON.stringify(data.detalle);ce.title='Costo desglosado en '+data.detalle.length+' concepto(s) — clic para editar';}}
+  updateEditItemTotal();
 }
 function removeEditItemRow(btn){btn.closest('.edit-item-row').remove();updateEditItemTotal();}
 function updateEditItemTotal(){
@@ -9178,8 +9184,9 @@ async function saveEditCot(){
     const _std=document.getElementById('editCotTipoDias')?.value||'';if(_std) fields['Tipo días producción']=_std;
     const editClienteId=document.getElementById('editCotClienteId').value;if(editClienteId) fields['Cliente']=[editClienteId];
     const _evv=document.getElementById('editCotVendedor')?.value||'';fields['Vendedor']=_evv||null;
+    const _itJsonE=_cotItemsJSON('#editItemsContainer .edit-item-row');fields['Detalle JSON']=_itJsonE||'';
     const cotId=document.getElementById('editCotId').value;
-    try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','PATCH',cotId,fields);ensureCotizacionFields();}
+    try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','PATCH',cotId,fields);ensureCotizacionFields();}
     toast('✓ Cotización actualizada','success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
     syncCotizacionADrive(cotId);
   }catch(e){toast('Error: '+e.message,'error');}
@@ -10640,7 +10647,9 @@ function addItemRow(data){
   const container=document.getElementById('itemsContainer');const row=document.createElement('div');row.className='item-row';row.style.cssText='display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-bottom:1px solid var(--border2);';
   const inp="background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;width:100%";const inpM="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 8px;width:100%";
   row.innerHTML=`<input class="item-desc" type="text" placeholder="Descripción" value="${escapeHtml(data?.desc||'')}" oninput="updateItemTotal()" style="${inp}"><input class="item-und" type="number" min="1" value="${data?.und||1}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text);text-align:center"><input class="item-costo" type="number" min="0" placeholder="0" value="${data?.costoUnit||''}" readonly onclick="openCostoDetalle(this)" oninput="updateItemTotal()" title="Clic para desglosar el costo por concepto" style="${inpM};border-left:1px solid var(--border2);color:var(--text2);text-align:right;cursor:pointer"><input class="item-venta" type="number" min="0" placeholder="0" value="${data?.ventaUnit||''}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--accent3);text-align:right"><button onclick="removeItemRow(this)" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
-  container.appendChild(row);updateItemTotal();if(!data) row.querySelector('.item-desc').focus();
+  container.appendChild(row);
+  if(data&&Array.isArray(data.detalle)&&data.detalle.length){const ce=row.querySelector('.item-costo');if(ce){ce.dataset.detalle=JSON.stringify(data.detalle);ce.title='Costo desglosado en '+data.detalle.length+' concepto(s) — clic para editar';}}
+  updateItemTotal();if(!data) row.querySelector('.item-desc').focus();
 }
 function removeItemRow(btn){btn.closest('.item-row').remove();updateItemTotal();updateItemsDetalle();}
 function initItemsContainer(){const c=document.getElementById('itemsContainer');if(c) c.innerHTML='';const t=document.getElementById('itemsTotalRow');if(t) t.style.display='none';addItemRow();}
@@ -10719,6 +10728,37 @@ function applyCostoDetalle(){
   closeCostoDetalle();
 }
 function closeCostoDetalle(){const m=document.getElementById('costoDetalleModal');if(m) m.style.display='none';_costoDetalleTarget=null;}
+
+// ── Persistencia del detalle de ítems (incl. desglose de costo) en Airtable ──
+// Serializa las filas de una cotización (nueva o editar) a un array estructurado
+// que se guarda en el campo "Detalle JSON" de Airtable. Así el desglose por
+// concepto (dataset.detalle del input de costo) y los valores unitarios exactos
+// quedan persistidos y se restauran al reabrir/editar/copiar la cotización.
+function _collectCotItems(rowSel){
+  const items=[];
+  document.querySelectorAll(rowSel).forEach(row=>{
+    const desc=(row.querySelector('.item-desc,.edit-item-desc')?.value||'').trim();
+    const und=parseFloat(row.querySelector('.item-und,.edit-item-und')?.value)||1;
+    const costoEl=row.querySelector('.item-costo,.edit-item-costo');
+    const costoUnit=parseFloat(costoEl?.value)||0;
+    const ventaUnit=parseFloat(row.querySelector('.item-venta,.edit-item-venta')?.value)||0;
+    if(!desc&&!costoUnit&&!ventaUnit) return;
+    const it={desc,und,costoUnit,ventaUnit};
+    let det=[];try{det=JSON.parse(costoEl?.dataset.detalle||'[]');}catch(e){det=[];}
+    if(Array.isArray(det)&&det.length) it.detalle=det;
+    items.push(it);
+  });
+  return items;
+}
+function _cotItemsJSON(rowSel){const it=_collectCotItems(rowSel);return it.length?JSON.stringify(it):'';}
+// Restaura las filas desde el "Detalle JSON" guardado. Devuelve true si había
+// JSON válido (para que quien llama no caiga al parseo de texto de respaldo).
+function _restoreCotItems(json,addFn){
+  let items=[];try{items=JSON.parse(json||'[]');}catch(e){items=[];}
+  if(!Array.isArray(items)||!items.length) return false;
+  items.forEach(it=>addFn({desc:it.desc||'',und:it.und||1,costoUnit:it.costoUnit||0,ventaUnit:it.ventaUnit||0,detalle:Array.isArray(it.detalle)?it.detalle:null}));
+  return true;
+}
 
 // ── CATÁLOGO DE PRODUCTOS (P3) ─────────────────────────────────────────
 // Lista de productos/servicios con costo y precio base, para insertar en las
@@ -10986,7 +11026,8 @@ async function createCotizacion(){
     if(tiempoVal){fields['Tiempo de producción']=parseInt(tiempoVal);fields['Tipo días producción']=document.getElementById('cot-tipo-dias')?.value||'DÍAS HÁBILES';}
     if(clienteId) fields['Cliente']=[clienteId];
     if(isVendorMode()){fields['Vendedor']=currentVendorId();}else{const vv=document.getElementById('cot-vendedor')?.value;if(vv) fields['Vendedor']=vv;}
-    try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
+    const _itJsonN=_cotItemsJSON('#itemsContainer .item-row');if(_itJsonN) fields['Detalle JSON']=_itJsonN;
+    try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
     toast(`✓ Cotización ${num} guardada`,'success');
     await _advanceEtapaCliente(clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
     clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
@@ -11189,8 +11230,10 @@ async function crearCotizacionGuiada(d){
   if(d.tiempoProd){fields['Tiempo de producción']=parseInt(d.tiempoProd);fields['Tipo días producción']=d.tipoDias||'DÍAS HÁBILES';}
   if(d.clienteId)fields['Cliente']=[d.clienteId];
   if(isVendorMode())fields['Vendedor']=currentVendorId();
+  const _itJsonG=(d.items||[]).length?JSON.stringify((d.items||[]).map(it=>({desc:it.desc||'',und:it.und||1,costoUnit:it.costo||0,ventaUnit:it.venta||0}))):'';
+  if(_itJsonG)fields['Detalle JSON']=_itJsonG;
   try{await airtableWrite('Cotizaciones','POST',null,fields);}
-  catch(e){if(!e.message.toLowerCase().includes('unknown'))throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
+  catch(e){if(!e.message.toLowerCase().includes('unknown'))throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
   if(d.clienteId)await _advanceEtapaCliente(d.clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
   await loadAllDataSilent();renderCotizaciones();renderOverview();
   const newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
