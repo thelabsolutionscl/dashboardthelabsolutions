@@ -12196,18 +12196,22 @@ function _canalStats(off){
   const mr=(typeof _mesRango==='function')?_mesRango(off||0):null;
   const ini=mr?mr.ini.getTime():0,fin=mr?mr.fin.getTime():Infinity;
   const gasto=_gastoCanal();
+  const _cid=f=>Array.isArray(f['Cliente'])&&f['Cliente'].length?f['Cliente'][0]:(f['Cliente']||null);
+  // Clientes que YA existían antes del período (cotizaron antes) → no son captación nueva.
+  const existentes=new Set();
+  (state.cotizaciones||[]).forEach(c=>{const t=c.createdTime?new Date(c.createdTime).getTime():0;if(t<ini){const id=_cid(c.fields);if(id)existentes.add(id);}});
   const by=new Map();
   (state.cotizaciones||[]).forEach(c=>{
     const f=c.fields;const t=c.createdTime?new Date(c.createdTime).getTime():0;if(!(t>=ini&&t<fin))return;
     const canal=(f['Canal solicitud']||'Directo').trim()||'Directo';
-    const e=by.get(canal)||{canal,clientes:new Set(),revenue:0,nCot:0};
+    const e=by.get(canal)||{canal,nuevos:new Set(),revenue:0,nCot:0};
     e.nCot++;
-    const cid=Array.isArray(f['Cliente'])&&f['Cliente'].length?f['Cliente'][0]:(f['Cliente']||('cot:'+c.id));
-    e.clientes.add(cid);
+    const cid=_cid(f)||('cot:'+c.id);
+    if(!existentes.has(cid)) e.nuevos.add(cid);   // solo clientes realmente nuevos
     if((f['Estado cotización']||'')==='Aprobada') e.revenue+=Math.round((f['Total final (CLP)']||0)/1.19);
     by.set(canal,e);
   });
-  return [...by.values()].map(e=>{const g=gasto[e.canal]||0;const nuevos=e.clientes.size;return {...e,nuevos,gasto:g,cac:g>0&&nuevos>0?Math.round(g/nuevos):0,roi:g>0?e.revenue/g:null};}).sort((a,b)=>b.revenue-a.revenue);
+  return [...by.values()].map(e=>{const g=gasto[e.canal]||0;const nuevos=e.nuevos.size;return {canal:e.canal,nCot:e.nCot,revenue:e.revenue,nuevos,gasto:g,cac:g>0&&nuevos>0?Math.round(g/nuevos):0,roi:g>0?e.revenue/g:null};}).sort((a,b)=>b.revenue-a.revenue);
 }
 function renderCacCanal(){
   const el=document.getElementById('cacCanalCard');if(!el)return;
