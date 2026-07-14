@@ -6429,7 +6429,7 @@ async function loadAllData(){
     ensureCotizacionFields();
     ensureFichaTecnicaField();
     ensureFichaPropuestaField();
-    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarCategorias();}catch(e){logErr('migrarCategorias',e);}},2500);}
+    if(isFirst){setTimeout(ceoAutoWeeklyCheck,1500);setTimeout(()=>{try{ceoAutoMonthlyCheck();}catch(e){}},1800);try{_schemaHealthCheck();}catch(e){logErr('schemaHealthCheck',e);}setTimeout(()=>{try{_migrarCategorias();}catch(e){logErr('migrarCategorias',e);}},2500);}
   }catch(e){
     console.error('loadAllData error:',e);
     // Si ya hay datos en pantalla (de la caché o de una carga previa), el fallo
@@ -10699,6 +10699,73 @@ async function ceoAutoWeeklyCheck(){
     else toast('✓ Reporte semanal generado automáticamente','success');
   }catch(e){console.error('ceoAutoWeeklyCheck:',e);}
   finally{_ceoAutoRunning=false;}
+}
+// ── CIERRE DE MES AUTOMÁTICO ───────────────────────────────────
+// El día 1-3 de cada mes arma un informe ejecutivo del mes CERRADO (revenue vs
+// meta, margen, top clientes por utilidad, conversión) comparado con el mes
+// anterior y lo envía por correo. Reutiliza el mismo enable/email del semanal.
+const _MES_NOMBRES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function _mesRango(off){const n=new Date();const y=n.getFullYear(),m=n.getMonth()+off;const ini=new Date(y,m,1),fin=new Date(y,m+1,1);return {ini,fin,label:_MES_NOMBRES[ini.getMonth()]+' '+ini.getFullYear(),key:ini.getFullYear()+'-'+String(ini.getMonth()+1).padStart(2,'0')};}
+function _mesAgregado(off){
+  const {ini,fin}=_mesRango(off);
+  const dentro=d=>{if(!d)return false;const t=new Date(d).getTime();return t>=ini.getTime()&&t<fin.getTime();};
+  let rev=0,util=0,nped=0;const byCli={};
+  (state.pedidos||[]).forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;if(!dentro(p.createdTime))return;
+    const venta=(f['Monto total (CLP)']||0)/1.19;if(venta<=0)return;
+    let margen=null;const cot=Array.isArray(f['Cotizaciones'])&&f['Cotizaciones'].length?(state.cotizacionesById||{})[f['Cotizaciones'][0]]:null;if(cot)margen=getMargenCot(cot.fields);
+    if(margen===null)margen=_margenPromedioGlobal();if(margen===null)margen=0;
+    rev+=venta;util+=venta*margen/100;nped++;
+    const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:('n:'+(f['Cliente']||'—'));
+    const e=byCli[cid]||{nombre:(state.clientesById||{})[cid]||resolveClienteName(f['Cliente']),util:0,rev:0};e.util+=venta*margen/100;e.rev+=venta;byCli[cid]=e;
+  });
+  let env=0,apr=0;
+  (state.cotizaciones||[]).forEach(c=>{const f=c.fields;if(!dentro(c.createdTime))return;const est=f['Estado cotización']||'';if(est==='Aprobada')apr++;else if(est==='Enviada'||est==='Rechazada')env++;});
+  const top=Object.values(byCli).sort((a,b)=>b.util-a.util).slice(0,5);
+  return {rev,util,nped,margen:rev>0?util/rev*100:0,conv:(apr+env)>0?apr/(apr+env)*100:null,top};
+}
+function _cierreMesTexto(off){
+  const {label}=_mesRango(off);
+  const a=_mesAgregado(off), prev=_mesAgregado(off-1);
+  const metaM=parseInt(localStorage.getItem('revMetaMensual'))||0;
+  const flecha=(cur,ant)=>{if(!(ant>0))return'';const d=Math.round((cur-ant)/ant*100);return d>0?` (▲ +${d}% vs mes anterior)`:d<0?` (▼ ${d}% vs mes anterior)`:' (= igual)';};
+  const L=[`CIERRE DE ${label.toUpperCase()} — The Lab Solutions`,''];
+  L.push(`• Revenue neto: ${formatCLP(Math.round(a.rev))}${flecha(a.rev,prev.rev)}`);
+  if(metaM>0)L.push(`• Meta mensual: ${formatCLP(metaM)} → cumplimiento ${Math.round(a.rev/metaM*100)}%${a.rev>=metaM?' 🎯 ¡Meta alcanzada!':''}`);
+  L.push(`• Pedidos del mes: ${a.nped}${prev.nped?` (mes anterior: ${prev.nped})`:''}`);
+  L.push(`• Utilidad estimada: ${formatCLP(Math.round(a.util))} · margen efectivo ${a.margen.toFixed(0)}%`);
+  if(a.conv!=null)L.push(`• Conversión de cotizaciones: ${a.conv.toFixed(0)}%${prev.conv!=null?` (mes anterior: ${prev.conv.toFixed(0)}%)`:''}`);
+  if(a.top.length){L.push('','TOP CLIENTES POR UTILIDAD:');a.top.forEach((c,i)=>L.push(`  ${i+1}. ${c.nombre}: ${formatCLP(Math.round(c.util))} (venta ${formatCLP(Math.round(c.rev))})`));}
+  L.push('','Entra al dashboard para el detalle: https://dashboard.thelab.solutions');
+  return L.join('\n');
+}
+let _ceoMesRunning=false;
+async function ceoAutoMonthlyCheck(){
+  if(localStorage.getItem('ceo_auto_weekly')!=='1'||!state.loaded||_ceoMesRunning)return;
+  const d=new Date();if(d.getDate()>3)return;                      // solo primeros días del mes
+  const {key}=_mesRango(-1);                                        // mes recién cerrado
+  if(localStorage.getItem('ceo_auto_last_month')===key)return;
+  const to=localStorage.getItem('ceo_auto_email')||'';
+  const {label}=_mesRango(-1);
+  _ceoMesRunning=true;
+  try{
+    const body=_cierreMesTexto(-1);
+    localStorage.setItem('ceo_auto_last_month',key);
+    if(to&&typeof MAIL!=='undefined'){
+      try{await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:`Cierre de ${label} — The Lab Solutions`,body,from_name:AGENT_CTA_FROM.name});toast('✓ Cierre de mes enviado por correo','success');}
+      catch(e){toast('Cierre de mes generado (no se pudo enviar el correo)','info');}
+    }
+  }catch(e){console.error('ceoAutoMonthlyCheck:',e);}
+  finally{_ceoMesRunning=false;}
+}
+// Envío manual del cierre del mes en curso (command palette / botón)
+async function enviarCierreMes(){
+  if(!state.loaded){toast('Pulsa ↺ Actualizar primero','error');return;}
+  const to=localStorage.getItem('ceo_auto_email')||(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser()?.email)||'';
+  const {label}=_mesRango(0);
+  const body=_cierreMesTexto(0);
+  if(!to){toast('Configura el correo del reporte (⚙ junto a Meta)','info');return;}
+  try{await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:`Cierre parcial de ${label} — The Lab Solutions`,body,from_name:AGENT_CTA_FROM.name});toast('✓ Cierre de mes enviado a '+to,'success');}
+  catch(e){toast('No se pudo enviar: '+e.message,'error');}
 }
 function renderReportes(){
   const tbody=document.getElementById('reportesTableBody');

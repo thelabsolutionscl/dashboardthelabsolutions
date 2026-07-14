@@ -1808,6 +1808,7 @@ const GS_ACTIONS=[
   {icon:'icon-chat',       title:'Abrir KAI (asistente)',      kw:'kai asistente chat ia ayuda hablar',         run:()=>{try{openKai();}catch(e){}}},
   {icon:'icon-laptop',     title:'Modo TV (taller)',           kw:'tv taller pantalla fullscreen monitor kiosco rotacion', run:()=>{try{tvStart();}catch(e){}}},
   {icon:'icon-calendar',   title:'Agendar compromiso',         kw:'agenda compromiso recordatorio tarea pendiente fecha llamar', run:()=>{try{openAgendaModal();}catch(e){}}},
+  {tab:'overview',icon:'icon-reporte', title:'Enviar cierre de mes por correo', kw:'cierre mes informe mensual ejecutivo revenue enviar reporte', run:()=>{try{enviarCierreMes();}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
