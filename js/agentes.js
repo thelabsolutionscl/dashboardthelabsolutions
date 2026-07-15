@@ -620,7 +620,7 @@ async function pdEmail(pedidoId,btn){
   if(btn){btn.disabled=false;btn.innerHTML=prev;}
   const bodyHtml=escapeHtml(_pdMsg(p)).replace(/\n/g,'<br>');
   if(typeof switchTab==='function') switchTab('correo');
-  setTimeout(()=>{try{MAIL.openCompose({to,subject:'¿Cómo llegó tu pedido? — The Lab Solutions',body:bodyHtml,title:'Mensaje post-entrega',_pdPedidoId:pedidoId,_fromName:AGENT_CTA_FROM.name});}catch(e){toast('No se pudo abrir el borrador','error');}},350);
+  setTimeout(()=>{try{MAIL.openCompose({to,subject:'¿Cómo llegó tu pedido? — The Lab Solutions',body:bodyHtml,title:'Mensaje post-entrega',_pdPedidoId:pedidoId,_fromName:AGENT_CTA_FROM.name,_fromEmail:AGENT_CTA_FROM.email});}catch(e){toast('No se pudo abrir el borrador','error');}},350);
 }
 async function pdMarkDone(pedidoId,via,silent){
   const log=_pdLog(); log[pedidoId]={ts:Date.now(),via:via||'manual'};

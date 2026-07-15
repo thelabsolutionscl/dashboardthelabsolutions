@@ -795,6 +795,7 @@ const MAIL={
     this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
     this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
     this._cmpFromName=opts._fromName||null;   // fuerza el nombre del remitente para este borrador
+    this._cmpFromEmail=opts._fromEmail||null;   // fuerza la casilla desde la que sale (p.ej. hola@)
     this.fillContactsDatalist();
     document.getElementById('mailCmpTo').value=opts.to||'';
     document.getElementById('mailCmpCc').value=opts.cc||'';
@@ -972,7 +973,9 @@ const MAIL={
       const a=this.auth();
       const params={action:'send',to,cc,bcc,subject,body,from_name:this._cmpFromName||a.from_name};
       if(this._cmpAtts.length) params.atts=JSON.stringify(this._cmpAtts.map(x=>({name:x.name,type:x.type,data:x.data})));
-      const data=await this.post(params);
+      // Si el borrador fija una casilla de salida (p.ej. hola@), autentica como esa
+      // cuenta con su clave guardada; si no, sale por la cuenta activa.
+      const data=this._cmpFromEmail?await this.postAs(this._cmpFromEmail,params):await this.post(params);
       if(data.error) err(data.error);
       else{
         status.textContent='✓ Enviado';status.style.color='var(--success)';
@@ -984,7 +987,7 @@ const MAIL={
         if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
         // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
         if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
-        this._cmpFromName=null;
+        this._cmpFromName=null;this._cmpFromEmail=null;
         this._cmpAtts=[];this.renderCmpAtts();
         setTimeout(()=>this.closeCompose(),1500);
       }
