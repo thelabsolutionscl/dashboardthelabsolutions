@@ -32,7 +32,7 @@ function buildCotizacionDoc(id){
 <link rel="icon" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
 <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:18px 24px;font-size:10px;}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #00d4cc;}
-.logo-area img{height:28px;filter:brightness(0);}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
+.logo-area img{height:28px;}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
 .cot-meta{text-align:right;}.cot-meta h1{font-size:20px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#0a0a0a;}
 .cot-meta .num{font-size:16px;font-weight:700;color:#00d4cc;font-family:monospace;margin-top:2px;}.cot-meta .fechas{font-size:9px;color:#999;margin-top:4px;line-height:1.6;}
 ${urgente?'.urgente-strip{background:#ff6b35;color:#fff;text-align:center;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:5px;border-radius:5px;margin-bottom:10px;}':''}
@@ -58,7 +58,7 @@ table.items thead th:nth-child(2){text-align:center;}table.items thead th:nth-ch
 .footer .left{font-size:8px;color:#bbb;line-height:1.7;}.footer .validity{background:#f8f8f8;border-radius:5px;padding:5px 10px;font-size:9px;color:#555;}
 .footer .validity strong{color:#0a0a0a;}
 @media print{body{padding:10px 14px;}@page{margin:8mm;size:A4;}}</style></head><body>
-<div class="header"><div class="logo-area"><img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
+<div class="header"><div class="logo-area"><img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab-black.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
 <div class="cot-meta"><h1>Cotización</h1><div class="num">${escHtml(num)}</div><div class="fechas">Emitida: <strong>${escHtml(fecha)}</strong><br>Válida hasta: <strong>${escHtml(vto)}</strong></div></div></div>
 ${urgente?'<div class="urgente-strip">⚡ Cotización con urgencia — se aplica recargo del 25%</div>':''}
 <div class="info-grid">
@@ -176,7 +176,7 @@ function buildFichaDoc(pedidoId){
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:18px 24px;font-size:10px;}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #3b82f6;}
-.logo-area img{height:28px;filter:brightness(0);}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
+.logo-area img{height:28px;}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
 .doc-meta{text-align:right;}.doc-meta h1{font-size:18px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#0a0a0a;}
 .doc-meta .num{font-size:14px;font-weight:700;color:#3b82f6;font-family:monospace;margin-top:2px;}
 .doc-meta .fecha{font-size:9px;color:#999;margin-top:4px;}
@@ -204,7 +204,7 @@ table.items thead th{padding:6px 10px;font-size:8px;font-weight:700;letter-spaci
 </style></head><body>
 <div class="header">
   <div class="logo-area">
-    <img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" onerror="this.style.display='none'">
+    <img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab-black.png" onerror="this.style.display='none'">
     <div class="tagline">Impresión 3D · Neones · Trofeos</div>
   </div>
   <div class="doc-meta">
