@@ -659,8 +659,9 @@ function _ofAgentEmoji(label){
 // Nombre de agente para MOSTRAR en español (solo visual; la etiqueta real no cambia).
 const _OF_NAME_ES={
   'SALES_AGENT':'Ventas','QUOTE_AGENT':'Cotizador','PRODUCTION_AGENT':'Producción','QA_AGENT':'Calidad',
-  'FOLLOWUP_AGENT':'Seguimiento','CEO_AGENT':'CEO','LEAD_GEN_AGENT':'Gerente de Ventas','ONBOARDING_AGENT':'Bienvenida',
+  'FOLLOWUP_AGENT':'Seguimiento','CEO_AGENT':'CEO','LEAD_GEN_AGENT':'Prospección','ONBOARDING_AGENT':'Bienvenida',
   'FINANCE_AGENT':'Finanzas','REPORTE_CLIENTE':'Reporte Cliente','CONTENT_AGENT':'Contenido','ADS_AGENT':'Publicidad',
+  'AUDITOR_3D':'Mantención 3D',
   'LINKEDIN_AGENT':'LinkedIn','SOCIAL_STRATEGIST':'Estratega Social','CAPTION_AGENT':'Copys','COMMUNITY_AGENT':'Community',
   'SOCIAL_ADS_AGENT':'Ads Sociales','TREND_AGENT':'Tendencias','REPORT_SOCIAL_AGENT':'Reporte Social','NEWSLETTER_AGENT':'Newsletter',
   'LEAD_AGENT':'Gerente de Ventas'

@@ -13613,12 +13613,19 @@ function showAgentCtx(id,btn){
   }else{box.style.display='none';btn.textContent='ver contexto ↓';}
 }
 
+// Nombre a mostrar de un agente: "Rol - Personaje" (ej: "CEO - Elon Musk").
+// Si no tiene personaje asignado, cae al nombre de rol en español.
+function agentDisplayName(cfg){
+  if(!cfg) return 'El agente';
+  const rol=(typeof _ofPretty==='function')?_ofPretty(cfg.label||cfg.id||''):(cfg.label||cfg.id||'');
+  return cfg.persona?(rol+' - '+cfg.persona):rol;
+}
 function renderAgentesGrid(){
   document.getElementById('agentesGrid').innerHTML=AGENTES_CFG.map(a=>{
     const ctxBadge=state.loaded?`<span class="badge badge-green" style="font-size:8px;letter-spacing:0"><svg class="dashboard-icon" width="10" height="10" stroke-width="1.5"><use href="#icon-chart"/></svg> datos vivos</span>`:`<span class="badge badge-gray" style="font-size:8px">sin datos</span>`;
     return`<div class="card" style="padding:0">
       <div class="card-header">
-        <span class="card-title" title="${a.label}">${a.icon} ${a.persona||a.label}</span>
+        <span class="card-title" title="${a.label}">${a.icon} ${agentDisplayName(a)}</span>
         <div style="display:flex;gap:5px;align-items:center">${ctxBadge}<span class="badge ${a.badge}">Activo</span></div>
       </div>
       <div style="padding:14px">
@@ -13694,7 +13701,7 @@ function showAgentWorking(ref,opts){
   const cfg=_apwResolve(ref);
   const col=opts.color||((typeof _ofCat==='function'?(_ofCat({id:cfg.id||''})||{}).color:null))||'#00d4aa';
   const em=opts.emoji||((typeof _ofAgentEmoji==='function')?_ofAgentEmoji(cfg.label||cfg.id||''):'🤖');
-  const name=opts.name||cfg.persona||((typeof _ofPretty==='function')?_ofPretty(cfg.label||cfg.id||''):(cfg.label||cfg.id))||'El agente';
+  const name=opts.name||agentDisplayName(cfg)||'El agente';
   const card=modal.querySelector('.apw-card'); if(card) card.style.setProperty('--apw-col',col);
   const agEl=document.getElementById('apwAgent'); if(agEl) agEl.textContent=em+' '+name;
   const vbEl=document.getElementById('apwVerb'); if(vbEl) vbEl.textContent=opts.verb||'está procesando tu solicitud…';
