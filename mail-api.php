@@ -28,7 +28,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-15-resend2');
+define('MAIL_API_BUILD', '2026-07-15-resend3');
 
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
 // Bufferizamos TODA la salida: si ocurre un fatal de PHP, descartamos lo que
@@ -66,19 +66,15 @@ $user   = trim($_POST['user']   ?? '');
 $pass   =      $_POST['pass']   ?? '';
 $action = trim($_POST['action'] ?? '');
 
-// Config server-side (clave de Resend, etc.). Se carga temprano para poder
-// mostrar en el health-check si la clave quedó bien puesta.
-if (is_file(__DIR__ . '/mail-api-config.php')) { require_once __DIR__ . '/mail-api-config.php'; }
-
 if (!$user || !$pass) {
     // Al abrir la URL en el navegador (sin credenciales) mostramos un diagnóstico:
     //  resend=true  → se detectó la API key (el envío saldrá por Resend)
-    //  cfg=true     → existe el archivo mail-api-config.php junto a este
+    //  cfg=true     → existe un archivo de config junto a este script
     echo json_encode([
         'error'  => 'Credenciales requeridas',
         'build'  => MAIL_API_BUILD,
         'resend' => resend_api_key() ? true : false,
-        'cfg'    => is_file(__DIR__ . '/mail-api-config.php'),
+        'cfg'    => resend_cfg_exists(),
     ]);
     exit;
 }
@@ -333,14 +329,38 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $at
 //   2) constante RESEND_API_KEY definida en mail-api-config.php (junto a este
 //      archivo, fuera del repo), o
 //   3) un archivo resend.key con la clave adentro (junto a este archivo).
-//   (mail-api-config.php se incluye arriba, temprano, para el health-check).
+// El archivo de config puede llamarse mail-api-config.php, mailapi.config.php o
+// mail-api.config.php, y puede usar cualquiera de estos formatos:
+//     <?php define('RESEND_API_KEY', 're_...');
+//     <?php return ['RESEND_API_KEY' => 're_...'];
+// Nombres de los posibles archivos de config (mismo directorio que este script).
+function _resend_cfg_names() { return ['mail-api-config.php', 'mailapi.config.php', 'mail-api.config.php']; }
+function resend_cfg_exists() {
+    foreach (array_merge(_resend_cfg_names(), ['resend.key']) as $n) {
+        if (is_file(__DIR__ . '/' . $n)) return true;
+    }
+    return false;
+}
 function resend_api_key() {
-    $k = getenv('RESEND_API_KEY');
-    if ($k) return trim($k);
-    if (defined('RESEND_API_KEY') && RESEND_API_KEY) return trim(RESEND_API_KEY);
-    $f = __DIR__ . '/resend.key';
-    if (is_file($f)) return trim((string) @file_get_contents($f));
-    return '';
+    static $cached = null;
+    if ($cached !== null) return $cached;
+    $find = function () {
+        $k = getenv('RESEND_API_KEY');
+        if ($k) return trim($k);
+        if (defined('RESEND_API_KEY') && RESEND_API_KEY) return trim(RESEND_API_KEY);
+        foreach (_resend_cfg_names() as $n) {
+            $f = __DIR__ . '/' . $n;
+            if (!is_file($f)) continue;
+            $ret = @include $f;                       // captura un posible return [...]
+            if (defined('RESEND_API_KEY') && RESEND_API_KEY) return trim(RESEND_API_KEY);
+            if (is_array($ret) && !empty($ret['RESEND_API_KEY'])) return trim($ret['RESEND_API_KEY']);
+        }
+        $f = __DIR__ . '/resend.key';
+        if (is_file($f)) return trim((string) @file_get_contents($f));
+        return '';
+    };
+    $cached = $find();
+    return $cached;
 }
 function _http_post_json($url, $headers, $bodyJson) {
     if (function_exists('curl_init')) {
