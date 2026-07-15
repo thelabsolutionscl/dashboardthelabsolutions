@@ -794,6 +794,7 @@ const MAIL={
     this._cmpReactivarCli=opts._reactivarCli||null;   // marcar cliente "Reactivado" al enviar
     this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
     this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
+    this._cmpFromName=opts._fromName||null;   // fuerza el nombre del remitente para este borrador
     this.fillContactsDatalist();
     document.getElementById('mailCmpTo').value=opts.to||'';
     document.getElementById('mailCmpCc').value=opts.cc||'';
@@ -969,7 +970,7 @@ const MAIL={
     status.textContent='Enviando...';status.style.color='var(--text3)';
     try{
       const a=this.auth();
-      const params={action:'send',to,cc,bcc,subject,body,from_name:a.from_name};
+      const params={action:'send',to,cc,bcc,subject,body,from_name:this._cmpFromName||a.from_name};
       if(this._cmpAtts.length) params.atts=JSON.stringify(this._cmpAtts.map(x=>({name:x.name,type:x.type,data:x.data})));
       const data=await this.post(params);
       if(data.error) err(data.error);
@@ -983,6 +984,7 @@ const MAIL={
         if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
         // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
         if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
+        this._cmpFromName=null;
         this._cmpAtts=[];this.renderCmpAtts();
         setTimeout(()=>this.closeCompose(),1500);
       }
