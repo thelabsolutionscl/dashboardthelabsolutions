@@ -793,6 +793,7 @@ const MAIL={
     this._cmpCotId=opts._cotId||null;   // vínculo con la cotización (registro al enviar)
     this._cmpReactivarCli=opts._reactivarCli||null;   // marcar cliente "Reactivado" al enviar
     this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
+    this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
     this.fillContactsDatalist();
     document.getElementById('mailCmpTo').value=opts.to||'';
     document.getElementById('mailCmpCc').value=opts.cc||'';
@@ -980,6 +981,8 @@ const MAIL={
         // Reactivación: si el borrador vino de un agente, marca al cliente Reactivado
         if(this._cmpReactivarCli){try{if(typeof marcarReactivado==='function') marcarReactivado(this._cmpReactivarCli,'correo');}catch(e){}this._cmpReactivarCli=null;}
         if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
+        // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
+        if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
         this._cmpAtts=[];this.renderCmpAtts();
         setTimeout(()=>this.closeCompose(),1500);
       }

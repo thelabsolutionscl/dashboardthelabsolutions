@@ -605,6 +605,9 @@ function pdWhatsApp(pedidoId){
   window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_pdMsg(p)),'_blank');
   pdMarkDone(pedidoId,'WhatsApp',true);
 }
+// Abre un BORRADOR del mensaje post-entrega en la sección Correos, listo para
+// revisar/editar antes de mandarlo (no se envía automáticamente). Al enviarlo de
+// verdad desde Correos, el pedido queda marcado como gestionado por 'correo'.
 async function pdEmail(pedidoId,btn){
   const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
   const cli=_pdCliRec(p);
@@ -613,13 +616,11 @@ async function pdEmail(pedidoId,btn){
   if(!validEmail(to)){toast('Correo inválido','error');return;}
   const prev=btn?btn.innerHTML:'';
   if(btn){btn.disabled=true;btn.textContent='…';}
-  if(_npsLink(p)){try{await ensureNpsFields();}catch(e){}}   // prepara los campos NPS antes de enviar
-  try{
-    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:'¿Cómo llegó tu pedido? — The Lab Solutions',body:_pdMsg(p),from_name:AGENT_CTA_FROM.name});
-    if(r&&!r.error){toast('✓ Mensaje post-entrega enviado a '+to,'success');pdMarkDone(pedidoId,'correo',true);}
-    else throw new Error(r?.error||'Error desconocido');
-  }catch(e){toast('Error: '+e.message,'error');}
-  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
+  if(_npsLink(p)){try{await ensureNpsFields();}catch(e){}}   // prepara los campos NPS antes de abrir el borrador
+  if(btn){btn.disabled=false;btn.innerHTML=prev;}
+  const bodyHtml=escapeHtml(_pdMsg(p)).replace(/\n/g,'<br>');
+  if(typeof switchTab==='function') switchTab('correo');
+  setTimeout(()=>{try{MAIL.openCompose({to,subject:'¿Cómo llegó tu pedido? — The Lab Solutions',body:bodyHtml,title:'Mensaje post-entrega',_pdPedidoId:pedidoId});}catch(e){toast('No se pudo abrir el borrador','error');}},350);
 }
 async function pdMarkDone(pedidoId,via,silent){
   const log=_pdLog(); log[pedidoId]={ts:Date.now(),via:via||'manual'};
