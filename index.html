@@ -6943,7 +6943,11 @@ async function callClaude(system,user){
   if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}
   return _callClaudeRaw(system,user,k);
 }
-const _CLAUDE_BODY=(system,user)=>JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system,messages:[{role:'user',content:user}]});
+// Modelo de los agentes: Haiku 4.5 (~3× más barato que Sonnet: US$1/$5 vs US$3/$15 por millón
+// de tokens). Suficiente para redactar mensajes de reactivación, correos y seguimientos.
+// KAI (chat con herramientas) sigue en Sonnet aparte, en js/kai.js.
+const AGENT_MODEL='claude-haiku-4-5';
+const _CLAUDE_BODY=(system,user)=>JSON.stringify({model:AGENT_MODEL,max_tokens:1500,system,messages:[{role:'user',content:user}]});
 function _claudeText(j){return j.content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
 async function _callClaudeViaProxy(system,user,px){
   // No mandamos 'anthropic-version' como header: dispara un preflight CORS que el Worker podría no permitir.
