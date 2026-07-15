@@ -9292,6 +9292,10 @@ function buildFichaPropuestaDoc(cotId){
   const cliente=resolveClienteName(f['Cliente']);
   const proyecto=(data.nombreProyecto||f['Solicitud cliente (texto libre)']||'PROPUESTA').toUpperCase();
   const numFicha=String(data.numFicha||'01').padStart(2,'0');
+  // Plazo de entrega de la cotización (mismo dato que usa la cotización)
+  const _tiempoProd=f['Tiempo de producción'];
+  const _tipoDias=(f['Tipo días producción']||'DÍAS HÁBILES');
+  const plazoEntrega=_tiempoProd?(_tiempoProd+' '+String(_tipoDias).toLowerCase()):'';
   const savedItems=data.items||[];
   // Merge saved text data with session images (images are not saved to Airtable)
   const sessionItems=_fpCotId===cotId?_fpItems:[];
@@ -9354,6 +9358,7 @@ function buildFichaPropuestaDoc(cotId){
           ${item.optLabel?'<div class="mat-col"><div class="mat-header mat-alt-hdr">OPCIÓN 2 — '+escH(item.optLabel)+'</div><div class="mat-lines">'+optMatLines.map(l=>'<div class="mat-line">'+escH(l)+'</div>').join('')+'</div></div>':''}
         </div>
         ${item.dims?'<div class="dims-block"><div class="dims-label">Medidas</div><div class="dims-pill">'+escH(item.dims)+'</div></div>':''}
+        ${plazoEntrega?'<div class="dims-block"><div class="dims-label">Plazo de entrega</div><div class="dims-pill">'+escH(plazoEntrega)+'</div></div>':''}
         </div>
         <div class="item-right">
         <div class="photos-section">
@@ -9411,7 +9416,7 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e
 .muestra-badge{background:#111;color:#00c8cc;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:6px 14px;border-radius:2px;flex-shrink:0;}
 .item-product-name{font-size:22px;font-weight:900;color:#1a1a1a;text-transform:uppercase;letter-spacing:-.3px;flex:1;line-height:1.1;}
 .dims-block{display:flex;flex-direction:column;gap:6px;align-items:flex-start;margin-top:2px;}
-.dims-label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#bbb;}
+.dims-label{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#999;}
 .dims-pill{border:2px solid #00c8cc;color:#1a1a1a;background:#e8fafa;font-size:12.5px;font-weight:700;padding:6px 16px;border-radius:20px;white-space:nowrap;flex-shrink:0;}
 .material-section{display:grid;grid-template-columns:1fr;gap:12px;}
 .mat-col{display:flex;flex-direction:column;}
