@@ -1494,7 +1494,9 @@
 #tab-oficina .of-kpi .of-kpi-val{font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1;color:var(--text);letter-spacing:.5px;}
 #tab-oficina .of-kpi .of-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-top:4px;}
 #tab-oficina .of-kpi.live{box-shadow:inset 0 0 26px -12px rgba(0,212,204,0.45);}
-#tab-oficina .of-kpi.live::before{background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+#tab-oficina .of-kpi.live::before{background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:220% 100%;animation:ofKpiShine 2.6s linear infinite;}
+@keyframes ofKpiShine{0%{background-position:120% 0;}100%{background-position:-120% 0;}}
+@media(prefers-reduced-motion:reduce){#tab-oficina .of-kpi.live::before{animation:none;}}
 #tab-oficina .of-kpi.live .of-kpi-val{color:var(--accent);text-shadow:0 0 18px rgba(0,212,204,0.4);}
 #tab-oficina .of-zone-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin:0 0 12px 2px;display:flex;align-items:center;gap:8px;}
 #tab-oficina .of-zone-title::after{content:'';flex:1;height:1px;background:var(--border);}
@@ -1543,6 +1545,9 @@
 .of-feed-chip.active{background:var(--cc,var(--accent));border-color:transparent;color:#0b0c0f;}
 .of-feed-chip.active::before{background:#0b0c0f;opacity:.5;}
 .of-feed-chip.active b{opacity:.85;}
+/* Barra de filtro por estado (vista Tarjetas) — reutiliza .of-feed-chip */
+#tab-oficina .of-cardfilter{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 18px;}
+#tab-oficina .of-cardfilter:empty{display:none;}
 @media(max-width:760px){#tab-oficina .of-kpis{grid-template-columns:repeat(2,1fr);}#tab-oficina .of-floor{grid-template-columns:1fr;}}
 /* Accesibilidad */
 .of-worker:focus-visible,.of-desk:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
@@ -1750,14 +1755,18 @@
   <div id="oficinaErr" class="of-errchip" style="display:none">⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.</div>
 
   <div id="oficinaCards">
-    <div class="of-zone-title">🤖 Agentes IA</div>
+    <div class="of-cardfilter" id="oficinaCardFilter" role="group" aria-label="Filtrar trabajadores por estado"></div>
+
+    <div class="of-zone-title" id="oficinaZoneIA">🤖 Agentes IA</div>
     <div class="of-floor" id="oficinaGridIA"></div>
 
-    <div class="of-zone-title">⚙️ Automatizaciones</div>
+    <div class="of-zone-title" id="oficinaZoneAuto">⚙️ Automatizaciones</div>
     <div class="of-floor" id="oficinaGridAuto"></div>
 
     <div class="of-zone-title" id="oficinaZonePrinters" style="display:none">🖨️ Impresoras 3D</div>
     <div class="of-floor" id="oficinaGridPrinters" style="display:none"></div>
+
+    <div id="oficinaCardsEmpty" style="display:none;padding:26px 6px;text-align:center;color:var(--text3);font-size:12px">Sin trabajadores en este estado.</div>
   </div>
 
   <div id="oficinaFloor" style="display:none"></div>

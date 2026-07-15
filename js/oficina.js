@@ -79,6 +79,7 @@ let _ofModel=null;                         // último modelo construido (para el
 let _ofAgentRuns=null;                      // ejecuciones del agente abierto en el panel de detalle
 let _ofView=(()=>{try{return localStorage.getItem('thelab_oficina_view')||'cards';}catch(e){return 'cards';}})();
 let _ofPrevView=_ofView;                   // vista a restaurar al salir del modo TV/pantalla completa
+let _ofCardFilter=(()=>{try{return localStorage.getItem('thelab_oficina_cardfilter')||'all';}catch(e){return 'all';}})();  // filtro por estado en la vista Tarjetas
 function _ofAgo(ts){
   if(!ts) return '—';
   const d=Date.now()-ts; if(d<0) return 'ahora';
@@ -128,7 +129,10 @@ function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_C
   }
   toast(id||'Elemento','info'); }
 // Refresca la Oficina forzando datos frescos (el polling usa caché corta; el botón manual la invalida)
-function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; _ofMaqCache={t:0,data:null}; renderOficina(); }
+function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; _ofMaqCache={t:0,data:null};
+  const _iso=document.getElementById('oficinaIso'); if(_iso) _iso.dataset.sig='';   // fuerza reconstruir la escena 3D aunque los datos coincidan
+  renderOficina(); try{toast('Oficina actualizada','success');}catch(e){}
+}
 // ── Panel de detalle de un agente IA (clic en un trabajador de la Oficina) ──
 function ofAgentDetail(id){
   if(!_ofModel||!_ofModel.iaModel){ switchTab('agentes'); return; }
@@ -254,6 +258,39 @@ function _ofInitCamControls(host){
   window.addEventListener('pointermove',e=>{ if(!drag)return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; const r=svg.getBoundingClientRect(), w=b[2]/_ofCam.scale, h=b[3]/_ofCam.scale; const dx=(e.clientX-lx)/r.width*w, dy=(e.clientY-ly)/r.height*h; if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)moved=true; _ofCam.cx-=dx; _ofCam.cy-=dy; lx=e.clientX; ly=e.clientY; _ofApplyCam(svg); });
   const end=()=>{ if(!drag)return; drag=false; const sc=scene(); if(sc)sc.classList.remove('of-grabbing'); host._ofDragged=moved; };
   window.addEventListener('pointerup',end); window.addEventListener('pointercancel',end);
+  // ── Táctil (móvil/tablet): pellizco para zoom + arrastre de un dedo para desplazar cuando hay zoom ──
+  // (el pan por puntero ignora 'touch' para no pelear con el scroll; aquí damos gestos naturales)
+  let _pt=null;
+  const _dist=(a,b)=>Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+  const _mid=(a,b)=>({x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2});
+  host.addEventListener('touchstart',e=>{
+    const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return;
+    if(e.touches.length===2){
+      if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1};
+      _pt={mode:'pinch',d0:_dist(e.touches[0],e.touches[1])||1,s0:_ofCam.scale,m:_mid(e.touches[0],e.touches[1])};
+      e.preventDefault();
+    } else if(e.touches.length===1 && _ofCam && _ofCam.scale>1.02){
+      _pt={mode:'pan',x:e.touches[0].clientX,y:e.touches[0].clientY};
+    } else { _pt=null; }
+  },{passive:false});
+  host.addEventListener('touchmove',e=>{
+    if(!_pt)return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; const r=svg.getBoundingClientRect();
+    if(_pt.mode==='pinch' && e.touches.length===2){
+      e.preventDefault();
+      const d=_dist(e.touches[0],e.touches[1]), s0=_pt.s0, w0=b[2]/s0, h0=b[3]/s0;
+      const fx=(_pt.m.x-r.left)/r.width, fy=(_pt.m.y-r.top)/r.height;
+      const ux=_ofCam.cx-w0/2+fx*w0, uy=_ofCam.cy-h0/2+fy*h0;
+      const ns=Math.max(1,Math.min(6,s0*(d/_pt.d0))), w1=b[2]/ns, h1=b[3]/ns;
+      _ofCam.cx=ux+(0.5-fx)*w1; _ofCam.cy=uy+(0.5-fy)*h1; _ofCam.scale=ns; _ofApplyCam(svg);
+    } else if(_pt.mode==='pan' && e.touches.length===1){
+      e.preventDefault();
+      const w=b[2]/_ofCam.scale, h=b[3]/_ofCam.scale;
+      const dx=(e.touches[0].clientX-_pt.x)/r.width*w, dy=(e.touches[0].clientY-_pt.y)/r.height*h;
+      _ofCam.cx-=dx; _ofCam.cy-=dy; _pt.x=e.touches[0].clientX; _pt.y=e.touches[0].clientY; _ofApplyCam(svg);
+    }
+  },{passive:false});
+  const _tend=()=>{ _pt=null; };
+  host.addEventListener('touchend',_tend); host.addEventListener('touchcancel',_tend);
   host.addEventListener('click',e=>{ if(host._ofDragged){ e.stopPropagation(); e.preventDefault(); host._ofDragged=false; } }, true);   // un arrastre no abre el detalle
 }
 async function renderOficina(){
@@ -415,14 +452,40 @@ function _ofWorkerCard(m){
     </div>
   </div>`;
 }
+// Filtro por estado en la vista Tarjetas (Todos / Trabajando / Activo / Reposo / Error)
+function ofSetCardFilter(f){
+  _ofCardFilter=f||'all';
+  try{localStorage.setItem('thelab_oficina_cardfilter',_ofCardFilter);}catch(e){}
+  if(_ofModel){ const extras=(_ofModel.printerModel&&_ofModel.printerModel.length)?[{name:'Impresoras 3D',color:'#3aa0ff',members:_ofModel.printerModel}]:[]; _ofRenderCards(_ofModel.iaModel,_ofModel.autoModel,extras); }
+}
 function _ofRenderCards(ia,auto,extras){
-  const g1=document.getElementById('oficinaGridIA'), g2=document.getElementById('oficinaGridAuto');
-  if(g1) g1.innerHTML=ia.map(_ofWorkerCard).join('');
-  if(g2) g2.innerHTML=auto.map(_ofWorkerCard).join('');
   const printers=(extras&&extras[0]&&extras[0].members)||[];
+  const allW=[...ia,...auto,...printers];
+  // Barra de filtro por estado (se auto-resetea a Todos si el estado activo se queda sin trabajadores)
+  const cnt=cls=>cls==='all'?allW.length:allW.filter(m=>m.cls===cls).length;
+  if(_ofCardFilter!=='all' && !cnt(_ofCardFilter)) _ofCardFilter='all';
+  let flt=_ofCardFilter;
+  const bar=document.getElementById('oficinaCardFilter');
+  if(bar){
+    const states=[['all','Todos','var(--accent)'],['of-work','Trabajando',_OF_STATUS['of-work']],['of-active','Activo',_OF_STATUS['of-active']],['of-off','Reposo',_OF_STATUS['of-off']],['of-error','Con falla',_OF_STATUS['of-error']]];
+    bar.innerHTML=states.filter(s=>s[0]==='all'||cnt(s[0])>0).map(([k,lbl,col])=>`<button class="of-feed-chip${flt===k?' active':''}" style="--cc:${col}" onclick="ofSetCardFilter('${k}')" aria-pressed="${flt===k}">${lbl} <b>${cnt(k)}</b></button>`).join('');
+  }
+  const keep=m=>flt==='all'||m.cls===flt;
+  const fIA=ia.filter(keep), fAuto=auto.filter(keep), fPr=printers.filter(keep);
+  const g1=document.getElementById('oficinaGridIA'), g2=document.getElementById('oficinaGridAuto');
+  const z1=document.getElementById('oficinaZoneIA'), z2=document.getElementById('oficinaZoneAuto');
+  if(g1) g1.innerHTML=fIA.map(_ofWorkerCard).join('');
+  if(g2) g2.innerHTML=fAuto.map(_ofWorkerCard).join('');
+  if(z1) z1.style.display=fIA.length?'':'none';
+  if(g1) g1.style.display=fIA.length?'':'none';
+  if(z2) z2.style.display=fAuto.length?'':'none';
+  if(g2) g2.style.display=fAuto.length?'':'none';
   const g3=document.getElementById('oficinaGridPrinters'), z3=document.getElementById('oficinaZonePrinters');
-  if(g3){ g3.innerHTML=printers.map(_ofWorkerCard).join(''); g3.style.display=printers.length?'':'none'; }
-  if(z3) z3.style.display=printers.length?'':'none';
+  if(g3){ g3.innerHTML=fPr.map(_ofWorkerCard).join(''); g3.style.display=fPr.length?'':'none'; }
+  if(z3) z3.style.display=fPr.length?'':'none';
+  // Mensaje si el filtro no deja ningún trabajador visible (sólo posible con datos vacíos)
+  const empty=document.getElementById('oficinaCardsEmpty');
+  if(empty) empty.style.display=(fIA.length+fAuto.length+fPr.length)?'none':'';
 }
 function _ofDesk(m){
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
@@ -494,10 +557,14 @@ function _ofPretty(label){
   return String(label||'').replace(/_AGENT$/i,'').replace(/_/g,' ').trim()||String(label||'');
 }
 // Categorías funcionales de los agentes IA (para agrupar dentro de la zona)
+// Nota: _ofCat se usa con m.id en las vistas de oficina y con el LABEL (r.agent) en
+// el feed/gráficos. Por eso las claves usan raíces que casan con AMBOS: p.ej. 'LEAD'
+// cubre LEADGEN (id) y LEAD_GEN_AGENT/LEAD_AGENT (label); 'AUDITOR'/'MANTEN' cubren
+// MANTENCION3D (id) y AUDITOR_3D (label) → así el área es idéntica en todas las vistas.
 const _OF_CAT=[
   {name:'Dirección', color:'#a78bfa', ids:['CEO']},
-  {name:'Comercial', color:'#00d4cc', ids:['SALES','QUOTE','FOLLOWUP','LEADGEN','ONBOARDING','REPCLIENTE','REPORTE_CLIENTE']},
-  {name:'Producción',color:'#ffaa00', ids:['PRODUCTION','QA','SUPPLIER']},
+  {name:'Comercial', color:'#00d4cc', ids:['SALES','QUOTE','FOLLOWUP','LEAD','ONBOARDING','REPCLIENTE','REPORTE_CLIENTE']},
+  {name:'Producción',color:'#ffaa00', ids:['PRODUCTION','QA','SUPPLIER','AUDITOR','MANTEN']},
   {name:'Marketing', color:'#ff6b35', ids:['ADS','COMMUNITY','NEWSLETTER','REPORT','SOCIAL','CONTENT','CAPTION','LINKEDIN','TREND']},
   {name:'Finanzas',  color:'#00d4aa', ids:['FINANCE']},
 ];
@@ -789,7 +856,7 @@ function _ofRenderIso(ia,auto,extras){
   const _comms=_ofComms.filter(c=>Date.now()-c.t<_OF_COMM_MS);
   // No re-renderizar si nada cambió → preserva las animaciones (sin "saltos" en la TV)
   const _cz=_ofCelebs.filter(c=>Date.now()-c.t<_OF_CELEB_MS).map(c=>c.label).join(',');
-  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.top?'*':'')+(m.task||'').slice(0,18)).join(';')+'|c:'+_comms.map(c=>c.from+'>'+c.to).join(',')+'|z:'+_cz+'|h:'+new Date().getHours();
+  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.top?'*':'')+(m.isPrinter?('P'+(m.progress==null?'':m.progress)+(m.eta?('e'+Math.round(m.eta/60)):'')):(m.task||'').slice(0,18))).join(';')+'|c:'+_comms.map(c=>c.from+'>'+c.to).join(',')+'|z:'+_cz+'|h:'+new Date().getHours();
   if(host.dataset.sig===sig && host.querySelector('svg')){
     // misma escena: solo aplica un enfoque pendiente (sin reconstruir → preserva las animaciones)
     if(_ofFollowId && _ofPos[_ofFollowId]){ const _p=_ofPos[_ofFollowId]; _ofCam={cx:_p[0],cy:_p[1]-30,scale:2.4}; _ofFollowId=null; _ofApplyCam(host.querySelector('svg.of-iso-svg')); }
