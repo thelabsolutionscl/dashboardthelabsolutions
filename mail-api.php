@@ -6,10 +6,16 @@
  *   1. Subir este archivo a https://mail-api.thelab.solutions/mail-api.php
  *      (subdominio del cPanel — el sitio principal ya no corre PHP: vive en Vercel)
  *   2. Verificar que PHP IMAP esté habilitado en cPanel > PHP Extensions
- *   3. El servidor de correo se conecta a mail.thelab.solutions:993 (IMAP SSL)
- *      y mail.thelab.solutions:465 (SMTP SSL)
+ *   3. La bandeja (leer) usa IMAP en mail.thelab.solutions:993 (IMAP SSL).
+ *   4. El ENVÍO sale por Resend (API). Configura la key SOLO en el servidor,
+ *      de una de estas formas (junto a este archivo, fuera del repo):
+ *        a) variable de entorno RESEND_API_KEY, o
+ *        b) archivo mail-api-config.php con:  <?php define('RESEND_API_KEY','re_...');
+ *        c) archivo resend.key con la clave adentro.
+ *      El dominio thelab.solutions debe estar verificado en Resend (SPF/DKIM).
+ *      Si NO hay key, cae a SMTP (mail.thelab.solutions:465) como respaldo.
  *
- * REQUISITOS: PHP 7.4+ con extensión IMAP habilitada
+ * REQUISITOS: PHP 7.4+ con extensión IMAP habilitada (curl recomendado para Resend)
  */
 
 $_origins = ['https://thelabsolutionscl.github.io', 'https://dashboard.thelab.solutions'];
@@ -22,7 +28,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-13-bcc');
+define('MAIL_API_BUILD', '2026-07-15-resend');
 
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
 // Bufferizamos TODA la salida: si ocurre un fatal de PHP, descartamos lo que
@@ -306,6 +312,87 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $at
     }
 }
 
+// ── Envío por Resend (API HTTP) ───────────────────────────────
+// El ENVÍO sale por Resend (https://resend.com) para no depender del SMTP del
+// hosting (que se suspende al superar su tope). La lectura de la bandeja y el
+// guardado en "Enviados" siguen por IMAP.
+// La API key vive SOLO en el servidor, nunca en el front:
+//   1) variable de entorno RESEND_API_KEY, o
+//   2) constante RESEND_API_KEY definida en mail-api-config.php (junto a este
+//      archivo, fuera del repo), o
+//   3) un archivo resend.key con la clave adentro (junto a este archivo).
+if (is_file(__DIR__ . '/mail-api-config.php')) { require_once __DIR__ . '/mail-api-config.php'; }
+function resend_api_key() {
+    $k = getenv('RESEND_API_KEY');
+    if ($k) return trim($k);
+    if (defined('RESEND_API_KEY') && RESEND_API_KEY) return trim(RESEND_API_KEY);
+    $f = __DIR__ . '/resend.key';
+    if (is_file($f)) return trim((string) @file_get_contents($f));
+    return '';
+}
+function _http_post_json($url, $headers, $bodyJson) {
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_POSTFIELDS     => $bodyJson,
+        ]);
+        $resp = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $cerr = curl_error($ch);
+        curl_close($ch);
+        return [$resp === false ? null : $resp, $code, $cerr];
+    }
+    $ctx = stream_context_create(['http' => [
+        'method'        => 'POST',
+        'header'        => implode("\r\n", $headers),
+        'content'       => $bodyJson,
+        'timeout'       => 30,
+        'ignore_errors' => true,
+    ]]);
+    $resp = @file_get_contents($url, false, $ctx);
+    $code = 0;
+    if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', $http_response_header[0], $m)) $code = (int) $m[1];
+    return [$resp === false ? null : $resp, $code, $resp === false ? 'Sin conexión' : ''];
+}
+// Devuelve null si se envió OK, o un string de error.
+function resend_send($from_name, $from_addr, $to, $cc, $subject, $body_html, $attachments = [], $bcc = '') {
+    $key = resend_api_key();
+    if (!$key) return 'Falta la API key de Resend en el servidor.';
+    $split = function ($s) { return $s ? array_values(array_filter(array_map('trim', explode(',', $s)))) : []; };
+    $from  = $from_name ? sprintf('%s <%s>', $from_name, $from_addr) : $from_addr;
+    $text  = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $body_html)));
+    $payload = [
+        'from'     => $from,
+        'to'       => $split($to),
+        'subject'  => $subject,
+        'html'     => $body_html,
+        'reply_to' => $from_addr,
+    ];
+    if ($text !== '') $payload['text'] = $text;
+    if ($cc)  $payload['cc']  = $split($cc);
+    if ($bcc) $payload['bcc'] = $split($bcc);
+    if (!empty($attachments)) {
+        $payload['attachments'] = array_map(function ($a) {
+            return ['filename' => $a['name'] ?? 'archivo', 'content' => $a['data'] ?? ''];
+        }, $attachments);
+    }
+    $endpoint = getenv('RESEND_ENDPOINT') ?: 'https://api.resend.com/emails';
+    list($resp, $code, $cerr) = _http_post_json(
+        $endpoint,
+        ['Authorization: Bearer ' . $key, 'Content-Type: application/json'],
+        json_encode($payload)
+    );
+    if ($resp === null) return 'No se pudo contactar a Resend: ' . $cerr;
+    $json = json_decode($resp, true);
+    if ($code >= 200 && $code < 300 && !empty($json['id'])) return null; // éxito
+    $msg = is_array($json) ? ($json['message'] ?? ($json['error']['message'] ?? ($json['name'] ?? $resp))) : $resp;
+    return 'Resend (' . $code . '): ' . mb_substr((string) $msg, 0, 300);
+}
+
 // ── Router ────────────────────────────────────────────────────
 switch ($action) {
 
@@ -495,7 +582,14 @@ case 'send':
         }
     }
 
-    $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments, $bcc);
+    // Envío por Resend si hay API key configurada en el servidor; si no, SMTP
+    // (respaldo, por si aún no se configura la key). El "from" usa el buzón
+    // activo: su dominio debe estar verificado en Resend.
+    if (resend_api_key()) {
+        $err = resend_send($from_name, $user, $to, $cc, $subject, $body_html, $attachments, $bcc);
+    } else {
+        $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments, $bcc);
+    }
     if ($err) { echo json_encode(['error' => $err]); exit; }
 
     // Guardar en carpeta Enviados via IMAP APPEND
