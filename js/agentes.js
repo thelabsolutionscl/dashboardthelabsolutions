@@ -123,7 +123,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
   const modal=document.getElementById('agentInlineModal');
   const resultEl=document.getElementById('agentInlineResult');
   const actionsEl=document.getElementById('agentInlineActions');
-  document.getElementById('agentInlineTitle').textContent='🤖 '+cfg.label;
+  document.getElementById('agentInlineTitle').textContent='🤖 '+(cfg.persona||cfg.label);
   resultEl.className='agent-modal-result loading';
   resultEl.style.whiteSpace='';
   resultEl.textContent='⏳ Procesando...';
