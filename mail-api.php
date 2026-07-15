@@ -28,7 +28,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-15-resend3');
+define('MAIL_API_BUILD', '2026-07-15-resend4');
 
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
 // Bufferizamos TODA la salida: si ocurre un fatal de PHP, descartamos lo que
@@ -634,9 +634,22 @@ case 'send':
             $n = strtolower(str_replace($prefix, '', $f));
             if (str_contains($n, 'sent') || str_contains($n, 'enviado')) { $sent = str_replace($prefix, '', $f); break; }
         }
-        $raw = "Date: " . date('r') . "\r\nFrom: $user\r\nTo: $to\r\n"
+        // Mensaje MIME BIEN FORMADO: sin MIME-Version, con el Subject sin
+        // codificar y el cuerpo crudo, el lector mostraba los encabezados como
+        // texto dentro del correo. Con MIME-Version + Subject codificado +
+        // cuerpo en base64, el lector separa cabeceras y cuerpo correctamente.
+        $subj_enc = '=?UTF-8?B?' . base64_encode($subject) . '?=';
+        $from_hdr = $from_name ? '=?UTF-8?B?' . base64_encode($from_name) . '?= <' . $user . '>' : $user;
+        $raw = "Date: " . date('r') . "\r\n"
+             . "From: $from_hdr\r\n"
+             . "To: $to\r\n"
              . ($cc ? "Cc: $cc\r\n" : '')
-             . "Subject: $subject\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n$body_html";
+             . "Subject: $subj_enc\r\n"
+             . "MIME-Version: 1.0\r\n"
+             . "Content-Type: text/html; charset=UTF-8\r\n"
+             . "Content-Transfer-Encoding: base64\r\n"
+             . "\r\n"
+             . chunk_split(base64_encode($body_html));
         @imap_append($conn, $prefix . $sent, $raw, '\\Seen');
         imap_close($conn);
     }
