@@ -9299,6 +9299,7 @@ function buildFichaPropuestaDoc(cotId){
     :'<div class="fbox"><div class="flbl">'+label+'</div><div class="fph"><span style="font-size:22px">📷</span><span>'+label+'</span></div></div>';
 
   const theLabLogo='https://dashboard.thelab.solutions/logo-thelab.png';
+  const theLabPrincipal='https://dashboard.thelab.solutions/logo-footer-thelab.png';
   const contacto='thelab.solutions  ·  hola@thelab.solutions  ·  +56 9 7180 6142';
 
   const portada=`<div class="pagina">
@@ -9308,7 +9309,7 @@ function buildFichaPropuestaDoc(cotId){
         <div class="fp-num">${escH(numFicha)}</div>
         <div class="fp-contact">${contacto}</div>
       </div>
-      <img loading="lazy" decoding="async" src="${theLabLogo}" onerror="this.style.display='none'" class="portada-lab-logo">
+      <img loading="lazy" decoding="async" src="${theLabPrincipal}" onerror="this.style.display='none'" class="portada-lab-logo">
     </div>
     <div class="portada-client-band">
       <div class="band-eyebrow">PROPUESTA PARA</div>
@@ -9386,7 +9387,7 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e
 .fp-eyebrow{font-size:8px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;}
 .fp-num{font-size:84px;font-weight:900;color:#00c8cc;line-height:1;letter-spacing:-5px;}
 .fp-contact{font-size:7.5px;color:rgba(255,255,255,0.35);letter-spacing:.5px;margin-top:6px;}
-.portada-lab-logo{height:44px;filter:brightness(0)invert(1);object-fit:contain;max-width:180px;margin-top:4px;}
+.portada-lab-logo{height:62px;object-fit:contain;max-width:150px;margin-top:2px;}
 .portada-client-band{background:#00c8cc;padding:14px 36px;}
 .band-eyebrow{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(0,0,0,0.45);margin-bottom:3px;}
 .band-name{font-size:26px;font-weight:900;color:#fff;letter-spacing:-0.3px;line-height:1.1;}
