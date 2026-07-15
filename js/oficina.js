@@ -80,6 +80,14 @@ let _ofAgentRuns=null;                      // ejecuciones del agente abierto en
 let _ofView=(()=>{try{return localStorage.getItem('thelab_oficina_view')||'cards';}catch(e){return 'cards';}})();
 let _ofPrevView=_ofView;                   // vista a restaurar al salir del modo TV/pantalla completa
 let _ofCardFilter=(()=>{try{return localStorage.getItem('thelab_oficina_cardfilter')||'all';}catch(e){return 'all';}})();  // filtro por estado en la vista Tarjetas
+let _ofSearch='';                          // búsqueda de trabajadores (nombre/área/rol) en la vista Tarjetas
+let _ofChartRange=(()=>{try{return +localStorage.getItem('thelab_oficina_range')||14;}catch(e){return 14;}})();   // rango de la analítica (7/14/30 días)
+let _ofSceneLight=(()=>{try{return localStorage.getItem('thelab_oficina_scenelight')==='1';}catch(e){return false;}})();  // tema claro para la escena 3D
+let _ofCompact=(()=>{try{return localStorage.getItem('thelab_oficina_compact')==='1';}catch(e){return false;}})();       // densidad compacta de tarjetas
+let _ofChartData=null;                     // {runs,ia,auto} para re-render de gráficos al cambiar el rango
+let _ofPrevKpis={};                        // valores previos de KPIs (para animar count-up)
+let _ofPrevAlerts='';                      // firma previa de alertas (para avisar sólo ante cambios)
+let _ofClockTimer=null;                    // timer del reloj de pared (tic sin reconstruir la escena)
 function _ofAgo(ts){
   if(!ts) return '—';
   const d=Date.now()-ts; if(d<0) return 'ahora';
@@ -133,6 +141,45 @@ function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:
   const _iso=document.getElementById('oficinaIso'); if(_iso) _iso.dataset.sig='';   // fuerza reconstruir la escena 3D aunque los datos coincidan
   renderOficina(); try{toast('Oficina actualizada','success');}catch(e){}
 }
+// Nombre de área/departamento visible de un trabajador (IA/automatización/impresora)
+function _ofAreaName(m){ return m.isPrinter?'Impresora 3D':(m.clickIA?_ofCat(m).name:'Automatización'); }
+// ── Preferencias visuales (tema de escena 3D + densidad de tarjetas), persistidas ──
+function _ofApplyPrefs(){
+  const el=document.getElementById('tab-oficina'); if(!el) return;
+  el.classList.toggle('of-scene-light',_ofSceneLight);
+  el.classList.toggle('of-compact',_ofCompact);
+  const tb=document.getElementById('ofSceneThemeBtn'); if(tb) tb.textContent=_ofSceneLight?'☀️ Escena':'🌙 Escena';
+  const db=document.getElementById('ofDensityBtn'); if(db) db.textContent=_ofCompact?'⤡ Compacta':'⤢ Cómoda';
+}
+function ofToggleSceneTheme(){ _ofSceneLight=!_ofSceneLight; try{localStorage.setItem('thelab_oficina_scenelight',_ofSceneLight?'1':'0');}catch(e){} _ofApplyPrefs(); }
+function ofToggleDensity(){ _ofCompact=!_ofCompact; try{localStorage.setItem('thelab_oficina_compact',_ofCompact?'1':'0');}catch(e){} _ofApplyPrefs(); }
+// ── Buscador de trabajadores (nombre/área/rol) en la vista Tarjetas ──
+function ofSearchInput(v){ _ofSearch=(v||'').trim().toLowerCase(); _ofReRenderCards(); }
+function _ofReRenderCards(){ if(!_ofModel) return; const extras=(_ofModel.printerModel&&_ofModel.printerModel.length)?[{name:'Impresoras 3D',color:'#3aa0ff',members:_ofModel.printerModel}]:[]; _ofRenderCards(_ofModel.iaModel,_ofModel.autoModel,extras); }
+// ── Rango de la analítica (7/14/30 días) ──
+function ofSetChartRange(n){ _ofChartRange=+n||14; try{localStorage.setItem('thelab_oficina_range',String(_ofChartRange));}catch(e){}
+  document.querySelectorAll('#oficinaRangeSel .of-vbtn').forEach(b=>b.classList.toggle('active',+b.dataset.r===_ofChartRange));
+  if(_ofChartData) _ofRenderCharts(_ofChartData.runs,_ofChartData.ia,_ofChartData.auto);
+}
+// ── Exportar: descarga la escena 3D (SVG, sin taint) o copia el resumen de KPIs ──
+function ofExport(){
+  const svg=_ofSvg();
+  if(_ofView==='iso' && svg){
+    try{
+      const src='<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(svg);
+      const blob=new Blob([src],{type:'image/svg+xml'}), url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='oficina-thelab.svg'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+      try{toast('Escena 3D exportada (SVG)','success');}catch(e){}
+    }catch(e){ try{toast('No se pudo exportar la escena','error');}catch(x){} }
+    return;
+  }
+  // Fuera de la vista 3D: copia un resumen de KPIs al portapapeles
+  const grab=id=>{const el=document.querySelector(`#oficinaKpis .of-kpi:nth-child(${id}) .of-kpi-val`);return el?el.textContent.trim():'—';};
+  const txt=`Oficina Virtual — The Lab Solutions\nTrabajadores: ${grab(1)}\nTrabajando ahora: ${grab(2)}\nEjecuciones hoy: ${grab(3)}\nEn cola: ${grab(4)}`;
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(()=>{try{toast('Resumen copiado al portapapeles','success');}catch(e){}}).catch(()=>{try{toast('No se pudo copiar','error');}catch(e){}}); }
+  else { try{toast('Portapapeles no disponible','error');}catch(e){} }
+}
 // ── Panel de detalle de un agente IA (clic en un trabajador de la Oficina) ──
 function ofAgentDetail(id){
   if(!_ofModel||!_ofModel.iaModel){ switchTab('agentes'); return; }
@@ -166,11 +213,21 @@ function ofAgentDetail(id){
       <div class="ofd-stat"><div class="ofd-stat-v">${total}</div><div class="ofd-stat-l">Registradas</div></div>
       <div class="ofd-stat"><div class="ofd-stat-v mono">${last?escapeHtml(_ofAgo(last.t)):'—'}</div><div class="ofd-stat-l">Última</div></div>
     </div>
+    ${_ofDetailHours(runs)}
     ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:8px" onclick="ofAgentRun('${id}')">▶ Ejecutar este agente</button>`:''}
     <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:16px" onclick="closeOfAgent();ofFocusAgent('${escapeHtml(id)}')">📍 Ver en la oficina 3D</button>
     <div class="ofd-seclbl">Últimas ejecuciones</div>
     ${rowsHtml}`;
   const mo=document.getElementById('ofAgentModal'); if(mo) mo.style.display='flex';
+}
+// Mini-gráfico de carga de HOY por hora para el detalle de un agente (idea 8)
+function _ofDetailHours(runs){
+  const h=new Array(24).fill(0), t0=new Date(); t0.setHours(0,0,0,0); const a=t0.getTime(), b=a+864e5, nowH=new Date().getHours();
+  (runs||[]).forEach(r=>{ if(r.t&&r.t>=a&&r.t<b) h[new Date(r.t).getHours()]++; });
+  const max=Math.max(1,...h), total=h.reduce((s,v)=>s+v,0);
+  if(!total) return '';
+  const bars=h.map((v,i)=>`<i class="${i===nowH?'now':(v?'has':'')}" style="height:${Math.max(6,Math.round(v/max*100))}%" title="${i}:00 · ${v} ejec."></i>`).join('');
+  return `<div class="ofd-seclbl">Carga de hoy por hora · ${total} ejec.</div><div class="ofd-hours" aria-hidden="true">${bars}</div>`;
 }
 function closeOfAgent(){ const e=document.getElementById('ofAgentModal'); if(e) e.style.display='none'; }
 function ofAgentRun(id){ closeOfAgent(); switchTab('agentes'); setTimeout(()=>{const i=document.getElementById('input_'+id); if(i){ i.scrollIntoView({behavior:'smooth',block:'center'}); i.focus(); }},140); }
@@ -197,8 +254,20 @@ function ofSetView(v){
   if(i) i.style.display=v==='iso'?'':'none';
   renderOficina();
 }
-function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000); }
-function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=null; }
+function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000);
+  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(!document.hidden && _ofView==='iso') _ofTickClock(); },20000);   // reloj de pared tic sin reconstruir la escena
+}
+function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=null; clearInterval(_ofClockTimer); _ofClockTimer=null; }
+// Actualiza sólo las manecillas del reloj de pared en la escena 3D (idea 5)
+function _ofTickClock(){
+  const g=document.getElementById('ofWallClock'); if(!g) return;
+  const cx=parseFloat(g.dataset.cx), cy=parseFloat(g.dataset.cy); if(isNaN(cx)||isNaN(cy)) return;
+  const now=new Date(), hr=now.getHours()%12, mn=now.getMinutes();
+  const ha=(hr+mn/60)/12*2*Math.PI-Math.PI/2, ma=mn/60*2*Math.PI-Math.PI/2;
+  const h=g.querySelector('.of-clock-h'), m=g.querySelector('.of-clock-m');
+  if(h){ h.setAttribute('x2',(cx+6.5*Math.cos(ha)).toFixed(1)); h.setAttribute('y2',(cy+6.5*Math.sin(ha)).toFixed(1)); }
+  if(m){ m.setAttribute('x2',(cx+10*Math.cos(ma)).toFixed(1)); m.setAttribute('y2',(cy+10*Math.sin(ma)).toFixed(1)); }
+}
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden && document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
 });
@@ -418,18 +487,56 @@ async function _renderOficina(){
   const totalWorkers=iaModel.length+autoModel.length+printerModel.length;
   const kpis=document.getElementById('oficinaKpis');
   if(kpis) kpis.innerHTML=`
-    <div class="of-kpi"><div class="of-kpi-val">${totalWorkers}</div><div class="of-kpi-lbl">Trabajadores</div></div>
-    <div class="of-kpi ${working?'live':''}"><div class="of-kpi-val">${working}</div><div class="of-kpi-lbl">Trabajando ahora</div></div>
-    <div class="of-kpi ${runsToday?'live':''}"><div class="of-kpi-val">${runsToday}</div><div class="of-kpi-lbl">Ejecuciones hoy</div></div>
-    <div class="of-kpi ${queueLen?'live':''}"><div class="of-kpi-val">${queueLen}</div><div class="of-kpi-lbl">En cola</div></div>`;
+    <div class="of-kpi"><div class="of-kpi-val" data-k="workers">${totalWorkers}</div><div class="of-kpi-lbl">Trabajadores</div></div>
+    <div class="of-kpi ${working?'live':''}"><div class="of-kpi-val" data-k="working">${working}</div><div class="of-kpi-lbl">Trabajando ahora</div></div>
+    <div class="of-kpi ${runsToday?'live':''}"><div class="of-kpi-val" data-k="runsToday">${runsToday}</div><div class="of-kpi-lbl">Ejecuciones hoy</div></div>
+    <div class="of-kpi ${queueLen?'live':''}"><div class="of-kpi-val" data-k="queue">${queueLen}</div><div class="of-kpi-lbl">En cola</div></div>`;
+  _ofAnimateKpis({workers:totalWorkers,working,runsToday,queue:queueLen});   // count-up al cambiar (idea 4)
 
   const errEl=document.getElementById('oficinaErr'); if(errEl) errEl.style.display=_ofErr?'':'none';
+  _ofApplyPrefs();                                                            // tema de escena + densidad persistidos
+  _ofRenderAlerts(iaModel,autoModel,printerModel);                           // alertas accionables (idea 6)
+  { const badge=document.getElementById('badge-oficina'); if(badge){ if(working>0){badge.textContent=working;badge.style.display='flex';} else badge.style.display='none'; } }  // badge del dock (idea 11)
 
   if(_ofView==='iso') _ofRenderIso(iaModel,autoModel,extraDepts);
   else if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel,extraDepts);
   else _ofRenderCards(iaModel,autoModel,extraDepts);
   _ofRenderFeed(runs);
   _ofRenderCharts(runs,iaModel,[...autoModel,...printerModel]);
+}
+// Count-up de KPIs (sólo anima cuando el valor cambia; respeta reduce-motion)
+function _ofAnimateKpis(vals){
+  const host=document.getElementById('oficinaKpis'); if(!host) return;
+  const red=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  Object.keys(vals).forEach(k=>{
+    const el=host.querySelector(`.of-kpi-val[data-k="${k}"]`); if(!el) return;
+    const to=vals[k]||0, from=(_ofPrevKpis[k]!=null?_ofPrevKpis[k]:0);
+    if(red || from===to){ el.textContent=to; return; }
+    _ofCountUp(el,from,to,520);
+  });
+  _ofPrevKpis=Object.assign({},vals);
+}
+function _ofCountUp(el,from,to,ms){
+  let t0=null; const d=to-from;
+  const step=now=>{ if(t0==null)t0=now; const p=Math.min(1,(now-t0)/ms), e=1-Math.pow(1-p,3); el.textContent=Math.round(from+d*e); if(p<1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+// A qué pestaña salta el botón "Ver →" de una alerta según el id de la automatización
+function _ofAutoTab(id){ id=(id||'').toLowerCase(); if(id.includes('mail'))return 'correo'; if(id.includes('printer')||id.includes('bridge'))return 'maquinas'; if(id.includes('lead'))return 'agentes'; if(id.includes('sii'))return 'finanzas'; return null; }
+// ── Alertas accionables: automatizaciones con falla/atraso + agentes/impresoras en error (idea 6) ──
+function _ofRenderAlerts(ia,auto,printers){
+  const host=document.getElementById('oficinaAlerts'); if(!host) return;
+  const items=[];
+  (auto||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',msg:`Automatización <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:_ofAutoTab(m.id)});
+    else if(/atras/i.test(m.lbl||'')) items.push({t:'warn',msg:`<b>${escapeHtml(_ofPretty(m.label))}</b> está atrasada`,tab:_ofAutoTab(m.id)}); });
+  (ia||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',msg:`Agente <b>${escapeHtml(_ofPretty(m.label))}</b> con error`,tab:'agentes'}); });
+  (printers||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',msg:`Impresora <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'maquinas'}); });
+  if(!items.length){ host.style.display='none'; host.innerHTML=''; _ofPrevAlerts=''; return; }
+  host.style.display='';
+  host.innerHTML=items.slice(0,6).map(it=>`<div class="of-alert of-alert-${it.t}"><span class="of-alert-ic">${it.t==='error'?'🔴':'🟠'}</span><span class="of-alert-msg">${it.msg}</span>${it.tab?`<button class="btn btn-ghost btn-sm" onclick="switchTab('${it.tab}')">Ver →</button>`:''}</div>`).join('');
+  const sig=items.map(i=>i.t+i.msg).join('|');
+  if(_ofPrevAlerts && sig!==_ofPrevAlerts){ const n=items.filter(i=>i.t==='error').length; if(n){ try{toast('⚠ '+n+' incidencia(s) en la oficina','error');}catch(e){} } }
+  _ofPrevAlerts=sig;
 }
 
 function _ofWorkerCard(m){
@@ -441,13 +548,17 @@ function _ofWorkerCard(m){
   const _wspr=m.clickIA?_ofSprite(m):null;
   const avInner=_wspr?`<img src="${_wspr.front}" alt="" style="width:100%;height:100%;object-fit:contain;padding:2px">`
     :m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:5px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:m.icon;
+  const areaChip=`<span class="of-area-chip" style="color:${ac};background:${ac}1f;border-color:${ac}55">${escapeHtml(cat.name)}</span>`;
+  // Acciones directas en tarjetas de impresora: webcam (si hay) + ir a Máquinas (idea 9)
+  const printerActions=m.isPrinter?`<div class="of-card-actions">${m.cam?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openWebcamModal('${escapeHtml(m.id)}')" title="Ver cámara en vivo">📷 Cámara</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('maquinas')" title="Abrir Máquinas">🔧 Controlar</button></div>`:'';
   return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
     <div class="of-avatar" style="${avStyle}">${avInner}</div>
     <div class="of-body">
-      <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(_ofPretty(m.label))}</span>${m.top?'<span title="Más ejecuciones en 30 días" style="margin-left:4px">👑</span>':''}</div>
+      <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(_ofPretty(m.label))}</span>${areaChip}${m.top?'<span title="Más ejecuciones en 30 días" style="margin-left:4px">👑</span>':''}</div>
       <div class="of-role">${escapeHtml(m.role)}</div>
       <div class="of-task">${escapeHtml((m.task||'').substring(0,90))}</div>
       <div class="of-foot"><span class="of-state-lbl">${escapeHtml(m.lbl)}</span><span class="of-stats">${escapeHtml(m.stats||'')}</span></div>
+      ${printerActions}
       ${spark}
     </div>
   </div>`;
@@ -470,7 +581,9 @@ function _ofRenderCards(ia,auto,extras){
     const states=[['all','Todos','var(--accent)'],['of-work','Trabajando',_OF_STATUS['of-work']],['of-active','Activo',_OF_STATUS['of-active']],['of-off','Reposo',_OF_STATUS['of-off']],['of-error','Con falla',_OF_STATUS['of-error']]];
     bar.innerHTML=states.filter(s=>s[0]==='all'||cnt(s[0])>0).map(([k,lbl,col])=>`<button class="of-feed-chip${flt===k?' active':''}" style="--cc:${col}" onclick="ofSetCardFilter('${k}')" aria-pressed="${flt===k}">${lbl} <b>${cnt(k)}</b></button>`).join('');
   }
-  const keep=m=>flt==='all'||m.cls===flt;
+  const q=_ofSearch;
+  const match=m=>!q||((_ofPretty(m.label)+' '+(m.role||'')+' '+_ofAreaName(m)).toLowerCase().includes(q));
+  const keep=m=>(flt==='all'||m.cls===flt)&&match(m);
   const fIA=ia.filter(keep), fAuto=auto.filter(keep), fPr=printers.filter(keep);
   const g1=document.getElementById('oficinaGridIA'), g2=document.getElementById('oficinaGridAuto');
   const z1=document.getElementById('oficinaZoneIA'), z2=document.getElementById('oficinaZoneAuto');
@@ -483,9 +596,9 @@ function _ofRenderCards(ia,auto,extras){
   const g3=document.getElementById('oficinaGridPrinters'), z3=document.getElementById('oficinaZonePrinters');
   if(g3){ g3.innerHTML=fPr.map(_ofWorkerCard).join(''); g3.style.display=fPr.length?'':'none'; }
   if(z3) z3.style.display=fPr.length?'':'none';
-  // Mensaje si el filtro no deja ningún trabajador visible (sólo posible con datos vacíos)
+  // Mensaje si el filtro/búsqueda no deja ningún trabajador visible
   const empty=document.getElementById('oficinaCardsEmpty');
-  if(empty) empty.style.display=(fIA.length+fAuto.length+fPr.length)?'none':'';
+  if(empty){ const none=!(fIA.length+fAuto.length+fPr.length); empty.style.display=none?'':'none'; if(none) empty.textContent=q?`Sin resultados para “${_ofSearch}”.`:'Sin trabajadores en este estado.'; }
 }
 function _ofDesk(m){
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
@@ -1074,9 +1187,9 @@ function _ofRenderIso(ia,auto,extras){
   // Reloj de pared con hora real
   const clk=lp(0.3,wallH*0.55), now=new Date(), hr=now.getHours()%12, mn=now.getMinutes();
   const ha=(hr+mn/60)/12*2*Math.PI-Math.PI/2, ma=mn/60*2*Math.PI-Math.PI/2;
-  const clock=`<g><circle cx="${clk[0].toFixed(1)}" cy="${clk[1].toFixed(1)}" r="13" fill="#0f1114" stroke="#2a2f36" stroke-width="2"/>`+
-    `<line x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+6.5*Math.cos(ha)).toFixed(1)}" y2="${(clk[1]+6.5*Math.sin(ha)).toFixed(1)}" stroke="#dadada" stroke-width="2"/>`+
-    `<line x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+10*Math.cos(ma)).toFixed(1)}" y2="${(clk[1]+10*Math.sin(ma)).toFixed(1)}" stroke="#9a9a9a" stroke-width="1.4"/>`+
+  const clock=`<g id="ofWallClock" data-cx="${clk[0].toFixed(1)}" data-cy="${clk[1].toFixed(1)}"><circle cx="${clk[0].toFixed(1)}" cy="${clk[1].toFixed(1)}" r="13" fill="#0f1114" stroke="#2a2f36" stroke-width="2"/>`+
+    `<line class="of-clock-h" x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+6.5*Math.cos(ha)).toFixed(1)}" y2="${(clk[1]+6.5*Math.sin(ha)).toFixed(1)}" stroke="#dadada" stroke-width="2"/>`+
+    `<line class="of-clock-m" x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+10*Math.cos(ma)).toFixed(1)}" y2="${(clk[1]+10*Math.sin(ma)).toFixed(1)}" stroke="#9a9a9a" stroke-width="1.4"/>`+
     `<circle cx="${clk[0].toFixed(1)}" cy="${clk[1].toFixed(1)}" r="1.6" fill="#dadada"/></g>`;
 
   // Límites del viewBox — ajuste ceñido al contenido (sin relleno artificial)
@@ -1179,23 +1292,23 @@ function _ofRenderFeed(runs){
 
 // ── Analítica de la oficina (gráficos SVG, sin librerías) ──────────────
 function _ofBarsDays(runs){
-  const N=14, arr=new Array(N).fill(0), lab=[];
+  const N=Math.max(7,Math.min(30,_ofChartRange||14)), arr=new Array(N).fill(0), lab=[];
   const start=new Date(); start.setHours(0,0,0,0);
   for(let i=0;i<N;i++){ const d=new Date(start); d.setDate(start.getDate()-(N-1-i)); lab.push(d.getDate()); }
   runs.forEach(r=>{ if(!r.t)return; const d=new Date(r.t); d.setHours(0,0,0,0); const idx=N-1-Math.round((start-d)/864e5); if(idx>=0&&idx<N) arr[idx]++; });
-  const max=Math.max(1,...arr), W=320,H=120,pad=16,bw=(W-pad*2)/N;
+  const max=Math.max(1,...arr), W=320,H=120,pad=16,bw=(W-pad*2)/N, step=Math.ceil(N/8);
   let bars='',lbls='';
   arr.forEach((v,i)=>{ const x=pad+i*bw, bh=(v/max)*(H-pad-22), y=H-22-bh;
     bars+=`<rect x="${(x+2).toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i===N-1?'var(--accent)':'var(--accent3)'}" opacity="${i===N-1?1:0.6}"><title>${lab[i]}: ${v}</title></rect>`;
-    if(i%3===0||i===N-1) lbls+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="8" fill="var(--text3)">${lab[i]}</text>`;
+    if(i%step===0||i===N-1) lbls+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="8" fill="var(--text3)">${lab[i]}</text>`;
   });
   return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg"><line x1="${pad}" y1="${H-22}" x2="${W-pad}" y2="${H-22}" stroke="var(--border)"/>${bars}${lbls}</svg>`;
 }
 function _ofBarsTop(runs){
-  const since=Date.now()-7*864e5, cnt={};
+  const _rd=Math.max(7,Math.min(30,_ofChartRange||14)), since=Date.now()-_rd*864e5, cnt={};
   runs.forEach(r=>{ if(r.t&&r.t>=since&&r.agent) cnt[r.agent]=(cnt[r.agent]||0)+1; });
   const arr=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  if(!arr.length) return '<div class="of-chart-empty">Sin ejecuciones en 7 días.</div>';
+  if(!arr.length) return `<div class="of-chart-empty">Sin ejecuciones en ${_rd} días.</div>`;
   const max=Math.max(...arr.map(a=>a[1])), W=320, rowH=21, H=arr.length*rowH+6;
   let rows='';
   arr.forEach((a,i)=>{ const y=i*rowH+4, bw=(a[1]/max)*(W-150);
@@ -1226,11 +1339,11 @@ function _ofDonutStatus(ia,auto){
   return `<div class="of-donut-wrap">${_ofDonut(parts,all.length)}<div class="of-donut-legend">${legend}</div></div>`;
 }
 function _ofBarsArea(runs){
-  const since=Date.now()-7*864e5, cnt={};
+  const _rd=Math.max(7,Math.min(30,_ofChartRange||14)), since=Date.now()-_rd*864e5, cnt={};
   runs.forEach(r=>{ if(!(r.t&&r.t>=since&&r.agent))return; const n=_ofCat({id:r.agent}).name; cnt[n]=(cnt[n]||0)+1; });
   const order=[..._OF_CAT,{name:'Otros',color:'#7a7a7a'}];
   const arr=order.map(c=>[c.name,cnt[c.name]||0,c.color]).filter(a=>a[1]>0);
-  if(!arr.length) return '<div class="of-chart-empty">Sin ejecuciones en 7 días.</div>';
+  if(!arr.length) return `<div class="of-chart-empty">Sin ejecuciones en ${_rd} días.</div>`;
   const max=Math.max(...arr.map(a=>a[1])), W=320, rowH=22, H=arr.length*rowH+6;
   let rows='';
   arr.forEach((a,i)=>{ const y=i*rowH+4, bw=(a[1]/max)*(W-150);
@@ -1259,11 +1372,14 @@ function _ofTimeline(runs){
 }
 function _ofRenderCharts(runs,ia,auto){
   const host=document.getElementById('oficinaCharts'); if(!host) return;
+  _ofChartData={runs,ia,auto};   // recordar para re-render al cambiar el rango
+  const R=_ofChartRange||14;
+  document.querySelectorAll('#oficinaRangeSel .of-vbtn').forEach(b=>b.classList.toggle('active',+b.dataset.r===R));
   host.innerHTML=`<div class="of-charts-grid">
-    <div class="of-chart"><div class="of-chart-t">📈 Ejecuciones · últimos 14 días</div>${_ofBarsDays(runs)}</div>
+    <div class="of-chart"><div class="of-chart-t">📈 Ejecuciones · últimos ${R} días</div>${_ofBarsDays(runs)}</div>
     <div class="of-chart"><div class="of-chart-t">🕐 Hoy por hora</div>${_ofTimeline(runs)}</div>
-    <div class="of-chart"><div class="of-chart-t">🏆 Top agentes · 7 días</div>${_ofBarsTop(runs)}</div>
+    <div class="of-chart"><div class="of-chart-t">🏆 Top agentes · ${R} días</div>${_ofBarsTop(runs)}</div>
     <div class="of-chart"><div class="of-chart-t">🟢 Estado del equipo · ahora</div>${_ofDonutStatus(ia,auto)}</div>
-    <div class="of-chart"><div class="of-chart-t">🗂️ Ejecuciones por área · 7 días</div>${_ofBarsArea(runs)}</div>
+    <div class="of-chart"><div class="of-chart-t">🗂️ Ejecuciones por área · ${R} días</div>${_ofBarsArea(runs)}</div>
   </div>`;
 }
