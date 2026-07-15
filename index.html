@@ -9336,6 +9336,7 @@ function buildFichaPropuestaDoc(cotId){
         <div class="item-ficha-ref">FICHA TÉCNICA · N° ${escH(numFicha)}</div>
       </div>
       <div class="item-body">
+        <div class="item-left">
         <div class="item-title-row">
           <div class="muestra-badge">MUESTRA ${idx+1}</div>
           <div class="item-product-name">${escH(item.nombre||('PRODUCTO '+(idx+1)))}</div>
@@ -9346,8 +9347,10 @@ function buildFichaPropuestaDoc(cotId){
             <div class="mat-header mat-primary-hdr">${escH(item.tipo||('MUESTRA '+(idx+1)))}</div>
             <div class="mat-lines">${matLines.map(l=>'<div class="mat-line">'+escH(l)+'</div>').join('')||'<div class="mat-line" style="color:#ccc">—</div>'}</div>
           </div>
-          ${item.optLabel?'<div class="mat-col"><div class="mat-header mat-alt-hdr">OPCIÓN 2 — '+escH(item.optLabel)+'</div><div class="mat-lines">'+optMatLines.map(l=>'<div class="mat-line">'+escH(l)+'</div>').join('')+'</div></div>':'<div></div>'}
+          ${item.optLabel?'<div class="mat-col"><div class="mat-header mat-alt-hdr">OPCIÓN 2 — '+escH(item.optLabel)+'</div><div class="mat-lines">'+optMatLines.map(l=>'<div class="mat-line">'+escH(l)+'</div>').join('')+'</div></div>':''}
         </div>
+        </div>
+        <div class="item-right">
         <div class="photos-section">
           <div class="photos-label">VISTAS DEL PRODUCTO</div>
           <div class="photos-grid">
@@ -9355,6 +9358,7 @@ function buildFichaPropuestaDoc(cotId){
             ${foto(item.imgIsometrica,'VISTA ISOMÉTRICA')}
             ${foto(item.imgAerea,'VISTA LATERAL')}
           </div>
+        </div>
         </div>
       </div>
       <div class="item-footer">
@@ -9372,7 +9376,7 @@ function buildFichaPropuestaDoc(cotId){
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e0e0;}
-.pagina{width:210mm;min-height:297mm;page-break-after:always;position:relative;overflow:hidden;background:#fff;margin:0 auto 24px;display:flex;flex-direction:column;}
+.pagina{width:297mm;min-height:210mm;page-break-after:always;position:relative;overflow:hidden;background:#fff;margin:0 auto 24px;display:flex;flex-direction:column;}
 .pagina:last-child{page-break-after:avoid;}
 /* Portada */
 .portada-top{background:#111;padding:24px 36px;display:flex;justify-content:space-between;align-items:flex-start;min-height:140px;}
@@ -9398,12 +9402,14 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e
 .item-header{display:flex;justify-content:space-between;align-items:center;padding:9px 32px;background:#f5f5f5;border-bottom:3px solid #00c8cc;}
 .item-breadcrumb{font-size:8px;color:#888;letter-spacing:.5px;text-transform:uppercase;font-style:italic;}
 .item-ficha-ref{font-size:9px;font-weight:700;color:#1a1a1a;letter-spacing:1px;text-transform:uppercase;}
-.item-body{flex:1;padding:20px 36px 16px;display:flex;flex-direction:column;gap:18px;}
+.item-body{flex:1;padding:18px 34px;display:flex;flex-direction:row;gap:30px;align-items:stretch;}
+.item-left{flex:0 0 38%;display:flex;flex-direction:column;gap:16px;min-width:0;}
+.item-right{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;}
 .item-title-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .muestra-badge{background:#111;color:#00c8cc;font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:4px 10px;border-radius:2px;flex-shrink:0;}
 .item-product-name{font-size:22px;font-weight:900;color:#1a1a1a;text-transform:uppercase;letter-spacing:-.3px;flex:1;line-height:1.1;}
 .dims-pill{border:2px solid #00c8cc;color:#1a1a1a;background:#e8fafa;font-size:10px;font-weight:700;padding:4px 12px;border-radius:20px;white-space:nowrap;flex-shrink:0;}
-.material-section{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.material-section{display:grid;grid-template-columns:1fr;gap:12px;}
 .mat-col{display:flex;flex-direction:column;}
 .mat-header{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:8px 14px;margin-bottom:10px;}
 .mat-primary-hdr{background:#00c8cc;color:#fff;}
@@ -9412,16 +9418,16 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e
 .mat-line{font-size:9.5px;color:#1a1a1a;line-height:1.9;padding-left:12px;position:relative;}
 .mat-line::before{content:'›';position:absolute;left:2px;color:#00c8cc;font-weight:900;}
 /* Fotos */
-.photos-section{display:flex;flex-direction:column;gap:8px;}
+.photos-section{display:flex;flex-direction:column;gap:8px;flex:1;}
 .photos-label{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#bbb;}
-.photos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.photos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;align-content:start;}
 .fbox{display:flex;flex-direction:column;}
 .flbl{font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#fff;text-align:center;background:#00c8cc;padding:5px 4px;border-radius:4px 4px 0 0;}
-.fimg{width:100%;aspect-ratio:1/1;object-fit:contain;background:#f9f9f9;border:1px solid #eee;border-top:none;border-radius:0 0 4px 4px;}
-.fph{width:100%;aspect-ratio:1/1;background:#f8f8f8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:8px;color:#ccc;border:1px solid #eee;border-top:none;border-radius:0 0 4px 4px;}
+.fimg{width:100%;aspect-ratio:3/4;object-fit:contain;background:#f9f9f9;border:1px solid #eee;border-top:none;border-radius:0 0 4px 4px;}
+.fph{width:100%;aspect-ratio:3/4;background:#f8f8f8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:8px;color:#ccc;border:1px solid #eee;border-top:none;border-radius:0 0 4px 4px;}
 .item-footer{padding:10px 32px;border-top:2px solid #00c8cc;display:flex;justify-content:space-between;align-items:center;}
 .item-footer-text{font-size:7.5px;color:#bbb;letter-spacing:.3px;}
-@media print{body{background:#fff;}.pagina{page-break-after:always;margin:0;}@page{margin:0;size:A4;}}
+@media print{body{background:#fff;}.pagina{page-break-after:always;margin:0;}@page{margin:0;size:A4 landscape;}}
 </style></head><body>
 ${portada}
 ${itemPages}
