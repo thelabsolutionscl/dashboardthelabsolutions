@@ -138,7 +138,10 @@ async function _fichaHTMLtoPdfBlob(htmlDoc){
   holder.style.cssText='position:fixed;top:0;left:-100000px;width:794px;z-index:-1;';
   const root=document.createElement('div');
   root.id=ROOT;
-  root.style.cssText='width:794px;background:#fff;';
+  // box-sizing:border-box para que el ancho 794 (≈A4) INCLUYA el padding del
+  // documento; si no, el root queda más ancho que la página y el PDF se corta
+  // por la derecha. (El escudo all:revert deja content-box, por eso se fija aquí.)
+  root.style.cssText='width:794px;background:#fff;box-sizing:border-box;';
   root.innerHTML='<style>'+shield+_scopeCss(css,'#'+ROOT)+'</style>'+body;
   holder.appendChild(root);
   document.body.appendChild(holder);
