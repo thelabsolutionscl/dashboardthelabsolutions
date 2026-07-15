@@ -329,7 +329,7 @@
     <button class="dock-btn" data-tab="pedidos" onclick="switchTab('pedidos')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-pedidos"/></svg></span><span class="dock-label">Pedidos</span><span class="dock-badge" id="badge-pedidos" style="display:none">0</span></button>
     <button class="dock-btn" data-tab="proveedores" onclick="switchTab('proveedores')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-proveedores"/></svg></span><span class="dock-label">Proveedores</span></button>
     <button class="dock-btn" data-tab="agentes" onclick="switchTab('agentes')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-agentes"/></svg></span><span class="dock-label">Agentes</span></button>
-    <button class="dock-btn" data-tab="oficina" onclick="switchTab('oficina')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-oficina"/></svg></span><span class="dock-label">Oficina</span></button>
+    <button class="dock-btn" data-tab="oficina" onclick="switchTab('oficina')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-oficina"/></svg></span><span class="dock-label">Oficina</span><span class="dock-badge dock-badge-live" id="badge-oficina" style="display:none">0</span></button>
     <button class="dock-btn" data-tab="maquinas" onclick="switchTab('maquinas')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-maquinas"/></svg></span><span class="dock-label">Máquinas</span></button>
     <button class="dock-btn" data-tab="inventario" onclick="switchTab('inventario')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-nut"/></svg></span><span class="dock-label">Inventario</span></button>
     <button class="dock-btn" data-tab="equipo" onclick="switchTab('equipo')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-equipo"/></svg></span><span class="dock-label">Equipo</span></button>
@@ -1494,7 +1494,9 @@
 #tab-oficina .of-kpi .of-kpi-val{font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1;color:var(--text);letter-spacing:.5px;}
 #tab-oficina .of-kpi .of-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-top:4px;}
 #tab-oficina .of-kpi.live{box-shadow:inset 0 0 26px -12px rgba(0,212,204,0.45);}
-#tab-oficina .of-kpi.live::before{background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+#tab-oficina .of-kpi.live::before{background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:220% 100%;animation:ofKpiShine 2.6s linear infinite;}
+@keyframes ofKpiShine{0%{background-position:120% 0;}100%{background-position:-120% 0;}}
+@media(prefers-reduced-motion:reduce){#tab-oficina .of-kpi.live::before{animation:none;}}
 #tab-oficina .of-kpi.live .of-kpi-val{color:var(--accent);text-shadow:0 0 18px rgba(0,212,204,0.4);}
 #tab-oficina .of-zone-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin:0 0 12px 2px;display:flex;align-items:center;gap:8px;}
 #tab-oficina .of-zone-title::after{content:'';flex:1;height:1px;background:var(--border);}
@@ -1543,6 +1545,9 @@
 .of-feed-chip.active{background:var(--cc,var(--accent));border-color:transparent;color:#0b0c0f;}
 .of-feed-chip.active::before{background:#0b0c0f;opacity:.5;}
 .of-feed-chip.active b{opacity:.85;}
+/* Barra de filtro por estado (vista Tarjetas) — reutiliza .of-feed-chip */
+#tab-oficina .of-cardfilter{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 18px;}
+#tab-oficina .of-cardfilter:empty{display:none;}
 @media(max-width:760px){#tab-oficina .of-kpis{grid-template-columns:repeat(2,1fr);}#tab-oficina .of-floor{grid-template-columns:1fr;}}
 /* Accesibilidad */
 .of-worker:focus-visible,.of-desk:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
@@ -1725,6 +1730,49 @@
 #tab-oficina.of-fs .of-kpi-val{font-size:48px;}
 #tab-oficina.of-fs .of-kpi-lbl{font-size:13px;}
 #tab-oficina.of-fs .of-iso-legend{font-size:14px;gap:22px;}
+/* ── Upgrades: alertas, buscador, densidad, temas de escena, transiciones ── */
+/* Alertas accionables (fallos/atrasos) */
+#tab-oficina .of-alerts{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+.of-alert{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:11px;font-size:12px;border:1px solid;background:var(--surface2);}
+.of-alert.of-alert-error{border-color:rgba(255,68,68,0.4);background:rgba(255,68,68,0.08);color:var(--text);}
+.of-alert.of-alert-warn{border-color:rgba(255,170,0,0.35);background:rgba(255,170,0,0.08);color:var(--text);}
+.of-alert .of-alert-ic{font-size:16px;flex-shrink:0;}
+.of-alert .of-alert-msg{flex:1;min-width:0;line-height:1.4;}
+.of-alert .of-alert-msg b{font-weight:700;}
+.of-alert .btn{flex-shrink:0;}
+/* Barra de herramientas de tarjetas (buscador + filtro) */
+#tab-oficina .of-cardtools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 18px;}
+#tab-oficina .of-cardtools .of-cardfilter{margin:0;flex:1;}
+.of-search{display:inline-flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:6px 11px;min-width:210px;transition:border-color .15s;}
+.of-search:focus-within{border-color:var(--accent);}
+.of-search span{font-size:12px;opacity:.7;}
+.of-search input{background:none;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;width:100%;}
+.of-search input::placeholder{color:var(--text3);}
+/* Chip de área en las tarjetas (identidad de departamento) */
+.of-area-chip{display:inline-flex;align-items:center;gap:4px;font-size:8.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:2px 6px;border-radius:5px;margin-left:6px;vertical-align:middle;border:1px solid;line-height:1.3;}
+.of-card-actions{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;}
+.of-card-actions .btn{font-size:10px;padding:3px 9px;}
+/* Densidad compacta */
+#tab-oficina.of-compact .of-floor{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px;}
+#tab-oficina.of-compact .of-worker{padding:10px;gap:9px;}
+#tab-oficina.of-compact .of-avatar{width:34px;height:34px;font-size:16px;}
+#tab-oficina.of-compact .of-task,#tab-oficina.of-compact .of-spark-wrap{display:none;}
+#tab-oficina.of-compact .of-role{font-size:9.5px;}
+/* Transición al cambiar de vista */
+#oficinaCards,#oficinaFloor,#oficinaIso{animation:ofViewIn .32s ease;}
+@keyframes ofViewIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+/* Badge "trabajando ahora" en el dock (pulso suave) */
+.dock-badge-live{background:var(--success)!important;box-shadow:0 0 0 0 rgba(0,212,170,0.6);animation:ofDockPulse 1.8s infinite;}
+@keyframes ofDockPulse{0%{box-shadow:0 0 0 0 rgba(0,212,170,0.5);}70%{box-shadow:0 0 0 6px rgba(0,212,170,0);}100%{box-shadow:0 0 0 0 rgba(0,212,170,0);}}
+/* Detalle: mini-carga por hora */
+.ofd-hours{display:flex;align-items:flex-end;gap:2px;height:34px;margin:2px 0 14px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;}
+.ofd-hours i{flex:1;background:var(--border2);border-radius:1.5px;min-height:2px;transition:height .2s;}
+.ofd-hours i.now{background:var(--accent);}
+.ofd-hours i.has{background:var(--accent3);}
+/* Tema de la escena 3D: CLARO (por defecto la escena es oscura) */
+#tab-oficina.of-scene-light .of-iso-scene{background:radial-gradient(ellipse at 50% -8%,#eef3f8,#d5dde6 78%);box-shadow:inset 0 0 60px -18px rgba(120,140,165,0.5),inset 0 1px 0 rgba(255,255,255,0.6);}
+@media(prefers-reduced-motion:reduce){#oficinaCards,#oficinaFloor,#oficinaIso{animation:none;}.dock-badge-live{animation:none;}}
+@media(max-width:760px){.of-search{min-width:0;flex:1;}}
 </style>
 <div class="tab-panel" id="tab-oficina">
   <div class="section-header">
@@ -1738,33 +1786,51 @@
         <button class="of-vbtn" data-v="floor" onclick="ofSetView('floor')">🏢 Planta</button>
         <button class="of-vbtn" data-v="iso" onclick="ofSetView('iso')">🏨 3D</button>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="ofZoom(1)" title="Acercar (o Ctrl/⌘ + rueda sobre la escena 3D · arrastra para mover)">🔍+</button>
+      <button class="btn btn-ghost btn-sm" onclick="ofZoom(1)" title="Acercar (o Ctrl/⌘ + rueda sobre la escena 3D · arrastra para mover · pellizca en móvil)">🔍+</button>
       <button class="btn btn-ghost btn-sm" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
       <button class="btn btn-ghost btn-sm" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
+      <button class="btn btn-ghost btn-sm" id="ofDensityBtn" onclick="ofToggleDensity()" title="Densidad de las tarjetas (cómoda / compacta)">⤢ Densidad</button>
+      <button class="btn btn-ghost btn-sm" id="ofSceneThemeBtn" onclick="ofToggleSceneTheme()" title="Tema de la escena 3D (auto / claro / oscuro)">🌗 Escena</button>
+      <button class="btn btn-ghost btn-sm" onclick="ofExport()" title="Exportar: descarga la escena 3D (SVG) o copia el resumen de KPIs">⬇ Exportar</button>
       <button class="btn btn-ghost btn-sm" onclick="refreshOficina()">↻ Actualizar</button>
       <button class="btn btn-ghost btn-sm" id="ofFsBtn" onclick="ofFullscreen()">📺 Pantalla completa</button>
     </div>
   </div>
 
+  <div id="oficinaAlerts" class="of-alerts" style="display:none"></div>
+
   <div class="of-kpis" id="oficinaKpis"></div>
   <div id="oficinaErr" class="of-errchip" style="display:none">⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.</div>
 
   <div id="oficinaCards">
-    <div class="of-zone-title">🤖 Agentes IA</div>
+    <div class="of-cardtools">
+      <div class="of-search"><span aria-hidden="true">🔎</span><input id="oficinaSearch" type="search" placeholder="Buscar trabajador o área…" autocomplete="off" spellcheck="false" oninput="ofSearchInput(this.value)" aria-label="Buscar trabajador o área"></div>
+      <div class="of-cardfilter" id="oficinaCardFilter" role="group" aria-label="Filtrar trabajadores por estado"></div>
+    </div>
+
+    <div class="of-zone-title" id="oficinaZoneIA">🤖 Agentes IA</div>
     <div class="of-floor" id="oficinaGridIA"></div>
 
-    <div class="of-zone-title">⚙️ Automatizaciones</div>
+    <div class="of-zone-title" id="oficinaZoneAuto">⚙️ Automatizaciones</div>
     <div class="of-floor" id="oficinaGridAuto"></div>
 
     <div class="of-zone-title" id="oficinaZonePrinters" style="display:none">🖨️ Impresoras 3D</div>
     <div class="of-floor" id="oficinaGridPrinters" style="display:none"></div>
+
+    <div id="oficinaCardsEmpty" style="display:none;padding:26px 6px;text-align:center;color:var(--text3);font-size:12px">Sin trabajadores en este estado.</div>
   </div>
 
   <div id="oficinaFloor" style="display:none"></div>
   <div id="oficinaIso" style="display:none"></div>
 
   <div class="card" style="margin-bottom:20px">
-    <div class="card-header"><span class="card-title">📊 Analítica de la oficina</span><span class="badge badge-gray">7–14 días</span></div>
+    <div class="card-header"><span class="card-title">📊 Analítica de la oficina</span>
+      <div id="oficinaRangeSel" class="of-viewtoggle" role="group" aria-label="Rango de la analítica">
+        <button class="of-vbtn" data-r="7" onclick="ofSetChartRange(7)">7 días</button>
+        <button class="of-vbtn active" data-r="14" onclick="ofSetChartRange(14)">14 días</button>
+        <button class="of-vbtn" data-r="30" onclick="ofSetChartRange(30)">30 días</button>
+      </div>
+    </div>
     <div id="oficinaCharts" style="padding:14px 16px"></div>
   </div>
 
