@@ -28,7 +28,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-15-resend');
+define('MAIL_API_BUILD', '2026-07-15-resend2');
 
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
 // Bufferizamos TODA la salida: si ocurre un fatal de PHP, descartamos lo que
@@ -66,8 +66,20 @@ $user   = trim($_POST['user']   ?? '');
 $pass   =      $_POST['pass']   ?? '';
 $action = trim($_POST['action'] ?? '');
 
+// Config server-side (clave de Resend, etc.). Se carga temprano para poder
+// mostrar en el health-check si la clave quedó bien puesta.
+if (is_file(__DIR__ . '/mail-api-config.php')) { require_once __DIR__ . '/mail-api-config.php'; }
+
 if (!$user || !$pass) {
-    echo json_encode(['error' => 'Credenciales requeridas', 'build' => MAIL_API_BUILD]);
+    // Al abrir la URL en el navegador (sin credenciales) mostramos un diagnóstico:
+    //  resend=true  → se detectó la API key (el envío saldrá por Resend)
+    //  cfg=true     → existe el archivo mail-api-config.php junto a este
+    echo json_encode([
+        'error'  => 'Credenciales requeridas',
+        'build'  => MAIL_API_BUILD,
+        'resend' => resend_api_key() ? true : false,
+        'cfg'    => is_file(__DIR__ . '/mail-api-config.php'),
+    ]);
     exit;
 }
 
@@ -321,7 +333,7 @@ function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $at
 //   2) constante RESEND_API_KEY definida en mail-api-config.php (junto a este
 //      archivo, fuera del repo), o
 //   3) un archivo resend.key con la clave adentro (junto a este archivo).
-if (is_file(__DIR__ . '/mail-api-config.php')) { require_once __DIR__ . '/mail-api-config.php'; }
+//   (mail-api-config.php se incluye arriba, temprano, para el health-check).
 function resend_api_key() {
     $k = getenv('RESEND_API_KEY');
     if ($k) return trim($k);
