@@ -458,6 +458,62 @@ function _fpDefaultPrompt(campo){const v=FP_VIEWS.find(x=>x.campo===campo);retur
 function _fpGetPrompt(idx,campo){return (_fpItems[idx]&&_fpItems[idx].prompts&&_fpItems[idx].prompts[campo])||_fpDefaultPrompt(campo);}
 function _fpSetPrompt(idx,campo,val){if(!_fpItems[idx])return;if(!_fpItems[idx].prompts)_fpItems[idx].prompts={};_fpItems[idx].prompts[campo]=val;}
 
+// Quita el fondo LISO (típicamente negro o blanco) de una imagen: hace un
+// flood-fill desde los bordes y vuelve transparentes los píxeles del fondo, para
+// que la foto no se vea con un recuadro negro dentro de la ficha (fondo blanco).
+// Si las 4 esquinas NO son un color uniforme (foto real con fondo con textura),
+// deja la imagen intacta. Devuelve la misma dataUrl ante cualquier error.
+async function _fpRemoveBg(dataUrl){
+  try{
+    if(!dataUrl||typeof dataUrl!=='string'||dataUrl.indexOf('data:image')!==0) return dataUrl;
+    const img=new Image();img.crossOrigin='anonymous';img.src=dataUrl;
+    await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;});
+    const w=img.naturalWidth||1024,h=img.naturalHeight||1024;
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
+    const id=ctx.getImageData(0,0,w,h);const d=id.data;
+    const cIdx=[0,(w-1)*4,(h-1)*w*4,((h-1)*w+(w-1))*4];
+    let bgR=0,bgG=0,bgB=0;
+    cIdx.forEach(i=>{bgR+=d[i];bgG+=d[i+1];bgB+=d[i+2];});
+    bgR=Math.round(bgR/4);bgG=Math.round(bgG/4);bgB=Math.round(bgB/4);
+    // ¿son las 4 esquinas parecidas entre sí? Si no, el fondo no es liso: no tocar.
+    const uniform=cIdx.every(i=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB)<60);
+    if(!uniform) return dataUrl;
+    const thresh=70;
+    const isBg=(i)=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB)<thresh*3;
+    const visited=new Uint8Array(w*h);const queue=[];
+    for(let x=0;x<w;x++){[x,x+(h-1)*w].forEach(p=>{if(!visited[p]&&isBg(p*4)){visited[p]=1;queue.push(p);}});}
+    for(let y=1;y<h-1;y++){[y*w,y*w+(w-1)].forEach(p=>{if(!visited[p]&&isBg(p*4)){visited[p]=1;queue.push(p);}});}
+    let qi=0;
+    while(qi<queue.length){
+      const p=queue[qi++];d[p*4+3]=0;
+      const x=p%w,y=Math.floor(p/w);
+      if(x>0){const n=p-1;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+      if(x<w-1){const n=p+1;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+      if(y>0){const n=p-w;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+      if(y<h-1){const n=p+w;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+    }
+    ctx.putImageData(id,0,0);
+    return c.toDataURL('image/png');
+  }catch(e){console.warn('[_fpRemoveBg]',e);return dataUrl;}
+}
+
+// Limpia el fondo liso de todas las fotos de las muestras (frontal/iso/lateral)
+// ya cargadas en _fpItems. Se llama al abrir/descargar la ficha para que las
+// fotos subidas antes de este arreglo también salgan sin fondo negro.
+async function _fpNormalizeImages(){
+  const campos=['imgFrontal','imgIsometrica','imgAerea'];
+  for(const it of (_fpItems||[])){
+    if(!it) continue;
+    for(const campo of campos){
+      const v=it[campo];
+      if(v&&typeof v==='string'&&v.indexOf('data:image')===0){
+        try{ it[campo]=await _fpRemoveBg(v); }catch(_){}
+      }
+    }
+  }
+}
+
 // idx: muestra. onlyCampo (opcional): regenerar SOLO esa vista con su prompt editado.
 async function generarVistasIA(idx, onlyCampo){
   const openaiKey=getOpenAIKey();
@@ -514,37 +570,7 @@ async function generarVistasIA(idx, onlyCampo){
       c.getContext('2d').drawImage(img,0,0);
       return await new Promise(r=>c.toBlob(r,'image/png'));
     };
-    const removeBackground=async(dataUrl)=>{
-      const img=new Image();img.crossOrigin='anonymous';img.src=dataUrl;
-      await new Promise(r=>{img.onload=r;img.onerror=r;});
-      const w=img.naturalWidth||1024,h=img.naturalHeight||1024;
-      const c=document.createElement('canvas');c.width=w;c.height=h;
-      const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
-      const id=ctx.getImageData(0,0,w,h);const d=id.data;
-      // sample background from 4 corners and average
-      const corners=[0,(w-1)*4,(h-1)*w*4,((h-1)*w+(w-1))*4];
-      let bgR=0,bgG=0,bgB=0;
-      corners.forEach(i=>{bgR+=d[i];bgG+=d[i+1];bgB+=d[i+2];});
-      bgR=Math.round(bgR/4);bgG=Math.round(bgG/4);bgB=Math.round(bgB/4);
-      const thresh=40;
-      const isBg=(i)=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB)<thresh*3;
-      const visited=new Uint8Array(w*h);
-      const queue=[];
-      // seed BFS from all 4 edges
-      for(let x=0;x<w;x++){[x,x+(h-1)*w].forEach(p=>{if(!visited[p]&&isBg(p*4)){visited[p]=1;queue.push(p);}});}
-      for(let y=1;y<h-1;y++){[y*w,y*w+(w-1)].forEach(p=>{if(!visited[p]&&isBg(p*4)){visited[p]=1;queue.push(p);}});}
-      let qi=0;
-      while(qi<queue.length){
-        const p=queue[qi++];const pi=p*4;d[pi+3]=0;
-        const x=p%w,y=Math.floor(p/w);
-        if(x>0){const n=p-1;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
-        if(x<w-1){const n=p+1;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
-        if(y>0){const n=p-w;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
-        if(y<h-1){const n=p+w;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
-      }
-      ctx.putImageData(id,0,0);
-      return c.toDataURL('image/png');
-    };
+    const removeBackground=_fpRemoveBg;
     // Show shimmer on all 3 placeholders before starting
     views.forEach(v=>{
       const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
@@ -657,12 +683,19 @@ function removeFPItem(idx){
 function handleFPImage(evt,idx,campo){
   const file=evt.target.files[0];if(!file) return;
   const reader=new FileReader();
-  reader.onload=e=>{
-    _fpItems[idx][campo]=e.target.result;
+  reader.onload=async e=>{
+    const data=e.target.result;
     const prev=document.getElementById(`fpi-${idx}-${campo}`);
-    if(prev){prev.src=e.target.result;prev.style.display='block';}
     const ph=document.getElementById(`fpp-${idx}-${campo}`);
+    // Mostrar de inmediato
+    _fpItems[idx][campo]=data;
+    if(prev){prev.src=data;prev.style.display='block';}
     if(ph) ph.style.display='none';
+    // Quitar el fondo liso (negro/blanco) para que no salga con recuadro en la ficha
+    try{
+      const cleaned=await _fpRemoveBg(data);
+      if(cleaned&&cleaned!==data){_fpItems[idx][campo]=cleaned;if(prev)prev.src=cleaned;}
+    }catch(_){}
   };
   reader.readAsDataURL(file);
 }
@@ -730,7 +763,7 @@ function renderFPItems(){
               <div>
                 <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:6px 4px;border-radius:8px 8px 0 0;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase">${l}</div>
                 <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
-                  <img loading="lazy" decoding="async" id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:var(--surface);display:${item[c]?'block':'none'}">
+                  <img loading="lazy" decoding="async" id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:#fff;display:${item[c]?'block':'none'}">
                   <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;color:var(--text3)">
                     <span style="font-size:22px">📷</span>
                     <span style="font-size:9px;font-weight:600">Subir foto</span>

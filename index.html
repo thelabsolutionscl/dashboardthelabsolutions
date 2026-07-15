@@ -9384,10 +9384,10 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e
 .pagina:last-child{page-break-after:avoid;}
 /* Portada */
 .portada-top{background:#111;padding:24px 36px;display:flex;justify-content:space-between;align-items:flex-start;min-height:140px;}
-.fp-eyebrow{font-size:20px;font-weight:800;letter-spacing:5px;text-transform:uppercase;color:rgba(255,255,255,0.72);margin-bottom:12px;}
+.fp-eyebrow{font-size:20px;font-weight:800;letter-spacing:5px;text-transform:uppercase;color:#fff;margin-bottom:12px;}
 .fp-num{font-size:56px;font-weight:900;color:#00c8cc;line-height:1;letter-spacing:-3px;}
-.fp-contact{font-size:12px;color:rgba(255,255,255,0.5);letter-spacing:.6px;margin-top:12px;}
-.portada-lab-logo{height:62px;object-fit:contain;max-width:150px;margin-top:2px;}
+.fp-contact{font-size:12px;color:#fff;letter-spacing:.6px;margin-top:12px;}
+.portada-lab-logo{height:92px;object-fit:contain;max-width:220px;margin-top:0;}
 .portada-client-band{background:#00c8cc;padding:14px 36px;}
 .band-eyebrow{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(0,0,0,0.45);margin-bottom:3px;}
 .band-name{font-size:26px;font-weight:900;color:#fff;letter-spacing:-0.3px;line-height:1.1;}
@@ -9427,7 +9427,7 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e
 .photos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;align-content:start;}
 .fbox{display:flex;flex-direction:column;}
 .flbl{font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#fff;text-align:center;background:#00c8cc;padding:5px 4px;border-radius:4px 4px 0 0;}
-.fimg{width:100%;aspect-ratio:3/4;object-fit:contain;background:#f9f9f9;border:1px solid #eee;border-top:none;border-radius:0 0 4px 4px;}
+.fimg{width:100%;aspect-ratio:3/4;object-fit:contain;background:#fff;border:1px solid #eee;border-top:none;border-radius:0 0 4px 4px;}
 .fph{width:100%;aspect-ratio:3/4;background:#f8f8f8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:8px;color:#ccc;border:1px solid #eee;border-top:none;border-radius:0 0 4px 4px;}
 .item-footer{padding:10px 32px;border-top:2px solid #00c8cc;display:flex;justify-content:space-between;align-items:center;}
 .item-footer-text{font-size:7.5px;color:#bbb;letter-spacing:.3px;}
@@ -9439,17 +9439,23 @@ ${itemPages}
   return {html, num};
 }
 
-function generarFichaPropuesta(cotId){
-  const res=buildFichaPropuestaDoc(cotId);if(!res){toast('Cotización no encontrada','error');return;}
+async function generarFichaPropuesta(cotId){
+  // Abrir la ventana YA (dentro del gesto de click) para no gatillar el bloqueo de pop-ups
+  const win=window.open('','_blank');
+  try{ if(typeof _fpNormalizeImages==='function') await _fpNormalizeImages(); }catch(_){}
+  const res=buildFichaPropuestaDoc(cotId);
+  if(!res){toast('Cotización no encontrada','error');if(win)win.close();return;}
   const blob=new Blob([res.html],{type:'text/html;charset=utf-8'});
   const url=URL.createObjectURL(blob);
-  const win=window.open(url,'_blank');
-  if(!win) toast('Permite ventanas emergentes','error');
+  if(win){win.location.href=url;}else{toast('Permite ventanas emergentes','error');}
   setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
-function descargarFichaPropuesta(cotId){
-  const res=buildFichaPropuestaDoc(cotId);if(!res){toast('Cotización no encontrada','error');return;}
+async function descargarFichaPropuesta(cotId){
+  const win=window.open('','_blank');
+  try{ if(typeof _fpNormalizeImages==='function') await _fpNormalizeImages(); }catch(_){}
+  const res=buildFichaPropuestaDoc(cotId);
+  if(!res){toast('Cotización no encontrada','error');if(win)win.close();return;}
   const htmlWithPrint=res.html.replace('</body></html>',`<script>
 window.onload=function(){
   var imgs=document.querySelectorAll('img');
@@ -9464,8 +9470,7 @@ window.onload=function(){
 <\/script></body></html>`);
   const blob=new Blob([htmlWithPrint],{type:'text/html;charset=utf-8'});
   const url=URL.createObjectURL(blob);
-  const win=window.open(url,'_blank');
-  if(!win){toast('Permite ventanas emergentes','error');return;}
+  if(win){win.location.href=url;}else{toast('Permite ventanas emergentes','error');return;}
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 
