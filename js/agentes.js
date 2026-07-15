@@ -66,6 +66,15 @@ async function marcarReactivado(cliId,via){
     if(String(e.message||'').toLowerCase().includes('unknown')){try{ensureClienteReactivadoFields();}catch(_){}}
   }
 }
+// Quita a mano la marca de Reactivado de un cliente/lead (clic en el badge).
+async function quitarReactivado(cliId){
+  const c=state.clientes&&state.clientes.find(x=>x.id===cliId); if(!c) return;
+  if(!confirm('¿Quitar la marca de Reactivado de '+(c.fields['Empresa']||'este cliente')+'?')) return;
+  c.fields['Reactivado']=false; c.fields['Fecha reactivación']=null;   // optimista en local
+  try{if(typeof renderClientes==='function') renderClientes(true);}catch(e){}
+  try{toast('Marca de Reactivado quitada','info');}catch(e){}
+  try{await airtableWrite('Clientes','PATCH',cliId,{'Reactivado':false,'Fecha reactivación':null});}catch(e){}
+}
 async function ensureClienteReactivadoFields(){
   try{
     const t=(typeof getToken==='function'?getToken():'')||'';

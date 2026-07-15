@@ -7849,6 +7849,9 @@ window.addEventListener('scroll',function(e){
   _closeAllActMenus();
 },true);
 window.addEventListener('resize',_closeAllActMenus);
+// Días que se muestra el badge "♻ Reactivado" tras el último mensaje; pasado ese
+// tiempo se apaga solo (el dato queda en Airtable, solo deja de destacarse).
+const REACTIVADO_DIAS=30;
 function buildClienteRow(c){
   const f=c.fields,val=Math.max(0,Math.min(5,parseInt(f['Valoración cliente'])||0));
   const tel=f['Teléfono']||'';
@@ -7861,7 +7864,8 @@ function buildClienteRow(c){
   const scoreChip=_score>0?`<span class="badge ${_score>=70?'badge-orange':_score>=40?'badge-yellow':'badge-gray'}" style="font-size:9px" title="Lead Score IA: ${_score}/100 — potencial ${_score>=70?'alto':_score>=40?'medio':'bajo'}">${_score>=70?'🔥':_score>=40?'⚡':'❄'} ${_score}</span>`:'';
   const _sil=!esLead?_cliSilencioDias(c):null;
   const silChip=(_sil!=null&&_sil>=60)?`<span class="badge ${_sil>=90?'badge-red':'badge-orange'}" style="font-size:9px;cursor:pointer" title="Sin cotizaciones ni pedidos hace ${_sil} días — clic para reconectar con IA" onclick="event.stopPropagation();runClienteWinbackAgent('${c.id}')">😴 ${_sil}d</span>`:'';
-  const reactChip=f['Reactivado']?`<span class="badge badge-green" style="font-size:9px" title="Reactivado${f['Fecha reactivación']?' el '+escapeHtml(String(f['Fecha reactivación'])):''} — ya se le envió un mensaje desde un agente">♻ Reactivado</span>`:'';
+  const _reactDias=(f['Reactivado']&&f['Fecha reactivación'])?Math.floor((Date.now()-new Date(f['Fecha reactivación']+'T00:00:00'))/864e5):(f['Reactivado']?0:null);
+  const reactChip=(f['Reactivado']&&(_reactDias==null||_reactDias<=REACTIVADO_DIAS))?`<span class="badge badge-green" style="font-size:9px;cursor:pointer" title="Reactivado${f['Fecha reactivación']?' el '+escapeHtml(String(f['Fecha reactivación']))+' ('+_reactDias+'d)':''} — clic para quitar la marca" onclick="event.stopPropagation();quitarReactivado('${c.id}')">♻ Reactivado</span>`:'';
   const validarItem=esLead
     ?`<button class="act-item act-item-green" onclick="validarCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check"/></svg> &nbsp;✅ Validar como cliente</button>`
     :`<button class="act-item" onclick="revertirALead('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;↩ Volver a lead</button>`;
