@@ -59,16 +59,17 @@ const MAIL={
   },
 
   // ── FRENO DE ENVÍOS ────────────────────────────────────────────
-  // El hosting suspende la casilla si se excede su tope de correos/hora (ya
-  // pasó una vez). Ventana móvil de 60 min compartida por TODOS los flujos
-  // (manual, agentes IA, cobranza, reportes) y todas las casillas: al llegar
-  // al límite, el envío se bloquea con un aviso claro en vez de arriesgar
-  // otra suspensión. Límite por defecto 50/hora, ajustable con el botón 🛡.
+  // Ahora el envío sale por Resend, así que ya NO hay riesgo de que el hosting
+  // suspenda la casilla. El freno queda solo como red de seguridad contra
+  // envíos masivos accidentales (p. ej. un bucle) y para no rozar los límites
+  // de tu plan de Resend. Ventana móvil de 60 min compartida por TODOS los
+  // flujos (manual, agentes IA, cobranza, reportes) y todas las casillas.
+  // Tope por defecto 200/hora, ajustable con el botón 🛡.
   _SEND_LIMIT_KEY:'thelab_mail_hourly_limit',
   _SEND_LOG_KEY:'thelab_mail_send_ts',
-  hourlyLimit(){const v=parseInt(localStorage.getItem(this._SEND_LIMIT_KEY));return v>0?v:50;},
+  hourlyLimit(){const v=parseInt(localStorage.getItem(this._SEND_LIMIT_KEY));return v>0?v:200;},
   setHourlyLimit(){
-    const v=prompt('Freno de envíos: máximo de correos por hora.\nTu hosting suspende la casilla si se excede su tope — pregúntales el límite del plan y deja esto por debajo.',String(this.hourlyLimit()));
+    const v=prompt('Freno de envíos: máximo de correos por hora (red de seguridad contra envíos masivos accidentales).\nAhora envías por Resend, así que puedes dejarlo alto; ajústalo según el límite de tu plan de Resend.',String(this.hourlyLimit()));
     if(v===null) return;
     const n=parseInt(v);
     if(!(n>0)){toast('Debe ser un número mayor a 0','error');return;}
