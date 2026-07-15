@@ -4696,6 +4696,15 @@ function _reportarResultados(muts) {
 </div>
 
 
+<div class="tab-panel" id="tab-inventario">
+  <div class="section-header"><div><div class="section-title">Inventario de materiales</div><div class="section-desc">Stock de insumos (filamento, planchas, resina, vinilo…). Cuando un material baja de su punto de reorden, aparece en las alertas del sistema.</div></div><button class="btn btn-primary btn-sm" onclick="addMaterial()">＋ Material</button></div>
+  <div id="invReordenCard"></div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Materiales <span class="badge badge-gray" id="invCount">0</span></span><button class="btn btn-ghost btn-sm" onclick="loadInventario(true)" title="Recargar">↻</button></div>
+    <div class="table-wrap"><table><thead><tr><th style="min-width:160px">Material</th><th>Stock</th><th>Unidad</th><th>Reorden</th><th>Estado</th><th></th></tr></thead><tbody id="inventarioTableBody"></tbody></table></div>
+  </div>
+</div>
+
 <div class="footer"><div class="footer-inner">
   <div style="display:flex;align-items:center;gap:10px"><img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab.png" style="height:14px;opacity:0.4;mix-blend-mode:screen"><span class="footer-text">v5.1 · Centro de Comando</span></div>
   <div style="display:flex;gap:8px;align-items:center"><span class="footer-text">Atajos:</span><kbd>1-8</kbd><span class="footer-text">tabs</span><kbd>Ctrl+R</kbd><span class="footer-text">refresh</span></div>
@@ -4853,15 +4862,6 @@ function _reportarResultados(muts) {
 </div>
 
 <!-- INVENTARIO DE MATERIALES -->
-<div class="tab-panel" id="tab-inventario">
-  <div class="section-header"><div><div class="section-title">Inventario de materiales</div><div class="section-desc">Stock de insumos (filamento, planchas, resina, vinilo…). Cuando un material baja de su punto de reorden, aparece en las alertas del sistema.</div></div><button class="btn btn-primary btn-sm" onclick="addMaterial()">＋ Material</button></div>
-  <div id="invReordenCard"></div>
-  <div class="card">
-    <div class="card-header"><span class="card-title">Materiales <span class="badge badge-gray" id="invCount">0</span></span><button class="btn btn-ghost btn-sm" onclick="loadInventario(true)" title="Recargar">↻</button></div>
-    <div class="table-wrap"><table><thead><tr><th style="min-width:160px">Material</th><th>Stock</th><th>Unidad</th><th>Reorden</th><th>Estado</th><th></th></tr></thead><tbody id="inventarioTableBody"></tbody></table></div>
-  </div>
-</div>
-
 <div id="metaModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeMetaModal()"></div>
   <div class="modal-card" style="max-width:400px">
