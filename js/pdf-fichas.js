@@ -445,17 +445,34 @@ function _openaiFetch(path,{method='POST',body=null,isForm=false,directKey=null}
 // ¿Hay CÓMO llamar a OpenAI? (proxy configurado O key local) — las compuertas IA
 // deben preguntar esto, no si hay una key en el navegador.
 function _openaiAvailable(){return !!(getOpenAIKey()||(typeof _proxyCfg==='function'&&_proxyCfg()));}
-async function generarVistasIA(idx){
+
+// Config de las 3 vistas: el prompt es EDITABLE por muestra (si una sale mal se
+// puede afinar y regenerar solo esa). El default está aquí; el editado se guarda
+// en _fpItems[idx].prompts[campo].
+const FP_VIEWS=[
+  {campo:'imgFrontal',label:'FRONTAL',prompt:'front view centered eye level'},
+  {campo:'imgIsometrica',label:'ISOMÉTRICA',prompt:'isometric 45-degree angle view'},
+  {campo:'imgAerea',label:'LATERAL',prompt:'side profile view, 90-degree lateral angle from the right side, camera at eye level showing the full side of the product'}
+];
+function _fpDefaultPrompt(campo){const v=FP_VIEWS.find(x=>x.campo===campo);return v?v.prompt:'';}
+function _fpGetPrompt(idx,campo){return (_fpItems[idx]&&_fpItems[idx].prompts&&_fpItems[idx].prompts[campo])||_fpDefaultPrompt(campo);}
+function _fpSetPrompt(idx,campo,val){if(!_fpItems[idx])return;if(!_fpItems[idx].prompts)_fpItems[idx].prompts={};_fpItems[idx].prompts[campo]=val;}
+
+// idx: muestra. onlyCampo (opcional): regenerar SOLO esa vista con su prompt editado.
+async function generarVistasIA(idx, onlyCampo){
   const openaiKey=getOpenAIKey();
   const aiOk=_openaiAvailable();
   const rawImg=_fpRawImages[idx];
   const statusEl=document.getElementById('fpAiStatus-'+idx);
   const setStatus=msg=>{if(statusEl){statusEl.style.display='block';statusEl.innerHTML=msg;}};
-  const btn=document.getElementById('fpGenBtn-'+idx);
+  const btn=document.getElementById(onlyCampo?('fpRegenBtn-'+idx+'-'+onlyCampo):('fpGenBtn-'+idx));
+  const _btnOrig=onlyCampo?'🔄 Regenerar':'✨ Generar 3 vistas';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
-    let descripcion='';
-    if(rawImg&&aiOk){
+    // Descripción del producto (para el fallback de texto): se cachea por muestra,
+    // así al regenerar UNA vista no se vuelve a llamar a GPT-4o.
+    let descripcion=(_fpItems[idx]&&_fpItems[idx]._descripcion)||'';
+    if(!descripcion&&rawImg&&aiOk){
       setStatus('🔍 Analizando imagen con GPT-4o...');
       try{
         const visionRes=await _openaiFetch('/v1/chat/completions',{
@@ -473,11 +490,10 @@ async function generarVistasIA(idx){
       descripcion=(item.nombre||'product')+(item.tipo?' '+item.tipo:'');
     }
     descripcion=descripcion.slice(0,150);
-    const views=[
-      {campo:'imgFrontal',label:'FRONTAL',prompt:'front view centered eye level'},
-      {campo:'imgIsometrica',label:'ISOMÉTRICA',prompt:'isometric 45-degree angle view'},
-      {campo:'imgAerea',label:'LATERAL',prompt:'side profile view, 90-degree lateral angle from the right side, camera at eye level showing the full side of the product'}
-    ];
+    if(_fpItems[idx]) _fpItems[idx]._descripcion=descripcion;   // cache
+    // Vistas con el prompt EDITABLE de cada una; si onlyCampo, solo esa.
+    const views=FP_VIEWS.map(v=>({campo:v.campo,label:v.label,prompt:_fpGetPrompt(idx,v.campo)}))
+      .filter(v=>!onlyCampo||v.campo===onlyCampo);
     const genImgCanvas=(label,nombre)=>{
       const c=document.createElement('canvas');c.width=512;c.height=512;
       const x=c.getContext('2d');
@@ -624,7 +640,7 @@ async function generarVistasIA(idx){
     setStatus('❌ '+e.message);
     toast('Error IA: '+e.message,'error');
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='✨ Generar 3 vistas';}
+    if(btn){btn.disabled=false;btn.textContent=_btnOrig;}
   }
 }
 
@@ -721,6 +737,8 @@ function renderFPItems(){
                   </div>
                   <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${c}')">
                 </label>
+                <textarea class="field-input" rows="2" title="Prompt de la IA para esta vista — edítalo si la vista sale mal y regenera solo esta" placeholder="Prompt de esta vista (ángulo/indicaciones para la IA)" oninput="_fpSetPrompt(${idx},'${c}',this.value)" style="width:100%;font-size:9px;margin-top:6px;resize:vertical;line-height:1.4">${escapeHtml(_fpGetPrompt(idx,c))}</textarea>
+                <button class="btn btn-ghost btn-sm" id="fpRegenBtn-${idx}-${c}" onclick="generarVistasIA(${idx},'${c}')" style="width:100%;margin-top:4px;font-size:10px;padding:6px" title="Regenerar solo esta vista con el prompt de arriba">🔄 Regenerar</button>
               </div>`).join('')}
           </div>
           <div style="font-size:9px;color:var(--text3);margin-top:6px">Las fotos se guardan localmente en este navegador al guardar la ficha.</div>
