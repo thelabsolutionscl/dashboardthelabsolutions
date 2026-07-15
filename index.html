@@ -9002,9 +9002,24 @@ async function toggleUrgenciaCotizacion(id){
 }
 // ¿La cotización ya tiene un pedido creado? Evita duplicar cuando aprueban por
 // el portal y también desde el dashboard, o si se pulsa dos veces el botón.
-function _pedidoDeCot(numCot){
-  if(!numCot) return null;
-  return (state.pedidos||[]).find(p=>String(p.fields['N° Cotización']||'')===String(numCot))||null;
+// Devuelve el pedido asociado a una cotización, o null. Recibe el registro de la
+// cotización (no el número). Match: (1) el pedido enlaza la cotización por el campo
+// link "Cotizaciones"; (2) respaldo para pedidos antiguos sin ese link → mismo
+// cliente y mismo monto total. (La tabla Pedidos no tiene un campo "N° Cotización".)
+function _pedidoDeCot(cot){
+  if(!cot||!cot.id) return null;
+  const cotId=cot.id;
+  const cli=Array.isArray(cot.fields['Cliente'])?cot.fields['Cliente'][0]:null;
+  const total=Number(cot.fields['Total final (CLP)']||0);
+  return (state.pedidos||[]).find(p=>{
+    const pf=p.fields||{};
+    if(Array.isArray(pf['Cotizaciones'])&&pf['Cotizaciones'].includes(cotId)) return true;
+    if(cli&&total>0){
+      const pCli=Array.isArray(pf['Cliente'])?pf['Cliente'][0]:null;
+      if(pCli===cli&&Number(pf['Monto total (CLP)']||0)===total) return true;
+    }
+    return false;
+  })||null;
 }
 async function ensurePedidoCotField(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
@@ -9020,7 +9035,7 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   const cot=state.cotizacionesById[cotId];if(!cot) return false;const f=cot.fields;
   const numCot=f['N° Cotización']||'';
   // Guard anti-duplicado: si ya existe un pedido para esta cotización, no crear otro.
-  const existente=_pedidoDeCot(numCot);
+  const existente=_pedidoDeCot(cot);
   if(existente){ if(!opts.silent) toast(`Esta cotización ya tiene el pedido ${existente.fields['N° Pedido']||''}`,'info'); return false; }
   const year=new Date().getFullYear();let maxNum=0;state.pedidos.forEach(p=>{const m=(p.fields['N° Pedido']||'').toString().match(new RegExp(`PED-${year}-(\\d+)`));if(m) maxNum=Math.max(maxNum,parseInt(m[1]));});
   const numPedido=`PED-${year}-${String(maxNum+1).padStart(3,'0')}`;
@@ -9028,15 +9043,14 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   if(Array.isArray(f['Cliente'])&&f['Cliente'].length>0) fields['Cliente']=f['Cliente'];
   if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
   if(f['Vendedor']) fields['Vendedor']=f['Vendedor'];
-  if(numCot) fields['N° Cotización']=numCot;                              // backlink cotización→pedido
+  fields['Cotizaciones']=[cotId];                                        // link real cotización→pedido
   if(f['Detalle productos']) fields['Detalle productos']=f['Detalle productos'];
   if(f['Tiempo de producción']) fields['Tiempo de producción']=f['Tiempo de producción'];
   if(f['Tipo días producción']) fields['Tipo días producción']=f['Tipo días producción'];
   const solicitudCot=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';
-  if(numCot){try{await ensurePedidoCotField();}catch(e){}}   // asegura el campo backlink
   // Reintento tolerante: si Airtable rechaza por un campo desconocido, reintenta
   // dejando solo los campos base garantizados (no perder el pedido por un campo nuevo).
-  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)']};
+  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)'],'Cotizaciones':[cotId]};
   if(fields['Cliente']) base['Cliente']=fields['Cliente'];
   try{
     await airtableWrite('Pedidos','POST',null,fields);
@@ -9057,7 +9071,7 @@ function _cotAprobadasSinPedido(){
   return (state.cotizaciones||[]).filter(c=>{
     const est=c.fields['Estado cotización']||'';
     if(est!=='Aprobada') return false;
-    return !_pedidoDeCot(c.fields['N° Cotización']||'');
+    return !_pedidoDeCot(c);
   }).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));
 }
 function renderCotToOrderTray(){
