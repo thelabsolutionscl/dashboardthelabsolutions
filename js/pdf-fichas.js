@@ -342,11 +342,12 @@ function openFichaPropModal(cotId){
     _fpItems=lineas.map(l=>{const p=l.split('|').map(s=>s.trim());return{nombre:p[0]||'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''};});
     if(!_fpItems.length) _fpItems=[{nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''}];
   }
-  _fpLogoCliente='';
+  _fpLogoCliente=saved.logoCliente||'';
   _fpRawImages={};
   loadFPImgCache(cotId);
-  const lp=document.getElementById('fpLogoPrev');if(lp){lp.src='';lp.style.display='none';}
-  const lph=document.getElementById('fpLogoPh');if(lph) lph.style.display='flex';
+  const lp=document.getElementById('fpLogoPrev'),lph=document.getElementById('fpLogoPh');
+  if(_fpLogoCliente){if(lp){lp.src=_fpLogoCliente;lp.style.display='block';}if(lph) lph.style.display='none';}
+  else{if(lp){lp.src='';lp.style.display='none';}if(lph) lph.style.display='flex';}
   renderFPItems();
   document.getElementById('fichaPropModal').style.display='flex';
   // Restore Drive button state if folder already exists
@@ -411,9 +412,24 @@ function handleFPLogo(evt){
   const file=evt.target.files[0];if(!file) return;
   const reader=new FileReader();
   reader.onload=e=>{
-    _fpLogoCliente=e.target.result;
-    const prev=document.getElementById('fpLogoPrev');if(prev){prev.src=e.target.result;prev.style.display='block';}
-    const ph=document.getElementById('fpLogoPh');if(ph) ph.style.display='none';
+    const setLogo=(dataUrl)=>{
+      _fpLogoCliente=dataUrl;
+      const prev=document.getElementById('fpLogoPrev');if(prev){prev.src=dataUrl;prev.style.display='block';}
+      const ph=document.getElementById('fpLogoPh');if(ph) ph.style.display='none';
+    };
+    // Reducir el logo para que quepa en el JSON de la ficha (Airtable) sin pesar de más.
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const max=360;let w=img.naturalWidth||max,h=img.naturalHeight||max;
+        if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}
+        const c=document.createElement('canvas');c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        setLogo(c.toDataURL('image/png'));
+      }catch(_){setLogo(e.target.result);}
+    };
+    img.onerror=()=>setLogo(e.target.result);
+    img.src=e.target.result;
   };
   reader.readAsDataURL(file);
 }

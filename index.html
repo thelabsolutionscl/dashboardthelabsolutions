@@ -9252,6 +9252,7 @@ async function saveFichaPropModal(verPDF=false){
   const data={
     numFicha:document.getElementById('fpNumFicha').value||'01',
     nombreProyecto:document.getElementById('fpNombreProyecto').value||'',
+    logoCliente:_fpLogoCliente||'',
     items:_fpItems.map(it=>({nombre:it.nombre,tipo:it.tipo,material:it.material,optLabel:it.optLabel,optMaterial:it.optMaterial,dims:it.dims})),
     updatedAt:new Date().toISOString().slice(0,10)
   };
@@ -9341,13 +9342,12 @@ function buildFichaPropuestaDoc(cotId){
     const optMatLines=(item.optMaterial||'').split('\n').filter(Boolean);
     return `<div class="pagina">
       <div class="item-header">
-        <div class="item-breadcrumb">${escH(proyecto)} — ${escH(cliente)}</div>
+        <div class="item-header-left"><div class="muestra-badge">MUESTRA ${idx+1}</div><div class="item-breadcrumb">${escH(proyecto)} — ${escH(cliente)}</div></div>
         <div class="item-ficha-ref">FICHA TÉCNICA · N° ${escH(numFicha)}</div>
       </div>
       <div class="item-body">
         <div class="item-left">
         <div class="item-title-row">
-          <div class="muestra-badge">MUESTRA ${idx+1}</div>
           <div class="item-product-name">${escH(item.nombre||('PRODUCTO '+(idx+1)))}</div>
         </div>
         <div class="material-section">
@@ -9401,18 +9401,19 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e
 .cover-img{object-fit:contain;max-height:340px;height:auto;width:auto;}
 .cover-no-img{color:#ccc;font-size:11px;text-align:center;}
 .portada-footer{padding:18px 36px;border-top:4px solid #00c8cc;display:flex;justify-content:flex-start;align-items:center;background:#fff;min-height:56px;}
-.portada-footer-logo{height:26px;object-fit:contain;filter:brightness(0);margin-left:auto;}
+.portada-footer-logo{height:20px;object-fit:contain;filter:brightness(0);margin-left:auto;}
 .client-logo{height:36px;max-width:160px;object-fit:contain;}
 .footer-lab-logo{height:18px;object-fit:contain;opacity:.85;filter:brightness(0);}
 .footer-contact{font-size:7px;color:#aaa;letter-spacing:.3px;text-align:right;line-height:1.6;}
 /* Páginas de ítem */
 .item-header{display:flex;justify-content:space-between;align-items:center;padding:9px 32px;background:#f5f5f5;border-bottom:3px solid #00c8cc;}
+.item-header-left{display:flex;align-items:center;gap:12px;min-width:0;}
 .item-breadcrumb{font-size:12px;color:#777;letter-spacing:.5px;text-transform:uppercase;font-style:italic;}
 .item-ficha-ref{font-size:13px;font-weight:700;color:#1a1a1a;letter-spacing:1px;text-transform:uppercase;}
 .item-body{flex:1;padding:18px 30px;display:flex;flex-direction:row;gap:22px;align-items:stretch;}
 .item-left{flex:0 0 31%;display:flex;flex-direction:column;gap:16px;min-width:0;}
 .item-right{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;}
-.item-title-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.item-title-row{display:flex;align-items:flex-end;gap:12px;min-height:36px;}
 .muestra-badge{background:#111;color:#00c8cc;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:6px 14px;border-radius:2px;flex-shrink:0;}
 .item-product-name{font-size:22px;font-weight:900;color:#1a1a1a;text-transform:uppercase;letter-spacing:-.3px;flex:1;line-height:1.1;}
 .dims-block{display:flex;flex-direction:column;gap:6px;align-items:flex-start;margin-top:2px;}
@@ -9427,8 +9428,8 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#e0e
 .mat-line{font-size:13px;font-weight:700;color:#1a1a1a;line-height:1.85;padding-left:14px;position:relative;}
 .mat-line::before{content:'›';position:absolute;left:2px;color:#00c8cc;font-weight:900;}
 /* Fotos */
-.photos-section{display:flex;flex-direction:column;gap:8px;flex:1;}
-.photos-label{font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#bbb;}
+.photos-section{display:flex;flex-direction:column;gap:16px;flex:1;}
+.photos-label{font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#bbb;text-align:center;min-height:36px;display:flex;align-items:flex-end;justify-content:center;}
 .photos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;align-content:start;}
 .fbox{display:flex;flex-direction:column;}
 .flbl{font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#fff;text-align:center;background:#00c8cc;padding:8px 4px;border-radius:4px 4px 0 0;}
