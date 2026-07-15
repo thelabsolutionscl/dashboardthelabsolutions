@@ -1,0 +1,21 @@
+# dashboard.thelab.solutions
+# Este subdominio aloja el panel interno de The Lab Solutions (Centro de Comando),
+# no contenido público. El panel va con <meta name="robots" content="noindex">.
+# Aquí bloqueamos además el crawleo de código y assets internos para que no
+# generen "páginas" basura ni ruido en las auditorías SEO del dominio.
+
+User-agent: *
+Disallow: /js/
+Disallow: /airtable-proxy/
+Disallow: /lead-worker/
+Disallow: /sii-worker/
+Disallow: /printer-bridge/
+Disallow: /desktop-app/
+Disallow: /scripts/
+Disallow: /docs/
+Disallow: /icons/
+Disallow: /avatars/
+Disallow: /tests/
+
+# Página pública de captación de leads: sí se puede indexar.
+Allow: /cotiza.html
