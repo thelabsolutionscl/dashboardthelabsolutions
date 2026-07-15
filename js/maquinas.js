@@ -706,11 +706,24 @@ async function audit3DAll(){
   return res;
 }
 function _audit3DDot(sev){return sev===0?'var(--accent3)':sev===1?'var(--danger)':'var(--warn)';}
-async function audit3DRun(){
-  const el=document.getElementById('audit3DResult');if(el)el.innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div> Auditando impresoras…</div>';
+async function audit3DRun(silent){
+  const el=document.getElementById('audit3DResult');if(el&&!silent)el.innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div> Auditando impresoras…</div>';
   audit3DRenderResult(await audit3DAll());
   try{audit3DLoadDaily();}catch(_){}
 }
+// El panel de auditoría es un snapshot: antes, tras Home/calibrar se quedaba con
+// el dato viejo (p.ej. "Sin home") hasta apretar "Auditar ahora". Ahora la propia
+// acción re-audita en silencio (sin el spinner) en varios momentos, para reflejar
+// el estado nuevo a medida que la máquina termina el home/nivelación.
+let _audit3DBurstTimers=[];
+function _audit3DRefreshBurst(delays){
+  _audit3DBurstTimers.forEach(t=>clearTimeout(t));_audit3DBurstTimers=[];
+  (delays||[8000]).forEach(d=>_audit3DBurstTimers.push(setTimeout(()=>{
+    const el=document.getElementById('audit3DResult');
+    if(el&&el.innerHTML.trim()&&document.getElementById('tab-maquinas')?.classList.contains('active'))audit3DRun(true);
+  },d)));
+}
+function audit3DHome(id){printerHome(id);_audit3DRefreshBurst([7000,12000]);}
 function audit3DRenderResult(res){
   const el=document.getElementById('audit3DResult');if(!el)return;
   if(!res.length){el.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Sin impresoras con IP configurada. Configura las IPs en cada tarjeta del monitor.</div>';return;}
@@ -720,7 +733,7 @@ function audit3DRenderResult(res){
     const stCol=a.errored?'var(--danger)':a.busy?'var(--accent)':(a.state==='offline'||a.state==='noip')?'var(--text3)':'var(--success)';
     const stTxt=a.errored?'⚠ Detenida (Klipper)':a.busy?'🖨 Imprimiendo':a.state==='offline'?'⚫ Offline':a.state==='noip'?'Sin IP':'✓ Lista';
     const issues=(a.issues||[]).map(i=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)"><span style="width:6px;height:6px;border-radius:50%;background:${_audit3DDot(i.sev)};flex-shrink:0"></span>${escapeHtml(i.txt)}</div>`).join('');
-    const acts=(a.actions||[]).map(ac=>{const fn=ac.key==='firmware'?`printerFirmwareRestart('${a.id}')`:ac.key==='home'?`printerHome('${a.id}')`:`audit3DCalibrate('${a.id}')`;return `<button class="btn btn-ghost btn-sm" onclick="${fn}" style="font-size:10px">${escapeHtml(ac.txt)}</button>`;}).join('');
+    const acts=(a.actions||[]).map(ac=>{const fn=ac.key==='firmware'?`printerFirmwareRestart('${a.id}')`:ac.key==='home'?`audit3DHome('${a.id}')`:`audit3DCalibrate('${a.id}')`;return `<button class="btn btn-ghost btn-sm" onclick="${fn}" style="font-size:10px">${escapeHtml(ac.txt)}</button>`;}).join('');
     return `<div style="padding:11px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--surface2)">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px">
         <b style="font-size:12px">${escapeHtml(a.nombre)} <span style="color:var(--text3)">#${a.numG}</span></b>
@@ -737,6 +750,7 @@ async function audit3DCalibrate(id){
   if(_isPrinterBusy(_pcState(id))){toast('🔒 Está imprimiendo — no se calibra','error');return;}
   if(!confirm(`📐 Calibrar bed mesh en ${m.nombre} #${m.numG}?\n\nHará home + nivelación de cama (1-2 min). Asegúrate de que la cama esté despejada.`))return;
   _sendGcode(id,'G28\nBED_MESH_CALIBRATE','📐 Calibrando bed mesh… (1-2 min)',{timeout:180000});
+  _audit3DRefreshBurst([8000,60000,95000,140000]);
 }
 async function audit3DCalibrateAll(){
   const free=(typeof MAQUINAS!=='undefined'?MAQUINAS:[]).filter(m=>getPrinterIp(m)&&!_isPrinterBusy(_pcState(m.id))&&_pcState(m.id)!=='offline'&&_pcState(m.id)!=='shutdown');
@@ -744,6 +758,7 @@ async function audit3DCalibrateAll(){
   if(!confirm(`📐 Lanzar bed mesh en ${free.length} impresora(s) libre(s)?\n\n${free.map(m=>m.nombre+' #'+m.numG).join(', ')}\n\nCada una hace home + nivelación. No toca las que estén imprimiendo.`))return;
   free.forEach(m=>_sendGcode(m.id,'G28\nBED_MESH_CALIBRATE',null,{timeout:180000}));
   toast(`📐 Calibración lanzada en ${free.length} impresora(s)`,'success');
+  _audit3DRefreshBurst([8000,60000,95000,140000]);
 }
 async function audit3DReport(){
   const out=document.getElementById('audit3DAiOut');if(out){out.style.display='block';out.textContent='🧠 Analizando el estado del parque…';}
