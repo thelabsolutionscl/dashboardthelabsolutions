@@ -118,6 +118,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'startOficinaPolling', 'stopOficinaPolling', 'ofLogComm', 'ofCelebrate', 'ofAgentError',
     'ofAgentDetail', 'ofSetView', 'ofSetCardFilter', 'ofSearchInput', 'ofSetChartRange',
     'ofToggleSceneTheme', 'ofToggleDensity', 'ofExport', 'ofUpdateDockBadge', '_ofApplyPrefs',
+    'agentIdentity', 'ofToggleMore', 'ofAgentDetailByLabel', 'ofFeedMore', '_ofChatMsg', '_ofTvTour',
   ];
   const probs = [];
   CRITICAL.forEach(n => {

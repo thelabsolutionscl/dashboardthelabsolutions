@@ -1545,6 +1545,13 @@
 .of-feed-chip.active{background:var(--cc,var(--accent));border-color:transparent;color:#0b0c0f;}
 .of-feed-chip.active::before{background:#0b0c0f;opacity:.5;}
 .of-feed-chip.active b{opacity:.85;}
+/* Menú "⋯ Más" del toolbar (acciones secundarias agrupadas) */
+.of-more-wrap{position:relative;}
+.of-more-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:600;min-width:160px;box-shadow:0 14px 34px -12px rgba(0,0,0,0.75);}
+.of-more-menu .btn{width:100%;justify-content:flex-start;text-align:left;}
+/* Separadores temporales del feed (Hoy / Ayer / Esta semana) */
+.of-feed-group{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);padding:9px 4px 3px;}
+.of-feed-rol{font-weight:500;color:var(--text3);font-size:10px;}
 /* Barra de filtro por estado (vista Tarjetas) — reutiliza .of-feed-chip */
 #tab-oficina .of-cardfilter{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 18px;}
 #tab-oficina .of-cardfilter:empty{display:none;}
@@ -1801,11 +1808,16 @@
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofZoom(1)" title="Acercar (o Ctrl/⌘ + rueda sobre la escena 3D · arrastra para mover · pellizca en móvil)">🔍+</button>
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
-      <button class="btn btn-ghost btn-sm" id="ofDensityBtn" onclick="ofToggleDensity()" title="Densidad de las tarjetas (cómoda / compacta)">⤢ Densidad</button>
-      <button class="btn btn-ghost btn-sm" id="ofSceneThemeBtn" onclick="ofToggleSceneTheme()" title="Tema de la escena 3D (oscuro / claro)">🌗 Escena</button>
-      <button class="btn btn-ghost btn-sm" onclick="ofExport()" title="Exportar: descarga la escena 3D (SVG) o copia el resumen de KPIs">⬇ Exportar</button>
-      <button class="btn btn-ghost btn-sm" onclick="refreshOficina()">↻ Actualizar</button>
       <button class="btn btn-ghost btn-sm" id="ofFsBtn" onclick="ofFullscreen()">📺 Pantalla completa</button>
+      <div class="of-more-wrap">
+        <button class="btn btn-ghost btn-sm" id="ofMoreBtn" aria-haspopup="true" aria-expanded="false" onclick="ofToggleMore(event)" title="Más acciones">⋯ Más</button>
+        <div class="of-more-menu" id="ofMoreMenu" style="display:none">
+          <button class="btn btn-ghost btn-sm" id="ofDensityBtn" onclick="ofToggleDensity()" title="Densidad de las tarjetas (cómoda / compacta)">⤢ Densidad</button>
+          <button class="btn btn-ghost btn-sm" id="ofSceneThemeBtn" onclick="ofToggleSceneTheme()" title="Tema de la escena 3D (oscuro / claro)">🌗 Escena</button>
+          <button class="btn btn-ghost btn-sm" onclick="ofExport()" title="Exportar: descarga la escena 3D (SVG) o copia el resumen de KPIs">⬇ Exportar</button>
+          <button class="btn btn-ghost btn-sm" onclick="refreshOficina()">↻ Actualizar</button>
+        </div>
+      </div>
     </div>
   </div>
 

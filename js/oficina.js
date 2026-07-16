@@ -58,6 +58,9 @@ function ofCelebrate(label){
 let _ofCam=null;                 // {cx,cy,scale} sobre el viewBox base; null = sin tocar
 let _ofCamVb=null;               // viewBox base con el que se guardó _ofCam (para reanclar si cambia — B7)
 let _ofFollowId=null;            // agente a centrar tras el render
+let _ofTourPts=[];               // centros de los departamentos (auto-tour del modo TV — idea 3)
+let _ofTourIdx=0;                // parada actual del tour
+let _ofTourPauseT=0;             // última interacción manual con la cámara (pausa el tour 60s)
 const _ofPos={};                 // id → [x,y] del puesto del agente (para enfocar)
 // Estado de impresora 3D → estado de oficina
 function _ofPrinterCls(estado){ const e=(estado||'').toString().toLowerCase();
@@ -171,6 +174,21 @@ function ofUpdateDockBadge(n){
   const badge=document.getElementById('badge-oficina'); if(!badge) return;
   const v=(typeof n==='number')?n:((typeof _ofActive!=='undefined'&&_ofActive.size)||0);
   if(v>0){ badge.textContent=v; badge.style.display='flex'; } else badge.style.display='none';
+}
+// ── Menú "⋯ Más" del toolbar (idea 4): agrupa Densidad/Escena/Exportar/Actualizar ──
+function ofToggleMore(e){
+  if(e) e.stopPropagation();
+  const m=document.getElementById('ofMoreMenu'), b=document.getElementById('ofMoreBtn'); if(!m) return;
+  const on=m.style.display==='none';
+  m.style.display=on?'':'none';
+  if(b) b.setAttribute('aria-expanded',on?'true':'false');
+  if(on && !document._ofMoreClose){
+    document._ofMoreClose=true;
+    document.addEventListener('click',ev=>{
+      const mm=document.getElementById('ofMoreMenu'), bb=document.getElementById('ofMoreBtn');
+      if(mm && mm.style.display!=='none' && !(ev.target&&ev.target.id==='ofMoreBtn')){ mm.style.display='none'; if(bb) bb.setAttribute('aria-expanded','false'); }
+    });
+  }
 }
 // ── Buscador de trabajadores (nombre/área/rol) en la vista Tarjetas ──
 function ofSearchInput(v){ _ofSearch=(v||'').trim().toLowerCase(); _ofReRenderCards(); }
@@ -287,7 +305,21 @@ function ofSetView(v,persist){
   renderOficina();
 }
 function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000);
-  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(!document.hidden && _ofView==='iso'){ _ofTickClock(); _ofTickLive(); } },20000);   // reloj + progreso de impresión: tic por mutación, sin reconstruir la escena
+  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(!document.hidden && _ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTvTour(); } },20000);   // reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
+}
+// ── Auto-tour del modo TV (idea 3): en pantalla completa la cámara recorre los departamentos
+// cada 20s (una parada por depto + una vista general). Cualquier interacción manual con la
+// cámara (rueda/arrastre/pinch/botones) lo pausa 60s.
+function _ofTvTour(){
+  const el=document.getElementById('tab-oficina'); if(!el) return;
+  const fs=el.classList.contains('of-fs')||((document.fullscreenElement||document.webkitFullscreenElement)===el);
+  if(!fs || !_ofTourPts.length) return;
+  if(Date.now()-_ofTourPauseT<60000) return;
+  const svg=_ofSvg(); if(!svg) return;
+  const i=(_ofTourIdx++)%(_ofTourPts.length+1);
+  if(i===_ofTourPts.length){ _ofCam=null; }                       // última parada: vista general
+  else { const p=_ofTourPts[i]; _ofCam={cx:p.x,cy:p.y-20,scale:1.9}; }
+  _ofApplyCam(svg);
 }
 function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=null; clearInterval(_ofClockTimer); _ofClockTimer=null; clearTimeout(_ofCommTimer); clearTimeout(_ofCelebTimer);
   try{ofUpdateDockBadge();}catch(e){}   // al salir, el badge cae al conteo EN VIVO de _ofActive (no queda congelado — B-C2)
@@ -395,8 +427,8 @@ function _ofApplyCam(svg){
   _ofCam.cx=cx; _ofCam.cy=cy; _ofCam.scale=s;
   svg.setAttribute('viewBox',`${(cx-w/2).toFixed(1)} ${(cy-h/2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
 }
-function ofZoom(dir){ const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; _ofCam.scale=Math.max(1,Math.min(6,_ofCam.scale*(dir>0?1.25:0.8))); _ofApplyCam(svg); }
-function ofCamReset(){ _ofCam=null; _ofFollowId=null; const svg=_ofSvg(); if(svg)_ofApplyCam(svg); }
+function ofZoom(dir){ _ofTourPauseT=Date.now(); const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; _ofCam.scale=Math.max(1,Math.min(6,_ofCam.scale*(dir>0?1.25:0.8))); _ofApplyCam(svg); }
+function ofCamReset(){ _ofTourPauseT=Date.now(); _ofCam=null; _ofFollowId=null; const svg=_ofSvg(); if(svg)_ofApplyCam(svg); }
 function ofFocusAgent(id){ _ofFollowId=id; if(_ofView!=='iso'){ ofSetView('iso',false); return; } const svg=_ofSvg(); if(svg && _ofPos[id]){ const p=_ofPos[id]; _ofCam={cx:p[0],cy:p[1]-30,scale:2.4}; _ofFollowId=null; _ofApplyCam(svg); } else renderOficina(); }
 function _ofInitCamControls(host){
   if(host._ofCamInit) return; host._ofCamInit=true;
@@ -406,14 +438,14 @@ function _ofInitCamControls(host){
     try{ const io=new IntersectionObserver(es=>{ const en=es[es.length-1]; host.classList.toggle('of-paused', en.intersectionRatio<0.04); }, {threshold:[0,0.04,0.25]}); io.observe(host); }catch(e){}
   }
   // Zoom con rueda anclado al cursor (coords reales por CTM: el punto bajo el cursor queda fijo, B6)
-  host.addEventListener('wheel',e=>{ if(!(e.ctrlKey||e.metaKey)) return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; e.preventDefault();
+  host.addEventListener('wheel',e=>{ if(!(e.ctrlKey||e.metaKey)) return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; e.preventDefault(); _ofTourPauseT=Date.now();
     if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1};
     const u=_ofClientToUser(svg,e.clientX,e.clientY);
     _ofCam.scale=Math.max(1,Math.min(6,_ofCam.scale*(e.deltaY<0?1.15:0.87))); _ofApplyCam(svg);
     if(u){ const u2=_ofClientToUser(svg,e.clientX,e.clientY); if(u2){ _ofCam.cx+=u.x-u2.x; _ofCam.cy+=u.y-u2.y; _ofApplyCam(svg); } }
   }, {passive:false});
   let drag=false,lx=0,ly=0,moved=false;
-  host.addEventListener('pointerdown',e=>{ if(e.button!==0||e.pointerType==='touch')return; if(!_ofSvg())return; drag=true; moved=false; host._ofDragged=false; lx=e.clientX; ly=e.clientY; const sc=scene(); if(sc)sc.classList.add('of-grabbing'); });
+  host.addEventListener('pointerdown',e=>{ if(e.button!==0||e.pointerType==='touch')return; if(!_ofSvg())return; _ofTourPauseT=Date.now(); drag=true; moved=false; host._ofDragged=false; lx=e.clientX; ly=e.clientY; const sc=scene(); if(sc)sc.classList.add('of-grabbing'); });
   window.addEventListener('pointermove',e=>{ if(!drag)return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1};
     if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)moved=true;
     const u1=_ofClientToUser(svg,lx,ly), u2=_ofClientToUser(svg,e.clientX,e.clientY);
@@ -427,7 +459,7 @@ function _ofInitCamControls(host){
   const _dist=(a,b)=>Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
   const _mid=(a,b)=>({x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2});
   host.addEventListener('touchstart',e=>{
-    const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return;
+    const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; _ofTourPauseT=Date.now();
     if(e.touches.length===2){
       if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1};
       _pt={mode:'pinch',d0:_dist(e.touches[0],e.touches[1])||1,s0:_ofCam.scale,m:_mid(e.touches[0],e.touches[1])};
@@ -529,6 +561,15 @@ async function _renderOficina(){
   });
   // 👑 Empleado del mes: el agente con MÁS ejecuciones en los últimos 30 días (si hay actividad)
   { let _bi=-1,_bv=0; iaModel.forEach((m,i)=>{ if((m.count30||0)>_bv){_bv=m.count30;_bi=i;} }); if(_bi>=0&&_bv>0) iaModel[_bi].top=true; }
+  // Anuncio DIARIO del empleado del mes con su persona (idea 8): "👑 Sherlock Holmes (Prospección)"
+  try{
+    const topM=iaModel.find(m=>m.top);
+    if(topM){ const k='thelab_oficina_empday', today=new Date().toDateString();
+      if(localStorage.getItem(k)!==today){ localStorage.setItem(k,today);
+        const idn=agentIdentity(topM.label);
+        toast('👑 Empleado del mes: '+(idn.persona?idn.persona+' ('+idn.rol+')':idn.rol)+' · '+(topM.count30||0)+' ejecuciones en 30 días','success');
+      } }
+  }catch(e){}
 
   // ── Modelo: automatizaciones (data-driven: CFG + filas extra de la tabla) ──
   const cfgIds=new Set(AUTOMATIONS_CFG.map(a=>a.id.toLowerCase()));
@@ -790,6 +831,16 @@ function _ofPretty(label){
   if(_OF_NAME_ES[label]) return _OF_NAME_ES[label];
   return String(label||'').replace(/_AGENT$/i,'').replace(/_/g,' ').trim()||String(label||'');
 }
+// ── Identidad ÚNICA de un agente (idea 7): rol en español, persona (de AGENTES_CFG), emoji y
+// área en un solo lugar — la consumen el feed, el detalle, la charla y el empleado del mes,
+// para que la Oficina y la pestaña Agentes no diverjan.
+function agentIdentity(labelOrId){
+  const s=String(labelOrId||'');
+  const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.label===s||a.id===s):null;
+  const label=cfg?cfg.label:s, rol=_ofPretty(label), persona=(cfg&&cfg.persona)||'';
+  return { id:cfg?cfg.id:s, label, rol, persona, emoji:_ofAgentEmoji(label), area:_ofCat({id:label}).name,
+    display:persona?(rol+' - '+persona):rol };
+}
 // Categorías funcionales de los agentes IA (para agrupar dentro de la zona)
 // Nota: _ofCat se usa con m.id en las vistas de oficina y con el LABEL (r.agent) en
 // el feed/gráficos. Por eso las claves usan raíces que casan con AMBOS: p.ej. 'LEAD'
@@ -1022,12 +1073,49 @@ function _ofDeskLaptop(x,y,working,col){
   return `<g transform="translate(${f(x)},${f(y)})">${glow}<polygon points="-11,0 0,5 11,0 0,-5" fill="#cfd6de"/><polygon points="-11,0 0,5 0,-5" fill="#bcc5cf"/><rect x="-9" y="-13.5" width="18" height="12" rx="1.6" fill="#15171a"/><rect x="-7.4" y="-11.9" width="14.8" height="8.8" rx="1" fill="${scr}" opacity="${working?'0.97':'0.5'}"/><rect x="-7.4" y="-11.9" width="14.8" height="3.4" rx="1" fill="#ffffff" opacity="0.18"/></g>`;
 }
 // ── Charla ambiental: los agentes conversan constantemente entre ellos ──
-// Burbujas de emote que aparecen en secuencia alrededor de la mesa de cada depto (100% CSS,
-// no reconstruye la escena). Da sensación de equipo colaborando en vivo.
+// Burbujas que aparecen en secuencia alrededor de la mesa de cada depto (100% CSS, no
+// reconstruye la escena). Mezcla FRASES con la voz de cada rol y emotes (idea 2).
 const _OF_CHAT=['💬','💡','👍','✅','📊','✍️','🙌','🤝','❓','📈','🔥','👀','🗣️','💯','🤔','📝'];
-function _ofChatBubble(x,y,em,delay,dur,col){
-  const f=n=>n.toFixed(1);
-  return `<g transform="translate(${f(x)},${f(y-58)})" pointer-events="none"><g class="of-chat" style="--cd:${f(delay)}s;--cdur:${f(dur)}s"><rect x="-11" y="-9" width="22" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,6 4,6 0,12" fill="#ffffff"/><text x="0" y="3" text-anchor="middle" font-size="10">${em}</text></g></g>`;
+// Frases cortas por rol (lookup por raíz del label, específico→general — mismo orden que los emojis)
+const _OF_CHAT_LINES=[
+  ['SALES',['¡Ese lead es mío!','Cerrando el trato 🤝','Llamando al cliente']],
+  ['QUOTE',['Cotización al toque','Números listos ✅','El margen se cuida']],
+  ['PRODUCTION',['¡A imprimir!','Cama nivelada','Lote en curso 🎯']],
+  ['AUDITOR',['Boquillas al día','Todo calibrado ✅']],
+  ['MANTEN',['Boquillas al día','Todo calibrado ✅']],
+  ['QA',['Esto pasa QA ✅','Revisión impecable']],
+  ['FOLLOWUP',['Les hago seguimiento','¿Vieron mi correo?']],
+  ['CEO',['¿Y esos KPIs? 📊','Visión de futuro']],
+  ['CLIENTE',['Informe enviado 📬']],
+  ['NEWSLETTER',['Newsletter lista ✉️']],
+  ['REPORT',['Métricas al día 📈']],
+  ['CAPTION',['Copy con gancho ✍️']],
+  ['COMMUNITY',['Respondo los DMs 💬']],
+  ['STRATEG',['Plan de contenidos ♟️']],
+  ['SOCIAL',['Posts programados 📱']],
+  ['TREND',['Esto es tendencia 🔥']],
+  ['LINKEDIN',['Networking time 💼']],
+  ['CONTENT',['Idea para un post 💡']],
+  ['ADS',['El CTR va subiendo 📣']],
+  ['LEAD',['Traigo 3 leads 🔥','Prospectando…']],
+  ['ONBOARD',['¡Bienvenido a bordo! 🚀']],
+  ['FINANCE',['Cuadremos la caja 💰','IVA al día']],
+  ['SUPPLIER',['Encontré proveedor 🔍']],
+];
+// Mensaje de charla de un agente: ~60% frase de su rol (si existe), resto emote — determinista
+// por id (estable entre re-renders, no "cambia de opinión" con cada poll).
+function _ofChatMsg(m){
+  const s=String((m&&m.label)||(m&&m.id)||'').toUpperCase(), h=_ofHash(s+'msg');
+  const pool=(_OF_CHAT_LINES.find(([k])=>s.includes(k))||[])[1];
+  if(pool && h%5<3) return pool[h%pool.length];
+  return _OF_CHAT[h%_OF_CHAT.length];
+}
+function _ofChatBubble(x,y,txt,delay,dur,col){
+  const f=n=>n.toFixed(1), isEmote=String(txt).length<=3;
+  const w=isEmote?22:Math.max(34,Math.min(116,String(txt).length*4.9+14)), hh=isEmote?16:15;
+  const inner=isEmote?`<text x="0" y="3" text-anchor="middle" font-size="10">${txt}</text>`
+    :`<text x="0" y="2.6" text-anchor="middle" font-size="7.5" fill="#222831" font-family="DM Sans" font-weight="600">${escapeHtml(txt)}</text>`;
+  return `<g transform="translate(${f(x)},${f(y-58)})" pointer-events="none"><g class="of-chat" style="--cd:${f(delay)}s;--cdur:${f(dur)}s"><rect x="${f(-w/2)}" y="${f(-hh/2-1.5)}" width="${f(w)}" height="${f(hh+1.5)}" rx="7.5" fill="#ffffff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,${f(hh/2)} 4,${f(hh/2)} 0,${f(hh/2+6)}" fill="#ffffff"/>${inner}</g></g>`;
 }
 // Agente SENTADO alrededor de la mesa (mira a cámara)
 function _ofRingAgent(m,x,y,facing){
@@ -1241,6 +1329,7 @@ function _ofRenderIso(ia,auto,extras){
     return {P,Q,C,ux,uy,nx,ny,mx,my,len,hasOut}; };
   let doors='';
   _rooms.forEach(R=>{ doors+=_ofDoor(_doorGeo(R), R.color); });
+  _ofTourPts=_rooms.map(R=>{ const c=iso(R.cc,R.rc); return {x:c[0],y:c[1]}; });   // paradas del auto-tour TV (idea 3)
 
   // Plataforma sólo para la sala de impresoras (las máquinas van encima)
   const _ch=24;
@@ -1335,8 +1424,8 @@ function _ofRenderIso(ia,auto,extras){
     const _CH=7.5;
     pos.forEach((p,i)=>{ if(p.brk||p.m.cls==='of-work'||p.m.cls==='of-error'||p.m.top) return;
       if(_ofCelebs.some(c=>c.label===p.m.label && Date.now()-c.t<_OF_CELEB_MS)) return;
-      const em=_OF_CHAT[_ofHash(p.m.id)%_OF_CHAT.length], dl=-(((i+0.5)/Math.max(1,N))*_CH + (_ofHash(p.m.id+'c')%14)/10);
-      chatter+=_ofChatBubble(p.sx+Math.cos(p.a)*20,p.sy+Math.sin(p.a)*10,em,dl,_CH,R.color);
+      const msg=_ofChatMsg(p.m), dl=-(((i+0.5)/Math.max(1,N))*_CH + (_ofHash(p.m.id+'c')%14)/10);
+      chatter+=_ofChatBubble(p.sx+Math.cos(p.a)*20,p.sy+Math.sin(p.a)*10,msg,dl,_CH,R.color);
     });
   });
   chars+=_errands;   // pausas en primer plano (pasan por delante de las salas)
@@ -1500,13 +1589,21 @@ function _ofRenderFeed(runs){
     return;
   }
   const more=shown.length>lim?`<button class="btn btn-ghost btn-sm" style="width:100%;margin:8px 0 4px" onclick="ofFeedMore()">▾ Ver más (${shown.length-lim} restantes)</button>`:'';
+  // Agrupación temporal (idea 6) + narración por PERSONA (idea 1): "Jordan Belfort · Ventas"
+  const _bucket=t=>{ if(!t) return 'Anteriores'; if(_ofSameDay(t)) return 'Hoy';
+    const y=new Date(); y.setHours(0,0,0,0); const y0=y.getTime()-864e5;
+    if(t>=y0) return 'Ayer'; if(Date.now()-t<7*864e5) return 'Esta semana'; return 'Anteriores'; };
+  let lastB=null;
   feed.innerHTML=shown.slice(0,lim).map(r=>{
     const col=_OF_STATUS[_ofStatus(r.t).cls]||'#7c8590';
-    const em=_ofAgentEmoji(r.agent);
-    return `<div class="of-feed-item" style="border-left:2px solid ${col};padding-left:11px">
-      <div class="of-feed-ic" style="background:${col}1f;box-shadow:inset 0 0 0 1px ${col}40">${em}</div>
+    const idn=agentIdentity(r.agent);
+    const b=_bucket(r.t);
+    const head=b!==lastB?`<div class="of-feed-group">${b}</div>`:''; lastB=b;
+    const who=idn.persona?`${escapeHtml(idn.persona)} <span class="of-feed-rol">· ${escapeHtml(idn.rol)}</span>`:escapeHtml(idn.rol||'—');
+    return `${head}<div class="of-feed-item" style="border-left:2px solid ${col};padding-left:11px">
+      <div class="of-feed-ic" style="background:${col}1f;box-shadow:inset 0 0 0 1px ${col}40">${idn.emoji}</div>
       <div class="of-feed-main">
-        <div class="of-feed-agent">${escapeHtml(_ofPretty(r.agent)||'—')}</div>
+        <div class="of-feed-agent">${who}</div>
         <div class="of-feed-txt">${escapeHtml((r.input||r.output||'').substring(0,120))}</div>
       </div>
       <div class="of-feed-time">${_ofAgo(r.t)}</div>
@@ -1536,11 +1633,19 @@ function _ofBarsTop(runs){
   const max=Math.max(...arr.map(a=>a[1])), W=320, rowH=21, H=arr.length*rowH+6;
   let rows='';
   arr.forEach((a,i)=>{ const y=i*rowH+4, bw=(a[1]/max)*(W-150-24);   // reserva 24px para la cifra (no se sale del lienzo — B-U13)
-    rows+=`<text x="0" y="${y+12}" font-size="9" fill="var(--text2)">${escapeHtml((p=>p.length>17?p.slice(0,16)+'…':p)(_ofPretty(a[0])))}</text>`;
-    rows+=`<rect x="132" y="${y+3}" width="${Math.max(2,bw).toFixed(1)}" height="12" rx="3" fill="var(--accent)"><title>${a[1]}</title></rect>`;
-    rows+=`<text x="${(132+Math.max(2,bw)+6).toFixed(1)}" y="${y+13}" font-size="9" fill="var(--text3)">${a[1]}</text>`;
+    // Fila CLICABLE → abre el detalle del agente (idea 5); zona de clic = toda la fila
+    rows+=`<g role="button" tabindex="0" data-label="${escapeHtml(a[0])}" onclick="ofAgentDetailByLabel(this.dataset.label)" onkeydown="ofKey(event)" style="cursor:pointer">`
+      +`<rect x="0" y="${y}" width="${W}" height="${rowH-2}" fill="transparent"><title>${escapeHtml(_ofPretty(a[0]))}: ${a[1]} ejecuciones · clic para ver el detalle</title></rect>`
+      +`<text x="0" y="${y+12}" font-size="9" fill="var(--text2)">${escapeHtml((p=>p.length>17?p.slice(0,16)+'…':p)(_ofPretty(a[0])))}</text>`
+      +`<rect x="132" y="${y+3}" width="${Math.max(2,bw).toFixed(1)}" height="12" rx="3" fill="var(--accent)"/>`
+      +`<text x="${(132+Math.max(2,bw)+6).toFixed(1)}" y="${y+13}" font-size="9" fill="var(--text3)">${a[1]}</text></g>`;
   });
   return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg">${rows}</svg>`;
+}
+// Abre el detalle a partir del LABEL (las filas del gráfico Top agentes trabajan con labels)
+function ofAgentDetailByLabel(label){
+  const m=(_ofModel&&_ofModel.iaModel)?_ofModel.iaModel.find(x=>x.label===label):null;
+  if(m) ofAgentDetail(m.id);
 }
 function _ofDonut(parts,total){
   const R=42,r=26,cx=52,cy=52, nz=parts.filter(p=>p.v>0);
@@ -1599,6 +1704,7 @@ function _ofInitChartTips(host){
   if(host._tipInit) return; host._tipInit=true;
   host.addEventListener('click',e=>{
     const t=e.target&&e.target.closest?e.target.closest('rect,path'):null; if(!t) return;
+    if(t.closest('[role="button"]')) return;   // las filas clicables (Top agentes) abren el detalle, no el toast
     const ti=t.querySelector&&t.querySelector('title');
     if(ti&&ti.textContent){ try{toast(ti.textContent,'info');}catch(x){} }
   });
