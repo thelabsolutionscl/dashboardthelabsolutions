@@ -1001,24 +1001,25 @@ function _ofDoor(g,color){
   s+=`<line x1="${f(otl[0])}" y1="${f(otl[1])}" x2="${f(otr[0])}" y2="${f(otr[1])}" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>`;   // brillo del dintel
   return s;
 }
-// Tamaño de la sala de impresoras: una L COMPACTA de 2 de grosor pegada a la
-// esquina del fondo (muro superior + muro izquierdo), dejando libre el frente.
-// Lado s tal que la L de 2 celdas de grosor (capacidad 4·s−4) contenga n máquinas.
+// Tamaño de la sala de impresoras: una L de UNA fila por pared (muro superior +
+// muro izquierdo) que comparte la celda esquina. Sala amplia para que la fila
+// respire; el centro/frente del taller queda despejado.
 function _ofPrinterLGrid(n){
   n=Math.max(1,n|0);
-  const s=Math.max(4,Math.ceil((n+4)/4));
-  return {dc:s, dr:s};
+  const dc=Math.max(2,Math.ceil((n+1)/2));   // largo del brazo superior (fila 0, incluye la esquina)
+  const dr=Math.max(2,n+1-dc);               // profundidad = esquina + brazo izquierdo (col 0)
+  return {dc,dr};
 }
-// Posiciones de las impresoras dentro de su sala: DISTRIBUIDAS EN L compacta
-// contra el muro IZQUIERDO (2 columnas) y el muro SUPERIOR (2 filas del fondo),
-// dejando despejado el centro/frente del taller. Se agrupan por modelo y la
-// Giga (la más grande) ancla la esquina del fondo.
+// Posiciones de las impresoras: DISTRIBUIDAS EN L de una sola fila por pared —
+// muro SUPERIOR (fila 0, va de la esquina hacia la derecha) y muro IZQUIERDO
+// (col 0, baja hacia el frente). Agrupadas por modelo; la Giga (la más grande)
+// ancla la esquina del fondo.
 function _ofPrinterSlots(members){
   const n=members.length;
   const {dc,dr}=_ofPrinterLGrid(n);
   const path=[];
-  for(let r=0;r<dr;r++){ path.push([0,r]); path.push([1,r]); }      // brazo izquierdo (2 columnas)
-  for(let c=2;c<dc;c++){ path.push([c,0]); path.push([c,1]); }       // brazo superior (2 filas)
+  for(let c=0;c<dc;c++) path.push([c,0]);          // brazo superior (muro del fondo)
+  for(let r=1;r<dr;r++) path.push([0,r]);           // brazo izquierdo (muro lateral)
   const rank=m=>{ const s=((m.label||'')+' '+(m.role||'')).toLowerCase();
     if(/giga|orangestorm/.test(s)) return 0;
     if(/k2\s*plus/.test(s)) return 1;
@@ -1027,7 +1028,7 @@ function _ofPrinterSlots(members){
     return 4; };                                     // K1 y otros al final
   const ordered=members.map((m,i)=>({m,i})).sort((a,b)=>rank(a.m)-rank(b.m)||a.i-b.i).map(x=>x.m);
   const map=new Map();
-  ordered.forEach((m,i)=>{ map.set(m, path[i]||[0,0]); });
+  ordered.forEach((m,i)=>{ map.set(m, path[i]||[0,Math.max(0,dr-1)]); });
   return map;
 }
 function _ofRenderIso(ia,auto,extras){
