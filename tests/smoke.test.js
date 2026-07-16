@@ -115,6 +115,9 @@ const ok = msg => console.log('  ✓ ' + msg);
     'backupAirtable', 'checkBackupReminder', '_pruneLocalLogs',
     // oficina
     'renderOficina', '_ofIsoStation', '_ofSprite',
+    'startOficinaPolling', 'stopOficinaPolling', 'ofLogComm', 'ofCelebrate', 'ofAgentError',
+    'ofAgentDetail', 'ofSetView', 'ofSetCardFilter', 'ofSearchInput', 'ofSetChartRange',
+    'ofToggleSceneTheme', 'ofToggleDensity', 'ofExport', 'ofUpdateDockBadge', '_ofApplyPrefs',
   ];
   const probs = [];
   CRITICAL.forEach(n => {
@@ -135,7 +138,10 @@ const ok = msg => console.log('  ✓ ' + msg);
     'recompraTrayCard', 'invReordenCard', 'cargaMaquinas', 'catalogoModal', 'comisionesRanking',
     'reclamoModal', 'reclamosCard', 'retainerModal', 'retainersCard', 'arqueoCard',
     'ocModal', 'ocList', 'cdDescChip', 'cdOnboarding', 'estacionalidadCard', 'breakEvenCard',
-    'ivaMensualCard', 'churnCard', 'fechasClaveCard', 'perdidasCard', 'cacCanalCard'];
+    'ivaMensualCard', 'churnCard', 'fechasClaveCard', 'perdidasCard', 'cacCanalCard',
+    // oficina: contenedores que js/oficina.js busca por id
+    'oficinaKpis', 'oficinaCards', 'oficinaFloor', 'oficinaIso', 'oficinaCharts', 'oficinaFeed',
+    'oficinaAlerts', 'oficinaCardFilter', 'oficinaErr', 'badge-oficina', 'ofAgentModal', 'oficinaRangeSel'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
   if (missing.length) fail('IDs del DOM ausentes: ' + missing.join(', '));
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');

@@ -36,10 +36,15 @@ function ofLogComm(from,to){
     _ofCommTimer=setTimeout(()=>{ if(document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina(); }, _OF_COMM_MS+300);
   }
 }
+// ── Errores de agentes IA (B-C10): runAgent llama ofAgentError(label) en su catch; el agente
+// aparece "Con falla" (of-error) en la Oficina durante 10 min o hasta su próxima ejecución OK.
+const _ofAgentErrors={}; const _OF_AGENT_ERR_MS=600000;
+function ofAgentError(label){ if(label) _ofAgentErrors[label]=Date.now(); }
 // ── Reacciones / celebraciones cuando un agente COMPLETA una ejecución ──
 let _ofCelebs=[]; const _OF_CELEB_MS=5200;
 function ofCelebrate(label){
   if(!label) return;
+  delete _ofAgentErrors[label];   // una ejecución exitosa limpia el estado de falla
   const now=Date.now();
   _ofCelebs=_ofCelebs.filter(c=>now-c.t<_OF_CELEB_MS);
   _ofCelebs.push({label,t:now});
@@ -154,15 +159,25 @@ function _ofApplyPrefs(){
   el.classList.toggle('of-compact',_ofCompact);
   const tb=document.getElementById('ofSceneThemeBtn'); if(tb) tb.textContent=_ofSceneLight?'☀️ Escena':'🌙 Escena';
   const db=document.getElementById('ofDensityBtn'); if(db) db.textContent=_ofCompact?'⤡ Compacta':'⤢ Cómoda';
+  // Botón de rango de la analítica sincronizado con la preferencia guardada (B-C11)
+  document.querySelectorAll('#oficinaRangeSel .of-vbtn').forEach(b=>{ const on=+b.dataset.r===_ofChartRange; b.classList.toggle('active',on); b.setAttribute('aria-pressed',on); });
 }
 function ofToggleSceneTheme(){ _ofSceneLight=!_ofSceneLight; try{localStorage.setItem('thelab_oficina_scenelight',_ofSceneLight?'1':'0');}catch(e){} _ofApplyPrefs(); }
 function ofToggleDensity(){ _ofCompact=!_ofCompact; try{localStorage.setItem('thelab_oficina_compact',_ofCompact?'1':'0');}catch(e){} _ofApplyPrefs(); }
+// Badge del dock "trabajando ahora": vivo también con la pestaña cerrada (B-C2). Sin argumento
+// usa los agentes IA en ejecución (_ofActive), que se actualiza desde runAgent en cualquier pestaña;
+// _renderOficina lo llama con el conteo completo (IA+automatizaciones+impresoras) cuando está abierta.
+function ofUpdateDockBadge(n){
+  const badge=document.getElementById('badge-oficina'); if(!badge) return;
+  const v=(typeof n==='number')?n:((typeof _ofActive!=='undefined'&&_ofActive.size)||0);
+  if(v>0){ badge.textContent=v; badge.style.display='flex'; } else badge.style.display='none';
+}
 // ── Buscador de trabajadores (nombre/área/rol) en la vista Tarjetas ──
 function ofSearchInput(v){ _ofSearch=(v||'').trim().toLowerCase(); _ofReRenderCards(); }
 function _ofReRenderCards(){ if(!_ofModel) return; const extras=(_ofModel.printerModel&&_ofModel.printerModel.length)?[{name:'Impresoras 3D',color:'#3aa0ff',members:_ofModel.printerModel}]:[]; _ofRenderCards(_ofModel.iaModel,_ofModel.autoModel,extras); }
 // ── Rango de la analítica (7/14/30 días) ──
 function ofSetChartRange(n){ _ofChartRange=+n||14; try{localStorage.setItem('thelab_oficina_range',String(_ofChartRange));}catch(e){}
-  document.querySelectorAll('#oficinaRangeSel .of-vbtn').forEach(b=>b.classList.toggle('active',+b.dataset.r===_ofChartRange));
+  document.querySelectorAll('#oficinaRangeSel .of-vbtn').forEach(b=>{ const on=+b.dataset.r===_ofChartRange; b.classList.toggle('active',on); b.setAttribute('aria-pressed',on); });
   if(_ofChartData) _ofRenderCharts(_ofChartData.runs,_ofChartData.ia,_ofChartData.auto);
 }
 // ── Exportar: descarga la escena 3D (SVG, sin taint) o copia el resumen de KPIs ──
@@ -184,9 +199,9 @@ function ofExport(){
     }catch(e){ try{toast('No se pudo exportar la escena','error');}catch(x){} }
     return;
   }
-  // Fuera de la vista 3D: copia un resumen de KPIs al portapapeles
-  const grab=id=>{const el=document.querySelector(`#oficinaKpis .of-kpi:nth-child(${id}) .of-kpi-val`);return el?el.textContent.trim():'—';};
-  const txt=`Oficina Virtual — The Lab Solutions\nTrabajadores: ${grab(1)}\nTrabajando ahora: ${grab(2)}\nEjecuciones hoy: ${grab(3)}\nEn cola: ${grab(4)}`;
+  // Fuera de la vista 3D: copia un resumen de KPIs al portapapeles (lookup por data-k, no por posición — B-C12)
+  const grab=k=>{const el=document.querySelector(`#oficinaKpis .of-kpi-val[data-k="${k}"]`);return el?el.textContent.trim():'—';};
+  const txt=`Oficina Virtual — The Lab Solutions\nTrabajadores: ${grab('workers')}\nTrabajando ahora: ${grab('working')}\nEjecuciones hoy: ${grab('runsToday')}\nEn cola: ${grab('queue')}`;
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(()=>{try{toast('Resumen copiado al portapapeles','success');}catch(e){}}).catch(()=>{try{toast('No se pudo copiar','error');}catch(e){}}); }
   else { try{toast('Portapapeles no disponible','error');}catch(e){} }
 }
@@ -208,7 +223,9 @@ function ofAgentDetail(id){
         </div>
       </div>`).join('')
     :'<div style="color:var(--text3);font-size:12px;padding:10px 2px">Sin ejecuciones registradas todavía.</div>';
-  document.getElementById('ofAgentTitle').textContent=_ofAgentEmoji(m.label)+' '+_ofPretty(m.label);
+  // Título con la PERSONA del agente (misma identidad que la pestaña Agentes: "CEO - Elon Musk")
+  const dispName=(cfg&&typeof agentDisplayName==='function')?agentDisplayName(cfg):_ofPretty(m.label);
+  document.getElementById('ofAgentTitle').textContent=_ofAgentEmoji(m.label)+' '+dispName;
   document.getElementById('ofAgentBody').innerHTML=`
     <div class="ofd-head">
       <div class="ofd-ava">${m.icon||'🤖'}</div>
@@ -224,8 +241,8 @@ function ofAgentDetail(id){
       <div class="ofd-stat"><div class="ofd-stat-v mono">${last?escapeHtml(_ofAgo(last.t)):'—'}</div><div class="ofd-stat-l">Última</div></div>
     </div>
     ${_ofDetailHours(runs)}
-    ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:8px" onclick="ofAgentRun('${id}')">▶ Ejecutar este agente</button>`:''}
-    <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:16px" onclick="closeOfAgent();ofFocusAgent('${escapeHtml(id)}')">📍 Ver en la oficina 3D</button>
+    ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:8px" data-id="${escapeHtml(id)}" onclick="ofAgentRun(this.dataset.id)">▶ Ejecutar este agente</button>`:''}
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:16px" data-id="${escapeHtml(id)}" onclick="closeOfAgent();ofFocusAgent(this.dataset.id)">📍 Ver en la oficina 3D</button>
     <div class="ofd-seclbl">Últimas ejecuciones</div>
     ${rowsHtml}`;
   const mo=document.getElementById('ofAgentModal'); if(mo) mo.style.display='flex';
@@ -244,7 +261,7 @@ function ofAgentRun(id){ closeOfAgent(); switchTab('agentes'); setTimeout(()=>{c
 function ofAgentViewRun(idx){
   const r=_ofAgentRuns&&_ofAgentRuns[idx]; if(!r) return;
   closeOfAgent();
-  document.getElementById('agentInlineTitle').textContent='📜 '+(r.agent||'Agente')+' — '+NOTIFY._fmtFull(r.time);
+  document.getElementById('agentInlineTitle').textContent='📜 '+_ofPretty(r.agent||'Agente')+' — '+NOTIFY._fmtFull(r.time);
   const resultEl=document.getElementById('agentInlineResult');
   resultEl.className='agent-modal-result'; resultEl.style.whiteSpace='normal';
   // Consulta como cabecera ligera + salida procesada (suave y estructurada, igual que en Agentes).
@@ -254,21 +271,27 @@ function ofAgentViewRun(idx){
   document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
   document.getElementById('agentInlineModal').style.display='flex';
 }
-function ofSetView(v){
+function ofSetView(v,persist){
   _ofView=v;
-  try{localStorage.setItem('thelab_oficina_view',v);}catch(e){}
-  document.querySelectorAll('#oficinaViewToggle .of-vbtn').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
+  // Los cambios de vista FORZADOS (modo TV, "Ver en 3D") no pisan la preferencia del usuario (B-C8)
+  if(persist!==false){ try{localStorage.setItem('thelab_oficina_view',v);}catch(e){} }
+  document.querySelectorAll('#oficinaViewToggle .of-vbtn').forEach(b=>{ const on=b.dataset.v===v; b.classList.toggle('active',on); b.setAttribute('aria-pressed',on); });
   const c=document.getElementById('oficinaCards'), f=document.getElementById('oficinaFloor'), i=document.getElementById('oficinaIso');
   if(c) c.style.display=v==='cards'?'':'none';
   if(f) f.style.display=v==='floor'?'':'none';
   if(i) i.style.display=v==='iso'?'':'none';
-  document.querySelectorAll('#tab-oficina .of-cam-btn').forEach(b=>b.style.display=(v==='iso')?'':'none');   // B13: controles de cámara sólo en la vista 3D
+  document.querySelectorAll('#tab-oficina .of-cam-btn').forEach(b=>b.style.display=(v==='iso')?'':'none');    // B13: controles de cámara sólo en la vista 3D
+  const db=document.getElementById('ofDensityBtn'); if(db) db.style.display=(v==='cards')?'':'none';           // Densidad sólo afecta Tarjetas (B-U15)
+  const tb=document.getElementById('ofSceneThemeBtn'); if(tb) tb.style.display=(v==='iso')?'':'none';          // Escena sólo afecta el 3D (B-U15)
+  _ofApplyPrefs();   // aplica tema/densidad persistidos ANTES del primer fetch (B-C7)
   renderOficina();
 }
 function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000);
   clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(!document.hidden && _ofView==='iso'){ _ofTickClock(); _ofTickLive(); } },20000);   // reloj + progreso de impresión: tic por mutación, sin reconstruir la escena
 }
-function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=null; clearInterval(_ofClockTimer); _ofClockTimer=null; clearTimeout(_ofCommTimer); clearTimeout(_ofCelebTimer); }
+function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=null; clearInterval(_ofClockTimer); _ofClockTimer=null; clearTimeout(_ofCommTimer); clearTimeout(_ofCelebTimer);
+  try{ofUpdateDockBadge();}catch(e){}   // al salir, el badge cae al conteo EN VIVO de _ofActive (no queda congelado — B-C2)
+}
 // Progreso de impresión EN VIVO por mutación (sin reconstruir): actualiza la barra y el rótulo
 // de cada impresora desde la telemetría del bridge (_printerStatus). Complementa el tic del reloj.
 function _ofTickLive(){
@@ -277,10 +300,20 @@ function _ofTickLive(){
   host.querySelectorAll('[data-pid]').forEach(g=>{
     const pid=g.getAttribute('data-pid'), lv=live[pid]; if(!lv||lv.state!=='printing') return;
     const prog=(typeof lv.progress==='number')?lv.progress:-1;
-    const fill=g.querySelector('.of-pfill');
-    if(fill && prog>=0){ const pw=parseFloat(fill.getAttribute('data-pw'))||0; fill.setAttribute('width',(pw*Math.max(0,Math.min(100,prog))/100).toFixed(1)); }
+    // Barra: si llega progreso real y la barra era indeterminada, se promueve a determinada (B-D6)
+    const bar=g.querySelector('.of-pfill,.of-prog-ind');
+    if(bar && prog>=0){
+      const pw=parseFloat(bar.getAttribute('data-pw'))||0;
+      if(bar.classList.contains('of-prog-ind')){ bar.classList.remove('of-prog-ind'); bar.classList.add('of-pfill'); bar.removeAttribute('style'); }
+      bar.setAttribute('width',(pw*Math.max(0,Math.min(100,prog))/100).toFixed(1));
+    }
     const lbl=g.querySelector('.of-plabel');
-    if(lbl){ const t=_ofPrinterLabelTxt(prog,lv.eta||0); if(lbl.textContent!==t) lbl.textContent=t; }
+    if(lbl){ const t=_ofPrinterLabelTxt(prog,lv.eta||0);
+      if(lbl.textContent!==t){ lbl.textContent=t;
+        // El pill se redimensiona con el texto (antes quedaba con el ancho del render y el texto desbordaba — B-D6)
+        const pill=g.querySelector('.of-ppill'); if(pill){ const lw=Math.max(48,t.length*4.9+14); pill.setAttribute('x',(-lw/2).toFixed(1)); pill.setAttribute('width',lw.toFixed(1)); }
+      }
+    }
   });
 }
 // Actualiza sólo las manecillas del reloj de pared en la escena 3D (idea 5)
@@ -307,11 +340,27 @@ function ofFullscreen(){
   } else { _ofToggleFsCss(el); }   // navegador sin Fullscreen API → fallback CSS
 }
 let _ofWasFs=false;   // ¿la Oficina fue la que entró a pantalla completa? (evita reaccionar a fullscreen de otros módulos)
+// En pantalla completa sólo se renderiza lo que está DENTRO del elemento fullscreen (top-layer);
+// además el fallback CSS usa z-index 99999 > modales (10000). Mover los modales de la Oficina y
+// los toasts adentro mientras dura el modo TV — y devolverlos a su sitio al salir (B-U3).
+const _ofFsMoved=[];
+function _ofFsReparent(on){
+  const el=document.getElementById('tab-oficina'); if(!el) return;
+  if(on){
+    ['ofAgentModal','agentInlineModal','toastContainer'].forEach(id=>{
+      const n=document.getElementById(id); if(!n||n.parentNode===el) return;
+      _ofFsMoved.push({n,parent:n.parentNode,next:n.nextSibling}); el.appendChild(n);
+    });
+  } else {
+    while(_ofFsMoved.length){ const m=_ofFsMoved.pop(); try{ m.parent.insertBefore(m.n,m.next); }catch(e){} }
+  }
+}
 function _ofToggleFsCss(el){
   const on=el.classList.toggle('of-fs');
   const b=document.getElementById('ofFsBtn'); if(b) b.textContent=on?'✕ Salir':'📺 Pantalla completa';
-  if(on){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso'); }   // TV → 3D, recordando la vista previa
-  else ofSetView(_ofPrevView||'cards');                                  // al salir, restaura la vista del usuario
+  _ofFsReparent(on);   // modales/toasts visibles dentro del modo TV (B-U3)
+  if(on){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso',false); }   // TV → 3D sin pisar la preferencia (B-C8)
+  else ofSetView(_ofPrevView||'cards',false);                                  // al salir, restaura la vista del usuario
 }
 function _ofOnFsChange(){
   const el=document.getElementById('tab-oficina'); if(!el) return;
@@ -323,8 +372,9 @@ function _ofOnFsChange(){
   else { if(!_ofWasFs) return; _ofWasFs=false; }
   el.classList.toggle('of-fs',fs);
   const b=document.getElementById('ofFsBtn'); if(b) b.textContent=fs?'✕ Salir':'📺 Pantalla completa';
-  if(fs){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso'); }   // TV → 3D, recordando la vista previa
-  else ofSetView(_ofPrevView||'cards');                                  // al salir, restaura la vista del usuario
+  _ofFsReparent(fs);   // modales/toasts visibles dentro del fullscreen (B-U3)
+  if(fs){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso',false); }   // TV → 3D sin pisar la preferencia (B-C8)
+  else ofSetView(_ofPrevView||'cards',false);                                  // al salir, restaura la vista del usuario
 }
 document.addEventListener('fullscreenchange',_ofOnFsChange);
 document.addEventListener('webkitfullscreenchange',_ofOnFsChange);
@@ -347,7 +397,7 @@ function _ofApplyCam(svg){
 }
 function ofZoom(dir){ const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; _ofCam.scale=Math.max(1,Math.min(6,_ofCam.scale*(dir>0?1.25:0.8))); _ofApplyCam(svg); }
 function ofCamReset(){ _ofCam=null; _ofFollowId=null; const svg=_ofSvg(); if(svg)_ofApplyCam(svg); }
-function ofFocusAgent(id){ _ofFollowId=id; if(_ofView!=='iso'){ ofSetView('iso'); return; } const svg=_ofSvg(); if(svg && _ofPos[id]){ const p=_ofPos[id]; _ofCam={cx:p[0],cy:p[1]-30,scale:2.4}; _ofFollowId=null; _ofApplyCam(svg); } else renderOficina(); }
+function ofFocusAgent(id){ _ofFollowId=id; if(_ofView!=='iso'){ ofSetView('iso',false); return; } const svg=_ofSvg(); if(svg && _ofPos[id]){ const p=_ofPos[id]; _ofCam={cx:p[0],cy:p[1]-30,scale:2.4}; _ofFollowId=null; _ofApplyCam(svg); } else renderOficina(); }
 function _ofInitCamControls(host){
   if(host._ofCamInit) return; host._ofCamInit=true;
   const scene=()=>host.querySelector('.of-iso-scene');
@@ -405,13 +455,14 @@ function _ofInitCamControls(host){
   host.addEventListener('touchend',_tend); host.addEventListener('touchcancel',_tend);
   host.addEventListener('click',e=>{ if(host._ofDragged){ e.stopPropagation(); e.preventDefault(); host._ofDragged=false; } }, true);   // un arrastre no abre el detalle
 }
+let _ofPendingRender=false;
 async function renderOficina(){
   if(!document.getElementById('tab-oficina')) return;
-  if(_oficinaBusy) return;          // B4: evita ejecuciones solapadas
+  if(_oficinaBusy){ _ofPendingRender=true; return; }   // B4: evita solaparse; B-D9: no descarta el evento (se re-renderiza al terminar)
   _oficinaBusy=true;
   try{ await _renderOficina(); }
   catch(e){ /* nunca romper la UI */ }
-  finally{ _oficinaBusy=false; }
+  finally{ _oficinaBusy=false; if(_ofPendingRender){ _ofPendingRender=false; setTimeout(()=>{ try{renderOficina();}catch(e){} },0); } }
 }
 
 async function _renderOficina(){
@@ -465,7 +516,10 @@ async function _renderOficina(){
     const last=list[0], lastT=last?last.t:0;
     let cls,lbl;
     if(_ofActive.has(a.label)){ cls='of-work'; lbl='Trabajando'; }      // B5: en vivo, mientras ejecuta
-    else { const st=_ofStatus(lastT); cls=st.cls; lbl=st.lbl; }
+    else { const st=_ofStatus(lastT); cls=st.cls; lbl=st.lbl;
+      const errT=_ofAgentErrors[a.label]||0;                            // B-C10: fallo reciente sin ejecución posterior → Con falla
+      if(errT && Date.now()-errT<_OF_AGENT_ERR_MS && errT>lastT){ cls='of-error'; lbl=_OF_STATE_LBL['of-error']; }
+    }
     if(cls==='of-work') working++;
     const today=list.filter(r=>_ofSameDay(r.t)).length;
     const count30=list.filter(r=>r.t && Date.now()-r.t<2592e6).length;   // ejecuciones últimos 30 días
@@ -536,10 +590,16 @@ async function _renderOficina(){
     <div class="of-kpi ${queueLen?'live':''}"><div class="of-kpi-val" data-k="queue">${queueLen}</div><div class="of-kpi-lbl">En cola</div></div>`;
   _ofAnimateKpis({workers:totalWorkers,working,runsToday,queue:queueLen});   // count-up al cambiar (idea 4)
 
-  const errEl=document.getElementById('oficinaErr'); if(errEl) errEl.style.display=_ofErr?'':'none';
+  // Aviso de estado de datos: sin token la oficina se ve "muerta" sin explicación (B-U12)
+  const errEl=document.getElementById('oficinaErr');
+  if(errEl){
+    if(!getToken()){ errEl.textContent='🔌 Sin conexión a Airtable configurada — la oficina muestra solo datos locales. Configura el token para ver la actividad real del equipo.'; errEl.style.display=''; }
+    else if(_ofErr){ errEl.textContent='⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.'; errEl.style.display=''; }
+    else errEl.style.display='none';
+  }
   _ofApplyPrefs();                                                            // tema de escena + densidad persistidos
   _ofRenderAlerts(iaModel,autoModel,printerModel);                           // alertas accionables (idea 6)
-  { const badge=document.getElementById('badge-oficina'); if(badge){ if(working>0){badge.textContent=working;badge.style.display='flex';} else badge.style.display='none'; } }  // badge del dock (idea 11)
+  ofUpdateDockBadge(working);   // badge del dock con el conteo completo (IA+auto+impresoras)
 
   if(_ofView==='iso') _ofRenderIso(iaModel,autoModel,extraDepts);
   else if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel,extraDepts);
@@ -566,17 +626,30 @@ function _ofCountUp(el,from,to,ms){
 }
 // A qué pestaña salta el botón "Ver →" de una alerta según el id de la automatización
 function _ofAutoTab(id){ id=(id||'').toLowerCase(); if(id.includes('mail'))return 'correo'; if(id.includes('printer')||id.includes('bridge'))return 'maquinas'; if(id.includes('lead'))return 'agentes'; if(id.includes('sii'))return 'finanzas'; return null; }
+// ¿El rol del usuario puede abrir esa pestaña? (RBAC — evita botones que llevan a un toast de error)
+function _ofCanTab(tab){
+  if(!tab) return false;
+  try{ const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null; if(!u) return true;
+    return (RBAC.tabs[u.role]||RBAC.tabs.demo||[]).includes(tab); }catch(e){ return true; }
+}
 // ── Alertas accionables: automatizaciones con falla/atraso + agentes/impresoras en error (idea 6) ──
 function _ofRenderAlerts(ia,auto,printers){
   const host=document.getElementById('oficinaAlerts'); if(!host) return;
   const items=[];
-  (auto||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',msg:`Automatización <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:_ofAutoTab(m.id)});
-    else if(/atras/i.test(m.lbl||'')) items.push({t:'warn',msg:`<b>${escapeHtml(_ofPretty(m.label))}</b> está atrasada`,tab:_ofAutoTab(m.id)}); });
-  (ia||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',msg:`Agente <b>${escapeHtml(_ofPretty(m.label))}</b> con error`,tab:'agentes'}); });
-  (printers||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',msg:`Impresora <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'maquinas'}); });
+  (auto||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Automatización <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:_ofAutoTab(m.id)});
+    else if(/atras/i.test(m.lbl||'')) items.push({t:'warn',id:m.id,msg:`<b>${escapeHtml(_ofPretty(m.label))}</b> está atrasada`,tab:_ofAutoTab(m.id)}); });
+  (ia||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Agente <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'agentes'}); });
+  (printers||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Impresora <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'maquinas'}); });
   if(!items.length){ host.style.display='none'; host.innerHTML=''; _ofPrevAlerts=''; return; }
   host.style.display='';
-  host.innerHTML=items.slice(0,6).map(it=>`<div class="of-alert of-alert-${it.t}"><span class="of-alert-ic">${it.t==='error'?'🔴':'🟠'}</span><span class="of-alert-msg">${it.msg}</span>${it.tab?`<button class="btn btn-ghost btn-sm" onclick="switchTab('${it.tab}')">Ver →</button>`:''}</div>`).join('');
+  // Botón de acción según RBAC: si el rol no puede abrir la pestaña destino, se ofrece
+  // "📍 Ver en 3D" (enfoca al trabajador en la escena; no requiere otra pestaña).
+  const actBtn=it=>{
+    if(it.tab && _ofCanTab(it.tab)) return `<button class="btn btn-ghost btn-sm" data-tab="${escapeHtml(it.tab)}" onclick="switchTab(this.dataset.tab)">Ver →</button>`;
+    if(it.id) return `<button class="btn btn-ghost btn-sm" data-id="${escapeHtml(it.id)}" onclick="ofFocusAgent(this.dataset.id)">📍 Ver en 3D</button>`;
+    return '';
+  };
+  host.innerHTML=items.slice(0,6).map(it=>`<div class="of-alert of-alert-${it.t}"><span class="of-alert-ic">${it.t==='error'?'🔴':'🟠'}</span><span class="of-alert-msg">${it.msg}</span>${actBtn(it)}</div>`).join('');
   const sig=items.map(i=>i.t+i.msg).join('|');
   if(_ofPrevAlerts && sig!==_ofPrevAlerts){ const n=items.filter(i=>i.t==='error').length; if(n){ try{toast('⚠ '+n+' incidencia(s) en la oficina','error');}catch(e){} } }
   _ofPrevAlerts=sig;
@@ -593,8 +666,8 @@ function _ofWorkerCard(m){
     :m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:5px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:m.icon;
   const areaChip=`<span class="of-area-chip" style="color:${ac};background:${ac}1f;border-color:${ac}55">${escapeHtml(cat.name)}</span>`;
   // Acciones directas en tarjetas de impresora: webcam (si hay) + ir a Máquinas (idea 9)
-  const printerActions=m.isPrinter?`<div class="of-card-actions">${m.cam?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openWebcamModal('${escapeHtml(m.id)}')" title="Ver cámara en vivo">📷 Cámara</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('maquinas')" title="Abrir Máquinas">🔧 Controlar</button></div>`:'';
-  return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
+  const printerActions=m.isPrinter?`<div class="of-card-actions">${m.cam?`<button class="btn btn-ghost btn-sm" data-id="${escapeHtml(m.id)}" onclick="event.stopPropagation();openWebcamModal(this.dataset.id)" title="Ver cámara en vivo">📷 Cámara</button>`:''}${_ofCanTab('maquinas')?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();switchTab('maquinas')" title="Abrir Máquinas">🔧 Controlar</button>`:''}</div>`:'';
+  return `<div class="of-worker ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(_ofPretty(m.label)+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label))} · ${escapeHtml(cat.name)}">
     <div class="of-avatar" style="${avStyle}">${avInner}</div>
     <div class="of-body">
       <div class="of-name-row"><span class="of-dot"></span><span class="of-name">${escapeHtml(_ofPretty(m.label))}</span>${areaChip}${m.top?'<span title="Más ejecuciones en 30 días" style="margin-left:4px">👑</span>':''}</div>
@@ -617,11 +690,13 @@ function _ofRenderCards(ia,auto,extras){
   const allW=[...ia,...auto,...printers];
   // Barra de filtro por estado (se auto-resetea a Todos si el estado activo se queda sin trabajadores)
   const cnt=cls=>cls==='all'?allW.length:allW.filter(m=>m.cls===cls).length;
-  if(_ofCardFilter!=='all' && !cnt(_ofCardFilter)) _ofCardFilter='all';
+  if(_ofCardFilter!=='all' && !cnt(_ofCardFilter)){ _ofCardFilter='all'; try{localStorage.setItem('thelab_oficina_cardfilter','all');}catch(e){} }   // reset persistido (B-C11)
   let flt=_ofCardFilter;
+  // Preservar el foco de teclado a través del re-render (el poll de 45s reemplaza el DOM — B-U16)
+  const _focusId=(document.activeElement&&document.activeElement.closest)?(document.activeElement.closest('.of-worker')?.dataset?.iaId||document.activeElement.closest('.of-worker')?.dataset?.autoId||null):null;
   const bar=document.getElementById('oficinaCardFilter');
   if(bar){
-    const states=[['all','Todos','var(--accent)'],['of-work','Trabajando',_OF_STATUS['of-work']],['of-active','Activo',_OF_STATUS['of-active']],['of-off','Reposo',_OF_STATUS['of-off']],['of-error','Con falla',_OF_STATUS['of-error']]];
+    const states=[['all','Todos','var(--accent)'],...['of-work','of-active','of-off','of-error'].map(k=>[k,_OF_STATE_LBL[k],_OF_STATUS[k]])];
     bar.innerHTML=states.filter(s=>s[0]==='all'||cnt(s[0])>0).map(([k,lbl,col])=>`<button class="of-feed-chip${flt===k?' active':''}" style="--cc:${col}" onclick="ofSetCardFilter('${k}')" aria-pressed="${flt===k}">${lbl} <b>${cnt(k)}</b></button>`).join('');
   }
   const q=_ofSearch;
@@ -642,6 +717,8 @@ function _ofRenderCards(ia,auto,extras){
   // Mensaje si el filtro/búsqueda no deja ningún trabajador visible
   const empty=document.getElementById('oficinaCardsEmpty');
   if(empty){ const none=!(fIA.length+fAuto.length+fPr.length); empty.style.display=none?'':'none'; if(none) empty.textContent=q?`Sin resultados para “${_ofSearch}”.`:'Sin trabajadores en este estado.'; }
+  // Restaurar el foco de teclado sobre la misma tarjeta tras el re-render (B-U16)
+  if(_focusId){ const nf=document.querySelector(`#oficinaCards .of-worker[data-ia-id="${CSS.escape(_focusId)}"],#oficinaCards .of-worker[data-auto-id="${CSS.escape(_focusId)}"]`); if(nf) try{nf.focus({preventScroll:true});}catch(e){} }
 }
 function _ofDesk(m){
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
@@ -652,7 +729,7 @@ function _ofDesk(m){
   const _dspr=m.clickIA?_ofSprite(m):null;
   const seatInner=_dspr?`<img src="${_dspr.front}" alt="" style="width:100%;height:100%;object-fit:contain;padding:3px">`
     :m.img?`<img src="${m.img}" alt="" style="width:100%;height:100%;object-fit:contain;padding:6px" onerror="this.replaceWith(document.createTextNode('🖨️'))">`:em;
-  return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(m.label+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label)+' · '+cat.name+' — '+m.lbl)}">
+  return `<div class="of-desk ${m.cls}" role="button" tabindex="0" onkeydown="ofKey(event)" ${click} aria-label="${escapeHtml(_ofPretty(m.label)+' — '+m.lbl)}" title="${escapeHtml(_ofPretty(m.label)+' · '+cat.name+' — '+m.lbl)}">
     <div class="of-seat" style="${seatStyle}"><span class="of-seat-light"></span>${seatInner}</div>
     <div class="of-desk-name">${escapeHtml(_ofPretty(m.label))}</div>
     <div class="of-desk-state">${escapeHtml(m.lbl)}</div>
@@ -673,7 +750,6 @@ function _ofRenderFloor(ia,auto,extras){
 }
 
 // ── Vista isométrica 2.5D (estilo Habbo Hotel) ─────────────────────────
-const _OF_EMOJI={SALES:'💬',QUOTE:'📝',PRODUCTION:'🔧',QA:'✅',FOLLOWUP:'🔁',CEO:'📊',LEADGEN:'🎯',ONBOARDING:'🚀',FINANCE:'💰',ADS:'📣',COMMUNITY:'📷',NEWSLETTER:'📰',REPORT:'📈',SUPPLIER:'🔍'};
 // ── Sprites pixel-art de agentes (personajes con arte propio en la Oficina) ──
 // Cada set: front (parado, de cara), frontWalk, back, backWalk. El lookup es por
 // id/label (contains), así cubre LEADGEN, LEAD_GEN_AGENT y LEAD_AGENT por igual.
@@ -685,15 +761,16 @@ function _ofSprite(m){
   for(const e of _OF_SPRITES){ if(e.re.test(s)) return e.set; }
   return null;
 }
+// Un SOLO origen de emojis para TODAS las vistas (3D, feed, planta, detalle): delega en
+// _ofAgentEmoji por label/id — antes había un segundo mapa desactualizado y 7 agentes
+// salían 🤖 en el 3D pero con emoji propio en el feed (divergencia B-C5).
 function _ofEmoji(m){
   if(!m.clickIA) return (m.icon && !m.icon.startsWith('<')) ? m.icon : '⚙️';
-  const id=(m.id||'').toUpperCase();
-  for(const k in _OF_EMOJI){ if(id.includes(k)) return _OF_EMOJI[k]; }
-  return '🤖';
+  return _ofAgentEmoji(m.label||m.id);
 }
 // Emoji por etiqueta de agente (p. ej. "SALES_AGENT") — cubre todas las áreas
 // para que el feed y los avatares no caigan en el 🤖 genérico. Orden = específico→general.
-const _OF_EMOJI_BYLABEL=[['SALES','💬'],['QUOTE','📝'],['PRODUCTION','🔧'],['QA','✅'],['FOLLOWUP','🔁'],['CEO','📊'],['CLIENTE','📋'],['NEWSLETTER','📰'],['REPORT','📈'],['CAPTION','✍️'],['COMMUNITY','📷'],['STRATEG','♟️'],['SOCIAL','📱'],['TREND','🔥'],['LINKEDIN','💼'],['CONTENT','🎨'],['ADS','📣'],['LEAD','🎯'],['ONBOARD','🚀'],['FINANCE','💰'],['SUPPLIER','🔍']];
+const _OF_EMOJI_BYLABEL=[['SALES','💬'],['QUOTE','📝'],['PRODUCTION','🔧'],['AUDITOR','🛠️'],['MANTEN','🛠️'],['QA','✅'],['FOLLOWUP','🔁'],['CEO','📊'],['CLIENTE','📋'],['NEWSLETTER','📰'],['REPORT','📈'],['CAPTION','✍️'],['COMMUNITY','📷'],['STRATEG','♟️'],['SOCIAL','📱'],['TREND','🔥'],['LINKEDIN','💼'],['CONTENT','🎨'],['ADS','📣'],['LEAD','🎯'],['ONBOARD','🚀'],['FINANCE','💰'],['SUPPLIER','🔍']];
 function _ofAgentEmoji(label){
   const s=(label||'').toUpperCase();
   for(const [k,e] of _OF_EMOJI_BYLABEL){ if(s.includes(k)) return e; }
@@ -735,8 +812,14 @@ function _ofShade(hex,f){
   let r=Math.round(((n>>16)&255)*f), g=Math.round(((n>>8)&255)*f), b=Math.round((n&255)*f);
   return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
 }
-// Paleta única de estado (avatares 3D, dona y leyendas — coherencia total)
-const _OF_STATUS={'of-work':'#00d4aa','of-active':'#00d4cc','of-error':'#ff4444','of-off':'#7c8590'};
+// Paleta única de estado (avatares 3D, dona y leyendas — coherencia total).
+// 'of-active' es AZUL para distinguirse de 'of-work' (antes #00d4cc vs #00d4aa eran
+// indistinguibles en leyendas/dona/chips, también para daltónicos — B-U6).
+const _OF_STATUS={'of-work':'#00d4aa','of-active':'#4da3ff','of-error':'#ff4444','of-off':'#7c8590'};
+// Vocabulario ÚNICO de estados para leyendas/chips/dona/alertas (B-C6). Las tarjetas pueden
+// mostrar un sublabel más específico ("Atrasado", "Sin conexión"), pero el nombre del ESTADO
+// es siempre el mismo en toda la sección.
+const _OF_STATE_LBL={'of-work':'Trabajando','of-active':'Activo','of-off':'En reposo','of-error':'Con falla'};
 // Texto del rótulo de progreso de impresión (reutilizado por el render y por la mutación en vivo)
 function _ofPrinterLabelTxt(progress,eta){
   const _eta=s=>{ s=Math.max(0,Math.round(s||0)); const h=Math.floor(s/3600), mi=Math.floor((s%3600)/60); return h?h+'h'+(mi<10?'0':'')+mi:mi+'m'; };
@@ -767,11 +850,11 @@ function _ofIsoStation(m,x,y){
       const lw=Math.max(48, lblT.length*4.9+14);   // ancho del rótulo según el texto (evita desborde, B19)
       prog=`<rect x="${f(px)}" y="${f(py)}" width="${f(pw)}" height="${ph}" rx="${ph/2}" fill="#0f1114" opacity="0.85"/>`
         +(det?`<rect class="of-pfill" data-pw="${f(pw)}" x="${f(px)}" y="${f(py)}" width="${f(fillW)}" height="${ph}" rx="${ph/2}" fill="${col}"/>`
-             :`<rect class="of-prog-ind" x="${f(px)}" y="${f(py)}" width="${f(pw*0.4)}" height="${ph}" rx="${ph/2}" fill="${col}" style="--pw:${f(pw)}px"/>`)
-        +`<g transform="translate(0,${f(baseY-Hp-7)})"><rect x="${f(-lw/2)}" y="-8.5" width="${f(lw)}" height="13" rx="6.5" fill="#0e1116" opacity="0.9"/><text class="of-plabel" x="0" y="1.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="700">${lblT}</text></g>`;
+             :`<rect class="of-prog-ind" data-pw="${f(pw)}" x="${f(px)}" y="${f(py)}" width="${f(pw*0.4)}" height="${ph}" rx="${ph/2}" fill="${col}" style="--pw:${f(pw)}px"/>`)
+        +`<g transform="translate(0,${f(baseY-Hp-7)})"><rect class="of-ppill" x="${f(-lw/2)}" y="-8.5" width="${f(lw)}" height="13" rx="6.5" fill="#0e1116" opacity="0.9"/><text class="of-plabel" x="0" y="1.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="700">${lblT}</text></g>`;
     }
     return `<g class="of-iso-char" data-pid="${escapeHtml(m.id)}" ${pclick} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
-      <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
+      <title>${escapeHtml(_ofPretty(m.label)+' — '+m.lbl)}</title>
       ${shadow}${halo}
       <g class="of-iso-body">${body}${light}${camb}</g>
       ${prog}
@@ -820,7 +903,7 @@ function _ofIsoStation(m,x,y){
       <circle cx="12" cy="-46" r="3.8" fill="${col}" stroke="#fff" stroke-width="1.1"${working?' class="of-iso-blink"':''}/>
     </g>`;
   return `<g class="of-iso-char${bob}" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
-    <title>${escapeHtml(m.label+' — '+m.lbl+(cat?' · '+cat.name:''))}</title>
+    <title>${escapeHtml(_ofPretty(m.label)+' — '+m.lbl+(cat?' · '+cat.name:''))}</title>
     <ellipse cx="0" cy="2" rx="15" ry="6.5" fill="url(#ofShadow)"/>
     ${halo}
     <g transform="scale(1.04)">${seat}</g>
@@ -892,7 +975,7 @@ function _ofBreakWalker(m,home,door,dest,kind,dur,delay){
       <circle cx="0" cy="-36" r="10.5" fill="#fff7ec" stroke="${col}" stroke-width="2.6"/>
       ${m.img?`<image href="${m.img}" x="-9" y="-45.5" width="18" height="18" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-32" text-anchor="middle" font-size="12">${em}</text>`}`;
   return `<g class="of-iso-errand" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" style="--hx:${f(home[0])}px;--hy:${f(home[1])}px;--dx:${f(door[0])}px;--dy:${f(door[1])}px;--ax:${f(dest[0])}px;--ay:${f(dest[1])}px;--dur:${dur}s;--dl:${delay}s">
-    <title>${escapeHtml(m.label+' — '+lbl)}</title>
+    <title>${escapeHtml(_ofPretty(m.label)+' — '+lbl)}</title>
     <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
     <g class="of-iso-body">${body}</g>
     <g class="of-iso-errand-bubble" transform="translate(0,-52)"><rect x="-11" y="-9" width="22" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-width="1.3"/><polygon points="-4,6 4,6 0,12" fill="#fff"/><text x="0" y="3" text-anchor="middle" font-size="10">${bub}</text></g>
@@ -964,7 +1047,7 @@ function _ofRingAgent(m,x,y,facing){
       ? `<g class="of-mood of-mood-storm" transform="translate(0,-60)"><ellipse cx="0" cy="0" rx="11" ry="6" fill="#7a828d"/><ellipse cx="-5.5" cy="-2.5" rx="6" ry="4.5" fill="#9aa3ad"/><ellipse cx="5.5" cy="-2.5" rx="6" ry="4.5" fill="#9aa3ad"/><polygon points="-1,4 3,4 0,10 4,10 -2,18 0,9 -3,9" fill="#ffd23f"/></g>`
       : '');
   return `<g class="of-iso-char${bob}"${bd} ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${f(x)},${f(y)})">
-    <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
+    <title>${escapeHtml(_ofPretty(m.label)+' — '+m.lbl)}</title>
     <ellipse cx="0" cy="3" rx="13" ry="5.5" fill="url(#ofShadow)"/>
     ${halo}
     ${(()=>{
@@ -1015,8 +1098,10 @@ function _ofDoor(g,color){
 // respire; el centro/frente del taller queda despejado.
 function _ofPrinterLGrid(n){
   n=Math.max(1,n|0);
-  const dc=Math.max(2,Math.ceil((n+1)/2));   // largo del brazo superior (fila 0, incluye la esquina)
-  const dr=Math.max(2,n+1-dc);               // profundidad = esquina + brazo izquierdo (col 0)
+  // Profundidad ACOTADA a 4 filas (B-D8): sin tope, la sala crecía cuadráticamente (n=13 → 7×7
+  // con 36 baldosas vacías) y encogía al resto de departamentos. El brazo superior se alarga.
+  const dr=Math.min(4,Math.max(2,Math.ceil((n+1)/2)));
+  const dc=Math.max(2,n+1-dr);               // largo del brazo superior (fila 0, incluye la esquina)
   return {dc,dr};
 }
 // Posiciones de las impresoras: DISTRIBUIDAS EN L de una sola fila por pared —
@@ -1138,15 +1223,22 @@ function _ofRenderIso(ia,auto,extras){
     dividers+=`<line x1="${k.L[0].toFixed(1)}" y1="${(k.L[1]-dw).toFixed(1)}" x2="${k.T[0].toFixed(1)}" y2="${(k.T[1]-dw).toFixed(1)}" stroke="${R.color}" stroke-width="2.6" opacity="0.85"/>`;
   });
 
-  // Puerta de cada departamento mirando a un pasillo. Por defecto va en el muro
-  // frontal-derecho (R→F); la sala de impresoras la lleva en el muro derecho-superior (T→R).
+  // Puerta de cada departamento mirando a un PASILLO REAL. Por defecto va en el muro
+  // frontal-derecho (R→F); si la sala termina en el borde derecho del piso se usa el
+  // frontal-izquierdo (F→L), y si también toca el frente, el trasero-derecho (T→R).
+  // B-D1: se elimina el caso especial de impresoras (con la distribución en L su muro R→F
+  // queda libre; antes la puerta iba en el muro del fondo, tapada por la propia fila de
+  // máquinas). B-D2: hasOut indica si hay piso al otro lado (walkers no flotan en el vacío).
   const _doorGeo=R=>{ const k=_rC(R), C=iso(R.cc,R.rc);
-    const isPr=/impresora/i.test(R.name), P=isPr?k.T:k.R, Q=isPr?k.R:k.F;
+    let P,Q,hasOut=true;
+    if(R.c1<cols-1){ P=k.R; Q=k.F; }
+    else if(R.r1<rows-1){ P=k.F; Q=k.L; }
+    else if(R.r0>0){ P=k.T; Q=k.R; }
+    else { P=k.R; Q=k.F; hasOut=false; }
     const ex=Q[0]-P[0], ey=Q[1]-P[1], len=Math.hypot(ex,ey)||1, ux=ex/len, uy=ey/len;
     const mx=P[0]+ux*len*0.52, my=P[1]+uy*len*0.52;
     let nx=-uy, ny=ux; if((mx+nx-C[0])**2+(my+ny-C[1])**2 < (mx-C[0])**2+(my-C[1])**2){ nx=-nx; ny=-ny; }
-    return {P,Q,C,ux,uy,nx,ny,mx,my,len}; };
-  const _roomDoorPt=R=>{ const g=_doorGeo(R); return [g.mx+g.nx*16, g.my+g.ny*16]; };
+    return {P,Q,C,ux,uy,nx,ny,mx,my,len,hasOut}; };
   let doors='';
   _rooms.forEach(R=>{ doors+=_ofDoor(_doorGeo(R), R.color); });
 
@@ -1167,13 +1259,22 @@ function _ofRenderIso(ia,auto,extras){
   const _roomByLabel={};
   _rooms.forEach(R=>R.members.forEach(mm=>{ if(mm&&mm.label) _roomByLabel[mm.label]=R; }));
   const _transit={};   // label → {m, home:interior, thr:umbral de la puerta, out:pasillo afuera}
-  _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm){ const g=_doorGeo(fr); _transit[c.from]={m:fm, home:[g.mx-g.nx*22,g.my-g.ny*22], thr:[g.mx,g.my], out:[g.mx+g.nx*44,g.my+g.ny*44]}; } } });
+  _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm){
+    const g=_doorGeo(fr), od=g.hasOut?44:10;                                   // sin pasillo → se queda en el umbral (B-D2)
+    const tg=((_ofHash(c.from+'t')%9)-4)*7;                                    // offset tangencial: walkers de la misma sala no se superponen (B-D7)
+    const home=[g.mx-g.nx*22,g.my-g.ny*22];
+    _ofPos[fm.id]=home;                                                        // el agente en tránsito sigue siendo enfocable (B-D10)
+    _transit[c.from]={m:fm, home, thr:[g.mx,g.my], out:[g.mx+g.nx*od+g.ux*tg, g.my+g.ny*od+g.uy*tg]};
+  } } });
 
   // Estaciones por sala: el MESÓN va al MEDIO del depto y los agentes trabajan ALREDEDOR
   let chars='', tags='', _errands='', chatter='';
-  // Zona de descanso: cafetería (frente-izq) y baño (frente-der) — destinos de las pausas
-  const coffeePt=[Dl[0]+(Cb[0]-Dl[0])*0.36, Dl[1]+(Cb[1]-Dl[1])*0.36];
-  const wcPt=[Cb[0]+(Br[0]-Cb[0])*0.64, Cb[1]+(Br[1]-Cb[1])*0.64];
+  // Zona de descanso (decorativa): en el PASILLO entre estanterías. Antes eran fracciones fijas
+  // del borde exterior y caían sobre la plataforma del taller o pegadas a una puerta (B-D3);
+  // sin pasillo real se omiten.
+  const _hasCorr=_rooms.length>1 && _corrR<rows-1;
+  const coffeePt=_hasCorr?iso(Math.max(1,cols*0.16),_corrR):null;
+  const wcPt=_hasCorr?iso(Math.min(cols-2,cols*0.84),_corrR):null;
   const _rtag=(m,x,y)=>{ const f=n=>n.toFixed(1), pretty=_ofPretty(m.label); const raw=pretty.length>14?pretty.slice(0,13)+'…':pretty; const nm=escapeHtml(raw), w=Math.max(34,raw.length*5.2+10);
     return `<g transform="translate(${f(x)},${f(y)})" pointer-events="none"><rect x="${f(-w/2)}" y="6" width="${f(w)}" height="13" rx="6.5" fill="#0e1116" opacity="0.85"/><text x="0" y="15.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="600">${nm}</text></g>`; };
   // Salas de atrás hacia adelante (orden de pintor entre salas)
@@ -1220,15 +1321,22 @@ function _ofRenderIso(ia,auto,extras){
     // 5) agentes en pausa → SALEN POR LA PUERTA al pasillo JUSTO AFUERA de su oficina (con la
     //    burbuja ☕/🚻) y vuelven por la misma puerta. Recorrido LOCAL: nunca cruzan otra sala
     //    (las salas están apiladas; ir a una amenidad del frente obligaría a atravesar muros).
-    const _g=_doorGeo(R), _thr=[_g.mx,_g.my], _out=[_g.mx+_g.nx*40,_g.my+_g.ny*40];
-    pos.forEach(p=>{ if(!p.brk) return; const dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur)); _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],_thr,_out,p.kind,dur,dl); });
+    //    Cada walker con offset tangencial propio → no se superponen en el mismo punto (B-D7);
+    //    si la sala no tiene pasillo al otro lado del muro, se quedan en el umbral (B-D2).
+    const _g=_doorGeo(R), _thr=[_g.mx,_g.my], _od=_g.hasOut?40:10;
+    pos.forEach(p=>{ if(!p.brk) return; const dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur));
+      const tg=((_ofHash(p.m.id+'t')%9)-4)*7;
+      const _out=[_g.mx+_g.nx*_od+_g.ux*tg, _g.my+_g.ny*_od+_g.uy*tg];
+      _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],_thr,_out,p.kind,dur,dl); });
     // 6) Charla ambiental: los agentes SENTADOS que no trabajan conversan entre ellos, en secuencia
     //    alrededor de la mesa (burbujas de emote en bucle CSS; el equipo se ve colaborando en vivo).
+    //    La burbuja se desplaza radialmente HACIA AFUERA del anillo para no tapar al vecino de
+    //    atrás ni su placa (B-D4); los que están Con falla no charlan (tienen su ⛈️ — B-D5).
     const _CH=7.5;
-    pos.forEach((p,i)=>{ if(p.brk||p.m.cls==='of-work'||p.m.top) return;
+    pos.forEach((p,i)=>{ if(p.brk||p.m.cls==='of-work'||p.m.cls==='of-error'||p.m.top) return;
       if(_ofCelebs.some(c=>c.label===p.m.label && Date.now()-c.t<_OF_CELEB_MS)) return;
       const em=_OF_CHAT[_ofHash(p.m.id)%_OF_CHAT.length], dl=-(((i+0.5)/Math.max(1,N))*_CH + (_ofHash(p.m.id+'c')%14)/10);
-      chatter+=_ofChatBubble(p.sx,p.sy,em,dl,_CH,R.color);
+      chatter+=_ofChatBubble(p.sx+Math.cos(p.a)*20,p.sy+Math.sin(p.a)*10,em,dl,_CH,R.color);
     });
   });
   chars+=_errands;   // pausas en primer plano (pasan por delante de las salas)
@@ -1257,7 +1365,7 @@ function _ofRenderIso(ia,auto,extras){
   // Plantas decorativas en las esquinas frontales
   const plant=(x,y)=>`<g transform="translate(${x},${y})"><ellipse cx="0" cy="2" rx="12" ry="6" fill="rgba(0,0,0,0.4)"/><text x="0" y="3" text-anchor="middle" font-size="22">🪴</text></g>`;
   const decor=plant(Dl[0]+10,Dl[1]-4)+plant(Cb[0]+2,Cb[1]-4);
-  const amenities=_ofCoffee(coffeePt[0],coffeePt[1])+_ofRestroom(wcPt[0],wcPt[1]);   // zona de descanso (café + baño)
+  const amenities=(coffeePt?_ofCoffee(coffeePt[0],coffeePt[1]):'')+(wcPt?_ofRestroom(wcPt[0],wcPt[1]):'');   // zona de descanso (café + baño) — sólo si hay pasillo
   // Jornada NOCHE: lámparas encendidas (pozo de luz cálido + bombillo colgante por sala)
   const isNight = H>=20 || H<7;   // B18: alineado con el cielo de la ventana (noche = luna, ≥20h) para no encender lámparas con sol
   let lamps='';
@@ -1307,10 +1415,10 @@ function _ofRenderIso(ia,auto,extras){
   const ambient = ambO? `<rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="${ambC}" opacity="${ambO}" pointer-events="none"/>`:'';
 
   const legend=`<div class="of-iso-legend">
-    <span><i style="background:${_OF_STATUS['of-work']}"></i>Trabajando</span>
-    <span><i style="background:${_OF_STATUS['of-active']}"></i>Activo</span>
-    <span><i style="background:${_OF_STATUS['of-off']}"></i>Reposo</span>
-    <span><i style="background:${_OF_STATUS['of-error']}"></i>Error</span>
+    <span><i style="background:${_OF_STATUS['of-work']}"></i>${_OF_STATE_LBL['of-work']}</span>
+    <span><i style="background:${_OF_STATUS['of-active']}"></i>${_OF_STATE_LBL['of-active']}</span>
+    <span><i style="background:${_OF_STATUS['of-off']}"></i>${_OF_STATE_LBL['of-off']}</span>
+    <span><i style="background:${_OF_STATUS['of-error']}"></i>${_OF_STATE_LBL['of-error']}</span>
   </div>`;
   const presentCats=_OF_CAT.filter(c=>ia.some(m=>_ofCat(m).name===c.name));
   if(ia.some(m=>_ofCat(m).name==='Otros')) presentCats.push({name:'Otros',color:'#7a7a7a'});
@@ -1362,6 +1470,7 @@ function _ofRenderIso(ia,auto,extras){
 }
 let _ofFeedRuns=[];            // últimos runs (para re-filtrar el feed sin volver a Airtable)
 let _ofFeedFilter='all';       // 'all' o nombre de departamento/área
+let _ofFeedLimit=15;           // corte visible del feed (crece con "Ver más" — B-U9)
 function ofSetFeedFilter(cat){ _ofFeedFilter=cat||'all'; _ofRenderFeed(_ofFeedRuns); }
 function _ofFeedCat(r){ return _ofCat({id:r.agent}).name; }   // área del run según su agente
 function _ofRenderFeed(runs){
@@ -1377,17 +1486,21 @@ function _ofRenderFeed(runs){
     present.sort((a,b)=>{ const ia=order.indexOf(a), ib=order.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
     if(_ofFeedFilter!=='all' && !present.includes(_ofFeedFilter)) _ofFeedFilter='all';   // el área filtrada ya no tiene actividad
     const colOf=n=>{ const c=_OF_CAT.find(x=>x.name===n); return c?c.color:'#7a7a7a'; };
-    const chip=(key,label,color,n)=>`<button class="of-feed-chip${_ofFeedFilter===key?' active':''}" style="--cc:${color}" onclick="ofSetFeedFilter('${escapeHtml(key)}')">${escapeHtml(label)}${n!=null?` <b>${n}</b>`:''}</button>`;
+    const chip=(key,label,color,n)=>`<button class="of-feed-chip${_ofFeedFilter===key?' active':''}" style="--cc:${color}" aria-pressed="${_ofFeedFilter===key}" onclick="ofSetFeedFilter('${escapeHtml(key)}')">${escapeHtml(label)}${n!=null?` <b>${n}</b>`:''}</button>`;
     fbar.innerHTML=chip('all','Todos','var(--accent)',runs.length)+present.map(n=>chip(n,n,colOf(n),runs.filter(r=>_ofFeedCat(r)===n).length)).join('');
     fbar.style.display=present.length>1?'flex':'none';
   }
   const shown=_ofFeedFilter==='all'?runs:runs.filter(r=>_ofFeedCat(r)===_ofFeedFilter);
-  if(fc) fc.textContent=String(shown.length);
+  // Contador honesto: si la lista está truncada dice "15 de 112" (antes el badge mostraba el
+  // total y la lista cortaba en 15 sin aviso — B-U9); "Ver más" amplía el corte.
+  const lim=Math.max(15,_ofFeedLimit);
+  if(fc) fc.textContent=shown.length>lim?`${lim} de ${shown.length}`:String(shown.length);
   if(!shown.length){
     feed.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">'+(runs.length?'Sin actividad en esta área por ahora.':'Aún no hay ejecuciones registradas. Cuando tus agentes trabajen aparecerán aquí en vivo.')+'</div>';
     return;
   }
-  feed.innerHTML=shown.slice(0,15).map(r=>{
+  const more=shown.length>lim?`<button class="btn btn-ghost btn-sm" style="width:100%;margin:8px 0 4px" onclick="ofFeedMore()">▾ Ver más (${shown.length-lim} restantes)</button>`:'';
+  feed.innerHTML=shown.slice(0,lim).map(r=>{
     const col=_OF_STATUS[_ofStatus(r.t).cls]||'#7c8590';
     const em=_ofAgentEmoji(r.agent);
     return `<div class="of-feed-item" style="border-left:2px solid ${col};padding-left:11px">
@@ -1397,8 +1510,9 @@ function _ofRenderFeed(runs){
         <div class="of-feed-txt">${escapeHtml((r.input||r.output||'').substring(0,120))}</div>
       </div>
       <div class="of-feed-time">${_ofAgo(r.t)}</div>
-    </div>`;}).join('');
+    </div>`;}).join('')+more;
 }
+function ofFeedMore(){ _ofFeedLimit=Math.max(15,_ofFeedLimit)+20; _ofRenderFeed(_ofFeedRuns); }
 
 // ── Analítica de la oficina (gráficos SVG, sin librerías) ──────────────
 function _ofBarsDays(runs){
@@ -1410,7 +1524,7 @@ function _ofBarsDays(runs){
   let bars='',lbls='';
   arr.forEach((v,i)=>{ const x=pad+i*bw, bh=(v/max)*(H-pad-22), y=H-22-bh;
     bars+=`<rect x="${(x+2).toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i===N-1?'var(--accent)':'var(--accent3)'}" opacity="${i===N-1?1:0.6}"><title>${lab[i]}: ${v}</title></rect>`;
-    if(i%step===0||i===N-1) lbls+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="8" fill="var(--text3)">${lab[i]}</text>`;
+    if((i%step===0 && N-1-i>=step)||i===N-1) lbls+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="8" fill="var(--text3)">${lab[i]}</text>`;   // sin solape con la última etiqueta (B-U8)
   });
   return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg"><line x1="${pad}" y1="${H-22}" x2="${W-pad}" y2="${H-22}" stroke="var(--border)"/>${bars}${lbls}</svg>`;
 }
@@ -1421,7 +1535,7 @@ function _ofBarsTop(runs){
   if(!arr.length) return `<div class="of-chart-empty">Sin ejecuciones en ${_rd} días.</div>`;
   const max=Math.max(...arr.map(a=>a[1])), W=320, rowH=21, H=arr.length*rowH+6;
   let rows='';
-  arr.forEach((a,i)=>{ const y=i*rowH+4, bw=(a[1]/max)*(W-150);
+  arr.forEach((a,i)=>{ const y=i*rowH+4, bw=(a[1]/max)*(W-150-24);   // reserva 24px para la cifra (no se sale del lienzo — B-U13)
     rows+=`<text x="0" y="${y+12}" font-size="9" fill="var(--text2)">${escapeHtml((p=>p.length>17?p.slice(0,16)+'…':p)(_ofPretty(a[0])))}</text>`;
     rows+=`<rect x="132" y="${y+3}" width="${Math.max(2,bw).toFixed(1)}" height="12" rx="3" fill="var(--accent)"><title>${a[1]}</title></rect>`;
     rows+=`<text x="${(132+Math.max(2,bw)+6).toFixed(1)}" y="${y+13}" font-size="9" fill="var(--text3)">${a[1]}</text>`;
@@ -1444,7 +1558,7 @@ function _ofDonut(parts,total){
 function _ofDonutStatus(ia,auto){
   const all=[...ia,...auto], c={work:0,active:0,off:0,error:0};
   all.forEach(m=>{ if(m.cls==='of-work')c.work++; else if(m.cls==='of-active')c.active++; else if(m.cls==='of-error')c.error++; else c.off++; });
-  const parts=[{v:c.work,color:_OF_STATUS['of-work'],label:'Trabajando'},{v:c.active,color:_OF_STATUS['of-active'],label:'Activo'},{v:c.off,color:_OF_STATUS['of-off'],label:'Reposo'},{v:c.error,color:_OF_STATUS['of-error'],label:'Error'}];
+  const parts=[{v:c.work,color:_OF_STATUS['of-work'],label:_OF_STATE_LBL['of-work']},{v:c.active,color:_OF_STATUS['of-active'],label:_OF_STATE_LBL['of-active']},{v:c.off,color:_OF_STATUS['of-off'],label:_OF_STATE_LBL['of-off']},{v:c.error,color:_OF_STATUS['of-error'],label:_OF_STATE_LBL['of-error']}];
   const legend=parts.map(p=>`<span><i style="background:${p.color}"></i>${p.label} · ${p.v}</span>`).join('');
   return `<div class="of-donut-wrap">${_ofDonut(parts,all.length)}<div class="of-donut-legend">${legend}</div></div>`;
 }
@@ -1480,8 +1594,18 @@ function _ofTimeline(runs){
   const mark=`<line x1="${nx.toFixed(1)}" y1="20" x2="${nx.toFixed(1)}" y2="${H-26}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 2" opacity="0.55"/>`;
   return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg"><text x="${W-pad}" y="13" text-anchor="end" font-size="8.5" fill="var(--text3)">pico ${peak}:00 · ${total} hoy</text><line x1="${pad}" y1="${H-26}" x2="${W-pad}" y2="${H-26}" stroke="var(--border)"/>${bars}${mark}${lbls}</svg>`;
 }
+// En táctil no existen los tooltips <title>: un tap sobre una barra/segmento muestra su valor (B-U10)
+function _ofInitChartTips(host){
+  if(host._tipInit) return; host._tipInit=true;
+  host.addEventListener('click',e=>{
+    const t=e.target&&e.target.closest?e.target.closest('rect,path'):null; if(!t) return;
+    const ti=t.querySelector&&t.querySelector('title');
+    if(ti&&ti.textContent){ try{toast(ti.textContent,'info');}catch(x){} }
+  });
+}
 function _ofRenderCharts(runs,ia,auto){
   const host=document.getElementById('oficinaCharts'); if(!host) return;
+  _ofInitChartTips(host);
   _ofChartData={runs,ia,auto};   // recordar para re-render al cambiar el rango
   const R=_ofChartRange||14;
   document.querySelectorAll('#oficinaRangeSel .of-vbtn').forEach(b=>b.classList.toggle('active',+b.dataset.r===R));

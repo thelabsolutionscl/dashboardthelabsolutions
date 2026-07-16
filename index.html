@@ -1487,12 +1487,12 @@
 
 <!-- OFICINA VIRTUAL -->
 <style id="oficina-styles">
-#tab-oficina .of-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+#tab-oficina .of-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;min-height:78px;}
 #tab-oficina .of-kpi{background:linear-gradient(160deg,var(--surface2),var(--surface));border:1px solid var(--border);border-radius:12px;padding:15px 16px;position:relative;overflow:hidden;transition:border-color .15s,transform .12s,box-shadow .15s;}
 #tab-oficina .of-kpi::before{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,var(--border2),transparent);}
 #tab-oficina .of-kpi:hover{transform:translateY(-2px);border-color:var(--border2);}
 #tab-oficina .of-kpi .of-kpi-val{font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1;color:var(--text);letter-spacing:.5px;}
-#tab-oficina .of-kpi .of-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-top:4px;}
+#tab-oficina .of-kpi .of-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-top:4px;}
 #tab-oficina .of-kpi.live{box-shadow:inset 0 0 26px -12px rgba(0,212,204,0.45);}
 #tab-oficina .of-kpi.live::before{background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:220% 100%;animation:ofKpiShine 2.6s linear infinite;}
 @keyframes ofKpiShine{0%{background-position:120% 0;}100%{background-position:-120% 0;}}
@@ -1507,7 +1507,7 @@
 .of-worker.of-work:hover{box-shadow:0 12px 30px -14px rgba(0,212,170,0.4);}
 .of-worker::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--text3);opacity:.6;}
 .of-worker.of-work::before{background:var(--success);opacity:1;}
-.of-worker.of-active::before{background:var(--accent);opacity:.9;}
+.of-worker.of-active::before{background:#4da3ff;opacity:.9;}
 .of-worker.of-error::before{background:var(--danger);opacity:1;}
 .of-worker.of-off::before{background:var(--text3);opacity:.4;}
 .of-avatar{width:42px;height:42px;flex-shrink:0;border-radius:11px;background:radial-gradient(circle at 35% 28%,var(--border2),var(--surface3));border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);}
@@ -1517,17 +1517,17 @@
 .of-name{font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .of-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0;}
 .of-worker.of-work .of-dot{background:var(--success);box-shadow:0 0 0 0 rgba(0,212,170,0.6);animation:ofPulse 1.6s infinite;}
-.of-worker.of-active .of-dot{background:var(--accent);}
+.of-worker.of-active .of-dot{background:#4da3ff;}
 .of-worker.of-error .of-dot{background:var(--danger);}
 @keyframes ofPulse{0%{box-shadow:0 0 0 0 rgba(0,212,170,0.55);}70%{box-shadow:0 0 0 7px rgba(0,212,170,0);}100%{box-shadow:0 0 0 0 rgba(0,212,170,0);}}
 .of-role{font-size:10.5px;color:var(--text3);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .of-task{font-size:11px;color:var(--text2);margin-top:7px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:14px;}
 .of-foot{display:flex;align-items:center;justify-content:space-between;margin-top:9px;gap:6px;}
-.of-state-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:6px;background:var(--surface3);color:var(--text3);}
+.of-state-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:6px;background:var(--surface3);color:var(--text2);}
 .of-worker.of-work .of-state-lbl{background:rgba(0,212,170,0.14);color:var(--success);}
-.of-worker.of-active .of-state-lbl{background:rgba(0,212,204,0.12);color:var(--accent);}
+.of-worker.of-active .of-state-lbl{background:rgba(77,163,255,0.12);color:#4da3ff;}
 .of-worker.of-error .of-state-lbl{background:rgba(255,68,68,0.12);color:var(--danger);}
-.of-stats{font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+.of-stats{font-size:9.5px;color:var(--text2);font-family:'JetBrains Mono',monospace;white-space:nowrap;}
 #tab-oficina .of-feed{max-height:420px;overflow-y:auto;}
 .of-feed-item{display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border);}
 .of-feed-item:last-child{border-bottom:none;}
@@ -1597,13 +1597,13 @@
 .of-seat-light{position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:var(--text3);border:2px solid var(--surface2);}
 .of-desk.of-work .of-seat{border-color:rgba(0,212,170,0.5);box-shadow:0 0 18px rgba(0,212,170,0.25);}
 .of-desk.of-work .of-seat-light{background:var(--success);animation:ofPulse 1.6s infinite;}
-.of-desk.of-active .of-seat-light{background:var(--accent);}
+.of-desk.of-active .of-seat-light{background:#4da3ff;}
 .of-desk.of-error .of-seat{border-color:rgba(255,68,68,0.5);}
 .of-desk.of-error .of-seat-light{background:var(--danger);}
 .of-desk-name{font-size:10.5px;font-weight:700;color:var(--text);max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.of-desk-state{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);}
+.of-desk-state{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);}
 .of-desk.of-work .of-desk-state{color:var(--success);}
-.of-desk.of-active .of-desk-state{color:var(--accent);}
+.of-desk.of-active .of-desk-state{color:#4da3ff;}
 .of-desk.of-error .of-desk-state{color:var(--danger);}
 /* Vista isométrica 3D (estilo Habbo) */
 #tab-oficina .of-iso-scene{overflow-x:auto;border:1px solid var(--border);border-radius:18px;background:radial-gradient(ellipse at 50% -8%,#1d222a,#0b0c0f 72%);padding:16px 10px;box-shadow:inset 0 0 70px -12px rgba(0,0,0,0.75),inset 0 1px 0 rgba(255,255,255,0.05);}
@@ -1707,15 +1707,13 @@
 .of-crown{animation:ofCrown 3s ease-in-out infinite;transform-box:fill-box;transform-origin:center bottom;}
 @keyframes ofStorm{0%,100%{transform:translateX(0);}25%{transform:translateX(-1.3px);}75%{transform:translateX(1.3px);}}
 .of-mood-storm{animation:ofStorm 1.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
-@keyframes ofSleep{0%{opacity:0;transform:translateY(2px) scale(.8);}40%{opacity:.9;}100%{opacity:0;transform:translateY(-7px) scale(1.1);}}
-.of-mood-sleep{animation:ofSleep 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
 @keyframes ofProgInd{0%{transform:translateX(0);}100%{transform:translateX(calc(var(--pw,40px) * 0.62));}}
 .of-prog-ind{animation:ofProgInd 1.4s ease-in-out infinite alternate;will-change:transform;}
 #tab-oficina .of-iso-scene{cursor:grab;}
 #tab-oficina .of-iso-scene.of-grabbing{cursor:grabbing;}
 /* B22: escena fuera del viewport → pausa sus animaciones (ahorro CPU/GPU) */
 #oficinaIso.of-paused svg *{animation-play-state:paused!important;}
-@media(prefers-reduced-motion:reduce){.of-celeb,.of-celeb .of-spark1,.of-celeb .of-spark2,.of-crown,.of-mood-storm,.of-mood-sleep,.of-prog-ind{animation:none;}.of-mood-sleep{opacity:.85;}}
+@media(prefers-reduced-motion:reduce){.of-celeb,.of-celeb .of-spark1,.of-celeb .of-spark2,.of-crown,.of-mood-storm,.of-prog-ind{animation:none;}}
 /* Analítica — gráficos */
 #tab-oficina .of-charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
 #tab-oficina .of-chart{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;min-width:0;}
@@ -1762,7 +1760,8 @@
 .of-search input{background:none;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;width:100%;}
 .of-search input::placeholder{color:var(--text3);}
 /* Chip de área en las tarjetas (identidad de departamento) */
-.of-area-chip{display:inline-flex;align-items:center;gap:4px;font-size:8.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:2px 6px;border-radius:5px;margin-left:6px;vertical-align:middle;border:1px solid;line-height:1.3;}
+.of-area-chip{display:inline-flex;align-items:center;gap:4px;font-size:8.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:2px 6px;border-radius:5px;margin-left:6px;vertical-align:middle;border:1px solid;line-height:1.3;white-space:nowrap;flex-shrink:0;max-width:45%;overflow:hidden;text-overflow:ellipsis;}
+#tab-oficina.of-compact .of-area-chip{display:none;}
 .of-card-actions{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;}
 .of-card-actions .btn{font-size:10px;padding:3px 9px;}
 /* Densidad compacta */
@@ -1783,7 +1782,7 @@
 .ofd-hours i.now{background:var(--accent);}
 .ofd-hours i.has{background:var(--accent3);}
 /* Tema de la escena 3D: CLARO (por defecto la escena es oscura) */
-#tab-oficina.of-scene-light .of-iso-scene{background:radial-gradient(ellipse at 50% -8%,#eef3f8,#d5dde6 78%);box-shadow:inset 0 0 60px -18px rgba(120,140,165,0.5),inset 0 1px 0 rgba(255,255,255,0.6);}
+#tab-oficina.of-scene-light .of-iso-scene{background:radial-gradient(ellipse at 50% -8%,#cfd8e2,#aeb9c6 78%);box-shadow:inset 0 0 60px -18px rgba(90,110,135,0.55),inset 0 1px 0 rgba(255,255,255,0.5);}
 @media(prefers-reduced-motion:reduce){#oficinaCards,#oficinaFloor,#oficinaIso{animation:none;}.dock-badge-live{animation:none;}}
 @media(max-width:760px){.of-search{min-width:0;flex:1;}}
 </style>
@@ -1793,7 +1792,7 @@
       <div class="section-title">Oficina Virtual</div>
       <div class="section-desc">Tu equipo de agentes IA y automatizaciones trabajando en vivo. El estado se actualiza solo cada 45 s a partir de las ejecuciones reales (Agent_Log), la cola de tareas (Agent_Queue) y, si existe, la tabla Automations.</div>
     </div>
-    <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
       <div id="oficinaViewToggle" class="of-viewtoggle">
         <button class="of-vbtn active" data-v="cards" onclick="ofSetView('cards')">▦ Tarjetas</button>
         <button class="of-vbtn" data-v="floor" onclick="ofSetView('floor')">🏢 Planta</button>
@@ -1803,7 +1802,7 @@
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
       <button class="btn btn-ghost btn-sm" id="ofDensityBtn" onclick="ofToggleDensity()" title="Densidad de las tarjetas (cómoda / compacta)">⤢ Densidad</button>
-      <button class="btn btn-ghost btn-sm" id="ofSceneThemeBtn" onclick="ofToggleSceneTheme()" title="Tema de la escena 3D (auto / claro / oscuro)">🌗 Escena</button>
+      <button class="btn btn-ghost btn-sm" id="ofSceneThemeBtn" onclick="ofToggleSceneTheme()" title="Tema de la escena 3D (oscuro / claro)">🌗 Escena</button>
       <button class="btn btn-ghost btn-sm" onclick="ofExport()" title="Exportar: descarga la escena 3D (SVG) o copia el resumen de KPIs">⬇ Exportar</button>
       <button class="btn btn-ghost btn-sm" onclick="refreshOficina()">↻ Actualizar</button>
       <button class="btn btn-ghost btn-sm" id="ofFsBtn" onclick="ofFullscreen()">📺 Pantalla completa</button>
@@ -1844,7 +1843,7 @@
         <button class="of-vbtn" data-r="30" onclick="ofSetChartRange(30)">30 días</button>
       </div>
     </div>
-    <div id="oficinaCharts" style="padding:14px 16px"></div>
+    <div id="oficinaCharts" style="padding:14px 16px;min-height:120px"><div style="color:var(--text3);font-size:12px;padding:12px 2px">Cargando analítica…</div></div>
   </div>
 
   <div class="card">
@@ -13751,6 +13750,7 @@ async function runAgent(id){
   if(btn) btn.disabled=true;
   try{showAgentWorking(cfg);}catch(e){}   // popup "Trabajando para ti" con el agente tecleando
   _ofActive.add(cfg.label);   // Oficina Virtual: marca el agente como "trabajando" en vivo
+  try{ofUpdateDockBadge();}catch(e){}   // badge del dock vivo aunque la pestaña Oficina esté cerrada
   if(typeof renderOficina==='function'&&document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
   const ctx=state.loaded?buildAgentContext(id):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
@@ -13775,10 +13775,11 @@ async function runAgent(id){
     const _ctaHtml=agentCtaButtonsHtml('out_'+id,_r);
     if(_ctaHtml) out.insertAdjacentHTML('afterend',`<div id="cta_${id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${_ctaHtml}</div>`);
   }
-  catch(e){out.style.whiteSpace='';out._rawText='';out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');}
+  catch(e){out.style.whiteSpace='';out._rawText='';out.textContent='❌ Error: '+e.message;toast('Error: '+e.message,'error');try{ofAgentError(cfg.label);}catch(x){}}   // la Oficina muestra el agente "Con falla"
   finally{
     try{hideAgentWorking();}catch(e){}
     _ofActive.delete(cfg.label);   // Oficina Virtual: el agente terminó
+    try{ofUpdateDockBadge();}catch(e){}
     if(btn) btn.disabled=false;
     if(typeof renderOficina==='function'&&document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
   }
