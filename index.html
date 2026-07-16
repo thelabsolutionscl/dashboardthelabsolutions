@@ -1693,7 +1693,10 @@
 /* Vapor del café */
 @keyframes ofSteam{0%{opacity:0;transform:translateY(0) scaleX(1);}35%{opacity:.65;}100%{opacity:0;transform:translateY(-8px) scaleX(1.6);}}
 .of-steam{animation:ofSteam 2.8s ease-out infinite;transform-box:fill-box;transform-origin:center bottom;}
-@media(prefers-reduced-motion:reduce){.of-iso-walker,.of-iso-comm,.of-iso-errand,.of-iso-errand-bubble,.of-steam{animation:none;}.of-iso-char.of-iso-bob .of-iso-body,.of-iso-char.of-iso-breathe .of-iso-body,.of-iso-walker .of-iso-body,.of-iso-comm .of-iso-body,.of-iso-errand .of-iso-body{animation:none;}}
+/* Charla ambiental: los agentes conversan entre ellos (burbujas de emote en secuencia) */
+@keyframes ofChat{0%,7%{opacity:0;transform:scale(.5);}13%,32%{opacity:1;transform:scale(1);}40%,100%{opacity:0;transform:scale(.85);}}
+.of-chat{animation:ofChat var(--cdur,7.5s) ease-in-out infinite;animation-delay:var(--cd,0s);transform-box:fill-box;transform-origin:center bottom;will-change:opacity,transform;}
+@media(prefers-reduced-motion:reduce){.of-iso-walker,.of-iso-comm,.of-iso-errand,.of-iso-errand-bubble,.of-steam,.of-chat{animation:none;}.of-chat{opacity:0;}.of-iso-char.of-iso-bob .of-iso-body,.of-iso-char.of-iso-breathe .of-iso-body,.of-iso-walker .of-iso-body,.of-iso-comm .of-iso-body,.of-iso-errand .of-iso-body{animation:none;}}
 /* Reacciones (🎉), corona (👑), moods (⛈️/💤), progreso de impresión y cámara 3D */
 @keyframes ofCelebPop{0%{transform:scale(.4);opacity:0;}25%{transform:scale(1.18);opacity:1;}70%{transform:scale(1);opacity:1;}100%{transform:scale(1.05);opacity:0;}}
 .of-celeb{animation:ofCelebPop 5.2s ease-out infinite;transform-box:fill-box;transform-origin:center;}
