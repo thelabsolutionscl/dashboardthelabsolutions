@@ -875,9 +875,10 @@ function _ofCommWalker(m,p1,p2,dur,delay){
 function _ofHash(s){ let h=2166136261; s=String(s); for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
 // Agente en STAND BY que sale a una pausa: camina de su puesto a la cafetería/baño y vuelve.
 // La burbuja (☕/🚻) sólo aparece mientras está en la amenidad (sincronizada por --dur).
-function _ofBreakWalker(m,home,dest,kind,dur,delay){
+function _ofBreakWalker(m,home,door,dest,kind,dur,delay){
   const col=_OF_STATUS[m.cls]||'#7c8590', dark=_ofShade(col,0.72), em=_ofEmoji(m), f=n=>n.toFixed(1);
   const bub=kind==='wc'?'🚻':'☕', lbl=kind==='wc'?'en una pausa':'por un café';
+  door=door||home;   // sin puerta conocida → comportamiento previo (sale directo)
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
   const spr=m.clickIA?_ofSprite(m):null;
   const body=spr?`<image href="${dest[1]<home[1]?spr.backWalk:spr.frontWalk}" x="-11" y="-48" width="22" height="50" preserveAspectRatio="xMidYMid meet"/>`
@@ -887,7 +888,7 @@ function _ofBreakWalker(m,home,dest,kind,dur,delay){
       <rect x="-8.5" y="-28" width="17" height="21" rx="8" fill="url(#ofShine)"/>
       <circle cx="0" cy="-36" r="10.5" fill="#fff7ec" stroke="${col}" stroke-width="2.6"/>
       ${m.img?`<image href="${m.img}" x="-9" y="-45.5" width="18" height="18" preserveAspectRatio="xMidYMid meet"/>`:`<text x="0" y="-32" text-anchor="middle" font-size="12">${em}</text>`}`;
-  return `<g class="of-iso-errand" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" style="--hx:${f(home[0])}px;--hy:${f(home[1])}px;--ax:${f(dest[0])}px;--ay:${f(dest[1])}px;--dur:${dur}s;--dl:${delay}s">
+  return `<g class="of-iso-errand" ${click} role="button" tabindex="0" onkeydown="ofKey(event)" style="--hx:${f(home[0])}px;--hy:${f(home[1])}px;--dx:${f(door[0])}px;--dy:${f(door[1])}px;--ax:${f(dest[0])}px;--ay:${f(dest[1])}px;--dur:${dur}s;--dl:${delay}s">
     <title>${escapeHtml(m.label+' — '+lbl)}</title>
     <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
     <g class="of-iso-body">${body}</g>
@@ -1198,8 +1199,10 @@ function _ofRenderIso(ia,auto,extras){
     chars+=_ofMeetingTable(ctr[0],ctr[1],tRx,tRy,R.color,tableH);
     pos.forEach(p=>{ const lx=ctr[0]+tRx*0.74*Math.cos(p.a), ly=(ctr[1]-tableH)+tRy*0.74*Math.sin(p.a); chars+=_ofDeskLaptop(lx,ly,p.m.cls==='of-work',_OF_STATUS[p.m.cls]||'#7c8590'); });
     front.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy,'back'); tags+=_rtag(p.m,p.sx,p.sy); });
-    // 5) agentes en pausa → cruzan al frente (cafetería/baño) y vuelven; se dibujan al final (primer plano)
-    pos.forEach(p=>{ if(!p.brk) return; const dest=p.kind==='wc'?wcPt:coffeePt, dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur)); _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],dest,p.kind,dur,dl); });
+    // 5) agentes en pausa → SALEN POR LA PUERTA de su sala hacia el frente (cafetería/baño) y vuelven
+    //    por la misma puerta; se dibujan al final (primer plano). Nunca atraviesan los muros.
+    const _doorPt=_roomDoorPt(R);
+    pos.forEach(p=>{ if(!p.brk) return; const dest=p.kind==='wc'?wcPt:coffeePt, dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur)); _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],_doorPt,dest,p.kind,dur,dl); });
   });
   chars+=_errands;   // pausas en primer plano (pasan por delante de las salas)
   // Agentes que se comunican: caminan de su departamento al de destino (y vuelven)

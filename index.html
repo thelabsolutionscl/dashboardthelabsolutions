@@ -1676,12 +1676,13 @@
 @keyframes ofBreathe{0%,100%{transform:translateY(calc(var(--lift,0px) + 0px)) scaleY(1);}45%{transform:translateY(calc(var(--lift,0px) - 1.1px)) scaleY(1.02);}}
 .of-iso-char.of-iso-breathe .of-iso-body{animation:ofBreathe 4.6s ease-in-out infinite;animation-delay:var(--bd,0s);will-change:transform;}
 /* Pausas: agentes en stand by van por un café o al baño (puesto→amenidad→puesto) */
-@keyframes ofErrand{0%,7%{transform:translate(var(--hx),var(--hy));}30%,58%{transform:translate(var(--ax),var(--ay));}82%,100%{transform:translate(var(--hx),var(--hy));}}
+/* El agente en pausa SALE POR LA PUERTA de su sala: puesto → puerta → amenidad → puerta → puesto (no atraviesa muros) */
+@keyframes ofErrand{0%,6%{transform:translate(var(--hx),var(--hy));}15%{transform:translate(var(--dx,var(--hx)),var(--dy,var(--hy)));}33%,55%{transform:translate(var(--ax),var(--ay));}73%{transform:translate(var(--dx,var(--hx)),var(--dy,var(--hy)));}85%,100%{transform:translate(var(--hx),var(--hy));}}
 .of-iso-errand{transform:translate(var(--hx),var(--hy));animation:ofErrand var(--dur,22s) cubic-bezier(.37,0,.63,1) infinite;animation-delay:var(--dl,0s);will-change:transform;cursor:pointer;}
 .of-iso-errand:focus{outline:none;}
 .of-iso-errand:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;}
 .of-iso-errand .of-iso-body{animation:ofStep .6s ease-in-out infinite;will-change:transform;}
-@keyframes ofErrandBub{0%,22%{opacity:0;}31%,56%{opacity:1;}66%,100%{opacity:0;}}
+@keyframes ofErrandBub{0%,26%{opacity:0;}35%,53%{opacity:1;}61%,100%{opacity:0;}}
 .of-iso-errand-bubble{animation:ofErrandBub var(--dur,22s) ease-in-out infinite;animation-delay:var(--dl,0s);}
 /* Vapor del café */
 @keyframes ofSteam{0%{opacity:0;transform:translateY(0) scaleX(1);}35%{opacity:.65;}100%{opacity:0;transform:translateY(-8px) scaleX(1.6);}}
