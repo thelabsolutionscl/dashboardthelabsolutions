@@ -119,7 +119,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'ofAgentDetail', 'ofSetView', 'ofSetCardFilter', 'ofSearchInput', 'ofSetChartRange',
     'ofToggleSceneTheme', 'ofToggleDensity', 'ofExport', 'ofUpdateDockBadge', '_ofApplyPrefs',
     'agentIdentity', 'ofToggleMore', 'ofAgentDetailByLabel', 'ofFeedMore', '_ofChatMsg', '_ofTvTour',
-    'ofFeedView', '_ofOpenRun', '_ofHeatmap', '_ofStateShapeStyle',
+    'ofFeedView', '_ofOpenRun', '_ofHeatmap', '_ofStateShapeStyle', '_ofTickTvClock',
   ];
   const probs = [];
   CRITICAL.forEach(n => {

@@ -312,7 +312,7 @@ function ofSetView(v,persist){
   renderOficina();
 }
 function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000);
-  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(document.hidden) return; _ofTickUpdated(); if(_ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTvTour(); } },20000);   // frescura + reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
+  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(document.hidden) return; _ofTickUpdated(); _ofTickTvClock(); if(_ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTvTour(); } },20000);   // frescura + reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
 }
 // ── Auto-tour del modo TV (idea 3): en pantalla completa la cámara recorre los departamentos
 // cada 20s (una parada por depto + una vista general). Cualquier interacción manual con la
@@ -393,6 +393,7 @@ let _ofWasFs=false;   // ¿la Oficina fue la que entró a pantalla completa? (ev
 const _ofFsMoved=[];
 function _ofFsReparent(on){
   const el=document.getElementById('tab-oficina'); if(!el) return;
+  if(on) try{_ofTickTvClock();}catch(e){}
   if(on){
     ['ofAgentModal','agentInlineModal','toastContainer'].forEach(id=>{
       const n=document.getElementById(id); if(!n||n.parentNode===el) return;
@@ -640,10 +641,10 @@ async function _renderOficina(){
   const totalWorkers=iaModel.length+autoModel.length+printerModel.length;
   const kpis=document.getElementById('oficinaKpis');
   if(kpis) kpis.innerHTML=`
-    <div class="of-kpi"><div class="of-kpi-val" data-k="workers">${totalWorkers}</div><div class="of-kpi-lbl">Trabajadores</div></div>
-    <div class="of-kpi ${working?'live':''}"><div class="of-kpi-val" data-k="working">${working}</div><div class="of-kpi-lbl">Trabajando ahora</div></div>
-    <div class="of-kpi ${runsToday?'live':''}"><div class="of-kpi-val" data-k="runsToday">${runsToday}</div><div class="of-kpi-lbl">Ejecuciones hoy</div></div>
-    <div class="of-kpi ${queueLen?'live':''}"><div class="of-kpi-val" data-k="queue">${queueLen}</div><div class="of-kpi-lbl">En cola</div></div>`;
+    <div class="of-kpi"><div class="of-kpi-val" data-k="workers">${totalWorkers}</div><div class="of-kpi-lbl">👥 Trabajadores</div></div>
+    <div class="of-kpi ${working?'live':''}"><div class="of-kpi-val" data-k="working">${working}</div><div class="of-kpi-lbl">⚡ Trabajando ahora</div></div>
+    <div class="of-kpi ${runsToday?'live':''}"><div class="of-kpi-val" data-k="runsToday">${runsToday}</div><div class="of-kpi-lbl">🔄 Ejecuciones hoy</div></div>
+    <div class="of-kpi ${queueLen?'live':''}"><div class="of-kpi-val" data-k="queue">${queueLen}</div><div class="of-kpi-lbl">📥 En cola</div></div>`;
   _ofAnimateKpis({workers:totalWorkers,working,runsToday,queue:queueLen});   // count-up al cambiar (idea 4)
 
   // Aviso de estado de datos: sin token la oficina se ve "muerta" sin explicación (B-U12)
@@ -666,6 +667,8 @@ async function _renderOficina(){
 }
 let _ofLastRenderT=0;
 function _ofTickUpdated(){ const el=document.getElementById('ofUpdatedAt'); if(!el) return; el.textContent=_ofLastRenderT?('actualizado '+_ofAgo(_ofLastRenderT)):''; }
+// Reloj digital del modo TV (V8): sólo visible en pantalla completa, tictaquea con el tick de 20s
+function _ofTickTvClock(){ const el=document.getElementById('ofTvClock'); if(!el) return; const d=new Date(); el.textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
 // Count-up de KPIs (sólo anima cuando el valor cambia; respeta reduce-motion)
 function _ofAnimateKpis(vals){
   const host=document.getElementById('oficinaKpis'); if(!host) return;
@@ -733,6 +736,7 @@ function _ofWorkerCard(m){
       <div class="of-role">${escapeHtml(m.role)}</div>
       <div class="of-task">${escapeHtml((m.task||'').substring(0,90))}</div>
       <div class="of-foot"><span class="of-state-lbl">${escapeHtml(m.lbl)}</span><span class="of-stats">${escapeHtml(m.stats||'')}</span></div>
+      ${(m.isPrinter&&m.cls==='of-work'&&m.progress!=null)?`<div class="of-card-prog"${m.progress<0?' data-ind="1"':''}><i style="width:${m.progress>=0?Math.max(2,Math.min(100,m.progress)):40}%"></i></div>`:''}
       ${printerActions}
       ${spark}
     </div>
@@ -766,6 +770,10 @@ function _ofRenderCards(ia,auto,extras){
   const z1=document.getElementById('oficinaZoneIA'), z2=document.getElementById('oficinaZoneAuto');
   if(g1) g1.innerHTML=fIA.map(_ofWorkerCard).join('');
   if(g2) g2.innerHTML=fAuto.map(_ofWorkerCard).join('');
+  // Títulos de zona con conteo en vivo (V6)
+  if(z1) z1.textContent=`🤖 Agentes IA · ${fIA.length}`;
+  if(z2) z2.textContent=`⚙️ Automatizaciones · ${fAuto.length}`;
+  const z3t=document.getElementById('oficinaZonePrinters'); if(z3t&&fPr.length) z3t.textContent=`🖨️ Impresoras 3D · ${fPr.length}`;
   if(z1) z1.style.display=fIA.length?'':'none';
   if(g1) g1.style.display=fIA.length?'':'none';
   if(z2) z2.style.display=fAuto.length?'':'none';
@@ -798,12 +806,14 @@ function _ofRenderFloor(ia,auto,extras){
   const f=document.getElementById('oficinaFloor'); if(!f) return;
   const groups=_OF_CAT.map(c=>({c,items:ia.filter(m=>_ofCat(m).name===c.name)})).filter(g=>g.items.length);
   const otros=ia.filter(m=>_ofCat(m).name==='Otros'); if(otros.length) groups.push({c:{name:'Otros',color:'#7a7a7a'},items:otros});
-  const sect=g=>`<div class="of-floor-grouplabel" style="color:${g.c.color}"><i style="background:${g.c.color}"></i>${g.c.name} · ${g.items.length}</div><div class="of-desks">${g.items.map(_ofDesk).join('')}</div>`;
-  const extraSects=(extras||[]).filter(d=>d.members&&d.members.length).map(d=>`<div class="of-floor-label" style="margin-top:20px">🖨️ ${escapeHtml(d.name)}</div><div class="of-desks">${d.members.map(_ofDesk).join('')}</div>`).join('');
+  // Cada área es una "SALA" tintada con su color (V5) — el mapa 2D refleja los departamentos del 3D
+  const room=(color,inner)=>`<div class="of-floor-room2" style="background:${color}0d;border-color:${color}30">${inner}</div>`;
+  const sect=g=>room(g.c.color,`<div class="of-floor-grouplabel" style="color:${g.c.color}"><i style="background:${g.c.color}"></i>${g.c.name} · ${g.items.length}</div><div class="of-desks">${g.items.map(_ofDesk).join('')}</div>`);
+  const extraSects=(extras||[]).filter(d=>d.members&&d.members.length).map(d=>room(d.color||'#3aa0ff',`<div class="of-floor-grouplabel" style="color:${d.color||'#3aa0ff'}"><i style="background:${d.color||'#3aa0ff'}"></i>🖨️ ${escapeHtml(d.name)} · ${d.members.length}</div><div class="of-desks">${d.members.map(_ofDesk).join('')}</div>`)).join('');
   f.innerHTML=`<div class="of-floorroom">
     <div class="of-floor-label">🤖 Agentes IA</div>
     ${groups.map(sect).join('')}
-    ${auto.length?`<div class="of-floor-label" style="margin-top:20px">⚙️ Automatizaciones</div><div class="of-desks">${auto.map(_ofDesk).join('')}</div>`:''}
+    ${auto.length?room('#a78bfa',`<div class="of-floor-grouplabel" style="color:#a78bfa"><i style="background:#a78bfa"></i>⚙️ Automatizaciones · ${auto.length}</div><div class="of-desks">${auto.map(_ofDesk).join('')}</div>`):''}
     ${extraSects}
   </div>`;
 }
@@ -1307,8 +1317,19 @@ function _ofRenderIso(ia,auto,extras){
   const orbSvg=orbMoon
     ? `<circle cx="${orb[0].toFixed(1)}" cy="${orb[1].toFixed(1)}" r="6" fill="${orbC}"/><circle cx="${(orb[0]+2.6).toFixed(1)}" cy="${(orb[1]-1.4).toFixed(1)}" r="5" fill="url(#ofSky)"/>`
     : `<circle cx="${orb[0].toFixed(1)}" cy="${orb[1].toFixed(1)}" r="6" fill="${orbC}" opacity="0.95"/>`;
-  const win=`<polygon points="${wp(0.40,22)} ${wp(0.80,22)} ${wp(0.80,64)} ${wp(0.40,64)}" fill="url(#ofSky)" stroke="#ffffff" stroke-width="3.5"/>`+
-    orbSvg+
+  // Vida en la ventana: estrellas de noche (V2) y una nube que cruza el cielo de día (V3),
+  // recortadas al vano con un clipPath para no salirse del marco.
+  const _winClip=`<clipPath id="ofWinClip"><polygon points="${wp(0.40,22)} ${wp(0.80,22)} ${wp(0.80,64)} ${wp(0.40,64)}"/></clipPath>`;
+  let winLife='';
+  if(orbMoon){
+    const stars=[[0.46,55],[0.52,38],[0.58,58],[0.64,33],[0.72,47],[0.77,59]];
+    winLife=`<g clip-path="url(#ofWinClip)" pointer-events="none">${stars.map(([sf,sh],i)=>{const p=wp(sf,sh);return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i%2?1:1.4}" fill="#fff" opacity="${0.55+(i%3)*0.15}"/>`;}).join('')}</g>`;
+  } else {
+    const c0=wp(0.36,50), dx=(wd[0]*0.5).toFixed(1), dy=(wd[1]*0.5).toFixed(1);
+    winLife=`<g clip-path="url(#ofWinClip)" pointer-events="none"><g class="of-cloud" style="--cwx:${dx}px;--cwy:${dy}px" transform="translate(${c0[0].toFixed(1)},${c0[1].toFixed(1)})"><ellipse cx="0" cy="0" rx="9" ry="4" fill="#fff" opacity="0.75"/><ellipse cx="6" cy="-2.5" rx="6" ry="3.4" fill="#fff" opacity="0.65"/><ellipse cx="-6" cy="-1.5" rx="5" ry="3" fill="#fff" opacity="0.6"/></g></g>`;
+  }
+  const win=_winClip+`<polygon points="${wp(0.40,22)} ${wp(0.80,22)} ${wp(0.80,64)} ${wp(0.40,64)}" fill="url(#ofSky)" stroke="#ffffff" stroke-width="3.5"/>`+
+    orbSvg+winLife+
     `<line x1="${wp(0.6,22)[0]}" y1="${wp(0.6,22)[1]}" x2="${wp(0.6,64)[0]}" y2="${wp(0.6,64)[1]}" stroke="#ffffff" stroke-width="2"/>`+
     `<line x1="${wp(0.40,43)[0]}" y1="${wp(0.40,43)[1]}" x2="${wp(0.80,43)[0]}" y2="${wp(0.80,43)[1]}" stroke="#ffffff" stroke-width="2"/>`;
   // Cuadros decorativos en la pared derecha
@@ -1368,15 +1389,34 @@ function _ofRenderIso(ia,auto,extras){
   _rooms.forEach(R=>{ doors+=_ofDoor(_doorGeo(R), R.color); });
   _ofTourPts=_rooms.map(R=>{ const c=iso(R.cc,R.rc); return {x:c[0],y:c[1]}; });   // paradas del auto-tour TV (idea 3)
 
-  // Plataforma sólo para la sala de impresoras (las máquinas van encima)
+  // Plataforma del taller en L REAL (idea 3D-2): mesones sólo bajo las dos filas de máquinas
+  // (fila del fondo + columna izquierda, la misma L de _ofPrinterSlots). El centro queda como
+  // piso transitable con un estante de filamentos, y la puerta (muro R→F) ya no tiene desnivel.
   const _ch=24;
   let counters='';
-  _rooms.forEach(R=>{ if(!/impresora/i.test(R.name)) return; const k=_rC(R);
+  _rooms.forEach(R=>{ if(!/impresora/i.test(R.name)) return;
     const U=p=>`${p[0].toFixed(1)},${(p[1]-_ch).toFixed(1)}`, P=p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-    counters+=`<polygon points="${U(k.L)} ${P(k.L)} ${P(k.F)} ${U(k.F)}" fill="#9aa6b3"/>`
-            +`<polygon points="${U(k.F)} ${P(k.F)} ${P(k.R)} ${U(k.R)}" fill="#b1bcc8"/>`
-            +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="#e8edf2"/>`
-            +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="${R.color}" opacity="0.14"/>`;
+    // Esquinas exteriores de una franja de celdas (c0..c1 × r0..r1 de la franja)
+    const strip=(c0,r0,c1,r1)=>{ const a=iso(c0,r0), b=iso(c1,r0), c=iso(c1,r1), d=iso(c0,r1);
+      return {T:[a[0],a[1]-th/2], R:[b[0]+tw/2,b[1]], F:[c[0],c[1]+th/2], L:[d[0]-tw/2,d[1]]}; };
+    const slab=k=>`<polygon points="${U(k.L)} ${P(k.L)} ${P(k.F)} ${U(k.F)}" fill="#9aa6b3"/>`
+      +`<polygon points="${U(k.F)} ${P(k.F)} ${P(k.R)} ${U(k.R)}" fill="#b1bcc8"/>`
+      +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="#e8edf2"/>`
+      +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="${R.color}" opacity="0.14"/>`;
+    counters+=slab(strip(R.c0,R.r0,R.c1,R.r0));                                   // brazo del fondo (fila 0 de la sala)
+    if(R.r1>R.r0) counters+=slab(strip(R.c0,R.r0+1,R.c0,R.r1));                    // brazo izquierdo (col 0)
+    // Estante de filamentos en el centro del taller (prop, a nivel de piso)
+    if(R.dc>=4 && R.dr>=3){
+      const fp=iso(R.c0+Math.floor(R.dc/2)+0.5, R.r0+Math.floor(R.dr/2)+0.5), f=n=>n.toFixed(1);
+      const spool=(dx,dy,c)=>`<circle cx="${f(fp[0]+dx)}" cy="${f(fp[1]+dy)}" r="4" fill="${c}" stroke="#0e1116" stroke-width="1"/>`;
+      counters+=`<g pointer-events="none"><ellipse cx="${f(fp[0])}" cy="${f(fp[1]+6)}" rx="20" ry="6" fill="url(#ofShadow)" opacity="0.5"/>`
+        +`<rect x="${f(fp[0]-18)}" y="${f(fp[1]-26)}" width="36" height="30" rx="3" fill="#8d99a6"/>`
+        +`<rect x="${f(fp[0]-15)}" y="${f(fp[1]-23)}" width="30" height="10" rx="2" fill="#6d7884"/>`
+        +`<rect x="${f(fp[0]-15)}" y="${f(fp[1]-10)}" width="30" height="10" rx="2" fill="#6d7884"/>`
+        +spool(-8,-18,'#ff6b35')+spool(0,-18,'#00d4cc')+spool(8,-18,'#ffd23f')
+        +spool(-8,-5,'#a78bfa')+spool(0,-5,'#00d4aa')+spool(8,-5,'#f6f6f6')
+        +`<g transform="translate(${f(fp[0])},${f(fp[1]-34)})"><rect x="-26" y="-8" width="52" height="13" rx="6.5" fill="#0e1116" opacity="0.9"/><text x="0" y="1.5" text-anchor="middle" font-size="7.5" fill="#fff" font-family="DM Sans" font-weight="700">FILAMENTOS</text></g></g>`;
+    }
   });
 
   // Mapa etiqueta→sala. El agente que se comunica hace un recorrido LOCAL: sale por SU puerta al

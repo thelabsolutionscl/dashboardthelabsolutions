@@ -1545,6 +1545,21 @@
 .of-feed-chip.active{background:var(--cc,var(--accent));border-color:transparent;color:#0b0c0f;}
 .of-feed-chip.active::before{background:#0b0c0f;opacity:.5;}
 .of-feed-chip.active b{opacity:.85;}
+/* Reloj digital del modo TV (sólo en pantalla completa) */
+.of-tv-clock{display:none;font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--accent);margin-left:16px;letter-spacing:2px;vertical-align:middle;text-shadow:0 0 18px rgba(0,212,204,0.4);}
+#tab-oficina.of-fs .of-tv-clock,#tab-oficina:fullscreen .of-tv-clock{display:inline-block;}
+/* Barra de progreso en tarjetas de impresora imprimiendo */
+.of-card-prog{height:4px;border-radius:3px;background:var(--surface3);overflow:hidden;margin-top:8px;}
+.of-card-prog i{display:block;height:100%;background:var(--success);border-radius:3px;transition:width .4s;}
+.of-card-prog[data-ind="1"] i{animation:ofCardProgInd 1.4s linear infinite;}
+@keyframes ofCardProgInd{0%{transform:translateX(-110%);}100%{transform:translateX(260%);}}
+/* Planta 2D: cada área como sala tintada con su color */
+.of-floor-room2{border:1px solid;border-radius:14px;padding:12px 12px 14px;margin-bottom:12px;}
+.of-floor-room2 .of-floor-grouplabel{margin-top:2px;}
+/* Nube que cruza la ventana del 3D (día) */
+@keyframes ofCloud{0%{transform:translate(0,0);}100%{transform:translate(var(--cwx,60px),var(--cwy,14px));}}
+.of-cloud{animation:ofCloud 46s linear infinite alternate;will-change:transform;}
+@media(prefers-reduced-motion:reduce){.of-cloud,.of-card-prog[data-ind="1"] i{animation:none;}}
 /* Menú "⋯ Más" del toolbar (acciones secundarias agrupadas) */
 .of-more-wrap{position:relative;}
 .of-more-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:600;min-width:160px;box-shadow:0 14px 34px -12px rgba(0,0,0,0.75);}
@@ -1800,7 +1815,7 @@
 <div class="tab-panel" id="tab-oficina">
   <div class="section-header">
     <div>
-      <div class="section-title">Oficina Virtual</div>
+      <div class="section-title">Oficina Virtual<span id="ofTvClock" class="of-tv-clock"></span></div>
       <div class="section-desc">Tu equipo de agentes IA y automatizaciones trabajando en vivo. El estado se actualiza solo cada 45 s a partir de las ejecuciones reales (Agent_Log), la cola de tareas (Agent_Queue) y, si existe, la tabla Automations.</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
@@ -1829,10 +1844,10 @@
   <div id="oficinaAlerts" class="of-alerts" style="display:none"></div>
 
   <div class="of-kpis" id="oficinaKpis">
-    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">Trabajadores</div></div>
-    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">Trabajando ahora</div></div>
-    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">Ejecuciones hoy</div></div>
-    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">En cola</div></div>
+    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">👥 Trabajadores</div></div>
+    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">⚡ Trabajando ahora</div></div>
+    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">🔄 Ejecuciones hoy</div></div>
+    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">📥 En cola</div></div>
   </div>
   <div id="oficinaErr" class="of-errchip" style="display:none">⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.</div>
 
