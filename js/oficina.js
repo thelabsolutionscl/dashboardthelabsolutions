@@ -938,6 +938,14 @@ function _ofDeskLaptop(x,y,working,col){
   const glow=working?`<rect x="-7.2" y="-13" width="14.4" height="9" rx="2" fill="${col}" opacity="0.5" filter="url(#ofHalo)"/>`:'';
   return `<g transform="translate(${f(x)},${f(y)})">${glow}<polygon points="-11,0 0,5 11,0 0,-5" fill="#cfd6de"/><polygon points="-11,0 0,5 0,-5" fill="#bcc5cf"/><rect x="-9" y="-13.5" width="18" height="12" rx="1.6" fill="#15171a"/><rect x="-7.4" y="-11.9" width="14.8" height="8.8" rx="1" fill="${scr}" opacity="${working?'0.97':'0.5'}"/><rect x="-7.4" y="-11.9" width="14.8" height="3.4" rx="1" fill="#ffffff" opacity="0.18"/></g>`;
 }
+// ── Charla ambiental: los agentes conversan constantemente entre ellos ──
+// Burbujas de emote que aparecen en secuencia alrededor de la mesa de cada depto (100% CSS,
+// no reconstruye la escena). Da sensación de equipo colaborando en vivo.
+const _OF_CHAT=['💬','💡','👍','✅','📊','✍️','🙌','🤝','❓','📈','🔥','👀','🗣️','💯','🤔','📝'];
+function _ofChatBubble(x,y,em,delay,dur,col){
+  const f=n=>n.toFixed(1);
+  return `<g transform="translate(${f(x)},${f(y-58)})" pointer-events="none"><g class="of-chat" style="--cd:${f(delay)}s;--cdur:${f(dur)}s"><rect x="-11" y="-9" width="22" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-width="1.2"/><polygon points="-4,6 4,6 0,12" fill="#ffffff"/><text x="0" y="3" text-anchor="middle" font-size="10">${em}</text></g></g>`;
+}
 // Agente SENTADO alrededor de la mesa (mira a cámara)
 function _ofRingAgent(m,x,y,facing){
   const col=_OF_STATUS[m.cls]||'#7c8590', dark=_ofShade(col,0.72), working=m.cls==='of-work', em=_ofEmoji(m);
@@ -948,12 +956,13 @@ function _ofRingAgent(m,x,y,facing){
   const celebrating=_ofCelebs.some(c=>c.label===m.label && Date.now()-c.t<_OF_CELEB_MS);
   // 👑 empleado del mes
   const crown=m.top?`<g class="of-crown" transform="translate(0,-52)"><text x="0" y="0" text-anchor="middle" font-size="15">👑</text></g>`:'';
-  // Reacción sobre la cabeza: 🎉 al completar · ⛈️ si hay error · 💤 en reposo
+  // Reacción sobre la cabeza: 🎉 al completar · ⛈️ si hay error. El reposo ya no muestra 💤:
+  // los agentes conversan entre ellos (capa de charla ambiental, ver _ofChatBubble).
   const reaction=celebrating
     ? `<g class="of-celeb" transform="translate(0,-62)"><text class="of-spark1" x="-15" y="-3" font-size="10">✨</text><text x="0" y="0" text-anchor="middle" font-size="18">🎉</text><text class="of-spark2" x="13" y="-1" font-size="10">✨</text></g>`
     : (m.cls==='of-error'
       ? `<g class="of-mood of-mood-storm" transform="translate(0,-60)"><ellipse cx="0" cy="0" rx="11" ry="6" fill="#7a828d"/><ellipse cx="-5.5" cy="-2.5" rx="6" ry="4.5" fill="#9aa3ad"/><ellipse cx="5.5" cy="-2.5" rx="6" ry="4.5" fill="#9aa3ad"/><polygon points="-1,4 3,4 0,10 4,10 -2,18 0,9 -3,9" fill="#ffd23f"/></g>`
-      : ((!working&&!m.top) ? `<g class="of-mood of-mood-sleep" transform="translate(11,-54)"><text x="0" y="0" font-size="10" fill="#aeb8c4" font-weight="700">z</text><text x="4" y="-6" font-size="7" fill="#9aa6b3" font-weight="700">z</text></g>` : ''));
+      : '');
   return `<g class="of-iso-char${bob}"${bd} ${click} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${f(x)},${f(y)})">
     <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
     <ellipse cx="0" cy="3" rx="13" ry="5.5" fill="url(#ofShadow)"/>
@@ -1161,7 +1170,7 @@ function _ofRenderIso(ia,auto,extras){
   _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm){ const g=_doorGeo(fr); _transit[c.from]={m:fm, home:[g.mx-g.nx*22,g.my-g.ny*22], thr:[g.mx,g.my], out:[g.mx+g.nx*44,g.my+g.ny*44]}; } } });
 
   // Estaciones por sala: el MESÓN va al MEDIO del depto y los agentes trabajan ALREDEDOR
-  let chars='', tags='', _errands='';
+  let chars='', tags='', _errands='', chatter='';
   // Zona de descanso: cafetería (frente-izq) y baño (frente-der) — destinos de las pausas
   const coffeePt=[Dl[0]+(Cb[0]-Dl[0])*0.36, Dl[1]+(Cb[1]-Dl[1])*0.36];
   const wcPt=[Cb[0]+(Br[0]-Cb[0])*0.64, Cb[1]+(Br[1]-Cb[1])*0.64];
@@ -1213,6 +1222,14 @@ function _ofRenderIso(ia,auto,extras){
     //    (las salas están apiladas; ir a una amenidad del frente obligaría a atravesar muros).
     const _g=_doorGeo(R), _thr=[_g.mx,_g.my], _out=[_g.mx+_g.nx*40,_g.my+_g.ny*40];
     pos.forEach(p=>{ if(!p.brk) return; const dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur)); _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],_thr,_out,p.kind,dur,dl); });
+    // 6) Charla ambiental: los agentes SENTADOS que no trabajan conversan entre ellos, en secuencia
+    //    alrededor de la mesa (burbujas de emote en bucle CSS; el equipo se ve colaborando en vivo).
+    const _CH=7.5;
+    pos.forEach((p,i)=>{ if(p.brk||p.m.cls==='of-work'||p.m.top) return;
+      if(_ofCelebs.some(c=>c.label===p.m.label && Date.now()-c.t<_OF_CELEB_MS)) return;
+      const em=_OF_CHAT[_ofHash(p.m.id)%_OF_CHAT.length], dl=-(((i+0.5)/Math.max(1,N))*_CH + (_ofHash(p.m.id+'c')%14)/10);
+      chatter+=_ofChatBubble(p.sx,p.sy,em,dl,_CH,R.color);
+    });
   });
   chars+=_errands;   // pausas en primer plano (pasan por delante de las salas)
   // Agentes que se comunican: salen por su puerta al pasillo (💬) y vuelven — recorrido local
@@ -1321,6 +1338,7 @@ function _ofRenderIso(ia,auto,extras){
     ${signs}
     <g>${chars}</g>
     <g>${tags}</g>
+    <g>${chatter}</g>
     ${decor}
     ${ambient}
     <rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="url(#ofVig)" pointer-events="none"/>
