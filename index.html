@@ -1611,11 +1611,12 @@
 .of-iso-char{cursor:pointer;}
 .of-iso-char:focus{outline:none;}
 .of-iso-char:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:6px;}
-.of-iso-char .of-iso-body{transition:transform .28s cubic-bezier(.22,.9,.32,1.18);will-change:transform;}
-.of-iso-char:hover .of-iso-body{transform:translateY(-5px);}
-.of-iso-char:focus-visible .of-iso-body{transform:translateY(-5px);}
+.of-iso-char .of-iso-body{transition:transform .28s cubic-bezier(.22,.9,.32,1.18);}
+/* B12: el lift de hover/focus se aplica como --lift, que las animaciones bob/breathe incorporan,
+   así los agentes que trabajan/respiran también se elevan (antes la animación lo anulaba). B9: will-change sólo en hover/animados. */
+.of-iso-char:hover .of-iso-body,.of-iso-char:focus-visible .of-iso-body{transform:translateY(var(--lift,-5px));--lift:-5px;will-change:transform;}
 .of-iso-char.of-iso-bob .of-iso-body{animation:ofBob 2.8s ease-in-out infinite;will-change:transform;}
-@keyframes ofBob{0%{transform:translateY(0);}20%{transform:translateY(-1.5px);}50%{transform:translateY(-3.4px);}80%{transform:translateY(-1.5px);}100%{transform:translateY(0);}}
+@keyframes ofBob{0%{transform:translateY(calc(var(--lift,0px) + 0px));}20%{transform:translateY(calc(var(--lift,0px) - 1.5px));}50%{transform:translateY(calc(var(--lift,0px) - 3.4px));}80%{transform:translateY(calc(var(--lift,0px) - 1.5px));}100%{transform:translateY(calc(var(--lift,0px) + 0px));}}
 /* Latido suave del indicador de estado (sin parpadeo brusco) */
 .of-iso-blink{animation:ofGlow 2.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center;will-change:opacity,transform;}
 @keyframes ofGlow{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.82);}}
@@ -1624,7 +1625,7 @@
 .of-type-l{animation:ofType .85s cubic-bezier(.36,0,.64,1) infinite;}
 .of-type-r{animation:ofType .85s cubic-bezier(.36,0,.64,1) infinite;animation-delay:-.425s;}
 @keyframes ofType{0%,100%{transform:translateY(0) scaleY(1);}50%{transform:translateY(2.4px) scaleY(.88);}}
-@media(prefers-reduced-motion:reduce){.of-type-l,.of-type-r,.of-iso-blink{animation:none;}}
+@media(prefers-reduced-motion:reduce){.of-type-l,.of-type-r,.of-iso-blink,.of-worker.of-work .of-dot,.of-desk.of-work .of-seat-light,.apw-card{animation:none;}}
 /* ── Popup "TRABAJANDO PARA TI" (sección Agentes) ── */
 #agentWorkingModal{z-index:10050;}
 .apw-card{position:relative;background:radial-gradient(ellipse at 50% -10%,var(--surface2),var(--surface) 68%);border:1px solid var(--border2);border-radius:20px;padding:26px 30px 24px;max-width:400px;width:calc(100% - 40px);text-align:center;box-shadow:0 24px 70px -18px rgba(0,0,0,0.8),inset 0 1px 0 rgba(255,255,255,0.05);overflow:hidden;animation:modalPop .3s cubic-bezier(.16,1,.3,1);}
@@ -1672,7 +1673,7 @@
 .of-iso-walker .of-iso-body{animation:ofStep .62s ease-in-out infinite;will-change:transform;}
 @keyframes ofStep{0%,100%{transform:translateY(0);}50%{transform:translateY(-2.4px);}}
 /* Respiración sutil de agentes en reposo (para que no se vean estáticos/toscos) */
-@keyframes ofBreathe{0%,100%{transform:translateY(0) scaleY(1);}45%{transform:translateY(-1.1px) scaleY(1.02);}}
+@keyframes ofBreathe{0%,100%{transform:translateY(calc(var(--lift,0px) + 0px)) scaleY(1);}45%{transform:translateY(calc(var(--lift,0px) - 1.1px)) scaleY(1.02);}}
 .of-iso-char.of-iso-breathe .of-iso-body{animation:ofBreathe 4.6s ease-in-out infinite;animation-delay:var(--bd,0s);will-change:transform;}
 /* Pausas: agentes en stand by van por un café o al baño (puesto→amenidad→puesto) */
 @keyframes ofErrand{0%,7%{transform:translate(var(--hx),var(--hy));}30%,58%{transform:translate(var(--ax),var(--ay));}82%,100%{transform:translate(var(--hx),var(--hy));}}
@@ -1702,6 +1703,8 @@
 .of-prog-ind{animation:ofProgInd 1.4s ease-in-out infinite alternate;will-change:transform;}
 #tab-oficina .of-iso-scene{cursor:grab;}
 #tab-oficina .of-iso-scene.of-grabbing{cursor:grabbing;}
+/* B22: escena fuera del viewport → pausa sus animaciones (ahorro CPU/GPU) */
+#oficinaIso.of-paused svg *{animation-play-state:paused!important;}
 @media(prefers-reduced-motion:reduce){.of-celeb,.of-celeb .of-spark1,.of-celeb .of-spark2,.of-crown,.of-mood-storm,.of-mood-sleep,.of-prog-ind{animation:none;}.of-mood-sleep{opacity:.85;}}
 /* Analítica — gráficos */
 #tab-oficina .of-charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
@@ -1786,9 +1789,9 @@
         <button class="of-vbtn" data-v="floor" onclick="ofSetView('floor')">🏢 Planta</button>
         <button class="of-vbtn" data-v="iso" onclick="ofSetView('iso')">🏨 3D</button>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="ofZoom(1)" title="Acercar (o Ctrl/⌘ + rueda sobre la escena 3D · arrastra para mover · pellizca en móvil)">🔍+</button>
-      <button class="btn btn-ghost btn-sm" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
-      <button class="btn btn-ghost btn-sm" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
+      <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofZoom(1)" title="Acercar (o Ctrl/⌘ + rueda sobre la escena 3D · arrastra para mover · pellizca en móvil)">🔍+</button>
+      <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
+      <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
       <button class="btn btn-ghost btn-sm" id="ofDensityBtn" onclick="ofToggleDensity()" title="Densidad de las tarjetas (cómoda / compacta)">⤢ Densidad</button>
       <button class="btn btn-ghost btn-sm" id="ofSceneThemeBtn" onclick="ofToggleSceneTheme()" title="Tema de la escena 3D (auto / claro / oscuro)">🌗 Escena</button>
       <button class="btn btn-ghost btn-sm" onclick="ofExport()" title="Exportar: descarga la escena 3D (SVG) o copia el resumen de KPIs">⬇ Exportar</button>
