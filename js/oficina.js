@@ -23,6 +23,7 @@ let _ofMaqCache={t:0,data:null};           // caché corta de las impresoras 3D 
 let _ofTileW=0,_ofTileH=0;                  // tamaño de baldosa actual (para dibujar el mesón de las impresoras)
 let _ofComms=[];                            // comunicaciones recientes entre agentes (mueven al agente entre departamentos)
 let _ofLastExec=null;                        // última ejecución registrada (para detectar handoffs/comunicación)
+let _ofCommTimer=null, _ofCelebTimer=null;   // timeouts de limpieza cancelables/coalescidos (B21)
 const _OF_COMM_MS=9000;
 function ofLogComm(from,to){
   if(!from||!to||from===to) return;
@@ -31,7 +32,8 @@ function ofLogComm(from,to){
   _ofComms.push({from,to,t:now});
   if(typeof renderOficina==='function' && document.getElementById('tab-oficina')?.classList.contains('active')){
     renderOficina();
-    setTimeout(()=>{ if(document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina(); }, _OF_COMM_MS+300);
+    clearTimeout(_ofCommTimer);   // coalesce: una ráfaga de handoffs comparte un solo render de limpieza
+    _ofCommTimer=setTimeout(()=>{ if(document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina(); }, _OF_COMM_MS+300);
   }
 }
 // ── Reacciones / celebraciones cuando un agente COMPLETA una ejecución ──
@@ -43,11 +45,13 @@ function ofCelebrate(label){
   _ofCelebs.push({label,t:now});
   if(typeof renderOficina==='function' && document.getElementById('tab-oficina')?.classList.contains('active')){
     renderOficina();
-    setTimeout(()=>{ if(document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina(); }, _OF_CELEB_MS+250);
+    clearTimeout(_ofCelebTimer);   // coalesce: varias celebraciones comparten un solo render de limpieza
+    _ofCelebTimer=setTimeout(()=>{ if(document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina(); }, _OF_CELEB_MS+250);
   }
 }
 // ── Cámara de la escena 3D (pan / zoom / enfocar agente) ──
 let _ofCam=null;                 // {cx,cy,scale} sobre el viewBox base; null = sin tocar
+let _ofCamVb=null;               // viewBox base con el que se guardó _ofCam (para reanclar si cambia — B7)
 let _ofFollowId=null;            // agente a centrar tras el render
 const _ofPos={};                 // id → [x,y] del puesto del agente (para enfocar)
 // Estado de impresora 3D → estado de oficina
@@ -166,7 +170,13 @@ function ofExport(){
   const svg=_ofSvg();
   if(_ofView==='iso' && svg){
     try{
-      const src='<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(svg);
+      const clone=svg.cloneNode(true);
+      if(svg.dataset.vb) clone.setAttribute('viewBox',svg.dataset.vb);   // B14: exporta la escena COMPLETA, no el encuadre con zoom
+      clone.querySelectorAll('image').forEach(im=>{                       // B10: hrefs relativos → absolutos (sprites/modelos no salen rotos)
+        const h=im.getAttribute('href')||im.getAttribute('xlink:href'); if(!h) return;
+        try{ im.setAttribute('href',new URL(h,location.href).href); im.removeAttribute('xlink:href'); }catch(e){}
+      });
+      const src='<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(clone);
       const blob=new Blob([src],{type:'image/svg+xml'}), url=URL.createObjectURL(blob);
       const a=document.createElement('a'); a.href=url; a.download='oficina-thelab.svg'; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),4000);
@@ -252,12 +262,27 @@ function ofSetView(v){
   if(c) c.style.display=v==='cards'?'':'none';
   if(f) f.style.display=v==='floor'?'':'none';
   if(i) i.style.display=v==='iso'?'':'none';
+  document.querySelectorAll('#tab-oficina .of-cam-btn').forEach(b=>b.style.display=(v==='iso')?'':'none');   // B13: controles de cámara sólo en la vista 3D
   renderOficina();
 }
 function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000);
-  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(!document.hidden && _ofView==='iso') _ofTickClock(); },20000);   // reloj de pared tic sin reconstruir la escena
+  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(!document.hidden && _ofView==='iso'){ _ofTickClock(); _ofTickLive(); } },20000);   // reloj + progreso de impresión: tic por mutación, sin reconstruir la escena
 }
-function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=null; clearInterval(_ofClockTimer); _ofClockTimer=null; }
+function stopOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=null; clearInterval(_ofClockTimer); _ofClockTimer=null; clearTimeout(_ofCommTimer); clearTimeout(_ofCelebTimer); }
+// Progreso de impresión EN VIVO por mutación (sin reconstruir): actualiza la barra y el rótulo
+// de cada impresora desde la telemetría del bridge (_printerStatus). Complementa el tic del reloj.
+function _ofTickLive(){
+  const host=document.getElementById('oficinaIso'); if(!host) return;
+  const live=(typeof _printerStatus!=='undefined')?_printerStatus:{};
+  host.querySelectorAll('[data-pid]').forEach(g=>{
+    const pid=g.getAttribute('data-pid'), lv=live[pid]; if(!lv||lv.state!=='printing') return;
+    const prog=(typeof lv.progress==='number')?lv.progress:-1;
+    const fill=g.querySelector('.of-pfill');
+    if(fill && prog>=0){ const pw=parseFloat(fill.getAttribute('data-pw'))||0; fill.setAttribute('width',(pw*Math.max(0,Math.min(100,prog))/100).toFixed(1)); }
+    const lbl=g.querySelector('.of-plabel');
+    if(lbl){ const t=_ofPrinterLabelTxt(prog,lv.eta||0); if(lbl.textContent!==t) lbl.textContent=t; }
+  });
+}
 // Actualiza sólo las manecillas del reloj de pared en la escena 3D (idea 5)
 function _ofTickClock(){
   const g=document.getElementById('ofWallClock'); if(!g) return;
@@ -277,10 +302,11 @@ function ofFullscreen(){
   const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
   const active=document.fullscreenElement||document.webkitFullscreenElement;
   if(req){
-    if(!active){ try{ req.call(el); }catch(e){ _ofToggleFsCss(el); } }
+    if(!active){ try{ const p=req.call(el); if(p&&p.catch) p.catch(()=>_ofToggleFsCss(el)); }catch(e){ _ofToggleFsCss(el); } }   // requestFullscreen rechaza por promesa (no lanza): capturar ambos
     else { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
   } else { _ofToggleFsCss(el); }   // navegador sin Fullscreen API → fallback CSS
 }
+let _ofWasFs=false;   // ¿la Oficina fue la que entró a pantalla completa? (evita reaccionar a fullscreen de otros módulos)
 function _ofToggleFsCss(el){
   const on=el.classList.toggle('of-fs');
   const b=document.getElementById('ofFsBtn'); if(b) b.textContent=on?'✕ Salir':'📺 Pantalla completa';
@@ -289,7 +315,12 @@ function _ofToggleFsCss(el){
 }
 function _ofOnFsChange(){
   const el=document.getElementById('tab-oficina'); if(!el) return;
-  const fs=(document.fullscreenElement||document.webkitFullscreenElement)===el;
+  const fe=document.fullscreenElement||document.webkitFullscreenElement;
+  const fs=(fe===el);
+  // Ignorar fullscreen de OTROS módulos (p. ej. el kiosko de Máquinas): sólo reaccionar
+  // cuando la Oficina entra, o cuando salimos de un fullscreen que era de la Oficina.
+  if(fs){ _ofWasFs=true; }
+  else { if(!_ofWasFs) return; _ofWasFs=false; }
   el.classList.toggle('of-fs',fs);
   const b=document.getElementById('ofFsBtn'); if(b) b.textContent=fs?'✕ Salir':'📺 Pantalla completa';
   if(fs){ if(_ofView!=='iso') _ofPrevView=_ofView; ofSetView('iso'); }   // TV → 3D, recordando la vista previa
@@ -300,6 +331,12 @@ document.addEventListener('webkitfullscreenchange',_ofOnFsChange);
 // ── Cámara de la escena 3D: pan (arrastrar), zoom (rueda/botones) y enfocar agente ──
 function _ofSvg(){ const h=document.getElementById('oficinaIso'); return h&&h.querySelector('svg.of-iso-svg'); }
 function _ofCamBase(svg){ const b=(svg.dataset.vb||'').split(' ').map(Number); return b.length===4?b:null; }
+// Convierte coords de pantalla (clientX/Y) a coords de USUARIO del SVG usando la matriz real
+// (getScreenCTM). Elimina la dependencia de r.width/r.height, que fallaba con el "letterbox"
+// de preserveAspectRatio=…meet + max-height (B6). Devuelve null si la API no está disponible.
+function _ofClientToUser(svg,cx,cy){
+  try{ const ctm=svg.getScreenCTM(); if(!ctm) return null; const pt=svg.createSVGPoint(); pt.x=cx; pt.y=cy; const u=pt.matrixTransform(ctm.inverse()); return {x:u.x,y:u.y}; }catch(e){ return null; }
+}
 function _ofApplyCam(svg){
   if(!svg) return; const b=_ofCamBase(svg); if(!b) return; const [bx,by,bw,bh]=b;
   if(!_ofCam){ svg.setAttribute('viewBox',`${bx} ${by} ${bw} ${bh}`); return; }
@@ -314,17 +351,24 @@ function ofFocusAgent(id){ _ofFollowId=id; if(_ofView!=='iso'){ ofSetView('iso')
 function _ofInitCamControls(host){
   if(host._ofCamInit) return; host._ofCamInit=true;
   const scene=()=>host.querySelector('.of-iso-scene');
+  // B22: pausa las animaciones de la escena cuando queda fuera del viewport (scroll al feed/analítica) → ahorra CPU/GPU
+  if('IntersectionObserver' in window){
+    try{ const io=new IntersectionObserver(es=>{ const en=es[es.length-1]; host.classList.toggle('of-paused', en.intersectionRatio<0.04); }, {threshold:[0,0.04,0.25]}); io.observe(host); }catch(e){}
+  }
+  // Zoom con rueda anclado al cursor (coords reales por CTM: el punto bajo el cursor queda fijo, B6)
   host.addEventListener('wheel',e=>{ if(!(e.ctrlKey||e.metaKey)) return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; e.preventDefault();
     if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1};
-    const r=svg.getBoundingClientRect(), s0=_ofCam.scale, w0=b[2]/s0, h0=b[3]/s0;
-    const fx=(e.clientX-r.left)/r.width, fy=(e.clientY-r.top)/r.height;
-    const ux=_ofCam.cx-w0/2+fx*w0, uy=_ofCam.cy-h0/2+fy*h0;
-    const ns=Math.max(1,Math.min(6,s0*(e.deltaY<0?1.15:0.87))), w1=b[2]/ns, h1=b[3]/ns;
-    _ofCam.cx=ux+(0.5-fx)*w1; _ofCam.cy=uy+(0.5-fy)*h1; _ofCam.scale=ns; _ofApplyCam(svg);
+    const u=_ofClientToUser(svg,e.clientX,e.clientY);
+    _ofCam.scale=Math.max(1,Math.min(6,_ofCam.scale*(e.deltaY<0?1.15:0.87))); _ofApplyCam(svg);
+    if(u){ const u2=_ofClientToUser(svg,e.clientX,e.clientY); if(u2){ _ofCam.cx+=u.x-u2.x; _ofCam.cy+=u.y-u2.y; _ofApplyCam(svg); } }
   }, {passive:false});
   let drag=false,lx=0,ly=0,moved=false;
   host.addEventListener('pointerdown',e=>{ if(e.button!==0||e.pointerType==='touch')return; if(!_ofSvg())return; drag=true; moved=false; host._ofDragged=false; lx=e.clientX; ly=e.clientY; const sc=scene(); if(sc)sc.classList.add('of-grabbing'); });
-  window.addEventListener('pointermove',e=>{ if(!drag)return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1}; const r=svg.getBoundingClientRect(), w=b[2]/_ofCam.scale, h=b[3]/_ofCam.scale; const dx=(e.clientX-lx)/r.width*w, dy=(e.clientY-ly)/r.height*h; if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)moved=true; _ofCam.cx-=dx; _ofCam.cy-=dy; lx=e.clientX; ly=e.clientY; _ofApplyCam(svg); });
+  window.addEventListener('pointermove',e=>{ if(!drag)return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; if(!_ofCam)_ofCam={cx:b[0]+b[2]/2,cy:b[1]+b[3]/2,scale:1};
+    if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)moved=true;
+    const u1=_ofClientToUser(svg,lx,ly), u2=_ofClientToUser(svg,e.clientX,e.clientY);
+    if(u1&&u2){ _ofCam.cx-=(u2.x-u1.x); _ofCam.cy-=(u2.y-u1.y); }
+    lx=e.clientX; ly=e.clientY; _ofApplyCam(svg); });
   const end=()=>{ if(!drag)return; drag=false; const sc=scene(); if(sc)sc.classList.remove('of-grabbing'); host._ofDragged=moved; };
   window.addEventListener('pointerup',end); window.addEventListener('pointercancel',end);
   // ── Táctil (móvil/tablet): pellizco para zoom + arrastre de un dedo para desplazar cuando hay zoom ──
@@ -345,17 +389,16 @@ function _ofInitCamControls(host){
   host.addEventListener('touchmove',e=>{
     if(!_pt)return; const svg=_ofSvg(); if(!svg)return; const b=_ofCamBase(svg); if(!b)return; const r=svg.getBoundingClientRect();
     if(_pt.mode==='pinch' && e.touches.length===2){
-      e.preventDefault();
-      const d=_dist(e.touches[0],e.touches[1]), s0=_pt.s0, w0=b[2]/s0, h0=b[3]/s0;
-      const fx=(_pt.m.x-r.left)/r.width, fy=(_pt.m.y-r.top)/r.height;
-      const ux=_ofCam.cx-w0/2+fx*w0, uy=_ofCam.cy-h0/2+fy*h0;
-      const ns=Math.max(1,Math.min(6,s0*(d/_pt.d0))), w1=b[2]/ns, h1=b[3]/ns;
-      _ofCam.cx=ux+(0.5-fx)*w1; _ofCam.cy=uy+(0.5-fy)*h1; _ofCam.scale=ns; _ofApplyCam(svg);
+      e.preventDefault(); host._ofDragged=true;   // B8: un gesto no debe abrir el detalle al soltar
+      const d=_dist(e.touches[0],e.touches[1]), mid=_mid(e.touches[0],e.touches[1]);
+      const u=_ofClientToUser(svg,mid.x,mid.y);
+      _ofCam.scale=Math.max(1,Math.min(6,_pt.s0*(d/_pt.d0))); _ofApplyCam(svg);
+      if(u){ const u2=_ofClientToUser(svg,mid.x,mid.y); if(u2){ _ofCam.cx+=u.x-u2.x; _ofCam.cy+=u.y-u2.y; _ofApplyCam(svg); } }
     } else if(_pt.mode==='pan' && e.touches.length===1){
-      e.preventDefault();
-      const w=b[2]/_ofCam.scale, h=b[3]/_ofCam.scale;
-      const dx=(e.touches[0].clientX-_pt.x)/r.width*w, dy=(e.touches[0].clientY-_pt.y)/r.height*h;
-      _ofCam.cx-=dx; _ofCam.cy-=dy; _pt.x=e.touches[0].clientX; _pt.y=e.touches[0].clientY; _ofApplyCam(svg);
+      e.preventDefault(); host._ofDragged=true;
+      const u1=_ofClientToUser(svg,_pt.x,_pt.y), u2=_ofClientToUser(svg,e.touches[0].clientX,e.touches[0].clientY);
+      if(u1&&u2){ _ofCam.cx-=(u2.x-u1.x); _ofCam.cy-=(u2.y-u1.y); _ofApplyCam(svg); }
+      _pt.x=e.touches[0].clientX; _pt.y=e.touches[0].clientY;
     }
   },{passive:false});
   const _tend=()=>{ _pt=null; };
@@ -694,6 +737,12 @@ function _ofShade(hex,f){
 }
 // Paleta única de estado (avatares 3D, dona y leyendas — coherencia total)
 const _OF_STATUS={'of-work':'#00d4aa','of-active':'#00d4cc','of-error':'#ff4444','of-off':'#7c8590'};
+// Texto del rótulo de progreso de impresión (reutilizado por el render y por la mutación en vivo)
+function _ofPrinterLabelTxt(progress,eta){
+  const _eta=s=>{ s=Math.max(0,Math.round(s||0)); const h=Math.floor(s/3600), mi=Math.floor((s%3600)/60); return h?h+'h'+(mi<10?'0':'')+mi:mi+'m'; };
+  const det=progress>=0;
+  return '🖨️ '+(det?progress+'%':'···')+((det&&eta&&progress<100)?' · '+_eta(eta):'');
+}
 function _ofIsoStation(m,x,y){
   const col=_OF_STATUS[m.cls]||'#7c8590';
   if(m.isPrinter){
@@ -712,21 +761,26 @@ function _ofIsoStation(m,x,y){
     // Barra de PROGRESO de impresión (real si el bridge la reporta; indeterminada si solo se sabe que imprime)
     let prog='';
     if(working && m.progress!=null){
-      const _eta=s=>{ s=Math.max(0,Math.round(s||0)); const h=Math.floor(s/3600), mi=Math.floor((s%3600)/60); return h?h+'h'+(mi<10?'0':'')+mi:mi+'m'; };
       const pw=Wp*0.78, px=-pw/2, py=baseY-Hp*0.16, ph=4.4, det=m.progress>=0;
       const fillW=det?pw*Math.max(0,Math.min(100,m.progress))/100:pw;
+      const lblT=_ofPrinterLabelTxt(m.progress,m.eta);
+      const lw=Math.max(48, lblT.length*4.9+14);   // ancho del rótulo según el texto (evita desborde, B19)
       prog=`<rect x="${f(px)}" y="${f(py)}" width="${f(pw)}" height="${ph}" rx="${ph/2}" fill="#0f1114" opacity="0.85"/>`
-        +(det?`<rect x="${f(px)}" y="${f(py)}" width="${f(fillW)}" height="${ph}" rx="${ph/2}" fill="${col}"/>`
+        +(det?`<rect class="of-pfill" data-pw="${f(pw)}" x="${f(px)}" y="${f(py)}" width="${f(fillW)}" height="${ph}" rx="${ph/2}" fill="${col}"/>`
              :`<rect class="of-prog-ind" x="${f(px)}" y="${f(py)}" width="${f(pw*0.4)}" height="${ph}" rx="${ph/2}" fill="${col}" style="--pw:${f(pw)}px"/>`)
-        +`<g transform="translate(0,${f(baseY-Hp-7)})"><rect x="-24" y="-8.5" width="48" height="13" rx="6.5" fill="#0e1116" opacity="0.9"/><text x="0" y="1.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="700">🖨️ ${det?m.progress+'%':'···'}${(det&&m.eta&&m.progress<100)?' · '+_eta(m.eta):''}</text></g>`;
+        +`<g transform="translate(0,${f(baseY-Hp-7)})"><rect x="${f(-lw/2)}" y="-8.5" width="${f(lw)}" height="13" rx="6.5" fill="#0e1116" opacity="0.9"/><text class="of-plabel" x="0" y="1.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="700">${lblT}</text></g>`;
     }
-    return `<g class="of-iso-char" ${pclick} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
+    return `<g class="of-iso-char" data-pid="${escapeHtml(m.id)}" ${pclick} role="button" tabindex="0" onkeydown="ofKey(event)" transform="translate(${x},${y})">
       <title>${escapeHtml(m.label+' — '+m.lbl)}</title>
       ${shadow}${halo}
       <g class="of-iso-body">${body}${light}${camb}</g>
       ${prog}
     </g>`;
   }
+  // ⚠️ CÓDIGO OBSOLETO (B20): _ofIsoStation SÓLO se invoca para impresoras (rama isPrinter de
+  // _ofRenderIso). Los agentes se dibujan con _ofRingAgent alrededor del mesón. Todo lo que sigue
+  // (personaje "sentado con piernas" + burbuja a y=-120) NUNCA se renderiza; se conserva sólo por
+  // seguridad/histórico y no debe usarse. No añadir features aquí.
   const dark=_ofShade(col,0.72);
   const cat=m.clickIA?_ofCat(m):null;
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`;
@@ -808,7 +862,10 @@ function _ofCommWalker(m,p1,p2,dur,delay){
       <rect x="-8.5" y="-28" width="17" height="21" rx="8" fill="url(#ofShine)"/>
       <circle cx="0" cy="-36" r="10.5" fill="#fff7ec" stroke="${col}" stroke-width="2.6"/>
       <text x="0" y="-32" text-anchor="middle" font-size="12">${em}</text>`;
-  return `<g class="of-iso-walker" style="--x1:${p1[0].toFixed(1)}px;--y1:${p1[1].toFixed(1)}px;--x2:${p2[0].toFixed(1)}px;--y2:${p2[1].toFixed(1)}px;--dur:${(dur||4.6)}s;animation-delay:${delay||0}s">
+  // Interactivo como el resto: el agente en tránsito se puede abrir/enfocar (B23)
+  const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:(m.id?`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`:'');
+  return `<g class="of-iso-walker of-iso-char"${click?' role="button" tabindex="0" onkeydown="ofKey(event)" '+click:''} style="--x1:${p1[0].toFixed(1)}px;--y1:${p1[1].toFixed(1)}px;--x2:${p2[0].toFixed(1)}px;--y2:${p2[1].toFixed(1)}px;--dur:${(dur||4.6)}s;animation-delay:${delay||0}s">
+    <title>${escapeHtml(_ofPretty(m.label)+' — comunicándose')}</title>
     <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
     <g class="of-iso-body">${body}</g>
     <g transform="translate(0,-56)"><rect x="-11" y="-9" width="22" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-width="1.3"/><polygon points="-4,6 4,6 0,12" fill="#fff"/><text x="0" y="3" text-anchor="middle" font-size="10">💬</text></g>
@@ -949,13 +1006,19 @@ function _ofPrinterSlots(members){
   const enders=[[3,1],[4,1],[4,2],[3,3],[4,3]];   // 5 Ender-5 Max rodeando la K2 Plus, tocando abajo
   const k1=[[2,3],[5,3],[6,3],[3,0],[4,0]];        // K1: fila frontal a los lados + 2 detrás del bloque
   const k2=[[0,3],[1,3]];                          // K2 en la fila frontal (izquierda)
-  const map=new Map(); let ei=0,ki=0,k2i=0;
+  const giga=[[0,1]], k2plus=[[3,2]];              // Giga y K2 Plus (grandes)
+  // B3: si hay MÁS unidades de un tipo que slots canónicos (o duplicados de Giga/K2 Plus),
+  // el excedente toma la siguiente CELDA LIBRE de la grilla 7×4 en vez de apilarse encima.
+  const used=new Set(), map=new Map(), key=p=>p[0]+','+p[1];
+  const freeCell=()=>{ for(let r=0;r<4;r++) for(let c=0;c<7;c++){ if(!used.has(c+','+r)) return [c,r]; } return [6,3]; };
+  const take=(arr,i)=>{ let p=arr[i]; if(!p||used.has(key(p))) p=freeCell(); used.add(key(p)); return p; };
+  let ei=0,ki=0,k2i=0,gi=0,kpi=0;
   members.forEach(m=>{ const s=((m.label||'')+' '+(m.role||'')).toLowerCase(); let pos;
-    if(/giga|orangestorm/.test(s)) pos=[0,1];      // Giga (grande) a la izquierda
-    else if(/k2\s*plus/.test(s)) pos=[3,2];        // K2 Plus al centro del bloque (una fila más abajo)
-    else if(/ender/.test(s)) pos=enders[ei++]||[5,1];
-    else if(/k2/.test(s)) pos=k2[k2i++]||[1,3];
-    else pos=k1[ki++]||[6,3];
+    if(/giga|orangestorm/.test(s)) pos=take(giga,gi++);
+    else if(/k2\s*plus/.test(s)) pos=take(k2plus,kpi++);
+    else if(/ender/.test(s)) pos=take(enders,ei++);
+    else if(/k2/.test(s)) pos=take(k2,k2i++);
+    else pos=take(k1,ki++);
     map.set(m,pos);
   });
   return map;
@@ -970,7 +1033,10 @@ function _ofRenderIso(ia,auto,extras){
   const _comms=_ofComms.filter(c=>Date.now()-c.t<_OF_COMM_MS);
   // No re-renderizar si nada cambió → preserva las animaciones (sin "saltos" en la TV)
   const _cz=_ofCelebs.filter(c=>Date.now()-c.t<_OF_CELEB_MS).map(c=>c.label).join(',');
-  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.top?'*':'')+(m.isPrinter?('P'+(m.progress==null?'':m.progress)+(m.eta?('e'+Math.round(m.eta/60)):'')):(m.task||'').slice(0,18))).join(';')+'|c:'+_comms.map(c=>c.from+'>'+c.to).join(',')+'|z:'+_cz+'|h:'+new Date().getHours();
+  // Firma SÓLO estructural (id+estado+empleado-del-mes) + transitorios + hora. El texto de
+  // tarea y el progreso/eta de impresora se ACTUALIZAN POR MUTACIÓN (_ofTickLive) sin reconstruir
+  // la escena → evita reiniciar todas las animaciones en cada poll / actualización de telemetría.
+  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.top?'*':'')).join(';')+'|c:'+_comms.map(c=>c.from+'>'+c.to).join(',')+'|z:'+_cz+'|h:'+new Date().getHours();
   if(host.dataset.sig===sig && host.querySelector('svg')){
     // misma escena: solo aplica un enfoque pendiente (sin reconstruir → preserva las animaciones)
     if(_ofFollowId && _ofPos[_ofFollowId]){ const _p=_ofPos[_ofFollowId]; _ofCam={cx:_p[0],cy:_p[1]-30,scale:2.4}; _ofFollowId=null; _ofApplyCam(host.querySelector('svg.of-iso-svg')); }
@@ -1108,10 +1174,12 @@ function _ofRenderIso(ia,auto,extras){
     const N=seats.length;
     const span=((R.dc-1)+(R.dr-1))/2;                 // semidiámetro de la sala (en tiles)
     const Wx=span*tw/2, Hy=span*th/2;                 // semiejes de la sala en pantalla
-    const need=N>=2? 42/(2*Math.sin(Math.PI/N)) : 0;  // radio mínimo para que no se solapen
+    const minChord=(N>=5?56:42);                      // B5: en salas grandes, más separación para que las placas de nombre no se solapen
+    const need=N>=2? minChord/(2*Math.sin(Math.PI/N)) : 0;  // radio mínimo para que no se solapen
     const ringRx=Math.min(Wx*0.7, Math.max(need, Wx*0.45, tw*0.5));
     const ringRy=Math.min(Hy*0.7, ringRx*(th/tw));
-    const tableH=16, tRx=Math.max(tw*0.38, ringRx*0.66), tRy=Math.max(th*0.38, ringRy*0.66);
+    // B17: la mesa nunca debe superar el anillo (si no, el agente frontal queda "incrustado" en la mesa)
+    const tableH=16, tRx=Math.min(ringRx*0.8, Math.max(tw*0.38, ringRx*0.66)), tRy=Math.min(ringRy*0.8, Math.max(th*0.38, ringRy*0.66));
     const ang=i=>-Math.PI/2 + 2*Math.PI*(i+0.5)/Math.max(N,1);
     const pos=seats.map((m,i)=>{ const a=ang(i); return {m,a,sx:ctr[0]+ringRx*Math.cos(a),sy:ctr[1]+ringRy*Math.sin(a)}; });
     pos.forEach(p=>{ _ofPos[p.m.id]=[p.sx,p.sy]; });   // puesto del agente (para enfocar/ubicar)
@@ -1136,8 +1204,10 @@ function _ofRenderIso(ia,auto,extras){
   chars+=_errands;   // pausas en primer plano (pasan por delante de las salas)
   // Agentes que se comunican: caminan de su departamento al de destino (y vuelven)
   Object.values(_transit).forEach((tr,i)=>{ chars+=_ofCommWalker(tr.m, tr.from, tr.to, 4.6, i*0.4); });
-  // Mensajeros ambientales: cruzan de un departamento a otro por el pasillo (movimiento continuo)
-  if(_rooms.length>1){
+  // Mensajeros ambientales: cruzan de un departamento a otro por el pasillo (movimiento continuo).
+  // B16: sólo si existe un pasillo REAL entre estanterías (con una sola estantería, _corrR cae en la
+  // fila frontal de las salas y los peatones cruzarían por dentro de las mesas → se omiten).
+  if(_rooms.length>1 && _corrR<rows-1){
     const midR=Math.min(_corrR,rows-1);
     const ems=['🚶','🧍','📄','☕','📬'];
     const n=_rooms.length;
@@ -1159,7 +1229,7 @@ function _ofRenderIso(ia,auto,extras){
   const decor=plant(Dl[0]+10,Dl[1]-4)+plant(Cb[0]+2,Cb[1]-4);
   const amenities=_ofCoffee(coffeePt[0],coffeePt[1])+_ofRestroom(wcPt[0],wcPt[1]);   // zona de descanso (café + baño)
   // Jornada NOCHE: lámparas encendidas (pozo de luz cálido + bombillo colgante por sala)
-  const isNight = H>=18 || H<7;
+  const isNight = H>=20 || H<7;   // B18: alineado con el cielo de la ventana (noche = luna, ≥20h) para no encender lámparas con sol
   let lamps='';
   if(isNight){
     _rooms.forEach(R=>{
@@ -1215,7 +1285,7 @@ function _ofRenderIso(ia,auto,extras){
   const presentCats=_OF_CAT.filter(c=>ia.some(m=>_ofCat(m).name===c.name));
   if(ia.some(m=>_ofCat(m).name==='Otros')) presentCats.push({name:'Otros',color:'#7a7a7a'});
   const catLegend=presentCats.length?`<div class="of-iso-legend of-iso-cats"><span style="color:var(--text3)">Áreas:</span>${presentCats.map(c=>`<span><i style="background:${c.color}"></i>${c.name}</span>`).join('')}</div>`:'';
-  host.innerHTML=`${legend}${catLegend}<div class="of-iso-scene"><svg class="of-iso-svg" viewBox="${vbX} ${topY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet">
+  host.innerHTML=`${legend}${catLegend}<div class="of-iso-scene"><svg class="of-iso-svg" role="img" aria-label="Oficina virtual en 3D — ${total} trabajadores" viewBox="${vbX} ${topY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet">
     <defs>
       <linearGradient id="ofShine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.3"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
       <radialGradient id="ofShadow"><stop offset="0" stop-color="#000" stop-opacity="0.38"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
@@ -1224,7 +1294,7 @@ function _ofRenderIso(ia,auto,extras){
       <linearGradient id="ofSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${skyT}"/><stop offset="1" stop-color="${skyB}"/></linearGradient>
       <linearGradient id="ofDoorway" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#11151b"/><stop offset="0.55" stop-color="#2c343d"/><stop offset="1" stop-color="#5c6775"/></linearGradient>
       <radialGradient id="ofLampGlow"><stop offset="0" stop-color="#ffe1a3" stop-opacity="0.6"/><stop offset="55%" stop-color="#ffcf86" stop-opacity="0.22"/><stop offset="100%" stop-color="#ffcf86" stop-opacity="0"/></radialGradient>
-      <filter id="ofHalo" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7"/></filter>
+      <filter id="ofHalo" x="-80%" y="-80%" width="260%" height="260%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="7"/></filter>
       <radialGradient id="ofVig" cx="50%" cy="42%" r="72%"><stop offset="58%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.42"/></radialGradient>
     </defs>
     ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}
@@ -1235,9 +1305,9 @@ function _ofRenderIso(ia,auto,extras){
     ${doors}
     ${amenities}
     ${lamps}
+    ${signs}
     <g>${chars}</g>
     <g>${tags}</g>
-    ${signs}
     ${decor}
     ${ambient}
     <rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="url(#ofVig)" pointer-events="none"/>
@@ -1245,6 +1315,14 @@ function _ofRenderIso(ia,auto,extras){
   // Cámara: guardar el viewBox base, aplicar pan/zoom/enfoque vigente y activar los controles
   const _svg=host.querySelector('svg.of-iso-svg');
   if(_svg){
+    const nb=[vbX,topY,vbW,vbH];
+    // B7: si el viewBox base cambió respecto al último render (nuevo agente, umbral de tw…),
+    // reanclar la cámara proporcionalmente para que el encuadre con zoom no "salte" de zona.
+    if(_ofCam && _ofCamVb && (_ofCamVb[0]!==nb[0]||_ofCamVb[1]!==nb[1]||_ofCamVb[2]!==nb[2]||_ofCamVb[3]!==nb[3]) && _ofCamVb[2] && _ofCamVb[3]){
+      const fx=(_ofCam.cx-_ofCamVb[0])/_ofCamVb[2], fy=(_ofCam.cy-_ofCamVb[1])/_ofCamVb[3];
+      _ofCam.cx=nb[0]+fx*nb[2]; _ofCam.cy=nb[1]+fy*nb[3];
+    }
+    _ofCamVb=nb;
     _svg.dataset.vb=`${vbX} ${topY} ${vbW} ${vbH}`;
     if(_ofFollowId && _ofPos[_ofFollowId]){ const _p=_ofPos[_ofFollowId]; _ofCam={cx:_p[0],cy:_p[1]-30,scale:2.4}; _ofFollowId=null; }
     _ofApplyCam(_svg);
