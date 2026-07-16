@@ -276,9 +276,9 @@ function _ofDetailHours(runs){
 }
 function closeOfAgent(){ const e=document.getElementById('ofAgentModal'); if(e) e.style.display='none'; }
 function ofAgentRun(id){ closeOfAgent(); switchTab('agentes'); setTimeout(()=>{const i=document.getElementById('input_'+id); if(i){ i.scrollIntoView({behavior:'smooth',block:'center'}); i.focus(); }},140); }
-function ofAgentViewRun(idx){
-  const r=_ofAgentRuns&&_ofAgentRuns[idx]; if(!r) return;
-  closeOfAgent();
+// Abre una ejecución en el modal inline (compartido por el detalle del agente y el feed)
+function _ofOpenRun(r){
+  if(!r) return;
   document.getElementById('agentInlineTitle').textContent='📜 '+_ofPretty(r.agent||'Agente')+' — '+NOTIFY._fmtFull(r.time);
   const resultEl=document.getElementById('agentInlineResult');
   resultEl.className='agent-modal-result'; resultEl.style.whiteSpace='normal';
@@ -289,6 +289,13 @@ function ofAgentViewRun(idx){
   document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
   document.getElementById('agentInlineModal').style.display='flex';
 }
+function ofAgentViewRun(idx){
+  const r=_ofAgentRuns&&_ofAgentRuns[idx]; if(!r) return;
+  closeOfAgent();
+  _ofOpenRun(r);
+}
+// Clic en un item del feed → abre esa ejecución (idea: el feed deja de ser sólo lectura)
+function ofFeedView(i){ const r=_ofFeedShown&&_ofFeedShown[+i]; if(r) _ofOpenRun(r); }
 function ofSetView(v,persist){
   _ofView=v;
   // Los cambios de vista FORZADOS (modo TV, "Ver en 3D") no pisan la preferencia del usuario (B-C8)
@@ -305,7 +312,7 @@ function ofSetView(v,persist){
   renderOficina();
 }
 function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000);
-  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(!document.hidden && _ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTvTour(); } },20000);   // reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
+  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(document.hidden) return; _ofTickUpdated(); if(_ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTvTour(); } },20000);   // frescura + reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
 }
 // ── Auto-tour del modo TV (idea 3): en pantalla completa la cámara recorre los departamentos
 // cada 20s (una parada por depto + una vista general). Cualquier interacción manual con la
@@ -360,6 +367,14 @@ function _ofTickClock(){
 }
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden && document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
+});
+// Atajo "/" → enfoca el buscador de trabajadores (sólo en la Oficina, vista Tarjetas, fuera de inputs)
+document.addEventListener('keydown',e=>{
+  if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey) return;
+  const t=e.target; if(t&&(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)||t.isContentEditable)) return;
+  if(!document.getElementById('tab-oficina')?.classList.contains('active')) return;
+  if(_ofView!=='cards') return;
+  const i=document.getElementById('oficinaSearch'); if(i){ e.preventDefault(); i.focus(); }
 });
 // ── Pantalla completa (modo TV / kiosko 1080p) ─────────────────────────
 function ofFullscreen(){
@@ -647,7 +662,10 @@ async function _renderOficina(){
   else _ofRenderCards(iaModel,autoModel,extraDepts);
   _ofRenderFeed(runs);
   _ofRenderCharts(runs,iaModel,[...autoModel,...printerModel]);
+  _ofLastRenderT=Date.now(); _ofTickUpdated();   // marca de frescura "actualizado hace Xs" (idea U-8)
 }
+let _ofLastRenderT=0;
+function _ofTickUpdated(){ const el=document.getElementById('ofUpdatedAt'); if(!el) return; el.textContent=_ofLastRenderT?('actualizado '+_ofAgo(_ofLastRenderT)):''; }
 // Count-up de KPIs (sólo anima cuando el valor cambia; respeta reduce-motion)
 function _ofAnimateKpis(vals){
   const host=document.getElementById('oficinaKpis'); if(!host) return;
@@ -871,6 +889,15 @@ const _OF_STATUS={'of-work':'#00d4aa','of-active':'#4da3ff','of-error':'#ff4444'
 // mostrar un sublabel más específico ("Atrasado", "Sin conexión"), pero el nombre del ESTADO
 // es siempre el mismo en toda la sección.
 const _OF_STATE_LBL={'of-work':'Trabajando','of-active':'Activo','of-off':'En reposo','of-error':'Con falla'};
+// Forma del indicador por estado (además del color, para daltonismo — idea U-4):
+// ● trabajando · ◯ activo (anillo) · ■ reposo · ▲ con falla
+function _ofStateShapeStyle(cls){
+  const c=_OF_STATUS[cls]||'#7c8590';
+  if(cls==='of-active') return `background:transparent;border:2.5px solid ${c};box-sizing:border-box;border-radius:50%`;
+  if(cls==='of-off')    return `background:${c};border-radius:2px`;
+  if(cls==='of-error')  return `background:${c};clip-path:polygon(50% 0,100% 100%,0 100%);border-radius:0`;
+  return `background:${c};border-radius:50%`;
+}
 // Texto del rótulo de progreso de impresión (reutilizado por el render y por la mutación en vivo)
 function _ofPrinterLabelTxt(progress,eta){
   const _eta=s=>{ s=Math.max(0,Math.round(s||0)); const h=Math.floor(s/3600), mi=Math.floor((s%3600)/60); return h?h+'h'+(mi<10?'0':'')+mi:mi+'m'; };
@@ -1287,6 +1314,12 @@ function _ofRenderIso(ia,auto,extras){
   // Cuadros decorativos en la pared derecha
   const frame=(f1,f2,h1,h2,c)=>`<polygon points="${wp(f1,h1)} ${wp(f2,h1)} ${wp(f2,h2)} ${wp(f1,h2)}" fill="#fff" stroke="#c9b48f" stroke-width="2"/><polygon points="${wp(f1+0.012,h1-3)} ${wp(f2-0.012,h1-3)} ${wp(f2-0.012,h2+3)} ${wp(f1+0.012,h2+3)}" fill="${c}" opacity="0.8"/>`;
   const frames=frame(0.10,0.20,34,54,'#7fd1c4')+frame(0.23,0.33,34,54,'#f6b8a0');
+  // Charco de sol: proyección cálida en el piso bajo la ventana durante el día (espejo diurno
+  // de las lámparas nocturnas — idea 3D-4). Mismas horas que el cielo diurno de la ventana.
+  let sunPatch='';
+  if(H>=7&&H<17){ const s1=wp(0.44,0), s2=wp(0.78,0), offX=-tw*0.55, offY=th*0.55;
+    sunPatch=`<polygon points="${s1[0].toFixed(1)},${s1[1].toFixed(1)} ${s2[0].toFixed(1)},${s2[1].toFixed(1)} ${(s2[0]+offX).toFixed(1)},${(s2[1]+offY).toFixed(1)} ${(s1[0]+offX).toFixed(1)},${(s1[1]+offY).toFixed(1)}" fill="#ffd9a0" opacity="0.10" pointer-events="none"/>`;
+  }
 
   // Piso: baldosas claras dentro de las salas, pasillos más oscuros entre salas
   let tiles='';
@@ -1303,7 +1336,11 @@ function _ofRenderIso(ia,auto,extras){
     rugs+=`<polygon points="${ins.map(p=>p.join(',')).join(' ')}" fill="${R.color}" opacity="0.17" stroke="${R.color}" stroke-opacity="0.45" stroke-width="2.5"/>`;
   });
   const dw=36;
-  const wallQuad=(P,Q,col)=>`<polygon points="${P[0].toFixed(1)},${P[1].toFixed(1)} ${Q[0].toFixed(1)},${Q[1].toFixed(1)} ${Q[0].toFixed(1)},${(Q[1]-dw).toFixed(1)} ${P[0].toFixed(1)},${(P[1]-dw).toFixed(1)}" fill="${col}"/>`;
+  // Muro divisorio con "vidrio": franja superior semitransparente para que los agentes del
+  // fondo de cada sala no queden cortados visualmente por el muro de la sala de atrás (idea 3D-8)
+  const wallQuad=(P,Q,col)=>{ const h1=dw*0.6, f=n=>n.toFixed(1);
+    return `<polygon points="${f(P[0])},${f(P[1])} ${f(Q[0])},${f(Q[1])} ${f(Q[0])},${f(Q[1]-h1)} ${f(P[0])},${f(P[1]-h1)}" fill="${col}"/>`
+      +`<polygon points="${f(P[0])},${f(P[1]-h1)} ${f(Q[0])},${f(Q[1]-h1)} ${f(Q[0])},${f(Q[1]-dw)} ${f(P[0])},${f(P[1]-dw)}" fill="${col}" opacity="0.38"/>`; };
   let dividers='';
   _rooms.forEach(R=>{ const k=_rC(R);
     dividers+=wallQuad(k.T,k.R,'#dfe6ec')+wallQuad(k.L,k.T,'#cfd8e1');
@@ -1364,8 +1401,13 @@ function _ofRenderIso(ia,auto,extras){
   const _hasCorr=_rooms.length>1 && _corrR<rows-1;
   const coffeePt=_hasCorr?iso(Math.max(1,cols*0.16),_corrR):null;
   const wcPt=_hasCorr?iso(Math.min(cols-2,cols*0.84),_corrR):null;
-  const _rtag=(m,x,y)=>{ const f=n=>n.toFixed(1), pretty=_ofPretty(m.label); const raw=pretty.length>14?pretty.slice(0,13)+'…':pretty; const nm=escapeHtml(raw), w=Math.max(34,raw.length*5.2+10);
-    return `<g transform="translate(${f(x)},${f(y)})" pointer-events="none"><rect x="${f(-w/2)}" y="6" width="${f(w)}" height="13" rx="6.5" fill="#0e1116" opacity="0.85"/><text x="0" y="15.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="600">${nm}</text></g>`; };
+  // Placa con DOBLE línea: rol arriba + persona abajo (misma identidad que Agentes — idea C4).
+  // La persona se trunca a 12 chars para que placas vecinas del anillo no se solapen.
+  const _rtag=(m,x,y)=>{ const f=n=>n.toFixed(1), idn=agentIdentity(m.label);
+    const rol=idn.rol.length>14?idn.rol.slice(0,13)+'…':idn.rol;
+    const per=idn.persona?(idn.persona.length>12?idn.persona.slice(0,11)+'…':idn.persona):'';
+    const w=Math.max(34, rol.length*5.2+10, per?per.length*4.6+10:0), h=per?23:13;
+    return `<g transform="translate(${f(x)},${f(y)})" pointer-events="none"><rect x="${f(-w/2)}" y="6" width="${f(w)}" height="${h}" rx="6.5" fill="#0e1116" opacity="0.85"/><text x="0" y="15.5" text-anchor="middle" font-size="8" fill="#fff" font-family="DM Sans" font-weight="600">${escapeHtml(rol)}</text>${per?`<text x="0" y="24.5" text-anchor="middle" font-size="6.8" fill="#9fb3c8" font-family="DM Sans" font-weight="600">${escapeHtml(per)}</text>`:''}</g>`; };
   // Salas de atrás hacia adelante (orden de pintor entre salas)
   const _sorted=[..._rooms].sort((a,b)=>(a.r0-b.r0)||(a.c0-b.c0));
   _sorted.forEach(R=>{
@@ -1425,7 +1467,7 @@ function _ofRenderIso(ia,auto,extras){
     pos.forEach((p,i)=>{ if(p.brk||p.m.cls==='of-work'||p.m.cls==='of-error'||p.m.top) return;
       if(_ofCelebs.some(c=>c.label===p.m.label && Date.now()-c.t<_OF_CELEB_MS)) return;
       const msg=_ofChatMsg(p.m), dl=-(((i+0.5)/Math.max(1,N))*_CH + (_ofHash(p.m.id+'c')%14)/10);
-      chatter+=_ofChatBubble(p.sx+Math.cos(p.a)*20,p.sy+Math.sin(p.a)*10,msg,dl,_CH,R.color);
+      chatter+=_ofChatBubble(p.sx+Math.cos(p.a)*20,p.sy+Math.sin(p.a)*10,msg,dl,_CH,_OF_STATUS[p.m.cls]||R.color);   // borde = color de ESTADO (paleta coherente)
     });
   });
   chars+=_errands;   // pausas en primer plano (pasan por delante de las salas)
@@ -1504,10 +1546,7 @@ function _ofRenderIso(ia,auto,extras){
   const ambient = ambO? `<rect x="${vbX}" y="${topY}" width="${vbW}" height="${vbH}" fill="${ambC}" opacity="${ambO}" pointer-events="none"/>`:'';
 
   const legend=`<div class="of-iso-legend">
-    <span><i style="background:${_OF_STATUS['of-work']}"></i>${_OF_STATE_LBL['of-work']}</span>
-    <span><i style="background:${_OF_STATUS['of-active']}"></i>${_OF_STATE_LBL['of-active']}</span>
-    <span><i style="background:${_OF_STATUS['of-off']}"></i>${_OF_STATE_LBL['of-off']}</span>
-    <span><i style="background:${_OF_STATUS['of-error']}"></i>${_OF_STATE_LBL['of-error']}</span>
+    ${['of-work','of-active','of-off','of-error'].map(k=>`<span><i style="${_ofStateShapeStyle(k)}"></i>${_OF_STATE_LBL[k]}</span>`).join('')}
   </div>`;
   const presentCats=_OF_CAT.filter(c=>ia.some(m=>_ofCat(m).name===c.name));
   if(ia.some(m=>_ofCat(m).name==='Otros')) presentCats.push({name:'Otros',color:'#7a7a7a'});
@@ -1527,6 +1566,7 @@ function _ofRenderIso(ia,auto,extras){
     ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}
     <g>${tiles}</g>
     ${rugs}
+    ${sunPatch}
     ${counters}
     ${dividers}
     ${doors}
@@ -1560,6 +1600,7 @@ function _ofRenderIso(ia,auto,extras){
 let _ofFeedRuns=[];            // últimos runs (para re-filtrar el feed sin volver a Airtable)
 let _ofFeedFilter='all';       // 'all' o nombre de departamento/área
 let _ofFeedLimit=15;           // corte visible del feed (crece con "Ver más" — B-U9)
+let _ofFeedShown=[];           // items visibles del feed (para abrir la ejecución al hacer clic)
 function ofSetFeedFilter(cat){ _ofFeedFilter=cat||'all'; _ofRenderFeed(_ofFeedRuns); }
 function _ofFeedCat(r){ return _ofCat({id:r.agent}).name; }   // área del run según su agente
 function _ofRenderFeed(runs){
@@ -1594,13 +1635,14 @@ function _ofRenderFeed(runs){
     const y=new Date(); y.setHours(0,0,0,0); const y0=y.getTime()-864e5;
     if(t>=y0) return 'Ayer'; if(Date.now()-t<7*864e5) return 'Esta semana'; return 'Anteriores'; };
   let lastB=null;
-  feed.innerHTML=shown.slice(0,lim).map(r=>{
+  _ofFeedShown=shown.slice(0,lim);
+  feed.innerHTML=_ofFeedShown.map((r,i)=>{
     const col=_OF_STATUS[_ofStatus(r.t).cls]||'#7c8590';
     const idn=agentIdentity(r.agent);
     const b=_bucket(r.t);
     const head=b!==lastB?`<div class="of-feed-group">${b}</div>`:''; lastB=b;
     const who=idn.persona?`${escapeHtml(idn.persona)} <span class="of-feed-rol">· ${escapeHtml(idn.rol)}</span>`:escapeHtml(idn.rol||'—');
-    return `${head}<div class="of-feed-item" style="border-left:2px solid ${col};padding-left:11px">
+    return `${head}<div class="of-feed-item of-feed-click" role="button" tabindex="0" onkeydown="ofKey(event)" data-i="${i}" onclick="ofFeedView(this.dataset.i)" title="Ver la ejecución completa" style="border-left:2px solid ${col};padding-left:11px">
       <div class="of-feed-ic" style="background:${col}1f;box-shadow:inset 0 0 0 1px ${col}40">${idn.emoji}</div>
       <div class="of-feed-main">
         <div class="of-feed-agent">${who}</div>
@@ -1663,8 +1705,8 @@ function _ofDonut(parts,total){
 function _ofDonutStatus(ia,auto){
   const all=[...ia,...auto], c={work:0,active:0,off:0,error:0};
   all.forEach(m=>{ if(m.cls==='of-work')c.work++; else if(m.cls==='of-active')c.active++; else if(m.cls==='of-error')c.error++; else c.off++; });
-  const parts=[{v:c.work,color:_OF_STATUS['of-work'],label:_OF_STATE_LBL['of-work']},{v:c.active,color:_OF_STATUS['of-active'],label:_OF_STATE_LBL['of-active']},{v:c.off,color:_OF_STATUS['of-off'],label:_OF_STATE_LBL['of-off']},{v:c.error,color:_OF_STATUS['of-error'],label:_OF_STATE_LBL['of-error']}];
-  const legend=parts.map(p=>`<span><i style="background:${p.color}"></i>${p.label} · ${p.v}</span>`).join('');
+  const parts=[{v:c.work,cls:'of-work'},{v:c.active,cls:'of-active'},{v:c.off,cls:'of-off'},{v:c.error,cls:'of-error'}].map(p=>({...p,color:_OF_STATUS[p.cls],label:_OF_STATE_LBL[p.cls]}));
+  const legend=parts.map(p=>`<span><i style="${_ofStateShapeStyle(p.cls)}"></i>${p.label} · ${p.v}</span>`).join('');
   return `<div class="of-donut-wrap">${_ofDonut(parts,all.length)}<div class="of-donut-legend">${legend}</div></div>`;
 }
 function _ofBarsArea(runs){
@@ -1699,6 +1741,24 @@ function _ofTimeline(runs){
   const mark=`<line x1="${nx.toFixed(1)}" y1="20" x2="${nx.toFixed(1)}" y2="${H-26}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 2" opacity="0.55"/>`;
   return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg"><text x="${W-pad}" y="13" text-anchor="end" font-size="8.5" fill="var(--text3)">pico ${peak}:00 · ${total} hoy</text><line x1="${pad}" y1="${H-26}" x2="${W-pad}" y2="${H-26}" stroke="var(--border)"/>${bars}${mark}${lbls}</svg>`;
 }
+// Mapa de calor SEMANAL (día × hora) de las ejecuciones del rango — muestra los patrones de
+// actividad del equipo (¿lunes por la mañana? ¿viernes de reportes?). Celdas con <title> (tap=toast).
+function _ofHeatmap(runs){
+  const R=Math.max(7,Math.min(30,_ofChartRange||14)), since=Date.now()-R*864e5;
+  const grid=Array.from({length:7},()=>new Array(24).fill(0));
+  (runs||[]).forEach(r=>{ if(!r.t||r.t<since) return; const d=new Date(r.t); grid[(d.getDay()+6)%7][d.getHours()]++; });
+  const flat=grid.flat(), max=Math.max(1,...flat), total=flat.reduce((s,v)=>s+v,0);
+  if(!total) return `<div class="of-chart-empty">Sin ejecuciones en ${R} días.</div>`;
+  const days=['L','M','X','J','V','S','D'], cw=11.5, ch=11, ox=18, oy=4, W=320, H=7*ch+oy+14;
+  let cells='';
+  for(let d=0;d<7;d++){
+    cells+=`<text x="${ox-6}" y="${oy+d*ch+8}" font-size="7" fill="var(--text3)" text-anchor="end">${days[d]}</text>`;
+    for(let h=0;h<24;h++){ const v=grid[d][h];
+      cells+=`<rect x="${(ox+h*cw).toFixed(1)}" y="${oy+d*ch}" width="${cw-1.5}" height="${ch-1.5}" rx="2" fill="var(--accent)" opacity="${v?(0.15+0.85*v/max).toFixed(2):0.05}"><title>${days[d]} ${h}:00 · ${v} ejec.</title></rect>`; }
+  }
+  let hl=''; for(let h=0;h<24;h+=6) hl+=`<text x="${(ox+h*cw+cw/2).toFixed(1)}" y="${H-3}" font-size="7" fill="var(--text3)" text-anchor="middle">${h}h</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg">${cells}${hl}</svg>`;
+}
 // En táctil no existen los tooltips <title>: un tap sobre una barra/segmento muestra su valor (B-U10)
 function _ofInitChartTips(host){
   if(host._tipInit) return; host._tipInit=true;
@@ -1721,5 +1781,6 @@ function _ofRenderCharts(runs,ia,auto){
     <div class="of-chart"><div class="of-chart-t">🏆 Top agentes · ${R} días</div>${_ofBarsTop(runs)}</div>
     <div class="of-chart"><div class="of-chart-t">🟢 Estado del equipo · ahora</div>${_ofDonutStatus(ia,auto)}</div>
     <div class="of-chart"><div class="of-chart-t">🗂️ Ejecuciones por área · ${R} días</div>${_ofBarsArea(runs)}</div>
+    <div class="of-chart"><div class="of-chart-t">🔥 Actividad semanal (día × hora) · ${R} días</div>${_ofHeatmap(runs)}</div>
   </div>`;
 }

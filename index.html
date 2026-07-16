@@ -1549,6 +1549,10 @@
 .of-more-wrap{position:relative;}
 .of-more-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:600;min-width:160px;box-shadow:0 14px 34px -12px rgba(0,0,0,0.75);}
 .of-more-menu .btn{width:100%;justify-content:flex-start;text-align:left;}
+.of-updated{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+.of-feed-click{cursor:pointer;transition:background .12s;}
+.of-feed-click:hover{background:var(--surface2);}
+.of-feed-click:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:6px;}
 /* Separadores temporales del feed (Hoy / Ayer / Esta semana) */
 .of-feed-group{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);padding:9px 4px 3px;}
 .of-feed-rol{font-weight:500;color:var(--text3);font-size:10px;}
@@ -1809,6 +1813,7 @@
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
       <button class="btn btn-ghost btn-sm" id="ofFsBtn" onclick="ofFullscreen()">📺 Pantalla completa</button>
+      <span class="of-updated" id="ofUpdatedAt" aria-live="off"></span>
       <div class="of-more-wrap">
         <button class="btn btn-ghost btn-sm" id="ofMoreBtn" aria-haspopup="true" aria-expanded="false" onclick="ofToggleMore(event)" title="Más acciones">⋯ Más</button>
         <div class="of-more-menu" id="ofMoreMenu" style="display:none">
@@ -1823,12 +1828,17 @@
 
   <div id="oficinaAlerts" class="of-alerts" style="display:none"></div>
 
-  <div class="of-kpis" id="oficinaKpis"></div>
+  <div class="of-kpis" id="oficinaKpis">
+    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">Trabajadores</div></div>
+    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">Trabajando ahora</div></div>
+    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">Ejecuciones hoy</div></div>
+    <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">En cola</div></div>
+  </div>
   <div id="oficinaErr" class="of-errchip" style="display:none">⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.</div>
 
   <div id="oficinaCards">
     <div class="of-cardtools">
-      <div class="of-search"><span aria-hidden="true">🔎</span><input id="oficinaSearch" type="search" placeholder="Buscar trabajador o área…" autocomplete="off" spellcheck="false" oninput="ofSearchInput(this.value)" aria-label="Buscar trabajador o área"></div>
+      <div class="of-search"><span aria-hidden="true">🔎</span><input id="oficinaSearch" type="search" placeholder="Buscar trabajador o área…  ( / )" autocomplete="off" spellcheck="false" oninput="ofSearchInput(this.value)" aria-label="Buscar trabajador o área"></div>
       <div class="of-cardfilter" id="oficinaCardFilter" role="group" aria-label="Filtrar trabajadores por estado"></div>
     </div>
 
