@@ -1001,30 +1001,33 @@ function _ofDoor(g,color){
   s+=`<line x1="${f(otl[0])}" y1="${f(otl[1])}" x2="${f(otr[0])}" y2="${f(otr[1])}" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>`;   // brillo del dintel
   return s;
 }
-// Posiciones exactas de las impresoras dentro de su sala (calca los planos del taller)
-// Grilla local 7×4 (fila 0 = fondo, fila 3 = frente/borde inferior).
-// Bloque Ender/K2Plus original (2 cols × 3 filas, K2 Plus al centro) BAJADO UNA FILA:
-// ahora ocupa filas 1-3 (cols 3-4) y toca el borde inferior del departamento.
-// K1/K2 quedan en la fila frontal flanqueando el bloque; Giga a la izquierda.
+// Tamaño de la sala de impresoras para que quepa una L con n máquinas:
+// dos brazos (contra los muros del fondo) que suman n compartiendo la esquina.
+function _ofPrinterLGrid(n){
+  n=Math.max(1,n|0);
+  const dc=Math.max(1,Math.ceil((n+1)/2));   // brazo horizontal (fila 0, incluye la esquina)
+  const dr=Math.max(1,n+1-dc);               // profundidad = esquina + brazo vertical (col 0)
+  return {dc,dr};
+}
+// Posiciones de las impresoras dentro de su sala: DISTRIBUIDAS EN L, pegadas a
+// los dos muros del fondo (fila 0 = muro trasero, col 0 = muro izquierdo),
+// dejando el centro del taller despejado. Se agrupan por modelo y la Giga
+// (la más grande) ancla la esquina.
 function _ofPrinterSlots(members){
-  const enders=[[3,1],[4,1],[4,2],[3,3],[4,3]];   // 5 Ender-5 Max rodeando la K2 Plus, tocando abajo
-  const k1=[[2,3],[5,3],[6,3],[3,0],[4,0]];        // K1: fila frontal a los lados + 2 detrás del bloque
-  const k2=[[0,3],[1,3]];                          // K2 en la fila frontal (izquierda)
-  const giga=[[0,1]], k2plus=[[3,2]];              // Giga y K2 Plus (grandes)
-  // B3: si hay MÁS unidades de un tipo que slots canónicos (o duplicados de Giga/K2 Plus),
-  // el excedente toma la siguiente CELDA LIBRE de la grilla 7×4 en vez de apilarse encima.
-  const used=new Set(), map=new Map(), key=p=>p[0]+','+p[1];
-  const freeCell=()=>{ for(let r=0;r<4;r++) for(let c=0;c<7;c++){ if(!used.has(c+','+r)) return [c,r]; } return [6,3]; };
-  const take=(arr,i)=>{ let p=arr[i]; if(!p||used.has(key(p))) p=freeCell(); used.add(key(p)); return p; };
-  let ei=0,ki=0,k2i=0,gi=0,kpi=0;
-  members.forEach(m=>{ const s=((m.label||'')+' '+(m.role||'')).toLowerCase(); let pos;
-    if(/giga|orangestorm/.test(s)) pos=take(giga,gi++);
-    else if(/k2\s*plus/.test(s)) pos=take(k2plus,kpi++);
-    else if(/ender/.test(s)) pos=take(enders,ei++);
-    else if(/k2/.test(s)) pos=take(k2,k2i++);
-    else pos=take(k1,ki++);
-    map.set(m,pos);
-  });
+  const n=members.length;
+  const {dc,dr}=_ofPrinterLGrid(n);
+  const path=[];
+  for(let c=0;c<dc;c++) path.push([c,0]);          // brazo superior (muro del fondo)
+  for(let r=1;r<dr;r++) path.push([0,r]);           // brazo lateral (muro izquierdo)
+  const rank=m=>{ const s=((m.label||'')+' '+(m.role||'')).toLowerCase();
+    if(/giga|orangestorm/.test(s)) return 0;
+    if(/k2\s*plus/.test(s)) return 1;
+    if(/k2/.test(s)) return 2;
+    if(/ender/.test(s)) return 3;
+    return 4; };                                     // K1 y otros al final
+  const ordered=members.map((m,i)=>({m,i})).sort((a,b)=>rank(a.m)-rank(b.m)||a.i-b.i).map(x=>x.m);
+  const map=new Map();
+  ordered.forEach((m,i)=>{ map.set(m, path[i]||[0,Math.max(0,dr-1)]); });
   return map;
 }
 function _ofRenderIso(ia,auto,extras){
@@ -1055,7 +1058,7 @@ function _ofRenderIso(ia,auto,extras){
   if(auto.length) _depts.push({name:'Automatizaciones',color:'#a78bfa',members:auto});
   extras.forEach(d=>{ if(d.members&&d.members.length) _depts.push({name:d.name,color:d.color,members:d.members}); });
   _depts.forEach(d=>{ const n=d.members.length;
-    if(/impresora/i.test(d.name)){ d.dc=7; d.dr=4; }
+    if(/impresora/i.test(d.name)){ const g=_ofPrinterLGrid(n); d.dc=g.dc; d.dr=g.dr; }
     else { const s=Math.max(2,Math.ceil(Math.sqrt(n))+1); d.dc=s; d.dr=s; } });   // sala cuadrada → mesa al centro y agentes alrededor
   const gap=1;
   const perShelf=Math.max(1,Math.min(3,Math.ceil(Math.sqrt(_depts.length))));
