@@ -1148,11 +1148,13 @@ function _ofRenderIso(ia,auto,extras){
             +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="${R.color}" opacity="0.14"/>`;
   });
 
-  // Mapa etiqueta→sala y ancla (la PUERTA del depto) para mover a los agentes que se comunican
-  const _roomByLabel={}, _roomAnchor=R=>_roomDoorPt(R);
+  // Mapa etiqueta→sala. El agente que se comunica hace un recorrido LOCAL: sale por SU puerta al
+  // pasillo justo afuera de su oficina (con la burbuja 💬) y vuelve. No cruza otras salas: los
+  // departamentos están apilados y no hay un pasillo recto hasta otro depto sin atravesar muros.
+  const _roomByLabel={};
   _rooms.forEach(R=>R.members.forEach(mm=>{ if(mm&&mm.label) _roomByLabel[mm.label]=R; }));
-  const _transit={};   // label → {m, from:[x,y], to:[x,y]}
-  _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm){ const gFr=_doorGeo(fr), home=[gFr.mx-gFr.nx*22, gFr.my-gFr.ny*22]; _transit[c.from]={m:fm, home, from:_roomAnchor(fr), to:_roomAnchor(to)}; } } });
+  const _transit={};   // label → {m, home:interior, thr:umbral de la puerta, out:pasillo afuera}
+  _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm){ const g=_doorGeo(fr); _transit[c.from]={m:fm, home:[g.mx-g.nx*22,g.my-g.ny*22], thr:[g.mx,g.my], out:[g.mx+g.nx*44,g.my+g.ny*44]}; } } });
 
   // Estaciones por sala: el MESÓN va al MEDIO del depto y los agentes trabajan ALREDEDOR
   let chars='', tags='', _errands='';
@@ -1202,14 +1204,15 @@ function _ofRenderIso(ia,auto,extras){
     chars+=_ofMeetingTable(ctr[0],ctr[1],tRx,tRy,R.color,tableH);
     pos.forEach(p=>{ const lx=ctr[0]+tRx*0.74*Math.cos(p.a), ly=(ctr[1]-tableH)+tRy*0.74*Math.sin(p.a); chars+=_ofDeskLaptop(lx,ly,p.m.cls==='of-work',_OF_STATUS[p.m.cls]||'#7c8590'); });
     front.forEach(p=>{ chars+=_ofRingAgent(p.m,p.sx,p.sy,'back'); tags+=_rtag(p.m,p.sx,p.sy); });
-    // 5) agentes en pausa → SALEN POR LA PUERTA de su sala hacia el frente (cafetería/baño) y vuelven
-    //    por la misma puerta; se dibujan al final (primer plano). Nunca atraviesan los muros.
-    const _doorPt=_roomDoorPt(R);
-    pos.forEach(p=>{ if(!p.brk) return; const dest=p.kind==='wc'?wcPt:coffeePt, dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur)); _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],_doorPt,dest,p.kind,dur,dl); });
+    // 5) agentes en pausa → SALEN POR LA PUERTA al pasillo JUSTO AFUERA de su oficina (con la
+    //    burbuja ☕/🚻) y vuelven por la misma puerta. Recorrido LOCAL: nunca cruzan otra sala
+    //    (las salas están apiladas; ir a una amenidad del frente obligaría a atravesar muros).
+    const _g=_doorGeo(R), _thr=[_g.mx,_g.my], _out=[_g.mx+_g.nx*40,_g.my+_g.ny*40];
+    pos.forEach(p=>{ if(!p.brk) return; const dur=20+_ofHash(p.m.id)%9, dl=-(_ofHash(p.m.id+'d')%Math.round(dur)); _errands+=_ofBreakWalker(p.m,[p.sx,p.sy],_thr,_out,p.kind,dur,dl); });
   });
   chars+=_errands;   // pausas en primer plano (pasan por delante de las salas)
-  // Agentes que se comunican: caminan de su departamento al de destino (y vuelven)
-  Object.values(_transit).forEach((tr,i)=>{ chars+=_ofCommWalker(tr.m, tr.home, tr.from, tr.to, 8, i*0.5); });
+  // Agentes que se comunican: salen por su puerta al pasillo (💬) y vuelven — recorrido local
+  Object.values(_transit).forEach((tr,i)=>{ chars+=_ofCommWalker(tr.m, tr.home, tr.thr, tr.out, 8, i*0.5); });
   // Mensajeros ambientales: cruzan de un departamento a otro por el pasillo (movimiento continuo).
   // B16: sólo si existe un pasillo REAL entre estanterías (con una sola estantería, _corrR cae en la
   // fila frontal de las salas y los peatones cruzarían por dentro de las mesas → se omiten).
