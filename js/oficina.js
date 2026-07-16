@@ -1236,9 +1236,12 @@ function _ofPrinterLGrid(n){
 function _ofPrinterSlots(members){
   const n=members.length;
   const {dc,dr}=_ofPrinterLGrid(n);
+  // La fila LARGA va al FRENTE del taller (lado opuesto al muro del fondo) y el brazo corto
+  // en el muro izquierdo. La Giga ancla la esquina frontal-izquierda. La puerta (muro R→F)
+  // sigue libre: la fila frontal corre por el muro F→L.
   const path=[];
-  for(let c=0;c<dc;c++) path.push([c,0]);          // brazo superior (muro del fondo)
-  for(let r=1;r<dr;r++) path.push([0,r]);           // brazo izquierdo (muro lateral)
+  for(let c=0;c<dc;c++) path.push([c,dr-1]);        // brazo largo: fila FRONTAL (muro frontal-izquierdo)
+  for(let r=dr-2;r>=0;r--) path.push([0,r]);        // brazo corto: columna izquierda, del frente hacia el fondo
   const rank=m=>{ const s=((m.label||'')+' '+(m.role||'')).toLowerCase();
     if(/giga|orangestorm/.test(s)) return 0;
     if(/k2\s*plus/.test(s)) return 1;
@@ -1390,8 +1393,8 @@ function _ofRenderIso(ia,auto,extras){
   _ofTourPts=_rooms.map(R=>{ const c=iso(R.cc,R.rc); return {x:c[0],y:c[1]}; });   // paradas del auto-tour TV (idea 3)
 
   // Plataforma del taller en L REAL (idea 3D-2): mesones sólo bajo las dos filas de máquinas
-  // (fila del fondo + columna izquierda, la misma L de _ofPrinterSlots). El centro queda como
-  // piso transitable con un estante de filamentos, y la puerta (muro R→F) ya no tiene desnivel.
+  // (fila FRONTAL larga + columna izquierda corta, la misma L de _ofPrinterSlots). El centro
+  // queda como piso transitable con un estante de filamentos; la puerta (muro R→F) sin desnivel.
   const _ch=24;
   let counters='';
   _rooms.forEach(R=>{ if(!/impresora/i.test(R.name)) return;
@@ -1403,8 +1406,8 @@ function _ofRenderIso(ia,auto,extras){
       +`<polygon points="${U(k.F)} ${P(k.F)} ${P(k.R)} ${U(k.R)}" fill="#b1bcc8"/>`
       +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="#e8edf2"/>`
       +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="${R.color}" opacity="0.14"/>`;
-    counters+=slab(strip(R.c0,R.r0,R.c1,R.r0));                                   // brazo del fondo (fila 0 de la sala)
-    if(R.r1>R.r0) counters+=slab(strip(R.c0,R.r0+1,R.c0,R.r1));                    // brazo izquierdo (col 0)
+    if(R.r1>R.r0) counters+=slab(strip(R.c0,R.r0,R.c0,R.r1-1));                    // brazo corto: columna izquierda (fondo→frente-1)
+    counters+=slab(strip(R.c0,R.r1,R.c1,R.r1));                                    // brazo LARGO: fila FRONTAL (lado opuesto al fondo)
     // Estante de filamentos en el centro del taller (prop, a nivel de piso)
     if(R.dc>=4 && R.dr>=3){
       const fp=iso(R.c0+Math.floor(R.dc/2)+0.5, R.r0+Math.floor(R.dr/2)+0.5), f=n=>n.toFixed(1);
