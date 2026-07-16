@@ -1672,6 +1672,12 @@
 .of-iso-walker{transform:translate(var(--x1),var(--y1));animation:ofWalk var(--dur,9s) cubic-bezier(.37,0,.63,1) infinite alternate;will-change:transform;}
 .of-iso-walker .of-iso-body{animation:ofStep .62s ease-in-out infinite;will-change:transform;}
 @keyframes ofStep{0%,100%{transform:translateY(0);}50%{transform:translateY(-2.4px);}}
+/* Agente que se comunica: home → su puerta → puerta destino → su puerta → home (siempre por las puertas) */
+@keyframes ofComm{0%,7%{transform:translate(var(--p0x),var(--p0y));}19%{transform:translate(var(--p1x),var(--p1y));}43%,57%{transform:translate(var(--p2x),var(--p2y));}81%{transform:translate(var(--p1x),var(--p1y));}93%,100%{transform:translate(var(--p0x),var(--p0y));}}
+.of-iso-comm{transform:translate(var(--p0x),var(--p0y));animation:ofComm var(--dur,8s) cubic-bezier(.37,0,.63,1) infinite;will-change:transform;cursor:pointer;}
+.of-iso-comm .of-iso-body{animation:ofStep .6s ease-in-out infinite;will-change:transform;}
+.of-iso-comm:focus{outline:none;}
+.of-iso-comm:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;}
 /* Respiración sutil de agentes en reposo (para que no se vean estáticos/toscos) */
 @keyframes ofBreathe{0%,100%{transform:translateY(calc(var(--lift,0px) + 0px)) scaleY(1);}45%{transform:translateY(calc(var(--lift,0px) - 1.1px)) scaleY(1.02);}}
 .of-iso-char.of-iso-breathe .of-iso-body{animation:ofBreathe 4.6s ease-in-out infinite;animation-delay:var(--bd,0s);will-change:transform;}
@@ -1687,7 +1693,7 @@
 /* Vapor del café */
 @keyframes ofSteam{0%{opacity:0;transform:translateY(0) scaleX(1);}35%{opacity:.65;}100%{opacity:0;transform:translateY(-8px) scaleX(1.6);}}
 .of-steam{animation:ofSteam 2.8s ease-out infinite;transform-box:fill-box;transform-origin:center bottom;}
-@media(prefers-reduced-motion:reduce){.of-iso-walker,.of-iso-errand,.of-iso-errand-bubble,.of-steam{animation:none;}.of-iso-char.of-iso-bob .of-iso-body,.of-iso-char.of-iso-breathe .of-iso-body,.of-iso-walker .of-iso-body,.of-iso-errand .of-iso-body{animation:none;}}
+@media(prefers-reduced-motion:reduce){.of-iso-walker,.of-iso-comm,.of-iso-errand,.of-iso-errand-bubble,.of-steam{animation:none;}.of-iso-char.of-iso-bob .of-iso-body,.of-iso-char.of-iso-breathe .of-iso-body,.of-iso-walker .of-iso-body,.of-iso-comm .of-iso-body,.of-iso-errand .of-iso-body{animation:none;}}
 /* Reacciones (🎉), corona (👑), moods (⛈️/💤), progreso de impresión y cámara 3D */
 @keyframes ofCelebPop{0%{transform:scale(.4);opacity:0;}25%{transform:scale(1.18);opacity:1;}70%{transform:scale(1);opacity:1;}100%{transform:scale(1.05);opacity:0;}}
 .of-celeb{animation:ofCelebPop 5.2s ease-out infinite;transform-box:fill-box;transform-origin:center;}

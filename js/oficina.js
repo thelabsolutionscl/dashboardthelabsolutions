@@ -851,11 +851,14 @@ function _ofWalker(p1,p2,dur,delay,em){
   </g>`;
 }
 // Agente que CAMINA a otro departamento porque se está comunicando (lleva su color y su emoji + 💬)
-function _ofCommWalker(m,p1,p2,dur,delay){
+// Agente que se comunica con otro depto: SALE POR SU PUERTA, viaja de puerta a puerta y
+// REGRESA POR SU PUERTA. Recorrido: home(interior) → puerta propia → puerta destino →
+// puerta propia → home. Nunca atraviesa muros. (p0=home, p1=puerta propia, p2=puerta destino)
+function _ofCommWalker(m,p0,p1,p2,dur,delay){
   const col=_OF_STATUS[m.cls]||_OF_STATUS['of-work'];
-  const dark=_ofShade(col,0.72), em=_ofEmoji(m);
+  const dark=_ofShade(col,0.72), em=_ofEmoji(m), f=n=>n.toFixed(1);
   const spr=_ofSprite(m);
-  const body=spr?`<image href="${p2[1]<p1[1]?spr.backWalk:spr.frontWalk}" x="-11" y="-48" width="22" height="50" preserveAspectRatio="xMidYMid meet"/>`
+  const body=spr?`<image href="${p2[1]<p0[1]?spr.backWalk:spr.frontWalk}" x="-11" y="-48" width="22" height="50" preserveAspectRatio="xMidYMid meet"/>`
     :`<rect x="-6.5" y="-9" width="5" height="9" rx="2.5" fill="${dark}"/>
       <rect x="1.5" y="-9" width="5" height="9" rx="2.5" fill="${dark}"/>
       <rect x="-8.5" y="-28" width="17" height="21" rx="8" fill="${col}"/>
@@ -864,7 +867,7 @@ function _ofCommWalker(m,p1,p2,dur,delay){
       <text x="0" y="-32" text-anchor="middle" font-size="12">${em}</text>`;
   // Interactivo como el resto: el agente en tránsito se puede abrir/enfocar (B23)
   const click=m.clickIA?`data-ia-id="${escapeHtml(m.id)}" onclick="ofAgentDetail(this.dataset.iaId)"`:(m.id?`data-auto-id="${escapeHtml(m.id)}" onclick="ofAutoInfo(this)"`:'');
-  return `<g class="of-iso-walker of-iso-char"${click?' role="button" tabindex="0" onkeydown="ofKey(event)" '+click:''} style="--x1:${p1[0].toFixed(1)}px;--y1:${p1[1].toFixed(1)}px;--x2:${p2[0].toFixed(1)}px;--y2:${p2[1].toFixed(1)}px;--dur:${(dur||4.6)}s;animation-delay:${delay||0}s">
+  return `<g class="of-iso-comm of-iso-char"${click?' role="button" tabindex="0" onkeydown="ofKey(event)" '+click:''} style="--p0x:${f(p0[0])}px;--p0y:${f(p0[1])}px;--p1x:${f(p1[0])}px;--p1y:${f(p1[1])}px;--p2x:${f(p2[0])}px;--p2y:${f(p2[1])}px;--dur:${(dur||8)}s;animation-delay:${delay||0}s">
     <title>${escapeHtml(_ofPretty(m.label)+' — comunicándose')}</title>
     <ellipse cx="0" cy="2" rx="12" ry="6" fill="url(#ofShadow)"/>
     <g class="of-iso-body">${body}</g>
@@ -1149,7 +1152,7 @@ function _ofRenderIso(ia,auto,extras){
   const _roomByLabel={}, _roomAnchor=R=>_roomDoorPt(R);
   _rooms.forEach(R=>R.members.forEach(mm=>{ if(mm&&mm.label) _roomByLabel[mm.label]=R; }));
   const _transit={};   // label → {m, from:[x,y], to:[x,y]}
-  _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm) _transit[c.from]={m:fm, from:_roomAnchor(fr), to:_roomAnchor(to)}; } });
+  _comms.forEach(c=>{ const fr=_roomByLabel[c.from], to=_roomByLabel[c.to]; if(fr&&to&&fr!==to){ const fm=fr.members.find(mm=>mm.label===c.from); if(fm){ const gFr=_doorGeo(fr), home=[gFr.mx-gFr.nx*22, gFr.my-gFr.ny*22]; _transit[c.from]={m:fm, home, from:_roomAnchor(fr), to:_roomAnchor(to)}; } } });
 
   // Estaciones por sala: el MESÓN va al MEDIO del depto y los agentes trabajan ALREDEDOR
   let chars='', tags='', _errands='';
@@ -1206,7 +1209,7 @@ function _ofRenderIso(ia,auto,extras){
   });
   chars+=_errands;   // pausas en primer plano (pasan por delante de las salas)
   // Agentes que se comunican: caminan de su departamento al de destino (y vuelven)
-  Object.values(_transit).forEach((tr,i)=>{ chars+=_ofCommWalker(tr.m, tr.from, tr.to, 4.6, i*0.4); });
+  Object.values(_transit).forEach((tr,i)=>{ chars+=_ofCommWalker(tr.m, tr.home, tr.from, tr.to, 8, i*0.5); });
   // Mensajeros ambientales: cruzan de un departamento a otro por el pasillo (movimiento continuo).
   // B16: sólo si existe un pasillo REAL entre estanterías (con una sola estantería, _corrR cae en la
   // fila frontal de las salas y los peatones cruzarían por dentro de las mesas → se omiten).
