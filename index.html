@@ -1545,6 +1545,30 @@
 .of-feed-chip.active{background:var(--cc,var(--accent));border-color:transparent;color:#0b0c0f;}
 .of-feed-chip.active::before{background:#0b0c0f;opacity:.5;}
 .of-feed-chip.active b{opacity:.85;}
+/* KPIs accionables: clic lleva a lo relevante */
+#tab-oficina .of-kpi-act{cursor:pointer;}
+#tab-oficina .of-kpi-act:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+#tab-oficina .of-kpi-act:active{transform:translateY(0);}
+/* Píldora de salud de la oficina (junto al título) */
+.of-health{display:inline-flex;align-items:center;gap:5px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;line-height:1;padding:5px 10px;border-radius:999px;margin-left:12px;vertical-align:middle;cursor:pointer;border:1px solid var(--border);letter-spacing:.2px;transition:border-color .15s,transform .12s;}
+.of-health:hover{transform:translateY(-1px);}
+.of-health:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.of-health-ok{color:var(--success);background:rgba(0,212,170,0.1);border-color:rgba(0,212,170,0.32);}
+.of-health-warn{color:var(--warn);background:rgba(255,170,0,0.1);border-color:rgba(255,170,0,0.34);}
+.of-health-bad{color:var(--danger);background:rgba(255,68,68,0.1);border-color:rgba(255,68,68,0.34);}
+/* Chip de última actividad del equipo (junto a "actualizado hace…") */
+.of-teamlast{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+/* Acciones dentro de una alerta (Despertar / Ver…) */
+.of-alert .of-alert-acts{display:inline-flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;}
+/* Cabecera del feed: buscador + contador */
+.of-feed-head{display:flex;align-items:center;gap:10px;flex:1;justify-content:flex-end;min-width:0;}
+.of-feed-search{min-width:140px;max-width:230px;flex:1;}
+/* Lado derecho del item del feed: copiar + hora */
+.of-feed-side{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.of-feed-copy{background:none;border:1px solid transparent;border-radius:7px;cursor:pointer;font-size:12px;line-height:1;padding:3px 5px;opacity:0;color:var(--text2);transition:opacity .14s,border-color .14s,background .14s;}
+.of-feed-item:hover .of-feed-copy,.of-feed-copy:focus-visible{opacity:1;}
+.of-feed-copy:hover{border-color:var(--border2);background:var(--surface3);color:var(--text);}
+@media(hover:none){.of-feed-copy{opacity:.65;}}
 /* Franja de insight del día (bajo los KPIs) */
 #tab-oficina .of-insight{background:linear-gradient(160deg,var(--surface2),var(--surface));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:11px;padding:9px 14px;margin:-8px 0 16px;font-size:12px;color:var(--text2);line-height:1.5;}
 #tab-oficina .of-insight b{color:var(--text);}
@@ -1828,7 +1852,7 @@
 <div class="tab-panel" id="tab-oficina">
   <div class="section-header">
     <div>
-      <div class="section-title">Oficina Virtual<span id="ofTvClock" class="of-tv-clock"></span></div>
+      <div class="section-title">Oficina Virtual<span id="ofHealth" class="of-health" role="button" tabindex="0" onclick="_ofScrollToEl('oficinaAlerts')" onkeydown="ofKey(event)" title="Estado general de la oficina" style="display:none"></span><span id="ofTvClock" class="of-tv-clock"></span></div>
       <div class="section-desc">Tu equipo de agentes IA y automatizaciones trabajando en vivo. El estado se actualiza solo cada 45 s a partir de las ejecuciones reales (Agent_Log), la cola de tareas (Agent_Queue) y, si existe, la tabla Automations.</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
@@ -1841,12 +1865,14 @@
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofZoom(-1)" title="Alejar">🔍−</button>
       <button class="btn btn-ghost btn-sm of-cam-btn" onclick="ofCamReset()" title="Restablecer la vista de la oficina 3D">⟲</button>
       <button class="btn btn-ghost btn-sm" id="ofFsBtn" onclick="ofFullscreen()">📺 Pantalla completa</button>
+      <span class="of-teamlast" id="ofTeamLast" aria-live="off" style="display:none"></span>
       <span class="of-updated" id="ofUpdatedAt" aria-live="off"></span>
       <div class="of-more-wrap">
         <button class="btn btn-ghost btn-sm" id="ofMoreBtn" aria-haspopup="true" aria-expanded="false" onclick="ofToggleMore(event)" title="Más acciones">⋯ Más</button>
         <div class="of-more-menu" id="ofMoreMenu" style="display:none">
           <button class="btn btn-ghost btn-sm" id="ofDensityBtn" onclick="ofToggleDensity()" title="Densidad de las tarjetas (cómoda / compacta)">⤢ Densidad</button>
           <button class="btn btn-ghost btn-sm" id="ofSceneThemeBtn" onclick="ofToggleSceneTheme()" title="Tema de la escena 3D (oscuro / claro)">🌗 Escena</button>
+          <button class="btn btn-ghost btn-sm" onclick="ofDigest()" title="Copia un resumen operativo del día (KPIs, líder, incidencias, impresión, stock) — ideal para el standup">🧾 Resumen del día</button>
           <button class="btn btn-ghost btn-sm" onclick="ofExport()" title="Exportar: descarga la escena 3D (SVG) o copia el resumen de KPIs">⬇ Exportar</button>
           <button class="btn btn-ghost btn-sm" onclick="refreshOficina()">↻ Actualizar</button>
         </div>
@@ -1900,7 +1926,10 @@
   <div class="card">
     <div class="card-header">
       <span class="card-title">📡 Actividad en vivo</span>
-      <span class="badge badge-gray" id="oficinaFeedCount">—</span>
+      <div class="of-feed-head">
+        <div class="of-search of-feed-search"><span aria-hidden="true">🔎</span><input id="oficinaFeedSearch" type="search" placeholder="Buscar en la actividad…" autocomplete="off" spellcheck="false" oninput="ofFeedSearch(this.value)" aria-label="Buscar en la actividad en vivo"></div>
+        <span class="badge badge-gray" id="oficinaFeedCount">—</span>
+      </div>
     </div>
     <div class="of-feed-filters" id="oficinaFeedFilters" style="display:none"></div>
     <div class="of-feed" id="oficinaFeed" style="padding:6px 16px 12px">

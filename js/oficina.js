@@ -267,6 +267,54 @@ function ofExport(){
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(()=>{try{toast('Resumen copiado al portapapeles','success');}catch(e){}}).catch(()=>{try{toast('No se pudo copiar','error');}catch(e){}}); }
   else { try{toast('Portapapeles no disponible','error');}catch(e){} }
 }
+// ── Resumen operativo del día (idea) ───────────────────────────────────
+// Texto listo para el standup / reporte: KPIs, comparación, líder, incidencias, impresión y stock.
+function ofDigest(){
+  const M=_ofModel;
+  if(!M){ try{toast('Aún no hay datos de la oficina para resumir','info');}catch(e){} return; }
+  const runs=_ofFeedRuns||[];
+  const d=new Date();
+  const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const hhmm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  const L=['🏢 Oficina Virtual — The Lab Solutions',
+           '📅 '+DIAS[d.getDay()]+' '+d.getDate()+' de '+MESES[d.getMonth()]+' de '+d.getFullYear()+' · '+hhmm];
+  const k=_ofKpiSnap||{};
+  const totalW=M.iaModel.length+M.autoModel.length+M.printerModel.length;
+  L.push('','📊 KPIs',
+    '• Trabajadores: '+totalW+(k.working?(' · '+k.working+' trabajando ahora'):''),
+    '• Ejecuciones hoy: '+(k.runsToday||0),
+    '• En cola: '+(k.queue||0));
+  const ins=_ofDayInsight(runs);
+  if(ins.delta!=null) L.push('• vs el '+DIAS[d.getDay()]+' pasado: '+(ins.delta>=0?'▲ +':'▼ ')+ins.delta+'% ('+ins.lastWeek+' entonces)');
+  if(ins.peak!=null) L.push('• Hora pico: '+ins.peak+'h');
+  if(ins.leader){ const idn=agentIdentity(ins.leader); L.push('• Líder del día: '+(idn.persona||idn.rol)+' — '+ins.leaderN+' ejec.'); }
+  // Incidencias abiertas
+  const inc=[];
+  M.autoModel.forEach(m=>{ if(m.cls==='of-error') inc.push('🔴 '+_ofPretty(m.label)+' con falla'); else if(/atras/i.test(m.lbl||'')) inc.push('🟠 '+_ofPretty(m.label)+' atrasada'); });
+  M.iaModel.forEach(m=>{ if(m.cls==='of-error') inc.push('🔴 Agente '+_ofPretty(m.label)+' con falla'); else if(m.sleepy) inc.push('😴 '+_ofPretty(m.label)+' inactivo >7 días'); });
+  M.printerModel.forEach(m=>{ if(m.cls==='of-error') inc.push('🔴 Impresora '+_ofPretty(m.label)+' con falla'); });
+  L.push('','⚠ Incidencias: '+(inc.length||'ninguna'));
+  inc.slice(0,10).forEach(x=>L.push('• '+x));
+  // Impresión en curso
+  const pr=M.printerModel.filter(m=>m.cls==='of-work');
+  if(pr.length){ L.push('','🖨️ Imprimiendo ahora: '+pr.length);
+    pr.slice(0,8).forEach(m=>L.push('• '+_ofPretty(m.label)+((m.progress!=null&&m.progress>=0)?(' · '+m.progress+'%'):''))); }
+  // Stock por reponer (estante de filamentos / inventario)
+  const low=(_ofInv||[]).filter(x=>x.sev>=2);
+  if(low.length){ L.push('','📦 Stock por reponer: '+low.length);
+    low.slice(0,10).forEach(x=>L.push('• '+x.mat+': '+x.stock+' '+x.unidad+(x.sev===3?' (agotado)':' (bajo mínimo)'))); }
+  const txt=L.join('\n');
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(()=>{try{toast('🧾 Resumen del día copiado al portapapeles','success');}catch(e){}}).catch(()=>_ofDigestFallback(txt)); }
+  else _ofDigestFallback(txt);
+}
+function _ofDigestFallback(txt){
+  try{ const blob=new Blob([txt],{type:'text/plain'}), url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='resumen-oficina.txt'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    try{toast('🧾 Resumen del día descargado (.txt)','success');}catch(e){}
+  }catch(e){ try{toast('No se pudo generar el resumen','error');}catch(x){} }
+}
 // ── Panel de detalle de un agente IA (clic en un trabajador de la Oficina) ──
 function ofAgentDetail(id){
   if(!_ofModel||!_ofModel.iaModel){ switchTab('agentes'); return; }
@@ -306,6 +354,14 @@ function ofAgentDetail(id){
       const byD={}; runs.forEach(r=>{ if(!r.t)return; const d=new Date(r.t); d.setHours(0,0,0,0); byD[d.getTime()]=(byD[d.getTime()]||0)+1; });
       const nD=Object.keys(byD).length, best=Math.max(0,...Object.values(byD));
       return nD?`<div class="ofd-extra">📊 Promedio <b>${(total/nD).toFixed(1)}</b> por día activo (${nD} días) · mejor día: <b>${best}</b></div>`:''; })()}
+    ${(()=>{ // Ranking del agente en el equipo: puesto por ejecuciones de 30 días + cuota del trabajo de hoy
+      const ias=(_ofModel&&_ofModel.iaModel)?_ofModel.iaModel:[]; if(ias.length<2) return '';
+      const ranked=[...ias].sort((a,b)=>(b.count30||0)-(a.count30||0));
+      const pos=ranked.findIndex(x=>x.id===m.id)+1; if(!pos) return '';
+      const teamToday=(_ofFeedRuns||[]).filter(r=>_ofSameDay(r.t)).length;
+      const share=(teamToday>0&&today)?Math.round(today/teamToday*100):0;
+      const medal=pos===1?'🥇':pos===2?'🥈':pos===3?'🥉':'🏅';
+      return `<div class="ofd-extra">${medal} Puesto <b>#${pos}</b> de ${ias.length} por ejecuciones (30 días)${share?` · <b>${share}%</b> del trabajo del equipo hoy`:''}</div>`; })()}
     ${_ofDetailHours(runs)}
     ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:8px" data-id="${escapeHtml(id)}" onclick="ofAgentRun(this.dataset.id)">▶ Ejecutar este agente</button>`:''}
     <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:16px" data-id="${escapeHtml(id)}" onclick="closeOfAgent();ofFocusAgent(this.dataset.id)">📍 Ver en la oficina 3D</button>
@@ -360,7 +416,7 @@ function ofSetView(v,persist){
   renderOficina();
 }
 function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000);
-  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(document.hidden) return; _ofTickUpdated(); _ofTickTvClock(); if(_ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTickBoard(); _ofTvTour(); } },20000);   // frescura + reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
+  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(document.hidden) return; _ofTickUpdated(); _ofTickTeamLast(); _ofTickTvClock(); if(_ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTickBoard(); _ofTvTour(); } },20000);   // frescura + reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
 }
 // ── Auto-tour del modo TV (idea 3): en pantalla completa la cámara recorre los departamentos
 // cada 20s (una parada por depto + una vista general). Cualquier interacción manual con la
@@ -416,13 +472,20 @@ function _ofTickClock(){
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden && document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
 });
-// Atajo "/" → enfoca el buscador de trabajadores (sólo en la Oficina, vista Tarjetas, fuera de inputs)
+// Atajos de teclado de la Oficina (sólo con la pestaña activa y fuera de inputs):
+//   /  buscar trabajador (vista Tarjetas) · 1/2/3 cambiar de vista · r actualizar · t pantalla completa · ? ayuda
 document.addEventListener('keydown',e=>{
-  if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey) return;
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
   const t=e.target; if(t&&(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)||t.isContentEditable)) return;
   if(!document.getElementById('tab-oficina')?.classList.contains('active')) return;
-  if(_ofView!=='cards') return;
-  const i=document.getElementById('oficinaSearch'); if(i){ e.preventDefault(); i.focus(); }
+  const k=e.key;
+  if(k==='/'){ if(_ofView!=='cards') ofSetView('cards'); const i=document.getElementById('oficinaSearch'); if(i){ e.preventDefault(); setTimeout(()=>i.focus(),0); } return; }
+  if(k==='1'){ e.preventDefault(); ofSetView('cards'); return; }
+  if(k==='2'){ e.preventDefault(); ofSetView('floor'); return; }
+  if(k==='3'){ e.preventDefault(); ofSetView('iso'); return; }
+  if(k==='r'||k==='R'){ e.preventDefault(); refreshOficina(); try{toast('↻ Actualizando la oficina…','info');}catch(x){} return; }
+  if(k==='t'||k==='T'){ e.preventDefault(); ofFullscreen(); return; }
+  if(k==='?'||(k==='/'&&e.shiftKey)){ e.preventDefault(); try{toast('⌨ Atajos: 1/2/3 vistas · / buscar · r actualizar · t pantalla completa','info');}catch(x){} return; }
 });
 // ── Pantalla completa (modo TV / kiosko 1080p) ─────────────────────────
 function ofFullscreen(){
@@ -711,12 +774,17 @@ async function _renderOficina(){
   // Insight del día: hoy vs el mismo día de la semana pasada + hora pico + líder
   const _ins=_ofDayInsight(runs);
   const _trend=(_ins.delta!=null)?`<span class="of-kpi-trend" style="color:${_ins.delta>=0?'var(--success)':'var(--warn)'}">${_ins.delta>=0?'▲':'▼'}${Math.abs(_ins.delta)}%</span>`:'';
-  if(kpis) kpis.innerHTML=`
-    <div class="of-kpi"><div class="of-kpi-val" data-k="workers">${totalWorkers}</div><div class="of-kpi-lbl">👥 Trabajadores</div></div>
-    <div class="of-kpi ${working?'live':''}"><div class="of-kpi-val" data-k="working">${working}</div><div class="of-kpi-lbl">⚡ Trabajando ahora</div></div>
-    <div class="of-kpi ${runsToday?'live':''}"><div class="of-kpi-val" data-k="runsToday">${runsToday}</div><div class="of-kpi-lbl">🔄 Ejecuciones hoy ${_trend}</div></div>
-    <div class="of-kpi ${queueLen?'live':''}"><div class="of-kpi-val" data-k="queue">${queueLen}</div><div class="of-kpi-lbl">📥 En cola</div></div>`;
+  // KPIs accionables: cada tarjeta salta a lo relevante (filtro de tarjetas, feed, cola…) — clic + teclado
+  const _kpi=(k,val,lbl,live,hint)=>`<div class="of-kpi of-kpi-act ${live?'live':''}" role="button" tabindex="0" data-kpi="${k}" onclick="ofKpiClick('${k}')" onkeydown="ofKey(event)" title="${hint}"><div class="of-kpi-val" data-k="${k}">${val}</div><div class="of-kpi-lbl">${lbl}</div></div>`;
+  if(kpis) kpis.innerHTML=
+    _kpi('workers',totalWorkers,'👥 Trabajadores',false,'Ver todo el equipo')
+    +_kpi('working',working,'⚡ Trabajando ahora',working,'Ver sólo quién trabaja ahora')
+    +_kpi('runsToday',runsToday,'🔄 Ejecuciones hoy '+_trend,runsToday,'Ir a la actividad de hoy')
+    +_kpi('queue',queueLen,'📥 En cola',queueLen,'Ver la cola de tareas pendientes');
   _ofAnimateKpis({workers:totalWorkers,working,runsToday,queue:queueLen});   // count-up al cambiar (idea 4)
+  _ofQueueSnap=queueLen;                                                      // para el peek de la cola desde el KPI
+  // Frescura a nivel equipo: marca del run más reciente (👥 último trabajo hace Xm) — distinta del "actualizado hace Xs"
+  _ofTeamLastT=(runs&&runs.length&&runs[0].t)?runs[0].t:0; _ofTickTeamLast();
   _ofKpiSnap={working,runsToday,queue:queueLen};                              // snapshot para la pantalla de pared del 3D
   _ofTickBoard();
   // Franja de insight bajo los KPIs (comparación vs semana pasada, pico y líder del día)
@@ -778,6 +846,27 @@ function _ofCountUp(el,from,to,ms){
   const step=now=>{ if(t0==null)t0=now; const p=Math.min(1,(now-t0)/ms), e=1-Math.pow(1-p,3); el.textContent=Math.round(from+d*e); if(p<1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
+// ── KPIs accionables: cada tarjeta lleva a lo relevante ────────────────
+let _ofQueueSnap=0;      // longitud de cola del último render (peek desde el KPI)
+let _ofTeamLastT=0;      // marca del run más reciente del equipo (frescura a nivel equipo)
+function _ofScrollToEl(id){ const el=document.getElementById(id); if(el&&el.scrollIntoView) try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){el.scrollIntoView();} return el; }
+function ofKpiClick(k){
+  if(k==='working'){ if(_ofView!=='cards') ofSetView('cards'); ofSetCardFilter('of-work'); _ofScrollToEl('oficinaCardFilter'); return; }
+  if(k==='workers'){ if(_ofView!=='cards') ofSetView('cards'); ofSetCardFilter('all'); _ofScrollToEl('oficinaCards'); return; }
+  if(k==='runsToday'){ ofSetFeedFilter('all'); _ofScrollToEl('oficinaFeed'); return; }
+  if(k==='queue'){
+    const n=_ofQueueSnap||0;
+    if(!n){ try{toast('📥 La cola de tareas está vacía','info');}catch(e){} return; }
+    if(_ofCanTab('agentes')){ try{toast('📥 '+n+' tarea(s) en cola — abriendo Agentes…','info');}catch(e){} switchTab('agentes'); }
+    else { try{toast('📥 '+n+' tarea(s) en cola de Agent_Queue','info');}catch(e){} }
+    return;
+  }
+}
+// Chip de frescura a nivel equipo: "👥 último trabajo hace Xm" (tictaquea con el poll, sin rebuild)
+function _ofTickTeamLast(){ const el=document.getElementById('ofTeamLast'); if(!el) return;
+  if(_ofTeamLastT){ el.textContent='👥 último trabajo '+_ofAgo(_ofTeamLastT); el.style.display=''; }
+  else { el.textContent=''; el.style.display='none'; }
+}
 // A qué pestaña salta el botón "Ver →" de una alerta según el id de la automatización
 function _ofAutoTab(id){ id=(id||'').toLowerCase(); if(id.includes('mail'))return 'correo'; if(id.includes('printer')||id.includes('bridge'))return 'maquinas'; if(id.includes('lead'))return 'agentes'; if(id.includes('sii'))return 'finanzas'; return null; }
 // ¿El rol del usuario puede abrir esa pestaña? (RBAC — evita botones que llevan a un toast de error)
@@ -792,22 +881,50 @@ function _ofRenderAlerts(ia,auto,printers){
   const items=[];
   (auto||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Automatización <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:_ofAutoTab(m.id)});
     else if(/atras/i.test(m.lbl||'')) items.push({t:'warn',id:m.id,msg:`<b>${escapeHtml(_ofPretty(m.label))}</b> está atrasada`,tab:_ofAutoTab(m.id)}); });
-  (ia||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Agente <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'agentes'});
-    else if(m.sleepy) items.push({t:'warn',id:m.id,msg:`😴 <b>${escapeHtml(_ofPretty(m.label))}</b> era regular y lleva más de 7 días sin actividad`,tab:'agentes'}); });
+  (ia||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Agente <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'agentes',wake:m.id});
+    else if(m.sleepy) items.push({t:'warn',id:m.id,msg:`😴 <b>${escapeHtml(_ofPretty(m.label))}</b> era regular y lleva más de 7 días sin actividad`,tab:'agentes',wake:m.id}); });
   (printers||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Impresora <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'maquinas'}); });
+  // Píldora de salud (idea 2): agrega el estado general de la oficina de un vistazo
+  _ofRenderHealth(items);
   if(!items.length){ host.style.display='none'; host.innerHTML=''; _ofPrevAlerts=''; return; }
   host.style.display='';
   // Botón de acción según RBAC: si el rol no puede abrir la pestaña destino, se ofrece
   // "📍 Ver en 3D" (enfoca al trabajador en la escena; no requiere otra pestaña).
+  // Para agentes (dormidos o con falla) se ofrece además "▶ Despertar": salta directo a su input.
   const actBtn=it=>{
-    if(it.tab && _ofCanTab(it.tab)) return `<button class="btn btn-ghost btn-sm" data-tab="${escapeHtml(it.tab)}" onclick="switchTab(this.dataset.tab)">Ver →</button>`;
-    if(it.id) return `<button class="btn btn-ghost btn-sm" data-id="${escapeHtml(it.id)}" onclick="ofFocusAgent(this.dataset.id)">📍 Ver en 3D</button>`;
-    return '';
+    const canWake=it.wake && AGENTES_CFG.some(a=>a.id===it.wake) && _ofCanTab('agentes');
+    let btns='';
+    if(canWake){
+      // "▶ Despertar" ya salta a Agentes; el secundario localiza al agente en la escena 3D (no repite el salto)
+      btns+=`<button class="btn btn-primary btn-sm" data-id="${escapeHtml(it.wake)}" onclick="ofWakeAgent(this.dataset.id)" title="Ir a este agente y prepararlo para ejecutar">▶ Despertar</button>`;
+      btns+=`<button class="btn btn-ghost btn-sm" data-id="${escapeHtml(it.id)}" onclick="ofFocusAgent(this.dataset.id)">📍 Ver en 3D</button>`;
+    } else if(it.tab && _ofCanTab(it.tab)) btns+=`<button class="btn btn-ghost btn-sm" data-tab="${escapeHtml(it.tab)}" onclick="switchTab(this.dataset.tab)">Ver →</button>`;
+    else if(it.id) btns+=`<button class="btn btn-ghost btn-sm" data-id="${escapeHtml(it.id)}" onclick="ofFocusAgent(this.dataset.id)">📍 Ver en 3D</button>`;
+    return btns;
   };
-  host.innerHTML=items.slice(0,6).map(it=>`<div class="of-alert of-alert-${it.t}"><span class="of-alert-ic">${it.t==='error'?'🔴':'🟠'}</span><span class="of-alert-msg">${it.msg}</span>${actBtn(it)}</div>`).join('');
+  host.innerHTML=items.slice(0,6).map(it=>`<div class="of-alert of-alert-${it.t}"><span class="of-alert-ic">${it.t==='error'?'🔴':'🟠'}</span><span class="of-alert-msg">${it.msg}</span><span class="of-alert-acts">${actBtn(it)}</span></div>`).join('');
   const sig=items.map(i=>i.t+i.msg).join('|');
   if(_ofPrevAlerts && sig!==_ofPrevAlerts){ const n=items.filter(i=>i.t==='error').length; if(n){ try{toast('⚠ '+n+' incidencia(s) en la oficina','error');}catch(e){} } }
   _ofPrevAlerts=sig;
+}
+// Píldora de salud junto al título: verde/ámbar/rojo según incidencias y avisos abiertos
+function _ofRenderHealth(items){
+  const el=document.getElementById('ofHealth'); if(!el) return;
+  const err=items.filter(i=>i.t==='error').length, warn=items.filter(i=>i.t==='warn').length;
+  let cls,txt;
+  if(err){ cls='bad'; txt='🔴 '+err+' incidencia'+(err>1?'s':''); }
+  else if(warn){ cls='warn'; txt='🟠 '+warn+' aviso'+(warn>1?'s':''); }
+  else { cls='ok'; txt='🟢 Todo en orden'; }
+  el.className='of-health of-health-'+cls;
+  el.textContent=txt;
+  el.title=(err||warn)?'Ver las alertas de la oficina':'Sin incidencias ni avisos';
+  el.style.display='';
+}
+// "▶ Despertar" desde una alerta: salta a Agentes y deja el input del agente listo para escribir
+function ofWakeAgent(id){
+  const cfg=AGENTES_CFG.find(a=>a.id===id); if(!cfg){ switchTab('agentes'); return; }
+  closeOfAgent(); switchTab('agentes');
+  setTimeout(()=>{ const i=document.getElementById('input_'+id); if(i){ i.scrollIntoView({behavior:'smooth',block:'center'}); i.focus(); try{toast('▶ '+_ofPretty(cfg.label)+' listo para ejecutar','info');}catch(e){} } },140);
 }
 
 function _ofWorkerCard(m){
@@ -1764,10 +1881,12 @@ function _ofRenderIso(ia,auto,extras){
   }
 }
 let _ofFeedRuns=[];            // últimos runs (para re-filtrar el feed sin volver a Airtable)
-let _ofFeedFilter='all';       // 'all' o nombre de departamento/área
+let _ofFeedFilter=(()=>{try{return localStorage.getItem('thelab_oficina_feedfilter')||'all';}catch(e){return 'all';}})();  // área filtrada (persistida)
 let _ofFeedLimit=15;           // corte visible del feed (crece con "Ver más" — B-U9)
 let _ofFeedShown=[];           // items visibles del feed (para abrir la ejecución al hacer clic)
-function ofSetFeedFilter(cat){ _ofFeedFilter=cat||'all'; _ofRenderFeed(_ofFeedRuns); }
+let _ofFeedQuery='';           // búsqueda de texto en la actividad (input/output del run)
+function ofSetFeedFilter(cat){ _ofFeedFilter=cat||'all'; try{localStorage.setItem('thelab_oficina_feedfilter',_ofFeedFilter);}catch(e){} _ofRenderFeed(_ofFeedRuns); }
+function ofFeedSearch(v){ _ofFeedQuery=(v||'').trim().toLowerCase(); _ofFeedLimit=15; _ofRenderFeed(_ofFeedRuns); }
 function _ofFeedCat(r){ return _ofCat({id:r.agent}).name; }   // área del run según su agente
 function _ofRenderFeed(runs){
   const feed=document.getElementById('oficinaFeed'); if(!feed) return;
@@ -1786,13 +1905,16 @@ function _ofRenderFeed(runs){
     fbar.innerHTML=chip('all','Todos','var(--accent)',runs.length)+present.map(n=>chip(n,n,colOf(n),runs.filter(r=>_ofFeedCat(r)===n).length)).join('');
     fbar.style.display=present.length>1?'flex':'none';
   }
-  const shown=_ofFeedFilter==='all'?runs:runs.filter(r=>_ofFeedCat(r)===_ofFeedFilter);
+  let shown=_ofFeedFilter==='all'?runs:runs.filter(r=>_ofFeedCat(r)===_ofFeedFilter);
+  // Búsqueda de texto en la actividad: agente/persona + consulta + resultado (idea)
+  const q=_ofFeedQuery;
+  if(q) shown=shown.filter(r=>{ const idn=agentIdentity(r.agent); return ((idn.persona||'')+' '+(idn.rol||'')+' '+(r.agent||'')+' '+(r.input||'')+' '+(r.output||'')).toLowerCase().includes(q); });
   // Contador honesto: si la lista está truncada dice "15 de 112" (antes el badge mostraba el
   // total y la lista cortaba en 15 sin aviso — B-U9); "Ver más" amplía el corte.
   const lim=Math.max(15,_ofFeedLimit);
   if(fc) fc.textContent=shown.length>lim?`${lim} de ${shown.length}`:String(shown.length);
   if(!shown.length){
-    feed.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">'+(runs.length?'Sin actividad en esta área por ahora.':'Aún no hay ejecuciones registradas. Cuando tus agentes trabajen aparecerán aquí en vivo.')+'</div>';
+    feed.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">'+(q?`Sin resultados para “${escapeHtml(_ofFeedQuery)}”.`:(runs.length?'Sin actividad en esta área por ahora.':'Aún no hay ejecuciones registradas. Cuando tus agentes trabajen aparecerán aquí en vivo.'))+'</div>';
     return;
   }
   const more=shown.length>lim?`<button class="btn btn-ghost btn-sm" style="width:100%;margin:8px 0 4px" onclick="ofFeedMore()">▾ Ver más (${shown.length-lim} restantes)</button>`:'';
@@ -1814,10 +1936,21 @@ function _ofRenderFeed(runs){
         <div class="of-feed-agent">${who}</div>
         <div class="of-feed-txt">${escapeHtml((r.input||r.output||'').substring(0,120))}</div>
       </div>
-      <div class="of-feed-time">${_ofAgo(r.t)}</div>
+      <div class="of-feed-side">
+        ${(r.output||r.input)?`<button class="of-feed-copy" data-i="${i}" onclick="ofFeedCopy(this.dataset.i,event)" title="Copiar el resultado" aria-label="Copiar el resultado de esta ejecución">📋</button>`:''}
+        <div class="of-feed-time">${_ofAgo(r.t)}</div>
+      </div>
     </div>`;}).join('')+more;
 }
 function ofFeedMore(){ _ofFeedLimit=Math.max(15,_ofFeedLimit)+20; _ofRenderFeed(_ofFeedRuns); }
+// Copiar el resultado de una ejecución directo desde el feed, sin abrir el modal
+function ofFeedCopy(i,ev){ if(ev&&ev.stopPropagation) ev.stopPropagation();
+  const r=_ofFeedShown&&_ofFeedShown[+i]; if(!r) return;
+  const txt=(r.output||r.input||'').toString();
+  if(!txt){ try{toast('Esta ejecución no tiene resultado para copiar','info');}catch(e){} return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(()=>{try{toast('📋 Resultado copiado','success');}catch(e){}}).catch(()=>{try{toast('No se pudo copiar','error');}catch(e){}}); }
+  else { try{toast('Portapapeles no disponible','error');}catch(e){} }
+}
 
 // ── Analítica de la oficina (gráficos SVG, sin librerías) ──────────────
 function _ofBarsDays(runs){

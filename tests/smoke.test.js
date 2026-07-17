@@ -120,6 +120,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'ofToggleSceneTheme', 'ofToggleDensity', 'ofExport', 'ofUpdateDockBadge', '_ofApplyPrefs',
     'agentIdentity', 'ofToggleMore', 'ofAgentDetailByLabel', 'ofFeedMore', '_ofChatMsg', '_ofTvTour',
     'ofFeedView', '_ofOpenRun', '_ofHeatmap', '_ofStateShapeStyle', '_ofTickTvClock', 'ofFilamentClick', '_ofDayInsight', '_ofStreakRecord', '_ofTickBoard',
+    'ofKpiClick', '_ofScrollToEl', '_ofTickTeamLast', 'ofDigest', '_ofDigestFallback', '_ofRenderHealth', 'ofWakeAgent', 'ofFeedSearch', 'ofFeedCopy',
   ];
   const probs = [];
   CRITICAL.forEach(n => {
@@ -143,7 +144,8 @@ const ok = msg => console.log('  ✓ ' + msg);
     'ivaMensualCard', 'churnCard', 'fechasClaveCard', 'perdidasCard', 'cacCanalCard',
     // oficina: contenedores que js/oficina.js busca por id
     'oficinaKpis', 'oficinaCards', 'oficinaFloor', 'oficinaIso', 'oficinaCharts', 'oficinaFeed',
-    'oficinaAlerts', 'oficinaCardFilter', 'oficinaErr', 'badge-oficina', 'ofAgentModal', 'oficinaRangeSel'];
+    'oficinaAlerts', 'oficinaCardFilter', 'oficinaErr', 'badge-oficina', 'ofAgentModal', 'oficinaRangeSel',
+    'ofHealth', 'ofTeamLast', 'oficinaFeedSearch'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
   if (missing.length) fail('IDs del DOM ausentes: ' + missing.join(', '));
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');
