@@ -2598,6 +2598,59 @@
 </div>
 
 <!-- NEWSLETTER -->
+<style id="newsletter-styles">
+/* Newsletter — capa visual "Cálido y suave" (drop-in, scopeada a #tab-newsletter), acento morado */
+#tab-newsletter{
+  --nl-purple:#7c4dff; --nl-lav:#a78bfa;
+  --nl-purple-soft:rgba(124,77,255,.15); --nl-purple-line:rgba(124,77,255,.34);
+  --nl-lg:18px; --nl-md:14px; --nl-sm:12px;
+  --nl-shadow:0 6px 20px rgba(0,0,0,.28);
+  --nl-shadow-hover:0 10px 26px rgba(0,0,0,.34);
+  --nl-ring:0 0 0 3px rgba(124,77,255,.22);
+  background:radial-gradient(1100px 420px at 50% -60px,rgba(124,77,255,.07),rgba(167,139,250,.03) 40%,transparent 72%);
+}
+/* Cards elevadas y suaves */
+#tab-newsletter .card{
+  border-radius:var(--nl-lg);
+  border:1px solid var(--border2);
+  box-shadow:var(--nl-shadow),inset 0 1px 0 rgba(255,255,255,.035);
+  background:linear-gradient(180deg,rgba(167,139,250,.05),transparent 150px),var(--surface2);
+}
+#tab-newsletter .card-header{padding-block:2px;}
+#tab-newsletter .card-title{letter-spacing:.1px;font-weight:700;}
+/* Botones amables */
+#tab-newsletter .btn{border-radius:999px;font-weight:600;letter-spacing:.1px;transition:transform .16s ease,box-shadow .16s ease,filter .16s ease,background .16s ease,border-color .16s ease;}
+#tab-newsletter .btn-primary{box-shadow:0 4px 14px rgba(124,77,255,.30);}
+#tab-newsletter .btn-ghost{background:rgba(255,255,255,.03);border:1px solid var(--border);}
+#tab-newsletter .btn-ghost:hover{background:rgba(255,255,255,.06);border-color:var(--border2);}
+#tab-newsletter .btn-mini{border-radius:999px;}
+@media(prefers-reduced-motion:no-preference){
+  #tab-newsletter .btn:hover{transform:translateY(-1px);}
+  #tab-newsletter .kpi-card{transition:transform .16s ease,box-shadow .16s ease;}
+  #tab-newsletter .kpi-card:hover{transform:translateY(-2px);box-shadow:var(--nl-shadow-hover);}
+}
+/* KPIs tintados por color con base sólida elevada (no se funden con el fondo) */
+#tab-newsletter .kpi-card{border-radius:var(--nl-md);border:1px solid var(--border2);box-shadow:var(--nl-shadow);}
+#tab-newsletter .kpi-card .kpi-label{font-size:11px;letter-spacing:.2px;line-height:1.4;}
+#tab-newsletter .kpi-card .kpi-value{letter-spacing:.5px;margin-top:4px;}
+#tab-newsletter .kpi-card.green{background:linear-gradient(160deg,rgba(0,212,170,.12),transparent 72%),var(--surface2);border-color:rgba(0,212,170,.28);}
+#tab-newsletter .kpi-card.green .kpi-value{color:var(--success);}
+#tab-newsletter .kpi-card.purple{background:linear-gradient(160deg,rgba(124,77,255,.17),transparent 72%),var(--surface2);border-color:var(--nl-purple-line);}
+#tab-newsletter .kpi-card.purple .kpi-value{color:var(--nl-lav);}
+#tab-newsletter .kpi-card.yellow{background:linear-gradient(160deg,rgba(255,170,0,.12),transparent 72%),var(--surface2);border-color:rgba(255,170,0,.28);}
+#tab-newsletter .kpi-card.yellow .kpi-value{color:var(--warn);}
+#tab-newsletter .kpi-card.orange{background:linear-gradient(160deg,rgba(255,107,53,.13),transparent 72%),var(--surface2);border-color:rgba(255,107,53,.28);}
+#tab-newsletter .kpi-card.orange .kpi-value{color:var(--accent2);}
+#tab-newsletter .kpi-card.red{background:linear-gradient(160deg,rgba(255,68,68,.13),transparent 72%),var(--surface2);border-color:rgba(255,68,68,.30);}
+#tab-newsletter .kpi-card.red .kpi-value{color:var(--danger);}
+/* Detalles amistosos */
+#tab-newsletter .badge{border-radius:999px;}
+#tab-newsletter .field-input:focus,#tab-newsletter .field-select:focus{border-color:var(--nl-purple);box-shadow:var(--nl-ring);outline:none;}
+/* Accesibilidad: red de seguridad para reduce-motion */
+@media(prefers-reduced-motion:reduce){
+  #tab-newsletter *,#tab-newsletter *::before,#tab-newsletter *::after{transition:none!important;animation:none!important;}
+}
+</style>
 <div class="tab-panel" id="tab-newsletter">
   <div class="section-header">
     <div>
@@ -2609,15 +2662,15 @@
 
   <!-- KPIs -->
   <div class="kpi-grid" id="nlKpis">
-    <div class="kpi-card green"><div class="kpi-label">Audiencia (con email)</div><div class="kpi-value" id="nlKpiAud">—</div></div>
-    <div class="kpi-card purple"><div class="kpi-label">Suscritos</div><div class="kpi-value" id="nlKpiSub">—</div></div>
-    <div class="kpi-card yellow"><div class="kpi-label">Borradores</div><div class="kpi-value" id="nlKpiBorr">—</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">Enviadas (mes)</div><div class="kpi-value" id="nlKpiEnv">—</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Leads calientes</div><div class="kpi-value" id="nlKpiHot">—</div></div>
+    <div class="kpi-card green"><div class="kpi-label">👥 Audiencia (con email)</div><div class="kpi-value" id="nlKpiAud">—</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">✅ Suscritos</div><div class="kpi-value" id="nlKpiSub">—</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">✏️ Borradores</div><div class="kpi-value" id="nlKpiBorr">—</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">📤 Enviadas (mes)</div><div class="kpi-value" id="nlKpiEnv">—</div></div>
+    <div class="kpi-card red"><div class="kpi-label">🔥 Leads calientes</div><div class="kpi-value" id="nlKpiHot">—</div></div>
   </div>
 
   <!-- GENERADOR -->
-  <div class="card" style="margin-bottom:20px;border-color:rgba(124,77,255,0.30);box-shadow:0 0 24px rgba(124,77,255,0.06)">
+  <div class="card" style="margin-bottom:20px;border-color:rgba(124,77,255,0.30);box-shadow:0 6px 22px rgba(124,77,255,0.10)">
     <div class="card-header" style="border-bottom-color:rgba(124,77,255,0.2)">
       <span class="card-title" style="color:#9b6bff"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-newsletter"/></svg> Redactar newsletter</span>
       <div style="display:flex;gap:5px;align-items:center"><span class="badge badge-purple">IA · NEWSLETTER_AGENT</span></div>
