@@ -1958,6 +1958,47 @@
 .redes-cal-chip{transition:transform .12s ease,box-shadow .12s ease;}
 .redes-cal-chip:hover{transform:translateY(-1px);box-shadow:0 3px 9px rgba(0,0,0,.35);}
 .redes-nethead{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+/* Banner de modo demo */
+.redes-demo-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:linear-gradient(135deg,#ec489922,#e1306c14);border:1px solid #ec489955;border-radius:11px;padding:9px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);}
+.redes-demo-banner b{color:var(--text);}
+.redes-demo-banner .btn{margin-left:auto;}
+/* Estado vacío enriquecido: guía de inicio */
+.redes-onboard{padding:20px 18px;}
+.redes-onboard-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:16px;}
+.redes-onboard-head .ico{font-size:30px;line-height:1;}
+.redes-onboard-head .t{font-size:15px;font-weight:700;color:var(--text);}
+.redes-onboard-head .s{font-size:12px;color:var(--text3);margin-top:3px;line-height:1.5;}
+.redes-onboard-steps{display:grid;gap:10px;}
+.redes-step{display:flex;gap:11px;align-items:flex-start;background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:12px 14px;}
+.redes-step .n{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:#ec4899;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;}
+.redes-step b{font-size:12.5px;color:var(--text);}
+.redes-step>div>div{font-size:11.5px;color:var(--text3);line-height:1.55;margin-top:3px;}
+.redes-step code{font-size:10.5px;}
+/* Vista previa estilo Instagram (marco de teléfono) */
+.ig-phone{background:var(--surface2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;}
+.ig-top{display:flex;align-items:center;gap:9px;padding:10px 12px;}
+.ig-ava{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#feda75,#d62976 55%,#4f5bd5);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ig-user{display:flex;flex-direction:column;line-height:1.25;min-width:0;}
+.ig-user b{font-size:12px;color:var(--text);}
+.ig-user span{font-size:10px;color:var(--text3);}
+.ig-more{margin-left:auto;color:var(--text2);letter-spacing:1px;}
+.ig-media{position:relative;width:100%;aspect-ratio:1/1;background:linear-gradient(135deg,#3a2540,#1d2436);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.ig-media img{position:relative;z-index:1;}
+.ig-media-ph{display:none;flex-direction:column;align-items:center;gap:4px;color:#ffffff88;font-size:34px;}
+.ig-media-ph span{font-size:11px;letter-spacing:.5px;}
+.ig-media.noimg .ig-media-ph{display:flex;}
+.ig-vid{display:flex;flex-direction:column;align-items:center;gap:4px;color:#fff;font-size:34px;}
+.ig-vid span{font-size:11px;color:#ffffffaa;}
+.ig-actions{display:flex;gap:14px;padding:9px 12px 4px;font-size:19px;color:var(--text);}
+.ig-likes{padding:2px 12px;font-size:12px;font-weight:600;color:var(--text);}
+.ig-likes b{font-weight:700;}
+.ig-caption{padding:4px 12px 2px;font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+.ig-caption b{color:var(--text);font-weight:700;}
+.ig-caption .ig-tags{color:#4a9bff;}
+.ig-time{padding:6px 12px 12px;font-size:9.5px;color:var(--text3);letter-spacing:.5px;}
+.ig-meta{margin-top:12px;}
+.ig-count{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;}
+.ig-count.over{color:var(--danger);font-weight:700;}
 </style>
 <div class="tab-panel" id="tab-redes">
   <div class="section-header">
@@ -1971,7 +2012,10 @@
         <span class="redes-pill" style="background:#1877f222;color:#4a9bff;border-color:#1877f266"><svg viewBox="0 0 24 24"><use href="#fb-glyph"/></svg>Facebook</span>
       </div>
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="redesLoad(true)" style="flex-shrink:0">↻ Actualizar</button>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="btn btn-ghost btn-sm" onclick="redesDemoToggle()" title="Ver la sección con datos de ejemplo de Instagram (no se guardan en Airtable)">👁️ Demo</button>
+      <button class="btn btn-ghost btn-sm" onclick="redesLoad(true)">↻ Actualizar</button>
+    </div>
   </div>
 
   <!-- KPIs -->
@@ -2179,6 +2223,17 @@
         <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(_redesReportText||'').then(()=>toast('Copiado ✓','success'))">Copiar</button>
         <button class="btn btn-primary btn-sm" id="redesReportEmailBtn" onclick="redesEmailReport()">✉ Enviar por email</button>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: vista previa estilo Instagram -->
+  <div id="redesIgPreviewModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.66);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)redesIgClose()">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;width:min(400px,96vw);max-height:92vh;overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:600;color:var(--text);display:flex;align-items:center;gap:7px"><svg viewBox="0 0 24 24" style="width:16px;height:16px;color:#e1306c"><use href="#ig-glyph"/></svg> Vista previa Instagram</span>
+        <button class="btn btn-ghost btn-sm" onclick="redesIgClose()">✕</button>
+      </div>
+      <div id="redesIgBody" style="padding:16px"></div>
     </div>
   </div>
 </div>

@@ -13,15 +13,26 @@ const REDES_GLYPH={Instagram:'ig-glyph',LinkedIn:'li-glyph',TikTok:'tt-glyph',Fa
 const REDES_BEST_HOUR={Instagram:19,LinkedIn:9,TikTok:20,Facebook:13};   // hora sugerida por red (afinable con datos)
 const _redesPad=n=>String(n).padStart(2,'0');
 const _redesDayKey=dt=>`${dt.getFullYear()}-${_redesPad(dt.getMonth()+1)}-${_redesPad(dt.getDate())}`;
+// ¿Hay CÓMO leer/escribir Airtable? — token local O proxy (Worker). Igual que hasAirtableAccess()
+// del resto de la app; antes Redes y Newsletter sólo miraban getToken() y en modo proxy no cargaban.
+function _redesHasData(){ try{ return (typeof hasAirtableAccess==='function')?hasAirtableAccess():!!getToken(); }catch(e){ return !!getToken(); } }
+// Modo demo: siembra datos de ejemplo en memoria para VER la sección funcionando sin conectar nada.
+// _redesWrite() intercepta cualquier escritura para que el demo jamás toque Airtable.
+let _redesDemo=false, _redesDemoSeq=0;
+async function _redesWrite(table,method,recordId,fields,maxTries){
+  if(_redesDemo){ return {id:recordId||('demo_'+(++_redesDemoSeq)), fields:Object.assign({},fields)}; }
+  return airtableWriteTolerant(table,method,recordId,fields,maxTries);
+}
 
 function initRedes(){
   redesPopulatePedidos();
-  if(!_redesLoaded && getToken()) redesLoad();
+  if(!_redesLoaded && !_redesDemo && _redesHasData()) redesLoad();
   else { renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); renderRedesBestTimes(); renderRedesRecycle(); }
 }
 
 async function redesLoad(force){
-  if(!getToken()){toast('Falta el token de Airtable (Mi cuenta)','error');return;}
+  if(_redesDemo){ toast('Estás en modo demo — sal del demo para cargar datos reales','info'); return; }
+  if(!_redesHasData()){toast('Conecta Airtable (token o proxy) en Mi cuenta — o pulsa “Ver demo”','error');return;}
   if(_redesLoadBusy) return;   // evita recargas solapadas (spam del botón Actualizar)
   _redesLoadBusy=true;
   try{
@@ -36,6 +47,71 @@ async function redesLoad(force){
     _redesLoaded=true;
     renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); renderRedesBestTimes(); renderRedesRecycle();
   }finally{ _redesLoadBusy=false; }
+}
+
+// ── Modo demo: datos de ejemplo (foco Instagram) para ver la sección viva sin conectar nada ──
+function redesDemoToggle(){ if(_redesDemo) redesDemoExit(); else redesDemoSeed(); }
+function redesDemoExit(){
+  _redesDemo=false; _redesLoaded=false;
+  state.socialPosts=[]; state.socialInteractions=[]; state.socialMetrics=[];
+  state._socialPostsErr=false; state._socialIntErr=false;
+  _redesDemoBanner(false);
+  renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); renderRedesBestTimes(); renderRedesRecycle();
+  toast('Saliste del modo demo','info');
+  if(_redesHasData()) redesLoad(true);   // vuelve a los datos reales si hay conexión
+}
+function redesDemoSeed(){
+  _redesDemo=true; _redesLoaded=true;
+  const now=Date.now(), DAY=86400000, iso=t=>new Date(t).toISOString();
+  const P=(id,red,estado,copy,hashtags,dOff,media,extra)=>({id:'demo_p'+id,createdTime:iso(now-Math.abs(dOff||0)*DAY),
+    fields:Object.assign({Red:red,Estado:estado,Copy:copy,Hashtags:hashtags,Objetivo:'Captar leads',Agente:'CAPTION_AGENT',
+      [dOff<0?'Fecha programada':'Fecha publicación']:iso(now+dOff*DAY)},media?{'Media URL':media}:{},extra||{})});
+  const img=s=>`https://picsum.photos/seed/${s}/640.jpg`;
+  state.socialPosts=[
+    P(1,'Instagram','Publicado','✨ Entregamos un letrero de neón LED personalizado para un restaurant en Vitacura. La ambientación nocturna quedó espectacular.\n\n¿Tienes un local que merece brillar? Escríbenos.','#neonled #vitacura #santiago #letrerosluminosos #diseño',6,img('neon'),{Engagement:428}),
+    P(2,'Instagram','Publicado','🏆 50 trofeos personalizados impresos en 3D para la gala corporativa de una empresa tech. Cada uno con el logo grabado.','#impresion3d #trofeos #galacorporativa #chile',12,img('trofeo'),{Engagement:612}),
+    P(3,'Instagram','Publicado','⏱️ Time-lapse del proceso de impresión 3D de medallas para un torneo. El detalle importa.','#timelapse #3dprinting #medallas #maker',3,'',{Engagement:255}),
+    P(4,'Instagram','Programado','🎨 Nuevo proyecto en camino: señalética premium para una oficina en Providencia. Pronto el antes y después.','#señaletica #diseñointerior #providencia',-2,img('signage')),
+    P(5,'Instagram','Programado','💡 3 razones para elegir neón LED sobre el neón tradicional: consume menos, dura más y es más seguro. Hilo 👇','#neonled #led #ahorroenergetico',-4,''),
+    P(6,'Instagram','En revisión','🔥 Detrás de cámaras: así fabricamos un logo corporativo iluminado de 1,2 metros. ¿Lo quieres para tu marca?','#behindthescenes #neon #branding',0,img('bts')),
+    P(7,'LinkedIn','Borrador','Caso de éxito: cómo ayudamos a una cadena de restaurantes a unificar su identidad visual con señalética LED en 6 locales.','#B2B #fabricaciondigital #retail',0,''),
+    P(8,'Instagram','Borrador','📸 Galería: los 10 mejores proyectos de neón que entregamos este trimestre. ¿Cuál es tu favorito?','#neon #portafolio #diseño',0,'')
+  ];
+  const I=(id,red,tipo,user,msg,estado,esLead,resp,dOff)=>({id:'demo_i'+id,createdTime:iso(now-dOff*DAY),
+    fields:{Red:red,Tipo:tipo,Usuario:user,Mensaje:msg,Estado:estado,'Es lead':!!esLead,'Respuesta sugerida':resp||'','Fecha':iso(now-dOff*DAY)}});
+  state.socialInteractions=[
+    I(1,'Instagram','DM','carla.eventos','Hola! Cuánto costaría un letrero de neón con el nombre de mi cafetería? Mide como 80cm','Pendiente',true,'',0),
+    I(2,'Instagram','Comentario','javiernuñez','Quedó increíble 🔥🔥 hacen envíos a regiones?','Pendiente',true,'',0),
+    I(3,'Instagram','Comentario','packandgo','Pedí uno hace 3 semanas y todavía no llega, pésimo servicio','Pendiente',false,'',1),
+    I(4,'Instagram','Comentario','laura_dg','Amo esto 😍 los sigo hace rato','Respondido',false,'¡Gracias Laura! 💜 Nos alegra mucho tenerte por acá.',2),
+    I(5,'Instagram','DM','estudio.norte','Buenas, necesito 20 trofeos 3D para diciembre, me pueden cotizar?','Respondido',true,'¡Hola! Claro que sí. Te paso a un ejecutivo para armar tu cotización 🙌',2)
+  ];
+  const mets=[]; let mid=0;
+  // 30 días de métricas para Instagram (engagement mayor fin de semana → alimenta "mejor momento")
+  for(let d=29;d>=0;d--){ const dt=new Date(now-d*DAY), wd=dt.getDay(), wknd=(wd===0||wd===6||wd===3)?1.6:1;
+    mets.push({id:'demo_m'+(++mid),createdTime:iso(dt.getTime()),fields:{Red:'Instagram',Fecha:iso(dt.getTime()),
+      Alcance:Math.round((900+((d*37)%700))*wknd),Impresiones:Math.round((1400+((d*53)%900))*wknd),
+      Engagement:Math.round((70+((d*11)%120))*wknd),Clics:20+((d*7)%40),'Seguidores nuevos':3+((d*3)%12),Leads:(d%5===0)?2:(d%3===0?1:0)}}); }
+  // un poco de LinkedIn para la comparativa
+  for(let d=20;d>=0;d-=2){ const dt=new Date(now-d*DAY);
+    mets.push({id:'demo_m'+(++mid),createdTime:iso(dt.getTime()),fields:{Red:'LinkedIn',Fecha:iso(dt.getTime()),
+      Alcance:300+((d*29)%400),Impresiones:500+((d*31)%600),Engagement:15+((d*5)%40),Clics:8+((d*3)%20),'Seguidores nuevos':1+((d*2)%6),Leads:(d%6===0)?1:0}}); }
+  state.socialMetrics=mets;
+  state._socialPostsErr=false; state._socialIntErr=false;
+  _redesDemoBanner(true);
+  renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); renderRedesBestTimes(); renderRedesRecycle();
+  toast('👁️ Modo demo activado — datos de ejemplo de Instagram (no se guardan en Airtable)','success');
+}
+// Banner visible mientras el modo demo está activo
+function _redesDemoBanner(on){
+  let b=document.getElementById('redesDemoBanner');
+  if(on){
+    if(!b){ const host=document.getElementById('tab-redes'); const hdr=host&&host.querySelector('.section-header');
+      b=document.createElement('div'); b.id='redesDemoBanner'; b.className='redes-demo-banner';
+      if(hdr&&hdr.parentNode) hdr.parentNode.insertBefore(b,hdr.nextSibling); else if(host) host.insertBefore(b,host.firstChild); }
+    b.innerHTML=`👁️ <b>Modo demo</b> — estás viendo datos de ejemplo de Instagram. Nada se guarda en Airtable. <button class="btn btn-ghost btn-sm" onclick="redesDemoExit()">Salir del demo</button>`;
+    b.style.display='';
+  } else if(b){ b.style.display='none'; }
 }
 
 // Pobla el selector de pedidos entregados (idea: generar contenido desde tu propia producción).
@@ -82,9 +158,14 @@ function renderRedesPosts(){
   const el=document.getElementById('redesPostsList'); if(!el) return;
   let posts=(state.socialPosts||[]).slice();
   if(!posts.length){
-    el.innerHTML=`<div class="redes-empty"><span class="ico">🗓️</span>
-      <div>Aún no hay publicaciones${state._socialPostsErr?' (o falta crear la tabla <code>Social_Posts</code>)':''}.</div>
-      <div>Usa el <b>Generador de contenido</b> de arriba y pulsa <b>“Guardar borrador”</b> para verlas aquí.</div>
+    // Estado vacío enriquecido: guía de 3 pasos para empezar (idea: "no sé cómo empezar")
+    el.innerHTML=`<div class="redes-onboard">
+      <div class="redes-onboard-head"><span class="ico">🚀</span><div><div class="t">Empieza a gestionar tus redes</div><div class="s">Aún no hay publicaciones${state._socialPostsErr?' (falta crear la tabla <code>Social_Posts</code> en Airtable)':''}. Sigue estos pasos:</div></div></div>
+      <div class="redes-onboard-steps">
+        <div class="redes-step"><span class="n">1</span><div><b>👀 Míralo funcionando</b><div>Carga datos de ejemplo de Instagram para ver el calendario, la bandeja y las métricas en acción — sin conectar nada.</div><button class="btn btn-primary btn-sm" style="margin-top:7px;background:#ec4899;border-color:#ec4899;color:#fff" onclick="redesDemoSeed()">👁️ Ver demo</button></div></div>
+        <div class="redes-step"><span class="n">2</span><div><b>✍️ Crea tu primer post</b><div>Usa el <b>Generador de contenido</b> de arriba: describe un proyecto o elige un pedido entregado, genera el copy con IA y pulsa <b>“Guardar borrador”</b>.</div></div></div>
+        <div class="redes-step"><span class="n">3</span><div><b>🔗 Conéctalo de verdad</b><div>Con <b>Make</b> puedes traer comentarios y métricas reales de Instagram a las tablas <code>Social_Posts</code>, <code>Social_Interactions</code> y <code>Social_Metrics</code>. Te guío cuando quieras.</div></div></div>
+      </div>
     </div>`; return;
   }
   const fRed=document.getElementById('redesFiltroRed')?.value||'';
@@ -113,6 +194,7 @@ function renderRedesPosts(){
       btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSchedule('${p.id}')">📅 Reagendar</button>`);
       btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesSetEstado('${p.id}','Publicado')">Marcar publicado ✓</button>`);
     }
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesPreviewInsta('${p.id}')" title="Ver cómo se vería en Instagram">👁 Preview</button>`);
     btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesOpenEdit('${p.id}')">✏ Editar</button>`);
     btns.push(`<button class="btn btn-ghost btn-sm" onclick="redesCopyPost('${p.id}')">Copiar copy</button>`);
     return `<div class="redes-post" style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px">
@@ -139,7 +221,7 @@ async function redesSetEstado(id,estado){
   try{
     const fields={'Estado':estado};
     if(estado==='Publicado'&&!p.fields['Fecha publicación']) fields['Fecha publicación']=new Date().toISOString();
-    await airtableWriteTolerant('Social_Posts','PATCH',id,fields);
+    await _redesWrite('Social_Posts','PATCH',id,fields);
     p.fields['Estado']=estado; if(fields['Fecha publicación']) p.fields['Fecha publicación']=fields['Fecha publicación'];
     toast('Estado actualizado ✓','success'); renderRedesKpis(); renderRedesPosts();
   }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
@@ -173,7 +255,7 @@ async function redesSchedule(id,presetIso){
   const iso=presetIso||await redesDatePicker('¿Cuándo publicar este post?',p.fields['Fecha programada']||null);
   if(!iso) return;
   try{
-    await airtableWriteTolerant('Social_Posts','PATCH',id,{'Estado':'Programado','Fecha programada':iso});
+    await _redesWrite('Social_Posts','PATCH',id,{'Estado':'Programado','Fecha programada':iso});
     p.fields['Estado']='Programado'; p.fields['Fecha programada']=iso;
     toast('Programado para '+_redesFmtFecha(iso)+' ✓','success'); renderRedesKpis(); renderRedesPosts(); if(_redesView==='cal') renderRedesCalendarGrid();
   }catch(e){toast('No se pudo programar: '+e.message,'error');}
@@ -183,6 +265,42 @@ function redesCopyPost(id){
   const t=[(p.fields['Copy']||p.fields['Texto']||''),p.fields['Hashtags']||''].filter(Boolean).join('\n\n');
   navigator.clipboard.writeText(t).then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error'));
 }
+// ── Vista previa estilo Instagram (marco de teléfono) + contador de caracteres ──
+const _REDES_IG_LIMIT=2200;   // límite de caracteres del caption en Instagram
+function redesPreviewInsta(id){
+  const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p){toast('Post no encontrado','error');return;}
+  const f=p.fields, copy=(f['Copy']||f['Texto']||'').toString(), hashtags=(f['Hashtags']||'').toString();
+  const media=safeHref(f['Media URL']||''), isImg=_redesIsImg(media);
+  const total=copy.length+(hashtags?hashtags.length+2:0), over=total>_REDES_IG_LIMIT;
+  const mediaHtml=media
+    ? (isImg?`<img src="${media}" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentNode.classList.add('noimg')">`
+            :`<div class="ig-vid">🎬<span>video / reel</span></div>`)
+    : '';
+  const hashHtml=hashtags?`<span class="ig-tags">${escapeHtml(hashtags)}</span>`:'';
+  const body=document.getElementById('redesIgBody');
+  if(body) body.innerHTML=`
+    <div class="ig-phone">
+      <div class="ig-top">
+        <div class="ig-ava">TL</div>
+        <div class="ig-user"><b>thelab.solutions</b><span>Santiago, Chile</span></div>
+        <span class="ig-more">•••</span>
+      </div>
+      <div class="ig-media${media&&isImg?'':' noimg'}">${mediaHtml}<span class="ig-media-ph">📷<span>vista previa</span></span></div>
+      <div class="ig-actions"><span>♡</span><span>💬</span><span>✈</span><span style="margin-left:auto">🔖</span></div>
+      ${f['Engagement']?`<div class="ig-likes">${(+f['Engagement']).toLocaleString('es-CL')} Me gusta</div>`:'<div class="ig-likes">Le gusta a <b>muchas personas</b></div>'}
+      <div class="ig-caption"><b>thelab.solutions</b> ${escapeHtml(copy)||'<span style="color:var(--text3)">(sin copy)</span>'} ${hashHtml}</div>
+      <div class="ig-time">HACE 2 HORAS</div>
+    </div>
+    <div class="ig-meta">
+      <div class="ig-count ${over?'over':''}">${total.toLocaleString('es-CL')} / ${_REDES_IG_LIMIT.toLocaleString('es-CL')} caracteres${over?' · ⚠ supera el límite de Instagram':''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn btn-primary btn-sm" style="background:#ec4899;border-color:#ec4899;color:#fff" onclick="redesCopyPost('${p.id}')">📋 Copiar copy</button>
+        <button class="btn btn-ghost btn-sm" onclick="redesIgClose()">Cerrar</button>
+      </div>
+    </div>`;
+  const m=document.getElementById('redesIgPreviewModal'); if(m) m.style.display='flex';
+}
+function redesIgClose(){ const m=document.getElementById('redesIgPreviewModal'); if(m) m.style.display='none'; }
 
 // ── Vista calendario (grilla mensual + drag&drop para reprogramar) ──
 function redesSetView(mode){
@@ -375,7 +493,7 @@ async function _redesSuggestReply(i){
   const esLead=mLead?/^s/i.test(mLead[1]):false;
   const fields={'Respuesta sugerida':resp.slice(0,5000),'Es lead':esLead};
   if(mInt) fields['Intención']=mInt[1].trim().slice(0,100);
-  await airtableWriteTolerant('Social_Interactions','PATCH',i.id,fields);
+  await _redesWrite('Social_Interactions','PATCH',i.id,fields);
   Object.assign(i.fields,fields);
   try{AGENT_LOG.add('COMMUNITY_AGENT',ctx,out);}catch(_){}
   return true;
@@ -414,7 +532,7 @@ function redesCopyReply(id){
   navigator.clipboard.writeText(i.fields['Respuesta sugerida']||'').then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error'));
 }
 async function redesMarkInteraction(id,estado){
-  try{ await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':estado});
+  try{ await _redesWrite('Social_Interactions','PATCH',id,{'Estado':estado});
     const i=(state.socialInteractions||[]).find(x=>x.id===id); if(i) i.fields['Estado']=estado;
     toast('Actualizado ✓','success'); renderRedesKpis(); renderRedesInbox();
   }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
@@ -424,7 +542,7 @@ async function redesInteractionToLead(id){
   const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
   const f=i.fields;
   try{
-    const cli=await airtableWriteTolerant('Clientes','POST',null,{
+    const cli=await _redesWrite('Clientes','POST',null,{
       'Contacto':f['Usuario']||'Lead redes','Empresa':f['Usuario']?('@'+f['Usuario']):'Lead redes sociales',
       'Validado':false,'Origen lead':'Redes sociales',
       'Notas internas':`Lead desde ${f['Red']||'redes'} (${f['Tipo']||'interacción'}):\n"${f['Mensaje']||''}"`
@@ -434,7 +552,7 @@ async function redesInteractionToLead(id){
     let encolado=false;
     if(cli&&cli.id){
       try{
-        await airtableWriteTolerant('Agent_Queue','POST',null,{
+        await _redesWrite('Agent_Queue','POST',null,{
           'Evento':'social.lead_received','Entidad':'Cliente','ID entidad':cli.id,
           'Agente':'LEAD_AGENT','Estado':'Pendiente','Prioridad':'Alta',
           'Source':(f['Red']||'redes').toLowerCase(),
@@ -444,7 +562,7 @@ async function redesInteractionToLead(id){
         encolado=true;
       }catch(_){}
     }
-    await airtableWriteTolerant('Social_Interactions','PATCH',id,{'Estado':'Respondido','Lead creado':true});
+    await _redesWrite('Social_Interactions','PATCH',id,{'Estado':'Respondido','Lead creado':true});
     if(i){ i.fields['Estado']='Respondido'; i.fields['Lead creado']=true; }
     toast(encolado?'Lead creado y encolado para scoring ✓':'Lead creado en Clientes ✓','success'); renderRedesKpis(); renderRedesInbox();
   }catch(e){toast('No se pudo crear el lead: '+e.message,'error');}
@@ -520,7 +638,7 @@ async function redesSaveDraft(){
   const mh=_redesLastGen.match(/HASHTAGS?:\s*([^\n]+)/i);
   if(mh){hashtags=mh[1].trim(); copy=_redesLastGen.replace(/HASHTAGS?:\s*[^\n]+/i,'').trim();}
   try{
-    const rec=await airtableWriteTolerant('Social_Posts','POST',null,Object.assign(_redesBaseFields(agentId),{'Red':red,'Copy':copy.slice(0,9000),'Hashtags':hashtags.slice(0,1000)}));
+    const rec=await _redesWrite('Social_Posts','POST',null,Object.assign(_redesBaseFields(agentId),{'Red':red,'Copy':copy.slice(0,9000),'Hashtags':hashtags.slice(0,1000)}));
     if(rec&&rec.id){ state.socialPosts=state.socialPosts||[]; state.socialPosts.unshift(rec); } else { await redesLoad(); }
     _redesAfterSave('Borrador guardado ✓');
   }catch(e){toast('No se pudo guardar (¿existe la tabla Social_Posts?): '+e.message,'error');}
@@ -551,7 +669,7 @@ async function redesSaveSplit(){
   let ok=0;
   for(const part of parts){
     try{
-      const rec=await airtableWriteTolerant('Social_Posts','POST',null,Object.assign(_redesBaseFields(agentId),{'Red':part.red,'Copy':part.copy.slice(0,9000),'Hashtags':(part.hashtags||'').slice(0,1000)}));
+      const rec=await _redesWrite('Social_Posts','POST',null,Object.assign(_redesBaseFields(agentId),{'Red':part.red,'Copy':part.copy.slice(0,9000),'Hashtags':(part.hashtags||'').slice(0,1000)}));
       if(rec&&rec.id){ state.socialPosts=state.socialPosts||[]; state.socialPosts.unshift(rec); ok++; }
     }catch(e){}
   }
@@ -635,12 +753,12 @@ const _nlMesActual=()=>{const m=new Date().toLocaleDateString('es-CL',{month:'lo
 function initNewsletter(){
   const mes=document.getElementById('nlGenMes'); if(mes&&!mes.value) mes.value=_nlMesActual();
   nlPopulateSegments();
-  if(!_nlLoaded && getToken()) nlLoad();
+  if(!_nlLoaded && _redesHasData()) nlLoad();
   else { renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); renderNlSubscribers(); }
 }
 
 async function nlLoad(force){
-  if(!getToken()){toast('Falta el token de Airtable (Mi cuenta)','error');return;}
+  if(!_redesHasData()){toast('Conecta Airtable (token o proxy) en Mi cuenta','error');return;}
   const loadingHTML='<div style="padding:16px;color:var(--text3);font-size:12px">⏳ Cargando…</div>';
   if(force){const ce=document.getElementById('nlCampaignsList');if(ce)ce.innerHTML=loadingHTML;const le=document.getElementById('nlLeadsList');if(le)le.innerHTML=loadingHTML;}
   // Lecturas tolerantes: distingue "tabla no existe" (estado guía) de un error de red (toast).
@@ -820,7 +938,7 @@ async function nlDestSend(){
     await new Promise(r=>setTimeout(r,120));
   }
   btn.disabled=false;btn.textContent=prev;
-  try{await airtableWriteTolerant('Newsletter_Campañas','PATCH',c.id,{'Estado':'Enviada','Enviados':ok,'Fecha envío':c.fields['Fecha envío']||new Date().toISOString().slice(0,10)});Object.assign(c.fields,{'Estado':'Enviada','Enviados':ok});}catch(_){}
+  try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Estado':'Enviada','Enviados':ok,'Fecha envío':c.fields['Fecha envío']||new Date().toISOString().slice(0,10)});Object.assign(c.fields,{'Estado':'Enviada','Enviados':ok});}catch(_){}
   toast(`✓ Enviado a ${ok}${fail?` · ${fail} con error`:''}`,fail?'info':'success');
   document.getElementById('nlDestModal').style.display='none';renderNlKpis();renderNlCampaigns();
 }
@@ -878,7 +996,7 @@ async function nlSetEstado(id,estado){
   try{
     const fields={'Estado':estado};
     if(estado==='Enviada'&&!c.fields['Fecha envío']) fields['Fecha envío']=new Date().toISOString().slice(0,10);
-    await airtableWriteTolerant('Newsletter_Campañas','PATCH',id,fields);
+    await _redesWrite('Newsletter_Campañas','PATCH',id,fields);
     Object.assign(c.fields,fields);
     toast('Estado: '+estado+' ✓','success'); renderNlKpis(); renderNlCampaigns();
   }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
@@ -900,7 +1018,7 @@ async function nlSchedule(id){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
   const day=await nlDatePicker(c.fields['Fecha envío']||null); if(!day) return;
   try{
-    await airtableWriteTolerant('Newsletter_Campañas','PATCH',id,{'Estado':'Programada','Fecha envío':day});
+    await _redesWrite('Newsletter_Campañas','PATCH',id,{'Estado':'Programada','Fecha envío':day});
     c.fields['Estado']='Programada'; c.fields['Fecha envío']=day;
     toast('Programada para el '+_nlFmtFecha(day)+' ✓','success'); renderNlKpis(); renderNlCampaigns();
   }catch(e){toast('No se pudo programar: '+e.message,'error');}
@@ -987,7 +1105,7 @@ async function nlEditSave(){
   fields['Cuerpo HTML']=_nlEmailHtml(fields).slice(0,99000);
   const btn=document.getElementById('nlEditSaveBtn'); if(btn) btn.disabled=true;
   try{
-    await airtableWriteTolerant('Newsletter_Campañas','PATCH',_nlEditId,fields);
+    await _redesWrite('Newsletter_Campañas','PATCH',_nlEditId,fields);
     Object.assign(c.fields,fields);
     document.getElementById('nlEditModal').style.display='none';
     toast('Cambios guardados ✓','success'); renderNlCampaigns();
@@ -1037,7 +1155,7 @@ async function nlLeadToTask(id){
       source:'newsletter',
       input:{source:'newsletter',email:f['Email']||'',campana:_nlCampName((f['Campaña']||[])[0])||'',estado:f['Estado']||'',rubro:f['Rubro']||''}
     });
-    try{ await airtableWriteTolerant('Newsletter_Envios','PATCH',id,{'Tarea creada':true}); e.fields['Tarea creada']=true; }catch(_){}
+    try{ await _redesWrite('Newsletter_Envios','PATCH',id,{'Tarea creada':true}); e.fields['Tarea creada']=true; }catch(_){}
     _nlHotTasked.add(id);
     toast('Tarea de seguimiento encolada ✓','success'); renderNlKpis(); renderNlLeads();
   }catch(err){toast('No se pudo crear la tarea: '+err.message,'error');}
@@ -1126,7 +1244,7 @@ async function nlSaveDraft(){
   if(_nlLastInput) fields['Notas']='Brief: '+_nlLastInput.slice(0,500);
   fields['Cuerpo HTML']=_nlEmailHtml(fields).slice(0,99000);
   try{
-    const rec=await airtableWriteTolerant('Newsletter_Campañas','POST',null,fields);
+    const rec=await _redesWrite('Newsletter_Campañas','POST',null,fields);
     if(rec&&rec.id){ state.nlCampaigns=state.nlCampaigns||[]; state.nlCampaigns.unshift(rec); } else { await nlLoad(); }
     toast('Borrador guardado ✓','success'); renderNlKpis(); renderNlCampaigns();
     document.getElementById('nlCampaignsList')?.scrollIntoView({behavior:'smooth',block:'center'});
@@ -1172,7 +1290,7 @@ async function redesAutoSchedule(){
   for(let i=0;i<drafts.length;i++){
     const p=drafts[i], red=p.fields['Red']||'Instagram', hr=REDES_BEST_HOUR[red]||18;
     const d=new Date(start); d.setDate(d.getDate()+1+i); d.setHours(hr,0,0,0);
-    try{ await airtableWriteTolerant('Social_Posts','PATCH',p.id,{'Estado':'Programado','Fecha programada':d.toISOString()}); p.fields['Estado']='Programado'; p.fields['Fecha programada']=d.toISOString(); ok++; }catch(e){}
+    try{ await _redesWrite('Social_Posts','PATCH',p.id,{'Estado':'Programado','Fecha programada':d.toISOString()}); p.fields['Estado']='Programado'; p.fields['Fecha programada']=d.toISOString(); ok++; }catch(e){}
   }
   if(ok){ toast(`Programados ${ok} borradores ✓`,'success'); renderRedesKpis(); redesApplyFilters(); }
   else toast('No se pudo programar','error');
@@ -1199,7 +1317,7 @@ async function redesSaveEdit(){
   const fields={'Red':g('redesEditRed'),'Estado':g('redesEditEstado'),'Objetivo':g('redesEditObjetivo'),'Copy':g('redesEditCopy').slice(0,9000),'Hashtags':g('redesEditHashtags').slice(0,1000),'Media URL':g('redesEditMedia'),'Link':g('redesEditLink')};
   const feRaw=g('redesEditFecha'); if(feRaw){const d=new Date(feRaw);if(!isNaN(d.getTime()))fields['Fecha programada']=d.toISOString();}
   try{
-    await airtableWriteTolerant('Social_Posts','PATCH',_redesEditId,fields);
+    await _redesWrite('Social_Posts','PATCH',_redesEditId,fields);
     Object.assign(p.fields,fields);
     toast('Publicación guardada ✓','success'); redesCloseEdit(); renderRedesKpis(); redesApplyFilters(); renderRedesRecycle();
   }catch(e){toast('No se pudo guardar: '+e.message,'error');}
@@ -1278,7 +1396,7 @@ async function redesRecycle(id){
     const base={'Red':f['Red']||'Instagram','Copy':(f['Copy']||'').slice(0,9000),'Hashtags':(f['Hashtags']||'').slice(0,1000),'Estado':'Borrador','Agente':'Reciclado','Objetivo':f['Objetivo']||'Captar leads'};
     if(f['Media URL']) base['Media URL']=f['Media URL'];
     if(f['Link']) base['Link']=f['Link'];
-    const rec=await airtableWriteTolerant('Social_Posts','POST',null,base);
+    const rec=await _redesWrite('Social_Posts','POST',null,base);
     if(rec&&rec.id){ state.socialPosts.unshift(rec); }
     toast('Copia creada como borrador ✓','success'); renderRedesKpis(); redesApplyFilters();
     document.getElementById('redesPostsList')?.scrollIntoView({behavior:'smooth',block:'center'});
