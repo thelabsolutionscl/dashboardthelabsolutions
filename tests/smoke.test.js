@@ -120,7 +120,7 @@ const ok = msg => console.log('  ✓ ' + msg);
     'ofToggleSceneTheme', 'ofToggleDensity', 'ofExport', 'ofUpdateDockBadge', '_ofApplyPrefs',
     'agentIdentity', 'ofToggleMore', 'ofAgentDetailByLabel', 'ofFeedMore', '_ofChatMsg', '_ofTvTour',
     'ofFeedView', '_ofOpenRun', '_ofHeatmap', '_ofStateShapeStyle', '_ofTickTvClock', 'ofFilamentClick', '_ofDayInsight', '_ofStreakRecord', '_ofTickBoard',
-    'ofKpiClick', '_ofScrollToEl', '_ofTickTeamLast', 'ofDigest', '_ofDigestFallback', '_ofRenderHealth', 'ofHealthClick', 'ofWakeAgent', 'ofFeedSearch', 'ofFeedCopy',
+    'ofKpiClick', '_ofScrollToEl', '_ofTickTeamLast', 'ofDigest', '_ofDigestFallback', '_ofRenderHealth', 'ofHealthClick', 'ofWakeAgent', 'ofFeedSearch', 'ofFeedCopy', '_ofHasData',
   ];
   const probs = [];
   CRITICAL.forEach(n => {

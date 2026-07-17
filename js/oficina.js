@@ -212,7 +212,7 @@ function ofFilamentClick(){
   if(now-_ofFilamentT<4000 && _ofCanTab('inventario')){ _ofFilamentT=0; switchTab('inventario'); return; }
   _ofFilamentT=now;
   const inv=_ofInv||[];
-  if(!inv.length){ try{toast('🧵 Sin datos de inventario'+(getToken()?'':' — configura Airtable para ver el stock real'),'info');}catch(e){} return; }
+  if(!inv.length){ try{toast('🧵 Sin datos de inventario'+(_ofHasData()?'':' — configura Airtable para ver el stock real'),'info');}catch(e){} return; }
   const low=inv.filter(i=>i.sev>=2);
   const parts=(low.length?low:inv).slice(0,4).map(i=>i.mat+': '+(i.sev===3?'SIN STOCK':i.stock+(i.unidad?' '+i.unidad:'')+(i.sev===2?' (bajo)':'')));
   const rest=inv.length>4?' · +'+(inv.length-4)+' más':'';
@@ -632,7 +632,7 @@ async function _renderOficina(){
   // 1) Ejecuciones: historial local + Airtable (con caché corta de 25s)
   let runs=[];
   try{AGENT_LOG._load();runs=(AGENT_LOG._runs||[]).map(r=>({agent:r.agent,input:r.input,output:r.output,time:r.time}));}catch(e){}
-  if(getToken()){
+  if(_ofHasData()){
     if(_ofRunsCache.data && Date.now()-_ofRunsCache.t<_OF_CACHE_MS){
       runs=[...runs,..._ofRunsCache.data];
     }else{
@@ -654,14 +654,14 @@ async function _renderOficina(){
 
   // 2) Cola pendiente (con caché corta para no refetch en cada render/cambio de vista)
   let queueLen=_agentQueue.length;
-  if(getToken()&&!queueLen){
+  if(_ofHasData()&&!queueLen){
     if(_ofQueueCache.len!=null && Date.now()-_ofQueueCache.t<_OF_CACHE_MS){ queueLen=_ofQueueCache.len; }
     else { try{const q=await airtableFetch(AGENT_QUEUE_TABLE,200);queueLen=(q.records||[]).length;_ofQueueCache={t:Date.now(),len:queueLen};}catch(e){_ofErr=true;if(_ofQueueCache.len!=null)queueLen=_ofQueueCache.len;} }
   }
 
   // 3) Telemetría de automatizaciones (tabla Automations) — con caché corta
   const autoState={};
-  if(getToken()){
+  if(_ofHasData()){
     if(_ofAutoCache.data && Date.now()-_ofAutoCache.t<_OF_CACHE_MS){ Object.assign(autoState,_ofAutoCache.data); }
     else {
       try{ const a=await airtableFetch('Automations',50); const fresh={}; (a.records||[]).forEach(r=>{const k=(r.fields['ID']||r.fields['Nombre']||'').toString().toLowerCase();if(k)fresh[k]=r.fields;}); Object.assign(autoState,fresh); _ofAutoCache={t:Date.now(),data:fresh}; }
@@ -728,7 +728,7 @@ async function _renderOficina(){
 
   // ── Impresoras 3D (tabla Maquinas) — con caché corta ──
   let printersRaw=[];
-  if(getToken()){
+  if(_ofHasData()){
     if(_ofMaqCache.data && Date.now()-_ofMaqCache.t<_OF_CACHE_MS){ printersRaw=_ofMaqCache.data; }
     else { try{ const mq=await airtableFetch('Maquinas',200); printersRaw=(mq.records||[]).map(r=>({id:r.fields.id||r.id,nombre:r.fields.nombre||'',num:r.fields.num||0,numG:r.fields.numG||r.fields.num||0,modelo:r.fields.modelo||'',color:r.fields.color||'#3aa0ff',estado:r.fields.estado||'disponible'})); _ofMaqCache={t:Date.now(),data:printersRaw}; }
       catch(e){ _ofErr=true; if(_ofMaqCache.data)printersRaw=_ofMaqCache.data; else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS))printersRaw=MAQUINAS; } }
@@ -739,7 +739,7 @@ async function _renderOficina(){
   {
     const _mapInv=recs=>(recs||[]).map(r=>{ const f=r.fields||{}; const stock=+f['Stock actual']||0, ro=+f['Punto de reorden']||0;
       return {mat:String(f['Material']||'—'), stock, unidad:String(f['Unidad']||''), sev:stock<=0?3:((ro>0&&stock<=ro)?2:0)}; }).sort((a,b)=>b.sev-a.sev);
-    if(getToken()){
+    if(_ofHasData()){
       if(_ofInvCache.data && Date.now()-_ofInvCache.t<_OF_CACHE_MS){ _ofInv=_ofInvCache.data; }
       else { try{ const iv=await airtableFetch('Inventario',200); _ofInv=_mapInv(iv.records); _ofInvCache={t:Date.now(),data:_ofInv}; }
         catch(e){ if(_ofInvCache.data)_ofInv=_ofInvCache.data; } }   // el estante es decorativo: un fallo aquí no marca _ofErr
@@ -800,10 +800,10 @@ async function _renderOficina(){
     } else insEl.style.display='none';
   }
 
-  // Aviso de estado de datos: sin token la oficina se ve "muerta" sin explicación (B-U12)
+  // Aviso de estado de datos: sin acceso (ni token ni proxy) la oficina se ve "muerta" sin explicación (B-U12)
   const errEl=document.getElementById('oficinaErr');
   if(errEl){
-    if(!getToken()){ errEl.textContent='🔌 Sin conexión a Airtable configurada — la oficina muestra solo datos locales. Configura el token para ver la actividad real del equipo.'; errEl.style.display=''; }
+    if(!_ofHasData()){ errEl.textContent='🔌 Sin conexión a Airtable configurada — la oficina muestra solo datos locales. Configura el token (o el proxy) para ver la actividad real del equipo.'; errEl.style.display=''; }
     else if(_ofErr){ errEl.textContent='⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.'; errEl.style.display=''; }
     else errEl.style.display='none';
   }
@@ -875,6 +875,10 @@ function _ofCanTab(tab){
   try{ const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null; if(!u) return true;
     return (RBAC.tabs[u.role]||RBAC.tabs.demo||[]).includes(tab); }catch(e){ return true; }
 }
+// ¿Hay CÓMO leer Airtable? — token local O proxy (Worker). Usa el mismo criterio que
+// el resto de la app (hasAirtableAccess); antes la Oficina sólo miraba getToken(), así
+// que en modo proxy se quedaba "ciega" (todo en reposo) aunque el resto sí cargaba datos.
+function _ofHasData(){ try{ return (typeof hasAirtableAccess==='function')?hasAirtableAccess():!!getToken(); }catch(e){ return !!getToken(); } }
 // ── Alertas accionables: automatizaciones con falla/atraso + agentes/impresoras en error (idea 6) ──
 function _ofRenderAlerts(ia,auto,printers){
   const host=document.getElementById('oficinaAlerts'); if(!host) return;
@@ -913,10 +917,10 @@ function _ofRenderAlerts(ia,auto,printers){
 function _ofRenderHealth(items){
   const el=document.getElementById('ofHealth'); if(!el) return;
   const err=items.filter(i=>i.t==='error').length, warn=items.filter(i=>i.t==='warn').length;
-  const noToken=(typeof getToken==='function')&&!getToken();
+  const noConn=!_ofHasData();
   let cls,txt,title;
   if(err){ cls='bad'; txt='🔴 '+err+' incidencia'+(err>1?'s':''); title='Ver las alertas de la oficina'; }
-  else if(noToken){ cls='warn'; txt='🔌 Sin conexión'; title='La oficina muestra sólo datos locales — configura el token de Airtable'; }
+  else if(noConn){ cls='warn'; txt='🔌 Sin conexión'; title='La oficina muestra sólo datos locales — configura el token de Airtable (o el proxy)'; }
   else if(warn){ cls='warn'; txt='🟠 '+warn+' aviso'+(warn>1?'s':''); title='Ver las alertas de la oficina'; }
   else if(_ofErr){ cls='warn'; txt='⚠ Datos en caché'; title='Sin conexión con Airtable — mostrando los últimos datos conocidos'; }
   else { cls='ok'; txt='🟢 Todo en orden'; title='Sin incidencias ni avisos'; }
