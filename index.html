@@ -1545,6 +1545,19 @@
 .of-feed-chip.active{background:var(--cc,var(--accent));border-color:transparent;color:#0b0c0f;}
 .of-feed-chip.active::before{background:#0b0c0f;opacity:.5;}
 .of-feed-chip.active b{opacity:.85;}
+/* Franja de insight del día (bajo los KPIs) */
+#tab-oficina .of-insight{background:linear-gradient(160deg,var(--surface2),var(--surface));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:11px;padding:9px 14px;margin:-8px 0 16px;font-size:12px;color:var(--text2);line-height:1.5;}
+#tab-oficina .of-insight b{color:var(--text);}
+/* Tendencia del KPI (▲/▼ vs semana pasada) */
+.of-kpi-trend{font-size:9.5px;font-weight:800;margin-left:4px;letter-spacing:.3px;}
+/* Hitos del equipo (tarjeta de analítica) */
+.of-hitos{display:flex;gap:18px;flex-wrap:wrap;padding:8px 2px 4px;}
+.of-hitos>div{display:flex;flex-direction:column;gap:2px;min-width:86px;}
+.of-hito-v{font-family:'Bebas Neue',sans-serif;font-size:30px;line-height:1;color:var(--accent);}
+.of-hito-l{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);}
+/* Línea extra del detalle (promedio / mejor día) */
+.ofd-extra{font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:7px 11px;margin-bottom:14px;}
+.ofd-extra b{color:var(--text);}
 /* Reloj digital del modo TV (sólo en pantalla completa) */
 .of-tv-clock{display:none;font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--accent);margin-left:16px;letter-spacing:2px;vertical-align:middle;text-shadow:0 0 18px rgba(0,212,204,0.4);}
 #tab-oficina.of-fs .of-tv-clock,#tab-oficina:fullscreen .of-tv-clock{display:inline-block;}
@@ -1849,6 +1862,7 @@
     <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">🔄 Ejecuciones hoy</div></div>
     <div class="of-kpi"><div class="of-kpi-val" style="opacity:.25">—</div><div class="of-kpi-lbl">📥 En cola</div></div>
   </div>
+  <div id="oficinaInsight" class="of-insight" style="display:none"></div>
   <div id="oficinaErr" class="of-errchip" style="display:none">⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.</div>
 
   <div id="oficinaCards">

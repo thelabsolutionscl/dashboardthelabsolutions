@@ -20,6 +20,8 @@ let _ofRunsCache={t:0,data:null};          // caché corta del Agent_Log remoto
 let _ofQueueCache={t:0,len:null};          // caché corta de la longitud de Agent_Queue
 let _ofAutoCache={t:0,data:null};          // caché corta de la telemetría de Automations
 let _ofMaqCache={t:0,data:null};           // caché corta de las impresoras 3D (tabla Maquinas)
+let _ofInvCache={t:0,data:null};           // caché corta del Inventario (estante de filamentos del taller)
+let _ofInv=[];                             // materiales {mat,stock,unidad,sev} para las bobinas dinámicas
 let _ofTileW=0,_ofTileH=0;                  // tamaño de baldosa actual (para dibujar el mesón de las impresoras)
 let _ofComms=[];                            // comunicaciones recientes entre agentes (mueven al agente entre departamentos)
 let _ofLastExec=null;                        // última ejecución registrada (para detectar handoffs/comunicación)
@@ -140,6 +142,34 @@ function _ofSpark(list){
   return `<svg class="of-spark" width="62" height="20" viewBox="0 0 62 20" aria-hidden="true">${bars}</svg>`;
 }
 function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); const t=e.currentTarget; if(!t)return; if(typeof t.click==='function') t.click(); else if(typeof t.onclick==='function') t.onclick(e); else t.dispatchEvent(new MouseEvent('click',{bubbles:true})); } }   // a11y teclado (incluye nodos SVG sin .click() en algunos navegadores)
+// ── Insights del día (reglas simples, sin ML): hoy vs el MISMO día de la semana pasada,
+// hora pico y agente líder de hoy. Alimenta la franja bajo los KPIs y la tendencia del KPI.
+function _ofDayInsight(runs){
+  const now=new Date(), day0=new Date(now); day0.setHours(0,0,0,0);
+  const today=(runs||[]).filter(r=>_ofSameDay(r.t)).length;
+  const lw0=day0.getTime()-7*864e5, lw1=lw0+864e5;
+  const lastWeek=(runs||[]).filter(r=>r.t>=lw0&&r.t<lw1).length;
+  const hours=new Array(24).fill(0);
+  (runs||[]).forEach(r=>{ if(r.t>=day0.getTime()) hours[new Date(r.t).getHours()]++; });
+  const mx=Math.max(...hours), peak=(today&&mx>0)?hours.indexOf(mx):null;
+  const cnt={}; (runs||[]).forEach(r=>{ if(_ofSameDay(r.t)&&r.agent) cnt[r.agent]=(cnt[r.agent]||0)+1; });
+  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]||null;
+  const delta=lastWeek>0?Math.round((today-lastWeek)/lastWeek*100):null;
+  return {today,lastWeek,delta,peak,leader:top?top[0]:null,leaderN:top?top[1]:0};
+}
+// ── Hitos del equipo: racha de días consecutivos con actividad y récord de ejecuciones en un día ──
+function _ofStreakRecord(runs){
+  const days=new Set(), byDay={};
+  (runs||[]).forEach(r=>{ if(!r.t)return; const d=new Date(r.t); d.setHours(0,0,0,0); const k=d.getTime(); days.add(k); byDay[k]=(byDay[k]||0)+1; });
+  const t0=new Date(); t0.setHours(0,0,0,0);
+  let streak=0;
+  for(let i=0;i<3650;i++){ const k=t0.getTime()-i*864e5;
+    if(days.has(k)) streak++;
+    else { if(i===0) continue; break; } }   // hoy sin actividad no corta la racha de ayer
+  let recordN=0, recordK=0;
+  Object.keys(byDay).forEach(k=>{ if(byDay[k]>recordN){recordN=byDay[k];recordK=+k;} });
+  return {streak, recordN, recordDate:recordN?new Date(recordK):null};
+}
 function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_CFG.find(x=>x.id===id); if(a){toast(a.label+' — '+a.tipo,'info');return;}
   const pm=(_ofModel&&_ofModel.printerModel)||[]; const p=pm.find(x=>x.id===id);
   if(p){
@@ -149,7 +179,7 @@ function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_C
   }
   toast(id||'Elemento','info'); }
 // Refresca la Oficina forzando datos frescos (el polling usa caché corta; el botón manual la invalida)
-function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; _ofMaqCache={t:0,data:null};
+function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; _ofMaqCache={t:0,data:null}; _ofInvCache={t:0,data:null};
   const _iso=document.getElementById('oficinaIso'); if(_iso) _iso.dataset.sig='';   // fuerza reconstruir la escena 3D aunque los datos coincidan
   renderOficina(); try{toast('Oficina actualizada','success');}catch(e){}
 }
@@ -174,6 +204,20 @@ function ofUpdateDockBadge(n){
   const badge=document.getElementById('badge-oficina'); if(!badge) return;
   const v=(typeof n==='number')?n:((typeof _ofActive!=='undefined'&&_ofActive.size)||0);
   if(v>0){ badge.textContent=v; badge.style.display='flex'; } else badge.style.display='none';
+}
+// ── Estante de FILAMENTOS (clic): resumen de stock del Inventario; clic de nuevo → pestaña Inventario ──
+let _ofFilamentT=0;
+function ofFilamentClick(){
+  const now=Date.now();
+  if(now-_ofFilamentT<4000 && _ofCanTab('inventario')){ _ofFilamentT=0; switchTab('inventario'); return; }
+  _ofFilamentT=now;
+  const inv=_ofInv||[];
+  if(!inv.length){ try{toast('🧵 Sin datos de inventario'+(getToken()?'':' — configura Airtable para ver el stock real'),'info');}catch(e){} return; }
+  const low=inv.filter(i=>i.sev>=2);
+  const parts=(low.length?low:inv).slice(0,4).map(i=>i.mat+': '+(i.sev===3?'SIN STOCK':i.stock+(i.unidad?' '+i.unidad:'')+(i.sev===2?' (bajo)':'')));
+  const rest=inv.length>4?' · +'+(inv.length-4)+' más':'';
+  const cta=_ofCanTab('inventario')?' — clic de nuevo para abrir Inventario':'';
+  try{toast('🧵 '+parts.join(' · ')+rest+cta, low.length?'error':'info');}catch(e){}
 }
 // ── Menú "⋯ Más" del toolbar (idea 4): agrupa Densidad/Escena/Exportar/Actualizar ──
 function ofToggleMore(e){
@@ -258,6 +302,10 @@ function ofAgentDetail(id){
       <div class="ofd-stat"><div class="ofd-stat-v">${total}</div><div class="ofd-stat-l">Registradas</div></div>
       <div class="ofd-stat"><div class="ofd-stat-v mono">${last?escapeHtml(_ofAgo(last.t)):'—'}</div><div class="ofd-stat-l">Última</div></div>
     </div>
+    ${(()=>{ if(!runs.length) return '';
+      const byD={}; runs.forEach(r=>{ if(!r.t)return; const d=new Date(r.t); d.setHours(0,0,0,0); byD[d.getTime()]=(byD[d.getTime()]||0)+1; });
+      const nD=Object.keys(byD).length, best=Math.max(0,...Object.values(byD));
+      return nD?`<div class="ofd-extra">📊 Promedio <b>${(total/nD).toFixed(1)}</b> por día activo (${nD} días) · mejor día: <b>${best}</b></div>`:''; })()}
     ${_ofDetailHours(runs)}
     ${cfg?`<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:8px" data-id="${escapeHtml(id)}" onclick="ofAgentRun(this.dataset.id)">▶ Ejecutar este agente</button>`:''}
     <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:16px" data-id="${escapeHtml(id)}" onclick="closeOfAgent();ofFocusAgent(this.dataset.id)">📍 Ver en la oficina 3D</button>
@@ -312,7 +360,7 @@ function ofSetView(v,persist){
   renderOficina();
 }
 function startOficinaPolling(){ clearInterval(_oficinaInterval); _oficinaInterval=setInterval(()=>{ if(!document.hidden) renderOficina(); },45000);
-  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(document.hidden) return; _ofTickUpdated(); _ofTickTvClock(); if(_ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTvTour(); } },20000);   // frescura + reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
+  clearInterval(_ofClockTimer); _ofClockTimer=setInterval(()=>{ if(document.hidden) return; _ofTickUpdated(); _ofTickTvClock(); if(_ofView==='iso'){ _ofTickClock(); _ofTickLive(); _ofTickBoard(); _ofTvTour(); } },20000);   // frescura + reloj + progreso + auto-tour TV: tics por mutación, sin reconstruir la escena
 }
 // ── Auto-tour del modo TV (idea 3): en pantalla completa la cámara recorre los departamentos
 // cada 20s (una parada por depto + una vista general). Cualquier interacción manual con la
@@ -400,7 +448,10 @@ function _ofFsReparent(on){
       _ofFsMoved.push({n,parent:n.parentNode,next:n.nextSibling}); el.appendChild(n);
     });
   } else {
-    while(_ofFsMoved.length){ const m=_ofFsMoved.pop(); try{ m.parent.insertBefore(m.n,m.next); }catch(e){} }
+    while(_ofFsMoved.length){ const m=_ofFsMoved.pop();
+      try{ m.parent.insertBefore(m.n,m.next); }
+      catch(e){ try{ m.parent.appendChild(m.n); }catch(x){} }   // el hermano original ya no existe → al final del parent (nunca queda atrapado en el tab)
+    }
   }
 }
 function _ofToggleFsCss(el){
@@ -571,8 +622,12 @@ async function _renderOficina(){
     if(cls==='of-work') working++;
     const today=list.filter(r=>_ofSameDay(r.t)).length;
     const count30=list.filter(r=>r.t && Date.now()-r.t<2592e6).length;   // ejecuciones últimos 30 días
+    // 😴 Agente "dormido": era regular (≥3 ejecuciones entre hace 21 y 7 días) pero lleva >7 días
+    // sin actividad — anomalía simple por reglas, alimenta las alertas.
+    const prev14=list.filter(r=>r.t && r.t<Date.now()-7*864e5 && r.t>Date.now()-21*864e5).length;
+    const sleepy=!!(lastT && Date.now()-lastT>7*864e5 && prev14>=3 && cls!=='of-work');
     return {clickIA:true, id:a.id, label:a.label, icon:a.icon||'🤖', role:'Agente IA · '+_ofCat(a).name,
-      cls, lbl, task:last?(last.input||last.output||''):'Sin tareas recientes',
+      cls, lbl, sleepy, task:last?(last.input||last.output||''):'Sin tareas recientes',
       count30, stats:today+' hoy · '+_ofAgo(lastT), spark:_ofSpark(list)};
   });
   // 👑 Empleado del mes: el agente con MÁS ejecuciones en los últimos 30 días (si hay actividad)
@@ -615,6 +670,19 @@ async function _renderOficina(){
     else { try{ const mq=await airtableFetch('Maquinas',200); printersRaw=(mq.records||[]).map(r=>({id:r.fields.id||r.id,nombre:r.fields.nombre||'',num:r.fields.num||0,numG:r.fields.numG||r.fields.num||0,modelo:r.fields.modelo||'',color:r.fields.color||'#3aa0ff',estado:r.fields.estado||'disponible'})); _ofMaqCache={t:Date.now(),data:printersRaw}; }
       catch(e){ _ofErr=true; if(_ofMaqCache.data)printersRaw=_ofMaqCache.data; else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS))printersRaw=MAQUINAS; } }
   } else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)){ printersRaw=MAQUINAS; }
+
+  // ── Inventario (bobinas dinámicas del estante FILAMENTOS) — con caché corta ──
+  // sev: 3 = sin stock · 2 = bajo el punto de reorden · 0 = ok (misma regla que la pestaña Inventario)
+  {
+    const _mapInv=recs=>(recs||[]).map(r=>{ const f=r.fields||{}; const stock=+f['Stock actual']||0, ro=+f['Punto de reorden']||0;
+      return {mat:String(f['Material']||'—'), stock, unidad:String(f['Unidad']||''), sev:stock<=0?3:((ro>0&&stock<=ro)?2:0)}; }).sort((a,b)=>b.sev-a.sev);
+    if(getToken()){
+      if(_ofInvCache.data && Date.now()-_ofInvCache.t<_OF_CACHE_MS){ _ofInv=_ofInvCache.data; }
+      else { try{ const iv=await airtableFetch('Inventario',200); _ofInv=_mapInv(iv.records); _ofInvCache={t:Date.now(),data:_ofInv}; }
+        catch(e){ if(_ofInvCache.data)_ofInv=_ofInvCache.data; } }   // el estante es decorativo: un fallo aquí no marca _ofErr
+    } else if(typeof state!=='undefined'&&state.inventario&&state.inventario.length){ _ofInv=_mapInv(state.inventario); }
+    else _ofInv=[];
+  }
   const _liveP=(typeof _printerStatus!=='undefined')?_printerStatus:{};
   const printerModel=printersRaw.map(p=>{
     // Telemetría EN VIVO del bridge (si la pestaña Impresoras la ha poblado): manda sobre el estado de Airtable
@@ -640,12 +708,29 @@ async function _renderOficina(){
   const runsToday=runs.filter(r=>_ofSameDay(r.t)).length + autoToday;
   const totalWorkers=iaModel.length+autoModel.length+printerModel.length;
   const kpis=document.getElementById('oficinaKpis');
+  // Insight del día: hoy vs el mismo día de la semana pasada + hora pico + líder
+  const _ins=_ofDayInsight(runs);
+  const _trend=(_ins.delta!=null)?`<span class="of-kpi-trend" style="color:${_ins.delta>=0?'var(--success)':'var(--warn)'}">${_ins.delta>=0?'▲':'▼'}${Math.abs(_ins.delta)}%</span>`:'';
   if(kpis) kpis.innerHTML=`
     <div class="of-kpi"><div class="of-kpi-val" data-k="workers">${totalWorkers}</div><div class="of-kpi-lbl">👥 Trabajadores</div></div>
     <div class="of-kpi ${working?'live':''}"><div class="of-kpi-val" data-k="working">${working}</div><div class="of-kpi-lbl">⚡ Trabajando ahora</div></div>
-    <div class="of-kpi ${runsToday?'live':''}"><div class="of-kpi-val" data-k="runsToday">${runsToday}</div><div class="of-kpi-lbl">🔄 Ejecuciones hoy</div></div>
+    <div class="of-kpi ${runsToday?'live':''}"><div class="of-kpi-val" data-k="runsToday">${runsToday}</div><div class="of-kpi-lbl">🔄 Ejecuciones hoy ${_trend}</div></div>
     <div class="of-kpi ${queueLen?'live':''}"><div class="of-kpi-val" data-k="queue">${queueLen}</div><div class="of-kpi-lbl">📥 En cola</div></div>`;
   _ofAnimateKpis({workers:totalWorkers,working,runsToday,queue:queueLen});   // count-up al cambiar (idea 4)
+  _ofKpiSnap={working,runsToday,queue:queueLen};                              // snapshot para la pantalla de pared del 3D
+  _ofTickBoard();
+  // Franja de insight bajo los KPIs (comparación vs semana pasada, pico y líder del día)
+  const insEl=document.getElementById('oficinaInsight');
+  if(insEl){
+    if(_ins.today||_ins.lastWeek){
+      const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+      const parts=[`Hoy: <b>${_ins.today}</b> ejecuciones`];
+      if(_ins.delta!=null) parts.push(`<b style="color:${_ins.delta>=0?'var(--success)':'var(--warn)'}">${_ins.delta>=0?'▲':'▼'} ${Math.abs(_ins.delta)}%</b> vs el ${DIAS[new Date().getDay()]} pasado (${_ins.lastWeek})`);
+      if(_ins.peak!=null) parts.push(`pico a las ${_ins.peak}h`);
+      if(_ins.leader){ const idn=agentIdentity(_ins.leader); parts.push(`líder: <b>${escapeHtml(idn.persona||idn.rol)}</b> (${_ins.leaderN})`); }
+      insEl.innerHTML='💡 '+parts.join(' · '); insEl.style.display='';
+    } else insEl.style.display='none';
+  }
 
   // Aviso de estado de datos: sin token la oficina se ve "muerta" sin explicación (B-U12)
   const errEl=document.getElementById('oficinaErr');
@@ -666,9 +751,16 @@ async function _renderOficina(){
   _ofLastRenderT=Date.now(); _ofTickUpdated();   // marca de frescura "actualizado hace Xs" (idea U-8)
 }
 let _ofLastRenderT=0;
+let _ofKpiSnap=null;   // {working,runsToday,queue} — para la pantalla de pared del 3D (se muta sin rebuild)
 function _ofTickUpdated(){ const el=document.getElementById('ofUpdatedAt'); if(!el) return; el.textContent=_ofLastRenderT?('actualizado '+_ofAgo(_ofLastRenderT)):''; }
 // Reloj digital del modo TV (V8): sólo visible en pantalla completa, tictaquea con el tick de 20s
 function _ofTickTvClock(){ const el=document.getElementById('ofTvClock'); if(!el) return; const d=new Date(); el.textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+// Pantalla de pared del 3D: refresca los números desde el snapshot sin reconstruir la escena
+function _ofTickBoard(){ const k=_ofKpiSnap; if(!k) return;
+  const w=document.getElementById('ofBoardWork'), r=document.getElementById('ofBoardRuns');
+  if(w) w.textContent='⚡ '+(k.working||0);
+  if(r) r.textContent='HOY '+(k.runsToday||0);
+}
 // Count-up de KPIs (sólo anima cuando el valor cambia; respeta reduce-motion)
 function _ofAnimateKpis(vals){
   const host=document.getElementById('oficinaKpis'); if(!host) return;
@@ -700,7 +792,8 @@ function _ofRenderAlerts(ia,auto,printers){
   const items=[];
   (auto||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Automatización <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:_ofAutoTab(m.id)});
     else if(/atras/i.test(m.lbl||'')) items.push({t:'warn',id:m.id,msg:`<b>${escapeHtml(_ofPretty(m.label))}</b> está atrasada`,tab:_ofAutoTab(m.id)}); });
-  (ia||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Agente <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'agentes'}); });
+  (ia||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Agente <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'agentes'});
+    else if(m.sleepy) items.push({t:'warn',id:m.id,msg:`😴 <b>${escapeHtml(_ofPretty(m.label))}</b> era regular y lleva más de 7 días sin actividad`,tab:'agentes'}); });
   (printers||[]).forEach(m=>{ if(m.cls==='of-error') items.push({t:'error',id:m.id,msg:`Impresora <b>${escapeHtml(_ofPretty(m.label))}</b> con falla`,tab:'maquinas'}); });
   if(!items.length){ host.style.display='none'; host.innerHTML=''; _ofPrevAlerts=''; return; }
   host.style.display='';
@@ -765,7 +858,10 @@ function _ofRenderCards(ia,auto,extras){
   const q=_ofSearch;
   const match=m=>!q||((_ofPretty(m.label)+' '+(m.role||'')+' '+_ofAreaName(m)).toLowerCase().includes(q));
   const keep=m=>(flt==='all'||m.cls===flt)&&match(m);
-  const fIA=ia.filter(keep), fAuto=auto.filter(keep), fPr=printers.filter(keep);
+  // Orden por estado: lo que TRABAJA o FALLA primero (lo accionable arriba); sort estable conserva el orden original dentro de cada grupo
+  const _rk={'of-work':0,'of-error':1,'of-active':2,'of-off':3};
+  const bySt=(a,b)=>(_rk[a.cls]??9)-(_rk[b.cls]??9);
+  const fIA=ia.filter(keep).sort(bySt), fAuto=auto.filter(keep).sort(bySt), fPr=printers.filter(keep).sort(bySt);
   const g1=document.getElementById('oficinaGridIA'), g2=document.getElementById('oficinaGridAuto');
   const z1=document.getElementById('oficinaZoneIA'), z2=document.getElementById('oficinaZoneAuto');
   if(g1) g1.innerHTML=fIA.map(_ofWorkerCard).join('');
@@ -773,7 +869,14 @@ function _ofRenderCards(ia,auto,extras){
   // Títulos de zona con conteo en vivo (V6)
   if(z1) z1.textContent=`🤖 Agentes IA · ${fIA.length}`;
   if(z2) z2.textContent=`⚙️ Automatizaciones · ${fAuto.length}`;
-  const z3t=document.getElementById('oficinaZonePrinters'); if(z3t&&fPr.length) z3t.textContent=`🖨️ Impresoras 3D · ${fPr.length}`;
+  // Título de impresoras con cuántas imprimen y las horas restantes totales (suma de ETAs del bridge)
+  const z3t=document.getElementById('oficinaZonePrinters');
+  if(z3t&&fPr.length){
+    const pr=fPr.filter(m=>m.cls==='of-work');
+    const etaS=pr.reduce((s,m)=>s+((m.eta>0&&m.progress>=0&&m.progress<100)?m.eta:0),0);
+    const fEta=s=>{const h=Math.floor(s/3600),mi=Math.round(s%3600/60);return h?h+'h'+(mi<10?'0':'')+mi:mi+'m';};
+    z3t.textContent=`🖨️ Impresoras 3D · ${fPr.length}`+(pr.length?` · ${pr.length} imprimiendo`+(etaS?` · ~${fEta(etaS)} restantes`:''):'');
+  }
   if(z1) z1.style.display=fIA.length?'':'none';
   if(g1) g1.style.display=fIA.length?'':'none';
   if(z2) z2.style.display=fAuto.length?'':'none';
@@ -1266,7 +1369,7 @@ function _ofRenderIso(ia,auto,extras){
   // Firma SÓLO estructural (id+estado+empleado-del-mes) + transitorios + hora. El texto de
   // tarea y el progreso/eta de impresora se ACTUALIZAN POR MUTACIÓN (_ofTickLive) sin reconstruir
   // la escena → evita reiniciar todas las animaciones en cada poll / actualización de telemetría.
-  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.top?'*':'')).join(';')+'|c:'+_comms.map(c=>c.from+'>'+c.to).join(',')+'|z:'+_cz+'|h:'+new Date().getHours();
+  const sig=_ofView+'|'+[...ia,...auto,...extraMembers].map(m=>m.id+m.cls+(m.top?'*':'')).join(';')+'|c:'+_comms.map(c=>c.from+'>'+c.to).join(',')+'|z:'+_cz+'|h:'+new Date().getHours()+'|i:'+(_ofInv||[]).slice(0,6).map(x=>x.sev).join('');
   if(host.dataset.sig===sig && host.querySelector('svg')){
     // misma escena: solo aplica un enfoque pendiente (sin reconstruir → preserva las animaciones)
     if(_ofFollowId && _ofPos[_ofFollowId]){ const _p=_ofPos[_ofFollowId]; _ofCam={cx:_p[0],cy:_p[1]-30,scale:2.4}; _ofFollowId=null; _ofApplyCam(host.querySelector('svg.of-iso-svg')); }
@@ -1408,17 +1511,29 @@ function _ofRenderIso(ia,auto,extras){
       +`<polygon points="${U(k.T)} ${U(k.R)} ${U(k.F)} ${U(k.L)}" fill="${R.color}" opacity="0.14"/>`;
     if(R.r1>R.r0) counters+=slab(strip(R.c0,R.r0,R.c0,R.r1-1));                    // brazo corto: columna izquierda (fondo→frente-1)
     counters+=slab(strip(R.c0,R.r1,R.c1,R.r1));                                    // brazo LARGO: fila FRONTAL (lado opuesto al fondo)
-    // Estante de filamentos en el centro del taller (prop, a nivel de piso)
+    // Estante de FILAMENTOS en el centro del taller — conectado al Inventario real:
+    // cada bobina es un material (color fijo por posición): llena = stock OK, translúcida con
+    // anillo naranjo = BAJO el punto de reorden, vacía punteada = SIN STOCK. Con tooltip por
+    // bobina, ⚠ en el rótulo si algo anda bajo, y CLIC → resumen de stock / Inventario.
     if(R.dc>=4 && R.dr>=3){
       const fp=iso(R.c0+Math.floor(R.dc/2)+0.5, R.r0+Math.floor(R.dr/2)+0.5), f=n=>n.toFixed(1);
-      const spool=(dx,dy,c)=>`<circle cx="${f(fp[0]+dx)}" cy="${f(fp[1]+dy)}" r="4" fill="${c}" stroke="#0e1116" stroke-width="1"/>`;
-      counters+=`<g pointer-events="none"><ellipse cx="${f(fp[0])}" cy="${f(fp[1]+6)}" rx="20" ry="6" fill="url(#ofShadow)" opacity="0.5"/>`
-        +`<rect x="${f(fp[0]-18)}" y="${f(fp[1]-26)}" width="36" height="30" rx="3" fill="#8d99a6"/>`
-        +`<rect x="${f(fp[0]-15)}" y="${f(fp[1]-23)}" width="30" height="10" rx="2" fill="#6d7884"/>`
-        +`<rect x="${f(fp[0]-15)}" y="${f(fp[1]-10)}" width="30" height="10" rx="2" fill="#6d7884"/>`
-        +spool(-8,-18,'#ff6b35')+spool(0,-18,'#00d4cc')+spool(8,-18,'#ffd23f')
-        +spool(-8,-5,'#a78bfa')+spool(0,-5,'#00d4aa')+spool(8,-5,'#f6f6f6')
-        +`<g transform="translate(${f(fp[0])},${f(fp[1]-34)})"><rect x="-26" y="-8" width="52" height="13" rx="6.5" fill="#0e1116" opacity="0.9"/><text x="0" y="1.5" text-anchor="middle" font-size="7.5" fill="#fff" font-family="DM Sans" font-weight="700">FILAMENTOS</text></g></g>`;
+      const inv=(_ofInv||[]).slice(0,6), cols6=['#ff6b35','#00d4cc','#ffd23f','#a78bfa','#00d4aa','#f6f6f6'];
+      const spool=(i,dx,dy)=>{ const c=cols6[i%6], cx=f(fp[0]+dx), cy=f(fp[1]+dy), it=inv[i];
+        if(!it) return `<circle cx="${cx}" cy="${cy}" r="4" fill="${c}" stroke="#0e1116" stroke-width="1"/>`;   // sin datos: bobina decorativa
+        const tt=`<title>${escapeHtml(it.mat+': '+(it.sev===3?'SIN STOCK':it.stock+(it.unidad?' '+it.unidad:'')+(it.sev===2?' — BAJO':'')))}</title>`;
+        if(it.sev===3) return `<circle cx="${cx}" cy="${cy}" r="4" fill="none" stroke="${c}" stroke-width="1.4" stroke-dasharray="2.2 1.8" opacity="0.85">${tt}</circle>`;
+        if(it.sev===2) return `<circle cx="${cx}" cy="${cy}" r="4" fill="${c}" opacity="0.45" stroke="#ffaa00" stroke-width="1.5">${tt}</circle>`;
+        return `<circle cx="${cx}" cy="${cy}" r="4" fill="${c}" stroke="#0e1116" stroke-width="1">${tt}</circle>`; };
+      const warn=inv.some(it=>it.sev>=2), lbl='FILAMENTOS'+(warn?' ⚠':''), lw=warn?62:52;
+      counters+=`<g class="of-iso-char" role="button" tabindex="0" onkeydown="ofKey(event)" onclick="ofFilamentClick()" style="cursor:pointer">
+        <title>Stock de materiales — clic para el resumen</title>
+        <ellipse cx="${f(fp[0])}" cy="${f(fp[1]+6)}" rx="20" ry="6" fill="url(#ofShadow)" opacity="0.5"/>
+        <rect x="${f(fp[0]-18)}" y="${f(fp[1]-26)}" width="36" height="30" rx="3" fill="#8d99a6"/>
+        <rect x="${f(fp[0]-15)}" y="${f(fp[1]-23)}" width="30" height="10" rx="2" fill="#6d7884"/>
+        <rect x="${f(fp[0]-15)}" y="${f(fp[1]-10)}" width="30" height="10" rx="2" fill="#6d7884"/>
+        ${spool(0,-8,-18)+spool(1,0,-18)+spool(2,8,-18)+spool(3,-8,-5)+spool(4,0,-5)+spool(5,8,-5)}
+        <g transform="translate(${f(fp[0])},${f(fp[1]-34)})"><rect x="${-lw/2}" y="-8" width="${lw}" height="13" rx="6.5" fill="#0e1116" opacity="0.9"/><text x="0" y="1.5" text-anchor="middle" font-size="7.5" fill="${warn?'#ffaa00':'#fff'}" font-family="DM Sans" font-weight="700">${lbl}</text></g>
+      </g>`;
     }
   });
 
@@ -1531,7 +1646,8 @@ function _ofRenderIso(ia,auto,extras){
   let signs='';
   _rooms.forEach(R=>{
     const cx=iso(R.cc,R.r0)[0], cy=iso(R.cc,R.r0)[1]-th/2-dw-15;
-    const label=R.name.toUpperCase()+' · '+R.members.length;
+    const _pw=/impresora/i.test(R.name)?R.members.filter(m=>m.cls==='of-work').length:0;
+    const label=R.name.toUpperCase()+' · '+R.members.length+(_pw?' · ⚡'+_pw:'');
     const w=Math.max(72,label.length*6.1+24);
     signs+=`<g transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})"><rect x="${-w/2}" y="-11" width="${w}" height="21" rx="10.5" fill="#0e1116" opacity="0.92"/><circle cx="${(-w/2+13).toFixed(1)}" cy="0" r="4" fill="${R.color}"/><text x="7" y="3.5" text-anchor="middle" font-size="10" fill="#ffffff" font-family="DM Sans" font-weight="700" letter-spacing="0.3">${escapeHtml(label)}</text></g>`;
   });
@@ -1574,6 +1690,13 @@ function _ofRenderIso(ia,auto,extras){
     `<line class="of-clock-h" x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+6.5*Math.cos(ha)).toFixed(1)}" y2="${(clk[1]+6.5*Math.sin(ha)).toFixed(1)}" stroke="#dadada" stroke-width="2"/>`+
     `<line class="of-clock-m" x1="${clk[0].toFixed(1)}" y1="${clk[1].toFixed(1)}" x2="${(clk[0]+10*Math.cos(ma)).toFixed(1)}" y2="${(clk[1]+10*Math.sin(ma)).toFixed(1)}" stroke="#9a9a9a" stroke-width="1.4"/>`+
     `<circle cx="${clk[0].toFixed(1)}" cy="${clk[1].toFixed(1)}" r="1.6" fill="#dadada"/></g>`;
+  // Pantalla de pared con los KPIs EN VIVO (junto a la ventana): "⚡ trabajando · HOY ejecuciones".
+  // Los números se MUTAN desde _ofTickLive/_renderOficina (ids ofBoardWork/ofBoardRuns), sin rebuild.
+  const _bp=[wp(0.85,62),wp(0.98,62),wp(0.98,26),wp(0.85,26)], _bc=wp(0.915,44), _f1=n=>n.toFixed(1);
+  const _ks=_ofKpiSnap||{working:0,runsToday:0};
+  const board=`<g><polygon points="${_bp.map(p=>_f1(p[0])+','+_f1(p[1])).join(' ')}" fill="#0f1114" stroke="#2a2f36" stroke-width="2"/>
+    <text id="ofBoardWork" x="${_f1(_bc[0])}" y="${_f1(_bc[1]-4)}" text-anchor="middle" font-size="12" fill="#00d4aa" font-family="Bebas Neue" letter-spacing="1">⚡ ${_ks.working||0}</text>
+    <text id="ofBoardRuns" x="${_f1(_bc[0])}" y="${_f1(_bc[1]+9)}" text-anchor="middle" font-size="8.5" fill="#8fd8cf" font-family="DM Sans" font-weight="700">HOY ${_ks.runsToday||0}</text></g>`;
 
   // Límites del viewBox — ajuste ceñido al contenido (sin relleno artificial)
   const right=originX+(cols-1)*tw/2+tw/2, left=originX-(rows-1)*tw/2-tw/2;
@@ -1606,7 +1729,7 @@ function _ofRenderIso(ia,auto,extras){
       <filter id="ofHalo" x="-80%" y="-80%" width="260%" height="260%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="7"/></filter>
       <radialGradient id="ofVig" cx="50%" cy="42%" r="72%"><stop offset="58%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.42"/></radialGradient>
     </defs>
-    ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}
+    ${wallL}${wallR}${logo}${door}${trimL}${trimR}${frames}${win}${clock}${board}
     <g>${tiles}</g>
     ${rugs}
     ${sunPatch}
@@ -1825,5 +1948,12 @@ function _ofRenderCharts(runs,ia,auto){
     <div class="of-chart"><div class="of-chart-t">🟢 Estado del equipo · ahora</div>${_ofDonutStatus(ia,auto)}</div>
     <div class="of-chart"><div class="of-chart-t">🗂️ Ejecuciones por área · ${R} días</div>${_ofBarsArea(runs)}</div>
     <div class="of-chart"><div class="of-chart-t">🔥 Actividad semanal (día × hora) · ${R} días</div>${_ofHeatmap(runs)}</div>
+    <div class="of-chart"><div class="of-chart-t">🏅 Hitos del equipo</div>${(()=>{const h=_ofStreakRecord(runs);
+      const fD=d=>d?d.getDate()+'/'+(d.getMonth()+1):'';
+      return `<div class="of-hitos">
+        <div><span class="of-hito-v">${h.streak}</span><span class="of-hito-l">día${h.streak===1?'':'s'} de racha</span></div>
+        <div><span class="of-hito-v">${h.recordN}</span><span class="of-hito-l">récord en un día${h.recordDate?' · '+fD(h.recordDate):''}</span></div>
+        <div><span class="of-hito-v">${runs.length}</span><span class="of-hito-l">ejecuciones registradas</span></div>
+      </div>`;})()}</div>
   </div>`;
 }
