@@ -63,17 +63,21 @@ function redesDemoExit(){
 function redesDemoSeed(){
   _redesDemo=true; _redesLoaded=true;
   const now=Date.now(), DAY=86400000, iso=t=>new Date(t).toISOString();
-  const P=(id,red,estado,copy,hashtags,dOff,media,extra)=>({id:'demo_p'+id,createdTime:iso(now-Math.abs(dOff||0)*DAY),
-    fields:Object.assign({Red:red,Estado:estado,Copy:copy,Hashtags:hashtags,Objetivo:'Captar leads',Agente:'CAPTION_AGENT',
-      [dOff<0?'Fecha programada':'Fecha publicación']:iso(now+dOff*DAY)},media?{'Media URL':media}:{},extra||{})});
+  // whenOff = días respecto a hoy (negativo = pasado → publicado; positivo = futuro → programado)
+  const P=(id,red,estado,copy,hashtags,whenOff,media,extra)=>{
+    const fld=(estado==='Publicado')?'Fecha publicación':'Fecha programada';
+    const at=iso(now+(whenOff||0)*DAY);
+    return {id:'demo_p'+id,createdTime:iso(now-Math.abs(whenOff||0)*DAY),
+      fields:Object.assign({Red:red,Estado:estado,Copy:copy,Hashtags:hashtags,Objetivo:'Captar leads',Agente:'CAPTION_AGENT',[fld]:at},media?{'Media URL':media}:{},extra||{})};
+  };
   const img=s=>`https://picsum.photos/seed/${s}/640.jpg`;
   state.socialPosts=[
-    P(1,'Instagram','Publicado','✨ Entregamos un letrero de neón LED personalizado para un restaurant en Vitacura. La ambientación nocturna quedó espectacular.\n\n¿Tienes un local que merece brillar? Escríbenos.','#neonled #vitacura #santiago #letrerosluminosos #diseño',6,img('neon'),{Engagement:428}),
-    P(2,'Instagram','Publicado','🏆 50 trofeos personalizados impresos en 3D para la gala corporativa de una empresa tech. Cada uno con el logo grabado.','#impresion3d #trofeos #galacorporativa #chile',12,img('trofeo'),{Engagement:612}),
-    P(3,'Instagram','Publicado','⏱️ Time-lapse del proceso de impresión 3D de medallas para un torneo. El detalle importa.','#timelapse #3dprinting #medallas #maker',3,'',{Engagement:255}),
-    P(4,'Instagram','Programado','🎨 Nuevo proyecto en camino: señalética premium para una oficina en Providencia. Pronto el antes y después.','#señaletica #diseñointerior #providencia',-2,img('signage')),
-    P(5,'Instagram','Programado','💡 3 razones para elegir neón LED sobre el neón tradicional: consume menos, dura más y es más seguro. Hilo 👇','#neonled #led #ahorroenergetico',-4,''),
-    P(6,'Instagram','En revisión','🔥 Detrás de cámaras: así fabricamos un logo corporativo iluminado de 1,2 metros. ¿Lo quieres para tu marca?','#behindthescenes #neon #branding',0,img('bts')),
+    P(1,'Instagram','Publicado','✨ Entregamos un letrero de neón LED personalizado para un restaurant en Vitacura. La ambientación nocturna quedó espectacular.\n\n¿Tienes un local que merece brillar? Escríbenos.','#neonled #vitacura #santiago #letrerosluminosos #diseño',-6,img('neon'),{Engagement:428}),
+    P(2,'Instagram','Publicado','🏆 50 trofeos personalizados impresos en 3D para la gala corporativa de una empresa tech. Cada uno con el logo grabado.','#impresion3d #trofeos #galacorporativa #chile',-12,img('trofeo'),{Engagement:612}),
+    P(3,'Instagram','Publicado','⏱️ Time-lapse del proceso de impresión 3D de medallas para un torneo. El detalle importa.','#timelapse #3dprinting #medallas #maker',-3,'',{Engagement:255}),
+    P(4,'Instagram','Programado','🎨 Nuevo proyecto en camino: señalética premium para una oficina en Providencia. Pronto el antes y después.','#señaletica #diseñointerior #providencia',2,img('signage')),
+    P(5,'Instagram','Programado','💡 3 razones para elegir neón LED sobre el neón tradicional: consume menos, dura más y es más seguro. Hilo 👇','#neonled #led #ahorroenergetico',5,''),
+    P(6,'Instagram','En revisión','🔥 Detrás de cámaras: así fabricamos un logo corporativo iluminado de 1,2 metros. ¿Lo quieres para tu marca?','#behindthescenes #neon #branding',1,img('bts')),
     P(7,'LinkedIn','Borrador','Caso de éxito: cómo ayudamos a una cadena de restaurantes a unificar su identidad visual con señalética LED en 6 locales.','#B2B #fabricaciondigital #retail',0,''),
     P(8,'Instagram','Borrador','📸 Galería: los 10 mejores proyectos de neón que entregamos este trimestre. ¿Cuál es tu favorito?','#neon #portafolio #diseño',0,'')
   ];
@@ -164,7 +168,7 @@ function renderRedesPosts(){
       <div class="redes-onboard-steps">
         <div class="redes-step"><span class="n">1</span><div><b>👀 Míralo funcionando</b><div>Carga datos de ejemplo de Instagram para ver el calendario, la bandeja y las métricas en acción — sin conectar nada.</div><button class="btn btn-primary btn-sm" style="margin-top:7px;background:#ec4899;border-color:#ec4899;color:#fff" onclick="redesDemoSeed()">👁️ Ver demo</button></div></div>
         <div class="redes-step"><span class="n">2</span><div><b>✍️ Crea tu primer post</b><div>Usa el <b>Generador de contenido</b> de arriba: describe un proyecto o elige un pedido entregado, genera el copy con IA y pulsa <b>“Guardar borrador”</b>.</div></div></div>
-        <div class="redes-step"><span class="n">3</span><div><b>🔗 Conéctalo de verdad</b><div>Con <b>Make</b> puedes traer comentarios y métricas reales de Instagram a las tablas <code>Social_Posts</code>, <code>Social_Interactions</code> y <code>Social_Metrics</code>. Te guío cuando quieras.</div></div></div>
+        <div class="redes-step"><span class="n">3</span><div><b>🔗 Conéctalo de verdad</b><div>Con <b>Make</b> puedes traer comentarios y métricas reales de Instagram a las tablas <code>Social_Posts</code>, <code>Social_Interactions</code> y <code>Social_Metrics</code>.</div><button class="btn btn-ghost btn-sm" style="margin-top:7px" onclick="redesConnectGuide()">🔗 Ver cómo conectar</button></div></div>
       </div>
     </div>`; return;
   }
@@ -257,7 +261,7 @@ async function redesSchedule(id,presetIso){
   try{
     await _redesWrite('Social_Posts','PATCH',id,{'Estado':'Programado','Fecha programada':iso});
     p.fields['Estado']='Programado'; p.fields['Fecha programada']=iso;
-    toast('Programado para '+_redesFmtFecha(iso)+' ✓','success'); renderRedesKpis(); renderRedesPosts(); if(_redesView==='cal') renderRedesCalendarGrid();
+    toast('Programado para '+_redesFmtFecha(iso)+' ✓','success'); renderRedesKpis(); redesApplyFilters();
   }catch(e){toast('No se pudo programar: '+e.message,'error');}
 }
 function redesCopyPost(id){
@@ -267,16 +271,21 @@ function redesCopyPost(id){
 }
 // ── Vista previa estilo Instagram (marco de teléfono) + contador de caracteres ──
 const _REDES_IG_LIMIT=2200;   // límite de caracteres del caption en Instagram
-function redesPreviewInsta(id){
-  const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p){toast('Post no encontrado','error');return;}
-  const f=p.fields, copy=(f['Copy']||f['Texto']||'').toString(), hashtags=(f['Hashtags']||'').toString();
-  const media=safeHref(f['Media URL']||''), isImg=_redesIsImg(media);
+// Render compartido del marco IG (lo usan el preview de un post guardado y el del generador).
+function _redesIgOpen(copy,hashtags,media,opts){
+  opts=opts||{};
+  copy=(copy||'').toString(); hashtags=(hashtags||'').toString(); media=safeHref(media||'');
+  const isImg=_redesIsImg(media);
   const total=copy.length+(hashtags?hashtags.length+2:0), over=total>_REDES_IG_LIMIT;
   const mediaHtml=media
     ? (isImg?`<img src="${media}" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentNode.classList.add('noimg')">`
             :`<div class="ig-vid">🎬<span>video / reel</span></div>`)
     : '';
   const hashHtml=hashtags?`<span class="ig-tags">${escapeHtml(hashtags)}</span>`:'';
+  const likes=opts.engagement?`${(+opts.engagement).toLocaleString('es-CL')} Me gusta`:'Le gusta a <b>muchas personas</b>';
+  const copyBtn=opts.copyId?`<button class="btn btn-primary btn-sm" style="background:#ec4899;border-color:#ec4899;color:#fff" onclick="redesCopyPost('${opts.copyId}')">📋 Copiar copy</button>`
+    :`<button class="btn btn-primary btn-sm" style="background:#ec4899;border-color:#ec4899;color:#fff" onclick="redesIgCopy()">📋 Copiar copy</button>`;
+  _redesIgClip=[copy,hashtags].filter(Boolean).join('\n\n');
   const body=document.getElementById('redesIgBody');
   if(body) body.innerHTML=`
     <div class="ig-phone">
@@ -287,36 +296,79 @@ function redesPreviewInsta(id){
       </div>
       <div class="ig-media${media&&isImg?'':' noimg'}">${mediaHtml}<span class="ig-media-ph">📷<span>vista previa</span></span></div>
       <div class="ig-actions"><span>♡</span><span>💬</span><span>✈</span><span style="margin-left:auto">🔖</span></div>
-      ${f['Engagement']?`<div class="ig-likes">${(+f['Engagement']).toLocaleString('es-CL')} Me gusta</div>`:'<div class="ig-likes">Le gusta a <b>muchas personas</b></div>'}
+      <div class="ig-likes">${likes}</div>
       <div class="ig-caption"><b>thelab.solutions</b> ${escapeHtml(copy)||'<span style="color:var(--text3)">(sin copy)</span>'} ${hashHtml}</div>
       <div class="ig-time">HACE 2 HORAS</div>
     </div>
     <div class="ig-meta">
       <div class="ig-count ${over?'over':''}">${total.toLocaleString('es-CL')} / ${_REDES_IG_LIMIT.toLocaleString('es-CL')} caracteres${over?' · ⚠ supera el límite de Instagram':''}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-        <button class="btn btn-primary btn-sm" style="background:#ec4899;border-color:#ec4899;color:#fff" onclick="redesCopyPost('${p.id}')">📋 Copiar copy</button>
+        ${copyBtn}
         <button class="btn btn-ghost btn-sm" onclick="redesIgClose()">Cerrar</button>
       </div>
     </div>`;
   const m=document.getElementById('redesIgPreviewModal'); if(m) m.style.display='flex';
 }
+let _redesIgClip='';
+function redesIgCopy(){ navigator.clipboard.writeText(_redesIgClip||'').then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error')); }
+function redesPreviewInsta(id){
+  const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p){toast('Post no encontrado','error');return;}
+  const f=p.fields;
+  _redesIgOpen(f['Copy']||f['Texto']||'', f['Hashtags']||'', f['Media URL']||'', {engagement:f['Engagement']||0, copyId:p.id});
+}
+// Preview del contenido recién generado (extrae la parte de Instagram si viene multi-red)
+function redesPreviewGen(){
+  if(!_redesLastGen){toast('Genera contenido primero','error');return;}
+  let copy=_redesLastGen, hashtags='';
+  const parts=_redesSplitByNetwork(_redesLastGen);
+  if(parts){ const ig=parts.find(p=>p.red==='Instagram')||parts[0]; copy=ig.copy; hashtags=ig.hashtags||''; }
+  else { const mh=_redesLastGen.match(/HASHTAGS?:\s*([^\n]+)/i); if(mh){ hashtags=mh[1].trim(); copy=_redesLastGen.replace(/HASHTAGS?:\s*[^\n]+/i,'').trim(); } }
+  _redesIgOpen(copy,hashtags,_redesLastMedia||'',{});
+}
 function redesIgClose(){ const m=document.getElementById('redesIgPreviewModal'); if(m) m.style.display='none'; }
+
+// ── Guía in-app: conectar Instagram de verdad vía Make + Airtable ──
+function redesConnectGuide(){
+  const body=document.getElementById('redesGuideBody');
+  const step=(n,t,html)=>`<div class="redes-gstep"><div class="redes-gstep-h"><span class="n">${n}</span><b>${t}</b></div><div class="redes-gstep-b">${html}</div></div>`;
+  const tbl=rows=>`<table class="redes-gtable"><tr><th>Campo en Airtable</th><th>De dónde sale (Make)</th></tr>${rows.map(r=>`<tr><td><code>${r[0]}</code></td><td>${r[1]}</td></tr>`).join('')}</table>`;
+  if(body) body.innerHTML=`
+    <p class="redes-gintro">Todo el módulo se alimenta de 3 tablas de Airtable: <code>Social_Posts</code>, <code>Social_Interactions</code> y <code>Social_Metrics</code>. Con <b>Make</b> (make.com) conectas Instagram a esas tablas. Necesitas una cuenta de Instagram <b>Business o Creator</b> vinculada a una <b>página de Facebook</b>, y conectar tu base de Airtable en Make.</p>
+    ${step(1,'Traer comentarios y DMs → bandeja',`
+      Crea un escenario en Make: <b>Instagram for Business → “Watch Comments / Mentions”</b> como disparador, y de salida <b>Airtable → “Create a Record”</b> en <code>Social_Interactions</code>.
+      ${tbl([['Red',"texto fijo: Instagram"],['Tipo',"Comentario o DM"],['Usuario',"username de quien escribe"],['Mensaje',"texto del comentario"],['Estado',"texto fijo: Pendiente"],['Fecha',"fecha del comentario"]])}
+      <div class="redes-gtip">Con eso las interacciones caen en la <b>Bandeja</b> y el COMMUNITY_AGENT sugiere respuesta y detecta leads.</div>`)}
+    ${step(2,'Traer métricas → analítica',`
+      Escenario <b>programado (1 vez al día)</b>: <b>Instagram → “Get Insights”</b> de tu cuenta/publicaciones → <b>Airtable “Create a Record”</b> en <code>Social_Metrics</code>.
+      ${tbl([['Red',"Instagram"],['Fecha',"día de la métrica"],['Alcance',"reach"],['Impresiones',"impressions"],['Engagement',"likes+comentarios+guardados"],['Clics',"clics al perfil/enlace"],['Seguidores nuevos',"follower_count"],['Leads',"0 (o los que atribuyas)"]])}
+      <div class="redes-gtip">Alimenta las <b>Métricas</b>, la tendencia de engagement y el <b>mejor momento para publicar</b>.</div>`)}
+    ${step(3,'Publicar automático (avanzado, opcional)',`
+      Escenario <b>cada 15 min</b>: <b>Airtable “Search Records”</b> en <code>Social_Posts</code> con <code>Estado = Programado</code> y <code>Fecha programada ≤ ahora</code> → <b>Instagram “Create a Post”</b> (usa <code>Media URL</code> + <code>Copy</code> + <code>Hashtags</code>) → <b>Airtable “Update Record”</b> poniendo <code>Estado = Publicado</code>.
+      <div class="redes-gtip">⚠ Publicar por API exige permisos de <i>Instagram Content Publishing</i> aprobados por Meta. Mientras tanto, usa el flujo <b>asistido</b>: genera, pulsa <b>👁 Preview</b> y <b>Copiar copy</b>, y publica a mano.</div>`)}
+    <p class="redes-gfoot">💡 ¿No tienes Make aún? Puedes trabajar 100% asistido desde hoy: genera contenido con IA, prográmalo en el calendario y publícalo manualmente. Cuando conectes Make, lo ya cargado sigue sirviendo.</p>`;
+  const m=document.getElementById('redesGuideModal'); if(m) m.style.display='flex';
+}
+function redesGuideClose(){ const m=document.getElementById('redesGuideModal'); if(m) m.style.display='none'; }
 
 // ── Vista calendario (grilla mensual + drag&drop para reprogramar) ──
 function redesSetView(mode){
   _redesView=mode;
   const list=document.getElementById('redesPostsList'), cal=document.getElementById('redesPostsCal');
+  const showCal=(mode==='cal'||mode==='semana');
   if(list) list.style.display=mode==='lista'?'':'none';
-  if(cal) cal.style.display=mode==='cal'?'':'none';
+  if(cal) cal.style.display=showCal?'':'none';
   document.getElementById('redesBtnLista')?.classList.toggle('active-filter',mode==='lista');
+  document.getElementById('redesBtnSem')?.classList.toggle('active-filter',mode==='semana');
   document.getElementById('redesBtnCal')?.classList.toggle('active-filter',mode==='cal');
-  if(mode==='cal') renderRedesCalendarGrid(); else renderRedesPosts();
+  if(mode==='semana') renderRedesWeekGrid();
+  else if(mode==='cal') renderRedesCalendarGrid();
+  else renderRedesPosts();
 }
 function redesCalNav(delta){
   const b=_redesCalMonth||new Date(); _redesCalMonth=new Date(b.getFullYear(),b.getMonth()+delta,1); renderRedesCalendarGrid();
 }
-// Refresca la vista activa al cambiar los filtros (lista o calendario).
-function redesApplyFilters(){ if(_redesView==='cal') renderRedesCalendarGrid(); else renderRedesPosts(); }
+// Refresca la vista activa al cambiar los filtros (lista / semana / calendario).
+function redesApplyFilters(){ if(_redesView==='cal') renderRedesCalendarGrid(); else if(_redesView==='semana') renderRedesWeekGrid(); else renderRedesPosts(); }
 // ── Feriados, festividades y fechas comerciales de Chile (precargados en el calendario de contenido) ──
 let _redesFechasCache={};
 function _redesEaster(y){ // computus (Meeus/Jones/Butcher) → Domingo de Pascua
@@ -369,6 +421,29 @@ function redesPlanFecha(label){
   if(inp){inp.value=`Contenido para ${label}: idea que conecte un producto de The Lab Solutions (trofeos, medallas, neón, impresión 3D, señalética) con esta fecha, con gancho y llamado a la acción`;inp.focus();inp.scrollIntoView({behavior:'smooth',block:'center'});}
   toast('💡 Idea cargada para '+label+' — ajústala y genera el contenido','info');
 }
+// ── Detección de huecos: días de los próximos N sin ninguna publicación (ni programada ni publicada) ──
+function _redesGaps(days){
+  days=days||7; const DAY=86400000, out=[], filled=new Set();
+  (state.socialPosts||[]).forEach(p=>{ const e=p.fields['Estado']||p.fields['Estado post']||''; if(e==='Borrador'||e==='En revisión') return;
+    const d=p.fields['Fecha programada']||p.fields['Fecha publicación']; if(!d) return; const dt=new Date(d); if(!isNaN(dt)) filled.add(_redesDayKey(dt)); });
+  const t0=new Date(); t0.setHours(0,0,0,0);
+  for(let i=0;i<days;i++){ const dt=new Date(t0.getTime()+i*DAY); const k=_redesDayKey(dt); if(!filled.has(k)) out.push({key:k,date:dt}); }
+  return out;
+}
+function _redesGapsHtml(){
+  const gaps=_redesGaps(7); if(!gaps.length) return '<div class="redes-gaps ok">✅ Tienes contenido programado para los próximos 7 días. ¡Bien ahí!</div>';
+  const dias=['dom','lun','mar','mié','jue','vie','sáb'];
+  const chips=gaps.map(g=>`<span class="redes-gap-chip" onclick="redesPlanDay('${g.key}')" title="Planificar contenido para este día">${dias[g.date.getDay()]} ${g.date.getDate()}</span>`).join('');
+  return `<div class="redes-gaps"><span>📭 <b>${gaps.length}</b> día${gaps.length>1?'s':''} sin publicar en los próximos 7:</span>${chips}</div>`;
+}
+// Clic en un hueco → pre-llena el generador para ese día (queda listo para generar y programar)
+function redesPlanDay(key){
+  const dt=new Date(key+'T12:00:00');
+  const txt=isNaN(dt)?key:dt.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+  const inp=document.getElementById('redesGenInput');
+  if(inp){ inp.value=`Post para publicar el ${txt}: destaca un producto o proyecto de The Lab Solutions (neón, impresión 3D, trofeos, señalética) con gancho y llamado a la acción`; inp.focus(); inp.scrollIntoView({behavior:'smooth',block:'center'}); }
+  toast('💡 Idea cargada para el '+txt+' — genera el contenido y prográmalo','info');
+}
 function renderRedesCalendarGrid(){
   const el=document.getElementById('redesPostsCal'); if(!el) return;
   if(!_redesCalMonth){const n=new Date();_redesCalMonth=new Date(n.getFullYear(),n.getMonth(),1);}
@@ -399,7 +474,7 @@ function renderRedesCalendarGrid(){
       return `<div class="redes-cal-chip" draggable="true" ondragstart="redesDragStart(event,'${p.id}')" onclick="redesOpenEdit('${p.id}')" title="${escapeHtml((red||'—')+' · '+(f['Estado']||'')+' — clic para editar, arrastra para reprogramar')}" style="font-size:9px;background:${c}22;color:${c};border-left:3px solid ${c};border-radius:5px;padding:2px 5px;margin:2px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(txt)}</div>`;}).join('');
     cells+=`<div class="redes-cal-cell" ondragover="redesAllowDrop(event)" ondrop="redesDropOnDay(event,'${key}')" style="min-height:64px;border:1px solid ${key===todayKey?'var(--accent)':hasFer?'rgba(255,107,107,0.4)':'var(--border)'};border-radius:9px;padding:4px;background:var(--surface2)"><div style="font-size:10px;color:${key===todayKey?'var(--accent)':'var(--text3)'};text-align:right;font-weight:${key===todayKey?'700':'400'}">${day}</div>${fxHtml}${chips}</div>`;
   }
-  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+  el.innerHTML=_redesGapsHtml()+`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <button class="btn btn-ghost btn-sm" onclick="redesCalNav(-1)">‹</button>
     <span style="font-size:13px;font-weight:600;text-transform:capitalize">${escapeHtml(monthName)}</span>
     <button class="btn btn-ghost btn-sm" onclick="redesCalNav(1)">›</button>
@@ -411,6 +486,46 @@ function renderRedesCalendarGrid(){
     <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#a78bfa;margin-right:4px"></span>Festividad</span>
     <span style="margin-left:auto">↔ Arrastra una publicación a otro día · clic en una fecha para planificar contenido</span>
   </div>`;
+}
+// ── Vista semana: 7 días grandes con las publicaciones de la semana + mejores horas ──
+let _redesWeekStart=null;
+function redesWeekNav(delta){ const b=_redesWeekStart||_redesMonday(new Date()); _redesWeekStart=new Date(b.getTime()+delta*7*86400000); renderRedesWeekGrid(); }
+function _redesMonday(d){ const x=new Date(d); x.setHours(0,0,0,0); const dow=(x.getDay()+6)%7; x.setDate(x.getDate()-dow); return x; }
+function renderRedesWeekGrid(){
+  const el=document.getElementById('redesPostsCal'); if(!el) return;
+  if(!_redesWeekStart) _redesWeekStart=_redesMonday(new Date());
+  const start=_redesWeekStart, DAY=86400000;
+  const fRed=document.getElementById('redesFiltroRed')?.value||'';
+  const fEst=document.getElementById('redesFiltroEstado')?.value||'';
+  const byDay={};
+  (state.socialPosts||[]).forEach(p=>{ const e=p.fields['Estado']||p.fields['Estado post']||'';
+    if((fRed&&p.fields['Red']!==fRed)||(fEst&&e!==fEst)) return;
+    const d=p.fields['Fecha programada']||p.fields['Fecha publicación']; if(!d) return; const dt=new Date(d); if(isNaN(dt)) return;
+    (byDay[_redesDayKey(dt)]=byDay[_redesDayKey(dt)]||[]).push(p); });
+  const todayKey=_redesDayKey(new Date()), year=start.getFullYear(), fechas=_redesFechas(year);
+  const dias=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  const _fxCol={feriado:'#ff6b6b',festividad:'#a78bfa',comercial:'#ec4899'};
+  let cols='';
+  for(let i=0;i<7;i++){
+    const dt=new Date(start.getTime()+i*DAY), key=_redesDayKey(dt), lst=byDay[key]||[], isToday=key===todayKey;
+    const fx=fechas[key]||[];
+    const fxHtml=fx.map(o=>{const c=_fxCol[o.type]||'#888';return `<div title="${escapeHtml(o.label)}" style="font-size:8.5px;font-weight:600;background:${c}1f;color:${c};border-radius:4px;padding:1px 5px;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.emoji} ${escapeHtml(o.label)}</div>`;}).join('');
+    const chips=lst.map(p=>{const f=p.fields,red=f['Red']||'',c=REDES_COLOR[red]||'#888',hh=(()=>{const d=f['Fecha programada']||f['Fecha publicación'];const t=d?new Date(d):null;return t&&!isNaN(t)?_redesPad(t.getHours())+':'+_redesPad(t.getMinutes())+' ':'';})();
+      return `<div class="redes-cal-chip" draggable="true" ondragstart="redesDragStart(event,'${p.id}')" onclick="redesOpenEdit('${p.id}')" title="${escapeHtml((red||'—')+' · '+(f['Estado']||'')+' — clic para editar, arrastra para mover')}" style="font-size:10px;background:${c}22;color:${c};border-left:3px solid ${c};border-radius:5px;padding:3px 6px;margin:3px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${hh}</b>${escapeHtml((f['Copy']||red||'').slice(0,26))}</div>`;}).join('');
+    const empty=lst.length?'':`<div class="redes-week-add" onclick="redesPlanDay('${key}')" title="Planificar contenido para este día">＋ planificar</div>`;
+    cols+=`<div class="redes-week-col" ondragover="redesAllowDrop(event)" ondrop="redesDropOnDay(event,'${key}')" style="border:1px solid ${isToday?'var(--accent)':'var(--border)'}">
+      <div class="redes-week-hd" style="color:${isToday?'var(--accent)':'var(--text2)'}"><b>${dias[i]}</b> ${dt.getDate()}/${dt.getMonth()+1}</div>
+      ${fxHtml}${chips}${empty}</div>`;
+  }
+  const end=new Date(start.getTime()+6*DAY);
+  const rango=`${start.getDate()} ${start.toLocaleDateString('es-CL',{month:'short'})} – ${end.getDate()} ${end.toLocaleDateString('es-CL',{month:'short'})}`;
+  el.innerHTML=_redesGapsHtml()+`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <button class="btn btn-ghost btn-sm" onclick="redesWeekNav(-1)">‹</button>
+    <span style="font-size:13px;font-weight:600">Semana · ${escapeHtml(rango)}</span>
+    <button class="btn btn-ghost btn-sm" onclick="redesWeekNav(1)">›</button>
+  </div>
+  <div class="redes-week-grid">${cols}</div>
+  <div style="font-size:10px;color:var(--text3);margin-top:8px">🕐 Mejor hora sugerida — Instagram ${_redesPad(REDES_BEST_HOUR.Instagram)}:00 · LinkedIn ${_redesPad(REDES_BEST_HOUR.LinkedIn)}:00 · TikTok ${_redesPad(REDES_BEST_HOUR.TikTok)}:00 · ↔ arrastra para mover</div>`;
 }
 let _redesDragId=null;
 function redesDragStart(ev,id){_redesDragId=id;try{ev.dataTransfer.setData('text/plain',id);ev.dataTransfer.effectAllowed='move';}catch(_){}}
@@ -612,6 +727,7 @@ async function _redesRunGenerate(agentId,input,media,pedidoNum){
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
         ${multiNet?`<button class="btn btn-primary btn-sm" onclick="redesSaveDraft()">💾 Guardar borrador</button>`:''}
         ${multiNet?`<button class="btn btn-ghost btn-sm" onclick="redesSaveSplit()">🗂️ Guardar 1 por red</button>`:''}
+        ${multiNet?`<button class="btn btn-ghost btn-sm" onclick="redesPreviewGen()" title="Ver cómo se vería en Instagram">👁 Preview IG</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(_redesLastGen).then(()=>toast('Copiado ✓','success'))">Copiar todo</button>
         ${multiNet?'':'<span style="font-size:10px;color:var(--text3);align-self:center">El Estratega y Tendencias generan planes/ideas — usa Caption o Content para crear posts guardables.</span>'}
       </div>`;
@@ -627,7 +743,7 @@ function _redesBaseFields(agentId){
   return f;
 }
 function _redesAfterSave(msg){
-  toast(msg,'success'); renderRedesKpis(); renderRedesPosts(); if(_redesView==='cal') renderRedesCalendarGrid();
+  toast(msg,'success'); renderRedesKpis(); redesApplyFilters();
   document.getElementById('redesPostsList')?.scrollIntoView({behavior:'smooth',block:'center'});
 }
 async function redesSaveDraft(){
@@ -691,11 +807,34 @@ function renderRedesMetrics(){
   const maxAlc=Math.max(1,...nets.map(n=>agg[n].Alcance));
   const fmt=n=>n>=1000?(n/1000).toFixed(1).replace(/\.0$/,'')+'k':String(n||0);
   el.innerHTML=`<div style="font-size:10px;color:var(--text3);margin-bottom:10px">${recent.length?'Últimos 30 días':'Histórico'} · ${use.length} registros</div>`+
+    _redesEngTrend(use)+
     nets.map(n=>{const a=agg[n],c=REDES_COLOR[n]||'#888';
       return `<div style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;gap:8px;flex-wrap:wrap"><span style="color:${c};font-weight:600">${escapeHtml(n)}</span><span style="color:var(--text3)">${fmt(a.Alcance)} alcance · ${fmt(a.Engagement)} eng · ${fmt(a.Clics)} clics · <b style="color:var(--text)">${a.Leads} leads</b></span></div>
         <div style="height:6px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(a.Alcance/maxAlc*100)}%;background:${c}"></div></div>
       </div>`;}).join('');
+}
+// Tendencia diaria de engagement (área SVG, sin librerías) — de un vistazo se ve si sube o baja.
+function _redesEngTrend(mets){
+  const N=30, DAY=86400000, arr=new Array(N).fill(0);
+  const start=new Date(); start.setHours(0,0,0,0); const s0=start.getTime()-(N-1)*DAY;
+  (mets||[]).forEach(m=>{ const d=m.fields['Fecha']; if(!d) return; const t=new Date(d); if(isNaN(t)) return;
+    t.setHours(0,0,0,0); const idx=Math.round((t.getTime()-s0)/DAY); if(idx>=0&&idx<N) arr[idx]+=+m.fields['Engagement']||0; });
+  const tot=arr.reduce((a,b)=>a+b,0); if(!tot) return '';
+  const max=Math.max(1,...arr), W=320,H=64,pad=4, bw=(W-pad*2)/(N-1);
+  const pts=arr.map((v,i)=>[pad+i*bw, H-4-(v/max)*(H-14)]);
+  const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const area=`M${pad} ${H-4} `+pts.map(p=>'L'+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ')+` L${(pad+(N-1)*bw).toFixed(1)} ${H-4} Z`;
+  const last7=arr.slice(-7).reduce((a,b)=>a+b,0), prev7=arr.slice(-14,-7).reduce((a,b)=>a+b,0);
+  const delta=prev7>0?Math.round((last7-prev7)/prev7*100):null;
+  const trend=delta!=null?`<span style="color:${delta>=0?'var(--success)':'var(--danger)'};font-weight:700">${delta>=0?'▲':'▼'} ${Math.abs(delta)}%</span> vs semana previa`:'';
+  return `<div style="margin:2px 0 14px">
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:4px"><span>📈 Engagement diario (30 días)</span><span>${trend}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:64px;display:block">
+      <defs><linearGradient id="redesEngGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ec4899" stop-opacity="0.35"/><stop offset="1" stop-color="#ec4899" stop-opacity="0"/></linearGradient></defs>
+      <path d="${area}" fill="url(#redesEngGrad)"/>
+      <path d="${line}" fill="none" stroke="#ec4899" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg></div>`;
 }
 function _redesBuildMetricsContext(){
   const mets=(state.socialMetrics||[]), posts=(state.socialPosts||[]), inter=(state.socialInteractions||[]);

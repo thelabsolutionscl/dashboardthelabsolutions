@@ -1999,6 +1999,33 @@
 .ig-meta{margin-top:12px;}
 .ig-count{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;}
 .ig-count.over{color:var(--danger);font-weight:700;}
+/* Tira de huecos (días sin publicar) */
+.redes-gaps{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:10px;}
+.redes-gaps.ok{color:var(--text3);}
+.redes-gaps b{color:var(--text);}
+.redes-gap-chip{cursor:pointer;font-size:10.5px;font-weight:600;color:#ec4899;background:#ec48991a;border:1px solid #ec489955;border-radius:999px;padding:2px 9px;transition:background .14s,transform .12s;text-transform:capitalize;}
+.redes-gap-chip:hover{background:#ec489933;transform:translateY(-1px);}
+/* Vista semana */
+.redes-week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.redes-week-col{min-height:130px;border-radius:10px;padding:6px;background:var(--surface2);}
+.redes-week-hd{font-size:10.5px;margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.redes-week-add{font-size:10px;color:var(--text3);border:1px dashed var(--border2);border-radius:6px;padding:5px;text-align:center;cursor:pointer;margin-top:4px;transition:border-color .14s,color .14s;}
+.redes-week-add:hover{border-color:#ec4899;color:#ec4899;}
+@media(max-width:760px){.redes-week-grid{grid-template-columns:repeat(3,1fr);}}
+/* Guía de conexión Make */
+.redes-gintro{font-size:12px;color:var(--text2);line-height:1.6;margin:0 0 14px;}
+.redes-gstep{border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:10px;background:var(--surface2);}
+.redes-gstep-h{display:flex;align-items:center;gap:9px;margin-bottom:8px;}
+.redes-gstep-h .n{width:22px;height:22px;border-radius:50%;background:#ec4899;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.redes-gstep-h b{font-size:13px;color:var(--text);}
+.redes-gstep-b{font-size:11.5px;color:var(--text2);line-height:1.65;}
+.redes-gstep-b b{color:var(--text);}
+.redes-gtable{width:100%;border-collapse:collapse;margin:8px 0;font-size:11px;}
+.redes-gtable th,.redes-gtable td{border:1px solid var(--border);padding:5px 8px;text-align:left;vertical-align:top;}
+.redes-gtable th{background:var(--surface3);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px;}
+.redes-gtable code{font-size:10.5px;color:var(--accent);}
+.redes-gtip{margin-top:8px;font-size:11px;color:var(--text2);background:var(--surface3);border-left:3px solid #ec4899;border-radius:6px;padding:6px 10px;}
+.redes-gfoot{font-size:11.5px;color:var(--text2);line-height:1.6;margin:12px 0 0;padding-top:12px;border-top:1px solid var(--border);}
 </style>
 <div class="tab-panel" id="tab-redes">
   <div class="section-header">
@@ -2012,7 +2039,8 @@
         <span class="redes-pill" style="background:#1877f222;color:#4a9bff;border-color:#1877f266"><svg viewBox="0 0 24 24"><use href="#fb-glyph"/></svg>Facebook</span>
       </div>
     </div>
-    <div style="display:flex;gap:6px;flex-shrink:0">
+    <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="redesConnectGuide()" title="Cómo conectar Instagram de verdad con Make + Airtable">🔗 Conectar</button>
       <button class="btn btn-ghost btn-sm" onclick="redesDemoToggle()" title="Ver la sección con datos de ejemplo de Instagram (no se guardan en Airtable)">👁️ Demo</button>
       <button class="btn btn-ghost btn-sm" onclick="redesLoad(true)">↻ Actualizar</button>
     </div>
@@ -2087,7 +2115,8 @@
       <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-redes"/></svg> Calendario de contenido</span>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm active-filter" id="redesBtnLista" onclick="redesSetView('lista')">Lista</button>
-        <button class="btn btn-ghost btn-sm" id="redesBtnCal" onclick="redesSetView('cal')">📅 Calendario</button>
+        <button class="btn btn-ghost btn-sm" id="redesBtnSem" onclick="redesSetView('semana')">🗓️ Semana</button>
+        <button class="btn btn-ghost btn-sm" id="redesBtnCal" onclick="redesSetView('cal')">📅 Mes</button>
         <select class="field-select" id="redesFiltroRed" onchange="redesApplyFilters()" style="font-size:11px;padding:4px 8px;width:auto">
           <option value="">Todas las redes</option>
           <option value="Instagram">Instagram</option>
@@ -2234,6 +2263,17 @@
         <button class="btn btn-ghost btn-sm" onclick="redesIgClose()">✕</button>
       </div>
       <div id="redesIgBody" style="padding:16px"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: guía de conexión con Make -->
+  <div id="redesGuideModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.66);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)redesGuideClose()">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;width:min(680px,96vw);max-height:90vh;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:600;color:var(--text)">🔗 Conectar Instagram con Make</span>
+        <button class="btn btn-ghost btn-sm" onclick="redesGuideClose()">✕</button>
+      </div>
+      <div id="redesGuideBody" style="padding:16px 18px;overflow:auto"></div>
     </div>
   </div>
 </div>
