@@ -144,6 +144,7 @@ function renderRedesKpis(){
   set('redesKpiPub',pub); set('redesKpiProg',prog); set('redesKpiBorr',borr); set('redesKpiInt',intPend); set('redesKpiLeads',leads);
   const badge=document.getElementById('badge-redes');
   if(badge){if(intPend>0){badge.textContent=intPend;badge.style.display='';}else badge.style.display='none';}
+  try{renderRedesAutoPanel();}catch(_){}   // el panel de modo automático se refresca con cada render
 }
 
 function _redesFmtFecha(d){
@@ -1433,6 +1434,110 @@ async function redesAutoSchedule(){
   }
   if(ok){ toast(`Programados ${ok} borradores ✓`,'success'); renderRedesKpis(); redesApplyFilters(); }
   else toast('No se pudo programar','error');
+}
+
+// ── Modo automático: panel de estado + piloto automático de contenido ──
+let _redesBusyAuto=false;
+// ¿Qué está fluyendo solo? Se deriva de la frescura de los datos (últimos 7 días).
+function _redesAutoStatus(){
+  const now=Date.now(), WK=7*86400000;
+  const fresh=(recs,fld)=>(recs||[]).some(r=>{const d=(r.fields&&r.fields[fld])||r.createdTime;return d&&now-new Date(d).getTime()<WK;});
+  const posts=(state.socialPosts||[]);
+  return {
+    listen:(state.socialInteractions||[]).length>0 && fresh(state.socialInteractions,'Fecha'),
+    metrics:(state.socialMetrics||[]).length>0 && fresh(state.socialMetrics,'Fecha'),
+    publish: posts.some(p=>(p.fields['Estado']||'')==='Publicado' && p.fields['Fecha publicación'] && now-new Date(p.fields['Fecha publicación']).getTime()<WK)
+  };
+}
+function renderRedesAutoPanel(){
+  const el=document.getElementById('redesAutoPanel'); if(!el) return;
+  const s=_redesAutoStatus();
+  const gaps=_redesGaps(7).length, drafts=(state.socialPosts||[]).filter(p=>(p.fields['Estado']||'')==='Borrador').length;
+  const guideBtn=`<button class="btn btn-ghost btn-sm" onclick="redesConnectGuide()">🔗 Conectar</button>`;
+  const row=(ic,name,on,txt,action)=>`<div class="redes-auto-row"><span class="ic">${ic}</span><div class="rt"><b>${name}</b><span>${txt}</span></div><span class="redes-auto-pill ${on?'on':'off'}">${on?'🟢 activo':'⚪ manual'}</span>${action||''}</div>`;
+  el.innerHTML=`
+    <div class="redes-auto-head">
+      <div><b>🤖 Modo automático</b><div class="s">Qué trabaja solo y qué necesita conectarse con Make.</div></div>
+      <button class="btn btn-primary btn-sm" style="background:#ec4899;border-color:#ec4899;color:#fff" onclick="redesAutopilot()" title="Genera y programa contenido para los días que te faltan, en un clic">🤖 Piloto automático</button>
+    </div>
+    <div class="redes-auto-rows">
+      ${row('✍️','Generación de contenido',true,'IA lista — copy y hashtags por red al instante.',gaps?`<button class="btn btn-ghost btn-sm" onclick="redesFillGaps()">Rellenar ${gaps} hueco(s)</button>`:'')}
+      ${row('📅','Programación',true,drafts?`${drafts} borrador(es) listos para auto-programar.`:'Sin borradores por programar.',drafts?`<button class="btn btn-ghost btn-sm" onclick="redesAutoSchedule()">Auto-programar</button>`:'')}
+      ${row('👂','Escucha de comentarios/DMs',s.listen,s.listen?'Interacciones llegando a la bandeja.':'Sin interacciones recientes — conéctalo con Make.',s.listen?'':guideBtn)}
+      ${row('📊','Métricas',s.metrics,s.metrics?'Recibiendo alcance y engagement.':'Sin métricas recientes — conéctalas con Make.',s.metrics?'':guideBtn)}
+      ${row('📤','Publicación',s.publish,s.publish?'Publicando automáticamente vía Make.':'Asistida: generas y publicas a mano (o conéctala).',s.publish?'':guideBtn)}
+    </div>`;
+}
+// Copys de ejemplo para el piloto en modo demo (sin llamadas reales a la IA)
+function _redesDemoCopy(date){
+  const ideas=[
+    {copy:'🔥 Nuevo neón LED listo para entrega. Hecho a mano, a la medida de tu marca. Escríbenos por DM.',hashtags:'#neonled #santiago #diseño'},
+    {copy:'🏆 Trofeos impresos en 3D para tu próxima premiación. Personalización total, pieza por pieza.',hashtags:'#impresion3d #trofeos #chile'},
+    {copy:'⏱️ Del archivo a la realidad: time-lapse de una impresión 3D en curso. El detalle importa.',hashtags:'#3dprinting #maker #timelapse'},
+    {copy:'✨ Señalética premium que se ve increíble de día y de noche. Cotiza la tuya hoy.',hashtags:'#señaletica #branding #diseño'},
+    {copy:'💡 ¿Sabías que el neón LED consume menos y dura más? Ideal para tu local. Te asesoramos.',hashtags:'#neonled #led #pyme'},
+    {copy:'📸 Antes y después de una instalación de letrero luminoso. Transformamos tu fachada.',hashtags:'#letreros #santiago #retail'},
+    {copy:'🎁 Regalos corporativos personalizados en 3D. Sorprende a tu equipo este año.',hashtags:'#regaloscorporativos #3d #chile'}
+  ];
+  return ideas[(date.getDate())%ideas.length];
+}
+// Núcleo: genera un borrador de Instagram por cada día suelto y lo programa a la mejor hora.
+async function _redesFillGapsCore(gaps){
+  const red='Instagram', hr=REDES_BEST_HOUR[red]||19; let ok=0;
+  const cfg=AGENTES_CFG.find(a=>a.id==='CAPTION_AGENT');
+  for(const g of gaps){
+    const d=new Date(g.date); d.setHours(hr,0,0,0);
+    try{
+      let copy,hashtags;
+      if(_redesDemo || !cfg){ const c=_redesDemoCopy(g.date); copy=c.copy; hashtags=c.hashtags; }
+      else{
+        const fecha=g.date.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+        const out=await callClaude(cfg.sys,`${cfg.pre||''}Crea UN post breve de Instagram para The Lab Solutions para publicar el ${fecha}. Elige un producto (neón LED, impresión 3D, trofeos/medallas, señalética) con gancho y llamado a la acción. Termina con una línea "HASHTAGS: ..." con 3-5 hashtags.`);
+        const mh=out.match(/HASHTAGS?:\s*([^\n]+)/i); hashtags=mh?mh[1].trim():''; copy=mh?out.replace(/HASHTAGS?:\s*[^\n]+/i,'').trim():out.trim();
+      }
+      const rec=await _redesWrite('Social_Posts','POST',null,{Red:red,Estado:'Programado','Fecha programada':d.toISOString(),Copy:(copy||'').slice(0,9000),Hashtags:(hashtags||'').slice(0,1000),Agente:'CAPTION_AGENT · auto',Objetivo:'Captar leads'});
+      if(rec&&rec.id){ state.socialPosts=state.socialPosts||[]; state.socialPosts.unshift(rec); ok++; toast(`Autopilot: ${ok}/${gaps.length} generado(s)…`,'info'); }
+    }catch(e){}
+  }
+  return ok;
+}
+async function redesFillGaps(){
+  if(_redesBusyAuto) return;
+  const gaps=_redesGaps(7);
+  if(!gaps.length){ toast('✅ No hay huecos en los próximos 7 días','info'); return; }
+  if(!_redesDemo && !_redesHasData()){ toast('Conecta Airtable (o usa el modo demo) para guardar los posts','error'); return; }
+  if(!confirm(`¿Generar y programar ${gaps.length} publicación(es) de Instagram — una por cada día sin contenido de los próximos 7 — a la mejor hora?`)) return;
+  _redesBusyAuto=true;
+  try{ const ok=await _redesFillGapsCore(gaps);
+    if(ok){ toast(`🤖 ${ok} publicación(es) generada(s) y programada(s) ✓`,'success'); renderRedesKpis(); redesApplyFilters(); }
+    else toast('No se pudo generar el contenido','error');
+  }finally{ _redesBusyAuto=false; }
+}
+// Piloto automático 1-clic: rellena huecos + auto-programa los borradores restantes.
+async function redesAutopilot(){
+  if(_redesBusyAuto){ toast('El piloto ya está trabajando…','info'); return; }
+  const gaps=_redesGaps(7);
+  const drafts=(state.socialPosts||[]).filter(p=>(p.fields['Estado']||'')==='Borrador');
+  const plan=[];
+  if(gaps.length) plan.push(`Generar y programar ${gaps.length} post(s) para los días sin contenido`);
+  if(drafts.length) plan.push(`Auto-programar ${drafts.length} borrador(es) que ya tienes`);
+  if(!plan.length){ toast('✅ Todo al día: sin huecos ni borradores por programar','success'); return; }
+  if(!_redesDemo && !_redesHasData()){ toast('Conecta Airtable (o usa el modo demo) para que el piloto guarde el contenido','error'); return; }
+  if(!confirm('🤖 Piloto automático\n\n• '+plan.join('\n• ')+'\n\n¿Ejecutar ahora?')) return;
+  _redesBusyAuto=true;
+  try{
+    let gen=0; if(gaps.length) gen=await _redesFillGapsCore(gaps);
+    // Programar los borradores restantes DESPUÉS de la semana de huecos (para no chocar de día)
+    const rem=(state.socialPosts||[]).filter(p=>(p.fields['Estado']||'')==='Borrador');
+    const start=new Date(); start.setHours(0,0,0,0); let sch=0;
+    for(let i=0;i<rem.length;i++){ const p=rem[i], red=p.fields['Red']||'Instagram', hr=REDES_BEST_HOUR[red]||18;
+      const d=new Date(start); d.setDate(d.getDate()+8+i); d.setHours(hr,0,0,0);
+      try{ await _redesWrite('Social_Posts','PATCH',p.id,{'Estado':'Programado','Fecha programada':d.toISOString()}); p.fields['Estado']='Programado'; p.fields['Fecha programada']=d.toISOString(); sch++; }catch(e){}
+    }
+    toast(`🤖 Piloto automático: ${gen} generado(s) · ${sch} programado(s) ✓`,'success');
+    renderRedesKpis(); redesApplyFilters();
+    if(_redesView==='lista') redesSetView('semana');   // muestra el resultado en el calendario
+  }finally{ _redesBusyAuto=false; }
 }
 
 // ── Edición inline de una publicación (modal) ──

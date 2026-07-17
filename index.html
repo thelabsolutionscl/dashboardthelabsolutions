@@ -2026,6 +2026,19 @@
 .redes-gtable code{font-size:10.5px;color:var(--accent);}
 .redes-gtip{margin-top:8px;font-size:11px;color:var(--text2);background:var(--surface3);border-left:3px solid #ec4899;border-radius:6px;padding:6px 10px;}
 .redes-gfoot{font-size:11.5px;color:var(--text2);line-height:1.6;margin:12px 0 0;padding-top:12px;border-top:1px solid var(--border);}
+/* Panel de modo automático */
+.redes-auto-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.redes-auto-head b{font-size:14px;color:var(--text);}
+.redes-auto-head .s{font-size:11px;color:var(--text3);margin-top:2px;}
+.redes-auto-rows{display:grid;gap:8px;}
+.redes-auto-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 12px;}
+.redes-auto-row .ic{font-size:17px;line-height:1;flex-shrink:0;}
+.redes-auto-row .rt{flex:1;min-width:150px;display:flex;flex-direction:column;line-height:1.35;}
+.redes-auto-row .rt b{font-size:12.5px;color:var(--text);}
+.redes-auto-row .rt span{font-size:11px;color:var(--text3);}
+.redes-auto-pill{font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;flex-shrink:0;}
+.redes-auto-pill.on{color:var(--success);background:rgba(0,212,170,0.12);border:1px solid rgba(0,212,170,0.3);}
+.redes-auto-pill.off{color:var(--text3);background:var(--surface3);border:1px solid var(--border);}
 </style>
 <div class="tab-panel" id="tab-redes">
   <div class="section-header">
@@ -2040,6 +2053,7 @@
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+      <button class="btn btn-primary btn-sm" onclick="redesAutopilot()" title="Genera y programa el contenido que te falta, en un clic" style="background:#ec4899;border-color:#ec4899;color:#fff">🤖 Piloto</button>
       <button class="btn btn-ghost btn-sm" onclick="redesConnectGuide()" title="Cómo conectar Instagram de verdad con Make + Airtable">🔗 Conectar</button>
       <button class="btn btn-ghost btn-sm" onclick="redesDemoToggle()" title="Ver la sección con datos de ejemplo de Instagram (no se guardan en Airtable)">👁️ Demo</button>
       <button class="btn btn-ghost btn-sm" onclick="redesLoad(true)">↻ Actualizar</button>
@@ -2054,6 +2068,9 @@
     <div class="kpi-card orange"><div class="redes-kpi"><span class="ico">💬</span><div><div class="kpi-label">Interacciones pend.</div><div class="kpi-value" id="redesKpiInt">—</div></div></div></div>
     <div class="kpi-card red"><div class="redes-kpi"><span class="ico">🎯</span><div><div class="kpi-label">Leads desde redes</div><div class="kpi-value" id="redesKpiLeads">—</div></div></div></div>
   </div>
+
+  <!-- MODO AUTOMÁTICO -->
+  <div class="card" id="redesAutoPanel" style="margin-bottom:20px;padding:14px 16px"></div>
 
   <!-- GENERADOR RÁPIDO -->
   <div class="card" style="margin-bottom:20px;border-color:rgba(236,72,153,0.30);box-shadow:0 0 24px rgba(236,72,153,0.06)">
