@@ -907,18 +907,31 @@ function _ofRenderAlerts(ia,auto,printers){
   if(_ofPrevAlerts && sig!==_ofPrevAlerts){ const n=items.filter(i=>i.t==='error').length; if(n){ try{toast('⚠ '+n+' incidencia(s) en la oficina','error');}catch(e){} } }
   _ofPrevAlerts=sig;
 }
-// Píldora de salud junto al título: verde/ámbar/rojo según incidencias y avisos abiertos
+// Píldora de salud junto al título: refleja incidencias, avisos Y estado de conexión.
+// Sin datos reales (sin token / Airtable caído) la oficina está "ciega": no puede
+// afirmar "Todo en orden", así que lo dice — una incidencia real siempre tiene prioridad.
 function _ofRenderHealth(items){
   const el=document.getElementById('ofHealth'); if(!el) return;
   const err=items.filter(i=>i.t==='error').length, warn=items.filter(i=>i.t==='warn').length;
-  let cls,txt;
-  if(err){ cls='bad'; txt='🔴 '+err+' incidencia'+(err>1?'s':''); }
-  else if(warn){ cls='warn'; txt='🟠 '+warn+' aviso'+(warn>1?'s':''); }
-  else { cls='ok'; txt='🟢 Todo en orden'; }
+  const noToken=(typeof getToken==='function')&&!getToken();
+  let cls,txt,title;
+  if(err){ cls='bad'; txt='🔴 '+err+' incidencia'+(err>1?'s':''); title='Ver las alertas de la oficina'; }
+  else if(noToken){ cls='warn'; txt='🔌 Sin conexión'; title='La oficina muestra sólo datos locales — configura el token de Airtable'; }
+  else if(warn){ cls='warn'; txt='🟠 '+warn+' aviso'+(warn>1?'s':''); title='Ver las alertas de la oficina'; }
+  else if(_ofErr){ cls='warn'; txt='⚠ Datos en caché'; title='Sin conexión con Airtable — mostrando los últimos datos conocidos'; }
+  else { cls='ok'; txt='🟢 Todo en orden'; title='Sin incidencias ni avisos'; }
   el.className='of-health of-health-'+cls;
   el.textContent=txt;
-  el.title=(err||warn)?'Ver las alertas de la oficina':'Sin incidencias ni avisos';
+  el.title=title;
   el.style.display='';
+}
+// Clic en la píldora de salud: baja a lo relevante — alertas si las hay, si no el aviso de conexión
+function ofHealthClick(){
+  const a=document.getElementById('oficinaAlerts');
+  if(a && a.style.display!=='none'){ _ofScrollToEl('oficinaAlerts'); return; }
+  const e=document.getElementById('oficinaErr');
+  if(e && e.style.display!=='none'){ _ofScrollToEl('oficinaErr'); return; }
+  _ofScrollToEl('oficinaKpis');
 }
 // "▶ Despertar" desde una alerta: salta a Agentes y deja el input del agente listo para escribir
 function ofWakeAgent(id){
