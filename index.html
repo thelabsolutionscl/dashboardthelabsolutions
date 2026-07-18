@@ -545,6 +545,48 @@
   </div>
 </div>
 <!-- OVERVIEW -->
+<style id="overview-styles">
+/* Centro de Comando — capa visual "Cálido y suave" (scopeada a #tab-overview), acento turquesa */
+#tab-overview{
+  --ov-teal:#00d4cc; --ov-mint:#00d4aa;
+  --ov-lg:16px; --ov-md:14px;
+  --ov-shadow:0 6px 20px rgba(0,0,0,.28);
+  --ov-shadow-hover:0 10px 26px rgba(0,0,0,.34);
+  --ov-ring:0 0 0 3px rgba(0,212,204,.22);
+  background:radial-gradient(1100px 420px at 50% -60px,rgba(0,212,204,.06),rgba(0,212,170,.03) 40%,transparent 72%);
+}
+/* Cards elevadas y suaves */
+#tab-overview .card{
+  border-radius:var(--ov-lg);
+  border:1px solid var(--border2);
+  box-shadow:var(--ov-shadow),inset 0 1px 0 rgba(255,255,255,.03);
+  background:linear-gradient(180deg,rgba(0,212,204,.03),transparent 150px),var(--surface2);
+}
+#tab-overview .card-title{letter-spacing:.1px;font-weight:700;}
+/* Botones amables */
+#tab-overview .btn{border-radius:999px;font-weight:600;transition:transform .16s ease,box-shadow .16s ease,background .16s ease,border-color .16s ease;}
+#tab-overview .btn-primary{box-shadow:0 4px 14px rgba(0,212,204,.26);}
+#tab-overview .btn-ghost{background:rgba(255,255,255,.03);border:1px solid var(--border);}
+#tab-overview .btn-ghost:hover{background:rgba(255,255,255,.06);border-color:var(--border2);}
+/* KPIs: tiles de color elevados (icono + valor ya vienen coloreados) */
+#tab-overview .kpi-card{border-radius:var(--ov-md);border:1px solid var(--border2);box-shadow:var(--ov-shadow);}
+#tab-overview .kpi-card.yellow{background:linear-gradient(160deg,rgba(255,170,0,.10),transparent 72%),var(--surface2);border-color:rgba(255,170,0,.26);}
+#tab-overview .kpi-card.green{background:linear-gradient(160deg,rgba(0,212,170,.10),transparent 72%),var(--surface2);border-color:rgba(0,212,170,.26);}
+#tab-overview .kpi-card.orange{background:linear-gradient(160deg,rgba(255,107,53,.11),transparent 72%),var(--surface2);border-color:rgba(255,107,53,.26);}
+#tab-overview .kpi-card.purple{background:linear-gradient(160deg,rgba(167,139,250,.12),transparent 72%),var(--surface2);border-color:rgba(167,139,250,.28);}
+#tab-overview .kpi-card.red{background:linear-gradient(160deg,rgba(255,68,68,.11),transparent 72%),var(--surface2);border-color:rgba(255,68,68,.28);}
+/* Detalles amistosos */
+#tab-overview .badge{border-radius:999px;}
+#tab-overview .field-input:focus,#tab-overview .field-select:focus{border-color:var(--ov-teal);box-shadow:var(--ov-ring);outline:none;}
+@media(prefers-reduced-motion:no-preference){
+  #tab-overview .kpi-card{transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;}
+  #tab-overview .kpi-card:hover{transform:translateY(-2px);box-shadow:var(--ov-shadow-hover);}
+}
+/* Accesibilidad: red de seguridad para reduce-motion */
+@media(prefers-reduced-motion:reduce){
+  #tab-overview *,#tab-overview *::before,#tab-overview *::after{transition:none!important;animation:none!important;}
+}
+</style>
 <div class="tab-panel active" id="tab-overview">
   <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Meta</button><div style="position:relative"><button class="btn btn-ghost btn-sm" onclick="openOvCustomize(event)" title="Personalizar overview" style="font-size:14px;line-height:1">⚙</button></div></div></div>
   <!-- SALUDO DE LA MAÑANA: top 3 urgencias del día, 1 vez al día, descartable -->
