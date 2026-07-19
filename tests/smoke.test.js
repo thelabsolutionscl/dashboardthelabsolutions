@@ -126,6 +126,11 @@ const ok = msg => console.log('  ✓ ' + msg);
     '_redesHasData', '_redesWrite', 'redesDemoToggle', 'redesDemoExit', 'redesDemoSeed', '_redesDemoBanner', 'redesPreviewInsta', 'redesIgClose',
     '_redesIgOpen', 'redesIgCopy', 'redesPreviewGen', '_redesEngTrend', '_redesMonday', 'redesWeekNav', 'renderRedesWeekGrid', '_redesGaps', '_redesGapsHtml', 'redesPlanDay', 'redesConnectGuide', 'redesGuideClose',
     '_redesAutoStatus', 'renderRedesAutoPanel', '_redesDemoCopy', '_redesFillGapsCore', 'redesFillGaps', 'redesAutopilot', 'redesAutoSchedule',
+    // newsletter — top 3
+    'initNewsletter', 'nlLoad', 'renderNlCampaigns', 'renderNlKpis', 'nlGenerate', '_nlBaseDest',
+    '_nlEngByEmail', '_nlRecentRecipients', '_nlCampRate', '_nlBestSendTime', 'renderNlAnalytics',
+    '_nlSubjectScore', '_nlScoreChip', 'nlSubjectSuggest', 'nlApplySubject',
+    'nlPopulatePedidos', 'nlGenerateFromPedido', '_nlSmartSegOptions', 'nlDestSetNoResend',
   ];
   const probs = [];
   CRITICAL.forEach(n => {
@@ -152,7 +157,8 @@ const ok = msg => console.log('  ✓ ' + msg);
     'oficinaAlerts', 'oficinaCardFilter', 'oficinaErr', 'badge-oficina', 'ofAgentModal', 'oficinaRangeSel',
     'ofHealth', 'ofTeamLast', 'oficinaFeedSearch',
     'tab-redes', 'redesPostsList', 'redesInboxList', 'redesIgPreviewModal', 'redesIgBody',
-    'redesGuideModal', 'redesGuideBody', 'redesBtnSem', 'redesPostsCal', 'redesAutoPanel'];
+    'redesGuideModal', 'redesGuideBody', 'redesBtnSem', 'redesPostsCal', 'redesAutoPanel',
+    'nlAnalytics', 'nlGenPedido', 'nlDestNoResend'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
   if (missing.length) fail('IDs del DOM ausentes: ' + missing.join(', '));
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');

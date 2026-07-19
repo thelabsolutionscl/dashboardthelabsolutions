@@ -892,9 +892,9 @@ const _nlMesActual=()=>{const m=new Date().toLocaleDateString('es-CL',{month:'lo
 
 function initNewsletter(){
   const mes=document.getElementById('nlGenMes'); if(mes&&!mes.value) mes.value=_nlMesActual();
-  nlPopulateSegments();
+  nlPopulateSegments(); nlPopulatePedidos();
   if(!_nlLoaded && _redesHasData()) nlLoad();
-  else { renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); renderNlSubscribers(); }
+  else { renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); renderNlSubscribers(); renderNlAnalytics(); }
 }
 
 async function nlLoad(force){
@@ -907,7 +907,7 @@ async function nlLoad(force){
   state.nlCampaigns = await airtableFetch('Newsletter_Campañas',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._nlCampErr=true;else toast('No se pudieron cargar campañas: '+e.message,'error');return [];});
   state.nlEnvios    = await airtableFetch('Newsletter_Envios',1000).then(r=>r.records).catch(e=>{if(isMissing(e))state._nlEnvErr=true;else toast('No se pudieron cargar envíos: '+e.message,'error');return [];});
   _nlLoaded=true;
-  nlPopulateSegments(); renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); renderNlSubscribers();
+  nlPopulateSegments(); nlPopulatePedidos(); renderNlKpis(); renderNlCampaigns(); renderNlLeads(); renderNlAudience(); renderNlSubscribers(); renderNlAnalytics();
 }
 
 // Audiencia = clientes del CRM con email y sin baja. "Suscritos" = opt-in explícito.
@@ -926,7 +926,7 @@ function nlPopulateSegments(){
   const sel=document.getElementById('nlGenSegment'); if(!sel) return;
   const a=_nlAudience(); const cur=sel.value;
   const rubros=Object.keys(a.byRubro).sort((x,y)=>a.byRubro[y]-a.byRubro[x]);
-  sel.innerHTML=`<option value="">Toda la audiencia (${a.reachable.length})</option>`+rubros.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)} (${a.byRubro[r]})</option>`).join('');
+  sel.innerHTML=`<option value="">Toda la audiencia (${a.reachable.length})</option>`+rubros.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)} (${a.byRubro[r]})</option>`).join('')+_nlSmartSegOptions(cur);
   if(cur) sel.value=cur;
 }
 
@@ -1016,7 +1016,25 @@ function _nlGetDest(id){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id);
   return {seg:(c&&c.fields['Segmento objetivo'])?String(c.fields['Segmento objetivo']):'',exclude:[],extra:[]};
 }
-function _nlBaseDest(seg){let base=_nlSubList();if(seg)base=base.filter(c=>String(c.fields['Industria / Rubro']||'')===seg);return base;}
+// Segmentos: por rubro (texto) o inteligentes (prefijo @: aperturistas, no-abrieron, clicaron, inactivos)
+function _nlBaseDest(seg){
+  const base=_nlSubList();
+  if(!seg) return base;
+  if(seg[0]==='@'){
+    const eng=_nlEngByEmail(), of=c=>eng[String(c.fields['Email']||'').toLowerCase()]||{opens:0,clicks:0};
+    if(seg==='@openers')    return base.filter(c=>of(c).opens>0);
+    if(seg==='@nonopeners') return base.filter(c=>of(c).opens===0);
+    if(seg==='@clickers')   return base.filter(c=>of(c).clicks>0);
+    if(seg==='@inactive'){ const cut=Date.now()-90*864e5; return base.filter(c=>{const d=Date.parse(c.fields['Fecha último pedido']||'')||0; return !d||d<cut;}); }
+    return base;
+  }
+  return base.filter(c=>String(c.fields['Industria / Rubro']||'')===seg);
+}
+// <optgroup> de segmentos inteligentes (reusable en el generador y en el modal de destinatarios)
+function _nlSmartSegOptions(sel){
+  const S=[['@openers','🔥 Aperturistas'],['@nonopeners','😴 No abrieron'],['@clickers','🖱️ Clicaron alguna vez'],['@inactive','💤 Clientes inactivos (>90d)']];
+  return `<optgroup label="Segmentos inteligentes">`+S.map(([v,l])=>`<option value="${v}"${sel===v?' selected':''}>${l} (${_nlBaseDest(v).length})</option>`).join('')+`</optgroup>`;
+}
 function _nlDestResolve(seg,exclude,extra){
   const ex=exclude instanceof Set?exclude:new Set(exclude||[]);const out=[],seen=new Set();
   _nlBaseDest(seg).forEach(c=>{if(ex.has(c.id))return;const em=String(c.fields['Email']||'').toLowerCase();if(seen.has(em))return;seen.add(em);out.push({id:c.id,nombre:c.fields['Empresa']||c.fields['Contacto']||em,email:c.fields['Email']});});
@@ -1028,18 +1046,25 @@ function nlDestOpen(id){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id);if(!c){toast('Campaña no encontrada','error');return;}
   if(!(state.clientes||[]).length){toast('Carga los clientes (↻ del Overview) para gestionar destinatarios','info');return;}
   const d=_nlGetDest(id);
-  _nlDest={campId:id,seg:d.seg||'',exclude:new Set(d.exclude||[]),extra:(d.extra||[]).slice()};
+  _nlDest={campId:id,seg:d.seg||'',exclude:new Set(d.exclude||[]),extra:(d.extra||[]).slice(),noResend:!!d.noResend};
   document.getElementById('nlDestCamp').textContent='Asunto: '+(c.fields['Asunto']||c.fields['Campaña']||'(sin asunto)');
   const a=_nlAudience();const rubros=Object.keys(a.byRubro||{}).sort();
   const seg=document.getElementById('nlDestSeg');
-  seg.innerHTML='<option value="">Toda la audiencia</option>'+rubros.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  seg.innerHTML='<option value="">Toda la audiencia</option>'+rubros.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('')+_nlSmartSegOptions(_nlDest.seg);
   seg.value=_nlDest.seg;
+  const nr=document.getElementById('nlDestNoResend'); if(nr) nr.checked=!!_nlDest.noResend;
   document.getElementById('nlDestSearch').value='';document.getElementById('nlDestExtraEmail').value='';
   nlDestRenderList();
   document.getElementById('nlDestModal').style.display='flex';
 }
 function nlDestSetSeg(v){if(_nlDest){_nlDest.seg=v;nlDestRenderList();}}
-function _nlDestWorking(){return _nlDest?_nlDestResolve(_nlDest.seg,_nlDest.exclude,_nlDest.extra):[];}
+function nlDestSetNoResend(ch){if(_nlDest){_nlDest.noResend=ch;_nlDestUpdCount();}}
+function _nlDestWorking(){
+  if(!_nlDest) return [];
+  let list=_nlDestResolve(_nlDest.seg,_nlDest.exclude,_nlDest.extra);
+  if(_nlDest.noResend){ const recent=_nlRecentRecipients(14); list=list.filter(x=>!recent.has(String(x.email||'').toLowerCase())); }
+  return list;
+}
 function _nlDestUpdCount(){const n=_nlDestWorking().length;const el=document.getElementById('nlDestCount');if(el)el.textContent=n+' destinatario'+(n!==1?'s':'')+' seleccionado'+(n!==1?'s':'');}
 function nlDestRenderList(){
   if(!_nlDest)return;const el=document.getElementById('nlDestList');if(!el)return;
@@ -1060,7 +1085,7 @@ function nlDestRenderList(){
 function nlDestToggle(id,checked){if(!_nlDest)return;if(checked)_nlDest.exclude.delete(id);else _nlDest.exclude.add(id);_nlDestUpdCount();}
 function nlDestAddExtra(){if(!_nlDest)return;const inp=document.getElementById('nlDestExtraEmail');const em=(inp.value||'').trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Email inválido','error');return;}if(_nlDest.extra.some(e=>e.email.toLowerCase()===em.toLowerCase())){toast('Ya está en la lista','info');inp.value='';return;}_nlDest.extra.push({nombre:em,email:em});inp.value='';nlDestRenderList();}
 function nlDestRemoveExtra(i){if(!_nlDest)return;_nlDest.extra.splice(i,1);nlDestRenderList();}
-function nlDestSave(close){if(!_nlDest)return;try{localStorage.setItem(_nlDestKey(_nlDest.campId),JSON.stringify({seg:_nlDest.seg,exclude:[..._nlDest.exclude],extra:_nlDest.extra}));}catch(_){}
+function nlDestSave(close){if(!_nlDest)return;try{localStorage.setItem(_nlDestKey(_nlDest.campId),JSON.stringify({seg:_nlDest.seg,exclude:[..._nlDest.exclude],extra:_nlDest.extra,noResend:_nlDest.noResend}));}catch(_){}
   toast('Selección de destinatarios guardada ✓','success');renderNlCampaigns();if(close)document.getElementById('nlDestModal').style.display='none';}
 async function nlDestSend(){
   if(!_nlDest)return;const list=_nlDestWorking();
@@ -1362,7 +1387,9 @@ async function nlGenerate(){
     try{AGENT_LOG.add(cfg.label,input,out);}catch(_){}
     const p=_nlLastParsed;
     res.innerHTML=`<div style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
-        <div style="font-size:10px;color:var(--text3)">ASUNTO</div><div style="font-size:13px;font-weight:600;color:var(--text)">${escapeHtml(p.asunto||'—')}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:10px;color:var(--text3)">ASUNTO</span><span id="nlSubjScore">${_nlScoreChip(p.asunto||'')}</span><button class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 9px" onclick="nlSubjectSuggest()" title="3 alternativas con IA, cada una con su puntaje">✨ Ideas</button></div>
+        <div id="nlSubjText" style="font-size:13px;font-weight:600;color:var(--text);margin-top:3px">${escapeHtml(p.asunto||'—')}</div>
+        <div id="nlSubjOpts"></div>
         ${p.preheader?`<div style="font-size:10px;color:var(--text3);margin-top:6px">PREHEADER</div><div style="font-size:12px;color:var(--text2)">${escapeHtml(p.preheader)}</div>`:''}
       </div>
       <div class="ai-response" style="white-space:normal">${formatAgentReport(p.cuerpo||out)}</div>
@@ -1389,6 +1416,144 @@ async function nlSaveDraft(){
     toast('Borrador guardado ✓','success'); renderNlKpis(); renderNlCampaigns();
     document.getElementById('nlCampaignsList')?.scrollIntoView({behavior:'smooth',block:'center'});
   }catch(e){toast('No se pudo guardar (¿existe la tabla Newsletter_Campañas?): '+e.message,'error');}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// NEWSLETTER — Top 3: analítica de rendimiento · optimizador de asunto · segmentos inteligentes
+// ═══════════════════════════════════════════════════════════════════════
+
+// Engagement por email (aperturas/clics/último envío) desde Newsletter_Envios — base de segmentos y analítica
+function _nlEngByEmail(){
+  const m={};
+  (state.nlEnvios||[]).forEach(e=>{ const em=String(e.fields['Email']||'').toLowerCase(); if(!em) return;
+    const o=m[em]=m[em]||{opens:0,clicks:0,last:0};
+    if(e.fields['Fecha apertura']) o.opens++;
+    if(e.fields['Fecha click']) o.clicks++;
+    const t=Date.parse(e.fields['Fecha envío']||e.fields['Fecha click']||e.fields['Fecha apertura']||e.createdTime||'')||0;
+    if(t>o.last) o.last=t;
+  });
+  return m;
+}
+// Emails que ya recibieron una campaña en los últimos N días (anti-doble-envío)
+function _nlRecentRecipients(days){
+  const cut=Date.now()-(days||14)*864e5, set=new Set();
+  (state.nlEnvios||[]).forEach(e=>{ const em=String(e.fields['Email']||'').toLowerCase(); if(!em) return;
+    const t=Date.parse(e.fields['Fecha envío']||e.createdTime||'')||0; if(t>=cut) set.add(em); });
+  return set;
+}
+
+// ── (1) Analítica de rendimiento ──────────────────────────────────────
+function _nlCampRate(c){
+  const rate=k=>{const v=c.fields[k]; if(v==null||v==='')return null; return Math.round(v<=1?v*100:v);};
+  let open=rate('Tasa apertura (%)'), click=rate('Tasa click (%)');
+  if(open==null||click==null){
+    const env=(state.nlEnvios||[]).filter(e=>{const cc=e.fields['Campaña']; return Array.isArray(cc)?cc.includes(c.id):(cc===c.id);});
+    if(env.length){ if(open==null)open=Math.round(env.filter(e=>e.fields['Fecha apertura']).length/env.length*100);
+      if(click==null)click=Math.round(env.filter(e=>e.fields['Fecha click']).length/env.length*100); }
+  }
+  return {open,click};
+}
+function _nlBestSendTime(){
+  const wd=new Array(7).fill(0), hr=new Array(24).fill(0); let n=0;
+  (state.nlEnvios||[]).forEach(e=>{ const d=e.fields['Fecha apertura']; if(!d)return; const t=new Date(d); if(isNaN(t))return; wd[t.getDay()]++; hr[t.getHours()]++; n++; });
+  if(!n) return null;
+  return {dia:wd.indexOf(Math.max(...wd)), hora:hr.indexOf(Math.max(...hr)), n};
+}
+function renderNlAnalytics(){
+  const el=document.getElementById('nlAnalytics'); if(!el) return;
+  const sent=(state.nlCampaigns||[]).filter(c=>(c.fields['Estado']||'')==='Enviada')
+    .sort((a,b)=>new Date(a.fields['Fecha envío']||a.createdTime||0)-new Date(b.fields['Fecha envío']||b.createdTime||0));
+  if(!sent.length){
+    el.innerHTML=`<div class="redes-empty"><span class="ico">📊</span><div>Sin campañas enviadas todavía${state._nlCampErr?' (o falta la tabla)':''}.</div><div>Cuando envíes ediciones y Make registre aperturas/clics (<code>Newsletter_Envios</code>), aquí verás el rendimiento en el tiempo.</div></div>`; return;
+  }
+  const rates=sent.map(c=>({c,...(_nlCampRate(c))}));
+  const withOpen=rates.filter(r=>r.open!=null), withClick=rates.filter(r=>r.click!=null);
+  const avg=a=>a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):null;
+  const avgO=avg(withOpen.map(r=>r.open)), avgC=avg(withClick.map(r=>r.click));
+  let best=null; withOpen.forEach(r=>{ if(!best||r.open>best.open) best={open:r.open,asunto:r.c.fields['Asunto']||r.c.fields['Campaña']||'(sin asunto)'}; });
+  const bt=_nlBestSendTime(); const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  // Gráfico de barras: apertura (morado) por campaña (últimas 10)
+  const last=rates.slice(-10), W=320,H=90,pad=6,bw=(W-pad*2)/Math.max(1,last.length);
+  let bars=''; last.forEach((r,i)=>{ const o=r.open||0; const bh=(o/100)*(H-24), x=pad+i*bw+2, y=H-18-bh;
+    bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${Math.max(1,bh).toFixed(1)}" rx="2" fill="#7c4dff" opacity="${i===last.length-1?1:.6}"><title>${escapeHtml((r.c.fields['Asunto']||'').slice(0,40))}: ${o}% apertura${r.click!=null?(' · '+r.click+'% clic'):''}</title></rect>`;
+    if(r.click!=null){ const ch=(r.click/100)*(H-24); bars+=`<rect x="${(x+ (bw-4)*0.62).toFixed(1)}" y="${(H-18-ch).toFixed(1)}" width="${Math.max(2,(bw-4)*0.34).toFixed(1)}" height="${Math.max(1,ch).toFixed(1)}" rx="1.5" fill="#00d4aa" opacity=".9"></rect>`; }
+  });
+  const chart=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:90px;display:block"><line x1="${pad}" y1="${H-18}" x2="${W-pad}" y2="${H-18}" stroke="var(--border)"/>${bars}</svg>`;
+  const stat=(v,lbl,col)=>`<div style="flex:1;min-width:92px"><div style="font-family:'Bebas Neue',sans-serif;font-size:30px;line-height:1;color:${col}">${v==null?'—':v+'%'}</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin-top:2px">${lbl}</div></div>`;
+  el.innerHTML=`
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+      ${stat(avgO,'Apertura prom.','#a78bfa')}
+      ${stat(avgC,'Clic prom.','var(--success)')}
+      <div style="flex:1;min-width:92px"><div style="font-family:'Bebas Neue',sans-serif;font-size:30px;line-height:1;color:var(--text)">${sent.length}</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin-top:2px">Campañas enviadas</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:3px"><span>📈 Apertura por campaña (últimas ${last.length}) · <span style="color:#7c4dff">■</span> apertura <span style="color:#00d4aa">■</span> clic</span></div>
+    ${chart}
+    ${best?`<div style="font-size:11px;color:var(--text2);margin-top:10px;background:var(--surface3);border-radius:8px;padding:8px 11px">🏆 <b style="color:var(--text)">Mejor asunto</b> (${best.open}% apertura): “${escapeHtml(best.asunto.slice(0,70))}”</div>`:''}
+    ${bt?`<div style="font-size:11px;color:var(--text2);margin-top:8px">⏰ <b style="color:var(--text)">Mejor momento</b>: tus lectores abren más los <b>${DIAS[bt.dia]}</b> alrededor de las <b>${_redesPad(bt.hora)}:00</b> (${bt.n} aperturas registradas).</div>`:''}`;
+}
+
+// ── (2) Optimizador de asunto ─────────────────────────────────────────
+const _NL_SPAM=['gratis','oferta imperdible','descuento','urgente','última oportunidad','click aquí','clic aquí','dinero','$$$','ganador','felicidades','100% gratis','sin costo','promoción','compra ahora','no te lo pierdas'];
+function _nlSubjectScore(s){
+  s=(s||'').trim(); const len=s.length; let score=62; const tips=[];
+  if(!len) return {score:0,level:'flojo',tips:['Escribe un asunto'],len:0};
+  if(len>=28&&len<=52) score+=16;
+  else if(len<28){ score-=12; tips.push('Muy corto — apunta a 28–52 caracteres'); }
+  else if(len>65){ score-=16; tips.push('Muy largo — se corta en el móvil (mantén <52)'); }
+  else { score-=4; tips.push('Un poco largo — lo ideal es <52'); }
+  if(/\p{Extended_Pictographic}/u.test(s)) score+=6; else tips.push('Un emoji sutil puede subir la apertura');
+  if(/\d/.test(s)) score+=6; else tips.push('Un número concreto (ej. “3 ideas”) suele funcionar');
+  if(/\{\{/.test(s)) score+=6;
+  if(s===s.toUpperCase()&&/[A-ZÁÉÍÓÚÑ]/.test(s)){ score-=18; tips.push('Evita TODO EN MAYÚSCULAS (parece spam)'); }
+  const low=s.toLowerCase(); const spam=_NL_SPAM.filter(w=>low.includes(w));
+  if(spam.length){ score-=7*spam.length; tips.push('Palabras “spammy”: '+spam.slice(0,2).join(', ')); }
+  if(/[!?]{2,}/.test(s)){ score-=8; tips.push('Evita signos repetidos (!!! / ???)'); }
+  score=Math.max(0,Math.min(100,score));
+  return {score,level:score>=75?'bueno':score>=50?'medio':'flojo',tips:tips.slice(0,3),len};
+}
+function _nlScoreChip(s){
+  const r=_nlSubjectScore(s), col=r.level==='bueno'?'var(--success)':r.level==='medio'?'var(--warn)':'var(--danger)';
+  return `<span title="${escapeHtml(r.tips.join(' · ')||'Buen asunto')}" style="font-size:10px;font-weight:800;color:${col};background:${col}1f;border:1px solid ${col}55;border-radius:999px;padding:2px 8px;white-space:nowrap">${r.score}/100 · ${r.len} car.</span>`;
+}
+// Pide 3 asuntos alternativos a la IA y los muestra con su score, aplicables con un clic
+async function nlSubjectSuggest(){
+  const base=(_nlLastParsed&&_nlLastParsed.asunto)||_nlLastInput||''; if(!base){toast('Genera el newsletter primero','info');return;}
+  const cfg=AGENTES_CFG.find(a=>a.id==='NEWSLETTER_AGENT'); if(!cfg){toast('Falta NEWSLETTER_AGENT','error');return;}
+  const box=document.getElementById('nlSubjOpts'); if(box) box.innerHTML='<div style="font-size:11px;color:var(--text3)">⏳ Pensando 3 asuntos…</div>';
+  try{
+    const out=await callClaude(cfg.sys,`Devuelve EXACTAMENTE 3 líneas de asunto de email en español para esta edición del newsletter, una por línea, SIN numerar, SIN comillas: cortas (menos de 52 caracteres), atractivas, específicas y NO spammy. Edición: "${base}". Responde solo las 3 líneas.`);
+    const opts=out.split('\n').map(x=>x.replace(/^[\s\-*•\d.)]+/,'').replace(/^["“]|["”]$/g,'').trim()).filter(x=>x&&x.length<90).slice(0,3);
+    if(!opts.length){ if(box) box.innerHTML='<div style="font-size:11px;color:var(--text3)">No hubo sugerencias, intenta de nuevo.</div>'; return; }
+    if(box) box.innerHTML=opts.map(o=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border)"><div style="flex:1;min-width:0;font-size:12px;color:var(--text)">${escapeHtml(o)}</div>${_nlScoreChip(o)}<button class="btn btn-ghost btn-sm" onclick="nlApplySubject(this.dataset.s)" data-s="${escapeHtml(o)}">Usar</button></div>`).join('');
+  }catch(e){ if(box) box.innerHTML='<div style="font-size:11px;color:var(--danger)">No se pudo: '+escapeHtml(e.message)+'</div>'; }
+}
+function nlApplySubject(txt){ if(!_nlLastParsed) return; _nlLastParsed.asunto=txt;
+  const el=document.getElementById('nlSubjText'); if(el) el.textContent=txt;
+  const sc=document.getElementById('nlSubjScore'); if(sc) sc.innerHTML=_nlScoreChip(txt);
+  toast('Asunto actualizado ✓','success');
+}
+
+// ── (3b) Generar desde un pedido entregado real ───────────────────────
+function nlPopulatePedidos(){
+  const sel=document.getElementById('nlGenPedido'); if(!sel) return;
+  const peds=(state.pedidos||[]).filter(p=>['Despachado','Listo para despacho'].includes(p.fields['Estado pedido']||''));
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— o desde un pedido entregado —</option>'+peds.slice(0,60).map(p=>{
+    const f=p.fields, n=f['N° Pedido']||p.id, cli=typeof resolveClienteName==='function'?resolveClienteName(f['Cliente']):'';
+    return `<option value="${p.id}">${escapeHtml(n)}${cli?(' · '+escapeHtml(cli)):''}</option>`;
+  }).join('');
+  if(cur) sel.value=cur;
+}
+async function nlGenerateFromPedido(){
+  const sel=document.getElementById('nlGenPedido'), pid=sel&&sel.value;
+  if(!pid){toast('Elige un pedido entregado','error');return;}
+  const p=(state.pedidos||[]).find(x=>x.id===pid); if(!p){toast('Pedido no encontrado','error');return;}
+  const f=p.fields, cli=typeof resolveClienteName==='function'?resolveClienteName(f['Cliente']):'';
+  const det=f['Detalle productos']||f['Notas pedido']||f['Material']||'un proyecto personalizado';
+  const num=f['N° Pedido']||pid;
+  const it=document.getElementById('nlGenInput');
+  if(it) it.value=`Newsletter destacando el pedido entregado ${num}${cli?(' para '+cli):''}: ${det}. Úsalo como caso real / prueba social, con un CTA a cotizar algo similar.`;
+  nlGenerate();
 }
 
 // ── Mejor momento para publicar (día desde Social_Metrics + hora sugerida por red) ──

@@ -2778,6 +2778,13 @@
         <button onclick="nlQuick('Neones LED personalizados para restaurantes y retail: ideas, antes/después y CTA a cotizar')" class="btn-mini">Neones</button>
         <button onclick="nlQuick('Campaña de reactivación para clientes que no compran hace meses, con una oferta especial')" class="btn-mini">Reactivación</button>
       </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:0 0 12px;padding:10px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:8px">
+        <div class="field-group" style="margin:0;flex:1;min-width:200px">
+          <label class="field-label" style="font-size:10px">…o arma la edición desde un pedido entregado real (caso / prueba social)</label>
+          <select class="field-select" id="nlGenPedido" style="font-size:12px"><option value="">— o desde un pedido entregado —</option></select>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="nlGenerateFromPedido()" style="white-space:nowrap">✨ Generar desde pedido</button>
+      </div>
       <button class="btn btn-primary" id="nlGenBtn" onclick="nlGenerate()" style="background:#7c4dff;color:#fff;border-color:#7c4dff"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-newsletter"/></svg> Generar newsletter</button>
     </div>
     <div id="nlGenResult" style="padding:14px 16px"></div>
@@ -2799,6 +2806,16 @@
     </div>
     <div id="nlCampaignsList" style="padding:8px 0">
       <div style="padding:16px;color:var(--text3);font-size:12px">Presiona “Actualizar” para cargar tus campañas (tabla <code>Newsletter_Campañas</code> de Airtable).</div>
+    </div>
+  </div>
+
+  <!-- ANALÍTICA DE RENDIMIENTO -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Rendimiento del newsletter</span>
+    </div>
+    <div id="nlAnalytics" style="padding:14px 16px">
+      <div style="padding:8px;color:var(--text3);font-size:12px">Cuando envíes campañas y Make registre aperturas/clics, aquí verás la tendencia, el mejor asunto y el mejor momento para enviar.</div>
     </div>
   </div>
 
@@ -2868,6 +2885,7 @@
       <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <label style="font-size:11px;color:var(--text3)">Segmento</label>
         <select id="nlDestSeg" class="field-select" style="width:auto;font-size:12px" onchange="nlDestSetSeg(this.value)"></select>
+        <label style="font-size:11px;color:var(--text2);display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Excluye a quien ya recibió una campaña en los últimos 14 días"><input type="checkbox" id="nlDestNoResend" onchange="nlDestSetNoResend(this.checked)"> No reenviar (14 d)</label>
         <input id="nlDestSearch" oninput="nlDestRenderList()" placeholder="Buscar…" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 9px;color:var(--text);font-size:12px;width:min(170px,38vw)">
       </div>
       <div style="padding:10px 18px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)">
