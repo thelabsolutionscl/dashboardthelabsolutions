@@ -753,12 +753,156 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <!-- Sub-navegación interna -->
   <div id="fin-subnav" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
     <button class="btn btn-ghost btn-sm active-filter" id="fin-nav-resumen" onclick="finSwitchTab('resumen')">📊 Resumen</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-gestion" onclick="finSwitchTab('gestion')" style="border-color:rgba(0,212,204,0.4);color:var(--accent)">🗂️ Gestión</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-facturas" onclick="finSwitchTab('facturas')">📄 Facturas</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-cobrar" onclick="finSwitchTab('cobrar')">💸 Por Cobrar</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-prestamos" onclick="finSwitchTab('prestamos')">🏦 Préstamos</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-deudas" onclick="finSwitchTab('deudas')">⚠️ Deudas</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-nueva" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-diario" onclick="finSwitchTab('diario')">📒 Libro Diario</button>
+  </div>
+
+  <!-- ══ GESTIÓN — clientes, cotizaciones, pagos, archivos ══ -->
+  <div id="fin-panel-gestion" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text)">🗂️ Gestión</div>
+        <div style="font-size:12px;color:var(--text2)">Clientes · Cotizaciones · Pagos · Archivos — todo en tu equipo</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="gxOpenCliente()">👤 Nuevo cliente</button>
+        <button class="btn btn-primary btn-sm" onclick="gxOpenCotizacion()">➕ Nueva cotización</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div id="gx-resumen" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text2)">—</div>
+    </div>
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <span class="card-title">Cotizaciones</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input class="field-input" id="gx-buscar" placeholder="🔍 buscar cliente / ítem / N°..." style="width:200px;padding:5px 9px;font-size:12px" oninput="gxRenderTabla()">
+          <select class="field-select" id="gx-filtro-estado" style="width:150px;padding:5px 9px;font-size:12px" onchange="gxRenderTabla()">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="aprobada">Aprobada</option>
+            <option value="rechazada">Rechazada</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>N°</th><th>Cliente</th><th>Ítems</th><th style="text-align:right">Total + IVA</th>
+            <th>Estado</th><th style="text-align:right">Pagado</th><th style="text-align:right">Por cobrar</th>
+            <th style="text-align:center">📎</th><th>Acciones</th>
+          </tr></thead>
+          <tbody id="gx-tabla-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal Cliente -->
+    <div id="gxClienteModal" class="modal-overlay" style="display:none">
+      <div class="modal-backdrop" onclick="gxCloseCliente()"></div>
+      <div class="modal-card">
+        <div class="modal-title">👤 <span id="gxClienteTitle">Nuevo cliente</span></div>
+        <input type="hidden" id="gx-cli-id">
+        <div class="form-grid" style="padding:10px 0 0">
+          <div class="field-group form-full"><label class="field-label">Empresa</label><input class="field-input" id="gx-cli-empresa" placeholder="Ej: BCI Pagos"></div>
+          <div class="field-group"><label class="field-label">Nombre contacto</label><input class="field-input" id="gx-cli-nombre" placeholder="Ej: Virginia Venturino"></div>
+          <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="gx-cli-rut" placeholder="77.190.661-3"></div>
+          <div class="field-group"><label class="field-label">E-mail</label><input class="field-input" id="gx-cli-email" placeholder="correo@empresa.cl"></div>
+          <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="gx-cli-tel" placeholder="+56 9 ..."></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-ghost btn-sm" onclick="gxCloseCliente()">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="gxSaveCliente()">✓ Guardar cliente</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Cotización -->
+    <div id="gxCotModal" class="modal-overlay" style="display:none">
+      <div class="modal-backdrop" onclick="gxCloseCotizacion()"></div>
+      <div class="modal-card wide">
+        <div class="modal-title">➕ <span id="gxCotTitle">Nueva cotización</span></div>
+        <input type="hidden" id="gx-cot-id">
+        <div class="form-grid" style="padding:10px 0 0">
+          <div class="field-group form-full"><label class="field-label">Cliente</label>
+            <div style="display:flex;gap:8px">
+              <select class="field-select" id="gx-cot-cliente" style="flex:1"></select>
+              <button class="btn btn-ghost btn-sm" onclick="gxOpenCliente()" title="Nuevo cliente">＋</button>
+            </div>
+          </div>
+          <div class="field-group"><label class="field-label">N° Cotización</label><input class="field-input" id="gx-cot-num" placeholder="COT-2026-001"></div>
+          <div class="field-group"><label class="field-label">Canal</label><select class="field-select" id="gx-cot-canal"><option>CONTACTO</option><option>ADWORDS</option><option>VENDEDORES</option></select></div>
+          <div class="field-group"><label class="field-label">Categoría</label><select class="field-select" id="gx-cot-cat"><option value="">—</option><option>IMPRENTA</option><option>3D</option><option>NEON/CARTEL</option><option>DISEÑO</option><option>SERVICIO</option></select></div>
+        </div>
+        <div style="margin-top:12px">
+          <label class="field-label">Ítems (valor neto por unidad)</label>
+          <div id="gx-cot-items" style="margin-top:6px"></div>
+          <button class="btn btn-ghost btn-sm" onclick="gxAddItem()" style="margin-top:4px">＋ Agregar ítem</button>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:18px;margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:13px">
+          <span style="color:var(--text2)">Neto: <strong id="gx-cot-neto" style="color:var(--text)">$0</strong></span>
+          <span style="color:var(--text2)">IVA: <strong id="gx-cot-iva" style="color:var(--text3)">$0</strong></span>
+          <span style="color:var(--text2)">Total: <strong id="gx-cot-total" style="color:var(--accent)">$0</strong></span>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-ghost btn-sm" onclick="gxCloseCotizacion()">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="gxSaveCotizacion()">✓ Guardar cotización</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Pago -->
+    <div id="gxPagoModal" class="modal-overlay" style="display:none">
+      <div class="modal-backdrop" onclick="gxClosePago()"></div>
+      <div class="modal-card">
+        <div class="modal-title">💵 Registrar pago</div>
+        <input type="hidden" id="gx-pago-cotid">
+        <div style="padding:8px 0 0">
+          <div style="font-weight:700" id="gx-pago-cliente">—</div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:8px 0">
+            <span style="color:var(--text2)">Total con IVA</span><span style="font-weight:700;color:var(--accent)" id="gx-pago-total">$0</span>
+          </div>
+          <label class="field-label">Monto pagado</label>
+          <div style="display:flex;gap:6px;margin:6px 0;flex-wrap:wrap">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="gxPagoPct(0)">0%</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="gxPagoPct(50)">50%</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="gxPagoPct(100)">100%</button>
+          </div>
+          <input class="field-input" id="gx-pago-monto" type="number" placeholder="0" oninput="gxPagoCalc()">
+          <div style="font-size:12px;color:var(--text2);margin-top:5px" id="gx-pago-pct">—</div>
+          <div style="display:flex;justify-content:space-between;margin-top:12px"><span style="color:var(--text2)">Por cobrar</span><span style="font-weight:700;color:var(--danger)" id="gx-pago-cobrar">$0</span></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-ghost btn-sm" onclick="gxClosePago()">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="gxSavePago()">✓ Guardar pago</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Archivos -->
+    <div id="gxFilesModal" class="modal-overlay" style="display:none">
+      <div class="modal-backdrop" onclick="gxCloseFiles()"></div>
+      <div class="modal-card">
+        <div class="modal-title">📎 Archivos</div>
+        <input type="hidden" id="gx-files-cotid">
+        <div style="padding:8px 0 0">
+          <div style="font-weight:700;margin-bottom:8px" id="gx-files-cliente">—</div>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-block">＋ Subir archivo
+            <input type="file" id="gx-files-input" multiple style="display:none" onchange="gxUploadFiles(this)">
+          </label>
+          <div style="font-size:11px;color:var(--text3);margin:6px 0">Facturas, órdenes de compra, comprobantes, imágenes… (se guardan en tu navegador)</div>
+          <div id="gx-files-list" style="margin-top:10px"></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-ghost btn-sm" onclick="gxCloseFiles()">Cerrar</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ── RESUMEN ── -->
@@ -1501,13 +1645,15 @@ function varPct(a,b){if(!a||!b)return null;return ((b-a)/a)*100;}
 /* ── Sub-tabs internos ── */
 function finSwitchTab(tab){
   finCurrentTab=tab;
-  ['resumen','facturas','cobrar','prestamos','deudas','nueva','diario'].forEach(t=>{
-    document.getElementById('fin-panel-'+t).style.display=(t===tab)?'':'none';
+  ['resumen','gestion','facturas','cobrar','prestamos','deudas','nueva','diario'].forEach(t=>{
+    const panel=document.getElementById('fin-panel-'+t);
+    if(panel)panel.style.display=(t===tab)?'':'none';
     const btn=document.getElementById('fin-nav-'+t);
     if(btn){
       btn.classList.toggle('active-filter',t===tab);
     }
   });
+  if(tab==='gestion'&&typeof gxRender==='function'){gxRender();}
   if(tab==='resumen'){finDrawChart();finDrawCanalDonut();finRenderResumenAnual();finRenderTopClientes();}
   if(tab==='facturas'){finRenderFacturas();}
   if(tab==='cobrar'){finRenderCobrar();}
@@ -2717,6 +2863,270 @@ document.addEventListener('click',function(e){
   const dd=document.getElementById('nuevoDropdown');
   if(dd&&!dd.contains(e.target))closeNuevoMenu();
 });
+</script>
+<script>
+/* ══════════════════════════════════════════════════════════════
+   GESTIÓN (gx) — clientes, cotizaciones, pagos, archivos
+   Datos: localStorage (mini_clientes, mini_cotizaciones)
+   Archivos: IndexedDB (gx_finanzas / files) — aguanta MB
+   Independiente del sistema central.
+   ══════════════════════════════════════════════════════════════ */
+const GX_CLI='mini_clientes', GX_COT='mini_cotizaciones';
+function gxGetClientes(){try{return JSON.parse(localStorage.getItem(GX_CLI)||'[]');}catch(e){return[];}}
+function gxSetClientes(a){try{localStorage.setItem(GX_CLI,JSON.stringify(a));return true;}catch(e){toast('Sin espacio para guardar','error');return false;}}
+function gxGetCots(){try{return JSON.parse(localStorage.getItem(GX_COT)||'[]');}catch(e){return[];}}
+function gxSetCots(a){try{localStorage.setItem(GX_COT,JSON.stringify(a));return true;}catch(e){toast('Sin espacio para guardar','error');return false;}}
+function gxId(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function gxHoy(){return new Date().toISOString().slice(0,10);}
+
+/* ── IndexedDB para archivos ── */
+let gxDB=null;
+function gxDBOpen(){return new Promise((res,rej)=>{if(gxDB)return res(gxDB);const r=indexedDB.open('gx_finanzas',1);r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('files'))db.createObjectStore('files',{keyPath:'id'});};r.onsuccess=e=>{gxDB=e.target.result;res(gxDB);};r.onerror=e=>rej(e);});}
+function gxFilePut(rec){return gxDBOpen().then(db=>new Promise((res,rej)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').put(rec);tx.oncomplete=()=>res();tx.onerror=e=>rej(e);}));}
+function gxFileGet(id){return gxDBOpen().then(db=>new Promise((res,rej)=>{const rq=db.transaction('files','readonly').objectStore('files').get(id);rq.onsuccess=()=>res(rq.result);rq.onerror=e=>rej(e);}));}
+function gxFileDel(id){return gxDBOpen().then(db=>new Promise((res,rej)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').delete(id);tx.oncomplete=()=>res();tx.onerror=e=>rej(e);}));}
+function gxFilesAll(){return gxDBOpen().then(db=>new Promise((res)=>{const rq=db.transaction('files','readonly').objectStore('files').getAll();rq.onsuccess=()=>res(rq.result||[]);rq.onerror=()=>res([]);}));}
+function gxFilesByCot(cotId){return gxFilesAll().then(all=>all.filter(f=>f.cotId===cotId));}
+function gxFmtSize(b){b=b||0;if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(0)+' KB';return(b/1048576).toFixed(1)+' MB';}
+
+/* ── Render ── */
+function gxCliById(id){return gxGetClientes().find(c=>c.id===id);}
+function gxRender(){gxRenderResumen();gxRenderTabla();}
+function gxRenderResumen(){
+  const cots=gxGetCots();
+  const aprob=cots.filter(c=>c.estado==='aprobada');
+  const totalAprob=aprob.reduce((s,c)=>s+(c.total||0),0);
+  const pagado=aprob.reduce((s,c)=>s+(c.pago||0),0);
+  const cobrar=aprob.reduce((s,c)=>s+Math.max(0,(c.total||0)-(c.pago||0)),0);
+  const el=document.getElementById('gx-resumen');
+  const sep='<span style="color:var(--text3)">·</span>';
+  if(el)el.innerHTML=`<span><strong style="color:var(--text)">${cots.length}</strong> cotizaciones</span>${sep}<span><strong style="color:var(--accent3)">${aprob.length}</strong> aprobadas</span>${sep}<span>Total aprobado: <strong style="color:var(--accent)">${clp(totalAprob)}</strong></span>${sep}<span>Pagado: <strong style="color:var(--accent3)">${clp(pagado)}</strong></span>${sep}<span>Por cobrar: <strong style="color:var(--danger)">${clp(cobrar)}</strong></span>`;
+}
+function gxRenderTabla(){
+  const cots=gxGetCots();
+  const buscar=(document.getElementById('gx-buscar')?.value||'').toLowerCase();
+  const festado=document.getElementById('gx-filtro-estado')?.value||'';
+  const rows=cots.slice().reverse().filter(c=>{
+    if(festado&&c.estado!==festado)return false;
+    if(buscar){const cl=gxCliById(c.clienteId);const hay=((cl?.empresa||'')+' '+(cl?.nombre||'')+' '+(c.items||[]).map(i=>i.desc).join(' ')+' '+(c.num||'')).toLowerCase();if(!hay.includes(buscar))return false;}
+    return true;
+  });
+  const draw=(fileCounts)=>{
+    let html='';
+    rows.forEach(c=>{
+      const cl=gxCliById(c.clienteId);
+      const total=c.total||0,pago=c.pago||0,cobrar=Math.max(0,total-pago);
+      const pct=total>0?Math.round(pago/total*100):0;
+      const badge=c.estado==='aprobada'?'badge-green':c.estado==='rechazada'?'badge-red':'badge-yellow';
+      const txt=c.estado==='aprobada'?'Aprobada':c.estado==='rechazada'?'Rechazada':'Pendiente';
+      const items=(c.items||[]);
+      const itemsRes=items.length?((items[0].desc||'—')+(items.length>1?` +${items.length-1}`:'')):'—';
+      const nf=fileCounts[c.id]||0;
+      let acc='';
+      if(c.estado==='pendiente')acc=`<button class="btn-mini btn-mini-green" onclick="gxAprobar('${c.id}')">✓ Aprobar</button><button class="btn-mini btn-mini-red" onclick="gxRechazar('${c.id}')">✕ Rechazar</button><button class="btn-mini" onclick="gxOpenCotizacion('${c.id}')">✏️</button>`;
+      else if(c.estado==='aprobada')acc=`<button class="btn-mini" onclick="gxOpenPago('${c.id}')">💵 Pago</button><button class="btn-mini" onclick="gxOpenFiles('${c.id}')">📎 Archivos</button><button class="btn-mini" onclick="gxOpenCotizacion('${c.id}')">✏️</button>`;
+      else acc=`<button class="btn-mini" onclick="gxReactivar('${c.id}')">↩ Reactivar</button>`;
+      acc+=`<button class="btn-mini btn-mini-red" onclick="gxEliminar('${c.id}')">🗑</button>`;
+      html+=`<tr>
+        <td class="mono" style="font-size:11px">${escapeHtml(c.num||'—')}</td>
+        <td style="font-weight:600">${escapeHtml(cl?.empresa||cl?.nombre||'—')}<div style="font-size:10px;color:var(--text3)">${escapeHtml(cl?.empresa?(cl?.nombre||''):'')}</div></td>
+        <td style="font-size:12px">${escapeHtml(itemsRes)}</td>
+        <td style="text-align:right;color:var(--accent);font-weight:700">${clp(total)}</td>
+        <td><span class="badge ${badge}">${txt}</span></td>
+        <td style="text-align:right">${c.estado==='aprobada'?`<span style="font-size:11px">${pct}%</span><div style="font-size:10px;color:var(--text3)">${clp(pago)}</div>`:'—'}</td>
+        <td style="text-align:right;color:${(cobrar>0&&c.estado==='aprobada')?'var(--danger)':'var(--text3)'};font-weight:600">${c.estado==='aprobada'?clp(cobrar):'—'}</td>
+        <td style="text-align:center"><button class="btn-mini" onclick="gxOpenFiles('${c.id}')">📎${nf?' '+nf:''}</button></td>
+        <td><div style="display:flex;gap:4px;flex-wrap:wrap">${acc}</div></td>
+      </tr>`;
+    });
+    if(!html)html='<tr><td colspan="9" style="text-align:center;padding:26px;color:var(--text3)">Sin cotizaciones. Crea una con "➕ Nueva cotización".</td></tr>';
+    const tb=document.getElementById('gx-tabla-body');if(tb)tb.innerHTML=html;
+  };
+  draw({});
+  gxFilesAll().then(all=>{const fc={};all.forEach(f=>{fc[f.cotId]=(fc[f.cotId]||0)+1;});draw(fc);}).catch(()=>{});
+  gxRenderResumen();
+}
+
+/* ── Cliente ── */
+function gxFillClienteSelect(selId){
+  const sel=document.getElementById('gx-cot-cliente');if(!sel)return;
+  const arr=gxGetClientes();
+  sel.innerHTML=arr.length?arr.map(c=>`<option value="${c.id}">${escapeHtml(c.empresa||c.nombre||'—')}${(c.nombre&&c.empresa)?(' · '+escapeHtml(c.nombre)):''}</option>`).join(''):'<option value="">(sin clientes — crea uno con ＋)</option>';
+  if(selId)sel.value=selId;
+}
+function gxOpenCliente(id){
+  document.getElementById('gx-cli-id').value=id||'';
+  const c=id?gxCliById(id):null;
+  document.getElementById('gxClienteTitle').textContent=c?'Editar cliente':'Nuevo cliente';
+  document.getElementById('gx-cli-empresa').value=c?.empresa||'';
+  document.getElementById('gx-cli-nombre').value=c?.nombre||'';
+  document.getElementById('gx-cli-rut').value=c?.rut||'';
+  document.getElementById('gx-cli-email').value=c?.email||'';
+  document.getElementById('gx-cli-tel').value=c?.telefono||'';
+  document.getElementById('gxClienteModal').style.display='flex';
+}
+function gxCloseCliente(){document.getElementById('gxClienteModal').style.display='none';}
+function gxSaveCliente(){
+  const empresa=document.getElementById('gx-cli-empresa').value.trim();
+  const nombre=document.getElementById('gx-cli-nombre').value.trim();
+  if(!empresa&&!nombre){alert('Ingresa al menos la empresa o el nombre.');return;}
+  const id=document.getElementById('gx-cli-id').value;
+  const arr=gxGetClientes();
+  const data={empresa,nombre,rut:document.getElementById('gx-cli-rut').value.trim(),email:document.getElementById('gx-cli-email').value.trim(),telefono:document.getElementById('gx-cli-tel').value.trim()};
+  let selId=id;
+  if(id){const i=arr.findIndex(x=>x.id===id);if(i>=0)arr[i]=Object.assign(arr[i],data);}
+  else{data.id=gxId('cl');data.creado=gxHoy();arr.push(data);selId=data.id;}
+  if(!gxSetClientes(arr))return;
+  toast('Cliente guardado','success');
+  gxCloseCliente();
+  gxFillClienteSelect(selId);
+  gxRenderTabla();
+}
+
+/* ── Cotización ── */
+function gxNextNum(){const y=new Date().getFullYear();let mx=0;gxGetCots().forEach(c=>{const m=(c.num||'').match(new RegExp('COT-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return 'COT-'+y+'-'+String(mx+1).padStart(3,'0');}
+function gxOpenCotizacion(id){
+  gxFillClienteSelect();
+  const c=id?gxGetCots().find(x=>x.id===id):null;
+  document.getElementById('gx-cot-id').value=id||'';
+  document.getElementById('gxCotTitle').textContent=c?'Editar cotización':'Nueva cotización';
+  document.getElementById('gx-cot-num').value=c?.num||gxNextNum();
+  document.getElementById('gx-cot-canal').value=c?.canal||'CONTACTO';
+  document.getElementById('gx-cot-cat').value=c?.categoria||'';
+  if(c)document.getElementById('gx-cot-cliente').value=c.clienteId||'';
+  const cont=document.getElementById('gx-cot-items');cont.innerHTML='';
+  const items=(c&&c.items&&c.items.length)?c.items:[{desc:'',cant:1,valor:''}];
+  items.forEach(it=>gxAddItem(it));
+  gxCotCalc();
+  document.getElementById('gxCotModal').style.display='flex';
+}
+function gxCloseCotizacion(){document.getElementById('gxCotModal').style.display='none';}
+function gxAddItem(it){
+  const cont=document.getElementById('gx-cot-items');
+  const row=document.createElement('div');
+  row.className='gx-item-row';
+  row.style.cssText='display:grid;grid-template-columns:1fr 66px 120px 30px;gap:6px;margin-bottom:6px';
+  row.innerHTML=`<input class="field-input gx-it-desc" placeholder="Descripción" value="${escapeHtml(it&&it.desc||'')}" oninput="gxCotCalc()">
+    <input class="field-input gx-it-cant" type="number" min="1" placeholder="1" value="${it&&it.cant||1}" oninput="gxCotCalc()" style="text-align:center">
+    <input class="field-input gx-it-valor" type="number" min="0" placeholder="neto" value="${(it&&(it.valor||it.valor===0))?it.valor:''}" oninput="gxCotCalc()" style="text-align:right">
+    <button class="btn-mini btn-mini-red" onclick="this.parentElement.remove();gxCotCalc()">✕</button>`;
+  cont.appendChild(row);
+}
+function gxCotItemsRead(){
+  const items=[];
+  document.querySelectorAll('#gx-cot-items .gx-item-row').forEach(r=>{
+    const desc=r.querySelector('.gx-it-desc').value.trim();
+    const cant=parseFloat(r.querySelector('.gx-it-cant').value)||1;
+    const valor=parseFloat(r.querySelector('.gx-it-valor').value)||0;
+    if(desc||valor)items.push({desc,cant,valor});
+  });
+  return items;
+}
+function gxCotCalc(){
+  const items=gxCotItemsRead();
+  const neto=items.reduce((s,i)=>s+i.cant*i.valor,0);
+  const iva=Math.round(neto*0.19);
+  document.getElementById('gx-cot-neto').textContent=clp(neto);
+  document.getElementById('gx-cot-iva').textContent=clp(iva);
+  document.getElementById('gx-cot-total').textContent=clp(neto+iva);
+}
+function gxSaveCotizacion(){
+  const clienteId=document.getElementById('gx-cot-cliente').value;
+  if(!clienteId){alert('Selecciona un cliente (o crea uno con ＋).');return;}
+  const items=gxCotItemsRead();
+  if(!items.length){alert('Agrega al menos un ítem con valor.');return;}
+  const neto=items.reduce((s,i)=>s+i.cant*i.valor,0);
+  const iva=Math.round(neto*0.19);
+  const total=neto+iva;
+  const id=document.getElementById('gx-cot-id').value;
+  const arr=gxGetCots();
+  const base={clienteId,num:document.getElementById('gx-cot-num').value.trim(),canal:document.getElementById('gx-cot-canal').value,categoria:document.getElementById('gx-cot-cat').value,items,neto,iva,total};
+  if(id){const i=arr.findIndex(x=>x.id===id);if(i>=0){arr[i]=Object.assign(arr[i],base);arr[i].pago=Math.min(arr[i].pago||0,total);}}
+  else arr.push(Object.assign({id:gxId('cot'),estado:'pendiente',pago:0,fechaCreacion:gxHoy()},base));
+  if(!gxSetCots(arr))return;
+  toast(id?'Cotización actualizada':'Cotización creada','success');
+  gxCloseCotizacion();
+  gxRenderTabla();
+}
+
+/* ── Estados ── */
+function gxUpdEstado(id,estado){const arr=gxGetCots();const c=arr.find(x=>x.id===id);if(!c)return;c.estado=estado;if(estado==='aprobada'&&!c.fechaAprobacion)c.fechaAprobacion=gxHoy();gxSetCots(arr);gxRenderTabla();}
+function gxAprobar(id){gxUpdEstado(id,'aprobada');toast('Cotización aprobada','success');}
+function gxRechazar(id){if(!confirm('¿Rechazar esta cotización?'))return;gxUpdEstado(id,'rechazada');toast('Cotización rechazada','info');}
+function gxReactivar(id){gxUpdEstado(id,'pendiente');toast('Cotización reactivada','info');}
+function gxEliminar(id){
+  if(!confirm('¿Eliminar esta cotización y sus archivos?'))return;
+  gxSetCots(gxGetCots().filter(x=>x.id!==id));
+  gxFilesByCot(id).then(files=>Promise.all(files.map(f=>gxFileDel(f.id)))).catch(()=>{}).then(()=>gxRenderTabla());
+  gxRenderTabla();
+}
+
+/* ── Pago ── */
+function gxPagoTotal(){const c=gxGetCots().find(x=>x.id===document.getElementById('gx-pago-cotid').value);return c?c.total||0:0;}
+function gxOpenPago(id){
+  const c=gxGetCots().find(x=>x.id===id);if(!c)return;
+  const cl=gxCliById(c.clienteId);
+  document.getElementById('gx-pago-cotid').value=id;
+  document.getElementById('gx-pago-cliente').textContent=(cl?.empresa||cl?.nombre||'—')+' · '+(c.num||'');
+  document.getElementById('gx-pago-total').textContent=clp(c.total||0);
+  document.getElementById('gx-pago-monto').value=c.pago||'';
+  gxPagoCalc();
+  document.getElementById('gxPagoModal').style.display='flex';
+}
+function gxClosePago(){document.getElementById('gxPagoModal').style.display='none';}
+function gxPagoCalc(){
+  const total=gxPagoTotal();
+  const pago=parseFloat(document.getElementById('gx-pago-monto').value)||0;
+  const pct=total>0?Math.round(pago/total*1000)/10:0;
+  const el=document.getElementById('gx-pago-pct');
+  el.textContent=total>0?`Representa ${pct.toFixed(1)}% del total`:'—';
+  el.style.color=pct>=100?'var(--accent3)':pct>0?'var(--warn)':'var(--text3)';
+  document.getElementById('gx-pago-cobrar').textContent=clp(Math.max(0,total-pago));
+}
+function gxPagoPct(p){document.getElementById('gx-pago-monto').value=Math.round(gxPagoTotal()*p/100);gxPagoCalc();}
+function gxSavePago(){
+  const id=document.getElementById('gx-pago-cotid').value;
+  const arr=gxGetCots();const c=arr.find(x=>x.id===id);if(!c)return;
+  const total=c.total||0;
+  const pago=Math.min(total,Math.max(0,parseFloat(document.getElementById('gx-pago-monto').value)||0));
+  c.pago=pago;c.fechaPago=pago>0?gxHoy():'';
+  if(!gxSetCots(arr))return;
+  toast('Pago guardado','success');
+  gxClosePago();
+  gxRenderTabla();
+}
+
+/* ── Archivos ── */
+function gxOpenFiles(id){
+  const c=gxGetCots().find(x=>x.id===id);if(!c)return;
+  const cl=gxCliById(c.clienteId);
+  document.getElementById('gx-files-cotid').value=id;
+  document.getElementById('gx-files-cliente').textContent=(cl?.empresa||cl?.nombre||'—')+' · '+(c.num||'');
+  document.getElementById('gx-files-input').value='';
+  gxRenderFiles(id);
+  document.getElementById('gxFilesModal').style.display='flex';
+}
+function gxCloseFiles(){document.getElementById('gxFilesModal').style.display='none';}
+function gxRenderFiles(id){
+  const list=document.getElementById('gx-files-list');
+  list.innerHTML='<div style="color:var(--text3);font-size:12px">Cargando…</div>';
+  gxFilesByCot(id).then(files=>{
+    if(!files.length){list.innerHTML='<div style="color:var(--text3);font-size:12px;padding:8px 0">Sin archivos aún.</div>';return;}
+    list.innerHTML=files.map(f=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border:1px solid var(--border2);border-radius:6px;margin-bottom:6px">
+      <div style="min-width:0"><div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(f.nombre)}</div><div style="font-size:10px;color:var(--text3)">${gxFmtSize(f.size)} · ${f.fecha||''}</div></div>
+      <div style="display:flex;gap:4px;flex-shrink:0"><button class="btn-mini" onclick="gxDownloadFile('${f.id}')">⬇</button><button class="btn-mini btn-mini-red" onclick="gxDeleteFile('${f.id}','${id}')">🗑</button></div>
+    </div>`).join('');
+  }).catch(()=>{list.innerHTML='<div style="color:var(--danger);font-size:12px">Error al leer archivos.</div>';});
+}
+function gxUploadFiles(input){
+  const id=document.getElementById('gx-files-cotid').value;
+  const files=Array.from(input.files||[]);
+  if(!files.length)return;
+  Promise.all(files.map(file=>gxFilePut({id:gxId('f'),cotId:id,nombre:file.name,tipo:file.type,size:file.size,blob:file,fecha:gxHoy()}).catch(()=>{toast('No se pudo guardar '+file.name,'error');})))
+    .then(()=>{toast(files.length+' archivo(s) subido(s)','success');input.value='';gxRenderFiles(id);gxRenderTabla();});
+}
+function gxDownloadFile(fid){gxFileGet(fid).then(f=>{if(!f)return;const url=URL.createObjectURL(f.blob);const a=document.createElement('a');a.href=url;a.download=f.nombre;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}).catch(()=>toast('No se pudo descargar','error'));}
+function gxDeleteFile(fid,cotId){if(!confirm('¿Eliminar este archivo?'))return;gxFileDel(fid).catch(()=>{}).then(()=>{gxRenderFiles(cotId);gxRenderTabla();});}
 </script>
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
