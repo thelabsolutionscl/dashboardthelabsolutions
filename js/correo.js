@@ -108,6 +108,20 @@ const MAIL={
     return o;
   },
 
+  // Parseo tolerante de la respuesta del backend PHP: un 200 con JSON "inválido"
+  // casi siempre es un Warning/Notice de PHP impreso ANTES del JSON, o basura
+  // alrededor. Rescatamos el objeto/array embebido; si no, damos un error útil.
+  _parseResp(text,status){
+    const s=String(text||'');
+    try{ return this._friendlyErr(JSON.parse(s)); }catch(_){}
+    // extrae el primer { o [ ... hasta el último } o ] (salta warnings/HTML delante)
+    const i=s.search(/[\[{]/), j=Math.max(s.lastIndexOf('}'),s.lastIndexOf(']'));
+    if(i>=0 && j>i){ try{ return this._friendlyErr(JSON.parse(s.slice(i,j+1))); }catch(_){} }
+    try{ console.warn('[MAIL] respuesta no-JSON ('+status+'):', s.slice(0,600)); }catch(_){}
+    const snip=s.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,140);
+    return {error:'El servidor de correo respondió algo inesperado ('+status+')'+(snip?': “'+snip+'…”':'. Reintenta o recarga la bandeja.')};
+  },
+
   async post(params){
     if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
     const fd=new FormData();
@@ -119,8 +133,7 @@ const MAIL={
     try{
       const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
       const text=await r.text();
-      try{return this._friendlyErr(JSON.parse(text));}
-      catch(e){return{error:'Respuesta inválida del servidor ('+r.status+')'};}
+      return this._parseResp(text,r.status);
     }catch(e){
       return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
     }finally{clearTimeout(timeout);}
@@ -145,8 +158,7 @@ const MAIL={
     try{
       const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
       const text=await r.text();
-      try{return this._friendlyErr(JSON.parse(text));}
-      catch(e){return{error:'Respuesta inválida del servidor ('+r.status+')'};}
+      return this._parseResp(text,r.status);
     }catch(e){
       return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
     }finally{clearTimeout(timeout);}
