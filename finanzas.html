@@ -770,6 +770,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <div style="font-size:12px;color:var(--text2)">Clientes · Cotizaciones · Pagos · Archivos — todo en tu equipo</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="gxSeedReales()" style="border-color:rgba(0,212,204,0.4)">📥 Traer ejemplo real</button>
         <button class="btn btn-ghost btn-sm" onclick="gxOpenCliente()">👤 Nuevo cliente</button>
         <button class="btn btn-primary btn-sm" onclick="gxOpenCotizacion()">➕ Nueva cotización</button>
       </div>
@@ -2947,6 +2948,34 @@ function gxRenderTabla(){
   gxRenderResumen();
 }
 
+/* ── Semilla: cotizaciones REALES traídas del sistema (Airtable) ── */
+function gxSeedReales(){
+  const seedClientes=[
+    {id:'clr_treid',empresa:'TREID SPA',nombre:'CARLOS SALINAS',rut:'',email:'CSALINAS@TREID.CL',telefono:'+56966394488'},
+    {id:'clr_coch',empresa:'Comité Olímpico de Chile',nombre:'Valentina Castro',rut:'70.269.800-6',email:'vcastro@coch.cl',telefono:'569 7984 7560'},
+    {id:'clr_tech',empresa:'TECH STREAM SPA',nombre:'Hans Schmitz',rut:'76.968.507-3',email:'hans.schmitz@techstream.cl',telefono:'569 8903 7759'}
+  ];
+  const seedCots=[
+    {id:'cotr_treid',clienteId:'clr_treid',num:'COT-260705',canal:'CONTACTO',categoria:'',estado:'pendiente',items:[{desc:'LLAVERO DORITOS + NFC',cant:300,valor:2250}]},
+    {id:'cotr_coch',clienteId:'clr_coch',num:'COT-260603',canal:'CONTACTO',categoria:'',estado:'aprobada',items:[{desc:'MEDALLA "YOU CAN DO THIS"',cant:300,valor:3550},{desc:'CHIP NFC',cant:300,valor:1500},{desc:'ENVÍO',cant:1,valor:15000}]},
+    {id:'cotr_tech',clienteId:'clr_tech',num:'COT-260609',canal:'CONTACTO',categoria:'',estado:'aprobada',items:[{desc:'HOOKER 1',cant:300,valor:1380},{desc:'HOOKER 2',cant:300,valor:1375},{desc:'RUEDA DENTADA',cant:300,valor:330}]}
+  ];
+  const clientes=gxGetClientes();
+  seedClientes.forEach(sc=>{if(!clientes.some(c=>c.id===sc.id))clientes.push(Object.assign({creado:gxHoy()},sc));});
+  gxSetClientes(clientes);
+  const cots=gxGetCots();let added=0;
+  seedCots.forEach(sc=>{
+    if(cots.some(c=>c.id===sc.id))return;
+    const neto=sc.items.reduce((s,i)=>s+i.cant*i.valor,0);
+    const iva=Math.round(neto*0.19);
+    cots.push({id:sc.id,clienteId:sc.clienteId,num:sc.num,canal:sc.canal,categoria:sc.categoria,items:sc.items,neto,iva,total:neto+iva,estado:sc.estado,pago:0,fechaCreacion:gxHoy(),_real:true});
+    added++;
+  });
+  gxSetCots(cots);
+  toast(added?`${added} cotización(es) real(es) cargada(s)`:'Ya estaban cargadas','success');
+  gxRenderTabla();
+}
+
 /* ── Cliente ── */
 function gxFillClienteSelect(selId){
   const sel=document.getElementById('gx-cot-cliente');if(!sel)return;
@@ -2963,7 +2992,9 @@ function gxOpenCliente(id){
   document.getElementById('gx-cli-rut').value=c?.rut||'';
   document.getElementById('gx-cli-email').value=c?.email||'';
   document.getElementById('gx-cli-tel').value=c?.telefono||'';
-  document.getElementById('gxClienteModal').style.display='flex';
+  const m=document.getElementById('gxClienteModal');
+  m.style.zIndex='10002'; /* por encima del modal de cotización al crear cliente desde ＋ */
+  m.style.display='flex';
 }
 function gxCloseCliente(){document.getElementById('gxClienteModal').style.display='none';}
 function gxSaveCliente(){
