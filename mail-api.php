@@ -28,7 +28,33 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-15-resend4');
+define('MAIL_API_BUILD', '2026-07-21-jsonout');
+
+// ── Serialización JSON resiliente ─────────────────────────────────────
+// Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
+// codificados). En ese caso json_encode() devuelve false y se emitía un
+// cuerpo VACÍO con 200 → el cliente mostraba "respuesta inválida (200)".
+// json_out() sustituye los bytes inválidos (JSON_INVALID_UTF8_SUBSTITUTE)
+// y, si aún fallara, saneía recursivamente a UTF-8 — nunca devuelve vacío.
+function json_out($data) {
+    $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        | (defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0)
+        | (defined('JSON_PARTIAL_OUTPUT_ON_ERROR') ? JSON_PARTIAL_OUTPUT_ON_ERROR : 0);
+    $out = json_encode($data, $flags);
+    if ($out === false || $out === null || $out === '') {
+        $fix = function ($v) use (&$fix) {
+            if (is_string($v)) return mb_convert_encoding($v, 'UTF-8', 'UTF-8');
+            if (is_array($v))  { $r = []; foreach ($v as $k => $x) { $r[is_string($k) ? mb_convert_encoding($k, 'UTF-8', 'UTF-8') : $k] = $fix($x); } return $r; }
+            if (is_object($v)) { $r = new stdClass(); foreach (get_object_vars($v) as $k => $x) { $r->{$k} = $fix($x); } return $r; }
+            return $v;
+        };
+        $out = json_encode($fix($data), $flags);
+    }
+    if ($out === false || $out === null || $out === '') {
+        $out = json_encode(['error' => 'No se pudo serializar la respuesta (encoding del mensaje).', 'build' => MAIL_API_BUILD]);
+    }
+    return $out;
+}
 
 // ── Robustez: nunca devolver un 500 con cuerpo no-JSON ────────────────
 // Bufferizamos TODA la salida: si ocurre un fatal de PHP, descartamos lo que
@@ -44,7 +70,7 @@ register_shutdown_function(function () {
         while (ob_get_level() > 0) { @ob_end_clean(); }   // descarta salida a medias
         if (!headers_sent()) { http_response_code(200); header('Content-Type: application/json; charset=utf-8'); }
         $detail = sprintf('[tipo %d] %s en %s:%d', $e['type'], $e['message'], basename($e['file'] ?? '?'), $e['line'] ?? 0);
-        echo json_encode([
+        echo json_out([
             'error'  => 'Error interno del servidor de correo — detalle técnico: ' . mb_substr($detail, 0, 400),
             'build'  => MAIL_API_BUILD,
         ]);
@@ -56,7 +82,7 @@ set_exception_handler(function ($ex) {
     while (ob_get_level() > 0) { @ob_end_clean(); }
     if (!headers_sent()) { http_response_code(200); header('Content-Type: application/json; charset=utf-8'); }
     $detail = get_class($ex) . ': ' . $ex->getMessage() . ' en ' . basename($ex->getFile()) . ':' . $ex->getLine();
-    echo json_encode(['error' => 'Error interno del servidor de correo — detalle técnico: ' . mb_substr($detail, 0, 400), 'build' => MAIL_API_BUILD]);
+    echo json_out(['error' => 'Error interno del servidor de correo — detalle técnico: ' . mb_substr($detail, 0, 400), 'build' => MAIL_API_BUILD]);
     exit;
 });
 
@@ -70,7 +96,7 @@ if (!$user || !$pass) {
     // Al abrir la URL en el navegador (sin credenciales) mostramos un diagnóstico:
     //  resend=true  → se detectó la API key (el envío saldrá por Resend)
     //  cfg=true     → existe un archivo de config junto a este script
-    echo json_encode([
+    echo json_out([
         'error'  => 'Credenciales requeridas',
         'build'  => MAIL_API_BUILD,
         'resend' => resend_api_key() ? true : false,
@@ -431,7 +457,7 @@ switch ($action) {
 // ── folders ──────────────────────────────────────────────────
 case 'folders':
     $conn = open_imap($user, $pass);
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
 
     $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
     $list   = imap_list($conn, $prefix, '*') ?: [];
@@ -446,7 +472,7 @@ case 'folders':
         ];
     }
     imap_close($conn);
-    echo json_encode(['folders' => $result]);
+    echo json_out(['folders' => $result]);
     break;
 
 // ── list ─────────────────────────────────────────────────────
@@ -456,7 +482,7 @@ case 'list':
     $perpage = 30;
 
     $conn = open_imap($user, $pass, $folder);
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
 
     $total = imap_num_msg($conn);
     $end   = max(1, $total - ($page - 1) * $perpage);
@@ -484,7 +510,7 @@ case 'list':
         ];
     }
     imap_close($conn);
-    echo json_encode([
+    echo json_out([
         'messages' => $result,
         'total'    => $total,
         'page'     => $page,
@@ -503,7 +529,7 @@ case 'snippets':
     $uids   = (string)($_POST['uids'] ?? '');
 
     $conn = open_imap($user, $pass, $folder);
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
 
     $ids = array_slice(array_filter(array_map('intval', explode(',', $uids))), 0, 15);
     $out = [];
@@ -530,7 +556,7 @@ case 'snippets':
         $out[(string)$uid] = $snippet;
     }
     imap_close($conn);
-    echo json_encode(['snippets' => $out, 'build' => MAIL_API_BUILD]);
+    echo json_out(['snippets' => $out, 'build' => MAIL_API_BUILD]);
     break;
 
 // ── read ─────────────────────────────────────────────────────
@@ -539,10 +565,10 @@ case 'read':
     $uid    = (int)($_POST['uid'] ?? 0);
 
     $conn = open_imap($user, $pass, $folder);
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
 
     $msgno = imap_msgno($conn, $uid);
-    if (!$msgno) { echo json_encode(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
+    if (!$msgno) { echo json_out(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
 
     imap_setflag_full($conn, (string)$msgno, '\\Seen');
 
@@ -572,7 +598,7 @@ case 'read':
     $from_name  = decode_str($header->from[0]->personal ?? '');
     $from_email = ($header->from[0]->mailbox ?? '') . '@' . ($header->from[0]->host ?? '');
 
-    echo json_encode([
+    echo json_out([
         'uid'        => $uid,
         'from_name'  => $from_name,
         'from_email' => $from_email,
@@ -596,8 +622,8 @@ case 'send':
     $body_html = $_POST['body']           ?? '';
     $from_name = trim($_POST['from_name'] ?? '');
 
-    if (!$to)      { echo json_encode(['error' => 'Destinatario requerido']); exit; }
-    if (!$subject) { echo json_encode(['error' => 'Asunto requerido']); exit; }
+    if (!$to)      { echo json_out(['error' => 'Destinatario requerido']); exit; }
+    if (!$subject) { echo json_out(['error' => 'Asunto requerido']); exit; }
 
     // Adjuntos: JSON [{name, type, data(base64)}] — máx 20 MB decodificado
     $attachments = [];
@@ -608,7 +634,7 @@ case 'send':
             foreach ($parsed as $a) {
                 if (empty($a['data']) || empty($a['name'])) continue;
                 $total += strlen($a['data']) * 0.75;
-                if ($total > 20 * 1024 * 1024) { echo json_encode(['error' => 'Adjuntos superan 20 MB']); exit; }
+                if ($total > 20 * 1024 * 1024) { echo json_out(['error' => 'Adjuntos superan 20 MB']); exit; }
                 $attachments[] = $a;
             }
         }
@@ -622,7 +648,7 @@ case 'send':
     } else {
         $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments, $bcc);
     }
-    if ($err) { echo json_encode(['error' => $err]); exit; }
+    if ($err) { echo json_out(['error' => $err]); exit; }
 
     // Guardar en carpeta Enviados via IMAP APPEND
     $conn = open_imap($user, $pass);
@@ -654,7 +680,7 @@ case 'send':
         imap_close($conn);
     }
 
-    echo json_encode(['ok' => true]);
+    echo json_out(['ok' => true]);
     break;
 
 // ── trash ─────────────────────────────────────────────────────
@@ -663,10 +689,10 @@ case 'trash':
     $uid    = (int)($_POST['uid'] ?? 0);
 
     $conn = open_imap($user, $pass, $folder);
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
 
     $msgno = imap_msgno($conn, $uid);
-    if (!$msgno) { echo json_encode(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
+    if (!$msgno) { echo json_out(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
 
     // Try to move to Trash folder first
     $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
@@ -685,7 +711,7 @@ case 'trash':
     }
     imap_expunge($conn);
     imap_close($conn);
-    echo json_encode(['ok' => true]);
+    echo json_out(['ok' => true]);
     break;
 
 // ── mark ─────────────────────────────────────────────────────
@@ -695,10 +721,10 @@ case 'mark':
     $seen   = (int)($_POST['seen'] ?? 1);
 
     $conn = open_imap($user, $pass, $folder);
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
 
     $msgno = imap_msgno($conn, $uid);
-    if (!$msgno) { echo json_encode(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
+    if (!$msgno) { echo json_out(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
 
     if (isset($_POST['flagged'])) {
         if ((int)$_POST['flagged']) imap_setflag_full($conn,   (string)$msgno, '\\Flagged');
@@ -709,7 +735,7 @@ case 'mark':
     }
 
     imap_close($conn);
-    echo json_encode(['ok' => true]);
+    echo json_out(['ok' => true]);
     break;
 
 // ── search ───────────────────────────────────────────────────
@@ -717,10 +743,10 @@ case 'search':
     $folder = $_POST['folder'] ?? 'INBOX';
     $query  = trim($_POST['query'] ?? '');
 
-    if (!$query) { echo json_encode(['messages' => [], 'total' => 0]); exit; }
+    if (!$query) { echo json_out(['messages' => [], 'total' => 0]); exit; }
 
     $conn = open_imap($user, $pass, $folder);
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
 
     $found = imap_search($conn, 'TEXT "' . addslashes($query) . '"') ?: [];
     $found = array_slice(array_reverse($found), 0, 50);
@@ -741,7 +767,7 @@ case 'search':
         }
     }
     imap_close($conn);
-    echo json_encode(['messages' => $result, 'total' => count($result)]);
+    echo json_out(['messages' => $result, 'total' => count($result)]);
     break;
 
 // ── attachment ────────────────────────────────────────────────
@@ -751,20 +777,20 @@ case 'attachment':
     $uid    = (int)($_POST['uid'] ?? 0);
     $part   = $_POST['part'] ?? '';
 
-    if (!$part) { echo json_encode(['error' => 'Parte requerida']); exit; }
+    if (!$part) { echo json_out(['error' => 'Parte requerida']); exit; }
 
     $conn = open_imap($user, $pass, $folder);
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
 
     $msgno = imap_msgno($conn, $uid);
-    if (!$msgno) { echo json_encode(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
+    if (!$msgno) { echo json_out(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
 
     // Localizar la estructura de la parte pedida para conocer encoding y nombre
     $structure = imap_fetchstructure($conn, $msgno);
     $target = $structure;
     foreach (explode('.', $part) as $idx) {
         $i = (int)$idx - 1;
-        if (!isset($target->parts[$i])) { echo json_encode(['error' => 'Parte no encontrada']); imap_close($conn); exit; }
+        if (!isset($target->parts[$i])) { echo json_out(['error' => 'Parte no encontrada']); imap_close($conn); exit; }
         $target = $target->parts[$i];
     }
 
@@ -791,22 +817,22 @@ case 'attachment':
     $type_names = [0=>'text',1=>'multipart',2=>'message',3=>'application',4=>'audio',5=>'image',6=>'video',7=>'other'];
     $mime = ($type_names[(int)$target->type] ?? 'application') . '/' . strtolower($target->subtype ?? 'octet-stream');
 
-    echo json_encode(['name' => $fname, 'mime' => $mime, 'data' => base64_encode($bin)]);
+    echo json_out(['name' => $fname, 'mime' => $mime, 'data' => base64_encode($bin)]);
     break;
 
 // ── check ─────────────────────────────────────────────────────
 // Endpoint liviano: solo devuelve el conteo de no leídos en INBOX
 case 'check':
     $conn = open_imap($user, $pass, 'INBOX');
-    if (is_array($conn)) { echo json_encode($conn); exit; }
+    if (is_array($conn)) { echo json_out($conn); exit; }
     $status = @imap_status($conn, imap_str('INBOX'), SA_ALL);
     imap_close($conn);
-    echo json_encode([
+    echo json_out([
         'unseen'   => $status ? (int)$status->unseen   : 0,
         'messages' => $status ? (int)$status->messages : 0,
     ]);
     break;
 
 default:
-    echo json_encode(['error' => 'Acción desconocida: ' . htmlspecialchars($action)]);
+    echo json_out(['error' => 'Acción desconocida: ' . htmlspecialchars($action)]);
 }
