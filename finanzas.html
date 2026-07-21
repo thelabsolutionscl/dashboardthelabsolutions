@@ -754,8 +754,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   <div id="fin-subnav" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:14px">
     <button class="btn btn-ghost btn-sm active-filter" id="fin-nav-resumen" onclick="finSwitchTab('resumen')">📊 Resumen</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-gestion" onclick="finSwitchTab('gestion')" style="border-color:rgba(0,212,204,0.4);color:var(--accent)">🗂️ Gestión</button>
-    <button class="btn btn-ghost btn-sm" id="fin-nav-facturas" onclick="finSwitchTab('facturas')">📄 Facturas</button>
-    <button class="btn btn-ghost btn-sm" id="fin-nav-cobrar" onclick="finSwitchTab('cobrar')">💸 Por Cobrar</button>
+    <button class="btn btn-ghost btn-sm" id="fin-nav-venta" onclick="finSwitchTab('venta')">🧾 Venta</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-prestamos" onclick="finSwitchTab('prestamos')">🏦 Préstamos</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-deudas" onclick="finSwitchTab('deudas')">⚠️ Deudas</button>
     <button class="btn btn-ghost btn-sm" id="fin-nav-nueva" onclick="finSwitchTab('nueva')">➕ Nueva Venta</button>
@@ -1039,7 +1038,60 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     </div>
   </div>
 
-  <!-- ── FACTURAS ── -->
+  <!-- ══ VENTA (fusiona Facturas + Por Cobrar) — se alimenta de cotizaciones aprobadas en Gestión ══ -->
+  <div id="fin-panel-venta" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text)">🧾 Venta</div>
+        <div style="font-size:12px;color:var(--text2)">Ventas de las cotizaciones aprobadas en Gestión · pagos y por cobrar</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div id="gx-venta-resumen" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text2)">—</div>
+    </div>
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <span class="card-title">Ventas</span>
+        <input class="field-input" id="gx-venta-buscar" placeholder="🔍 buscar cliente / ítem / N°..." style="width:230px;padding:5px 9px;font-size:12px" oninput="gxRenderVentas()">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>N° Coti</th><th>Nombre Cliente</th><th>Ítem de venta</th>
+            <th style="text-align:right">Valor unitario</th><th style="text-align:right">Valor total</th>
+            <th style="text-align:right">Por cobrar</th><th style="text-align:right">Pago total</th>
+          </tr></thead>
+          <tbody id="gx-venta-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Popup: ver cotización "en chico" -->
+    <div id="gxVerCotModal" class="modal-overlay" style="display:none">
+      <div class="modal-backdrop" onclick="gxCloseVerCot()"></div>
+      <div class="modal-card wide" style="max-height:88vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div class="modal-title" id="gxVerCotTitle" style="margin:0">Cotización</div>
+          <button class="btn-mini" onclick="gxCloseVerCot()">✕</button>
+        </div>
+        <div id="gxVerCotBody" style="padding:10px 0 0"></div>
+      </div>
+    </div>
+
+    <!-- Popup: datos del cliente -->
+    <div id="gxVerCliModal" class="modal-overlay" style="display:none">
+      <div class="modal-backdrop" onclick="gxCloseVerCli()"></div>
+      <div class="modal-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div class="modal-title" style="margin:0">👤 Cliente</div>
+          <button class="btn-mini" onclick="gxCloseVerCli()">✕</button>
+        </div>
+        <div id="gxVerCliBody" style="padding:10px 0 0"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FACTURAS (oculto — reemplazado por Venta) ── -->
   <div id="fin-panel-facturas" style="display:none">
     <div class="card">
       <div class="card-header" style="flex-wrap:wrap;gap:10px">
@@ -1676,7 +1728,7 @@ function varPct(a,b){if(!a||!b)return null;return ((b-a)/a)*100;}
 /* ── Sub-tabs internos ── */
 function finSwitchTab(tab){
   finCurrentTab=tab;
-  ['resumen','gestion','facturas','cobrar','prestamos','deudas','nueva','diario'].forEach(t=>{
+  ['resumen','gestion','venta','prestamos','deudas','nueva','diario'].forEach(t=>{
     const panel=document.getElementById('fin-panel-'+t);
     if(panel)panel.style.display=(t===tab)?'':'none';
     const btn=document.getElementById('fin-nav-'+t);
@@ -1685,9 +1737,8 @@ function finSwitchTab(tab){
     }
   });
   if(tab==='gestion'&&typeof gxRender==='function'){gxRender();}
+  if(tab==='venta'&&typeof gxRenderVentas==='function'){gxRenderVentas();}
   if(tab==='resumen'){finDrawChart();finDrawCanalDonut();finRenderResumenAnual();finRenderTopClientes();}
-  if(tab==='facturas'){finRenderFacturas();}
-  if(tab==='cobrar'){finRenderCobrar();}
   if(tab==='prestamos'){finRenderPrestamos();finDrawDeudaTimeline();}
   if(tab==='nueva'){finRenderNuevaLista();}
   if(tab==='diario'){ldInit();}
@@ -3005,6 +3056,108 @@ function gxSeedReales(){
   toast(added?`${added} cotización(es) real(es) cargada(s)`:'Ya estaban cargadas','success');
   gxRenderTabla();
 }
+
+/* ── VENTA (fusiona Facturas + Por Cobrar) ── */
+function gxRenderVentas(){
+  const buscar=(document.getElementById('gx-venta-buscar')?.value||'').toLowerCase();
+  const cots=gxGetCots().filter(c=>c.estado==='aprobada').filter(c=>{
+    if(!buscar)return true;
+    const cl=gxCliById(c.clienteId);
+    return ((cl?.empresa||'')+' '+(cl?.nombre||'')+' '+(c.items||[]).map(i=>i.desc).join(' ')+' '+(c.num||'')+' '+(c.alias||'')).toLowerCase().includes(buscar);
+  });
+  let html='',tVenta=0,tPago=0,tCobrar=0;
+  cots.forEach(c=>{
+    const cl=gxCliById(c.clienteId);
+    const cliName=cl?(cl.empresa||cl.nombre||'—'):'—';
+    const total=c.total||0,pago=c.pago||0,cobrar=Math.max(0,total-pago);
+    tVenta+=total;tPago+=pago;tCobrar+=cobrar;
+    const items=(c.items&&c.items.length)?c.items:[{desc:'—',und:1,venta:0}];
+    items.forEach((it,idx)=>{
+      const first=idx===0;
+      const vUnit=it.venta||0,vTot=(it.venta||0)*(it.und||1);
+      html+=`<tr style="${first?'border-top:2px solid var(--border2)':''}">
+        <td class="mono" style="font-size:11px">${first?`<span onclick="gxVerCot('${c.id}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">${escapeHtml(c.num||'—')}</span>`:''}</td>
+        <td style="font-weight:600">${first?`<span onclick="gxVerCli('${c.clienteId}')" style="color:var(--text);cursor:pointer;text-decoration:underline">${escapeHtml(cliName)}</span>`:''}</td>
+        <td style="font-size:12px">${escapeHtml(it.desc||'—')}${(it.und>1)?` <span style="color:var(--text3)">×${it.und}</span>`:''}</td>
+        <td style="text-align:right">${clp(vUnit)}</td>
+        <td style="text-align:right;font-weight:600">${clp(vTot)}</td>
+        <td style="text-align:right;color:${(first&&cobrar>0)?'var(--danger)':'var(--text3)'};font-weight:600">${first?clp(cobrar):''}</td>
+        <td style="text-align:right;color:var(--accent3);font-weight:600">${first?clp(pago):''}</td>
+      </tr>`;
+    });
+  });
+  if(!html)html='<tr><td colspan="7" style="text-align:center;padding:26px;color:var(--text3)">Sin ventas todavía. Aprueba una cotización en <strong>Gestión</strong> y aparecerá aquí.</td></tr>';
+  const tb=document.getElementById('gx-venta-body');if(tb)tb.innerHTML=html;
+  const s=document.getElementById('gx-venta-resumen');const sep='<span style="color:var(--text3)">·</span>';
+  if(s)s.innerHTML=`<span><strong style="color:var(--text)">${cots.length}</strong> ventas</span>${sep}<span>Total: <strong style="color:var(--accent)">${clp(tVenta)}</strong></span>${sep}<span>Pagado: <strong style="color:var(--accent3)">${clp(tPago)}</strong></span>${sep}<span>Por cobrar: <strong style="color:var(--danger)">${clp(tCobrar)}</strong></span>`;
+}
+function gxVerCot(id){
+  const c=gxGetCots().find(x=>x.id===id);if(!c)return;
+  const cl=gxCliById(c.clienteId);
+  const total=c.total||0,pago=c.pago||0,cobrar=Math.max(0,total-pago);
+  const estadoTxt=c.estado==='aprobada'?'Aprobada':c.estado==='rechazada'?'Rechazada':'Pendiente';
+  const estBadge=c.estado==='aprobada'?'badge-green':c.estado==='rechazada'?'badge-red':'badge-yellow';
+  document.getElementById('gxVerCotTitle').innerHTML=`🧾 ${escapeHtml(c.num||'—')} <span class="badge ${estBadge}" style="margin-left:6px">${estadoTxt}</span>`;
+  const info=(lbl,val)=>val?`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0"><span style="color:var(--text3);font-size:11px">${lbl}</span><span style="color:var(--text2);font-size:12px;text-align:right">${escapeHtml(String(val))}</span></div>`:'';
+  let itemsHtml=(c.items||[]).map(it=>`<tr>
+    <td style="padding:5px 8px;font-size:12px">${escapeHtml(it.desc||'—')}</td>
+    <td style="padding:5px 8px;text-align:center;font-size:12px">${it.und||1}</td>
+    <td style="padding:5px 8px;text-align:right;font-size:12px;color:var(--text3)">${clp(it.costo||0)}</td>
+    <td style="padding:5px 8px;text-align:right;font-size:12px;color:var(--accent3)">${clp(it.venta||0)}</td>
+    <td style="padding:5px 8px;text-align:right;font-size:12px;font-weight:600">${clp((it.venta||0)*(it.und||1))}</td>
+  </tr>`).join('');
+  document.getElementById('gxVerCotBody').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px">
+      <div>
+        ${info('Cliente', cl?(cl.empresa||cl.nombre):'—')}
+        ${info('Contacto', cl?.nombre)}
+        ${info('Alias / Título', c.alias)}
+        ${info('Canal', c.canal)}
+        ${info('Urgente', c.urgente?'Sí (+25%)':'No')}
+      </div>
+      <div>
+        ${info('Fecha', c.fecha)}
+        ${info('Vencimiento', c.vto)}
+        ${info('Forma de pago', c.formaPago)}
+        ${info('Producción', c.tiempoProd?(c.tiempoProd+' '+(c.tipoDias||'')):'')}
+      </div>
+    </div>
+    <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:12px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface3)">
+          <th style="padding:5px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:var(--text3)">Descripción</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;text-transform:uppercase;color:var(--text3)">Und</th>
+          <th style="padding:5px 8px;text-align:right;font-size:10px;text-transform:uppercase;color:var(--text3)">Costo</th>
+          <th style="padding:5px 8px;text-align:right;font-size:10px;text-transform:uppercase;color:var(--text3)">Venta</th>
+          <th style="padding:5px 8px;text-align:right;font-size:10px;text-transform:uppercase;color:var(--text3)">Total</th>
+        </tr></thead>
+        <tbody>${itemsHtml||'<tr><td colspan="5" style="padding:8px;text-align:center;color:var(--text3)">Sin ítems</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:20px;font-size:13px;border-top:1px solid var(--border);padding-top:10px">
+      <span style="color:var(--text2)">Neto: <strong style="color:var(--text)">${clp(c.neto||0)}</strong></span>
+      <span style="color:var(--text2)">Total c/IVA: <strong style="color:var(--accent)">${clp(total)}</strong></span>
+      <span style="color:var(--text2)">Pagado: <strong style="color:var(--accent3)">${clp(pago)}</strong></span>
+      <span style="color:var(--text2)">Por cobrar: <strong style="color:var(--danger)">${clp(cobrar)}</strong></span>
+    </div>
+    ${c.solicitud?`<div style="margin-top:12px"><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Observaciones</div><div style="font-size:12px;color:var(--text2);white-space:pre-wrap">${escapeHtml(c.solicitud)}</div></div>`:''}
+    ${c.notas?`<div style="margin-top:10px"><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Notas internas</div><div style="font-size:12px;color:var(--text2);white-space:pre-wrap">${escapeHtml(c.notas)}</div></div>`:''}`;
+  document.getElementById('gxVerCotModal').style.display='flex';
+}
+function gxCloseVerCot(){document.getElementById('gxVerCotModal').style.display='none';}
+function gxVerCli(id){
+  const c=gxCliById(id);if(!c){toast('Cliente no encontrado','error');return;}
+  const row=(lbl,val)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border2)"><span style="color:var(--text3);font-size:12px">${lbl}</span><span style="color:var(--text);font-size:13px;text-align:right">${val?escapeHtml(String(val)):'<span style=\"color:var(--text3)\">—</span>'}</span></div>`;
+  document.getElementById('gxVerCliBody').innerHTML=`
+    <div style="font-weight:700;font-size:15px;margin-bottom:8px">${escapeHtml(c.empresa||c.nombre||'—')}</div>
+    ${row('Contacto',c.nombre)}
+    ${row('RUT',c.rut)}
+    ${row('E-mail',c.email)}
+    ${row('Teléfono',c.telefono)}
+    ${row('Cliente desde',c.creado)}`;
+  document.getElementById('gxVerCliModal').style.display='flex';
+}
+function gxCloseVerCli(){document.getElementById('gxVerCliModal').style.display='none';}
 
 /* ── Cliente ── */
 function gxFillClienteSelect(selId){
