@@ -8232,7 +8232,8 @@ function goToAlert(tab,id){
 }
 function updateDockBadges(){
   const today=new Date();today.setHours(0,0,0,0);
-  const atrasados=(state.pedidos||[]).filter(p=>{
+  const _pedBadge=isVendorMode()?(state.pedidos||[]).filter(vendorOwnsRecord):(state.pedidos||[]);
+  const atrasados=_pedBadge.filter(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
     if(['Despachado','Cancelado'].includes(est)) return false;
     return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;
