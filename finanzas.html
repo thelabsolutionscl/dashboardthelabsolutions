@@ -796,7 +796,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
           <thead><tr>
             <th>N°</th><th>Cliente</th><th>Ítems</th><th style="text-align:right">Total + IVA</th>
             <th>Estado</th><th style="text-align:right">Pagado</th><th style="text-align:right">Por cobrar</th>
-            <th style="text-align:center">📎</th><th>Acciones</th>
+            <th>Acciones</th>
           </tr></thead>
           <tbody id="gx-tabla-body"></tbody>
         </table>
@@ -2954,9 +2954,10 @@ function gxRenderTabla(){
       const itemsRes=items.length?((items[0].desc||'—')+(items.length>1?` +${items.length-1}`:'')):'—';
       const nf=fileCounts[c.id]||0;
       let acc='';
-      if(c.estado==='pendiente')acc=`<button class="btn-mini btn-mini-green" onclick="gxAprobar('${c.id}')">✓ Aprobar</button><button class="btn-mini btn-mini-red" onclick="gxRechazar('${c.id}')">✕ Rechazar</button><button class="btn-mini" onclick="gxOpenCotizacion('${c.id}')">✏️</button>`;
-      else if(c.estado==='aprobada')acc=`<button class="btn-mini" onclick="gxOpenPago('${c.id}')">💵 Pago</button><button class="btn-mini" onclick="gxOpenFiles('${c.id}')">📎 Archivos</button><button class="btn-mini" onclick="gxOpenCotizacion('${c.id}')">✏️</button>`;
-      else acc=`<button class="btn-mini" onclick="gxReactivar('${c.id}')">↩ Reactivar</button>`;
+      const btnFiles=`<button class="btn-mini" onclick="gxOpenFiles('${c.id}')">📎 Archivos${nf?' '+nf:''}</button>`;
+      if(c.estado==='pendiente')acc=`<button class="btn-mini btn-mini-green" onclick="gxAprobar('${c.id}')">✓ Aprobar</button><button class="btn-mini btn-mini-red" onclick="gxRechazar('${c.id}')">✕ Rechazar</button><button class="btn-mini" onclick="gxOpenCotizacion('${c.id}')">✏️</button>${btnFiles}`;
+      else if(c.estado==='aprobada')acc=`<button class="btn-mini" onclick="gxOpenPago('${c.id}')">💵 Pago</button>${btnFiles}<button class="btn-mini" onclick="gxOpenCotizacion('${c.id}')">✏️</button>`;
+      else acc=`<button class="btn-mini" onclick="gxReactivar('${c.id}')">↩ Reactivar</button>${btnFiles}`;
       acc+=`<button class="btn-mini btn-mini-red" onclick="gxEliminar('${c.id}')">🗑</button>`;
       html+=`<tr>
         <td class="mono" style="font-size:11px">${escapeHtml(c.num||'—')}</td>
@@ -2966,11 +2967,10 @@ function gxRenderTabla(){
         <td><span class="badge ${badge}">${txt}</span></td>
         <td style="text-align:right">${c.estado==='aprobada'?`<span style="font-size:11px">${pct}%</span><div style="font-size:10px;color:var(--text3)">${clp(pago)}</div>`:'—'}</td>
         <td style="text-align:right;color:${(cobrar>0&&c.estado==='aprobada')?'var(--danger)':'var(--text3)'};font-weight:600">${c.estado==='aprobada'?clp(cobrar):'—'}</td>
-        <td style="text-align:center"><button class="btn-mini" onclick="gxOpenFiles('${c.id}')">📎${nf?' '+nf:''}</button></td>
         <td><div style="display:flex;gap:4px;flex-wrap:wrap">${acc}</div></td>
       </tr>`;
     });
-    if(!html)html='<tr><td colspan="9" style="text-align:center;padding:26px;color:var(--text3)">Sin cotizaciones. Crea una con "➕ Nueva cotización".</td></tr>';
+    if(!html)html='<tr><td colspan="8" style="text-align:center;padding:26px;color:var(--text3)">Sin cotizaciones. Crea una con "➕ Nueva cotización".</td></tr>';
     const tb=document.getElementById('gx-tabla-body');if(tb)tb.innerHTML=html;
   };
   draw({});
