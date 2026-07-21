@@ -1058,7 +1058,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
         <table>
           <thead><tr>
             <th>N° Coti</th><th>Nombre Cliente</th><th>Ítem de venta</th>
-            <th style="text-align:right">Valor unitario</th><th style="text-align:right">Valor total</th>
+            <th style="text-align:right">Valor neto</th><th style="text-align:right">Valor total</th>
             <th style="text-align:right">Por cobrar</th><th style="text-align:right">Pago total</th>
           </tr></thead>
           <tbody id="gx-venta-body"></tbody>
@@ -3068,23 +3068,20 @@ function gxRenderVentas(){
   let html='',tVenta=0,tPago=0,tCobrar=0;
   cots.forEach(c=>{
     const cl=gxCliById(c.clienteId);
-    const cliName=cl?(cl.empresa||cl.nombre||'—'):'—';
-    const total=c.total||0,pago=c.pago||0,cobrar=Math.max(0,total-pago);
+    const persona=cl?.nombre||'',empresa=cl?.empresa||'';
+    const total=c.total||0,pago=c.pago||0,cobrar=Math.max(0,total-pago),neto=c.neto||0;
     tVenta+=total;tPago+=pago;tCobrar+=cobrar;
-    const items=(c.items&&c.items.length)?c.items:[{desc:'—',und:1,venta:0}];
-    items.forEach((it,idx)=>{
-      const first=idx===0;
-      const vUnit=it.venta||0,vTot=(it.venta||0)*(it.und||1);
-      html+=`<tr style="${first?'border-top:2px solid var(--border2)':''}">
-        <td class="mono" style="font-size:11px">${first?`<span onclick="gxVerCot('${c.id}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">${escapeHtml(c.num||'—')}</span>`:''}</td>
-        <td style="font-weight:600">${first?`<span onclick="gxVerCli('${c.clienteId}')" style="color:var(--text);cursor:pointer;text-decoration:underline">${escapeHtml(cliName)}</span>`:''}</td>
-        <td style="font-size:12px">${escapeHtml(it.desc||'—')}${(it.und>1)?` <span style="color:var(--text3)">×${it.und}</span>`:''}</td>
-        <td style="text-align:right">${clp(vUnit)}</td>
-        <td style="text-align:right;font-weight:600">${clp(vTot)}</td>
-        <td style="text-align:right;color:${(first&&cobrar>0)?'var(--danger)':'var(--text3)'};font-weight:600">${first?clp(cobrar):''}</td>
-        <td style="text-align:right;color:var(--accent3);font-weight:600">${first?clp(pago):''}</td>
-      </tr>`;
-    });
+    const items=(c.items||[]).filter(it=>((it.desc&&it.desc.trim())||it.venta>0));
+    const itemLabel=(c.alias&&c.alias.trim())?c.alias:(items.length?(items[0].desc+(items.length>1?` +${items.length-1} ítems`:'')):'—');
+    html+=`<tr>
+      <td class="mono" style="font-size:11px"><span onclick="gxVerCot('${c.id}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">${escapeHtml(c.num||'—')}</span></td>
+      <td><span onclick="gxVerCli('${c.clienteId}')" style="color:var(--text);cursor:pointer;text-decoration:underline;font-weight:600">${escapeHtml(persona||empresa||'—')}</span>${(persona&&empresa)?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(empresa)}</div>`:''}</td>
+      <td style="font-size:12px">${escapeHtml(itemLabel)}</td>
+      <td style="text-align:right">${clp(neto)}</td>
+      <td style="text-align:right;font-weight:600;color:var(--accent)">${clp(total)}</td>
+      <td style="text-align:right;color:${cobrar>0?'var(--danger)':'var(--text3)'};font-weight:600">${clp(cobrar)}</td>
+      <td style="text-align:right;color:var(--accent3);font-weight:600">${clp(pago)}</td>
+    </tr>`;
   });
   if(!html)html='<tr><td colspan="7" style="text-align:center;padding:26px;color:var(--text3)">Sin ventas todavía. Aprueba una cotización en <strong>Gestión</strong> y aparecerá aquí.</td></tr>';
   const tb=document.getElementById('gx-venta-body');if(tb)tb.innerHTML=html;
@@ -3099,7 +3096,7 @@ function gxVerCot(id){
   const estBadge=c.estado==='aprobada'?'badge-green':c.estado==='rechazada'?'badge-red':'badge-yellow';
   document.getElementById('gxVerCotTitle').innerHTML=`🧾 ${escapeHtml(c.num||'—')} <span class="badge ${estBadge}" style="margin-left:6px">${estadoTxt}</span>`;
   const info=(lbl,val)=>val?`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0"><span style="color:var(--text3);font-size:11px">${lbl}</span><span style="color:var(--text2);font-size:12px;text-align:right">${escapeHtml(String(val))}</span></div>`:'';
-  let itemsHtml=(c.items||[]).map(it=>`<tr>
+  let itemsHtml=(c.items||[]).filter(it=>((it.desc&&it.desc.trim())||it.venta>0||it.costo>0)).map(it=>`<tr>
     <td style="padding:5px 8px;font-size:12px">${escapeHtml(it.desc||'—')}</td>
     <td style="padding:5px 8px;text-align:center;font-size:12px">${it.und||1}</td>
     <td style="padding:5px 8px;text-align:right;font-size:12px;color:var(--text3)">${clp(it.costo||0)}</td>
