@@ -28,7 +28,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-21-jsonout');
+define('MAIL_API_BUILD', '2026-07-21-jsonout2');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -171,6 +171,24 @@ function decode_body($raw, $encoding, $charset) {
     return $raw;
 }
 
+// ¿Una parte "de texto" quedó en realidad como binario? (mensaje malformado:
+// transfer-encoding mal declarado, etc.) El texto/HTML real casi no tiene bytes
+// de control (<32, salvo \t \n \r); el binario tiene ~10%. Con >4% lo tratamos
+// como binario y NO lo mostramos, para no ensuciar el cuerpo con basura.
+function looks_binary($s) {
+    $len = strlen($s);
+    if ($len < 16) return false;
+    $sample = substr($s, 0, 8000);
+    $n = strlen($sample); if ($n === 0) return false;
+    $ctrl = 0;
+    for ($i = 0; $i < $n; $i++) {
+        $o = ord($sample[$i]);
+        if ($o === 9 || $o === 10 || $o === 13) continue; // tab, LF, CR ok
+        if ($o < 32) $ctrl++;
+    }
+    return ($ctrl / $n) > 0.04;
+}
+
 function get_charset($params) {
     foreach (($params ?? []) as $p) {
         if (strtolower($p->attribute) === 'charset') return $p->value;
@@ -210,8 +228,9 @@ function parse_part($conn, $msgno, $structure, $partno, &$html, &$text, &$atts) 
         $raw     = imap_fetchbody($conn, $msgno, $partno);
         $charset = get_charset($structure->parameters ?? []);
         $decoded = decode_body($raw, $structure->encoding, $charset);
-        if ($subtype === 'html') $html .= $decoded;
-        else                     $text .= $decoded;
+        if (looks_binary($decoded)) { /* parte "de texto" que en realidad es binaria: se omite */ }
+        elseif ($subtype === 'html') $html .= $decoded;
+        else                         $text .= $decoded;
 
     } elseif ($type === 1) { // multipart
         foreach (($structure->parts ?? []) as $i => $part) {
@@ -582,7 +601,8 @@ case 'read':
     if (!$html && !$text) {
         $raw     = imap_body($conn, $msgno);
         $decoded = decode_body($raw, $structure->encoding ?? 0, get_charset($structure->parameters ?? []));
-        if (strtolower($structure->subtype ?? '') === 'html') $html = $decoded;
+        if (looks_binary($decoded)) $text = '(Este mensaje no tiene una parte de texto legible.)';
+        elseif (strtolower($structure->subtype ?? '') === 'html') $html = $decoded;
         else $text = $decoded;
     }
 
