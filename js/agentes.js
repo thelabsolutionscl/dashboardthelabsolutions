@@ -1,5 +1,9 @@
 /* js/agentes.js — agentes inline, bandejas, CTA y proveedores (extraído de index.html). */
 
+// Scoping por vendedor: en modo comercial las bandejas/agentes sólo operan
+// sobre los registros del propio comercial (mismo criterio que el resto del panel).
+function _agMine(coll){ return (typeof isVendorMode==='function'&&isVendorMode())?(coll||[]).filter(vendorOwnsRecord):(coll||[]); }
+
 // ── AGENTES INLINE ─────────────────────────────────────────────
 let _agentInlineText='';
 
@@ -169,7 +173,7 @@ function buildFollowupTray(){
   const sel=document.getElementById('fuTrayDays'); if(sel) sel.value=String(_fuDays());
   const sched=_fuSched(), log=_fuLog(), now=Date.now();
   const _t=new Date();_t.setHours(0,0,0,0);
-  const cands=(state.cotizaciones||[]).map(c=>{
+  const cands=_agMine(state.cotizaciones).map(c=>{
     const f=c.fields;
     if((f['Estado cotización']||'')!=='Enviada') return null;
     const fecha=f['Fecha cotización']||(c.createdTime||'').slice(0,10);
@@ -223,7 +227,7 @@ function _wbCands(){
   (state.cotizaciones||[]).forEach(c=>(Array.isArray(c.fields['Cliente'])?c.fields['Cliente']:[]).forEach(id=>(cotsByCli[id]=cotsByCli[id]||[]).push(c)));
   (state.pedidos||[]).forEach(p=>(Array.isArray(p.fields['Cliente'])?p.fields['Cliente']:[]).forEach(id=>(pedsByCli[id]=pedsByCli[id]||[]).push(p)));
   const lastTs=r=>{const f=r.fields;const d=f['Fecha cotización']||f['Fecha entrega']||f['Fecha despacho']||(r.createdTime||'').slice(0,10);return d?new Date(d+(d.length===10?'T00:00:00':'')).getTime():0;};
-  return (state.clientes||[]).map(c=>{
+  return _agMine(state.clientes).map(c=>{
     const f=c.fields;
     if((f['Estado cuenta']||'')==='Bloqueado') return null;
     const cots=cotsByCli[c.id]||[],peds=pedsByCli[c.id]||[];
@@ -304,7 +308,7 @@ function _recompraInfo(cli){
 }
 function _recompraCands(){
   const log=_recompraLog();
-  return (state.clientes||[]).map(c=>{
+  return _agMine(state.clientes).map(c=>{
     if(log[c.id]&&(Date.now()-log[c.id].ts<30*864e5)) return null;   // gestionado hace <30 días
     const info=_recompraInfo(c);if(!info) return null;
     // "toca" desde el 85% de la cadencia y hasta 2.5× (más allá es winback, no recompra)
@@ -374,7 +378,7 @@ function recompraSnooze(cliId){_recompraMark(cliId,'manual');toast('✓ Gestiona
 function _churnRiesgo(){
   const log=_recompraLog();
   const reclamos=(typeof _reclamos==='function')?_reclamos():[];
-  return (state.clientes||[]).map(c=>{
+  return _agMine(state.clientes).map(c=>{
     const info=_recompraInfo(c);if(!info)return null;          // necesita historial (2+ pedidos)
     const emp=c.fields['Empresa']||c.fields['Contacto']||'';
     const peds=_clientePedidos(c);
@@ -535,7 +539,7 @@ async function ensureNpsFields(){
 // Lectura/estadística de las notas ya recibidas (satisfacción tipo CSAT 1-5).
 function _npsScore(p){const v=p&&p.fields?parseInt(p.fields['NPS score'],10):NaN;return(v>=1&&v<=5)?v:null;}
 function _npsStats(){
-  const notas=(state.pedidos||[]).map(_npsScore).filter(v=>v!=null);
+  const notas=_agMine(state.pedidos).map(_npsScore).filter(v=>v!=null);
   if(!notas.length) return null;
   const n=notas.length,sum=notas.reduce((a,b)=>a+b,0);
   const prom=notas.filter(v=>v>=4).length,detr=notas.filter(v=>v<=2).length;
@@ -567,7 +571,7 @@ function buildPostEntregaTray(){
   const card=document.getElementById('pdTrayCard'); if(!card) return;
   const log=_pdLog();
   const _t=new Date();_t.setHours(0,0,0,0);
-  const cands=(state.pedidos||[]).map(p=>{
+  const cands=_agMine(state.pedidos).map(p=>{
     const f=p.fields;
     if((f['Estado pedido']||'')!=='Despachado') return null;
     const fecha=f['Fecha despacho']||f['Fecha entrega']||'';
@@ -909,7 +913,7 @@ function runLeadGenAgent(){
 function runLeadRankingAgent(){
   if(!state.loaded){toast('Carga los datos primero (↺ Actualizar)','error');return;}
   const _t=new Date();_t.setHours(0,0,0,0);
-  const leads=state.clientes.filter(c=>esLeadCat(c)&&(c.fields['Etapa venta']||'')!=='Perdido');
+  const leads=_agMine(state.clientes).filter(c=>esLeadCat(c)&&(c.fields['Etapa venta']||'')!=='Perdido');
   if(!leads.length){toast('No hay leads en el pipeline','info');return;}
   const lineas=leads.map(c=>{
     const f=c.fields;

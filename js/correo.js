@@ -686,7 +686,9 @@ const MAIL={
   fillContactsDatalist(){
     const dl=document.getElementById('mailContactsList');
     if(!dl||typeof state==='undefined'||!state.clientes) return;
-    const opts=state.clientes
+    // En modo vendedor el autocompletar de destinatarios sólo ofrece los clientes propios.
+    const _base=(typeof isVendorMode==='function'&&isVendorMode())?state.clientes.filter(vendorOwnsRecord):state.clientes;
+    const opts=_base
       .filter(c=>c.fields['Email'])
       .map(c=>`<option value="${this.esc(c.fields['Email'])}">${this.esc(c.fields['Empresa']||c.fields['Contacto']||'')}</option>`);
     dl.innerHTML=opts.join('');

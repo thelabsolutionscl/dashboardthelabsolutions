@@ -8868,7 +8868,7 @@ function _diasHastaMMDD(mmdd){
 function _fechasProximas(dias){
   const lim=dias||30;const out=[];
   const fc=_fechasCliente();
-  (state.clientes||[]).forEach(c=>{
+  (isVendorMode()?(state.clientes||[]).filter(vendorOwnsRecord):(state.clientes||[])).forEach(c=>{
     const emp=c.fields['Empresa']||c.fields['Contacto']||'';
     const nombre=c.fields['Contacto']||emp;
     const cumple=(fc[c.id]||{}).cumple;
@@ -9795,7 +9795,8 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
 // Cotizaciones aprobadas que aún no tienen pedido (incluye las aprobadas desde el
 // portal del cliente). Base de la bandeja de conversión 1-clic.
 function _cotAprobadasSinPedido(){
-  return (state.cotizaciones||[]).filter(c=>{
+  const _base=isVendorMode()?(state.cotizaciones||[]).filter(vendorOwnsRecord):(state.cotizaciones||[]);
+  return _base.filter(c=>{
     const est=c.fields['Estado cotización']||'';
     if(est!=='Aprobada') return false;
     return !_pedidoDeCot(c);
@@ -13888,7 +13889,8 @@ const _PERDIDA_CATS=[
 ];
 function _perdidaCat(txt){for(const c of _PERDIDA_CATS)if(c.re.test(txt||''))return c.k;return (txt&&txt.trim())?'Otro':'Sin motivo';}
 function _cotizacionesPerdidas(){
-  const rech=(state.cotizaciones||[]).filter(c=>(c.fields['Estado cotización']||'')==='Rechazada');
+  const _base=isVendorMode()?(state.cotizaciones||[]).filter(vendorOwnsRecord):(state.cotizaciones||[]);
+  const rech=_base.filter(c=>(c.fields['Estado cotización']||'')==='Rechazada');
   const totalNeto=rech.reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
   const cats=new Map();
   rech.forEach(c=>{const k=_perdidaCat(c.fields['Motivo rechazo']);const e=cats.get(k)||{cat:k,n:0,valor:0,ej:[]};e.n++;e.valor+=Math.round((c.fields['Total final (CLP)']||0)/1.19);if(c.fields['Motivo rechazo']&&e.ej.length<3)e.ej.push(String(c.fields['Motivo rechazo']).slice(0,80));cats.set(k,e);});
@@ -13973,12 +13975,18 @@ function buildAgentContext(id){
   const fmtCLP=n=>'$'+Math.round(n).toLocaleString('es-CL');
   const lines=['=== DATOS EN TIEMPO REAL — THE LAB SOLUTIONS ===',`Fecha: ${today.toLocaleDateString('es-CL')}`];
 
+  // En modo vendedor (comercial) el contexto que reciben los agentes se limita
+  // a los registros del propio comercial; admin/gerencia/marketing ven todo.
+  const _av=(typeof isVendorMode==='function'&&isVendorMode());
+  const P=_av?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const C=_av?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  const CL=_av?state.clientes.filter(vendorOwnsRecord):state.clientes;
   // métricas base compartidas
-  const pedActivos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+  const pedActivos=P.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
   const pedAtrasados=pedActivos.filter(p=>p.fields['Fecha entrega']&&new Date(p.fields['Fecha entrega']+'T00:00:00')<today);
-  const cotAbiertas=state.cotizaciones.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||''));
-  const revSemana=state.pedidos.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
-  const revTotal=state.pedidos.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
+  const cotAbiertas=C.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||''));
+  const revSemana=P.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
+  const revTotal=P.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
 
   if(['CEO','FINANCE','SALES','PRODUCTION','FOLLOWUP','QA','REPCLIENTE'].includes(id)){
     lines.push('\nMÉTRICAS GENERALES:');
@@ -13986,16 +13994,16 @@ function buildAgentContext(id){
     lines.push(`- Revenue total acumulado: ${fmtCLP(revTotal)}`);
     lines.push(`- Pedidos activos: ${pedActivos.length} | Atrasados: ${pedAtrasados.length}`);
     lines.push(`- Cotizaciones abiertas (sin respuesta): ${cotAbiertas.length}`);
-    lines.push(`- Total clientes en CRM: ${state.clientes.length}`);
+    lines.push(`- Total clientes en CRM: ${CL.length}`);
   }
 
   if(id==='CEO'){
     const sinPago=pedActivos.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||''));
-    const fv=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=2);
-    const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);
+    const fv=CL.filter(c=>(c.fields['Facturas vencidas']||0)>=2);
+    const cotM=C.filter(c=>getMargenCot(c.fields)!==null);
     const avgM=cotM.length?cotM.reduce((s,c)=>s+getMargenCot(c.fields),0)/cotM.length:0;
-    const aprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
-    const enviadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Enviada').length;
+    const aprobadas=C.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
+    const enviadas=C.filter(c=>c.fields['Estado cotización']==='Enviada').length;
     lines.push('\nALERTAS:');
     lines.push(`- Pedidos sin pago: ${sinPago.length} | Clientes con fact. vencidas: ${fv.length}`);
     lines.push('\nFINANCIERO:');
@@ -14003,7 +14011,7 @@ function buildAgentContext(id){
     try{
       const metaM=parseInt(localStorage.getItem('revMetaMensual'))||0;
       const mStart=new Date(today.getFullYear(),today.getMonth(),1);
-      const rMes=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=mStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
+      const rMes=P.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=mStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
       const pj=proyeccionMes(rMes,metaM,today);
       if(pj) lines.push(`- Meta mensual: ${fmtCLP(metaM)} | Mes a la fecha: ${fmtCLP(rMes)} | Proyección de cierre: ${fmtCLP(pj.proyeccion)} (${pj.pct}% de la meta) | Faltan ${pj.diasRestantes} días | Ritmo necesario: ${fmtCLP(pj.necesarioDiario)}/día`);
     }catch(e){}
@@ -14012,7 +14020,8 @@ function buildAgentContext(id){
     const cotTop=cotAbiertas.slice(0,5);
     if(cotTop.length){lines.push('\nCOTIZACIONES SIN RESPUESTA:');cotTop.forEach(c=>{const f=c.fields;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Vto: ${f['Fecha vencimiento']||'—'}`);});}
     // Rentabilidad: quién y qué deja utilidad de verdad (no solo revenue)
-    try{
+    // (agregado a nivel empresa: sólo para admin/gerencia, no para un comercial)
+    if(!_av)try{
       const rc=rentabilidadClientes().slice(0,3);
       if(rc.length){lines.push('\nRENTABILIDAD (utilidad estimada):');rc.forEach(c=>lines.push(`  • ${c.nombre}: utilidad ${fmtCLP(c.util)} (margen efectivo ${c.margen.toFixed(0)}%, ${c.n} pedidos)`));}
       const rp=rentabilidadProductos();
@@ -14021,7 +14030,8 @@ function buildAgentContext(id){
     }catch(e){}
     // Histórico de reportes semanales: le da al agente la DIRECCIÓN del negocio,
     // no sólo la foto de hoy (compara, detecta rachas y lo dice en el informe).
-    try{
+    // (histórico a nivel empresa: sólo admin/gerencia, no un comercial)
+    if(!_av)try{
       const hist=_histSemanas(8);
       if(hist.length>=2){
         lines.push('\nHISTÓRICO SEMANAL (reportes anteriores, del más reciente al más antiguo):');
@@ -14036,14 +14046,14 @@ function buildAgentContext(id){
     const porCobrar=pedActivos.reduce((s,p)=>{const f=p.fields,neto=(f['Monto total (CLP)']||0)/1.19;let r=0;if(!f['Anticipo pagado (50%)']) r+=neto*0.5;if(!f['Saldo pagado (50%)']) r+=neto*0.5;return s+r;},0);
     const sinAnticipo=pedActivos.filter(p=>!p.fields['Anticipo pagado (50%)']&&['Confirmado','En producción'].includes(p.fields['Estado pedido']||''));
     const sinSaldo=pedActivos.filter(p=>!p.fields['Saldo pagado (50%)']&&p.fields['Estado pedido']==='Listo para despacho');
-    const deudores=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
+    const deudores=CL.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
     lines.push('\nCOBRANZA:');
     lines.push(`- Total por cobrar (neto): ${fmtCLP(porCobrar)} | Sin anticipo: ${sinAnticipo.length} | Sin saldo (listos): ${sinSaldo.length}`);
     if(sinAnticipo.length){lines.push('  ANTICIPO PENDIENTE:');sinAnticipo.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | anticipo ${fmtCLP((f['Monto total (CLP)']||0)/1.19*0.5)} | ${f['Estado pedido']||'—'} | Forma pago: ${f['Forma de pago']||'—'}`);});}
     if(sinSaldo.length){lines.push('  SALDO PENDIENTE (listos para despacho):');sinSaldo.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | saldo ${fmtCLP((f['Monto total (CLP)']||0)/1.19*0.5)} | Forma pago: ${f['Forma de pago']||'—'}`);});}
     lines.push('\nCLIENTES CON FACTURAS VENCIDAS:');
     if(deudores.length){deudores.forEach(c=>{const f=c.fields;lines.push(`  • ${f['Empresa']||'—'} | ${f['Facturas vencidas']||0} fact. vencidas | Estado: ${f['Estado cuenta']||'—'} | Email: ${f['Email']||'—'}`);});}else lines.push('  Ninguno ✓');
-    const cotM=state.cotizaciones.filter(c=>getMargenCot(c.fields)!==null);
+    const cotM=C.filter(c=>getMargenCot(c.fields)!==null);
     const avgM=cotM.length?cotM.reduce((s,c)=>s+getMargenCot(c.fields),0)/cotM.length:0;
     lines.push(`\nMARGEN PROMEDIO: ${avgM.toFixed(1)}% | Objetivo: 35–45%`);
   }
@@ -14068,7 +14078,7 @@ function buildAgentContext(id){
   }
 
   if(id==='QA'){
-    const listos=state.pedidos.filter(p=>p.fields['Estado pedido']==='Listo para despacho');
+    const listos=P.filter(p=>p.fields['Estado pedido']==='Listo para despacho');
     lines.push('\nPEDIDOS LISTOS PARA QA:');
     if(listos.length){listos.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | Entrega: ${f['Fecha entrega']||'—'} | QA previo: ${f['Resultado QA']||'Pendiente'}`);const req=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';if(req) lines.push(`    Solicitud: ${req.substring(0,120)}`);});}else lines.push('  Ninguno en este momento');
   }
@@ -14076,32 +14086,32 @@ function buildAgentContext(id){
   if(id==='SALES'){
     lines.push('\nCOTIZACIONES ABIERTAS:');
     cotAbiertas.slice(0,8).forEach(c=>{const f=c.fields;const vto=f['Fecha vencimiento']?Math.round((new Date(f['Fecha vencimiento']+'T00:00:00')-today)/86400000):null;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado cotización']||'—'}${vto!==null?` | vence en ${vto}d`:''}${f['Canal solicitud']?` | Canal: ${f['Canal solicitud']}`:''}`);});
-    const leads=state.clientes.filter(esLeadCat).slice(0,6);
+    const leads=CL.filter(esLeadCat).slice(0,6);
     if(leads.length){lines.push('\nLEADS EN PIPELINE:');leads.forEach(c=>{const f=c.fields;lines.push(`  • ${f['Empresa']||'—'} | ${f['Contacto']||'—'} | ${f['Etapa venta']||'—'} | ${f['Teléfono']||f['Email']||'—'}`);});}
   }
 
   if(id==='FOLLOWUP'){
     const hace5=new Date(Date.now()-5*86400000);
-    const sinResp=state.cotizaciones.filter(c=>{const f=c.fields;if(f['Estado cotización']!=='Enviada') return false;const fc=f['Fecha cotización']?new Date(f['Fecha cotización']+'T00:00:00'):null;return fc&&fc<hace5;}).slice(0,8);
+    const sinResp=C.filter(c=>{const f=c.fields;if(f['Estado cotización']!=='Enviada') return false;const fc=f['Fecha cotización']?new Date(f['Fecha cotización']+'T00:00:00'):null;return fc&&fc<hace5;}).slice(0,8);
     lines.push('\nCOTIZACIONES SIN RESPUESTA (+5 DÍAS):');
     if(sinResp.length){sinResp.forEach(c=>{const f=c.fields;const dias=f['Fecha cotización']?Math.round((today-new Date(f['Fecha cotización']+'T00:00:00'))/86400000):'—';const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientesByIdRec[cid]:null;const contacto=[cl?.fields['Teléfono'],cl?.fields['Email']].filter(Boolean).join(' | ')||'—';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | ${dias}d sin respuesta | Contacto: ${contacto}`);const sol=f['Solicitud cliente (texto libre)']||'';if(sol) lines.push(`    Solicitud: ${sol.substring(0,80)}`);});}else lines.push('  Sin cotizaciones pendientes +5 días ✓');
   }
 
   if(id==='QUOTE'){
-    const aprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-8);
+    const aprobadas=C.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-8);
     lines.push('\nÚLTIMAS COTIZACIONES APROBADAS (referencia de precios reales):');
     if(aprobadas.length){aprobadas.forEach(c=>{const f=c.fields;const neto=Math.round((f['Total final (CLP)']||0)/1.19);const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Neto: ${fmtCLP(neto)}${sol?' | '+sol.substring(0,70):''}`);});}else lines.push('  Sin cotizaciones aprobadas aún');
     // Punto dulce de precio: margen promedio de las APROBADAS (lo que el mercado acepta) + tasa de aprobación
-    const _aprAll=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada');
+    const _aprAll=C.filter(c=>c.fields['Estado cotización']==='Aprobada');
     const _aprM=_aprAll.map(c=>getMargenCot(c.fields)).filter(m=>m!==null);
     const _avgAprM=_aprM.length?Math.round(_aprM.reduce((s,m)=>s+m,0)/_aprM.length):null;
-    const _enviadas=state.cotizaciones.filter(c=>['Aprobada','Rechazada','Enviada'].includes(c.fields['Estado cotización']||'')).length;
+    const _enviadas=C.filter(c=>['Aprobada','Rechazada','Enviada'].includes(c.fields['Estado cotización']||'')).length;
     const _tasa=_enviadas?Math.round(_aprAll.length/_enviadas*100):null;
     if(_avgAprM!==null)lines.push(`\nPUNTO DULCE: las cotizaciones que el cliente APRUEBA tienen margen promedio ${_avgAprM}% (tasa de aprobación ${_tasa!==null?_tasa+'%':'—'}). Apunta a ese rango para maximizar probabilidad de cierre sin regalar margen.`);
     lines.push('\nCOST BASE (referencia interna):');
     lines.push('  Trofeo $18.000/und | Medalla $4.500/und | Neón $18.000–25.000/m | PLA $24/g+$1.200/h');
     lines.push('  Margen objetivo: 35–45% · piso mínimo 25%');
-    const rech=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Rechazada'&&c.fields['Motivo rechazo']).slice(-5);
+    const rech=C.filter(c=>c.fields['Estado cotización']==='Rechazada'&&c.fields['Motivo rechazo']).slice(-5);
     if(rech.length){
       lines.push('\nCOTIZACIONES RECHAZADAS RECIENTES (considera estos motivos al fijar precios):');
       rech.forEach(c=>{const f=c.fields;lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])} | Neto: ${fmtCLP(Math.round((f['Total final (CLP)']||0)/1.19))} | Motivo: ${String(f['Motivo rechazo']).substring(0,100)}`);});
@@ -14115,15 +14125,15 @@ function buildAgentContext(id){
 
   if(id==='LEADGEN'){
     lines.push('\nCLIENTES ACTUALES POR INDUSTRIA:');
-    const ind={};state.clientes.forEach(c=>{const i=c.fields['Industria / Rubro']||'Sin clasificar';ind[i]=(ind[i]||0)+1;});
+    const ind={};CL.forEach(c=>{const i=c.fields['Industria / Rubro']||'Sin clasificar';ind[i]=(ind[i]||0)+1;});
     Object.entries(ind).sort((a,b)=>b[1]-a[1]).forEach(([i,n])=>lines.push(`  • ${i}: ${n}`));
     lines.push('\nDISTRIBUCIÓN PIPELINE:');
-    const et={};state.clientes.forEach(c=>{const e=c.fields['Etapa venta']||'—';et[e]=(et[e]||0)+1;});
+    const et={};CL.forEach(c=>{const e=c.fields['Etapa venta']||'—';et[e]=(et[e]||0)+1;});
     Object.entries(et).forEach(([e,n])=>lines.push(`  • ${e}: ${n}`));
   }
 
   if(id==='CONTENT'){
-    const recientes=state.pedidos.filter(p=>p.fields['Estado pedido']==='Despachado').slice(-6);
+    const recientes=P.filter(p=>p.fields['Estado pedido']==='Despachado').slice(-6);
     lines.push('\nÚLTIMOS PROYECTOS ENTREGADOS (para contenido):');
     if(recientes.length){recientes.forEach(p=>{const f=p.fields;const sol=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';lines.push(`  • ${resolveClienteName(f['Cliente'])} | ${f['Fecha despacho']||f['Fecha entrega']||'—'} | ${fmtCLP((f['Monto total (CLP)']||0)/1.19)}${sol?' | '+sol.substring(0,60):''}`);});}else lines.push('  Sin proyectos despachados recientes');
   }
@@ -14141,9 +14151,9 @@ function buildAgentContext(id){
       lines.push(`TOTALES (reportado por Google): Gasto ${fmtCLP(gasto)} | Imp. ${(imp||0).toLocaleString('es-CL')} | Clics ${(clics||0).toLocaleString('es-CL')} | CTR ${ctr}% | CPC ${fmtCLP(cpc)} | Conv. ${conv} | CPA ${conv>0?fmtCLP(cpa):'—'} | ROAS reportado ${valConv>0?roas+'x':'—'}`);
       // ── ROAS-REAL desde el CRM (verdad de negocio): ingresos netos de pedidos creados en el período ──
       const _cut=new Date(Date.now()-days*86400000);
-      const _ped=(state.pedidos||[]).filter(pp=>{const f=pp.fields;const dd=pp.createdTime?new Date(pp.createdTime):null;return dd&&dd>=_cut&&(f['Estado pedido']||'')!=='Cancelado';});
+      const _ped=(P||[]).filter(pp=>{const f=pp.fields;const dd=pp.createdTime?new Date(pp.createdTime):null;return dd&&dd>=_cut&&(f['Estado pedido']||'')!=='Cancelado';});
       const ingresoCRM=_ped.reduce((s,pp)=>s+Math.round((pp.fields['Monto total (CLP)']||0)/1.19),0);
-      const _leads=(state.clientes||[]).filter(c=>{const dd=c.createdTime?new Date(c.createdTime):null;return dd&&dd>=_cut;}).length;
+      const _leads=(CL||[]).filter(c=>{const dd=c.createdTime?new Date(c.createdTime):null;return dd&&dd>=_cut;}).length;
       const roasReal=gasto>0?(ingresoCRM/gasto):0,cplReal=_leads>0&&gasto>0?Math.round(gasto/_leads):0;
       lines.push(`VERDAD CRM (manda esto): Ingresos netos ${fmtCLP(ingresoCRM)} de ${_ped.length} pedido(s) · ROAS-REAL ${roasReal>0?roasReal.toFixed(2)+'x':'—'} · ${_leads} leads nuevos · CPL real ${cplReal>0?fmtCLP(cplReal):'—'}`);
       if(roasReal>0&&valConv>0){const gap=(roas/roasReal);if(gap>1.6)lines.push(`  ⚠ Google reporta ${roas}x pero el CRM-real es ${roasReal.toFixed(2)}x (${gap.toFixed(1)}× inflado) — usa el real.`);}
@@ -14251,7 +14261,7 @@ function buildAgentContext(id){
   }
 
   if(id==='ONBOARDING'){
-    const recienAprobadas=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-3);
+    const recienAprobadas=C.filter(c=>c.fields['Estado cotización']==='Aprobada').slice(-3);
     lines.push('\nCOTIZACIONES RECIENTEMENTE APROBADAS (nuevos clientes):');
     if(recienAprobadas.length){recienAprobadas.forEach(c=>{const f=c.fields;const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cl=cid?state.clientesByIdRec[cid]:null;const sol=f['Solicitud cliente (texto libre)']||'';lines.push(`  • ${f['N° Cotización']||'—'} | ${resolveClienteName(f['Cliente'])}${cl?.fields['Email']?' | '+cl.fields['Email']:''}${sol?' | Solicitud: '+sol.substring(0,70):''}`);});}else lines.push('  Sin aprobaciones recientes');
   }
@@ -14448,6 +14458,9 @@ const _agentSuggestKey='thelab_agent_suggest_v1';
 // direcciones. Silencioso con poco historial (necesita 3+ semanas de datos).
 function detectarAnomalias(hoy){
   const out=[];
+  // Anomalías a nivel empresa (revenue/conversión/ritmo): sólo admin/gerencia,
+  // no aplican a un comercial (sería revelarle cifras globales de la empresa).
+  if(typeof isVendorMode==='function'&&isVendorMode()) return out;
   try{
     const d=hoy?new Date(hoy):new Date();
     const _t=new Date(d);_t.setHours(0,0,0,0);
@@ -14508,8 +14521,13 @@ function checkAgentSuggestions(){
   let seen;try{seen=JSON.parse(localStorage.getItem(_agentSuggestKey)||'{}');}catch(e){seen={};}
   const todayStr=new Date().toISOString().slice(0,10);
   const _t=new Date();_t.setHours(0,0,0,0);
+  // En modo vendedor las sugerencias/notificaciones se limitan a los registros del comercial
+  const _av=(typeof isVendorMode==='function'&&isVendorMode());
+  const _P=_av?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
+  const _C=_av?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
+  const _CL=_av?state.clientes.filter(vendorOwnsRecord):state.clientes;
   // FOLLOWUP: cotizaciones Enviada +5 días
-  const pendFU=state.cotizaciones.filter(c=>{
+  const pendFU=_C.filter(c=>{
     const f=c.fields;if(f['Estado cotización']!=='Enviada'||!f['Fecha cotización']) return false;
     return Math.round((_t-new Date(f['Fecha cotización']+'T00:00:00'))/86400000)>=5;
   });
@@ -14518,19 +14536,19 @@ function checkAgentSuggestions(){
     seen.followup=todayStr;
   }
   // QA: pedidos listos para despacho sin QA
-  const pendQA=state.pedidos.filter(p=>p.fields['Estado pedido']==='Listo para despacho'&&!p.fields['Resultado QA']);
+  const pendQA=_P.filter(p=>p.fields['Estado pedido']==='Listo para despacho'&&!p.fields['Resultado QA']);
   if(pendQA.length&&seen.qa!==todayStr){
     NOTIFY.add('info',`🤖 QA: ${pendQA.length} pedido${pendQA.length>1?'s':''} listo${pendQA.length>1?'s':''} sin checklist QA`,'Toca para generar con IA','@openQAPicker',{silent:true});
     seen.qa=todayStr;
   }
   // FINANCE: clientes con facturas vencidas
-  const deudores=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
+  const deudores=_CL.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
   if(deudores.length&&seen.finance!==todayStr){
     NOTIFY.add('warning',`💰 FINANCE: ${deudores.length} cliente${deudores.length>1?'s':''} con facturas vencidas`,'Toca para redactar recordatorios con IA','@openFinancePicker',{silent:true});
     seen.finance=todayStr;
   }
   // ONBOARDING: cotizaciones aprobadas de clientes aún no activados
-  const pendOB=state.cotizaciones.filter(c=>{
+  const pendOB=_C.filter(c=>{
     if(c.fields['Estado cotización']!=='Aprobada') return false;
     const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
     const cl=cid?state.clientesByIdRec[cid]:null;
@@ -14541,7 +14559,7 @@ function checkAgentSuggestions(){
     seen.onboarding=todayStr;
   }
   // QUOTE: solicitudes sin cotizar +2 días
-  const pendSol=state.cotizaciones.filter(c=>{
+  const pendSol=_C.filter(c=>{
     const f=c.fields;if(f['Estado cotización']!=='Solicitada') return false;
     const d=f['Fecha cotización']||(c.createdTime||'').slice(0,10);if(!d) return false;
     return Math.round((_t-new Date(d+'T00:00:00'))/86400000)>=2;
@@ -14551,7 +14569,7 @@ function checkAgentSuggestions(){
     seen.quote=todayStr;
   }
   // WIN-BACK: cotizaciones vencidas o enviadas con vencimiento pasado
-  const pendWB=state.cotizaciones.filter(c=>{
+  const pendWB=_C.filter(c=>{
     const f=c.fields;
     if(f['Estado cotización']==='Vencida') return true;
     return f['Estado cotización']==='Enviada'&&f['Fecha vencimiento']&&new Date(f['Fecha vencimiento']+'T00:00:00')<_t;
@@ -14561,13 +14579,13 @@ function checkAgentSuggestions(){
     seen.winback=todayStr;
   }
   // SALES: ranking diario de leads (si hay al menos 2 en pipeline)
-  const _leadsRank=state.clientes.filter(c=>esLeadCat(c)&&(c.fields['Etapa venta']||'')!=='Perdido');
+  const _leadsRank=_CL.filter(c=>esLeadCat(c)&&(c.fields['Etapa venta']||'')!=='Perdido');
   if(_leadsRank.length>=2&&seen.salesrank!==todayStr){
     NOTIFY.add('info',`📊 SALES: ${_leadsRank.length} leads en pipeline`,'Toca para ver el ranking de prioridad de hoy','@runLeadRankingAgent',{silent:true});
     seen.salesrank=todayStr;
   }
   // SALES: win-back semanal de clientes inactivos/perdidos
-  const _inactivos=state.clientes.filter(c=>['Cliente inactivo','Perdido'].includes(c.fields['Etapa venta']||''));
+  const _inactivos=_CL.filter(c=>['Cliente inactivo','Perdido'].includes(c.fields['Etapa venta']||''));
   const _diasDesdeWB=seen.clientwb?Math.round((_t-new Date(seen.clientwb+'T00:00:00'))/86400000):999;
   if(_inactivos.length&&_diasDesdeWB>=7){
     NOTIFY.add('info',`♻ ${_inactivos.length} cliente${_inactivos.length>1?'s':''} inactivo${_inactivos.length>1?'s':''}/perdido${_inactivos.length>1?'s':''} — ¿reconectamos?`,'Toca para redactar mensajes de reconexión con IA','@openClienteWinbackPicker',{silent:true});
@@ -14589,7 +14607,7 @@ function _openAgentPicker(title,rows){
 
 function openFollowupPicker(){
   const _t=new Date();_t.setHours(0,0,0,0);
-  const pend=state.cotizaciones.filter(c=>{
+  const pend=(isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones).filter(c=>{
     const f=c.fields;if(f['Estado cotización']!=='Enviada'||!f['Fecha cotización']) return false;
     return Math.round((_t-new Date(f['Fecha cotización']+'T00:00:00'))/86400000)>=5;
   });
@@ -14604,7 +14622,7 @@ function openFollowupPicker(){
 }
 
 function openQAPicker(){
-  const pend=state.pedidos.filter(p=>p.fields['Estado pedido']==='Listo para despacho'&&!p.fields['Resultado QA']);
+  const pend=(isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos).filter(p=>p.fields['Estado pedido']==='Listo para despacho'&&!p.fields['Resultado QA']);
   _openAgentPicker('🤖 Pedidos sin checklist QA',pend.map(p=>{
     const f=p.fields;
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
@@ -14615,7 +14633,7 @@ function openQAPicker(){
 }
 
 function openFinancePicker(){
-  const deudores=state.clientes.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
+  const deudores=(isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes).filter(c=>(c.fields['Facturas vencidas']||0)>=1);
   _openAgentPicker('💰 Clientes con facturas vencidas',deudores.map(c=>{
     const f=c.fields;
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
@@ -14626,7 +14644,7 @@ function openFinancePicker(){
 }
 
 function openOnboardingPicker(){
-  const pend=state.cotizaciones.filter(c=>{
+  const pend=(isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones).filter(c=>{
     if(c.fields['Estado cotización']!=='Aprobada') return false;
     const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;
     const cl=cid?state.clientesByIdRec[cid]:null;
@@ -14644,7 +14662,7 @@ function openOnboardingPicker(){
 
 function openSolicitadasPicker(){
   const _t=new Date();_t.setHours(0,0,0,0);
-  const pend=state.cotizaciones.filter(c=>c.fields['Estado cotización']==='Solicitada');
+  const pend=(isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones).filter(c=>c.fields['Estado cotización']==='Solicitada');
   _openAgentPicker('⚡ Solicitudes sin cotizar',pend.map(c=>{
     const f=c.fields;
     const d=f['Fecha cotización']||(c.createdTime||'').slice(0,10);
@@ -14658,7 +14676,7 @@ function openSolicitadasPicker(){
 
 function openWinbackPicker(){
   const _t=new Date();_t.setHours(0,0,0,0);
-  const pend=state.cotizaciones.filter(c=>{
+  const pend=(isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones).filter(c=>{
     const f=c.fields;
     if(f['Estado cotización']==='Vencida') return true;
     return f['Estado cotización']==='Enviada'&&f['Fecha vencimiento']&&new Date(f['Fecha vencimiento']+'T00:00:00')<_t;
@@ -14674,7 +14692,7 @@ function openWinbackPicker(){
 }
 
 function openClienteWinbackPicker(){
-  const inactivos=state.clientes.filter(c=>['Cliente inactivo','Perdido'].includes(c.fields['Etapa venta']||''));
+  const inactivos=(isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes).filter(c=>['Cliente inactivo','Perdido'].includes(c.fields['Etapa venta']||''));
   _openAgentPicker('♻ Clientes para reconectar',inactivos.map(c=>{
     const f=c.fields;
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
