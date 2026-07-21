@@ -841,13 +841,24 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             </div>
             <div class="text-small text-muted" id="gx-cot-cliente-info" style="margin-top:3px"></div>
           </div>
-          <div class="field-group"><label class="field-label">N° Cotización *</label><input class="field-input" id="gx-cot-num" placeholder="260507"></div>
+          <div class="field-group form-full"><label class="field-label">N° Cotización *</label><input class="field-input" id="gx-cot-num" placeholder="260507"></div>
+          <div class="field-group form-full"><label class="field-label">Alias / Título <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">(opcional — identificador amigable)</span></label><input class="field-input" id="gx-cot-alias" placeholder="ej. Trofeos Graduación USACH 2025"></div>
           <div class="field-group"><label class="field-label">Canal</label><select class="field-select" id="gx-cot-canal"><option>WhatsApp</option><option>Email</option><option>LinkedIn</option><option>Teléfono</option><option>Presencial</option></select></div>
           <div class="field-group"><label class="field-label">Urgente</label><select class="field-select" id="gx-cot-urgente"><option value="false">No</option><option value="true">Sí (+25%)</option></select></div>
           <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="gx-cot-fecha" type="date" onchange="gxCotVto()"></div>
           <div class="field-group"><label class="field-label">Vto. (auto 10 días háb.)</label><input class="field-input" id="gx-cot-vto" type="date" disabled style="opacity:0.5;cursor:not-allowed"></div>
           <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="gx-cot-forma"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
           <div class="field-group"><label class="field-label">Tiempo de Producción</label><div style="display:flex;align-items:center;gap:8px"><input class="field-input" id="gx-cot-tiempo" type="number" min="1" step="1" placeholder="0" style="width:80px;text-align:center;flex-shrink:0"><input type="hidden" id="gx-cot-tipo-dias" value="DÍAS HÁBILES"><button type="button" id="gx-cot-tipo-dias-btn" onclick="gxToggleTipoDias()" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.5);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em">DÍAS HÁBILES</button></div></div>
+          <div class="field-group form-full"><label class="field-label">Observaciones</label>
+            <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
+              <div style="display:flex;border-bottom:1px solid var(--border2)">
+                <input class="field-input" id="gx-cot-obs-inp" placeholder="Agregar ítem..." style="border:none;border-radius:0;flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();gxAddObs();}">
+                <button type="button" onclick="gxAddObs()" style="background:var(--surface3);border:none;border-left:1px solid var(--border2);color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:0 14px;cursor:pointer;white-space:nowrap">+ Agregar</button>
+              </div>
+              <div id="gx-cot-obs-items" style="min-height:32px;padding:6px 8px;display:flex;flex-direction:column;gap:4px"></div>
+            </div>
+            <textarea class="field-textarea" id="gx-cot-solicitud" rows="2" placeholder="O escribe directamente aquí..."></textarea>
+          </div>
           <div class="field-group form-full"><label class="field-label">Detalle productos</label>
             <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
               <div style="display:grid;grid-template-columns:1fr 66px 104px 104px 30px;background:var(--surface3);border-bottom:1px solid var(--border2)">
@@ -867,7 +878,6 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
             </div>
             <button type="button" class="btn btn-ghost btn-sm" onclick="gxAddItem()">+ Agregar ítem</button>
           </div>
-          <div class="field-group form-full"><label class="field-label">Solicitud / Observaciones</label><textarea class="field-textarea" id="gx-cot-solicitud" rows="2" placeholder="Lo que pidió el cliente..."></textarea></div>
           <div class="field-group form-full"><label class="field-label">Notas internas</label><textarea class="field-textarea" id="gx-cot-notas" rows="2"></textarea></div>
         </div>
         <div class="form-actions">
@@ -3069,6 +3079,16 @@ function gxToggleTipoDias(){
   if(nv==='DÍAS NORMALES'){b.style.background='rgba(255,170,0,0.15)';b.style.borderColor='rgba(255,170,0,0.5)';b.style.color='var(--accent2)';}
   else{b.style.background='rgba(0,212,204,0.15)';b.style.borderColor='rgba(0,212,204,0.5)';b.style.color='var(--accent)';}
 }
+function gxAddObs(){
+  const inp=document.getElementById('gx-cot-obs-inp');const val=(inp?.value||'').trim();if(!val)return;
+  const cont=document.getElementById('gx-cot-obs-items');const item=document.createElement('div');
+  item.dataset.value=val;
+  item.style.cssText='display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:12px';
+  item.innerHTML=`<span style="color:var(--accent);flex-shrink:0">•</span><span style="flex:1">${escapeHtml(val)}</span><button onclick="gxRemoveObs(this)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0;line-height:1">✕</button>`;
+  cont.appendChild(item);inp.value='';gxSyncObs();inp.focus();
+}
+function gxRemoveObs(btn){btn.closest('[data-value]').remove();gxSyncObs();}
+function gxSyncObs(){const items=[...document.querySelectorAll('#gx-cot-obs-items [data-value]')].map(el=>'• '+el.dataset.value);const ta=document.getElementById('gx-cot-solicitud');if(ta)ta.value=items.join('\n');}
 function gxOpenCotizacion(id){
   const c=id?gxGetCots().find(x=>x.id===id):null;
   const cl=c?gxCliById(c.clienteId):null;
@@ -3079,6 +3099,9 @@ function gxOpenCotizacion(id){
   document.getElementById('gx-cot-cliente-info').textContent=cl?'✓ Cliente seleccionado':'';
   document.getElementById('gx-cot-cliente-dropdown').classList.remove('open');
   document.getElementById('gx-cot-num').value=c?(c.num||''):gxNextNum();
+  document.getElementById('gx-cot-alias').value=c?.alias||'';
+  const obsC=document.getElementById('gx-cot-obs-items');if(obsC)obsC.innerHTML='';
+  const obsI=document.getElementById('gx-cot-obs-inp');if(obsI)obsI.value='';
   document.getElementById('gx-cot-canal').value=c?.canal||'WhatsApp';
   document.getElementById('gx-cot-urgente').value=(c&&c.urgente)?'true':'false';
   document.getElementById('gx-cot-fecha').value=c?.fecha||gxHoy();
@@ -3144,6 +3167,7 @@ function gxSaveCotizacion(){
   const arr=gxGetCots();
   const base={clienteId,
     num:document.getElementById('gx-cot-num').value.trim(),
+    alias:document.getElementById('gx-cot-alias').value.trim(),
     canal:document.getElementById('gx-cot-canal').value,
     urgente:document.getElementById('gx-cot-urgente').value==='true',
     fecha:document.getElementById('gx-cot-fecha').value,
