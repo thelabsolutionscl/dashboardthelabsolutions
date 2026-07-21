@@ -823,36 +823,56 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
       </div>
     </div>
 
-    <!-- Modal Cotización -->
+    <!-- Modal Cotización (mismo formulario que el sistema real) -->
     <div id="gxCotModal" class="modal-overlay" style="display:none">
       <div class="modal-backdrop" onclick="gxCloseCotizacion()"></div>
-      <div class="modal-card wide">
+      <div class="modal-card wide" style="max-height:90vh;overflow-y:auto">
         <div class="modal-title">➕ <span id="gxCotTitle">Nueva cotización</span></div>
         <input type="hidden" id="gx-cot-id">
         <div class="form-grid" style="padding:10px 0 0">
-          <div class="field-group form-full"><label class="field-label">Cliente</label>
-            <div style="display:flex;gap:8px">
-              <select class="field-select" id="gx-cot-cliente" style="flex:1"></select>
-              <button class="btn btn-ghost btn-sm" onclick="gxOpenCliente()" title="Nuevo cliente">＋</button>
+          <div class="field-group form-full"><label class="field-label">Cliente *</label>
+            <div style="display:flex;gap:8px;align-items:flex-start">
+              <div class="search-select-wrap" style="flex:1">
+                <input class="field-input" id="gx-cot-cliente-search" placeholder="🔍 buscar cliente..." autocomplete="off" oninput="gxCotClienteSearch()" onfocus="gxCotClienteSearch()">
+                <input type="hidden" id="gx-cot-cliente-id">
+                <div class="search-select-dropdown" id="gx-cot-cliente-dropdown"></div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="gxOpenCliente()" title="Nuevo cliente" style="flex-shrink:0">＋</button>
             </div>
+            <div class="text-small text-muted" id="gx-cot-cliente-info" style="margin-top:3px"></div>
           </div>
-          <div class="field-group"><label class="field-label">N° Cotización</label><input class="field-input" id="gx-cot-num" placeholder="COT-2026-001"></div>
-          <div class="field-group"><label class="field-label">Canal</label><select class="field-select" id="gx-cot-canal"><option>CONTACTO</option><option>ADWORDS</option><option>VENDEDORES</option></select></div>
-          <div class="field-group"><label class="field-label">Categoría</label><select class="field-select" id="gx-cot-cat"><option value="">—</option><option>IMPRENTA</option><option>3D</option><option>NEON/CARTEL</option><option>DISEÑO</option><option>SERVICIO</option></select></div>
+          <div class="field-group"><label class="field-label">N° Cotización *</label><input class="field-input" id="gx-cot-num" placeholder="260507"></div>
+          <div class="field-group"><label class="field-label">Canal</label><select class="field-select" id="gx-cot-canal"><option>WhatsApp</option><option>Email</option><option>LinkedIn</option><option>Teléfono</option><option>Presencial</option></select></div>
+          <div class="field-group"><label class="field-label">Urgente</label><select class="field-select" id="gx-cot-urgente"><option value="false">No</option><option value="true">Sí (+25%)</option></select></div>
+          <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="gx-cot-fecha" type="date" onchange="gxCotVto()"></div>
+          <div class="field-group"><label class="field-label">Vto. (auto 10 días háb.)</label><input class="field-input" id="gx-cot-vto" type="date" disabled style="opacity:0.5;cursor:not-allowed"></div>
+          <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="gx-cot-forma"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
+          <div class="field-group"><label class="field-label">Tiempo de Producción</label><div style="display:flex;align-items:center;gap:8px"><input class="field-input" id="gx-cot-tiempo" type="number" min="1" step="1" placeholder="0" style="width:80px;text-align:center;flex-shrink:0"><input type="hidden" id="gx-cot-tipo-dias" value="DÍAS HÁBILES"><button type="button" id="gx-cot-tipo-dias-btn" onclick="gxToggleTipoDias()" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.5);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em">DÍAS HÁBILES</button></div></div>
+          <div class="field-group form-full"><label class="field-label">Detalle productos</label>
+            <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
+              <div style="display:grid;grid-template-columns:1fr 66px 104px 104px 30px;background:var(--surface3);border-bottom:1px solid var(--border2)">
+                <div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">Descripción</div>
+                <div style="padding:6px 6px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);text-align:center;border-left:1px solid var(--border2)">Und.</div>
+                <div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);text-align:right;border-left:1px solid var(--border2)">Costo unit.</div>
+                <div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);text-align:right;border-left:1px solid var(--border2)">Precio venta</div>
+                <div style="border-left:1px solid var(--border2)"></div>
+              </div>
+              <div id="gx-cot-items"></div>
+              <div id="gx-cot-tot" style="display:none">
+                <div style="display:grid;grid-template-columns:1fr 66px 104px 104px 30px;border-top:1px solid var(--border2);background:var(--surface3)"><div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);grid-column:1/3">Costo total</div><div id="gx-cot-costo" style="padding:6px 10px;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--text2);text-align:right;border-left:1px solid var(--border2)">$0</div><div style="border-left:1px solid var(--border2)"></div><div style="border-left:1px solid var(--border2)"></div></div>
+                <div style="display:grid;grid-template-columns:1fr 66px 104px 104px 30px;border-top:1px solid var(--border2);background:var(--surface3)"><div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);grid-column:1/4">Precio neto (sin IVA)</div><div id="gx-cot-neto" style="padding:6px 10px;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--text);text-align:right;border-left:1px solid var(--border2)">$0</div><div style="border-left:1px solid var(--border2)"></div></div>
+                <div style="display:grid;grid-template-columns:1fr 66px 104px 104px 30px;border-top:1px solid var(--border2);background:var(--surface3)"><div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);grid-column:1/4">Margen</div><div id="gx-cot-margen" style="padding:6px 10px;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;text-align:right;border-left:1px solid var(--border2)">—</div><div style="border-left:1px solid var(--border2)"></div></div>
+                <div style="display:grid;grid-template-columns:1fr 66px 104px 104px 30px;border-top:1px solid var(--border2);background:var(--surface2)"><div style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent3);grid-column:1/4">TOTAL IVA INC. <span style="font-size:9px;color:var(--text3);font-weight:400">(+19%)</span></div><div id="gx-cot-total" style="padding:8px 10px;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent3);text-align:right;border-left:1px solid var(--border2)">$0</div><div style="border-left:1px solid var(--border2)"></div></div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="gxAddItem()">+ Agregar ítem</button>
+          </div>
+          <div class="field-group form-full"><label class="field-label">Solicitud / Observaciones</label><textarea class="field-textarea" id="gx-cot-solicitud" rows="2" placeholder="Lo que pidió el cliente..."></textarea></div>
+          <div class="field-group form-full"><label class="field-label">Notas internas</label><textarea class="field-textarea" id="gx-cot-notas" rows="2"></textarea></div>
         </div>
-        <div style="margin-top:12px">
-          <label class="field-label">Ítems (valor neto por unidad)</label>
-          <div id="gx-cot-items" style="margin-top:6px"></div>
-          <button class="btn btn-ghost btn-sm" onclick="gxAddItem()" style="margin-top:4px">＋ Agregar ítem</button>
-        </div>
-        <div style="display:flex;justify-content:flex-end;gap:18px;margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:13px">
-          <span style="color:var(--text2)">Neto: <strong id="gx-cot-neto" style="color:var(--text)">$0</strong></span>
-          <span style="color:var(--text2)">IVA: <strong id="gx-cot-iva" style="color:var(--text3)">$0</strong></span>
-          <span style="color:var(--text2)">Total: <strong id="gx-cot-total" style="color:var(--accent)">$0</strong></span>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <div class="form-actions">
           <button class="btn btn-ghost btn-sm" onclick="gxCloseCotizacion()">Cancelar</button>
-          <button class="btn btn-primary btn-sm" onclick="gxSaveCotizacion()">✓ Guardar cotización</button>
+          <button class="btn btn-primary" onclick="gxSaveCotizacion()">✚ Guardar cotización</button>
         </div>
       </div>
     </div>
@@ -2956,9 +2976,9 @@ function gxSeedReales(){
     {id:'clr_tech',empresa:'TECH STREAM SPA',nombre:'Hans Schmitz',rut:'76.968.507-3',email:'hans.schmitz@techstream.cl',telefono:'569 8903 7759'}
   ];
   const seedCots=[
-    {id:'cotr_treid',clienteId:'clr_treid',num:'COT-260705',canal:'CONTACTO',categoria:'',estado:'pendiente',items:[{desc:'LLAVERO DORITOS + NFC',cant:300,valor:2250}]},
-    {id:'cotr_coch',clienteId:'clr_coch',num:'COT-260603',canal:'CONTACTO',categoria:'',estado:'aprobada',items:[{desc:'MEDALLA "YOU CAN DO THIS"',cant:300,valor:3550},{desc:'CHIP NFC',cant:300,valor:1500},{desc:'ENVÍO',cant:1,valor:15000}]},
-    {id:'cotr_tech',clienteId:'clr_tech',num:'COT-260609',canal:'CONTACTO',categoria:'',estado:'aprobada',items:[{desc:'HOOKER 1',cant:300,valor:1380},{desc:'HOOKER 2',cant:300,valor:1375},{desc:'RUEDA DENTADA',cant:300,valor:330}]}
+    {id:'cotr_treid',clienteId:'clr_treid',num:'COT-260705',canal:'WhatsApp',estado:'pendiente',items:[{desc:'LLAVERO DORITOS + NFC',und:300,costo:1100,venta:2250}]},
+    {id:'cotr_coch',clienteId:'clr_coch',num:'COT-260603',canal:'WhatsApp',estado:'aprobada',items:[{desc:'MEDALLA "YOU CAN DO THIS"',und:300,costo:1500,venta:3550},{desc:'CHIP NFC',und:300,costo:500,venta:1500},{desc:'ENVÍO',und:1,costo:10000,venta:15000}]},
+    {id:'cotr_tech',clienteId:'clr_tech',num:'COT-260609',canal:'Teléfono',estado:'aprobada',items:[{desc:'HOOKER 1',und:300,costo:590,venta:1380},{desc:'HOOKER 2',und:300,costo:650,venta:1375},{desc:'RUEDA DENTADA',und:300,costo:180,venta:330}]}
   ];
   const clientes=gxGetClientes();
   seedClientes.forEach(sc=>{if(!clientes.some(c=>c.id===sc.id))clientes.push(Object.assign({creado:gxHoy()},sc));});
@@ -2966,9 +2986,9 @@ function gxSeedReales(){
   const cots=gxGetCots();let added=0;
   seedCots.forEach(sc=>{
     if(cots.some(c=>c.id===sc.id))return;
-    const neto=sc.items.reduce((s,i)=>s+i.cant*i.valor,0);
-    const iva=Math.round(neto*0.19);
-    cots.push({id:sc.id,clienteId:sc.clienteId,num:sc.num,canal:sc.canal,categoria:sc.categoria,items:sc.items,neto,iva,total:neto+iva,estado:sc.estado,pago:0,fechaCreacion:gxHoy(),_real:true});
+    let costo=0,neto=0;sc.items.forEach(i=>{costo+=i.costo*i.und;neto+=i.venta*i.und;});
+    costo=Math.round(costo);neto=Math.round(neto);const total=Math.round(neto*1.19);
+    cots.push({id:sc.id,clienteId:sc.clienteId,num:sc.num,canal:sc.canal,categoria:'',items:sc.items,costo,neto,iva:total-neto,total,estado:sc.estado,pago:0,fechaCreacion:gxHoy(),_real:true});
     added++;
   });
   gxSetCots(cots);
@@ -3010,23 +3030,68 @@ function gxSaveCliente(){
   if(!gxSetClientes(arr))return;
   toast('Cliente guardado','success');
   gxCloseCliente();
-  gxFillClienteSelect(selId);
+  /* si el modal de cotización está abierto, seleccionar el cliente recién creado */
+  if(document.getElementById('gxCotModal').style.display==='flex'){
+    document.getElementById('gx-cot-cliente-search').value=data.empresa||data.nombre||'';
+    document.getElementById('gx-cot-cliente-id').value=selId;
+    document.getElementById('gx-cot-cliente-info').textContent='✓ Cliente seleccionado';
+  }
   gxRenderTabla();
 }
 
 /* ── Cotización ── */
 function gxNextNum(){const y=new Date().getFullYear();let mx=0;gxGetCots().forEach(c=>{const m=(c.num||'').match(new RegExp('COT-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return 'COT-'+y+'-'+String(mx+1).padStart(3,'0');}
+function gxCotClienteSearch(){
+  const inp=document.getElementById('gx-cot-cliente-search'),dd=document.getElementById('gx-cot-cliente-dropdown');
+  document.getElementById('gx-cot-cliente-id').value='';
+  document.getElementById('gx-cot-cliente-info').textContent='';
+  const q=inp.value.toLowerCase().trim();
+  const arr=gxGetClientes();
+  const src=q?arr.filter(c=>((c.empresa||'')+' '+(c.nombre||'')).toLowerCase().includes(q)).slice(0,8):arr.slice(0,6);
+  dd.innerHTML=src.length?src.map(c=>`<div class="search-select-item" onclick="gxCotPickCliente('${c.id}')"><strong>${escapeHtml(c.empresa||c.nombre||'—')}</strong><span class="text-muted text-small" style="margin-left:7px">${escapeHtml(c.empresa?(c.nombre||''):'')}</span></div>`).join(''):'<div class="search-select-item" style="opacity:.6">Sin clientes — usa ＋ para crear uno</div>';
+  dd.classList.add('open');
+}
+function gxCotPickCliente(id){
+  const c=gxCliById(id);if(!c)return;
+  document.getElementById('gx-cot-cliente-search').value=c.empresa||c.nombre||'';
+  document.getElementById('gx-cot-cliente-id').value=id;
+  document.getElementById('gx-cot-cliente-dropdown').classList.remove('open');
+  document.getElementById('gx-cot-cliente-info').textContent='✓ Cliente seleccionado';
+}
+function gxCotVto(){
+  const f=document.getElementById('gx-cot-fecha').value;
+  const base=f?new Date(f+'T00:00:00'):new Date();
+  document.getElementById('gx-cot-vto').value=addBusinessDays(base,10).toISOString().slice(0,10);
+}
+function gxToggleTipoDias(){
+  const h=document.getElementById('gx-cot-tipo-dias'),b=document.getElementById('gx-cot-tipo-dias-btn');
+  const nv=h.value==='DÍAS HÁBILES'?'DÍAS NORMALES':'DÍAS HÁBILES';h.value=nv;b.textContent=nv;
+  if(nv==='DÍAS NORMALES'){b.style.background='rgba(255,170,0,0.15)';b.style.borderColor='rgba(255,170,0,0.5)';b.style.color='var(--accent2)';}
+  else{b.style.background='rgba(0,212,204,0.15)';b.style.borderColor='rgba(0,212,204,0.5)';b.style.color='var(--accent)';}
+}
 function gxOpenCotizacion(id){
-  gxFillClienteSelect();
   const c=id?gxGetCots().find(x=>x.id===id):null;
+  const cl=c?gxCliById(c.clienteId):null;
   document.getElementById('gx-cot-id').value=id||'';
   document.getElementById('gxCotTitle').textContent=c?'Editar cotización':'Nueva cotización';
-  document.getElementById('gx-cot-num').value=c?.num||gxNextNum();
-  document.getElementById('gx-cot-canal').value=c?.canal||'CONTACTO';
-  document.getElementById('gx-cot-cat').value=c?.categoria||'';
-  if(c)document.getElementById('gx-cot-cliente').value=c.clienteId||'';
+  document.getElementById('gx-cot-cliente-search').value=cl?(cl.empresa||cl.nombre||''):'';
+  document.getElementById('gx-cot-cliente-id').value=c?(c.clienteId||''):'';
+  document.getElementById('gx-cot-cliente-info').textContent=cl?'✓ Cliente seleccionado':'';
+  document.getElementById('gx-cot-cliente-dropdown').classList.remove('open');
+  document.getElementById('gx-cot-num').value=c?(c.num||''):gxNextNum();
+  document.getElementById('gx-cot-canal').value=c?.canal||'WhatsApp';
+  document.getElementById('gx-cot-urgente').value=(c&&c.urgente)?'true':'false';
+  document.getElementById('gx-cot-fecha').value=c?.fecha||gxHoy();
+  gxCotVto();
+  if(c&&c.vto)document.getElementById('gx-cot-vto').value=c.vto;
+  document.getElementById('gx-cot-forma').value=c?.formaPago||'';
+  document.getElementById('gx-cot-tiempo').value=c?.tiempoProd||'';
+  const td=c?.tipoDias||'DÍAS HÁBILES';
+  document.getElementById('gx-cot-tipo-dias').value=td;document.getElementById('gx-cot-tipo-dias-btn').textContent=td;
+  document.getElementById('gx-cot-solicitud').value=c?.solicitud||'';
+  document.getElementById('gx-cot-notas').value=c?.notas||'';
   const cont=document.getElementById('gx-cot-items');cont.innerHTML='';
-  const items=(c&&c.items&&c.items.length)?c.items:[{desc:'',cant:1,valor:''}];
+  const items=(c&&c.items&&c.items.length)?c.items:[{desc:'',und:1,costo:'',venta:''}];
   items.forEach(it=>gxAddItem(it));
   gxCotCalc();
   document.getElementById('gxCotModal').style.display='flex';
@@ -3034,45 +3099,62 @@ function gxOpenCotizacion(id){
 function gxCloseCotizacion(){document.getElementById('gxCotModal').style.display='none';}
 function gxAddItem(it){
   const cont=document.getElementById('gx-cot-items');
-  const row=document.createElement('div');
-  row.className='gx-item-row';
-  row.style.cssText='display:grid;grid-template-columns:1fr 66px 120px 30px;gap:6px;margin-bottom:6px';
-  row.innerHTML=`<input class="field-input gx-it-desc" placeholder="Descripción" value="${escapeHtml(it&&it.desc||'')}" oninput="gxCotCalc()">
-    <input class="field-input gx-it-cant" type="number" min="1" placeholder="1" value="${it&&it.cant||1}" oninput="gxCotCalc()" style="text-align:center">
-    <input class="field-input gx-it-valor" type="number" min="0" placeholder="neto" value="${(it&&(it.valor||it.valor===0))?it.valor:''}" oninput="gxCotCalc()" style="text-align:right">
-    <button class="btn-mini btn-mini-red" onclick="this.parentElement.remove();gxCotCalc()">✕</button>`;
+  const row=document.createElement('div');row.className='gx-item-row';
+  row.style.cssText='display:grid;grid-template-columns:1fr 66px 104px 104px 30px;border-bottom:1px solid var(--border2)';
+  const inp="background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;width:100%";
+  const inpM="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 8px;width:100%";
+  row.innerHTML=`<input class="gx-it-desc" placeholder="Descripción" value="${escapeHtml(it&&it.desc||'')}" oninput="gxCotCalc()" style="${inp}">
+    <input class="gx-it-und" type="number" min="1" value="${it&&it.und||1}" oninput="gxCotCalc()" style="${inpM};border-left:1px solid var(--border2);text-align:center;color:var(--text)">
+    <input class="gx-it-costo" type="number" min="0" placeholder="0" value="${(it&&(it.costo||it.costo===0))?it.costo:''}" oninput="gxCotCalc()" style="${inpM};border-left:1px solid var(--border2);text-align:right;color:var(--text2)">
+    <input class="gx-it-venta" type="number" min="0" placeholder="0" value="${(it&&(it.venta||it.venta===0))?it.venta:''}" oninput="gxCotCalc()" style="${inpM};border-left:1px solid var(--border2);text-align:right;color:var(--accent3)">
+    <button onclick="this.parentElement.remove();gxCotCalc()" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px">✕</button>`;
   cont.appendChild(row);
 }
 function gxCotItemsRead(){
   const items=[];
   document.querySelectorAll('#gx-cot-items .gx-item-row').forEach(r=>{
     const desc=r.querySelector('.gx-it-desc').value.trim();
-    const cant=parseFloat(r.querySelector('.gx-it-cant').value)||1;
-    const valor=parseFloat(r.querySelector('.gx-it-valor').value)||0;
-    if(desc||valor)items.push({desc,cant,valor});
+    const und=parseFloat(r.querySelector('.gx-it-und').value)||1;
+    const costo=parseFloat(r.querySelector('.gx-it-costo').value)||0;
+    const venta=parseFloat(r.querySelector('.gx-it-venta').value)||0;
+    if(desc||venta)items.push({desc,und,costo,venta});
   });
   return items;
 }
+function gxCotTotals(items){let costo=0,neto=0;items.forEach(i=>{costo+=i.costo*i.und;neto+=i.venta*i.und;});costo=Math.round(costo);neto=Math.round(neto);return{costo,neto,total:Math.round(neto*1.19),markup:neto>0?(neto-costo)/neto*100:null};}
 function gxCotCalc(){
   const items=gxCotItemsRead();
-  const neto=items.reduce((s,i)=>s+i.cant*i.valor,0);
-  const iva=Math.round(neto*0.19);
-  document.getElementById('gx-cot-neto').textContent=clp(neto);
-  document.getElementById('gx-cot-iva').textContent=clp(iva);
-  document.getElementById('gx-cot-total').textContent=clp(neto+iva);
+  const t=gxCotTotals(items);
+  const tot=document.getElementById('gx-cot-tot');
+  if(tot)tot.style.display=items.length?'block':'none';
+  document.getElementById('gx-cot-costo').textContent=clp(t.costo);
+  document.getElementById('gx-cot-neto').textContent=clp(t.neto);
+  document.getElementById('gx-cot-total').textContent=clp(t.total);
+  const me=document.getElementById('gx-cot-margen');
+  if(t.markup===null){me.textContent='—';me.style.color='var(--text3)';}
+  else{me.textContent=t.markup.toFixed(1)+'%';me.style.color=t.markup>=35?'var(--success)':t.markup>=20?'var(--warn)':'var(--danger)';}
 }
 function gxSaveCotizacion(){
-  const clienteId=document.getElementById('gx-cot-cliente').value;
-  if(!clienteId){alert('Selecciona un cliente (o crea uno con ＋).');return;}
+  const clienteId=document.getElementById('gx-cot-cliente-id').value;
+  if(!clienteId){alert('Selecciona un cliente (búscalo, o créalo con ＋).');return;}
   const items=gxCotItemsRead();
-  if(!items.length){alert('Agrega al menos un ítem con valor.');return;}
-  const neto=items.reduce((s,i)=>s+i.cant*i.valor,0);
-  const iva=Math.round(neto*0.19);
-  const total=neto+iva;
+  if(!items.length){alert('Agrega al menos un ítem con precio de venta.');return;}
+  const t=gxCotTotals(items);
   const id=document.getElementById('gx-cot-id').value;
   const arr=gxGetCots();
-  const base={clienteId,num:document.getElementById('gx-cot-num').value.trim(),canal:document.getElementById('gx-cot-canal').value,categoria:document.getElementById('gx-cot-cat').value,items,neto,iva,total};
-  if(id){const i=arr.findIndex(x=>x.id===id);if(i>=0){arr[i]=Object.assign(arr[i],base);arr[i].pago=Math.min(arr[i].pago||0,total);}}
+  const base={clienteId,
+    num:document.getElementById('gx-cot-num').value.trim(),
+    canal:document.getElementById('gx-cot-canal').value,
+    urgente:document.getElementById('gx-cot-urgente').value==='true',
+    fecha:document.getElementById('gx-cot-fecha').value,
+    vto:document.getElementById('gx-cot-vto').value,
+    formaPago:document.getElementById('gx-cot-forma').value,
+    tiempoProd:document.getElementById('gx-cot-tiempo').value,
+    tipoDias:document.getElementById('gx-cot-tipo-dias').value,
+    solicitud:document.getElementById('gx-cot-solicitud').value,
+    notas:document.getElementById('gx-cot-notas').value,
+    items,costo:t.costo,neto:t.neto,iva:t.total-t.neto,total:t.total};
+  if(id){const i=arr.findIndex(x=>x.id===id);if(i>=0){arr[i]=Object.assign(arr[i],base);arr[i].pago=Math.min(arr[i].pago||0,t.total);}}
   else arr.push(Object.assign({id:gxId('cot'),estado:'pendiente',pago:0,fechaCreacion:gxHoy()},base));
   if(!gxSetCots(arr))return;
   toast(id?'Cotización actualizada':'Cotización creada','success');
