@@ -817,10 +817,11 @@
           <th class="sort-th" onclick="sortClientes('val')">Val.</th>
           <th class="sort-th" onclick="sortClientes('score')">Score IA</th>
           <th class="sort-th" onclick="sortClientes('estado')">Estado</th>
+          <th class="sort-th" onclick="sortClientes('silencio')" title="Fecha de la última cotización o pedido (o ingreso al CRM si aún no hay actividad)">Última interacción</th>
           <th>Vendedor</th>
           <th>Acc.</th>
         </tr></thead>
-        <tbody id="clientesTableBody"><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="11"><div class="skel-bar"></div></td></tr></tbody>
+        <tbody id="clientesTableBody"><tr class="skel-row"><td colspan="12"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="12"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="12"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="12"><div class="skel-bar"></div></td></tr><tr class="skel-row"><td colspan="12"><div class="skel-bar"></div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -8549,6 +8550,24 @@ function _cliSilencioDias(c){
   const ts=_cliLastAct[c.id];if(!ts)return null;   // sin actividad registrada → no opinamos
   return Math.max(0,Math.floor((Date.now()-ts)/864e5));
 }
+// Última interacción para TODA fila: última cotización/pedido; si aún no hay,
+// cae a la fecha de ingreso al CRM (createdTime). Devuelve {ts,dias,src} o null.
+function _cliUltInteraccion(c){
+  if(!_cliLastAct)_buildCliLastAct();
+  let ts=_cliLastAct[c.id]||null, src='actividad';
+  if(!ts&&c.createdTime){const t=new Date(c.createdTime).getTime();if(!isNaN(t)){ts=t;src='ingreso';}}
+  if(!ts) return null;
+  return {ts,dias:Math.max(0,Math.floor((Date.now()-ts)/864e5)),src};
+}
+// Celda de "Última interacción": fecha corta + días transcurridos, con color por antigüedad.
+function _cliUltInteraccionCell(c){
+  const ui=_cliUltInteraccion(c);
+  if(!ui) return '<span style="color:var(--text3)">—</span>';
+  const fecha=new Date(ui.ts).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'2-digit'});
+  const col=ui.dias>=90?'var(--danger)':ui.dias>=60?'var(--warn)':ui.dias>=30?'var(--accent2)':'var(--text2)';
+  const tip=(ui.src==='actividad'?'Última cotización o pedido':'Ingreso al CRM (sin cotizaciones ni pedidos aún)')+` · hace ${ui.dias} día${ui.dias!==1?'s':''}`;
+  return `<span title="${tip}" style="white-space:nowrap;color:${col};font-size:11px">${fecha} <span style="color:var(--text3);font-size:10px">· ${ui.dias}d</span>${ui.src==='ingreso'?' <span style="color:var(--text3);font-size:9px">(ingreso)</span>':''}</span>`;
+}
 function getSortedClientes(){const base=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;if(!clientesSort.key) return base;return[...base].sort((a,b)=>{const va=getSortValue(a,clientesSort.key),vb=getSortValue(b,clientesSort.key);if(typeof va==='number') return(va-vb)*clientesSort.dir;return va.localeCompare(vb,'es')*clientesSort.dir;});}
 // ── NOTAS INTERNAS ──────────────────────────────────────────
 let _notasType='',_notasId='';
@@ -8684,7 +8703,10 @@ function buildClienteRow(c){
   const validarItem=esLead
     ?`<button class="act-item act-item-green" onclick="validarCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check"/></svg> &nbsp;✅ Validar como cliente</button>`
     :`<button class="act-item" onclick="revertirALead('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;↩ Volver a lead</button>`;
-  const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(esInactivo?`<button class="act-item act-item-cyan" onclick="runClienteWinbackAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reconectar IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
+  const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
+  // Reactivar IA (agente de reconexión) + marcar como gestionado — disponible en toda fila,
+  // igual que en la bandeja de "Leads dormidos".
+  const reactivarItems=`<button class="act-item act-item-cyan" onclick="wbReactivar('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reactivar IA</button><button class="act-item act-item-green" onclick="wbMarkDone('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check"/></svg> &nbsp;✓ Marcar gestionado (listo)</button>`;
   return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}${_flashCls(c.id)}">
     <td class="td-chk" style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="td-empresa"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong>${escapeHtml(f['Empresa']||'—')}</strong>${catBadge}${silChip}${reactChip}</div><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
@@ -8695,6 +8717,7 @@ function buildClienteRow(c){
     <td class="td-val" data-label="Val.">${'★'.repeat(val)}${'☆'.repeat(5-val)}</td>
     <td class="td-score" data-label="Score IA">${scoreChip||'<span style="color:var(--text3)">—</span>'}</td>
     <td class="td-estado" data-label="Estado">${estadoBadge(f['Estado cuenta']||'Al día')}</td>
+    <td class="td-ult" data-label="Última interacción">${_cliUltInteraccionCell(c)}</td>
     <td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(resolveVendedorName(f['Vendedor']||''))}</td>
     <td class="td-acc">
       <div class="act-drop">
@@ -8708,6 +8731,8 @@ function buildClienteRow(c){
           <button class="act-item act-item-green" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="startQuoteFlow('${c.id}',this.dataset.empresa)">💰 &nbsp;Cotizar con KAI (guiado)</button>
           <button class="act-item" onclick="compartirPortalCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-link"/></svg> &nbsp;Portal cliente</button>
           ${iaItems}
+          <div class="act-sep"></div>
+          ${reactivarItems}
         </div>
       </div>
     </td>
@@ -8736,7 +8761,7 @@ function renderClientes(skipAnalytics){
       :(isVendorMode()&&state.clientes.length
         ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>Aún no tienes clientes asignados<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>'
         :'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-clientes"/></svg></div>Aún no hay clientes<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nuevo-lead\')">➕ Crear primer cliente</button></div>');
-    _setRows(tbody,'<tr><td colspan="11">'+emptyMsg+'</td></tr>');updateBulkBar();return;
+    _setRows(tbody,'<tr><td colspan="12">'+emptyMsg+'</td></tr>');updateBulkBar();return;
   }
   // Búsqueda basada en datos: replica el texto exacto que veía el filtro por DOM
   // (textContent de la fila) sin tener que pintar las ~1000 filas primero.
@@ -8744,7 +8769,7 @@ function renderClientes(skipAnalytics){
   _cliRowIds=matched.map(c=>c.id);
   const _catN=_cliCat==='lead'?'mis leads':'mis clientes';
   if(countEl) countEl.textContent=_cliQuery?`${matched.length} de ${sorted.length}`:(isVendorMode()?`${sorted.length} ${_catN}`:`${sorted.length}${_cliCat==='todos'?' clientes en CRM':(_cliCat==='lead'?' leads':' clientes')}`);
-  if(!matched.length){_setRows(tbody,`<tr><td colspan="11"><div class="empty-state" style="padding:20px">Sin resultados para "${escapeHtml(_cliQuery)}"</div></td></tr>`);updateBulkBar();return;}
+  if(!matched.length){_setRows(tbody,`<tr><td colspan="12"><div class="empty-state" style="padding:20px">Sin resultados para "${escapeHtml(_cliQuery)}"</div></td></tr>`);updateBulkBar();return;}
   const shown=_cliQuery?matched:matched.slice(0,_cliCap);
   let html=shown.map(c=>buildClienteRow(c)).join('');
   if(!_cliQuery&&matched.length>_cliCap) html+=_loadMoreRow(matched.length-_cliCap,10,'cliShowMore()');
