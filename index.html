@@ -6946,7 +6946,7 @@ async function airtableDelete(table,recordId){
 async function ensureCotizacionFields(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
   const tableId='tblvVAc4TtiERA0Tc';
-  const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tiempo de producción máx',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'},{name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso'}}},{name:'Detalle JSON',type:'multilineText'}];
+  const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tiempo de producción máx',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'},{name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso',format:'YYYY-MM-DD'}}},{name:'Detalle JSON',type:'multilineText'}];
   for(const c of needed){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
 }
 async function ensureFichaTecnicaField(){
@@ -6984,7 +6984,7 @@ async function crearCamposItemsAirtable(){
   if(!existingFields.includes('Tiempo de producción')) campos.push({name:'Tiempo de producción',type:'number',options:{precision:0}});
   if(!existingFields.includes('Tiempo de producción máx')) campos.push({name:'Tiempo de producción máx',type:'number',options:{precision:0}});
   if(!existingFields.includes('Tipo días producción')) campos.push({name:'Tipo días producción',type:'singleLineText'});
-  if(!existingFields.includes('Fecha de entrega')) campos.push({name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso'}}});
+  if(!existingFields.includes('Fecha de entrega')) campos.push({name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso',format:'YYYY-MM-DD'}}});
   if(!existingFields.includes('Forma de pago')) campos.push({name:'Forma de pago',type:'singleSelect'});
   if(!campos.length){toast('✓ Todos los campos ya existen','info');return;}
   toast(`Creando ${campos.length} campos...`,'info');let ok=0,fail=0;
@@ -10198,6 +10198,31 @@ function updateEditItemTotal(){
   const lines=[];rows.forEach(row=>{const desc=row.querySelector('.edit-item-desc')?.value.trim()||'';const und=row.querySelector('.edit-item-und')?.value||'1';const costo=parseFloat(row.querySelector('.edit-item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.edit-item-venta')?.value)||0;if(desc||venta>0) lines.push(`${desc} | ${und} und. | Costo: ${formatCLP(costo*parseFloat(und))} | Venta: ${formatCLP(venta*parseFloat(und))}`);});
   document.getElementById('editCotDetalle').value=lines.join('\n');
 }
+// Guarda una cotización tolerando campos que aún no existen en la base de Airtable.
+// 1) intenta con todos los campos; 2) si rechaza por "campo desconocido", crea los
+// campos que faltan (await) y reintenta con todo; 3) si aún falla, quita los campos
+// opcionales de plazo de uno en uno —dejando el mínimo para el final— para no perder
+// el resto de los datos. Así un intervalo o una fecha ya no impiden guardar.
+async function _saveCotFields(method,id,fields){
+  const isUnknown=e=>/unknown/i.test((e&&e.message)||'');
+  const f={...fields};
+  try{ return await airtableWrite('Cotizaciones',method,id,f); }
+  catch(e){
+    if(!isUnknown(e)) throw e;
+    try{ await ensureCotizacionFields(); }catch(_){}
+    try{ return await airtableWrite('Cotizaciones',method,id,f); }
+    catch(e2){
+      if(!isUnknown(e2)) throw e2;
+      for(const k of ['Fecha de entrega','Tiempo de producción máx','Detalle JSON','Tipo días producción','Tiempo de producción']){
+        if(k in f){ delete f[k];
+          try{ return await airtableWrite('Cotizaciones',method,id,f); }
+          catch(e3){ if(!isUnknown(e3)) throw e3; }
+        }
+      }
+      throw e2;
+    }
+  }
+}
 async function saveEditCot(){
   const btn=document.getElementById('saveEditCotBtn');btn.disabled=true;btn.textContent='Guardando...';
   try{
@@ -10213,7 +10238,7 @@ async function saveEditCot(){
     const _evv=document.getElementById('editCotVendedor')?.value||'';fields['Vendedor']=_evv||null;
     const _itJsonE=_cotItemsJSON('#editItemsContainer .edit-item-row');fields['Detalle JSON']=_itJsonE||'';
     const cotId=document.getElementById('editCotId').value;
-    try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tiempo de producción máx'];delete fields['Tipo días producción'];delete fields['Fecha de entrega'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','PATCH',cotId,fields);ensureCotizacionFields();}
+    await _saveCotFields('PATCH',cotId,fields);
     toast('✓ Cotización actualizada','success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
     syncCotizacionADrive(cotId);
   }catch(e){toast('Error: '+e.message,'error');}
@@ -12065,7 +12090,7 @@ async function createCotizacion(){
     if(clienteId) fields['Cliente']=[clienteId];
     if(isVendorMode()){fields['Vendedor']=currentVendorId();}else{const vv=document.getElementById('cot-vendedor')?.value;if(vv) fields['Vendedor']=vv;}
     const _itJsonN=_cotItemsJSON('#itemsContainer .item-row');if(_itJsonN) fields['Detalle JSON']=_itJsonN;
-    try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tiempo de producción máx'];delete fields['Tipo días producción'];delete fields['Fecha de entrega'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
+    await _saveCotFields('POST',null,fields);
     toast(`✓ Cotización ${num} guardada`,'success');
     await _advanceEtapaCliente(clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
     clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
