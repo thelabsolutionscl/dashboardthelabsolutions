@@ -7452,7 +7452,7 @@ function _applyMonitorSistema(recs){
       const all=JSON.parse(agRec.fields['Notes']||'{}');
       const u=(AUTH.getUser&&AUTH.getUser())||{};
       const mine=u.username&&all[u.username];
-      if(Array.isArray(mine)&&mine.length&&!_agenda().length) localStorage.setItem(_AGENDA_KEY,JSON.stringify(mine));
+      if(Array.isArray(mine)&&mine.length&&!_agenda().length) localStorage.setItem(_agendaKey(),JSON.stringify(mine));
     }catch(e){logErr('monitorSistema:agenda',e);}
   }
   // Firmas de correo respaldadas: restaura las que falten localmente (una firma
@@ -7820,9 +7820,14 @@ function morningBriefIA(){
 // Recordatorios con fecha (y cliente opcional) que el usuario se anota. Los que
 // vencen hoy o antes aparecen en Acciones de Hoy y el brief matinal. Respaldo
 // en Airtable (Monitor Sistema · AGENDA) para que sobrevivan a limpiar caché.
-const _AGENDA_KEY='thelab_agenda_v1';
-function _agenda(){try{return JSON.parse(localStorage.getItem(_AGENDA_KEY)||'[]');}catch(e){return[];}}
-function _agendaSaveArr(arr){try{localStorage.setItem(_AGENDA_KEY,JSON.stringify(arr));}catch(e){}_agendaBackup();}
+// Los recordatorios de agenda son PERSONALES: cada usuario tiene su propia clave
+// local (namespaceada por username) para que, en un navegador compartido, un
+// comercial no vea los compromisos de otra persona. El respaldo remoto
+// (Monitor Sistema » AGENDA) ya guarda por username; esto alinea la copia local.
+const _AGENDA_KEY_BASE='thelab_agenda_v1';
+function _agendaKey(){try{const u=(AUTH.getUser&&AUTH.getUser())||{};return _AGENDA_KEY_BASE+'::'+(u.username||'anon');}catch(e){return _AGENDA_KEY_BASE+'::anon';}}
+function _agenda(){try{return JSON.parse(localStorage.getItem(_agendaKey())||'[]');}catch(e){return[];}}
+function _agendaSaveArr(arr){try{localStorage.setItem(_agendaKey(),JSON.stringify(arr));}catch(e){}_agendaBackup();}
 async function _agendaBackup(){
   try{
     const u=(AUTH.getUser&&AUTH.getUser())||{};if(!u.username)return;
