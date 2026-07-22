@@ -1,108 +1,46 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Firma de correo · Nicanor Marambio · The Lab Solutions</title>
-<style>
-  :root{--bg:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--border:#2a2a2a;--accent:#00d4cc;--text:#f0f0f0;--text2:#9a9a9a;--text3:#777}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.5;padding:32px 18px}
-  .wrap{max-width:720px;margin:0 auto}
-  h1{font-size:20px;margin:0 0 4px}
-  .sub{color:var(--text2);font-size:13px;margin:0 0 26px}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px}
-  .card-label{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin:0 0 12px;font-weight:700}
-  .preview{background:#ffffff;border-radius:10px;padding:22px 24px;overflow-x:auto}
-  .btn{appearance:none;border:none;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
-  .btn-primary{background:var(--accent);color:#003633}
-  .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
-  .btns{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
-  .ok{color:var(--accent);font-size:12.5px;font-weight:600;opacity:0;transition:opacity .2s}
-  .ok.show{opacity:1}
-  pre{background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;font-size:12px;line-height:1.55;color:#cfe;white-space:pre;margin:0}
-  ol{margin:6px 0 0;padding-left:20px;color:var(--text2);font-size:13.5px}
-  ol li{margin:4px 0}
-  code{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:12px;color:var(--accent)}
-</style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Firma — Nicanor Marambio</title>
 </head>
-<body>
-<div class="wrap">
-  <h1>Firma de correo — Nicanor Marambio</h1>
-  <p class="sub">Producción · The Lab Solutions. Diseñada para fondo claro y compatible con Gmail, Outlook y Apple Mail (tablas + estilos en línea).</p>
+<!-- ============================================================
+     CÓMO INSTALAR EN GMAIL:
+     1. Abre este archivo en el navegador.
+     2. Selecciona toda la firma (Ctrl/Cmd + A) y cópiala (Ctrl/Cmd + C).
+     3. Gmail → ⚙ Configuración → "Ver todos los ajustes" → pestaña General
+        → sección "Firma" → Crear nueva → pega (Ctrl/Cmd + V) → Guardar cambios.
+     ============================================================ -->
+<body style="margin:0;padding:32px;background-color:#e9eaec;">
 
-  <div class="card">
-    <p class="card-label">Vista previa</p>
-    <div class="preview" id="preview"></div>
-  </div>
+  <!-- ▼▼▼ FIRMA (esto es lo que se copia) ▼▼▼ -->
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0;">
+    <tr>
+      <td bgcolor="#0a0a0a" style="background-color:#0a0a0a;border:1px solid #262626;border-radius:14px;padding:22px 26px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+          <tr>
+            <td valign="middle" style="padding-right:22px;">
+              <img src="data:image/png;base64,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" width="80" height="75" alt="The Lab Solutions"
+                   style="display:block;border:0;outline:none;text-decoration:none;width:80px;height:75px;" />
+            </td>
+            <td valign="middle" style="padding-left:22px;border-left:2px solid #00d4cc;">
+              <div style="font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;font-size:17px;line-height:1.2;font-weight:700;color:#ffffff;letter-spacing:0.3px;">Nicanor Marambio</div>
+              <div style="height:13px;line-height:13px;font-size:0;">&nbsp;</div>
+              <div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:12.5px;line-height:1.95;color:#c7ccd1;">
+                <span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="https://wa.me/56971806142" style="color:#c7ccd1;text-decoration:none;">+56 9 7180 6142</a><br />
+                <span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="https://thelab.solutions" style="color:#00d4cc;text-decoration:none;font-weight:500;">www.thelab.solutions</a><br />
+                <span style="color:#00d4cc;">&#9642;</span>&nbsp;<a href="mailto:nicanor@thelab.solutions" style="color:#c7ccd1;text-decoration:none;">nicanor@thelab.solutions</a>
+              </div>
+              <div style="height:12px;line-height:12px;font-size:0;">&nbsp;</div>
+              <div style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:10.5px;line-height:1.3;color:#6b7177;letter-spacing:0.4px;">Fabricación propia &middot; Santiago, Chile</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+  <!-- ▲▲▲ FIN DE LA FIRMA ▲▲▲ -->
 
-  <div class="card">
-    <p class="card-label">Instalar en el dashboard</p>
-    <ol>
-      <li>Entra a <strong>Correo</strong> y pulsa <strong>✍ Firma</strong> en la cabecera.</li>
-      <li>Activa el modo <code>&lt;/&gt; HTML</code>.</li>
-      <li>Pega el HTML (usa el botón de abajo) y pulsa <strong>Guardar firma</strong>.</li>
-    </ol>
-    <div class="btns">
-      <button class="btn btn-primary" id="copyHtml">Copiar HTML de la firma</button>
-      <button class="btn btn-ghost" id="copyRich">Copiar firma con formato</button>
-      <span class="ok" id="ok">✓ Copiado</span>
-    </div>
-  </div>
-
-  <div class="card">
-    <p class="card-label">Código HTML</p>
-    <pre id="code"></pre>
-  </div>
-</div>
-
-<script>
-// ── Firma de Nicanor (HTML basado en tablas para máxima compatibilidad de correo) ──
-const SIG = [
-'<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;color:#334155">',
-'  <tr>',
-'    <td style="border-right:3px solid #00d4cc">&nbsp;</td>',
-'    <td style="padding:0 0 0 16px;vertical-align:top">',
-'      <div style="font-size:17px;font-weight:700;color:#0f172a;letter-spacing:.2px">Nicanor Marambio</div>',
-'      <div style="font-size:12.5px;color:#475569;margin:3px 0 11px"><span style="color:#0a9d95;font-weight:700">Producción</span> &middot; The Lab Solutions</div>',
-'      <div style="font-size:12.5px;line-height:1.9;color:#475569">',
-'        <a href="mailto:nicanor@thelab.solutions" style="color:#0a9d95;text-decoration:none">&#9993;&nbsp;&nbsp;nicanor@thelab.solutions</a><br>',
-'        <a href="https://wa.me/56971806142" style="color:#0a9d95;text-decoration:none">&#128241;&nbsp;&nbsp;+56 9 7180 6142</a><br>',
-'        <a href="https://thelab.solutions" style="color:#0a9d95;text-decoration:none">&#127760;&nbsp;&nbsp;thelab.solutions</a>',
-'      </div>',
-'      <div style="margin-top:13px">',
-'        <a href="https://thelab.solutions"><img src="https://dashboard.thelab.solutions/logo-thelab-black.png" alt="The Lab Solutions" width="200" height="19" style="display:block;border:0"></a>',
-'      </div>',
-'    </td>',
-'  </tr>',
-'</table>'
-].join('\n');
-
-document.getElementById('preview').innerHTML = SIG;
-document.getElementById('code').textContent = SIG;
-
-function flash(){const o=document.getElementById('ok');o.classList.add('show');setTimeout(()=>o.classList.remove('show'),1600);}
-
-document.getElementById('copyHtml').addEventListener('click', async ()=>{
-  try{ await navigator.clipboard.writeText(SIG); }
-  catch(e){ const t=document.createElement('textarea');t.value=SIG;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove(); }
-  flash();
-});
-
-document.getElementById('copyRich').addEventListener('click', async ()=>{
-  try{
-    await navigator.clipboard.write([new ClipboardItem({
-      'text/html': new Blob([SIG],{type:'text/html'}),
-      'text/plain': new Blob([SIG],{type:'text/plain'})
-    })]);
-    flash();
-  }catch(e){
-    const r=document.createRange();r.selectNode(document.getElementById('preview'));
-    const s=window.getSelection();s.removeAllRanges();s.addRange(r);
-    document.execCommand('copy');s.removeAllRanges();flash();
-  }
-});
-</script>
 </body>
 </html>
