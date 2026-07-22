@@ -8704,9 +8704,12 @@ function buildClienteRow(c){
     ?`<button class="act-item act-item-green" onclick="validarCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check"/></svg> &nbsp;✅ Validar como cliente</button>`
     :`<button class="act-item" onclick="revertirALead('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;↩ Volver a lead</button>`;
   const iaItems=(esLead?`<button class="act-item act-item-cyan" onclick="runSalesAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chat"/></svg> &nbsp;💬 Estrategia venta IA</button><button class="act-item act-item-cyan" onclick="runOnboardingAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📨 Bienvenida IA</button>`:'')+(tieneDeuda?`<button class="act-item act-item-cyan" onclick="runFinanceAgent('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-dollar"/></svg> &nbsp;💰 Recordatorio pago IA</button>`:'');
-  // Reactivar IA (agente de reconexión) + marcar como gestionado — disponible en toda fila,
-  // igual que en la bandeja de "Leads dormidos".
-  const reactivarItems=`<button class="act-item act-item-cyan" onclick="wbReactivar('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reactivar IA</button><button class="act-item act-item-green" onclick="wbMarkDone('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check"/></svg> &nbsp;✓ Marcar gestionado (listo)</button>`;
+  // Reactivar IA (agente de reconexión) + marcar como gestionado — sólo donde tiene
+  // sentido: inactivos/ex-clientes o quien se enfrió (30+ días sin interacción). En
+  // un cliente activo con actividad reciente no aparece (sería ruido).
+  const _uiInfo=_cliUltInteraccion(c);
+  const esReactivable=esInactivo||(_uiInfo&&_uiInfo.dias>=30);
+  const reactivarItems=esReactivable?`<button class="act-item act-item-cyan" onclick="wbReactivar('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-repeat"/></svg> &nbsp;♻ Reactivar IA</button><button class="act-item act-item-green" onclick="wbMarkDone('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check"/></svg> &nbsp;✓ Marcar gestionado (listo)</button>`:'';
   return`<tr data-id="${c.id}" class="${selectedClientes.has(c.id)?'row-selected':''}${_flashCls(c.id)}">
     <td class="td-chk" style="text-align:center"><input type="checkbox" class="row-chk" data-id="${c.id}" ${selectedClientes.has(c.id)?'checked':''} onchange="toggleRowSelect(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
     <td class="td-empresa"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong>${escapeHtml(f['Empresa']||'—')}</strong>${catBadge}${silChip}${reactChip}</div><div class="text-small text-muted">${escapeHtml(f['Email']||'—')}</div></td>
@@ -8731,8 +8734,7 @@ function buildClienteRow(c){
           <button class="act-item act-item-green" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="startQuoteFlow('${c.id}',this.dataset.empresa)">💰 &nbsp;Cotizar con KAI (guiado)</button>
           <button class="act-item" onclick="compartirPortalCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-link"/></svg> &nbsp;Portal cliente</button>
           ${iaItems}
-          <div class="act-sep"></div>
-          ${reactivarItems}
+          ${reactivarItems?'<div class="act-sep"></div>'+reactivarItems:''}
         </div>
       </div>
     </td>
