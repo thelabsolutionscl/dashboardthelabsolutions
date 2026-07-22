@@ -28,7 +28,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-21-jsonout2');
+define('MAIL_API_BUILD', '2026-07-22-decode-fix');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -159,16 +159,51 @@ function addr_str($addr) {
     return $name ? "$name <$email>" : $email;
 }
 
-function decode_body($raw, $encoding, $charset) {
+// Algunos correos traen la parte de texto/HTML comprimida (gzip o zlib/deflate)
+// dentro del transfer-encoding. Si no se descomprime, se muestra como basura
+// binaria (mojibake). Detecta la firma y descomprime; si no aplica, deja igual.
+function maybe_decompress($s) {
+    if (strlen($s) < 4) return $s;
+    $b0 = ord($s[0]); $b1 = ord($s[1]);
+    if ($b0 === 0x1f && $b1 === 0x8b && function_exists('gzdecode')) {                       // gzip
+        $d = @gzdecode($s);
+        if ($d !== false && $d !== '') return $d;
+    } elseif ($b0 === 0x78 && in_array($b1, [0x01, 0x9c, 0xda], true) && function_exists('gzuncompress')) { // zlib/deflate
+        $d = @gzuncompress($s);
+        if ($d !== false && $d !== '') return $d;
+    }
+    return $s;
+}
+
+// Deshace el Content-Transfer-Encoding (base64 / quoted-printable) y, si el
+// resultado venía comprimido, lo descomprime. Devuelve BYTES crudos (sin charset).
+function decode_transfer($raw, $encoding) {
     switch ((int)$encoding) {
         case 3: $raw = base64_decode($raw); break;
         case 4: $raw = quoted_printable_decode($raw); break;
     }
+    return maybe_decompress($raw);
+}
+
+// Lleva unos bytes de texto a UTF-8 usando el charset declarado. Si el charset
+// dice UTF-8 (o ASCII) pero los bytes no son UTF-8 válido, recupera como
+// Windows-1252 (superset de Latin-1) para no mostrar acentos rotos («»).
+function to_utf8($s, $charset) {
     $cs = strtoupper(trim($charset ?: 'UTF-8'));
-    if ($cs && $cs !== 'UTF-8') {
-        $raw = @mb_convert_encoding($raw, 'UTF-8', $cs) ?: $raw;
+    if ($cs && $cs !== 'UTF-8' && $cs !== 'US-ASCII' && $cs !== 'ASCII') {
+        $c = @mb_convert_encoding($s, 'UTF-8', $cs);
+        if ($c !== false && $c !== '') return $c;
     }
-    return $raw;
+    if (!mb_check_encoding($s, 'UTF-8')) {
+        $c = @mb_convert_encoding($s, 'UTF-8', 'Windows-1252');
+        if ($c !== false && $c !== '') return $c;
+    }
+    return $s;
+}
+
+// Wrapper compatible: transfer-encoding + descompresión + charset a UTF-8.
+function decode_body($raw, $encoding, $charset) {
+    return to_utf8(decode_transfer($raw, $encoding), $charset);
 }
 
 // ¿Una parte "de texto" quedó en realidad como binario? (mensaje malformado:
@@ -180,13 +215,19 @@ function looks_binary($s) {
     if ($len < 16) return false;
     $sample = substr($s, 0, 8000);
     $n = strlen($sample); if ($n === 0) return false;
-    $ctrl = 0;
+    $ctrl = 0; $high = 0;
     for ($i = 0; $i < $n; $i++) {
         $o = ord($sample[$i]);
         if ($o === 9 || $o === 10 || $o === 13) continue; // tab, LF, CR ok
-        if ($o < 32) $ctrl++;
+        if ($o < 32) $ctrl++;              // bytes de control
+        elseif ($o >= 127) $high++;        // bytes altos (no ASCII imprimible)
     }
-    return ($ctrl / $n) > 0.04;
+    if ($ctrl / $n > 0.04) return true;    // muchos controles → binario
+    // Muchos bytes altos Y no es UTF-8 válido → binario/comprimido, no texto
+    // Latin-1 (donde los acentos son escasos, ~pocos %). Umbral 0.30 para no
+    // confundir texto con acentos/emoji (que sí es UTF-8 válido) con basura.
+    if (($high / $n) > 0.30 && !mb_check_encoding($s, 'UTF-8')) return true;
+    return false;
 }
 
 function get_charset($params) {
@@ -225,12 +266,16 @@ function parse_part($conn, $msgno, $structure, $partno, &$html, &$text, &$atts) 
     $subtype = strtolower($structure->subtype ?? '');
 
     if ($type === 0) { // text
-        $raw     = imap_fetchbody($conn, $msgno, $partno);
-        $charset = get_charset($structure->parameters ?? []);
-        $decoded = decode_body($raw, $structure->encoding, $charset);
-        if (looks_binary($decoded)) { /* parte "de texto" que en realidad es binaria: se omite */ }
-        elseif ($subtype === 'html') $html .= $decoded;
-        else                         $text .= $decoded;
+        $raw   = imap_fetchbody($conn, $msgno, $partno);
+        $bytes = decode_transfer($raw, $structure->encoding); // base64/qp + descompresión
+        // El binario se decide sobre los bytes crudos: si luego se convierte el
+        // charset, la basura pasaría a "UTF-8 válido" y se colaría al cuerpo.
+        if (looks_binary($bytes)) { /* parte "de texto" que en realidad es binaria: se omite */ }
+        else {
+            $decoded = to_utf8($bytes, get_charset($structure->parameters ?? []));
+            if ($subtype === 'html') $html .= $decoded;
+            else                     $text .= $decoded;
+        }
 
     } elseif ($type === 1) { // multipart
         foreach (($structure->parts ?? []) as $i => $part) {
@@ -599,11 +644,14 @@ case 'read':
 
     // If no html and no text, fetch raw body
     if (!$html && !$text) {
-        $raw     = imap_body($conn, $msgno);
-        $decoded = decode_body($raw, $structure->encoding ?? 0, get_charset($structure->parameters ?? []));
-        if (looks_binary($decoded)) $text = '(Este mensaje no tiene una parte de texto legible.)';
-        elseif (strtolower($structure->subtype ?? '') === 'html') $html = $decoded;
-        else $text = $decoded;
+        $bytes = decode_transfer(imap_body($conn, $msgno), $structure->encoding ?? 0);
+        if (looks_binary($bytes)) {
+            $text = '(Este mensaje no tiene una parte de texto legible.)';
+        } else {
+            $decoded = to_utf8($bytes, get_charset($structure->parameters ?? []));
+            if (strtolower($structure->subtype ?? '') === 'html') $html = $decoded;
+            else $text = $decoded;
+        }
     }
 
     $to_list = [];
