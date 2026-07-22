@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Firma de correo · Nicanor Marambio · The Lab Solutions</title>
+<style>
+  :root{--bg:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--border:#2a2a2a;--accent:#00d4cc;--text:#f0f0f0;--text2:#9a9a9a;--text3:#777}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.5;padding:32px 18px}
+  .wrap{max-width:720px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--text2);font-size:13px;margin:0 0 26px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px}
+  .card-label{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin:0 0 12px;font-weight:700}
+  .preview{background:#ffffff;border-radius:10px;padding:22px 24px;overflow-x:auto}
+  .btn{appearance:none;border:none;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn-primary{background:var(--accent);color:#003633}
+  .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+  .ok{color:var(--accent);font-size:12.5px;font-weight:600;opacity:0;transition:opacity .2s}
+  .ok.show{opacity:1}
+  pre{background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;font-size:12px;line-height:1.55;color:#cfe;white-space:pre;margin:0}
+  ol{margin:6px 0 0;padding-left:20px;color:var(--text2);font-size:13.5px}
+  ol li{margin:4px 0}
+  code{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:12px;color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Firma de correo — Nicanor Marambio</h1>
+  <p class="sub">Producción · The Lab Solutions. Diseñada para fondo claro y compatible con Gmail, Outlook y Apple Mail (tablas + estilos en línea).</p>
+
+  <div class="card">
+    <p class="card-label">Vista previa</p>
+    <div class="preview" id="preview"></div>
+  </div>
+
+  <div class="card">
+    <p class="card-label">Instalar en el dashboard</p>
+    <ol>
+      <li>Entra a <strong>Correo</strong> y pulsa <strong>✍ Firma</strong> en la cabecera.</li>
+      <li>Activa el modo <code>&lt;/&gt; HTML</code>.</li>
+      <li>Pega el HTML (usa el botón de abajo) y pulsa <strong>Guardar firma</strong>.</li>
+    </ol>
+    <div class="btns">
+      <button class="btn btn-primary" id="copyHtml">Copiar HTML de la firma</button>
+      <button class="btn btn-ghost" id="copyRich">Copiar firma con formato</button>
+      <span class="ok" id="ok">✓ Copiado</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="card-label">Código HTML</p>
+    <pre id="code"></pre>
+  </div>
+</div>
+
+<script>
+// ── Firma de Nicanor (HTML basado en tablas para máxima compatibilidad de correo) ──
+const SIG = [
+'<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;color:#334155">',
+'  <tr>',
+'    <td style="border-right:3px solid #00d4cc">&nbsp;</td>',
+'    <td style="padding:0 0 0 16px;vertical-align:top">',
+'      <div style="font-size:17px;font-weight:700;color:#0f172a;letter-spacing:.2px">Nicanor Marambio</div>',
+'      <div style="font-size:12.5px;color:#475569;margin:3px 0 11px"><span style="color:#0a9d95;font-weight:700">Producción</span> &middot; The Lab Solutions</div>',
+'      <div style="font-size:12.5px;line-height:1.9;color:#475569">',
+'        <a href="mailto:nicanor@thelab.solutions" style="color:#0a9d95;text-decoration:none">&#9993;&nbsp;&nbsp;nicanor@thelab.solutions</a><br>',
+'        <a href="https://wa.me/56971806142" style="color:#0a9d95;text-decoration:none">&#128241;&nbsp;&nbsp;+56 9 7180 6142</a><br>',
+'        <a href="https://thelab.solutions" style="color:#0a9d95;text-decoration:none">&#127760;&nbsp;&nbsp;thelab.solutions</a>',
+'      </div>',
+'      <div style="margin-top:13px">',
+'        <a href="https://thelab.solutions"><img src="https://dashboard.thelab.solutions/logo-thelab-black.png" alt="The Lab Solutions" width="200" height="19" style="display:block;border:0"></a>',
+'      </div>',
+'    </td>',
+'  </tr>',
+'</table>'
+].join('\n');
+
+document.getElementById('preview').innerHTML = SIG;
+document.getElementById('code').textContent = SIG;
+
+function flash(){const o=document.getElementById('ok');o.classList.add('show');setTimeout(()=>o.classList.remove('show'),1600);}
+
+document.getElementById('copyHtml').addEventListener('click', async ()=>{
+  try{ await navigator.clipboard.writeText(SIG); }
+  catch(e){ const t=document.createElement('textarea');t.value=SIG;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove(); }
+  flash();
+});
+
+document.getElementById('copyRich').addEventListener('click', async ()=>{
+  try{
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([SIG],{type:'text/html'}),
+      'text/plain': new Blob([SIG],{type:'text/plain'})
+    })]);
+    flash();
+  }catch(e){
+    const r=document.createRange();r.selectNode(document.getElementById('preview'));
+    const s=window.getSelection();s.removeAllRanges();s.addRange(r);
+    document.execCommand('copy');s.removeAllRanges();flash();
+  }
+});
+</script>
+</body>
+</html>
