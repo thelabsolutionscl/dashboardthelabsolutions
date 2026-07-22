@@ -7448,26 +7448,9 @@ function _applyMonitorSistema(recs){
   const agRec=recs.find(r=>r.fields['Name']==='AGENDA');
   if(agRec){
     state.agendaRecordId=agRec.id;state._agendaRemote=agRec.fields['Notes']||'{}';
-    try{
-      const all=JSON.parse(agRec.fields['Notes']||'{}');
-      const u=(AUTH.getUser&&AUTH.getUser())||{};
-      const scope=_agendaScope();
-      let mine=all[scope];
-      // Migración: la agenda de equipo hereda, la primera vez, los compromisos
-      // que antes se guardaban por username de los usuarios NO comerciales
-      // (así los recordatorios ya creados por Gustavo/Nicanor no se pierden).
-      if(scope==='__equipo__'&&(!Array.isArray(mine)||!mine.length)){
-        const seen=new Set(),merged=[];
-        Object.keys(all).forEach(k=>{
-          if(k===scope||String(k).includes('@')===false) return;
-          const usr=(AUTH.USERS&&AUTH.USERS.find(x=>x.username===k));
-          if(!usr||usr.role==='comercial') return;   // sólo hereda de usuarios de equipo (no comerciales)
-          (Array.isArray(all[k])?all[k]:[]).forEach(it=>{if(it&&it.id&&!seen.has(it.id)){seen.add(it.id);merged.push(it);}});
-        });
-        if(merged.length) mine=merged;
-      }
-      if(Array.isArray(mine)&&mine.length&&!_agenda().length) localStorage.setItem(_agendaKey(),JSON.stringify(mine));
-    }catch(e){logErr('monitorSistema:agenda',e);}
+    // Reconcilia (fusiona) la agenda del alcance actual con el remoto — incluye la
+    // migración de compromisos previos por-username de los usuarios de equipo.
+    try{ _agendaReconcile(JSON.parse(agRec.fields['Notes']||'{}')); }catch(e){logErr('monitorSistema:agenda',e);}
   }
   // Firmas de correo respaldadas: restaura las que falten localmente (una firma
   // recién editada en este navegador no se pisa — lo local gana hasta guardarse).
@@ -7850,13 +7833,87 @@ async function _agendaBackup(){
   try{
     const u=(AUTH.getUser&&AUTH.getUser())||{};if(!u.username)return;
     let all={};try{all=JSON.parse(state._agendaRemote||'{}');}catch(e){}
-    all[_agendaScope()]=_agenda();   // comercial → por username · equipo → "__equipo__"
+    const _sc=_agendaScope();
+    // Fusiona lo local con lo último conocido del remoto (para no pisar cambios de
+    // otro miembro del equipo) y poda lo viejo. comercial → por username · equipo → "__equipo__"
+    const merged=_agendaPrune(_agendaMerge(_agenda(),Array.isArray(all[_sc])?all[_sc]:[]));
+    all[_sc]=merged;
+    try{localStorage.setItem(_agendaKey(),JSON.stringify(merged));}catch(e){}
     const notes=JSON.stringify(all).slice(0,95000);
     if(state.agendaRecordId) await airtableWrite('Monitor Sistema','PATCH',state.agendaRecordId,{'Notes':notes});
     else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'AGENDA','Notes':notes});if(r?.id)state.agendaRecordId=r.id;}
     state._agendaRemote=notes;
   }catch(e){}
 }
+// ── Sincronización de agenda (casi en vivo entre miembros del equipo) ──────────
+// Fusión por id tolerante a ediciones concurrentes: gana la marca más reciente
+// (mts). "hecho" y "eliminado" son adhesivos (una vez true se mantienen) para que
+// esos cambios se propaguen entre Gustavo y Nicanor sin resucitar ítems borrados.
+function _agendaMerge(a,b){
+  const by={};
+  const put=it=>{ if(!it||!it.id) return; const p=by[it.id];
+    if(!p){ by[it.id]={...it}; return; }
+    const tp=+(p.mts||p.ts||0), ti=+(it.mts||it.ts||0);
+    const base=ti>=tp?{...it}:{...p};
+    base.done=!!(p.done||it.done);
+    base.del=!!(p.del||it.del);
+    base.mts=Math.max(tp,ti)||base.mts||base.ts||0;
+    by[it.id]=base;
+  };
+  (Array.isArray(a)?a:[]).forEach(put);
+  (Array.isArray(b)?b:[]).forEach(put);
+  return Object.values(by);
+}
+function _agendaPrune(arr){
+  const cut=Date.now()-60*864e5;   // conserva pendientes; descarta hechos/eliminados de +60 días
+  return (Array.isArray(arr)?arr:[]).filter(it=>it&&it.id&&!((it.done||it.del)&&(+(it.mts||it.ts||0))<cut));
+}
+// Reconcilia el remoto (objeto {scope:[items]}) con lo local del alcance actual.
+// Devuelve true si hubo cambios (y re-renderiza agenda + acciones de hoy).
+function _agendaReconcile(all){
+  try{
+    if(!all||typeof all!=='object') return false;
+    const scope=_agendaScope();
+    let remoteArr=Array.isArray(all[scope])?all[scope]:[];
+    // Migración única: la agenda de equipo hereda los compromisos previos guardados
+    // por username de usuarios NO comerciales (sólo si la compartida está vacía).
+    if(scope==='__equipo__'&&!remoteArr.length){
+      const seen=new Set(),acc=[];
+      Object.keys(all).forEach(k=>{
+        if(k===scope||!String(k).includes('@')) return;
+        const usr=(AUTH.USERS&&AUTH.USERS.find(x=>x.username===k));
+        if(!usr||usr.role==='comercial') return;   // nunca mezclar agendas de comerciales
+        (Array.isArray(all[k])?all[k]:[]).forEach(it=>{if(it&&it.id&&!seen.has(it.id)){seen.add(it.id);acc.push(it);}});
+      });
+      remoteArr=acc;
+    }
+    const before=JSON.stringify(_agenda());
+    const merged=_agendaPrune(_agendaMerge(_agenda(),remoteArr));
+    const after=JSON.stringify(merged);
+    if(after===before) return false;
+    try{localStorage.setItem(_agendaKey(),after);}catch(e){}
+    try{renderAgendaList();}catch(e){}
+    try{renderAccionesHoy();}catch(e){}
+    return true;
+  }catch(e){return false;}
+}
+// Poll liviano: relee SÓLO el registro AGENDA (no toda la tabla) cada 15s con la
+// pestaña visible, y reconcilia. Barato: un GET de un registro pequeño.
+let _agendaPollTimer=null;
+async function _agendaPoll(){
+  try{
+    if(document.visibilityState!=='visible'||!navigator.onLine) return;
+    if(typeof hasAirtableAccess==='function'&&!hasAirtableAccess()) return;
+    if(!state.agendaRecordId||!(AUTH.getUser&&AUTH.getUser())) return;
+    const r=await _atFetch(`/${BASE_ID}/${encodeURIComponent('Monitor Sistema')}/${state.agendaRecordId}`,{headers:{}});
+    if(!r||!r.ok) return;
+    const rec=await r.json();
+    const notes=(rec&&rec.fields&&rec.fields['Notes'])||'{}';
+    state._agendaRemote=notes;
+    _agendaReconcile(JSON.parse(notes));
+  }catch(e){}
+}
+function startAgendaSync(){ if(_agendaPollTimer) clearInterval(_agendaPollTimer); _agendaPollTimer=setInterval(_agendaPoll,15000); }
 function openAgendaModal(cliId){
   const chip=document.getElementById('agendaCliChip');
   window._agendaCli=null;
@@ -7875,19 +7932,21 @@ function agendaSave(){
   if(!texto){toast('Escribe el compromiso','error');return;}
   if(!fecha){toast('Elige una fecha','error');return;}
   const arr=_agenda();
-  arr.push({id:'ag'+Date.now(),texto,fecha,cliId:window._agendaCli?.id||null,cliNombre:window._agendaCli?.nombre||null,done:false,ts:Date.now()});
+  arr.push({id:'ag'+Date.now(),texto,fecha,cliId:window._agendaCli?.id||null,cliNombre:window._agendaCli?.nombre||null,done:false,ts:Date.now(),mts:Date.now()});
   _agendaSaveArr(arr);
   document.getElementById('agendaTexto').value='';
   toast('✓ Compromiso agendado','success');
   renderAgendaList();
   try{renderAccionesHoy();}catch(e){}
 }
-function agendaDone(id){const arr=_agenda();const it=arr.find(x=>x.id===id);if(it)it.done=true;_agendaSaveArr(arr);renderAgendaList();try{renderAccionesHoy();}catch(e){}}
-function agendaDel(id){_agendaSaveArr(_agenda().filter(x=>x.id!==id));renderAgendaList();try{renderAccionesHoy();}catch(e){}}
+function agendaDone(id){const arr=_agenda();const it=arr.find(x=>x.id===id);if(it){it.done=true;it.mts=Date.now();}_agendaSaveArr(arr);renderAgendaList();try{renderAccionesHoy();}catch(e){}}
+// Eliminar = marca-lápida (soft delete) para que el borrado se propague al equipo
+// sin que el ítem reaparezca desde la copia del otro miembro.
+function agendaDel(id){const arr=_agenda();const it=arr.find(x=>x.id===id);if(it){it.del=true;it.mts=Date.now();}_agendaSaveArr(arr);renderAgendaList();try{renderAccionesHoy();}catch(e){}}
 function renderAgendaList(){
   const el=document.getElementById('agendaList');if(!el)return;
   const hoy=new Date().toISOString().slice(0,10);
-  const pend=_agenda().filter(x=>!x.done).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  const pend=_agenda().filter(x=>!x.done&&!x.del).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   if(!pend.length){el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:8px 2px">Sin compromisos pendientes.</div>';return;}
   el.innerHTML=pend.map(x=>{
     const venc=x.fecha<hoy,hoyEs=x.fecha===hoy;
@@ -7904,7 +7963,7 @@ function renderAgendaList(){
 // Compromisos que vencen hoy o antes → items de Acciones de Hoy
 function _agendaDueItems(){
   const hoy=new Date().toISOString().slice(0,10);
-  return _agenda().filter(x=>!x.done&&String(x.fecha)<=hoy).map(x=>({
+  return _agenda().filter(x=>!x.done&&!x.del&&String(x.fecha)<=hoy).map(x=>({
     cat:'agenda',prio:1,icon:'📅',
     txt:`<b>${escapeHtml(x.texto)}</b>${x.cliNombre?' · '+escapeHtml(x.cliNombre):''}${x.fecha<hoy?' · <span style="color:var(--danger)">atrasado</span>':''}`,
     btn:'Hecho',fn:`agendaDone('${x.id}')`,color:x.fecha<hoy?'var(--danger)':'var(--warn)'
@@ -15174,11 +15233,11 @@ function initDashboard(){
       try{_renderOverviewNow();_reRenderActiveList();}catch(e){logErr('hydrateRender',e);}
       if(!navigator.onLine) try{_setOfflineBanner(true);}catch(e){}
     }
-    loadAllData().then(()=>{startAutoRefresh();});
+    loadAllData().then(()=>{startAutoRefresh();startAgendaSync();});
   }
   initMobileTableLabels();
   checkClientePortal();
-  window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
+  window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);if(_agendaPollTimer) clearInterval(_agendaPollTimer);});
   document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
     if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}
