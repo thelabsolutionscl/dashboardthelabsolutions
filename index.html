@@ -20117,14 +20117,32 @@ const MAIL={
     const sel=document.getElementById('mailAcctSel'); if(!sel) return;
     const list=this.accounts(), active=this.activeAccount();
     let html=list.map(a=>`<option value="${this.esc(a.email)}"${a.email===active?' selected':''}>${this.esc(a.email)}</option>`).join('');
+    html+=`<option value="__rename__">✏️ Editar nombre del remitente…</option>`;
     html+=`<option value="__add__">＋ Agregar cuenta…</option>`;
     if(list.length>1) html+=`<option value="__remove__">✕ Quitar cuenta actual…</option>`;
     sel.innerHTML=html;
   },
   onAcctChange(v){
+    if(v==='__rename__'){ this.renderAccounts(); this.editSenderName(); return; }
     if(v==='__add__'){ this.renderAccounts(); this.addAccount(); return; }
     if(v==='__remove__'){ this.renderAccounts(); this.removeAccount(); return; }
     if(v && v!==this.activeAccount()) this.switchAccount(v);
+  },
+  // Edita el nombre visible del remitente de la cuenta ACTIVA (incluida la
+  // principal con la que inicias sesión, que antes no tenía forma de cambiarlo).
+  editSenderName(){
+    const active=this.activeAccount(); if(!active) return;
+    const cur=this.activeAccountObj().name||'';
+    let name=prompt('Nombre para mostrar al enviar (remitente) de '+active+':', cur||'The Lab Solutions');
+    if(name===null) return;
+    name=name.trim();
+    let list=this.accounts();
+    const i=list.findIndex(a=>a.email===active);
+    if(i>=0) list[i]=Object.assign({},list[i],{name});
+    else list.push({email:active,name});
+    this.setAccounts(list);
+    this.renderAccounts();
+    toast('✓ Nombre del remitente actualizado: '+(name||'(vacío)'),'success');
   },
   addAccount(){
     let email=prompt('Correo de la cuenta a agregar:','@thelab.solutions');
