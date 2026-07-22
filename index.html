@@ -7451,7 +7451,21 @@ function _applyMonitorSistema(recs){
     try{
       const all=JSON.parse(agRec.fields['Notes']||'{}');
       const u=(AUTH.getUser&&AUTH.getUser())||{};
-      const mine=u.username&&all[u.username];
+      const scope=_agendaScope();
+      let mine=all[scope];
+      // Migración: la agenda de equipo hereda, la primera vez, los compromisos
+      // que antes se guardaban por username de los usuarios NO comerciales
+      // (así los recordatorios ya creados por Gustavo/Nicanor no se pierden).
+      if(scope==='__equipo__'&&(!Array.isArray(mine)||!mine.length)){
+        const seen=new Set(),merged=[];
+        Object.keys(all).forEach(k=>{
+          if(k===scope||String(k).includes('@')===false) return;
+          const usr=(AUTH.USERS&&AUTH.USERS.find(x=>x.username===k));
+          if(!usr||usr.role==='comercial') return;   // sólo hereda de usuarios de equipo (no comerciales)
+          (Array.isArray(all[k])?all[k]:[]).forEach(it=>{if(it&&it.id&&!seen.has(it.id)){seen.add(it.id);merged.push(it);}});
+        });
+        if(merged.length) mine=merged;
+      }
       if(Array.isArray(mine)&&mine.length&&!_agenda().length) localStorage.setItem(_agendaKey(),JSON.stringify(mine));
     }catch(e){logErr('monitorSistema:agenda',e);}
   }
@@ -7820,19 +7834,23 @@ function morningBriefIA(){
 // Recordatorios con fecha (y cliente opcional) que el usuario se anota. Los que
 // vencen hoy o antes aparecen en Acciones de Hoy y el brief matinal. Respaldo
 // en Airtable (Monitor Sistema · AGENDA) para que sobrevivan a limpiar caché.
-// Los recordatorios de agenda son PERSONALES: cada usuario tiene su propia clave
-// local (namespaceada por username) para que, en un navegador compartido, un
-// comercial no vea los compromisos de otra persona. El respaldo remoto
-// (Monitor Sistema » AGENDA) ya guarda por username; esto alinea la copia local.
+// Alcance de la agenda:
+//  · Comerciales → agenda PERSONAL (cada vendedor ve sólo sus recordatorios).
+//  · Resto del equipo (admin/operaciones/producción/finanzas/marketing) → una
+//    sola agenda COMPARTIDA ("__equipo__"): todos ven los mismos compromisos.
+// La clave local se namespacea por ese alcance para que, en un navegador
+// compartido, un comercial no vea los compromisos del equipo (y viceversa).
+// El respaldo remoto (Monitor Sistema » AGENDA) guarda bajo la misma llave.
 const _AGENDA_KEY_BASE='thelab_agenda_v1';
-function _agendaKey(){try{const u=(AUTH.getUser&&AUTH.getUser())||{};return _AGENDA_KEY_BASE+'::'+(u.username||'anon');}catch(e){return _AGENDA_KEY_BASE+'::anon';}}
+function _agendaScope(){try{const u=(AUTH.getUser&&AUTH.getUser())||{};if(!u||!u.username)return 'anon';return u.role==='comercial'?u.username:'__equipo__';}catch(e){return 'anon';}}
+function _agendaKey(){return _AGENDA_KEY_BASE+'::'+_agendaScope();}
 function _agenda(){try{return JSON.parse(localStorage.getItem(_agendaKey())||'[]');}catch(e){return[];}}
 function _agendaSaveArr(arr){try{localStorage.setItem(_agendaKey(),JSON.stringify(arr));}catch(e){}_agendaBackup();}
 async function _agendaBackup(){
   try{
     const u=(AUTH.getUser&&AUTH.getUser())||{};if(!u.username)return;
     let all={};try{all=JSON.parse(state._agendaRemote||'{}');}catch(e){}
-    all[u.username]=_agenda();
+    all[_agendaScope()]=_agenda();   // comercial → por username · equipo → "__equipo__"
     const notes=JSON.stringify(all).slice(0,95000);
     if(state.agendaRecordId) await airtableWrite('Monitor Sistema','PATCH',state.agendaRecordId,{'Notes':notes});
     else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'AGENDA','Notes':notes});if(r?.id)state.agendaRecordId=r.id;}
