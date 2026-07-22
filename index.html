@@ -333,6 +333,7 @@
     <button class="dock-btn" data-tab="maquinas" onclick="switchTab('maquinas')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-maquinas"/></svg></span><span class="dock-label">Máquinas</span></button>
     <button class="dock-btn" data-tab="inventario" onclick="switchTab('inventario')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-nut"/></svg></span><span class="dock-label">Inventario</span></button>
     <button class="dock-btn" data-tab="equipo" onclick="switchTab('equipo')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-equipo"/></svg></span><span class="dock-label">Equipo</span></button>
+    <button class="dock-btn" data-tab="calendario" onclick="switchTab('calendario')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-calendar"/></svg></span><span class="dock-label">Calendario</span></button>
     <button class="dock-btn" data-tab="reporte" onclick="switchTab('reporte')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-reporte"/></svg></span><span class="dock-label">Reportes</span></button>
     <button class="dock-btn" data-tab="web" onclick="switchTab('web')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-web"/></svg></span><span class="dock-label">Web</span></button>
     <button class="dock-btn" data-tab="finanzas" onclick="switchTab('finanzas')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-finanzas"/></svg></span><span class="dock-label">Finanzas</span><span class="dock-badge" id="badge-finanzas" style="display:none">0</span></button>
@@ -376,6 +377,7 @@
     <button class="mobile-tab-btn" data-tab="maquinas" onclick="switchTabMobile('maquinas')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-maquinas"/></svg></span>Máquinas</button>
     <button class="mobile-tab-btn" data-tab="inventario" onclick="switchTabMobile('inventario')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-nut"/></svg></span>Inventario</button>
     <button class="mobile-tab-btn" data-tab="equipo" onclick="switchTabMobile('equipo')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-equipo"/></svg></span>Equipo</button>
+    <button class="mobile-tab-btn" data-tab="calendario" onclick="switchTabMobile('calendario')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-calendar"/></svg></span>Calendario</button>
     <button class="mobile-tab-btn" data-tab="reporte" onclick="switchTabMobile('reporte')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-reporte"/></svg></span>Reportes</button>
     <button class="mobile-tab-btn" data-tab="web" onclick="switchTabMobile('web')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-web"/></svg></span>Web</button>
     <button class="mobile-tab-btn" data-tab="finanzas" onclick="switchTabMobile('finanzas')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-finanzas"/></svg></span>Finanzas</button>
@@ -3493,6 +3495,104 @@
 <div id="tokenModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closeTokenModal()"></div>
   <div class="modal-card"><div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-key"/></svg> Configurar Airtable</div><p class="modal-desc">Pega tu Personal Access Token de Airtable. Necesita scopes: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:read</code> + <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">data:records:write</code></p><input class="field-input" id="modalTokenInput" type="password" placeholder="patXXXXXXX..." style="margin-top:12px"><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeTokenModal()">Cancelar</button><button class="btn btn-ghost btn-sm" id="testWriteBtn" onclick="testAirtableWrite()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-search"/></svg> Probar escritura</button><button class="btn btn-primary btn-sm" onclick="saveToken()">Guardar y Conectar</button></div></div>
+</div>
+
+<!-- ══════════════════ CALENDARIO (equipo: Nicanor · Gustavo · Florencia) ═══ -->
+<style id="calendario-styles">
+#tab-calendario .cal-head{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+#tab-calendario .cal-dow{font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);text-align:center;padding:4px 0}
+#tab-calendario .cal-body{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+#tab-calendario .cal-cell{min-height:92px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;padding:5px 6px;cursor:pointer;transition:border-color .15s;overflow:hidden;display:flex;flex-direction:column;gap:3px}
+#tab-calendario .cal-cell:hover{border-color:var(--accent)}
+#tab-calendario .cal-cell.other{opacity:.38}
+#tab-calendario .cal-cell.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+#tab-calendario .cal-num{font-size:11px;font-weight:700;color:var(--text3)}
+#tab-calendario .cal-cell.today .cal-num{color:var(--accent)}
+#tab-calendario .cal-ev{font-size:10px;color:var(--text2);background:var(--surface3);border-left:3px solid var(--accent);border-radius:5px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+#tab-calendario .cal-ev:hover{color:var(--text)}
+#tab-calendario .cal-ev.cal-pend{outline:1px dashed rgba(255,170,0,.5)}
+#tab-calendario .cal-ev-h{font-weight:700;color:var(--text3);font-size:9px}
+#tab-calendario .cal-mas{font-size:9px;color:var(--accent);cursor:pointer;padding-left:3px}
+#tab-calendario .cal-chip,#tab-calendario .cal-pchip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border2);border-radius:999px;color:var(--text2);font-size:11px;font-weight:600;padding:4px 12px;cursor:pointer;font-family:inherit}
+#tab-calendario .cal-chip.on,#tab-calendario .cal-pchip.on,#calEventoModal .cal-pchip.on{border-color:var(--chip,var(--accent));color:var(--text);background:var(--surface3)}
+#calEventoModal .cal-pchip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border2);border-radius:999px;color:var(--text2);font-size:11px;font-weight:600;padding:5px 13px;cursor:pointer;font-family:inherit}
+.cal-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
+#tab-calendario .cal-px-dia{font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin:10px 0 4px}
+#tab-calendario .cal-px-ev{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--text2);background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:7px 10px;margin-bottom:5px;cursor:pointer}
+#tab-calendario .cal-px-ev:hover{border-color:var(--accent)}
+#tab-calendario .cal-px-h{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);min-width:52px}
+@media(max-width:760px){#tab-calendario .cal-cell{min-height:56px;padding:3px 4px}#tab-calendario .cal-ev{font-size:8px;padding:1px 3px}}
+</style>
+<div class="tab-panel pf" id="tab-calendario">
+  <div class="section-header"><div><div class="section-title">Calendario</div><div class="section-desc">Eventos del equipo — Nicanor, Gustavo y Florencia — con alarmas y sincronización al Google Calendar personal de cada uno.</div></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="calPedirPermisoAvisos()" title="Permitir notificaciones del navegador para las alarmas">🔔 Avisos</button>
+      <button class="btn btn-ghost btn-sm" onclick="calGoogleConnect()" title="Conectar tu cuenta Google (una vez por navegador)">🔗 Conectar Google</button>
+      <button class="btn btn-ghost btn-sm" id="calSyncBtn" onclick="calSyncAll()" title="Empujar los eventos pendientes a los Google Calendar">⇅ Sincronizar</button>
+      <button class="btn btn-primary btn-sm" onclick="openCalEventoModal()">＋ Evento</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px">
+      <span id="calSyncStatus" style="font-size:11px;color:var(--text3)">—</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="calToggleConfig()">⚙ Calendarios de cada uno</button>
+    </div>
+    <div id="calCfgBox" style="display:none;padding:0 14px 12px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--text3);margin:10px 0 8px">Correo de Google de cada persona (su Google Calendar personal). Si tu cuenta conectada no puede escribir directo en ese calendario, el evento llega igual como <b>invitación</b>.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+        <div class="field-group"><label class="field-label">Nicanor</label><input class="field-input" id="calCfg_nicanor" type="email" placeholder="nicanor@gmail.com"></div>
+        <div class="field-group"><label class="field-label">Gustavo</label><input class="field-input" id="calCfg_gustavo" type="email" placeholder="gustavo@gmail.com"></div>
+        <div class="field-group"><label class="field-label">Florencia</label><input class="field-input" id="calCfg_florencia" type="email" placeholder="florencia@gmail.com"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="calSaveConfig()">Guardar</button></div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header" style="flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="calNavMes(-1)" title="Mes anterior">‹</button>
+        <button class="btn btn-ghost btn-sm" onclick="calHoy()">Hoy</button>
+        <button class="btn btn-ghost btn-sm" onclick="calNavMes(1)" title="Mes siguiente">›</button>
+        <span class="card-title" id="calMesLabel" style="margin-left:6px">—</span>
+      </div>
+      <div id="calFiltroChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto"></div>
+    </div>
+    <div id="calGrid" style="padding:12px 14px"></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">📆 Próximos 7 días</span></div>
+    <div id="calProximos" style="padding:10px 14px"></div>
+  </div>
+</div>
+<!-- Modal crear/editar evento -->
+<div class="modal-overlay" id="calEventoModal" style="display:none">
+  <div class="modal-backdrop" onclick="closeCalEventoModal()"></div>
+  <div class="modal-card" style="max-width:520px">
+    <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-calendar"/></svg> <span id="calMdlTitle">Nuevo evento</span></div>
+    <div class="field-group" style="margin-top:10px"><label class="field-label">Título</label><input class="field-input" id="calEvTitulo" placeholder="Reunión con cliente, entrega, visita…"></div>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
+      <div class="field-group"><label class="field-label">Fecha</label><input class="field-input" id="calEvFecha" type="date"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer;padding-bottom:9px"><input type="checkbox" id="calEvAllDay" onchange="calToggleAllDay()" style="cursor:pointer;accent-color:var(--accent)">Todo el día</label>
+    </div>
+    <div id="calEvHoras" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field-group"><label class="field-label">Desde</label><input class="field-input" id="calEvHIni" type="time" value="10:00"></div>
+      <div class="field-group"><label class="field-label">Hasta</label><input class="field-input" id="calEvHFin" type="time" value="11:00"></div>
+    </div>
+    <div class="field-group"><label class="field-label">Personas</label><div id="calEvPersonas" style="display:flex;gap:7px;flex-wrap:wrap"></div></div>
+    <div class="field-group"><label class="field-label">Lugar (opcional)</label><input class="field-input" id="calEvLugar" placeholder="Taller, oficina del cliente, videollamada…"></div>
+    <div class="field-group"><label class="field-label">Notas (opcional)</label><textarea class="field-textarea" id="calEvDesc" rows="2"></textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field-group"><label class="field-label">🔔 Alarma (popup)</label><select class="field-select" id="calEvAlarma"><option value="">Sin alarma</option><option value="0">Al momento</option><option value="5">5 min antes</option><option value="10">10 min antes</option><option value="15">15 min antes</option><option value="30" selected>30 min antes</option><option value="60">1 hora antes</option><option value="120">2 horas antes</option><option value="1440">1 día antes</option></select></div>
+      <div class="field-group"><label class="field-label">📧 Recordatorio por correo</label><select class="field-select" id="calEvEmail"><option value="">No</option><option value="30">30 min antes</option><option value="60">1 hora antes</option><option value="1440">1 día antes</option></select></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text2);cursor:pointer;margin-bottom:6px"><input type="checkbox" id="calEvAvisoApp" checked style="cursor:pointer;accent-color:var(--accent)">Avisar también en el panel (campana 🔔 y notificación del navegador)</label>
+    <div id="calEvSyncInfo" style="display:none;font-size:10px;color:var(--text3);margin-bottom:4px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="btn btn-ghost btn-sm" id="calEvDelBtn" style="display:none;color:var(--danger);margin-right:auto" onclick="calDelEvento()">🗑 Eliminar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeCalEventoModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="calSaveEvento()">Guardar</button>
+    </div>
+  </div>
 </div>
 
 <!-- REPORTES -->
@@ -7453,6 +7553,12 @@ function _applyMonitorSistema(recs){
     // migración de compromisos previos por-username de los usuarios de equipo.
     try{ _agendaReconcile(JSON.parse(agRec.fields['Notes']||'{}')); }catch(e){logErr('monitorSistema:agenda',e);}
   }
+  // Calendario de equipo respaldado (eventos + mapa de Google Calendars).
+  const calRec=recs.find(r=>r.fields['Name']==='CALENDARIO');
+  if(calRec){
+    state.calRecordId=calRec.id;state._calRemote=calRec.fields['Notes']||'{}';
+    try{ if(typeof _calReconcile==='function') _calReconcile(JSON.parse(calRec.fields['Notes']||'{}')); }catch(e){logErr('monitorSistema:calendario',e);}
+  }
   // Firmas de correo respaldadas: restaura las que falten localmente (una firma
   // recién editada en este navegador no se pisa — lo local gana hasta guardarse).
   const sigRec=recs.find(r=>r.fields['Name']==='MAIL_SIGNATURES');
@@ -7795,6 +7901,7 @@ function switchTab(name){
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;if(typeof disconnectAllPrinterWs==='function')disconnectAllPrinterWs();}
   if(name==='equipo') initEquipo();
+  if(name==='calendario') try{renderCalendario();}catch(e){}
   if(name==='inventario') loadInventario();
   if(name==='nueva-cot'){const cn=document.getElementById('cot-num');if(cn) cn.value=generarNumeroCotizacion();updateVtoPreview();}
   window.scrollTo({top:0,behavior:'smooth'});
@@ -14558,6 +14665,7 @@ function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classLi
 <script src="js/redes.js?v=%%BUILD%%"></script>
 <script src="js/agentes.js?v=%%BUILD%%"></script>
 <script src="js/oficina.js?v=%%BUILD%%"></script>
+<script src="js/calendario.js?v=%%BUILD%%"></script>
 <script>
 // ── SUGERENCIAS PROACTIVAS DE AGENTES ──────────────────────────
 const _agentSuggestKey='thelab_agent_suggest_v1';
@@ -15036,9 +15144,9 @@ const AUTH={
 const RBAC={
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','oficina','remuneraciones','correo','redes','newsletter','nuevo-lead','nueva-cot','cot3d'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','oficina','calendario','remuneraciones','correo','redes','newsletter','nuevo-lead','nueva-cot','cot3d'],
     produccion: ['overview','pedidos','maquinas','inventario','equipo','visual','correo'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo'],
     marketing:  ['overview','web','agentes','oficina','reporte','correo','redes','newsletter'],
@@ -15231,7 +15339,7 @@ function initDashboard(){
   if(_useDemoMode){
     enableDemoMode();
     slProgress(5,'Cargando datos demo...');
-    loadAllData().then(()=>{setStatus('modo demo',true);startAutoRefresh();});
+    loadAllData().then(()=>{setStatus('modo demo',true);startAutoRefresh();try{startCalAlarmas();}catch(e){}});
     initMobileTableLabels();
     window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
     document.addEventListener('keydown',e=>{
@@ -15260,11 +15368,11 @@ function initDashboard(){
       try{_renderOverviewNow();_reRenderActiveList();}catch(e){logErr('hydrateRender',e);}
       if(!navigator.onLine) try{_setOfflineBanner(true);}catch(e){}
     }
-    loadAllData().then(()=>{startAutoRefresh();startAgendaSync();});
+    loadAllData().then(()=>{startAutoRefresh();startAgendaSync();try{startCalSync();startCalAlarmas();}catch(e){}});
   }
   initMobileTableLabels();
   checkClientePortal();
-  window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);if(_agendaPollTimer) clearInterval(_agendaPollTimer);});
+  window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);if(_agendaPollTimer) clearInterval(_agendaPollTimer);try{if(_calPollTimer)clearInterval(_calPollTimer);if(_calAlarmTimer)clearInterval(_calAlarmTimer);}catch(e){}});
   document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
     if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}

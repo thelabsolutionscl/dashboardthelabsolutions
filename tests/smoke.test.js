@@ -131,6 +131,12 @@ const ok = msg => console.log('  ✓ ' + msg);
     '_nlEngByEmail', '_nlRecentRecipients', '_nlCampRate', '_nlBestSendTime', 'renderNlAnalytics',
     '_nlSubjectScore', '_nlScoreChip', 'nlSubjectSuggest', 'nlApplySubject',
     'nlPopulatePedidos', 'nlGenerateFromPedido', '_nlSmartSegOptions', 'nlDestSetNoResend',
+    // calendario de equipo
+    'renderCalendario', 'renderCalProximos', 'openCalEventoModal', 'closeCalEventoModal', 'calSaveEvento', 'calDelEvento',
+    'calNavMes', 'calHoy', 'calSetFiltro', 'calTogglePersona', 'calToggleAllDay',
+    '_calMerge', '_calPrune', '_calReconcile', '_calBackup', '_calPoll', 'startCalSync',
+    'calGoogleConnect', 'calSyncAll', '_calAutoSync', '_calSyncEvento', '_calNeedsSync', '_calGcalBody',
+    'startCalAlarmas', '_calAlarmTick', 'calPedirPermisoAvisos', 'calToggleConfig', 'calSaveConfig',
   ];
   const probs = [];
   CRITICAL.forEach(n => {
@@ -158,7 +164,10 @@ const ok = msg => console.log('  ✓ ' + msg);
     'ofHealth', 'ofTeamLast', 'oficinaFeedSearch',
     'tab-redes', 'redesPostsList', 'redesInboxList', 'redesIgPreviewModal', 'redesIgBody',
     'redesGuideModal', 'redesGuideBody', 'redesBtnSem', 'redesPostsCal', 'redesAutoPanel',
-    'nlAnalytics', 'nlGenPedido', 'nlDestNoResend'];
+    'nlAnalytics', 'nlGenPedido', 'nlDestNoResend',
+    // calendario
+    'tab-calendario', 'calGrid', 'calProximos', 'calMesLabel', 'calFiltroChips', 'calSyncStatus',
+    'calCfgBox', 'calEventoModal', 'calEvTitulo', 'calEvFecha', 'calEvPersonas', 'calEvAlarma'];
   const missing = IDS.filter(id => !SRC.includes('id="' + id + '"'));
   if (missing.length) fail('IDs del DOM ausentes: ' + missing.join(', '));
   else ok('IDs críticos del DOM: ' + IDS.length + ' presentes');
