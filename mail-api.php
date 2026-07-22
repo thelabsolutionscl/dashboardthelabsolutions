@@ -28,7 +28,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-22-decode-fix');
+define('MAIL_API_BUILD', '2026-07-22-sent-addrs');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -537,6 +537,53 @@ case 'folders':
     }
     imap_close($conn);
     echo json_out(['folders' => $result]);
+    break;
+
+// ── sent_addrs ────────────────────────────────────────────────
+// Precarga para el autocompletar: recorre los SOBRES (no los cuerpos) de la
+// carpeta de Enviados y devuelve las direcciones de destino ya usadas. Barato
+// (solo envelopes) y acotado a los últimos N mensajes.
+case 'sent_addrs':
+    $folder = trim($_POST['folder'] ?? '');
+
+    $conn = open_imap($user, $pass);
+    if (is_array($conn)) { echo json_out($conn); exit; }
+
+    // Autodetecta la carpeta de enviados si el cliente no la pasó.
+    if ($folder === '') {
+        $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
+        foreach ((imap_list($conn, $prefix, '*') ?: []) as $f) {
+            $nm = str_replace($prefix, '', $f);
+            if (preg_match('~(^|[./])(sent|enviad|elementos enviados)~i', $nm)) { $folder = $nm; break; }
+        }
+    }
+    imap_close($conn);
+    if ($folder === '') { echo json_out(['addresses' => [], 'note' => 'no-sent-folder', 'build' => MAIL_API_BUILD]); exit; }
+
+    $conn = open_imap($user, $pass, $folder);
+    if (is_array($conn)) { echo json_out($conn); exit; }
+
+    $total = imap_num_msg($conn);
+    $limit = 800;                                   // últimos N enviados
+    $start = max(1, $total - $limit + 1);
+    $msgs  = ($total > 0) ? (imap_fetch_overview($conn, "$start:$total", 0) ?: []) : [];
+    imap_close($conn);
+
+    $set = [];
+    foreach ($msgs as $m) {
+        foreach (['to', 'cc'] as $hdr) {
+            $raw = isset($m->$hdr) ? $m->$hdr : '';
+            if (!$raw) continue;
+            if (preg_match_all('~[^\s<>,;:"()]+@[^\s<>,;:"()]+\.[^\s<>,;:"()]+~', $raw, $mm)) {
+                foreach ($mm[0] as $addr) {
+                    $a = strtolower(rtrim($addr, '.,;:'));
+                    if ($a !== '' && !isset($set[$a])) $set[$a] = true;
+                    if (count($set) >= 2000) break 3;   // tope de seguridad
+                }
+            }
+        }
+    }
+    echo json_out(['addresses' => array_keys($set), 'folder' => $folder, 'scanned' => count($msgs), 'build' => MAIL_API_BUILD]);
     break;
 
 // ── list ─────────────────────────────────────────────────────

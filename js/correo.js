@@ -176,6 +176,7 @@ const MAIL={
       document.getElementById('mailConnStatus').textContent='';
       _mailPollErrors=0;
       startMailPolling();
+      this.preloadSentAddrs();   // backfill del histórico de Enviados (una vez, en segundo plano)
     }catch(e){
       this._init=false;
       document.getElementById('mailConnStatus').textContent='Error de conexión';
@@ -747,6 +748,23 @@ const MAIL={
       }
       state._mailSentRemote=notes;
     }catch(e){console.warn('[Direcciones] no se pudo respaldar en Airtable (queda local):',e.message);}
+  },
+  // Precarga única (por casilla/equipo) del histórico de la carpeta Enviados, para
+  // que el autocompletar tenga direcciones desde el primer día y no solo desde el
+  // próximo envío. Silenciosa: nunca bloquea ni rompe el correo.
+  async preloadSentAddrs(){
+    const acct=this.activeAccount();if(!acct)return;
+    const flag='thelab_mail_sent_preloaded_'+acct;
+    if(localStorage.getItem(flag))return;
+    try{
+      let folder='';
+      try{const fd=await this.post({action:'folders'});const f=(fd.folders||[]).find(x=>/(^|[.\/])(sent|enviad)/i.test(x.name||''));if(f)folder=f.name;}catch(e){}
+      const data=await this.post({action:'sent_addrs',folder});
+      if(data&&!data.error){
+        if(Array.isArray(data.addresses)&&data.addresses.length) this.addSentAddrs(data.addresses.join(','));
+        localStorage.setItem(flag,'1');   // hecho (aunque venga vacío): no reintentar en cada carga
+      }
+    }catch(e){/* silencioso */}
   },
 
   // ── Plantillas ──
