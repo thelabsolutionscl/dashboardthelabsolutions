@@ -1,11 +1,37 @@
 /* js/pdf-fichas.js — módulo extraído de index.html (carga en el mismo punto). */
+
+// ── PLAZO DE ENTREGA (texto para cotización / ficha) ──────────
+// Fecha legible en español (ej: "15 de agosto de 2026") desde un ISO yyyy-mm-dd.
+function cotFechaLarga(iso){
+  if(!iso)return '';
+  const d=new Date(String(iso).slice(0,10)+'T00:00:00');
+  if(isNaN(d))return String(iso);
+  try{return d.toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'});}catch(e){return String(iso);}
+}
+// Texto largo del plazo: rango de días, número único o fecha fija. '' si no hay dato.
+function cotPlazoTexto(f){
+  if(!f)return '';
+  if(f['Fecha de entrega'])return `Entrega estimada para el ${cotFechaLarga(f['Fecha de entrega'])}. Fecha sujeta a la confirmación del pedido y a la disponibilidad de stock.`;
+  const min=f['Tiempo de producción'];if(!min)return '';
+  const max=f['Tiempo de producción máx'];const tipo=String(f['Tipo días producción']||'DÍAS HÁBILES').toLowerCase();
+  const rango=(max&&max>min)?`${min}-${max}`:`${min}`;
+  return `${rango} ${tipo} desde la confirmación del pedido. Plazo podría variar dependiendo de stock de productos, contingencias sanitarias o sociales.`;
+}
+// Texto corto del plazo (ej: "10-15 días hábiles" o la fecha). '' si no hay dato.
+function cotPlazoCorto(f){
+  if(!f)return '';
+  if(f['Fecha de entrega'])return cotFechaLarga(f['Fecha de entrega']);
+  const min=f['Tiempo de producción'];if(!min)return '';
+  const max=f['Tiempo de producción máx'];const tipo=String(f['Tipo días producción']||'DÍAS HÁBILES').toLowerCase();
+  return `${(max&&max>min)?`${min}-${max}`:min} ${tipo}`;
+}
+
 // ── PDF ───────────────────────────────────────────────────────
 function buildCotizacionDoc(id){
   const c=state.cotizacionesById[id];if(!c) return null;
   const f=c.fields;const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cf=(clienteId?state.clientes.find(x=>x.id===clienteId):null)?.fields||{};
   const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||new Date().toISOString().split('T')[0],vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
-  const tiempoProd=f['Tiempo de producción'];const tipoDias=(f['Tipo días producción']||'DÍAS HÁBILES').toLowerCase();
-  const plazotxt=tiempoProd?`${tiempoProd} ${tipoDias} desde la confirmación del pedido. Plazo podría variar dependiendo de stock de productos, contingencias sanitarias o sociales.`:'A coordinar con el cliente.';
+  const plazotxt=cotPlazoTexto(f)||'A coordinar con el cliente.';
   const formaPago=f['Forma de pago']||'';
   const formaDescMap={'AL CONTADO':'Pago total al momento de confirmar el pedido, vía transferencia bancaria, vale vista o cheque al día.','30 DÍAS DESDE OC':'Pago total a 30 días desde la emisión de la Orden de Compra, vía transferencia bancaria.','45 DÍAS DESDE OC':'Pago total a 45 días desde la emisión de la Orden de Compra, vía transferencia bancaria.','70% ABONO Y 30% CONTRA ENTREGA':'70% de abono al confirmar el pedido (Facturable inmediatamente), 30% restante contra entrega y conformidad de recepción, vía transferencia bancaria, vale vista o cheque al día.','50% ABONO Y 50% 30 DÍAS':'50% de abono al confirmar el pedido (Facturable inmediatamente), 50% restante a 30 días desde la Orden de Compra, vía transferencia bancaria.'};
   const formaHtml=formaPago?`<strong>${escHtml(formaPago)}:</strong> ${formaDescMap[formaPago]||''}`:'';

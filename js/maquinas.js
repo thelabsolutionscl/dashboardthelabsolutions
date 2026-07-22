@@ -1808,6 +1808,56 @@ function toggleEditTipoDias(){
     btn.style.background='rgba(0,212,204,0.15)';btn.style.borderColor='rgba(0,212,204,0.5)';btn.style.color='var(--accent)';
   }
 }
+
+// ── PLAZO DE ENTREGA (rango de días o fecha fija) ─────────────
+// Un mismo control en el formulario nuevo ('new') y en el de edición ('edit').
+const COT_PLAZO_IDS={
+  'new': {modo:'cotPlazoModo',diasWrap:'cotPlazoDiasWrap',fechaWrap:'cotPlazoFechaWrap',min:'cot-tiempo-prod',max:'cot-tiempo-prod-max',tipo:'cot-tipo-dias',tipoBtn:'cot-tipo-dias-btn',fecha:'cot-fecha-entrega',btnDias:'cotPlazoBtnDias',btnFecha:'cotPlazoBtnFecha'},
+  'edit':{modo:'editCotPlazoModo',diasWrap:'editCotPlazoDiasWrap',fechaWrap:'editCotPlazoFechaWrap',min:'editCotTiempoProd',max:'editCotTiempoProdMax',tipo:'editCotTipoDias',tipoBtn:'editCotTipoDiasBtn',fecha:'editCotFechaEntrega',btnDias:'editCotPlazoBtnDias',btnFecha:'editCotPlazoBtnFecha'}
+};
+// Alterna el modo del control: 'dias' (rango N-M) o 'fecha' (fecha fija).
+function cotPlazoSetModo(scope,modo){
+  const ids=COT_PLAZO_IDS[scope];if(!ids)return;modo=(modo==='fecha')?'fecha':'dias';
+  const hid=document.getElementById(ids.modo);if(hid)hid.value=modo;
+  const dw=document.getElementById(ids.diasWrap),fw=document.getElementById(ids.fechaWrap);
+  if(dw)dw.style.display=(modo==='fecha')?'none':'flex';
+  if(fw)fw.style.display=(modo==='fecha')?'flex':'none';
+  [[ids.btnDias,modo==='dias'],[ids.btnFecha,modo==='fecha']].forEach(([id,on])=>{const b=document.getElementById(id);if(!b)return;b.style.background=on?'rgba(0,212,204,0.18)':'transparent';b.style.borderColor=on?'rgba(0,212,204,0.55)':'var(--border2)';b.style.color=on?'var(--accent)':'var(--text3)';});
+}
+// Pinta el botón de tipo de días (hábiles/normales) según el valor guardado.
+function _cotPintaTipoDias(ids,tipo){
+  const td=document.getElementById(ids.tipo);if(td)td.value=tipo;
+  const tdb=document.getElementById(ids.tipoBtn);if(!tdb)return;
+  const norm=(tipo==='DÍAS NORMALES');tdb.textContent=tipo;
+  tdb.style.background=norm?'rgba(255,170,0,0.15)':'rgba(0,212,204,0.15)';
+  tdb.style.borderColor=norm?'rgba(255,170,0,0.5)':'rgba(0,212,204,0.5)';
+  tdb.style.color=norm?'var(--accent2)':'var(--accent)';
+}
+// Carga los valores de plazo de un registro (o vacío) en el control.
+function cotPlazoLoad(scope,f){
+  const ids=COT_PLAZO_IDS[scope];if(!ids)return;f=f||{};
+  const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  setV(ids.min,f['Tiempo de producción']||'');
+  setV(ids.max,f['Tiempo de producción máx']||'');
+  setV(ids.fecha,f['Fecha de entrega']||'');
+  _cotPintaTipoDias(ids,f['Tipo días producción']||'DÍAS HÁBILES');
+  cotPlazoSetModo(scope,f['Fecha de entrega']?'fecha':'dias');
+}
+// Reúne los campos de plazo para Airtable según el modo activo.
+// En cada modo pone en null los campos del otro para que al cambiar de modo se limpien.
+function cotPlazoFields(scope){
+  const ids=COT_PLAZO_IDS[scope];
+  const modo=document.getElementById(ids.modo)?.value||'dias';
+  if(modo==='fecha'){
+    const fecha=document.getElementById(ids.fecha)?.value||'';
+    return {'Fecha de entrega':fecha||null,'Tiempo de producción':null,'Tiempo de producción máx':null,'Tipo días producción':null};
+  }
+  const min=parseInt(document.getElementById(ids.min)?.value)||null;
+  let max=parseInt(document.getElementById(ids.max)?.value)||null;
+  if(!(min&&max&&max>min))max=null; // el máximo solo cuenta si es mayor que el mínimo
+  return {'Tiempo de producción':min,'Tiempo de producción máx':max,'Tipo días producción':min?(document.getElementById(ids.tipo)?.value||'DÍAS HÁBILES'):null,'Fecha de entrega':null};
+}
+
 function addSolicitudItem(){
   const inp=document.getElementById('cot-solicitud-inp');const val=(inp?.value||'').trim();if(!val) return;
   const container=document.getElementById('solicitudItems');const item=document.createElement('div');
@@ -1837,6 +1887,6 @@ function selectClienteNew(){document.getElementById('cot-cliente-id').value='';d
 document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap')) document.querySelectorAll('.search-select-dropdown').forEach(d=>d.classList.remove('open'));});
 function clearForm(type){
   if(type==='lead'){['nl-empresa','nl-contacto','nl-cargo','nl-telefono','nl-email','nl-rut','nl-web','nl-notas','nl-ciudad','nl-direccion'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});document.getElementById('nl-origen').value='Referido';document.getElementById('nl-industria').value='';const nr=document.getElementById('nl-region');if(nr) nr.value='';const nc=document.getElementById('nl-comuna');if(nc){nc.innerHTML='<option value="">— Seleccionar región primero —</option>';nc.disabled=true;}}
-  if(type==='cot'){['cot-num','cot-alias','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id','cot-tiempo-prod','cot-descuento'].forEach(id=>{const el=document.getElementById(id);if(el) el.value=id==='cot-descuento'?'0':'';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';const cu=document.getElementById('cot-urgente');if(cu) cu.value='false';const td=document.getElementById('cot-tipo-dias');if(td) td.value='DÍAS HÁBILES';const tdb=document.getElementById('cot-tipo-dias-btn');if(tdb){tdb.textContent='DÍAS HÁBILES';tdb.style.background='rgba(0,212,204,0.15)';tdb.style.borderColor='rgba(0,212,204,0.5)';tdb.style.color='var(--accent)';};document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();const c3dp=document.getElementById('c3d-inline-panel');if(c3dp) c3dp.style.display='none';Object.values(_c3dBtns()).forEach(b=>{if(b)b.style.background='';});const c3dl=document.getElementById('c3d-i-piezas');if(c3dl) c3dl.innerHTML='';c3dPiezasActivas=[];c3dPiezaCounter=0;['lsr','neo'].forEach(k=>{const p=document.getElementById(k+'-inline-panel');if(p)p.style.display='none';Object.values(_qcalcBtns(k)).forEach(b=>{if(b)b.style.background='';});});}
+  if(type==='cot'){['cot-num','cot-alias','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id','cot-tiempo-prod','cot-tiempo-prod-max','cot-fecha-entrega','cot-descuento'].forEach(id=>{const el=document.getElementById(id);if(el) el.value=id==='cot-descuento'?'0':'';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';const cu=document.getElementById('cot-urgente');if(cu) cu.value='false';try{cotPlazoLoad('new',{});}catch(e){};document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();const c3dp=document.getElementById('c3d-inline-panel');if(c3dp) c3dp.style.display='none';Object.values(_c3dBtns()).forEach(b=>{if(b)b.style.background='';});const c3dl=document.getElementById('c3d-i-piezas');if(c3dl) c3dl.innerHTML='';c3dPiezasActivas=[];c3dPiezaCounter=0;['lsr','neo'].forEach(k=>{const p=document.getElementById(k+'-inline-panel');if(p)p.style.display='none';Object.values(_qcalcBtns(k)).forEach(b=>{if(b)b.style.background='';});});}
   if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-whatsapp','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});setPvSelectedCats('np',[]);const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
 }

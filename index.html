@@ -1412,7 +1412,25 @@
         <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="cot-fecha" type="date" onchange="updateVtoPreview()"></div>
         <div class="field-group"><label class="field-label">Vto. (auto 10 días háb.)</label><input class="field-input" id="cot-vto-preview" type="date" disabled style="opacity:0.5;cursor:not-allowed"></div>
         <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="cot-forma-pago"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
-        <div class="field-group"><label class="field-label">Tiempo de Producción</label><div style="display:flex;align-items:center;gap:8px"><input class="field-input" id="cot-tiempo-prod" type="number" min="1" step="1" placeholder="0" style="width:80px;text-align:center;flex-shrink:0"><input type="hidden" id="cot-tipo-dias" value="DÍAS HÁBILES"><button type="button" id="cot-tipo-dias-btn" onclick="toggleTipoDias()" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.5);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">DÍAS HÁBILES</button></div></div>
+        <div class="field-group form-full"><label class="field-label">Tiempo de Producción / Entrega</label>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+            <button type="button" id="cotPlazoBtnDias" onclick="cotPlazoSetModo('new','dias')" style="background:rgba(0,212,204,0.18);border:1px solid rgba(0,212,204,0.55);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:4px 11px;cursor:pointer;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">Por días</button>
+            <button type="button" id="cotPlazoBtnFecha" onclick="cotPlazoSetModo('new','fecha')" style="background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:4px 11px;cursor:pointer;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">Fecha fija</button>
+          </div>
+          <input type="hidden" id="cotPlazoModo" value="dias">
+          <div id="cotPlazoDiasWrap" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <input class="field-input" id="cot-tiempo-prod" type="number" min="1" step="1" placeholder="10" style="width:74px;text-align:center;flex-shrink:0">
+            <span style="color:var(--text3);font-weight:700">–</span>
+            <input class="field-input" id="cot-tiempo-prod-max" type="number" min="1" step="1" placeholder="15" style="width:74px;text-align:center;flex-shrink:0">
+            <input type="hidden" id="cot-tipo-dias" value="DÍAS HÁBILES">
+            <button type="button" id="cot-tipo-dias-btn" onclick="toggleTipoDias()" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.5);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">DÍAS HÁBILES</button>
+            <span style="color:var(--text3);font-size:10px">El máximo es opcional — déjalo vacío para un solo número</span>
+          </div>
+          <div id="cotPlazoFechaWrap" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
+            <input class="field-input" id="cot-fecha-entrega" type="date" style="width:170px;flex-shrink:0">
+            <span style="color:var(--text3);font-size:10px">Fecha de entrega comprometida</span>
+          </div>
+        </div>
         <div class="field-group form-full">
           <label class="field-label">Observaciones</label>
           <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
@@ -3248,7 +3266,25 @@
       <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="editCotFecha" type="date"></div>
       <div class="field-group"><label class="field-label">Fecha vencimiento</label><input class="field-input" id="editCotVto" type="date"></div>
       <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="editCotFormaPago"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
-      <div class="field-group"><label class="field-label">Tiempo de Producción</label><div style="display:flex;align-items:center;gap:8px"><input class="field-input" id="editCotTiempoProd" type="number" min="1" step="1" placeholder="0" style="width:80px;text-align:center;flex-shrink:0"><input type="hidden" id="editCotTipoDias" value="DÍAS HÁBILES"><button type="button" id="editCotTipoDiasBtn" onclick="toggleEditTipoDias()" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.5);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">DÍAS HÁBILES</button></div></div>
+      <div class="field-group form-full"><label class="field-label">Tiempo de Producción / Entrega</label>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+          <button type="button" id="editCotPlazoBtnDias" onclick="cotPlazoSetModo('edit','dias')" style="background:rgba(0,212,204,0.18);border:1px solid rgba(0,212,204,0.55);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:4px 11px;cursor:pointer;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">Por días</button>
+          <button type="button" id="editCotPlazoBtnFecha" onclick="cotPlazoSetModo('edit','fecha')" style="background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:4px 11px;cursor:pointer;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">Fecha fija</button>
+        </div>
+        <input type="hidden" id="editCotPlazoModo" value="dias">
+        <div id="editCotPlazoDiasWrap" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input class="field-input" id="editCotTiempoProd" type="number" min="1" step="1" placeholder="10" style="width:74px;text-align:center;flex-shrink:0">
+          <span style="color:var(--text3);font-weight:700">–</span>
+          <input class="field-input" id="editCotTiempoProdMax" type="number" min="1" step="1" placeholder="15" style="width:74px;text-align:center;flex-shrink:0">
+          <input type="hidden" id="editCotTipoDias" value="DÍAS HÁBILES">
+          <button type="button" id="editCotTipoDiasBtn" onclick="toggleEditTipoDias()" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.5);border-radius:6px;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em;transition:all 0.2s">DÍAS HÁBILES</button>
+          <span style="color:var(--text3);font-size:10px">El máximo es opcional — déjalo vacío para un solo número</span>
+        </div>
+        <div id="editCotPlazoFechaWrap" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
+          <input class="field-input" id="editCotFechaEntrega" type="date" style="width:170px;flex-shrink:0">
+          <span style="color:var(--text3);font-size:10px">Fecha de entrega comprometida</span>
+        </div>
+      </div>
       <div class="field-group form-full"><label class="field-label">Observaciones</label><textarea class="field-textarea" id="editCotSolicitud" rows="2"></textarea></div>
       <div class="field-group form-full">
         <label class="field-label">Detalle productos / ítems</label>
@@ -6910,7 +6946,7 @@ async function airtableDelete(table,recordId){
 async function ensureCotizacionFields(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
   const tableId='tblvVAc4TtiERA0Tc';
-  const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'},{name:'Detalle JSON',type:'multilineText'}];
+  const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tiempo de producción máx',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'},{name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso'}}},{name:'Detalle JSON',type:'multilineText'}];
   for(const c of needed){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
 }
 async function ensureFichaTecnicaField(){
@@ -6946,7 +6982,9 @@ async function crearCamposItemsAirtable(){
   if(!existingFields.includes('SUBTOTAL')) campos.push({name:'SUBTOTAL',type:'currency',options:{precision:0,symbol:'$'}});
   if(!existingFields.includes('TOTAL CON IVA')) campos.push({name:'TOTAL CON IVA',type:'currency',options:{precision:0,symbol:'$'}});
   if(!existingFields.includes('Tiempo de producción')) campos.push({name:'Tiempo de producción',type:'number',options:{precision:0}});
+  if(!existingFields.includes('Tiempo de producción máx')) campos.push({name:'Tiempo de producción máx',type:'number',options:{precision:0}});
   if(!existingFields.includes('Tipo días producción')) campos.push({name:'Tipo días producción',type:'singleLineText'});
+  if(!existingFields.includes('Fecha de entrega')) campos.push({name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso'}}});
   if(!existingFields.includes('Forma de pago')) campos.push({name:'Forma de pago',type:'singleSelect'});
   if(!campos.length){toast('✓ Todos los campos ya existen','info');return;}
   toast(`Creando ${campos.length} campos...`,'info');let ok=0,fail=0;
@@ -9990,6 +10028,8 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   if(f['Detalle productos']) fields['Detalle productos']=f['Detalle productos'];
   if(f['Tiempo de producción']) fields['Tiempo de producción']=f['Tiempo de producción'];
   if(f['Tipo días producción']) fields['Tipo días producción']=f['Tipo días producción'];
+  // Si la cotización comprometió una fecha fija de entrega, el pedido nace con esa fecha.
+  if(f['Fecha de entrega']) fields['Fecha entrega']=f['Fecha de entrega'];
   const solicitudCot=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';
   // Reintento tolerante: si Airtable rechaza por un campo desconocido, reintenta
   // dejando solo los campos base garantizados (no perder el pedido por un campo nuevo).
@@ -10046,8 +10086,7 @@ function openEditCot(id){
   const c=state.cotizacionesById[id];if(!c) return;const f=c.fields;
   document.getElementById('editCotId').value=id;document.getElementById('editCotNum').value=f['N° Cotización']||'';const _eAlias=document.getElementById('editCotAlias');if(_eAlias) _eAlias.value=f['Alias / Título']||'';document.getElementById('editCotCanal').value=f['Canal solicitud']||'WhatsApp';document.getElementById('editCotEstado').value=f['Estado cotización']||'Enviada';document.getElementById('editCotUrgente').value=f['Urgencia (+25%)']?'true':'false';document.getElementById('editCotFecha').value=f['Fecha cotización']||'';document.getElementById('editCotVto').value=f['Fecha vencimiento']||'';document.getElementById('editCotSolicitud').value=f['Solicitud cliente (texto libre)']||'';document.getElementById('editCotNotas').value=f['Notas cotización']||'';
   const _efp=document.getElementById('editCotFormaPago');if(_efp) _efp.value=f['Forma de pago']||'';
-  const _etp=document.getElementById('editCotTiempoProd');if(_etp) _etp.value=f['Tiempo de producción']||'';
-  const _etd=document.getElementById('editCotTipoDias');const _etdb=document.getElementById('editCotTipoDiasBtn');const _tdv=f['Tipo días producción']||'DÍAS HÁBILES';if(_etd) _etd.value=_tdv;if(_etdb){_etdb.textContent=_tdv;if(_tdv==='DÍAS NORMALES'){_etdb.style.background='rgba(255,170,0,0.15)';_etdb.style.borderColor='rgba(255,170,0,0.5)';_etdb.style.color='var(--accent2)';}else{_etdb.style.background='rgba(0,212,204,0.15)';_etdb.style.borderColor='rgba(0,212,204,0.5)';_etdb.style.color='var(--accent)';}}
+  cotPlazoLoad('edit',f);
   const clienteIdActual=Array.isArray(f['Cliente'])?f['Cliente'][0]:(f['Cliente']||'');const clienteRec=clienteIdActual?state.clientes.find(x=>x.id===clienteIdActual):null;
   document.getElementById('editCotClienteSearch').value=clienteRec?.fields['Empresa']||resolveClienteName(f['Cliente'])||'';document.getElementById('editCotClienteId').value=clienteIdActual||'';
   const _ecInfo=document.getElementById('editCotClienteInfo');
@@ -10115,8 +10154,7 @@ function applyCopyCot(cotId){
     document.getElementById('cot-solicitud').value=f['Solicitud cliente (texto libre)']||'';
     const fp=document.getElementById('cot-forma-pago');if(fp) fp.value=f['Forma de pago']||'';
     document.getElementById('cot-urgente').value=f['Urgencia (+25%)']?'true':'false';
-    const tp=document.getElementById('cot-tiempo-prod');if(tp) tp.value=f['Tiempo de producción']||'';
-    const tdv=f['Tipo días producción']||'DÍAS HÁBILES';const td=document.getElementById('cot-tipo-dias');if(td) td.value=tdv;const tdb=document.getElementById('cot-tipo-dias-btn');if(tdb){tdb.textContent=tdv;tdb.style.background=tdv==='DÍAS NORMALES'?'rgba(255,170,0,0.15)':'rgba(0,212,204,0.15)';tdb.style.borderColor=tdv==='DÍAS NORMALES'?'rgba(255,170,0,0.5)':'rgba(0,212,204,0.5)';tdb.style.color=tdv==='DÍAS NORMALES'?'var(--accent2)':'var(--accent)';}
+    cotPlazoLoad('new',f);
     const disc=document.getElementById('cot-descuento');if(disc) disc.value=f['Descuento (%)']||0;
     const cont=document.getElementById('itemsContainer');if(cont) cont.innerHTML='';const tr=document.getElementById('itemsTotalRow');if(tr) tr.style.display='none';
     if(!_restoreCotItems(f['Detalle JSON'],addItemRow)){if(lineas.length) lineas.forEach(l=>addItemRow(l));else addItemRow();}
@@ -10124,8 +10162,7 @@ function applyCopyCot(cotId){
     document.getElementById('editCotSolicitud').value=f['Solicitud cliente (texto libre)']||'';
     const fp=document.getElementById('editCotFormaPago');if(fp) fp.value=f['Forma de pago']||'';
     document.getElementById('editCotUrgente').value=f['Urgencia (+25%)']?'true':'false';
-    const tp=document.getElementById('editCotTiempoProd');if(tp) tp.value=f['Tiempo de producción']||'';
-    const tdv=f['Tipo días producción']||'DÍAS HÁBILES';const td=document.getElementById('editCotTipoDias');if(td) td.value=tdv;const tdb=document.getElementById('editCotTipoDiasBtn');if(tdb){tdb.textContent=tdv;tdb.style.background=tdv==='DÍAS NORMALES'?'rgba(255,170,0,0.15)':'rgba(0,212,204,0.15)';tdb.style.borderColor=tdv==='DÍAS NORMALES'?'rgba(255,170,0,0.5)':'rgba(0,212,204,0.5)';tdb.style.color=tdv==='DÍAS NORMALES'?'var(--accent2)':'var(--accent)';}
+    cotPlazoLoad('edit',f);
     const disc=document.getElementById('editCotDescuento');if(disc) disc.value=f['Descuento (%)']||0;
     const cont=document.getElementById('editItemsContainer');if(cont) cont.innerHTML='';const tr=document.getElementById('editItemsTotalRow');if(tr) tr.style.display='none';
     if(!_restoreCotItems(f['Detalle JSON'],addEditItemRow)){if(lineas.length) lineas.forEach(l=>addEditItemRow(l));else addEditItemRow();}
@@ -10171,13 +10208,12 @@ async function saveEditCot(){
     const fields={'N° Cotización':document.getElementById('editCotNum').value,'Alias / Título':_aliasValE||null,'Canal solicitud':document.getElementById('editCotCanal').value,'Estado cotización':document.getElementById('editCotEstado').value,'Urgencia (+25%)':document.getElementById('editCotUrgente').value==='true','Fecha cotización':document.getElementById('editCotFecha').value,'Fecha vencimiento':document.getElementById('editCotVto').value,'Solicitud cliente (texto libre)':document.getElementById('editCotSolicitud').value,'Detalle productos':detalle,'Notas cotización':document.getElementById('editCotNotas').value,'Subtotal (CLP)':costoTotal,'Total final (CLP)':totalIva};
     if(_descPctE>0) fields['Descuento (%)']=_descPctE;
     const _sfp=document.getElementById('editCotFormaPago')?.value||'';if(_sfp) fields['Forma de pago']=_sfp;
-    const _stp=document.getElementById('editCotTiempoProd')?.value||'';if(_stp) fields['Tiempo de producción']=parseInt(_stp);
-    const _std=document.getElementById('editCotTipoDias')?.value||'';if(_std) fields['Tipo días producción']=_std;
+    Object.assign(fields,cotPlazoFields('edit'));
     const editClienteId=document.getElementById('editCotClienteId').value;if(editClienteId) fields['Cliente']=[editClienteId];
     const _evv=document.getElementById('editCotVendedor')?.value||'';fields['Vendedor']=_evv||null;
     const _itJsonE=_cotItemsJSON('#editItemsContainer .edit-item-row');fields['Detalle JSON']=_itJsonE||'';
     const cotId=document.getElementById('editCotId').value;
-    try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','PATCH',cotId,fields);ensureCotizacionFields();}
+    try{await airtableWrite('Cotizaciones','PATCH',cotId,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tiempo de producción máx'];delete fields['Tipo días producción'];delete fields['Fecha de entrega'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','PATCH',cotId,fields);ensureCotizacionFields();}
     toast('✓ Cotización actualizada','success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
     syncCotizacionADrive(cotId);
   }catch(e){toast('Error: '+e.message,'error');}
@@ -10251,10 +10287,8 @@ function buildFichaPropuestaDoc(cotId){
   const cliente=resolveClienteName(f['Cliente']);
   const proyecto=(data.nombreProyecto||f['Solicitud cliente (texto libre)']||'PROPUESTA').toUpperCase();
   const numFicha=String(data.numFicha||'01').padStart(2,'0');
-  // Plazo de entrega de la cotización (mismo dato que usa la cotización)
-  const _tiempoProd=f['Tiempo de producción'];
-  const _tipoDias=(f['Tipo días producción']||'DÍAS HÁBILES');
-  const plazoEntrega=_tiempoProd?(_tiempoProd+' '+String(_tipoDias).toLowerCase()):'';
+  // Plazo de entrega de la cotización (rango de días, número único o fecha fija)
+  const plazoEntrega=cotPlazoCorto(f);
   const savedItems=data.items||[];
   // Merge saved text data with session images (images are not saved to Airtable)
   const sessionItems=_fpCotId===cotId?_fpItems:[];
@@ -12027,12 +12061,11 @@ async function createCotizacion(){
     if(_descPctN>0) fields['Descuento (%)']=_descPctN;
     const formaVal=document.getElementById('cot-forma-pago')?.value||'';
     if(formaVal) fields['Forma de pago']=formaVal;
-    const tiempoVal=document.getElementById('cot-tiempo-prod')?.value||'';
-    if(tiempoVal){fields['Tiempo de producción']=parseInt(tiempoVal);fields['Tipo días producción']=document.getElementById('cot-tipo-dias')?.value||'DÍAS HÁBILES';}
+    Object.assign(fields,cotPlazoFields('new'));
     if(clienteId) fields['Cliente']=[clienteId];
     if(isVendorMode()){fields['Vendedor']=currentVendorId();}else{const vv=document.getElementById('cot-vendedor')?.value;if(vv) fields['Vendedor']=vv;}
     const _itJsonN=_cotItemsJSON('#itemsContainer .item-row');if(_itJsonN) fields['Detalle JSON']=_itJsonN;
-    try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
+    try{await airtableWrite('Cotizaciones','POST',null,fields);}catch(e){if(!e.message.toLowerCase().includes('unknown')) throw e;delete fields['Tiempo de producción'];delete fields['Tiempo de producción máx'];delete fields['Tipo días producción'];delete fields['Fecha de entrega'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
     toast(`✓ Cotización ${num} guardada`,'success');
     await _advanceEtapaCliente(clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
     clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
@@ -12385,9 +12418,9 @@ function startEditCotFlow(id){
     toast('Guardando…','info');
     const fields={'Estado cotización':a.estado,'Urgencia (+25%)':a.urgencia==='urgente','Notas cotización':a.notas||''};
     if(a.formaPago)fields['Forma de pago']=a.formaPago;
-    if(a.plazo){fields['Tiempo de producción']=parseInt(a.plazo);fields['Tipo días producción']='DÍAS HÁBILES';}
+    if(a.plazo){fields['Tiempo de producción']=parseInt(a.plazo);fields['Tipo días producción']='DÍAS HÁBILES';fields['Tiempo de producción máx']=null;fields['Fecha de entrega']=null;}
     try{await actualizarCotizacion(id,fields);}
-    catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Tiempo de producción'];delete fields['Tipo días producción'];await actualizarCotizacion(id,fields);}else throw e;}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Tiempo de producción'];delete fields['Tiempo de producción máx'];delete fields['Tipo días producción'];delete fields['Fecha de entrega'];await actualizarCotizacion(id,fields);}else throw e;}
     gfClose();await loadAllDataSilent();renderCotizaciones();renderOverview();
     toast('✓ Cotización actualizada','success');
     syncCotizacionADrive(id);
