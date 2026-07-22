@@ -5488,11 +5488,11 @@ function _reportarResultados(muts) {
     </div>
     <div class="mail-compose-field" id="mailCcRow" style="display:none">
       <span class="mail-compose-lbl">CC</span>
-      <input id="mailCmpCc" type="email" placeholder="">
+      <input id="mailCmpCc" type="email" placeholder="" list="mailContactsList" autocomplete="off">
     </div>
     <div class="mail-compose-field" id="mailBccRow" style="display:none">
       <span class="mail-compose-lbl">CCO</span>
-      <input id="mailCmpBcc" type="email" placeholder="copia oculta — los demás no lo ven">
+      <input id="mailCmpBcc" type="email" placeholder="copia oculta — los demás no lo ven" list="mailContactsList" autocomplete="off">
     </div>
     <div class="mail-compose-field">
       <span class="mail-compose-lbl">Asunto</span>
@@ -7606,6 +7606,23 @@ function _applyMonitorSistema(recs){
       const sigs=JSON.parse(sigRec.fields['Notes']||'{}');
       Object.entries(sigs).forEach(([email,html])=>{const k='thelab_mail_sig_'+email;if(html&&!localStorage.getItem(k)) localStorage.setItem(k,html);});
     }catch(e){logErr('monitorSistema:sigs',e);}
+  }
+  // Direcciones enviadas antes, respaldadas: une lo remoto con lo local por casilla
+  // (lo usado recién en este equipo va primero; el resto lo aporta el respaldo).
+  const sentRec=recs.find(r=>r.fields['Name']==='MAIL_SENT_ADDRESSES');
+  if(sentRec){
+    state.mailSentRecordId=sentRec.id;state._mailSentRemote=sentRec.fields['Notes']||'{}';
+    try{
+      const map=JSON.parse(sentRec.fields['Notes']||'{}');
+      Object.entries(map).forEach(([email,arr])=>{
+        if(!Array.isArray(arr))return;
+        const k='thelab_mail_sent_'+email;
+        let cur=[];try{cur=JSON.parse(localStorage.getItem(k)||'[]');}catch(e){}
+        const seen=new Set();const merged=[];
+        [...cur,...arr].forEach(e=>{const lk=String(e).toLowerCase();if(lk&&!seen.has(lk)){seen.add(lk);merged.push(lk);}});
+        localStorage.setItem(k,JSON.stringify(merged.slice(0,300)));
+      });
+    }catch(e){logErr('monitorSistema:sentAddrs',e);}
   }
   // Cronómetros de producción respaldados (registro compartido).
   const ptRec=recs.find(r=>r.fields['Name']==='PROD_TIMERS');

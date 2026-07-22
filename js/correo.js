@@ -685,13 +685,68 @@ const MAIL={
 
   fillContactsDatalist(){
     const dl=document.getElementById('mailContactsList');
-    if(!dl||typeof state==='undefined'||!state.clientes) return;
-    // En modo vendedor el autocompletar de destinatarios sólo ofrece los clientes propios.
-    const _base=(typeof isVendorMode==='function'&&isVendorMode())?state.clientes.filter(vendorOwnsRecord):state.clientes;
-    const opts=_base
-      .filter(c=>c.fields['Email'])
-      .map(c=>`<option value="${this.esc(c.fields['Email'])}">${this.esc(c.fields['Empresa']||c.fields['Contacto']||'')}</option>`);
+    if(!dl) return;
+    const seen=new Set();const opts=[];
+    // 1) Clientes registrados (etiqueta = empresa/contacto)
+    if(typeof state!=='undefined'&&state.clientes){
+      // En modo vendedor el autocompletar sólo ofrece los clientes propios.
+      const _base=(typeof isVendorMode==='function'&&isVendorMode())?state.clientes.filter(vendorOwnsRecord):state.clientes;
+      _base.forEach(c=>{
+        const em=(c.fields['Email']||'').trim();if(!em)return;
+        const k=em.toLowerCase();if(seen.has(k))return;seen.add(k);
+        opts.push(`<option value="${this.esc(em)}">${this.esc(c.fields['Empresa']||c.fields['Contacto']||'')}</option>`);
+      });
+    }
+    // 2) Direcciones a las que ya se envió antes (aunque no sean clientes registrados)
+    this.getSentAddrs().forEach(em=>{
+      const k=String(em).toLowerCase();if(!k||seen.has(k))return;seen.add(k);
+      opts.push(`<option value="${this.esc(em)}">enviado antes</option>`);
+    });
     dl.innerHTML=opts.join('');
+  },
+
+  // ── Direcciones enviadas antes (para autocompletar) ──
+  // Se guardan por casilla activa (como la firma) y se respaldan en Airtable
+  // (Monitor Sistema » MAIL_SENT_ADDRESSES) para sobrevivir al caché y a otros equipos.
+  _sentKey(){const a=this.activeAccount();return a?'thelab_mail_sent_'+a:null;},
+  getSentAddrs(){const k=this._sentKey();if(!k)return[];try{const v=JSON.parse(localStorage.getItem(k)||'[]');return Array.isArray(v)?v:[];}catch(e){return[];}},
+  _extractEmails(...strs){
+    const out=[];const re=/[^\s<>,;:"]+@[^\s<>,;:"]+\.[^\s<>,;:"]+/g;
+    strs.forEach(s=>{if(!s)return;const m=String(s).match(re);if(m)m.forEach(e=>out.push(e.trim().replace(/[.,;:]+$/,'')));});
+    return out;
+  },
+  addSentAddrs(...strs){
+    const k=this._sentKey();if(!k)return;
+    const found=this._extractEmails(...strs);
+    if(!found.length)return;
+    // Recién enviadas primero, luego el histórico; dedup case-insensitive; tope 300.
+    const seen=new Set();const list=[];
+    [...found, ...this.getSentAddrs()].forEach(e=>{const lk=String(e).toLowerCase();if(lk&&!seen.has(lk)){seen.add(lk);list.push(lk);}});
+    try{localStorage.setItem(k,JSON.stringify(list.slice(0,300)));}catch(e){}
+    this._saveSentAddrsAirtable();
+    try{this.fillContactsDatalist();}catch(e){}
+  },
+  async _saveSentAddrsAirtable(){
+    try{
+      let prev={};try{prev=JSON.parse(state._mailSentRemote||'{}');}catch(e){}
+      const all={...prev};
+      this.accounts().forEach(a=>{
+        const v=localStorage.getItem('thelab_mail_sent_'+a.email);if(!v)return;
+        let local=[];try{local=JSON.parse(v);}catch(e){return;}
+        const remote=Array.isArray(all[a.email])?all[a.email]:[];
+        const seen=new Set();const merged=[];
+        [...local, ...remote].forEach(e=>{const lk=String(e).toLowerCase();if(lk&&!seen.has(lk)){seen.add(lk);merged.push(lk);}});
+        all[a.email]=merged.slice(0,300);
+      });
+      const notes=JSON.stringify(all).slice(0,95000);
+      if(state.mailSentRecordId){
+        await airtableWrite('Monitor Sistema','PATCH',state.mailSentRecordId,{'Notes':notes});
+      }else{
+        const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'MAIL_SENT_ADDRESSES','Notes':notes});
+        if(r?.id) state.mailSentRecordId=r.id;
+      }
+      state._mailSentRemote=notes;
+    }catch(e){console.warn('[Direcciones] no se pudo respaldar en Airtable (queda local):',e.message);}
   },
 
   // ── Plantillas ──
@@ -994,6 +1049,7 @@ const MAIL={
       else{
         status.textContent='✓ Enviado';status.style.color='var(--success)';
         NOTIFY.add('sent','Correo enviado',to,'correo');
+        try{this.addSentAddrs(to,cc,bcc);}catch(e){}   // recuerda las direcciones para autocompletar luego
         // Cierre del ciclo cotización→PDF→correo: marca Enviada y deja registro
         if(this._cmpCotId){try{await this._registrarCotEnviada(this._cmpCotId,to);}catch(e){}this._cmpCotId=null;}
         // Reactivación: si el borrador vino de un agente, marca al cliente Reactivado
