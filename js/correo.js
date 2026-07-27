@@ -124,7 +124,7 @@ const MAIL={
 
   async post(params){
     if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
-    const fd=new FormData();
+    const fd=new URLSearchParams(); // urlencoded, no multipart: el WAF del hosting devuelve 415 a multipart/form-data
     const a=this.auth();
     fd.append('user',a.user); fd.append('pass',a.pass);
     for(const[k,v] of Object.entries(params)) fd.append(k,v);
@@ -150,7 +150,7 @@ const MAIL={
       return this.post(params);
     }
     if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
-    const fd=new FormData();
+    const fd=new URLSearchParams(); // urlencoded, no multipart: el WAF del hosting devuelve 415 a multipart/form-data
     fd.append('user',fromEmail); fd.append('pass',pass);
     for(const[k,v] of Object.entries(params)) fd.append(k,v);
     const ctrl=new AbortController();
