@@ -16,6 +16,19 @@ activos, con reintento anti-429; Newsletter armado; Worker blindado en el repo;
 CRM limpio). Las **6 acciones** que requerían tus accesos (Cloudflare, DNS,
 dashboard de Resend) ya están completadas.
 
+> ## 🔧 Actualización (2026-07-27) — se corrigieron registros DNS duplicados
+> Al re-verificar la autenticación del dominio se detectaron **duplicados** que
+> hacían que Gmail/Outlook **ignoraran** la protección (el estándar descarta el
+> DMARC/SPF cuando hay más de un registro):
+> - **DMARC duplicado**: existían dos registros `_dmarc` (`p=quarantine` y `p=none`).
+>   → Quedó **uno solo**: `v=DMARC1; p=none; rua=mailto:hola@thelab.solutions`.
+> - **SPF duplicado**: existían dos `v=spf1` en la raíz (`v=spf1 a mx ~all` y el que
+>   incluye SilverHost). → Quedó **uno solo**: `v=spf1 +a +mx include:_spf.silverhost.cl ~all`.
+>
+> Ambos verificados vía DNS-over-HTTPS (un único registro en cada consulta).
+> Recordatorio automático programado para **2026-08-17**: revisar reportes DMARC y,
+> si la entrega se ve bien, subir a `p=quarantine`.
+
 ---
 
 ## 1. Re-desplegar el Worker de leads
@@ -53,18 +66,17 @@ Activa la firma de Andrea en la auto-respuesta + los fixes anti-pérdida de lead
 - [ ] En **make.com**, abre el escenario **"The Lab — Newsletter · Tracking (Resend webhook)"**
   y ponlo en **ON** (toggle).
 
-## 3. DMARC (reputación del dominio)
-En el panel DNS de `thelab.solutions` (Cloudflare), agrega un registro:
+## 3. DMARC (reputación del dominio) — ✅ HECHO Y VERIFICADO (2026-07-27)
+Registro único publicado en Cloudflare (se eliminó un duplicado que lo anulaba):
 
-- [ ] Tipo: **TXT**
-- [ ] Nombre: `_dmarc`
-- [ ] Valor (**decidido: arranque suave con `p=none`**):
-  ```
-  v=DMARC1; p=none; rua=mailto:hola@thelab.solutions
-  ```
-- [ ] Guardar.
-- [ ] **En 2–3 semanas** (si todo llega bien): edita el registro y sube a
-  `p=quarantine` cambiando solo esa palabra.
+- [x] TXT `_dmarc` = `v=DMARC1; p=none; rua=mailto:hola@thelab.solutions` — verificado por DNS-over-HTTPS.
+- [ ] **~2026-08-17** (si todo llega bien): subir a `p=quarantine` cambiando solo esa palabra.
+  *(Recordatorio automático programado para esa fecha; avisa por push/email.)*
+
+## 3b. SPF — ✅ HECHO Y VERIFICADO (2026-07-27)
+Había **dos** registros SPF en la raíz, lo que invalidaba la validación. Quedó uno solo:
+
+- [x] TXT raíz = `v=spf1 +a +mx include:_spf.silverhost.cl ~all` — verificado por DNS-over-HTTPS.
 
 ## 4. Monitoreo externo gratis (que nunca se caiga el formulario sin avisar)
 - [ ] Entra a **uptimerobot.com** (plan gratis) → **New Monitor**.
