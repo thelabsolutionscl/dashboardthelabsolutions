@@ -2945,7 +2945,9 @@
       <div style="padding:16px 18px;overflow:auto">
         <div class="field-group"><label class="field-label">Asunto</label><input class="field-input" id="nlEditAsunto" maxlength="200"></div>
         <div class="field-group"><label class="field-label">Preheader</label><input class="field-input" id="nlEditPreheader" maxlength="200"></div>
-        <div class="field-group"><label class="field-label">Cuerpo (Markdown)</label><textarea class="field-textarea" id="nlEditCuerpo" rows="14" style="font-family:'JetBrains Mono',monospace;font-size:12px"></textarea></div>
+        <div class="field-group"><label class="field-label">Cuerpo (Markdown)</label>
+          <div style="margin-bottom:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="nlInsertImage()">📷 Insertar imagen</button></div>
+          <textarea class="field-textarea" id="nlEditCuerpo" rows="14" style="font-family:'JetBrains Mono',monospace;font-size:12px"></textarea></div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nlEditModal').style.display='none'">Cancelar</button>

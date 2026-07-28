@@ -1263,6 +1263,23 @@ function nlPreviewGenerated(){
 function nlPreviewEdit(){
   _nlShowPreview(_nlEmailHtml({'Asunto':document.getElementById('nlEditAsunto').value,'Preheader':document.getElementById('nlEditPreheader').value,'Cuerpo (Markdown)':document.getElementById('nlEditCuerpo').value}));
 }
+// Inserta una imagen (Markdown) en el cuerpo del newsletter, en la posición del
+// cursor. La imagen debe estar en una URL pública (web, Drive público, etc.).
+function nlInsertImage(){
+  const ta=document.getElementById('nlEditCuerpo'); if(!ta) return;
+  let url=prompt('Pega la URL pública de la imagen (tu web, Drive público, etc.):','https://');
+  if(url===null) return;
+  url=url.trim();
+  if(!/^https?:\/\/\S+/i.test(url)){toast('URL inválida — debe empezar con http:// o https://','error');return;}
+  let alt=(prompt('Descripción corta de la imagen (opcional, ayuda a la accesibilidad):','')||'').trim().replace(/[\[\]()]/g,'');
+  const snippet=`\n\n![${alt}](${url})\n\n`;
+  const s=(ta.selectionStart!=null)?ta.selectionStart:ta.value.length;
+  const e=(ta.selectionEnd!=null)?ta.selectionEnd:ta.value.length;
+  ta.value=ta.value.slice(0,s)+snippet+ta.value.slice(e);
+  const pos=s+snippet.length;
+  ta.focus(); try{ta.setSelectionRange(pos,pos);}catch(_){}
+  toast('Imagen insertada — usa 👁 Vista previa para verla','success');
+}
 async function nlSendTest(id){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
   if(typeof MAIL==='undefined'||!MAIL.post){toast('Correo no disponible','error');return;}
