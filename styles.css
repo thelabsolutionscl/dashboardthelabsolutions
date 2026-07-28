@@ -878,6 +878,9 @@ body.mail-fs-on .mail-compose-panel{z-index:460!important;}
 .mail-att-chip:hover{border-color:var(--accent);color:var(--accent);}
 .mail-att-chip .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mail-att-chip .att-x{color:var(--danger);cursor:pointer;font-size:13px;line-height:1;flex-shrink:0;}
+/* Con muchos adjuntos, la lista no debe empujar el cuerpo del correo fuera de
+   la pantalla: se limita en alto y hace su propio scroll (clave en móvil). */
+#mailRdrAtts{max-height:158px;overflow-y:auto;overscroll-behavior:contain;padding-right:2px;}
 .mail-cmp-atts{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 6px;}
 .mail-tpl-menu{position:absolute;bottom:100%;left:0;margin-bottom:4px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.5);min-width:220px;max-height:260px;overflow-y:auto;z-index:10;}
 .mail-tpl-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-size:12px;color:var(--text2);cursor:pointer;gap:8px;}
@@ -885,6 +888,8 @@ body.mail-fs-on .mail-compose-panel{z-index:460!important;}
 .mail-compose-footer{padding:9px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-shrink:0;}
 @media(max-width:900px){
   .mail-client{grid-template-columns:1fr;height:calc(100vh - 230px);height:calc(100dvh - 230px);}
+  /* En móvil la pantalla es más corta: adjuntos aún más compactos y con scroll. */
+  #mailRdrAtts{max-height:104px;}
   .mail-folders,.mail-list-wrap,.mail-reader{display:none;}
   .mail-client.mob-folders .mail-folders{display:flex;}
   .mail-client.mob-list .mail-list-wrap{display:flex;}
