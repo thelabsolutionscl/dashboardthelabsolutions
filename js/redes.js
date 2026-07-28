@@ -1189,23 +1189,45 @@ async function nlSchedule(id){
   }catch(e){toast('No se pudo programar: '+e.message,'error');}
 }
 
-// Markdown → HTML (títulos, negritas, listas, links, párrafos). Base para preview, prueba y el "Cuerpo HTML" que envía Make.
+// Corrige dominios mal escritos por la IA (el dominio real es thelab.solutions).
+function _nlFixDomain(s){
+  return String(s||'')
+    .replace(/thelabsolutions\.cl/gi,'thelab.solutions')
+    .replace(/@thelab\.cl\b/gi,'@thelab.solutions');
+}
+// Markdown → HTML (títulos, negritas, listas, citas, reglas, imágenes, links,
+// y un botón para el CTA). Base para preview, prueba y el "Cuerpo HTML" que envía Make.
 function _nlMdToHtml(md){
-  const inline=s=>escapeHtml(s)
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" style="color:#00a99d">$1</a>');
-  const lines=String(md||'').replace(/\r/g,'').split('\n');
+  const AC='#00a99d';
+  const linkify=s=>s.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)/g,
+    `<a href="$2" style="color:${AC};text-decoration:underline">$1</a>`);
+  const inline=s=>linkify(escapeHtml(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>'));
+  // Una línea que es SOLO un link (opcionalmente con → al inicio) → botón CTA.
+  const ctaOf=line=>{
+    const m=line.replace(/^[\s→>\-*]+/,'').match(/^\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)$/);
+    return m?{text:m[1],url:m[2]}:null;
+  };
+  const lines=_nlFixDomain(md).replace(/\r/g,'').split('\n');
   let html='',inList=false;
   const closeList=()=>{if(inList){html+='</ul>';inList=false;}};
   for(const raw of lines){
     const line=raw.trim();
     if(!line){closeList();continue;}
     let m;
-    if(m=line.match(/^###\s+(.+)/)){closeList();html+=`<h3 style="margin:18px 0 6px;font-size:16px">${inline(m[1])}</h3>`;}
-    else if(m=line.match(/^##\s+(.+)/)){closeList();html+=`<h2 style="margin:20px 0 8px;font-size:19px">${inline(m[1])}</h2>`;}
-    else if(m=line.match(/^#\s+(.+)/)){closeList();html+=`<h2 style="margin:20px 0 8px;font-size:21px">${inline(m[1])}</h2>`;}
-    else if(m=line.match(/^[-*•]\s+(.+)/)){if(!inList){html+='<ul style="margin:8px 0;padding-left:20px">';inList=true;}html+=`<li style="margin:3px 0">${inline(m[1])}</li>`;}
-    else{closeList();html+=`<p style="margin:0 0 12px">${inline(line)}</p>`;}
+    // Imagen ![alt](url)
+    if(m=line.match(/^!\[([^\]]*)\]\(([^)\s]+)\)/)){closeList();html+=`<img src="${escapeHtml(m[2])}" alt="${escapeHtml(m[1])}" style="display:block;width:100%;max-width:100%;height:auto;border-radius:10px;margin:16px 0">`;continue;}
+    // Regla horizontal: --- *** ___
+    if(/^([-*_])\1{2,}$/.test(line)){closeList();html+='<hr style="border:none;border-top:1px solid #e6e6e9;margin:24px 0">';continue;}
+    // CTA (línea que es solo un enlace) → botón
+    const cta=ctaOf(line);
+    if(cta){closeList();html+=`<div style="text-align:center;margin:24px 0"><a href="${escapeHtml(cta.url)}" style="display:inline-block;background:${AC};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 28px;border-radius:9px">${escapeHtml(cta.text)}</a></div>`;continue;}
+    // Cita > con estilo
+    if(m=line.match(/^>\s?(.+)/)){closeList();html+=`<blockquote style="margin:18px 0;padding:12px 18px;background:#f2fbfa;border-left:3px solid ${AC};border-radius:0 8px 8px 0;color:#2b3a3a;font-style:italic">${inline(m[1])}</blockquote>`;continue;}
+    if(m=line.match(/^###\s+(.+)/)){closeList();html+=`<h3 style="margin:18px 0 6px;font-size:16px;color:#111">${inline(m[1])}</h3>`;}
+    else if(m=line.match(/^##\s+(.+)/)){closeList();html+=`<h2 style="margin:24px 0 8px;font-size:20px;color:#0f0f10">${inline(m[1])}</h2>`;}
+    else if(m=line.match(/^#\s+(.+)/)){closeList();html+=`<h2 style="margin:24px 0 8px;font-size:22px;color:#0f0f10">${inline(m[1])}</h2>`;}
+    else if(m=line.match(/^[-*•]\s+(.+)/)){if(!inList){html+='<ul style="margin:10px 0;padding-left:22px">';inList=true;}html+=`<li style="margin:5px 0">${inline(m[1])}</li>`;}
+    else{closeList();html+=`<p style="margin:0 0 14px">${inline(line)}</p>`;}
   }
   closeList();
   return html||'<p style="color:#999">(sin contenido)</p>';
@@ -1218,7 +1240,7 @@ function _nlEmailHtml(f){
   (pre?`<span style="display:none;max-height:0;overflow:hidden;opacity:0">${pre}</span>`:'')+
   `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5"><tr><td align="center" style="padding:24px 12px">`+
   `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e6e6e9">`+
-  `<tr><td style="background:#0b0b0c;padding:18px 28px"><img src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab Solutions" height="28" style="height:28px;width:auto;max-width:220px;display:block;border:0;outline:none;text-decoration:none" onerror="this.style.display='none';var t=this.parentNode.querySelector('.nl-brand-txt');if(t)t.style.display='inline'"><span class="nl-brand-txt" style="display:none;color:#fff;font-weight:800;font-size:16px;letter-spacing:.04em">THE LAB <span style="color:#00d4cc">SOLUTIONS</span></span></td></tr>`+
+  `<tr><td align="center" style="background:#0b0b0c;padding:26px 28px"><img src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab Solutions" width="210" style="width:210px;max-width:60%;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none" onerror="this.style.display='none';var t=this.parentNode.querySelector('.nl-brand-txt');if(t)t.style.display='inline'"><span class="nl-brand-txt" style="display:none;color:#fff;font-weight:800;font-size:18px;letter-spacing:.04em">THE LAB <span style="color:#00d4cc">SOLUTIONS</span></span></td></tr>`+
   `<tr><td style="padding:28px;font-family:system-ui,Arial,sans-serif;color:#18181b;font-size:15px;line-height:1.65">${_nlMdToHtml(f['Cuerpo (Markdown)']||'')}</td></tr>`+
   `<tr><td style="padding:18px 28px;background:#fafafa;border-top:1px solid #eee;font-family:system-ui,Arial,sans-serif;color:#9a9aa2;font-size:11px;line-height:1.6">`+
   `The Lab Solutions · Fabricación digital · Las Condes, Santiago, Chile<br>`+
