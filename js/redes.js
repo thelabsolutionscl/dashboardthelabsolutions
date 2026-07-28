@@ -1202,9 +1202,11 @@ function _nlMdToHtml(md){
   const linkify=s=>s.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)/g,
     `<a href="$2" style="color:${AC};text-decoration:underline">$1</a>`);
   const inline=s=>linkify(escapeHtml(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>'));
-  // Una línea que es SOLO un link (opcionalmente con → al inicio) → botón CTA.
+  // Una línea que es SOLO un link (con cualquier prefijo de marcadores: flechas
+  // →➜⟶», emojis, viñetas, espacios) → botón CTA. Un enlace dentro de una frase
+  // (con letras antes) NO se convierte en botón.
   const ctaOf=line=>{
-    const m=line.replace(/^[\s→>\-*]+/,'').match(/^\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)$/);
+    const m=line.match(/^[^\p{L}\p{N}\[]*\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)\s*$/u);
     return m?{text:m[1],url:m[2]}:null;
   };
   const lines=_nlFixDomain(md).replace(/\r/g,'').split('\n');
