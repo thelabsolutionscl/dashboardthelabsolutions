@@ -128,15 +128,25 @@ const MAIL={
     const a=this.auth();
     fd.append('user',a.user); fd.append('pass',a.pass);
     for(const[k,v] of Object.entries(params)) fd.append(k,v);
-    const ctrl=new AbortController();
-    const timeout=setTimeout(()=>ctrl.abort(),30000);
-    try{
-      const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
-      const text=await r.text();
-      return this._parseResp(text,r.status);
-    }catch(e){
-      return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
-    }finally{clearTimeout(timeout);}
+    // El WAF del hosting bloquea de forma INTERMITENTE (fetch falla sin CORS).
+    // Reintentamos con backoff SOLO en lecturas — nunca en 'send', para no
+    // arriesgar envíos duplicados.
+    const canRetry=!(params&&params.action==='send');
+    const tries=canRetry?3:1;
+    let lastErr='Sin conexión con el servidor';
+    for(let i=0;i<tries;i++){
+      const ctrl=new AbortController();
+      const timeout=setTimeout(()=>ctrl.abort(),30000);
+      try{
+        const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
+        const text=await r.text();
+        return this._parseResp(text,r.status);
+      }catch(e){
+        lastErr=e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor';
+        if(i<tries-1&&e.name!=='AbortError'){await new Promise(res=>setTimeout(res,500*(i+1)));continue;}
+      }finally{clearTimeout(timeout);}
+    }
+    return{error:lastErr};
   },
 
   // Envía autenticando como OTRA casilla (p.ej. hola@) usando su clave guardada
