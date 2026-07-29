@@ -750,12 +750,7 @@ const MAIL={
         all[a.email]=merged.slice(0,300);
       });
       const notes=JSON.stringify(all).slice(0,95000);
-      if(state.mailSentRecordId){
-        await airtableWrite('Monitor Sistema','PATCH',state.mailSentRecordId,{'Notes':notes});
-      }else{
-        const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'MAIL_SENT_ADDRESSES','Notes':notes});
-        if(r?.id) state.mailSentRecordId=r.id;
-      }
+      await _monitorUpsert('MAIL_SENT_ADDRESSES',notes,'mailSentRecordId');
       state._mailSentRemote=notes;
     }catch(e){console.warn('[Direcciones] no se pudo respaldar en Airtable (queda local):',e.message);}
   },
