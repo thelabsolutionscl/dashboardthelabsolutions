@@ -434,28 +434,43 @@ function saveIAConfig(){
   toast(o?.value.trim()?'OpenAI key guardada ✓':'Sin API key configurada','success');
 }
 
+// Reduce un data URL de imagen para que su base64 quepa HOLGADO en una celda de
+// texto de Airtable (límite duro 100.000 chars — usamos ~70k para dejar margen al
+// resto del JSON de la ficha). Baja la resolución conservando transparencia (PNG);
+// si aún no entra, cae a JPEG (sin transparencia) con calidad decreciente.
+function _fpFitLogo(dataUrl,maxChars=70000){
+  return new Promise(resolve=>{
+    if(!dataUrl) return resolve('');
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const scaleTo=max=>{ let w=img.naturalWidth||max,h=img.naturalHeight||max;
+          if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}
+          const c=document.createElement('canvas');c.width=Math.max(1,w);c.height=Math.max(1,h);
+          c.getContext('2d').drawImage(img,0,0,w,h);return c; };
+        for(const max of [360,300,240,200,160,120]){                 // PNG a resolución decreciente
+          const png=scaleTo(max).toDataURL('image/png');
+          if(png.length<=maxChars) return resolve(png);
+        }
+        const c=scaleTo(240);                                        // último recurso: JPEG
+        for(const q of [0.8,0.6,0.45,0.3]){ const j=c.toDataURL('image/jpeg',q); if(j.length<=maxChars) return resolve(j); }
+        return resolve(c.toDataURL('image/jpeg',0.3));
+      }catch(_){ resolve(dataUrl.length<=maxChars?dataUrl:''); }
+    };
+    img.onerror=()=>resolve(dataUrl.length<=maxChars?dataUrl:'');
+    img.src=dataUrl;
+  });
+}
 function handleFPLogo(evt){
   const file=evt.target.files[0];if(!file) return;
   const reader=new FileReader();
   reader.onload=e=>{
-    const setLogo=(dataUrl)=>{
-      _fpLogoCliente=dataUrl;
-      const prev=document.getElementById('fpLogoPrev');if(prev){prev.src=dataUrl;prev.style.display='block';}
-      const ph=document.getElementById('fpLogoPh');if(ph) ph.style.display='none';
-    };
-    // Reducir el logo para que quepa en el JSON de la ficha (Airtable) sin pesar de más.
-    const img=new Image();
-    img.onload=()=>{
-      try{
-        const max=360;let w=img.naturalWidth||max,h=img.naturalHeight||max;
-        if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}
-        const c=document.createElement('canvas');c.width=w;c.height=h;
-        c.getContext('2d').drawImage(img,0,0,w,h);
-        setLogo(c.toDataURL('image/png'));
-      }catch(_){setLogo(e.target.result);}
-    };
-    img.onerror=()=>setLogo(e.target.result);
-    img.src=e.target.result;
+    // Ajusta el logo para que quepa en el JSON de la ficha (Airtable) sin fallar el guardado.
+    _fpFitLogo(e.target.result).then(dataUrl=>{
+      _fpLogoCliente=dataUrl||'';
+      const prev=document.getElementById('fpLogoPrev');if(prev){prev.src=_fpLogoCliente;prev.style.display=_fpLogoCliente?'block':'none';}
+      const ph=document.getElementById('fpLogoPh');if(ph) ph.style.display=_fpLogoCliente?'none':'';
+    });
   };
   reader.readAsDataURL(file);
 }

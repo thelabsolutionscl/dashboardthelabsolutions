@@ -10319,6 +10319,8 @@ function selectEditCotCliente(id){
 
 async function saveFichaPropModal(verPDF=false){
   if(!_fpCotId) return;
+  // Garantiza que el logo del cliente quepa en la celda de Airtable (evita el 422 por celda muy grande).
+  if(typeof _fpFitLogo==='function'){ try{ _fpLogoCliente=await _fpFitLogo(_fpLogoCliente); }catch(_){} }
   const data={
     numFicha:document.getElementById('fpNumFicha').value||'01',
     nombreProyecto:document.getElementById('fpNombreProyecto').value||'',
@@ -10346,7 +10348,8 @@ async function saveFichaPropModal(verPDF=false){
         await airtableWrite('Cotizaciones','PATCH',_fpCotId,{'Ficha Propuesta':JSON.stringify(data)});
         applyAndClose();
       }catch(e2){
-        toast('Crea el campo "Ficha Propuesta" (texto largo) manualmente en Airtable → tabla Cotizaciones','error');
+        const big=(e2.message||'').match(/too long|too large|invalid value|422/i);
+        toast(big?'No se pudo guardar: el logo del cliente pesa demasiado. Prueba con una imagen más liviana.':'No se pudo guardar la ficha: '+(e2.message||'error'),'error');
       }
     } else {
       toast('Error: '+e.message,'error');
