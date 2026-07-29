@@ -1206,7 +1206,7 @@ function _nlMdToHtml(md){
   // →➜⟶», emojis, viñetas, espacios) → botón CTA. Un enlace dentro de una frase
   // (con letras antes) NO se convierte en botón.
   const ctaOf=line=>{
-    const m=line.match(/^[^\p{L}\p{N}\[]*\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)\s*$/u);
+    const m=line.match(/^[^\p{L}\p{N}\[]*\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)[^\p{L}\p{N}]*$/u);
     return m?{text:m[1],url:m[2]}:null;
   };
   const lines=_nlFixDomain(md).replace(/\r/g,'').split('\n');
