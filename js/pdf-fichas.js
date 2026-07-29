@@ -520,6 +520,12 @@ function _fpSetPrompt(idx,campo,val){if(!_fpItems[idx])return;if(!_fpItems[idx].
 // que la foto no se vea con un recuadro negro dentro de la ficha (fondo blanco).
 // Si las 4 esquinas NO son un color uniforme (foto real con fondo con textura),
 // deja la imagen intacta. Devuelve la misma dataUrl ante cualquier error.
+// Normaliza la imagen de una vista para la ficha SIN destruir el producto.
+// Aprendizaje: recortar el fondo por color se come los productos claros (p.ej.
+// un soporte impreso en blanco sobre fondo crema queda borrado). Por eso ya NO
+// recortamos el fondo de fotos reales: se muestran tal cual (su fondo liso claro
+// se ve profesional en la ficha). Sólo aplanamos la transparencia sobre blanco
+// para que nunca aparezca un fondo negro en el PDF.
 async function _fpRemoveBg(dataUrl){
   try{
     if(!dataUrl||typeof dataUrl!=='string'||dataUrl.indexOf('data:image')!==0) return dataUrl;
@@ -529,35 +535,11 @@ async function _fpRemoveBg(dataUrl){
     const c=document.createElement('canvas');c.width=w;c.height=h;
     const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
     const id=ctx.getImageData(0,0,w,h);const d=id.data;
-    const cIdx=[0,(w-1)*4,(h-1)*w*4,((h-1)*w+(w-1))*4];
-    let bgR=0,bgG=0,bgB=0;
-    cIdx.forEach(i=>{bgR+=d[i];bgG+=d[i+1];bgB+=d[i+2];});
-    bgR=Math.round(bgR/4);bgG=Math.round(bgG/4);bgB=Math.round(bgB/4);
-    // ¿son las 4 esquinas parecidas entre sí? Si no, el fondo no es liso: no tocar.
-    const uniform=cIdx.every(i=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB)<60);
-    if(!uniform) return dataUrl;
-    const dist=i=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB);
-    // Borde SUAVIZADO: no es un corte binario. El flood recorre desde los bordes
-    // mientras el color se parezca al fondo (< outer); asigna alfa gradual — 0 en el
-    // fondo puro (<= inner) y subiendo a 255 al acercarse al producto. Así no queda
-    // el "halo" dentado del umbral duro.
-    const inner=150, outer=360;
-    const near=i=>dist(i)<outer;
-    const visited=new Uint8Array(w*h);const queue=[];
-    const push=p=>{ if(!visited[p]&&near(p*4)){ visited[p]=1; queue.push(p); } };
-    for(let x=0;x<w;x++){ push(x); push(x+(h-1)*w); }
-    for(let y=1;y<h-1;y++){ push(y*w); push(y*w+(w-1)); }
-    let qi=0;
-    while(qi<queue.length){
-      const p=queue[qi++];
-      const dd=dist(p*4);
-      d[p*4+3]= dd<=inner ? 0 : Math.round(Math.min(1,(dd-inner)/(outer-inner))*255);
-      const x=p%w,y=Math.floor(p/w);
-      if(x>0)push(p-1); if(x<w-1)push(p+1); if(y>0)push(p-w); if(y<h-1)push(p+w);
-    }
-    ctx.putImageData(id,0,0);
-    // Aplana sobre BLANCO: el borde difuso se mezcla con el blanco de la ficha (sin
-    // halo translúcido) y de paso evita cualquier fondo negro en el PDF.
+    // ¿Tiene transparencia? (algún píxel con alfa < 250)
+    let transp=false;
+    for(let i=3;i<d.length;i+=4){ if(d[i]<250){ transp=true; break; } }
+    if(!transp) return dataUrl;   // foto opaca (producto real): NO tocar
+    // PNG con transparencia (p.ej. vista generada): aplánalo sobre blanco.
     const out=document.createElement('canvas');out.width=w;out.height=h;
     const octx=out.getContext('2d');octx.fillStyle='#ffffff';octx.fillRect(0,0,w,h);
     octx.drawImage(c,0,0);
