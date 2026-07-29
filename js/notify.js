@@ -384,7 +384,7 @@ ${ceoHtml}
 let _mailPollTimer = null;
 let _mailLastUnseen = -1;
 let _notifPermission = false;
-const _POLL_INTERVAL = 30000; // 30 segundos
+const _POLL_INTERVAL = 60000; // 60 segundos (SilverHost pidió bajar la frecuencia de consulta a mail-api para no disparar el antibot del firewall; 1/min alcanza de sobra)
 const _BASE_TITLE = document.title;
 
 // Solicita permiso para notificaciones del sistema operativo
