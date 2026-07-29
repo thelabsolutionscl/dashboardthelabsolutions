@@ -536,22 +536,32 @@ async function _fpRemoveBg(dataUrl){
     // ¿son las 4 esquinas parecidas entre sí? Si no, el fondo no es liso: no tocar.
     const uniform=cIdx.every(i=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB)<60);
     if(!uniform) return dataUrl;
-    const thresh=70;
-    const isBg=(i)=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB)<thresh*3;
+    const dist=i=>Math.abs(d[i]-bgR)+Math.abs(d[i+1]-bgG)+Math.abs(d[i+2]-bgB);
+    // Borde SUAVIZADO: no es un corte binario. El flood recorre desde los bordes
+    // mientras el color se parezca al fondo (< outer); asigna alfa gradual — 0 en el
+    // fondo puro (<= inner) y subiendo a 255 al acercarse al producto. Así no queda
+    // el "halo" dentado del umbral duro.
+    const inner=150, outer=360;
+    const near=i=>dist(i)<outer;
     const visited=new Uint8Array(w*h);const queue=[];
-    for(let x=0;x<w;x++){[x,x+(h-1)*w].forEach(p=>{if(!visited[p]&&isBg(p*4)){visited[p]=1;queue.push(p);}});}
-    for(let y=1;y<h-1;y++){[y*w,y*w+(w-1)].forEach(p=>{if(!visited[p]&&isBg(p*4)){visited[p]=1;queue.push(p);}});}
+    const push=p=>{ if(!visited[p]&&near(p*4)){ visited[p]=1; queue.push(p); } };
+    for(let x=0;x<w;x++){ push(x); push(x+(h-1)*w); }
+    for(let y=1;y<h-1;y++){ push(y*w); push(y*w+(w-1)); }
     let qi=0;
     while(qi<queue.length){
-      const p=queue[qi++];d[p*4+3]=0;
+      const p=queue[qi++];
+      const dd=dist(p*4);
+      d[p*4+3]= dd<=inner ? 0 : Math.round(Math.min(1,(dd-inner)/(outer-inner))*255);
       const x=p%w,y=Math.floor(p/w);
-      if(x>0){const n=p-1;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
-      if(x<w-1){const n=p+1;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
-      if(y>0){const n=p-w;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
-      if(y<h-1){const n=p+w;if(!visited[n]&&isBg(n*4)){visited[n]=1;queue.push(n);}}
+      if(x>0)push(p-1); if(x<w-1)push(p+1); if(y>0)push(p-w); if(y<h-1)push(p+w);
     }
     ctx.putImageData(id,0,0);
-    return c.toDataURL('image/png');
+    // Aplana sobre BLANCO: el borde difuso se mezcla con el blanco de la ficha (sin
+    // halo translúcido) y de paso evita cualquier fondo negro en el PDF.
+    const out=document.createElement('canvas');out.width=w;out.height=h;
+    const octx=out.getContext('2d');octx.fillStyle='#ffffff';octx.fillRect(0,0,w,h);
+    octx.drawImage(c,0,0);
+    return out.toDataURL('image/png');
   }catch(e){console.warn('[_fpRemoveBg]',e);return dataUrl;}
 }
 
