@@ -103,8 +103,7 @@ async function _calBackup(){
     const gmapMts=Math.max(gm.mts,+(prev.gmapMts||0));
     const gmap=gm.mts>=+(prev.gmapMts||0)?gm.map:(prev.gmap||gm.map);
     const notes=JSON.stringify({events,gmap,gmapMts}).slice(0,95000);
-    if(state.calRecordId) await airtableWrite('Monitor Sistema','PATCH',state.calRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'CALENDARIO','Notes':notes});if(r?.id)state.calRecordId=r.id;}
+    await _monitorUpsert('CALENDARIO',notes,'calRecordId');
     state._calRemote=notes;
   }catch(e){}
 }

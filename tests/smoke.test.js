@@ -137,6 +137,11 @@ const ok = msg => console.log('  ✓ ' + msg);
     '_calMerge', '_calPrune', '_calReconcile', '_calBackup', '_calPoll', 'startCalSync',
     'calGoogleConnect', 'calSyncAll', '_calAutoSync', '_calSyncEvento', '_calNeedsSync', '_calGcalBody',
     'startCalAlarmas', '_calAlarmTick', 'calPedirPermisoAvisos', 'calToggleConfig', 'calSaveConfig',
+    // upsert anti-duplicados en Monitor Sistema
+    '_monitorUpsert',
+    // buscador de empresa en Nuevo Lead / Cliente
+    '_nlEmpNorm', '_nlEmpMatchExacto', '_nlEmpCandidatos', 'nlEmpresaBuscar', '_nlEmpAviso',
+    'nlEmpresaCerrar', 'nlEmpresaNueva', 'nlEmpresaForzar', 'nlEmpresaPick', 'nlEmpresaKey',
   ];
   const probs = [];
   CRITICAL.forEach(n => {

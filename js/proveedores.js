@@ -573,8 +573,7 @@ function _preciosProvSaveArr(arr){try{localStorage.setItem(_PRECIOS_PROV_KEY,JSO
 async function _preciosProvBackup(){
   try{
     const notes=localStorage.getItem(_PRECIOS_PROV_KEY)||'[]';
-    if(state.preciosProvRecordId) await airtableWrite('Monitor Sistema','PATCH',state.preciosProvRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'PRECIOS_PROV','Notes':notes});if(r&&r.id)state.preciosProvRecordId=r.id;}
+    await _monitorUpsert('PRECIOS_PROV',notes,'preciosProvRecordId');
   }catch(e){}
 }
 // Normaliza el nombre de ítem para agrupar (minúsculas, sin tildes ni espacios extra)
@@ -683,8 +682,7 @@ function _ocAll(){try{return JSON.parse(localStorage.getItem(_OC_KEY)||'[]');}ca
 function _ocSaveArr(arr){try{localStorage.setItem(_OC_KEY,JSON.stringify(arr||[]));}catch(e){}_ocBackup();}
 async function _ocBackup(){
   try{const notes=localStorage.getItem(_OC_KEY)||'[]';
-    if(state.ocRecordId) await airtableWrite('Monitor Sistema','PATCH',state.ocRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'ORDENES_COMPRA','Notes':notes});if(r&&r.id)state.ocRecordId=r.id;}
+    await _monitorUpsert('ORDENES_COMPRA',notes,'ocRecordId');
   }catch(e){}
 }
 function _ocNextNum(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}

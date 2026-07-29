@@ -932,12 +932,7 @@ const MAIL={
       const all={...prev};
       this.accounts().forEach(a=>{const v=localStorage.getItem('thelab_mail_sig_'+a.email);if(v) all[a.email]=v;});
       const notes=JSON.stringify(all).slice(0,95000);
-      if(state.mailSigsRecordId){
-        await airtableWrite('Monitor Sistema','PATCH',state.mailSigsRecordId,{'Notes':notes});
-      }else{
-        const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'MAIL_SIGNATURES','Notes':notes});
-        if(r?.id) state.mailSigsRecordId=r.id;
-      }
+      await _monitorUpsert('MAIL_SIGNATURES',notes,'mailSigsRecordId');
       state._mailSigsRemote=notes;
     }catch(e){console.warn('[Firmas] no se pudo respaldar en Airtable (queda local):',e.message);}
   },

@@ -1350,7 +1350,12 @@
   <div class="card">
     <div class="card-header"><span class="card-title">Datos del Lead</span><button id="watiConfigBtn" onclick="openWatiModal()" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer">⚙ WATI</button></div>
     <div class="form-grid">
-      <div class="field-group"><label class="field-label">Empresa *</label><input class="field-input" id="nl-empresa" placeholder="Acme Corp"></div>
+      <div class="field-group" style="position:relative">
+        <label class="field-label">Empresa * <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">— escribe para buscar una existente o crear una nueva</span></label>
+        <input class="field-input" id="nl-empresa" placeholder="Acme Corp" autocomplete="off" oninput="nlEmpresaBuscar(this.value)" onfocus="nlEmpresaBuscar(this.value)" onkeydown="nlEmpresaKey(event)">
+        <div id="nlEmpresaSug" class="nl-emp-sug" style="display:none"></div>
+        <div id="nlEmpresaAviso" style="display:none;font-size:10.5px;margin-top:5px;line-height:1.45"></div>
+      </div>
       <div class="field-group"><label class="field-label">Contacto *</label><input class="field-input" id="nl-contacto" placeholder="Juan Pérez"></div>
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="nl-cargo"></div>
       <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="nl-telefono" type="tel" placeholder="+56 9 1234 5678"></div>
@@ -3536,6 +3541,12 @@
 </div>
 
 <!-- ══════════════════ CALENDARIO (equipo: Nicanor · Gustavo · Florencia) ═══ -->
+<style id="nuevo-lead-styles">
+.nl-emp-sug{position:absolute;top:100%;left:0;right:0;z-index:60;margin-top:3px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;box-shadow:0 12px 32px rgba(0,0,0,.55);max-height:274px;overflow-y:auto;padding:4px}
+.nl-emp-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;cursor:pointer}
+.nl-emp-item:hover,.nl-emp-item.on{background:var(--surface3)}
+.nl-emp-nueva{border-top:1px solid var(--border);margin-top:3px;padding-top:9px}
+</style>
 <style id="calendario-styles">
 #tab-calendario .cal-head{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
 #tab-calendario .cal-dow{font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);text-align:center;padding:4px 0}
@@ -6918,6 +6929,32 @@ async function airtableWrite(table,method,recordId,fields){
   if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${j.error?.message||j.error?.type||'Error desconocido'}`);}
   return await r.json();
 }
+// Upsert de un registro de 'Monitor Sistema' por Name, a prueba de duplicados.
+// Antes se hacía "si no tengo id → POST", lo que creaba registros repetidos cuando
+// dos guardados salían a la vez (misma pestaña) o dos personas guardaban casi
+// simultáneamente (Gustavo y Nicanor). Aquí: (1) las llamadas del mismo Name se
+// encadenan (nunca dos en vuelo), y (2) antes de crear se recomprueba en Airtable
+// si el registro ya existe y se adopta su id.
+const _monUpsertChain={};
+function _monitorUpsert(name,notes,idKey){
+  const prev=_monUpsertChain[name]||Promise.resolve();
+  const run=prev.catch(()=>{}).then(async()=>{
+    let id=state[idKey];
+    if(!id){
+      try{
+        const r=await airtableFetch('Monitor Sistema',100);
+        const found=(r.records||[]).find(x=>x.fields['Name']===name);
+        if(found){id=found.id;state[idKey]=found.id;}
+      }catch(e){}
+    }
+    if(id){await airtableWrite('Monitor Sistema','PATCH',id,{'Notes':notes});return id;}
+    const c=await airtableWrite('Monitor Sistema','POST',null,{'Name':name,'Notes':notes});
+    if(c&&c.id)state[idKey]=c.id;
+    return c&&c.id;
+  });
+  _monUpsertChain[name]=run;
+  return run;
+}
 async function testAirtableWrite(){
   const btn=document.getElementById('testWriteBtn');if(btn){btn.disabled=true;btn.textContent='Probando...';}
   // 1. Test read
@@ -7167,8 +7204,7 @@ const _PROD_TIMER_KEY='thelab_prod_timer_v1';
 function _prodTimers(){try{return JSON.parse(localStorage.getItem(_PROD_TIMER_KEY)||'{}');}catch(e){return{};}}
 async function _prodTimersBackup(){
   try{const notes=localStorage.getItem(_PROD_TIMER_KEY)||'{}';
-    if(state.prodTimersRecordId) await airtableWrite('Monitor Sistema','PATCH',state.prodTimersRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'PROD_TIMERS','Notes':notes});if(r&&r.id)state.prodTimersRecordId=r.id;}
+    await _monitorUpsert('PROD_TIMERS',notes,'prodTimersRecordId');
   }catch(e){}
 }
 function _prodState(pedidoId){const t=_prodTimers()[pedidoId];if(!t||!t.start)return null;return{running:!t.end,ms:(t.end||Date.now())-t.start};}
@@ -8005,8 +8041,7 @@ async function _agendaBackup(){
     all[_sc]=merged;
     try{localStorage.setItem(_agendaKey(),JSON.stringify(merged));}catch(e){}
     const notes=JSON.stringify(all).slice(0,95000);
-    if(state.agendaRecordId) await airtableWrite('Monitor Sistema','PATCH',state.agendaRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'AGENDA','Notes':notes});if(r?.id)state.agendaRecordId=r.id;}
+    await _monitorUpsert('AGENDA',notes,'agendaRecordId');
     state._agendaRemote=notes;
   }catch(e){}
 }
@@ -9076,8 +9111,7 @@ function _descClientes(){try{return JSON.parse(localStorage.getItem(_DESC_CLIENT
 function _descCliente(clienteId){const v=parseFloat(_descClientes()[clienteId]);return(v>0&&v<=90)?v:0;}
 async function _descClienteBackup(){
   try{const notes=localStorage.getItem(_DESC_CLIENTE_KEY)||'{}';
-    if(state.descClienteRecordId) await airtableWrite('Monitor Sistema','PATCH',state.descClienteRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'DESC_CLIENTE','Notes':notes});if(r&&r.id)state.descClienteRecordId=r.id;}
+    await _monitorUpsert('DESC_CLIENTE',notes,'descClienteRecordId');
   }catch(e){}
 }
 function setDescCliente(clienteId){
@@ -9104,8 +9138,7 @@ const _FECHAS_CLI_KEY='thelab_fechas_cliente_v1';
 function _fechasCliente(){try{return JSON.parse(localStorage.getItem(_FECHAS_CLI_KEY)||'{}');}catch(e){return{};}}
 async function _fechasClienteBackup(){
   try{const notes=localStorage.getItem(_FECHAS_CLI_KEY)||'{}';
-    if(state.fechasCliRecordId) await airtableWrite('Monitor Sistema','PATCH',state.fechasCliRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'FECHAS_CLIENTE','Notes':notes});if(r&&r.id)state.fechasCliRecordId=r.id;}
+    await _monitorUpsert('FECHAS_CLIENTE',notes,'fechasCliRecordId');
   }catch(e){}
 }
 function setFechaCliente(clienteId){
@@ -9197,8 +9230,7 @@ const _ONBOARDING_STEPS=[
 function _onboarding(){try{return JSON.parse(localStorage.getItem(_ONBOARDING_KEY)||'{}');}catch(e){return{};}}
 async function _onboardingBackup(){
   try{const notes=localStorage.getItem(_ONBOARDING_KEY)||'{}';
-    if(state.onboardingRecordId) await airtableWrite('Monitor Sistema','PATCH',state.onboardingRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'ONBOARDING','Notes':notes});if(r&&r.id)state.onboardingRecordId=r.id;}
+    await _monitorUpsert('ONBOARDING',notes,'onboardingRecordId');
   }catch(e){}
 }
 function _onboardingSteps(clienteId){
@@ -11549,8 +11581,7 @@ async function saveWatiCfg(){
   localStorage.setItem('wati_cfg',JSON.stringify({url,token}));
   const notes=JSON.stringify({url,token,updatedAt:new Date().toISOString()});
   try{
-    if(state.watiRecordId){await airtableWrite('Monitor Sistema','PATCH',state.watiRecordId,{'Notes':notes});}
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'WATI_CONFIG','Notes':notes});if(r?.id) state.watiRecordId=r.id;}
+    await _monitorUpsert('WATI_CONFIG',notes,'watiRecordId');
     toast('✓ Configuración WATI guardada en Airtable','success');
   }catch(e){toast('Guardado localmente (Airtable: '+e.message+')','error');}
   renderWatiConfigBtn();closeWatiModal();
@@ -11653,10 +11684,122 @@ function renderLeadAgentResult(raw){
   document.getElementById('leadAgentPanel').style.display='block';
   document.getElementById('leadAgentPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
+// ── Buscador de empresa en "Nuevo Lead / Cliente" ─────────────────────────────
+// Al escribir en Empresa se ofrecen las que ya existen en el CRM (para no crear
+// duplicados y poder sumar un contacto nuevo a una empresa ya registrada) o
+// seguir con una empresa nueva.
+let _nlEmpSel=null;      // id del cliente existente elegido (si lo hay)
+let _nlEmpForce=false;   // el usuario decidió crear igual pese al duplicado
+let _nlEmpIdx=-1;        // opción resaltada con las flechas
+function _nlEmpNorm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
+function _nlEmpMatchExacto(nombre){
+  const n=_nlEmpNorm(nombre);if(!n)return null;
+  return (state.clientes||[]).find(c=>_nlEmpNorm(c.fields['Empresa'])===n)||null;
+}
+function _nlEmpCandidatos(q){
+  const n=_nlEmpNorm(q);
+  const base=isVendorMode()?(state.clientes||[]).filter(vendorOwnsRecord):(state.clientes||[]);
+  if(!n) return base.slice().sort((a,b)=>String(a.fields['Empresa']||'').localeCompare(String(b.fields['Empresa']||''),'es')).slice(0,8);
+  return base.filter(c=>{
+    const e=_nlEmpNorm(c.fields['Empresa']),ct=_nlEmpNorm(c.fields['Contacto']),r=_nlEmpNorm(c.fields['RUT']);
+    return e.includes(n)||ct.includes(n)||r.includes(n);
+  }).sort((a,b)=>{
+    const ea=_nlEmpNorm(a.fields['Empresa']),eb=_nlEmpNorm(b.fields['Empresa']);
+    return (eb.startsWith(n)?1:0)-(ea.startsWith(n)?1:0)||ea.localeCompare(eb,'es');
+  }).slice(0,8);
+}
+function nlEmpresaBuscar(q){
+  const box=document.getElementById('nlEmpresaSug');if(!box)return;
+  _nlEmpSel=null;_nlEmpForce=false;_nlEmpIdx=-1;
+  const cands=_nlEmpCandidatos(q);
+  if(!cands.length){box.style.display='none';box.innerHTML='';}
+  else{
+    box.innerHTML=cands.map((c,i)=>{
+      const f=c.fields,esLead=esLeadCat(c);
+      const sub=[f['Contacto'],f['Comuna']||f['Ciudad'],f['Industria / Rubro']].filter(Boolean).join(' · ');
+      return `<div class="nl-emp-item" data-i="${i}" onmousedown="event.preventDefault();nlEmpresaPick('${c.id}')">
+        <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f['Empresa']||'—')}</div>${sub?`<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(sub)}</div>`:''}</div>
+        <span class="${esLead?'badge-lead':'badge-cliente'}" style="flex-shrink:0">${esLead?'Lead':'Cliente'}</span>
+      </div>`;
+    }).join('')+`<div class="nl-emp-item nl-emp-nueva" onmousedown="event.preventDefault();nlEmpresaNueva()"><span style="color:var(--accent3);font-weight:600;font-size:12px">＋ Crear empresa nueva${String(q||'').trim()?': “'+escapeHtml(String(q).trim())+'”':''}</span></div>`;
+    box.style.display='';
+  }
+  _nlEmpAviso(q);
+}
+function _nlEmpAviso(q){
+  const av=document.getElementById('nlEmpresaAviso');if(!av)return;
+  const val=String(q||'').trim();
+  if(!val){av.style.display='none';return;}
+  const dup=_nlEmpMatchExacto(val);
+  if(_nlEmpSel){
+    const c=(state.clientes||[]).find(x=>x.id===_nlEmpSel);
+    av.innerHTML=`<span style="color:var(--accent3)">✓ Empresa existente — se rellenaron sus datos. Cambia el contacto para sumar una persona nueva.</span> <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px" onclick="openClienteDetalle('${_nlEmpSel}')">Ver ficha</button>`;
+    av.style.display='';return;
+  }
+  if(dup&&!_nlEmpForce){
+    av.innerHTML=`<span style="color:var(--warn)">⚠ Ya existe <b>${escapeHtml(dup.fields['Empresa']||'')}</b> en el CRM.</span>
+      <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px" onclick="nlEmpresaPick('${dup.id}')">Usar esa</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px" onclick="openClienteDetalle('${dup.id}')">Ver ficha</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--text3)" onclick="nlEmpresaForzar()">Crear igual</button>`;
+    av.style.display='';return;
+  }
+  av.innerHTML=_nlEmpForce?'<span style="color:var(--text3)">Se creará un registro aparte con el mismo nombre.</span>':'<span style="color:var(--accent3)">✓ Empresa nueva</span>';
+  av.style.display='';
+}
+function nlEmpresaCerrar(){const b=document.getElementById('nlEmpresaSug');if(b){b.style.display='none';}_nlEmpIdx=-1;}
+function nlEmpresaNueva(){
+  _nlEmpSel=null;_nlEmpForce=true;nlEmpresaCerrar();
+  _nlEmpAviso(document.getElementById('nl-empresa').value);
+  document.getElementById('nl-contacto')?.focus();
+}
+function nlEmpresaForzar(){_nlEmpForce=true;_nlEmpSel=null;_nlEmpAviso(document.getElementById('nl-empresa').value);}
+function nlEmpresaPick(id){
+  const c=(state.clientes||[]).find(x=>x.id===id);if(!c)return;
+  const f=c.fields;_nlEmpSel=id;_nlEmpForce=false;
+  const set=(el,v)=>{const e=document.getElementById(el);if(e&&v!=null&&v!=='')e.value=v;};
+  set('nl-empresa',f['Empresa']||'');
+  // Rellena los datos de la empresa (no los del contacto: se está sumando una persona)
+  set('nl-rut',f['RUT']||'');set('nl-web',f['Sitio web']||'');set('nl-direccion',f['Dirección']||'');
+  set('nl-ciudad',f['Ciudad']||'');
+  const ind=document.getElementById('nl-industria');if(ind&&f['Industria / Rubro'])ind.value=f['Industria / Rubro'];
+  const reg=document.getElementById('nl-region');
+  if(reg&&f['Región']){reg.value=f['Región'];try{reg.dispatchEvent(new Event('change'));}catch(e){}
+    setTimeout(()=>{const com=document.getElementById('nl-comuna');if(com&&f['Comuna'])com.value=f['Comuna'];},60);}
+  const ven=document.getElementById('nl-vendedor');if(ven&&f['Vendedor'])ven.value=f['Vendedor'];
+  nlEmpresaCerrar();
+  _nlEmpAviso(f['Empresa']||'');
+  toast('Datos de '+(f['Empresa']||'la empresa')+' cargados — completa el contacto','info');
+  document.getElementById('nl-contacto')?.focus();
+}
+function nlEmpresaKey(e){
+  const box=document.getElementById('nlEmpresaSug');
+  if(!box||box.style.display==='none'){if(e.key==='ArrowDown')nlEmpresaBuscar(e.target.value);return;}
+  const items=[...box.querySelectorAll('.nl-emp-item')];if(!items.length)return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    _nlEmpIdx=e.key==='ArrowDown'?Math.min(items.length-1,_nlEmpIdx+1):Math.max(0,_nlEmpIdx-1);
+    items.forEach((el,i)=>el.classList.toggle('on',i===_nlEmpIdx));
+    items[_nlEmpIdx]?.scrollIntoView({block:'nearest'});
+  }else if(e.key==='Enter'){
+    if(_nlEmpIdx>=0){e.preventDefault();items[_nlEmpIdx].dispatchEvent(new MouseEvent('mousedown'));}
+  }else if(e.key==='Escape'){nlEmpresaCerrar();}
+}
+document.addEventListener('click',e=>{const b=document.getElementById('nlEmpresaSug');if(b&&b.style.display!=='none'&&!e.target.closest('#nlEmpresaSug')&&e.target.id!=='nl-empresa')nlEmpresaCerrar();});
 async function createLead(){
   const btn=document.getElementById('createLeadBtn');const empresa=document.getElementById('nl-empresa').value.trim();const contacto=document.getElementById('nl-contacto').value.trim();const email=document.getElementById('nl-email').value.trim();
   const tel=document.getElementById('nl-telefono').value.trim();const rutEl=document.getElementById('nl-rut');const rut=(rutEl?.value||'').trim();
   if(!empresa){toast('Empresa requerida','error');return;}if(!contacto){toast('Contacto requerido','error');return;}
+  // Evita crear una empresa repetida sin querer: si el nombre ya existe y no se
+  // eligió la existente ni se confirmó "Crear igual", se detiene y se avisa.
+  if(!_nlEmpSel&&!_nlEmpForce){
+    const dup=_nlEmpMatchExacto(empresa);
+    if(dup){
+      _nlEmpAviso(empresa);
+      try{document.getElementById('nlEmpresaAviso')?.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}
+      toast('Ya existe «'+(dup.fields['Empresa']||empresa)+'» — usa esa empresa o confirma "Crear igual"','error');
+      return;
+    }
+  }
   if(email&&!validEmail(email)){toast('Email inválido','error');return;}
   if(tel&&!validPhone(tel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
   if(rut&&!validRUT(rut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
@@ -11852,8 +11995,7 @@ function _catalogoSaveArr(arr){try{localStorage.setItem(_CATALOGO_KEY,JSON.strin
 async function _catalogoBackup(){
   try{
     const notes=localStorage.getItem(_CATALOGO_KEY)||'[]';
-    if(state.catalogoRecordId) await airtableWrite('Monitor Sistema','PATCH',state.catalogoRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'CATALOGO','Notes':notes});if(r&&r.id)state.catalogoRecordId=r.id;}
+    await _monitorUpsert('CATALOGO',notes,'catalogoRecordId');
   }catch(e){}
 }
 function _catMargen(it){const c=+it.costo||0,p=+it.precio||0;return p>0?Math.round((p-c)/p*100):0;}
@@ -11911,8 +12053,7 @@ function _reclamosSaveArr(arr){try{localStorage.setItem(_RECLAMOS_KEY,JSON.strin
 async function _reclamosBackup(){
   try{
     const notes=localStorage.getItem(_RECLAMOS_KEY)||'[]';
-    if(state.reclamosRecordId) await airtableWrite('Monitor Sistema','PATCH',state.reclamosRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'RECLAMOS','Notes':notes});if(r&&r.id)state.reclamosRecordId=r.id;}
+    await _monitorUpsert('RECLAMOS',notes,'reclamosRecordId');
   }catch(e){}
 }
 const _RECLAMO_COL={'Abierto':'var(--danger)','En proceso':'var(--warn)','Resuelto':'var(--accent3)','Rechazado':'var(--text3)'};
@@ -11987,8 +12128,7 @@ function _retainersSaveArr(arr){try{localStorage.setItem(_RETAINERS_KEY,JSON.str
 async function _retainersBackup(){
   try{
     const notes=localStorage.getItem(_RETAINERS_KEY)||'[]';
-    if(state.retainersRecordId) await airtableWrite('Monitor Sistema','PATCH',state.retainersRecordId,{'Notes':notes});
-    else{const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'RETAINERS','Notes':notes});if(r&&r.id)state.retainersRecordId=r.id;}
+    await _monitorUpsert('RETAINERS',notes,'retainersRecordId');
   }catch(e){}
 }
 function _mesActualKey(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
@@ -13576,24 +13716,14 @@ function proyeccionMes(revMes,meta,hoy){
 }
 async function saveMetaAirtable(metaSemanal,metaMensual){
   const notes=JSON.stringify({metaSemanal,metaMensual,updatedAt:new Date().toISOString()});
-  if(state.metaRecordId){
-    await airtableWrite('Monitor Sistema','PATCH',state.metaRecordId,{'Notes':notes});
-  } else {
-    const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'META_REVENUE','Notes':notes});
-    if(r?.id) state.metaRecordId=r.id;
-  }
+  await _monitorUpsert('META_REVENUE',notes,'metaRecordId');
 }
 // Persiste las ventas manuales (fin_ventas) en Airtable usando el mismo
 // patrón Name/Notes de Monitor Sistema. Falla en silencio → localStorage queda como respaldo.
 async function saveFinVentasAirtable(){
   const notes=localStorage.getItem('fin_ventas')||'[]';
   try{
-    if(state.finVentasRecordId){
-      await airtableWrite('Monitor Sistema','PATCH',state.finVentasRecordId,{'Notes':notes});
-    } else {
-      const r=await airtableWrite('Monitor Sistema','POST',null,{'Name':'FIN_VENTAS','Notes':notes});
-      if(r?.id) state.finVentasRecordId=r.id;
-    }
+    await _monitorUpsert('FIN_VENTAS',notes,'finVentasRecordId');
   }catch(e){console.warn('[FinVentas] no se pudo guardar en Airtable:',e.message);}
 }
 function openMetaModal(){
