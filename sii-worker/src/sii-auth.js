@@ -4,6 +4,10 @@ import { sha1b64, rsaSha1b64, certDerb64, rsaModulusb64, rsaExponentb64, private
 const require = createRequire(import.meta.url);
 const { SignedXml } = require('xml-crypto');
 
+function debugSii(env, ...args) {
+  if (env && env.SII_DEBUG === 'true') console.log(...args);
+}
+
 function siiHost(env) {
   return env.SII_ENV === 'produccion'
     ? 'https://palena.sii.cl'
@@ -155,7 +159,7 @@ export async function getSIIToken(privateKey, certificate, env) {
     `</soapenv:Body>` +
     `</soapenv:Envelope>`;
 
-  console.log('[DEBUG getToken] innerXml firmado:', innerXml);
+  debugSii(env, '[DEBUG getToken] documento firmado generado (contenido omitido)');
 
   const res = await fetch(`${siiHost(env)}/DTEWS/GetTokenFromSeed.jws`, {
     method: 'POST',
@@ -164,8 +168,8 @@ export async function getSIIToken(privateKey, certificate, env) {
   });
 
   const xml = await res.text();
-  console.log('[DEBUG getToken] SII HTTP status:', res.status);
-  console.log('[DEBUG getToken] SII raw response:', xml.substring(0, 800));
+  debugSii(env, '[DEBUG getToken] SII HTTP status:', res.status);
+  debugSii(env, '[DEBUG getToken] respuesta recibida (contenido omitido)');
 
   // Buscar TOKEN directo o dentro de getTokenReturn (entity-encoded)
   let token = (xml.match(/<TOKEN>([^<]+)<\/TOKEN>/) || [])[1]?.trim();
@@ -215,8 +219,8 @@ export async function uploadDTE(envioDteXml, token, rutEmisor, env) {
 
   const text = await res.text();
 
-  console.log('[DEBUG uploadDTE] HTTP status:', res.status);
-  console.log('[DEBUG uploadDTE] respuesta cruda SII COMPLETA:\n', text);
+  debugSii(env, '[DEBUG uploadDTE] HTTP status:', res.status);
+  debugSii(env, '[DEBUG uploadDTE] respuesta recibida (contenido omitido)');
 
   // La respuesta de recepción usa <TRACKID> y <STATUS> (mayúsculas).
   const trackid = (text.match(/TRACKID[^>]*>([^<]+)/i) || [])[1]?.trim() || null;
@@ -262,7 +266,7 @@ export async function getUploadStatus(trackId, token, rutEmisor, env) {
 
   const xml = await res.text();
   const inner = extractSoapReturn(xml, 'getEstUp') || xml;
-  console.log('[DEBUG getEstUp] respuesta:', inner.substring(0, 600));
+  debugSii(env, '[DEBUG getEstUp] respuesta recibida (contenido omitido)');
 
   const estado = (inner.match(/<ESTADO>([^<]+)<\/ESTADO>/) || [])[1]?.trim() || null;
   const glosa  = (inner.match(/<GLOSA>([^<]+)<\/GLOSA>/) || [])[1]?.trim() || '';
