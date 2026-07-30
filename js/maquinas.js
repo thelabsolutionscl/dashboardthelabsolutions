@@ -90,6 +90,15 @@ function printerCamUrl(id){
 // Cámaras tipo "snapshot" (p.ej. go2rtc /api/frame.jpeg de las K2, que no dan
 // MJPEG): el <img> con data-snap se refresca solo cada ~1s para simular video.
 function _camIsSnapshot(raw){return /\/api\/frame\.jpe?g/i.test(raw||'');}
+function _safePrinterMediaUrl(raw){
+  const s=String(raw||'').trim();
+  if(!s)return'';
+  try{
+    const u=new URL(s,location.href);
+    if(!['http:','https:','blob:'].includes(u.protocol))return'';
+    return escapeHtml(u.href);
+  }catch(e){return'';}
+}
 let _camSnapInterval=null;
 function _refreshSnapshotCams(){
   if(document.hidden)return;
@@ -512,7 +521,7 @@ function renderMonitorGrid(){
     } else {
       body=`
         ${isActive?`<div style="margin:10px 0 6px;display:flex;gap:9px;align-items:center">
-          ${s.thumbUrl?`<img loading="lazy" decoding="async" src="${s.thumbUrl}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
+          ${_safePrinterMediaUrl(s.thumbUrl)?`<img loading="lazy" decoding="async" src="${_safePrinterMediaUrl(s.thumbUrl)}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
           <div style="flex:1;min-width:0">
             <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
             <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:5px">
@@ -614,7 +623,8 @@ function _syncPrinterCam(id,camKey,force){
   if(!camKey){slot.innerHTML='';slot.__camKey='';return;}
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   const raw=localStorage.getItem('printer_cam_'+id)||m.cam;
-  const camU=printerCamUrl(id),snap=_camIsSnapshot(raw);
+  const camU=_safePrinterMediaUrl(printerCamUrl(id)),snap=_camIsSnapshot(raw);
+  if(!camU){slot.innerHTML='';slot.__camKey='';return;}
   slot.innerHTML=`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative">
     <img loading="lazy" decoding="async" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" ${snap?'':`onerror="this.parentElement.innerHTML='<div style=\\'padding:12px;text-align:center;color:#666;font-size:10px\\'>Sin señal · verifica la URL</div>'"`}>
   </div>`;
@@ -1075,7 +1085,7 @@ function openWebcamModal(id){
   if(url){const cu=printerCamUrl(id);if(_camIsSnapshot(url))img.setAttribute('data-snap',cu);else img.removeAttribute('data-snap');img.src=cu;img.style.display='block';nf.style.display='none';}else{img.removeAttribute('data-snap');img.src='';img.style.display='none';nf.style.display='flex';}
   document.getElementById('webcamModal').style.display='flex';
 }
-function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);const m=MAQUINAS.find(x=>x.id===id);if(m){m.cam=url||null;if(m._airtableId){if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{cam:url||''}})});}}closeWebcamModal();renderMonitorGrid();toast(url?'📷 Webcam configurada — guardada en Airtable':'Webcam eliminada','success');}
+function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url&&!_safePrinterMediaUrl(url)){toast('URL de webcam inválida — usa http:// o https://','error');return;}if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);const m=MAQUINAS.find(x=>x.id===id);if(m){m.cam=url||null;if(m._airtableId){if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{cam:url||''}})});}}closeWebcamModal();renderMonitorGrid();toast(url?'📷 Webcam configurada — guardada en Airtable':'Webcam eliminada','success');}
 function closeWebcamModal(){document.getElementById('webcamModal').style.display='none';const wi=document.getElementById('webcamModalImg');if(wi){wi.removeAttribute('data-snap');wi.src='';}}
 
 function openHistoryModal(id){

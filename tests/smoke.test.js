@@ -20,6 +20,7 @@ const path = require('path');
 const _jsDir = path.join(__dirname, '..', 'js');
 const _jsExtra = fs.existsSync(_jsDir) ? fs.readdirSync(_jsDir).filter(f => f.endsWith('.js')).sort().map(f => fs.readFileSync(path.join(_jsDir, f), 'utf8')).join('\n') : '';
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8') + '\n<script>\n' + _jsExtra + '\n</scr' + 'ipt>';
+const ROOT = path.join(__dirname, '..');
 
 // Solo el JS inline (sin src=) para buscar definiciones
 const scripts = [...SRC.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
@@ -30,6 +31,18 @@ const scripts = [...SRC.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
 let fails = 0;
 const fail = msg => { fails++; console.error('  ✗ ' + msg); };
 const ok = msg => console.log('  ✓ ' + msg);
+
+// ── 0. GUARDAS DE SEGURIDAD ─────────────────────────────────────────
+{
+  const mailApi = fs.readFileSync(path.join(ROOT, 'mail-api.php'), 'utf8');
+  const siiAuth = fs.readFileSync(path.join(ROOT, 'sii-worker', 'src', 'sii-auth.js'), 'utf8');
+  if (!mailApi.includes("header('Cache-Control: no-store")) fail('mail-api debe impedir caché de correos/credenciales');
+  else ok('mail-api marca respuestas sensibles como no-store');
+  if (/respuesta cruda SII COMPLETA|innerXml firmado:',\s*innerXml/.test(siiAuth)) fail('SII no debe registrar XML tributario completo');
+  else ok('SII no registra XML tributario ni documentos firmados completos');
+  if (!SRC.includes('function _safePrinterMediaUrl(')) fail('Falta validación de URLs multimedia de impresoras');
+  else ok('URLs configurables de cámaras/miniaturas pasan por allowlist');
+}
 
 // ── 1. WIRING: on*="..." → función definida ──────────────────────────────
 {
