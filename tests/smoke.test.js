@@ -42,6 +42,19 @@ const ok = msg => console.log('  ✓ ' + msg);
   else ok('SII no registra XML tributario ni documentos firmados completos');
   if (!SRC.includes('function _safePrinterMediaUrl(')) fail('Falta validación de URLs multimedia de impresoras');
   else ok('URLs configurables de cámaras/miniaturas pasan por allowlist');
+  if (!SRC.includes("filterPedidos('Completado'") || !SRC.includes("<option>Completado</option>")) fail('Pedidos debe exponer el estado Completado y su archivo');
+  else ok('Pedidos completados tienen estado y acceso al archivo');
+  if (!/filter==='all'[^:]*\?basePedidos\.filter\(p=>\(p\.fields\['Estado pedido'\]\|\|''\)!=='Completado'\)/.test(SRC)) fail('La vista principal de Pedidos debe ocultar los completados');
+  else ok('La vista principal excluye pedidos completados sin eliminarlos');
+  const completionGuards = (SRC.match(/Solo se puede completar un pedido que ya esté despachado/g) || []).length;
+  if (completionGuards < 3 || !SRC.includes('Solo se pueden completar pedidos que ya estén despachados')) fail('Completar debe exigir Despachado en acciones individuales, guiadas y masivas');
+  else ok('El archivo solo acepta pedidos previamente despachados');
+  if (!SRC.includes("const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];")) fail('El portal del cliente debe representar la etapa Completado');
+  else ok('El portal del cliente representa el ciclo completo hasta Completado');
+  if (!SRC.includes("querySelectorAll('#pedidosFilterBar>button.active-filter')")) fail('Los filtros de Pedidos no deben desactivar el selector de vista');
+  else ok('Los filtros preservan el selector Tabla/Kanban/Calendario');
+  if (SRC.includes('thelab2025')) fail('No debe existir el secreto histórico de Google Ads en el código fuente');
+  else ok('Google Ads no contiene secretos de mutación hardcodeados');
 }
 
 // ── 1. WIRING: on*="..." → función definida ──────────────────────────────

@@ -372,7 +372,7 @@ function finRenderCobrar(){
 
   // Resumen aging
   // Proyección de caja del libro de pedidos en curso: anticipos/saldos aún no cobrados (distinto de facturas emitidas)
-  const _pedCurso=(state.pedidos||[]).filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+  const _pedCurso=(state.pedidos||[]).filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
   const proyPedidos=_pedCurso.reduce((s,p)=>{const f=p.fields,neto=(f['Monto total (CLP)']||0)/1.19;let r=0;if(!f['Anticipo pagado (50%)'])r+=neto*0.5;if(!f['Saldo pagado (50%)'])r+=neto*0.5;return s+r;},0);
   const nProy=_pedCurso.filter(p=>{const f=p.fields;return!f['Anticipo pagado (50%)']||!f['Saldo pagado (50%)'];}).length;
   const agingEl=document.getElementById('fin-cobrar-aging');
@@ -2345,10 +2345,10 @@ function renderFunnel(){
   const leads=_cli.filter(c=>c.createdTime&&inMes(c.createdTime)).length;
   const cots=_cot.filter(c=>c.createdTime&&inMes(c.createdTime)).length;
   const peds=_ped.filter(p=>p.createdTime&&inMes(p.createdTime)&&(p.fields['Estado pedido']||'')!=='Cancelado').length;
-  const cerrados=_ped.filter(p=>p.fields['Estado pedido']==='Despachado'&&p.createdTime&&inMes(p.createdTime)).length;
+  const cerrados=_ped.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')&&p.createdTime&&inMes(p.createdTime)).length;
   const valCots=_cot.filter(c=>c.createdTime&&inMes(c.createdTime)).reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
   const valPeds=_ped.filter(p=>p.createdTime&&inMes(p.createdTime)&&(p.fields['Estado pedido']||'')!=='Cancelado').reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-  const valCerr=_ped.filter(p=>p.fields['Estado pedido']==='Despachado'&&p.createdTime&&inMes(p.createdTime)).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const valCerr=_ped.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')&&p.createdTime&&inMes(p.createdTime)).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
   const pct=(a,b)=>b>0?Math.round(a/b*100):0;
   const stages=[
     {icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-clientes"/></svg>',label:'Leads Nuevos',n:leads,val:null,color:'var(--accent4)',next:cots},
@@ -2666,8 +2666,8 @@ function checkClientePortal(){
     const nombre=f['Empresa']||f['Contacto']||'Cliente';
     const pedidos=state.pedidos.filter(p=>{const cli=p.fields['Cliente'];return Array.isArray(cli)?cli.includes(clienteId):cli===clienteId;});
     const cots=state.cotizaciones.filter(c=>{const cli=c.fields['Cliente'];return Array.isArray(cli)?cli.includes(clienteId):cli===clienteId;}).slice(0,10);
-    const stageColors={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
-    const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
+    const stageColors={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)','Completado':'var(--accent3)'};
+    const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
     // Stepper visual del avance del pedido (mismo lenguaje que el pipeline interno)
     const stepper=est=>{const idx=stages.indexOf(est);
       return `<div style="display:flex;align-items:center;gap:3px;margin:10px 0 4px">${stages.map((s,i)=>
@@ -2675,18 +2675,18 @@ function checkClientePortal(){
           <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${i<=idx?(stageColors[s]||'var(--accent)'):'var(--border2)'};background:${i<idx?(stageColors[s]||'var(--accent)'):(i===idx?'rgba(0,212,204,0.15)':'var(--surface3)')};display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;color:${i<idx?'#0a0a0a':'var(--text3)'}">${i<idx?'✓':(i===idx?'●':'○')}</div>
           ${i<stages.length-1?`<div style="height:2px;flex:1;background:${i<idx?(stageColors[s]||'var(--accent)'):'var(--border2)'}"></div>`:''}
         </div>`).join('')}</div>
-      <div style="display:flex;justify-content:space-between;font-size:8.5px;color:var(--text3);margin-bottom:6px"><span>Confirmado</span><span>Producción</span><span>Listo</span><span>Despachado</span></div>`;};
+      <div style="display:flex;justify-content:space-between;font-size:8.5px;color:var(--text3);margin-bottom:6px"><span>Confirmado</span><span>Producción</span><span>Listo</span><span>Despachado</span><span>Completado</span></div>`;};
     const pedHTML=pedidos.length?pedidos.sort((a,b)=>(b.createdTime||'').localeCompare(a.createdTime||'')).map(p=>{
       const pf=p.fields,est=pf['Estado pedido']||'Confirmado',atras=pf['Fecha entrega']&&new Date(pf['Fecha entrega']+'T00:00:00')<new Date();
       const prod=String(pf['Detalle productos']||pf['Solicitud cliente (texto libre)']||'').trim().slice(0,110);
       return`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:${stageColors[est]||'var(--text)'}">${escapeHtml(pf['N° Pedido']||'—')}</div>
-          <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;background:${stageColors[est]||'var(--surface3)'}22;color:${stageColors[est]||'var(--text3)'};">${est==='Despachado'?'✓ Despachado':est}</span>
+          <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;background:${stageColors[est]||'var(--surface3)'}22;color:${stageColors[est]||'var(--text3)'};">${['Despachado','Completado'].includes(est)?'✓ '+est:est}</span>
         </div>
         ${prod?`<div style="font-size:11px;color:var(--text2);margin-bottom:2px">${escapeHtml(prod)}</div>`:''}
         ${est==='Cancelado'?'':stepper(est)}
-        ${pf['Fecha entrega']?`<div style="font-size:11px;color:${atras&&est!=='Despachado'?'var(--warn)':'var(--text3)'}">📅 ${est==='Despachado'?'Entregado':'Entrega estimada'}: ${pf['Fecha despacho']&&est==='Despachado'?pf['Fecha despacho']:pf['Fecha entrega']}${atras&&est!=='Despachado'?' · en proceso de despacho':''}</div>`:''}
+        ${pf['Fecha entrega']?`<div style="font-size:11px;color:${atras&&!['Despachado','Completado'].includes(est)?'var(--warn)':'var(--text3)'}">📅 ${['Despachado','Completado'].includes(est)?'Entregado':'Entrega estimada'}: ${pf['Fecha despacho']&&['Despachado','Completado'].includes(est)?pf['Fecha despacho']:pf['Fecha entrega']}${atras&&!['Despachado','Completado'].includes(est)?' · en proceso de despacho':''}</div>`:''}
         ${pf['Notas']?`<div style="font-size:11px;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px;margin-top:6px">${formatRichText(pf['Notas']||'')}</div>`:''}
       </div>`;
     }).join(''):'<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px">Sin pedidos registrados</div>';

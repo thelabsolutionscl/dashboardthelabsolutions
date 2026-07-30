@@ -897,19 +897,20 @@
   <div id="pdCsatBar" style="display:none;margin-bottom:16px"></div>
   <div id="reclamosCard" style="margin-bottom:16px"></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-    <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Todos</button>
+    <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Sin archivar</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Atrasados</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Confirmado',this)">Confirmados</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('En producción',this)">En Prod.</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Listo para despacho',this)">Listos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Despachado',this)">Despachados</button>
+    <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Completado',this)" title="Pedidos completados y archivados">📦 Archivo <span id="pedidosArchivoCount" class="badge badge-gray" style="margin-left:3px">0</span></button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('qa_pendiente',this)" style="border-color:rgba(255,170,0,0.3);color:var(--warn)" title="Listos para despacho sin QA aprobado">QA pendiente</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('qa_rechazado',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)" title="Pedidos con QA rechazado">QA rechazado</button>
     <div id="pedidosBulkBar" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
       <span id="pedidosBulkCount" style="font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace"></span>
       <select id="pedidosBulkEstado" class="field-select" style="font-size:11px;padding:4px 8px;width:auto;border-color:var(--accent)">
         <option value="">— Cambiar estado —</option>
-        <option>Confirmado</option><option>En producción</option><option>Listo para despacho</option><option>Despachado</option><option>Cancelado</option>
+        <option>Confirmado</option><option>En producción</option><option>Listo para despacho</option><option>Despachado</option><option>Completado</option><option>Cancelado</option>
       </select>
       <button class="btn btn-sm" style="background:rgba(0,212,204,0.15);border:1px solid rgba(0,212,204,0.3);color:var(--accent)" onclick="bulkEditPedidoEstado()">✓ Aplicar estado</button>
       <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeletePedidos()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
@@ -950,7 +951,7 @@
       <div class="form-grid" style="padding:10px 0 0">
         <div class="field-group"><label class="field-label">Estado</label>
           <select class="field-select" id="editPedidoEstado">
-            <option>Confirmado</option><option>En producción</option><option>Listo para despacho</option><option>Despachado</option><option>Cancelado</option>
+            <option>Confirmado</option><option>En producción</option><option>Listo para despacho</option><option>Despachado</option><option>Completado</option><option>Cancelado</option>
           </select>
         </div>
         <div class="field-group"><label class="field-label">Fecha entrega</label><input class="field-input" id="editPedidoFecha" type="date"></div>
@@ -3773,6 +3774,11 @@
             <label class="field-label">Customer ID (opcional, para mostrar en la UI)</label>
             <input class="field-input" id="ads-customer-id" placeholder="123-456-7890">
           </div>
+          <div class="field-group">
+            <label class="field-label">Secreto de mutaciones</label>
+            <input class="field-input" id="ads-secret" type="password" autocomplete="off" placeholder="Usa una clave larga, única y distinta a la anterior">
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">Se guarda solo en este navegador y debe coincidir con <code>SECRET</code> en ambos scripts.</div>
+          </div>
         </div>
         <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" onclick="saveAdsConfig()">💾 Guardar</button>
@@ -3797,7 +3803,7 @@
 // Proyecto nuevo → pega este código → Desplegar → App Web
 // Ejecutar como: Yo  |  Quién tiene acceso: Cualquier persona
 
-var SECRET = 'thelab2025';
+var SECRET = 'CONFIGURA_UN_SECRETO_LARGO_Y_UNICO';
 
 // ── Tráfico web (GA4) ──
 // Requiere: menú izquierdo del editor → Servicios (+) → "Google Analytics Data API" → Añadir.
@@ -3910,7 +3916,7 @@ function json(obj) {
 // IMPORTANTE: usa executeInParallel para crear campañas desde MCC.
 
 var ENDPOINT    = 'PEGA_AQUI_LA_URL_DEL_SCRIPT_1';
-var SECRET      = 'thelab2025';
+var SECRET      = 'CONFIGURA_UN_SECRETO_LARGO_Y_UNICO';
 // ID de la cuenta cliente SIN guiones (ej: 7577812099)
 var CUSTOMER_ID = 'PEGA_AQUI_EL_CUSTOMER_ID';
 // Modo seguro: las campañas nuevas quedan como BORRADOR en
@@ -7899,7 +7905,7 @@ function setMargenPiso(){
 }
 function margenBadge(m){if(m===null) return '—';const piso=_margenPiso();const bajo=m<piso;return`<span class="badge ${bajo?'badge-red':m>=35?'badge-green':'badge-yellow'}"${bajo?` title="Bajo el piso de margen (${piso}%)"`:''}>${m.toFixed(0)}%${bajo?' ⚠':''}</span>`;}
 function resolveClienteName(f){if(!f) return '—';if(typeof f==='string') return f;if(Array.isArray(f)&&f.length>0) return(state.clientesById&&state.clientesById[f[0]])||'(cliente)';return '—';}
-function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-yellow','Confirmado':'badge-yellow','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Listo para despacho':'badge-green','Pendiente':'badge-gray','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green','Cancelado':'badge-red','Cancelada':'badge-red','Anulada':'badge-red','Negociación':'badge-yellow','Contactado':'badge-yellow','Propuesta enviada':'badge-yellow','Cliente activo':'badge-green','Cliente inactivo':'badge-gray','Perdido':'badge-gray','Con deuda':'badge-yellow','Cobrada':'badge-green','Pagada':'badge-green','Pagado':'badge-green','Vencida':'badge-red','QA rechazado':'badge-red','QA pendiente':'badge-yellow'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
+function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-yellow','Confirmado':'badge-yellow','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Completado':'badge-gray','Listo para despacho':'badge-green','Pendiente':'badge-gray','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green','Cancelado':'badge-red','Cancelada':'badge-red','Anulada':'badge-red','Negociación':'badge-yellow','Contactado':'badge-yellow','Propuesta enviada':'badge-yellow','Cliente activo':'badge-green','Cliente inactivo':'badge-gray','Perdido':'badge-gray','Con deuda':'badge-yellow','Cobrada':'badge-green','Pagada':'badge-green','Pagado':'badge-green','Vencida':'badge-red','QA rechazado':'badge-red','QA pendiente':'badge-yellow'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
 function formatCLP(v){if(!v) return '$0';return '$'+_NF_CL.format(Math.round(v));}
 function escapeHtml(s){if(s===null||s===undefined) return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function safeHref(v){if(!v)return '';const s=String(v).trim();return(/^https?:\/\//i.test(s)||/^mailto:/i.test(s)||/^tel:/i.test(s))?s.replace(/"/g,'&quot;').replace(/'/g,'&#39;'):'';}
@@ -8213,7 +8219,7 @@ function renderAccionesHoy(){
   // 1) Cobranza — clientes con facturas vencidas (no vendedor)
   if(!vendor)_cli.forEach(c=>{const v=c.fields['Facturas vencidas']||0;if(v>=2)push('cob',1,'💰',`<b>${escapeHtml(c.fields['Empresa']||'—')}</b> · ${v} facturas vencidas`,'Cobrar IA',`runFinanceAgent('${c.id}')`,'var(--danger)');});
   // 2) Pedidos atrasados → update al cliente
-  _ped.forEach(p=>{const f=p.fields,est=f['Estado pedido']||'';if(f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(est)){const d=Math.round((today-new Date(f['Fecha entrega']+'T00:00:00'))/86400000);push('ped',1,'⏰',`<b>${escapeHtml(f['N° Pedido']||'—')}</b> (${escapeHtml(resolveClienteName(f['Cliente']))}) · atrasado ${d}d`,'Update IA',`runRepClienteAgent('${p.id}')`,'var(--danger)');}});
+  _ped.forEach(p=>{const f=p.fields,est=f['Estado pedido']||'';if(f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today&&!['Despachado','Completado','Cancelado'].includes(est)){const d=Math.round((today-new Date(f['Fecha entrega']+'T00:00:00'))/86400000);push('ped',1,'⏰',`<b>${escapeHtml(f['N° Pedido']||'—')}</b> (${escapeHtml(resolveClienteName(f['Cliente']))}) · atrasado ${d}d`,'Update IA',`runRepClienteAgent('${p.id}')`,'var(--danger)');}});
   // 3) Pedidos sin anticipo confirmado
   _ped.forEach(p=>{const f=p.fields,est=f['Estado pedido']||'';if(['Confirmado','En producción'].includes(est)&&!f['Anticipo pagado (50%)'])push('pago',2,'💵',`<b>${escapeHtml(f['N° Pedido']||'—')}</b> · anticipo 50% pendiente`,'Ver pedido',`switchTab('pedidos')`,'var(--warn)');});
   // 4) Cotizaciones por vencer / sin respuesta → seguimiento
@@ -8303,7 +8309,7 @@ function renderEquipoSnapshot(){
   // Precalcula una sola vez los pedidos activos (con su "Equipo asignado" ya en
   // minúsculas) en lugar de re-escanear todos los pedidos por cada persona.
   const activosEq=[];
-  state.pedidos.forEach(x=>{const est=x.fields['Estado pedido']||'';if(est==='Despachado'||est==='Cancelado')return;activosEq.push({ea:(x.fields['Equipo asignado']||'').toLowerCase(),fe:x.fields['Fecha entrega']||''});});
+  state.pedidos.forEach(x=>{const est=x.fields['Estado pedido']||'';if(['Despachado','Completado','Cancelado'].includes(est))return;activosEq.push({ea:(x.fields['Equipo asignado']||'').toLowerCase(),fe:x.fields['Fecha entrega']||''});});
   const chips=PERSONAS.map(p=>{
     const ev=equipoState.eventos[`${p.id}_${todayStr}`];
     const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):EQUIPO_TIPOS.disponible;
@@ -8344,7 +8350,7 @@ function renderKPIs(){
   let revSemana=0,revAnterior=0,revTotal=0,pedActivos=0,atrasados=0,pedNuevosSem=0,pedNuevosPrev=0,_aAnticipo=0,_aEntrega=0;
   for(const p of _ped){
     const f=p.fields,est=f['Estado pedido']||'';
-    const cancel=est==='Cancelado',despCanc=cancel||est==='Despachado';
+    const cancel=est==='Cancelado',despCanc=cancel||est==='Despachado'||est==='Completado';
     const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
     revTotal+=neto;
     const d=p.createdTime?new Date(p.createdTime):null;
@@ -8450,7 +8456,7 @@ function renderKPIs(){
 
   if(isVendorMode()){
     const TASA=0.035;
-    const despachados=_ped.filter(p=>(p.fields['Estado pedido']||'')==='Despachado');
+    const despachados=_ped.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||''));
     const revDespMes=despachados.filter(p=>p.createdTime&&new Date(p.createdTime)>=monthStart).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
     const comisionMes=Math.round(revDespMes*TASA);
     const pipelineTotal=_cot.filter(c=>['Solicitada','Enviada'].includes(c.fields['Estado cotización']||'')).reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
@@ -8488,7 +8494,7 @@ function renderKPIs(){
 }
 function renderPipelineArea(){
   const _basePed=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
-  const todos=_basePed.filter(p=>p.fields['Estado pedido']!=='Cancelado');const activos=todos.filter(p=>p.fields['Estado pedido']!=='Despachado');
+  const todos=_basePed.filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||''));const activos=todos.filter(p=>p.fields['Estado pedido']!=='Despachado');
   document.getElementById('pedActivosBadge').textContent=activos.length;
   if(!todos.length){document.getElementById('pipelineArea').innerHTML='<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-pedidos"/></svg></div><div>Sin pedidos activos</div><button onclick="switchTab(\'cotizaciones\')" style="margin-top:10px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ver cotizaciones</button></div>';return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'],colores={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
@@ -8517,7 +8523,7 @@ function updateDockBadges(){
   const _pedBadge=isVendorMode()?(state.pedidos||[]).filter(vendorOwnsRecord):(state.pedidos||[]);
   const atrasados=_pedBadge.filter(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
-    if(['Despachado','Cancelado'].includes(est)) return false;
+    if(['Despachado','Completado','Cancelado'].includes(est)) return false;
     return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;
   }).length;
   const ptxt=atrasados>9?'9+':String(atrasados);
@@ -8543,7 +8549,7 @@ function renderAlertas(){
   });
   _ped.forEach(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
-    if(f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(est)){
+    if(f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today&&!['Despachado','Completado','Cancelado'].includes(est)){
       const d=Math.round((today-new Date(f['Fecha entrega']+'T00:00:00'))/86400000);
       alertas.push({sev:3,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-clock"/></svg>',type:'pedido-atrasado',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): atrasado ${d}d`,id:p.id,tab:'pedidos'});
     }
@@ -8566,7 +8572,7 @@ function renderAlertas(){
   });
   _ped.forEach(p=>{
     const f=p.fields,est=f['Estado pedido']||'';
-    if(!f['Fecha entrega']||['Despachado','Cancelado'].includes(est)) return;
+    if(!f['Fecha entrega']||['Despachado','Completado','Cancelado'].includes(est)) return;
     const fe=new Date(f['Fecha entrega']+'T00:00:00');
     if(fe>=today&&fe<=in2days){
       const d=Math.round((fe-today)/86400000);
@@ -8616,7 +8622,7 @@ function renderAlertas(){
     if((pv.fields['Estado']||'')!=='Bloqueado') return;
     const cat=pvCat(pv.fields);
     const nombre=pv.fields['Nombre']||'—';
-    const pedActivos=_ped.filter(x=>!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'')).length;
+    const pedActivos=_ped.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||'')).length;
     if(pedActivos>0)
       alertas.push({sev:3,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-proveedores"/></svg>',type:'proveedor-bloqueado',msg:`<strong>${escapeHtml(nombre)}</strong> bloqueado${cat?` (${escapeHtml(cat)})`:''} — revisar pedidos activos`,id:pv.id,tab:'proveedores'});
   });
@@ -10661,14 +10667,14 @@ function renderRemuneraciones(){
   const today=new Date();today.setHours(0,0,0,0);
 
   // --- Completadas (Despachado) ---
-  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado').filter(vendorOwnsRecord);
+  const despachados=state.pedidos.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')).filter(vendorOwnsRecord);
   const filtrados=_remFiltrarPorPeriodo(despachados);
   const totalBruto=filtrados.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0),0);
   const totalNeto=filtrados.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
   const totalComision=Math.round(totalNeto*TASA);
 
   // --- En proceso (pedidos no despachados, no cancelados) ---
-  const enProceso=state.pedidos.filter(p=>{const est=p.fields['Estado pedido']||'';return!['Despachado','Cancelado'].includes(est);}).filter(vendorOwnsRecord);
+  const enProceso=state.pedidos.filter(p=>{const est=p.fields['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(est);}).filter(vendorOwnsRecord);
 
   // --- Pipeline cotizaciones activas (Solicitada / Enviada) ---
   const pipeline=(state.cotizaciones||[]).filter(c=>['Solicitada','Enviada'].includes(c.fields['Estado cotización']||'')).filter(vendorOwnsRecord);
@@ -10763,7 +10769,7 @@ function renderRemuneraciones(){
 }
 function exportRemCSV(){
   const TASA=0.035;
-  const despachados=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')==='Despachado').filter(vendorOwnsRecord);
+  const despachados=state.pedidos.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')).filter(vendorOwnsRecord);
   const filtrados=_remFiltrarPorPeriodo(despachados);
   const rows=[['N° Pedido','Cliente','F. Despacho','Monto Bruto','Monto Neto','Comisión 3.5%']];
   filtrados.forEach(p=>{
@@ -10782,25 +10788,29 @@ function renderPedidos(filter){
   try{document.querySelectorAll('#pedidosFilterBar button[onclick*="filterPedidos("]').forEach(b=>{const k=/filterPedidos\('([^']+)'/.exec(b.getAttribute('onclick')||'')?.[1];b.classList.toggle('active-filter',k===filter);});}catch(e){}
   _refreshDriveBtns();
   const basePedidos=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
-  let data=filter==='all'?basePedidos:filter==='atrasados'?basePedidos.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
+  const archivados=basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Completado');
+  const archivoCount=document.getElementById('pedidosArchivoCount');if(archivoCount)archivoCount.textContent=archivados.length;
+  let data=filter==='all'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'):filter==='atrasados'?basePedidos.filter(p=>{const f=p.fields;if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'&&(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
   _pedRowIds=data.map(p=>p.id);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
     const emptyHtml=basePedidos.length
       ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-search"/></svg></div>Ningún pedido coincide con este filtro<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="filterPedidos(\'all\',document.querySelector(\'#pedidosFilterBar>button\'))">Ver todos los pedidos</button></div>'
       :'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-pedidos"/></svg></div>Aún no hay pedidos<br><span style="font-size:11px;color:var(--text3)">Los pedidos se generan al aprobar una cotización</span><br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'cotizaciones\')">📋 Ir a cotizaciones</button></div>';
     _setRows(tbody,'<tr><td colspan="12">'+emptyHtml+'</td></tr>');return;}
-  const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
+  const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
   _setRows(tbody,data.slice(0,_pedCap).map(p=>{
-    const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
+    const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Completado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
     const facturaLink=localStorage.getItem('factura_drive_'+p.id)||f['Factura URL']||'';
     const fichaData=parseFichaData(f['Ficha Tecnica']);
     const pedDriveCotId=f['Cotizaciones']?.[0];
     const pedDriveLink=pedDriveCotId?localStorage.getItem('fp_drive_folder_'+pedDriveCotId):localStorage.getItem('fp_drive_folder_ped_'+p.id);
     const pedNotasN=_getNotas('ped',p.id).length;
-    const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item act-item-yellow" onclick="advancePedido('${p.id}','${stages[idx+1]}')">→ &nbsp;Avanzar a "${stages[idx+1]}"</button><div class="act-sep"></div>`:(estado==='Despachado'?'':'');
-    const repClienteItem=estado!=='Despachado'?`<button class="act-item act-item-cyan" onclick="runRepClienteAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> &nbsp;📢 Update cliente IA</button>`:'';
-    const contentItem=estado==='Despachado'?`<button class="act-item act-item-cyan" onclick="runContentAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> &nbsp;🎬 Contenido IA</button>`:'';
-    const facturarItem=estado==='Despachado'?`<button class="act-item act-item-green" onclick="openDTEModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;🧾 Facturar (DTE SII)${f['DTE N°']?' ✓ N° '+escapeHtml(String(f['DTE N°'])):''}</button>`:'';
+    const advLabel=estado==='Despachado'?'✓ &nbsp;Completar y archivar':`→ &nbsp;Avanzar a "${stages[idx+1]||''}"`;
+    const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item ${estado==='Despachado'?'act-item-green':'act-item-yellow'}" onclick="advancePedido('${p.id}','${stages[idx+1]}')">${advLabel}</button><div class="act-sep"></div>`:'';
+    const cerrado=['Despachado','Completado'].includes(estado);
+    const repClienteItem=!cerrado?`<button class="act-item act-item-cyan" onclick="runRepClienteAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> &nbsp;📢 Update cliente IA</button>`:'';
+    const contentItem=cerrado?`<button class="act-item act-item-cyan" onclick="runContentAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> &nbsp;🎬 Contenido IA</button>`:'';
+    const facturarItem=cerrado?`<button class="act-item act-item-green" onclick="openDTEModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;🧾 Facturar (DTE SII)${f['DTE N°']?' ✓ N° '+escapeHtml(String(f['DTE N°'])):''}</button>`:'';
     const consumoItem=estado!=='Cancelado'?`<button class="act-item" onclick="openConsumoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-nut"/></svg> &nbsp;📦 Descontar material${_pedConsumoN(f)?' <span class="nota-badge">'+_pedConsumoN(f)+'</span>':''}</button>`:'';
     const seguimientoItem=(estado!=='Cancelado'&&typeof _seguimientoLink==='function'&&_seguimientoLink(p))?`<button class="act-item" onclick="compartirSeguimiento('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> &nbsp;🔗 Compartir seguimiento</button>`:'';
     const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-ped-${p.id}')">⋯</button><div class="act-menu" id="actmenu-ped-${p.id}">${advItem}<button class="act-item" onclick="openEditPedidoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar pedido</button><button class="act-item act-item-yellow" onclick="startManagePedidoFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;📦 Gestionar (guiado)</button><button class="act-item" onclick="startPedidoOnboardingFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;🚀 Iniciar producción</button><button class="act-item act-item-cyan" onclick="startQAFlow('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🎬 QA (guiado)</button>${facturaLink?`<button class="act-item act-item-green" onclick="window.open('${escapeHtml(facturaLink)}','_blank')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> ✓ &nbsp;Ver factura en Drive</button>`:`<button class="act-item act-item-red" onclick="subirFactura('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;Subir factura PDF</button>`}<button class="act-item${fichaData?' act-item-blue':''}" onclick="openFichaModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Técnica${fichaData?' ✓':''}</button><button class="act-item act-item-cyan" onclick="runProductionAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> &nbsp;📋 Ficha Técnica IA</button><button class="act-item act-item-cyan" onclick="runQAAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-check-circle"/></svg> &nbsp;🤖 Checklist QA IA</button><button class="act-item act-item-cyan" onclick="runAgentChain('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-rocket"/></svg> &nbsp;⚡ Cadena IA (Ficha + QA)</button>${repClienteItem}${contentItem}${facturarItem}${consumoItem}${seguimientoItem}<button class="act-item act-item-blue" onclick="openAdjuntosModal('ped','${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;Ver adjuntos</button><button class="act-item" onclick="openNotasModal('ped','${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${pedNotasN?' <span class="nota-badge">'+pedNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deletePedido('${p.id}','${escapeHtml(f['N° Pedido']||'—')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar pedido</button></div></div>`;
@@ -10816,7 +10826,7 @@ function renderPedidos(filter){
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
     <td style="text-align:center"><button data-pedido="${escapeHtml(f['N° Pedido']||'—')}" onclick="openQAModal('${p.id}',this.dataset.pedido)" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
     <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
-    <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':''}</td></tr>`;
+    <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':estado==='Completado'?'&nbsp;<span class="badge badge-gray">📦</span>':''}</td></tr>`;
   }).join('')+(data.length>_pedCap?_loadMoreRow(data.length-_pedCap,12,'pedShowMore()'):''));
   try{buildPostEntregaTray();}catch(e){}
   // Si la vista Kanban está activa, refléjale los cambios (antes quedaba desactualizada)
@@ -11259,7 +11269,7 @@ async function saveQAModal(){
   const saved=await _qaPersist(id);
   if(saved){await _qaOfferRework(id);closeQAModal();renderPedidos();renderOverview();}
 }
-function filterPedidos(filter,btn){document.querySelectorAll('.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');_pedCap=TABLE_PAGE;renderPedidos(filter);_saveUIState();}
+function filterPedidos(filter,btn){document.querySelectorAll('#pedidosFilterBar>button.active-filter').forEach(b=>b.classList.remove('active-filter'));if(btn) btn.classList.add('active-filter');_pedCap=TABLE_PAGE;renderPedidos(filter);_saveUIState();}
 
 // ── PEDIDOS MULTI-SELECT ──────────────────────────────────────
 function togglePedidoRow(chk){const id=chk.dataset.id;if(chk.checked) selectedPedidos.add(id);else selectedPedidos.delete(id);chk.closest('tr')?.classList.toggle('row-selected',chk.checked);updatePedidosBulkBar();}
@@ -11288,6 +11298,13 @@ async function bulkDeletePedidos(){
 async function bulkEditPedidoEstado(){
   const estado=document.getElementById('pedidosBulkEstado')?.value;if(!estado){toast('Selecciona un estado primero','error');return;}
   let ids=[...selectedPedidos];if(!ids.length) return;
+  if(estado==='Completado'){
+    const validos=ids.filter(id=>(state.pedidosById[id]?.fields['Estado pedido']||'')==='Despachado');
+    const excluidos=ids.length-validos.length;
+    if(excluidos) toast(`📦 ${excluidos} pedido${excluidos!==1?'s':''} sin despachar ${excluidos!==1?'fueron excluidos':'fue excluido'} del archivo`,'info');
+    ids=validos;
+    if(!ids.length){toast('Solo se pueden completar pedidos que ya estén despachados','error');return;}
+  }
   // Compuerta de calidad en lote: nunca despachar rechazados; avisar de los que no tienen QA aprobado
   if(estado==='Despachado'){
     const sel=ids.map(id=>state.pedidosById[id]).filter(Boolean);
@@ -11300,7 +11317,9 @@ async function bulkEditPedidoEstado(){
     }
     if(sinAprobar.length&&!confirm(`⚠ ${sinAprobar.length} de ${ids.length} pedido(s) NO tienen QA aprobado.\n¿Despachar igualmente sin control de calidad?`)) return;
   }
-  if(!confirm(`¿Cambiar estado a "${estado}" para ${ids.length} pedido${ids.length!==1?'s':''}?`)) return;
+  if(!confirm(estado==='Completado'
+    ?`¿Completar y archivar ${ids.length} pedido${ids.length!==1?'s':''} despachado${ids.length!==1?'s':''}?\n\nSeguirán guardados y podrás verlos desde “📦 Archivo”.`
+    :`¿Cambiar estado a "${estado}" para ${ids.length} pedido${ids.length!==1?'s':''}?`)) return;
   const btn=document.querySelector('[onclick="bulkEditPedidoEstado()"]');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   let ok=0,err=0;
   for(const id of ids){try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);const p=state.pedidosById[id];if(p) p.fields['Estado pedido']=estado;ok++;}catch(e){err++;}}
@@ -11342,10 +11361,16 @@ function _epCostoCalc(){
 }
 function closeEditPedidoModal(){document.getElementById('editPedidoModal').style.display='none';}
 async function saveEditPedido(){
-  const btn=document.getElementById('saveEditPedidoBtn');btn.disabled=true;btn.textContent='Guardando...';
+  const btn=document.getElementById('saveEditPedidoBtn');
   const id=document.getElementById('editPedidoId').value;
+  const nuevoEstado=document.getElementById('editPedidoEstado').value;
+  const estadoActual=state.pedidosById[id]?.fields['Estado pedido']||'';
+  if(nuevoEstado==='Completado'&&!['Despachado','Completado'].includes(estadoActual)){
+    toast('Solo se puede completar un pedido que ya esté despachado','error');return;
+  }
+  btn.disabled=true;btn.textContent='Guardando...';
   try{
-    const fields={'Estado pedido':document.getElementById('editPedidoEstado').value,'Fecha entrega':document.getElementById('editPedidoFecha').value||null,'Equipo asignado':document.getElementById('editPedidoEquipo').value,'Proveedor':document.getElementById('editPedidoProveedor').value};
+    const fields={'Estado pedido':nuevoEstado,'Fecha entrega':document.getElementById('editPedidoFecha').value||null,'Equipo asignado':document.getElementById('editPedidoEquipo').value,'Proveedor':document.getElementById('editPedidoProveedor').value};
     const fp=document.getElementById('editPedidoFormaPago').value;if(fp) fields['Forma de pago']=fp;
     const _epVv=document.getElementById('editPedidoVendedor')?.value||'';fields['Vendedor']=_epVv||null;
     if(fields['Estado pedido']==='Despachado'&&!state.pedidosById[id]?.fields['Fecha despacho']) fields['Fecha despacho']=new Date().toISOString().split('T')[0];
@@ -11369,6 +11394,7 @@ async function saveEditPedido(){
 async function advancePedido(id,estado){
   const p=state.pedidosById[id];if(!p) return;
   const f=p.fields;
+  if(estado==='Completado'&&(f['Estado pedido']||'')!=='Despachado'){toast('Solo se puede completar un pedido que ya esté despachado','error');return;}
   // Bloqueo duro: saldo antes de despachar
   if(estado==='Despachado'&&!f['Saldo pagado (50%)']){toast('⚠ Confirma el saldo (50%) antes de despachar','error');return;}
   // Compuerta de calidad: no despachar sin QA aprobado (rechazado = bloqueo; pendiente = confirmación)
@@ -11380,10 +11406,12 @@ async function advancePedido(id,estado){
   // Advertencia suave: sin ningún pago al pasar a producción
   if(estado==='En producción'&&!f['Anticipo pagado (50%)']&&!f['Saldo pagado (50%)']){
     if(!confirm('⚠ No hay abono ni pago total registrado para este pedido.\n¿Estás seguro que quieres avanzar a "En producción"?')) return;
+  } else if(estado==='Completado'){
+    if(!confirm('¿Marcar este pedido como completado y enviarlo al archivo?\n\nSeguirá guardado y podrás verlo desde “📦 Archivo”.')) return;
   } else {
     if(!confirm(`¿Avanzar a "${estado}"?`)) return;
   }
-  try{const flds={'Estado pedido':estado};if(estado==='Despachado') flds['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,flds);Object.assign(p.fields,flds);renderPedidos();toast(`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+  try{const flds={'Estado pedido':estado};if(estado==='Despachado') flds['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,flds);Object.assign(p.fields,flds);renderPedidos();toast(estado==='Completado'?'✓ Pedido completado y archivado':`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 
 // ── NUEVO LEAD + LEAD_AGENT ───────────────────────────────────
 let _leadAgentResponse=null;
@@ -12618,10 +12646,12 @@ function startManagePedidoFlow(id){
   const p=state.pedidosById[id];if(!p){toast('Pedido no encontrado','error');return;}
   const f=p.fields;
   gfStart({title:'📦 Gestionar '+(f['N° Pedido']||'pedido'),initial:{estado:f['Estado pedido']||'Confirmado',fecha:f['Fecha entrega']||'',qa:f['Resultado QA']||'Pendiente'},steps:[
-    {key:'estado',type:'chips',q:'Estado del pedido',options:['Confirmado','En producción','Listo para despacho','Despachado','Cancelado'].map(v=>({label:v,value:v}))},
+    {key:'estado',type:'chips',q:'Estado del pedido',options:['Confirmado','En producción','Listo para despacho','Despachado','Completado','Cancelado'].map(v=>({label:v,value:v}))},
     {key:'fecha',type:'date',q:'Fecha de entrega comprometida',sub:'Opcional — déjalo vacío si aún no hay.'},
     {key:'qa',type:'chips',q:'Control de calidad (QA)',options:[{label:'Pendiente',value:'Pendiente'},{label:'QA aprobado',value:'QA aprobado',icon:'✅'},{label:'Rechazado',value:'Rechazado',icon:'❌'}]},
   ],onComplete:async(a)=>{
+    const estadoActual=f['Estado pedido']||'';
+    if(a.estado==='Completado'&&!['Despachado','Completado'].includes(estadoActual)){toast('Solo se puede completar un pedido que ya esté despachado','error');return;}
     toast('Guardando…','info');
     const fields={'Estado pedido':a.estado};
     if(a.fecha)fields['Fecha entrega']=a.fecha;
@@ -12812,10 +12842,10 @@ function prefillReporte(){
   document.getElementById('rep-cot-env').value=cotSem.length;
   document.getElementById('rep-cot-apr').value=cotSem.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
   // Pedidos activos y despachados esta semana
-  document.getElementById('rep-ped-act').value=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
+  document.getElementById('rep-ped-act').value=state.pedidos.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
   const pedDesSem=state.pedidos.filter(p=>{
     const f=p.fields;
-    if(f['Estado pedido']!=='Despachado') return false;
+    if(!['Despachado','Completado'].includes(f['Estado pedido']||'')) return false;
     const d=f['Fecha despacho']||f['Fecha entrega']||'';
     return d&&new Date(d+'T00:00:00')>=weekStart;
   }).length;
@@ -13146,8 +13176,8 @@ function _digestSemanalTexto(){
   const ped=state.pedidos||[], cot=state.cotizaciones||[];
   const nuevos=ped.filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;return p.createdTime&&new Date(p.createdTime).getTime()>=wsT;});
   const revSem=nuevos.reduce((s,p)=>s+neto(p.fields['Monto total (CLP)']),0);
-  const despachados=ped.filter(p=>{const f=p.fields;const d=f['Fecha despacho']||f['Fecha entrega'];return (f['Estado pedido']||'')==='Despachado'&&d&&new Date(d+'T00:00:00').getTime()>=wsT;});
-  const atrasados=ped.filter(p=>{const f=p.fields;if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;});
+  const despachados=ped.filter(p=>{const f=p.fields;const d=f['Fecha despacho']||f['Fecha entrega'];return ['Despachado','Completado'].includes(f['Estado pedido']||'')&&d&&new Date(d+'T00:00:00').getTime()>=wsT;});
+  const atrasados=ped.filter(p=>{const f=p.fields;if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;});
   const cotEnv=cot.filter(c=>c.createdTime&&new Date(c.createdTime).getTime()>=wsT);
   const cotApr=cot.filter(c=>(c.fields['Estado cotización']||'')==='Aprobada'&&c.createdTime&&new Date(c.createdTime).getTime()>=wsT);
   const byCli={};nuevos.forEach(p=>{const c=p.fields['Cliente'];const id=Array.isArray(c)?c[0]:('n:'+c);byCli[id]=(byCli[id]||0)+neto(p.fields['Monto total (CLP)']);});
@@ -13802,7 +13832,7 @@ function _tvViewMaquinas(){
 }
 function _tvViewHoy(){
   const hoy=new Date();hoy.setHours(0,0,0,0);const hoyStr=fmtDate(hoy);
-  const activos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+  const activos=state.pedidos.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
   const deHoy=activos.filter(p=>p.fields['Fecha entrega']===hoyStr);
   const atrasados=activos.filter(p=>p.fields['Fecha entrega']&&new Date(p.fields['Fecha entrega']+'T00:00:00')<hoy);
   const semana=activos.filter(p=>{const d=p.fields['Fecha entrega'];if(!d)return false;const dd=new Date(d+'T00:00:00');return dd>hoy&&dd<=new Date(hoy.getTime()+7*864e5);}).sort((a,b)=>String(a.fields['Fecha entrega']).localeCompare(String(b.fields['Fecha entrega'])));
@@ -13856,10 +13886,10 @@ function renderPedidosKanban(){
   const today=new Date();today.setHours(0,0,0,0);
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
   const colores={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
-  const activos=state.pedidos.filter(p=>!['Cancelado'].includes(p.fields['Estado pedido']||''));
+  const activos=state.pedidos.filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||''));
   const cols=stages.map(stage=>{
     const items=activos.filter(p=>(p.fields['Estado pedido']||'')==stage);
-    const nextStage=stages[stages.indexOf(stage)+1];
+    const nextStage=stages[stages.indexOf(stage)+1]||(stage==='Despachado'?'Completado':null);
     const cards=items.map(p=>{
       const f=p.fields,entrega=f['Fecha entrega']||'',atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&stage!=='Despachado';
       const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
@@ -13871,7 +13901,7 @@ function renderPedidosKanban(){
         <div style="font-size:11px;color:var(--text2);margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(f['Cliente']))}</div>
         <div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:6px">${formatCLP(neto)}</div>
         ${entrega?`<div style="font-size:10px;color:${atrasado?'var(--danger)':'var(--text3)'};margin-bottom:7px">📅 ${entrega}</div>`:''}
-        ${nextStage?`<button onclick="event.stopPropagation();advancePedido('${p.id}','${nextStage}')" style="width:100%;background:rgba(255,107,53,0.1);border:1px solid rgba(255,107,53,0.3);color:var(--accent2);border-radius:6px;padding:5px 0;font-size:10px;font-weight:700;cursor:pointer;transition:background .15s" onmouseenter="this.style.background='rgba(255,107,53,0.22)'" onmouseleave="this.style.background='rgba(255,107,53,0.1)'">→ ${nextStage.split(' ')[0]}</button>`:'<div style="text-align:center;font-size:10px;color:var(--accent3);font-weight:700">✓ Completado</div>'}
+        ${nextStage?`<button onclick="event.stopPropagation();advancePedido('${p.id}','${nextStage}')" style="width:100%;background:rgba(255,107,53,0.1);border:1px solid rgba(255,107,53,0.3);color:var(--accent2);border-radius:6px;padding:5px 0;font-size:10px;font-weight:700;cursor:pointer;transition:background .15s" onmouseenter="this.style.background='rgba(255,107,53,0.22)'" onmouseleave="this.style.background='rgba(255,107,53,0.1)'">${nextStage==='Completado'?'✓ Completar y archivar':'→ '+nextStage.split(' ')[0]}</button>`:''}
       </div>`;
     }).join('');
     const colTotal=items.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
@@ -14011,8 +14041,8 @@ function renderPedidosPlanificacion(){
   const today=new Date();today.setHours(0,0,0,0);
   const dias=14;
   const fechas=Array.from({length:dias},(_,i)=>{const d=new Date(today);d.setDate(d.getDate()+i);return d;});
-  const activos=state.pedidos.filter(p=>!['Cancelado','Despachado'].includes(p.fields['Estado pedido']||''));
-  const atrasados=state.pedidos.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];return fe&&new Date(fe+'T00:00:00')<today&&!['Cancelado','Despachado'].includes(f['Estado pedido']||'');});
+  const activos=state.pedidos.filter(p=>!['Cancelado','Despachado','Completado'].includes(p.fields['Estado pedido']||''));
+  const atrasados=state.pedidos.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];return fe&&new Date(fe+'T00:00:00')<today&&!['Cancelado','Despachado','Completado'].includes(f['Estado pedido']||'');});
   const enProd=activos.filter(p=>p.fields['Estado pedido']==='En producción').length;
   const listos=activos.filter(p=>p.fields['Estado pedido']==='Listo para despacho').length;
   const estaSemana=activos.filter(p=>{const fe=p.fields['Fecha entrega'];if(!fe)return false;const d=new Date(fe+'T00:00:00'),diff=Math.floor((d-today)/86400000);return diff>=0&&diff<=7;}).length;
@@ -14065,7 +14095,7 @@ function renderPedidosCalendario(){
   const stageColors={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
   // Agrupar pedidos por Fecha entrega del mes
   const byDate={};
-  state.pedidos.filter(p=>!['Cancelado'].includes(p.fields['Estado pedido']||'')).forEach(p=>{
+  state.pedidos.filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||'')).forEach(p=>{
     const fe=p.fields['Fecha entrega'];if(!fe) return;
     const [py,pm]=fe.split('-').map(Number);
     if(py===y&&pm===m+1){if(!byDate[fe]) byDate[fe]=[];byDate[fe].push(p);}
@@ -14408,7 +14438,7 @@ function buildAgentContext(id){
   const C=_av?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
   const CL=_av?state.clientes.filter(vendorOwnsRecord):state.clientes;
   // métricas base compartidas
-  const pedActivos=P.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+  const pedActivos=P.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
   const pedAtrasados=pedActivos.filter(p=>p.fields['Fecha entrega']&&new Date(p.fields['Fecha entrega']+'T00:00:00')<today);
   const cotAbiertas=C.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||''));
   const revSemana=P.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
@@ -14559,7 +14589,7 @@ function buildAgentContext(id){
   }
 
   if(id==='CONTENT'){
-    const recientes=P.filter(p=>p.fields['Estado pedido']==='Despachado').slice(-6);
+    const recientes=P.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')).slice(-6);
     lines.push('\nÚLTIMOS PROYECTOS ENTREGADOS (para contenido):');
     if(recientes.length){recientes.forEach(p=>{const f=p.fields;const sol=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';lines.push(`  • ${resolveClienteName(f['Cliente'])} | ${f['Fecha despacho']||f['Fecha entrega']||'—'} | ${fmtCLP((f['Monto total (CLP)']||0)/1.19)}${sol?' | '+sol.substring(0,60):''}`);});}else lines.push('  Sin proyectos despachados recientes');
   }
