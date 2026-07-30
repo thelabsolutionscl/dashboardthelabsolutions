@@ -40,8 +40,8 @@
         return '—';
       };
 
-      const activos = ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields?.['Estado pedido']||''));
-      const atrasados = ped.filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;});
+      const activos = ped.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields?.['Estado pedido']||''));
+      const atrasados = ped.filter(p=>{const f=p.fields||{};if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;});
       const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||''));
       const revTotal = ped.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0);
 
@@ -199,7 +199,7 @@ CAPACIDADES Y REGLAS:
       const s=window.state||{};
       const ped=s.pedidos||[], cot=s.cotizaciones||[], fac=s.facturas||[];
       const today=new Date(); today.setHours(0,0,0,0);
-      const atrasados=ped.filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
+      const atrasados=ped.filter(p=>{const f=p.fields||{};if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
       const vencidas=fac.filter(x=>x.fields&&(x.fields['Estado Pago']||'')==='Vencida').length;
       const cotPend=cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||'')).length;
       const parts=[];
@@ -317,7 +317,7 @@ CAPACIDADES Y REGLAS:
         if(!cli) return 'No encontré un cliente que coincida con "'+nombre+'".';
         const f=cli.fields; const emp=f['Empresa']||f['Contacto']||'—';
         const peds=(s.pedidos||[]).filter(p=>{const c=p.fields['Cliente'];return Array.isArray(c)?c.includes(cli.id):(norm(c)===norm(emp));});
-        const activos=peds.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+        const activos=peds.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
         let saldo=0;try{saldo=(typeof finGetAllFacturas==='function'?finGetAllFacturas():[]).filter(r=>r.porCobrar>0&&(norm(r.empresa)===norm(emp)||norm(r.nombre)===norm(emp))).reduce((a,r)=>a+(r.porCobrar||0),0);}catch(e){}
         let nps=null;try{const ns=peds.map(p=>typeof _npsScore==='function'?_npsScore(p):null).filter(v=>v!=null);if(ns.length)nps=ns.reduce((a,b)=>a+b,0)/ns.length;}catch(e){}
         const L=['Cliente: '+emp+(f['Etapa venta']?' | Etapa: '+f['Etapa venta']:'')+(f['Estado cuenta']?' | '+f['Estado cuenta']:'')];
@@ -347,7 +347,7 @@ CAPACIDADES Y REGLAS:
       }
       if(consulta==='pedidos_atrasados'){
         const today=new Date();today.setHours(0,0,0,0);
-        const at=(s.pedidos||[]).filter(p=>{const f=p.fields||{};if(['Despachado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;})
+        const at=(s.pedidos||[]).filter(p=>{const f=p.fields||{};if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;})
           .sort((a,b)=>String(a.fields['Fecha entrega']).localeCompare(String(b.fields['Fecha entrega'])));
         if(!at.length) return 'No hay pedidos atrasados. Todo al día.';
         return at.length+' pedido(s) atrasado(s):\n'+at.slice(0,12).map(p=>{const f=p.fields;const dias=Math.floor((today-new Date(f['Fecha entrega']+'T00:00:00'))/864e5);return '- '+(f['N° Pedido']||'—')+' | '+cliNombre(Array.isArray(f['Cliente'])?f['Cliente'][0]:f['Cliente'])+' | '+(f['Estado pedido']||'—')+' | '+dias+' día(s) de atraso';}).join('\n');
@@ -393,7 +393,7 @@ CAPACIDADES Y REGLAS:
       }
       if(consulta==='resumen'){
         const today=new Date();today.setHours(0,0,0,0);
-        const ped=s.pedidos||[];const activos=ped.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+        const ped=s.pedidos||[];const activos=ped.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
         const at=activos.filter(p=>{const f=p.fields||{};return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;});
         const cotPend=(s.cotizaciones||[]).filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
         let porCobrar=0;try{porCobrar=(typeof finGetAllFacturas==='function'?finGetAllFacturas():[]).filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);}catch(e){}

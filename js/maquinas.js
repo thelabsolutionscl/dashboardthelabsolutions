@@ -1604,7 +1604,7 @@ function openMaquinaModal(maqId,nombre,dateStr){
   document.getElementById('maquinaModalFechaInicio').value=dateStr;
   document.getElementById('maquinaModalFechaFin').value=dateStr;
   // poblar select de pedidos activos
-  const activos=state.pedidos.filter(p=>!['Despachado','Cancelado'].includes(p.fields['Estado pedido']||''));
+  const activos=state.pedidos.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
   const sel=document.getElementById('maquinaModalPedido');
   sel.innerHTML='<option value="">— sin pedido vinculado —</option>'+activos.map(p=>{
     const f=p.fields;
@@ -1703,7 +1703,7 @@ function renderEquipoResumenHoy(today){
     const fn=p.nombre.split(' ')[0].toLowerCase();
     const misPedidos=state.pedidos.filter(x=>{
       const ea=(x.fields['Equipo asignado']||'').toLowerCase();
-      return ea.includes(fn)&&!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'');
+      return ea.includes(fn)&&!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||'');
     });
     const proxEntrega=misPedidos
       .filter(x=>x.fields['Fecha entrega']&&new Date(x.fields['Fecha entrega']+'T00:00:00')>=todayDate)
@@ -1734,7 +1734,7 @@ function renderEquipoDetalleSemana(dias){
     const fn=p.nombre.split(' ')[0].toLowerCase();
     const misPedidos=state.pedidos.filter(x=>{
       const ea=(x.fields['Equipo asignado']||'').toLowerCase();
-      return ea.includes(fn)&&!['Despachado','Cancelado'].includes(x.fields['Estado pedido']||'');
+      return ea.includes(fn)&&!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||'');
     });
     // Mapa fecha→lista de N°Pedido que vencen ese día
     const entregasDias={};

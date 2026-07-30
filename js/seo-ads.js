@@ -601,7 +601,7 @@ function getCapacidadLineas(){
   }catch(e){}
   const fdmS=calcSlots(fdmSmallIds);
   const fdmL=calcSlots(fdmLargeIds);
-  const activos=(state.pedidos||[]).filter(p=>{const e=(p.fields||{})['Estado pedido']||'';return e!=='Despachado'&&e!=='Cancelado';}).length;
+  const activos=(state.pedidos||[]).filter(p=>{const e=(p.fields||{})['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(e);}).length;
   const pedPct=Math.min(Math.round(activos/20*100),100);
   const sem=pct=>{
     if(pct>=85) return{s:'🔴',a:'PAUSAR',m:'Línea saturada — considera pausar campañas para no colapsar producción',c:'var(--danger)'};
@@ -869,12 +869,14 @@ function adsExportKeywordsCSV(){
   a.click();
   toast('✓ CSV de palabras clave descargado','success');
 }
-function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s) return JSON.parse(s);}catch(e){}const _dw=_DEFAULTS.ADS_WEBAPP,_dc=_DEFAULTS.ADS_CUSTOMER;return{endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbzepd4w_8meCRmOCsx-pngGHyQ_BqUXAaWAFE8WpIFtTO6zRmFPDukNarCXUNzmfLdt/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099'};}
+function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s){const c=JSON.parse(s);return{...c,secret:c.secret||''};}}catch(e){}const _dw=_DEFAULTS.ADS_WEBAPP,_dc=_DEFAULTS.ADS_CUSTOMER;return{endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbzepd4w_8meCRmOCsx-pngGHyQ_BqUXAaWAFE8WpIFtTO6zRmFPDukNarCXUNzmfLdt/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099',secret:''};}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
+  const secret=(document.getElementById('ads-secret')?.value||'').trim();
   if(!endpoint){toast('Ingresa la URL del endpoint','error');return;}
-  localStorage.setItem('ads_config',JSON.stringify({endpoint,customerId}));
+  if(secret.length<16){toast('Usa un secreto de al menos 16 caracteres','error');return;}
+  localStorage.setItem('ads_config',JSON.stringify({endpoint,customerId,secret}));
   document.getElementById('adsConfigPanel').style.display='none';
   toast('✓ Configuración Google Ads guardada','success');
   loadAdsData();
@@ -887,12 +889,14 @@ function toggleAdsConfig(){
     const cfg=getAdsConfig();
     if(cfg.endpoint) document.getElementById('ads-endpoint').value=cfg.endpoint;
     if(cfg.customerId) document.getElementById('ads-customer-id').value=cfg.customerId;
+    document.getElementById('ads-secret').value=cfg.secret||'';
   }
 }
 function copyAdsScript(id){
   let code=document.getElementById(id||'adsScriptCode')?.textContent||'';
   const cfg=getAdsConfig();
   if(cfg.endpoint) code=code.replace('PEGA_AQUI_LA_URL_DEL_SCRIPT_1',cfg.endpoint);
+  if(cfg.secret) code=code.replace('CONFIGURA_UN_SECRETO_LARGO_Y_UNICO',cfg.secret);
   if(cfg.customerId) code=code.replace('PEGA_AQUI_EL_CUSTOMER_ID',cfg.customerId.replace(/-/g,''));
   navigator.clipboard.writeText(code).then(()=>toast('✓ Script copiado (endpoint y customer ID pre-rellenados)','success')).catch(()=>{
     const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Script copiado','success');
@@ -1211,6 +1215,7 @@ function confirmDeleteCampaign(){
 async function adsLimpiarHistorialMutaciones(){
   const cfg=getAdsConfig();
   if(!cfg.endpoint){toast('No hay endpoint configurado','error');return;}
+  if(!cfg.secret){toast('Configura el secreto de mutaciones de Google Ads','error');return;}
   try{
     const r=await fetch(cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now());
     const d=await r.json();
@@ -1219,7 +1224,7 @@ async function adsLimpiarHistorialMutaciones(){
     const resueltas=todas.length-pendientes.length;
     if(!resueltas){toast('No hay mutaciones resueltas que limpiar','info');return;}
     if(!confirm(`Se eliminarán ${resueltas} mutaciones ya resueltas (aplicadas o con error) del historial del servidor. Se conservan las ${pendientes.length} pendientes. ¿Continuar?`)) return;
-    const res=await fetch(cfg.endpoint,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({secret:'thelab2025',type:'update_mutations',mutations:pendientes})});
+    const res=await fetch(cfg.endpoint,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({secret:cfg.secret,type:'update_mutations',mutations:pendientes})});
     const dr=await res.json().catch(()=>({}));
     if(dr&&dr.ok){
       _adsPendingMutations=_adsPendingMutations.filter(m=>m.status==='pending'||m.status==='enviado');
@@ -1409,11 +1414,12 @@ async function adsDiagnostico(){
 function sendAdsMutation(mutation){
   const cfg=getAdsConfig();
   if(!cfg.endpoint){mutation.status='error';mutation.error='No hay endpoint configurado';savePendingToStorage();renderPendingMutations();return;}
+  if(!cfg.secret){mutation.status='error';mutation.error='Configura el secreto de mutaciones';savePendingToStorage();renderPendingMutations();return;}
   // text/plain evita el CORS preflight que bloquea los POSTs a Google Apps Script
   fetch(cfg.endpoint,{
     method:'POST',
     headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify({secret:'thelab2025',type:'mutation',...mutation})
+    body:JSON.stringify({secret:cfg.secret,type:'mutation',...mutation})
   }).then(r=>r.json()).then(d=>{
     if(d&&d.ok){mutation.status='enviado';mutation.error='';}
     else{mutation.status='error';mutation.error=(d&&d.error)||'El servidor rechazó la mutación';}
