@@ -660,6 +660,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const name=(prompt('Nombre del perfil:','')||'').trim();if(!name)return;
     const vals={};for(const f of FIELDS){const e=el('sl_f_'+f.k);if(e)vals[f.k]=e.value;}
     const m=_slProfiles();m[name]=vals;_slProfilesSave(m);renderProfileSel();
+    if(window.MachineOps?.captureSlicerProfile)window.MachineOps.captureSlicerProfile(name,vals,{model:el('slPrinter')?.value||'',material:el('slMaterial')?.value||'',nozzle:el('slNozzle')?.value||'0.4'});
     el('slProfileSel').value=name;toast(`✓ Perfil "${name}" guardado`,'success');
   }
   function loadProfile(name){
