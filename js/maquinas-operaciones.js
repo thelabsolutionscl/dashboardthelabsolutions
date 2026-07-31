@@ -36,6 +36,19 @@ const DEFAULT_MAINT={
   'Giga':{'nozzle':180,'lubrication':70,'belt':350,'extruder':240,'bed':180,'sensors':450,'general':40},
 };
 const MAINT_KEYS=['nozzle','lubrication','belt','extruder','bed','sensors','general'];
+const POST_STAGES=[
+  {key:'lijado',label:'Lijado',icon:'🪵'},
+  {key:'pintura',label:'Pintura',icon:'🎨'},
+  {key:'dtf',label:'DTF / gráfica',icon:'🖼'},
+  {key:'acrilico',label:'Acrílico / corte',icon:'✂️'},
+  {key:'armado',label:'Armado',icon:'🧩'},
+  {key:'empaque',label:'Empaque',icon:'📦'},
+];
+const DEFAULT_SAFETY={
+  enforce:false,cameraRequired:true,ventilationRequired:true,smokeRequired:true,
+  maxTemperature:38,maxHumidity:75,maxVoc:600,staleMinutes:10,
+  sensorUrl:'',updatedAt:0,
+};
 
 let _data=null,_remoteTimer=null,_initialized=false,_initPromise=null,_activeView='operacion';
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -46,18 +59,26 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const cssColor=v=>/^(#[0-9a-f]{3,8}|[a-z]{1,20})$/i.test(String(v||'').trim())?String(v).trim():'#888';
 const fmtMin=m=>{m=Math.max(0,Math.round(num(m)));const h=Math.floor(m/60),mm=m%60;return h?`${h}h ${mm}m`:`${mm}m`;};
 const fmtMoney=v=>typeof formatCLP==='function'?formatCLP(Math.round(num(v))):'$'+Math.round(num(v)).toLocaleString('es-CL');
+const fmtStamp=v=>v?new Date(v).toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'}):'';
 const dateValue=v=>v?new Date(v+'T12:00:00').getTime():Infinity;
 const actor=()=>{try{const u=AUTH.getUser();return u?.name||u?.username||'Sistema';}catch(_){return'Sistema';}};
+const hashText=value=>{let h=2166136261;for(const c of String(value||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return(h>>>0).toString(16).padStart(8,'0');};
+const postStageMeta=key=>POST_STAGES.find(s=>s.key===key)||{key,label:key,icon:'•'};
 
 function defaultData(){
-  return{version:2,updatedAt:0,jobs:[],spools:[],qa:[],audit:[],maintenanceProfiles:JSON.parse(JSON.stringify(DEFAULT_MAINT))};
+  return{version:3,updatedAt:0,jobs:[],spools:[],qa:[],workflows:[],profiles:[],safetyReadings:[],audit:[],
+    safetyConfig:{...DEFAULT_SAFETY},maintenanceProfiles:JSON.parse(JSON.stringify(DEFAULT_MAINT))};
 }
 function normalizeData(raw){
   const d={...defaultData(),...(raw&&typeof raw==='object'?raw:{})};
   d.jobs=Array.isArray(d.jobs)?d.jobs:[];
   d.spools=Array.isArray(d.spools)?d.spools:[];
   d.qa=Array.isArray(d.qa)?d.qa:[];
+  d.workflows=Array.isArray(d.workflows)?d.workflows:[];
+  d.profiles=Array.isArray(d.profiles)?d.profiles:[];
+  d.safetyReadings=Array.isArray(d.safetyReadings)?d.safetyReadings.slice(0,200):[];
   d.audit=Array.isArray(d.audit)?d.audit:[];
+  d.safetyConfig={...DEFAULT_SAFETY,...(d.safetyConfig||{})};
   const saved=d.maintenanceProfiles||{};
   d.maintenanceProfiles={};
   MODELS.forEach(model=>{d.maintenanceProfiles[model]={...DEFAULT_MAINT[model],...(saved[model]||{})};});
@@ -87,7 +108,11 @@ function mergeData(local,remote){
     jobs:mergeRows(l.jobs,r.jobs),
     spools:mergeRows(l.spools,r.spools),
     qa:mergeRows(l.qa,r.qa),
+    workflows:mergeRows(l.workflows,r.workflows),
+    profiles:mergeRows(l.profiles,r.profiles),
+    safetyReadings:mergeRows(l.safetyReadings,r.safetyReadings).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,200),
     audit:mergeRows(l.audit,r.audit).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,500),
+    safetyConfig:remoteIsNewer?r.safetyConfig:l.safetyConfig,
     maintenanceProfiles:remoteIsNewer?r.maintenanceProfiles:l.maintenanceProfiles,
     updatedAt:Math.max(num(l.updatedAt),num(r.updatedAt)),
   });
@@ -251,10 +276,11 @@ function renderPlanning(){
       ['pendiente','planificado'].includes(j.status)?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.enqueueJob('${j.id}')" title="Enviar a cola">＋ Cola</button>`:'',
       j.status==='en_cola'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.startJob('${j.id}')" title="Iniciar archivo en Moonraker">▶</button>`:'',
       j.status==='qa'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.openQA('${j.id}')">QA</button>`:'',
+      `<button class="btn btn-ghost btn-sm" onclick="MachineOps.printEntityLabel('job','${j.id}')" title="Etiqueta QR">▦</button>`,
       `<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveJob('${j.id}')" title="Archivar">🗄</button>`,
     ].join('');
     return`<tr>
-      <td><b style="color:var(--text)">${esc(j.name)}</b><div style="font-size:9px;color:var(--text3);margin-top:2px">${esc(j.gcodeFile||'sin archivo')}</div></td>
+      <td><b style="color:var(--text)">${esc(j.name)}</b><div style="font-size:9px;color:var(--text3);margin-top:2px">${esc(j.gcodeFile||'sin archivo')}${j.profileId?` · ${esc(profileLabel(j.profileId))}`:''}</div>${j.postStages?.length?`<div style="font-size:8.5px;color:var(--accent4);margin-top:2px">${j.postStages.map(k=>postStageMeta(k).icon+' '+esc(postStageMeta(k).label)).join(' · ')}</div>`:''}</td>
       <td>${esc(orderLabel(j.pedidoId)||'—')}</td>
       <td>${num(j.qty,1)} u · ${cycles} ciclos<div style="font-size:9px;color:var(--text3)">${produced}/${cycles} completados · ${fmtMin(jobMinutes(j))}</div></td>
       <td>${esc(j.material||'—')} · ${esc(j.color||'—')}<div style="font-size:9px;color:var(--text3)">${num(j.grams)} g</div></td>
@@ -295,9 +321,13 @@ function fillJobSelects(job={}){
   if(machine)machine.innerHTML='<option value="">— planificar automáticamente —</option>'+(MAQUINAS||[]).map(m=>`<option value="${m.id}"${job.machineId===m.id?' selected':''}>${esc(m.nombre)} #${m.numG} · ${esc(liveState(m.id)||'sin datos')}</option>`).join('');
   const spool=document.getElementById('mopsJobSpool');
   if(spool)spool.innerHTML='<option value="">— sin rollo reservado —</option>'+data().spools.filter(s=>!s.archived&&s.status!=='agotado').map(s=>`<option value="${s.id}"${job.spoolId===s.id?' selected':''}>${esc(s.name)} · ${esc(s.material)} ${esc(s.color)} · ${Math.round(spoolAvailable(s))}g libres</option>`).join('');
+  const profile=document.getElementById('mopsJobProfile');
+  if(profile){const choices=latestProfiles().filter(p=>!p.archived&&p.status!=='deprecated'),current=data().profiles.find(p=>p.id===job.profileId);if(current&&!choices.some(p=>p.id===current.id))choices.unshift(current);profile.innerHTML='<option value="">— sin perfil controlado —</option>'+choices.map(p=>`<option value="${p.id}"${job.profileId===p.id?' selected':''}>${esc(p.name)} v${num(p.version,1)} · ${esc(p.model)} ${esc(p.material)} ${esc(p.nozzle)}mm · ${esc(p.status)}</option>`).join('');}
   const models=document.getElementById('mopsJobModels');
   const selected=new Set(job.compatibleModels||[]);
   if(models)models.innerHTML=MODELS.map(m=>`<label><input type="checkbox" value="${esc(m)}"${selected.has(m)?' checked':''}> ${esc(m)} <span style="color:var(--text3);font-size:9px">${esc(MODEL_CAPS[m].bed.join('×'))}</span></label>`).join('');
+  const post=document.getElementById('mopsJobPostStages'),postSelected=new Set(job.postStages||[]);
+  if(post)post.innerHTML=POST_STAGES.map(s=>`<label><input type="checkbox" value="${s.key}"${postSelected.has(s.key)?' checked':''}> ${s.icon} ${esc(s.label)}</label>`).join('');
 }
 function input(id){return document.getElementById(id);}
 function inputVal(id){return input(id)?.value??'';}
@@ -321,14 +351,16 @@ function collectJob(){
   const id=inputVal('mopsJobId'),existing=id?data().jobs.find(j=>j.id===id):null;
   const qty=Math.max(1,num(inputVal('mopsJobQty'),1)),unitsPerBed=Math.max(1,num(inputVal('mopsJobBedQty'),1));
   const models=[...document.querySelectorAll('#mopsJobModels input:checked')].map(x=>x.value);
+  const postStages=[...document.querySelectorAll('#mopsJobPostStages input:checked')].map(x=>x.value);
   return{
     ...(existing||{}),id:id||uid('job'),name:inputVal('mopsJobName').trim(),pedidoId:inputVal('mopsJobPedido'),
     qty,unitsPerBed,cycles:Math.max(1,num(inputVal('mopsJobCycles'),Math.ceil(qty/unitsPerBed))),
     minutesPerCycle:Math.max(1,num(inputVal('mopsJobMinutes'),60)),material:inputVal('mopsJobMaterial'),color:inputVal('mopsJobColor').trim(),
     grams:Math.max(0,num(inputVal('mopsJobGrams'))),nozzle:inputVal('mopsJobNozzle'),sizeX:Math.max(0,num(inputVal('mopsJobX'))),
     sizeY:Math.max(0,num(inputVal('mopsJobY'))),sizeZ:Math.max(0,num(inputVal('mopsJobZ'))),dueDate:inputVal('mopsJobDue'),
-    priority:inputVal('mopsJobPriority'),machineId:inputVal('mopsJobMachine'),spoolId:inputVal('mopsJobSpool'),
+    priority:inputVal('mopsJobPriority'),machineId:inputVal('mopsJobMachine'),spoolId:inputVal('mopsJobSpool'),profileId:inputVal('mopsJobProfile'),
     gcodeFile:inputVal('mopsJobFile').trim(),notes:inputVal('mopsJobNotes').trim(),compatibleModels:models,
+    postStages,
     status:existing?.status||'pendiente',createdAt:existing?.createdAt||nowIso(),updatedAt:nowIso(),archived:false,
   };
 }
@@ -336,6 +368,7 @@ function validateJob(j){
   const errors=[];if(!j.name)errors.push('Falta el nombre del trabajo.');
   if(j.machineId){const m=getMachine(j.machineId);if(!m||!modelCanRun(m.modelo,j))errors.push('La máquina elegida no es compatible con material o dimensiones.');}
   if(j.spoolId){const s=data().spools.find(x=>x.id===j.spoolId);if(!s)errors.push('El rollo reservado no existe.');else{const previous=data().jobs.find(x=>x.id===j.id);const ownReservation=previous?.spoolId===s.id&&!previous.materialConsumed?num(previous.grams):0;const available=spoolAvailable(s)+ownReservation;if(available<j.grams)errors.push(`El rollo solo tiene ${Math.round(available)} g libres y el trabajo necesita ${j.grams} g.`);}}
+  if(j.profileId){const p=data().profiles.find(x=>x.id===j.profileId);if(!p||p.archived)errors.push('El perfil de laminado seleccionado ya no está disponible.');else if((p.model&&j.machineId&&p.model!==getMachine(j.machineId)?.modelo)||(p.material&&p.material!==j.material)||(p.nozzle&&String(p.nozzle)!==String(j.nozzle)))errors.push('El perfil no coincide con la máquina, material o boquilla del trabajo.');}
   if(!jobModels(j).length)errors.push('Ningún modelo de la flota admite este trabajo.');
   return errors;
 }
@@ -378,6 +411,7 @@ async function startJob(id){
   const m=getMachine(j.machineId),st=liveState(j.machineId);
   if(!machineOperational(m)){toast('La máquina no está operativa','error');return;}
   if(st==='printing'||st==='paused'){j.status='en_cola';persist('Trabajo conservado en cola');toast('La impresora está ocupada; el trabajo permanece en cola','info');return;}
+  if(!checkSafetyBeforeStart(j,m))return;
   if(!j.gcodeFile){toast('Configura el nombre del archivo G-code que ya está en la impresora','error');return;}
   if(!confirm(`Iniciar ${j.gcodeFile} en ${machineLabel(j.machineId)}?`))return;
   try{
@@ -408,7 +442,7 @@ function renderMaterials(){
       <div class="mops-spool-meter"><i style="width:${pct}%;background:${color}"></i></div>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2)"><span><b>${Math.round(free)} g</b> libres</span><span>${Math.round(res)} g reservados</span></div>
       <div style="font-size:9px;color:var(--text3);margin-top:6px">${esc(machineLabel(s.machineId))}${s.slot?' · slot '+esc(s.slot):''} · ${fmtMoney(num(s.costPerKg))}/kg</div>
-      <div style="display:flex;gap:5px;margin-top:9px"><button class="btn btn-ghost btn-sm" onclick="MachineOps.openSpool('${s.id}')">Editar</button>${s.status!=='agotado'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.markSpoolEmpty('${s.id}')">Agotar</button>`:''}</div>
+      <div style="display:flex;gap:5px;margin-top:9px"><button class="btn btn-ghost btn-sm" onclick="MachineOps.openSpool('${s.id}')">Editar</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.printEntityLabel('spool','${s.id}')">▦ QR</button>${s.status!=='agotado'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.markSpoolEmpty('${s.id}')">Agotar</button>`:''}</div>
     </div>`;
   }).join('')}</div>`:'<div class="empty-state">No hay rollos registrados. Agrega el primero para reservar material por trabajo.</div>';
 }
@@ -437,6 +471,79 @@ function saveSpool(){
 function markSpoolEmpty(id){const s=data().spools.find(x=>x.id===id);if(!s)return;s.remaining=0;s.status='agotado';s.updatedAt=nowIso();persist('Rollo agotado');}
 function reconcileSpools(){renderMaterials();toast('Reservas recalculadas desde los trabajos activos','success');}
 
+// ── Biblioteca compartida y versionada de perfiles Orca/Slicer ──────
+function profileKey(p){return[p.name,p.model,p.material,p.nozzle].map(x=>String(x||'').trim().toLowerCase()).join('|');}
+function latestProfiles(){
+  const map=new Map();data().profiles.filter(p=>!p.archived).forEach(p=>{const k=profileKey(p),old=map.get(k);if(!old||num(p.version)>num(old.version)||(num(p.version)===num(old.version)&&Date.parse(p.updatedAt||0)>Date.parse(old.updatedAt||0)))map.set(k,p);});
+  return[...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')||a.model.localeCompare(b.model,'es'));
+}
+function profileLabel(id){const p=data().profiles.find(x=>x.id===id);return p?`${p.name} v${num(p.version,1)}`:'perfil eliminado';}
+function addProfileVersion(meta,params){
+  const normalized={...(params||{})},fingerprint=hashText(JSON.stringify(normalized));
+  const siblings=data().profiles.filter(p=>profileKey(p)===profileKey(meta));
+  const duplicate=siblings.find(p=>p.fingerprint===fingerprint&&!p.archived);
+  if(duplicate)return{profile:duplicate,created:false};
+  const version=Math.max(0,...siblings.map(p=>num(p.version)))+1;
+  const p={id:uid('profile'),name:String(meta.name||'').trim(),model:meta.model||'',material:meta.material||'',nozzle:String(meta.nozzle||'0.4'),
+    layerHeight:num(meta.layerHeight||normalized.layerHeight),status:meta.status||'experimental',version,parentId:siblings[0]?.id||'',fingerprint,
+    params:normalized,notes:String(meta.notes||''),approvedBy:meta.status==='approved'?actor():'',approvedAt:meta.status==='approved'?nowIso():'',
+    createdAt:nowIso(),updatedAt:nowIso(),archived:false};
+  data().profiles.push(p);return{profile:p,created:true};
+}
+function importLegacyProfiles(){
+  let legacy={};try{legacy=JSON.parse(localStorage.getItem('sl_profiles')||'{}');}catch(_){}
+  let added=0;Object.entries(legacy).forEach(([name,params])=>{const r=addProfileVersion({name,model:'',material:'',nozzle:'0.4',status:'experimental',notes:'Importado desde perfil local'},params);if(r.created)added++;});
+  if(added){writeLocal();scheduleRemote();audit('Perfiles locales importados','',`${added} perfil(es)`);}
+}
+function captureSlicerProfile(name,params,meta={}){
+  const r=addProfileVersion({name,model:meta.model||'',material:meta.material||'',nozzle:meta.nozzle||'0.4',status:'experimental',notes:'Capturado desde el laminador'},params);
+  if(r.created){persist('Nueva versión de perfil capturada');toast(`Perfil compartido ${name} v${r.profile.version} ✓`,'success');}
+  else toast('Ese perfil ya está respaldado con la misma versión','info');
+  return r.profile;
+}
+function openProfile(id=''){
+  const p=id?data().profiles.find(x=>x.id===id):null,base=p||{model:'K1',material:'PLA',nozzle:'0.4',status:'experimental',params:{}};
+  setText('mopsProfileModalTitle',p?'Nueva versión del perfil':'Nuevo perfil controlado');setVal('mopsProfileSourceId',p?.id||'');setVal('mopsProfileName',base.name);setVal('mopsProfileModel',base.model);
+  setVal('mopsProfileMaterial',base.material);setVal('mopsProfileNozzle',base.nozzle);setVal('mopsProfileLayer',base.layerHeight||base.params?.layerHeight);setVal('mopsProfileStatus',base.status);
+  setVal('mopsProfileNotes',base.notes);setVal('mopsProfileParams',JSON.stringify(base.params||{},null,2));input('mopsProfileModal').style.display='flex';
+}
+function closeProfile(){input('mopsProfileModal').style.display='none';}
+function saveProfile(){
+  const name=inputVal('mopsProfileName').trim();if(!name){toast('Ingresa un nombre para el perfil','error');return;}
+  let params={};try{params=JSON.parse(inputVal('mopsProfileParams')||'{}');}catch(_){toast('Los parámetros JSON no son válidos','error');return;}
+  if(inputVal('mopsProfileLayer'))params.layerHeight=inputVal('mopsProfileLayer');
+  const r=addProfileVersion({name,model:inputVal('mopsProfileModel'),material:inputVal('mopsProfileMaterial'),nozzle:inputVal('mopsProfileNozzle'),
+    layerHeight:inputVal('mopsProfileLayer'),status:inputVal('mopsProfileStatus'),notes:inputVal('mopsProfileNotes')},params);
+  closeProfile();if(r.created){persist('Versión de perfil creada');toast(`${name} v${r.profile.version} guardado ✓`,'success');}else toast('No hay cambios respecto de la versión existente','info');
+}
+function setProfileStatus(id,status){
+  const p=data().profiles.find(x=>x.id===id);if(!p||!['experimental','approved','deprecated'].includes(status))return;p.status=status;p.updatedAt=nowIso();
+  if(status==='approved'){p.approvedBy=actor();p.approvedAt=nowIso();}persist('Estado de perfil actualizado');
+}
+function archiveProfile(id){const p=data().profiles.find(x=>x.id===id);if(!p)return;p.archived=true;p.updatedAt=nowIso();persist('Perfil archivado');}
+function useProfile(id){
+  const p=data().profiles.find(x=>x.id===id);if(!p)return;let legacy={};try{legacy=JSON.parse(localStorage.getItem('sl_profiles')||'{}');}catch(_){}
+  legacy[p.name]=p.params||{};localStorage.setItem('sl_profiles',JSON.stringify(legacy));showView('laminado');
+  setTimeout(()=>{setVal('slPrinter',p.model);setVal('slMaterial',p.material);setVal('slNozzle',p.nozzle);try{SL3D.loadProfile(p.name);}catch(_){toast('Perfil copiado al laminador; genera parámetros para aplicarlo','info');}},120);
+  audit('Perfil enviado al laminador','',profileLabel(id));writeLocal();scheduleRemote();
+}
+function exportProfile(id){
+  const p=data().profiles.find(x=>x.id===id);if(!p)return;const payload={schema:'thelab-orca-profile-v1',name:p.name,version:p.version,model:p.model,material:p.material,nozzle:p.nozzle,status:p.status,fingerprint:p.fingerprint,params:p.params,notes:p.notes};
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));a.download=`${p.name.replace(/[^a-z0-9_-]+/gi,'_')}_v${p.version}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+}
+async function importProfileFile(event){
+  const file=event?.target?.files?.[0];if(!file)return;try{const doc=JSON.parse(await file.text()),params=doc.params||doc.config||doc;const name=doc.name||doc.profile_name||file.name.replace(/\.json$/i,'');
+    const r=addProfileVersion({name,model:doc.model||doc.printer_model||'',material:doc.material||doc.filament_type||'',nozzle:doc.nozzle||doc.nozzle_diameter||'0.4',status:'experimental',notes:`Importado desde ${file.name}`},params);
+    if(r.created){persist('Perfil Orca importado');toast(`${name} v${r.profile.version} importado ✓`,'success');}else toast('Ese archivo coincide con una versión existente','info');
+  }catch(e){toast('No se pudo importar el perfil JSON: '+e.message,'error');}finally{event.target.value='';}
+}
+function renderProfiles(){
+  const el=input('mopsProfiles');if(!el)return;const rows=latestProfiles(),approved=rows.filter(p=>p.status==='approved').length;
+  const versions=data().profiles.filter(p=>!p.archived).length;
+  el.innerHTML=`<div class="mops-kpis">${kpi('Perfiles vigentes',rows.length,'combinaciones')}${kpi('Aprobados',approved,'listos para producción',approved===rows.length?'var(--accent3)':'var(--warn)')}${kpi('Versiones',versions,'histórico trazable')}</div>
+  ${rows.length?`<div class="mops-profile-grid">${rows.map(p=>{const count=data().profiles.filter(x=>profileKey(x)===profileKey(p)&&!x.archived).length,col=p.status==='approved'?'var(--accent3)':p.status==='deprecated'?'var(--danger)':'var(--warn)';return`<div class="mops-profile-card"><div style="display:flex;gap:8px;align-items:center"><b style="color:var(--text);flex:1">${esc(p.name)}</b><span class="mops-status" style="color:${col}">${esc(p.status)}</span></div><div style="font-size:10px;color:var(--text3);margin-top:5px">${esc(p.model||'cualquier modelo')} · ${esc(p.material||'material libre')} · ${esc(p.nozzle)} mm · capa ${num(p.layerHeight||p.params?.layerHeight).toFixed(2)} mm</div><div style="font-size:9px;color:var(--text3);margin-top:5px">v${p.version} · ${count} versión${count!==1?'es':''} · huella ${esc(p.fingerprint)}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:9px"><button class="btn btn-primary btn-sm" onclick="MachineOps.useProfile('${p.id}')">Usar</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openProfile('${p.id}')">Nueva versión</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.exportProfile('${p.id}')">Exportar</button>${p.status!=='approved'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.setProfileStatus('${p.id}','approved')">✓ Aprobar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveProfile('${p.id}')">Archivar</button></div></div>`;}).join('')}</div>`:'<div class="empty-state">Aún no hay perfiles compartidos. Guarda uno desde el laminador o créalo manualmente.</div>'}`;
+}
+
 function qaJobOptions(selected=''){
   const jobs=data().jobs.filter(j=>!j.archived&&['qa','imprimiendo','terminado','fallido'].includes(j.status));
   const el=input('mopsQAJob');if(el)el.innerHTML='<option value="">— seleccionar trabajo —</option>'+jobs.map(j=>`<option value="${j.id}"${selected===j.id?' selected':''}>${esc(j.name)} · ${esc(orderLabel(j.pedidoId)||'sin pedido')}</option>`).join('');
@@ -454,16 +561,31 @@ function consumeJobMaterial(j,actualGrams){
   if(s){s.remaining=Math.max(0,num(s.remaining)-grams);if(s.remaining<=0)s.status='agotado';s.updatedAt=nowIso();}
   j.materialConsumed=grams;
 }
+function requiredPostStages(pedidoId){return[...new Set(data().jobs.filter(j=>j.pedidoId===pedidoId&&!j.archived).flatMap(j=>j.postStages||[]))].filter(k=>POST_STAGES.some(s=>s.key===k));}
+function ensureWorkflow(pedidoId,stageKeys){
+  let w=data().workflows.find(x=>x.pedidoId===pedidoId&&!x.archived);
+  if(!w){w={id:uid('workflow'),pedidoId,status:'active',stages:[],createdAt:nowIso(),updatedAt:nowIso(),archived:false};data().workflows.push(w);}
+  const existing=new Set(w.stages.map(s=>s.key));stageKeys.forEach(key=>{if(!existing.has(key))w.stages.push({key,status:'pending',updatedAt:nowIso()});});
+  if(w.stages.some(s=>s.status!=='done'))w.status='active';w.updatedAt=nowIso();return w;
+}
+async function markOrderReady(pedidoId){
+  const p=state.pedidosById?.[pedidoId];if(!p)return;
+  p.fields['Estado pedido']='Listo para despacho';p.fields['Resultado QA']='QA aprobado';
+  try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Estado pedido':'Listo para despacho','Resultado QA':'QA aprobado'});toast(`${p.fields['N° Pedido']||'Pedido'} listo para despacho ✓`,'success');}
+  catch(e){console.warn('[MachineOps] no se pudo avanzar pedido',e);toast('Producción terminada; Airtable no pudo actualizar el pedido','info');}
+}
 async function maybeCompleteOrder(pedidoId){
   if(!pedidoId)return;
   const jobs=data().jobs.filter(j=>j.pedidoId===pedidoId&&!j.archived);
   if(!jobs.length||jobs.some(j=>j.status!=='terminado'))return;
-  try{
-    const p=state.pedidosById?.[pedidoId];if(!p)return;
-    p.fields['Estado pedido']='Listo para despacho';p.fields['Resultado QA']='QA aprobado';
-    await airtableWrite('Pedidos','PATCH',pedidoId,{'Estado pedido':'Listo para despacho','Resultado QA':'QA aprobado'});
-    toast(`${p.fields['N° Pedido']||'Pedido'} listo para despacho ✓`,'success');
-  }catch(e){console.warn('[MachineOps] no se pudo avanzar pedido',e);}
+  const keys=requiredPostStages(pedidoId),existing=data().workflows.find(w=>w.pedidoId===pedidoId&&!w.archived);
+  if(keys.length||existing){
+    const w=ensureWorkflow(pedidoId,keys);persist('Pedido enviado a postproducción');
+    if(w.stages.length&&w.stages.every(s=>s.status==='done')){w.status='done';w.completedAt=w.completedAt||nowIso();await markOrderReady(pedidoId);}
+    else{const p=state.pedidosById?.[pedidoId];if(p){p.fields['Estado pedido']='En producción';p.fields['Resultado QA']='QA aprobado';try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Estado pedido':'En producción','Resultado QA':'QA aprobado'});}catch(_){}toast(`${p.fields['N° Pedido']||'Pedido'} pasó a postproducción`,'success');}}
+    return;
+  }
+  await markOrderReady(pedidoId);
 }
 function saveQA(){
   const job=data().jobs.find(j=>j.id===inputVal('mopsQAJob'));if(!job){toast('Selecciona un trabajo','error');return;}
@@ -491,6 +613,125 @@ function renderQuality(){
   el.innerHTML=`<div class="mops-kpis">${kpi('Esperando revisión',pending.length,'trabajos')}${kpi('Fallos 30 días',fail30.length,`${fail30.reduce((s,q)=>s+num(q.wasteGrams),0)} g desperdicio`,fail30.length?'var(--danger)':'var(--accent3)')}${kpi('Controles registrados',data().qa.length,'histórico compartido')}</div>
     ${pending.length?`<div class="mops-qa-grid" style="margin-bottom:12px">${pending.map(j=>`<div class="mops-qa-card"><div style="display:flex;gap:8px;align-items:center"><b style="color:var(--text);flex:1">${esc(j.name)}</b>${statusBadge(j.status)}</div><div style="font-size:9.5px;color:var(--text3);margin:5px 0">${esc(machineLabel(j.machineId))} · ${esc(orderLabel(j.pedidoId)||'sin pedido')}</div><button class="btn btn-primary btn-sm" onclick="MachineOps.openQA('${j.id}')">Revisar QA</button></div>`).join('')}</div>`:''}
     ${recent.length?`<div class="card" style="padding:12px"><div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px">ÚLTIMOS CONTROLES</div>${recent.map(q=>{const j=data().jobs.find(x=>x.id===q.jobId);const col=q.result==='fallido'?'var(--danger)':q.result==='observaciones'?'var(--warn)':'var(--accent3)';return`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border2);font-size:10px"><span style="color:${col};font-weight:800">${esc(q.result)}</span><span style="color:var(--text2);flex:1">${esc(j?.name||'Trabajo')} ${q.reason?'· '+esc(q.reason):''}</span><span style="color:var(--text3)">${new Date(q.createdAt).toLocaleDateString('es-CL')}</span></div>`;}).join('')}</div>`:''}`;
+}
+
+function postProgress(w){return w.stages.length?w.stages.filter(s=>s.status==='done').length/w.stages.length*100:100;}
+function renderPostProduction(){
+  const el=input('mopsPostProduction');if(!el)return;const all=data().workflows.filter(w=>!w.archived),active=all.filter(w=>w.status!=='done'),blocked=all.filter(w=>w.stages.some(s=>s.status==='blocked'));
+  const rows=[...active,...all.filter(w=>w.status==='done').sort((a,b)=>Date.parse(b.completedAt||0)-Date.parse(a.completedAt||0)).slice(0,6)];
+  el.innerHTML=`<div class="mops-kpis">${kpi('En postproducción',active.length,'pedidos activos')}${kpi('Bloqueados',blocked.length,'requieren atención',blocked.length?'var(--danger)':'var(--accent3)')}${kpi('Terminados',all.filter(w=>w.status==='done').length,'histórico')}</div>
+  ${rows.length?`<div class="mops-post-grid">${rows.map(w=>{const pct=postProgress(w),p=state.pedidosById?.[w.pedidoId],due=p?.fields?.['Fecha entrega']||'';return`<div class="mops-post-card"><div style="display:flex;gap:8px;align-items:start"><div style="flex:1"><b style="font-size:12px;color:var(--text)">${esc(orderLabel(w.pedidoId)||'Pedido sin nombre')}</b><div style="font-size:9px;color:var(--text3);margin-top:3px">${esc(resolveClienteName(p?.fields?.Cliente)||'')} ${due?'· entrega '+esc(due):''}</div></div><span class="mops-status" style="color:${w.status==='done'?'var(--accent3)':'var(--accent4)'}">${w.status==='done'?'terminado':'en proceso'}</span></div><div class="mops-spool-meter" style="margin:10px 0 9px"><i style="width:${pct}%;background:${pct===100?'var(--accent3)':'var(--accent4)'}"></i></div><div class="mops-stage-list">${w.stages.map((s,i)=>{const meta=postStageMeta(s.key),prevOk=i===0||w.stages.slice(0,i).every(x=>x.status==='done'),col=s.status==='done'?'var(--accent3)':s.status==='blocked'?'var(--danger)':s.status==='doing'?'var(--warn)':'var(--text3)',stamp=s.completedAt||s.startedAt;return`<div class="mops-stage ${s.status}"><span>${meta.icon}</span><span style="flex:1;color:${col}">${esc(meta.label)}<small>${s.operator?esc(s.operator):''}${stamp?' · '+esc(fmtStamp(stamp)):''}${s.blockReason?' · '+esc(s.blockReason):''}</small></span>${w.status!=='done'?`<button class="btn btn-ghost btn-sm" ${!prevOk&&s.status==='pending'?'disabled':''} onclick="MachineOps.advancePost('${w.id}','${s.key}')">${s.status==='pending'?'Iniciar':s.status==='doing'?'Completar':s.status==='blocked'?'Retomar':'✓'}</button>${s.status!=='done'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.blockPost('${w.id}','${s.key}')" title="Bloquear">!</button>`:''}`:'<span style="color:var(--accent3)">✓</span>'}</div>`;}).join('')}</div></div>`;}).join('')}</div>`:'<div class="empty-state">Los pedidos aprobados en QA aparecerán aquí cuando tengan procesos posteriores configurados.</div>'}`;
+}
+function advancePost(id,key){
+  const w=data().workflows.find(x=>x.id===id),s=w?.stages.find(x=>x.key===key);if(!w||!s||s.status==='done')return;const i=w.stages.indexOf(s);
+  if(i>0&&!w.stages.slice(0,i).every(x=>x.status==='done')){toast('Completa las etapas anteriores primero','error');return;}
+  if(s.status==='pending'||s.status==='blocked'){s.status='doing';s.startedAt=s.startedAt||nowIso();s.blockReason='';}
+  else{s.status='done';s.completedAt=nowIso();}
+  s.operator=actor();s.updatedAt=nowIso();w.updatedAt=nowIso();
+  if(w.stages.every(x=>x.status==='done')){w.status='done';w.completedAt=nowIso();persist('Postproducción terminada');markOrderReady(w.pedidoId);}
+  else persist('Etapa de postproducción actualizada');
+}
+function blockPost(id,key){
+  const w=data().workflows.find(x=>x.id===id),s=w?.stages.find(x=>x.key===key);if(!w||!s||s.status==='done')return;const reason=(prompt('Motivo del bloqueo:','')||'').trim();if(!reason)return;
+  s.status='blocked';s.blockReason=reason;s.operator=actor();s.updatedAt=nowIso();w.updatedAt=nowIso();persist('Etapa de postproducción bloqueada');
+}
+
+// ── Simulador de capacidad y promesa de entrega ──────────────
+let _lastCapacity=null;
+function simulateCapacity(inputData,fleet,loads={},nowMs=Date.now()){
+  const q=Math.max(1,Math.ceil(num(inputData.qty,1))),perBed=Math.max(1,Math.ceil(num(inputData.unitsPerBed,1))),cycles=Math.ceil(q/perBed);
+  const cycleMinutes=Math.max(1,num(inputData.minutesPerCycle,60)),handling=Math.max(0,num(inputData.handlingMinutes,8)),buffer=clamp(num(inputData.bufferPct,15),0,100)/100;
+  const probe={material:inputData.material||'PLA',sizeX:num(inputData.sizeX),sizeY:num(inputData.sizeY),sizeZ:num(inputData.sizeZ)};
+  const machines=(fleet||[]).filter(m=>m.operational!==false&&modelCanRun(m.modelo||m.model,probe)).map(m=>({id:m.id,model:m.modelo||m.model,label:m.label||m.nombre||m.id,
+    speed:(MODEL_CAPS[m.modelo||m.model]||MODEL_CAPS.K1).speed,available:Math.max(0,num(loads[m.id])),cycles:0,minutes:0,qty:0}));
+  if(!machines.length)return{ok:false,reason:'No hay máquinas operativas compatibles',cycles,qty:q,assignments:[]};
+  let remaining=q,totalPrinterMinutes=0;
+  for(let i=0;i<cycles;i++){
+    const slot=machines.slice().sort((a,b)=>(a.available+cycleMinutes/a.speed)-(b.available+cycleMinutes/b.speed))[0];
+    const duration=cycleMinutes/slot.speed+handling;slot.available+=duration;slot.minutes+=duration;slot.cycles++;const units=Math.min(perBed,remaining);slot.qty+=units;remaining-=units;totalPrinterMinutes+=duration;
+  }
+  const used=machines.filter(m=>m.cycles),finishMinutes=Math.max(...used.map(m=>m.available)),promisedMinutes=Math.ceil(finishMinutes*(1+buffer));
+  const promisedAt=new Date(nowMs+promisedMinutes*60000),dueMs=inputData.dueDate?dateValue(inputData.dueDate):Infinity;
+  const grams=Math.max(0,num(inputData.grams)),materialCost=grams/1000*Math.max(0,num(inputData.costPerKg)),machineCost=totalPrinterMinutes/60*Math.max(0,num(inputData.hourlyRate,1500));
+  return{ok:true,qty:q,cycles,machinesUsed:used.length,finishMinutes,promisedMinutes,promisedAt:promisedAt.toISOString(),dueDate:inputData.dueDate||'',
+    feasible:dueMs===Infinity||promisedAt.getTime()<=dueMs,totalPrinterMinutes,grams,materialCost,machineCost,totalCost:materialCost+machineCost,
+    assignments:used.map(m=>({machineId:m.id,model:m.model,label:m.label,cycles:m.cycles,qty:m.qty,minutes:Math.round(m.minutes)}))};
+}
+function capacityInput(){return{pedidoId:inputVal('mopsCapPedido'),name:inputVal('mopsCapName').trim(),qty:inputVal('mopsCapQty'),unitsPerBed:inputVal('mopsCapPerBed'),minutesPerCycle:inputVal('mopsCapMinutes'),
+  handlingMinutes:inputVal('mopsCapHandling'),material:inputVal('mopsCapMaterial'),grams:inputVal('mopsCapGrams'),costPerKg:inputVal('mopsCapCostKg'),hourlyRate:inputVal('mopsCapRate'),
+  sizeX:inputVal('mopsCapX'),sizeY:inputVal('mopsCapY'),sizeZ:inputVal('mopsCapZ'),dueDate:inputVal('mopsCapDue'),bufferPct:inputVal('mopsCapBuffer')};}
+function fillCapacityOrders(){const el=input('mopsCapPedido');if(!el)return;const selected=el.value,orders=activeOrders();el.innerHTML='<option value="">— simulación sin pedido —</option>'+orders.map(p=>`<option value="${p.id}">${esc(p.fields['N° Pedido']||'—')} · ${esc(resolveClienteName(p.fields.Cliente))}</option>`).join('');if(orders.some(p=>p.id===selected))el.value=selected;}
+function runCapacitySimulation(){
+  fillCapacityOrders();const request=capacityInput(),loads={};(MAQUINAS||[]).forEach(m=>loads[m.id]=jobsForMachine(m.id).reduce((s,j)=>s+jobMinutes(j),0)+(liveState(m.id)==='printing'?num(_printerStatus[m.id]?.eta)/60:0));
+  const fleet=(MAQUINAS||[]).map(m=>({...m,operational:machineOperational(m)}));_lastCapacity=simulateCapacity(request,fleet,loads);
+  const el=input('mopsCapacityResult');if(!el)return;if(!_lastCapacity.ok){el.innerHTML=`<div class="mops-alert danger">⚠ <span>${esc(_lastCapacity.reason)}</span></div>`;return;}
+  const r=_lastCapacity,finish=new Date(r.promisedAt).toLocaleString('es-CL',{dateStyle:'medium',timeStyle:'short'}),col=r.feasible?'var(--accent3)':'var(--danger)';
+  el.innerHTML=`<div class="mops-kpis">${kpi('Ciclos',r.cycles,`${r.qty} unidades`)}${kpi('Máquinas',r.machinesUsed,'compatibles usadas')}${kpi('Horas impresora',(r.totalPrinterMinutes/60).toFixed(1)+' h','suma productiva')}${kpi('Promesa',finish,r.feasible?'cumple fecha':'riesgo de atraso',col)}${kpi('Costo 3D',fmtMoney(r.totalCost),`${fmtMoney(r.materialCost)} material · ${fmtMoney(r.machineCost)} máquina`)}</div><div class="card" style="overflow-x:auto"><table class="mops-job-table" style="min-width:620px"><thead><tr><th>Máquina</th><th>Modelo</th><th>Ciclos</th><th>Unidades</th><th>Carga</th></tr></thead><tbody>${r.assignments.map(a=>`<tr><td>${esc(machineLabel(a.machineId))}</td><td>${esc(a.model)}</td><td>${a.cycles}</td><td>${a.qty}</td><td>${fmtMin(a.minutes)}</td></tr>`).join('')}</tbody></table></div><div class="mops-alert ${r.feasible?'':'danger'}" style="margin-top:10px">${r.feasible?'✅':'🚨'} <span>${r.feasible?'Capacidad disponible con el margen de seguridad indicado.':'La promesa excede la fecha límite. Reduce carga, agrega máquinas o renegocia la entrega.'}</span></div>`;
+}
+function createCapacityJobs(){
+  if(!_lastCapacity?.ok){toast('Ejecuta primero la simulación','error');return;}const req=capacityInput();if(!req.name){toast('Escribe un nombre para el lote','error');return;}
+  if(!confirm(`Crear ${_lastCapacity.assignments.length} trabajo(s) planificados desde esta simulación?`))return;
+  _lastCapacity.assignments.forEach((a,i)=>data().jobs.push({id:uid('job'),name:`${req.name} · lote ${i+1}`,pedidoId:req.pedidoId||'',qty:a.qty,unitsPerBed:Math.max(1,num(req.unitsPerBed,1)),cycles:a.cycles,
+    minutesPerCycle:Math.max(1,num(req.minutesPerCycle,60)),material:req.material,color:'',grams:Math.round(num(req.grams)*a.qty/Math.max(1,num(req.qty))),nozzle:'0.4',sizeX:num(req.sizeX),sizeY:num(req.sizeY),sizeZ:num(req.sizeZ),
+    dueDate:req.dueDate,priority:'normal',machineId:a.machineId,spoolId:'',profileId:'',gcodeFile:'',notes:'Creado desde simulador de capacidad',compatibleModels:[a.model],postStages:[],status:'planificado',createdAt:nowIso(),updatedAt:nowIso(),archived:false}));
+  persist('Lote creado desde simulador de capacidad');toast('Trabajos creados y planificados ✓','success');showView('planificacion');
+}
+
+// ── Seguridad ambiental y compuerta de inicio ────────────────
+function latestSafetyReading(){return data().safetyReadings.slice().sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0))[0]||null;}
+function safetyDecision(config,reading,context={},nowMs=Date.now()){
+  const cfg={...DEFAULT_SAFETY,...(config||{})},blockers=[],warnings=[],fresh=!!reading&&nowMs-Date.parse(reading.at||0)<=num(cfg.staleMinutes,10)*60000;
+  if(fresh&&reading.online!==false){
+    if(reading.smoke===true)blockers.push('El sensor detecta humo.');
+    if(num(reading.temperature)>num(cfg.maxTemperature))blockers.push(`Temperatura ambiental ${num(reading.temperature).toFixed(1)}°C sobre el máximo.`);
+    if(num(reading.voc)>num(cfg.maxVoc))blockers.push(`VOC ${Math.round(num(reading.voc))} sobre el máximo configurado.`);
+    if(num(reading.humidity)>num(cfg.maxHumidity))warnings.push(`Humedad ${num(reading.humidity).toFixed(0)}%: aumenta el riesgo de filamento húmedo.`);
+  }
+  const unattended=!!context.unattended;
+  if(unattended){
+    if(cfg.cameraRequired&&!context.cameraConfigured)(cfg.enforce?blockers:warnings).push('Impresión larga/nocturna sin cámara configurada.');
+    if((cfg.ventilationRequired||cfg.smokeRequired)&&!fresh)(cfg.enforce?blockers:warnings).push('Lectura ambiental ausente o vencida.');
+    if(fresh&&cfg.ventilationRequired&&reading.ventilation!==true)(cfg.enforce?blockers:warnings).push('Ventilación no confirmada.');
+    if(fresh&&cfg.smokeRequired&&typeof reading.smoke!=='boolean')(cfg.enforce?blockers:warnings).push('Sensor de humo no confirmado.');
+  }
+  return{ok:blockers.length===0,blockers,warnings,fresh,unattended};
+}
+function safetyContext(job,m){const hour=new Date().getHours(),long=jobMinutes(job)>=240,night=hour>=19||hour<9;let camera=false;try{camera=!!printerCamUrl(m.id);}catch(_){}return{unattended:long||night,long,night,cameraConfigured:camera};}
+function checkSafetyBeforeStart(job,m){
+  const d=safetyDecision(data().safetyConfig,latestSafetyReading(),safetyContext(job,m));
+  if(d.blockers.length){audit('Inicio bloqueado por seguridad',m.id,d.blockers.join(' '),'error');writeLocal();scheduleRemote();toast(d.blockers[0],'error');renderSafety();return false;}
+  if(d.warnings.length&&!confirm(`⚠ Revisión de seguridad\n\n${d.warnings.join('\n')}\n\n¿Confirmas que un operador revisó físicamente la máquina y desea continuar?`)){audit('Inicio cancelado por advertencia de seguridad',m.id,d.warnings.join(' '),'warn');writeLocal();scheduleRemote();return false;}
+  if(d.warnings.length){audit('Excepción de seguridad confirmada',m.id,d.warnings.join(' '),'control');writeLocal();scheduleRemote();}return true;
+}
+function canAutoStart(id,secs=0){
+  const m=getMachine(id),dummy={cycles:1,minutesPerCycle:Math.max(1,num(secs)/60||300)},d=safetyDecision(data().safetyConfig,latestSafetyReading(),safetyContext(dummy,m));
+  if(d.blockers.length||d.warnings.length){audit('Auto-inicio detenido por seguridad',id,[...d.blockers,...d.warnings].join(' '),'warn');writeLocal();scheduleRemote();toast('Cola detenida: requiere revisión de seguridad','error');renderSafety();return false;}return true;
+}
+function saveSafetyConfig(){
+  const cfg=data().safetyConfig;cfg.enforce=!!input('mopsSafetyEnforce')?.checked;cfg.cameraRequired=!!input('mopsSafetyCamera')?.checked;cfg.ventilationRequired=!!input('mopsSafetyVent')?.checked;cfg.smokeRequired=!!input('mopsSafetySmoke')?.checked;
+  cfg.maxTemperature=clamp(num(inputVal('mopsSafetyMaxTemp'),38),20,60);cfg.maxHumidity=clamp(num(inputVal('mopsSafetyMaxHumidity'),75),20,100);cfg.maxVoc=clamp(num(inputVal('mopsSafetyMaxVoc'),600),50,5000);
+  const url=inputVal('mopsSafetyUrl').trim();if(url&&!/^https?:\/\//i.test(url)){toast('La URL del sensor debe comenzar con http:// o https://','error');return;}cfg.sensorUrl=url;cfg.updatedAt=Date.now();
+  const token=inputVal('mopsSafetyToken').trim();if(token)sessionStorage.setItem('machine_ops_sensor_token',token);else sessionStorage.removeItem('machine_ops_sensor_token');persist('Configuración de seguridad actualizada');toast('Seguridad guardada ✓','success');
+}
+function recordSafetyReading(values,source='manual'){
+  const bool=v=>v===undefined||v===null?undefined:v===true||v==='true'||v===1;
+  const r={id:uid('safety'),at:nowIso(),temperature:num(values.temperature),humidity:num(values.humidity),voc:num(values.voc),smoke:bool(values.smoke),
+    ventilation:bool(values.ventilation),online:values.online!==false,source,updatedAt:nowIso()};
+  data().safetyReadings.unshift(r);if(data().safetyReadings.length>200)data().safetyReadings.length=200;persist('Lectura ambiental registrada');return r;
+}
+function recordSafetyManual(){recordSafetyReading({temperature:inputVal('mopsSafetyTemp'),humidity:inputVal('mopsSafetyHumidity'),voc:inputVal('mopsSafetyVoc'),smoke:input('mopsSafetySmokeNow')?.checked,ventilation:input('mopsSafetyVentNow')?.checked},'manual');toast('Lectura ambiental guardada ✓','success');}
+async function refreshSafety(){
+  const url=data().safetyConfig.sensorUrl;if(!url){toast('Configura la URL del sensor o registra una lectura manual','info');return;}
+  try{const token=sessionStorage.getItem('machine_ops_sensor_token')||'',r=await fetch(url,{headers:token?{'Authorization':'Bearer '+token}:{},signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();recordSafetyReading(d,'sensor');toast('Sensores actualizados ✓','success');}
+  catch(e){audit('Sensor ambiental sin respuesta','',e.message,'error');writeLocal();scheduleRemote();toast('No se pudo leer el sensor: '+e.message,'error');renderSafety();}
+}
+function renderSafety(){
+  const el=input('mopsSafety');if(!el)return;const cfg=data().safetyConfig,r=latestSafetyReading(),decision=safetyDecision(cfg,r,{unattended:true,cameraConfigured:(MAQUINAS||[]).some(m=>{try{return!!printerCamUrl(m.id);}catch(_){return false;}})});
+  if(input('mopsSafetyEnforce'))input('mopsSafetyEnforce').checked=!!cfg.enforce;if(input('mopsSafetyCamera'))input('mopsSafetyCamera').checked=!!cfg.cameraRequired;if(input('mopsSafetyVent'))input('mopsSafetyVent').checked=!!cfg.ventilationRequired;if(input('mopsSafetySmoke'))input('mopsSafetySmoke').checked=!!cfg.smokeRequired;
+  setVal('mopsSafetyMaxTemp',cfg.maxTemperature);setVal('mopsSafetyMaxHumidity',cfg.maxHumidity);setVal('mopsSafetyMaxVoc',cfg.maxVoc);setVal('mopsSafetyUrl',cfg.sensorUrl);setVal('mopsSafetyToken',sessionStorage.getItem('machine_ops_sensor_token')||'');
+  const age=r?Math.max(0,Math.round((Date.now()-Date.parse(r.at))/60000)):null,col=decision.blockers.length?'var(--danger)':decision.warnings.length?'var(--warn)':'var(--accent3)';
+  el.innerHTML=`<div class="mops-kpis">${kpi('Estado',decision.blockers.length?'BLOQUEADO':decision.warnings.length?'REVISAR':'SEGURO',r?`lectura hace ${age} min`:'sin lectura',col)}${kpi('Temperatura',r?num(r.temperature).toFixed(1)+' °C':'—',`máx. ${cfg.maxTemperature} °C`)}${kpi('Humedad',r?num(r.humidity).toFixed(0)+' %':'—',`máx. ${cfg.maxHumidity}%`)}${kpi('VOC',r?Math.round(num(r.voc)):'—',`máx. ${cfg.maxVoc}`)}${kpi('Ventilación',r?(r.ventilation?'ACTIVA':'NO CONFIRMADA'):'—','sensor ambiental',r?.ventilation?'var(--accent3)':'var(--warn)')}${kpi('Humo',r?(r.smoke?'DETECTADO':'normal'):'—','sensor ambiental',r?.smoke?'var(--danger)':'var(--accent3)')}</div>
+  ${[...decision.blockers,...decision.warnings].length?`<div style="display:grid;gap:7px;margin-bottom:12px">${decision.blockers.map(x=>`<div class="mops-alert danger">🚨 <span>${esc(x)}</span></div>`).join('')}${decision.warnings.map(x=>`<div class="mops-alert warn">⚠ <span>${esc(x)}</span></div>`).join('')}</div>`:''}`;
 }
 
 function maintenanceThreshold(machineId,type){
@@ -548,11 +789,13 @@ function renderAnalytics(){
 function updateNavCounts(){
   setText('mopsNavPending',activeJobs().length);
   setText('mopsNavSpools',data().spools.filter(s=>!s.archived&&spoolAvailable(s)>0).length);
+  setText('mopsNavPost',data().workflows.filter(w=>!w.archived&&w.status!=='done').length);
+  const sd=safetyDecision(data().safetyConfig,latestSafetyReading(),{unattended:true,cameraConfigured:true});setText('mopsNavSafety',sd.blockers.length+sd.warnings.length);
   let alerts=0;try{(MAQUINAS||[]).forEach(m=>alerts+=getMaintAlerts(m).length);}catch(_){}
   setText('mopsNavMaint',alerts);
 }
 function renderAll(){
-  renderOpsOverview();renderPlanning();renderMaterials();renderQuality();renderMaintenanceProfiles();renderAnalytics();updateNavCounts();
+  renderOpsOverview();renderPlanning();renderMaterials();renderQuality();renderPostProduction();renderProfiles();renderMaintenanceProfiles();renderAnalytics();renderSafety();fillCapacityOrders();updateNavCounts();
 }
 
 async function syncNow(){
@@ -636,10 +879,43 @@ function pauseFromVision(id){
   audit('Pausa solicitada tras visión IA',id,'Confirmada por operador','control');writeLocal();scheduleRemote();printerControl(id,'pause');
 }
 
-function techLink(id){
-  const u=new URL(location.href);u.searchParams.set('machine',id);u.hash='maquinas';return u.toString();
+// ── QR operacional: máquina → trabajo/rollo desde el móvil ───
+let _scanStream=null,_scanTimer=null;
+function opsLink(type,id){const u=new URL(location.href);u.searchParams.set('ops',type);u.searchParams.set('id',id);u.hash='maquinas';return u.toString();}
+function techLink(id){return opsLink('machine',id);}
+function entityInfo(type,id){
+  if(type==='machine'){const m=getMachine(id);return m?{title:machineLabel(id),subtitle:m.modelo,link:opsLink(type,id)}:null;}
+  if(type==='job'){const j=data().jobs.find(x=>x.id===id);return j?{title:j.name,subtitle:`${orderLabel(j.pedidoId)||'sin pedido'} · ${j.material||''} · ${j.qty||1} u`,link:opsLink(type,id)}:null;}
+  if(type==='spool'){const s=data().spools.find(x=>x.id===id);return s?{title:s.name,subtitle:`${s.material} ${s.color||''} · ${Math.round(spoolAvailable(s))} g`,link:opsLink(type,id)}:null;}return null;
 }
+function printEntityLabel(type,id){
+  const info=entityInfo(type,id);if(!info)return;const qr=`https://quickchart.io/qr?size=320&margin=1&text=${encodeURIComponent(info.link)}`;
+  const w=window.open('','_blank','width=520,height=680');if(!w){toast('El navegador bloqueó la ventana de impresión','error');return;}
+  w.document.write(`<!doctype html><html><head><title>Etiqueta ${esc(info.title)}</title><style>body{font-family:Arial;text-align:center;padding:28px;color:#111}.box{border:3px solid #111;border-radius:18px;padding:22px;display:inline-block}img{width:300px;height:300px}.name{font-size:26px;font-weight:800;margin:12px}.meta{font-size:16px;color:#444}.url{font-size:9px;max-width:330px;word-break:break-all;margin:10px auto}</style></head><body><div class="box"><img src="${qr}" onload="setTimeout(()=>window.print(),400)"><div class="name">${esc(info.title)}</div><div class="meta">${esc(info.subtitle)}</div><div class="url">${esc(info.link)}</div></div></body></html>`);w.document.close();audit('Etiqueta QR generada',type==='machine'?id:'',`${type} · ${info.title}`);writeLocal();scheduleRemote();
+}
+function parseScan(raw){
+  const value=String(raw||'').trim();if(!value)return null;const compact=value.match(/^TLS:(MACHINE|JOB|SPOOL):(.+)$/i);if(compact)return{type:compact[1].toLowerCase(),id:compact[2]};
+  try{const u=new URL(value,location.href),type=u.searchParams.get('ops'),id=u.searchParams.get('id');if(['machine','job','spool'].includes(type)&&id)return{type,id};}catch(_){}return null;
+}
+function handleScan(raw){
+  const parsed=parseScan(raw);if(!parsed){toast('Código QR no reconocido','error');return false;}closeScanner();const machineId=sessionStorage.getItem('mops_scan_machine')||'';
+  if(parsed.type==='machine'){if(!getMachine(parsed.id)){toast('Máquina no encontrada','error');return false;}sessionStorage.setItem('mops_scan_machine',parsed.id);audit('Máquina escaneada',parsed.id,'Contexto móvil');writeLocal();openTech(parsed.id);return true;}
+  if(parsed.type==='job'){const j=data().jobs.find(x=>x.id===parsed.id);if(!j){toast('Trabajo no encontrado','error');return false;}if(machineId&&getMachine(machineId)&&confirm(`Asignar ${j.name} a ${machineLabel(machineId)}?`)){const m=getMachine(machineId);if(!modelCanRun(m.modelo,j)){toast('La máquina escaneada no es compatible','error');return false;}j.machineId=machineId;if(j.status==='pendiente')j.status='planificado';j.updatedAt=nowIso();persist('Trabajo asignado por QR');toast('Trabajo asignado ✓','success');showView('planificacion');return true;}openJob(j.id);return true;}
+  const s=data().spools.find(x=>x.id===parsed.id);if(!s){toast('Rollo no encontrado','error');return false;}if(machineId&&getMachine(machineId)&&confirm(`Cargar ${s.name} en ${machineLabel(machineId)}?`)){data().spools.filter(x=>x.machineId===machineId&&x.id!==s.id).forEach(x=>{x.machineId='';x.updatedAt=nowIso();});s.machineId=machineId;s.updatedAt=nowIso();persist('Rollo cargado por QR');toast('Rollo cargado ✓','success');showView('materiales');return true;}openSpool(s.id);return true;
+}
+async function openScanner(){
+  input('mopsScannerModal').style.display='flex';setVal('mopsScanInput','');setText('mopsScanStatus','Apunta la cámara al QR o pega el código manualmente.');
+  const video=input('mopsScanVideo');if(!navigator.mediaDevices?.getUserMedia||typeof BarcodeDetector==='undefined'){video.style.display='none';setText('mopsScanStatus','Este navegador no ofrece lector QR directo. Usa el campo manual.');return;}
+  try{_scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});video.srcObject=_scanStream;video.style.display='block';await video.play();const detector=new BarcodeDetector({formats:['qr_code']});
+    _scanTimer=setInterval(async()=>{try{const codes=await detector.detect(video);if(codes[0]?.rawValue)handleScan(codes[0].rawValue);}catch(_){}},500);
+  }catch(e){video.style.display='none';setText('mopsScanStatus','No se pudo abrir la cámara. Puedes pegar el código manualmente.');}
+}
+function closeScanner(){if(_scanTimer){clearInterval(_scanTimer);_scanTimer=null;}if(_scanStream){_scanStream.getTracks().forEach(t=>t.stop());_scanStream=null;}const modal=input('mopsScannerModal');if(modal)modal.style.display='none';}
+function submitScan(){handleScan(inputVal('mopsScanInput'));}
+function clearScanMachine(){sessionStorage.removeItem('mops_scan_machine');toast('Contexto de máquina limpiado','info');}
+
 function openTech(id){
+  sessionStorage.setItem('mops_scan_machine',id);
   const m=getMachine(id);if(!m)return;
   setVal('mopsTechId',id);setText('mopsTechTitle',`${m.nombre} #${m.numG}`);
   const cap=machineCapabilities(m),jobs=jobsForMachine(id),spool=data().spools.find(s=>s.machineId===id&&!s.archived&&s.status!=='agotado');
@@ -654,7 +930,7 @@ function openTech(id){
       <div class="field-group"><label class="field-label">Estado operacional</label><select class="field-select" onchange="MachineOps.setMachineStatus('${id}',this.value)">${stateOptions}</select></div>
       <div style="font-size:10px;color:var(--text3);margin-top:9px">${esc(m.modelo)} · cama ${esc(cap.bed.join('×'))} mm · ${esc(cap.materials.join(', '))}</div>
       ${maint.length?`<div class="mops-alert warn" style="margin-top:9px">🔧 <span>${maint.map(a=>`${esc(a.label)} ${Math.round(a.hours)}/${a.threshold}h`).join('<br>')}</span></div>`:''}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="openWebcamModal('${id}')">📷 Cámara</button><button class="btn btn-ghost btn-sm" onclick="openMaintModal('${id}')">🔧 Mantención</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();MachineOps.showView('planificacion')">🗓 Planificación</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="MachineOps.closeTech();MachineOps.openScanner()">▦ Escanear trabajo/rollo</button><button class="btn btn-ghost btn-sm" onclick="openWebcamModal('${id}')">📷 Cámara</button><button class="btn btn-ghost btn-sm" onclick="openMaintModal('${id}')">🔧 Mantención</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();MachineOps.showView('planificacion')">🗓 Planificación</button></div>
     </div>
   </div>`;
   input('mopsTechModal').style.display='flex';
@@ -672,20 +948,17 @@ function copyTechLink(){
   navigator.clipboard.writeText(techLink(id)).then(()=>toast('Enlace de técnico copiado ✓','success')).catch(()=>toast('No se pudo copiar el enlace','error'));
 }
 function printTechLabel(){
-  const id=inputVal('mopsTechId'),m=getMachine(id);if(!m)return;
-  const link=techLink(id),qr=`https://quickchart.io/qr?size=320&margin=1&text=${encodeURIComponent(link)}`;
-  const w=window.open('','_blank','width=520,height=680');if(!w){toast('El navegador bloqueó la ventana de impresión','error');return;}
-  w.document.write(`<!doctype html><html><head><title>Etiqueta ${esc(machineLabel(id))}</title><style>body{font-family:Arial;text-align:center;padding:28px;color:#111}.box{border:3px solid #111;border-radius:18px;padding:22px;display:inline-block}img{width:300px;height:300px}.name{font-size:26px;font-weight:800;margin:12px}.meta{font-size:16px;color:#444}.url{font-size:9px;max-width:330px;word-break:break-all;margin:10px auto}</style></head><body><div class="box"><img src="${qr}" onload="setTimeout(()=>window.print(),400)"><div class="name">${esc(m.nombre)} #${m.numG}</div><div class="meta">${esc(m.modelo)} · Máquina #${m.numG}</div><div class="url">${esc(link)}</div></div></body></html>`);
-  w.document.close();audit('Etiqueta QR generada',id,'Ficha móvil de técnico');writeLocal();scheduleRemote();
+  const id=inputVal('mopsTechId');if(id)printEntityLabel('machine',id);
 }
 
 async function init(){
   if(_initPromise)return _initPromise;
   _initPromise=(async()=>{
-    data();await loadRemote();await restoreLegacyQueues();_initialized=true;
+    data();await loadRemote();await restoreLegacyQueues();importLegacyProfiles();_initialized=true;
     _activeView=localStorage.getItem('machine_ops_view')||'operacion';showView(_activeView);renderAll();
-    const machineParam=new URLSearchParams(location.search).get('machine');
-    if(machineParam&&getMachine(machineParam))setTimeout(()=>openTech(machineParam),120);
+    const qp=new URLSearchParams(location.search),machineParam=qp.get('machine'),opsType=qp.get('ops'),opsId=qp.get('id');
+    if(opsType&&opsId)setTimeout(()=>handleScan(opsLink(opsType,opsId)),120);else if(machineParam&&getMachine(machineParam))setTimeout(()=>openTech(machineParam),120);
+    if(data().safetyConfig.sensorUrl){setTimeout(refreshSafety,900);setInterval(()=>{if(!document.hidden)refreshSafety();},60000);}
   })();
   return _initPromise;
 }
@@ -693,10 +966,15 @@ async function init(){
 const api={
   init,showView,renderAll,renderPlanning,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,archiveJob,
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
+  renderPostProduction,advancePost,blockPost,
+  renderProfiles,openProfile,closeProfile,saveProfile,setProfileStatus,archiveProfile,useProfile,captureSlicerProfile,exportProfile,importProfileFile,
+  runCapacitySimulation,createCapacityJobs,
+  saveSafetyConfig,recordSafetyManual,refreshSafety,renderSafety,canAutoStart,
+  openScanner,closeScanner,submitScan,handleScan,clearScanMachine,printEntityLabel,
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
   openTech,closeTech,setMachineStatus,copyTechLink,printTechLabel,
   handlePrinterTransition,onLegacyQueueAdd,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan},
 };
 window.MachineOps=api;
 
@@ -727,7 +1005,7 @@ if(typeof _queueRemove==='function'){
 }
 if(typeof _queueStartNext==='function'){
   const baseQueueStartNext=_queueStartNext;
-  _queueStartNext=async function(id){const r=await baseQueueStartNext(id);api.persistLegacyQueue(id);return r;};
+  _queueStartNext=async function(id){const next=(_printQueue[id]||[])[0];if(!api.canAutoStart(id,next?.secs))return false;const r=await baseQueueStartNext(id);api.persistLegacyQueue(id);return r;};
 }
 
 })();
