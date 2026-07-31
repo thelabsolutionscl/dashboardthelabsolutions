@@ -2982,8 +2982,18 @@
     <button class="btn btn-ghost btn-sm" onclick="openMaquinasManager()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Gestionar máquinas</button>
   </div>
 
+  <div id="maqWorkspaceNav" class="maq-workspace-nav" role="tablist" aria-label="Áreas de Máquinas">
+    <button class="active" data-maq-nav="operacion" onclick="MachineOps.showView('operacion',this)">📡 Operación</button>
+    <button data-maq-nav="planificacion" onclick="MachineOps.showView('planificacion',this)">🗓 Planificación <span id="mopsNavPending" class="maq-nav-count">0</span></button>
+    <button data-maq-nav="materiales" onclick="MachineOps.showView('materiales',this)">🧵 Materiales <span id="mopsNavSpools" class="maq-nav-count">0</span></button>
+    <button data-maq-nav="mantenimiento" onclick="MachineOps.showView('mantenimiento',this)">🔧 Mantenimiento <span id="mopsNavMaint" class="maq-nav-count">0</span></button>
+    <button data-maq-nav="analitica" onclick="MachineOps.showView('analitica',this)">📊 Analítica</button>
+    <button data-maq-nav="laminado" onclick="MachineOps.showView('laminado',this)">🧠 Laminado</button>
+  </div>
+  <div id="maquinaOpsOverview" data-maq-view="operacion"></div>
+
   <!-- ── MONITOR EN VIVO ── -->
-  <div style="margin-bottom:28px">
+  <div id="maquinaMonitorView" data-maq-view="operacion" style="margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">📡 Monitor en vivo</span>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -3002,8 +3012,40 @@
     <div id="maquinaMonGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
   </div>
 
+  <!-- ── CONTROL DE CALIDAD Y REIMPRESIONES ── -->
+  <div id="maquinaQualityView" data-maq-view="operacion" style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
+      <span class="maq-view-title">✅ Control de calidad y reimpresiones</span>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.openQA()">+ Registrar control</button>
+    </div>
+    <div id="mopsQuality"></div>
+  </div>
+
+  <!-- ── PLANIFICADOR DE TRABAJOS ── -->
+  <div id="maquinaPlanningOpsView" data-maq-view="planificacion" style="display:none;margin-bottom:28px">
+    <div class="maq-view-head">
+      <div><div class="maq-view-title">🗓 Centro de planificación</div><div class="maq-view-sub">Divide pedidos en trabajos, calcula ciclos y distribuye la carga según capacidad real.</div></div>
+      <div class="maq-view-actions">
+        <button class="btn btn-primary btn-sm" onclick="MachineOps.openJob()">+ Trabajo de impresión</button>
+        <button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">🎯 Planificar automáticamente</button>
+        <button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">☁ Sincronizar</button>
+      </div>
+    </div>
+    <div id="mopsPlanningSummary"></div>
+    <div class="card maq-ops-card"><div id="mopsGantt"></div></div>
+    <div class="card maq-ops-card" style="margin-top:12px">
+      <div class="maq-toolbar">
+        <input id="mopsJobSearch" class="field-input" placeholder="Buscar trabajo, pedido o material…" oninput="MachineOps.renderPlanning()">
+        <select id="mopsJobStatus" class="field-select" onchange="MachineOps.renderPlanning()">
+          <option value="">Todos los estados</option><option value="pendiente">Pendientes</option><option value="planificado">Planificados</option><option value="en_cola">En cola</option><option value="imprimiendo">Imprimiendo</option><option value="qa">Esperando QA</option><option value="terminado">Terminados</option><option value="fallido">Fallidos</option>
+        </select>
+      </div>
+      <div id="mopsJobs"></div>
+    </div>
+  </div>
+
   <!-- ── CARGA DE PRODUCCIÓN POR MÁQUINA (O7) ── -->
-  <div style="margin-bottom:28px">
+  <div id="maquinaCargaLegacyView" data-maq-view="planificacion" style="display:none;margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🗂️ Carga de producción</span>
       <span style="font-size:10.5px;color:var(--text3)">asigna pedidos a impresoras y ve la cola y horas por máquina</span>
@@ -3012,7 +3054,7 @@
   </div>
 
   <!-- ── AGENTE DE IMPRESIÓN 3D — STL/OBJ → G-CODE CON IA ── -->
-  <div id="maquinaSlicerView" class="maquina-section" style="margin-bottom:28px">
+  <div id="maquinaSlicerView" class="maquina-section" data-maq-view="laminado" style="display:none;margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🧠 Agente de impresión 3D</span>
       <span class="badge badge-purple">STL / OBJ → G-code · IA + slicer nativo</span>
@@ -3128,7 +3170,7 @@
   </div>
 
   <!-- ── CALENDARIO ── -->
-  <div id="maquinaCalView" class="maquina-section">
+  <div id="maquinaCalView" class="maquina-section" data-maq-view="planificacion" style="display:none">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">📅 Disponibilidad semanal</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="navSemana(-1)">← Anterior</button>
@@ -3141,8 +3183,21 @@
     <div class="card"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px"><thead id="maquinasHeader"></thead><tbody id="maquinasBody"></tbody></table></div></div>
   </div>
 
+  <!-- ── ROLLOS Y MATERIALES ── -->
+  <div id="maquinaMaterialsView" class="maquina-section" data-maq-view="materiales" style="display:none">
+    <div class="maq-view-head">
+      <div><div class="maq-view-title">🧵 Rollos y materiales cargados</div><div class="maq-view-sub">Controla peso disponible, reservas, costo y ubicación de cada rollo.</div></div>
+      <div class="maq-view-actions">
+        <button class="btn btn-primary btn-sm" onclick="MachineOps.openSpool()">+ Registrar rollo</button>
+        <button class="btn btn-ghost btn-sm" onclick="MachineOps.reconcileSpools()">↻ Recalcular reservas</button>
+      </div>
+    </div>
+    <div id="mopsMaterialSummary"></div>
+    <div id="mopsSpools"></div>
+  </div>
+
   <!-- ── MANTENIMIENTO PREVENTIVO ── -->
-  <div id="maquinaMaintView" class="maquina-section" style="margin-top:28px">
+  <div id="maquinaMaintView" class="maquina-section" data-maq-view="mantenimiento" style="display:none;margin-top:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mantenimiento preventivo</span>
       <div style="display:flex;gap:8px">
@@ -3151,11 +3206,12 @@
         <button class="btn btn-ghost btn-sm" onclick="renderMaintenanceTable()" style="font-size:11px">↻ Actualizar</button>
       </div>
     </div>
+    <div id="mopsMaintenanceProfiles" style="margin-bottom:12px"></div>
     <div id="maintTable"></div>
   </div>
 
   <!-- ── AUDITORÍA Y MANTENCIÓN 3D (agente) ── -->
-  <div id="maquinaAuditView" class="maquina-section" style="margin-top:28px">
+  <div id="maquinaAuditView" class="maquina-section" data-maq-view="mantenimiento" style="display:none;margin-top:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg> Auditoría y mantención 3D</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -3171,8 +3227,9 @@
   </div>
 
   <!-- ── ANALÍTICA ── -->
-  <div id="maquinaAnalyticsView" class="maquina-section" style="margin-top:28px">
+  <div id="maquinaAnalyticsView" class="maquina-section" data-maq-view="analitica" style="display:none;margin-top:28px">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:14px"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chart"/></svg> Analítica de producción</div>
+    <div id="mopsAnalytics" style="margin-bottom:16px"></div>
     <div id="analyticsContent"></div>
   </div>
 </div>
@@ -7182,7 +7239,7 @@ function closeMaquinasManager(){document.getElementById('modalMaquinasManager').
 // Asigna pedidos a impresoras (campo "Máquina asignada", creado bajo demanda)
 // y muestra la cola, horas estimadas y próxima entrega por máquina, además de
 // una bolsa de pedidos sin asignar con sugerencia de la impresora más libre.
-const _MAQ_ESTADOS_ACTIVOS=['Confirmado','En producción','En cola','Listo para despacho'];
+const _MAQ_ESTADOS_ACTIVOS=['Confirmado','En producción','En cola'];
 async function ensureMaqField(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
@@ -7237,7 +7294,18 @@ function _maqCarga(){
 }
 function _maqMasLibre(){
   const {maquinas}=_maqCarga();
-  return maquinas.slice().sort((a,b)=>a.horas-b.horas)[0];
+  const candidatas=maquinas.filter(x=>{
+    if(getMaquinaEstadoGlobal(x.maq.id)!=='disponible') return false;
+    const live=_maqLive(x.maq.id);
+    return !['offline','noip','shutdown','error'].includes(live);
+  });
+  const base=candidatas.length?candidatas:maquinas.filter(x=>getMaquinaEstadoGlobal(x.maq.id)==='disponible'&&!_maqLive(x.maq.id));
+  return base.slice().sort((a,b)=>{
+    const sa=_maqLive(a.maq.id),sb=_maqLive(b.maq.id);
+    const liveA=sa==='printing'?((_printerStatus[a.maq.id]?.eta||0)/3600):sa==='paused'?24:0;
+    const liveB=sb==='printing'?((_printerStatus[b.maq.id]?.eta||0)/3600):sb==='paused'?24:0;
+    return (a.horas+liveA)-(b.horas+liveB);
+  })[0];
 }
 async function asignarMaquina(pedidoId,maqId){
   const p=state.pedidosById[pedidoId];if(!p)return;
@@ -7317,12 +7385,18 @@ function renderMaquinasManagerModal(){
       <td style="padding:6px 8px"><input id="mgr-ip-${m.id}" value="${m.ip||''}" placeholder="192.168.100.x" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text);width:130px"></td>
       <td style="padding:6px 8px">
         <select id="mgr-estado-${m.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--text)">
-          <option value="disponible" ${m.estado!=='mantencion'?'selected':''}>✓ Disponible</option>
-          <option value="mantencion" ${m.estado==='mantencion'?'selected':''}>Mantención</option>
+          <option value="disponible" ${m.estado==='disponible'?'selected':''}>✓ Disponible</option>
+          <option value="reservada" ${m.estado==='reservada'?'selected':''}>◷ Reservada</option>
+          <option value="calibrando" ${m.estado==='calibrando'?'selected':''}>📐 Calibrando</option>
+          <option value="limpieza" ${m.estado==='limpieza'?'selected':''}>🧹 En limpieza</option>
+          <option value="mantencion" ${m.estado==='mantencion'?'selected':''}>🔧 Mantención</option>
+          <option value="esperando_repuesto" ${m.estado==='esperando_repuesto'?'selected':''}>📦 Esperando repuesto</option>
+          <option value="fuera_servicio" ${m.estado==='fuera_servicio'?'selected':''}>⛔ Fuera de servicio</option>
         </select>
       </td>
       <td style="padding:6px 8px;display:flex;gap:4px">
         <button onclick="saveMgrRow('${m.id}')" class="btn btn-primary btn-sm" style="font-size:10px;padding:3px 8px">💾</button>
+        <button onclick="MachineOps.openTech('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" title="Ficha móvil / etiqueta QR">📱</button>
         <button onclick="deleteMgrRow('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px;color:var(--danger)">✕</button>
       </td>
     </tr>`).join('');
@@ -7382,7 +7456,34 @@ async function addMaquinaDesdeForm(){
 // ── MAQUINAS PERSISTENCE ──────────────────────────────────────
 async function crearTablaMaquinasEventos(){
   const t=getToken();if(!t&&!_proxyCfg()) return false;
-  try{const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Maquinas_Eventos')) return true;const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Eventos',fields:[{name:'maquina_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'tiempo',type:'number',options:{precision:1}}]})});return cr.ok;}catch(e){return false;}
+  try{
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return false;
+    const d=await r.json();
+    const existing=d.tables?.find(x=>x.name==='Maquinas_Eventos');
+    if(existing){
+      if(!existing.fields?.some(f=>f.name==='pedido_id')){
+        const fr=await _atFetch(`/meta/bases/${BASE_ID}/tables/${existing.id}/fields`,{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({name:'pedido_id',type:'singleLineText'})
+        });
+        return fr.ok;
+      }
+      return true;
+    }
+    const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:'Maquinas_Eventos',fields:[
+        {name:'maquina_id',type:'singleLineText'},
+        {name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},
+        {name:'tipo',type:'singleLineText'},
+        {name:'desc',type:'singleLineText'},
+        {name:'tiempo',type:'number',options:{precision:1}},
+        {name:'pedido_id',type:'singleLineText'},
+      ]})
+    });
+    return cr.ok;
+  }catch(e){return false;}
 }
 async function saveMaquinaEventosAirtable(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
@@ -7403,7 +7504,7 @@ async function saveMaquinaEventosAirtable(){
 }
 async function loadMaquinaEventosAirtable(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
-  try{const res=await airtableFetch('Maquinas_Eventos',500);maquinaState.eventos={};(res.records||[]).forEach(r=>{const f=r.fields;if(f.maquina_id&&f.fecha) maquinaState.eventos[`${f.maquina_id}_${f.fecha}`]={tipo:f.tipo||'uso',desc:f.desc||'',tiempo:f.tiempo||null};});}
+  try{const res=await airtableFetch('Maquinas_Eventos',500);maquinaState.eventos={};(res.records||[]).forEach(r=>{const f=r.fields;if(f.maquina_id&&f.fecha) maquinaState.eventos[`${f.maquina_id}_${f.fecha}`]={tipo:f.tipo||'uso',desc:f.desc||'',tiempo:f.tiempo||null,pedidoId:f.pedido_id||''};});}
   catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaMaquinasEventos();}
 }
 
@@ -7413,11 +7514,19 @@ async function crearTablaMaquinasMant(){
     const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
     if(!r.ok) return false;
     const d=await r.json();
-    if(d.tables?.find(x=>x.name==='Maquinas_Mant')) return true;
+    const existente=d.tables?.find(x=>x.name==='Maquinas_Mant');
+    if(existente){
+      if(!existente.fields?.some(f=>f.name==='repuestos')){
+        const campo=await _atFetch(`/meta/bases/${BASE_ID}/tables/${existente.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'repuestos',type:'multilineText'})});
+        if(!campo.ok) return false;
+      }
+      return true;
+    }
     const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Maquinas_Mant',fields:[
       {name:'maquina_id',type:'singleLineText'},
       {name:'tipo',type:'singleLineText'},
       {name:'notas',type:'multilineText'},
+      {name:'repuestos',type:'multilineText'},
       {name:'print_hours',type:'number',options:{precision:1}},
       {name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},
       {name:'ts',type:'number',options:{precision:0}},
@@ -7431,12 +7540,15 @@ async function loadMaintLogAirtable(){
     maquinaState.maintLog=getMaintLogLocal();return;
   }
   try{
+    // Mantiene el esquema al día (incluye el campo de repuestos en bases antiguas).
+    await crearTablaMaquinasMant();
     const res=await airtableFetch('Maquinas_Mant',500);
     maquinaState.maintLog=(res.records||[]).map(r=>({
       _airtableId:r.id,
       maquinaId:r.fields.maquina_id||'',
       tipo:r.fields.tipo||'general',
       notas:r.fields.notas||'',
+      parts:r.fields.repuestos||'',
       printHoursAtTime:r.fields.print_hours||0,
       fecha:r.fields.fecha||'',
       ts:r.fields.ts||0,
@@ -7454,7 +7566,16 @@ async function loadMaintLogAirtable(){
 
 async function saveMaintRecordAirtable(rec){
   const t=getToken();if(!t&&!_proxyCfg()) return;
-  await _atFetch(`/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:[{fields:{maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()}}],typecast:true})});
+  const fields={maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',repuestos:rec.parts||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()};
+  let r=await _atFetch(`/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:[{fields}],typecast:true})});
+  // Si el token permite datos pero no cambios de esquema, conserva los repuestos
+  // dentro de las notas para no perder trazabilidad.
+  if(!r.ok&&rec.parts){
+    delete fields.repuestos;
+    fields.notas=[fields.notas,`Repuestos: ${rec.parts}`].filter(Boolean).join('\n');
+    r=await _atFetch(`/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:[{fields}],typecast:true})});
+  }
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`);}
 }
 
 let _maintRaw=null,_maintParsed=[];
@@ -15161,6 +15282,7 @@ function openClienteWinbackPicker(){
 
 </script>
 <script src="js/maquinas.js?v=%%BUILD%%"></script>
+<script src="js/maquinas-operaciones.js?v=%%BUILD%%"></script>
 <script>
 </script>
 <script src="js/proveedores.js?v=%%BUILD%%"></script>
@@ -15742,10 +15864,14 @@ document.addEventListener('DOMContentLoaded',()=>{
           <option value="nozzle">🔩 Cambio de Nozzle</option>
           <option value="lubrication">🛢️ Lubricación de ejes</option>
           <option value="belt">⚙️ Ajuste/cambio de correa</option>
+          <option value="extruder">⚙️ Limpieza/revisión de extrusor</option>
+          <option value="bed">▦ Cama y superficie de impresión</option>
+          <option value="sensors">⚡ Sensores y sistema eléctrico</option>
           <option value="general">🔧 Mantención general</option>
         </select>
       </div>
       <div><div class="field-label">Notas (opcional)</div><textarea id="maintModalNotas" class="field-input" rows="3" placeholder="Descripción del trabajo realizado..." style="resize:vertical;margin-top:6px;width:100%;box-sizing:border-box"></textarea></div>
+      <div><div class="field-label">Repuestos utilizados (opcional)</div><input id="maintModalParts" class="field-input" placeholder="Ej: nozzle 0,4 mm; tubo PTFE; correa X" style="margin-top:6px;width:100%;box-sizing:border-box"></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn btn-primary btn-sm" onclick="saveMaintRecord()" style="flex:1">Guardar</button>
@@ -15794,6 +15920,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
     <input type="hidden" id="webcamModalId">
     <div style="margin-top:6px;font-size:10px;color:var(--text3)">URL del stream mjpeg de la impresora. Ejemplo: http://IP/webcam/?action=stream</div>
+    <button class="btn btn-primary btn-sm" id="mopsCameraAiBtn" onclick="MachineOps.analyzeCamera()" style="margin-top:12px;width:100%">✨ Analizar impresión con IA</button>
+    <div id="mopsCameraAiResult" style="display:none;margin-top:10px;padding:11px 13px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);font-size:11px;line-height:1.55;color:var(--text2)"></div>
     <button class="btn btn-ghost btn-sm" onclick="closeWebcamModal()" style="margin-top:14px;width:100%">Cerrar</button>
   </div>
 </div>
@@ -15815,6 +15943,97 @@ document.addEventListener('DOMContentLoaded',()=>{
     <div class="modal-title">🔁 <span id="queueModalTitle">Cola de impresión</span></div>
     <div id="queueModalBody" style="margin-top:14px;max-height:400px;overflow-y:auto"></div>
     <button class="btn btn-ghost btn-sm" onclick="closeQueueModal()" style="margin-top:14px;width:100%">Cerrar</button>
+  </div>
+</div>
+
+<!-- TRABAJO DE IMPRESIÓN -->
+<div id="mopsJobModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="MachineOps.closeJob()"></div>
+  <div class="modal-card" style="max-width:760px;width:96vw;max-height:90vh;overflow-y:auto">
+    <div class="modal-title">🗓 <span id="mopsJobModalTitle">Nuevo trabajo de impresión</span></div>
+    <input type="hidden" id="mopsJobId">
+    <div class="maq-form-grid" style="margin-top:16px">
+      <div class="field-group"><label class="field-label">Pedido relacionado</label><select id="mopsJobPedido" class="field-select"></select></div>
+      <div class="field-group"><label class="field-label">Nombre del trabajo *</label><input id="mopsJobName" class="field-input" placeholder="Ej: Medallas doradas · cama 1"></div>
+      <div class="field-group"><label class="field-label">Cantidad total</label><input id="mopsJobQty" type="number" min="1" value="1" class="field-input" oninput="MachineOps.updateJobCycles()"></div>
+      <div class="field-group"><label class="field-label">Unidades por cama</label><input id="mopsJobBedQty" type="number" min="1" value="1" class="field-input" oninput="MachineOps.updateJobCycles()"></div>
+      <div class="field-group"><label class="field-label">Ciclos calculados</label><input id="mopsJobCycles" type="number" min="1" value="1" class="field-input"></div>
+      <div class="field-group"><label class="field-label">Minutos por ciclo</label><input id="mopsJobMinutes" type="number" min="1" value="60" class="field-input"></div>
+      <div class="field-group"><label class="field-label">Material</label><select id="mopsJobMaterial" class="field-select"><option>PLA</option><option>PLA+</option><option>PETG</option><option>ABS</option><option>ASA</option><option>TPU</option><option>PA</option><option>PA-CF</option><option>PETG-CF</option></select></div>
+      <div class="field-group"><label class="field-label">Color</label><input id="mopsJobColor" class="field-input" placeholder="Blanco"></div>
+      <div class="field-group"><label class="field-label">Gramos totales estimados</label><input id="mopsJobGrams" type="number" min="0" value="0" class="field-input"></div>
+      <div class="field-group"><label class="field-label">Boquilla</label><select id="mopsJobNozzle" class="field-select"><option value="0.4">0,4 mm</option><option value="0.6">0,6 mm</option><option value="0.8">0,8 mm</option></select></div>
+      <div class="field-group"><label class="field-label">Tamaño pieza X × Y × Z (mm)</label><div style="display:flex;gap:5px"><input id="mopsJobX" type="number" min="0" class="field-input" placeholder="X"><input id="mopsJobY" type="number" min="0" class="field-input" placeholder="Y"><input id="mopsJobZ" type="number" min="0" class="field-input" placeholder="Z"></div></div>
+      <div class="field-group"><label class="field-label">Fecha límite</label><input id="mopsJobDue" type="date" class="field-input"></div>
+      <div class="field-group"><label class="field-label">Prioridad</label><select id="mopsJobPriority" class="field-select"><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option><option value="baja">Baja</option></select></div>
+      <div class="field-group"><label class="field-label">Máquina</label><select id="mopsJobMachine" class="field-select"></select></div>
+      <div class="field-group"><label class="field-label">Rollo reservado</label><select id="mopsJobSpool" class="field-select"></select></div>
+      <div class="field-group"><label class="field-label">Archivo G-code / 3MF</label><input id="mopsJobFile" class="field-input" placeholder="medallas_ped047.gcode"></div>
+    </div>
+    <div class="field-group" style="margin-top:10px"><label class="field-label">Modelos compatibles</label><div id="mopsJobModels" class="maq-check-grid"></div></div>
+    <div class="field-group" style="margin-top:10px"><label class="field-label">Notas</label><textarea id="mopsJobNotes" class="field-input" rows="2" style="resize:vertical" placeholder="Orientación, perfil, acabado o instrucciones para producción"></textarea></div>
+    <div id="mopsJobValidation" style="display:none;margin-top:10px"></div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-primary btn-sm" onclick="MachineOps.saveJob()" style="flex:1">Guardar trabajo</button>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeJob()" style="flex:1">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROLLO DE FILAMENTO -->
+<div id="mopsSpoolModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="MachineOps.closeSpool()"></div>
+  <div class="modal-card" style="max-width:620px;width:96vw">
+    <div class="modal-title">🧵 <span id="mopsSpoolModalTitle">Registrar rollo</span></div>
+    <input type="hidden" id="mopsSpoolId">
+    <div class="maq-form-grid" style="margin-top:16px">
+      <div class="field-group"><label class="field-label">Código / nombre *</label><input id="mopsSpoolName" class="field-input" placeholder="PLA-BLANCO-01"></div>
+      <div class="field-group"><label class="field-label">Material</label><select id="mopsSpoolMaterial" class="field-select"><option>PLA</option><option>PLA+</option><option>PETG</option><option>ABS</option><option>ASA</option><option>TPU</option><option>PA</option><option>PA-CF</option><option>PETG-CF</option></select></div>
+      <div class="field-group"><label class="field-label">Color</label><input id="mopsSpoolColor" class="field-input" placeholder="Blanco"></div>
+      <div class="field-group"><label class="field-label">Marca</label><input id="mopsSpoolBrand" class="field-input" placeholder="Creality / eSUN / otra"></div>
+      <div class="field-group"><label class="field-label">Peso inicial (g)</label><input id="mopsSpoolInitial" type="number" min="1" value="1000" class="field-input"></div>
+      <div class="field-group"><label class="field-label">Peso disponible (g)</label><input id="mopsSpoolRemaining" type="number" min="0" value="1000" class="field-input"></div>
+      <div class="field-group"><label class="field-label">Costo por kg (CLP)</label><input id="mopsSpoolCost" type="number" min="0" value="0" class="field-input"></div>
+      <div class="field-group"><label class="field-label">Máquina / ubicación</label><select id="mopsSpoolMachine" class="field-select"></select></div>
+      <div class="field-group"><label class="field-label">Slot CFS</label><input id="mopsSpoolSlot" class="field-input" placeholder="A1 / A2 / externo"></div>
+      <div class="field-group"><label class="field-label">Estado</label><select id="mopsSpoolStatus" class="field-select"><option value="activo">Activo</option><option value="reserva">En reserva</option><option value="agotado">Agotado</option><option value="cuarentena">Cuarentena</option></select></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px"><button class="btn btn-primary btn-sm" onclick="MachineOps.saveSpool()" style="flex:1">Guardar rollo</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.closeSpool()" style="flex:1">Cancelar</button></div>
+  </div>
+</div>
+
+<!-- CONTROL DE CALIDAD -->
+<div id="mopsQAModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="MachineOps.closeQA()"></div>
+  <div class="modal-card" style="max-width:600px;width:96vw">
+    <div class="modal-title">✅ Control de calidad</div>
+    <input type="hidden" id="mopsQAId">
+    <div style="display:flex;flex-direction:column;gap:11px;margin-top:16px">
+      <div class="field-group"><label class="field-label">Trabajo</label><select id="mopsQAJob" class="field-select" onchange="MachineOps.prefillQA()"></select></div>
+      <div class="field-group"><label class="field-label">Resultado</label><select id="mopsQAResult" class="field-select" onchange="MachineOps.toggleQAFailure()"><option value="aprobado">✅ Aprobado</option><option value="observaciones">⚠ Aprobado con observaciones</option><option value="fallido">❌ Fallido / reimprimir</option></select></div>
+      <div id="mopsQAFailureFields" style="display:none" class="maq-form-grid">
+        <div class="field-group"><label class="field-label">Causa</label><select id="mopsQAReason" class="field-select"><option>Warping</option><option>Mala primera capa</option><option>Spaghetti</option><option>Pieza desprendida</option><option>Filamento enredado</option><option>Nozzle obstruido</option><option>Error dimensional</option><option>Error de perfil</option><option>Error de operador</option><option>Fallo eléctrico</option><option>Otro</option></select></div>
+        <div class="field-group"><label class="field-label">Desperdicio (g)</label><input id="mopsQAWaste" type="number" min="0" value="0" class="field-input"></div>
+      </div>
+      <div class="field-group"><label class="field-label">Observaciones</label><textarea id="mopsQANotes" class="field-input" rows="3" style="resize:vertical" placeholder="Terminación, medidas, defectos o acción correctiva"></textarea></div>
+      <div class="field-group"><label class="field-label">Evidencia fotográfica (URL opcional)</label><input id="mopsQAPhoto" class="field-input" placeholder="https://..."></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px"><button class="btn btn-primary btn-sm" onclick="MachineOps.saveQA()" style="flex:1">Guardar control</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.closeQA()" style="flex:1">Cancelar</button></div>
+  </div>
+</div>
+
+<!-- FICHA MÓVIL DE TÉCNICO -->
+<div id="mopsTechModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="MachineOps.closeTech()"></div>
+  <div class="modal-card" style="max-width:640px;width:96vw;max-height:92vh;overflow-y:auto">
+    <div class="modal-title">📱 Ficha de técnico · <span id="mopsTechTitle"></span></div>
+    <input type="hidden" id="mopsTechId">
+    <div id="mopsTechBody" style="margin-top:14px"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="MachineOps.copyTechLink()" style="flex:1">🔗 Copiar enlace</button>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.printTechLabel()" style="flex:1">🖨 Imprimir etiqueta QR</button>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech()" style="flex:1">Cerrar</button>
+    </div>
   </div>
 </div>
 
@@ -15873,7 +16092,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       <div>
         <div class="field-label" style="margin-bottom:6px">API Key <span style="font-weight:400;color:var(--text3)">(opcional)</span></div>
         <input id="printerConnKey" type="password" placeholder="Clave de autorización Moonraker" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
-        <div style="font-size:10px;color:var(--text3);margin-top:4px">En OrcaSlicer: Preparar → Impresoras → ⚙ → IP/API Key. En Fluidd/Mainsail: Configuración → API Keys. Se envía como encabezado <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">X-Api-Key</code>.</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">En OrcaSlicer: Preparar → Impresoras → ⚙ → IP/API Key. Se envía como <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">X-Api-Key</code> y se conserva solo durante esta sesión del navegador.</div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:18px">

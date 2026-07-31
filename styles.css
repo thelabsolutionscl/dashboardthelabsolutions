@@ -1532,3 +1532,61 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   /* Ocultar subtítulos de sección si hay poco espacio */
   .section-subtitle{display:none!important;}
 }
+
+/* ── Centro de producción 3D ─────────────────────────────────── */
+.maq-workspace-nav{display:flex;gap:7px;flex-wrap:wrap;position:sticky;top:0;z-index:18;padding:9px;margin:0 0 16px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px}
+.maq-workspace-nav button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--text3);border-radius:8px;padding:7px 11px;font:600 11px 'DM Sans',sans-serif;cursor:pointer;transition:.15s ease}
+.maq-workspace-nav button:hover{color:var(--text);border-color:var(--accent)}
+.maq-workspace-nav button.active{color:#061513;background:var(--accent);border-color:var(--accent);box-shadow:0 5px 20px rgba(0,212,204,.18)}
+.maq-nav-count{display:inline-flex;min-width:17px;height:17px;align-items:center;justify-content:center;border-radius:9px;padding:0 4px;background:rgba(255,255,255,.14);font-size:9px;font-weight:800}
+.maq-workspace-nav button.active .maq-nav-count{background:rgba(0,0,0,.16)}
+.maq-view-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.maq-view-title{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)}
+.maq-view-sub{font-size:10.5px;color:var(--text3);margin-top:3px}
+.maq-view-actions{display:flex;gap:7px;flex-wrap:wrap}
+.maq-ops-card{padding:14px}
+.maq-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.maq-toolbar .field-input{flex:1;min-width:220px}
+.maq-toolbar .field-select{width:auto;min-width:170px}
+.maq-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.maq-check-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:6px}
+.maq-check-grid label{display:flex;gap:7px;align-items:center;padding:7px 9px;border:1px solid var(--border2);border-radius:7px;background:var(--surface2);font-size:11px;color:var(--text2);cursor:pointer}
+.maq-check-grid input{accent-color:var(--accent)}
+.mops-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px;margin-bottom:13px}
+.mops-kpi{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:11px 13px;min-width:0}
+.mops-kpi-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+.mops-kpi-value{font:26px 'Bebas Neue',sans-serif;letter-spacing:1px;color:var(--text);margin-top:3px}
+.mops-kpi-sub{font-size:9.5px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mops-alert{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2);font-size:10.5px;color:var(--text2)}
+.mops-alert.danger{border-color:rgba(255,68,68,.38);background:rgba(255,68,68,.07)}
+.mops-alert.warn{border-color:rgba(255,170,0,.35);background:rgba(255,170,0,.07)}
+.mops-job-table{width:100%;border-collapse:collapse;min-width:850px}
+.mops-job-table th{padding:8px 9px;text-align:left;border-bottom:1px solid var(--border);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.mops-job-table td{padding:9px;border-bottom:1px solid var(--border2);font-size:10.5px;color:var(--text2);vertical-align:middle}
+.mops-job-table tr:hover td{background:rgba(255,255,255,.018)}
+.mops-status{display:inline-flex;align-items:center;border:1px solid currentColor;border-radius:12px;padding:2px 7px;font-size:8.5px;font-weight:800;text-transform:uppercase;white-space:nowrap}
+.mops-gantt{overflow-x:auto;padding-bottom:5px}
+.mops-gantt-row{display:grid;grid-template-columns:170px minmax(600px,1fr);align-items:center;gap:8px;margin-bottom:6px}
+.mops-gantt-machine{font-size:10.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mops-gantt-track{display:flex;min-height:31px;border:1px solid var(--border);background:var(--surface2);border-radius:7px;overflow:hidden}
+.mops-gantt-job{display:flex;align-items:center;justify-content:center;min-width:72px;padding:0 7px;border-right:1px solid rgba(0,0,0,.24);font-size:8.5px;font-weight:700;color:#071313;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.mops-spool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:11px}
+.mops-spool{border:1px solid var(--border2);border-radius:11px;padding:12px 13px;background:var(--surface)}
+.mops-spool-meter{height:8px;background:var(--surface3);border-radius:5px;overflow:hidden;margin:8px 0}
+.mops-spool-meter i{display:block;height:100%;border-radius:5px;transition:width .25s}
+.mops-qa-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.mops-qa-card{border:1px solid var(--border2);border-radius:10px;padding:11px 12px;background:var(--surface)}
+.mops-audit-list{max-height:280px;overflow:auto}
+.mops-audit-row{display:grid;grid-template-columns:130px 130px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid var(--border2);font-size:9.5px;color:var(--text3)}
+@media(max-width:760px){
+  .maq-workspace-nav{position:static;overflow-x:auto;flex-wrap:nowrap}
+  .maq-workspace-nav button{flex:0 0 auto}
+  .maq-form-grid{grid-template-columns:1fr}
+  .mops-gantt-row{grid-template-columns:125px minmax(520px,1fr)}
+  .mops-audit-row{grid-template-columns:90px 90px 1fr}
+}
+@media(max-width:560px){
+  #mopsTechBody>div{grid-template-columns:1fr!important}
+  #mopsTechModal .modal{width:calc(100vw - 16px)!important;max-height:calc(100vh - 16px)!important}
+  .mops-job-table{min-width:760px}
+}
