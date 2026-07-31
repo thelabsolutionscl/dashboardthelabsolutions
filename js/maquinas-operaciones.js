@@ -881,7 +881,19 @@ function pauseFromVision(id){
 
 // ── QR operacional: máquina → trabajo/rollo desde el móvil ───
 let _scanStream=null,_scanTimer=null;
-function opsLink(type,id){const u=new URL(location.href);u.searchParams.set('ops',type);u.searchParams.set('id',id);u.hash='maquinas';return u.toString();}
+function directRoute(search){
+  const qp=new URLSearchParams(search===undefined?location.search:search),legacyId=String(qp.get('machine')||'').trim();
+  const type=String(qp.get('ops')||'').trim().toLowerCase(),id=String(qp.get('id')||'').trim();
+  if(['machine','job','spool'].includes(type)&&id)return{tab:'maquinas',type,id};
+  if(legacyId)return{tab:'maquinas',type:'machine',id:legacyId};
+  return null;
+}
+function opsLink(type,id){
+  const u=new URL(location.href);
+  u.search='';u.hash='';
+  u.searchParams.set('ops',String(type||'').toLowerCase());u.searchParams.set('id',id);u.hash='maquinas';
+  return u.toString();
+}
 function techLink(id){return opsLink('machine',id);}
 function entityInfo(type,id){
   if(type==='machine'){const m=getMachine(id);return m?{title:machineLabel(id),subtitle:m.modelo,link:opsLink(type,id)}:null;}
@@ -895,7 +907,7 @@ function printEntityLabel(type,id){
 }
 function parseScan(raw){
   const value=String(raw||'').trim();if(!value)return null;const compact=value.match(/^TLS:(MACHINE|JOB|SPOOL):(.+)$/i);if(compact)return{type:compact[1].toLowerCase(),id:compact[2]};
-  try{const u=new URL(value,location.href),type=u.searchParams.get('ops'),id=u.searchParams.get('id');if(['machine','job','spool'].includes(type)&&id)return{type,id};}catch(_){}return null;
+  try{const u=new URL(value,location.href),route=directRoute(u.search);if(route)return{type:route.type,id:route.id};}catch(_){}return null;
 }
 function handleScan(raw){
   const parsed=parseScan(raw);if(!parsed){toast('Código QR no reconocido','error');return false;}closeScanner();const machineId=sessionStorage.getItem('mops_scan_machine')||'';
@@ -918,21 +930,78 @@ function openTech(id){
   sessionStorage.setItem('mops_scan_machine',id);
   const m=getMachine(id);if(!m)return;
   setVal('mopsTechId',id);setText('mopsTechTitle',`${m.nombre} #${m.numG}`);
-  const cap=machineCapabilities(m),jobs=jobsForMachine(id),spool=data().spools.find(s=>s.machineId===id&&!s.archived&&s.status!=='agotado');
+  const cap=machineCapabilities(m),jobs=jobsForMachine(id).sort((a,b)=>dueUrgency(a)-dueUrgency(b)),spool=data().spools.find(s=>s.machineId===id&&!s.archived&&s.status!=='agotado');
+  let live={};try{live=_printerStatus[id]||{};}catch(_){ }
   let maint=[];try{maint=getMaintAlerts(m);}catch(_){}
+  let forecast=null;try{forecast=getMaintForecast(m);}catch(_){ }
   const link=techLink(id),qr=`https://quickchart.io/qr?size=180&margin=1&text=${encodeURIComponent(link)}`;
+  const liveMeta=typeof printerStateMeta==='function'?printerStateMeta(live.state||'offline'):{label:live.state||'Sin datos',color:'var(--text3)',bg:'var(--surface2)'};
+  const opMeta=typeof maquinaEstadoMeta==='function'?maquinaEstadoMeta(getMaquinaEstadoGlobal(id)):{label:getMaquinaEstadoGlobal(id),icon:'•'};
+  const ip=typeof getPrinterIp==='function'?(getPrinterIp(m)||'Sin IP'):(m.ip||'Sin IP');
+  const queueMinutes=jobs.reduce((sum,j)=>sum+jobMinutes(j),0),isPrinting=['printing','paused'].includes(live.state);
+  const spoolFree=spool?Math.round(spoolAvailable(spool)):0,spoolPct=spool?clamp(spoolFree/Math.max(1,num(spool.initial,1000))*100,0,100):0;
+  const lastAction=data().audit.find(row=>row.machineId===id&&row.action!=='Máquina escaneada');
+  const queueHtml=jobs.length?jobs.slice(0,4).map((j,index)=>`<button class="mops-tech-job" onclick="MachineOps.closeTech();MachineOps.openJob('${j.id}')">
+      <span class="mops-tech-job-order">${index===0?'SIGUIENTE':'#'+(index+1)}</span>
+      <span class="mops-tech-job-main"><b>${esc(j.name)}</b><small>${esc(orderLabel(j.pedidoId)||'Sin pedido')} · ${esc(j.material||'Sin material')} · ${num(j.qty,1)} u</small></span>
+      <span class="mops-tech-job-due">${esc(j.dueDate||'Sin fecha')}</span>
+    </button>`).join(''):'<div class="mops-tech-empty">No hay trabajos asignados a esta máquina.</div>';
   const stateOptions=Object.entries(typeof MAQUINA_ESTADOS!=='undefined'?MAQUINA_ESTADOS:{disponible:{label:'Disponible'},mantencion:{label:'Mantención'}})
     .map(([k,v])=>`<option value="${esc(k)}"${getMaquinaEstadoGlobal(id)===k?' selected':''}>${esc(v.icon||'')} ${esc(v.label)}</option>`).join('');
-  input('mopsTechBody').innerHTML=`<div style="display:grid;grid-template-columns:180px 1fr;gap:15px;align-items:start">
-    <div style="text-align:center"><img src="${qr}" alt="QR ficha ${esc(m.nombre)}" width="180" height="180" style="display:block;background:#fff;border-radius:8px"><div style="font-size:8.5px;color:var(--text3);word-break:break-all;margin-top:5px">${esc(link)}</div></div>
-    <div>
-      <div class="mops-kpis" style="grid-template-columns:repeat(2,1fr)">${kpi('Estado en vivo',liveState(id)||'sin datos','Moonraker')}${kpi('Cola',jobs.length,fmtMin(jobs.reduce((s,j)=>s+jobMinutes(j),0)))}${kpi('Mantenciones',maint.length,'alertas',maint.length?'var(--warn)':'var(--accent3)')}${kpi('Rollo',spool?Math.round(spoolAvailable(spool))+' g':'—',spool?`${spool.material} ${spool.color}`:'sin rollo cargado')}</div>
-      <div class="field-group"><label class="field-label">Estado operacional</label><select class="field-select" onchange="MachineOps.setMachineStatus('${id}',this.value)">${stateOptions}</select></div>
-      <div style="font-size:10px;color:var(--text3);margin-top:9px">${esc(m.modelo)} · cama ${esc(cap.bed.join('×'))} mm · ${esc(cap.materials.join(', '))}</div>
-      ${maint.length?`<div class="mops-alert warn" style="margin-top:9px">🔧 <span>${maint.map(a=>`${esc(a.label)} ${Math.round(a.hours)}/${a.threshold}h`).join('<br>')}</span></div>`:''}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="MachineOps.closeTech();MachineOps.openScanner()">▦ Escanear trabajo/rollo</button><button class="btn btn-ghost btn-sm" onclick="openWebcamModal('${id}')">📷 Cámara</button><button class="btn btn-ghost btn-sm" onclick="openMaintModal('${id}')">🔧 Mantención</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();MachineOps.showView('planificacion')">🗓 Planificación</button></div>
+  input('mopsTechBody').innerHTML=`<div class="mops-tech-status" style="--tech-color:${liveMeta.color};--tech-bg:${liveMeta.bg}">
+      <span class="pdot${isPrinting?' live':''}"></span><b>${esc(liveMeta.label)}</b>
+      <span>${live.stale?'Actualización pendiente · ':''}${esc(ip)}</span>
+      <span class="mops-tech-op">${esc(opMeta.icon||'')} ${esc(opMeta.label||'')}</span>
     </div>
-  </div>`;
+    <div class="mops-tech-layout">
+      <aside class="mops-tech-qr-panel">
+        <img src="${qr}" alt="QR ficha ${esc(m.nombre)}" width="160" height="160">
+        <b>${esc(machineLabel(id))}</b>
+        <span>${esc(m.modelo)} · ID ${esc(id)}</span>
+        <button class="btn btn-primary btn-sm" onclick="MachineOps.copyTechLink(this)">📡 Copiar enlace NFC</button>
+        <small>Graba este enlace en un NFC o usa el QR como respaldo.</small>
+      </aside>
+      <div class="mops-tech-main">
+        <div class="mops-kpis mops-tech-kpis">
+          ${kpi('Progreso',isPrinting?(num(live.progress)+'%'):'—',isPrinting?(live.state==='paused'?'impresión pausada':'trabajo actual'):'sin impresión activa',isPrinting?liveMeta.color:'var(--text3)')}
+          ${kpi('Tiempo restante',isPrinting&&typeof fmtSecs==='function'?fmtSecs(live.eta):'—',isPrinting?(live.filename||'archivo sin nombre'):'máquina libre')}
+          ${kpi('Cola',jobs.length,fmtMin(queueMinutes),jobs.length?'var(--accent4)':'var(--accent3)')}
+          ${kpi('Filamento',spool?spoolFree+' g':'—',spool?`${spool.material} ${spool.color||''}`:'sin rollo registrado',spool&&spoolFree<150?'var(--warn)':'var(--accent3)')}
+        </div>
+        <div class="field-group"><label class="field-label">Estado operacional</label><select class="field-select" onchange="MachineOps.setMachineStatus('${id}',this.value)">${stateOptions}</select></div>
+        <div class="mops-tech-spec">${esc(m.modelo)} · cama ${esc(cap.bed.join('×'))} mm · materiales: ${esc(cap.materials.join(', '))}</div>
+      </div>
+    </div>
+    ${isPrinting?`<section class="mops-tech-section mops-tech-print">
+      <div class="mops-tech-section-title"><span>🖨 Impresión actual</span><b>${num(live.progress)}%</b></div>
+      <div class="mops-tech-file">${esc(live.filename||'Archivo sin nombre')}</div>
+      <div class="mops-tech-progress"><i style="width:${clamp(num(live.progress),0,100)}%;background:${liveMeta.color}"></i></div>
+      <div class="mops-tech-live-values"><span>🔥 Hotend <b>${num(live.hotend?.actual)}°${num(live.hotend?.target)?' → '+num(live.hotend.target)+'°':''}</b></span><span>▦ Cama <b>${num(live.bed?.actual)}°${num(live.bed?.target)?' → '+num(live.bed.target)+'°':''}</b></span><span>⏱ Restante <b>${typeof fmtSecs==='function'?fmtSecs(live.eta):'—'}</b></span></div>
+    </section>`:`<div class="mops-alert" style="margin-top:12px">✅ <span><b>Sin impresión activa.</b> Revisa la cola siguiente o escanea un trabajo para asignarlo.</span></div>`}
+    <section class="mops-tech-section">
+      <div class="mops-tech-section-title"><span>🗓 Trabajos asignados</span><b>${jobs.length}</b></div>
+      <div class="mops-tech-jobs">${queueHtml}</div>
+    </section>
+    <section class="mops-tech-section mops-tech-two-col">
+      <div>
+        <div class="mops-tech-section-title"><span>🧵 Material cargado</span></div>
+        ${spool?`<div class="mops-tech-material"><b>${esc(spool.name)}</b><span>${esc(spool.material)} · ${esc(spool.color||'Sin color')}${spool.slot?' · slot '+esc(spool.slot):''}</span><div class="mops-spool-meter"><i style="width:${spoolPct}%;background:${spoolFree<150?'var(--warn)':'var(--accent3)'}"></i></div><small>${spoolFree} g disponibles · ${Math.round(num(spool.remaining))} g físicos</small></div>`:'<div class="mops-tech-empty">No hay un rollo registrado en esta máquina.</div>'}
+      </div>
+      <div>
+        <div class="mops-tech-section-title"><span>🔧 Mantención</span><b style="color:${maint.length?'var(--warn)':'var(--accent3)'}">${maint.length?maint.length+' alerta'+(maint.length!==1?'s':''):'Al día'}</b></div>
+        ${maint.length?`<div class="mops-alert warn">⚠ <span>${maint.map(a=>`<b>${esc(a.label)}</b> · ${Math.round(a.hours)}/${a.threshold} h`).join('<br>')}</span></div>`:`<div class="mops-tech-empty">${forecast&&isFinite(forecast.weeks)?`Próxima: ${esc(forecast.tipo)} en aproximadamente ${Math.max(0,forecast.weeks).toFixed(1)} semanas.`:'Sin alertas de mantenimiento.'}</div>`}
+      </div>
+    </section>
+    <div class="mops-tech-meta">${lastAction?`Última actividad: <b>${esc(lastAction.action)}</b> · ${esc(fmtStamp(lastAction.at))} · ${esc(lastAction.actor)}`:'Sin actividad registrada todavía.'}</div>
+    <div class="mops-tech-actions">
+      <button class="btn btn-primary btn-sm" onclick="MachineOps.closeTech();MachineOps.openScanner()">▦ Escanear trabajo/rollo</button>
+      ${typeof togglePrinterLight==='function'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.toggleTechLight('${id}',this)">💡 Luz LED</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();openWebcamModal('${id}')">📷 Cámara</button>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();openHistoryModal('${id}')">📋 Historial</button>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();openMaintModal('${id}')">🔧 Mantención</button>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();openPrinterConnModal('${id}')">⚙ Conexión</button>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();MachineOps.showView('planificacion')">🗓 Planificación</button>
+    </div>`;
   input('mopsTechModal').style.display='flex';
 }
 function closeTech(){input('mopsTechModal').style.display='none';}
@@ -943,9 +1012,33 @@ async function setMachineStatus(id,status){
   renderAll();try{renderMaquinasCalendar();renderMonitorGrid();}catch(_){}
   toast(`${machineLabel(id)} · ${maquinaEstadoMeta(status).label}`,'success');openTech(id);
 }
-function copyTechLink(){
-  const id=inputVal('mopsTechId');if(!id)return;
-  navigator.clipboard.writeText(techLink(id)).then(()=>toast('Enlace de técnico copiado ✓','success')).catch(()=>toast('No se pudo copiar el enlace','error'));
+async function copyTextSafe(value){
+  const text=String(value||'');if(!text)return false;
+  if(navigator.clipboard?.writeText){try{await navigator.clipboard.writeText(text);return true;}catch(_){ }}
+  let area=null;
+  try{
+    area=document.createElement('textarea');area.value=text;area.setAttribute('readonly','');area.style.cssText='position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(area);area.select();area.setSelectionRange(0,text.length);
+    if(document.execCommand?.('copy'))return true;
+  }catch(_){
+  }finally{if(area?.parentNode)area.parentNode.removeChild(area);}
+  return false;
+}
+async function copyTechLinkFor(id,button){
+  const m=getMachine(id);if(!m)return false;
+  const link=techLink(id),copied=await copyTextSafe(link);
+  if(!copied){window.prompt('Copia este enlace para grabarlo en el NFC:',link);toast('El navegador bloqueó el portapapeles; mantén presionado para copiar','info');return false;}
+  audit('Enlace NFC/QR copiado',id,link);writeLocal();scheduleRemote();toast(`Enlace copiado · ${machineLabel(id)}`,'success');
+  if(button){const old=button.textContent;button.textContent='✓ Copiado';button.disabled=true;setTimeout(()=>{button.textContent=old;button.disabled=false;},1400);}
+  return true;
+}
+function copyTechLink(button){
+  const id=inputVal('mopsTechId');if(!id)return false;
+  return copyTechLinkFor(id,button);
+}
+async function toggleTechLight(id,button){
+  if(typeof togglePrinterLight!=='function')return;
+  try{await togglePrinterLight(id,button);}finally{if(button)button.disabled=false;openTech(id);}
 }
 function printTechLabel(){
   const id=inputVal('mopsTechId');if(id)printEntityLabel('machine',id);
@@ -956,8 +1049,8 @@ async function init(){
   _initPromise=(async()=>{
     data();await loadRemote();await restoreLegacyQueues();importLegacyProfiles();_initialized=true;
     _activeView=localStorage.getItem('machine_ops_view')||'operacion';showView(_activeView);renderAll();
-    const qp=new URLSearchParams(location.search),machineParam=qp.get('machine'),opsType=qp.get('ops'),opsId=qp.get('id');
-    if(opsType&&opsId)setTimeout(()=>handleScan(opsLink(opsType,opsId)),120);else if(machineParam&&getMachine(machineParam))setTimeout(()=>openTech(machineParam),120);
+    const route=directRoute();
+    if(route)setTimeout(()=>handleScan(opsLink(route.type,route.id)),120);
     if(data().safetyConfig.sensorUrl){setTimeout(refreshSafety,900);setInterval(()=>{if(!document.hidden)refreshSafety();},60000);}
   })();
   return _initPromise;
@@ -972,9 +1065,10 @@ const api={
   saveSafetyConfig,recordSafetyManual,refreshSafety,renderSafety,canAutoStart,
   openScanner,closeScanner,submitScan,handleScan,clearScanMachine,printEntityLabel,
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
-  openTech,closeTech,setMachineStatus,copyTechLink,printTechLabel,
+  openTech,closeTech,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
+  directRoute,
   handlePrinterTransition,onLegacyQueueAdd,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink},
 };
 window.MachineOps=api;
 
