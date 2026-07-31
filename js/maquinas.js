@@ -6,13 +6,24 @@ function getMaquinaSemanaLunes(){const t=new Date();t.setHours(0,0,0,0);const da
 function navSemana(d){maquinaState.semanaOffset+=d;renderMaquinasCalendar();}
 function goToday(){maquinaState.semanaOffset=0;renderMaquinasCalendar();}
 function getMaquinaEstadoGlobal(id){const m=MAQUINAS.find(x=>x.id===id);return m?.estado||localStorage.getItem('estado_maq_'+id)||'disponible';}
+const MAQUINA_ESTADOS={
+  disponible:{label:'Disponible',short:'✓ Disp.',color:'green',icon:'✓'},
+  reservada:{label:'Reservada',short:'◷ Res.',color:'yellow',icon:'◷'},
+  calibrando:{label:'Calibrando',short:'📐 Cal.',color:'yellow',icon:'📐'},
+  limpieza:{label:'En limpieza',short:'🧹 Limp.',color:'yellow',icon:'🧹'},
+  mantencion:{label:'En mantención',short:'🔧 Mant.',color:'red',icon:'🔧'},
+  esperando_repuesto:{label:'Esperando repuesto',short:'📦 Rep.',color:'red',icon:'📦'},
+  fuera_servicio:{label:'Fuera de servicio',short:'⛔ Fuera',color:'red',icon:'⛔'},
+};
+function maquinaEstadoMeta(estado){return MAQUINA_ESTADOS[estado]||MAQUINA_ESTADOS.disponible;}
 async function toggleMaquinaEstado(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m) return;
-  const nv=m.estado==='mantencion'?'disponible':'mantencion';
+  const nv=m.estado==='disponible'?'mantencion':'disponible';
   m.estado=nv;
   localStorage.setItem('estado_maq_'+id,nv);
   renderMaquinasCalendar();
-  toast(`${m.nombre} #${m.num}: ${nv==='mantencion'?'🔧 Mantención':'✓ Disponible'}`,nv==='mantencion'?'error':'success');
+  const meta=maquinaEstadoMeta(nv);
+  toast(`${m.nombre} #${m.num}: ${meta.icon} ${meta.label}`,nv==='disponible'?'success':'error');
   try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);}
 }
 async function initMaquinas(){
@@ -184,7 +195,15 @@ const MONITOR_GRUPOS=[
 ];
 
 function getPrinterIp(m){return localStorage.getItem('printer_ip_'+m.id)||m.ip||null;}
-function getPrinterApiKey(id){return localStorage.getItem('printer_key_'+id)||'';}
+function getPrinterApiKey(id){
+  const key='printer_key_'+id;
+  const session=sessionStorage.getItem(key);
+  if(session)return session;
+  // Migración de seguridad: las claves antiguas dejan de persistir entre sesiones.
+  const legacy=localStorage.getItem(key)||'';
+  if(legacy){sessionStorage.setItem(key,legacy);localStorage.removeItem(key);}
+  return legacy;
+}
 function getPrinterAuthHeaders(id){const k=getPrinterApiKey(id);return k?{'X-Api-Key':k}:{};}
 
 function savePrinterIp(id){
@@ -199,7 +218,9 @@ function savePrinterIp(id){
 function savePrinterApiKey(id){
   const inp=document.getElementById('ipkey_'+id);if(!inp)return;
   const val=inp.value.trim();
-  if(val)localStorage.setItem('printer_key_'+id,val);else localStorage.removeItem('printer_key_'+id);
+  const key='printer_key_'+id;
+  localStorage.removeItem(key);
+  if(val)sessionStorage.setItem(key,val);else sessionStorage.removeItem(key);
   const m=MAQUINAS.find(x=>x.id===id);
   toast(`API Key ${val?'guardada':'eliminada'} · ${m?.nombre} #${m?.numG}`,'success');
 }
@@ -218,7 +239,9 @@ function savePrinterConn(){
   const ip=(document.getElementById('printerConnIp').value||'').trim();
   const key=(document.getElementById('printerConnKey').value||'').trim();
   if(ip)localStorage.setItem('printer_ip_'+id,ip);else localStorage.removeItem('printer_ip_'+id);
-  if(key)localStorage.setItem('printer_key_'+id,key);else localStorage.removeItem('printer_key_'+id);
+  const keyName='printer_key_'+id;
+  localStorage.removeItem(keyName);
+  if(key)sessionStorage.setItem(keyName,key);else sessionStorage.removeItem(keyName);
   const m=MAQUINAS.find(x=>x.id===id);
   if(m&&m._airtableId){m.ip=ip||m.ip;if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
   closePrinterConnModal();
@@ -1170,10 +1193,19 @@ const MAINT_TYPES=[
   {key:'nozzle',label:'Nozzle',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-nut"/></svg>',defaultHours:200},
   {key:'lubrication',label:'Lubricación',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-droplet"/></svg>',defaultHours:100},
   {key:'belt',label:'Correa',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg>',defaultHours:500},
+  {key:'extruder',label:'Extrusor',icon:'⚙️',defaultHours:300},
+  {key:'bed',label:'Cama / superficie',icon:'▦',defaultHours:250},
+  {key:'sensors',label:'Sensores / eléctrico',icon:'⚡',defaultHours:600},
   {key:'general',label:'General',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg>',defaultHours:50},
 ];
 function getMaintConfig(){try{return JSON.parse(localStorage.getItem(MAINT_CFG_KEY)||'{}');}catch(e){return{};}}
-function getMaintThreshold(tipo){const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;}
+function getMaintThreshold(tipo,maquinaId){
+  if(maquinaId&&window.MachineOps?.maintenanceThreshold){
+    const specific=window.MachineOps.maintenanceThreshold(maquinaId,tipo);
+    if(specific>0)return specific;
+  }
+  const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;
+}
 function getMaintLog(){return maquinaState.maintLog.length?maquinaState.maintLog:getMaintLogLocal();}
 function getPrintHours(id){if(_useOdometer())return(getOdometer()[id]||{}).hours||0;return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
 function getHoursSinceMaint(id,tipo){
@@ -1183,8 +1215,8 @@ function getHoursSinceMaint(id,tipo){
   return Math.max(0,total-log[0].printHoursAtTime);
 }
 function getMaintAlerts(m){
-  return MAINT_TYPES.filter(t=>getHoursSinceMaint(m.id,t.key)>=getMaintThreshold(t.key)*0.9)
-    .map(t=>({...t,hours:getHoursSinceMaint(m.id,t.key),threshold:getMaintThreshold(t.key)}));
+  return MAINT_TYPES.filter(t=>getHoursSinceMaint(m.id,t.key)>=getMaintThreshold(t.key,m.id)*0.9)
+    .map(t=>({...t,hours:getHoursSinceMaint(m.id,t.key),threshold:getMaintThreshold(t.key,m.id)}));
 }
 // Ritmo de impresión (h/semana) de las últimas 4 semanas, para proyectar mantención
 function getWeeklyPrintRate(id){
@@ -1194,7 +1226,7 @@ function getWeeklyPrintRate(id){
 function getMaintForecast(m){
   const rate=getWeeklyPrintRate(m.id);let soonest=null;
   MAINT_TYPES.forEach(t=>{
-    const left=getMaintThreshold(t.key)-getHoursSinceMaint(m.id,t.key);
+    const left=getMaintThreshold(t.key,m.id)-getHoursSinceMaint(m.id,t.key);
     const weeks=left<=0?0:(rate>0?left/rate:Infinity);
     if(!soonest||weeks<soonest.weeks)soonest={tipo:t.label,key:t.key,hoursLeft:left,weeks,rate};
   });
@@ -1217,7 +1249,7 @@ function renderMaintenanceTable(){
     const mLog=getMaintLog().filter(x=>x.maquinaId===m.id);
     const perType=MAINT_TYPES.map(t=>{
       const l=mLog.filter(x=>x.tipo===t.key).sort((a,b)=>b.ts-a.ts);const last=l[0];
-      const h=last?Math.max(0,ph-last.printHoursAtTime):ph;const thresh=getMaintThreshold(t.key);
+      const h=last?Math.max(0,ph-last.printHoursAtTime):ph;const thresh=getMaintThreshold(t.key,m.id);
       return{t,h,thresh,last,pct:thresh>0?h/thresh:0};
     });
     const alertsN=perType.filter(p=>p.pct>=0.9).length;
@@ -1270,6 +1302,8 @@ function openMaintModal(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   document.getElementById('maintModalId').value=id;
   document.getElementById('maintModalNombre').textContent=`${m.nombre} — Máquina #${m.numG}`;
+  document.getElementById('maintModalNotas').value='';
+  const partsEl=document.getElementById('maintModalParts');if(partsEl)partsEl.value='';
   document.getElementById('maintModal').style.display='flex';
 }
 function closeMaintModal(){document.getElementById('maintModal').style.display='none';}
@@ -1277,8 +1311,9 @@ async function saveMaintRecord(){
   const id=document.getElementById('maintModalId').value;
   const tipo=document.getElementById('maintModalTipo').value;
   const notas=document.getElementById('maintModalNotas').value.trim();
+  const parts=document.getElementById('maintModalParts')?.value.trim()||'';
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
-  const rec={maquinaId:id,nombre:m.nombre,numG:m.numG,tipo,notas,printHoursAtTime:getPrintHours(id),ts:Date.now(),fecha:new Date().toISOString()};
+  const rec={maquinaId:id,nombre:m.nombre,numG:m.numG,tipo,notas,parts,printHoursAtTime:getPrintHours(id),ts:Date.now(),fecha:new Date().toISOString()};
   maquinaState.maintLog.unshift(rec);
   // guardar también en localStorage como backup
   const local=getMaintLogLocal();local.unshift(rec);localStorage.setItem(MAINT_KEY,JSON.stringify(local.slice(0,200)));
@@ -1506,7 +1541,7 @@ function renderMaquinasKPIs(dias,todayStr){
   const total=MAQUINAS.length*dias.length;
   let usados=0,mant=0,horas=0,dispHoy=0,usoHoy=0,mantHoy=0;
   MAQUINAS.forEach(m=>{
-    const globalMant=getMaquinaEstadoGlobal(m.id)==='mantencion';
+    const globalMant=getMaquinaEstadoGlobal(m.id)!=='disponible';
     dias.forEach(d=>{
       const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key];
       const esMant=globalMant||ev?.tipo==='mantencion';
@@ -1565,7 +1600,7 @@ function renderMaquinasCalendar(){
   // pre-calcular stats por modelo para los headers de grupo
   const modeloStats={};[...new Set(MAQUINAS.map(m=>m.modelo))].forEach(modelo=>{
     const mqs=MAQUINAS.filter(x=>x.modelo===modelo);
-    const disp=mqs.filter(x=>getMaquinaEstadoGlobal(x.id)!=='mantencion'&&!maquinaState.eventos[`${x.id}_${today}`]).length;
+    const disp=mqs.filter(x=>getMaquinaEstadoGlobal(x.id)==='disponible'&&!maquinaState.eventos[`${x.id}_${today}`]).length;
     const usados=mqs.reduce((s,x)=>{let u=0;dias.forEach(d=>{const ev=maquinaState.eventos[`${x.id}_${fmtDate(d)}`];if(ev&&ev.tipo==='uso') u++;});return s+u;},0);
     const totalSlots=mqs.length*dias.length;
     modeloStats[modelo]={total:mqs.length,disp,pct:Math.round(usados/totalSlots*100)};
@@ -1590,12 +1625,12 @@ function renderMaquinasCalendar(){
         </div>
       </div>
     </td></tr>`:'' ;
-    const enMant=getMaquinaEstadoGlobal(m.id)==='mantencion';
-    const estadoBtn=enMant?`<button class="btn-mini btn-mini-red" onclick="toggleMaquinaEstado('${m.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mant.</button>`:`<button class="btn-mini btn-mini-green" onclick="toggleMaquinaEstado('${m.id}')">✓ Disp.</button>`;
+    const estadoGlobal=getMaquinaEstadoGlobal(m.id),estadoMeta=maquinaEstadoMeta(estadoGlobal);
+    const estadoBtn=`<button class="btn-mini btn-mini-${estadoMeta.color}" onclick="toggleMaquinaEstado('${m.id}')" title="${escapeHtml(estadoMeta.label)} · clic para ${estadoGlobal==='disponible'?'poner en mantención':'marcar disponible'}">${estadoMeta.short}</button>`;
     const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key],isH=ds===today;let bg='',content='';if(ev){if(ev.tipo==='mantencion'){bg='rgba(255,68,68,0.2)';content=`<div style="font-size:9px;font-weight:700;color:var(--danger)">🔧 MANT.</div>`;}else if(ev.tipo==='uso'){bg='rgba(255,107,53,0.2)';const pedLabel=ev.pedidoId?state.pedidosById[ev.pedidoId]?.fields['N° Pedido']||null:null;const descLabel=pedLabel?`🔗 ${pedLabel}`:(ev.desc||'En uso');content=`<div style="font-size:9px;color:${pedLabel?'var(--accent)':'var(--accent2)'};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85px" title="${escapeHtml(ev.desc||'')}">${escapeHtml(descLabel)}</div>${ev.tiempo?`<div style="font-size:8px;color:var(--text3)">${ev.tiempo}h</div>`:''}`;}else{bg='rgba(0,212,170,0.12)';content=`<div style="font-size:9px;color:var(--accent3);font-weight:600">✓ Libre</div>`;}}return`<td onclick="openMaquinaModal('${m.id}','${m.nombre} #${m.num}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg||'transparent'};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.5)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content||`<span style="color:var(--text3);font-size:10px">+</span>`}${ev?`<button onclick="event.stopPropagation();deleteMaquinaEvento('${m.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:8px;padding:0">✕</button>`:''}</div></td>`;}).join('');
     return`${groupRow}<tr><td style="padding:9px 14px;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:0;z-index:2"><span style="width:7px;height:7px;border-radius:50%;background:${m.color};display:inline-block;margin-right:6px"></span>${escapeHtml(m.nombre)} <span style="color:var(--text3)">#${m.num}</span></td><td style="padding:4px 6px;text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:2">${estadoBtn}</td>${celdas}</tr>`;
   }).join('');
-  document.getElementById('maquinasSubtitle').textContent=`${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)!=='mantencion').length} disponibles · ${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)==='mantencion').length} en mantención`;
+  document.getElementById('maquinasSubtitle').textContent=`${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)==='disponible').length} disponibles · ${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)!=='disponible').length} no operativas`;
 }
 function openMaquinaModal(maqId,nombre,dateStr){
   document.getElementById('maquinaModalId').value=maqId;
