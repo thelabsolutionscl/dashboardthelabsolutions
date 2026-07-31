@@ -7475,7 +7475,8 @@ function renderMaquinasManagerModal(){
       </td>
       <td style="padding:6px 8px;display:flex;gap:4px">
         <button onclick="saveMgrRow('${m.id}')" class="btn btn-primary btn-sm" style="font-size:10px;padding:3px 8px">💾</button>
-        <button onclick="MachineOps.openTech('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" title="Ficha móvil / etiqueta QR">📱</button>
+        <button onclick="MachineOps.openTech('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" title="Abrir ficha operacional de la máquina">📱 Ficha</button>
+        <button onclick="MachineOps.copyTechLinkFor('${m.id}',this)" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" title="Copiar enlace para NFC o QR">📡 NFC</button>
         <button onclick="deleteMgrRow('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px;color:var(--danger)">✕</button>
       </td>
     </tr>`).join('');
@@ -15361,6 +15362,7 @@ function openClienteWinbackPicker(){
 
 </script>
 <script src="js/maquinas.js?v=%%BUILD%%"></script>
+<script src="js/maquinas-led.js?v=%%BUILD%%"></script>
 <script src="js/maquinas-operaciones.js?v=%%BUILD%%"></script>
 <script>
 </script>
@@ -15750,12 +15752,19 @@ function initDashboard(){
   // desde el inicio — sin necesidad de abrir el tab Correo
   if(MAIL.getMailPass&&MAIL.getMailPass()) startMailPolling();
   initGlobalSearch();
-  // Restaurar tab previo solo si el rol actual tiene acceso (evita toast de error tras cambio de usuario)
+  // Un enlace operacional (QR/NFC) siempre tiene prioridad sobre el último tab.
+  // Esto también corre después del login, porque initDashboard conserva la URL.
   try{
-    const s=sessionStorage.getItem('thelab_active_tab');
     const allowed=user?[...(RBAC.tabs[user.role]||RBAC.tabs.demo),...(RBAC.nuevos[user.role]||[])]:null;
-    if(s&&(!allowed||allowed.includes(s))) switchTab(s);
-    else if(s) sessionStorage.removeItem('thelab_active_tab');
+    const route=window.MachineOps?.directRoute?.();
+    if(route&&(!allowed||allowed.includes(route.tab))){
+      switchTab(route.tab);
+    }else{
+      if(route&&allowed&&!allowed.includes(route.tab)) toast('Tu usuario no tiene acceso a Máquinas','error');
+      const s=sessionStorage.getItem('thelab_active_tab');
+      if(s&&(!allowed||allowed.includes(s))) switchTab(s);
+      else if(s) sessionStorage.removeItem('thelab_active_tab');
+    }
   }catch(e){}
   // El sitio ya no usa WordPress: limpiar credenciales antiguas (evita 401 y fugas)
   try{localStorage.removeItem('wp_config');}catch(e){}
@@ -16140,12 +16149,12 @@ document.addEventListener('DOMContentLoaded',()=>{
 <div id="mopsTechModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="MachineOps.closeTech()"></div>
   <div class="modal-card" style="max-width:640px;width:96vw;max-height:92vh;overflow-y:auto">
-    <div class="modal-title">📱 Ficha de técnico · <span id="mopsTechTitle"></span></div>
+    <div class="modal-title">📱 Ficha operacional · <span id="mopsTechTitle"></span></div>
     <input type="hidden" id="mopsTechId">
     <div id="mopsTechBody" style="margin-top:14px"></div>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="MachineOps.copyTechLink()" style="flex:1">🔗 Copiar enlace</button>
-      <button class="btn btn-ghost btn-sm" onclick="MachineOps.printTechLabel()" style="flex:1">🖨 Imprimir etiqueta QR</button>
+      <button class="btn btn-primary btn-sm" onclick="MachineOps.copyTechLink(this)" style="flex:1">📡 Copiar enlace NFC/QR</button>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.printTechLabel()" style="flex:1">🖨 Imprimir QR</button>
       <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech()" style="flex:1">Cerrar</button>
     </div>
   </div>
@@ -16194,7 +16203,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 <!-- PRINTER CONNECTION MODAL -->
 <div id="printerConnModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="closePrinterConnModal()"></div>
-  <div class="modal-card" style="max-width:460px;width:95vw">
+  <div class="modal-card" style="max-width:460px;width:95vw;max-height:90vh;overflow-y:auto">
     <div class="modal-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-settings"/></svg> Conexión · <span id="printerConnTitle"></span></div>
     <input type="hidden" id="printerConnId">
     <div style="margin-top:16px;display:flex;flex-direction:column;gap:14px">
@@ -16207,6 +16216,11 @@ document.addEventListener('DOMContentLoaded',()=>{
         <div class="field-label" style="margin-bottom:6px">API Key <span style="font-weight:400;color:var(--text3)">(opcional)</span></div>
         <input id="printerConnKey" type="password" placeholder="Clave de autorización Moonraker" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
         <div style="font-size:10px;color:var(--text3);margin-top:4px">En OrcaSlicer: Preparar → Impresoras → ⚙ → IP/API Key. Se envía como <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">X-Api-Key</code> y se conserva solo durante esta sesión del navegador.</div>
+      </div>
+      <div>
+        <div class="field-label" style="margin-bottom:6px">Control LED <span style="font-weight:400;color:var(--text3)">(opcional)</span></div>
+        <input id="printerConnLight" type="text" placeholder="Auto (recomendado)" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.45">Déjalo vacío para detectar automáticamente. Si tu firmware usa otro nombre: <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">output_pin caselight</code>, <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">led chamber_led</code>, <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">LIGHT_ON/LIGHT_OFF</code> o <code style="background:var(--surface2);border-radius:3px;padding:1px 4px;font-family:monospace">M355</code>.</div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:18px">

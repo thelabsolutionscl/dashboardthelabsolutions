@@ -25,8 +25,8 @@ function storage(){
 function loadOps(){
   const context={
     console,crypto:webcrypto,localStorage:storage(),sessionStorage:storage(),
-    setTimeout,clearTimeout,Date,Math,JSON,Number,String,Array,Object,Map,Set,URL,
-    location:{href:'https://dashboard.example.com/index.html'},
+    setTimeout,clearTimeout,Date,Math,JSON,Number,String,Array,Object,Map,Set,URL,URLSearchParams,
+    location:{href:'https://dashboard.example.com/index.html?vista=overview#overview',search:'?vista=overview'},
   };
   context.window=context;
   vm.createContext(context);
@@ -96,7 +96,26 @@ test('lector QR reconoce etiquetas compactas y enlaces operacionales',()=>{
   const ops=loadOps();
   assert.deepEqual({...ops.parseScan('TLS:MACHINE:k1-1')},{type:'machine',id:'k1-1'});
   assert.deepEqual({...ops.parseScan('https://dashboard.example.com/?ops=job&id=job-1')},{type:'job',id:'job-1'});
+  assert.deepEqual({...ops.parseScan('https://dashboard.example.com/?ops=MACHINE&id=k2-1')},{type:'machine',id:'k2-1'});
   assert.equal(ops.parseScan('texto libre'),null);
+});
+
+test('enlace NFC es estable y la ruta directa prioriza Máquinas',()=>{
+  const ops=loadOps();
+  assert.deepEqual({...ops.directRoute('?ops=machine&id=k1-1')},{tab:'maquinas',type:'machine',id:'k1-1'});
+  assert.deepEqual({...ops.directRoute('?machine=k2-1')},{tab:'maquinas',type:'machine',id:'k2-1'});
+  assert.equal(ops.directRoute('?vista=overview'),null);
+  assert.equal(ops.opsLink('machine','k1-1'),'https://dashboard.example.com/index.html?ops=machine&id=k1-1#maquinas');
+  assert.match(INDEX,/const route=window\.MachineOps\?\.directRoute\?\.\(\);[\s\S]*switchTab\(route\.tab\)/);
+});
+
+test('ficha operacional separa apertura y copia NFC con respaldo de portapapeles',()=>{
+  assert.match(INDEX,/MachineOps\.openTech\('\$\{m\.id\}'\)[\s\S]*📱 Ficha/);
+  assert.match(INDEX,/MachineOps\.copyTechLinkFor\('\$\{m\.id\}',this\)[\s\S]*📡 NFC/);
+  assert.match(OPS,/async function copyTextSafe\(/);
+  assert.match(OPS,/document\.execCommand\?\.\('copy'\)/);
+  assert.match(OPS,/window\.prompt\('Copia este enlace para grabarlo en el NFC:'/);
+  for(const label of ['Impresión actual','Trabajos asignados','Material cargado','Mantención','Tiempo restante'])assert.ok(OPS.includes(label),`falta ${label}`);
 });
 
 test('sincronización conserva la versión más nueva de cada registro',()=>{

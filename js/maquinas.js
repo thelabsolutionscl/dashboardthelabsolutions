@@ -231,6 +231,7 @@ function openPrinterConnModal(id){
   document.getElementById('printerConnId').value=id;
   document.getElementById('printerConnIp').value=getPrinterIp(m)||'';
   document.getElementById('printerConnKey').value=getPrinterApiKey(id);
+  document.getElementById('printerConnLight').value=localStorage.getItem('printer_light_override_'+id)||'';
   document.getElementById('printerConnModal').style.display='flex';
 }
 function closePrinterConnModal(){document.getElementById('printerConnModal').style.display='none';}
@@ -238,10 +239,15 @@ function savePrinterConn(){
   const id=document.getElementById('printerConnId').value;
   const ip=(document.getElementById('printerConnIp').value||'').trim();
   const key=(document.getElementById('printerConnKey').value||'').trim();
+  const light=(document.getElementById('printerConnLight').value||'').trim();
+  const lightCfg=_printerLightParseOverride(light);
+  if(lightCfg?.error){toast(lightCfg.error,'error');document.getElementById('printerConnLight').focus();return;}
   if(ip)localStorage.setItem('printer_ip_'+id,ip);else localStorage.removeItem('printer_ip_'+id);
   const keyName='printer_key_'+id;
   localStorage.removeItem(keyName);
   if(key)sessionStorage.setItem(keyName,key);else sessionStorage.removeItem(keyName);
+  if(light)localStorage.setItem('printer_light_override_'+id,light);else localStorage.removeItem('printer_light_override_'+id);
+  delete _printerLightCaps[id];
   const m=MAQUINAS.find(x=>x.id===id);
   if(m&&m._airtableId){m.ip=ip||m.ip;if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
   closePrinterConnModal();
@@ -272,7 +278,8 @@ function _deriveStatus(m,s,ip){
   let state=ps.state||'standby';
   if(klState==='shutdown'||klState==='error')state='shutdown';
   else if(klState==='startup')state='startup';
-  return{state,klState,klMsg,progress,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip};
+  const light=_printerLightApplyStatus(m.id,s);
+  return{state,klState,klMsg,progress,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip,light:light?.available?{available:true,on:!!light.on}:null};
 }
 // Miniatura del trabajo en curso (cacheada por archivo). Devuelve la URL o null.
 async function _ensureThumb(m,ip,st){
@@ -291,7 +298,7 @@ async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   const headers=getPrinterAuthHeaders(m.id);
   try{
-    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard&webhooks`),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
+    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard&webhooks${_printerLightQuerySuffix(m.id)}`),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
     if(!r.ok)return{state:'offline',_fetchFail:true,ip};
     const d=await r.json();const s=d.result?.status||{};
     const st=_deriveStatus(m,s,ip);
@@ -345,7 +352,7 @@ function connectPrinterWs(m){
   let ws;
   try{ws=new WebSocket(_printerWsUrl(ip));}catch(e){return;}
   _wsConn[m.id]=ws;
-  ws.onopen=()=>{try{ws.send(JSON.stringify({jsonrpc:'2.0',method:'printer.objects.subscribe',params:{objects:{print_stats:null,heater_bed:null,extruder:null,display_status:null,virtual_sdcard:null,webhooks:null}},id:++_wsRpcId}));}catch(e){}};
+  ws.onopen=()=>{try{ws.send(JSON.stringify({jsonrpc:'2.0',method:'printer.objects.subscribe',params:{objects:_printerLightWsObjects(m.id)},id:++_wsRpcId}));}catch(e){}};
   ws.onmessage=ev=>{
     let msg;try{msg=JSON.parse(ev.data);}catch(e){return;}
     let status=null;
@@ -514,7 +521,7 @@ function renderMonitorGrid(){
     // Huella estructural: SOLO lo que cambia qué ramas se dibujan. Excluye
     // progreso/eta/temperaturas (se parchean en vivo) → la tarjeta no se
     // reconstruye cada 15s mientras imprime, evitando el parpadeo.
-    const structFP=[s.state,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0)].join('~');
+    const structFP=[s.state,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0),_printerLightFingerprint(m.id)].join('~');
 
     let body='';
     if(s.state==='noip'){
@@ -535,7 +542,7 @@ function renderMonitorGrid(){
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
           <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}</span>
           <div style="display:flex;gap:4px">
-            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
+            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">⚙</button>
             <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
             <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}</button>
           </div>
@@ -578,9 +585,10 @@ function renderMonitorGrid(){
         <div class="pcard-iprow" style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
           <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">🔑</span>`:''}</span>
           <div class="pcard-actions" style="display:flex;gap:4px">
+            ${_renderPrinterLightButton(m.id)}
             <button onclick="openPrinterControl('${m.id}')" style="background:${isActive?'rgba(0,212,170,0.12)':'var(--surface2)'};border:1px solid ${isActive?'rgba(0,212,170,0.35)':'var(--border2)'};border-radius:6px;color:${isActive?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Control de impresora">🎛️</button>
             <button onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Enviar G-code">📤</button>
-            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP y API Key">⚙</button>
+            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">⚙</button>
             <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
             <button onclick="openBedMesh('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Bed mesh (mapa de nivelación de cama)">🗺️</button>
             <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
@@ -666,6 +674,7 @@ function _patchLivePrinter(id,s){
   if(s.bed)set('pbed_',(s.bed.actual||0)+'°');
   const sp=g('pspark_'),th=_tempHistory[id]||[];
   if(sp&&th.length>=2)sp.innerHTML=renderSparkline(th,'h','#ff6b35');
+  _patchPrinterLightButton(id);
 }
 
 async function printerControl(id,action){
