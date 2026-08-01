@@ -874,7 +874,7 @@
       <th class="sort-th" onclick="sortCotizaciones('total')">Total Neto</th>
       <th class="sort-th" onclick="sortCotizaciones('urgente')">Urgente</th>
       <th class="sort-th" onclick="sortCotizaciones('estado')">Estado</th>
-      <th class="sort-th" onclick="sortCotizaciones('vto')">Vto.</th>
+      <th class="sort-th" onclick="sortCotizaciones('vto')">Fechas</th>
       <th>Vendedor</th>
       <th>Acciones</th>
     </tr></thead>
@@ -929,7 +929,7 @@
   <div id="pedidosTableWrap" class="card"><div class="table-wrap sticky-head">
     <table><thead><tr>
       <th style="width:36px;text-align:center"><input type="checkbox" id="pedidosSelectAll" onchange="toggleSelectAllPedidos(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
-      <th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th><th>Entrega</th><th>Acciones</th>
+      <th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th><th>Entrega / meta</th><th>Acciones</th>
     </tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
@@ -955,7 +955,8 @@
             <option>Confirmado</option><option>En producción</option><option>Listo para despacho</option><option>Despachado</option><option>Completado</option><option>Cancelado</option>
           </select>
         </div>
-        <div class="field-group"><label class="field-label">Fecha entrega</label><input class="field-input" id="editPedidoFecha" type="date"></div>
+        <div class="field-group"><label class="field-label">Fecha entrega cliente</label><input class="field-input" id="editPedidoFecha" type="date" onchange="if(!document.getElementById('editPedidoFechaInterna').value)document.getElementById('editPedidoFechaInterna').value=calInternalDate(this.value,2)"></div>
+        <div class="field-group"><label class="field-label">Fecha objetivo interna</label><input class="field-input" id="editPedidoFechaInterna" type="date"><small style="color:var(--text3);font-size:9px">Producción, QA y embalaje listos.</small></div>
         <div class="field-group"><label class="field-label">Forma de Pago</label>
           <select class="field-select" id="editPedidoFormaPago">
             <option value="">— Seleccionar —</option>
@@ -1418,6 +1419,8 @@
         <div class="field-group"><label class="field-label">Urgente</label><select class="field-select" id="cot-urgente"><option value="false">No</option><option value="true">Sí (+25%)</option></select></div>
         <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="cot-fecha" type="date" onchange="updateVtoPreview()"></div>
         <div class="field-group"><label class="field-label">Vto. (auto 10 días háb.)</label><input class="field-input" id="cot-vto-preview" type="date" disabled style="opacity:0.5;cursor:not-allowed"></div>
+        <div class="field-group"><label class="field-label">Estado inicial</label><select class="field-select" id="cot-estado-inicial" onchange="if(this.value==='Solicitada'&&!document.getElementById('cot-fecha-limite').value)document.getElementById('cot-fecha-limite').value=calBusinessDate(document.getElementById('cot-fecha').value||new Date().toISOString().slice(0,10),2)"><option>Enviada</option><option>Solicitada</option></select></div>
+        <div class="field-group"><label class="field-label">Fecha límite para entregar cotización</label><input class="field-input" id="cot-fecha-limite" type="date"><small style="color:var(--text3);font-size:9px">Para propuestas que todavía estás preparando.</small></div>
         <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="cot-forma-pago"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
         <div class="field-group form-full"><label class="field-label">Tiempo de Producción / Entrega</label>
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
@@ -3420,6 +3423,7 @@
       <div class="field-group"><label class="field-label">Urgente</label><select class="field-select" id="editCotUrgente"><option value="false">No</option><option value="true">Sí (+25%)</option></select></div>
       <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="editCotFecha" type="date"></div>
       <div class="field-group"><label class="field-label">Fecha vencimiento</label><input class="field-input" id="editCotVto" type="date"></div>
+      <div class="field-group"><label class="field-label">Fecha límite para entregar cotización</label><input class="field-input" id="editCotFechaLimite" type="date"><small style="color:var(--text3);font-size:9px">No es la vigencia: es cuándo debe enviarse.</small></div>
       <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="editCotFormaPago"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
       <div class="field-group form-full"><label class="field-label">Tiempo de Producción / Entrega</label>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
@@ -3718,10 +3722,22 @@
 #tab-calendario .cal-px-ev{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--text2);background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:7px 10px;margin-bottom:5px;cursor:pointer}
 #tab-calendario .cal-px-ev:hover{border-color:var(--accent)}
 #tab-calendario .cal-px-h{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);min-width:52px}
-@media(max-width:760px){#tab-calendario .cal-cell{min-height:56px;padding:3px 4px}#tab-calendario .cal-ev{font-size:8px;padding:1px 3px}}
+#tab-calendario .cal-ev.risk-overdue,#tab-calendario .cal-ev.risk-today{background:rgba(255,68,68,.12);color:#ffd0d0}#tab-calendario .cal-ev.risk-high{background:rgba(255,170,0,.1)}
+#tab-calendario .cal-cap-risk{display:inline-block;margin-left:4px;padding:0 3px;border-radius:3px;background:rgba(255,68,68,.2);color:var(--danger);font-size:7px;font-weight:900}
+#tab-calendario .cal-kpis{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:9px;margin-bottom:14px}
+#tab-calendario .cal-kpi{border:1px solid var(--border2);border-top:2px solid var(--cal-kpi);border-radius:10px;background:var(--surface2);padding:10px 12px;text-align:left;color:var(--text);cursor:pointer;font-family:inherit}#tab-calendario .cal-kpi b{display:block;font-family:'Bebas Neue';font-size:25px;color:var(--cal-kpi);line-height:1}#tab-calendario .cal-kpi span{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px}
+#tab-calendario .cal-week{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:7px;min-width:1060px}#tab-calendario .cal-week-day{border:1px solid var(--border2);border-radius:9px;background:var(--surface2);min-height:360px;padding:7px}#tab-calendario .cal-week-day.today{border-color:var(--accent)}#tab-calendario .cal-week-day>button{width:100%;display:flex;justify-content:space-between;background:none;border:none;color:var(--text3);font-family:inherit;padding:2px 3px 8px;cursor:pointer;text-transform:capitalize}#tab-calendario .cal-week-day>div{display:grid;gap:5px}#tab-calendario .cal-week-day small{color:var(--text3);font-size:9px}
+#tab-calendario .cal-agenda{display:grid;gap:9px}#tab-calendario .cal-ag-day{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;border-bottom:1px solid var(--border2);padding:9px 0}#tab-calendario .cal-ag-day>div:first-child b,#tab-calendario .cal-ag-day>div:first-child span{display:block;text-transform:capitalize}#tab-calendario .cal-ag-day>div:first-child b{font-size:11px;color:var(--text)}#tab-calendario .cal-ag-day>div:first-child span{font-size:10px;color:var(--text3)}#tab-calendario .cal-ag-day>div:last-child{display:grid;gap:5px}
+#tab-calendario .cal-side-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}#tab-calendario .cal-missing{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid var(--border2)}#tab-calendario .cal-missing b,#tab-calendario .cal-missing small{display:block}#tab-calendario .cal-missing b{font-size:10.5px;color:var(--text)}#tab-calendario .cal-missing small{font-size:9px;color:var(--warn);margin-top:2px}#tab-calendario .cal-good{padding:18px;text-align:center;color:var(--accent3);font-size:11px}
+#tab-calendario .cal-history-row{display:grid;grid-template-columns:92px minmax(0,1fr);gap:5px 8px;padding:7px 12px;border-top:1px solid var(--border2);font-size:9px}#tab-calendario .cal-history-row b{color:var(--accent)}#tab-calendario .cal-history-row span{color:var(--text2)}#tab-calendario .cal-history-row small{grid-column:2;color:var(--text3)}
+#tab-calendario .cal-px-ev small{color:var(--text3);font-size:9px}.cal-crm-cap{padding:10px 12px;border-radius:8px;font-size:10.5px;margin-top:10px}.cal-crm-cap.ok{background:rgba(0,212,170,.08);border:1px solid rgba(0,212,170,.3);color:var(--accent3)}.cal-crm-cap.risk{background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.3);color:var(--danger)}.cal-crm-cap.unknown{background:var(--surface2);border:1px solid var(--border2);color:var(--text3)}
+#tab-calendario #calGrid{overflow-x:auto}
+#calCrmHistory>div{padding:6px 0;border-bottom:1px solid var(--border2);font-size:9.5px;color:var(--text2)}#calCrmHistory small{display:block;color:var(--text3);margin-top:2px}#calCrmHistory>span{font-size:10px;color:var(--text3)}
+@media(max-width:900px){#tab-calendario .cal-kpis{grid-template-columns:repeat(2,1fr)}#tab-calendario .cal-side-grid{grid-template-columns:1fr}}
+@media(max-width:760px){#tab-calendario .cal-cell{min-height:64px;padding:3px 4px}#tab-calendario .cal-ev{font-size:8px;padding:1px 3px}#tab-calendario .cal-head,#tab-calendario .cal-body{min-width:700px}#tab-calendario #calGrid{overflow-x:auto}#tab-calendario .cal-ag-day{grid-template-columns:90px 1fr}}
 </style>
 <div class="tab-panel pf" id="tab-calendario">
-  <div class="section-header"><div><div class="section-title">Calendario</div><div class="section-desc">Eventos del equipo — Nicanor, Gustavo y Florencia — con alarmas y sincronización al Google Calendar personal de cada uno.</div></div>
+  <div class="section-header"><div><div class="section-title">Calendario operacional</div><div class="section-desc">Fechas límite de cotizaciones, metas internas, entregas de pedidos y agenda del equipo, con alertas y capacidad de Máquinas.</div></div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="calPedirPermisoAvisos()" title="Permitir notificaciones del navegador para las alarmas">🔔 Avisos</button>
       <button class="btn btn-ghost btn-sm" onclick="calGoogleConnect()" title="Conectar tu cuenta Google (una vez por navegador)">🔗 Conectar Google</button>
@@ -3741,9 +3757,13 @@
         <div class="field-group"><label class="field-label">Gustavo</label><input class="field-input" id="calCfg_gustavo" type="email" placeholder="gustavo@gmail.com"></div>
         <div class="field-group"><label class="field-label">Florencia</label><input class="field-input" id="calCfg_florencia" type="email" placeholder="florencia@gmail.com"></div>
       </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="calSaveConfig()">Guardar</button></div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)"><div class="field-label" style="margin-bottom:7px">Qué enviar a Google Calendar</div><div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="cal-chip"><input id="calSync_manual" type="checkbox"> Eventos del equipo</label><label class="cal-chip"><input id="calSync_cot_due" type="checkbox"> Entrega cotizaciones</label><label class="cal-chip"><input id="calSync_cot_expiry" type="checkbox"> Vigencia cotizaciones</label><label class="cal-chip"><input id="calSync_ped_internal" type="checkbox"> Metas internas</label><label class="cal-chip"><input id="calSync_ped_delivery" type="checkbox"> Entregas cliente</label><label class="cal-chip"><input id="calSync_onlyMine" type="checkbox"> Solo los míos</label>
+      </div></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="calSaveSyncPrefs()">Guardar selección Google</button><button class="btn btn-primary btn-sm" onclick="calSaveConfig()">Guardar calendarios</button></div>
     </div>
   </div>
+  <div id="calKpis" class="cal-kpis"></div>
   <div class="card" style="margin-bottom:14px">
     <div class="card-header" style="flex-wrap:wrap;gap:10px">
       <div style="display:flex;align-items:center;gap:6px">
@@ -3752,14 +3772,16 @@
         <button class="btn btn-ghost btn-sm" onclick="calNavMes(1)" title="Mes siguiente">›</button>
         <span class="card-title" id="calMesLabel" style="margin-left:6px">—</span>
       </div>
-      <div id="calFiltroChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto"></div>
+      <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px;margin-left:auto"><button class="btn btn-ghost btn-sm" data-cal-view="mes" onclick="calSetVista('mes')">Mes</button><button class="btn btn-ghost btn-sm" data-cal-view="semana" onclick="calSetVista('semana')">Semana</button><button class="btn btn-ghost btn-sm" data-cal-view="agenda" onclick="calSetVista('agenda')">Agenda</button></div>
     </div>
+    <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:10px 14px 0;border-top:1px solid var(--border2)"><span style="font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:800">Tipo</span><div id="calTipoChips" style="display:flex;gap:5px;flex-wrap:wrap"></div><span style="font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:800;margin-left:auto">Responsable</span><div id="calFiltroChips" style="display:flex;gap:5px;flex-wrap:wrap"></div></div>
     <div id="calGrid" style="padding:12px 14px"></div>
   </div>
-  <div class="card">
-    <div class="card-header"><span class="card-title">📆 Próximos 7 días</span></div>
-    <div id="calProximos" style="padding:10px 14px"></div>
+  <div class="cal-side-grid" style="margin-bottom:14px">
+    <div class="card"><div class="card-header"><span class="card-title">📆 Próximos 14 días</span></div><div id="calProximos" style="padding:10px 14px"></div></div>
+    <div class="card" id="calSinFechaCard"><div class="card-header"><span class="card-title">⚠ Compromisos sin fecha</span></div><div id="calSinFecha"></div></div>
   </div>
+  <div class="card"><div class="card-header"><span class="card-title">↔ Historial de reprogramaciones</span><span style="font-size:10px;color:var(--text3);margin-left:auto">últimos 12 cambios</span></div><div id="calHistory"></div></div>
 </div>
 <!-- Modal crear/editar evento -->
 <div class="modal-overlay" id="calEventoModal" style="display:none">
@@ -3789,6 +3811,21 @@
       <button class="btn btn-ghost btn-sm" onclick="closeCalEventoModal()">Cancelar</button>
       <button class="btn btn-primary btn-sm" onclick="calSaveEvento()">Guardar</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal compromiso derivado desde Cotizaciones / Pedidos -->
+<div class="modal-overlay" id="calCrmModal" style="display:none">
+  <div class="modal-backdrop" onclick="closeCalCrmModal()"></div>
+  <div class="modal-card" style="max-width:600px;width:96vw">
+    <input type="hidden" id="calCrmKind"><input type="hidden" id="calCrmId">
+    <div class="modal-title" id="calCrmTitle">Compromiso</div><div id="calCrmSub" style="font-size:10.5px;color:var(--text3);margin:5px 0 14px"></div>
+    <div id="calCrmQuoteDates" style="display:none;grid-template-columns:1fr 1fr;gap:10px"><div class="field-group"><label class="field-label">Fecha límite para enviar</label><input class="field-input" id="calCrmCotDue" type="date"></div><div class="field-group"><label class="field-label">Vigencia de la propuesta</label><input class="field-input" id="calCrmCotExpiry" type="date"></div></div>
+    <div id="calCrmOrderDates" style="display:none;grid-template-columns:1fr 1fr;gap:10px"><div class="field-group"><label class="field-label">Meta interna</label><input class="field-input" id="calCrmPedInternal" type="date"></div><div class="field-group"><label class="field-label">Entrega al cliente</label><input class="field-input" id="calCrmPedDelivery" type="date" onchange="if(!document.getElementById('calCrmPedInternal').value)document.getElementById('calCrmPedInternal').value=calInternalDate(this.value,2)"></div></div>
+    <div class="field-group"><label class="field-label">Motivo de reprogramación</label><input class="field-input" id="calCrmReason" placeholder="Ej. cambio solicitado por cliente, ajuste de producción…"><small style="color:var(--text3);font-size:9px">Obligatorio cuando cambias una fecha ya comprometida.</small></div>
+    <div id="calCrmCapacity" style="display:none"></div>
+    <details style="margin-top:12px"><summary style="font-size:10px;color:var(--text3);cursor:pointer">Historial de cambios</summary><div id="calCrmHistory" style="margin-top:7px"></div></details>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px"><button class="btn btn-ghost btn-sm" onclick="calGoRecord(document.getElementById('calCrmKind').value,document.getElementById('calCrmId').value)">Abrir ficha</button><button class="btn btn-ghost btn-sm" onclick="calShareReminder()">💬 Compartir aviso</button><button class="btn btn-ghost btn-sm" id="calCrmPrimaryAction" onclick="calCrmPrimaryAction()">Acción</button><button class="btn btn-ghost btn-sm" onclick="closeCalCrmModal()">Cancelar</button><button class="btn btn-primary btn-sm" onclick="calSaveCrmDates()">Guardar fechas</button></div>
   </div>
 </div>
 
@@ -7140,7 +7177,7 @@ async function airtableDelete(table,recordId){
 async function ensureCotizacionFields(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
   const tableId='tblvVAc4TtiERA0Tc';
-  const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tiempo de producción máx',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'},{name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso',format:'YYYY-MM-DD'}}},{name:'Detalle JSON',type:'multilineText'}];
+  const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tiempo de producción máx',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'},{name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso',format:'YYYY-MM-DD'}}},{name:'Fecha límite cotización',type:'date',options:{dateFormat:{name:'iso',format:'YYYY-MM-DD'}}},{name:'Historial fechas calendario',type:'multilineText'},{name:'Detalle JSON',type:'multilineText'}];
   for(const c of needed){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
 }
 async function ensureFichaTecnicaField(){
@@ -7704,7 +7741,8 @@ let isLoadingData=false;
 // para no perder datos en silencio cuando un campo no existe en Airtable. Solo diagnóstico, sin UI.
 function _schemaHealthCheck(){
   const checks=[
-    ['Pedidos',state.pedidos,['Resultado QA','Notas QA','Ficha Tecnica']],
+    ['Pedidos',state.pedidos,['Resultado QA','Notas QA','Ficha Tecnica','Fecha objetivo interna','Historial fechas calendario']],
+    ['Cotizaciones',state.cotizaciones,['Fecha límite cotización','Historial fechas calendario']],
     ['Clientes',state.clientes,['Etapa venta','Notas internas']],
   ];
   const faltantes=[];
@@ -10199,7 +10237,7 @@ function buildCotRow(c){
   const actMenu=`<div class="act-drop"><button class="btn-mini act-toggle" onclick="toggleActMenu(event,'actmenu-cot-${c.id}')">⋯</button><div class="act-menu" id="actmenu-cot-${c.id}">${approveItems}${winbackItem}<button class="act-item" onclick="openEditCot('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;Editar</button><button class="act-item" onclick="startEditCotFlow('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> &nbsp;✏️ Editar (guiado)</button><button class="act-item act-item-yellow" onclick="generarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-eye"/></svg> &nbsp;Ver PDF</button><button class="act-item act-item-yellow" onclick="descargarPDFCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-file"/></svg> &nbsp;Descargar PDF</button><button class="act-item act-item-green" onclick="MAIL.sendCotizacion('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-correo"/></svg> &nbsp;Enviar por correo</button><button class="act-item${fpData?' act-item-purple':''}" onclick="openFichaPropModal('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> &nbsp;Ficha Propuesta${fpData?' ✓':''}</button><button class="act-item${cotDriveLink?' act-item-blue':''}" onclick="openDriveFolder('${c.id}','${numCotEsc}','${cliNomEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-folder"/></svg> &nbsp;${cotDriveLink?'Abrir carpeta Drive':'Crear carpeta Drive'}</button><button class="act-item" onclick="openNotasModal('cot','${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-note"/></svg> &nbsp;Notas internas${cotNotasN?' <span class="nota-badge">'+cotNotasN+'</span>':''}</button><div class="act-sep"></div><button class="act-item act-item-red" onclick="deleteCotizacion('${c.id}','${numCotEsc}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> &nbsp;Eliminar</button></div></div>`;
   const vendNom=resolveVendedorName(f['Vendedor']||'');
   const _aliasEsc=escapeHtml(f['Alias / Título']||'');
-  return`<tr data-id="${c.id}" class="${_flashCls(c.id).trim()}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Alias / Título" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)">${_aliasEsc?`<span title="${_aliasEsc}">${_aliasEsc}</span>`:'<span style="color:var(--text3)">—</span>'}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Vto.">${f['Fecha vencimiento']?formatFecha(f['Fecha vencimiento']):'—'}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
+  return`<tr data-id="${c.id}" class="${_flashCls(c.id).trim()}"><td class="mono" data-label="N° Cot.">${escapeHtml(f['N° Cotización']||'—')}</td><td data-label="Alias / Título" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)">${_aliasEsc?`<span title="${_aliasEsc}">${_aliasEsc}</span>`:'<span style="color:var(--text3)">—</span>'}</td><td data-label="Cliente">${escapeHtml(resolveClienteName(f['Cliente']))}</td><td data-label="Canal"><span class="badge badge-gray">${escapeHtml(f['Canal solicitud']||'—')}</span></td><td class="mono" data-label="Costo Neto">${formatCLP(f['Subtotal (CLP)']||0)}</td><td class="clp" data-label="Total Neto">${formatCLP(neto)}</td><td data-label="Urgente">${f['Urgencia (+25%)']?`<button class="btn-mini" style="background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;font-weight:700" onclick="toggleUrgenciaCotizacion('${c.id}')">⚡<span class="btn-txt"> Urgente</span></button>`:`<button class="btn-mini" style="color:var(--text3)" onclick="toggleUrgenciaCotizacion('${c.id}')">—<span class="btn-txt"> Normal</span></button>`}</td><td data-label="Estado">${estadoBadge(f['Estado cotización']||'—')}</td><td class="text-small text-muted" data-label="Fechas">${f['Fecha límite cotización']?`<span style="color:var(--warn)" title="Límite para enviar">✍ ${formatFecha(f['Fecha límite cotización'])}</span><br>`:''}${f['Fecha vencimiento']?`<span title="Vigencia">⌛ ${formatFecha(f['Fecha vencimiento'])}</span>`:'—'}</td><td class="text-small" data-label="Vendedor" style="color:var(--text2)">${escapeHtml(vendNom)}</td>
   <td class="cot-td-actions" data-label="Acciones"><div class="cot-btns">${actMenu}</div></td></tr>`;
 }
 // Avanza la etapa del cliente solo si su etapa actual está en la lista `desde` (no retrocede etapas)
@@ -10300,7 +10338,7 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   if(f['Tiempo de producción']) fields['Tiempo de producción']=f['Tiempo de producción'];
   if(f['Tipo días producción']) fields['Tipo días producción']=f['Tipo días producción'];
   // Si la cotización comprometió una fecha fija de entrega, el pedido nace con esa fecha.
-  if(f['Fecha de entrega']) fields['Fecha entrega']=f['Fecha de entrega'];
+  if(f['Fecha de entrega']){fields['Fecha entrega']=f['Fecha de entrega'];if(typeof calInternalDate==='function')fields['Fecha objetivo interna']=calInternalDate(f['Fecha de entrega'],2);}
   const solicitudCot=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';
   // Reintento tolerante: si Airtable rechaza por un campo desconocido, reintenta
   // dejando solo los campos base garantizados (no perder el pedido por un campo nuevo).
@@ -10310,7 +10348,7 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
     await airtableWrite('Pedidos','POST',null,fields);
   }catch(e){
     const m=(e.message||'').toLowerCase();
-    if(/unknown|field|cliente|invalid|422/.test(m)){ try{ await airtableWrite('Pedidos','POST',null,base); }catch(e2){ toast(`⚠ Error: ${e2.message}`,'error'); return false; } }
+    if(/unknown|field|cliente|invalid|422/.test(m)){try{await ensureCalendarioCrmFields();await airtableWrite('Pedidos','POST',null,fields);}catch(_){try{await airtableWrite('Pedidos','POST',null,base);}catch(e2){toast(`⚠ Error: ${e2.message}`,'error');return false;}}}
     else { toast(`⚠ Error: ${e.message}`,'error'); return false; }
   }
   toast(`✓ Pedido ${numPedido} creado desde ${numCot||'la cotización'}`,'success');
@@ -10355,7 +10393,7 @@ async function convertirCotAPedido(cotId,btn){
 }
 function openEditCot(id){
   const c=state.cotizacionesById[id];if(!c) return;const f=c.fields;
-  document.getElementById('editCotId').value=id;document.getElementById('editCotNum').value=f['N° Cotización']||'';const _eAlias=document.getElementById('editCotAlias');if(_eAlias) _eAlias.value=f['Alias / Título']||'';document.getElementById('editCotCanal').value=f['Canal solicitud']||'WhatsApp';document.getElementById('editCotEstado').value=f['Estado cotización']||'Enviada';document.getElementById('editCotUrgente').value=f['Urgencia (+25%)']?'true':'false';document.getElementById('editCotFecha').value=f['Fecha cotización']||'';document.getElementById('editCotVto').value=f['Fecha vencimiento']||'';document.getElementById('editCotSolicitud').value=f['Solicitud cliente (texto libre)']||'';document.getElementById('editCotNotas').value=f['Notas cotización']||'';
+  document.getElementById('editCotId').value=id;document.getElementById('editCotNum').value=f['N° Cotización']||'';const _eAlias=document.getElementById('editCotAlias');if(_eAlias) _eAlias.value=f['Alias / Título']||'';document.getElementById('editCotCanal').value=f['Canal solicitud']||'WhatsApp';document.getElementById('editCotEstado').value=f['Estado cotización']||'Enviada';document.getElementById('editCotUrgente').value=f['Urgencia (+25%)']?'true':'false';document.getElementById('editCotFecha').value=f['Fecha cotización']||'';document.getElementById('editCotVto').value=f['Fecha vencimiento']||'';document.getElementById('editCotFechaLimite').value=f['Fecha límite cotización']||'';document.getElementById('editCotSolicitud').value=f['Solicitud cliente (texto libre)']||'';document.getElementById('editCotNotas').value=f['Notas cotización']||'';
   const _efp=document.getElementById('editCotFormaPago');if(_efp) _efp.value=f['Forma de pago']||'';
   cotPlazoLoad('edit',f);
   const clienteIdActual=Array.isArray(f['Cliente'])?f['Cliente'][0]:(f['Cliente']||'');const clienteRec=clienteIdActual?state.clientes.find(x=>x.id===clienteIdActual):null;
@@ -10484,7 +10522,7 @@ async function _saveCotFields(method,id,fields){
     try{ return await airtableWrite('Cotizaciones',method,id,f); }
     catch(e2){
       if(!isUnknown(e2)) throw e2;
-      for(const k of ['Fecha de entrega','Tiempo de producción máx','Detalle JSON','Tipo días producción','Tiempo de producción']){
+      for(const k of ['Historial fechas calendario','Fecha límite cotización','Fecha de entrega','Tiempo de producción máx','Detalle JSON','Tipo días producción','Tiempo de producción']){
         if(k in f){ delete f[k];
           try{ return await airtableWrite('Cotizaciones',method,id,f); }
           catch(e3){ if(!isUnknown(e3)) throw e3; }
@@ -10501,14 +10539,17 @@ async function saveEditCot(){
     rows.forEach(row=>{const und=parseFloat(row.querySelector('.edit-item-und')?.value)||1;const costo=parseFloat(row.querySelector('.edit-item-costo')?.value)||0;const venta=parseFloat(row.querySelector('.edit-item-venta')?.value)||0;costoTotal+=costo*und;ventaTotal+=venta*und;});
     costoTotal=Math.round(costoTotal);ventaTotal=Math.round(ventaTotal);const _descPctE=Math.min(100,Math.max(0,parseFloat(document.getElementById('editCotDescuento')?.value)||0));const _netoDescE=Math.round(ventaTotal*(1-_descPctE/100));const totalIva=Math.round(_netoDescE*1.19);const detalle=document.getElementById('editCotDetalle').value;
     const _aliasValE=(document.getElementById('editCotAlias')?.value||'').trim();
-    const fields={'N° Cotización':document.getElementById('editCotNum').value,'Alias / Título':_aliasValE||null,'Canal solicitud':document.getElementById('editCotCanal').value,'Estado cotización':document.getElementById('editCotEstado').value,'Urgencia (+25%)':document.getElementById('editCotUrgente').value==='true','Fecha cotización':document.getElementById('editCotFecha').value,'Fecha vencimiento':document.getElementById('editCotVto').value,'Solicitud cliente (texto libre)':document.getElementById('editCotSolicitud').value,'Detalle productos':detalle,'Notas cotización':document.getElementById('editCotNotas').value,'Subtotal (CLP)':costoTotal,'Total final (CLP)':totalIva};
+    const fields={'N° Cotización':document.getElementById('editCotNum').value,'Alias / Título':_aliasValE||null,'Canal solicitud':document.getElementById('editCotCanal').value,'Estado cotización':document.getElementById('editCotEstado').value,'Urgencia (+25%)':document.getElementById('editCotUrgente').value==='true','Fecha cotización':document.getElementById('editCotFecha').value,'Fecha vencimiento':document.getElementById('editCotVto').value||null,'Fecha límite cotización':document.getElementById('editCotFechaLimite').value||null,'Solicitud cliente (texto libre)':document.getElementById('editCotSolicitud').value,'Detalle productos':detalle,'Notas cotización':document.getElementById('editCotNotas').value,'Subtotal (CLP)':costoTotal,'Total final (CLP)':totalIva};
     if(_descPctE>0) fields['Descuento (%)']=_descPctE;
     const _sfp=document.getElementById('editCotFormaPago')?.value||'';if(_sfp) fields['Forma de pago']=_sfp;
     Object.assign(fields,cotPlazoFields('edit'));
     const editClienteId=document.getElementById('editCotClienteId').value;if(editClienteId) fields['Cliente']=[editClienteId];
     const _evv=document.getElementById('editCotVendedor')?.value||'';fields['Vendedor']=_evv||null;
     const _itJsonE=_cotItemsJSON('#editItemsContainer .edit-item-row');fields['Detalle JSON']=_itJsonE||'';
-    const cotId=document.getElementById('editCotId').value;
+    const cotId=document.getElementById('editCotId').value,_cotRec=state.cotizacionesById[cotId];
+    if(fields['Estado cotización']==='Enviada'&&_cotRec?.fields?.['Estado cotización']!=='Enviada'&&!fields['Fecha vencimiento'])fields['Fecha vencimiento']=calBusinessDate(_calFmtFecha(new Date()),10);
+    const _dateChanges=['Fecha límite cotización','Fecha vencimiento','Fecha de entrega'].filter(k=>(_cotRec?.fields?.[k]||'')!==(fields[k]||'')).map(k=>({field:k,to:fields[k]||''}));
+    if(_dateChanges.length){let _reason='Fecha inicial';if(_dateChanges.some(x=>_cotRec?.fields?.[x.field])){_reason=(prompt('Motivo de la reprogramación de la cotización:','Cambio solicitado por cliente')||'').trim();if(!_reason)throw new Error('Debes indicar el motivo para cambiar una fecha comprometida');}fields['Historial fechas calendario']=calHistoryForChanges(_cotRec,_dateChanges,_reason);}
     await _saveCotFields('PATCH',cotId,fields);
     toast('✓ Cotización actualizada','success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
     syncCotizacionADrive(cotId);
@@ -11013,7 +11054,7 @@ function renderPedidos(filter){
     _setRows(tbody,'<tr><td colspan="12">'+emptyHtml+'</td></tr>');return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
   _setRows(tbody,data.slice(0,_pedCap).map(p=>{
-    const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Completado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
+    const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'',interna=f['Fecha objetivo interna']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Completado','Cancelado'].includes(estado),metaAtrasada=interna&&new Date(interna+'T00:00:00')<today&&!['Listo para despacho','Despachado','Completado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
     const facturaLink=localStorage.getItem('factura_drive_'+p.id)||f['Factura URL']||'';
     const fichaData=parseFichaData(f['Ficha Tecnica']);
     const pedDriveCotId=f['Cotizaciones']?.[0];
@@ -11039,7 +11080,7 @@ function renderPedidos(filter){
     <td><select onchange="updateFormaPago('${p.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;padding:3px 6px;cursor:pointer;outline:none;width:100%;max-width:170px"><option value="">— Seleccionar —</option>${formaOpts.map(op=>`<option value="${op}" ${formaActual===op?'selected':''}>${op}</option>`).join('')}</select></td>
     <td style="text-align:center">${pagoChips(p.id,f)}</td>
     <td style="text-align:center"><button data-pedido="${escapeHtml(f['N° Pedido']||'—')}" onclick="openQAModal('${p.id}',this.dataset.pedido)" style="background:${qaColor(f['Resultado QA'])};border:1px solid ${qaBorder(f['Resultado QA'])};color:${qaTextColor(f['Resultado QA'])};border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;min-width:80px">${qaLabel(f['Resultado QA'])}</button></td>
-    <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"></td>
+    <td><input type="date" value="${escapeHtml(entrega)}" onchange="updateFechaEntrega('${p.id}',this.value)" style="background:${atrasado?'rgba(255,68,68,0.1)':'var(--surface2)'};border:1px solid ${atrasado?'rgba(255,68,68,0.4)':'var(--border2)'};border-radius:5px;color:${atrasado?'var(--danger)':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:130px"><button class="btn-mini" onclick="openCalCrmModal('pedido','${p.id}','Fecha objetivo interna')" style="display:block;margin-top:4px;color:${metaAtrasada?'var(--danger)':'var(--text3)'};font-size:8.5px" title="Editar la meta interna de producción">🛠 ${interna?escapeHtml(interna):'sin meta'}${metaAtrasada?' ⚠':''}</button></td>
     <td>${actMenu}${estado==='Despachado'?'&nbsp;<span class="badge badge-green">✓</span>':estado==='Completado'?'&nbsp;<span class="badge badge-gray">📦</span>':''}</td></tr>`;
   }).join('')+(data.length>_pedCap?_loadMoreRow(data.length-_pedCap,12,'pedShowMore()'):''));
   try{buildPostEntregaTray();}catch(e){}
@@ -11213,7 +11254,7 @@ async function toggleTotal(id,actual){
     toast(n?'✓ Pago total recibido':'Pago total revertido',n?'success':'info');
   }catch(e){p.fields['Anticipo pagado (50%)']=!n;p.fields['Saldo pagado (50%)']=!n;renderPedidos();renderOverview();toast('Error: '+e.message,'error');}
 }
-async function updateFechaEntrega(id,fecha){try{await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidosById[id];if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+async function updateFechaEntrega(id,fecha){try{if(typeof calUpdateCrmDate==='function'){await calUpdateCrmDate('pedido',id,'Fecha entrega',fecha);return;}await airtableWrite('Pedidos','PATCH',id,{'Fecha entrega':fecha});const p=state.pedidosById[id];if(p) p.fields['Fecha entrega']=fecha;toast('✓ Fecha actualizada','success');renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 const QA_DEFAULTS=['Visual: sin defectos','Dimensional: dentro de tolerancia','Funcional: correcto','Embalaje: protegido','Documentación: completa'];
 let qaItems=[],qaResultadoActual='Pendiente';
 function openQAModal(pedidoId,numPedido){document.getElementById('qaModalPedidoId').value=pedidoId;document.getElementById('qaModalPedidoNum').textContent=`Pedido: ${numPedido}`;const p=state.pedidosById[pedidoId];const f=p?.fields||{};qaResultadoActual=f['Resultado QA']||'Pendiente';const saved=f['Notas QA']||'';if(saved){try{qaItems=JSON.parse(saved);}catch(e){qaItems=saved.split('\n').filter(Boolean).map(l=>({texto:l.replace(/^[✓✕]\s*/,''),checked:l.startsWith('✓')}));}}else{qaItems=QA_DEFAULTS.map(t=>({texto:t,checked:false}));}const descEl=document.getElementById('qaIADesc');if(descEl)descEl.value=f['Detalle productos']||f['Solicitud cliente (texto libre)']||'';qaFotoData=localStorage.getItem('qa_foto_'+pedidoId)||null;qaFotoLink=localStorage.getItem('qa_foto_link_'+pedidoId)||f['Foto QA URL']||null;renderQAFoto();renderQAChecklist();updateQAResultadoBtns();document.getElementById('qaModal').style.display='flex';}
@@ -11547,6 +11588,7 @@ function openEditPedidoModal(id){
   document.getElementById('editPedidoId').value=id;
   document.getElementById('editPedidoEstado').value=f['Estado pedido']||'Confirmado';
   document.getElementById('editPedidoFecha').value=f['Fecha entrega']||'';
+  document.getElementById('editPedidoFechaInterna').value=f['Fecha objetivo interna']||'';
   document.getElementById('editPedidoFormaPago').value=f['Forma de pago']||'';
   document.getElementById('editPedidoEquipo').value=f['Equipo asignado']||'';
   document.getElementById('editPedidoProveedor').value=f['Proveedor']||'';
@@ -11584,7 +11626,7 @@ async function saveEditPedido(){
   }
   btn.disabled=true;btn.textContent='Guardando...';
   try{
-    const fields={'Estado pedido':nuevoEstado,'Fecha entrega':document.getElementById('editPedidoFecha').value||null,'Equipo asignado':document.getElementById('editPedidoEquipo').value,'Proveedor':document.getElementById('editPedidoProveedor').value};
+    const fields={'Estado pedido':nuevoEstado,'Fecha entrega':document.getElementById('editPedidoFecha').value||null,'Fecha objetivo interna':document.getElementById('editPedidoFechaInterna').value||null,'Equipo asignado':document.getElementById('editPedidoEquipo').value,'Proveedor':document.getElementById('editPedidoProveedor').value};
     const fp=document.getElementById('editPedidoFormaPago').value;if(fp) fields['Forma de pago']=fp;
     const _epVv=document.getElementById('editPedidoVendedor')?.value||'';fields['Vendedor']=_epVv||null;
     if(fields['Estado pedido']==='Despachado'&&!state.pedidosById[id]?.fields['Fecha despacho']) fields['Fecha despacho']=new Date().toISOString().split('T')[0];
@@ -11594,9 +11636,11 @@ async function saveEditPedido(){
     if(_ch>0)fields['Horas máquina reales']=_ch;
     if(_cmo>0)fields['Costo mano de obra (CLP)']=_cmo;
     if(_cm>0||_ch>0||_cmo>0)fields['Costo real total (CLP)']=Math.round(_cm+_ch*TARIFA_HORA_MAQUINA+_cmo);
+    const _pedRec=state.pedidosById[id],_pedDateChanges=['Fecha objetivo interna','Fecha entrega'].filter(k=>(_pedRec?.fields?.[k]||'')!==(fields[k]||'')).map(k=>({field:k,to:fields[k]||''}));
+    if(_pedDateChanges.length){let _reason='Fecha inicial';if(_pedDateChanges.some(x=>_pedRec?.fields?.[x.field])){_reason=(prompt('Motivo de la reprogramación del pedido:','Ajuste de producción')||'').trim();if(!_reason)throw new Error('Debes indicar el motivo para cambiar una fecha comprometida');}fields['Historial fechas calendario']=calHistoryForChanges(_pedRec,_pedDateChanges,_reason);}
     try{await airtableWrite('Pedidos','PATCH',id,fields);}
     catch(err){
-      if(/field|unknown|422|INVALID|UNKNOWN/i.test(err.message||'')){await ensureCostosPedidoFields();await airtableWrite('Pedidos','PATCH',id,fields);}
+      if(/field|unknown|422|INVALID|UNKNOWN/i.test(err.message||'')){await ensureCalendarioCrmFields();await ensureCostosPedidoFields();await airtableWrite('Pedidos','PATCH',id,fields);}
       else throw err;
     }
     const p=state.pedidosById[id];if(p) Object.assign(p.fields,fields);
@@ -12484,9 +12528,10 @@ async function createCotizacion(){
   try{
     const clienteId=document.getElementById('cot-cliente-id')?.value||'';
     const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];
-    const vtoStr=addBusinessDays(new Date(fechaCot+'T00:00:00'),10).toISOString().split('T')[0];
+    const vtoStr=calBusinessDate(fechaCot,10);
     const _aliasValN=(document.getElementById('cot-alias')?.value||'').trim();
-    const fields={'N° Cotización':num,'Alias / Título':_aliasValN||null,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':vtoStr,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':document.getElementById('cot-urgente')?.value==='true','Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':'Enviada'};
+    const _estadoInicial=document.getElementById('cot-estado-inicial')?.value||'Enviada';let _fechaLimite=document.getElementById('cot-fecha-limite')?.value||'';if(_estadoInicial==='Solicitada'&&!_fechaLimite)_fechaLimite=calBusinessDate(fechaCot,2);
+    const fields={'N° Cotización':num,'Alias / Título':_aliasValN||null,'Canal solicitud':document.getElementById('cot-canal')?.value||'WhatsApp','Fecha cotización':fechaCot,'Fecha vencimiento':_estadoInicial==='Enviada'?vtoStr:null,'Fecha límite cotización':_fechaLimite||null,'Subtotal (CLP)':s,'Total final (CLP)':t,'Urgencia (+25%)':document.getElementById('cot-urgente')?.value==='true','Solicitud cliente (texto libre)':document.getElementById('cot-solicitud')?.value||'','Detalle productos':document.getElementById('cot-detalle')?.value||'','Notas cotización':document.getElementById('cot-notas')?.value||'','Estado cotización':_estadoInicial};
     if(_descPctN>0) fields['Descuento (%)']=_descPctN;
     const formaVal=document.getElementById('cot-forma-pago')?.value||'';
     if(formaVal) fields['Forma de pago']=formaVal;
@@ -12496,7 +12541,7 @@ async function createCotizacion(){
     const _itJsonN=_cotItemsJSON('#itemsContainer .item-row');if(_itJsonN) fields['Detalle JSON']=_itJsonN;
     await _saveCotFields('POST',null,fields);
     toast(`✓ Cotización ${num} guardada`,'success');
-    await _advanceEtapaCliente(clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
+    if(_estadoInicial==='Enviada')await _advanceEtapaCliente(clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
     clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
     const _newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
     if(_newCot) syncCotizacionADrive(_newCot.id);
@@ -12588,7 +12633,7 @@ function gfNext(){
   if(GF.idx>=GF.steps.length-1){gfFinish();return;}
   GF.idx++;gfRender();
 }
-function gfBack(){if(GF.idx>0){gfCollect();delete GF.answers._items;GF.idx--;gfRender();}}
+function gfBack(){if(GF.idx>0){gfCollect();delete GF.answers._items;let i=GF.idx-1;while(i>0&&typeof GF.steps[i]?.skip==='function'&&GF.steps[i].skip(GF.answers))i--;GF.idx=i;gfRender();}}
 async function gfFinish(){
   if(GF._busy)return;GF._busy=true;
   const $next=document.getElementById('gfNext');if($next)$next.disabled=true;
@@ -12658,6 +12703,7 @@ function gfReviewHTML(){
   const a=GF.answers,items=a._items||[];
   const head='<div class="gf-rev-row"><span>Cliente</span><b>'+escapeHtml(a.clienteNombre||'Sin cliente')+'</b></div>'
     +'<div class="gf-rev-row"><span>Producto · Material</span><b>'+escapeHtml((a.tipo||'-')+(a.material&&a.material!=='a elección de KAI'?' · '+a.material:''))+'</b></div>'
+    +'<div class="gf-rev-row"><span>Estado · compromiso</span><b>'+escapeHtml(a.estadoInicial==='Solicitada'?('Por preparar · '+(a.fechaLimite||'sin fecha')):'Se envía ahora')+'</b></div>'
     +'<div class="gf-rev-row" style="border-bottom:none"><span>Urgencia · Pago</span><b>'+(a.urgencia==='urgente'?'⚡ Urgente':'Normal')+(a.formaPago?' · '+escapeHtml(a.formaPago):'')+'</b></div>';
   const rows=items.map((it,i)=>{
     const sub=Math.round((it.ventaUnit||0)*(it.und||1));
@@ -12689,8 +12735,8 @@ async function crearCotizacionGuiada(d){
   costo=Math.round(costo);const descPct=d.descuento||0;const netoDesc=Math.round(venta*(1-descPct/100));const total=Math.round(netoDesc*1.19);
   const detalle=(d.items||[]).map(it=>it.desc+' | '+(it.und||1)+' und. | Costo: $'+(it.costo||0)+' | Venta: $'+(it.venta||0)).join('\n');
   const fecha=new Date().toISOString().split('T')[0];
-  const vto=addBusinessDays(new Date(fecha+'T00:00:00'),10).toISOString().split('T')[0];
-  const fields={'N° Cotización':num,'Canal solicitud':d.canal||'WhatsApp','Fecha cotización':fecha,'Fecha vencimiento':vto,'Subtotal (CLP)':costo,'Total final (CLP)':total,'Urgencia (+25%)':!!d.urgente,'Solicitud cliente (texto libre)':d.solicitud||'','Detalle productos':detalle,'Notas cotización':d.notas||'','Estado cotización':'Enviada'};
+  const estado=d.estadoInicial||'Enviada',vto=calBusinessDate(fecha,10),fechaLimite=estado==='Solicitada'?(d.fechaLimite||calBusinessDate(fecha,2)):'';
+  const fields={'N° Cotización':num,'Canal solicitud':d.canal||'WhatsApp','Fecha cotización':fecha,'Fecha vencimiento':estado==='Enviada'?vto:null,'Fecha límite cotización':fechaLimite||null,'Subtotal (CLP)':costo,'Total final (CLP)':total,'Urgencia (+25%)':!!d.urgente,'Solicitud cliente (texto libre)':d.solicitud||'','Detalle productos':detalle,'Notas cotización':d.notas||'','Estado cotización':estado};
   if(d.alias)fields['Alias / Título']=d.alias;
   if(descPct>0)fields['Descuento (%)']=descPct;
   if(d.formaPago)fields['Forma de pago']=d.formaPago;
@@ -12701,11 +12747,11 @@ async function crearCotizacionGuiada(d){
   if(_itJsonG)fields['Detalle JSON']=_itJsonG;
   try{await airtableWrite('Cotizaciones','POST',null,fields);}
   catch(e){if(!e.message.toLowerCase().includes('unknown'))throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
-  if(d.clienteId)await _advanceEtapaCliente(d.clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
+  if(d.clienteId&&estado==='Enviada')await _advanceEtapaCliente(d.clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
   await loadAllDataSilent();renderCotizaciones();renderOverview();
   const newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
   if(newCot)syncCotizacionADrive(newCot.id);
-  return{num,total,cotId:newCot?newCot.id:null};
+  return{num,total,cotId:newCot?newCot.id:null,status:estado,fechaLimite};
 }
 // Pantalla final con opciones de compartir (#8)
 function _gfQuoteSuccess(r,clienteId){
@@ -12713,7 +12759,7 @@ function _gfQuoteSuccess(r,clienteId){
   const tel=c?((c.fields['Teléfono']||c.fields['WhatsApp']||'').replace(/\D/g,'')):'';
   const waNum=tel?(tel.length<=9?'56'+tel:tel):'';
   const email=c?(c.fields['Email']||''):'';
-  const waMsg=encodeURIComponent('Hola'+(c?' '+(c.fields['Contacto']||c.fields['Empresa']||''):'')+', te comparto la cotización '+r.num+' por '+formatCLP(r.total)+'. ¡Quedo atento a tus comentarios!');
+  const waiting=r.status==='Solicitada',waMsg=encodeURIComponent(waiting?('Hola'+(c?' '+(c.fields['Contacto']||c.fields['Empresa']||''):'')+', estamos preparando la cotización '+r.num+' y la enviaremos a más tardar el '+formatFecha(r.fechaLimite)+'.'):('Hola'+(c?' '+(c.fields['Contacto']||c.fields['Empresa']||''):'')+', te comparto la cotización '+r.num+' por '+formatCLP(r.total)+'. ¡Quedo atento a tus comentarios!'));
   document.getElementById('gfTitle').textContent='✓ Cotización creada';
   document.getElementById('gfStepInfo').textContent='';
   document.getElementById('gfProgress').style.width='100%';
@@ -12723,7 +12769,7 @@ function _gfQuoteSuccess(r,clienteId){
     +'<div style="font-size:17px;font-weight:800;margin-top:6px">Cotización '+escapeHtml(r.num)+'</div>'
     +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Total '+formatCLP(r.total)+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:8px;max-width:320px;margin:0 auto">'
-    +(waNum?'<button class="btn btn-primary btn-sm" onclick="window.open(\'https://wa.me/'+waNum+'?text='+waMsg+'\',\'_blank\')">💬 Enviar por WhatsApp</button>':'')
+    +(waNum?'<button class="btn btn-primary btn-sm" onclick="window.open(\'https://wa.me/'+waNum+'?text='+waMsg+'\',\'_blank\')">💬 '+(waiting?'Avisar fecha comprometida':'Enviar por WhatsApp')+'</button>':'')
     +(email&&window.MAIL&&MAIL.sendCotizacion&&r.cotId?'<button class="btn btn-ghost btn-sm" onclick="gfClose();MAIL.sendCotizacion(\''+r.cotId+'\')">✉️ Enviar por correo</button>':'')
     +(r.cotId?'<button class="btn btn-ghost btn-sm" onclick="generarPDFCotizacion(\''+r.cotId+'\')">📄 Ver PDF</button>':'')
     +'<button class="btn btn-ghost btn-sm" onclick="gfClose()">Cerrar</button>'
@@ -12735,6 +12781,8 @@ function startQuoteFlow(presetClienteId,presetClienteNombre){
   const steps=[
       {key:'clienteId',type:'client',q:'¿Para qué cliente es la cotización?',sub:'Busca uno existente, crea uno nuevo, u omítelo.'},
       {key:'alias',type:'text',q:'¿Título o alias para la cotización?',sub:'Opcional — para identificarla rápido en la lista.',rows:1,placeholder:'Ej: Trofeos premiación 2026'},
+      {key:'estadoInicial',type:'chips',q:'¿La cotización se envía ahora?',sub:'Si aún falta prepararla, se agendará una fecha límite en el Calendario.',options:[{label:'Sí, se envía ahora',value:'Enviada',icon:'✅'},{label:'No, queda por preparar',value:'Solicitada',icon:'🗓'}]},
+      {key:'fechaLimite',type:'date',q:'¿A más tardar cuándo la enviarás?',sub:'Usaremos esta fecha para alertas y seguimiento.',required:true,skip:a=>a.estadoInicial!=='Solicitada'},
       {key:'tipo',type:'chips',q:'¿Qué tipo de producto?',options:[{label:'Impresión 3D',value:'Impresión 3D',icon:'🖨️'},{label:'Letrero Neón',value:'Letrero Neón',icon:'💡'},{label:'Trofeo',value:'Trofeo',icon:'🏆'},{label:'Otro',value:'Otro',icon:'📦'}]},
       {key:'descripcion',type:'text',q:'Describe lo que necesita el cliente',sub:'Medidas, diseño, referencias… cuanto más detalle, mejor estima KAI.',placeholder:'Ej: 50 trofeos de acrílico de 15cm con logo grabado…',rows:3,required:true},
       {key:'material',type:'chips',q:'¿Material o técnica?',options:[{label:'PLA',value:'PLA'},{label:'PETG',value:'PETG'},{label:'ABS',value:'ABS'},{label:'Resina',value:'Resina'},{label:'Acrílico',value:'Acrílico'},{label:'Que sugiera KAI',value:'a elección de KAI',icon:'✨'}]},
@@ -12745,10 +12793,10 @@ function startQuoteFlow(presetClienteId,presetClienteNombre){
       {key:'plazo',type:'number',q:'¿Plazo de producción?',sub:'Días hábiles estimados desde la confirmación.',min:1,default:7,suffix:'días hábiles'},
       {key:'_review',type:'review',q:'Revisa y confirma',sub:'KAI sugirió un precio; ajústalo o agrega más ítems.'},
   ];
-  const initial={};
+  const hoy=_calFmtFecha(new Date()),initial={estadoInicial:'Enviada',fechaLimite:calBusinessDate(hoy,2)};
   if(presetClienteId){initial.clienteId=presetClienteId;initial.clienteNombre=presetClienteNombre||(state.clientesById&&state.clientesById[presetClienteId])||'';steps[0].skip=()=>true;}
   gfStart({
-    title:'💰 Cotizar con KAI',draft:true,flowKey:'quote',finishLabel:'✓ Crear cotización',initial,steps,
+    title:'💰 Cotizar con KAI',draft:true,flowKey:'quote_v2',finishLabel:'✓ Crear cotización',initial,steps,
     onComplete:async(a)=>{
       const items=(a._items||[]).filter(it=>it.desc||it.ventaUnit);
       if(!items.length||!items.some(it=>it.ventaUnit)){toast('Agrega al menos un ítem con precio de venta','error');return;}
@@ -12762,6 +12810,8 @@ function startQuoteFlow(presetClienteId,presetClienteNombre){
         tiempoProd:a.plazo||'',
         tipoDias:'DÍAS HÁBILES',
         urgente:a.urgencia==='urgente',
+        estadoInicial:a.estadoInicial||'Enviada',
+        fechaLimite:a.fechaLimite||'',
         canal:'KAI',
         notas:'Cotización generada con el asistente guiado de KAI.'
       });
@@ -12837,19 +12887,22 @@ function startEditClientFlow(id){
 function startEditCotFlow(id){
   const c=state.cotizacionesById[id];if(!c){toast('Cotización no encontrada','error');return;}
   const f=c.fields;
-  gfStart({title:'✏️ Editar '+(f['N° Cotización']||'cotización'),initial:{estado:f['Estado cotización']||'Enviada',formaPago:f['Forma de pago']||'',urgencia:f['Urgencia (+25%)']?'urgente':'normal',plazo:f['Tiempo de producción']||'',notas:f['Notas cotización']||''},steps:[
+  gfStart({title:'✏️ Editar '+(f['N° Cotización']||'cotización'),initial:{estado:f['Estado cotización']||'Enviada',fechaLimite:f['Fecha límite cotización']||'',formaPago:f['Forma de pago']||'',urgencia:f['Urgencia (+25%)']?'urgente':'normal',plazo:f['Tiempo de producción']||'',notas:f['Notas cotización']||''},steps:[
     {key:'estado',type:'chips',q:'Estado de la cotización',sub:'Para APROBAR usa el botón "Aprobar" (crea el pedido automáticamente).',options:['Enviada','Solicitada','Rechazada','Vencida'].map(v=>({label:v,value:v}))},
+    {key:'fechaLimite',type:'date',q:'Fecha límite para entregar la cotización',sub:'Distinta de la vigencia de la propuesta.'},
     {key:'formaPago',type:'chips',q:'Forma de pago',options:[{label:'Al contado',value:'AL CONTADO'},{label:'30 días OC',value:'30 DÍAS DESDE OC'},{label:'45 días OC',value:'45 DÍAS DESDE OC'},{label:'70/30',value:'70% ABONO Y 30% CONTRA ENTREGA'},{label:'50/50',value:'50% ABONO Y 50% 30 DÍAS'}]},
     {key:'urgencia',type:'chips',q:'¿Urgente?',options:[{label:'Normal',value:'normal',icon:'🟢'},{label:'Urgente',value:'urgente',icon:'⚡'}]},
     {key:'plazo',type:'number',q:'Plazo de producción',min:1,suffix:'días hábiles'},
     {key:'notas',type:'text',q:'Notas',rows:2},
   ],onComplete:async(a)=>{
     toast('Guardando…','info');
-    const fields={'Estado cotización':a.estado,'Urgencia (+25%)':a.urgencia==='urgente','Notas cotización':a.notas||''};
+    const fields={'Estado cotización':a.estado,'Fecha límite cotización':a.fechaLimite||null,'Urgencia (+25%)':a.urgencia==='urgente','Notas cotización':a.notas||''};
+    if(a.estado==='Enviada'&&f['Estado cotización']!=='Enviada'&&!f['Fecha vencimiento'])fields['Fecha vencimiento']=calBusinessDate(_calFmtFecha(new Date()),10);
     if(a.formaPago)fields['Forma de pago']=a.formaPago;
     if(a.plazo){fields['Tiempo de producción']=parseInt(a.plazo);fields['Tipo días producción']='DÍAS HÁBILES';fields['Tiempo de producción máx']=null;fields['Fecha de entrega']=null;}
+    if((f['Fecha límite cotización']||'')!==(a.fechaLimite||'')){let reason='Fecha inicial';if(f['Fecha límite cotización']){reason=(prompt('Motivo de la reprogramación:','Cambio solicitado por cliente')||'').trim();if(!reason){toast('Debes indicar el motivo del cambio','error');return;}}fields['Historial fechas calendario']=calHistoryForChanges(c,[{field:'Fecha límite cotización',to:a.fechaLimite||''}],reason);}
     try{await actualizarCotizacion(id,fields);}
-    catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Tiempo de producción'];delete fields['Tiempo de producción máx'];delete fields['Tipo días producción'];delete fields['Fecha de entrega'];await actualizarCotizacion(id,fields);}else throw e;}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){await ensureCalendarioCrmFields();delete fields['Tiempo de producción'];delete fields['Tiempo de producción máx'];delete fields['Tipo días producción'];delete fields['Fecha de entrega'];await actualizarCotizacion(id,fields);}else throw e;}
     gfClose();await loadAllDataSilent();renderCotizaciones();renderOverview();
     toast('✓ Cotización actualizada','success');
     syncCotizacionADrive(id);
@@ -12859,8 +12912,9 @@ function startEditCotFlow(id){
 function startManagePedidoFlow(id){
   const p=state.pedidosById[id];if(!p){toast('Pedido no encontrado','error');return;}
   const f=p.fields;
-  gfStart({title:'📦 Gestionar '+(f['N° Pedido']||'pedido'),initial:{estado:f['Estado pedido']||'Confirmado',fecha:f['Fecha entrega']||'',qa:f['Resultado QA']||'Pendiente'},steps:[
+  gfStart({title:'📦 Gestionar '+(f['N° Pedido']||'pedido'),initial:{estado:f['Estado pedido']||'Confirmado',fechaInterna:f['Fecha objetivo interna']||'',fecha:f['Fecha entrega']||'',qa:f['Resultado QA']||'Pendiente'},steps:[
     {key:'estado',type:'chips',q:'Estado del pedido',options:['Confirmado','En producción','Listo para despacho','Despachado','Completado','Cancelado'].map(v=>({label:v,value:v}))},
+    {key:'fechaInterna',type:'date',q:'Fecha objetivo interna',sub:'Producción, QA y embalaje terminados antes de la entrega.'},
     {key:'fecha',type:'date',q:'Fecha de entrega comprometida',sub:'Opcional — déjalo vacío si aún no hay.'},
     {key:'qa',type:'chips',q:'Control de calidad (QA)',options:[{label:'Pendiente',value:'Pendiente'},{label:'QA aprobado',value:'QA aprobado',icon:'✅'},{label:'Rechazado',value:'Rechazado',icon:'❌'}]},
   ],onComplete:async(a)=>{
@@ -12868,10 +12922,12 @@ function startManagePedidoFlow(id){
     if(a.estado==='Completado'&&!['Despachado','Completado'].includes(estadoActual)){toast('Solo se puede completar un pedido que ya esté despachado','error');return;}
     toast('Guardando…','info');
     const fields={'Estado pedido':a.estado};
-    if(a.fecha)fields['Fecha entrega']=a.fecha;
+    fields['Fecha entrega']=a.fecha||null;
+    fields['Fecha objetivo interna']=a.fechaInterna||null;
     if(a.qa)fields['Resultado QA']=a.qa;
+    const _changes=[{field:'Fecha objetivo interna',to:a.fechaInterna||''},{field:'Fecha entrega',to:a.fecha||''}].filter(x=>(f[x.field]||'')!==x.to);if(_changes.length){let _reason='Fecha inicial';if(_changes.some(x=>f[x.field])){_reason=(prompt('Motivo de la reprogramación:','Ajuste de producción')||'').trim();if(!_reason){toast('Debes indicar el motivo del cambio','error');return;}}fields['Historial fechas calendario']=calHistoryForChanges(p,_changes,_reason);}
     try{await actualizarPedido(id,fields);}
-    catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Resultado QA'];await actualizarPedido(id,fields);}else throw e;}
+    catch(e){if(e.message.toLowerCase().includes('unknown')){await ensureCalendarioCrmFields();delete fields['Resultado QA'];await actualizarPedido(id,fields);}else throw e;}
     gfClose();await loadAllDataSilent();renderPedidos();renderOverview();
     toast('✓ Pedido actualizado','success');
   }});
@@ -13004,9 +13060,10 @@ function startPedidoOnboardingFlow(id){
   ],onComplete:async(a)=>{
     const fields={'Estado pedido':a.estado||'Confirmado'};
     if(a.equipo)fields['Equipo asignado']=a.equipo;
-    if(a.fecha)fields['Fecha entrega']=a.fecha;
+    if(a.fecha){fields['Fecha entrega']=a.fecha;if(!f['Fecha objetivo interna'])fields['Fecha objetivo interna']=calInternalDate(a.fecha,2);}
+    const changes=['Fecha objetivo interna','Fecha entrega'].filter(k=>(f[k]||'')!==(fields[k]||f[k]||'')).map(k=>({field:k,to:fields[k]||''}));if(changes.length)fields['Historial fechas calendario']=calHistoryForChanges(p,changes,'Planificación al iniciar producción');
     toast('Guardando…','info');
-    try{await actualizarPedido(id,fields);}catch(e){if(e.message.toLowerCase().includes('unknown')){delete fields['Equipo asignado'];await actualizarPedido(id,fields);}else throw e;}
+    try{await actualizarPedido(id,fields);}catch(e){if(e.message.toLowerCase().includes('unknown')){await ensureCalendarioCrmFields();delete fields['Equipo asignado'];await actualizarPedido(id,fields);}else throw e;}
     gfClose();await loadAllDataSilent();renderPedidos();renderOverview();
     toast('✓ Producción iniciada','success');
   }});

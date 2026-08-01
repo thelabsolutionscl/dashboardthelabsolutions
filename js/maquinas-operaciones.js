@@ -890,6 +890,24 @@ function runCapacitySimulation(){
   const r=_lastCapacity,finish=new Date(r.promisedAt).toLocaleString('es-CL',{dateStyle:'medium',timeStyle:'short'}),col=r.feasible?'var(--accent3)':'var(--danger)';
   el.innerHTML=`<div class="mops-kpis">${kpi('Ciclos',r.cycles,`${r.qty} unidades`)}${kpi('Máquinas',r.machinesUsed,'compatibles usadas')}${kpi('Horas impresora',(r.totalPrinterMinutes/60).toFixed(1)+' h','suma productiva')}${kpi('Promesa',finish,r.feasible?'cumple fecha':'riesgo de atraso',col)}${kpi('Costo 3D',fmtMoney(r.totalCost),`${fmtMoney(r.materialCost)} material · ${fmtMoney(r.machineCost)} máquina`)}</div><div class="card" style="overflow-x:auto"><table class="mops-job-table" style="min-width:620px"><thead><tr><th>Máquina</th><th>Modelo</th><th>Ciclos</th><th>Unidades</th><th>Carga</th></tr></thead><tbody>${r.assignments.map(a=>`<tr><td>${esc(machineLabel(a.machineId))}</td><td>${esc(a.model)}</td><td>${a.cycles}</td><td>${a.qty}</td><td>${fmtMin(a.minutes)}</td></tr>`).join('')}</tbody></table></div><div class="mops-alert ${r.feasible?'':'danger'}" style="margin-top:10px">${r.feasible?'✅':'🚨'} <span>${r.feasible?'Capacidad disponible con el margen de seguridad indicado.':'La promesa excede la fecha límite. Reduce carga, agrega máquinas o renegocia la entrega.'}</span></div>`;
 }
+// Resumen compacto para el Calendario. Usa los trabajos planificados reales del
+// pedido y la carga/ETA viva de la flota; si aún no hay trabajos, devuelve
+// "unknown" en vez de inventar una promesa.
+function deadlineCapacityRisk(pedidoId,dueDate){
+  if(!dueDate)return{status:'unknown',feasible:null,message:'Sin fecha de entrega comprometida.'};
+  const target=data().jobs.filter(j=>j.pedidoId===pedidoId&&!j.archived&&!['terminado','cancelado','fallido'].includes(j.status));
+  if(!target.length)return{status:'unknown',feasible:null,message:'Capacidad sin calcular: el pedido todavía no tiene trabajos planificados en Máquinas.'};
+  const loads=new Map();(MAQUINAS||[]).forEach(m=>{const queue=activeJobs().filter(j=>j.pedidoId!==pedidoId&&j.machineId===m.id).reduce((s,j)=>s+jobMinutes(j),0),eta=liveState(m.id)==='printing'?num(_printerStatus[m.id]?.eta)/60:0;loads.set(m.id,queue+eta);});
+  let blocked='';const targetMachines=new Set();for(const job of target.slice().sort((a,b)=>dueUrgency(a)-dueUrgency(b))){
+    const remaining=Math.max(1,Math.max(0,num(job.cycles,1)-num(job.completedCycles))*Math.max(1,num(job.minutesPerCycle,60)));
+    let machine=job.machineId?getMachine(job.machineId):null;if(!machine||!machineOperational(machine)||!modelCanRun(machine.modelo,job)){const pick=pickMachine(job,loads);machine=pick?.machine||null;}
+    if(!machine){blocked=`Sin impresora operativa compatible para ${job.name||'un trabajo'}.`;break;}
+    loads.set(machine.id,(loads.get(machine.id)||0)+remaining);targetMachines.add(machine.id);
+  }
+  if(blocked)return{status:'risk',feasible:false,message:'🚨 '+blocked};
+  const used=[...targetMachines].map(id=>loads.get(id)||0),finishMinutes=used.length?Math.max(...used):0,promised=new Date(Date.now()+finishMinutes*1.15*60000),due=new Date(String(dueDate).slice(0,10)+'T18:00:00'),feasible=promised<=due;
+  return{status:feasible?'ok':'risk',feasible,promisedAt:promised.toISOString(),finishMinutes,message:feasible?`✅ La planificación actual termina aprox. ${promised.toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'})}, antes de la entrega.`:`🚨 La planificación actual termina aprox. ${promised.toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'})}, después de la fecha comprometida.`};
+}
 function createCapacityJobs(){
   if(!_lastCapacity?.ok){toast('Ejecuta primero la simulación','error');return;}const req=capacityInput();if(!req.name){toast('Escribe un nombre para el lote','error');return;}
   if(!confirm(`Crear ${_lastCapacity.assignments.length} trabajo(s) planificados desde esta simulación?`))return;
@@ -1378,7 +1396,7 @@ const api={
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
   renderPostProduction,advancePost,blockPost,
   renderProfiles,openProfile,closeProfile,saveProfile,setProfileStatus,archiveProfile,useProfile,captureSlicerProfile,exportProfile,importProfileFile,
-  runCapacitySimulation,createCapacityJobs,
+  runCapacitySimulation,createCapacityJobs,deadlineCapacityRisk,
   saveSafetyConfig,recordSafetyManual,refreshSafety,renderSafety,canAutoStart,
   openScanner,closeScanner,submitScan,handleScan,clearScanMachine,printEntityLabel,
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
