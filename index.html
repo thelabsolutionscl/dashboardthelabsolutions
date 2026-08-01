@@ -10,6 +10,7 @@
 <title>The Lab Solutions — Centro de Comando</title>
 <!-- Panel interno: no debe indexarse en buscadores (privacidad + evita ruido SEO en el dominio) -->
 <meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
 <link rel="canonical" href="https://thelab.solutions/">
 <!-- Adelanta el handshake (DNS+TLS) a los orígenes críticos -->
 <link rel="preconnect" href="https://api.airtable.com" crossorigin>
@@ -2984,6 +2985,7 @@
 
   <div id="maqWorkspaceNav" class="maq-workspace-nav" role="tablist" aria-label="Áreas de Máquinas">
     <button class="active" data-maq-nav="operacion" onclick="MachineOps.showView('operacion',this)">📡 Operación</button>
+    <button data-maq-nav="inteligencia" onclick="MachineOps.showView('inteligencia',this)">🧠 Centro inteligente <span id="mopsNavIntel" class="maq-nav-count">0</span></button>
     <button data-maq-nav="planificacion" onclick="MachineOps.showView('planificacion',this)">🗓 Planificación <span id="mopsNavPending" class="maq-nav-count">0</span></button>
     <button data-maq-nav="postproduccion" onclick="MachineOps.showView('postproduccion',this)">🧩 Postproducción <span id="mopsNavPost" class="maq-nav-count">0</span></button>
     <button data-maq-nav="capacidad" onclick="MachineOps.showView('capacidad',this)">🧮 Capacidad</button>
@@ -2993,6 +2995,15 @@
     <button data-maq-nav="seguridad" onclick="MachineOps.showView('seguridad',this)">🛡 Seguridad <span id="mopsNavSafety" class="maq-nav-count">0</span></button>
     <button data-maq-nav="analitica" onclick="MachineOps.showView('analitica',this)">📊 Analítica</button>
     <button data-maq-nav="laminado" onclick="MachineOps.showView('laminado',this)">🧠 Laminado</button>
+  </div>
+
+  <!-- ── CENTRO INTELIGENTE DE OPERACIÓN ── -->
+  <div id="maquinaIntelligenceView" data-maq-view="inteligencia" style="display:none;margin-bottom:28px">
+    <div class="maq-view-head">
+      <div><div class="maq-view-title">🧠 Centro inteligente de la granja</div><div class="maq-view-sub">Alertas accionables, preflight, recomendación de carga, CFS, incidentes, fiabilidad y costo real en una sola vista.</div></div>
+      <div class="maq-view-actions"><button class="btn btn-primary btn-sm" onclick="MachineOps.autoPlan()">🎯 Planificar carga</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openIncident()">+ Incidente</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Diagnosticar bridge</button></div>
+    </div>
+    <div id="mopsIntelligence"><div class="empty-state">Analizando telemetría y producción…</div></div>
   </div>
 
   <!-- ── POSTPRODUCCIÓN ── -->
@@ -6870,8 +6881,8 @@ function openUserMenu(){
   const pk=document.getElementById('umProxyKey');if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const ps=document.getElementById('umProxyStatus');if(ps){const v=(typeof _proxyCfg==='function')&&_proxyCfg();ps.textContent=v?'✓ Proxy activo — Airtable y Claude viven en el Worker':'Sin proxy — claves guardadas localmente en el navegador';}
   const pt=document.getElementById('umPrinterTunnel');if(pt){pt.value=localStorage.getItem('printer_tunnel')||'';}
-  const ptk=document.getElementById('umPrinterToken');if(ptk){const v=localStorage.getItem('printer_tunnel_token');ptk.value=v?'••••••••'+v.slice(-4):'';ptk.onfocus=()=>{if(ptk.value.startsWith('••')){ptk.value='';}};ptk.onblur=()=>{if(!ptk.value){const vv=localStorage.getItem('printer_tunnel_token');ptk.value=vv?'••••••••'+vv.slice(-4):'';}};}
-  const pts=document.getElementById('umPrinterTunnelStatus');if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=(v?`✓ Túnel personalizado: ${v}`:'Default: https://printers.thelab.solutions')+(localStorage.getItem('printer_tunnel_token')?' · 🔑 token':'');}
+  const ptk=document.getElementById('umPrinterToken');if(ptk){const v=getPrinterTunnelToken();ptk.value=v?'••••••••'+v.slice(-4):'';ptk.onfocus=()=>{if(ptk.value.startsWith('••')){ptk.value='';}};ptk.onblur=()=>{if(!ptk.value){const vv=getPrinterTunnelToken();ptk.value=vv?'••••••••'+vv.slice(-4):'';}};}
+  const pts=document.getElementById('umPrinterTunnelStatus');if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=(v?`✓ Túnel personalizado: ${v}`:'Default: https://printers.thelab.solutions')+(getPrinterTunnelToken()?' · 🔑 token de sesión':'');}
   const ak=document.getElementById('umAnthropicKey');if(ak){const v=lsGet('anthropic_key');ak.value=v&&!v.startsWith('%%')?'••••••••'+v.slice(-4):'';ak.placeholder=v&&!v.startsWith('%%')?'(guardado — clic para cambiar)':'sk-ant-api03-...';ak.onfocus=()=>{if(ak.value.startsWith('••')){ak.value='';ak.placeholder='sk-ant-api03-...';}};ak.onblur=()=>{if(!ak.value){const vv=lsGet('anthropic_key');ak.value=vv&&!vv.startsWith('%%')?'••••••••'+vv.slice(-4):'';ak.placeholder=vv&&!vv.startsWith('%%')?'(guardado — clic para cambiar)':'sk-ant-api03-...';}};}
   const aks=document.getElementById('umAnthropicStatus');if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar — KAI no puede responder';}
   const _delay=window.innerWidth<=768?400:10;
@@ -6941,8 +6952,9 @@ function savePrinterTunnel(){
   if(val)localStorage.setItem('printer_tunnel',val);else localStorage.removeItem('printer_tunnel');
   const tkInp=document.getElementById('umPrinterToken');
   const tkVal=(tkInp?.value||'').trim();
-  if(tkVal&&!tkVal.startsWith('••'))localStorage.setItem('printer_tunnel_token',tkVal);
-  else if(!tkVal)localStorage.removeItem('printer_tunnel_token');
+  localStorage.removeItem('printer_tunnel_token');
+  if(tkVal&&!tkVal.startsWith('••'))sessionStorage.setItem('printer_tunnel_token',tkVal);
+  else if(!tkVal)sessionStorage.removeItem('printer_tunnel_token');
   if(tkInp&&tkVal&&!tkVal.startsWith('••'))tkInp.value='••••••••'+tkVal.slice(-4);
   const pts=document.getElementById('umPrinterTunnelStatus');
   if(pts)pts.textContent=(val?`✓ Túnel personalizado: ${val}`:'Default: https://printers.thelab.solutions')+(getPrinterTunnelToken()?' · 🔑 token':'');
@@ -6953,6 +6965,7 @@ function savePrinterTunnel(){
 function clearPrinterTunnel(){
   localStorage.removeItem('printer_tunnel');
   localStorage.removeItem('printer_tunnel_token');
+  sessionStorage.removeItem('printer_tunnel_token');
   const inp=document.getElementById('umPrinterTunnel');if(inp) inp.value='';
   const tkInp=document.getElementById('umPrinterToken');if(tkInp) tkInp.value='';
   const pts=document.getElementById('umPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
@@ -14022,11 +14035,16 @@ function _tvViewMaquinas(){
     const map={connecting:['CONECTANDO…','#38bdf8'],printing:['IMPRIMIENDO','var(--accent3)'],paused:['PAUSADA','var(--warn)'],error:['ERROR','var(--danger)'],shutdown:['DETENIDA','var(--danger)'],offline:['SIN CONEXIÓN','#888'],noip:['SIN IP','#666'],cancelled:['CANCELADA','var(--warn)'],idle:['LIBRE','var(--accent)'],standby:['LIBRE','var(--accent)'],complete:['FINALIZADA ✓','var(--accent3)']};
     const [lbl,col]=map[s]||['ESTADO DESCONOCIDO','#888'];
     const prog=s==='printing'&&st.progress!=null?Math.round(st.progress*(st.progress<=1?100:1)):null;
+    const eta=s==='printing'&&st.eta?Math.max(1,Math.round(st.eta/60)):null;
+    const filament=st.filament?.detected===true?'FILAMENTO OK':st.filament?.detected===false?'SIN FILAMENTO':'SENSOR SIN LECTURA';
+    const filamentColor=st.filament?.detected===false?'var(--danger)':st.filament?.detected===true?'var(--accent3)':'var(--text3)';
+    const alerts=typeof MachineOps!=='undefined'&&MachineOps.machineAlertsFor?MachineOps.machineAlertsFor(m.id):[];
     return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:5px solid ${col};border-radius:10px;padding:16px 18px">
-      <div style="font-size:19px;font-weight:700;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</div>
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:19px;font-weight:700;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</div>${alerts.length?`<span style="font-size:12px;color:var(--warn)">⚠ ${alerts.length}</span>`:''}</div>
       <div style="font-family:'Bebas Neue';font-size:26px;letter-spacing:1px;color:${col};margin-top:4px">${lbl}${prog!=null?` · ${prog}%`:''}</div>
       ${st.filename?`<div style="font-size:13px;color:var(--text3);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(String(st.filename))}</div>`:''}
       ${prog!=null?`<div style="height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;margin-top:10px"><div style="height:100%;width:${prog}%;background:${col}"></div></div>`:''}
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:9px;font-size:11px"><span style="color:${filamentColor}">${filament}${st.filament?.cfsConnected?' · CFS':''}</span>${eta?`<span style="color:var(--text3)">ETA ${eta<60?eta+' min':Math.floor(eta/60)+'h '+eta%60+'m'}</span>`:''}</div>
     </div>`;
   }).join('');
   return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;align-content:start">${cards||'<div style="color:var(--text3)">Sin impresoras configuradas</div>'}</div>`;
@@ -16070,6 +16088,35 @@ document.addEventListener('DOMContentLoaded',()=>{
   </div>
 </div>
 
+<!-- PREFLIGHT ANTES DE IMPRIMIR -->
+<div id="mopsPreflightModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="MachineOps.closePreflight()"></div>
+  <div class="modal-card" style="max-width:620px;width:96vw;max-height:90vh;overflow-y:auto">
+    <div class="modal-title">🛫 Preflight · <span id="mopsPreflightTitle">Trabajo</span></div>
+    <input type="hidden" id="mopsPreflightJobId">
+    <div id="mopsPreflightBody" style="margin-top:14px"></div>
+    <div class="mops-alert warn" style="margin-top:12px">⚠ <span>La telemetría ayuda a decidir, pero el operador sigue siendo responsable de revisar físicamente cama, boquilla, filamento y entorno.</span></div>
+    <div style="display:flex;gap:8px;margin-top:16px"><button id="mopsPreflightConfirm" class="btn btn-primary btn-sm" onclick="MachineOps.confirmPreflight()" style="flex:1">Confirmar e iniciar</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.closePreflight()" style="flex:1">Cancelar</button></div>
+  </div>
+</div>
+
+<!-- INCIDENTE TÉCNICO -->
+<div id="mopsIncidentModal" class="modal-overlay" style="display:none">
+  <div class="modal-backdrop" onclick="MachineOps.closeIncident()"></div>
+  <div class="modal-card" style="max-width:620px;width:96vw;max-height:90vh;overflow-y:auto">
+    <div class="modal-title">🧰 Registrar incidente técnico</div>
+    <div class="maq-form-grid" style="margin-top:16px">
+      <div class="field-group"><label class="field-label">Máquina</label><select id="mopsIncidentMachine" class="field-select" onchange="MachineOps.refreshIncidentJobs()"></select></div>
+      <div class="field-group"><label class="field-label">Trabajo relacionado</label><select id="mopsIncidentJob" class="field-select"></select></div>
+      <div class="field-group"><label class="field-label">Tipo de incidente</label><select id="mopsIncidentType" class="field-select"><option value="adhesion">Pieza despegada / adhesión</option><option value="clog">Atasco o boquilla</option><option value="filament">Filamento / CFS</option><option value="bed">Cama o nivelación</option><option value="temperature">Temperatura</option><option value="cancelled">Impresión cancelada</option><option value="electrical">Eléctrico / conexión</option><option value="quality">Calidad dimensional</option><option value="other">Otro</option></select></div>
+      <div class="field-group"><label class="field-label">Foto (opcional, máx. 8 MB)</label><input id="mopsIncidentPhoto" class="field-input" type="file" accept="image/*" capture="environment" onchange="MachineOps.loadIncidentPhoto(event)"></div>
+    </div>
+    <div class="field-group" style="margin-top:10px"><label class="field-label">Qué ocurrió y acción tomada</label><textarea id="mopsIncidentNote" class="field-input" rows="4" style="resize:vertical" placeholder="Síntoma, causa probable, pieza afectada y acción correctiva"></textarea></div>
+    <img id="mopsIncidentPreview" alt="Vista previa de evidencia" style="display:none;width:100%;max-height:240px;object-fit:contain;border:1px solid var(--border2);border-radius:9px;margin-top:10px;background:#080808">
+    <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-primary btn-sm" onclick="MachineOps.saveIncident()" style="flex:1">Guardar incidente</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.closeIncident()" style="flex:1">Cancelar</button></div>
+  </div>
+</div>
+
 <!-- PERFIL DE LAMINADO CONTROLADO -->
 <div id="mopsProfileModal" class="modal-overlay" style="display:none">
   <div class="modal-backdrop" onclick="MachineOps.closeProfile()"></div>
@@ -16709,7 +16756,7 @@ function _isLocalMode(){const v=localStorage.getItem('printer_local_mode');if(v=
 function renderLocalModeBtn(){const btn=document.getElementById('btnLocalMode');if(!btn)return;const local=_isLocalMode();btn.textContent=local?'📡 Local':'🌐 Remoto';btn.style.color=local?'var(--accent)':'var(--text3)';btn.title=local?'Conectado directo por IP (red local)':'Conectado vía tunnel remoto';}
 function toggleLocalMode(){const next=_isLocalMode()?'0':'1';localStorage.setItem('printer_local_mode',next);renderLocalModeBtn();pollPrinters();if(typeof reconnectAllPrinterWs==='function')reconnectAllPrinterWs();toast(next==='1'?'📡 Modo local — IPs directas':'🌐 Modo remoto — tunnel','info');if(next==='1'&&!localStorage.getItem('local_mode_seen')){localStorage.setItem('local_mode_seen','1');document.getElementById('localModeModal').style.display='flex';}}
 function openGcodeUpload(id){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada para esta impresora','error');return;}_uploadTargetId=id;const inp=document.getElementById('gcodeFileInput');inp.value='';inp.click();}
-async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));const _ak=getPrinterApiKey(id);if(_ak)xhr.setRequestHeader('X-Api-Key',_ak);xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}','${file.name.replace(/'/g,"\\'")}')" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
+async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));const _headers=getPrinterAuthHeaders(id);for(const _name in _headers)xhr.setRequestHeader(_name,_headers[_name]);xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}','${file.name.replace(/'/g,"\\'")}')" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
 async function startUploadedPrint(id,filename){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});if(r.ok){toast(`▶ Iniciando: ${filename}`,'success');closeGcodeUpload();setTimeout(pollPrinters,2000);}else{toast('Error al iniciar impresión: '+r.status,'error');}}catch(e){toast('Sin conexión con la impresora','error');}}
 function closeGcodeUpload(){document.getElementById('gcodeUploadModal').style.display='none';}
 function openOrcaConfigModal(){const rows=MAQUINAS.filter(m=>getPrinterIp(m)).map(m=>{const ip=getPrinterIp(m);return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--accent)">${escapeHtml(ip)}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text2)">7125</td><td style="padding:8px 10px"><span style="background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">Moonraker</span></td></tr>`;}).join('');document.getElementById('orcaTableBody').innerHTML=rows||`<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text3);font-size:11px">No hay IPs configuradas. Agrégalas en cada tarjeta de impresora primero.</td></tr>`;document.getElementById('orcaConfigModal').style.display='flex';}

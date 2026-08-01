@@ -50,10 +50,13 @@ test('horas de trabajo se calculan por ciclos reales',()=>{
 
 test('el modelo persistente incluye trazabilidad de postproducción, perfiles y seguridad',()=>{
   const d=loadOps().defaultData();
-  assert.equal(d.version,3);
+  assert.equal(d.version,4);
   assert.deepEqual(Array.from(d.workflows),[]);
   assert.deepEqual(Array.from(d.profiles),[]);
   assert.deepEqual(Array.from(d.safetyReadings),[]);
+  assert.deepEqual(Array.from(d.incidents),[]);
+  assert.equal(d.automation.autoLink,true);
+  assert.equal(d.costConfig.electricityClpKwh,220);
   assert.equal(d.safetyConfig.enforce,false);
   assert.equal(d.safetyConfig.cameraRequired,true);
 });
@@ -170,6 +173,10 @@ test('credenciales Moonraker quedan limitadas a la sesión',()=>{
   assert.match(MAQ,/localStorage\.removeItem\(key\)/);
   assert.match(MAQ,/sessionStorage\.setItem\(key,val\)/);
   assert.match(MAQ,/return !custom\|\|custom===defaultTunnel\?\(d\|\|local\):\(local\|\|d\)/);
+  assert.match(MAQ,/sessionStorage\.getItem\('printer_tunnel_token'\)/);
+  assert.match(MAQ,/headers\['X-Bridge-Token'\]=token/);
+  assert.match(MAQ,/function printerUrl\(ip,path\)[\s\S]*?return`\$\{getPrinterTunnel\(\)\}\/\$\{ip\}\$\{path\}`/);
+  assert.match(MAQ,/function printerMediaUrl\(ip,path\)\{return _appendBridgeToken\(printerUrl\(ip,path\)\);\}/);
 });
 
 test('monitor espera varios fallos antes de declarar una conexión nueva como caída',()=>{
@@ -179,13 +186,31 @@ test('monitor espera varios fallos antes de declarar una conexión nueva como ca
 });
 
 test('interfaz expone las áreas operacionales nuevas',()=>{
-  for(const id of ['maqWorkspaceNav','maquinaPlanningOpsView','mopsJobs','mopsGantt','maquinaMaterialsView','mopsSpools','mopsQuality','mopsAnalytics']){
+  for(const id of ['maqWorkspaceNav','maquinaIntelligenceView','mopsIntelligence','mopsNavIntel','maquinaPlanningOpsView','mopsJobs','mopsGantt','maquinaMaterialsView','mopsSpools','mopsQuality','mopsAnalytics','mopsPreflightModal','mopsIncidentModal']){
     assert.ok(INDEX.includes(`id="${id}"`),`falta ${id}`);
   }
   assert.ok(INDEX.includes('js/maquinas-operaciones.js?v=%%BUILD%%'));
   assert.match(INDEX,/\{name:'repuestos',type:'multilineText'\}/);
   assert.match(INDEX,/repuestos:rec\.parts\|\|''/);
   assert.match(OPS,/'Resultado QA':'QA aprobado'/);
+});
+
+test('vinculación inteligente reconoce variantes de nombre sin adivinar archivos distintos',()=>{
+  const ops=loadOps(),job={id:'job-42',name:'Medallas Colegio',gcodeFile:'ped-2026-042_medallas_v3.gcode',pedidoId:''};
+  assert.equal(ops.fileKey('folder/PED-2026-042_medallas_v3.gcode'),'ped2026042medallasv3');
+  assert.equal(ops.filenameMatchScore(job,'PED-2026-042_medallas_v3.gcode'),100);
+  assert.ok(ops.filenameMatchScore(job,'ped_2026_042_medallas_v3')>=82);
+  assert.equal(ops.filenameMatchScore(job,'llaveros_cliente_b'),0);
+});
+
+test('preflight bloquea conexión, compatibilidad, archivo y filamento físico',()=>{
+  const ops=loadOps();
+  const blocked=ops.preflightFromFacts({connectionReady:false,machineFree:true,compatible:false,hasFile:false,gramsRequired:200,spoolKnown:true,spoolAvailable:500,filamentDetected:false,cameraConfigured:false,maintenanceOverdue:false,maintenanceSoon:false,safetyBlockers:[],safetyWarnings:[]});
+  assert.equal(blocked.ok,false);
+  for(const key of ['connection','compatibility','file','sensor'])assert.ok(blocked.blockers.some(row=>row.key===key),`falta bloqueo ${key}`);
+  const ready=ops.preflightFromFacts({connectionReady:true,machineFree:true,compatible:true,hasFile:true,gramsRequired:200,spoolKnown:true,spoolAvailable:500,filamentDetected:true,cameraConfigured:true,maintenanceOverdue:false,maintenanceSoon:false,safetyBlockers:[],safetyWarnings:[]});
+  assert.equal(ready.ok,true);
+  assert.equal(ready.blockers.length,0);
 });
 
 test('interfaz expone postproducción, capacidad, perfiles, seguridad y QR móvil',()=>{

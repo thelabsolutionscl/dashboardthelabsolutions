@@ -94,6 +94,7 @@ test('estado Moonraker conserva impresión, progreso y sensores K2',()=>{
   },'192.168.100.71');
   assert.equal(result.state,'printing');
   assert.equal(result.progress,93);
+  assert.equal(result.progressRaw,93);
   assert.equal(result.filename,'pieza');
   assert.equal(result.hotend.actual,221);
   assert.equal(result.bed.actual,60);
