@@ -58,7 +58,9 @@ const _OFFLINE_AFTER_FAILS=3;       // fallos consecutivos antes de declarar Off
 function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 function getPrinterTunnelToken(){
   const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';
-  const local=localStorage.getItem('printer_tunnel_token')||'',custom=(localStorage.getItem('printer_tunnel')||'').replace(/\/$/,'');
+  let local=sessionStorage.getItem('printer_tunnel_token')||'';const legacy=localStorage.getItem('printer_tunnel_token')||'';
+  if(!local&&legacy){local=legacy;sessionStorage.setItem('printer_tunnel_token',legacy);localStorage.removeItem('printer_tunnel_token');}
+  const custom=(localStorage.getItem('printer_tunnel')||'').replace(/\/$/,'');
   const defaultTunnel=((!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL).replace(/\/$/,'');
   // En el túnel oficial, el token del deploy es la versión vigente. Así un
   // token antiguo guardado en un teléfono no invalida silenciosamente la ficha.
@@ -75,7 +77,7 @@ async function testPrinterBridge(statusId){
   catch(e){set('var(--danger)',`✗ No se alcanza ${url}. Revisa que el bridge y el túnel estén corriendo en el iMac.`);return;}
   if(!tk){set('var(--warn)','⚠ Túnel OK, pero falta el token del bridge. Pégalo y pulsa Guardar.');return;}
   try{
-    const r=await fetch(url+'/authcheck?bt='+encodeURIComponent(tk),{signal:AbortSignal.timeout(7000)});
+    const r=await fetch(url+'/authcheck',{signal:AbortSignal.timeout(7000),headers:{'X-Bridge-Token':tk}});
     if(r.status===401){set('var(--danger)','✗ Token incorrecto. Copia el token actual del bridge (lo imprime al arrancar / lo da install-launchd.sh).');return;}
     if(!r.ok)throw 0;
     set('var(--accent3)','✅ Bridge OK y token válido. Pon Máquinas en 🌐 Remoto.');
@@ -88,15 +90,16 @@ async function restartPrinterBridge(statusId){
   if(!tk){set('var(--warn)','Necesitas el token guardado para reiniciar el bridge.');return;}
   if(!confirm('¿Reiniciar el bridge del iMac? Se reconecta en unos segundos.'))return;
   set('var(--text3)','Reiniciando bridge…');
-  try{await fetch(url+'/restart?bt='+encodeURIComponent(tk),{method:'POST',signal:AbortSignal.timeout(7000)});}
+  try{await fetch(url+'/restart',{method:'POST',signal:AbortSignal.timeout(7000),headers:{'X-Bridge-Token':tk}});}
   catch(e){/* la conexión se corta al salir el proceso: es esperado */}
   set('var(--text3)','Bridge reiniciándose… reprobando en unos segundos.');
   setTimeout(()=>testPrinterBridge(statusId),4500);
 }
 function printerUrl(ip,path){
   if(typeof _isLocalMode==='function'&&_isLocalMode())return`http://${ip}:${MOONRAKER_PORT}${path}`;
-  return _appendBridgeToken(`${getPrinterTunnel()}/${ip}${path}`);
+  return`${getPrinterTunnel()}/${ip}${path}`;
 }
+function printerMediaUrl(ip,path){return _appendBridgeToken(printerUrl(ip,path));}
 // Webcam: en modo remoto reescribe http://IP_LAN:PUERTO/ruta → túnel /{ip}:{puerto}/ruta
 function printerCamUrl(id){
   const raw=localStorage.getItem('printer_cam_'+id)||(typeof MAQUINAS!=='undefined'?(MAQUINAS.find(x=>x.id===id)||{}).cam:'')||'';if(!raw)return'';
@@ -211,7 +214,7 @@ function getPrinterApiKey(id){
   if(legacy){sessionStorage.setItem(key,legacy);localStorage.removeItem(key);}
   return legacy;
 }
-function getPrinterAuthHeaders(id){const k=getPrinterApiKey(id);return k?{'X-Api-Key':k}:{};}
+function getPrinterAuthHeaders(id){const headers={},k=getPrinterApiKey(id);if(k)headers['X-Api-Key']=k;if(!(typeof _isLocalMode==='function'&&_isLocalMode())){const token=getPrinterTunnelToken();if(token)headers['X-Bridge-Token']=token;}return headers;}
 
 function _printerInitialStatus(m){return{state:getPrinterIp(m)?'connecting':'noip',checkedAt:0,lastSeenAt:0};}
 function _printerFetchFailure(ip,reason,code=0){return{state:'offline',_fetchFail:true,ip,connectionError:reason||'No se pudo consultar la impresora',httpStatus:code||0,checkedAt:Date.now()};}
@@ -319,7 +322,7 @@ function _deriveStatus(m,s,ip){
     try{const j=JSON.parse(wh.state_message);klMsg=j.msg||wh.state_message;}catch(_){klMsg=wh.state_message;}
     klMsg=String(klMsg).split('\n').map(x=>x.trim()).filter(Boolean)[0]||'';
   }
-  const progress=Math.round((vs.progress||0)*100);
+  const progressRaw=Math.max(0,Math.min(100,Number(vs.progress||0)*100)),progress=Math.round(progressRaw);
   const elapsed=ps.print_duration||0;
   const eta=progress>0&&progress<100?Math.round(elapsed/progress*(100-progress)):0;
   const filename=(ps.filename||'').replace(/\.gcode$/i,'');
@@ -330,7 +333,7 @@ function _deriveStatus(m,s,ip){
   else if(klState==='startup')state='startup';
   const light=_printerLightApplyStatus(m.id,s);
   const seen=Date.now();
-  return{state,klState,klMsg,progress,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip,filament:_extractFilamentTelemetry(s),updatedAt:seen,lastSeenAt:seen,checkedAt:seen,light:light?.available?{available:true,on:!!light.on}:null};
+  return{state,klState,klMsg,progress,progressRaw,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip,filament:_extractFilamentTelemetry(s),updatedAt:seen,lastSeenAt:seen,checkedAt:seen,light:light?.available?{available:true,on:!!light.on}:null};
 }
 // Miniatura del trabajo en curso (cacheada por archivo). Devuelve la URL o null.
 async function _ensureThumb(m,ip,st){
@@ -340,7 +343,7 @@ async function _ensureThumb(m,ip,st){
   let thumbUrl=null;
   try{
     const tr=await fetch(printerUrl(ip,`/server/files/thumbnails?filename=${encodeURIComponent(st.filename+'.gcode')}`),{signal:AbortSignal.timeout(_THUMB_TIMEOUT_MS),headers:getPrinterAuthHeaders(m.id)});
-    if(tr.ok){const td=await tr.json();const best=(td.result||[]).sort((a,b)=>b.size-a.size)[0];thumbUrl=best?printerUrl(ip,`/server/files/gcodes/.thumbnails/${best.relative_path}`):null;}
+    if(tr.ok){const td=await tr.json();const best=(td.result||[]).sort((a,b)=>b.size-a.size)[0];thumbUrl=best?printerMediaUrl(ip,`/server/files/gcodes/.thumbnails/${best.relative_path}`):null;}
   }catch(e){}
   _thumbCache[ck]=thumbUrl;
   return thumbUrl;
