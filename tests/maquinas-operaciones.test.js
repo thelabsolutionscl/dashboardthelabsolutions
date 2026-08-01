@@ -115,7 +115,28 @@ test('ficha operacional separa apertura y copia NFC con respaldo de portapapeles
   assert.match(OPS,/async function copyTextSafe\(/);
   assert.match(OPS,/document\.execCommand\?\.\('copy'\)/);
   assert.match(OPS,/window\.prompt\('Copia este enlace para grabarlo en el NFC:'/);
-  for(const label of ['Impresión actual','Trabajos asignados','Material cargado','Mantención','Tiempo restante'])assert.ok(OPS.includes(label),`falta ${label}`);
+  for(const label of ['Impresión actual','Trabajos asignados','Material y sensores','Mantención','Tiempo restante'])assert.ok(OPS.includes(label),`falta ${label}`);
+  assert.match(OPS,/Estado de impresión desconocido/);
+  assert.match(OPS,/MachineOps\.refreshTechStatus/);
+});
+
+test('ficha no confunde falta de telemetría con una máquina libre',()=>{
+  const ops=loadOps(),now=Date.parse('2026-07-31T12:00:00Z');
+  assert.equal(ops.techLiveFacts(null,now).connecting,true);
+  assert.equal(ops.techLiveFacts({state:'offline'},now).canClaimIdle,false);
+  assert.equal(ops.techLiveFacts({state:'standby',lastSeenAt:now},now).canClaimIdle,true);
+  assert.equal(ops.techLiveFacts({state:'printing',lastSeenAt:now},now).active,true);
+  assert.equal(ops.techLiveFacts({state:'printing',stale:true,lastSeenAt:now-60000},now).stale,true);
+});
+
+test('ficha prioriza sensor físico de filamento sobre inventario manual',()=>{
+  const ops=loadOps();
+  const detected=ops.techFilamentSummary({filament:{detected:true,source:'rack',cfsConnected:false,chamber:34.7}},null);
+  assert.equal(detected.value,'Detectado');
+  assert.match(detected.sub,/Portarrollos externo/);
+  assert.match(detected.sub,/34\.7°/);
+  const unknown=ops.techFilamentSummary({},null);
+  assert.equal(unknown.value,'Sin datos');
 });
 
 test('sincronización conserva la versión más nueva de cada registro',()=>{
@@ -148,6 +169,13 @@ test('credenciales Moonraker quedan limitadas a la sesión',()=>{
   assert.match(MAQ,/sessionStorage\.getItem\(key\)/);
   assert.match(MAQ,/localStorage\.removeItem\(key\)/);
   assert.match(MAQ,/sessionStorage\.setItem\(key,val\)/);
+  assert.match(MAQ,/return !custom\|\|custom===defaultTunnel\?\(d\|\|local\):\(local\|\|d\)/);
+});
+
+test('monitor espera varios fallos antes de declarar una conexión nueva como caída',()=>{
+  assert.match(MAQ,/n<_OFFLINE_AFTER_FAILS&&\(!prev\|\|prev\.state==='connecting'\)/);
+  assert.match(MAQ,/state:'connecting',attempt:n,connectionError:s\.connectionError/);
+  assert.match(MAQ,/lastSeenAt:prev\?\.lastSeenAt\|\|0/);
 });
 
 test('interfaz expone las áreas operacionales nuevas',()=>{

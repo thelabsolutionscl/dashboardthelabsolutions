@@ -35,14 +35,14 @@ jobs:
             process.exit(bad?1:0);
           '
 
-      - name: Run calculation tests
-        run: node tests/calc.test.js
+      - name: Syntax check (JavaScript modules)
+        run: |
+          for file in js/*.js; do
+            node --check "$file"
+          done
 
-      - name: Run redes tests
-        run: node tests/redes.test.js
-
-      - name: Smoke tests (wiring UI, funciones críticas, IDs del DOM)
-        run: node tests/smoke.test.js
+      - name: Run all tests
+        run: node --test tests/*.test.js
 
       - name: PHP lint (mail-api)
         run: |

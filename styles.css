@@ -1568,7 +1568,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .mops-tech-status{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:9px 11px;border:1px solid color-mix(in srgb,var(--tech-color) 38%,var(--border2));border-radius:9px;background:var(--tech-bg);font-size:10.5px;color:var(--tech-color);margin-bottom:12px}
 .mops-tech-status .pdot{width:8px;height:8px;border-radius:50%;background:var(--tech-color)}
 .mops-tech-status>span:not(.pdot):not(.mops-tech-op){color:var(--text3);margin-left:2px}
-.mops-tech-status .mops-tech-op{margin-left:auto;border-left:1px solid var(--border2);padding-left:9px;color:var(--text2)}
+.mops-tech-status .mops-tech-status-block{display:flex;flex-direction:column;line-height:1.15;color:var(--tech-color)!important;min-width:88px}
+.mops-tech-status-block small,.mops-tech-op small{display:block;font-size:7.5px;letter-spacing:.65px;text-transform:uppercase;color:var(--text3);margin-bottom:2px}
+.mops-tech-status-block b{font-size:10.5px;color:var(--tech-color)}
+.mops-tech-status .mops-tech-network{flex:1;min-width:145px;font-family:monospace;font-size:9px;color:var(--text3)}
+.mops-tech-network small{display:block;margin-top:2px;font-family:'DM Sans',sans-serif;font-size:8px;line-height:1.3;color:var(--text3)}
+.mops-tech-status .mops-tech-op{margin-left:auto;border-left:1px solid var(--border2);padding-left:9px;color:var(--text2);line-height:1.2}
+.mops-tech-refresh{width:30px;height:30px;border:1px solid color-mix(in srgb,var(--tech-color) 45%,var(--border2));border-radius:7px;background:var(--surface2);color:var(--tech-color);font-size:17px;line-height:1;cursor:pointer}
+.mops-tech-refresh:disabled{opacity:.45;cursor:wait}
 .mops-tech-layout{display:grid;grid-template-columns:180px minmax(0,1fr);gap:15px;align-items:start}
 .mops-tech-qr-panel{display:flex;flex-direction:column;align-items:center;gap:7px;padding:10px;border:1px solid var(--border2);border-radius:11px;background:var(--surface2);text-align:center}
 .mops-tech-qr-panel img{display:block;width:160px;height:160px;background:#fff;border-radius:8px}
@@ -1578,6 +1585,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .mops-tech-kpis{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:10px}
 .mops-tech-kpis .mops-kpi{padding:9px 10px}
 .mops-tech-kpis .mops-kpi-value{font-size:22px}
+.mops-tech-kpis .mops-kpi-sub{white-space:normal;line-height:1.3;min-height:24px}
 .mops-tech-spec{font-size:9.5px;color:var(--text3);line-height:1.45;margin-top:7px}
 .mops-tech-section{margin-top:12px;padding:11px;border:1px solid var(--border2);border-radius:10px;background:var(--surface)}
 .mops-tech-section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:10.5px;color:var(--text);margin-bottom:8px}
@@ -1597,6 +1605,14 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .mops-tech-two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
 .mops-tech-material{font-size:10px;color:var(--text2)}
 .mops-tech-material>b,.mops-tech-material>span,.mops-tech-material>small{display:block}.mops-tech-material>span,.mops-tech-material>small{font-size:8.5px;color:var(--text3);margin-top:3px}
+.mops-tech-sensor{padding:9px;border:1px solid rgba(0,212,170,.28);border-radius:8px;background:rgba(0,212,170,.06);font-size:9px;color:var(--text2)}
+.mops-tech-sensor.warn{border-color:rgba(255,170,0,.32);background:rgba(255,170,0,.06)}
+.mops-tech-sensor>b,.mops-tech-sensor>span{display:block}.mops-tech-sensor>span{margin-top:3px;color:var(--text3);font-size:8.5px}
+.mops-tech-inventory,.mops-tech-inventory-empty{margin-top:7px}
+.mops-tech-slots{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.mops-tech-slots span{display:inline-flex;align-items:center;gap:3px;padding:2px 5px;border-radius:5px;background:var(--surface3);font-size:8px;color:var(--text2)}
+.mops-tech-slots i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.35)}
+.printer-connecting-dot{display:inline-block;font-size:22px;animation:spin .9s linear infinite}
 .mops-tech-empty{padding:10px;border-radius:7px;background:var(--surface2);font-size:9.5px;color:var(--text3);line-height:1.45}
 .mops-tech-meta{font-size:8.5px;color:var(--text3);margin-top:10px;padding:0 2px}
 .mops-tech-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}
@@ -1639,6 +1655,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 }
 @media(max-width:560px){
   #mopsTechModal .modal-card{width:calc(100vw - 16px)!important;max-height:calc(100dvh - 16px)!important;padding:14px!important}
+  .mops-tech-status .mops-tech-network{order:4;flex-basis:100%;margin-left:17px!important}
+  .mops-tech-status .mops-tech-op{margin-left:auto}
   .mops-tech-layout{grid-template-columns:1fr}
   .mops-tech-qr-panel{display:grid;grid-template-columns:112px minmax(0,1fr);grid-template-rows:auto auto auto;column-gap:10px;text-align:left;align-items:center}
   .mops-tech-qr-panel img{width:112px;height:112px;grid-row:1/4}

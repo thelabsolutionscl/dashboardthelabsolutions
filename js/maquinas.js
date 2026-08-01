@@ -56,7 +56,14 @@ const _STATUS_TIMEOUT_MS=9000;      // túnel/WiFi lento del taller necesita mar
 const _THUMB_TIMEOUT_MS=2000;       // antes 3000
 const _OFFLINE_AFTER_FAILS=3;       // fallos consecutivos antes de declarar Offline
 function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
-function getPrinterTunnelToken(){const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';return localStorage.getItem('printer_tunnel_token')||d;}
+function getPrinterTunnelToken(){
+  const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';
+  const local=localStorage.getItem('printer_tunnel_token')||'',custom=(localStorage.getItem('printer_tunnel')||'').replace(/\/$/,'');
+  const defaultTunnel=((!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL).replace(/\/$/,'');
+  // En el túnel oficial, el token del deploy es la versión vigente. Así un
+  // token antiguo guardado en un teléfono no invalida silenciosamente la ficha.
+  return !custom||custom===defaultTunnel?(d||local):(local||d);
+}
 function _appendBridgeToken(u){const tk=getPrinterTunnelToken();return tk?u+(u.includes('?')?'&':'?')+'bt='+encodeURIComponent(tk):u;}
 // Diagnóstico del túnel/bridge desde el propio dashboard (Mi cuenta → Túnel Impresoras)
 async function testPrinterBridge(statusId){
@@ -206,6 +213,49 @@ function getPrinterApiKey(id){
 }
 function getPrinterAuthHeaders(id){const k=getPrinterApiKey(id);return k?{'X-Api-Key':k}:{};}
 
+function _printerInitialStatus(m){return{state:getPrinterIp(m)?'connecting':'noip',checkedAt:0,lastSeenAt:0};}
+function _printerFetchFailure(ip,reason,code=0){return{state:'offline',_fetchFail:true,ip,connectionError:reason||'No se pudo consultar la impresora',httpStatus:code||0,checkedAt:Date.now()};}
+function _emitPrinterStatus(m,status){
+  if(typeof window==='undefined'||typeof window.dispatchEvent!=='function'||typeof CustomEvent==='undefined')return;
+  try{window.dispatchEvent(new CustomEvent('printerstatus',{detail:{id:m.id,status}}));}catch(_){}
+}
+function _crealityColor(value){
+  const raw=String(value||'').replace(/[^0-9a-f]/gi,'');
+  return raw.length>=6?'#'+raw.slice(-6):'';
+}
+function _extractFilamentTelemetry(status){
+  const sensor=status?.['filament_switch_sensor filament_sensor'];
+  const rack=status?.filament_rack;
+  const box=status?.box;
+  const chamber=status?.['temperature_sensor chamber_temp'];
+  const detected=typeof sensor?.filament_detected==='boolean'?sensor.filament_detected:null;
+  const boxState=String(box?.state||'').toLowerCase();
+  const cfsConnected=!!box&&!['','none','disconnect','disconnected'].includes(boxState)&&Number(box.enable)!==0;
+  const cfsSlots=[];
+  if(cfsConnected){
+    ['T1','T2','T3','T4'].forEach(unit=>{
+      const row=box[unit]||{};
+      (Array.isArray(row.remain_len)?row.remain_len:[]).forEach((remain,index)=>{
+        if(Number(remain)>=0)cfsSlots.push({slot:`${unit}${String.fromCharCode(65+index)}`,remain:Number(remain),color:_crealityColor(row.color_value?.[index]),material:String(row.material_type?.[index]||'')});
+      });
+    });
+  }
+  const rackPresent=!!rack&&Object.keys(rack).length>0;
+  const temperature=Number(chamber?.temperature);
+  if(detected===null&&!rackPresent&&!box&&!Number.isFinite(temperature))return null;
+  return{
+    detected,
+    source:cfsConnected?'cfs':rackPresent?'rack':'sensor',
+    cfsConnected,
+    cfsEnabled:!!box&&Number(box.enable)!==0,
+    cfsAutoRefill:!!box&&Number(box.auto_refill)!==0,
+    cfsSlots,
+    chamber:Number.isFinite(temperature)?Math.round(temperature*10)/10:null,
+    color:rackPresent?_crealityColor(rack.remain_material_color||rack.color_value):'',
+    materialCode:rackPresent?String(rack.remain_material_type||rack.material_type||''):'',
+  };
+}
+
 function savePrinterIp(id){
   const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
   localStorage.setItem('printer_ip_'+id,val);
@@ -279,7 +329,8 @@ function _deriveStatus(m,s,ip){
   if(klState==='shutdown'||klState==='error')state='shutdown';
   else if(klState==='startup')state='startup';
   const light=_printerLightApplyStatus(m.id,s);
-  return{state,klState,klMsg,progress,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip,light:light?.available?{available:true,on:!!light.on}:null};
+  const seen=Date.now();
+  return{state,klState,klMsg,progress,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip,filament:_extractFilamentTelemetry(s),updatedAt:seen,lastSeenAt:seen,checkedAt:seen,light:light?.available?{available:true,on:!!light.on}:null};
 }
 // Miniatura del trabajo en curso (cacheada por archivo). Devuelve la URL o null.
 async function _ensureThumb(m,ip,st){
@@ -298,13 +349,19 @@ async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   const headers=getPrinterAuthHeaders(m.id);
   try{
-    const r=await fetch(printerUrl(ip,`/printer/objects/query?print_stats&heater_bed&extruder&display_status&virtual_sdcard&webhooks${_printerLightQuerySuffix(m.id)}`),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
-    if(!r.ok)return{state:'offline',_fetchFail:true,ip};
+    const objects=['print_stats','heater_bed','extruder','display_status','virtual_sdcard','webhooks'];
+    if(m.modelo==='K2'||m.modelo==='K2 Plus')objects.push('filament_switch_sensor filament_sensor','temperature_sensor chamber_temp','filament_rack','box');
+    const path='/printer/objects/query?'+objects.map(encodeURIComponent).join('&')+_printerLightQuerySuffix(m.id);
+    const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
+    if(!r.ok){
+      const reason=r.status===401?'Token del bridge inválido o vencido':r.status===502?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
+      return _printerFetchFailure(ip,reason,r.status);
+    }
     const d=await r.json();const s=d.result?.status||{};
     const st=_deriveStatus(m,s,ip);
     st.thumbUrl=await _ensureThumb(m,ip,st);
     return st;
-  }catch(e){return{state:'offline',_fetchFail:true,ip};}
+  }catch(e){return _printerFetchFailure(ip,e?.name==='TimeoutError'||e?.name==='AbortError'?'Tiempo de espera agotado al consultar Moonraker':'No se pudo alcanzar Moonraker');}
 }
 
 // ── Estado en vivo por WebSocket (Moonraker) ──────────────────────────────
@@ -340,6 +397,7 @@ function _wsMergeStatus(m,ip,status){
   st.thumbUrl=(_printerStatus[m.id]||{}).thumbUrl||null;
   checkTransitions(m,st);
   _printerStatus[m.id]=st;
+  _emitPrinterStatus(m,st);
   if(st.hotend){if(!_tempHistory[m.id])_tempHistory[m.id]=[];_tempHistory[m.id].push({h:st.hotend.actual,b:st.bed?.actual||0});if(_tempHistory[m.id].length>20)_tempHistory[m.id].shift();}
   _ensureThumb(m,ip,st).then(t=>{if(t&&_printerStatus[m.id]&&_printerStatus[m.id].thumbUrl!==t){_printerStatus[m.id].thumbUrl=t;_wsScheduleRender();}});
   _wsScheduleRender();
@@ -381,17 +439,26 @@ function disconnectAllPrinterWs(){
 function reconnectAllPrinterWs(){disconnectAllPrinterWs();connectAllPrinterWs();}
 
 function fmtSecs(s){if(!s||s<=0)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;}
+function fmtPrinterSeen(ts){
+  const age=Math.max(0,Date.now()-Number(ts||0));if(!ts)return'Sin lectura previa';
+  if(age<15000)return'Actualizado ahora';
+  const min=Math.floor(age/60000);if(min<60)return`Última lectura hace ${Math.max(1,min)} min`;
+  const h=Math.floor(min/60);return`Última lectura hace ${h} h`;
+}
 
 function printerStateMeta(state){
   return({
+    connecting:{label:'Conectando…',color:'#38bdf8',bg:'rgba(56,189,248,0.12)'},
     printing:{label:'Imprimiendo',color:'#00d4aa',bg:'rgba(0,212,170,0.15)'},
     paused:{label:'Pausado',color:'#ffaa00',bg:'rgba(255,170,0,0.15)'},
     error:{label:'Error',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
-    complete:{label:'Completado',color:'#a78bfa',bg:'rgba(167,139,250,0.15)'},
-    standby:{label:'Idle',color:'var(--text3)',bg:'var(--surface2)'},
+    complete:{label:'Impresión finalizada',color:'#a78bfa',bg:'rgba(167,139,250,0.15)'},
+    cancelled:{label:'Impresión cancelada',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
+    standby:{label:'En línea · libre',color:'var(--accent3)',bg:'rgba(0,212,170,0.08)'},
+    idle:{label:'En línea · libre',color:'var(--accent3)',bg:'rgba(0,212,170,0.08)'},
     shutdown:{label:'⚠ Detenida',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
     startup:{label:'Iniciando…',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
-    offline:{label:'Offline',color:'#888',bg:'rgba(120,120,120,0.12)'},
+    offline:{label:'Sin conexión',color:'#888',bg:'rgba(120,120,120,0.12)'},
     noip:{label:'Sin IP',color:'#ff6b35',bg:'rgba(255,107,53,0.12)'},
   }[state])||{label:state,color:'var(--text3)',bg:'var(--surface2)'};
 }
@@ -419,16 +486,17 @@ function filterMonitor(grupo){_monitorFilter=grupo;renderMonitorFilterTabs();ren
 function renderMonitorKPIs(){
   const el=document.getElementById('monitorKPIs');if(!el)return;
   const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
-  let printing=0,paused=0,idle=0,error=0,down=0,offline=0,noip=0;
-  lista.forEach(m=>{const st=(_printerStatus[m.id]||{}).state||'offline';if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='offline')offline++;else idle++;});
+  let printing=0,paused=0,idle=0,error=0,down=0,offline=0,noip=0,connecting=0;
+  lista.forEach(m=>{const st=(_printerStatus[m.id]||_printerInitialStatus(m)).state;if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='offline')offline++;else if(st==='connecting')connecting++;else idle++;});
   const total=lista.length,utilPct=total>0?Math.round((printing+paused)/total*100):0;
   el.innerHTML=`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:11px">
     ${printing>0?`<span style="color:#00d4aa;font-weight:700">🟢 ${printing} Imprimiendo</span>`:''}
     ${paused>0?`<span style="color:#ffaa00;font-weight:700">⏸ ${paused} Pausado</span>`:''}
-    ${idle>0?`<span style="color:var(--text3)">⚪ ${idle} Idle</span>`:''}
+    ${idle>0?`<span style="color:var(--accent3)">⚪ ${idle} En línea · libres</span>`:''}
+    ${connecting>0?`<span style="color:#38bdf8">◌ ${connecting} Conectando</span>`:''}
     ${error>0?`<span style="color:#ff4444;font-weight:700">🔴 ${error} Error</span>`:''}
     ${down>0?`<span style="color:#ff4444;font-weight:700">⚠ ${down} Detenida${down>1?'s':''} (Klipper)</span>`:''}
-    ${offline>0?`<span style="color:#888">⚫ ${offline} Offline</span>`:''}
+    ${offline>0?`<span style="color:#888">⚫ ${offline} Sin conexión</span>`:''}
     ${noip>0?`<span style="color:#ff6b35">❓ ${noip} Sin IP</span>`:''}
     <span style="margin-left:auto;font-weight:700;color:${utilPct>0?'#00d4aa':'var(--text3)'}">Utilización ${utilPct}%</span>
   </div>`;
@@ -443,8 +511,8 @@ function renderMaqOcupacion(){
   const el=document.getElementById('maqOcupacion');if(!el)return;
   const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
   if(!lista.length){el.style.display='none';return;}
-  const clasif=st=>st==='printing'?'print':st==='paused'?'paused':(st==='error'||st==='shutdown')?'error':(st==='offline'||st==='noip')?'off':'idle';
-  const rows=lista.map(m=>{const s=_printerStatus[m.id]||{state:'offline'};return{m,s,k:clasif(s.state),eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
+  const clasif=st=>st==='printing'?'print':st==='paused'?'paused':(st==='error'||st==='shutdown')?'error':(st==='offline'||st==='noip')?'off':st==='connecting'?'connecting':'idle';
+  const rows=lista.map(m=>{const s=_printerStatus[m.id]||_printerInitialStatus(m);return{m,s,k:clasif(s.state),eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
   const etas=rows.filter(r=>r.eta>0).map(r=>r.eta);
   const horizon=Math.max(4*3600,Math.min(12*3600,etas.length?Math.max(...etas)*1.15:4*3600));
   const libres=rows.filter(r=>r.k==='idle').length;
@@ -471,6 +539,9 @@ function renderMaqOcupacion(){
     }else if(r.k==='error'){
       bar=`<div style="height:100%;width:100%;background:rgba(255,68,68,0.14);border:1px dashed rgba(255,68,68,0.5);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:var(--danger)">⚠ con falla — revisar</span></div>`;
       lbl=`<span style="color:var(--danger)">🔴</span>`;
+    }else if(r.k==='connecting'){
+      bar=`<div style="height:100%;width:100%;background:rgba(56,189,248,.08);border:1px dashed rgba(56,189,248,.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;color:#38bdf8">consultando telemetría…</span></div>`;
+      lbl=`<span style="color:#38bdf8">◌</span>`;
     }else if(r.k==='off'){
       bar=`<div style="height:100%;width:100%;background:var(--surface3);border-radius:5px;display:flex;align-items:center;padding-left:8px;opacity:.55"><span style="font-size:9px;color:var(--text3)">sin conexión</span></div>`;
       lbl=`<span style="color:var(--text3)">⚫</span>`;
@@ -498,7 +569,7 @@ function renderMonitorGrid(){
   const base=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
   const lista=sortedList(base);
   const __cards=lista.map(m=>{
-    const s=_printerStatus[m.id]||{state:'offline'};
+    const s=_printerStatus[m.id]||_printerInitialStatus(m);
     const sm=printerStateMeta(s.state);
     const ip=getPrinterIp(m);
     const _rawCam=localStorage.getItem('printer_cam_'+m.id)||m.cam;
@@ -524,7 +595,9 @@ function renderMonitorGrid(){
     const structFP=[s.state,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0),_printerLightFingerprint(m.id)].join('~');
 
     let body='';
-    if(s.state==='noip'){
+    if(s.state==='connecting'){
+      body=`<div class="printer-connecting" style="margin-top:12px;text-align:center;color:#38bdf8;font-size:11px;padding:16px 8px"><span class="printer-connecting-dot">◌</span><br><b>Consultando telemetría…</b><br><span style="font-family:monospace;font-size:10px;color:var(--text3)">${ip}</span></div>`;
+    } else if(s.state==='noip'){
       body=`<div style="margin-top:10px">
         <div style="font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:600">Conexión OrcaSlicer / Moonraker</div>
         <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ipin_${m.id}" type="text" placeholder="IP  192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
@@ -533,7 +606,7 @@ function renderMonitorGrid(){
         <button onclick="savePrinterApiKey('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;flex-shrink:0;color:var(--text3)">Key</button></div>
       </div>`;
     } else if(s.state==='offline'){
-      body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:11px;padding:8px 0">Sin respuesta<br><span style="font-family:monospace;font-size:10px">${ip}</span><br><span style="font-size:10px">Verifica que esté encendida</span></div>`;
+      body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:11px;padding:8px 0"><b>Sin telemetría</b><br><span style="font-family:monospace;font-size:10px">${ip}</span><br><span style="font-size:10px">${escapeHtml(s.connectionError||'La impresora no respondió')}</span><br><span style="font-size:9px;color:#777">${escapeHtml(fmtPrinterSeen(s.lastSeenAt))}</span></div>`;
     } else if(s.state==='shutdown'){
       body=`<div style="margin-top:10px;padding:10px;background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);border-radius:8px">
         <div style="font-size:11px;color:#ff6b6b;font-weight:700;margin-bottom:4px">⚠ Klipper detenido</div>
@@ -1515,14 +1588,21 @@ function _applyStatus(m,s){
     const prev=_printerStatus[m.id];
     // backoff exponencial (2s,4s,8s… máx 60s) + jitter
     _nextPollAt[m.id]=Date.now()+Math.min(60000,2000*Math.pow(2,Math.max(0,n-1)))+Math.floor(Math.random()*1500);
-    if(n<_OFFLINE_AFTER_FAILS&&prev&&prev.state!=='offline'&&prev.state!=='noip'){
-      _printerStatus[m.id]={...prev,stale:true,staleSince:prev.staleSince||Date.now()};
+    if(n<_OFFLINE_AFTER_FAILS&&prev&&prev.state!=='offline'&&prev.state!=='noip'&&prev.state!=='connecting'){
+      _printerStatus[m.id]={...prev,stale:true,connectionError:s.connectionError,checkedAt:s.checkedAt,staleSince:prev.staleSince||Date.now()};
+      _emitPrinterStatus(m,_printerStatus[m.id]);
       return;
     }
-    checkTransitions(m,s);_printerStatus[m.id]=s;return;
+    if(n<_OFFLINE_AFTER_FAILS&&(!prev||prev.state==='connecting')){
+      _printerStatus[m.id]={...(prev||_printerInitialStatus(m)),state:'connecting',attempt:n,connectionError:s.connectionError,checkedAt:s.checkedAt};
+      _emitPrinterStatus(m,_printerStatus[m.id]);
+      return;
+    }
+    const failed={...s,lastSeenAt:prev?.lastSeenAt||0,disconnectedAt:prev?.disconnectedAt||Date.now()};
+    checkTransitions(m,failed);_printerStatus[m.id]=failed;_emitPrinterStatus(m,failed);return;
   }
   _failCount[m.id]=0;_nextPollAt[m.id]=0;
-  checkTransitions(m,s);_printerStatus[m.id]=s;
+  checkTransitions(m,s);_printerStatus[m.id]=s;_emitPrinterStatus(m,s);
   if(s&&s.hotend){if(!_tempHistory[m.id])_tempHistory[m.id]=[];_tempHistory[m.id].push({h:s.hotend.actual,b:s.bed?.actual||0});if(_tempHistory[m.id].length>20)_tempHistory[m.id].shift();}
 }
 async function pollPrinters(){
@@ -1543,6 +1623,7 @@ async function pollPrinters(){
   checkIdleAlerts();
   renderMonitorKPIs();
   renderMonitorGrid();
+  const lu=document.getElementById('monitorLastUpdate');if(lu)lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   if(_pollCount%4===0){renderMaintenanceTable();renderProductionAnalytics();}
 }
 

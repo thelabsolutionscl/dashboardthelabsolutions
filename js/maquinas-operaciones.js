@@ -51,6 +51,8 @@ const DEFAULT_SAFETY={
 };
 
 let _data=null,_remoteTimer=null,_initialized=false,_initPromise=null,_activeView='operacion';
+const _techRefreshPending={};
+let _techStatusListenerBound=false;
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=p=>(p||'mops')+'-'+Date.now().toString(36)+'-'+(crypto.randomUUID?crypto.randomUUID().slice(0,8):Math.random().toString(36).slice(2,10));
 const nowIso=()=>new Date().toISOString();
@@ -926,19 +928,70 @@ function closeScanner(){if(_scanTimer){clearInterval(_scanTimer);_scanTimer=null
 function submitScan(){handleScan(inputVal('mopsScanInput'));}
 function clearScanMachine(){sessionStorage.removeItem('mops_scan_machine');toast('Contexto de máquina limpiado','info');}
 
-function openTech(id){
+function techLiveFacts(live,now=Date.now()){
+  const row=live&&typeof live==='object'?live:{},state=row.state||'connecting';
+  const connecting=state==='connecting',disconnected=state==='offline'||state==='noip';
+  const active=state==='printing'||state==='paused',stale=!!row.stale;
+  const hasTelemetry=!connecting&&!disconnected;
+  const canClaimIdle=hasTelemetry&&!active&&!['error','shutdown','startup'].includes(state);
+  const seenAt=num(row.lastSeenAt||row.updatedAt||0),ageMs=seenAt?Math.max(0,now-seenAt):null;
+  return{state,connecting,disconnected,active,stale,hasTelemetry,canClaimIdle,seenAt,ageMs};
+}
+function techSeenText(live){
+  const ts=num(live?.lastSeenAt||live?.updatedAt||0);
+  if(typeof fmtPrinterSeen==='function')return fmtPrinterSeen(ts);
+  if(!ts)return'Sin lectura previa';const min=Math.max(0,Math.floor((Date.now()-ts)/60000));return min<1?'Actualizado ahora':`Última lectura hace ${min} min`;
+}
+function techFilamentSummary(live,spool){
+  const ft=live?.filament;
+  if(ft&&ft.detected!==null){
+    const source=ft.cfsConnected?`CFS${ft.cfsSlots?.length?' · '+ft.cfsSlots.length+' slots':''}`:ft.source==='rack'?'Portarrollos externo':'Sensor de filamento';
+    return{value:ft.detected?'Detectado':'Vacío',sub:`${source}${Number.isFinite(ft.chamber)?' · cámara '+ft.chamber+'°':''}`,color:ft.detected?'var(--accent3)':'var(--warn)',telemetry:true};
+  }
+  if(spool){const free=Math.round(spoolAvailable(spool));return{value:free+' g',sub:`Inventario asignado · ${spool.material} ${spool.color||''}`.trim(),color:free<150?'var(--warn)':'var(--accent3)',telemetry:false};}
+  return{value:'Sin datos',sub:'sin sensor ni inventario asignado',color:'var(--text3)',telemetry:false};
+}
+function bindTechStatusListener(){
+  if(_techStatusListenerBound||typeof window.addEventListener!=='function')return;
+  _techStatusListenerBound=true;
+  window.addEventListener('printerstatus',event=>{
+    const id=String(event?.detail?.id||''),modal=input('mopsTechModal');
+    if(!id||!modal||modal.style.display==='none'||inputVal('mopsTechId')!==id)return;
+    const card=modal.querySelector?.('.modal-card'),scrollTop=card?.scrollTop||0;
+    openTech(id,{autoRefresh:false});
+    if(card){const restore=()=>{card.scrollTop=scrollTop;};if(typeof requestAnimationFrame==='function')requestAnimationFrame(restore);else setTimeout(restore,0);}
+  });
+}
+async function refreshTechStatus(id,button,auto=false){
+  const m=getMachine(id);if(!m||_techRefreshPending[id])return false;
+  if(typeof fetchPrinterStatus!=='function'||typeof _applyStatus!=='function')return false;
+  _techRefreshPending[id]=true;if(button){button.disabled=true;button.textContent='…';}
+  try{
+    const status=await fetchPrinterStatus(m);_applyStatus(m,status);
+    if(!auto)toast(status?._fetchFail?'No se recibió telemetría · '+(status.connectionError||'revisa la conexión'):'Telemetría actualizada',status?._fetchFail?'info':'success');
+    return !status?._fetchFail;
+  }finally{
+    delete _techRefreshPending[id];
+    if(button){button.disabled=false;button.textContent='↻';}
+  }
+}
+
+function openTech(id,{autoRefresh=true}={}){
   sessionStorage.setItem('mops_scan_machine',id);
   const m=getMachine(id);if(!m)return;
   setVal('mopsTechId',id);setText('mopsTechTitle',`${m.nombre} #${m.numG}`);
   const cap=machineCapabilities(m),jobs=jobsForMachine(id).sort((a,b)=>dueUrgency(a)-dueUrgency(b)),spool=data().spools.find(s=>s.machineId===id&&!s.archived&&s.status!=='agotado');
-  let live={};try{live=_printerStatus[id]||{};}catch(_){ }
+  let live=null,hasLiveStatus=false;try{hasLiveStatus=Object.prototype.hasOwnProperty.call(_printerStatus,id);live=hasLiveStatus?_printerStatus[id]:null;}catch(_){ }
+  const ip=typeof getPrinterIp==='function'?(getPrinterIp(m)||'Sin IP'):(m.ip||'Sin IP');
+  if(!live)live={state:ip==='Sin IP'?'noip':'connecting',lastSeenAt:0};
+  const facts=techLiveFacts(live),filamentSummary=techFilamentSummary(live,spool);
   let maint=[];try{maint=getMaintAlerts(m);}catch(_){}
   let forecast=null;try{forecast=getMaintForecast(m);}catch(_){ }
   const link=techLink(id),qr=`https://quickchart.io/qr?size=180&margin=1&text=${encodeURIComponent(link)}`;
-  const liveMeta=typeof printerStateMeta==='function'?printerStateMeta(live.state||'offline'):{label:live.state||'Sin datos',color:'var(--text3)',bg:'var(--surface2)'};
+  let liveMeta=typeof printerStateMeta==='function'?printerStateMeta(live.state||'connecting'):{label:live.state||'Conectando…',color:'var(--text3)',bg:'var(--surface2)'};
+  if(facts.stale)liveMeta={label:'Reconectando…',color:'var(--warn)',bg:'rgba(255,170,0,.08)'};
   const opMeta=typeof maquinaEstadoMeta==='function'?maquinaEstadoMeta(getMaquinaEstadoGlobal(id)):{label:getMaquinaEstadoGlobal(id),icon:'•'};
-  const ip=typeof getPrinterIp==='function'?(getPrinterIp(m)||'Sin IP'):(m.ip||'Sin IP');
-  const queueMinutes=jobs.reduce((sum,j)=>sum+jobMinutes(j),0),isPrinting=['printing','paused'].includes(live.state);
+  const queueMinutes=jobs.reduce((sum,j)=>sum+jobMinutes(j),0),isPrinting=facts.active;
   const spoolFree=spool?Math.round(spoolAvailable(spool)):0,spoolPct=spool?clamp(spoolFree/Math.max(1,num(spool.initial,1000))*100,0,100):0;
   const lastAction=data().audit.find(row=>row.machineId===id&&row.action!=='Máquina escaneada');
   const queueHtml=jobs.length?jobs.slice(0,4).map((j,index)=>`<button class="mops-tech-job" onclick="MachineOps.closeTech();MachineOps.openJob('${j.id}')">
@@ -948,10 +1001,35 @@ function openTech(id){
     </button>`).join(''):'<div class="mops-tech-empty">No hay trabajos asignados a esta máquina.</div>';
   const stateOptions=Object.entries(typeof MAQUINA_ESTADOS!=='undefined'?MAQUINA_ESTADOS:{disponible:{label:'Disponible'},mantencion:{label:'Mantención'}})
     .map(([k,v])=>`<option value="${esc(k)}"${getMaquinaEstadoGlobal(id)===k?' selected':''}>${esc(v.icon||'')} ${esc(v.label)}</option>`).join('');
+  const progressValue=isPrinting?num(live.progress)+'%':facts.connecting?'…':facts.disconnected?'?':'—';
+  const progressSub=isPrinting?(live.state==='paused'?'impresión pausada':'trabajo actual'):facts.connecting?'consultando impresora':facts.disconnected?'sin telemetría':live.state==='cancelled'?'última impresión cancelada':'sin impresión activa';
+  const etaValue=isPrinting&&typeof fmtSecs==='function'?fmtSecs(live.eta):facts.connecting?'…':facts.disconnected?'?':'—';
+  const etaSub=isPrinting?(live.filename||'archivo sin nombre'):facts.connecting?'esperando primera lectura':facts.disconnected?'no se puede confirmar':facts.canClaimIdle?'sin trabajo activo':'estado no disponible';
+  const seenText=techSeenText(live);
+  const connectionDetail=facts.connecting?(live.connectionError?`${live.connectionError} · reintento ${num(live.attempt,1)}/${typeof _OFFLINE_AFTER_FAILS==='number'?_OFFLINE_AFTER_FAILS:3}`:'Esperando la primera respuesta de Moonraker'):facts.stale?`Mostrando el último estado conocido · ${seenText}`:facts.disconnected?`${live.connectionError||'Moonraker no respondió'} · ${seenText}`:seenText;
+  const tempHint=(num(live.hotend?.actual)>45||num(live.bed?.actual)>45)?` · Hotend ${num(live.hotend?.actual)}° / cama ${num(live.bed?.actual)}°`:'';
+  let printStateHtml='';
+  if(isPrinting)printStateHtml=`<section class="mops-tech-section mops-tech-print">
+      <div class="mops-tech-section-title"><span>🖨 Impresión actual</span><b>${num(live.progress)}%</b></div>
+      <div class="mops-tech-file">${esc(live.filename||'Archivo sin nombre')}</div>
+      <div class="mops-tech-progress"><i style="width:${clamp(num(live.progress),0,100)}%;background:${liveMeta.color}"></i></div>
+      <div class="mops-tech-live-values"><span>🔥 Hotend <b>${num(live.hotend?.actual)}°${num(live.hotend?.target)?' → '+num(live.hotend.target)+'°':''}</b></span><span>▦ Cama <b>${num(live.bed?.actual)}°${num(live.bed?.target)?' → '+num(live.bed.target)+'°':''}</b></span><span>⏱ Restante <b>${typeof fmtSecs==='function'?fmtSecs(live.eta):'—'}</b></span></div>
+    </section>`;
+  else if(facts.connecting)printStateHtml='<div class="mops-alert mops-tech-unknown" style="margin-top:12px">◌ <span><b>Consultando la impresora.</b> Aún no se puede confirmar si está libre o imprimiendo.</span></div>';
+  else if(facts.disconnected)printStateHtml=`<div class="mops-alert warn" style="margin-top:12px">⚠ <span><b>Estado de impresión desconocido.</b> Sin telemetría no se asumirá que la máquina está libre.</span></div>`;
+  else if(live.state==='shutdown'||live.state==='error')printStateHtml=`<div class="mops-alert danger" style="margin-top:12px">🚨 <span><b>La impresora requiere atención.</b> ${esc(live.klMsg||'Klipper reportó una detención.')}</span></div>`;
+  else if(live.state==='cancelled')printStateHtml=`<div class="mops-alert warn" style="margin-top:12px">⏹ <span><b>La última impresión fue cancelada.</b> La máquina sigue en línea${esc(tempHint)}.</span></div>`;
+  else if(live.state==='complete')printStateHtml=`<div class="mops-alert" style="margin-top:12px">✅ <span><b>Impresión finalizada.</b> La máquina está conectada${esc(tempHint)}.</span></div>`;
+  else printStateHtml='<div class="mops-alert" style="margin-top:12px">✅ <span><b>En línea y sin impresión activa.</b> Puedes asignar el siguiente trabajo.</span></div>';
+  const ft=live.filament;
+  const cfsSlots=ft?.cfsSlots?.length?`<div class="mops-tech-slots">${ft.cfsSlots.map(slot=>`<span>${slot.color?`<i style="background:${cssColor(slot.color)}"></i>`:''}${esc(slot.slot)}</span>`).join('')}</div>`:'';
+  const liveMaterial=ft?`<div class="mops-tech-sensor ${ft.detected===false?'warn':''}"><b>${ft.detected===true?'✅ Filamento detectado':ft.detected===false?'⚠ Sin filamento detectado':'◌ Sensor sin lectura'}</b><span>${ft.cfsConnected?'CFS conectado':ft.source==='rack'?'Portarrollos externo':'Sensor de la impresora'}${Number.isFinite(ft.chamber)?' · cámara '+ft.chamber+'°':''}</span>${cfsSlots}</div>`:'<div class="mops-tech-empty">Esta impresora no entregó sensores de filamento en la última lectura.</div>';
   input('mopsTechBody').innerHTML=`<div class="mops-tech-status" style="--tech-color:${liveMeta.color};--tech-bg:${liveMeta.bg}">
-      <span class="pdot${isPrinting?' live':''}"></span><b>${esc(liveMeta.label)}</b>
-      <span>${live.stale?'Actualización pendiente · ':''}${esc(ip)}</span>
-      <span class="mops-tech-op">${esc(opMeta.icon||'')} ${esc(opMeta.label||'')}</span>
+      <span class="pdot${isPrinting?' live':''}"></span>
+      <span class="mops-tech-status-block"><small>Conectividad</small><b>${esc(liveMeta.label)}</b></span>
+      <span class="mops-tech-network">${esc(ip)}<small>${esc(connectionDetail)}</small></span>
+      <span class="mops-tech-op"><small>Estado operacional</small>${esc(opMeta.icon||'')} ${esc(opMeta.label||'')}</span>
+      <button class="mops-tech-refresh" onclick="MachineOps.refreshTechStatus('${id}',this)" aria-label="Actualizar telemetría" title="Actualizar telemetría">↻</button>
     </div>
     <div class="mops-tech-layout">
       <aside class="mops-tech-qr-panel">
@@ -963,29 +1041,25 @@ function openTech(id){
       </aside>
       <div class="mops-tech-main">
         <div class="mops-kpis mops-tech-kpis">
-          ${kpi('Progreso',isPrinting?(num(live.progress)+'%'):'—',isPrinting?(live.state==='paused'?'impresión pausada':'trabajo actual'):'sin impresión activa',isPrinting?liveMeta.color:'var(--text3)')}
-          ${kpi('Tiempo restante',isPrinting&&typeof fmtSecs==='function'?fmtSecs(live.eta):'—',isPrinting?(live.filename||'archivo sin nombre'):'máquina libre')}
-          ${kpi('Cola',jobs.length,fmtMin(queueMinutes),jobs.length?'var(--accent4)':'var(--accent3)')}
-          ${kpi('Filamento',spool?spoolFree+' g':'—',spool?`${spool.material} ${spool.color||''}`:'sin rollo registrado',spool&&spoolFree<150?'var(--warn)':'var(--accent3)')}
+          ${kpi('Progreso',progressValue,progressSub,isPrinting?liveMeta.color:'var(--text3)')}
+          ${kpi('Tiempo restante',etaValue,etaSub)}
+          ${kpi('Trabajos planificados',jobs.length,fmtMin(queueMinutes),jobs.length?'var(--accent4)':'var(--accent3)')}
+          ${kpi('Filamento',filamentSummary.value,filamentSummary.sub,filamentSummary.color)}
         </div>
         <div class="field-group"><label class="field-label">Estado operacional</label><select class="field-select" onchange="MachineOps.setMachineStatus('${id}',this.value)">${stateOptions}</select></div>
         <div class="mops-tech-spec">${esc(m.modelo)} · cama ${esc(cap.bed.join('×'))} mm · materiales: ${esc(cap.materials.join(', '))}</div>
       </div>
     </div>
-    ${isPrinting?`<section class="mops-tech-section mops-tech-print">
-      <div class="mops-tech-section-title"><span>🖨 Impresión actual</span><b>${num(live.progress)}%</b></div>
-      <div class="mops-tech-file">${esc(live.filename||'Archivo sin nombre')}</div>
-      <div class="mops-tech-progress"><i style="width:${clamp(num(live.progress),0,100)}%;background:${liveMeta.color}"></i></div>
-      <div class="mops-tech-live-values"><span>🔥 Hotend <b>${num(live.hotend?.actual)}°${num(live.hotend?.target)?' → '+num(live.hotend.target)+'°':''}</b></span><span>▦ Cama <b>${num(live.bed?.actual)}°${num(live.bed?.target)?' → '+num(live.bed.target)+'°':''}</b></span><span>⏱ Restante <b>${typeof fmtSecs==='function'?fmtSecs(live.eta):'—'}</b></span></div>
-    </section>`:`<div class="mops-alert" style="margin-top:12px">✅ <span><b>Sin impresión activa.</b> Revisa la cola siguiente o escanea un trabajo para asignarlo.</span></div>`}
+    ${printStateHtml}
     <section class="mops-tech-section">
       <div class="mops-tech-section-title"><span>🗓 Trabajos asignados</span><b>${jobs.length}</b></div>
       <div class="mops-tech-jobs">${queueHtml}</div>
     </section>
     <section class="mops-tech-section mops-tech-two-col">
       <div>
-        <div class="mops-tech-section-title"><span>🧵 Material cargado</span></div>
-        ${spool?`<div class="mops-tech-material"><b>${esc(spool.name)}</b><span>${esc(spool.material)} · ${esc(spool.color||'Sin color')}${spool.slot?' · slot '+esc(spool.slot):''}</span><div class="mops-spool-meter"><i style="width:${spoolPct}%;background:${spoolFree<150?'var(--warn)':'var(--accent3)'}"></i></div><small>${spoolFree} g disponibles · ${Math.round(num(spool.remaining))} g físicos</small></div>`:'<div class="mops-tech-empty">No hay un rollo registrado en esta máquina.</div>'}
+        <div class="mops-tech-section-title"><span>🧵 Material y sensores</span></div>
+        ${liveMaterial}
+        ${spool?`<div class="mops-tech-material mops-tech-inventory"><b>Inventario · ${esc(spool.name)}</b><span>${esc(spool.material)} · ${esc(spool.color||'Sin color')}${spool.slot?' · slot '+esc(spool.slot):''}</span><div class="mops-spool-meter"><i style="width:${spoolPct}%;background:${spoolFree<150?'var(--warn)':'var(--accent3)'}"></i></div><small>${spoolFree} g disponibles · ${Math.round(num(spool.remaining))} g físicos</small></div>`:'<div class="mops-tech-empty mops-tech-inventory-empty">Sin rollo vinculado al inventario. Escanéalo para asociarlo.</div>'}
       </div>
       <div>
         <div class="mops-tech-section-title"><span>🔧 Mantención</span><b style="color:${maint.length?'var(--warn)':'var(--accent3)'}">${maint.length?maint.length+' alerta'+(maint.length!==1?'s':''):'Al día'}</b></div>
@@ -1003,6 +1077,8 @@ function openTech(id){
       <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();MachineOps.showView('planificacion')">🗓 Planificación</button>
     </div>`;
   input('mopsTechModal').style.display='flex';
+  bindTechStatusListener();
+  if(autoRefresh&&!_techRefreshPending[id])refreshTechStatus(id,null,true);
 }
 function closeTech(){input('mopsTechModal').style.display='none';}
 async function setMachineStatus(id,status){
@@ -1048,7 +1124,7 @@ async function init(){
   if(_initPromise)return _initPromise;
   _initPromise=(async()=>{
     data();await loadRemote();await restoreLegacyQueues();importLegacyProfiles();_initialized=true;
-    _activeView=localStorage.getItem('machine_ops_view')||'operacion';showView(_activeView);renderAll();
+    _activeView=localStorage.getItem('machine_ops_view')||'operacion';showView(_activeView);renderAll();bindTechStatusListener();
     const route=directRoute();
     if(route)setTimeout(()=>handleScan(opsLink(route.type,route.id)),120);
     if(data().safetyConfig.sensorUrl){setTimeout(refreshSafety,900);setInterval(()=>{if(!document.hidden)refreshSafety();},60000);}
@@ -1065,10 +1141,10 @@ const api={
   saveSafetyConfig,recordSafetyManual,refreshSafety,renderSafety,canAutoStart,
   openScanner,closeScanner,submitScan,handleScan,clearScanMachine,printEntityLabel,
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
-  openTech,closeTech,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
+  openTech,closeTech,refreshTechStatus,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,onLegacyQueueAdd,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary},
 };
 window.MachineOps=api;
 

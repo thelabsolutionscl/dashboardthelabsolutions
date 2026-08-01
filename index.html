@@ -14018,9 +14018,9 @@ function _tvViewPedidos(){
 function _tvViewMaquinas(){
   const cards=(typeof MAQUINAS!=='undefined'?MAQUINAS:[]).map(m=>{
     const st=(typeof _printerStatus!=='undefined'?_printerStatus[m.id]:null)||{};
-    const s=st.state||'offline';
-    const map={printing:['IMPRIMIENDO','var(--accent3)'],paused:['PAUSADA','var(--warn)'],error:['ERROR','var(--danger)'],shutdown:['APAGADA','#888'],offline:['OFFLINE','#888'],noip:['SIN IP','#666'],idle:['LIBRE','var(--accent)'],standby:['LIBRE','var(--accent)'],complete:['LISTA ✓','var(--accent3)']};
-    const [lbl,col]=map[s]||['LIBRE','var(--accent)'];
+    const s=st.state||(typeof getPrinterIp==='function'&&getPrinterIp(m)?'connecting':'noip');
+    const map={connecting:['CONECTANDO…','#38bdf8'],printing:['IMPRIMIENDO','var(--accent3)'],paused:['PAUSADA','var(--warn)'],error:['ERROR','var(--danger)'],shutdown:['DETENIDA','var(--danger)'],offline:['SIN CONEXIÓN','#888'],noip:['SIN IP','#666'],cancelled:['CANCELADA','var(--warn)'],idle:['LIBRE','var(--accent)'],standby:['LIBRE','var(--accent)'],complete:['FINALIZADA ✓','var(--accent3)']};
+    const [lbl,col]=map[s]||['ESTADO DESCONOCIDO','#888'];
     const prog=s==='printing'&&st.progress!=null?Math.round(st.progress*(st.progress<=1?100:1)):null;
     return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:5px solid ${col};border-radius:10px;padding:16px 18px">
       <div style="font-size:19px;font-weight:700;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</div>
