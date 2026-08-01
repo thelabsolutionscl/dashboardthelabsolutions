@@ -756,6 +756,8 @@ async function _renderOficina(){
       else if(ls==='paused'){ cls='of-active'; lbl='En pausa'; progress=(typeof lv.progress==='number'?lv.progress:null); }
       else if(ls==='error'||ls==='shutdown'){ cls='of-error'; lbl='Con falla'; }
       else if(ls==='offline'||ls==='noip'){ cls='of-off'; lbl='Sin conexión'; }
+      else if(ls==='connecting'){ cls='of-active'; lbl='Conectando'; }
+      else if(ls==='cancelled'){ cls='of-active'; lbl='Impresión cancelada'; }
       else { cls='of-off'; lbl='Disponible'; }
     } else { cls=_ofPrinterCls(p.estado); lbl=_ofPrinterLbl(p.estado); if(cls==='of-work') progress=-1; }   // sin bridge: barra indeterminada si "imprimiendo"
     if(cls==='of-work')working++;
