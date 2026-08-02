@@ -1,0 +1,53 @@
+name: Audit Calendario
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/calendario*.js'
+      - 'js/tv-logo-fix.js'
+      - 'js/tv-control-center.js'
+      - 'js/maquinas-operaciones.js'
+      - 'index.html'
+      - 'tests/calendario*.test.js'
+      - '.github/workflows/calendario-audit.yml'
+  pull_request:
+    paths:
+      - 'js/calendario*.js'
+      - 'js/tv-logo-fix.js'
+      - 'js/tv-control-center.js'
+      - 'js/maquinas-operaciones.js'
+      - 'index.html'
+      - 'tests/calendario*.test.js'
+      - '.github/workflows/calendario-audit.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  calendario:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verificar sintaxis de módulos
+        run: |
+          node --check js/calendario.js
+          node --check js/calendario-base.js
+          node --check js/calendario-operaciones.js
+          node --check js/calendario-collapsible.js
+          node --check js/tv-logo-fix.js
+          node --check js/tv-control-center.js
+
+      - name: Probar CRM, operaciones y orden de carga
+        run: node --test tests/calendario-crm.test.js tests/calendario-operaciones.test.js
+
+      - name: Probar cableado general del dashboard
+        run: node tests/smoke.test.js
