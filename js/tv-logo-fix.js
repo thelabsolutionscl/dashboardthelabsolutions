@@ -1,6 +1,7 @@
 /* Reutiliza en todas las páginas del Modo TV el mismo logo horizontal del dashboard. */
 (function(){
   'use strict';
+  if(window.TVLogoFix)return;
   const PATCHED='data-tv-dashboard-logo';
   const LOGO_CLASS='tv-shared-dashboard-logo';
 
@@ -78,6 +79,8 @@
     observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});
     document.addEventListener('fullscreenchange',patch);
   };
+
+  window.TVLogoFix={patch};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
   else start();
 })();
