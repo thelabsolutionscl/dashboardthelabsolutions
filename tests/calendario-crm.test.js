@@ -8,7 +8,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const ROOT = path.join(__dirname, '..');
-const CAL_SRC = fs.readFileSync(path.join(ROOT, 'js', 'calendario.js'), 'utf8');
+const CAL_SRC = fs.readFileSync(path.join(ROOT, 'js', 'calendario-base.js'), 'utf8');
+const LOADER_SRC = fs.readFileSync(path.join(ROOT, 'js', 'calendario.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const MOPS = fs.readFileSync(path.join(ROOT, 'js', 'maquinas-operaciones.js'), 'utf8');
 
@@ -32,9 +33,27 @@ function calendarContext(state = { cotizaciones: [], pedidos: [], clientes: [] }
     setInterval: () => 0,
     clearInterval: () => {},
   });
-  vm.runInContext(CAL_SRC, context, { filename: 'calendario.js' });
+  vm.runInContext(CAL_SRC, context, { filename: 'calendario-base.js' });
   return context;
 }
+
+test('el cargador respeta el orden completo de módulos', () => {
+  const expected = [
+    'js/calendario-base.js',
+    'js/calendario-operaciones.js',
+    'js/calendario-collapsible.js',
+    'js/tv-logo-fix.js',
+    'js/tv-control-center.js',
+  ];
+  let cursor = -1;
+  for (const file of expected) {
+    const next = LOADER_SRC.indexOf(file);
+    assert.ok(next > cursor, `${file} debe cargarse en orden`);
+    cursor = next;
+  }
+  assert.match(LOADER_SRC, /CalendarModulesReady/);
+  assert.match(LOADER_SRC, /thelab:calendar-ready/);
+});
 
 test('genera compromisos CRM distintos para cotizaciones y pedidos', () => {
   const state = {
