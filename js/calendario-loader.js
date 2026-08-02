@@ -1,4 +1,4 @@
-/* Cargador del calendario: conserva el módulo base y activa la planificación avanzada. */
+/* Cargador de compatibilidad: calendario base + capa operacional avanzada. */
 (function(){
   function load(src,next){
     const s=document.createElement('script');
