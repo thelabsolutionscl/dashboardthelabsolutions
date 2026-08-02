@@ -386,6 +386,9 @@ function _calPassFilter(ev){
   if(_calTipoFiltro==='pedidos')return String(ev.type||'').startsWith('ped_');
   if(_calTipoFiltro==='equipo')return ev.source!=='crm';
   if(_calTipoFiltro==='atrasados')return ev.risk==='overdue'||ev.risk==='today';
+  if(_calTipoFiltro==='hoy')return _calDays(ev.fecha)===0;
+  if(_calTipoFiltro==='semana'){const days=_calDays(ev.fecha);return days>=0&&days<=7;}
+  if(_calTipoFiltro==='capacidad')return ev.type==='ped_delivery'&&typeof MachineOps!=='undefined'&&MachineOps.deadlineCapacityRisk&&MachineOps.deadlineCapacityRisk(ev.recordId,ev.fecha).status==='risk';
   if(_calTipoFiltro==='mios'){const me=_calUserId();return!!me&&(ev.personas||[]).includes(me);}
   if(_calTipoFiltro==='sin-responsable')return!(ev.personas||[]).length;
   return true;
@@ -412,7 +415,7 @@ function calDropDate(e,fecha){e.preventDefault();const id=(e.dataTransfer&&e.dat
 function _calRenderFilters(){
   const chips=document.getElementById('calFiltroChips');if(chips)chips.innerHTML=[`<button class="cal-chip ${_calFiltro==='todos'?'on':''}" onclick="calSetFiltro('todos')">Todos</button>`]
     .concat(_calPersonas().map(p=>`<button class="cal-chip ${_calFiltro===p.id?'on':''}" style="--chip:${p.color}" onclick="calSetFiltro('${p.id}')"><span class="cal-dot" style="background:${p.color}"></span>${p.nombre.split(' ')[0]}</button>`)).join('');
-  const types=document.getElementById('calTipoChips');if(types){const rows=[['todos','Todos'],['cotizaciones','🟣 Cotizaciones'],['pedidos','🟠 Pedidos'],['equipo','🔵 Equipo'],['atrasados','🔴 Atrasados'],['mios','👤 Míos'],['sin-responsable','⚪ Sin responsable']];types.innerHTML=rows.map(([k,l])=>`<button class="cal-chip ${_calTipoFiltro===k?'on':''}" onclick="calSetTipo('${k}')">${l}</button>`).join('');}
+  const types=document.getElementById('calTipoChips');if(types){const rows=[['todos','Todos'],['hoy','Hoy'],['semana','7 días'],['cotizaciones','🟣 Cotizaciones'],['pedidos','🟠 Pedidos'],['equipo','🔵 Equipo'],['atrasados','🔴 Atrasados'],['capacidad','⚠ Capacidad'],['mios','👤 Míos'],['sin-responsable','⚪ Sin responsable']];types.innerHTML=rows.map(([k,l])=>`<button class="cal-chip ${_calTipoFiltro===k?'on':''}" onclick="calSetTipo('${k}')">${l}</button>`).join('');}
   document.querySelectorAll('[data-cal-view]').forEach(b=>b.classList.toggle('active-filter',b.dataset.calView===_calVista));
 }
 function _calRenderMonth(grid){
@@ -429,19 +432,45 @@ function _calRenderAgenda(grid){
   const start=new Date(_calMes),rows=[];start.setHours(0,0,0,0);for(let i=0;i<30;i++){const d=new Date(start);d.setDate(start.getDate()+i);const f=_calFmtFecha(d),evs=_calEventosDia(f);if(!evs.length)continue;rows.push(`<section class="cal-ag-day"><div><b>${d.toLocaleDateString('es-CL',{weekday:'long'})}</b><span>${d.toLocaleDateString('es-CL',{day:'numeric',month:'short'})}</span></div><div>${evs.map(ev=>_calEventHtml(ev)).join('')}</div></section>`);}grid.innerHTML=rows.length?`<div class="cal-agenda">${rows.join('')}</div>`:'<div class="empty-state">Sin compromisos en los próximos 30 días con los filtros actuales.</div>';
 }
 function _calMissingItems(){
-  const out=[],closedCot=new Set(['Aprobada','Rechazada','Vencida']),closedPed=new Set(['Completado','Cancelado','Despachado']);
-  (state.cotizaciones||[]).forEach(c=>{const f=c.fields||{},s=f['Estado cotización']||'';if(!closedCot.has(s)&&s!=='Enviada'&&!f['Fecha límite cotización'])out.push({kind:'cotizacion',id:c.id,field:'Fecha límite cotización',label:f['N° Cotización']||'Cotización',client:_calClient(f),what:'fecha límite'});});
-  (state.pedidos||[]).forEach(p=>{const f=p.fields||{},s=f['Estado pedido']||'';if(closedPed.has(s))return;if(!f['Fecha entrega'])out.push({kind:'pedido',id:p.id,field:'Fecha entrega',label:f['N° Pedido']||'Pedido',client:_calClient(f),what:'entrega cliente'});if(!f['Fecha objetivo interna'])out.push({kind:'pedido',id:p.id,field:'Fecha objetivo interna',label:f['N° Pedido']||'Pedido',client:_calClient(f),what:'meta interna'});});
+  const out=[],closedCot=new Set(['Aprobada','Rechazada','Vencida']),closedPed=new Set(['Completado','Cancelado']),today=_calFmtFecha(new Date());
+  (state.cotizaciones||[]).forEach(c=>{const f=c.fields||{},s=f['Estado cotización']||'',base=(f['Fecha cotización']||'')>today?f['Fecha cotización']:today;if(closedCot.has(s))return;
+    if(s==='Enviada'){if(!f['Fecha vencimiento'])out.push({kind:'cotizacion',id:c.id,field:'Fecha vencimiento',label:f['N° Cotización']||'Cotización',client:_calClient(f),what:'vigencia de propuesta',suggested:calBusinessDate(base,10),rule:'10 días hábiles desde el envío'});return;}
+    if(!f['Fecha límite cotización'])out.push({kind:'cotizacion',id:c.id,field:'Fecha límite cotización',label:f['N° Cotización']||'Cotización',client:_calClient(f),what:'fecha límite',suggested:calBusinessDate(base,2),rule:'2 días hábiles para responder'});
+  });
+  (state.pedidos||[]).forEach(p=>{const f=p.fields||{},s=f['Estado pedido']||'';if(closedPed.has(s))return;
+    if(!f['Fecha entrega'])out.push({kind:'pedido',id:p.id,field:'Fecha entrega',label:f['N° Pedido']||'Pedido',client:_calClient(f),what:'entrega cliente',suggested:'',rule:'requiere compromiso con el cliente'});
+    if(!f['Fecha objetivo interna'])out.push({kind:'pedido',id:p.id,field:'Fecha objetivo interna',label:f['N° Pedido']||'Pedido',client:_calClient(f),what:'meta interna',suggested:f['Fecha entrega']?calInternalDate(f['Fecha entrega'],2):'',rule:f['Fecha entrega']?'2 días hábiles antes de entregar':'primero define la entrega'});
+  });
   return out;
 }
 function _calRenderKpis(){
   const el=document.getElementById('calKpis');if(!el)return;const crm=_calCrmEvents(),today=crm.filter(e=>_calDays(e.fecha)===0).length,week=crm.filter(e=>{const d=_calDays(e.fecha);return d>=0&&d<=7;}).length,late=crm.filter(e=>_calDays(e.fecha)<0).length,missing=_calMissingItems().length;
   const capRisk=crm.filter(e=>e.type==='ped_delivery'&&typeof MachineOps!=='undefined'&&MachineOps.deadlineCapacityRisk&&MachineOps.deadlineCapacityRisk(e.recordId,e.fecha).status==='risk').length;
-  el.innerHTML=[[today,'Vencen hoy','var(--warn)'],[week,'Próximos 7 días','var(--accent)'],[late,'Atrasados','var(--danger)'],[missing,'Sin fecha','var(--accent4)'],[capRisk,'Riesgo capacidad','var(--danger)']].map(([v,l,c])=>`<button onclick="${l==='Atrasados'?"calSetTipo('atrasados')":l==='Sin fecha'?"document.getElementById('calSinFechaCard')?.scrollIntoView({behavior:'smooth'})":'void 0'}" class="cal-kpi" style="--cal-kpi:${c}"><b>${v}</b><span>${l}</span></button>`).join('');
+  el.innerHTML=[[today,'Vencen hoy','var(--warn)',"calSetTipo('hoy')"],[week,'Próximos 7 días','var(--accent)',"calSetTipo('semana')"],[late,'Atrasados','var(--danger)',"calSetTipo('atrasados')"],[missing,'Sin fecha','var(--accent4)',"document.getElementById('calSinFechaCard')?.scrollIntoView({behavior:'smooth'})"],[capRisk,'Riesgo capacidad','var(--danger)',"calSetTipo('capacidad')"]].map(([v,l,c,action])=>`<button onclick="${action}" class="cal-kpi" style="--cal-kpi:${c}"><b>${v}</b><span>${l}</span></button>`).join('');
+}
+function _calFocusItems(){
+  return _calCrmEvents().filter(ev=>{const d=_calDays(ev.fecha);return d!==null&&d<=2;}).sort((a,b)=>{const da=_calDays(a.fecha),db=_calDays(b.fecha),wa=da===0?0:da<0?1:2,wb=db===0?0:db<0?1:2;return wa-wb||(wa===1?db-da:da-db)||String(a.titulo).localeCompare(String(b.titulo));}).slice(0,10);
+}
+function renderCalFocus(){
+  const el=document.getElementById('calFocus');if(!el)return;const rows=_calFocusItems();
+  if(!rows.length){el.innerHTML='<div class="cal-focus-clear">✓ Sin compromisos urgentes ni atrasados. La operación inmediata está al día.</div>';return;}
+  const action={cot_due:'Preparar cotización',cot_expiry:'Hacer seguimiento',ped_internal:'Revisar producción',ped_delivery:'Coordinar entrega'};
+  el.innerHTML=rows.map(ev=>{const people=(ev.personas||[]).map(id=>_calPersona(id)?.nombre?.split(' ')[0]||id).join(', ')||'Sin responsable',days=_calDays(ev.fecha),when=days<0?`${Math.abs(days)}d atrasado`:days===0?'Hoy':days===1?'Mañana':`En ${days} días`,cap=ev.type==='ped_delivery'&&typeof MachineOps!=='undefined'&&MachineOps.deadlineCapacityRisk?MachineOps.deadlineCapacityRisk(ev.recordId,ev.fecha):null;return `<article class="cal-focus-row risk-${ev.risk}"><span class="cal-focus-when">${escapeHtml(when)}</span><div><b>${escapeHtml(ev.titulo)}</b><small>${escapeHtml(ev.client||'Sin cliente')} · ${escapeHtml(people)}${ev.amount?' · '+escapeHtml(_calMoney(ev.amount)):''}${cap?.status==='risk'?' · capacidad insuficiente':''}</small></div><button class="btn btn-ghost btn-sm" onclick="calOpenEvent('${ev.id}')">${escapeHtml(action[ev.type]||'Revisar')}</button></article>`;}).join('');
+}
+async function calApplySuggestedDate(kind,id,field,date){
+  if(!date)return;try{await calUpdateCrmDate(kind,id,field,date,'Fecha sugerida automáticamente según SLA operativo',true);toast('✓ Fecha sugerida aplicada','success');renderCalendario();}catch(e){toast('Error: '+e.message,'error');}
+}
+async function calApplySuggestedDates(){
+  const rows=_calMissingItems().filter(x=>x.suggested);if(!rows.length){toast('No hay fechas que se puedan calcular de forma segura','info');return;}
+  if(!confirm(`Se aplicarán ${rows.length} fecha${rows.length!==1?'s':''} sugerida${rows.length!==1?'s':''}: cotizaciones +2 días hábiles, vigencias +10 días hábiles y metas internas 2 días antes de entregar. ¿Continuar?`))return;
+  let ok=0;for(const x of rows){try{if(await calUpdateCrmDate(x.kind,x.id,x.field,x.suggested,'Fecha sugerida automáticamente según SLA operativo',true))ok++;}catch(e){console.warn('[Calendario] sugerencia',x,e);}}
+  toast(`✓ ${ok} fecha${ok!==1?'s':''} aplicada${ok!==1?'s':''}`,'success');renderCalendario();
 }
 function renderCalMissing(){
   const el=document.getElementById('calSinFecha');if(!el)return;const rows=_calMissingItems();
-  el.innerHTML=rows.length?rows.slice(0,18).map(x=>`<div class="cal-missing"><span>${x.kind==='pedido'?'📦':'✍'}</span><div><b>${escapeHtml(x.label)} · ${escapeHtml(x.client)}</b><small>Falta ${escapeHtml(x.what)}</small></div><button class="btn btn-ghost btn-sm" onclick="calQuickSchedule('${x.kind}','${x.id}','${x.field}')">Agendar</button></div>`).join(''):'<div class="cal-good">✓ Todos los compromisos activos tienen fecha.</div>';
+  const summary=document.getElementById('calMissingSummary'),auto=rows.filter(x=>x.suggested).length;if(summary)summary.textContent=rows.length?`${rows.length} pendiente${rows.length!==1?'s':''} · ${auto} calculable${auto!==1?'s':''}`:'Todo al día';
+  const autoBtn=document.getElementById('calApplySuggestedBtn');if(autoBtn){autoBtn.style.display=auto?'':'none';autoBtn.textContent=`⚡ Aplicar ${auto} sugerida${auto!==1?'s':''}`;}
+  el.innerHTML=rows.length?rows.slice(0,18).map(x=>`<div class="cal-missing"><span>${x.kind==='pedido'?'📦':'✍'}</span><div><b>${escapeHtml(x.label)} · ${escapeHtml(x.client)}</b><small>Falta ${escapeHtml(x.what)} · ${escapeHtml(x.rule||'')}</small>${x.suggested?`<em>Sugerencia: ${escapeHtml(x.suggested)}</em>`:''}</div><div class="cal-missing-actions">${x.suggested?`<button class="btn btn-ghost btn-sm" onclick="calApplySuggestedDate('${x.kind}','${x.id}','${x.field}','${x.suggested}')">Aplicar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="calQuickSchedule('${x.kind}','${x.id}','${x.field}')">Definir</button></div></div>`).join(''):'<div class="cal-good">✓ Todos los compromisos activos tienen fecha.</div>';
 }
 function renderCalHistory(){
   const el=document.getElementById('calHistory');if(!el)return;const rows=[];['cotizaciones','pedidos'].forEach(kind=>(state[kind]||[]).forEach(r=>{let h=[];try{h=JSON.parse(r.fields?.['Historial fechas calendario']||'[]');}catch(e){}h.forEach(x=>rows.push({...x,kind,id:r.id,label:r.fields[kind==='pedidos'?'N° Pedido':'N° Cotización']||'—'}));}));rows.sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0));
@@ -453,7 +482,7 @@ function renderCalendario(){
   try{_calVista=localStorage.getItem('thelab_cal_vista')||_calVista;}catch(e){}
   const lbl=document.getElementById('calMesLabel');
   if(lbl){const start=_calVista==='semana'?_calWeekStart(_calMes):_calMes;lbl.textContent=_calVista==='semana'?`Semana del ${start.toLocaleDateString('es-CL',{day:'numeric',month:'long'})}`:_calVista==='agenda'?`Agenda desde ${_calMes.toLocaleDateString('es-CL',{day:'numeric',month:'long'})}`:_calMes.toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase());}
-  _calRenderFilters();_calRenderKpis();if(_calVista==='semana')_calRenderWeek(grid);else if(_calVista==='agenda')_calRenderAgenda(grid);else _calRenderMonth(grid);
+  _calRenderFilters();_calRenderKpis();renderCalFocus();if(_calVista==='semana')_calRenderWeek(grid);else if(_calVista==='agenda')_calRenderAgenda(grid);else _calRenderMonth(grid);
   renderCalProximos();
   renderCalMissing();renderCalHistory();
   _calRenderSyncStatus();
@@ -513,7 +542,7 @@ async function calUpdateCrmDate(kind,id,field,to,reason='',silent=false){
   if(old&&!reason&&!silent){reason=(prompt(`Motivo del cambio de ${field}:`,'Reprogramación operacional')||'').trim();if(!reason)return false;}
   await ensureCalendarioCrmFields();const table=kind==='pedido'?'Pedidos':'Cotizaciones',fields={[field]:to||null,'Historial fechas calendario':_calHistory(rec,field,to,reason)};
   try{await airtableWrite(table,'PATCH',id,fields);}catch(e){if(!/field|unknown|422|INVALID/i.test(e.message||''))throw e;await ensureCalendarioCrmFields();await airtableWrite(table,'PATCH',id,fields);}
-  Object.assign(rec.fields,fields);if(!silent)toast(`✓ ${field} actualizada`,'success');renderCalendario();try{if(kind==='pedido')renderPedidos();else renderCotizaciones();renderOverview();}catch(e){}return true;
+  Object.assign(rec.fields,fields);if(!silent){toast(`✓ ${field} actualizada`,'success');renderCalendario();try{if(kind==='pedido')renderPedidos();else renderCotizaciones();renderOverview();}catch(e){}}return true;
 }
 function _calEaster(year){
   const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),month=Math.floor((h+l-7*m+114)/31),day=(h+l-7*m+114)%31+1;
@@ -556,9 +585,16 @@ function openCalCrmModal(kind,id,focusField=''){
   document.getElementById('calCrmReason').value='';modal.style.display='flex';setTimeout(()=>{const map={'Fecha límite cotización':'calCrmCotDue','Fecha vencimiento':'calCrmCotExpiry','Fecha objetivo interna':'calCrmPedInternal','Fecha entrega':'calCrmPedDelivery'};document.getElementById(map[focusField]||'calCrmReason')?.focus();},50);
 }
 function closeCalCrmModal(){const m=document.getElementById('calCrmModal');if(m)m.style.display='none';}
+function _calValidateCrmDates(kind,dates){
+  const x=dates||{};
+  if(kind==='pedido'&&x.internal&&x.delivery&&x.internal>x.delivery)return'La meta interna debe ser anterior o igual a la entrega al cliente.';
+  if(kind==='cotizacion'&&x.due&&x.expiry&&x.due>x.expiry)return'La fecha límite para enviar no puede quedar después del vencimiento de la propuesta.';
+  return'';
+}
 async function calSaveCrmDates(){
   const kind=document.getElementById('calCrmKind').value,id=document.getElementById('calCrmId').value,rec=_calRecord(kind,id);if(!rec)return;const reason=(document.getElementById('calCrmReason').value||'').trim();
-  const changes=kind==='cotizacion'?[['Fecha límite cotización',document.getElementById('calCrmCotDue').value],['Fecha vencimiento',document.getElementById('calCrmCotExpiry').value]]:[['Fecha objetivo interna',document.getElementById('calCrmPedInternal').value],['Fecha entrega',document.getElementById('calCrmPedDelivery').value]];
+  const dates={due:document.getElementById('calCrmCotDue').value,expiry:document.getElementById('calCrmCotExpiry').value,internal:document.getElementById('calCrmPedInternal').value,delivery:document.getElementById('calCrmPedDelivery').value},invalid=_calValidateCrmDates(kind,dates);if(invalid){toast(invalid,'error');return;}
+  const changes=kind==='cotizacion'?[['Fecha límite cotización',dates.due],['Fecha vencimiento',dates.expiry]]:[['Fecha objetivo interna',dates.internal],['Fecha entrega',dates.delivery]];
   const dirty=changes.filter(([field,to])=>(rec.fields[field]||'')!==(to||''));if(!dirty.length){closeCalCrmModal();return;}if(dirty.some(([field])=>rec.fields[field])&&!reason){toast('Escribe el motivo de la reprogramación','error');return;}
   try{for(const [field,to] of dirty)await calUpdateCrmDate(kind,id,field,to,reason,true);toast('✓ Fechas guardadas','success');closeCalCrmModal();renderCalendario();}catch(e){toast('Error: '+e.message,'error');}
 }

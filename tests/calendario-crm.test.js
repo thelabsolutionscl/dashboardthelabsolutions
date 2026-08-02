@@ -79,6 +79,37 @@ test('fechas internas saltan fines de semana y feriados nacionales de Chile', ()
   assert.equal(vm.runInContext("calBusinessDate('2028-06-23', 1)", ctx), '2028-06-27');
 });
 
+test('sugiere fechas seguras y mantiene Despachado bajo control hasta Completado', () => {
+  const state = {
+    clientes: [],
+    cotizaciones: [
+      { id: 'requested', fields: { 'N° Cotización': 'COT-10', 'Estado cotización': 'Solicitada', 'Fecha cotización': '2099-08-03' } },
+      { id: 'sent', fields: { 'N° Cotización': 'COT-11', 'Estado cotización': 'Enviada', 'Fecha cotización': '2099-08-03' } },
+    ],
+    pedidos: [
+      { id: 'shipped', fields: { 'N° Pedido': 'PED-10', 'Estado pedido': 'Despachado' } },
+      { id: 'production', fields: { 'N° Pedido': 'PED-11', 'Estado pedido': 'En producción', 'Fecha entrega': '2026-09-22' } },
+      { id: 'done', fields: { 'N° Pedido': 'PED-12', 'Estado pedido': 'Completado' } },
+    ],
+  };
+  const rows = vm.runInContext('_calMissingItems()', calendarContext(state));
+  const plain = Array.from(rows, row => ({ id: row.id, field: row.field, suggested: row.suggested }));
+  assert.deepEqual(plain, [
+    { id: 'requested', field: 'Fecha límite cotización', suggested: '2099-08-05' },
+    { id: 'sent', field: 'Fecha vencimiento', suggested: '2099-08-17' },
+    { id: 'shipped', field: 'Fecha entrega', suggested: '' },
+    { id: 'shipped', field: 'Fecha objetivo interna', suggested: '' },
+    { id: 'production', field: 'Fecha objetivo interna', suggested: '2026-09-17' },
+  ]);
+});
+
+test('bloquea secuencias de fechas incoherentes', () => {
+  const ctx = calendarContext();
+  assert.match(vm.runInContext("_calValidateCrmDates('pedido',{internal:'2026-08-12',delivery:'2026-08-10'})", ctx), /meta interna/);
+  assert.match(vm.runInContext("_calValidateCrmDates('cotizacion',{due:'2026-08-12',expiry:'2026-08-10'})", ctx), /vencimiento/);
+  assert.equal(vm.runInContext("_calValidateCrmDates('pedido',{internal:'2026-08-08',delivery:'2026-08-10'})", ctx), '');
+});
+
 test('Google Calendar recibe la secuencia completa de recordatorios CRM', () => {
   const ctx = calendarContext();
   const body = vm.runInContext("_calGcalBody({titulo:'Entrega',fecha:'2026-08-10',allDay:true,reminders:[4320,1440,180,0]}, 'direct', '')", ctx);
@@ -104,7 +135,7 @@ test('concilia IDs de Google entre navegadores y conserva lápidas recientes', (
 });
 
 test('UI y persistencia incluyen fechas, historial, vistas y sincronización selectiva', () => {
-  for (const id of ['calKpis', 'calTipoChips', 'calSinFecha', 'calHistory', 'calCrmModal', 'cot-fecha-limite', 'editCotFechaLimite', 'editPedidoFechaInterna']) {
+  for (const id of ['calKpis', 'calFocus', 'calTipoChips', 'calSinFecha', 'calMissingSummary', 'calApplySuggestedBtn', 'calHistory', 'calCrmModal', 'cot-fecha-limite', 'editCotFechaLimite', 'editPedidoFechaInterna']) {
     assert.match(HTML, new RegExp(`id=["']${id}["']`), `falta ${id}`);
   }
   for (const field of ['Fecha límite cotización', 'Fecha objetivo interna', 'Historial fechas calendario']) assert.match(HTML + CAL_SRC, new RegExp(field));
@@ -112,6 +143,8 @@ test('UI y persistencia incluyen fechas, historial, vistas y sincronización sel
   assert.match(CAL_SRC, /function calRescheduleEvent/);
   assert.match(CAL_SRC, /Motivo:/);
   assert.match(CAL_SRC, /function calShareReminder/);
+  assert.match(CAL_SRC, /function calApplySuggestedDates/);
+  assert.match(CAL_SRC, /function renderCalFocus/);
   assert.match(MOPS, /function deadlineCapacityRisk/);
   assert.match(MOPS, /deadlineCapacityRisk,/);
 });
