@@ -2,6 +2,8 @@
 (function () {
   'use strict';
 
+  if (window.CalendarCollapsible) return;
+
   const STORAGE_KEY = 'thelab_calendar_collapsed_panels_v1';
 
   function readState() {
@@ -64,8 +66,9 @@
       const content = document.createElement('div');
       content.className = 'cal-collapsible-content';
 
-      const nodes = Array.from(card.childNodes).filter(node => node !== heading);
-      nodes.forEach(node => content.appendChild(node));
+      Array.from(card.childNodes)
+        .filter(node => node !== heading)
+        .forEach(node => content.appendChild(node));
 
       const button = document.createElement('button');
       button.type = 'button';
@@ -93,13 +96,19 @@
     });
   }
 
-  const observer = new MutationObserver(() => requestAnimationFrame(enhance));
+  let frame = 0;
+  const observer = new MutationObserver(() => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(enhance);
+  });
 
   function init() {
     enhance();
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  window.CalendarCollapsible = { enhance };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
   else init();
 })();
