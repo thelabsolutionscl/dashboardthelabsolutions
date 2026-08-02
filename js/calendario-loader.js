@@ -1,11 +1,16 @@
-/* Cargador de compatibilidad: calendario base + capa operacional avanzada. */
-(function(){
-  function load(src,next){
-    const s=document.createElement('script');
-    s.src=src;
-    s.onload=()=>next&&next();
-    s.onerror=()=>console.error('[Calendario] no se pudo cargar',src);
-    document.head.appendChild(s);
-  }
-  load('js/calendario-base.js',()=>load('js/calendario-operaciones.js'));
+/* Compatibilidad: todas las vistas antiguas delegan en el cargador único. */
+(function () {
+  'use strict';
+
+  if (window.__thelabCalendarLoadPromise) return;
+
+  const target = new URL('js/calendario.js', document.baseURI).href;
+  const existing = Array.from(document.scripts).find(script => script.src === target);
+  if (existing) return;
+
+  const script = document.createElement('script');
+  script.src = 'js/calendario.js';
+  script.async = false;
+  script.onerror = () => console.error('[Calendario] no se pudo cargar js/calendario.js');
+  document.head.appendChild(script);
 })();
