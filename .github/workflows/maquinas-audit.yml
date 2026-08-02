@@ -1,0 +1,53 @@
+name: Auditoría Máquinas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/maquinas.js'
+      - 'js/maquinas-operaciones.js'
+      - 'js/slicer3d.js'
+      - 'tests/maquinas-*.test.js'
+      - '.github/workflows/maquinas-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/maquinas.js'
+      - 'js/maquinas-operaciones.js'
+      - 'js/slicer3d.js'
+      - 'tests/maquinas-*.test.js'
+      - '.github/workflows/maquinas-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maquinas-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  maquinas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validar sintaxis
+        run: |
+          node --check js/maquinas.js
+          node --check js/maquinas-operaciones.js
+          node --check js/slicer3d.js
+
+      - name: Auditar cableado integral
+        run: node --test tests/maquinas-wiring.test.js
+
+      - name: Probar operaciones y telemetría
+        run: node --test tests/maquinas-operaciones.test.js tests/maquinas-telemetria.test.js
