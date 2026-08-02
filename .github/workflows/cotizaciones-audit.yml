@@ -1,0 +1,43 @@
+name: Auditoría Cotizaciones
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/**'
+      - 'tests/cotizaciones-wiring.test.js'
+      - '.github/workflows/cotizaciones-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/**'
+      - 'tests/cotizaciones-wiring.test.js'
+      - '.github/workflows/cotizaciones-audit.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  cotizaciones-wiring:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validar sintaxis
+        run: |
+          node --check tests/cotizaciones-wiring.test.js
+          for file in js/*.js; do node --check "$file"; done
+
+      - name: Auditar Cotizaciones
+        run: node --test tests/cotizaciones-wiring.test.js
+
+      - name: Ejecutar smoke test general
+        run: node tests/smoke.test.js
