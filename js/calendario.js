@@ -7,5 +7,5 @@
     s.onerror=()=>console.error('[Dashboard] no se pudo cargar',src);
     document.head.appendChild(s);
   }
-  load('js/calendario-base.js',()=>load('js/calendario-operaciones.js',()=>load('js/tv-logo-fix.js')));
+  load('js/calendario-base.js',()=>load('js/calendario-operaciones.js',()=>load('js/tv-logo-fix.js',()=>load('js/tv-control-center.js'))));
 })();
