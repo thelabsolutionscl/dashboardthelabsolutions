@@ -1,0 +1,57 @@
+name: Finanzas audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/finanzas.js'
+      - 'js/seo-ads.js'
+      - 'tests/finanzas-wiring.test.js'
+      - 'tests/pedidos-wiring.test.js'
+      - 'tests/cotizaciones-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/finanzas-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/finanzas.js'
+      - 'js/seo-ads.js'
+      - 'tests/finanzas-wiring.test.js'
+      - 'tests/pedidos-wiring.test.js'
+      - 'tests/cotizaciones-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/finanzas-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  financial-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check js/finanzas.js
+          node --check tests/finanzas-wiring.test.js
+
+      - name: Audit Finanzas wiring
+        run: node --test tests/finanzas-wiring.test.js
+
+      - name: Audit linked commercial flow
+        run: |
+          node --test tests/pedidos-wiring.test.js
+          node --test tests/cotizaciones-wiring.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js
