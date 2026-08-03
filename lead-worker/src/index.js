@@ -453,7 +453,10 @@ function portalPage({ token, nombre, pedidos, cots }) {
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Tus pedidos — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif">
 <div style="max-width:620px;margin:0 auto;padding:34px 20px 48px">
-  <div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:6px">The Lab Solutions</div>
+  <div style="margin-bottom:18px">
+    <img src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab Solutions" style="width:230px;max-width:62%;height:auto;display:block" onerror="this.style.display='none';document.getElementById('lb-txt').style.display='block'">
+    <div id="lb-txt" style="display:none;font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase">The Lab Solutions</div>
+  </div>
   <h1 style="font-size:22px;margin:0 0 4px">${esc(nombre)}</h1>
   <div style="font-size:13px;color:#8a8a92;margin-bottom:24px">${pedidos.length} pedido${pedidos.length !== 1 ? "s" : ""}${cots.length ? ` · ${cots.length} cotización${cots.length !== 1 ? "es" : ""} por responder` : ""}</div>
   ${cotHTML ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#7a7a82;margin-bottom:10px">Cotizaciones pendientes</div>${cotHTML}<div style="height:14px"></div>` : ""}
