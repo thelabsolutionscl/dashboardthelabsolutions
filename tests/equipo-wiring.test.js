@@ -25,14 +25,12 @@ function functionBlock(source,name){
   return source.slice(start.index,next?start.index+start[0].length+next.index:source.length);
 }
 
-const EQUIPO=functionBlock(MODULES,'initEquipo')+MODULES.slice(MODULES.indexOf('function toggleGcalEquipoConfig'));
-
 test('Equipo tiene una sola sección y navegación en escritorio y móvil',()=>{
   assert.equal(count(/id=["']tab-equipo["']/g,INDEX),1,'#tab-equipo debe ser único');
   assert.match(SOURCE,/switchTab\(\s*['"]equipo['"]\s*\)/,'debe existir navegación a Equipo');
   assert.match(SOURCE,/switchTabMobile\(\s*['"]equipo['"]\s*\)/,'debe existir navegación móvil a Equipo');
   for(const id of ['equipoSemanaLabel','equipoHeader','equipoBody','equipoResumenHoy','equipoDetalleSemana','equipoSubtitle','equipoEventModal','comisionesRanking']){
-    assert.equal(count(new RegExp(`id=["']${id}["']`,'g'),1),`${id} debe existir exactamente una vez`);
+    assert.equal(count(new RegExp(`id=["']${id}["']`,'g'),INDEX),1,`${id} debe existir exactamente una vez`);
   }
 });
 
