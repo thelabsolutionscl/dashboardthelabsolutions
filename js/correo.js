@@ -865,6 +865,21 @@ const MAIL={
         this._cmpAtts.push({name:fname,type:'application/pdf',size:pdfBlob.size,data:b64});
       }
     }catch(e){toast('Error generando PDF','error');}
+    // Link del portal del cliente (firmado, con vencimiento). Si no se pudo
+    // generar, el correo sale igual sin el bloque: nunca bloquea el envío.
+    let portalHtml='';
+    try{
+      if(cid&&typeof portalLinkCliente==='function'){
+        const p=await portalLinkCliente(cid);
+        if(p&&p.url){
+          portalHtml=`<p style="margin:18px 0 0;padding:14px 16px;background:#f0fffe;border:1px solid rgba(0,212,204,0.35);border-radius:8px">`
+            +`<strong>Revisa todo en tu portal de cliente</strong><br>`
+            +`Desde tu enlace privado puedes ver esta cotización, aprobarla con un clic y seguir el avance de tus pedidos en cualquier momento:<br>`
+            +`<a href="${this.esc(p.url)}" style="display:inline-block;margin-top:10px;background:#00d4cc;color:#0a0a0a;font-weight:700;text-decoration:none;padding:10px 18px;border-radius:7px">Entrar a mi portal</a><br>`
+            +`<span style="font-size:12px;color:#888">Enlace personal, válido hasta el ${this.esc(p.expira)}. Por seguridad, no lo compartas.</span></p>`;
+        }else if(p&&p.error){toast('Correo sin link del portal — '+p.error,'info');}
+      }
+    }catch(e){}
     switchTab('correo');
     setTimeout(()=>{
       this.init();
@@ -874,7 +889,7 @@ const MAIL={
         title:'Enviar cotización',
         to:email,
         subject:`Cotización ${numCot} — The Lab Solutions`,
-        body:`<p>Estimado${empresa?' equipo de '+this.esc(empresa):''},</p><p>Adjuntamos la cotización <strong>${this.esc(numCot)}</strong> solicitada. Quedamos atentos a sus comentarios.</p><p>Saludos cordiales,</p>`
+        body:`<p>Estimado${empresa?' equipo de '+this.esc(empresa):''},</p><p>Adjuntamos la cotización <strong>${this.esc(numCot)}</strong> solicitada. Quedamos atentos a sus comentarios.</p>${portalHtml}<p>Saludos cordiales,</p>`
       });
       this.renderCmpAtts();
     },300);

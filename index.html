@@ -9378,21 +9378,27 @@ function cotizarParaCliente(clienteId){const c=state.clientes.find(x=>x.id===cli
 // link firmado (el Worker lo emite con vencimiento y lee Airtable server-side,
 // así el cliente nunca recibe el token de Airtable ni datos de otros clientes).
 const PORTAL_DIAS=30;
-async function compartirPortalCliente(clienteId){
+// Pide al Worker el link firmado de un cliente. Devuelve {url,expira} o null
+// con el motivo en .error (quien llama decide si avisa o sigue sin el link).
+async function portalLinkCliente(clienteId,dias){
   const base=(_DEFAULTS.LEAD_WORKER_URL||'').replace(/\/+$/,'');
   const key=_DEFAULTS.PORTAL_ADMIN_KEY||'';
-  if(base.startsWith('%%')||!base||key.startsWith('%%')||!key){
-    toast('Portal sin configurar: faltan los secrets LEAD_WORKER_URL y PORTAL_ADMIN_KEY','error');return;
-  }
-  toast('Generando link del portal…','info');
+  if(base.startsWith('%%')||!base||key.startsWith('%%')||!key) return{error:'Portal sin configurar: faltan los secrets LEAD_WORKER_URL y PORTAL_ADMIN_KEY'};
+  if(!clienteId) return{error:'La cotización no tiene cliente asociado'};
   try{
-    const r=await fetch(base+'/portal/link',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Admin-Key':key},body:JSON.stringify({clienteId,dias:PORTAL_DIAS})});
+    const r=await fetch(base+'/portal/link',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Admin-Key':key},body:JSON.stringify({clienteId,dias:dias||PORTAL_DIAS})});
     const res=await r.json().catch(()=>null);
-    if(!r.ok||!res||!res.ok){toast('No se pudo generar el link: '+((res&&res.error)||r.status),'error');return;}
-    const url=res.url;
-    if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast(`🔗 Link copiado — válido hasta el ${res.expira}`,'success')).catch(()=>{prompt(`Copia esta URL para el cliente (válida hasta el ${res.expira}):`,url);});}
-    else{prompt(`Copia esta URL para el cliente (válida hasta el ${res.expira}):`,url);}
-  }catch(e){toast('Error de conexión con el worker: '+e.message,'error');}
+    if(!r.ok||!res||!res.ok) return{error:'No se pudo generar el link: '+((res&&res.error)||r.status)};
+    return{url:res.url,expira:res.expira};
+  }catch(e){return{error:'Error de conexión con el worker: '+e.message};}
+}
+async function compartirPortalCliente(clienteId){
+  toast('Generando link del portal…','info');
+  const res=await portalLinkCliente(clienteId);
+  if(!res.url){toast(res.error,'error');return;}
+  const {url,expira}=res;
+  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast(`🔗 Link copiado — válido hasta el ${expira}`,'success')).catch(()=>{prompt(`Copia esta URL para el cliente (válida hasta el ${expira}):`,url);});}
+  else{prompt(`Copia esta URL para el cliente (válida hasta el ${expira}):`,url);}
 }
 // ── PRECIOS / DESCUENTO POR CLIENTE (Q3) ───────────────────────────────
 // Descuento porcentual por cliente que se aplica automáticamente al cotizar.
