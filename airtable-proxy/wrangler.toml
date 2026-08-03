@@ -1,28 +1,56 @@
 name = "airtable-proxy"
 main = "src/worker.js"
-compatibility_date = "2024-09-01"
+compatibility_date = "2025-04-01"
+workers_dev = false
 
-# Secrets — ejecutar una vez después del deploy:
-#   wrangler secret put AIRTABLE_TOKEN    ← tu PAT de Airtable (patXXX...)
-#   wrangler secret put ANTHROPIC_TOKEN   ← tu API key de Anthropic (sk-ant-...)
-#   wrangler secret put OPENAI_TOKEN      ← tu API key de OpenAI (sk-...) para las vistas de la ficha
-#   wrangler secret put APP_KEY           ← passphrase que elijas (mínimo 20 chars)
+# Este Worker debe publicarse detrás de un dominio protegido por Cloudflare
+# Access. workers_dev está desactivado para impedir que la URL alternativa
+# omita la política de Access.
 #
+# Secrets server-side:
+#   wrangler secret put AIRTABLE_TOKEN
+#   wrangler secret put ANTHROPIC_TOKEN
+#   wrangler secret put OPENAI_TOKEN
+#   wrangler secret put CF_ACCESS_AUD
+#
+# Variables que se deben completar antes del deploy:
+#   CF_ACCESS_TEAM_DOMAIN = "https://TU-EQUIPO.cloudflareaccess.com"
+#   WRITE_EMAILS          = "usuario1@dominio.cl,usuario2@dominio.cl"
+#   ADMIN_EMAILS          = "administrador@dominio.cl"
+#
+# Autenticación legacy:
+#   No se usa APP_KEY en producción y el frontend ya no la publica.
+#   ALLOW_LEGACY_APP_KEY solo puede habilitarse temporalmente durante una
+#   migración controlada; exige además un Origin permitido.
+
+[vars]
+AIRTABLE_BASE_ID = "app1YtD74AqiPWQhy"
+AIRTABLE_ALLOWED_TABLES = "Clientes,Cotizaciones,Pedidos,Proveedores,Facturas,Reportes,Maquinas,Automations,Social_Posts,Social_Interactions,Agent_Log,Agent_Queue,Inventario,Eventos,Calendario,Newsletter,Reclamos,Retainers,Ordenes_Compra,Catalogo,Presupuesto,Pagos_Programados,Gastos,Audit_Log"
+AUDIT_TABLE = "Audit_Log"
+HEARTBEAT_TABLE = "Automations"
+HEARTBEAT_ID = "airtable-proxy"
+ALLOW_LEGACY_APP_KEY = "false"
+ALLOW_AIRTABLE_DELETE = "false"
+ALLOW_READER_AI = "false"
+RATE_LIMIT_PER_MINUTE = "180"
+AI_RATE_LIMIT_PER_MINUTE = "20"
+AI_MAX_TOKENS = "8192"
+MAX_AIRTABLE_BODY_BYTES = "2097152"
+MAX_STATE_BODY_BYTES = "2097152"
+MAX_AI_BODY_BYTES = "12582912"
+
+# Persistencia central para Calendario Operacional, cola de impresión y
+# odómetro. Crear el namespace una sola vez:
+#   npx wrangler kv namespace create DASHBOARD_STATE
+# Copiar el id devuelto y descomentar/rellenar el bloque:
+#
+# [[kv_namespaces]]
+# binding = "DASHBOARD_STATE"
+# id = "PEGAR_ID_KV_AQUI"
+
 # Deploy:
-#   cd airtable-proxy && npx wrangler deploy
+#   cd airtable-proxy
+#   npx wrangler deploy
 #
-# Luego en el dashboard (Mi cuenta → Proxy Worker):
-#   URL:   https://airtable-proxy.<tu-subdominio>.workers.dev
-#   Clave: el mismo valor que pusiste en APP_KEY
-#
-# Con esto, ni el PAT de Airtable ni la API key de Anthropic salen al navegador:
-#   - Airtable:  <worker>/<base>/<tabla>           (el dashboard ya lo usa)
-#   - Claude:    <worker>/anthropic/v1/messages    (callClaude lo usa automáticamente)
-#   - OpenAI:    <worker>/openai/v1/...            (vistas IA de la ficha propuesta)
-#
-# Oficina Virtual — latido automático:
-#   Tras el deploy, el proxy marca su fila ID="airtable-proxy" en la tabla
-#   Automations como "Activo" con la hora actual (máx. 1 vez cada 5 min,
-#   fire-and-forget, sin añadir latencia). Usa la base del dashboard por
-#   defecto; para apuntar a otra base define la variable:
-#     [vars]  HEARTBEAT_BASE = "appXXXXXXXXXXXXXX"
+# Después proteger el hostname completo con Cloudflare Zero Trust → Access →
+# Applications y usar el mismo Application Audience (AUD) en CF_ACCESS_AUD.

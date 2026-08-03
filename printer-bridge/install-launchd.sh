@@ -1,54 +1,52 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────
-# The Lab Solutions — Instalador de autoarranque del Printer Bridge (macOS)
-#
-# Deja el bridge corriendo siempre: arranca al encender el iMac y se reinicia
-# solo si se cae (launchd / LaunchAgent). Es idempotente: puedes volver a
-# correrlo cuando quieras (p. ej. tras actualizar Node con nvm) y se reconfigura.
-#
-#   cd ~/dashboardthelabsolutions/printer-bridge
-#   ./install-launchd.sh
-#
-# Para desinstalarlo:  ./install-launchd.sh --uninstall
-# ─────────────────────────────────────────────────────────────────────
+# The Lab Solutions — instalador del Printer Bridge seguro para macOS.
 set -euo pipefail
 
 LABEL="com.thelab.printer-bridge"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER_JS="$SCRIPT_DIR/server.js"
+SERVER_JS="$SCRIPT_DIR/secure-launcher.js"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PORT="${BRIDGE_PORT:-8347}"
 
-red()  { printf '\033[31m%s\033[0m\n' "$*"; }
-grn()  { printf '\033[32m%s\033[0m\n' "$*"; }
-ylw()  { printf '\033[33m%s\033[0m\n' "$*"; }
-
+red() { printf '\033[31m%s\033[0m\n' "$*"; }
+grn() { printf '\033[32m%s\033[0m\n' "$*"; }
+ylw() { printf '\033[33m%s\033[0m\n' "$*"; }
 unload() { launchctl unload "$PLIST" 2>/dev/null || true; }
 
 if [[ "${1:-}" == "--uninstall" ]]; then
   unload
   rm -f "$PLIST"
-  grn "✅ Autoarranque desinstalado ($LABEL). El bridge ya no arrancará solo."
+  grn "✅ Autoarranque desinstalado ($LABEL)."
   exit 0
 fi
 
-# 1) Comprobaciones
-[[ -f "$SERVER_JS" ]] || { red "✗ No encuentro server.js en $SCRIPT_DIR"; exit 1; }
+[[ -f "$SERVER_JS" ]] || { red "✗ No encuentro secure-launcher.js en $SCRIPT_DIR"; exit 1; }
+[[ -f "$SCRIPT_DIR/server.js" ]] || { red "✗ No encuentro server.js, requerido como bridge interno"; exit 1; }
+
+if [[ ! -f "$SCRIPT_DIR/printers.json" && -z "${BRIDGE_PRINTERS:-}" ]]; then
+  red "✗ Falta la allowlist exacta de impresoras."
+  echo "  Copia printers.example.json a printers.json y reemplaza las IP de ejemplo:"
+  echo "  cp '$SCRIPT_DIR/printers.example.json' '$SCRIPT_DIR/printers.json'"
+  exit 1
+fi
 
 NODE_BIN="$(command -v node || true)"
 if [[ -z "$NODE_BIN" ]]; then
-  for c in /opt/homebrew/bin/node /usr/local/bin/node "$HOME"/.nvm/versions/node/*/bin/node; do
-    [[ -x "$c" ]] && NODE_BIN="$c"
+  for candidate in /opt/homebrew/bin/node /usr/local/bin/node "$HOME"/.nvm/versions/node/*/bin/node; do
+    [[ -x "$candidate" ]] && NODE_BIN="$candidate"
   done
 fi
-[[ -n "$NODE_BIN" && -x "$NODE_BIN" ]] || {
-  red "✗ No encuentro Node. Instálalo (brew install node) o carga nvm y reintenta."
-  exit 1
-}
-ylw "→ Node:      $NODE_BIN ($("$NODE_BIN" -v))"
-ylw "→ server.js: $SERVER_JS"
+[[ -n "$NODE_BIN" && -x "$NODE_BIN" ]] || { red "✗ No encuentro Node.js ≥18."; exit 1; }
 
-# 2) Generar el plist con las rutas reales de este equipo
+NODE_MAJOR="$($NODE_BIN -p 'Number(process.versions.node.split(".")[0])')"
+[[ "$NODE_MAJOR" -ge 18 ]] || { red "✗ Node.js 18 o superior requerido; actual: $($NODE_BIN -v)"; exit 1; }
+
+# Comprobar sintaxis antes de reemplazar el proceso activo.
+"$NODE_BIN" --check "$SERVER_JS"
+"$NODE_BIN" --check "$SCRIPT_DIR/server.js"
+ylw "→ Node: $NODE_BIN ($($NODE_BIN -v))"
+ylw "→ Gateway: $SERVER_JS"
+
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -64,12 +62,29 @@ cat > "$PLIST" <<PLIST
   </array>
   <key>WorkingDirectory</key>
   <string>$SCRIPT_DIR</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>BRIDGE_HOST</key>
+    <string>127.0.0.1</string>
+    <key>BRIDGE_PORT</key>
+    <string>$PORT</string>
+    <key>BRIDGE_ALLOW_ORIGINS</key>
+    <string>${BRIDGE_ALLOW_ORIGINS:-https://dashboard.thelab.solutions,https://thelabsolutionscl.github.io}</string>
+    <key>BRIDGE_ADMIN_EMAILS</key>
+    <string>${BRIDGE_ADMIN_EMAILS:-}</string>
+    <key>BRIDGE_WRITE_EMAILS</key>
+    <string>${BRIDGE_WRITE_EMAILS:-}</string>
+    <key>BRIDGE_ALLOW_LEGACY_TOKEN</key>
+    <string>false</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>ThrottleInterval</key>
   <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
   <key>StandardOutPath</key>
   <string>/tmp/printer-bridge.log</string>
   <key>StandardErrorPath</key>
@@ -77,37 +92,42 @@ cat > "$PLIST" <<PLIST
 </dict>
 </plist>
 PLIST
+chmod 600 "$PLIST"
 grn "✓ Escrito $PLIST"
 
-# 3) (Re)cargar en launchd
 unload
 launchctl load -w "$PLIST"
-grn "✓ Cargado en launchd (arrancará solo al encender el iMac)"
+grn "✓ Bridge seguro cargado en launchd"
 
-# 4) Verificar que responde
 ok=""
-for _ in $(seq 1 10); do
-  if curl -fsS -m 2 "http://localhost:$PORT/healthz" >/dev/null 2>&1; then ok=1; break; fi
+for _ in $(seq 1 15); do
+  if curl -fsS -m 2 "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then ok=1; break; fi
   sleep 1
 done
 
 echo
 if [[ -n "$ok" ]]; then
-  grn "✅ Bridge ACTIVO y respondiendo en http://localhost:$PORT/healthz"
+  grn "✅ Gateway activo en http://127.0.0.1:$PORT/healthz"
 else
-  red "⚠ El bridge no respondió en localhost:$PORT todavía."
-  ylw "  Revisa los logs:  tail -n 40 /tmp/printer-bridge.err /tmp/printer-bridge.log"
+  red "⚠ El gateway no respondió."
+  ylw "  Revisa: tail -n 80 /tmp/printer-bridge.err /tmp/printer-bridge.log"
+  exit 1
 fi
 
-# 5) Mostrar el token para pegarlo en el dashboard
-if [[ -n "${BRIDGE_TOKEN:-}" ]]; then
-  echo; ylw "Token (fijo por BRIDGE_TOKEN): $BRIDGE_TOKEN"
-elif [[ -f "$SCRIPT_DIR/.bridge-token" ]]; then
-  echo; ylw "Token del bridge (pégalo en el dashboard → Mi cuenta → Túnel Impresoras):"
-  grn "  $(cat "$SCRIPT_DIR/.bridge-token")"
+# Los tokens locales son para diagnóstico desde el iMac. No se pegan en el HTML.
+if [[ -f "$SCRIPT_DIR/.bridge-read-token" ]]; then
+  echo; ylw "Token local de solo lectura (guardar en un gestor de contraseñas):"
+  grn "  $(cat "$SCRIPT_DIR/.bridge-read-token")"
 fi
+if [[ -f "$SCRIPT_DIR/.bridge-admin-token" ]]; then
+  echo; ylw "Token local administrativo (no compartir con el navegador):"
+  grn "  $(cat "$SCRIPT_DIR/.bridge-admin-token")"
+fi
+
 echo
-ylw "Comandos útiles:"
-echo "  Estado:      launchctl list | grep printer-bridge"
-echo "  Reiniciar:   launchctl unload \"$PLIST\" && launchctl load -w \"$PLIST\""
-echo "  Quitar auto: ./install-launchd.sh --uninstall"
+ylw "Siguiente paso obligatorio: proteger printers.thelab.solutions con Cloudflare Access."
+echo "Comandos:"
+echo "  Estado:    launchctl list | grep printer-bridge"
+echo "  Logs:      tail -f /tmp/printer-bridge.log /tmp/printer-bridge.err"
+echo "  Reiniciar: launchctl unload '$PLIST' && launchctl load -w '$PLIST'"
+echo "  Quitar:    ./install-launchd.sh --uninstall"

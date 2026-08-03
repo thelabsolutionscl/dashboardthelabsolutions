@@ -1,27 +1,28 @@
 name: Automatización semanal
 
-# Corre solo en el servidor (GitHub Actions) — no necesita que nadie abra el dashboard.
-# 1) Respalda TODAS las tablas de Airtable a un JSON y lo guarda como artifact (90 días).
-# 2) (Opcional) Envía un resumen por correo vía mail-api.thelab.solutions.
-#
-# Secrets que usa:
-#   AIRTABLE        (ya existe — el mismo del deploy)
-#   MAIL_USER       (opcional: casilla que envía, p. ej. hola@thelab.solutions)
-#   MAIL_PASS       (opcional: contraseña de esa casilla en cPanel)
-#   REPORT_EMAIL    (opcional: destinatario del resumen; sin él no se envía correo)
+# Corre solo en GitHub Actions y nunca publica el JSON del CRM en texto plano.
+# Secrets obligatorios:
+#   AIRTABLE                 PAT de lectura para el respaldo
+#   BACKUP_ENCRYPTION_KEY    frase aleatoria de 24+ caracteres, guardada fuera de GitHub
+# Secrets opcionales para el resumen por correo:
+#   MAIL_USER, MAIL_PASS, REPORT_EMAIL
 
 on:
   schedule:
-    # Lunes 12:00 UTC = 08:00 en Chile en invierno (UTC-4); 09:00 en horario de verano (UTC-3).
     - cron: '0 12 * * 1'
-  workflow_dispatch: {} # también se puede lanzar a mano desde la pestaña Actions
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   backup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,39 +32,77 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Backup Airtable → JSON
+      - name: Validar configuración segura
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$AIRTABLE_TOKEN" || { echo '::error::Falta el secret AIRTABLE'; exit 1; }
+          test ${#BACKUP_ENCRYPTION_KEY} -ge 24 || { echo '::error::BACKUP_ENCRYPTION_KEY debe tener al menos 24 caracteres'; exit 1; }
+
+      - name: Backup Airtable a JSON temporal
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
         run: node scripts/backup-airtable.mjs
 
-      - name: Guardar backup como artifact (90 días)
+      - name: Cifrar y borrar el JSON en texto plano
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          node scripts/encrypt-backup.mjs
+          if compgen -G 'backup/backup-crm-*.json' >/dev/null; then
+            echo '::error::Quedó un backup CRM sin cifrar en el workspace'
+            exit 1
+          fi
+          test -n "$(find backup -maxdepth 1 -name 'backup-crm-*.json.enc' -print -quit)" || {
+            echo '::error::No se generó el backup cifrado'; exit 1;
+          }
+
+      - name: Guardar solo el backup cifrado
         uses: actions/upload-artifact@v4
         with:
-          name: backup-crm-${{ github.run_id }}
-          path: backup/
-          retention-days: 90
+          name: backup-crm-cifrado-${{ github.run_id }}
+          path: |
+            backup/backup-crm-*.json.enc
+            backup/manifest.json
+          if-no-files-found: error
+          retention-days: 30
 
-      - name: Enviar resumen por correo (solo si hay secrets de correo)
+      - name: Enviar resumen por correo
         env:
           MAIL_USER: ${{ secrets.MAIL_USER }}
           MAIL_PASS: ${{ secrets.MAIL_PASS }}
           REPORT_EMAIL: ${{ secrets.REPORT_EMAIL }}
         run: |
+          set -euo pipefail
           if [ -z "${MAIL_USER}" ] || [ -z "${MAIL_PASS}" ] || [ -z "${REPORT_EMAIL}" ]; then
-            echo "Secrets de correo no configurados (MAIL_USER/MAIL_PASS/REPORT_EMAIL) — resumen omitido."
+            echo 'Secrets de correo no configurados; resumen omitido.'
             exit 0
           fi
           BODY=$(sed 's/$/<br>/' backup/resumen.txt)
-          HTTP=$(curl -s -o /tmp/mail-out.json -w "%{http_code}" \
+          HTTP=$(curl --fail-with-body --silent --show-error \
+            -o /tmp/mail-out.json -w '%{http_code}' \
             --data-urlencode "user=${MAIL_USER}" \
             --data-urlencode "pass=${MAIL_PASS}" \
-            --data-urlencode "action=send" \
+            --data-urlencode 'action=send' \
             --data-urlencode "to=${REPORT_EMAIL}" \
-            --data-urlencode "subject=💾 Backup semanal CRM — $(date -u +%Y-%m-%d)" \
+            --data-urlencode "subject=💾 Backup semanal CRM cifrado — $(date -u +%Y-%m-%d)" \
             --data-urlencode "body=${BODY}" \
-            --data-urlencode "from_name=The Lab Solutions (automático)" \
-            https://mail-api.thelab.solutions/mail-api.php)
-          cat /tmp/mail-out.json; echo
-          if [ "${HTTP}" != "200" ]; then
-            echo "::warning::El envío del resumen devolvió HTTP ${HTTP} (el backup igual quedó como artifact)."
+            --data-urlencode 'from_name=The Lab Solutions (automático)' \
+            https://mail-api.thelab.solutions/mail-api.php) || true
+          cat /tmp/mail-out.json 2>/dev/null || true
+          echo
+          if [ "${HTTP:-000}" != '200' ]; then
+            echo "::warning::El correo devolvió HTTP ${HTTP:-000}; el backup cifrado sí quedó guardado."
+          fi
+
+      - name: Comprobar que no quedan datos CRM planos
+        if: always()
+        run: |
+          if compgen -G 'backup/backup-crm-*.json' >/dev/null; then
+            rm -f backup/backup-crm-*.json
+            echo '::error::Se eliminó un respaldo plano residual'
+            exit 1
           fi
