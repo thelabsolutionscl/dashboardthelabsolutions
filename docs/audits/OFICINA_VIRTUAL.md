@@ -50,7 +50,7 @@ Se revisaron:
 3. **“Trabajando” no equivale a una ejecución en curso.**
    Si no está en `_ofActive`, una ejecución terminada hace menos de 90 segundos también aparece como `Trabajando`. Para actividad remota no existe un ciclo `started/running/finished` o heartbeat verificable.
 
-4. **El webhook/telemetría de errores de agentes no es compartido.**
+4. **La telemetría de errores de agentes no es compartida.**
    `_ofAgentErrors` vive únicamente en memoria durante diez minutos. Un error visto en un navegador puede no aparecer en otro y desaparece al recargar.
 
 5. **La salud puede indicar “Todo en orden” con automatizaciones desconocidas.**
