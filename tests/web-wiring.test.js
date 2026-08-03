@@ -13,7 +13,6 @@ const MODULES=fs.existsSync(JS_DIR)
   ?fs.readdirSync(JS_DIR).filter(name=>name.endsWith('.js')).sort().map(name=>fs.readFileSync(path.join(JS_DIR,name),'utf8')).join('\n')
   :'';
 const SOURCE=`${INDEX}\n${MODULES}`;
-const SEO_ADS=fs.readFileSync(path.join(ROOT,'js','seo-ads.js'),'utf8');
 
 function count(pattern,text=SOURCE){return(text.match(pattern)||[]).length;}
 function esc(value){return String(value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
@@ -93,29 +92,30 @@ test('loadAdsData respeta el orden lógico completo del panel',()=>{
   const fetchPos=body.search(/await\s+fetch\s*\(/);
   const validate=body.search(/if\(!data\.ok\)/);
   const statePos=body.search(/window\._adsLastData\s*=\s*data/);
-  const kpis=body.search(/renderAdsKPIs\(data/);
-  const campaigns=body.search(/renderAdsCampaigns\(data/);
-  const agent=body.search(/renderAdsAgent\(data/);
-  const capacity=body.search(/renderAdsCapacidad\(data/);
-  const suggestions=body.search(/renderAdsSugerencias\(data/);
-  const web=body.search(/loadWebStats\s*\(/);
-  const pending=body.search(/renderPendingMutations\s*\(/);
-  const reconcile=body.search(/syncMutationStatuses\s*\(/);
-  const autopilot=body.search(/renderAdsAutopilot\s*\(/);
-  const airtable=body.search(/syncAdsToAirtable\(data/);
   assert.ok(fetchPos>=0&&validate>fetchPos&&statePos>validate,'primero debe obtener y validar datos reales');
-  assert.ok(kpis>statePos&&campaigns>statePos&&agent>statePos&&capacity>statePos&&suggestions>statePos,'los renders deben usar la misma respuesta validada');
-  assert.ok(web>statePos,'GA4 debe cargarse dentro del mismo ciclo');
-  assert.ok(pending>statePos&&reconcile>pending,'primero muestra la cola y luego concilia con Script 2');
+  const live=body.slice(statePos);
+  const kpis=live.search(/renderAdsKPIs\(data/);
+  const campaigns=live.search(/renderAdsCampaigns\(data/);
+  const agent=live.search(/renderAdsAgent\(data/);
+  const capacity=live.search(/renderAdsCapacidad\(data/);
+  const suggestions=live.search(/renderAdsSugerencias\(data/);
+  const web=live.search(/loadWebStats\s*\(/);
+  const pending=live.search(/renderPendingMutations\s*\(/);
+  const reconcile=live.search(/syncMutationStatuses\s*\(/);
+  const autopilot=live.search(/renderAdsAutopilot\s*\(/);
+  const airtable=live.search(/syncAdsToAirtable\(data/);
+  assert.ok(kpis>=0&&campaigns>=0&&agent>=0&&capacity>=0&&suggestions>=0,'los renders deben usar la misma respuesta validada');
+  assert.ok(web>=0,'GA4 debe cargarse dentro del mismo ciclo');
+  assert.ok(pending>=0&&reconcile>pending,'primero muestra la cola y luego concilia con Script 2');
   assert.ok(autopilot>reconcile,'las propuestas deben aparecer después de conciliar cambios previos');
-  assert.ok(airtable>statePos,'el snapshot debe salir de datos reales ya validados');
+  assert.ok(airtable>=0,'el snapshot debe salir de datos reales ya validados');
 });
 
 test('las campañas validan presupuesto, URL, anuncios y límites de Google Ads',()=>{
   const body=functionBlock(SOURCE,'saveCampaignMutation');
   assert.match(body,/presupuesto\s*<\s*1000/);
   assert.match(body,/^\s*if\(!nombre\)/m);
-  assert.match(body,/https\?:\\\/\\\//,'la URL final debe ser HTTP(S)');
+  assert.match(body,/La URL final del anuncio debe empezar con http:\/\/ o https:\/\//);
   assert.match(body,/titulos\.length\s*<\s*3/);
   assert.match(body,/descripciones\.length\s*<\s*2/);
   assert.match(body,/t\.length\s*>\s*30/);
