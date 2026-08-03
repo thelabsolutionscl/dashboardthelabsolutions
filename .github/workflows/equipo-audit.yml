@@ -1,0 +1,63 @@
+name: Equipo audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/maquinas.js'
+      - 'js/finanzas.js'
+      - 'js/calendario*.js'
+      - 'tests/equipo-wiring.test.js'
+      - 'tests/pedidos-wiring.test.js'
+      - 'tests/calendario-crm.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/equipo-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/maquinas.js'
+      - 'js/finanzas.js'
+      - 'js/calendario*.js'
+      - 'tests/equipo-wiring.test.js'
+      - 'tests/pedidos-wiring.test.js'
+      - 'tests/calendario-crm.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/equipo-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  team-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          node --check tests/equipo-wiring.test.js
+          node --check js/maquinas.js
+          node --check js/finanzas.js
+          node --check js/calendario-base.js
+
+      - name: Audit team availability and commissions
+        run: node --test tests/equipo-wiring.test.js
+
+      - name: Audit linked order lifecycle
+        run: node --test tests/pedidos-wiring.test.js
+
+      - name: Audit linked CRM calendar
+        run: node --test tests/calendario-crm.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js
