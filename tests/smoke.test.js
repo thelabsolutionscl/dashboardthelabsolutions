@@ -49,8 +49,17 @@ const ok = msg => console.log('  ✓ ' + msg);
   const completionGuards = (SRC.match(/Solo se puede completar un pedido que ya esté despachado/g) || []).length;
   if (completionGuards < 3 || !SRC.includes('Solo se pueden completar pedidos que ya estén despachados')) fail('Completar debe exigir Despachado en acciones individuales, guiadas y masivas');
   else ok('El archivo solo acepta pedidos previamente despachados');
-  if (!SRC.includes("const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];")) fail('El portal del cliente debe representar la etapa Completado');
-  else ok('El portal del cliente representa el ciclo completo hasta Completado');
+  // El portal del cliente vive en el Worker (lead-worker/src/index.js), no acá:
+  // el dashboard solo pide el link firmado. Ver tests/portal-cliente.test.js.
+  {
+    const worker = fs.readFileSync(path.join(ROOT, 'lead-worker', 'src', 'index.js'), 'utf8');
+    if (!worker.includes('const PORTAL_STAGES = ["Confirmado", "En producción", "Listo para despacho", "Despachado", "Completado"];')) fail('El portal del cliente debe representar la etapa Completado');
+    else ok('El portal del cliente representa el ciclo completo hasta Completado');
+    if (/\?portal=|function checkClientePortal/.test(SRC)) fail('El dashboard no debe volver a servir el portal del cliente (fuga de datos internos)');
+    else ok('El dashboard no expone el portal del cliente desde su propio HTML');
+    if (!/X-Portal-Admin-Key/.test(SRC)) fail('El dashboard debe pedir el link del portal al Worker con PORTAL_ADMIN_KEY');
+    else ok('El link del portal lo emite el Worker, firmado y con vencimiento');
+  }
   if (!SRC.includes("querySelectorAll('#pedidosFilterBar>button.active-filter')")) fail('Los filtros de Pedidos no deben desactivar el selector de vista');
   else ok('Los filtros preservan el selector Tabla/Kanban/Calendario');
   if (SRC.includes('thelab2025')) fail('No debe existir el secreto histórico de Google Ads en el código fuente');

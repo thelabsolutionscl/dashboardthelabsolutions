@@ -17,6 +17,9 @@
  *   POST /newsletter            (alta de suscriptor desde la web — misma clave + anti-bot)
  *   GET  /newsletter/confirm    (doble opt-in: confirma la suscripción vía token HMAC)
  *   GET  /newsletter/unsubscribe(baja de la lista — token HMAC opcional)
+ *   POST /portal/link           (dashboard — emite el link del portal, clave PORTAL_ADMIN_KEY)
+ *   GET  /portal                (cliente — pedidos y cotizaciones, token firmado)
+ *   POST /portal/cotizacion/decision (cliente — aprueba/rechaza su cotización)
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
@@ -69,8 +72,18 @@ export default {
         return await handleProveedor(request, env, ctx, cors);
       }
 
-      if (request.method === "POST" && url.pathname === "/cotizacion/decision") {
-        return await handleCotDecision(request, env, ctx, cors);
+      // Portal del cliente (token firmado con vencimiento). El link lo emite el
+      // dashboard contra /portal/link; la página y la decisión se sirven acá.
+      if (request.method === "POST" && url.pathname === "/portal/link") {
+        return await handlePortalLink(request, env, cors);
+      }
+
+      if (request.method === "GET" && url.pathname === "/portal") {
+        return await handlePortal(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/portal/cotizacion/decision") {
+        return await handlePortalCotDecision(request, env, ctx, cors);
       }
 
       // Encuesta de satisfacción post-entrega (NPS/CSAT). El cliente llega desde
@@ -199,50 +212,119 @@ async function cleanupAgentQueue(env) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
- * RUTA: POST /cotizacion/decision  (el cliente aprueba/rechaza desde el portal)
- * Body: { token: base64(cotizacionRecId), decision: 'Aprobada'|'Rechazada', comentario }
- * Seguridad: clave pública (anti-bot) + el recId no adivinable + se verifica que
- * la cotización siga ABIERTA antes de escribir (un link viejo no puede re-decidir).
+ * PORTAL DEL CLIENTE  (páginas servidas por el Worker, no por el dashboard)
+ *
+ *   POST /portal/link                 el dashboard pide el link de un cliente
+ *   GET  /portal?t=<token>            página del cliente: pedidos + cotizaciones
+ *   POST /portal/cotizacion/decision  el cliente aprueba/rechaza una cotización
+ *
+ * Token:  recIdCliente . vencimiento(base36) . HMAC-SHA256
+ * Sin el secreto no se puede forjar, y deja de servir en la fecha de vencimiento.
+ * Los datos se leen ACÁ con el token de Airtable del servidor: el navegador del
+ * cliente no recibe credenciales ni más registros que los suyos.
  * ══════════════════════════════════════════════════════════════════════ */
-async function handleCotDecision(request, env, ctx, cors) {
-  if (env.PUBLIC_LEAD_KEY) {
-    const key = request.headers.get("X-Public-Lead-Key") || "";
-    if (!timingSafeEqual(key, env.PUBLIC_LEAD_KEY)) {
-      return json({ ok: false, error: "No autorizado" }, 401, cors);
-    }
+const PORTAL_DIAS_DEFAULT = 30;
+const PORTAL_STAGES = ["Confirmado", "En producción", "Listo para despacho", "Despachado", "Completado"];
+const PORTAL_COT_ABIERTAS = ["Enviada", "Solicitada"];
+
+// Secreto de firma. NUNCA PUBLIC_LEAD_KEY: esa viaja en el bundle de la web y
+// permitiría a cualquiera firmarse un token para el cliente que quisiera.
+function portalSecret(env) {
+  return env.PORTAL_SECRET || env.NEWSLETTER_SECRET || env.AIRTABLE_TOKEN || "";
+}
+async function portalSign(env, clienteId, exp) {
+  return await hmacB64u(portalSecret(env), `portal:${clienteId}:${exp}`);
+}
+async function portalMakeToken(env, clienteId, dias) {
+  const exp = Math.floor(Date.now() / 1000) + Math.round(dias * 86400);
+  return { token: `${clienteId}.${exp.toString(36)}.${await portalSign(env, clienteId, exp)}`, exp };
+}
+// Devuelve null si la firma no cuadra; { vencido: true } distingue el enlace
+// caducado del inválido para poder decirle al cliente qué le pasó.
+async function portalVerifyToken(env, token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3 || !portalSecret(env)) return null;
+  const [clienteId, expB36, sig] = parts;
+  if (!isRecId(clienteId)) return null;
+  const exp = parseInt(expB36, 36);
+  if (!Number.isFinite(exp)) return null;
+  if (!timingSafeEqual(sig, await portalSign(env, clienteId, exp))) return null;
+  return { clienteId, exp, vencido: exp * 1000 < Date.now() };
+}
+
+/* ── POST /portal/link ── solo el dashboard (clave PORTAL_ADMIN_KEY) ────── */
+async function handlePortalLink(request, env, cors) {
+  const expected = env.PORTAL_ADMIN_KEY || "";
+  const key = request.headers.get("X-Portal-Admin-Key") || "";
+  if (!expected || !timingSafeEqual(key, expected)) {
+    return json({ ok: false, error: "No autorizado" }, 401, cors);
   }
+  if (!portalSecret(env)) return json({ ok: false, error: "Portal sin configurar (falta PORTAL_SECRET)" }, 500, cors);
+  const body = await readJson(request);
+  const clienteId = str(body && body.clienteId);
+  if (!isRecId(clienteId)) return json({ ok: false, error: "Cliente inválido" }, 400, cors);
+  let dias = parseInt((body && body.dias) ?? PORTAL_DIAS_DEFAULT, 10);
+  if (!Number.isFinite(dias) || dias < 1) dias = PORTAL_DIAS_DEFAULT;
+  if (dias > 365) dias = 365;
+  const { token, exp } = await portalMakeToken(env, clienteId, dias);
+  const base = (env.WORKER_PUBLIC_URL || new URL(request.url).origin).replace(/\/+$/, "");
+  return json({ ok: true, url: `${base}/portal?t=${token}`, dias, expira: portalFecha(new Date(exp * 1000).toISOString().slice(0, 10)) }, 200, cors);
+}
+
+/* ── GET /portal?t=… ── la página que ve el cliente ─────────────────────── */
+async function handlePortal(request, env) {
+  const url = new URL(request.url);
+  const tok = await portalVerifyToken(env, url.searchParams.get("t"));
+  if (!tok) return htmlPage("Enlace inválido", "Este enlace no es válido. Escríbenos a hola@thelab.solutions y te enviamos uno nuevo.", false);
+  if (tok.vencido) return htmlPage("Enlace vencido", "Este enlace de seguimiento ya venció. Escríbenos a hola@thelab.solutions y te enviamos uno nuevo al tiro.", false);
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return htmlPage("No disponible", "El portal no está disponible en este momento. Intenta más tarde.", false);
+
+  const cliente = await portalGetRecord(env, "Clientes", tok.clienteId);
+  if (!cliente) return htmlPage("No disponible", "No pudimos cargar tus datos ahora. Intenta más tarde o escríbenos a hola@thelab.solutions.", false);
+  const f = cliente.fields || {};
+  const [pedidos, cots] = await Promise.all([
+    portalGetLinked(env, "Pedidos", f["Pedidos"]),
+    portalGetLinked(env, "Cotizaciones", f["Cotizaciones"]),
+  ]);
+  return portalPage({
+    token: url.searchParams.get("t") || "",
+    nombre: f["Empresa"] || f["Contacto"] || "Cliente",
+    pedidos,
+    cots: cots.filter((c) => PORTAL_COT_ABIERTAS.includes((c.fields || {})["Estado cotización"] || "")),
+  });
+}
+
+/* ── POST /portal/cotizacion/decision ── aprobar / rechazar ─────────────── */
+async function handlePortalCotDecision(request, env, ctx, cors) {
   const body = await readJson(request);
   if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
-
-  let cotId;
-  try { cotId = atob(String(body.token || "")); } catch (e) { return json({ ok: false, error: "Token inválido" }, 400, cors); }
-  if (!/^rec[A-Za-z0-9]{14}$/.test(cotId)) return json({ ok: false, error: "Token inválido" }, 400, cors);
-
+  const tok = await portalVerifyToken(env, body.t);
+  if (!tok) return json({ ok: false, error: "Enlace inválido" }, 401, cors);
+  if (tok.vencido) return json({ ok: false, error: "Este enlace venció. Escríbenos a hola@thelab.solutions." }, 401, cors);
+  const cotId = str(body.cot);
+  if (!isRecId(cotId)) return json({ ok: false, error: "Cotización inválida" }, 400, cors);
   const decision = String(body.decision || "");
   if (decision !== "Aprobada" && decision !== "Rechazada") return json({ ok: false, error: "Decisión inválida" }, 400, cors);
-
+  if (await rateLimited(env, request, "portal-dec", 40, 3600)) return json({ ok: false, error: "Demasiados intentos, intenta más tarde" }, 429, cors);
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return json({ ok: false, error: "No configurado" }, 500, cors);
 
-  // Verifica el estado actual: solo se decide sobre cotizaciones abiertas.
-  let rec;
-  try {
-    const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Cotizaciones/${cotId}`, {
-      headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
-    });
-    if (r.status === 404) return json({ ok: false, error: "Cotización no encontrada" }, 404, cors);
-    if (!r.ok) return json({ ok: false, error: "No se pudo leer la cotización" }, 502, cors);
-    rec = await r.json();
-  } catch (e) {
-    return json({ ok: false, error: "Error de conexión" }, 502, cors);
-  }
-  const estado = (rec.fields && rec.fields["Estado cotización"]) || "";
-  if (!["Enviada", "Solicitada"].includes(estado)) {
-    // Ya fue decidida (o venció): idempotente, no error.
+  const rec = await portalGetRecord(env, "Cotizaciones", cotId);
+  if (!rec) return json({ ok: false, error: "Cotización no encontrada" }, 404, cors);
+  // La cotización tiene que ser de ESTE cliente: con el token de uno no se
+  // decide sobre la cotización de otro.
+  const dueño = (rec.fields || {})["Cliente"];
+  const esSuya = Array.isArray(dueño) ? dueño.includes(tok.clienteId) : dueño === tok.clienteId;
+  if (!esSuya) return json({ ok: false, error: "No autorizado" }, 403, cors);
+
+  const estado = (rec.fields || {})["Estado cotización"] || "";
+  if (!PORTAL_COT_ABIERTAS.includes(estado)) {
+    // Ya fue decidida (doble clic, pestaña vieja): idempotente, no es error.
     return json({ ok: true, alreadyDecided: true, estado }, 200, cors);
   }
 
   const comentario = String(body.comentario || "").slice(0, 2000);
   const fields = { "Estado cotización": decision };
+  if (decision === "Aprobada") fields["Fecha aprobación"] = today();
   if (decision === "Rechazada" && comentario) fields["Motivo rechazo"] = comentario;
   try {
     await airtableUpdateTolerant(env, "Cotizaciones", cotId, fields);
@@ -251,10 +333,151 @@ async function handleCotDecision(request, env, ctx, cors) {
   }
 
   // Aviso al equipo (best-effort, no bloquea la respuesta)
-  const numCot = (rec.fields && rec.fields["N° Cotización"]) || cotId;
+  const numCot = (rec.fields || {})["N° Cotización"] || cotId;
   ctx.waitUntil(sendCotDecisionAlert(env, { numCot, decision, comentario }));
 
   return json({ ok: true, decision }, 200, cors);
+}
+
+/* ── Lectura en Airtable (siempre server-side) ──────────────────────────── */
+async function portalGetRecord(env, table, recId) {
+  try {
+    const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent(table)}/${recId}`, {
+      headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) {
+    return null;
+  }
+}
+// Los recIds vienen del propio registro del cliente (campos link), así que la
+// fórmula no puede llevar nada inyectado; igual se validan uno a uno.
+async function portalGetLinked(env, table, ids, max = 30) {
+  const list = (Array.isArray(ids) ? ids : []).filter(isRecId).slice(-max);
+  if (!list.length) return [];
+  const out = [];
+  for (let i = 0; i < list.length; i += 15) {
+    const chunk = list.slice(i, i + 15);
+    const q = new URLSearchParams({
+      filterByFormula: `OR(${chunk.map((id) => `RECORD_ID()='${id}'`).join(",")})`,
+      pageSize: String(chunk.length),
+    });
+    try {
+      const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent(table)}?${q}`, {
+        headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
+      });
+      if (!r.ok) { console.error(`[portal] ${table}:`, r.status); continue; }
+      out.push(...((await r.json()).records || []));
+    } catch (e) {
+      console.error(`[portal] ${table}:`, e.message);
+    }
+  }
+  return out;
+}
+
+/* ── Formato chileno: $1.234.567 y DD-MM-AAAA ──────────────────────────── */
+function portalCLP(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "";
+  return "$" + Math.round(v).toLocaleString("es-CL").replace(/,/g, ".");
+}
+function portalFecha(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+}
+
+/* ── La página ─────────────────────────────────────────────────────────── */
+function portalPage({ token, nombre, pedidos, cots }) {
+  const esc = escapeHtmlW;
+  const orden = (a, b) => String((b.fields || {})["Fecha ingreso"] || b.createdTime || "").localeCompare(String((a.fields || {})["Fecha ingreso"] || a.createdTime || ""));
+
+  const stepper = (estado) => {
+    const idx = PORTAL_STAGES.indexOf(estado);
+    const pasos = PORTAL_STAGES.map((s, i) => {
+      const hecho = i <= idx;
+      return `<div style="flex:1;min-width:0;text-align:center">
+        <div style="display:flex;align-items:center"><div style="height:3px;flex:1;background:${i === 0 ? "transparent" : i <= idx ? "#00b3a4" : "#26262b"}"></div>
+        <div style="width:16px;height:16px;border-radius:50%;flex-shrink:0;background:${hecho ? "#00b3a4" : "#151518"};border:2px solid ${hecho ? "#00b3a4" : "#33343a"}"></div>
+        <div style="height:3px;flex:1;background:${i === PORTAL_STAGES.length - 1 ? "transparent" : i < idx ? "#00b3a4" : "#26262b"}"></div></div>
+        <div style="font-size:9px;margin-top:5px;color:${i === idx ? "#e8e8ea" : hecho ? "#8a8a92" : "#5c5c63"};font-weight:${i === idx ? "700" : "400"}">${esc(s === "Listo para despacho" ? "Listo" : s === "En producción" ? "Producción" : s)}</div>
+      </div>`;
+    }).join("");
+    return `<div style="display:flex;margin:14px 0 4px">${pasos}</div>`;
+  };
+
+  const pedHTML = pedidos.length
+    ? pedidos.slice().sort(orden).map((p) => {
+        const pf = p.fields || {};
+        const estado = pf["Estado pedido"] || "Confirmado";
+        const cerrado = ["Despachado", "Completado"].includes(estado);
+        const entrega = portalFecha(cerrado && pf["Fecha despacho"] ? pf["Fecha despacho"] : pf["Fecha entrega"]);
+        const seguimiento = str(pf["N° seguimiento courier"]);
+        return `<div style="background:#131315;border:1px solid #26262b;border-radius:12px;padding:14px 16px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-size:14px;font-weight:700;letter-spacing:.02em">${esc(pf["N° Pedido"] || "—")}</span>
+            <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:${estado === "Cancelado" ? "#3a1e20" : cerrado ? "#0f2b24" : "#1b2b33"};color:${estado === "Cancelado" ? "#e5484d" : cerrado ? "#5fdcc4" : "#7fc4e0"}">${cerrado ? "✓ " : ""}${esc(estado)}</span>
+          </div>
+          ${estado === "Cancelado" ? "" : stepper(estado)}
+          ${entrega ? `<div style="font-size:12px;color:#8a8a92;margin-top:8px">📅 ${cerrado ? "Entregado" : "Entrega estimada"}: ${esc(entrega)}</div>` : ""}
+          ${seguimiento ? `<div style="font-size:12px;color:#8a8a92;margin-top:4px">🚚 Seguimiento: ${esc(seguimiento)}</div>` : ""}
+        </div>`;
+      }).join("")
+    : '<div style="text-align:center;padding:18px;color:#6b6b73;font-size:13px">Todavía no tienes pedidos registrados.</div>';
+
+  const cotHTML = cots.map((c) => {
+    const cf = c.fields || {};
+    const total = portalCLP(cf["Total final (CLP)"]);
+    const vto = portalFecha(cf["Fecha vencimiento"]);
+    const titulo = str(cf["Alias / Título"]);
+    return `<div id="cot-${esc(c.id)}" style="background:#131315;border:1px solid #26262b;border-radius:12px;padding:14px 16px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div><div style="font-size:14px;font-weight:700">${esc(cf["N° Cotización"] || "—")}</div>
+        ${titulo ? `<div style="font-size:12px;color:#8a8a92;margin-top:2px">${esc(titulo)}</div>` : ""}</div>
+        ${total ? `<div style="text-align:right"><div style="font-size:16px;font-weight:700">${esc(total)}</div><div style="font-size:10px;color:#6b6b73">IVA incluido</div></div>` : ""}
+      </div>
+      ${vto ? `<div style="font-size:12px;color:#8a8a92;margin-top:8px">Válida hasta ${esc(vto)}</div>` : ""}
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="portalDecidir('${esc(c.id)}','Aprobada')" style="flex:1;background:#00b3a4;color:#06231f;border:0;border-radius:9px;padding:11px;font-weight:700;font-size:14px;cursor:pointer">✓ Aprobar</button>
+        <button onclick="portalDecidir('${esc(c.id)}','Rechazada')" style="background:transparent;color:#8a8a92;border:1px solid #33343a;border-radius:9px;padding:11px 18px;font-size:13px;cursor:pointer">Rechazar</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Tus pedidos — The Lab Solutions</title></head>
+<body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif">
+<div style="max-width:620px;margin:0 auto;padding:34px 20px 48px">
+  <div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:6px">The Lab Solutions</div>
+  <h1 style="font-size:22px;margin:0 0 4px">${esc(nombre)}</h1>
+  <div style="font-size:13px;color:#8a8a92;margin-bottom:24px">${pedidos.length} pedido${pedidos.length !== 1 ? "s" : ""}${cots.length ? ` · ${cots.length} cotización${cots.length !== 1 ? "es" : ""} por responder` : ""}</div>
+  ${cotHTML ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#7a7a82;margin-bottom:10px">Cotizaciones pendientes</div>${cotHTML}<div style="height:14px"></div>` : ""}
+  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#7a7a82;margin-bottom:10px">Tus pedidos</div>
+  ${pedHTML}
+  <div style="margin-top:26px;text-align:center;font-size:11px;color:#6b6b73;line-height:1.7">¿Dudas? Escríbenos a <a href="mailto:hola@thelab.solutions" style="color:#00b3a4">hola@thelab.solutions</a><br><a href="https://thelab.solutions" style="color:#6b6b73">thelab.solutions</a></div>
+</div>
+<script>
+var PORTAL_TOKEN=${JSON.stringify(token)};
+async function portalDecidir(cot,decision){
+  var comentario='';
+  if(decision==='Rechazada'){var m=prompt('¿Nos cuentas por qué? (opcional — nos ayuda a mejorar la propuesta)');if(m===null)return;comentario=m||'';}
+  else if(!confirm('¿Confirmas que APRUEBAS esta cotización? Nos ponemos en marcha de inmediato.'))return;
+  var card=document.getElementById('cot-'+cot);if(card)card.style.opacity='0.55';
+  try{
+    var r=await fetch('/portal/cotizacion/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:PORTAL_TOKEN,cot:cot,decision:decision,comentario:comentario})});
+    var res=await r.json().catch(function(){return null;});
+    if(r.ok&&res&&res.ok){
+      if(card){card.style.opacity='1';card.innerHTML=decision==='Aprobada'
+        ?'<div style="font-size:14px;font-weight:700;color:#00b3a4">✓ ¡Cotización aprobada! Gracias — partimos de inmediato y te contactamos con los próximos pasos.</div>'
+        :'<div style="font-size:13px;color:#b6b6bd">Cotización rechazada. Gracias por avisarnos; si podemos ajustar algo, escríbenos a hola@thelab.solutions.</div>';}
+    }else{if(card)card.style.opacity='1';alert((res&&res.error)||'No se pudo registrar. Escríbenos a hola@thelab.solutions y lo resolvemos.');}
+  }catch(e){if(card)card.style.opacity='1';alert('Problema de conexión. Escríbenos a hola@thelab.solutions.');}
+}
+</script>
+</body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
+  });
 }
 
 async function sendCotDecisionAlert(env, { numCot, decision, comentario }) {
@@ -293,7 +516,7 @@ async function sendCotDecisionAlert(env, { numCot, decision, comentario }) {
 function _npsDecodeToken(t) {
   let id;
   try { id = atob(String(t || "")); } catch (e) { return null; }
-  return /^rec[A-Za-z0-9]{14}$/.test(id) ? id : null;
+  return isRecId(id) ? id : null;
 }
 async function handleNps(request, env, ctx, cors) {
   const url = new URL(request.url);
@@ -937,12 +1160,14 @@ function nlSecret(env) {
   return env.NEWSLETTER_SECRET || env.PUBLIC_LEAD_KEY || env.AIRTABLE_TOKEN || "thelab-newsletter";
 }
 async function nlSign(env, purpose, email) {
-  const msg = new TextEncoder().encode(`${purpose}:${String(email).trim().toLowerCase()}`);
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(nlSecret(env)), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, msg);
+  return await hmacB64u(nlSecret(env), `${purpose}:${String(email).trim().toLowerCase()}`);
+}
+// HMAC-SHA256 en base64url — firma los tokens sin estado (newsletter y portal).
+async function hmacB64u(secret, msg) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(msg)));
   let s = "";
-  const b = new Uint8Array(sig);
-  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  for (let i = 0; i < sig.length; i++) s += String.fromCharCode(sig[i]);
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 async function nlVerify(env, purpose, email, token) {
@@ -1970,7 +2195,7 @@ function corsHeaders(origin, env) {
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Public-Lead-Key",
+    "Access-Control-Allow-Headers": "Content-Type, X-Public-Lead-Key, X-Portal-Admin-Key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -2015,6 +2240,7 @@ function safeJson(text) {
 }
 
 const str = (v) => (v == null ? "" : String(v).trim());
+const isRecId = (v) => /^rec[A-Za-z0-9]{14}$/.test(String(v || ""));
 // Fecha calendario en horario de Chile (America/Santiago). new Date().toISOString()
 // devuelve UTC y estampa el día siguiente en acciones de tarde-noche (UTC-4/-3),
 // descuadrando reportes mensuales cuando el cambio de día UTC cruza fin de mes.

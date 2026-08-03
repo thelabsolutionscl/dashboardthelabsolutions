@@ -6210,7 +6210,8 @@ const _DEFAULTS={
   ELEVENLABS:'%%ELEVENLABS%%',
   PRINTER_TUNNEL_TOKEN:'%%PRINTER_TUNNEL_TOKEN%%',
   LEAD_WORKER_URL:'%%LEAD_WORKER_URL%%',
-  PUBLIC_LEAD_KEY:'%%PUBLIC_LEAD_KEY%%'
+  PUBLIC_LEAD_KEY:'%%PUBLIC_LEAD_KEY%%',
+  PORTAL_ADMIN_KEY:'%%PORTAL_ADMIN_KEY%%'
 };
 // ────────────────────────────────────────────────────────────
 const state={clientes:[],cotizaciones:[],pedidos:[],reportes:[],proveedores:[],facturas:[],clientesById:{},clientesByIdRec:{},pedidosById:{},cotizacionesById:{},loaded:false,pedidoFilter:'all',lastUpdateTs:null,metaRecordId:null,watiRecordId:null};
@@ -9358,10 +9359,25 @@ function verCotizacionesCliente(clienteId,empresa){
   setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`);return;}_setRows(tbody,cots.map(c=>buildCotRow(c)).join(''));},50);
 }
 function cotizarParaCliente(clienteId){const c=state.clientes.find(x=>x.id===clienteId);if(!c) return;switchTab('nueva-cot');setTimeout(()=>{selectCliente(clienteId);initDates();toast(`Cotizando para ${c.fields['Empresa']}`,'info');},100);}
-function compartirPortalCliente(clienteId){
-  const url=`${location.origin}${location.pathname}?portal=${btoa(clienteId)}`;
-  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast('🔗 URL copiada al portapapeles','success')).catch(()=>{prompt('Copia esta URL para el cliente:',url);});}
-  else{prompt('Copia esta URL para el cliente:',url);}
+// El portal lo sirve el lead-worker, no este dashboard: acá solo se pide el
+// link firmado (el Worker lo emite con vencimiento y lee Airtable server-side,
+// así el cliente nunca recibe el token de Airtable ni datos de otros clientes).
+const PORTAL_DIAS=30;
+async function compartirPortalCliente(clienteId){
+  const base=(_DEFAULTS.LEAD_WORKER_URL||'').replace(/\/+$/,'');
+  const key=_DEFAULTS.PORTAL_ADMIN_KEY||'';
+  if(base.startsWith('%%')||!base||key.startsWith('%%')||!key){
+    toast('Portal sin configurar: faltan los secrets LEAD_WORKER_URL y PORTAL_ADMIN_KEY','error');return;
+  }
+  toast('Generando link del portal…','info');
+  try{
+    const r=await fetch(base+'/portal/link',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Admin-Key':key},body:JSON.stringify({clienteId,dias:PORTAL_DIAS})});
+    const res=await r.json().catch(()=>null);
+    if(!r.ok||!res||!res.ok){toast('No se pudo generar el link: '+((res&&res.error)||r.status),'error');return;}
+    const url=res.url;
+    if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast(`🔗 Link copiado — válido hasta el ${res.expira}`,'success')).catch(()=>{prompt(`Copia esta URL para el cliente (válida hasta el ${res.expira}):`,url);});}
+    else{prompt(`Copia esta URL para el cliente (válida hasta el ${res.expira}):`,url);}
+  }catch(e){toast('Error de conexión con el worker: '+e.message,'error');}
 }
 // ── PRECIOS / DESCUENTO POR CLIENTE (Q3) ───────────────────────────────
 // Descuento porcentual por cliente que se aplica automáticamente al cotizar.
@@ -15898,7 +15914,6 @@ function initDashboard(){
     loadAllData().then(()=>{startAutoRefresh();startAgendaSync();try{startCalSync();startCalAlarmas();}catch(e){}});
   }
   initMobileTableLabels();
-  checkClientePortal();
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);if(_agendaPollTimer) clearInterval(_agendaPollTimer);try{if(_calPollTimer)clearInterval(_calPollTimer);if(_calAlarmTimer)clearInterval(_calAlarmTimer);}catch(e){}});
   document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;

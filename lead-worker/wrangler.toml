@@ -62,6 +62,12 @@ id = "c148848321344f60939fa71a51d050c6"
 #   ANTHROPIC_API_KEY       (opcional — solo si AUTO_PROCESS_LEADS=true)
 #   RESEND_API_KEY          (opcional — auto-respuesta de leads + confirmación de newsletter)
 #   NEWSLETTER_SECRET       (opcional — firma tokens de confirmación/baja; si falta usa PUBLIC_LEAD_KEY)
+#   PORTAL_SECRET           (portal del cliente — firma los links de /portal. Ponlo:
+#                            sin él cae a NEWSLETTER_SECRET/AIRTABLE_TOKEN y rotar
+#                            ese token invalida todos los links ya enviados)
+#   PORTAL_ADMIN_KEY        (portal del cliente — OBLIGATORIO para emitir links desde
+#                            el dashboard vía POST /portal/link. Sin fallback: el mismo
+#                            valor va en el secret PORTAL_ADMIN_KEY de GitHub Actions)
 #   ADS_APPROVAL_SECRET     (piloto Ads — OBLIGATORIO para los links Aprobar/Rechazar del email
 #                            y el disparo manual; sin él solo se aprueba desde el dashboard)
 #   ADS_SCRIPT_SECRET       (piloto Ads — secret del Script 1; si falta usa el default del Script)
