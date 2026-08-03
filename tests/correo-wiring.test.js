@@ -102,7 +102,7 @@ test('el visor aísla HTML activo y escapa el texto plano', () => {
   const render = methodBlock('_renderMsgBody');
   assert.match(render, /createElement\(['"]iframe['"]\)/);
   assert.match(render, /setAttribute\(['"]sandbox['"]/);
-  assert.doesNotMatch(render, /allow-scripts/, 'un correo nunca debe ejecutar scripts');
+  assert.doesNotMatch(render, /allow-scripts/, 'un correo nunca debe ejecutar scripts en el visor');
   assert.match(render, /this\.esc\(data\.body_text/);
   assert.match(render, /<base\s+target=["']_blank["']>/);
 });
@@ -158,30 +158,60 @@ test('diagnóstico: Resend debe autenticar la casilla antes de enviar', (t) => {
   const authAt = send.indexOf('open_imap(');
   assert.notEqual(resendAt, -1, 'falta integración Resend');
   if (authAt === -1 || authAt > resendAt) {
-    t.todo('CRÍTICO: hoy Resend se invoca antes de validar user/pass por IMAP; autenticar primero y abortar si falla');
+    t.todo('CRÍTICO: Resend se invoca antes de validar user/pass; el endpoint puede enviar con una contraseña falsa');
     return;
   }
   assert.ok(authAt < resendAt);
 });
 
+test('diagnóstico: responder o reenviar no debe sacar HTML remoto del sandbox', (t) => {
+  const open = methodBlock('openCompose');
+  const reply = methodBlock('reply');
+  const forward = methodBlock('forward');
+  if (/innerHTML\s*=/.test(open) && (/body_html/.test(reply) || /body_html/.test(forward))) {
+    t.todo('CRÍTICO: el HTML recibido se inserta en el DOM principal al responder/reenviar; sanitizar antes de abrir el editor');
+    return;
+  }
+});
+
+test('diagnóstico: firmas persistidas no deben ejecutar HTML arbitrario', (t) => {
+  const sig = methodBlock('sigHtml');
+  const open = methodBlock('openCompose');
+  if (/localStorage/.test(MAIL) && /\$\{s\}/.test(sig) && /innerHTML\s*=/.test(open)) {
+    t.todo('sanitizar firmas recuperadas de localStorage/Airtable antes de insertarlas en el DOM o en un correo');
+    return;
+  }
+});
+
 test('diagnóstico: el freno de envíos debe existir también en servidor', (t) => {
-  if (!/rate.?limit|send.?limit|429|too many/i.test(PHP)) {
-    t.todo('el límite actual vive en localStorage y puede omitirse; agregar rate limit por casilla/IP en mail-api.php');
+  if (!/rate.?limit|send.?limit|http_response_code\(429\)|too many/i.test(PHP)) {
+    t.todo('el límite actual vive en localStorage y puede omitirse; agregar rate limit por casilla/IP/tenant en mail-api.php');
     return;
   }
 });
 
 test('diagnóstico: las credenciales no deberían persistir en texto plano', (t) => {
-  if (/setMailPass\(p\)[\s\S]{0,120}localStorage\.setItem/.test(MAIL) || /thelab_mail_pass_/.test(MAIL)) {
+  if (/thelab_mail_pass_/.test(MAIL) && /localStorage\.setItem/.test(MAIL)) {
     t.todo('migrar contraseñas fuera de localStorage: sesión corta, token delegado o vault/backend');
     return;
   }
 });
 
-test.todo('mail-api debe validar sintácticamente To/CC/BCC y restringir From a casillas autorizadas del dominio');
-test.todo('el visor debe bloquear imágenes remotas por defecto para evitar tracking pixels y carga de recursos inseguros');
+test('diagnóstico: IMAP debe validar el certificado TLS', (t) => {
+  if (/\/novalidate-cert/.test(PHP)) {
+    t.todo('eliminar /novalidate-cert y corregir la cadena TLS del servidor de correo');
+    return;
+  }
+});
+
+// Hallazgos confirmados que deben convertirse en pruebas obligatorias al corregirse.
+test.todo('mail-api debe validar To/CC/BCC, limitar cantidad de destinatarios y restringir From a casillas autorizadas de thelab.solutions');
+test.todo('el visor debe bloquear imágenes y recursos remotos por defecto para evitar tracking pixels y filtración de IP');
+test.todo('reply, forward, firmas e imágenes insertadas por URL deben pasar por un sanitizador HTML y una política de URLs');
 test.todo('frontend y host PHP deben verificar automáticamente el mismo MAIL_API_BUILD para detectar despliegues desfasados');
 test.todo('acciones masivas y automáticas deben usar una idempotency key compartida para evitar duplicados tras timeouts');
-test.todo('plantillas, firmas y borradores importantes deben tener respaldo versionado y permisos, no depender solo del navegador');
-test.todo('descargas de adjuntos deben aplicar allowlist o advertencia reforzada para ejecutables y formatos activos');
-test.todo('el backend debe registrar auditoría mínima de envíos sin guardar cuerpo, contraseña ni destinatarios sensibles completos');
+test.todo('el backend debe imponer rate limit, cuota por cuenta, tamaño de cuerpo y auditoría mínima sin guardar contraseñas ni contenido');
+test.todo('descargas de adjuntos deben tener límite de tamaño y advertencia/allowlist para ejecutables y formatos activos');
+test.todo('las cuentas compartidas deben asignarse por RBAC; no deben aparecer automáticamente para cualquier usuario con acceso a Correo');
+test.todo('postAs no debe caer silenciosamente a otra casilla cuando falta la credencial del remitente solicitado');
+test.todo('plantillas, firmas y borradores deben tener respaldo versionado, sanitizado y permisos por cuenta');
