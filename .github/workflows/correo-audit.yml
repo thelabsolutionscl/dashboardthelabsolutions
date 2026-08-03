@@ -1,0 +1,62 @@
+name: Correo audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/correo.js'
+      - 'js/notify.js'
+      - 'mail-api.php'
+      - 'tests/correo-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/correo-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/correo.js'
+      - 'js/notify.js'
+      - 'mail-api.php'
+      - 'tests/correo-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/correo-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mail-client-and-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Validate audit syntax
+        run: node --check tests/correo-wiring.test.js
+
+      - name: Validate mail JavaScript
+        run: |
+          node --check js/correo.js
+          node --check js/notify.js
+
+      - name: Validate mail API syntax
+        run: php -l mail-api.php
+
+      - name: Audit mail wiring and safety
+        run: node --test tests/correo-wiring.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js
