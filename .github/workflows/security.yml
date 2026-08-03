@@ -1,0 +1,85 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 10 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+jobs:
+  source-guards:
+    name: Source security guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Syntax and security regression checks
+        run: |
+          set -euo pipefail
+          for file in js/*.js scripts/*.mjs printer-bridge/*.js airtable-proxy/src/*.js lead-worker/src/*.js; do
+            [ -f "$file" ] && node --check "$file"
+          done
+          php -l mail-api.php
+
+          if grep -RInE --exclude-dir=.git --exclude='*.md' \
+            '(sk-ant-[A-Za-z0-9_-]{15,}|sk-(proj-)?[A-Za-z0-9_-]{20,}|pat[A-Za-z0-9._-]{20,}|re_[A-Za-z0-9_-]{20,})' .; then
+            echo '::error::Posible secreto real dentro del repositorio'
+            exit 1
+          fi
+
+          if grep -RIn --exclude-dir=.git --exclude='*.md' '/imap/ssl/novalidate-cert' .; then
+            echo '::error::IMAP no puede desactivar la validación del certificado TLS'
+            exit 1
+          fi
+
+          if grep -RIn --exclude-dir=.git --exclude='*.md' "BRIDGE_ALLOW_ORIGIN || '*'" printer-bridge; then
+            echo '::error::Printer Bridge no puede usar CORS comodín por defecto'
+            exit 1
+          fi
+
+          if grep -RIn --exclude-dir=.git --exclude='*.md' -E \
+            'sed -i .*%%(OPENAI_KEY|ANTHROPIC_KEY|AIRTABLE_TOKEN|ELEVENLABS|PROXY_KEY|PRINTER_TUNNEL_TOKEN)' .github scripts; then
+            echo '::error::Un workflow intenta hornear una credencial privada en el frontend'
+            exit 1
+          fi
+
+      - name: Run tests
+        run: node --test tests/*.test.js
+
+  codeql:
+    name: CodeQL JavaScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended,security-and-quality
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
