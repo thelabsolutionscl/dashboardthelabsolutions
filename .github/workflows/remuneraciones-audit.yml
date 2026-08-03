@@ -1,0 +1,55 @@
+name: Remuneraciones audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/**.js'
+      - 'tests/remuneraciones-wiring.test.js'
+      - 'tests/finanzas-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/remuneraciones-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/**.js'
+      - 'tests/remuneraciones-wiring.test.js'
+      - 'tests/finanzas-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/remuneraciones-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  payroll-and-commissions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate audit syntax
+        run: node --check tests/remuneraciones-wiring.test.js
+
+      - name: Validate JavaScript modules
+        run: find js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
+
+      - name: Audit remunerations wiring
+        run: node --test tests/remuneraciones-wiring.test.js
+
+      - name: Audit finance integration when available
+        run: |
+          if [ -f tests/finanzas-wiring.test.js ]; then
+            node --test tests/finanzas-wiring.test.js
+          fi
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js
