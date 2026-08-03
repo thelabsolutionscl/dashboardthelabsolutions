@@ -453,10 +453,7 @@ function portalPage({ token, nombre, pedidos, cots }) {
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Tus pedidos — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif">
 <div style="max-width:620px;margin:0 auto;padding:34px 20px 48px">
-  <div style="margin-bottom:18px">
-    <img src="https://dashboard.thelab.solutions/logo-thelab.png" alt="The Lab Solutions" style="width:230px;max-width:62%;height:auto;display:block" onerror="this.style.display='none';document.getElementById('lb-txt').style.display='block'">
-    <div id="lb-txt" style="display:none;font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase">The Lab Solutions</div>
-  </div>
+  ${logoHeader(false)}
   <h1 style="font-size:22px;margin:0 0 4px">${esc(nombre)}</h1>
   <div style="font-size:13px;color:#8a8a92;margin-bottom:24px">${pedidos.length} pedido${pedidos.length !== 1 ? "s" : ""}${cots.length ? ` · ${cots.length} cotización${cots.length !== 1 ? "es" : ""} por responder` : ""}</div>
   ${cotHTML ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#7a7a82;margin-bottom:10px">Cotizaciones pendientes</div>${cotHTML}<div style="height:14px"></div>` : ""}
@@ -588,7 +585,7 @@ function npsRatingPage(pedId, gUrl) {
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>¿Cómo lo hicimos? — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
 <div style="max-width:480px;padding:40px 24px;text-align:center">
-<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:18px">The Lab Solutions</div>
+${logoHeader(true)}
 <h1 style="font-size:22px;margin:0 0 8px">¿Cómo fue tu experiencia?</h1>
 <p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 24px">Tu opinión nos toma 5 segundos y nos ayuda un montón 💙</p>
 <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">${btns}</div>
@@ -622,7 +619,7 @@ function npsThanksPage(score, pedId, gUrl) {
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gracias — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
 <div style="max-width:460px;padding:40px 24px;text-align:center">
-<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:18px">The Lab Solutions</div>
+${logoHeader(true)}
 <div style="font-size:44px;margin-bottom:8px">${feliz ? "🎉" : "🙏"}</div>
 <h1 style="font-size:22px;margin:0 0 12px;color:${color}">${titulo}</h1>
 <p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 20px">${msg}</p>
@@ -692,7 +689,7 @@ function podConfirmPage(pedId) {
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirmar recepción — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
 <div style="max-width:460px;padding:40px 24px;text-align:center">
-<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:18px">The Lab Solutions</div>
+${logoHeader(true)}
 <div style="font-size:44px;margin-bottom:8px">📦</div>
 <h1 style="font-size:22px;margin:0 0 12px">¿Recibiste tu pedido?</h1>
 <p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 24px">Confírmanos que llegó todo en orden. Nos tomas 1 segundo y nos ayuda a cerrar el pedido.</p>
@@ -762,7 +759,7 @@ async function handlePedidoEstado(request, env) {
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seguimiento ${esc(numPed)} — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
 <div style="max-width:440px;width:100%;padding:36px 26px">
-<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:6px">The Lab Solutions</div>
+${logoHeader(false)}
 <h1 style="font-size:22px;margin:0 0 4px">Seguimiento de tu pedido</h1>
 <div style="font-size:13px;color:#8a8a92;margin-bottom:20px">${numPed ? "N° " + esc(numPed) : ""}${entrega ? " · entrega estimada " + esc(entrega) : ""}</div>
 <div style="height:8px;background:#151518;border-radius:5px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:${pct}%;background:#00b3a4;border-radius:5px"></div></div>
@@ -1183,6 +1180,16 @@ async function nlVerify(env, purpose, email, token) {
   if (!token) return false;
   return timingSafeEqual(token, await nlSign(env, purpose, email));
 }
+// Cabecera de marca de las páginas públicas (portal, seguimiento, NPS, POD,
+// newsletter). El PNG lo sirve el dashboard; si no cargara, cae al texto de
+// siempre en vez de dejar un hueco.
+const LOGO_URL = "https://dashboard.thelab.solutions/logo-thelab.png";
+function logoHeader(centrado) {
+  return `<div style="margin-bottom:18px">
+    <img src="${LOGO_URL}" alt="The Lab Solutions" style="width:200px;max-width:60%;height:auto;display:block${centrado ? ";margin:0 auto" : ""}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div style="display:none;font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase">The Lab Solutions</div>
+  </div>`;
+}
 function escapeHtmlW(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
@@ -1191,7 +1198,7 @@ function htmlPage(title, msg, ok) {
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtmlW(title)} — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
 <div style="max-width:460px;padding:40px 28px;text-align:center">
-<div style="font-size:13px;letter-spacing:.18em;color:#7a7a82;text-transform:uppercase;margin-bottom:18px">The Lab Solutions</div>
+${logoHeader(true)}
 <h1 style="font-size:22px;margin:0 0 12px;color:${color}">${escapeHtmlW(title)}</h1>
 <p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 24px">${escapeHtmlW(msg)}</p>
 <a href="https://thelab.solutions" style="display:inline-block;background:#00b3a4;color:#06231f;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:9px;font-size:14px">Ir a thelab.solutions</a>
