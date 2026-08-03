@@ -42,7 +42,13 @@ const REGISTROS = {
     [PEDIDO]: { id: PEDIDO, fields: { 'N° Pedido': 'PED-0042', 'Estado pedido': 'En producción', 'Fecha entrega': '2026-09-15', 'Notas internas': 'Margen 62%, proveedor barato' } },
   },
   Cotizaciones: {
-    [COT]: { id: COT, fields: { 'N° Cotización': 'COT-0100', Cliente: [CLIENTE], 'Estado cotización': 'Enviada', 'Total final (CLP)': 1234567, 'Fecha vencimiento': '2026-09-30' } },
+    [COT]: { id: COT, fields: {
+      'N° Cotización': 'COT-0100', Cliente: [CLIENTE], 'Estado cotización': 'Enviada',
+      'Total final (CLP)': 1234567, 'Fecha vencimiento': '2026-09-30',
+      'Subtotal (CLP)': 480000, // ojo: este campo guarda COSTOS, no venta
+      'Detalle productos': 'Tótem acrílico | 3 und. | Costo: $480.000 | Venta: $1.037.451',
+      'Detalle JSON': JSON.stringify([{ desc: 'Tótem acrílico', und: 3, costoUnit: 160000, ventaUnit: 345817, detalle: [{ c: 'Acrílico', m: 160000 }] }]),
+    } },
     [COT_CERRADA]: { id: COT_CERRADA, fields: { 'N° Cotización': 'COT-0099', Cliente: [CLIENTE], 'Estado cotización': 'Aprobada' } },
     [COT_AJENA]: { id: COT_AJENA, fields: { 'N° Cotización': 'COT-0200', Cliente: [OTRO_CLIENTE], 'Estado cotización': 'Enviada' } },
   },
@@ -137,6 +143,31 @@ test('portal del cliente', async (t) => {
     assert.doesNotMatch(html, /COT-0099/, 'las cotizaciones ya decididas no se muestran');
     assert.doesNotMatch(html, /patSECRETO_NO_DEBE_SALIR/, 'el token de Airtable no viaja al cliente');
     assert.doesNotMatch(html, /Margen 62%|MOROSO/, 'las notas internas no se filtran');
+  });
+
+  await t.test('la cotización se puede ver, y NO lleva costos ni márgenes', async () => {
+    const token = await tokenDe(worker);
+    const r = await worker.fetch(req(`https://worker.example.com/portal/cotizacion?t=${encodeURIComponent(token)}&cot=${COT}`), env, ctx);
+    assert.equal(r.status, 200);
+    const html = await r.text();
+    assert.match(html, /COT-0100/);
+    assert.match(html, /Tótem acrílico/);
+    assert.match(html, /\$345\.817/, 'precio unitario de venta');
+    assert.match(html, /\$1\.234\.567/, 'total con IVA');
+    assert.match(html, /window\.print\(\)/, 'botón de descarga en PDF');
+    // Lo que jamás puede aparecer: costo unitario, la suma de costos que guarda
+    // "Subtotal (CLP)", y el texto de "Detalle productos" que trae "Costo: $…".
+    assert.doesNotMatch(html, /160\.?000/, 'costo unitario filtrado');
+    assert.doesNotMatch(html, /480\.?000/, 'suma de costos filtrada');
+    assert.doesNotMatch(html, /Costo:/, 'texto con costos filtrado');
+  });
+
+  await t.test('no se puede ver la cotización de otro cliente', async () => {
+    const token = await tokenDe(worker);
+    const r = await worker.fetch(req(`https://worker.example.com/portal/cotizacion?t=${encodeURIComponent(token)}&cot=${COT_AJENA}`), env, ctx);
+    const html = await r.text();
+    assert.match(html, /no corresponde a tu cuenta/);
+    assert.doesNotMatch(html, /COT-0200/);
   });
 
   await t.test('el cliente aprueba su cotización', async () => {
