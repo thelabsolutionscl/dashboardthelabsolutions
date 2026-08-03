@@ -70,9 +70,10 @@ test('la vista de facturas reúne histórico, registros locales y Airtable',()=>
 });
 
 test('facturación, KPIs y gráficos reutilizan la misma agregación mensual interna',()=>{
-  for(const name of ['finRenderMensual','finDrawChart','finInitKPIs','finDrawSparklines','finRenderResumenAnual','renderOverviewFinanzas','drawOvFinChart']){
+  for(const name of ['finRenderMensual','finDrawChart','finInitKPIs','finDrawSparklines','finRenderResumenAnual','drawOvFinChart']){
     assert.match(functionBlock(FIN,name),/finVentasMerged\s*\(/,`${name} debe usar finVentasMerged`);
   }
+  assert.match(FIN,/function\s+renderOverviewFinanzas\s*\(\)[\s\S]*?const\s+VM\s*=\s*finVentasMerged\s*\(\)/,'renderOverviewFinanzas debe usar finVentasMerged');
 });
 
 test('cobranza y aging usan un vencimiento común y priorizan por mora',()=>{
