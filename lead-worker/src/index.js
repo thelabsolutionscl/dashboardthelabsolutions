@@ -19,6 +19,7 @@
  *   GET  /newsletter/unsubscribe(baja de la lista — token HMAC opcional)
  *   POST /portal/link           (dashboard — emite el link del portal, clave PORTAL_ADMIN_KEY)
  *   GET  /portal                (cliente — pedidos y cotizaciones, token firmado)
+ *   GET  /portal/cotizacion     (cliente — su cotización como documento imprimible)
  *   POST /portal/cotizacion/decision (cliente — aprueba/rechaza su cotización)
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
@@ -80,6 +81,10 @@ export default {
 
       if (request.method === "GET" && url.pathname === "/portal") {
         return await handlePortal(request, env);
+      }
+
+      if (request.method === "GET" && url.pathname === "/portal/cotizacion") {
+        return await handlePortalCotizacion(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/portal/cotizacion/decision") {
@@ -345,6 +350,175 @@ async function handlePortalCotDecision(request, env, ctx, cors) {
   return json({ ok: true, decision }, 200, cors);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ * GET /portal/cotizacion?t=<token>&cot=<recId>
+ * La cotización como documento imprimible (el cliente la ve y la guarda en PDF
+ * con el botón, que dispara el diálogo de impresión del navegador).
+ *
+ * CUIDADO al tocar los campos que se muestran acá:
+ *   · "Detalle JSON" trae costoUnit y el desglose de costos por ítem.
+ *   · "Detalle productos" trae "Costo: $…" escrito en el texto.
+ *   · "Subtotal (CLP)" NO es un subtotal de venta: guarda la suma de COSTOS.
+ * De ahí solo puede salir desc, und y ventaUnit. Nada más. El total que manda
+ * es "Total final (CLP)" (IVA incluido); si no cuadra con los ítems, la
+ * diferencia se muestra como ajuste para que las cuentas cierren siempre.
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handlePortalCotizacion(request, env) {
+  const url = new URL(request.url);
+  const tok = await portalVerifyToken(env, url.searchParams.get("t"));
+  if (!tok) return htmlPage("Enlace inválido", "Este enlace no es válido. Escríbenos a hola@thelab.solutions y te enviamos uno nuevo.", false);
+  if (tok.vencido) return htmlPage("Enlace vencido", "Este enlace ya venció. Escríbenos a hola@thelab.solutions y te enviamos uno nuevo al tiro.", false);
+  const cotId = str(url.searchParams.get("cot"));
+  if (!isRecId(cotId)) return htmlPage("Cotización no encontrada", "No pudimos encontrar esta cotización.", false);
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return htmlPage("No disponible", "No está disponible en este momento. Intenta más tarde.", false);
+
+  const rec = await portalGetRecord(env, "Cotizaciones", cotId);
+  if (!rec) return htmlPage("Cotización no encontrada", "No pudimos encontrar esta cotización.", false);
+  const dueño = (rec.fields || {})["Cliente"];
+  const esSuya = Array.isArray(dueño) ? dueño.includes(tok.clienteId) : dueño === tok.clienteId;
+  if (!esSuya) return htmlPage("No disponible", "Esta cotización no corresponde a tu cuenta.", false);
+
+  const cliente = await portalGetRecord(env, "Clientes", tok.clienteId);
+  return portalCotizacionPage(rec, (cliente && cliente.fields) || {}, url.searchParams.get("t") || "");
+}
+
+// Solo descripción, cantidad y precio de venta: ver la advertencia de arriba.
+function portalCotItems(cf) {
+  let crudo = [];
+  try {
+    const j = JSON.parse(cf["Detalle JSON"] || "[]");
+    if (Array.isArray(j)) crudo = j;
+  } catch (e) {
+    crudo = [];
+  }
+  return crudo
+    .map((x) => ({ desc: str(x && x.desc), und: Number(x && x.und) || 0, venta: Number(x && x.ventaUnit) || 0 }))
+    .filter((x) => x.desc || x.venta);
+}
+
+function portalCotizacionPage(rec, cli, token) {
+  const esc = escapeHtmlW;
+  const cf = rec.fields || {};
+  const items = portalCotItems(cf);
+  const abierta = PORTAL_COT_ABIERTAS.includes(cf["Estado cotización"] || "");
+  const totalFinal = Number(cf["Total final (CLP)"]) || 0;
+
+  const netoItems = items.reduce((a, x) => a + x.und * x.venta, 0);
+  // "Total final (CLP)" manda; el resto se deriva de él para que siempre cuadre.
+  const netoFinal = totalFinal ? Math.round(totalFinal / 1.19) : netoItems;
+  const ajuste = netoItems ? netoFinal - netoItems : 0;
+  const iva = (totalFinal || Math.round(netoFinal * 1.19)) - netoFinal;
+  const total = totalFinal || netoFinal + iva;
+
+  const filas = items.length
+    ? items.map((x) => `<tr>
+        <td style="padding:11px 8px;border-bottom:1px solid #e6e6e6">${esc(x.desc)}</td>
+        <td style="padding:11px 8px;border-bottom:1px solid #e6e6e6;text-align:center;white-space:nowrap">${x.und}</td>
+        <td style="padding:11px 8px;border-bottom:1px solid #e6e6e6;text-align:right;white-space:nowrap">${esc(portalCLP(x.venta))}</td>
+        <td style="padding:11px 8px;border-bottom:1px solid #e6e6e6;text-align:right;white-space:nowrap;font-weight:600">${esc(portalCLP(x.und * x.venta))}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="4" style="padding:16px 8px;color:#666;font-size:13px">El detalle de esta cotización te lo enviamos por correo. Cualquier duda, escríbenos.</td></tr>`;
+
+  const fila = (etiqueta, valor, fuerte) =>
+    `<tr><td colspan="2"></td>
+      <td style="padding:6px 8px;text-align:right;${fuerte ? "font-weight:700;font-size:15px" : "color:#555;font-size:13px"}">${esc(etiqueta)}</td>
+      <td style="padding:6px 8px;text-align:right;white-space:nowrap;${fuerte ? "font-weight:700;font-size:15px" : "font-size:13px"}">${esc(valor)}</td></tr>`;
+
+  const produccion = cf["Tiempo de producción"]
+    ? `${cf["Tiempo de producción"]} ${str(cf["Tipo días producción"]).toLowerCase() || "días"}`
+    : "";
+  const condiciones = [
+    ["Forma de pago", str(cf["Forma de pago"])],
+    ["Plazo de producción", produccion],
+    ["Válida hasta", portalFecha(cf["Fecha vencimiento"])],
+  ].filter(([, v]) => v);
+
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>Cotización ${esc(cf["N° Cotización"] || "")} — The Lab Solutions</title>
+<style>
+  body{margin:0;background:#ececed;color:#141414;font-family:system-ui,Arial,sans-serif}
+  .hoja{max-width:760px;margin:0 auto;background:#fff;padding:44px 46px 52px}
+  .acciones{max-width:760px;margin:0 auto;padding:14px 46px;display:flex;gap:10px;flex-wrap:wrap}
+  .btn{border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  @media print{
+    body{background:#fff}
+    .acciones{display:none !important}
+    .hoja{max-width:none;padding:0}
+    @page{margin:16mm}
+  }
+  @media(max-width:640px){.hoja{padding:28px 20px}.acciones{padding:12px 20px}}
+</style></head>
+<body>
+<div class="acciones">
+  <button class="btn" onclick="window.print()" style="background:#141414;color:#fff">⬇ Descargar PDF</button>
+  ${abierta ? `<button class="btn" onclick="portalDecidir('${esc(rec.id)}','Aprobada')" style="background:#00b3a4;color:#06231f">✓ Aprobar cotización</button>
+  <button class="btn" onclick="portalDecidir('${esc(rec.id)}','Rechazada')" style="background:transparent;color:#666;border:1px solid #ccc">Rechazar</button>` : ""}
+  <a class="btn" href="/portal?t=${encodeURIComponent(token)}" style="background:transparent;color:#666;border:1px solid #ccc;text-decoration:none">← Volver</a>
+</div>
+<div class="hoja">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;border-bottom:2px solid #141414;padding-bottom:18px">
+    <div>
+      <img src="${LOGO_BLACK_URL}" alt="The Lab Solutions" style="width:200px;max-width:60%;height:auto;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <div style="display:none;font-size:14px;letter-spacing:.16em;text-transform:uppercase;font-weight:700">The Lab Solutions</div>
+      <div style="font-size:11px;color:#666;margin-top:8px;line-height:1.6">Fabricación digital · Santiago, Chile<br>hola@thelab.solutions · thelab.solutions</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#666">Cotización</div>
+      <div style="font-size:24px;font-weight:700;line-height:1.2">${esc(cf["N° Cotización"] || "—")}</div>
+      ${cf["Fecha cotización"] ? `<div style="font-size:12px;color:#666;margin-top:4px">${esc(portalFecha(cf["Fecha cotización"]))}</div>` : ""}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:34px;flex-wrap:wrap;margin:22px 0 26px">
+    <div>
+      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#888;margin-bottom:5px">Cliente</div>
+      <div style="font-size:15px;font-weight:700">${esc(cli["Empresa"] || cli["Contacto"] || "")}</div>
+      ${cli["RUT"] ? `<div style="font-size:12px;color:#555;margin-top:2px">RUT ${esc(cli["RUT"])}</div>` : ""}
+      ${cli["Contacto"] && cli["Empresa"] ? `<div style="font-size:12px;color:#555">${esc(cli["Contacto"])}</div>` : ""}
+    </div>
+    ${cf["Alias / Título"] ? `<div>
+      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#888;margin-bottom:5px">Proyecto</div>
+      <div style="font-size:15px;font-weight:700">${esc(cf["Alias / Título"])}</div>
+    </div>` : ""}
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <thead><tr style="background:#f4f4f5">
+      <th style="padding:9px 8px;text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#666">Descripción</th>
+      <th style="padding:9px 8px;text-align:center;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#666">Cant.</th>
+      <th style="padding:9px 8px;text-align:right;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#666">P. unitario</th>
+      <th style="padding:9px 8px;text-align:right;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#666">Total</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+    <tfoot>
+      ${items.length ? fila("Neto", portalCLP(netoItems)) : ""}
+      ${ajuste ? fila(ajuste < 0 ? "Descuento" : "Ajuste", portalCLP(ajuste)) : ""}
+      ${items.length && ajuste ? fila("Neto final", portalCLP(netoFinal)) : (!items.length ? fila("Neto", portalCLP(netoFinal)) : "")}
+      ${fila("IVA 19%", portalCLP(iva))}
+      ${fila("Total", portalCLP(total), true)}
+    </tfoot>
+  </table>
+
+  ${condiciones.length ? `<div style="margin-top:30px;border-top:1px solid #e6e6e6;padding-top:18px;display:flex;gap:34px;flex-wrap:wrap">
+    ${condiciones.map(([k, v]) => `<div><div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#888;margin-bottom:4px">${esc(k)}</div><div style="font-size:13px;font-weight:600">${esc(v)}</div></div>`).join("")}
+  </div>` : ""}
+
+  <div style="margin-top:34px;font-size:11px;color:#888;line-height:1.7;border-top:1px solid #e6e6e6;padding-top:16px">
+    Valores en pesos chilenos, IVA incluido en el total.
+    ${abierta ? "Para confirmar, aprueba la cotización desde el botón de arriba o respóndenos este correo." : ""}
+  </div>
+</div>
+<script>
+var PORTAL_TOKEN=${JSON.stringify(token)};
+${PORTAL_DECIDIR_JS}
+</script>
+</body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
+  });
+}
+
 /* ── Lectura en Airtable (siempre server-side) ──────────────────────────── */
 async function portalGetRecord(env, table, recId) {
   try {
@@ -393,10 +567,35 @@ function portalFecha(iso) {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
 }
 
+/* ── Aprobar / rechazar: lo usan la lista del portal y la hoja de la
+      cotización. En la lista reemplaza la tarjeta; en la hoja avisa y vuelve. ── */
+const PORTAL_DECIDIR_JS = `
+async function portalDecidir(cot,decision){
+  var comentario='';
+  if(decision==='Rechazada'){var m=prompt('¿Nos cuentas por qué? (opcional — nos ayuda a mejorar la propuesta)');if(m===null)return;comentario=m||'';}
+  else if(!confirm('¿Confirmas que APRUEBAS esta cotización? Nos ponemos en marcha de inmediato.'))return;
+  var card=document.getElementById('cot-'+cot);if(card)card.style.opacity='0.55';
+  var okAprob='✓ ¡Cotización aprobada! Gracias — partimos de inmediato y te contactamos con los próximos pasos.';
+  var okRech='Cotización rechazada. Gracias por avisarnos; si podemos ajustar algo, escríbenos a hola@thelab.solutions.';
+  try{
+    var r=await fetch('/portal/cotizacion/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:PORTAL_TOKEN,cot:cot,decision:decision,comentario:comentario})});
+    var res=await r.json().catch(function(){return null;});
+    if(r.ok&&res&&res.ok){
+      var txt=decision==='Aprobada'?okAprob:okRech;
+      if(card){card.style.opacity='1';
+        card.innerHTML=decision==='Aprobada'
+          ?'<div style="font-size:14px;font-weight:700;color:#00b3a4">'+okAprob+'</div>'
+          :'<div style="font-size:13px;color:#b6b6bd">'+okRech+'</div>';
+      }else{alert(txt);location.href='/portal?t='+encodeURIComponent(PORTAL_TOKEN);}
+    }else{if(card)card.style.opacity='1';alert((res&&res.error)||'No se pudo registrar. Escríbenos a hola@thelab.solutions y lo resolvemos.');}
+  }catch(e){if(card)card.style.opacity='1';alert('Problema de conexión. Escríbenos a hola@thelab.solutions.');}
+}`;
+
 /* ── La página ─────────────────────────────────────────────────────────── */
 function portalPage({ token, nombre, pedidos, cots }) {
   const esc = escapeHtmlW;
   const orden = (a, b) => String((b.fields || {})["Fecha ingreso"] || b.createdTime || "").localeCompare(String((a.fields || {})["Fecha ingreso"] || a.createdTime || ""));
+  const verCot = (cotId) => `/portal/cotizacion?t=${encodeURIComponent(token)}&cot=${encodeURIComponent(cotId)}`;
 
   const stepper = (estado) => {
     const idx = PORTAL_STAGES.indexOf(estado);
@@ -419,6 +618,8 @@ function portalPage({ token, nombre, pedidos, cots }) {
         const cerrado = ["Despachado", "Completado"].includes(estado);
         const entrega = portalFecha(cerrado && pf["Fecha despacho"] ? pf["Fecha despacho"] : pf["Fecha entrega"]);
         const seguimiento = str(pf["N° seguimiento courier"]);
+        // Cotización de origen del pedido: el cliente puede volver a verla.
+        const cotDelPedido = (Array.isArray(pf["Cotizaciones"]) ? pf["Cotizaciones"] : []).filter(isRecId)[0];
         return `<div style="background:#131315;border:1px solid #26262b;border-radius:12px;padding:14px 16px;margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
             <span style="font-size:14px;font-weight:700;letter-spacing:.02em">${esc(pf["N° Pedido"] || "—")}</span>
@@ -427,6 +628,7 @@ function portalPage({ token, nombre, pedidos, cots }) {
           ${estado === "Cancelado" ? "" : stepper(estado)}
           ${entrega ? `<div style="font-size:12px;color:#8a8a92;margin-top:8px">📅 ${cerrado ? "Entregado" : "Entrega estimada"}: ${esc(entrega)}</div>` : ""}
           ${seguimiento ? `<div style="font-size:12px;color:#8a8a92;margin-top:4px">🚚 Seguimiento: ${esc(seguimiento)}</div>` : ""}
+          ${cotDelPedido ? `<a href="${verCot(cotDelPedido)}" style="display:inline-block;margin-top:11px;color:#e8e8ea;border:1px solid #33343a;border-radius:8px;padding:8px 14px;font-size:12px;text-decoration:none">📄 Ver cotización</a>` : ""}
         </div>`;
       }).join("")
     : '<div style="text-align:center;padding:18px;color:#6b6b73;font-size:13px">Todavía no tienes pedidos registrados.</div>';
@@ -443,9 +645,10 @@ function portalPage({ token, nombre, pedidos, cots }) {
         ${total ? `<div style="text-align:right"><div style="font-size:16px;font-weight:700">${esc(total)}</div><div style="font-size:10px;color:#6b6b73">IVA incluido</div></div>` : ""}
       </div>
       ${vto ? `<div style="font-size:12px;color:#8a8a92;margin-top:8px">Válida hasta ${esc(vto)}</div>` : ""}
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button onclick="portalDecidir('${esc(c.id)}','Aprobada')" style="flex:1;background:#00b3a4;color:#06231f;border:0;border-radius:9px;padding:11px;font-weight:700;font-size:14px;cursor:pointer">✓ Aprobar</button>
-        <button onclick="portalDecidir('${esc(c.id)}','Rechazada')" style="background:transparent;color:#8a8a92;border:1px solid #33343a;border-radius:9px;padding:11px 18px;font-size:13px;cursor:pointer">Rechazar</button>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button onclick="portalDecidir('${esc(c.id)}','Aprobada')" style="flex:1;min-width:130px;background:#00b3a4;color:#06231f;border:0;border-radius:9px;padding:11px;font-weight:700;font-size:14px;cursor:pointer">✓ Aprobar</button>
+        <a href="${verCot(c.id)}" style="background:transparent;color:#e8e8ea;border:1px solid #33343a;border-radius:9px;padding:11px 16px;font-size:13px;text-decoration:none;white-space:nowrap">📄 Ver cotización</a>
+        <button onclick="portalDecidir('${esc(c.id)}','Rechazada')" style="background:transparent;color:#8a8a92;border:1px solid #33343a;border-radius:9px;padding:11px 16px;font-size:13px;cursor:pointer">Rechazar</button>
       </div>
     </div>`;
   }).join("");
@@ -463,21 +666,7 @@ function portalPage({ token, nombre, pedidos, cots }) {
 </div>
 <script>
 var PORTAL_TOKEN=${JSON.stringify(token)};
-async function portalDecidir(cot,decision){
-  var comentario='';
-  if(decision==='Rechazada'){var m=prompt('¿Nos cuentas por qué? (opcional — nos ayuda a mejorar la propuesta)');if(m===null)return;comentario=m||'';}
-  else if(!confirm('¿Confirmas que APRUEBAS esta cotización? Nos ponemos en marcha de inmediato.'))return;
-  var card=document.getElementById('cot-'+cot);if(card)card.style.opacity='0.55';
-  try{
-    var r=await fetch('/portal/cotizacion/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:PORTAL_TOKEN,cot:cot,decision:decision,comentario:comentario})});
-    var res=await r.json().catch(function(){return null;});
-    if(r.ok&&res&&res.ok){
-      if(card){card.style.opacity='1';card.innerHTML=decision==='Aprobada'
-        ?'<div style="font-size:14px;font-weight:700;color:#00b3a4">✓ ¡Cotización aprobada! Gracias — partimos de inmediato y te contactamos con los próximos pasos.</div>'
-        :'<div style="font-size:13px;color:#b6b6bd">Cotización rechazada. Gracias por avisarnos; si podemos ajustar algo, escríbenos a hola@thelab.solutions.</div>';}
-    }else{if(card)card.style.opacity='1';alert((res&&res.error)||'No se pudo registrar. Escríbenos a hola@thelab.solutions y lo resolvemos.');}
-  }catch(e){if(card)card.style.opacity='1';alert('Problema de conexión. Escríbenos a hola@thelab.solutions.');}
-}
+${PORTAL_DECIDIR_JS}
 </script>
 </body></html>`;
   return new Response(html, {
@@ -1184,6 +1373,8 @@ async function nlVerify(env, purpose, email, token) {
 // newsletter). El PNG lo sirve el dashboard; si no cargara, cae al texto de
 // siempre en vez de dejar un hueco.
 const LOGO_URL = "https://dashboard.thelab.solutions/logo-thelab.png";
+// Versión para fondo claro (la hoja de la cotización).
+const LOGO_BLACK_URL = "https://dashboard.thelab.solutions/logo-thelab-black.png";
 function logoHeader(centrado) {
   return `<div style="margin-bottom:18px">
     <img src="${LOGO_URL}" alt="The Lab Solutions" style="width:200px;max-width:60%;height:auto;display:block${centrado ? ";margin:0 auto" : ""}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
