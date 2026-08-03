@@ -18,6 +18,7 @@
  *   GET  /newsletter/confirm    (doble opt-in: confirma la suscripción vía token HMAC)
  *   GET  /newsletter/unsubscribe(baja de la lista — token HMAC opcional)
  *   POST /portal/link           (dashboard — emite el link del portal, clave PORTAL_ADMIN_KEY)
+ *   POST /portal/revocar        (dashboard — invalida los links de un cliente)
  *   GET  /portal                (cliente — pedidos y cotizaciones, token firmado)
  *   GET  /portal/cotizacion     (cliente — su cotización como documento imprimible)
  *   POST /portal/cotizacion/decision (cliente — aprueba/rechaza su cotización)
@@ -81,6 +82,10 @@ export default {
 
       if (request.method === "GET" && url.pathname === "/portal") {
         return await handlePortal(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/portal/revocar") {
+        return await handlePortalRevocar(request, env, cors);
       }
 
       if (request.method === "GET" && url.pathname === "/portal/cotizacion") {
@@ -237,15 +242,28 @@ const PORTAL_COT_ABIERTAS = ["Enviada", "Solicitada"];
 function portalSecret(env) {
   return env.PORTAL_SECRET || env.NEWSLETTER_SECRET || env.AIRTABLE_TOKEN || "";
 }
-async function portalSign(env, clienteId, exp) {
-  return await hmacB64u(portalSecret(env), `portal:${clienteId}:${exp}`);
+// Revocación por cliente: en el KV vive un contador por cliente que entra en la
+// firma. Al revocar sube en 1 y todos los links que ya circulaban dejan de
+// validar, sin tocar los de los demás clientes. La versión 0 firma el mensaje
+// sin sufijo, así los links emitidos antes de existir esto siguen sirviendo
+// hasta su primera revocación (o hasta que venzan).
+const PORTAL_REV_KEY = (clienteId) => `portalrev:${clienteId}`;
+async function portalVersion(env, clienteId) {
+  if (!env.RL) return 0;
+  try { return parseInt((await env.RL.get(PORTAL_REV_KEY(clienteId))) || "0", 10) || 0; }
+  catch (e) { return 0; }
+}
+async function portalSign(env, clienteId, exp, version) {
+  const v = Number(version) || 0;
+  return await hmacB64u(portalSecret(env), `portal:${clienteId}:${exp}` + (v > 0 ? `:v${v}` : ""));
 }
 async function portalMakeToken(env, clienteId, dias) {
   const exp = Math.floor(Date.now() / 1000) + Math.round(dias * 86400);
-  return { token: `${clienteId}.${exp.toString(36)}.${await portalSign(env, clienteId, exp)}`, exp };
+  const v = await portalVersion(env, clienteId);
+  return { token: `${clienteId}.${exp.toString(36)}.${await portalSign(env, clienteId, exp, v)}`, exp };
 }
-// Devuelve null si la firma no cuadra; { vencido: true } distingue el enlace
-// caducado del inválido para poder decirle al cliente qué le pasó.
+// Devuelve null si la firma no cuadra (inválido o revocado); { vencido: true }
+// distingue el enlace caducado para poder decirle al cliente qué le pasó.
 async function portalVerifyToken(env, token) {
   const parts = String(token || "").split(".");
   if (parts.length !== 3 || !portalSecret(env)) return null;
@@ -253,8 +271,30 @@ async function portalVerifyToken(env, token) {
   if (!isRecId(clienteId)) return null;
   const exp = parseInt(expB36, 36);
   if (!Number.isFinite(exp)) return null;
-  if (!timingSafeEqual(sig, await portalSign(env, clienteId, exp))) return null;
+  const v = await portalVersion(env, clienteId);
+  if (!timingSafeEqual(sig, await portalSign(env, clienteId, exp, v))) return null;
   return { clienteId, exp, vencido: exp * 1000 < Date.now() };
+}
+
+/* ── POST /portal/revocar ── corta los links de UN cliente ──────────────── */
+async function handlePortalRevocar(request, env, cors) {
+  const expected = env.PORTAL_ADMIN_KEY || "";
+  const key = request.headers.get("X-Portal-Admin-Key") || "";
+  if (!expected || !timingSafeEqual(key, expected)) {
+    return json({ ok: false, error: "No autorizado" }, 401, cors);
+  }
+  // Sin KV no hay dónde guardar el contador: mejor decirlo que fingir que se revocó.
+  if (!env.RL) return json({ ok: false, error: "Revocación no disponible: al Worker le falta el KV (binding RL)" }, 501, cors);
+  const body = await readJson(request);
+  const clienteId = str(body && body.clienteId);
+  if (!isRecId(clienteId)) return json({ ok: false, error: "Cliente inválido" }, 400, cors);
+  const v = (await portalVersion(env, clienteId)) + 1;
+  try {
+    await env.RL.put(PORTAL_REV_KEY(clienteId), String(v));
+  } catch (e) {
+    return json({ ok: false, error: "No se pudo revocar" }, 502, cors);
+  }
+  return json({ ok: true, version: v }, 200, cors);
 }
 
 /* ── POST /portal/link ── solo el dashboard (clave PORTAL_ADMIN_KEY) ────── */
