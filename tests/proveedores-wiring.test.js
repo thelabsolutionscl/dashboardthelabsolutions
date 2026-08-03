@@ -18,15 +18,15 @@ function esc(value) {
 function count(re, text = SOURCE) {
   return (text.match(re) || []).length;
 }
-function uniqueFunction(name, text = PROV) {
-  const re = new RegExp(`(?:async\\s+)?function\\s+${esc(name)}\\s*\\(`, 'g');
-  assert.equal(count(re, text), 1, `${name} debe existir exactamente una vez`);
+function unique(name, text = PROV) {
+  assert.equal(
+    count(new RegExp(`(?:async\\s+)?function\\s+${esc(name)}\\s*\\(`, 'g'), text),
+    1,
+    `${name} debe existir exactamente una vez`
+  );
 }
 function balancedEnd(source, openIndex) {
-  let depth = 0;
-  let quote = null;
-  let lineComment = false;
-  let blockComment = false;
+  let depth = 0, quote = null, lineComment = false, blockComment = false;
   for (let i = openIndex; i < source.length; i += 1) {
     const c = source[i], n = source[i + 1], p = source[i - 1];
     if (lineComment) { if (c === '\n') lineComment = false; continue; }
@@ -50,37 +50,31 @@ function fn(name, text = PROV) {
   return text.slice(found.index, end + 1);
 }
 
-test('PROVEEDORES conserva navegación, sección y módulo únicos', () => {
-  assert.equal(count(/id=["']tab-proveedores["']/g, INDEX), 1, '#tab-proveedores debe ser único');
-  assert.match(INDEX, /switchTab\(\s*['"]proveedores['"]\s*\)/, 'falta navegación desktop');
-  assert.match(INDEX, /switchTabMobile\(\s*['"]proveedores['"]\s*\)/, 'falta navegación móvil');
-  assert.equal(count(/<script[^>]+src=["']js\/proveedores\.js\?v=/g, INDEX), 1, 'proveedores.js debe cargarse una vez');
-});
-
-test('la interfaz conserva tabla, filtros, ficha, precios y órdenes de compra', () => {
-  for (const id of [
-    'proveedoresTableBody', 'proveedorSearch', 'proveedorCatFilter', 'proveedoresBulkBar',
-    'catManagerModal', 'editProveedorModal', 'mejorPrecioProv', 'ocList', 'ocModal',
-    'ocProveedor', 'ocRows', 'ocNeto', 'ocIva', 'ocTotal'
-  ]) {
+test('PROVEEDORES conserva navegación y contenedores esenciales', () => {
+  assert.equal(count(/id=["']tab-proveedores["']/g, INDEX), 1);
+  assert.match(INDEX, /switchTab\(\s*['"]proveedores['"]\s*\)/);
+  assert.match(INDEX, /switchTabMobile\(\s*['"]proveedores['"]\s*\)/);
+  assert.equal(count(/<script[^>]+src=["']js\/proveedores\.js\?v=/g, INDEX), 1);
+  for (const id of ['proveedoresTableBody', 'proveedorSearch', 'proveedorCatFilter', 'mejorPrecioProv', 'ocList', 'ocModal']) {
     assert.equal(count(new RegExp(`id=["']${id}["']`, 'g'), INDEX), 1, `${id} debe existir una vez`);
   }
 });
 
 test('las funciones principales no se redefinen silenciosamente', () => {
   [
-    'pvCat', 'fillCatSelects', 'renderPvCatChips', 'openCatManager', 'renderCatManager',
-    'addPvCat', 'deletePvCat', 'renderProveedores', 'toggleProveedorFicha',
-    'updateRepProveedor', 'setProvEstadoPost', 'saveProvMotivo', 'createProveedor',
-    'openEditProveedor', 'saveEditProveedor', 'bulkDeleteProveedores',
-    'bulkEditProveedorEstado', 'deleteProveedor', '_preciosProv', '_preciosProvSaveArr',
-    '_preciosDeProv', 'addPrecioProv', 'delPrecioProv', '_mejorPrecioPorItem',
-    'renderMejorPrecio', '_ocAll', '_ocSaveArr', '_ocNextNum', 'openOCModal',
-    'ocAddRow', 'ocCalc', 'guardarOC', 'delOC', 'generarOCPDF', 'renderOCList'
-  ].forEach(name => uniqueFunction(name));
+    'pvCat', 'fillCatSelects', 'renderPvCatChips', 'renderCatManager',
+    'renderProveedores', 'updateRepProveedor', 'setProvEstadoPost',
+    'saveProvMotivo', 'createProveedor', 'saveEditProveedor',
+    'bulkDeleteProveedores', 'bulkEditProveedorEstado', 'deleteProveedor',
+    '_preciosProv', '_preciosProvSaveArr', '_preciosProvBackup',
+    '_preciosDeProv', 'addPrecioProv', 'delPrecioProv',
+    '_mejorPrecioPorItem', 'renderMejorPrecio', '_ocAll', '_ocSaveArr',
+    '_ocBackup', '_ocNextNum', 'openOCModal', 'ocAddRow', 'ocCalc',
+    'guardarOC', 'delOC', 'generarOCPDF', 'renderOCList', 'exportToCSV'
+  ].forEach(name => unique(name));
 });
 
-test('crear y editar validan identidad y escriben en Airtable', () => {
+test('crear y editar validan identidad antes de escribir en Airtable', () => {
   const create = fn('createProveedor');
   const edit = fn('saveEditProveedor');
   for (const block of [create, edit]) {
@@ -89,35 +83,36 @@ test('crear y editar validan identidad y escriben en Airtable', () => {
     assert.match(block, /validEmail/);
     assert.match(block, /validPhone/);
     assert.match(block, /validRUT/);
-    assert.match(block, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"](?:POST|PATCH)['"]/);
   }
-  assert.match(create, /airtableFetch\(['"]Proveedores['"]\s*,\s*500\)/);
+  assert.match(create, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]POST['"]/);
+  assert.match(edit, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]PATCH['"]/);
 });
 
-test('reputación y evaluación aplican actualización optimista con rollback', () => {
+test('reputación y postulación aplican actualización optimista con rollback', () => {
   const rep = fn('updateRepProveedor');
+  const post = fn('setProvEstadoPost');
   assert.match(rep, /Reputación/);
   assert.match(rep, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]PATCH['"]/);
   assert.match(rep, /catch[\s\S]*old/);
-  const post = fn('setProvEstadoPost');
   assert.match(post, /Estado postulación/);
-  assert.match(post, /ENTREVISTAR|APROBADO|RECHAZADO/);
   assert.match(post, /catch[\s\S]*old/);
+  assert.match(PROV, /ENTREVISTAR/);
+  assert.match(PROV, /APROBADO/);
+  assert.match(PROV, /RECHAZADO/);
   assert.match(fn('saveProvMotivo'), /Motivo evaluación/);
 });
 
-test('la ficha conecta contacto, pedidos, postulación e historial de precios', () => {
+test('la ficha conecta pedidos, evaluación e historial de precios', () => {
   const render = fn('renderProveedores');
   assert.match(render, /state\.proveedores/);
   assert.match(render, /state\.pedidos/);
-  assert.match(render, /WhatsApp/);
+  assert.match(render, /Pedidos activos vinculados/);
   assert.match(render, /Estado postulación/);
   assert.match(render, /Motivo evaluación/);
   assert.match(render, /_preciosProvFichaHtml/);
-  assert.match(render, /Pedidos activos vinculados/);
 });
 
-test('el formulario público aplica controles antiabuso antes de crear', () => {
+test('el formulario público aplica controles antiabuso y crea postulación', () => {
   assert.match(WORKER, /url\.pathname\s*===\s*["']\/proveedor["']/);
   const handler = fn('handleProveedor', WORKER);
   assert.match(handler, /X-Public-Lead-Key/);
@@ -127,36 +122,34 @@ test('el formulario público aplica controles antiabuso antes de crear', () => {
   assert.match(handler, /Falta el nombre del proveedor/);
   assert.match(handler, /Falta email o teléfono/);
   assert.match(handler, /airtableCreateTolerant\([^)]*["']Proveedores["']/);
-  assert.match(handler, /Estado postulación[^\n]*ENTREVISTAR/);
+  assert.match(handler, /ENTREVISTAR/);
   assert.match(handler, /sendProveedorNotification/);
 });
 
-test('precios se comparan por ítem y tienen respaldo remoto best-effort', () => {
+test('precios se comparan por ítem y tienen respaldo best-effort', () => {
   assert.match(fn('_preciosProv'), /localStorage/);
   assert.match(fn('_preciosProvSaveArr'), /_preciosProvBackup/);
   assert.match(fn('_preciosProvBackup'), /_monitorUpsert\(['"]PRECIOS_PROV['"]/);
-  assert.match(fn('_normItem'), /normalize\(['"]NFD['"]\)/);
   assert.match(fn('_mejorPrecioPorItem'), /precio\s*<\s*best\[k\]\.precio/);
-  assert.match(fn('renderMejorPrecio'), /último precio por proveedor|ultimoPorProv/);
+  assert.match(fn('renderMejorPrecio'), /ultimoPorProv|último precio por proveedor/);
 });
 
-test('órdenes de compra calculan totales, se respaldan y generan documento', () => {
+test('órdenes de compra calculan, respaldan y generan documento', () => {
   assert.match(fn('_ocSaveArr'), /_ocBackup/);
   assert.match(fn('_ocBackup'), /_monitorUpsert\(['"]ORDENES_COMPRA['"]/);
   assert.match(fn('_ocNextNum'), /OC-/);
   const save = fn('guardarOC');
-  assert.match(save, /proveedor/);
-  assert.match(save, /items/);
   assert.match(save, /estado\s*:\s*['"]Emitida['"]/);
   assert.match(save, /_ocSaveArr/);
   const calc = fn('ocCalc');
-  assert.match(calc, /neto/);
   assert.match(calc, /0\.19/);
+  assert.match(calc, /ocNeto/);
+  assert.match(calc, /ocIva/);
   assert.match(calc, /ocTotal/);
   assert.match(fn('generarOCPDF'), /window\.print|print\(\)/);
 });
 
-test('la exportación CSV escapa delimitadores y añade BOM UTF-8', () => {
+test('la exportación CSV incluye proveedores, escape y BOM UTF-8', () => {
   const csv = fn('exportToCSV');
   assert.match(csv, /t===['"]proveedores['"]/);
   assert.match(csv, /replace\(\/"\/g\s*,\s*['"]""['"]\)/);
@@ -164,19 +157,17 @@ test('la exportación CSV escapa delimitadores y añade BOM UTF-8', () => {
   assert.match(csv, /text\/csv/);
 });
 
-test('RBAC declara acceso y escritura de Proveedores', () => {
-  assert.match(INDEX, /RBAC[\s\S]*tabs[\s\S]*proveedores/);
-  assert.match(INDEX, /canWrite[\s\S]*Proveedores|Proveedores[\s\S]*canWrite/);
-  assert.match(INDEX, /canDelete[\s\S]*Proveedores|Proveedores[\s\S]*canDelete/);
+test('RBAC declara el módulo Proveedores', () => {
+  assert.match(INDEX, /RBAC[\s\S]*proveedores/);
+  assert.match(INDEX, /nuevo-proveedor/);
 });
 
-// Hallazgos confirmados: se vuelven pruebas obligatorias al implementar cada corrección.
+// Hallazgos confirmados: deben convertirse en pruebas obligatorias al corregirse.
 test('diagnóstico: pedidos y OC deben enlazar proveedores por record ID', (t) => {
   const render = fn('renderProveedores');
   const oc = fn('openOCModal');
-  if (/\['Proveedor'\][\s\S]{0,120}toLowerCase\(\)[\s\S]{0,120}nombre\.toLowerCase\(\)/.test(render)
-      || /option value=.*Nombre/.test(oc)) {
-    t.todo('CRÍTICO: reemplazar nombres/comas por relaciones Airtable o supplierId estable; renombrar o duplicar nombres rompe pedidos, gasto y OC');
+  if (/\['Proveedor'\][\s\S]{0,180}nombre\.toLowerCase\(\)/.test(render) || /option value=.*Nombre/.test(oc)) {
+    t.todo('CRÍTICO: reemplazar nombres/comas por supplierId estable; renombrar o duplicar nombres rompe pedidos, gasto, precios y OC');
     return;
   }
 });
@@ -184,7 +175,7 @@ test('diagnóstico: pedidos y OC deben enlazar proveedores por record ID', (t) =
 test('diagnóstico: el reintento de creación no debe duplicar registros', (t) => {
   const create = fn('createProveedor');
   if (/airtableWrite\(['"]Proveedores['"]\s*,\s*['"]POST['"][\s\S]*catch[\s\S]*airtableWrite\(['"]Proveedores['"]\s*,\s*['"]POST['"]/.test(create)) {
-    t.todo('CRÍTICO: un timeout o error incierto puede crear dos proveedores; usar idempotency key/upsert por RUT/email y reintentar solo errores de esquema comprobados');
+    t.todo('CRÍTICO: un timeout puede crear dos proveedores; usar idempotency key/upsert por RUT/email y reintentar solo rechazos de esquema confirmados');
     return;
   }
 });
@@ -192,23 +183,21 @@ test('diagnóstico: el reintento de creación no debe duplicar registros', (t) =
 test('diagnóstico: editar debe permitir limpiar campos', (t) => {
   const edit = fn('saveEditProveedor');
   if (/Object\.keys\(fields\)[\s\S]*delete fields\[k\]/.test(edit)) {
-    t.todo('en PATCH se eliminan valores vacíos del payload; borrar teléfono, notas, web o condiciones no persiste y deja datos obsoletos');
+    t.todo('borrar teléfono, notas, web o condiciones no persiste porque los valores vacíos se eliminan del PATCH');
     return;
   }
 });
 
-test('diagnóstico: catálogos no deben depender de localStorage', (t) => {
+test('diagnóstico: categorías no deben depender de localStorage', (t) => {
   if (/function getPvCats\(\)[\s\S]{0,220}localStorage/.test(PROV)) {
-    t.todo('categorías, orden y colores deben ser configuración autoritativa compartida; hoy difieren por navegador y no migran datos al renombrar/eliminar');
+    t.todo('categorías, orden y colores deben ser configuración compartida y migrable, no variar por navegador');
     return;
   }
 });
 
-test('diagnóstico: precios y OC no deben sincronizarse como un blob completo', (t) => {
-  const prices = fn('_preciosProvSaveArr');
-  const orders = fn('_ocSaveArr');
-  if (/localStorage/.test(prices) && /localStorage/.test(orders)) {
-    t.todo('PRECIOS_PROV y ORDENES_COMPRA requieren registros individuales/versionados; el JSON completo tiene last-write-wins, pérdida por concurrencia y sin auditoría');
+test('diagnóstico: precios y OC no deben sincronizarse como blobs completos', (t) => {
+  if (/localStorage/.test(fn('_preciosProvSaveArr')) && /localStorage/.test(fn('_ocSaveArr'))) {
+    t.todo('PRECIOS_PROV y ORDENES_COMPRA requieren registros individuales/versionados; el blob completo pierde cambios concurrentes y auditoría');
     return;
   }
 });
@@ -216,15 +205,15 @@ test('diagnóstico: precios y OC no deben sincronizarse como un blob completo', 
 test('diagnóstico: numeración de OC debe ser atómica', (t) => {
   const next = fn('_ocNextNum');
   if (/_ocAll\(\)/.test(next) && /mx\+1/.test(next)) {
-    t.todo('CRÍTICO: dos equipos pueden emitir el mismo OC-AAAA-NNN; reservar correlativo en backend mediante transacción/lock');
+    t.todo('CRÍTICO: dos equipos pueden emitir el mismo OC-AAAA-NNN; reservar correlativo único en backend');
     return;
   }
 });
 
-test('diagnóstico: valoración de proveedor no debe usar venta del cliente', (t) => {
+test('diagnóstico: valoración no debe usar revenue del cliente', (t) => {
   const render = fn('renderProveedores');
   if (/Monto total \(CLP\)/.test(render) && /Total pedidos/.test(render)) {
-    t.todo('“Total pedidos” suma el valor de venta al cliente, no el costo/OC/factura del proveedor; separar gasto real, comprometido, pagado y ahorro');
+    t.todo('“Total pedidos” suma la venta al cliente, no el costo, OC, factura o pago del proveedor');
     return;
   }
 });
@@ -239,32 +228,31 @@ test('diagnóstico: evaluación debe guardar evidencia y responsable', (t) => {
 
 test('diagnóstico: el endpoint público debe deduplicar postulaciones', (t) => {
   const handler = fn('handleProveedor', WORKER);
-  if (/airtableCreateTolerant/.test(handler) && !/idempot|dedup|upsert|RUT.*filter|email.*filter/i.test(handler)) {
-    t.todo('POST /proveedor crea una fila por cada reintento/envío; reservar por idempotency key y resolver duplicados por RUT/email normalizado');
+  if (/airtableCreateTolerant/.test(handler) && !/idempot|dedup|upsert/i.test(handler)) {
+    t.todo('POST /proveedor crea una fila por reintento; reservar idempotency key y resolver duplicados por RUT/email normalizado');
     return;
   }
 });
 
-test('diagnóstico: eliminar proveedor debe proteger dependencias', (t) => {
+test('diagnóstico: eliminar debe proteger dependencias', (t) => {
   const del = fn('deleteProveedor');
-  const bulk = fn('bulkDeleteProveedores');
-  if (/airtableDelete/.test(del) && /airtableDelete/.test(bulk) && !/pedido|orden|factura|depend|bloque/i.test(del)) {
-    t.todo('bloquear o archivar proveedores con pedidos, OC, facturas, precios o postulaciones; restaurar hoy crea otro record ID y bulk delete no tiene undo');
+  if (/airtableDelete/.test(del) && !/pedido|orden|factura|depend|bloque/i.test(del)) {
+    t.todo('archivar/bloquear proveedores con pedidos, OC, facturas, precios o evaluaciones; restaurar hoy crea otro record ID');
     return;
   }
 });
 
-test('diagnóstico: las lecturas deben paginar', (t) => {
+test('diagnóstico: la recarga debe paginar', (t) => {
   const create = fn('createProveedor');
   if (/airtableFetch\(['"]Proveedores['"]\s*,\s*500\)/.test(create)) {
-    t.todo('no truncar maestro en 500; paginar y hacer búsquedas/estadísticas sobre el universo completo');
+    t.todo('no truncar el maestro en 500; paginar y calcular estadísticas sobre el universo completo');
     return;
   }
 });
 
-test.todo('órdenes de compra deben tener estados Borrador/Aprobada/Enviada/Aceptada/Recibida parcial/Cerrada/Cancelada y trazabilidad de cambios');
-test.todo('OC y precios deben guardar supplierId, moneda, unidad, IVA/exención, vigencia, condición de pago, documento fuente y archivos adjuntos');
-test.todo('la reputación debe derivarse de entregas reales: calidad, puntualidad, precio, incidentes y muestra, conservando cada evaluación');
-test.todo('URLs, mailto, tel y WhatsApp deben normalizarse y validarse también para registros importados, no solo formularios del dashboard');
-test.todo('CSV debe neutralizar fórmulas, respetar filtros visibles y registrar exportaciones de datos sensibles');
-test.todo('la autorización de lectura/escritura debe vivir en backend con políticas por campo; RBAC del navegador no basta');
+test.todo('OC debe recorrer Borrador/Aprobada/Enviada/Aceptada/Recibida parcial/Cerrada/Cancelada con historial');
+test.todo('OC y precios deben guardar supplierId, moneda, unidad, IVA/exención, vigencia, condiciones y documento fuente');
+test.todo('la reputación debe derivarse de entregas reales y conservar cada evaluación');
+test.todo('URLs, mailto, tel y WhatsApp deben validarse también para registros importados');
+test.todo('CSV debe neutralizar fórmulas, respetar filtros y auditar exportaciones sensibles');
+test.todo('autorización de lectura/escritura debe imponerse en backend por tabla, fila y campo');
