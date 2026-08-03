@@ -5,13 +5,13 @@
 <script>
 /* Links antiguos del portal (?portal=base64) — apuntaban a este dashboard. El
    portal ahora lo sirve el lead-worker, que responde "enlace inválido" y pide
-   uno nuevo. Va PRIMERO en la cabecera, antes de las hojas de estilo y de los
-   scripts externos: un script inline espera a los stylesheets pendientes, y acá
-   hay que cortar al instante — con un link viejo nadie debe ver el dashboard. */
+   uno nuevo. Va PRIMERO en el <head>, antes de cualquier <link>/<script>: un
+   script inline espera a los stylesheets pendientes, y acá hay que cortar la
+   carga al instante — un cliente con un link viejo jamás debe ver el dashboard. */
 (function(){
   if(!/[?&]portal=/.test(location.search)) return;
   // El %% lo reemplaza GitHub Actions al desplegar (mismo sed que _DEFAULTS).
-  var w='%%LEAD_WORKER_URL%%';
+  var w='http://localhost:8899/worker';
   location.replace(w.indexOf('%%')===0
     ? 'https://thelab.solutions'
     : w.replace(/\/+$/,'')+'/portal?t=enlace-antiguo');
@@ -6224,7 +6224,7 @@ const _DEFAULTS={
   ADS_CUSTOMER:'%%ADS_CUSTOMER%%',
   ELEVENLABS:'%%ELEVENLABS%%',
   PRINTER_TUNNEL_TOKEN:'%%PRINTER_TUNNEL_TOKEN%%',
-  LEAD_WORKER_URL:'%%LEAD_WORKER_URL%%',
+  LEAD_WORKER_URL:'http://localhost:8899/worker',
   PUBLIC_LEAD_KEY:'%%PUBLIC_LEAD_KEY%%',
   PORTAL_ADMIN_KEY:'%%PORTAL_ADMIN_KEY%%'
 };

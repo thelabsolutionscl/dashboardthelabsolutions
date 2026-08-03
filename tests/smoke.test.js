@@ -55,8 +55,16 @@ const ok = msg => console.log('  ✓ ' + msg);
     const worker = fs.readFileSync(path.join(ROOT, 'lead-worker', 'src', 'index.js'), 'utf8');
     if (!worker.includes('const PORTAL_STAGES = ["Confirmado", "En producción", "Listo para despacho", "Despachado", "Completado"];')) fail('El portal del cliente debe representar la etapa Completado');
     else ok('El portal del cliente representa el ciclo completo hasta Completado');
-    if (/\?portal=|function checkClientePortal/.test(SRC)) fail('El dashboard no debe volver a servir el portal del cliente (fuga de datos internos)');
+    if (/function checkClientePortal/.test(SRC)) fail('El dashboard no debe volver a servir el portal del cliente (fuga de datos internos)');
     else ok('El dashboard no expone el portal del cliente desde su propio HTML');
+    // El guard tiene que ir ANTES de cualquier <link>/<script src> del head: un
+    // script inline espera a los stylesheets pendientes y la carga se colaría.
+    const head = SRC.slice(0, SRC.indexOf('</head>'));
+    const guard = head.indexOf('[?&]portal=');
+    const primerRecurso = Math.min(...['<link', '<script src', '<script defer', '<script async'].map((x) => { const i = head.indexOf(x); return i < 0 ? Infinity : i; }));
+    if (guard < 0 || !/location\.replace\(/.test(head)) fail('Un link antiguo (?portal=) debe salir del dashboard, no abrirlo');
+    else if (guard > primerRecurso) fail('El corte de los links antiguos (?portal=) debe ir antes de los recursos del <head>');
+    else ok('Los links antiguos del portal salen del dashboard antes de cargar nada');
     if (!/X-Portal-Admin-Key/.test(SRC)) fail('El dashboard debe pedir el link del portal al Worker con PORTAL_ADMIN_KEY');
     else ok('El link del portal lo emite el Worker, firmado y con vencimiento');
   }

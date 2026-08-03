@@ -152,6 +152,19 @@ test('portal del cliente', async (t) => {
     assert.match(patch.fields['Fecha aprobación'], /^\d{4}-\d{2}-\d{2}$/);
   });
 
+  await t.test('el motivo de rechazo va a notas, no ensucia el single select', async () => {
+    const token = await tokenDe(worker);
+    escrituras = [];
+    await worker.fetch(req('https://worker.example.com/portal/cotizacion/decision', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ t: token, cot: COT, decision: 'Rechazada', comentario: 'Muy caro comparado con la competencia' }),
+    }), env, ctx);
+    const patch = escrituras.find((e) => e.recId === COT);
+    assert.equal(patch.fields['Estado cotización'], 'Rechazada');
+    assert.equal(patch.fields['Motivo rechazo'], undefined, 'no se inventan opciones en el single select');
+    assert.match(patch.fields['Notas cotización'], /Muy caro comparado con la competencia/);
+  });
+
   await t.test('con su token no puede decidir la cotización de otro cliente', async () => {
     const token = await tokenDe(worker);
     const r = await worker.fetch(req('https://worker.example.com/portal/cotizacion/decision', {

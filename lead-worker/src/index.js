@@ -325,7 +325,13 @@ async function handlePortalCotDecision(request, env, ctx, cors) {
   const comentario = String(body.comentario || "").slice(0, 2000);
   const fields = { "Estado cotización": decision };
   if (decision === "Aprobada") fields["Fecha aprobación"] = today();
-  if (decision === "Rechazada" && comentario) fields["Motivo rechazo"] = comentario;
+  // El comentario va a "Notas cotización" (texto largo) y NO a "Motivo rechazo":
+  // ese campo es un single select y con typecast cada texto libre del cliente le
+  // creaba una opción nueva. La clasificación la hace el equipo desde el dashboard.
+  if (decision === "Rechazada" && comentario) {
+    const previas = str((rec.fields || {})["Notas cotización"]);
+    fields["Notas cotización"] = (previas ? previas + "\n\n" : "") + `[${today()}] Rechazo del cliente (portal): ${comentario}`;
+  }
   try {
     await airtableUpdateTolerant(env, "Cotizaciones", cotId, fields);
   } catch (e) {
