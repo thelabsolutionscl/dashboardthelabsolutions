@@ -6,6 +6,10 @@ on:
       - agent/dashboard-hardening-completo
     paths:
       - .github/workflows/autofix-hardening.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/autofix-hardening.yml
   workflow_dispatch: {}
 
 permissions:
@@ -13,6 +17,7 @@ permissions:
 
 jobs:
   patch:
+    if: github.head_ref == 'agent/dashboard-hardening-completo' || github.ref_name == 'agent/dashboard-hardening-completo'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +61,7 @@ function mail_rate_limit($max = 60, $window = 60) {
     $key = hash('sha256', $ip);
     $file = sys_get_temp_dir() . '/thelab-mail-rate-' . $key . '.json';
     $fh = @fopen($file, 'c+');
-    if (!$fh) return true; // fail-open solo si el servidor no permite temporales
+    if (!$fh) return true;
     if (!@flock($fh, LOCK_EX)) { fclose($fh); return true; }
     $raw = stream_get_contents($fh);
     $state = json_decode($raw ?: '{}', true) ?: [];
