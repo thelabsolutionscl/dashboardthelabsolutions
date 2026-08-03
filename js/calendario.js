@@ -9,10 +9,12 @@
   try { buildQuery = new URL(loaderSource, document.baseURI).search; } catch (_) {}
 
   const MODULES = {
+    gateway: { src: 'js/gateway-client.js', ready: () => !!window.DashboardGateway },
     base: { src: 'js/calendario-base.js', ready: () => typeof window.renderCalendario === 'function' },
+    runtime: { src: 'js/runtime-bridges.js', ready: () => !!window.PrinterTelemetry && !!window.TheLabTime },
     operations: { src: 'js/calendario-operaciones.js', ready: () => !!window.CalOps },
     collapsible: { src: 'js/calendario-collapsible.js', ready: () => !!window.CalendarCollapsible },
-    runtime: { src: 'js/runtime-bridges.js', ready: () => !!window.PrinterTelemetry && !!window.TheLabTime },
+    productionState: { src: 'js/production-state.js', ready: () => !!window.ProductionState },
     branding: { src: 'js/tv-logo-fix.js', ready: () => !!window.TVLogoFix },
     tv: { src: 'js/tv-control-center.js', ready: () => !!window.TVControlCenter },
   };
@@ -83,12 +85,16 @@
   }
 
   async function start() {
+    // El bridge de fetch se instala primero para que cualquier llamada posterior
+    // al gateway incluya la sesión de Cloudflare Access.
+    await Promise.allSettled([loadModule('gateway'), loadModule('runtime')]);
+
     const base = await Promise.allSettled([loadModule('base')]);
     if (base[0].status === 'fulfilled') {
       await Promise.allSettled([loadModule('operations'), loadModule('collapsible')]);
     }
 
-    await Promise.allSettled([loadModule('runtime'), loadModule('branding')]);
+    await Promise.allSettled([loadModule('productionState'), loadModule('branding')]);
     await Promise.allSettled([loadModule('tv')]);
 
     window.CalendarModulesReady = base[0].status === 'fulfilled';
