@@ -1,0 +1,53 @@
+name: Oficina audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/oficina.js'
+      - 'js/maquinas.js'
+      - 'tests/oficina-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - 'docs/audits/OFICINA_VIRTUAL.md'
+      - '.github/workflows/oficina-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/oficina.js'
+      - 'js/maquinas.js'
+      - 'tests/oficina-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - 'docs/audits/OFICINA_VIRTUAL.md'
+      - '.github/workflows/oficina-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  presence-health-and-privacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate audit syntax
+        run: node --check tests/oficina-wiring.test.js
+
+      - name: Validate office modules
+        run: |
+          node --check js/oficina.js
+          node --check js/maquinas.js
+
+      - name: Audit office wiring and safety
+        run: node --test tests/oficina-wiring.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js
