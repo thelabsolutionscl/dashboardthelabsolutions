@@ -3,9 +3,7 @@ name: Deploy Dashboard
 on:
   push:
     branches: [main]
-  workflow_dispatch: {} # permite lanzar el deploy a mano desde la pestaña Actions
-  # Nota: tras crear/cambiar un secret (PROXY_URL, PROXY_KEY, ADS_WEBAPP…), hay que
-  # relanzar este deploy para re-hornear los valores nuevos en index.html.
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -17,8 +15,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  quality:
+    name: Quality gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Syntax check JavaScript
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs");
+            const html=fs.readFileSync("index.html","utf8");
+            const re=/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
+            let m,i=0,bad=0;
+            while((m=re.exec(html))){
+              const head=m[0].slice(0,m[0].indexOf(">"));
+              if(/\bsrc\s*=/.test(head)) continue;
+              i++; fs.writeFileSync("/tmp/b"+i+".js",m[1]);
+              try{ require("child_process").execFileSync("node",["--check","/tmp/b"+i+".js"],{stdio:"pipe"}); }
+              catch(e){ bad++; console.error("Bloque inline "+i+" inválido\n"+(e.stderr||e.stdout||e)); }
+            }
+            process.exit(bad?1:0);
+          '
+          for file in js/*.js scripts/*.mjs; do node --check "$file"; done
+
+      - name: Run all tests
+        run: node --test tests/*.test.js
+
+      - name: PHP lint
+        run: php -l mail-api.php
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -26,67 +65,68 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inject secrets into index.html
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Inyectar solo configuración pública
         env:
-          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}       # el secret se llama AIRTABLE
-          OPENAI_KEY: ${{ secrets.OPENAI }}             # el secret se llama OPENAI
-          GOOGLE_CLIENT_ID: ${{ secrets.DRIVE }}        # el secret se llama DRIVE
+          GOOGLE_CLIENT_ID: ${{ secrets.DRIVE }}
           SII_WORKER_URL: ${{ secrets.SII_WORKER_URL }}
           SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
-          ANTHROPIC_KEY: ${{ secrets.CLAUDE }}          # el secret se llama CLAUDE
           PROXY_URL: ${{ secrets.PROXY_URL }}
-          PROXY_KEY: ${{ secrets.PROXY_KEY }}
           PRINTER_TUNNEL: ${{ secrets.PRINTER_TUNNEL }}
           ADS_WEBAPP: ${{ secrets.ADS_WEBAPP }}
           ADS_CUSTOMER: ${{ secrets.ADS_CUSTOMER }}
-          ELEVENLABS: ${{ secrets.ELEVENLABS }}
-          PRINTER_TUNNEL_TOKEN: ${{ secrets.PRINTER_TUNNEL_TOKEN }}
-          LEAD_WORKER_URL: ${{ secrets.LEAD_WORKER_URL }}
-          PUBLIC_LEAD_KEY: ${{ secrets.PUBLIC_LEAD_KEY }}
-          PORTAL_ADMIN_KEY: ${{ secrets.PORTAL_ADMIN_KEY }}
-        run: |
-          # MODO PROXY (ver SECURITY.md): con PROXY_URL+PROXY_KEY configurados, los
-          # tokens de Airtable y Anthropic NO se hornean en el HTML público — quedan
-          # como %%…%% (el cliente los neutraliza) y todas las llamadas van por el
-          # Worker, que guarda los tokens reales como secretos server-side.
-          if [ -n "${PROXY_URL}" ] && [ -n "${PROXY_KEY}" ]; then
-            echo "Modo proxy: AIRTABLE_TOKEN y ANTHROPIC_KEY no se inyectan en el HTML."
-          else
-            sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
-            sed -i "s|%%ANTHROPIC_KEY%%|${ANTHROPIC_KEY}|g" index.html
-          fi
-          sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
-          sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
-          # Portal del cliente: lo sirve el lead-worker. El dashboard solo necesita
-          # su URL y PORTAL_ADMIN_KEY para pedir el link firmado de cada cliente.
-          if [ -n "${LEAD_WORKER_URL}" ]; then sed -i "s|%%LEAD_WORKER_URL%%|${LEAD_WORKER_URL}|g" index.html; fi
-          if [ -n "${PUBLIC_LEAD_KEY}" ]; then sed -i "s|%%PUBLIC_LEAD_KEY%%|${PUBLIC_LEAD_KEY}|g" index.html; fi
-          if [ -n "${PORTAL_ADMIN_KEY}" ]; then sed -i "s|%%PORTAL_ADMIN_KEY%%|${PORTAL_ADMIN_KEY}|g" index.html; fi
-          sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
-          sed -i "s|%%SII_RUT_EMISOR%%|${SII_RUT_EMISOR}|g" index.html
-          sed -i "s|%%SII_RAZON_SOCIAL%%|${SII_RAZON_SOCIAL}|g" index.html
-          sed -i "s|%%PROXY_URL%%|${PROXY_URL}|g" index.html
-          sed -i "s|%%PROXY_KEY%%|${PROXY_KEY}|g" index.html
-          sed -i "s|%%PRINTER_TUNNEL%%|${PRINTER_TUNNEL}|g" index.html
-          sed -i "s|%%ADS_WEBAPP%%|${ADS_WEBAPP}|g" index.html
-          sed -i "s|%%ADS_CUSTOMER%%|${ADS_CUSTOMER}|g" index.html
-          sed -i "s|%%ELEVENLABS%%|${ELEVENLABS}|g" index.html
-          sed -i "s|%%PRINTER_TUNNEL_TOKEN%%|${PRINTER_TUNNEL_TOKEN}|g" index.html
-
-      - name: Inject secrets into cotiza.html (cotizador público)
-        env:
           LEAD_WORKER_URL: ${{ secrets.LEAD_WORKER_URL }}
           PUBLIC_LEAD_KEY: ${{ secrets.PUBLIC_LEAD_KEY }}
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
-        run: |
-          # Sin secrets configurados, los %%…%% quedan y el formulario cae a mailto: — no se rompe.
-          if [ -n "${LEAD_WORKER_URL}" ]; then sed -i "s|%%LEAD_WORKER_URL%%|${LEAD_WORKER_URL}|g" cotiza.html; fi
-          if [ -n "${PUBLIC_LEAD_KEY}" ]; then sed -i "s|%%PUBLIC_LEAD_KEY%%|${PUBLIC_LEAD_KEY}|g" cotiza.html; fi
-          if [ -n "${TURNSTILE_SITE_KEY}" ]; then sed -i "s|%%TURNSTILE_SITE_KEY%%|${TURNSTILE_SITE_KEY}|g" cotiza.html; fi
+        run: node scripts/inject-public-config.mjs
 
-      - name: Stamp build version (cache-busting de styles.css, js/* y service worker)
-        run: sed -i "s|%%BUILD%%|${GITHUB_SHA::8}|g" index.html sw.js
+      - name: Stamp build version
+        run: |
+          set -euo pipefail
+          sed -i "s|%%BUILD%%|${GITHUB_SHA::8}|g" index.html sw.js
+
+      - name: Construir artifact público mínimo
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir dist
+          rsync -a ./ dist/ \
+            --exclude dist \
+            --exclude .git \
+            --exclude .github \
+            --exclude '.*' \
+            --exclude tests \
+            --exclude scripts \
+            --exclude docs \
+            --exclude backup \
+            --exclude airtable-proxy \
+            --exclude lead-worker \
+            --exclude sii-worker \
+            --exclude printer-bridge \
+            --exclude node_modules \
+            --exclude mail-api.php \
+            --exclude SECURITY.md \
+            --exclude '*.md' \
+            --exclude '*.log'
+          test -s dist/index.html
+          test -s dist/sw.js
+
+      - name: Verificar artifact antes de publicar
+        run: |
+          set -euo pipefail
+          if grep -RIlE 'sk-ant-[A-Za-z0-9_-]{15,}|sk-(proj-)?[A-Za-z0-9_-]{20,}|pat[A-Za-z0-9._-]{20,}|re_[A-Za-z0-9_-]{20,}' dist/index.html dist/cotiza.html 2>/dev/null; then
+            echo '::error::Se detectó una posible credencial privada en el artifact público'
+            exit 1
+          fi
+          if grep -qE '%%(AIRTABLE_TOKEN|ANTHROPIC_KEY|OPENAI_KEY|ELEVENLABS|PROXY_KEY|PRINTER_TUNNEL_TOKEN|PORTAL_ADMIN_KEY)%%' dist/index.html; then
+            echo '::error::Quedaron placeholders privados en index.html'
+            exit 1
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -94,7 +134,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
 
       - name: Deploy to GitHub Pages
         id: deployment
