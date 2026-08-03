@@ -383,131 +383,155 @@ async function handlePortalCotizacion(request, env) {
 }
 
 // Solo descripción, cantidad y precio de venta: ver la advertencia de arriba.
-function portalCotItems(cf) {
-  let crudo = [];
-  try {
-    const j = JSON.parse(cf["Detalle JSON"] || "[]");
-    if (Array.isArray(j)) crudo = j;
-  } catch (e) {
-    crudo = [];
+// ── La cotización, calcada de buildCotizacionDoc() (js/pdf-fichas.js) ──────
+// Es EL MISMO documento que sale de la sección Cotizaciones del dashboard. Si
+// cambias uno, cambia el otro: el cliente no puede recibir dos versiones
+// distintas del mismo papel.
+const COT_FORMA_PAGO_DESC = {
+  "AL CONTADO": "Pago total al momento de confirmar el pedido, vía transferencia bancaria, vale vista o cheque al día.",
+  "30 DÍAS DESDE OC": "Pago total a 30 días desde la emisión de la Orden de Compra, vía transferencia bancaria.",
+  "45 DÍAS DESDE OC": "Pago total a 45 días desde la emisión de la Orden de Compra, vía transferencia bancaria.",
+  "70% ABONO Y 30% CONTRA ENTREGA": "70% de abono al confirmar el pedido (Facturable inmediatamente), 30% restante contra entrega y conformidad de recepción, vía transferencia bancaria, vale vista o cheque al día.",
+  "50% ABONO Y 50% 30 DÍAS": "50% de abono al confirmar el pedido (Facturable inmediatamente), 50% restante a 30 días desde la Orden de Compra, vía transferencia bancaria.",
+};
+function cotFechaLarga(iso) {
+  if (!iso) return "";
+  const d = new Date(String(iso).slice(0, 10) + "T00:00:00");
+  if (isNaN(d)) return String(iso);
+  try { return d.toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" }); }
+  catch (e) { return String(iso); }
+}
+function cotPlazoTexto(f) {
+  if (!f) return "";
+  if (f["Fecha de entrega"]) return `Entrega estimada para el ${cotFechaLarga(f["Fecha de entrega"])}. Fecha sujeta a la confirmación del pedido y a la disponibilidad de stock.`;
+  const min = f["Tiempo de producción"];
+  if (!min) return "";
+  const max = f["Tiempo de producción máx"];
+  const tipo = String(f["Tipo días producción"] || "DÍAS HÁBILES").toLowerCase();
+  const rango = max && max > min ? `${min}-${max}` : `${min}`;
+  return `${rango} ${tipo} desde la confirmación del pedido. Plazo podría variar dependiendo de stock de productos, contingencias sanitarias o sociales.`;
+}
+// Mismo parseo de "Detalle productos" que el dashboard: de cada línea saca la
+// VENTA. La diferencia: acá, si la columna elegida trae "Costo:" (línea con
+// formato raro), se descarta el precio en vez de arriesgar mostrarlo.
+function cotLineas(cf) {
+  const detalle = str(cf["Detalle productos"]);
+  if (detalle) {
+    return detalle.split("\n").filter(Boolean).map((l) => {
+      const parts = l.split("|").map((x) => x.trim());
+      const und = parseFloat((parts[1] || "").replace(/[^\d.]/g, "")) || 1;
+      const col = parts[3] || parts[2] || "";
+      const ventaTotal = /costo/i.test(col) ? 0 : parseFloat(String(col).replace(/[Vv]enta:\s*/, "").replace(/\./g, "").replace(/[^0-9]/g, "")) || 0;
+      return { desc: String(parts[0] || "").replace(/costo:.*/i, "").trim(), und, ventaUnit: und > 0 ? Math.round(ventaTotal / und) : ventaTotal, ventaTotal };
+    });
   }
-  return crudo
-    .map((x) => ({ desc: str(x && x.desc), und: Number(x && x.und) || 0, venta: Number(x && x.ventaUnit) || 0 }))
-    .filter((x) => x.desc || x.venta);
+  // Cotizaciones sin el texto: se arma desde "Detalle JSON" usando SOLO
+  // desc/und/ventaUnit (ese JSON también trae costoUnit y el desglose de costos).
+  let crudo = [];
+  try { const j = JSON.parse(cf["Detalle JSON"] || "[]"); if (Array.isArray(j)) crudo = j; } catch (e) {}
+  return crudo.map((x) => {
+    const und = Number(x && x.und) || 1;
+    const ventaUnit = Number(x && x.ventaUnit) || 0;
+    return { desc: str(x && x.desc), und, ventaUnit, ventaTotal: und * ventaUnit };
+  }).filter((x) => x.desc || x.ventaTotal);
 }
 
 function portalCotizacionPage(rec, cli, token) {
   const esc = escapeHtmlW;
-  const cf = rec.fields || {};
-  const items = portalCotItems(cf);
-  const abierta = PORTAL_COT_ABIERTAS.includes(cf["Estado cotización"] || "");
-  const totalFinal = Number(cf["Total final (CLP)"]) || 0;
+  const f = rec.fields || {};
+  const abierta = PORTAL_COT_ABIERTAS.includes(f["Estado cotización"] || "");
+  const num = f["N° Cotización"] || "—";
+  // Mismo fallback que el dashboard: sin fecha emitida, va la de hoy.
+  const fecha = f["Fecha cotización"] || new Date().toISOString().split("T")[0];
+  const vto = f["Fecha vencimiento"] || "—";
+  const urgente = !!f["Urgencia (+25%)"];
+  const solicitud = str(f["Solicitud cliente (texto libre)"]);
+  const total = Number(f["Total final (CLP)"]) || 0;
+  const neto = Math.round(total / 1.19);
+  const iva = total - neto;
+  const plazotxt = cotPlazoTexto(f) || "A coordinar con el cliente.";
+  const formaPago = str(f["Forma de pago"]);
+  const formaHtml = formaPago ? `<strong>${esc(formaPago)}:</strong> ${esc(COT_FORMA_PAGO_DESC[formaPago] || "")}` : "";
 
-  const netoItems = items.reduce((a, x) => a + x.und * x.venta, 0);
-  // "Total final (CLP)" manda; el resto se deriva de él para que siempre cuadre.
-  const netoFinal = totalFinal ? Math.round(totalFinal / 1.19) : netoItems;
-  const ajuste = netoItems ? netoFinal - netoItems : 0;
-  const iva = (totalFinal || Math.round(netoFinal * 1.19)) - netoFinal;
-  const total = totalFinal || netoFinal + iva;
+  const lineas = cotLineas(f);
+  const itemsHTML = lineas.length
+    ? lineas.map((l, i) => `<tr style="background:${i % 2 === 0 ? "#f9f9f9" : "#fff"}"><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px">${esc(l.desc)}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:center;color:#555">${l.und}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:right">${esc(portalCLP(l.ventaUnit))}</td><td style="padding:6px 10px;border-bottom:1px solid #e8e8e8;font-size:10px;text-align:right;font-weight:600">${esc(portalCLP(l.ventaTotal))}</td></tr>`).join("")
+    : `<tr><td colspan="4" style="padding:12px;text-align:center;color:#999;font-size:10px">Sin detalle</td></tr>`;
+  const infoRow = (label, val) => (val && val !== "—" ? `<tr><td style="padding:3px 0;font-size:10px;color:#888;width:80px;vertical-align:top">${esc(label)}</td><td style="padding:3px 0;font-size:10px;color:#1a1a1a;font-weight:500">${esc(val)}</td></tr>` : "");
 
-  const filas = items.length
-    ? items.map((x) => `<tr>
-        <td style="padding:11px 8px;border-bottom:1px solid #e6e6e6">${esc(x.desc)}</td>
-        <td style="padding:11px 8px;border-bottom:1px solid #e6e6e6;text-align:center;white-space:nowrap">${x.und}</td>
-        <td style="padding:11px 8px;border-bottom:1px solid #e6e6e6;text-align:right;white-space:nowrap">${esc(portalCLP(x.venta))}</td>
-        <td style="padding:11px 8px;border-bottom:1px solid #e6e6e6;text-align:right;white-space:nowrap;font-weight:600">${esc(portalCLP(x.und * x.venta))}</td>
-      </tr>`).join("")
-    : `<tr><td colspan="4" style="padding:16px 8px;color:#666;font-size:13px">El detalle de esta cotización te lo enviamos por correo. Cualquier duda, escríbenos.</td></tr>`;
+  const sumaNeto = lineas.reduce((a, l) => a + (l.ventaTotal || 0), 0);
+  const descPct = Math.max(0, parseFloat(f["Descuento (%)"]) || 0);
+  const descMonto = sumaNeto - neto;
+  const hayDesc = descPct > 0 && descMonto > 0 && sumaNeto > 0;
+  const descPctTxt = Number.isInteger(descPct) ? String(descPct) : descPct.toFixed(1).replace(/\.0$/, "");
+  const totalsRows =
+    (hayDesc
+      ? `<div class="totals-row"><span>Subtotal neto</span><span>${esc(portalCLP(sumaNeto))}</span></div>` +
+        `<div class="totals-row" style="color:#c0392b"><span>Descuento (${esc(descPctTxt)}%)</span><span>−${esc(portalCLP(descMonto))}</span></div>` +
+        `<div class="totals-row"><span>Neto</span><span>${esc(portalCLP(neto))}</span></div>`
+      : `<div class="totals-row"><span>Neto</span><span>${esc(portalCLP(neto))}</span></div>`) +
+    `<div class="totals-row iva"><span>IVA (19%)</span><span>${esc(portalCLP(iva))}</span></div>` +
+    `<div class="totals-row total-final"><span>TOTAL</span><span>${esc(portalCLP(total))}</span></div>`;
 
-  const fila = (etiqueta, valor, fuerte) =>
-    `<tr><td colspan="2"></td>
-      <td style="padding:6px 8px;text-align:right;${fuerte ? "font-weight:700;font-size:15px" : "color:#555;font-size:13px"}">${esc(etiqueta)}</td>
-      <td style="padding:6px 8px;text-align:right;white-space:nowrap;${fuerte ? "font-weight:700;font-size:15px" : "font-size:13px"}">${esc(valor)}</td></tr>`;
-
-  const produccion = cf["Tiempo de producción"]
-    ? `${cf["Tiempo de producción"]} ${str(cf["Tipo días producción"]).toLowerCase() || "días"}`
-    : "";
-  const condiciones = [
-    ["Forma de pago", str(cf["Forma de pago"])],
-    ["Plazo de producción", produccion],
-    ["Válida hasta", portalFecha(cf["Fecha vencimiento"])],
-  ].filter(([, v]) => v);
-
-  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
-<title>Cotización ${esc(cf["N° Cotización"] || "")} — The Lab Solutions</title>
-<style>
-  body{margin:0;background:#ececed;color:#141414;font-family:system-ui,Arial,sans-serif}
-  .hoja{max-width:760px;margin:0 auto;background:#fff;padding:44px 46px 52px}
-  .acciones{max-width:760px;margin:0 auto;padding:14px 46px;display:flex;gap:10px;flex-wrap:wrap}
-  .btn{border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
-  @media print{
-    body{background:#fff}
-    .acciones{display:none !important}
-    .hoja{max-width:none;padding:0}
-    @page{margin:16mm}
-  }
-  @media(max-width:640px){.hoja{padding:28px 20px}.acciones{padding:12px 20px}}
-</style></head>
-<body>
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Cotización ${esc(num)}</title>
+<link rel="icon" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
+<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;padding:18px 24px;font-size:10px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #00d4cc;}
+.logo-area img{height:28px;}.logo-area .tagline{font-size:8px;color:#aaa;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;}
+.cot-meta{text-align:right;}.cot-meta h1{font-size:20px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#0a0a0a;}
+.cot-meta .num{font-size:16px;font-weight:700;color:#00d4cc;font-family:monospace;margin-top:2px;}.cot-meta .fechas{font-size:9px;color:#999;margin-top:4px;line-height:1.6;}
+${urgente ? ".urgente-strip{background:#ff6b35;color:#fff;text-align:center;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:5px;border-radius:5px;margin-bottom:10px;}" : ""}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.info-box{background:#f8f8f8;border-radius:6px;padding:10px 12px;border-top:3px solid #00d4cc;}
+.info-box h3{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#aaa;margin-bottom:8px;}
+.info-box table{width:100%;border-collapse:collapse;}
+.section-label{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#aaa;margin:10px 0 5px;}
+.solicitud-box{background:#f0fffe;border:1px solid rgba(0,212,204,0.3);border-radius:6px;padding:8px 10px;font-size:10px;color:#333;line-height:1.7;white-space:pre-line;}
+.condiciones-box{background:#f8f8f8;border-radius:6px;padding:10px 12px;margin-top:10px;border-left:4px solid #00d4cc;font-size:9px;color:#333;line-height:1.7;}
+table.items{width:100%;border-collapse:collapse;border:1px solid #e8e8e8;margin-top:5px;}
+table.items thead tr{background:#0a0a0a;color:#fff;}
+table.items thead th{padding:7px 10px;font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;text-align:left;}
+table.items thead th:nth-child(2){text-align:center;}table.items thead th:nth-child(3),table.items thead th:nth-child(4){text-align:right;}
+.totals{margin-top:8px;display:flex;justify-content:flex-end;}
+.totals-box{min-width:220px;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;}
+.totals-row{display:flex;justify-content:space-between;padding:6px 12px;font-size:10px;border-bottom:1px solid #f0f0f0;background:#fff;}
+.totals-row.iva{color:#888;}.totals-row.total-final{background:#0a0a0a;color:#00d4cc;font-weight:700;font-size:12px;border-bottom:none;}
+.transfer-box{margin-top:12px;border:1px solid #00d4cc;border-radius:6px;overflow:hidden;}
+.transfer-title{background:#00d4cc;color:#0a0a0a;font-weight:700;text-align:center;padding:5px;letter-spacing:1.5px;text-transform:uppercase;font-size:9px;}
+.transfer-box table{width:100%;border-collapse:collapse;}.transfer-box table td{padding:4px 10px;font-size:9px;}
+.footer{margin-top:12px;padding-top:10px;border-top:2px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;}
+.footer .left{font-size:8px;color:#bbb;line-height:1.7;}.footer .validity{background:#f8f8f8;border-radius:5px;padding:5px 10px;font-size:9px;color:#555;}
+.footer .validity strong{color:#0a0a0a;}
+.acciones{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.acciones .btn{border:0;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block}
+@media print{body{padding:10px 14px;}.acciones{display:none !important}@page{margin:8mm;size:A4;}}</style></head><body>
 <div class="acciones">
-  <button class="btn" onclick="window.print()" style="background:#141414;color:#fff">⬇ Descargar PDF</button>
-  ${abierta ? `<button class="btn" onclick="portalDecidir('${esc(rec.id)}','Aprobada')" style="background:#00b3a4;color:#06231f">✓ Aprobar cotización</button>
-  <button class="btn" onclick="portalDecidir('${esc(rec.id)}','Rechazada')" style="background:transparent;color:#666;border:1px solid #ccc">Rechazar</button>` : ""}
-  <a class="btn" href="/portal?t=${encodeURIComponent(token)}" style="background:transparent;color:#666;border:1px solid #ccc;text-decoration:none">← Volver</a>
+  <button class="btn" onclick="window.print()" style="background:#0a0a0a;color:#fff">⬇ Descargar PDF</button>
+  ${abierta ? `<button class="btn" onclick="portalDecidir('${esc(rec.id)}','Aprobada')" style="background:#00d4cc;color:#0a0a0a">✓ Aprobar cotización</button>
+  <button class="btn" onclick="portalDecidir('${esc(rec.id)}','Rechazada')" style="background:#fff;color:#777;border:1px solid #ddd">Rechazar</button>` : ""}
+  <a class="btn" href="/portal?t=${encodeURIComponent(token)}" style="background:#fff;color:#777;border:1px solid #ddd">← Volver</a>
 </div>
-<div class="hoja">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;border-bottom:2px solid #141414;padding-bottom:18px">
-    <div>
-      <img src="${LOGO_BLACK_URL}" alt="The Lab Solutions" style="width:200px;max-width:60%;height:auto;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-      <div style="display:none;font-size:14px;letter-spacing:.16em;text-transform:uppercase;font-weight:700">The Lab Solutions</div>
-      <div style="font-size:11px;color:#666;margin-top:8px;line-height:1.6">Fabricación digital · Santiago, Chile<br>hola@thelab.solutions · thelab.solutions</div>
-    </div>
-    <div style="text-align:right">
-      <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#666">Cotización</div>
-      <div style="font-size:24px;font-weight:700;line-height:1.2">${esc(cf["N° Cotización"] || "—")}</div>
-      ${cf["Fecha cotización"] ? `<div style="font-size:12px;color:#666;margin-top:4px">${esc(portalFecha(cf["Fecha cotización"]))}</div>` : ""}
-    </div>
-  </div>
-
-  <div style="display:flex;gap:34px;flex-wrap:wrap;margin:22px 0 26px">
-    <div>
-      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#888;margin-bottom:5px">Cliente</div>
-      <div style="font-size:15px;font-weight:700">${esc(cli["Empresa"] || cli["Contacto"] || "")}</div>
-      ${cli["RUT"] ? `<div style="font-size:12px;color:#555;margin-top:2px">RUT ${esc(cli["RUT"])}</div>` : ""}
-      ${cli["Contacto"] && cli["Empresa"] ? `<div style="font-size:12px;color:#555">${esc(cli["Contacto"])}</div>` : ""}
-    </div>
-    ${cf["Alias / Título"] ? `<div>
-      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#888;margin-bottom:5px">Proyecto</div>
-      <div style="font-size:15px;font-weight:700">${esc(cf["Alias / Título"])}</div>
-    </div>` : ""}
-  </div>
-
-  <table style="width:100%;border-collapse:collapse;font-size:14px">
-    <thead><tr style="background:#f4f4f5">
-      <th style="padding:9px 8px;text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#666">Descripción</th>
-      <th style="padding:9px 8px;text-align:center;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#666">Cant.</th>
-      <th style="padding:9px 8px;text-align:right;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#666">P. unitario</th>
-      <th style="padding:9px 8px;text-align:right;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#666">Total</th>
-    </tr></thead>
-    <tbody>${filas}</tbody>
-    <tfoot>
-      ${items.length ? fila("Neto", portalCLP(netoItems)) : ""}
-      ${ajuste ? fila(ajuste < 0 ? "Descuento" : "Ajuste", portalCLP(ajuste)) : ""}
-      ${items.length && ajuste ? fila("Neto final", portalCLP(netoFinal)) : (!items.length ? fila("Neto", portalCLP(netoFinal)) : "")}
-      ${fila("IVA 19%", portalCLP(iva))}
-      ${fila("Total", portalCLP(total), true)}
-    </tfoot>
-  </table>
-
-  ${condiciones.length ? `<div style="margin-top:30px;border-top:1px solid #e6e6e6;padding-top:18px;display:flex;gap:34px;flex-wrap:wrap">
-    ${condiciones.map(([k, v]) => `<div><div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#888;margin-bottom:4px">${esc(k)}</div><div style="font-size:13px;font-weight:600">${esc(v)}</div></div>`).join("")}
-  </div>` : ""}
-
-  <div style="margin-top:34px;font-size:11px;color:#888;line-height:1.7;border-top:1px solid #e6e6e6;padding-top:16px">
-    Valores en pesos chilenos, IVA incluido en el total.
-    ${abierta ? "Para confirmar, aprueba la cotización desde el botón de arriba o respóndenos este correo." : ""}
-  </div>
+<div class="header"><div class="logo-area"><img loading="lazy" decoding="async" src="${LOGO_BLACK_URL}" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
+<div class="cot-meta"><h1>Cotización</h1><div class="num">${esc(num)}</div><div class="fechas">Emitida: <strong>${esc(fecha)}</strong><br>Válida hasta: <strong>${esc(vto)}</strong></div></div></div>
+${urgente ? '<div class="urgente-strip">⚡ Cotización con urgencia — se aplica recargo del 25%</div>' : ""}
+<div class="info-grid">
+<div class="info-box"><h3>Cliente</h3><table>${infoRow("Empresa", cli["Empresa"])}${infoRow("RUT", cli["RUT"])}${infoRow("Contacto", cli["Contacto"])}${infoRow("Teléfono", cli["Teléfono"])}${infoRow("Email", cli["Email"])}${infoRow("Dirección", cli["Dirección"])}${infoRow("Comuna", cli["Comuna"])}${infoRow("Región", cli["Región"])}</table></div>
+<div class="info-box"><h3>The Lab Solutions</h3><table>${infoRow("Web", "thelab.solutions")}${infoRow("Teléfono", "+56 9 7180 6142")}${infoRow("Email", "hola@thelab.solutions")}${infoRow("Dirección", "Zaragoza 8882, Las Condes")}${infoRow("Ciudad", "Santiago, Chile")}</table></div>
 </div>
+${solicitud ? `<div class="section-label">Solicitud del cliente</div><div class="solicitud-box">${esc(solicitud)}</div>` : ""}
+<div class="condiciones-box"><p style="margin-bottom:5px"><strong>PLAZO DE ENTREGA:</strong> ${esc(plazotxt)}</p>${formaHtml ? `<p style="margin-bottom:2px;margin-top:5px"><strong>FORMA DE PAGO:</strong></p><p style="margin-bottom:5px">${formaHtml}</p>` : ""}<p style="color:#888;font-style:italic">* Cotización válida por 10 días hábiles.</p></div>
+<div class="section-label" style="margin-top:10px">Detalle de productos / servicios</div>
+<table class="items"><thead><tr><th style="background:#0a0a0a;color:#fff">Descripción</th><th style="background:#0a0a0a;color:#fff;text-align:center">Cant.</th><th style="background:#0a0a0a;color:#fff;text-align:right">Precio Unit. Neto</th><th style="background:#0a0a0a;color:#fff;text-align:right">Total Neto</th></tr></thead><tbody>${itemsHTML}</tbody></table>
+<div class="totals"><div class="totals-box">${totalsRows}</div></div>
+<div class="transfer-box"><div class="transfer-title">Datos de Transferencia</div><table>
+<tr style="border-bottom:1px solid #e8e8e8"><td style="color:#888;width:120px;font-weight:600;text-transform:uppercase;font-size:8px">Razón Social</td><td style="font-weight:500">WAST3D SPA</td></tr>
+<tr style="border-bottom:1px solid #e8e8e8;background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Banco</td><td style="font-weight:500">BANCO ESTADO</td></tr>
+<tr style="border-bottom:1px solid #e8e8e8"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Tipo de Cuenta</td><td style="font-weight:500">CUENTA VISTA (CHEQUERA ELECTRÓNICA)</td></tr>
+<tr style="border-bottom:1px solid #e8e8e8;background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">RUT</td><td style="font-weight:500">77.499.554-4</td></tr>
+<tr style="border-bottom:1px solid #e8e8e8"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">N° de Cuenta</td><td style="font-weight:500">90270420078</td></tr>
+<tr style="background:#f9f9f9"><td style="color:#888;font-weight:600;text-transform:uppercase;font-size:8px">Email</td><td style="font-weight:500">PAGOS@THELAB.SOLUTIONS</td></tr>
+</table></div>
+<div class="footer"><div class="left">The Lab Solutions SpA · Santiago, Chile<br>hola@thelab.solutions · +56 9 7180 6142</div><div class="validity">Válida hasta: <strong>${esc(vto)}</strong></div></div>
 <script>
 var PORTAL_TOKEN=${JSON.stringify(token)};
 ${PORTAL_DECIDIR_JS}

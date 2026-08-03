@@ -12,6 +12,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -160,6 +161,35 @@ test('portal del cliente', async (t) => {
     assert.doesNotMatch(html, /160\.?000/, 'costo unitario filtrado');
     assert.doesNotMatch(html, /480\.?000/, 'suma de costos filtrada');
     assert.doesNotMatch(html, /Costo:/, 'texto con costos filtrado');
+  });
+
+  // El documento del portal tiene que ser EL MISMO que genera el botón de PDF de
+  // la sección Cotizaciones (js/pdf-fichas.js). Si alguien cambia uno y no el
+  // otro, el cliente recibiría dos versiones distintas del mismo papel.
+  await t.test('el documento es idéntico al PDF de la sección Cotizaciones', async () => {
+    const _NF = new Intl.NumberFormat('es-CL');
+    const previos = ['formatCLP', 'escHtml', 'resolveClienteName', 'state'].map((k) => [k, globalThis[k]]);
+    globalThis.formatCLP = (v) => (!v ? '$0' : '$' + _NF.format(Math.round(v)));
+    globalThis.escHtml = (s) => (!s && s !== 0 ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
+    globalThis.resolveClienteName = () => REGISTROS.Clientes[CLIENTE].fields.Empresa;
+    globalThis.state = { cotizacionesById: { [COT]: REGISTROS.Cotizaciones[COT] }, clientes: [REGISTROS.Clientes[CLIENTE]] };
+
+    const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'pdf-fichas.js'), 'utf8');
+    const trozo = src.slice(src.indexOf('function cotFechaLarga'), src.indexOf('function generarPDFCotizacion'));
+    const oficial = new Function(trozo + '\nreturn buildCotizacionDoc;')()(COT).html;
+
+    const token = await tokenDe(worker);
+    const delPortal = await (await worker.fetch(req(`https://worker.example.com/portal/cotizacion?t=${encodeURIComponent(token)}&cot=${COT}`), env, ctx)).text();
+    previos.forEach(([k, v]) => { globalThis[k] = v; });
+
+    // Se comparan sin la barra de acciones ni el script, que son solo del portal.
+    const norm = (h) => h
+      .replace(/<div class="acciones">[\s\S]*?<\/div>\s*(?=<div class="header">)/, '')
+      .replace(/<script>[\s\S]*?<\/script>/g, '')
+      .replace(/<meta name="viewport"[^>]*>|<meta name="robots"[^>]*>/g, '')
+      .replace(/\.acciones\{[^}]*\}|\.acciones \.btn\{[^}]*\}/g, '')
+      .replace(/\s+/g, ' ').trim();
+    assert.equal(norm(delPortal), norm(oficial), 'el documento del portal se desfasó del PDF del dashboard');
   });
 
   await t.test('no se puede ver la cotización de otro cliente', async () => {
