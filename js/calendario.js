@@ -10,6 +10,7 @@
 
   const MODULES = {
     gateway: { src: 'js/gateway-client.js', ready: () => !!window.DashboardGateway },
+    printerAccess: { src: 'js/printer-access-client.js', ready: () => !!window.PrinterAccess },
     base: { src: 'js/calendario-base.js', ready: () => typeof window.renderCalendario === 'function' },
     runtime: { src: 'js/runtime-bridges.js', ready: () => !!window.PrinterTelemetry && !!window.TheLabTime },
     operations: { src: 'js/calendario-operaciones.js', ready: () => !!window.CalOps },
@@ -85,9 +86,9 @@
   }
 
   async function start() {
-    // El bridge de fetch se instala primero para que cualquier llamada posterior
-    // al gateway incluya la sesión de Cloudflare Access.
-    await Promise.allSettled([loadModule('gateway'), loadModule('runtime')]);
+    // Los adaptadores de seguridad se instalan primero para que cualquier llamada
+    // posterior incluya la sesión Cloudflare Access y nunca agregue tokens a URLs.
+    await Promise.allSettled([loadModule('gateway'), loadModule('printerAccess'), loadModule('runtime')]);
 
     const base = await Promise.allSettled([loadModule('base')]);
     if (base[0].status === 'fulfilled') {
