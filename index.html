@@ -9208,6 +9208,7 @@ function buildClienteRow(c){
           <button class="act-item act-item-green" onclick="cotizarParaCliente('${c.id}')">＋ &nbsp;Nueva cotización</button>
           <button class="act-item act-item-green" data-empresa="${escapeHtml(f['Empresa']||'')}" onclick="startQuoteFlow('${c.id}',this.dataset.empresa)">💰 &nbsp;Cotizar con KAI (guiado)</button>
           <button class="act-item" onclick="compartirPortalCliente('${c.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-link"/></svg> &nbsp;Portal cliente</button>
+          <button class="act-item act-item-red" onclick="revocarPortalCliente('${c.id}','${escapeHtml(c.fields['Empresa']||c.fields['Contacto']||'este cliente').replace(/'/g,'')}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-link"/></svg> &nbsp;Revocar links del portal</button>
           ${iaItems}
           ${reactivarItems?'<div class="act-sep"></div>'+reactivarItems:''}
         </div>
@@ -9391,6 +9392,21 @@ async function portalLinkCliente(clienteId,dias){
     if(!r.ok||!res||!res.ok) return{error:'No se pudo generar el link: '+((res&&res.error)||r.status)};
     return{url:res.url,expira:res.expira};
   }catch(e){return{error:'Error de conexión con el worker: '+e.message};}
+}
+// Corta el acceso de UN cliente: los links que ya le enviaste dejan de abrir
+// (el Worker sube su versión de token). Los demás clientes no se ven afectados.
+async function revocarPortalCliente(clienteId,nombre){
+  if(!confirm(`¿Revocar los links del portal de ${nombre}?\n\nTodos los enlaces que le enviaste dejarán de funcionar de inmediato. Si sigue necesitando entrar, tendrás que enviarle uno nuevo.`)) return;
+  const base=(_DEFAULTS.LEAD_WORKER_URL||'').replace(/\/+$/,'');
+  const key=_DEFAULTS.PORTAL_ADMIN_KEY||'';
+  if(base.startsWith('%%')||!base||key.startsWith('%%')||!key){toast('Portal sin configurar: faltan los secrets LEAD_WORKER_URL y PORTAL_ADMIN_KEY','error');return;}
+  toast('Revocando…','info');
+  try{
+    const r=await fetch(base+'/portal/revocar',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Admin-Key':key},body:JSON.stringify({clienteId})});
+    const res=await r.json().catch(()=>null);
+    if(!r.ok||!res||!res.ok){toast('No se pudo revocar: '+((res&&res.error)||r.status),'error');return;}
+    toast(`✓ Links de ${nombre} revocados`,'success');
+  }catch(e){toast('Error de conexión con el worker: '+e.message,'error');}
 }
 async function compartirPortalCliente(clienteId){
   toast('Generando link del portal…','info');

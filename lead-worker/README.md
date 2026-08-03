@@ -11,6 +11,7 @@ Worker **dedicado y separado** de `sii-worker`. Ningún secreto vive en el repo.
 | POST | `/webhooks/google-ads` | `X-Google-Ads-Webhook-Key` | Google Lead Form |
 | POST | `/webhooks/linkedin` | `X-Linkedin-Webhook-Key` | LinkedIn vía Make/Zapier |
 | POST | `/portal/link` | `X-Portal-Admin-Key` | El dashboard pide el link del portal de un cliente |
+| POST | `/portal/revocar` | `X-Portal-Admin-Key` | Invalida los links ya enviados a un cliente |
 | GET | `/portal?t=…` | token firmado | Portal del cliente: pedidos y cotizaciones |
 | POST | `/portal/cotizacion/decision` | token firmado | El cliente aprueba/rechaza su cotización |
 
@@ -25,6 +26,12 @@ cliente, y las decisiones se cruzan contra el dueño de la cotización antes de
 escribir en Airtable. Para emitirlo, el dashboard llama a `/portal/link` con
 `PORTAL_ADMIN_KEY` (secreto compartido con GitHub Actions; **nunca**
 `PUBLIC_LEAD_KEY`, que viaja en el bundle de la web pública).
+
+**Revocar** (botón *Revocar links del portal* en la ficha del cliente) sube un
+contador por cliente en el KV que entra en la firma: sus enlaces dejan de abrir
+al instante y los de los demás siguen igual. Requiere el binding `RL`; sin KV la
+ruta responde 501 en vez de fingir que revocó. La propagación del KV entre
+regiones puede tardar hasta ~1 minuto.
 
 ## Variables y secretos
 No-secretas (`wrangler.toml [vars]`): `AIRTABLE_BASE_ID`, `ALLOWED_ORIGINS`, `AUTO_PROCESS_LEADS`,

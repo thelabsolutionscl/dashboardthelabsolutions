@@ -25,7 +25,16 @@ const COT = 'recCO0000000000A1';
 const COT_AJENA = 'recCO0000000000B2';
 const COT_CERRADA = 'recCO0000000000C3';
 
+// KV de mentira (el binding RL del Worker): guarda la versión de token de cada
+// cliente, que es lo que hace efectiva la revocación.
+const kv = new Map();
+const RL = {
+  async get(k) { return kv.has(k) ? kv.get(k) : null; },
+  async put(k, v) { kv.set(k, String(v)); },
+};
+
 const env = {
+  RL,
   AIRTABLE_TOKEN: 'patSECRETO_NO_DEBE_SALIR',
   AIRTABLE_BASE_ID: 'appTEST',
   PORTAL_SECRET: 'secreto-de-prueba',
@@ -254,6 +263,48 @@ test('portal del cliente', async (t) => {
     assert.equal(r.status, 200);
     assert.equal((await r.json()).alreadyDecided, true);
     assert.equal(escrituras.length, 0);
+  });
+
+  await t.test('revocar corta los links de ese cliente y de nadie más', async () => {
+    const suyo = await tokenDe(worker);
+    const ajeno = await tokenDe(worker, OTRO_CLIENTE);
+    const abre = async (tk) => (await (await worker.fetch(req(`https://worker.example.com/portal?t=${encodeURIComponent(tk)}`), env, ctx)).text()).includes('Ferretería Los Andes');
+    assert.equal(await abre(suyo), true, 'antes de revocar, el link abre');
+
+    const sinClave = await worker.fetch(req('https://worker.example.com/portal/revocar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clienteId: CLIENTE }),
+    }), env, ctx);
+    assert.equal(sinClave.status, 401, 'revocar exige la clave del dashboard');
+
+    const r = await worker.fetch(req('https://worker.example.com/portal/revocar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal-Admin-Key': env.PORTAL_ADMIN_KEY },
+      body: JSON.stringify({ clienteId: CLIENTE }),
+    }), env, ctx);
+    assert.equal(r.status, 200);
+
+    assert.equal(await abre(suyo), false, 'el link revocado ya no abre');
+    assert.match(await (await worker.fetch(req(`https://worker.example.com/portal?t=${encodeURIComponent(suyo)}`), env, ctx)).text(), /Enlace inválido/);
+    // Tampoco sirve para decidir cotizaciones.
+    const dec = await worker.fetch(req('https://worker.example.com/portal/cotizacion/decision', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ t: suyo, cot: COT, decision: 'Aprobada' }),
+    }), env, ctx);
+    assert.equal(dec.status, 401);
+
+    // El de otro cliente sigue intacto, y uno nuevo vuelve a funcionar.
+    const htmlAjeno = await (await worker.fetch(req(`https://worker.example.com/portal?t=${encodeURIComponent(ajeno)}`), env, ctx)).text();
+    assert.doesNotMatch(htmlAjeno, /Enlace inválido/, 'revocar a uno no afecta a los demás');
+    assert.equal(await abre(await tokenDe(worker)), true, 'el link nuevo sí abre');
+  });
+
+  await t.test('sin KV, revocar avisa en vez de fingir que funcionó', async () => {
+    const { RL: _omitido, ...sinKv } = env;
+    const r = await worker.fetch(req('https://worker.example.com/portal/revocar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal-Admin-Key': env.PORTAL_ADMIN_KEY },
+      body: JSON.stringify({ clienteId: CLIENTE }),
+    }), sinKv, ctx);
+    assert.equal(r.status, 501);
+    assert.match((await r.json()).error, /KV/);
   });
 
   await t.test('la ruta pública vieja ya no existe', async () => {
