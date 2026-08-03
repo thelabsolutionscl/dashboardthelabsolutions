@@ -1,0 +1,58 @@
+name: Redes audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/redes.js'
+      - 'lead-worker/src/index.js'
+      - 'docs/REDES_SOCIALES.md'
+      - 'tests/redes.test.js'
+      - 'tests/redes-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/redes-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/redes.js'
+      - 'lead-worker/src/index.js'
+      - 'docs/REDES_SOCIALES.md'
+      - 'tests/redes.test.js'
+      - 'tests/redes-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/redes-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publishing-inbox-and-webhook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate audit syntax
+        run: node --check tests/redes-wiring.test.js
+
+      - name: Validate social modules
+        run: |
+          node --check js/redes.js
+          node --check lead-worker/src/index.js
+
+      - name: Audit social wiring and safety
+        run: node --test tests/redes-wiring.test.js
+
+      - name: Run social logic tests
+        run: node tests/redes.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js
