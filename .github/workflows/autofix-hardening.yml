@@ -1,0 +1,119 @@
+name: One-time hardening autofix
+
+on:
+  push:
+    branches:
+      - agent/dashboard-hardening-completo
+    paths:
+      - .github/workflows/autofix-hardening.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dashboard-hardening-completo
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Aplicar parches puntuales seguros
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          mail = Path('mail-api.php')
+          text = mail.read_text()
+          text = text.replace("define('MAIL_API_BUILD', '2026-07-22-sent-addrs');", "define('MAIL_API_BUILD', '2026-08-03-security');")
+          text = text.replace("/imap/ssl/novalidate-cert", "/imap/ssl")
+          marker = "if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit(0); }\n\n$user"
+          guard = r'''if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit(0); }
+
+// Rechazar orígenes no autorizados en vez de limitarse a no compartir la respuesta.
+if ($_origin && !in_array($_origin, $_origins, true)) {
+    http_response_code(403);
+    echo json_out(['error' => 'Origen no autorizado', 'build' => MAIL_API_BUILD]);
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST, OPTIONS');
+    echo json_out(['error' => 'Método no permitido', 'build' => MAIL_API_BUILD]);
+    exit;
+}
+
+// Rate limit simple por IP, protegido con flock. Reduce fuerza bruta contra IMAP
+// incluso si la capa Cloudflare/cPanel queda temporalmente mal configurada.
+function mail_rate_limit($max = 60, $window = 60) {
+    $ip = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $key = hash('sha256', $ip);
+    $file = sys_get_temp_dir() . '/thelab-mail-rate-' . $key . '.json';
+    $fh = @fopen($file, 'c+');
+    if (!$fh) return true; // fail-open solo si el servidor no permite temporales
+    if (!@flock($fh, LOCK_EX)) { fclose($fh); return true; }
+    $raw = stream_get_contents($fh);
+    $state = json_decode($raw ?: '{}', true) ?: [];
+    $now = time();
+    if (empty($state['reset']) || (int)$state['reset'] <= $now) {
+        $state = ['count' => 0, 'reset' => $now + $window];
+    }
+    $state['count'] = (int)($state['count'] ?? 0) + 1;
+    ftruncate($fh, 0); rewind($fh); fwrite($fh, json_encode($state)); fflush($fh);
+    flock($fh, LOCK_UN); fclose($fh);
+    if ($state['count'] > $max) {
+        header('Retry-After: ' . max(1, (int)$state['reset'] - $now));
+        return false;
+    }
+    return true;
+}
+if (!mail_rate_limit()) {
+    http_response_code(429);
+    echo json_out(['error' => 'Demasiadas solicitudes. Intenta nuevamente en un minuto.', 'build' => MAIL_API_BUILD]);
+    exit;
+}
+
+$user'''
+          if marker not in text:
+              raise SystemExit('No se encontró el punto de inserción de seguridad en mail-api.php')
+          text = text.replace(marker, guard, 1)
+          mail.write_text(text)
+
+          bridge = Path('printer-bridge/server.js')
+          text = bridge.read_text()
+          text = text.replace("const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';", "const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || 'https://dashboard.thelab.solutions';")
+          text = text.replace("const given = req.headers['x-bridge-token'] || (btPart ? decodeURIComponent(btPart.slice(3)) : '');", "const allowQueryToken = String(process.env.BRIDGE_ALLOW_QUERY_TOKEN || '').toLowerCase() === 'true';\n  const given = req.headers['x-bridge-token'] || (allowQueryToken && btPart ? decodeURIComponent(btPart.slice(3)) : '');")
+          text = text.replace("headers['x-forwarded-for'] = '127.0.0.1';", "delete headers['x-forwarded-for'];")
+          text = text.replace("h['x-forwarded-for'] = '127.0.0.1';   // cae en trusted_clients de Moonraker", "delete h['x-forwarded-for'];")
+          text = text.replace("server.listen(PORT, () => {", "server.listen(PORT, process.env.BRIDGE_HOST || '127.0.0.1', () => {")
+          text = text.replace("console.log(`  Token          : ${TOKEN}`);", "console.log('  Token          : cargado de entorno/archivo local (no se imprime)');")
+          bridge.write_text(text)
+          PY
+
+      - name: Validar resultado
+        run: |
+          set -euo pipefail
+          php -l mail-api.php
+          node --check printer-bridge/server.js
+          ! grep -q '/imap/ssl/novalidate-cert' mail-api.php
+          ! grep -q "BRIDGE_ALLOW_ORIGIN || '*'" printer-bridge/server.js
+          ! grep -q "x-forwarded-for.*127.0.0.1" printer-bridge/server.js
+          grep -q 'mail_rate_limit' mail-api.php
+          grep -q "BRIDGE_ALLOW_QUERY_TOKEN" printer-bridge/server.js
+
+      - name: Commit y retirar este workflow temporal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/autofix-hardening.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mail-api.php printer-bridge/server.js
+          git commit -m 'security: validar TLS de correo y aislar bridge legado'
+          git push origin HEAD:agent/dashboard-hardening-completo
