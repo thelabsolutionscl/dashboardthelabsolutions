@@ -94,7 +94,9 @@ test('los adjuntos tienen límites en cliente y servidor', () => {
   assert.match(add, /15\s*\*\s*1024\s*\*\s*1024/, 'frontend debe limitar a 15 MB');
   assert.match(send, /20\s*\*\s*1024\s*\*\s*1024/, 'backend debe imponer límite independiente');
   assert.match(send, /Adjuntos superan 20 MB/);
-  assert.match(PHP, /preg_replace\('\/[\\r\\n"]\/'/, 'SMTP debe limpiar CR/LF del nombre del archivo');
+  // Los corchetes van escapados: sin escapar, `[\r\n"]` se lee como clase de
+  // caracteres y el assert pasaba/fallaba sin mirar la sanitización real.
+  assert.match(PHP, /preg_replace\('\/\[\\r\\n"\]\/'/, 'SMTP debe limpiar CR/LF del nombre del archivo');
   assert.match(methodBlock('downloadAtt'), /URL\.revokeObjectURL/);
 });
 

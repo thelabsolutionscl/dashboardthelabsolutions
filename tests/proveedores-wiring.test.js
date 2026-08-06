@@ -103,13 +103,17 @@ test('reputación y postulación aplican actualización optimista con rollback',
 });
 
 test('la ficha conecta pedidos, evaluación e historial de precios', () => {
+  // renderProveedores quedó como orquestador; la ficha se arma en
+  // buildProveedorRow, que es donde deben vivir los vínculos.
   const render = fn('renderProveedores');
   assert.match(render, /state\.proveedores/);
-  assert.match(render, /state\.pedidos/);
-  assert.match(render, /Pedidos activos vinculados/);
-  assert.match(render, /Estado postulación/);
-  assert.match(render, /Motivo evaluación/);
-  assert.match(render, /_preciosProvFichaHtml/);
+  assert.match(render, /buildProveedorRow/, 'el listado debe delegar la ficha en buildProveedorRow');
+  const ficha = fn('buildProveedorRow');
+  assert.match(ficha, /state\.pedidos/);
+  assert.match(ficha, /Pedidos activos vinculados/);
+  assert.match(ficha, /Estado postulación/);
+  assert.match(ficha, /_preciosProvFichaHtml/);
+  assert.match(PROV, /Motivo evaluación/);
 });
 
 test('el formulario público aplica controles antiabuso y crea postulación', () => {

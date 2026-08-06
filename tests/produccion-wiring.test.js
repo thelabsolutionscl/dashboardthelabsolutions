@@ -106,7 +106,9 @@ test('el cronómetro mide el ciclo pero no se salta QA ni despacho',()=>{
   assert.match(stop,/Inicia el cronómetro primero/,'no debe permitir detener un ciclo inexistente');
   assert.match(stop,/_prodTimersBackup\(\)/);
   assert.doesNotMatch(stop,/Listo para despacho|Despachado|Completado|advancePedido/,'terminar el cronómetro no debe saltarse control de calidad');
-  assert.match(INDEX,/Name':['"]PROD_TIMERS['"]|['"]Name['"]\s*:\s*['"]PROD_TIMERS['"]/,'los tiempos deben tener respaldo compartido');
+  // El respaldo compartido se hace vía _monitorUpsert('PROD_TIMERS',…), que es
+  // quien escribe el campo Name en Monitor Sistema.
+  assert.match(INDEX,/_monitorUpsert\(\s*['"]PROD_TIMERS['"]|Name['"]?\s*:\s*['"]PROD_TIMERS['"]/,'los tiempos deben tener respaldo compartido');
 });
 
 test('MachineOps conserva un orden de fabricación explícito',()=>{

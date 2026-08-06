@@ -144,7 +144,10 @@ test('CAC y ROI usa cotizaciones del período, canal, aprobaciones y venta neta'
   assert.match(calc,/Aprobada/,'solo las aprobadas deben generar revenue');
   assert.match(calc,/Total final \(CLP\)/);
   assert.match(calc,/\/\s*1\.19/,'el revenue debe ser neto de IVA');
-  assert.match(calc,/clientes:new Set\(\)/,'debe deduplicar clientes por canal');
+  // El acumulador por canal se llama `nuevos` (antes `clientes`): lo que importa
+  // es que sea un Set y que se cuente por su tamaño, para no inflar el CAC.
+  assert.match(calc,/(?:clientes|nuevos):new Set\(\)/,'debe deduplicar clientes por canal');
+  assert.match(calc,/\.(?:clientes|nuevos)\.size/,'el CAC debe usar el conteo deduplicado');
   assert.match(calc,/cac:/);
   assert.match(calc,/roi:/);
   assert.match(render,/cacCanalCard/);

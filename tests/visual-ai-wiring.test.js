@@ -58,13 +58,27 @@ test('el iframe declara título y permisos de medios de forma explícita',()=>{
 });
 
 test('el dashboard no contiene credenciales ni llamadas directas del proveedor visual',()=>{
-  assert.doesNotMatch(SOURCE,/api\.muapi\.ai|x-api-key|corsproxy\.io/i,'las llamadas del proveedor deben permanecer fuera del dashboard');
+  // Ojo: NO se puede prohibir 'x-api-key' a secas — es la cabecera estándar que
+  // el dashboard usa legítimamente con Anthropic y con Moonraker (impresoras).
+  // Lo que debe estar fuera es el proveedor visual y cualquier proxy abierto.
+  assert.doesNotMatch(SOURCE,/api\.muapi\.ai|corsproxy\.io/i,'las llamadas del proveedor deben permanecer fuera del dashboard');
+  assert.doesNotMatch(SOURCE,/x-api-key['"]\s*:\s*['"`]?(?:mu_|hf_)/i,'no debe enviarse una key del proveedor visual desde el dashboard');
   assert.doesNotMatch(SOURCE,/\bmu_[A-Za-z0-9_-]{12,}\b|\bhf_[A-Za-z0-9_-]{12,}\b/,'no debe existir una key literal');
 });
 
 test('la carga visual no se dispara desde secciones ajenas',()=>{
-  const matches=[...SOURCE.matchAll(/name\s*===\s*['"]([^'"]+)['"][\s\S]{0,350}?vaiFrame/g)].map(m=>m[1]);
-  assert.deepEqual([...new Set(matches)],['visual']);
+  // Se comprueba el guard REAL de cada línea que toca el iframe, no la cercanía
+  // de texto: la heurística por proximidad capturaba el `if(name===...)` vecino
+  // dentro de switchTab y fallaba al agregar cualquier sección nueva al lado.
+  const lineas=SOURCE.split('\n').filter(l=>l.includes('vaiFrame')&&/\.src\s*=/.test(l));
+  assert.ok(lineas.length,'debe existir la carga diferida del iframe visual');
+  const guards=new Set();
+  for(const l of lineas){
+    const g=[...l.matchAll(/name\s*===\s*['"]([^'"]+)['"]/g)].map(m=>m[1]);
+    assert.ok(g.length,`la carga del iframe debe estar condicionada por sección: ${l.trim().slice(0,80)}`);
+    g.forEach(x=>guards.add(x));
+  }
+  assert.deepEqual([...guards],['visual'],'solo la sección VISUAL AI debe cargar el iframe');
 });
 
 test.todo('el iframe debe usar sandbox mínimo, referrerpolicy y permisos concedidos solo cuando la función los necesite');

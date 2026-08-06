@@ -33,7 +33,9 @@ test('WEB tiene una sola sección, navegación y módulo SEO/Ads cargado',()=>{
   assert.match(SOURCE,/switchTab\(\s*['"]web['"]\s*\)/,'debe existir navegación escritorio');
   assert.match(SOURCE,/switchTabMobile\(\s*['"]web['"]\s*\)/,'debe existir navegación móvil');
   assert.equal(count(/js\/seo-ads\.js(?:\?[^"']*)?/g,INDEX),1,'seo-ads.js debe cargarse una sola vez');
-  for(const id of ['webTrafficPanel','webTrafficBody','webTrafficDemo','seoAuditBody','seoAuditScore','seoPagesList','adsCampaignsArea','adsPendingPanel','adsCapacidadBox','adsSuggestBox','adsAutopilotPanel','adsCampaignModal','adsDeleteModal','adsOfflineModal']){
+  // seoPagesList pertenecía al panel de WordPress, retirado al migrar el sitio
+  // (hoy manda el Auditor SEO on-page); sus funciones quedan con guarda de nulo.
+  for(const id of ['webTrafficPanel','webTrafficBody','webTrafficDemo','seoAuditBody','seoAuditScore','adsCampaignsArea','adsPendingPanel','adsCapacidadBox','adsSuggestBox','adsAutopilotPanel','adsCampaignModal','adsDeleteModal','adsOfflineModal']){
     assert.equal(count(new RegExp(`id=["']${id}["']`,'g'),INDEX),1,`${id} debe existir una vez`);
   }
 });

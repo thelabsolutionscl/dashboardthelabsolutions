@@ -32,7 +32,8 @@ function hasOneOf(text,patterns,message){
 test('Inventario tiene una sola entrada, navegación y contenedores únicos',()=>{
   assert.equal(count(/id=["']tab-inventario["']/g,INDEX),1,'#tab-inventario debe ser único');
   assert.match(SOURCE,/switchTab\(\s*['"]inventario['"]\s*\)/,'debe existir navegación a Inventario');
-  for(const id of ['invTbody','invTableWrap','invCards','invCardsWrap','invChartCat','invChartMat','invReordenCard','recompraTrayCard']){
+  // Contenedores reales de la sección (los nombres inv* antiguos ya no existen).
+  for(const id of ['inventarioTableBody','invCount','invReordenCard','recompraTrayCard']){
     assert.equal(count(new RegExp(`id=["']${id}["']`,'g'),INDEX),1,`${id} debe existir exactamente una vez`);
   }
 });
@@ -57,7 +58,9 @@ test('altas, ediciones y eliminaciones persisten antes de confirmar el cambio',(
   const del=functionBlock(INDEX,'deleteMaterial');
   assert.match(add,/await\s+airtableWrite(?:Tolerant)?\(\s*['"]Inventario['"]\s*,\s*['"]POST['"]/,'addMaterial debe esperar el POST');
   assert.match(edit,/await\s+airtableWrite(?:Tolerant)?\(\s*['"]Inventario['"]\s*,\s*['"]PATCH['"]/,'editMaterial debe esperar el PATCH');
-  assert.match(del,/await\s+airtableWrite(?:Tolerant)?\(\s*['"]Inventario['"]\s*,\s*['"]DELETE['"]/,'deleteMaterial debe esperar el DELETE');
+  // El borrado usa el helper dedicado airtableDelete (hace el DELETE HTTP y
+  // valida RBAC), no airtableWrite con verbo: se acepta cualquiera de los dos.
+  assert.match(del,/await\s+(?:airtableDelete\(\s*['"]Inventario['"]|airtableWrite(?:Tolerant)?\(\s*['"]Inventario['"]\s*,\s*['"]DELETE['"])/,'deleteMaterial debe esperar el DELETE');
 });
 
 test('el consumo por pedido valida cantidad y no permite stock negativo',()=>{

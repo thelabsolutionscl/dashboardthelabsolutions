@@ -202,7 +202,10 @@ async function testWPConnection(){
 async function loadWPPages(){
   const cfg=getWPConfig();
   if(!cfg.url){document.getElementById('wpConfigPanel').style.display='block';loadWPConfigForm();toast('Configura las credenciales primero','info');return;}
+  // El panel de WordPress se retiró al migrar el sitio (hoy manda el Auditor SEO
+  // on-page). Sin contenedor no se sigue: antes reventaba con TypeError.
   const list=document.getElementById('seoPagesList');
+  if(!list){toast('El panel de WordPress ya no está disponible — usa “Analizar sitio” del Auditor SEO','info');return;}
   list.innerHTML='<div style="padding:30px;text-align:center;color:var(--text3)">Cargando páginas...</div>';
   try{
     const h=wpAuthHeader();
@@ -222,6 +225,7 @@ async function loadWPPages(){
 }
 function renderSEOList(pages){
   const list=document.getElementById('seoPagesList');
+  if(!list)return;   // panel de WordPress retirado: no hay dónde pintar
   list.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">Páginas y Posts (${pages.length})</span></div>
   <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
   <thead><tr style="border-bottom:2px solid var(--border2)">

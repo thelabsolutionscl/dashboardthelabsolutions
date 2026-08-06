@@ -13932,6 +13932,15 @@ async function aplicarConsumo(){
   const inputs=[...document.querySelectorAll('#consumoBody input[data-mat]')];
   const aplicar=inputs.map(i=>({id:i.getAttribute('data-mat'),qty:parseFloat(i.value)||0})).filter(x=>x.qty>0);
   if(!aplicar.length){toast('Ingresa al menos una cantidad','error');return;}
+  // Validación ANTES de escribir nada: descontar más de lo disponible dejaba el
+  // stock en negativo (y con varios materiales, los ya descontados no se revertían).
+  // Se avisa con el material y las cantidades concretas, sin aplicar nada.
+  const faltantes=aplicar.map(a=>{
+    const m=(state.inventario||[]).find(x=>x.id===a.id);if(!m)return null;
+    const s=+m.fields['Stock actual']||0;
+    return a.qty>s?`${m.fields['Material']||'material'} (pides ${a.qty}, hay ${s})`:null;
+  }).filter(Boolean);
+  if(faltantes.length){toast('Sin stock suficiente: '+faltantes.join(' · '),'error');return;}
   const btn=document.getElementById('consumoAplicarBtn');if(btn){btn.disabled=true;btn.textContent='Descontando...';}
   const nuevos=[];
   try{

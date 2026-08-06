@@ -162,8 +162,12 @@ test('la conversión a pedido es idempotente y evita pedidos duplicados', () => 
 
 test('existe recuperación visible para aprobadas que todavía no tienen pedido', () => {
   const tray = extractFunction('renderCotToOrderTray');
-  assert.match(tray, /Aprobada/, 'La bandeja debe considerar cotizaciones aprobadas');
-  assert.match(tray, /_pedidoDeCot\s*\(/, 'La bandeja debe excluir las que ya tienen pedido');
+  // El filtro vive en _cotAprobadasSinPedido (la bandeja lo consume): se verifica
+  // la cadena completa, no la implementación inline que existía antes.
+  assert.match(tray, /_cotAprobadasSinPedido\s*\(/, 'La bandeja debe usar el filtro de aprobadas sin pedido');
+  const filtro = extractFunction('_cotAprobadasSinPedido');
+  assert.match(filtro, /Aprobada/, 'El filtro debe considerar cotizaciones aprobadas');
+  assert.match(filtro, /_pedidoDeCot\s*\(/, 'El filtro debe excluir las que ya tienen pedido');
   assert.match(tray, /convertirCotAPedido|crearPedidoDesdeCotizacion/, 'Debe ofrecer una acción real de conversión');
 });
 
