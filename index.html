@@ -8857,7 +8857,8 @@ function renderAlertas(){
     const f=p.fields,est=f['Estado pedido']||'';
     if(['Confirmado','En producción'].includes(est)&&!f['Anticipo pagado (50%)'])
       alertas.push({sev:2,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-dollar"/></svg>',type:'pago-pendiente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): anticipo 50% pendiente`,id:p.id,tab:'pedidos'});
-    else if(est==='Listo para despacho'&&!f['Saldo pagado (50%)'])
+    // Con pago a plazo el saldo se cobra DESPUÉS del despacho: no es una alerta.
+    else if(est==='Listo para despacho'&&!f['Saldo pagado (50%)']&&_saldoExigibleAlDespachar(f)!==false)
       alertas.push({sev:2,icon:'<svg class="dashboard-icon" width="16" height="16" stroke-width="1.5"><use href="#icon-dollar"/></svg>',type:'pago-pendiente',msg:`<strong>${escapeHtml(f['N° Pedido']||'—')}</strong> (${escapeHtml(resolveClienteName(f['Cliente']))}): saldo 50% pendiente antes de despachar`,id:p.id,tab:'pedidos'});
   });
   _ped.forEach(p=>{
@@ -11313,6 +11314,26 @@ async function updateProveedorPedido(id,nombre){
 // Estado de pago de un pedido: 0=nada, 1=anticipo, 2=completo
 function pedPagoEstado(f){const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'];return a&&s?2:a?1:0;}
 function pedPagado(f){return pedPagoEstado(f)===2;}
+// Forma de pago efectiva del pedido (si no la tiene, hereda la de su cotización).
+function pedFormaPago(f){
+  let forma=(f['Forma de pago']||'').trim();
+  if(!forma&&Array.isArray(f['Cotizaciones'])&&f['Cotizaciones'][0]){
+    const c=state.cotizacionesById?.[f['Cotizaciones'][0]];
+    if(c) forma=(c.fields['Forma de pago']||'').trim();
+  }
+  return forma;
+}
+// ¿Corresponde exigir el saldo ANTES de despachar?
+//  · true  → pago contra entrega o al contado: el saldo se cobra al despachar.
+//  · false → crédito (30/45 días desde OC, o 50% a 30 días): se despacha y se
+//            cobra después; exigirlo bloquearía la operación real.
+//  · null  → sin forma de pago definida: no se bloquea, se pide confirmación.
+function _saldoExigibleAlDespachar(f){
+  const forma=pedFormaPago(f).toUpperCase();
+  if(!forma) return null;
+  if(/D[ÍI]AS/.test(forma)) return false;
+  return true;
+}
 async function toggleAnticipo(id,actual){
   const n=!actual;const p=state.pedidosById[id];if(!p) return;
   if(n){
@@ -11774,8 +11795,13 @@ async function advancePedido(id,estado){
   const p=state.pedidosById[id];if(!p) return;
   const f=p.fields;
   if(estado==='Completado'&&(f['Estado pedido']||'')!=='Despachado'){toast('Solo se puede completar un pedido que ya esté despachado','error');return;}
-  // Bloqueo duro: saldo antes de despachar
-  if(estado==='Despachado'&&!f['Saldo pagado (50%)']){toast('⚠ Confirma el saldo (50%) antes de despachar','error');return;}
+  // Saldo antes de despachar: SOLO si el pago es contra entrega. Con crédito
+  // (30/45 días, o 50% a 30 días) se despacha primero y se cobra después.
+  if(estado==='Despachado'&&!f['Saldo pagado (50%)']){
+    const exige=_saldoExigibleAlDespachar(f);
+    if(exige===true){toast('⚠ Confirma el saldo antes de despachar (pago contra entrega)','error');return;}
+    if(exige===null&&!confirm('Este pedido no tiene forma de pago definida y no registra el saldo.\n¿Despachar igualmente?')) return;
+  }
   // Compuerta de calidad: no despachar sin QA aprobado (rechazado = bloqueo; pendiente = confirmación)
   if(estado==='Despachado'){
     const qa=f['Resultado QA']||'Pendiente';
