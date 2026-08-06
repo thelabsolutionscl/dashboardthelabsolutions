@@ -15967,6 +15967,17 @@ async function handleLogin(e){
   }
 }
 
+// ¿El usuario está ESCRIBIENDO en un campo? Los atajos numéricos (1-9 cambian de
+// sección) no deben dispararse mientras se teclea. Además de INPUT/TEXTAREA/SELECT
+// cubre los editores contenteditable —redacción de correo y firma—, donde antes
+// escribir un número sacaba al usuario de la pantalla.
+function _escribiendoEnCampo(e){
+  const t=e.target;
+  if(!t) return false;
+  if(['INPUT','TEXTAREA','SELECT'].includes(t.tagName)) return true;
+  if(t.isContentEditable) return true;
+  return !!(t.closest&&t.closest('[contenteditable="true"],[contenteditable=""]'));
+}
 function initDashboard(){
   const user=AUTH.getUser();
   if(user) applyRBAC(user.role);
@@ -16024,7 +16035,7 @@ function initDashboard(){
     initMobileTableLabels();
     window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);});
     document.addEventListener('keydown',e=>{
-      if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+      if(_escribiendoEnCampo(e)) return;
       if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}
       const _u2=AUTH.getUser();
       const tabs=(_u2&&RBAC.tabs[_u2.role]?RBAC.tabs[_u2.role]:['overview','clientes','cotizaciones','pedidos','agentes','reporte']).filter(t=>!['nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'].includes(t));
@@ -16054,7 +16065,7 @@ function initDashboard(){
   initMobileTableLabels();
   window.addEventListener('beforeunload',()=>{if(autoRefreshInterval) clearInterval(autoRefreshInterval);if(_agendaPollTimer) clearInterval(_agendaPollTimer);try{if(_calPollTimer)clearInterval(_calPollTimer);if(_calAlarmTimer)clearInterval(_calAlarmTimer);}catch(e){}});
   document.addEventListener('keydown',e=>{
-    if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+    if(_escribiendoEnCampo(e)) return;
     if((e.ctrlKey||e.metaKey)&&e.key==='r'){e.preventDefault();loadAllData();return;}
     const _u=AUTH.getUser();
     const tabs=(_u&&RBAC.tabs[_u.role]?RBAC.tabs[_u.role]:['overview','clientes','cotizaciones','pedidos','proveedores','agentes','maquinas','equipo','reporte']).filter(t=>!['nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'].includes(t));
