@@ -8642,7 +8642,7 @@ function renderKPIs(){
     const f=p.fields,est=f['Estado pedido']||'';
     const cancel=est==='Cancelado',despCanc=cancel||est==='Despachado'||est==='Completado';
     const neto=Math.round((f['Monto total (CLP)']||0)/1.19);
-    revTotal+=neto;
+    if(!cancel)revTotal+=neto;   // los cancelados no son ingreso (igual que semana/mes)
     const d=p.createdTime?new Date(p.createdTime):null;
     if(d){
       if(d>=weekStart){pedNuevosSem++;if(!cancel)revSemana+=neto;}
@@ -8773,7 +8773,7 @@ function renderKPIs(){
   const _ago7d=Date.now()-7*86400000;
   const _leadsFrios=_leadsAll.filter(c=>{const t=c.createdTime?new Date(c.createdTime).getTime():0;return t&&t<_ago7d;}).length;
   document.getElementById('kpiGrid').innerHTML=`
-    <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos">${_ki('icon-trending')}<div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub">total acum: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${_sparkline(spRev,'var(--accent)')}${metaHtml}</div>
+    <div class="kpi-card yellow" style="${kpiStyle}" onclick="switchTab('pedidos')" title="Ver pedidos">${_ki('icon-trending')}<div class="kpi-label">Revenue Semana (neto)</div><div class="kpi-value" style="color:var(--accent)">${formatCLP(revSemana)}</div><div class="kpi-sub" title="Suma neta de TODOS los pedidos registrados, de todos los meses (excluye cancelados). El avance del mes en curso va en la barra de abajo.">histórico: ${formatCLP(revTotal)}</div>${pctBadge(revSemana,revAnterior)}${_sparkline(spRev,'var(--accent)')}${metaHtml}</div>
     <div class="kpi-card green" style="${kpiStyle}" onclick="switchTab('pedidos');${atrasados>0?`filterPedidos('atrasados')`:`filterPedidos('all')`}" title="Ver pedidos${atrasados>0?' atrasados':''}">` + _ki('icon-pedidos') + `<div class="kpi-label">Pedidos Activos</div><div class="kpi-value" style="color:var(--accent3)">${pedActivos}</div><div class="kpi-sub">${atrasados>0?`<span style="color:var(--danger)">⚠ ${atrasados} atrasado${atrasados>1?'s':''}</span>`:'todos a tiempo'}</div>${cntBadge(pedNuevosSem,pedNuevosPrev,'nuevos vs sem. ant.')}${_sparkline(spPed,'var(--accent3)')}</div>
     <div class="kpi-card orange" style="${kpiStyle}" onclick="switchTab('cotizaciones')" title="Ver cotizaciones pendientes">${_ki('icon-message')}<div class="kpi-label">Cot. Pendientes</div><div class="kpi-value" style="color:var(--accent2)">${cotPend}</div><div class="kpi-sub">sin respuesta</div>${cntBadge(cotNuevosSem,cotNuevosPrev,'nuevas vs sem. ant.')}${_sparkline(spCot,'var(--accent2)')}</div>
     <div class="kpi-card purple" style="${kpiStyle}" onclick="switchTab('clientes');setCliCat('lead')" title="Ver leads sin validar">${_ki('icon-user-plus')}<div class="kpi-label">Leads sin validar</div><div class="kpi-value" style="color:#4db4ff">${_leadsSinValidar}</div><div class="kpi-sub">${_leadsFrios>0?`<span style="color:var(--accent2)">⏳ ${_leadsFrios} +7d sin avance</span>`:'✓ al día'}</div></div>
@@ -14874,7 +14874,7 @@ function buildAgentContext(id){
   const pedAtrasados=pedActivos.filter(p=>p.fields['Fecha entrega']&&new Date(p.fields['Fecha entrega']+'T00:00:00')<today);
   const cotAbiertas=C.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||''));
   const revSemana=P.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
-  const revTotal=P.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
+  const revTotal=P.reduce((s,p)=>(p.fields['Estado pedido']||'')==='Cancelado'?s:s+(p.fields['Monto total (CLP)']||0)/1.19,0);
 
   if(['CEO','FINANCE','SALES','PRODUCTION','FOLLOWUP','QA','REPCLIENTE'].includes(id)){
     lines.push('\nMÉTRICAS GENERALES:');
