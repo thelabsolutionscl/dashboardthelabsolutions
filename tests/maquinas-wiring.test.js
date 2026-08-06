@@ -18,7 +18,15 @@ function functionSource(source,name){
   const marker=new RegExp(`(?:async\\s+)?function\\s+${name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\s*\\(`);
   const found=marker.exec(source);
   assert.ok(found,`falta ${name}`);
-  const open=source.indexOf('{',found.index);
+  // El cuerpo empieza DESPUÉS de la lista de parámetros: con un valor por
+  // defecto tipo `opts={}` el primer `{` pertenece al parámetro, no al cuerpo.
+  let paren=0,open=-1;
+  for(let i=found.index+found[0].length-1;i<source.length;i++){
+    const ch=source[i];
+    if(ch==='(')paren++;
+    else if(ch===')'&&--paren===0){open=source.indexOf('{',i);break;}
+  }
+  assert.ok(open>=0,`no se pudo ubicar el cuerpo de ${name}`);
   let depth=0,quote='',escape=false,line=false,block=false;
   for(let i=open;i<source.length;i++){
     const ch=source[i],next=source[i+1];

@@ -327,8 +327,11 @@ function _deriveStatus(m,s,ip){
   const eta=progress>0&&progress<100?Math.round(elapsed/progress*(100-progress)):0;
   const filename=(ps.filename||'').replace(/\.gcode$/i,'');
   const filamentMm=Math.round(ps.filament_used||0);
-  // Klipper caído o iniciando manda sobre el estado del print
-  let state=ps.state||'standby';
+  // Klipper caído o iniciando manda sobre el estado del print.
+  // Sin print_stats.state NO se asume "libre": la ausencia de telemetría se
+  // muestra como desconocida (si no, una lectura incompleta se ve verde/OK y
+  // el planificador la toma como disponible).
+  let state=ps.state||'unknown';
   if(klState==='shutdown'||klState==='error')state='shutdown';
   else if(klState==='startup')state='startup';
   const light=_printerLightApplyStatus(m.id,s);
@@ -459,6 +462,7 @@ function printerStateMeta(state){
     cancelled:{label:'Impresión cancelada',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
     standby:{label:'En línea · libre',color:'var(--accent3)',bg:'rgba(0,212,170,0.08)'},
     idle:{label:'En línea · libre',color:'var(--accent3)',bg:'rgba(0,212,170,0.08)'},
+    unknown:{label:'Estado de impresión desconocido',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
     shutdown:{label:'⚠ Detenida',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
     startup:{label:'Iniciando…',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
     offline:{label:'Sin conexión',color:'#888',bg:'rgba(120,120,120,0.12)'},
@@ -805,7 +809,7 @@ async function audit3DPrinter(m){
   const klState=wh.state||'ready';
   let klMsg=''; if(wh.state_message){try{const j=JSON.parse(wh.state_message);klMsg=j.msg||wh.state_message;}catch(_){klMsg=wh.state_message;}klMsg=String(klMsg).split('\n').map(x=>x.trim()).filter(Boolean)[0]||'';}
   const errored=(klState==='shutdown'||klState==='error');
-  let state=ps.state||'standby'; if(errored)state='shutdown';
+  let state=ps.state||'unknown'; if(errored)state='shutdown';
   const busy=(state==='printing'||state==='paused');
   const homed=String(th.homed_axes||'').toLowerCase()==='xyz';
   const meshOk=!!(bm.profile_name||(bm.mesh_matrix&&bm.mesh_matrix.length));

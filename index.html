@@ -3010,17 +3010,29 @@
   </div>
 
   <div id="maqWorkspaceNav" class="maq-workspace-nav" role="tablist" aria-label="Áreas de Máquinas">
+    <!-- Orden por FLUJO DE TRABAJO: vigilar → preparar → producir → cerrar → soporte.
+         Cada grupo se rotula para que 12 áreas se lean de un vistazo. -->
+    <span class="maq-nav-group">Vigilar</span>
     <button class="active" data-maq-nav="operacion" onclick="MachineOps.showView('operacion',this)">📡 Operación</button>
     <button data-maq-nav="inteligencia" onclick="MachineOps.showView('inteligencia',this)">🧠 Centro inteligente <span id="mopsNavIntel" class="maq-nav-count">0</span></button>
-    <button data-maq-nav="planificacion" onclick="MachineOps.showView('planificacion',this)">🗓 Planificación <span id="mopsNavPending" class="maq-nav-count">0</span></button>
-    <button data-maq-nav="postproduccion" onclick="MachineOps.showView('postproduccion',this)">🧩 Postproducción <span id="mopsNavPost" class="maq-nav-count">0</span></button>
-    <button data-maq-nav="capacidad" onclick="MachineOps.showView('capacidad',this)">🧮 Capacidad</button>
+    <span class="maq-nav-sep" aria-hidden="true"></span>
+    <span class="maq-nav-group">Preparar</span>
+    <button data-maq-nav="laminado" onclick="MachineOps.showView('laminado',this)">🖨 Laminado</button>
+    <button data-maq-nav="perfiles" onclick="MachineOps.showView('perfiles',this)">🎛 Perfiles</button>
     <button data-maq-nav="materiales" onclick="MachineOps.showView('materiales',this)">🧵 Materiales <span id="mopsNavSpools" class="maq-nav-count">0</span></button>
-    <button data-maq-nav="perfiles" onclick="MachineOps.showView('perfiles',this)">🦙 Perfiles</button>
+    <span class="maq-nav-sep" aria-hidden="true"></span>
+    <span class="maq-nav-group">Producir</span>
+    <button data-maq-nav="planificacion" onclick="MachineOps.showView('planificacion',this)">🗓 Planificación <span id="mopsNavPending" class="maq-nav-count">0</span></button>
+    <button data-maq-nav="capacidad" onclick="MachineOps.showView('capacidad',this)">🧮 Capacidad</button>
+    <span class="maq-nav-sep" aria-hidden="true"></span>
+    <span class="maq-nav-group">Cerrar</span>
+    <button data-maq-nav="calidad" onclick="MachineOps.showView('calidad',this)">✅ Calidad <span id="mopsNavQa" class="maq-nav-count">0</span></button>
+    <button data-maq-nav="postproduccion" onclick="MachineOps.showView('postproduccion',this)">🧩 Postproducción <span id="mopsNavPost" class="maq-nav-count">0</span></button>
+    <span class="maq-nav-sep" aria-hidden="true"></span>
+    <span class="maq-nav-group">Soporte</span>
     <button data-maq-nav="mantenimiento" onclick="MachineOps.showView('mantenimiento',this)">🔧 Mantenimiento <span id="mopsNavMaint" class="maq-nav-count">0</span></button>
     <button data-maq-nav="seguridad" onclick="MachineOps.showView('seguridad',this)">🛡 Seguridad <span id="mopsNavSafety" class="maq-nav-count">0</span></button>
     <button data-maq-nav="analitica" onclick="MachineOps.showView('analitica',this)">📊 Analítica</button>
-    <button data-maq-nav="laminado" onclick="MachineOps.showView('laminado',this)">🧠 Laminado</button>
   </div>
 
   <!-- ── CENTRO INTELIGENTE DE OPERACIÓN ── -->
@@ -3093,7 +3105,7 @@
   </div>
 
   <!-- ── CONTROL DE CALIDAD Y REIMPRESIONES ── -->
-  <div id="maquinaQualityView" data-maq-view="operacion" style="margin-bottom:28px">
+  <div id="maquinaQualityView" data-maq-view="calidad" style="display:none;margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
       <span class="maq-view-title">✅ Control de calidad y reimpresiones</span>
       <button class="btn btn-ghost btn-sm" onclick="MachineOps.openQA()">+ Registrar control</button>
