@@ -393,15 +393,16 @@ function renderWebKPIs(pages){
   const sinTitle=total-withTitle.length;
   const sinDesc=total-withDesc.length;
   const pct=n=>total>0?Math.round(n/total*100)+'%':'—';
-  document.getElementById('kpi-total').textContent=total;
-  document.getElementById('kpi-completo').textContent=completo.length;
-  document.getElementById('kpi-completo-sub').textContent=pct(completo.length);
-  document.getElementById('kpi-sin-title').textContent=sinTitle||'✓';
-  document.getElementById('kpi-sin-title').style.color=sinTitle>0?'var(--danger)':'var(--success)';
-  document.getElementById('kpi-sin-desc').textContent=sinDesc||'✓';
-  document.getElementById('kpi-sin-desc').style.color=sinDesc>0?'var(--warn)':'var(--success)';
-  document.getElementById('kpi-title-ok').textContent=titleOk.length+'/'+total;
-  document.getElementById('kpi-desc-ok').textContent=descOk.length+'/'+total;
+  // Los KPI viven en el panel de WordPress, retirado al migrar el sitio: se
+  // escriben solo si están presentes (antes lanzaba TypeError sobre null).
+  const kpi=(id,txt,col)=>{const e=document.getElementById(id);if(!e)return;e.textContent=txt;if(col)e.style.color=col;};
+  kpi('kpi-total',total);
+  kpi('kpi-completo',completo.length);
+  kpi('kpi-completo-sub',pct(completo.length));
+  kpi('kpi-sin-title',sinTitle||'✓',sinTitle>0?'var(--danger)':'var(--success)');
+  kpi('kpi-sin-desc',sinDesc||'✓',sinDesc>0?'var(--warn)':'var(--success)');
+  kpi('kpi-title-ok',titleOk.length+'/'+total);
+  kpi('kpi-desc-ok',descOk.length+'/'+total);
   // Sincronizar al card de Overview
   ovSyncWebKPIs(total, completo.length, sinTitle, sinDesc, pct(completo.length));
 }

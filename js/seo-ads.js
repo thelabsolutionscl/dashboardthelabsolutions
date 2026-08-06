@@ -8,13 +8,13 @@ function saveWPConfig(){
   if(!url||!user||!pass){toast('Completa todos los campos','error');return;}
   localStorage.setItem('wp_config',JSON.stringify({url,user,pass}));
   toast('✓ Credenciales guardadas','success');
-  document.getElementById('wpConfigPanel').style.display='none';
+  const panel=document.getElementById('wpConfigPanel');if(panel)panel.style.display='none';
 }
+// El panel de WordPress se retiró al migrar el sitio: estas funciones quedan
+// operativas pero no deben reventar si sus campos ya no están en el DOM.
 function loadWPConfigForm(){
-  const cfg=getWPConfig();
-  if(cfg.url) document.getElementById('wp-url').value=cfg.url;
-  if(cfg.user) document.getElementById('wp-user').value=cfg.user;
-  if(cfg.pass) document.getElementById('wp-pass').value=cfg.pass;
+  const cfg=getWPConfig(),set=(id,v)=>{const e=document.getElementById(id);if(e&&v)e.value=v;};
+  set('wp-url',cfg.url);set('wp-user',cfg.user);set('wp-pass',cfg.pass);
 }
 // ══════════════════════════════════════════════════════════════
 // AUDITOR SEO ON-PAGE — analiza las páginas del sitio (Next.js, sin WordPress)
@@ -201,7 +201,7 @@ async function testWPConnection(){
 }
 async function loadWPPages(){
   const cfg=getWPConfig();
-  if(!cfg.url){document.getElementById('wpConfigPanel').style.display='block';loadWPConfigForm();toast('Configura las credenciales primero','info');return;}
+  if(!cfg.url){const _wp=document.getElementById('wpConfigPanel');if(_wp)_wp.style.display='block';loadWPConfigForm();toast('Configura las credenciales primero','info');return;}
   // El panel de WordPress se retiró al migrar el sitio (hoy manda el Auditor SEO
   // on-page). Sin contenedor no se sigue: antes reventaba con TypeError.
   const list=document.getElementById('seoPagesList');
