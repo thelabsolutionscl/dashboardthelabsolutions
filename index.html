@@ -8747,7 +8747,10 @@ function renderKPIs(){
   if(isVendorMode()){
     const TASA=0.035;
     const despachados=_ped.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||''));
-    const revDespMes=despachados.filter(p=>p.createdTime&&new Date(p.createdTime)>=monthStart).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+    // La comisión se gana al ENTREGAR, y Remuneraciones (el módulo que paga)
+    // filtra por 'Fecha entrega'. Antes este KPI usaba la fecha de creación del
+    // pedido, así que el vendedor veía dos comisiones distintas para el mismo mes.
+    const revDespMes=despachados.filter(p=>{const d=p.fields['Fecha entrega'];return d&&new Date(d+'T00:00:00')>=monthStart;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
     const comisionMes=Math.round(revDespMes*TASA);
     const pipelineTotal=_cot.filter(c=>['Solicitada','Enviada'].includes(c.fields['Estado cotización']||'')).reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
     const comisionPipeline=Math.round(pipelineTotal*TASA);

@@ -78,3 +78,27 @@ test.todo('cerrar períodos y registrar aprobaciones, ajustes, reversas y audito
 test.todo('exportar CSV con escape RFC 4180, BOM UTF-8 y nombre de período/vendedor');
 test.todo('usar zona America/Santiago y una definición empresarial de inicio de semana');
 test.todo('distinguir sueldo base, comisión estimada, devengada, aprobada y pagada');
+
+test('la comisión del KPI y la de Remuneraciones miden el mismo período', () => {
+  // La comisión se gana al ENTREGAR. Remuneraciones (el módulo que paga) filtra
+  // por 'Fecha entrega'; el KPI del vendedor usaba la fecha de creación del
+  // pedido, así que mostraba una comisión distinta para el mismo mes.
+  assert.match(
+    INDEX,
+    /const revDespMes=despachados\.filter\(p=>\{const d=p\.fields\['Fecha entrega'\]/,
+    'el KPI de comisión debe filtrar por Fecha entrega, igual que Remuneraciones',
+  );
+  assert.doesNotMatch(
+    INDEX,
+    /const revDespMes=despachados\.filter\(p=>p\.createdTime/,
+    'el KPI de comisión no debe volver a filtrar por fecha de creación',
+  );
+  // Remuneraciones sigue siendo la fuente autoritativa del criterio.
+  assert.match(
+    INDEX,
+    /_remPeriodo==='mes'[\s\S]{0,200}?p\.fields\['Fecha entrega'\]/,
+    'Remuneraciones debe seguir filtrando el mes por Fecha entrega',
+  );
+  // Misma tasa en los tres cálculos (KPI, panel y CSV).
+  assert.equal(count(/const TASA=0\.035;/g, INDEX), 3, 'la tasa de comisión debe ser única en los tres puntos');
+});
