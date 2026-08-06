@@ -190,3 +190,15 @@ test('Pedidos mantiene enlazados cliente, calendario y producción', () => {
   assert.ok(hasDefinition('renderCargaMaquinas'), 'Debe existir la integración con carga de máquinas');
   assert.ok(hasDefinition('prodStart') && hasDefinition('prodStop'), 'Debe existir control de inicio y término de producción');
 });
+
+test('el menú de acciones se posiciona dentro de la pantalla y bajo el topbar', () => {
+  // En ventanas bajas (~560px) el menú se colocaba en el tope de la ventana y
+  // sus primeros ítems quedaban debajo del topbar sticky: se veía cortado.
+  const pos = extractFunction('_positionActMenu');
+  assert.match(pos, /querySelector\(['"]\.topbar['"]\)/, 'debe medir el topbar para no meterse debajo');
+  assert.match(pos, /techo/, 'debe existir un límite superior calculado');
+  assert.match(pos, /Math\.max\(techo,\s*Math\.min\(top,\s*piso-alto\)\)/, 'el top final debe quedar acotado entre el topbar y el borde inferior');
+  // El alto debe acotarse al hueco real; forzar un mínimo hacía que se saliera.
+  assert.doesNotMatch(pos, /Math\.max\(\s*\d{2,}\s*,/, 'no debe forzarse un alto mínimo mayor al espacio disponible');
+  assert.match(pos, /overflowY\s*=\s*['"]auto['"]/, 'si no cabe, debe hacer scroll dentro del menú');
+});

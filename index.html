@@ -9139,20 +9139,31 @@ function _positionActMenu(menu,btn){
   if(!btn||!btn.getBoundingClientRect) return;
   const r=btn.getBoundingClientRect();
   const vw=window.innerWidth,vh=window.innerHeight,M=8,GAP=4;
+  // El topbar es sticky y ocupa la franja superior: el menú no puede empezar
+  // ahí o su primer ítem queda tapado (pasaba en ventanas bajas, ~600px).
+  let techo=M;
+  try{const tb=document.querySelector('.topbar');
+    if(tb){const t=tb.getBoundingClientRect();if(t.height&&t.bottom>0)techo=Math.max(techo,t.bottom+GAP);}
+  }catch(e){}
+  const piso=vh-M;
   menu.style.position='fixed';menu.style.right='auto';menu.style.bottom='auto';
   menu.style.maxHeight='none';menu.style.overflowY='';
   menu.style.top='-9999px';menu.style.left='0';   // fuera de vista para medir
   const mw=menu.offsetWidth,mh=menu.offsetHeight;
   const left=Math.min(Math.max(M,r.right-mw),Math.max(M,vw-mw-M)); // alinea a la derecha del botón
-  const below=vh-r.bottom-GAP-M,above=r.top-GAP-M;
-  let top;
+  const below=piso-r.bottom-GAP,above=r.top-GAP-techo;
+  let top,alto=mh;
   if(mh<=below||below>=above){
     top=r.bottom+GAP;
-    if(mh>below){menu.style.maxHeight=Math.max(140,below)+'px';menu.style.overflowY='auto';}
+    // Se acota al hueco REAL: antes forzaba 140px mínimo y el menú se salía.
+    if(mh>below){alto=Math.max(0,below);menu.style.maxHeight=alto+'px';menu.style.overflowY='auto';}
   }else{
-    top=r.top-GAP-Math.min(mh,above);
-    if(mh>above){menu.style.maxHeight=Math.max(140,above)+'px';menu.style.overflowY='auto';}
+    alto=Math.min(mh,Math.max(0,above));
+    top=r.top-GAP-alto;
+    if(mh>above){menu.style.maxHeight=alto+'px';menu.style.overflowY='auto';}
   }
+  // Red de seguridad: nunca por debajo del topbar ni fuera de la ventana.
+  top=Math.max(techo,Math.min(top,piso-alto));
   menu.style.left=Math.round(left)+'px';
   menu.style.top=Math.round(top)+'px';
 }
