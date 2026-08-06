@@ -732,8 +732,13 @@ function _syncPrinterCam(id,camKey,force){
   const raw=localStorage.getItem('printer_cam_'+id)||m.cam;
   const camU=_safePrinterMediaUrl(printerCamUrl(id)),snap=_camIsSnapshot(raw);
   if(!camU){slot.innerHTML='';slot.__camKey='';return;}
-  slot.innerHTML=`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative">
-    <img loading="lazy" decoding="async" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" ${snap?'':`onerror="this.parentElement.innerHTML='<div style=\\'padding:12px;text-align:center;color:#666;font-size:10px\\'>Sin señal · verifica la URL</div>'"`}>
+  // El <img> se conserva SIEMPRE (para snapshots se refresca cada 1s vía data-snap,
+  // así se recupera solo cuando la cámara vuelve). En vez de romper el nodo al fallar,
+  // mostramos una capa "sin señal" superpuesta y ocultamos la imagen — al primer frame
+  // bueno (onload) la capa se esconde de nuevo.
+  slot.innerHTML=`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative;min-height:56px">
+    <img loading="lazy" decoding="async" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" onload="this.style.opacity='1';var o=this.parentElement.querySelector('.pcam-off');if(o)o.style.display='none'" onerror="this.style.opacity='0';var o=this.parentElement.querySelector('.pcam-off');if(o)o.style.display='flex'">
+    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8a8a;font-size:10px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:8.5px;color:#666">${snap?'reintentando…':'verifica la URL'}</span></div>
   </div>`;
   slot.__camKey=camKey;
 }
