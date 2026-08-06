@@ -932,7 +932,8 @@
       <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeletePedidos()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
       <button class="btn btn-ghost btn-sm" onclick="clearPedidosSelection()">✕ Cancelar</button>
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')" style="margin-left:auto">⬇ CSV</button>
+    <input id="pedidosSearch" type="search" placeholder="Buscar N° pedido o cliente…" oninput="searchPedidos(this.value)" aria-label="Buscar pedidos" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:6px 11px;min-width:210px;outline:none">
+    <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')">⬇ CSV</button>
     <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px">
       <button id="btnVistaTabla" class="btn btn-ghost btn-sm active-filter" onclick="setPedidosView('tabla')" style="padding:4px 12px;font-size:10px">Tabla</button>
       <button id="btnVistaKanban" class="btn btn-ghost btn-sm" onclick="setPedidosView('kanban')" style="padding:4px 12px;font-size:10px">Kanban</button>
@@ -944,7 +945,14 @@
   <div id="pedidosTableWrap" class="card"><div class="table-wrap sticky-head">
     <table><thead><tr>
       <th style="width:36px;text-align:center"><input type="checkbox" id="pedidosSelectAll" onchange="toggleSelectAllPedidos(this)" style="cursor:pointer;accent-color:var(--accent)"></th>
-      <th>N° Pedido</th><th>Cliente</th><th>Estado</th><th>Equipo</th><th>Proveedor</th><th>Monto Neto</th><th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th><th>Entrega / meta</th><th>Acciones</th>
+      <th onclick="sortPedidos('numero')" title="Ordenar por N° de pedido" style="cursor:pointer;user-select:none;white-space:nowrap">N° Pedido<span class="sort-ind" data-k="numero"></span></th>
+      <th onclick="sortPedidos('cliente')" title="Ordenar por cliente" style="cursor:pointer;user-select:none">Cliente<span class="sort-ind" data-k="cliente"></span></th>
+      <th onclick="sortPedidos('estado')" title="Ordenar por estado" style="cursor:pointer;user-select:none">Estado<span class="sort-ind" data-k="estado"></span></th>
+      <th>Equipo</th><th>Proveedor</th>
+      <th onclick="sortPedidos('monto')" title="Ordenar por monto" style="cursor:pointer;user-select:none;white-space:nowrap">Monto Neto<span class="sort-ind" data-k="monto"></span></th>
+      <th>Forma de Pago</th><th>Abono / Pago Total</th><th>QA</th>
+      <th onclick="sortPedidos('entrega')" title="Ordenar por fecha de entrega" style="cursor:pointer;user-select:none">Entrega / meta<span class="sort-ind" data-k="entrega"></span></th>
+      <th>Acciones</th>
     </tr></thead>
     <tbody id="pedidosTableBody"></tbody></table>
   </div></div>
@@ -11092,6 +11100,51 @@ function exportRemCSV(){
   a.download='remuneraciones.csv';a.click();
 }
 
+// Buscador de pedidos (N° pedido, cliente, estado, forma de pago, detalle, monto).
+function searchPedidos(q){ state.pedidoSearch=q||''; _pedCap=60; renderPedidos(); }
+// Limpia búsqueda + vuelve al filtro "Todos" (salida del estado vacío).
+function resetPedidosView(){ const inp=document.getElementById('pedidosSearch'); if(inp) inp.value=''; state.pedidoSearch=''; filterPedidos('all',document.querySelector('#pedidosFilterBar>button')); }
+// Ordenar por columna: primer clic asc, segundo desc, en la misma columna.
+function sortPedidos(key){
+  const s=state.pedidoSort;
+  if(s&&s.key===key) s.dir=s.dir==='asc'?'desc':'asc';
+  else state.pedidoSort={key,dir:'asc'};
+  renderPedidos();
+}
+// Aplica buscador + orden a la lista de pedidos ya filtrada por estado.
+function _pedApplySearchSort(data){
+  const q=(state.pedidoSearch||'').trim().toLowerCase();
+  if(q) data=data.filter(p=>{const f=p.fields;return [
+    f['N° Pedido']||'', resolveClienteName(f['Cliente']), f['Estado pedido']||'',
+    f['Forma de pago']||'', f['Detalle productos']||'',
+    String(Math.round((f['Monto total (CLP)']||0)/1.19))
+  ].join(' ').toLowerCase().includes(q);});
+  const s=state.pedidoSort;
+  if(s&&s.key){
+    const dir=s.dir==='desc'?-1:1;
+    const stageOrder={'Confirmado':0,'En producción':1,'Listo para despacho':2,'Despachado':3,'Cancelado':4};
+    const val=p=>{const f=p.fields;switch(s.key){
+      case 'numero':{const m=(f['N° Pedido']||'').match(/(\d{4}).*?(\d+)\s*$/);return m?parseInt(m[1])*100000+parseInt(m[2]):0;}
+      case 'cliente':return resolveClienteName(f['Cliente']).toLowerCase();
+      case 'estado':return stageOrder[f['Estado pedido']]??99;
+      case 'monto':return Number(f['Monto total (CLP)']||0);
+      case 'entrega':return f['Fecha entrega']?new Date(f['Fecha entrega']+'T00:00:00').getTime():null;
+      default:return 0;
+    }};
+    data=data.slice().sort((a,b)=>{
+      const va=val(a),vb=val(b),na=va==null,nb=vb==null;
+      if(na&&nb)return 0; if(na)return 1; if(nb)return -1;   // sin dato → siempre al final
+      if(va<vb)return -1*dir; if(va>vb)return 1*dir; return 0;
+    });
+  }
+  // Indicadores ↑/↓ en las cabeceras
+  try{document.querySelectorAll('#pedidosTableWrap .sort-ind').forEach(el=>{
+    const on=s&&s.key===el.getAttribute('data-k');
+    el.textContent=on?(s.dir==='desc'?' ↓':' ↑'):'';
+    el.style.color=on?'var(--accent)':'';
+  });}catch(e){}
+  return data;
+}
 function renderPedidos(filter){
   try{renderReclamos();}catch(e){}
   filter=filter||state.pedidoFilter||'all';state.pedidoFilter=filter;const today=new Date();today.setHours(0,0,0,0);
@@ -11101,10 +11154,11 @@ function renderPedidos(filter){
   const archivados=basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Completado');
   const archivoCount=document.getElementById('pedidosArchivoCount');if(archivoCount)archivoCount.textContent=archivados.length;
   let data=filter==='all'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'):filter==='atrasados'?basePedidos.filter(p=>{const f=p.fields;if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'&&(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
+  data=_pedApplySearchSort(data);
   _pedRowIds=data.map(p=>p.id);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
     const emptyHtml=basePedidos.length
-      ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-search"/></svg></div>Ningún pedido coincide con este filtro<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="filterPedidos(\'all\',document.querySelector(\'#pedidosFilterBar>button\'))">Ver todos los pedidos</button></div>'
+      ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-search"/></svg></div>Ningún pedido coincide con la búsqueda o el filtro<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="resetPedidosView()">Ver todos los pedidos</button></div>'
       :'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-pedidos"/></svg></div>Aún no hay pedidos<br><span style="font-size:11px;color:var(--text3)">Los pedidos se generan al aprobar una cotización</span><br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'cotizaciones\')">📋 Ir a cotizaciones</button></div>';
     _setRows(tbody,'<tr><td colspan="12">'+emptyHtml+'</td></tr>');return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
