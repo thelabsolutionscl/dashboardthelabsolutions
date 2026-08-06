@@ -16187,8 +16187,10 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
     <div style="margin-top:12px;display:flex;gap:8px">
       <input id="webcamModalUrl" type="text" placeholder="http://192.168.100.51/webcam/?action=stream" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace">
+      <button class="btn btn-ghost btn-sm" onclick="testWebcam()" title="Prueba la conexión real y muestra el error exacto (token, puerto, go2rtc, stream)">🔧 Probar</button>
       <button class="btn btn-primary btn-sm" onclick="saveWebcamUrl()">Guardar</button>
     </div>
+    <div id="webcamTestStatus" style="margin-top:8px;font-size:11px;line-height:1.5"></div>
     <input type="hidden" id="webcamModalId">
     <div style="margin-top:6px;font-size:10px;color:var(--text3)">URL del stream mjpeg de la impresora. Ejemplo: http://IP/webcam/?action=stream</div>
     <button class="btn btn-primary btn-sm" id="mopsCameraAiBtn" onclick="MachineOps.analyzeCamera()" style="margin-top:12px;width:100%">✨ Analizar impresión con IA</button>

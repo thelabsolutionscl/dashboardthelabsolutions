@@ -1196,7 +1196,42 @@ function openWebcamModal(id){
   const img=document.getElementById('webcamModalImg');
   const nf=document.getElementById('webcamNoFeed');
   if(url){const cu=printerCamUrl(id);if(_camIsSnapshot(url))img.setAttribute('data-snap',cu);else img.removeAttribute('data-snap');img.src=cu;img.style.display='block';nf.style.display='none';}else{img.removeAttribute('data-snap');img.src='';img.style.display='none';nf.style.display='flex';}
+  const ts=document.getElementById('webcamTestStatus');if(ts)ts.textContent='';
   document.getElementById('webcamModal').style.display='flex';
+}
+// Diagnóstico de cámara: hace la petición REAL (a través del túnel/bridge en
+// modo remoto) y traduce el resultado a un mensaje claro — así se sabe si el
+// problema es el token, el puerto, que go2rtc no responde, o el nombre del stream.
+async function testWebcam(){
+  const inp=document.getElementById('webcamModalUrl');
+  const out=document.getElementById('webcamTestStatus');
+  if(!inp||!out)return;
+  const raw=(inp.value||'').trim();
+  const set=(msg,col)=>{out.textContent=msg;out.style.color=col;};
+  if(!raw){set('Ingresa una URL primero.','var(--warn)');return;}
+  // Misma reescritura que printerCamUrl: en remoto va por el bridge con el token.
+  let url=raw;
+  if(!(typeof _isLocalMode==='function'&&_isLocalMode())){
+    const mm=raw.match(/^http:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?(\/.*)?$/);
+    if(mm&&typeof _appendBridgeToken==='function') url=_appendBridgeToken(`${getPrinterTunnel()}/${mm[1]}:${mm[2]||'80'}${mm[3]||'/'}`);
+  }
+  set('⏳ Probando…','var(--text3)');
+  const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),12000);
+  try{
+    const r=await fetch(url,{method:'GET',cache:'no-store',signal:ctrl.signal});
+    try{r.body&&r.body.cancel();}catch(_){}
+    const ct=(r.headers.get('content-type')||'').toLowerCase();
+    if(r.ok&&(ct.includes('image')||ct.includes('multipart'))) set('✓ Cámara OK — está entregando video.','var(--success)');
+    else if(r.ok) set(`⚠ Responde 200 pero no es imagen (tipo: ${ct||'?'}). Si es go2rtc, revisa el nombre del stream (src=…).`,'var(--warn)');
+    else if(r.status===401) set('✖ 401 — token del bridge inválido.','var(--danger)');
+    else if(r.status===403) set('✖ 403 — el bridge bloqueó ese puerto (agrégalo a BRIDGE_PORTS).','var(--danger)');
+    else if(r.status===404) set('✖ 404 — ruta o stream no encontrado. Revisa la URL / el src=.','var(--danger)');
+    else if(r.status===502||r.status===504) set(`✖ ${r.status} — el bridge no pudo conectar con la cámara: go2rtc no responde en esa IP:puerto (¿apagado, IP equivocada, o cámara off al terminar la impresión?).`,'var(--danger)');
+    else set(`✖ ${r.status} ${r.statusText||''}`.trim(),'var(--danger)');
+  }catch(e){
+    if(e.name==='AbortError') set('✖ Sin respuesta (12s) — el bridge o la cámara no contestaron.','var(--danger)');
+    else set('✖ No se pudo conectar: bridge caído, sin red, o bloqueo del navegador. ('+(e.message||'error')+')','var(--danger)');
+  }finally{clearTimeout(to);}
 }
 function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url&&!_safePrinterMediaUrl(url)){toast('URL de webcam inválida — usa http:// o https://','error');return;}if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);const m=MAQUINAS.find(x=>x.id===id);if(m){m.cam=url||null;if(m._airtableId){if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{cam:url||''}})});}}closeWebcamModal();renderMonitorGrid();toast(url?'📷 Webcam configurada — guardada en Airtable':'Webcam eliminada','success');}
 function closeWebcamModal(){document.getElementById('webcamModal').style.display='none';const wi=document.getElementById('webcamModalImg');if(wi){wi.removeAttribute('data-snap');wi.src='';}}
