@@ -447,7 +447,7 @@ function addPagoProgramado(){
   const montoRaw=prompt('Monto del pago (CLP):','');if(montoRaw==null)return;
   const monto=Math.round(parseFloat(String(montoRaw).replace(/[^\d.-]/g,''))||0);
   if(!(monto>0)){toast('Monto inválido','error');return;}
-  const hoyISO=new Date().toISOString().slice(0,10);
+  const hoyISO=hoyCL();
   const fecha=(prompt('Fecha del pago (AAAA-MM-DD):',hoyISO)||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){toast('Fecha inválida (usa AAAA-MM-DD)','error');return;}
   const recurrente=confirm('¿Es un pago mensual recurrente? (Aceptar = se repite cada mes en las 8 semanas; Cancelar = pago único)');
@@ -563,7 +563,7 @@ function finExportCobranza(){
   const lines=[head.map(q).join(',')];
   rows.forEach(({r,tot,cobrar,dias})=>lines.push([r.nombre,r.empresa,`${MESES[(parseInt(r.mes,10)||1)-1]} ${r.year}`,r.item,tot,cobrar,dias,r.fact||''].map(q).join(',')));
   const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cobranza_pendiente_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cobranza_pendiente_'+hoyCL()+'.csv';a.click();
   toast('✓ Cobranza exportada a CSV','success');
 }
 // ── COBRANZA SEMI-AUTOMÁTICA ───────────────────────────────────
@@ -670,7 +670,7 @@ async function cobRegistrar(empresa,via,silent){
   // Deja constancia en la ficha del cliente (best-effort)
   const cli=_cobCliente(empresa);
   if(cli){
-    const nota=`[${new Date().toISOString().slice(0,10)}] Recordatorio de cobranza enviado por ${via} (Andrea)`;
+    const nota=`[${hoyCL()}] Recordatorio de cobranza enviado por ${via} (Andrea)`;
     const nuevo=(cli.fields['Notas internas']?String(cli.fields['Notas internas']).trim()+'\n':'')+nota;
     try{await airtableWriteTolerant('Clientes','PATCH',cli.id,{'Notas internas':nuevo});cli.fields['Notas internas']=nuevo;}catch(e){}
   }
@@ -774,7 +774,7 @@ function finExportAgingCSV(){
   });
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);
-  a.download='antiguedad_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  a.download='antiguedad_'+hoyCL()+'.csv';a.click();
 }
 
 /* ── Préstamos ── */
@@ -1244,7 +1244,7 @@ function ldSwitchTipo(){
 }
 
 function ldLimpiar(){
-  const hoy=new Date().toISOString().split('T')[0];
+  const hoy=hoyCL();
   const f=document.getElementById('ld-fecha');if(f)f.value=hoy;
   const t=document.getElementById('ld-tipo');if(t)t.value='gasto';
   ldSwitchTipo();
@@ -1352,7 +1352,7 @@ function ldRenderTabla(){
 function ldPagGo(p){ldPag=p;ldRenderTabla();}
 
 function ldRenderKPIs(){
-  const hoy=new Date().toISOString().split('T')[0];
+  const hoy=hoyCL();
   const mes=hoy.slice(0,7);
   const all=ldGetAll();
   const mesData=all.filter(e=>e.fecha.startsWith(mes));
@@ -1385,7 +1385,7 @@ function ldExportCSV(){
 }
 
 function ldInit(){
-  const hoy=new Date().toISOString().split('T')[0];
+  const hoy=hoyCL();
   const fd=document.getElementById('ld-fecha');if(fd&&!fd.value)fd.value=hoy;
   const desde=document.getElementById('ld-f-desde');
   const hasta=document.getElementById('ld-f-hasta');
@@ -2280,7 +2280,7 @@ async function emitirDTE(){
         const venc=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
         await airtableWrite('Facturas','POST',null,{
           'Cliente':razonSocial,'Cliente ID':cid||'','Tipo DTE':tipoDTE,'Folio':Number(dteNum)||0,
-          'Fecha':new Date().toISOString().slice(0,10),'Neto':neto,'IVA':iva,'Total':neto+iva,
+          'Fecha':hoyCL(),'Neto':neto,'IVA':iva,'Total':neto+iva,
           'Track ID':resp.trackid||resp.track_id||'','Estado SII':resp.estado_sii||resp.estado||'Enviado',
           'Estado Pago':'Pendiente','Fecha Vencimiento':venc,'N° Pedido':p?.fields['N° Pedido']||''
         });
@@ -2986,7 +2986,7 @@ function _arqueoDia(fecha){
 function renderArqueo(){
   const el=document.getElementById('arqueoCard');if(!el)return;
   let fecha=el.dataset.fecha;
-  if(!fecha){fecha=(document.getElementById('ld-fecha')?.value)||new Date().toISOString().slice(0,10);el.dataset.fecha=fecha;}
+  if(!fecha){fecha=(document.getElementById('ld-fecha')?.value)||hoyCL();el.dataset.fecha=fecha;}
   const a=_arqueoDia(fecha);
   const saved=_arqueos()[fecha];
   const contado=(el.dataset.contado!=null&&el.dataset.contado!=='')?parseFloat(el.dataset.contado):(saved?saved.contado:'');
@@ -3035,7 +3035,7 @@ function _arqueoSetContado(v){const el=document.getElementById('arqueoCard');if(
 }
 function guardarArqueo(){
   const el=document.getElementById('arqueoCard');if(!el)return;
-  const fecha=el.dataset.fecha||new Date().toISOString().slice(0,10);
+  const fecha=el.dataset.fecha||hoyCL();
   const contadoRaw=document.getElementById('arqueoContado')?.value;
   const contado=parseFloat(contadoRaw);
   if(isNaN(contado)){toast('Ingresa el efectivo contado','error');return;}

@@ -482,7 +482,10 @@ function portalCotizacionPage(rec, cli, token) {
   const abierta = PORTAL_COT_ABIERTAS.includes(f["Estado cotización"] || "");
   const num = f["N° Cotización"] || "—";
   // Mismo fallback que el dashboard: sin fecha emitida, va la de hoy.
-  const fecha = f["Fecha cotización"] || new Date().toISOString().split("T")[0];
+  // today() y no toISOString(): el worker corre en UTC, así que una cotización
+  // sin fecha propia abierta de noche salía fechada un día más adelante que el
+  // mismo documento descargado desde el dashboard.
+  const fecha = f["Fecha cotización"] || today();
   const vto = f["Fecha vencimiento"] || "—";
   const urgente = !!f["Urgencia (+25%)"];
   const solicitud = str(f["Solicitud cliente (texto libre)"]);
@@ -2412,7 +2415,9 @@ async function rateLimited(env, request, scope, max, windowSec) {
 async function autoProcessAllowed(env) {
   if (!env.RL) return true;
   const cap = parseInt(env.AUTO_PROCESS_DAILY_CAP || "200", 10);
-  const key = `autoproc:${new Date().toISOString().slice(0, 10)}`;
+  // El día del tope es el día de Chile: con UTC el contador se reiniciaba a las
+  // 20:00 hora local, en plena tarde de trabajo, y no al empezar la jornada.
+  const key = `autoproc:${today()}`;
   const cur = parseInt((await env.RL.get(key)) || "0", 10);
   if (cur >= cap) return false;
   await env.RL.put(key, String(cur + 1), { expirationTtl: 172800 });

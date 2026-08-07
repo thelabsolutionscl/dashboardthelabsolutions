@@ -308,7 +308,7 @@ const NOTIFY={
     if(typeof MAIL==='undefined'||!MAIL.getMailPass||!MAIL.getMailPass()){
       toast('Configura tu clave de correo primero','error');return;
     }
-    const todayStr=new Date().toISOString().slice(0,10);
+    const todayStr=hoyCL();
     if(!force&&localStorage.getItem(this._summaryKey)===todayStr) return;
     const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
     if(!u){toast('Inicia sesión para enviar el resumen','error');return;}

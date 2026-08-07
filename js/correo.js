@@ -827,7 +827,7 @@ const MAIL={
     const f=c.fields;
     const patch={};
     if((f['Estado cotización']||'')==='Solicitada') patch['Estado cotización']='Enviada';
-    if(!f['Fecha cotización']) patch['Fecha cotización']=new Date().toISOString().slice(0,10);
+    if(!f['Fecha cotización']) patch['Fecha cotización']=hoyCL();
     let guardado=true;
     if(Object.keys(patch).length){
       try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,patch);Object.assign(f,patch);}

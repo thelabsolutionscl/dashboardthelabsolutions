@@ -544,7 +544,7 @@ function initMobileTableLabels(){
 function addBusinessDays(date,days){const d=new Date(date);let added=0;while(added<days){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6) added++;}return d;}
 function updateVtoPreview(){const fi=document.getElementById('cot-fecha');const prev=document.getElementById('cot-vto-preview');if(!fi||!prev) return;const base=fi.value?new Date(fi.value+'T00:00:00'):new Date();prev.value=addBusinessDays(base,10).toISOString().split('T')[0];}
 function initDates(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=hoyCL();
   const fi=document.getElementById('cot-fecha'),cn=document.getElementById('cot-num');
   if(fi&&!fi.value) fi.value=today;
   updateVtoPreview();
@@ -560,7 +560,7 @@ function exportToCSV(t){
   else{toast('Tipo desconocido','error');return;}
   if(!rows.length){toast('Sin datos','error');return;}
   const csv=[headers.join(','),...rows.map(r=>r.map(v=>{const s=String(v).replace(/"/g,'""');return/[",\n]/.test(s)?`"${s}"`:s;}).join(','))].join('\n');
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${t}-${new Date().toISOString().split('T')[0]}.csv`;a.click();URL.revokeObjectURL(url);toast(`✓ ${t}.csv descargado`,'success');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${t}-${hoyCL()}.csv`;a.click();URL.revokeObjectURL(url);toast(`✓ ${t}.csv descargado`,'success');
 }
 
 // ── HISTORIAL DE PRECIOS DE PROVEEDORES (N5) ──────────────────────────
@@ -590,7 +590,7 @@ function addPrecioProv(prov){
   const precio=Math.round(parseFloat(String(precioRaw).replace(/[^\d.-]/g,''))||0);
   if(!(precio>0)){toast('Precio inválido','error');return;}
   const unidad=(prompt('Unidad (ej: kg, unidad, m², hora):','unidad')||'').trim()||'unidad';
-  const hoyISO=new Date().toISOString().slice(0,10);
+  const hoyISO=hoyCL();
   const fecha=(prompt('Fecha de la cotización (AAAA-MM-DD):',hoyISO)||'').trim()||hoyISO;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){toast('Fecha inválida (AAAA-MM-DD)','error');return;}
   const nota=(prompt('Nota opcional (condición, mínimo de compra, etc.):','')||'').trim();
@@ -693,8 +693,8 @@ function openOCModal(provNombre,ocId){
   document.getElementById('ocRows').innerHTML='';
   document.getElementById('ocId').value=ocId||'';
   const oc=ocId?_ocAll().find(x=>x.id===ocId):null;
-  if(oc){sel.value=oc.proveedor||'';document.getElementById('ocFecha').value=oc.fecha||new Date().toISOString().slice(0,10);document.getElementById('ocNotas').value=oc.notas||'';(oc.items||[]).forEach(it=>ocAddRow(it));}
-  else{sel.value=provNombre||'';document.getElementById('ocFecha').value=new Date().toISOString().slice(0,10);document.getElementById('ocNotas').value='';ocAddRow();}
+  if(oc){sel.value=oc.proveedor||'';document.getElementById('ocFecha').value=oc.fecha||hoyCL();document.getElementById('ocNotas').value=oc.notas||'';(oc.items||[]).forEach(it=>ocAddRow(it));}
+  else{sel.value=provNombre||'';document.getElementById('ocFecha').value=hoyCL();document.getElementById('ocNotas').value='';ocAddRow();}
   ocProveedorChanged();ocCalc();
   document.getElementById('ocModal').style.display='flex';
 }
@@ -740,7 +740,7 @@ function guardarOC(conPDF){
   const t=ocCalc();
   const arr=_ocAll();const id=document.getElementById('ocId').value;
   let oc;
-  const base={proveedor,fecha:document.getElementById('ocFecha').value||new Date().toISOString().slice(0,10),notas:(document.getElementById('ocNotas').value||'').trim(),items,neto:t.neto,total:t.total,estado:'Emitida'};
+  const base={proveedor,fecha:document.getElementById('ocFecha').value||hoyCL(),notas:(document.getElementById('ocNotas').value||'').trim(),items,neto:t.neto,total:t.total,estado:'Emitida'};
   if(id){oc=arr.find(x=>x.id===id);if(oc)Object.assign(oc,base);}
   else{oc={id:'oc'+Date.now()+'_'+arr.length,numero:_ocNextNum(),ts:Date.now(),...base};arr.push(oc);}
   _ocSaveArr(arr);closeOCModal();toast(`✓ Orden de compra ${oc.numero} guardada`,'success');

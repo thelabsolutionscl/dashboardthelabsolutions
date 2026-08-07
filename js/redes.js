@@ -1103,7 +1103,7 @@ async function nlDestSend(){
     await new Promise(r=>setTimeout(r,120));
   }
   btn.disabled=false;btn.textContent=prev;
-  try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Estado':'Enviada','Enviados':ok,'Fecha envío':c.fields['Fecha envío']||new Date().toISOString().slice(0,10)});Object.assign(c.fields,{'Estado':'Enviada','Enviados':ok});}catch(_){}
+  try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Estado':'Enviada','Enviados':ok,'Fecha envío':c.fields['Fecha envío']||hoyCL()});Object.assign(c.fields,{'Estado':'Enviada','Enviados':ok});}catch(_){}
   toast(`✓ Enviado a ${ok}${fail?` · ${fail} con error`:''}`,fail?'info':'success');
   document.getElementById('nlDestModal').style.display='none';renderNlKpis();renderNlCampaigns();
 }
@@ -1160,7 +1160,7 @@ async function nlSetEstado(id,estado){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
   try{
     const fields={'Estado':estado};
-    if(estado==='Enviada'&&!c.fields['Fecha envío']) fields['Fecha envío']=new Date().toISOString().slice(0,10);
+    if(estado==='Enviada'&&!c.fields['Fecha envío']) fields['Fecha envío']=hoyCL();
     await _redesWrite('Newsletter_Campañas','PATCH',id,fields);
     Object.assign(c.fields,fields);
     toast('Estado: '+estado+' ✓','success'); renderNlKpis(); renderNlCampaigns();

@@ -478,7 +478,7 @@ async function testYoastWrite(){openSEODiag();await runSEODiag();}
 // ── Snapshot histórico ──────────────────────────────────
 function adsSaveSnapshot(data,days){
   let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
-  const today=new Date().toISOString().slice(0,10);
+  const today=hoyCL();
   const imp=data.impresiones||0,clics=data.clics||0,gasto=data.gasto||0;
   const conv=data.conversiones||0;
   const ctr=imp>0?(clics/imp*100):0;
@@ -779,7 +779,7 @@ function adsHealthScore(c){
 // ── Airtable sync ────────────────────────────────────────
 async function syncAdsToAirtable(data,days){
   let cfg;try{cfg=_airtableConfig();}catch(e){return;}
-  const today=new Date().toISOString().slice(0,10);
+  const today=hoyCL();
   const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
   const conv=data.conversiones||0,valConv=data.valor_conversion||0;
   const ctr=imp>0?clics/imp:0;
@@ -852,7 +852,7 @@ function adsExportCSV(){
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='campanas_google_ads_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download='campanas_google_ads_'+hoyCL()+'.csv';
   a.click();
   toast('✓ CSV descargado','success');
 }
@@ -869,7 +869,7 @@ function adsExportKeywordsCSV(){
   const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='palabras_clave_google_ads_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download='palabras_clave_google_ads_'+hoyCL()+'.csv';
   a.click();
   toast('✓ CSV de palabras clave descargado','success');
 }
@@ -1368,7 +1368,7 @@ function adsExportOfflineConversions(){
   }
   const header='Parameters:TimeZone=America/Santiago\nGoogle Click ID,Conversion Name,Conversion Time,Conversion Value,Conversion Currency';
   const csv=header+'\n'+rows.map(r=>r.map(_adsCsvCell).join(',')).join('\n')+'\n';
-  _adsDownloadCSV('conversiones_offline_'+new Date().toISOString().slice(0,10)+'.csv',csv);
+  _adsDownloadCSV('conversiones_offline_'+hoyCL()+'.csv',csv);
   if(out) out.innerHTML='✓ CSV generado: <b>'+rows.length+'</b> conversiones ('+nLeads+' leads · '+nVentas+' ventas)'+(sinGclid?' · <span style="color:var(--warn)">'+sinGclid+' sin gclid omitidas</span>':'')+'.<br>Súbelo en Google Ads → Objetivos → Conversiones → Cargas → Subir.';
 }
 

@@ -30,7 +30,7 @@ function cotPlazoCorto(f){
 function buildCotizacionDoc(id){
   const c=state.cotizacionesById[id];if(!c) return null;
   const f=c.fields;const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cf=(clienteId?state.clientes.find(x=>x.id===clienteId):null)?.fields||{};
-  const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||new Date().toISOString().split('T')[0],vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
+  const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||hoyCL(),vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
   const plazotxt=cotPlazoTexto(f)||'A coordinar con el cliente.';
   const formaPago=f['Forma de pago']||'';
   const formaDescMap={'AL CONTADO':'Pago total al momento de confirmar el pedido, vía transferencia bancaria, vale vista o cheque al día.','30 DÍAS DESDE OC':'Pago total a 30 días desde la emisión de la Orden de Compra, vía transferencia bancaria.','45 DÍAS DESDE OC':'Pago total a 45 días desde la emisión de la Orden de Compra, vía transferencia bancaria.','70% ABONO Y 30% CONTRA ENTREGA':'70% de abono al confirmar el pedido (Facturable inmediatamente), 30% restante contra entrega y conformidad de recepción, vía transferencia bancaria, vale vista o cheque al día.','50% ABONO Y 50% 30 DÍAS':'50% de abono al confirmar el pedido (Facturable inmediatamente), 50% restante a 30 días desde la Orden de Compra, vía transferencia bancaria.'};
@@ -157,7 +157,7 @@ async function saveFichaModal(verPDF=false){
     cantidad:get('fichaCantidad'),impresora:get('fichaImpresora'),altaCapa:get('fichaAltaCapa'),
     relleno:get('fichaRelleno'),soportes:get('fichaSoportes'),peso:get('fichaPeso'),
     tiempo:get('fichaTiempo'),notas:get('fichaNotas'),aprobado:get('fichaAprobado'),
-    updatedAt:new Date().toISOString().slice(0,10)
+    updatedAt:hoyCL()
   };
   try{
     await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(data)});

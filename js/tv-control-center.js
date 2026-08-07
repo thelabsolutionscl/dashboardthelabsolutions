@@ -5,7 +5,7 @@ const ID='tvcc-root',STYLE='tvcc-style';
 const ROTATE_MS={resumen:15000,produccion:25000,libres:15000,entregas:20000,capacidad:18000,equipo:15000,alertas:12000,resultados:18000};
 let page='resumen',timer=null,lastCritical='';
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-const today=()=>new Date().toISOString().slice(0,10);
+const today=()=>hoyCL();
 const days=f=>{if(!f)return null;const a=new Date(today()+'T12:00:00'),b=new Date(String(f).slice(0,10)+'T12:00:00');return Math.ceil((b-a)/86400000);};
 function tvActive(){return document.fullscreenElement||document.body.classList.contains('kiosk')||document.querySelector('.cal-tv,.tv-mode,[data-tv-mode],.of-tv');}
 function machines(){return typeof MAQUINAS!=='undefined'?MAQUINAS:[];}

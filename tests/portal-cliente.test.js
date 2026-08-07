@@ -177,7 +177,10 @@ test('portal del cliente', async (t) => {
   // otro, el cliente recibiría dos versiones distintas del mismo papel.
   await t.test('el documento es idéntico al PDF de la sección Cotizaciones', async () => {
     const _NF = new Intl.NumberFormat('es-CL');
-    const previos = ['formatCLP', 'escHtml', 'resolveClienteName', 'state'].map((k) => [k, globalThis[k]]);
+    const previos = ['formatCLP', 'escHtml', 'resolveClienteName', 'state', 'hoyCL'].map((k) => [k, globalThis[k]]);
+    // Misma fecha de Chile que usa el worker: si los dos lados no coincidieran,
+    // el mismo documento saldría fechado distinto según de dónde se descargue.
+    globalThis.hoyCL = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date());
     globalThis.formatCLP = (v) => (!v ? '$0' : '$' + _NF.format(Math.round(v)));
     globalThis.escHtml = (s) => (!s && s !== 0 ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
     globalThis.resolveClienteName = () => REGISTROS.Clientes[CLIENTE].fields.Empresa;

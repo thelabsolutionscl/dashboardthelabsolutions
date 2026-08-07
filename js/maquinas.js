@@ -1,6 +1,10 @@
 /* js/maquinas.js — módulo extraído de index.html (carga en el mismo punto). */
 // ── MÁQUINAS ──────────────────────────────────────────────────
-function fmtDate(d){return d.toISOString().split('T')[0];}
+// Formatea por el calendario local, no por UTC. Con toISOString(), fmtDate(new
+// Date()) devolvía el día siguiente después de las 20:00 (Chile va UTC-4/-3), y
+// eso es lo que marca "hoy" en las grillas de máquinas y de equipo: pasadas las
+// 8 de la tarde la columna resaltada era la de mañana.
+function fmtDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function fmtDayLabel(d){return['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()]+' '+d.getDate();}
 function getMaquinaSemanaLunes(){const t=new Date();t.setHours(0,0,0,0);const day=t.getDay();const l=new Date(t);l.setDate(t.getDate()-(day===0?6:day-1)+(maquinaState.semanaOffset*7));return l;}
 function navSemana(d){maquinaState.semanaOffset+=d;renderMaquinasCalendar();}

@@ -1442,7 +1442,7 @@
         <div class="field-group"><label class="field-label">Urgente</label><select class="field-select" id="cot-urgente"><option value="false">No</option><option value="true">Sí (+25%)</option></select></div>
         <div class="field-group"><label class="field-label">Fecha cotización</label><input class="field-input" id="cot-fecha" type="date" onchange="updateVtoPreview()"></div>
         <div class="field-group"><label class="field-label">Vto. (auto 10 días háb.)</label><input class="field-input" id="cot-vto-preview" type="date" disabled style="opacity:0.5;cursor:not-allowed"></div>
-        <div class="field-group"><label class="field-label">Estado inicial</label><select class="field-select" id="cot-estado-inicial" onchange="if(this.value==='Solicitada'&&!document.getElementById('cot-fecha-limite').value)document.getElementById('cot-fecha-limite').value=calBusinessDate(document.getElementById('cot-fecha').value||new Date().toISOString().slice(0,10),2)"><option>Enviada</option><option>Solicitada</option></select></div>
+        <div class="field-group"><label class="field-label">Estado inicial</label><select class="field-select" id="cot-estado-inicial" onchange="if(this.value==='Solicitada'&&!document.getElementById('cot-fecha-limite').value)document.getElementById('cot-fecha-limite').value=calBusinessDate(document.getElementById('cot-fecha').value||hoyCL(),2)"><option>Enviada</option><option>Solicitada</option></select></div>
         <div class="field-group"><label class="field-label">Fecha límite para entregar cotización</label><input class="field-input" id="cot-fecha-limite" type="date"><small style="color:var(--text3);font-size:9px">Para propuestas que todavía estás preparando.</small></div>
         <div class="field-group"><label class="field-label">Forma de Pago</label><select class="field-select" id="cot-forma-pago"><option value="">— Seleccionar —</option><option>AL CONTADO</option><option>30 DÍAS DESDE OC</option><option>45 DÍAS DESDE OC</option><option>70% ABONO Y 30% CONTRA ENTREGA</option><option>50% ABONO Y 50% 30 DÍAS</option></select></div>
         <div class="field-group form-full"><label class="field-label">Tiempo de Producción / Entrega</label>
@@ -6929,6 +6929,16 @@ function getToken(){return _realKey(lsGet('airtable_token'))||_realKey(_DEFAULTS
 function getOpenAIKey(){return _realKey(localStorage.getItem('fp_openai_key'))||_realKey(_DEFAULTS.OPENAI_KEY);}
 // ── VENDOR LAYER ─────────────────────────────────────────────
 function currentVendorId(){const u=AUTH.getUser();return u?u.username.split('@')[0].toLowerCase():null;}
+// Fecha de calendario en horario de Chile. new Date().toISOString() devuelve
+// UTC, y Chile va UTC-4/-3: cualquier cosa hecha después de las 20:00 quedaba
+// estampada con la fecha del día siguiente. Un pedido despachado el 31 a las
+// 21:00 se guardaba con fecha del 1 del mes siguiente, y su comisión se contaba
+// en el mes equivocado. El lead-worker ya usaba este criterio; esto lo trae al
+// dashboard, que se había quedado con la hora UTC.
+function hoyCL(){
+  try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago'}).format(new Date());}
+  catch(e){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+}
 function isVendorMode(){const u=AUTH.getUser();return!!(u&&u.role==='comercial');}
 // Los pedidos que le corresponde ver a quien está en pantalla. El filtro por
 // vendedor estaba repetido a mano en cada vista, y las de Kanban, Planificación
@@ -7743,7 +7753,7 @@ async function loadMaintLogAirtable(){
 
 async function saveMaintRecordAirtable(rec){
   const t=getToken();if(!t&&!_proxyCfg()) return;
-  const fields={maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',repuestos:rec.parts||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||new Date().toISOString().slice(0,10),ts:rec.ts||Date.now()};
+  const fields={maquina_id:rec.maquinaId,tipo:rec.tipo,notas:rec.notas||'',repuestos:rec.parts||'',print_hours:rec.printHoursAtTime||0,fecha:rec.fecha?.slice(0,10)||hoyCL(),ts:rec.ts||Date.now()};
   let r=await _atFetch(`/${BASE_ID}/Maquinas_Mant`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:[{fields}],typecast:true})});
   // Si el token permite datos pero no cambios de esquema, conserva los repuestos
   // dentro de las notas para no perder trazabilidad.
@@ -8371,7 +8381,7 @@ function switchTab(name){
 // importantes (reutiliza los items ya calculados por renderAccionesHoy).
 function _briefKey(){const u=(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser())||{};return 'thelab_brief_'+(u.username||'guest');}
 function dismissMorningBrief(){
-  try{localStorage.setItem(_briefKey(),new Date().toISOString().slice(0,10));}catch(e){}
+  try{localStorage.setItem(_briefKey(),hoyCL());}catch(e){}
   const el=document.getElementById('morningBrief');if(el)el.style.display='none';
 }
 function morningBriefIA(){
@@ -8509,7 +8519,7 @@ function agendaDone(id){const arr=_agenda();const it=arr.find(x=>x.id===id);if(i
 function agendaDel(id){const arr=_agenda();const it=arr.find(x=>x.id===id);if(it){it.del=true;it.mts=Date.now();}_agendaSaveArr(arr);renderAgendaList();try{renderAccionesHoy();}catch(e){}}
 function renderAgendaList(){
   const el=document.getElementById('agendaList');if(!el)return;
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyCL();
   const pend=_agenda().filter(x=>!x.done&&!x.del).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   if(!pend.length){el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:8px 2px">Sin compromisos pendientes.</div>';return;}
   el.innerHTML=pend.map(x=>{
@@ -8526,7 +8536,7 @@ function renderAgendaList(){
 }
 // Compromisos que vencen hoy o antes → items de Acciones de Hoy
 function _agendaDueItems(){
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyCL();
   return _agenda().filter(x=>!x.done&&!x.del&&String(x.fecha)<=hoy).map(x=>({
     cat:'agenda',prio:1,icon:'📅',
     txt:`<b>${escapeHtml(x.texto)}</b>${x.cliNombre?' · '+escapeHtml(x.cliNombre):''}${x.fecha<hoy?' · <span style="color:var(--danger)">atrasado</span>':''}`,
@@ -8535,7 +8545,7 @@ function _agendaDueItems(){
 }
 function renderMorningBrief(){
   const el=document.getElementById('morningBrief');if(!el)return;
-  const today=new Date().toISOString().slice(0,10);
+  const today=hoyCL();
   let seen='';try{seen=localStorage.getItem(_briefKey())||'';}catch(e){}
   if(seen===today){el.style.display='none';return;}
   const u=(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser())||{};
@@ -9998,7 +10008,7 @@ function exportarLibroVentas(){
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=`libro_ventas_dte_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download=`libro_ventas_dte_${hoyCL()}.csv`;
   a.click();URL.revokeObjectURL(a.href);
   toast('Libro de Ventas exportado ✓','success');
 }
@@ -10051,7 +10061,7 @@ function openFacturaModal(clienteId,facturaId){
     document.querySelector('#facturaModal .modal-title').innerHTML='<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-invoice"/></svg> Editar Factura';
   }else{
     ['facId','facFolio','facNeto','facIva','facExento','facTotal','facTrackId','facEstado','facFechaVenc','facNotas'].forEach(id=>set(id,''));
-    set('facTipo','33 - Factura Electrónica');set('facFecha',new Date().toISOString().slice(0,10));
+    set('facTipo','33 - Factura Electrónica');set('facFecha',hoyCL());
     set('facEstadoPago','Pendiente');
     document.querySelector('#facturaModal .modal-title').innerHTML='<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-invoice"/></svg> Registrar Factura';
   }
@@ -10230,7 +10240,7 @@ function exportarFacturasCSV(){
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=`facturas_${(cdCurrentEmpresa||'cliente').replace(/[^a-z0-9]/gi,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download=`facturas_${(cdCurrentEmpresa||'cliente').replace(/[^a-z0-9]/gi,'_')}_${hoyCL()}.csv`;
   a.click();URL.revokeObjectURL(a.href);
 }
 async function abrirImportarDtes(){
@@ -10281,7 +10291,7 @@ async function confirmarImportarDtes(){
     const cliId=document.getElementById(`imp-cli-${i}`)?.value||'';
     const cliNombre=cliId?(state.clientesById[cliId]||''):'';
     const d=_importDtes[i];
-    const fields={'Tipo DTE':tipoLabel[String(d.tipo)]||String(d.tipo),'Folio':d.folio,'Fecha':d.fecha||new Date().toISOString().slice(0,10),'Neto':d.neto||null,'IVA':d.iva||null,'Exento':d.exento||null,'Total':d.total||null,'Track ID':d.trackid||'','Estado SII':d.trackid?'Enviado':'','Estado Pago':'Pendiente','Cliente':cliNombre,'Cliente ID':cliId};
+    const fields={'Tipo DTE':tipoLabel[String(d.tipo)]||String(d.tipo),'Folio':d.folio,'Fecha':d.fecha||hoyCL(),'Neto':d.neto||null,'IVA':d.iva||null,'Exento':d.exento||null,'Total':d.total||null,'Track ID':d.trackid||'','Estado SII':d.trackid?'Enviado':'','Estado Pago':'Pendiente','Cliente':cliNombre,'Cliente ID':cliId};
     try{
       await ensureFacturasTable();
       const res=await airtableWrite('Facturas','POST',null,fields);
@@ -10781,7 +10791,7 @@ async function saveFichaPropModal(verPDF=false){
     nombreProyecto:document.getElementById('fpNombreProyecto').value||'',
     logoCliente:_fpLogoCliente||'',
     items:_fpItems.map(it=>({nombre:it.nombre,tipo:it.tipo,material:it.material,optLabel:it.optLabel,optMaterial:it.optMaterial,dims:it.dims})),
-    updatedAt:new Date().toISOString().slice(0,10)
+    updatedAt:hoyCL()
   };
   const applyAndClose=()=>{
     const cot=state.cotizacionesById[_fpCotId];
@@ -11553,7 +11563,7 @@ async function backupAirtable(btn){
     }
     if(!tot) throw new Error('No se pudo leer ninguna tabla');
     const json=JSON.stringify(data);
-    const fname='backup-crm-'+new Date().toISOString().slice(0,10)+'.json';
+    const fname='backup-crm-'+hoyCL()+'.json';
     let dest='';
     if(typeof _driveConnected==='function'&&_driveConnected()){
       try{
@@ -11585,7 +11595,7 @@ function checkBackupReminder(){
   try{
     const last=parseInt(localStorage.getItem('thelab_backup_last'))||0;
     if(last&&(Date.now()-last)/864e5<7)return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=hoyCL();
     if(localStorage.getItem('thelab_backup_nag')===today)return;
     localStorage.setItem('thelab_backup_nag',today);
     NOTIFY.add('info',last?('💾 Backup del CRM: '+Math.floor((Date.now()-last)/864e5)+' días sin respaldo'):'💾 Aún no has respaldado tu CRM','Toca para respaldar todas las tablas de Airtable','@backupAirtable',{silent:true});
@@ -11598,7 +11608,7 @@ window.backupAirtable=backupAirtable;
 // se sueltan las entradas de más de 180 días para que el espacio lo ocupe
 // siempre lo reciente (las notas de clientes/pedidos NO se tocan: son datos).
 function _pruneLocalLogs(){
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyCL();
   if(localStorage.getItem('thelab_prune_last')===hoy) return;
   try{localStorage.setItem('thelab_prune_last',hoy);}catch(e){}
   const lim=Date.now()-180*864e5;
@@ -11838,7 +11848,7 @@ async function bulkEditPedidoEstado(){
     :`¿Cambiar estado a "${estado}" para ${ids.length} pedido${ids.length!==1?'s':''}?`)) return;
   const btn=document.querySelector('[onclick="bulkEditPedidoEstado()"]');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   let ok=0,err=0;
-  for(const id of ids){try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,f);const p=state.pedidosById[id];if(p) p.fields['Estado pedido']=estado;ok++;}catch(e){err++;}}
+  for(const id of ids){try{const f={'Estado pedido':estado};if(estado==='Despachado') f['Fecha despacho']=hoyCL();await airtableWrite('Pedidos','PATCH',id,f);const p=state.pedidosById[id];if(p) p.fields['Estado pedido']=estado;ok++;}catch(e){err++;}}
   document.getElementById('pedidosBulkEstado').value='';
   err?toast(`${ok} actualizados, ${err} con error`,'info'):toast(`✓ ${ok} pedido${ok!==1?'s':''} → "${estado}"`,'success');
   if(btn){btn.disabled=false;btn.textContent='✓ Aplicar estado';}
@@ -11890,7 +11900,7 @@ async function saveEditPedido(){
     const fields={'Estado pedido':nuevoEstado,'Fecha entrega':document.getElementById('editPedidoFecha').value||null,'Fecha objetivo interna':document.getElementById('editPedidoFechaInterna').value||null,'Equipo asignado':document.getElementById('editPedidoEquipo').value,'Proveedor':document.getElementById('editPedidoProveedor').value};
     const fp=document.getElementById('editPedidoFormaPago').value;if(fp) fields['Forma de pago']=fp;
     const _epVv=document.getElementById('editPedidoVendedor')?.value||'';fields['Vendedor']=_epVv||null;
-    if(fields['Estado pedido']==='Despachado'&&!state.pedidosById[id]?.fields['Fecha despacho']) fields['Fecha despacho']=new Date().toISOString().split('T')[0];
+    if(fields['Estado pedido']==='Despachado'&&!state.pedidosById[id]?.fields['Fecha despacho']) fields['Fecha despacho']=hoyCL();
     // Costos reales (crea los campos on-demand si aún no existen)
     const _cm=+document.getElementById('editPedidoCostoMat').value||0,_ch=+document.getElementById('editPedidoHoras').value||0,_cmo=+document.getElementById('editPedidoMO').value||0;
     if(_cm>0)fields['Costo material real (CLP)']=_cm;
@@ -11935,7 +11945,7 @@ async function advancePedido(id,estado){
   } else {
     if(!confirm(`¿Avanzar a "${estado}"?`)) return;
   }
-  try{const flds={'Estado pedido':estado};if(estado==='Despachado') flds['Fecha despacho']=new Date().toISOString().split('T')[0];await airtableWrite('Pedidos','PATCH',id,flds);Object.assign(p.fields,flds);renderPedidos();toast(estado==='Completado'?'✓ Pedido completado y archivado':`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
+  try{const flds={'Estado pedido':estado};if(estado==='Despachado') flds['Fecha despacho']=hoyCL();await airtableWrite('Pedidos','PATCH',id,flds);Object.assign(p.fields,flds);renderPedidos();toast(estado==='Completado'?'✓ Pedido completado y archivado':`Pedido → "${estado}"`,'success');await loadAllDataSilent();renderPedidos();renderOverview();}catch(e){toast('Error: '+e.message,'error');}}
 
 // ── NUEVO LEAD + LEAD_AGENT ───────────────────────────────────
 let _leadAgentResponse=null;
@@ -12369,7 +12379,7 @@ async function createLead(){
   if(rut&&!validRUT(rut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
   if(rut&&rutEl) rutEl.value=formatRUT(rut);
   btn.disabled=true;btn.textContent='Creando...';
-  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
+  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':hoyCL()};
   if(document.getElementById('nl-industria').value) fields['Industria / Rubro']=document.getElementById('nl-industria').value;
   if(document.getElementById('nl-rut').value) fields['RUT']=document.getElementById('nl-rut').value;
   if(document.getElementById('nl-web').value) fields['Sitio web']=document.getElementById('nl-web').value;
@@ -12806,7 +12816,7 @@ async function createCotizacion(){
   updateItemsDetalle();const tots=calcItemsTotals();const s=tots.costo;const _descPctN=Math.min(100,Math.max(0,parseFloat(document.getElementById('cot-descuento')?.value)||0));const _netoDescN=Math.round(tots.neto*(1-_descPctN/100));const t=Math.round(_netoDescN*1.19);btn.disabled=true;btn.textContent='Guardando...';
   try{
     const clienteId=document.getElementById('cot-cliente-id')?.value||'';
-    const fechaCot=document.getElementById('cot-fecha')?.value||new Date().toISOString().split('T')[0];
+    const fechaCot=document.getElementById('cot-fecha')?.value||hoyCL();
     const vtoStr=calBusinessDate(fechaCot,10);
     const _aliasValN=(document.getElementById('cot-alias')?.value||'').trim();
     const _estadoInicial=document.getElementById('cot-estado-inicial')?.value||'Enviada';let _fechaLimite=document.getElementById('cot-fecha-limite')?.value||'';if(_estadoInicial==='Solicitada'&&!_fechaLimite)_fechaLimite=calBusinessDate(fechaCot,2);
@@ -12950,7 +12960,7 @@ async function gfClientCreate(){
   if(!empresa){toast('Empresa requerida','error');return;}
   try{
     toast('Creando cliente…','info');
-    const f={'Empresa':empresa,'Contacto':contacto||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
+    const f={'Empresa':empresa,'Contacto':contacto||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':hoyCL()};
     if(isVendorMode())f['Vendedor']=currentVendorId();
     const rec=await airtableWrite('Clientes','POST',null,f);
     if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=empresa;state.clientesByIdRec[rec.id]=rec;}
@@ -13013,7 +13023,7 @@ async function crearCotizacionGuiada(d){
   let costo=0,venta=0;(d.items||[]).forEach(it=>{costo+=(it.costo||0)*(it.und||1);venta+=(it.venta||0)*(it.und||1);});
   costo=Math.round(costo);const descPct=d.descuento||0;const netoDesc=Math.round(venta*(1-descPct/100));const total=Math.round(netoDesc*1.19);
   const detalle=(d.items||[]).map(it=>it.desc+' | '+(it.und||1)+' und. | Costo: $'+(it.costo||0)+' | Venta: $'+(it.venta||0)).join('\n');
-  const fecha=new Date().toISOString().split('T')[0];
+  const fecha=hoyCL();
   const estado=d.estadoInicial||'Enviada',vto=calBusinessDate(fecha,10),fechaLimite=estado==='Solicitada'?(d.fechaLimite||calBusinessDate(fecha,2)):'';
   const fields={'N° Cotización':num,'Canal solicitud':d.canal||'WhatsApp','Fecha cotización':fecha,'Fecha vencimiento':estado==='Enviada'?vto:null,'Fecha límite cotización':fechaLimite||null,'Subtotal (CLP)':costo,'Total final (CLP)':total,'Urgencia (+25%)':!!d.urgente,'Solicitud cliente (texto libre)':d.solicitud||'','Detalle productos':detalle,'Notas cotización':d.notas||'','Estado cotización':estado};
   if(d.alias)fields['Alias / Título']=d.alias;
@@ -13126,7 +13136,7 @@ function startNewClientFlow(){
     {key:'_sum',type:'summary',q:'Revisa y confirma',sub:'Verifica los datos antes de crear el cliente.',fields:_CLI_SUM},
   ],onComplete:async(a)=>{
     if(!a.empresa){toast('La empresa es obligatoria','error');return;}
-    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Origen lead':a.origen||'','Notas internas':a.notas||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':new Date().toISOString().split('T')[0]};
+    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Origen lead':a.origen||'','Notas internas':a.notas||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':hoyCL()};
     if(isVendorMode())f['Vendedor']=currentVendorId();
     toast('Creando cliente…','info');
     let rec;
@@ -13412,7 +13422,7 @@ async function crearReporte(){
   const response=await callClaude(sys,`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
   out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(response);
   try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response);}catch(e){}
-  const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':new Date().toISOString().split('T')[0],'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
+  const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':hoyCL(),'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
   catch(e){toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;}
   finally{try{hideAgentWorking();}catch(e){}}
   btn.disabled=false;btn.innerHTML='<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar y Guardar';
@@ -15184,7 +15194,7 @@ function buildAgentContext(id){
       // ── TENDENCIA: comparar contra una foto anterior para que el agente vea la DIRECCIÓN, no sólo la foto ──
       try{
         let _snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');
-        const _today=new Date().toISOString().slice(0,10);
+        const _today=hoyCL();
         const _prev=_snaps.filter(s=>s.date&&s.date<_today&&(s.days===days||!s.days)).pop()||_snaps.filter(s=>s.date&&s.date<_today).pop();
         if(_prev){
           const _ageD=Math.max(1,Math.round((Date.now()-new Date(_prev.date).getTime())/86400000));
@@ -15532,7 +15542,7 @@ function detectarAnomalias(hoy){
 const _anomSeenKey='thelab_anom_seen_v1';
 function checkAnomalias(){
   let seen;try{seen=JSON.parse(localStorage.getItem(_anomSeenKey)||'{}');}catch(e){seen={};}
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=hoyCL();
   let dirty=false;
   detectarAnomalias().forEach(a=>{
     if(seen[a.tipo]===todayStr) return;   // un aviso por tipo por día
@@ -15543,7 +15553,7 @@ function checkAnomalias(){
 }
 function checkAgentSuggestions(){
   let seen;try{seen=JSON.parse(localStorage.getItem(_agentSuggestKey)||'{}');}catch(e){seen={};}
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=hoyCL();
   const _t=new Date();_t.setHours(0,0,0,0);
   // En modo vendedor las sugerencias/notificaciones se limitan a los registros del comercial
   const _av=(typeof isVendorMode==='function'&&isVendorMode());

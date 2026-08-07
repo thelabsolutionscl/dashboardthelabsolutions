@@ -59,7 +59,7 @@ function _cleanMsg(s){
 async function marcarReactivado(cliId,via){
   const c=state.clientes&&state.clientes.find(x=>x.id===cliId); if(!c) return;
   const yaEstaba=!!c.fields['Reactivado'];
-  const fecha=new Date().toISOString().split('T')[0];
+  const fecha=hoyCL();
   c.fields['Reactivado']=true; c.fields['Fecha reactivación']=fecha;   // optimista en local
   try{if(typeof renderClientes==='function') renderClientes(true);}catch(e){}
   try{_markAgentModalReactivado();}catch(e){}
@@ -218,7 +218,7 @@ async function fuMarkDone(cotId,via){
   const log=_fuLog(); const prev=log[cotId]||{};
   log[cotId]={ts:Date.now(),via:via||'manual',toques:Math.min((prev.toques||0)+1,3)};
   try{localStorage.setItem(_FU_LOG_KEY,JSON.stringify(log));}catch(e){}
-  try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,{'Último seguimiento':new Date().toISOString().slice(0,10)});}catch(e){}
+  try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,{'Último seguimiento':hoyCL()});}catch(e){}
   if(via&&via!=='manual') toast('✓ Seguimiento registrado ('+via+') — toque '+log[cotId].toques+'/3','success');
   buildFollowupTray();
 }
@@ -1212,7 +1212,7 @@ async function saveProductionFicha(pedidoId){
   const p=state.pedidosById[pedidoId];if(!p) return;
   const existing=parseFichaData(p.fields['Ficha Tecnica'])||{};
   existing.instrucciones=_agentInlineText;
-  existing.generadoIA=new Date().toISOString().substring(0,10);
+  existing.generadoIA=hoyCL();
   const btnEl=document.querySelector('#agentInlineActions .btn-primary');
   if(btnEl){btnEl.disabled=true;btnEl.textContent='Guardando...';}
   try{
@@ -1307,7 +1307,7 @@ async function runAgentChain(pedidoId,solicitudOverride){
     try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,ficha);}catch(e){}
     const existing=parseFichaData(f['Ficha Tecnica'])||{};
     existing.instrucciones=ficha;
-    existing.generadoIA=new Date().toISOString().substring(0,10);
+    existing.generadoIA=hoyCL();
     await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(existing)});
     p.fields['Ficha Tecnica']=JSON.stringify(existing);
     steps.prod='✅ Ficha Técnica generada y guardada';

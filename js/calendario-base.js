@@ -138,7 +138,7 @@ function _calPrune(arr){
 // El respaldo cabe en el campo Notes (~95k): si se pasa, suelta lo más viejo ya pasado.
 function _calFitBudget(events,extraBytes=0){
   let out=events.slice();
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyCL();
   const limit=Math.max(5000,88000-Math.max(0,+extraBytes||0));
   while(JSON.stringify(out).length>limit&&out.length>10){
     const past=out.filter(e=>!e.del&&e.fecha<hoy).sort((x,y)=>String(x.fecha).localeCompare(String(y.fecha)));
@@ -356,7 +356,7 @@ function _calAlarmTick(){
       const mins=Array.isArray(ev.reminders)?ev.reminders:(ev.alarmMin==null?[]:[+ev.alarmMin]);
       const ready=mins.slice().sort((a,b)=>a-b).find(min=>now>=ini-(+min)*60000&&!fired[ev.id+'@'+ev.fecha+'@'+min]);
       const overdue=ev.source==='crm'&&now>=ini+5*60000;
-      const keyMin=overdue?'overdue-'+new Date().toISOString().slice(0,10):ready;
+      const keyMin=overdue?'overdue-'+hoyCL():ready;
       if(keyMin===undefined||(!overdue&&now>=ini+5*60000))return;
       const k=ev.id+'@'+ev.fecha+'@'+keyMin;if(fired[k])return;fired[k]=now;dirty=true;
       const quien=(ev.personas||[]).map(p=>{const per=_calPersona(p);return per?per.nombre.split(' ')[0]:p;}).join(', ');
