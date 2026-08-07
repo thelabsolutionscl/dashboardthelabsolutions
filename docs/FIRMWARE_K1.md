@@ -43,11 +43,20 @@ en todos los comandos de abajo. No asumas que el archivo sirve para toda la seri
 Descarga: [Creality — K1 Downloads Center](https://www.creality.com/download/creality-k1-3d-printer)
 · [Creality Cloud — Flagship Series](https://www.crealitycloud.com/downloads/firmware/flagship-series/k1)
 
-## Paso 2 — Respaldar la configuración
+## Paso 2 — Preflight y respaldo (desde el iMac)
 
-Desde el iMac (misma red), con la IP de la K1 #2 (según
-`maint-config.example.json` sería `192.168.100.22` — confírmala en el dashboard,
-sección **Máquinas → 🔌 Conexión**):
+Con la IP de la K1 #2 (según `maint-config.example.json` sería
+`192.168.100.22` — confírmala en el dashboard, sección **Máquinas → 🔌 Conexión**):
+
+```bash
+K1=192.168.100.22
+curl -s "http://$K1:7125/printer/info"
+curl -s "http://$K1:7125/printer/objects/query?print_stats" | grep -o '"state":"[a-z]*"'
+```
+
+Tiene que responder y estar en `standby` (ni `printing` ni `paused`).
+
+Respaldo de la configuración:
 
 ```bash
 ssh root@192.168.100.22            # password por defecto en K1 rooteada: creality
@@ -63,11 +72,23 @@ Guarda ahí `printer.cfg`, `moonraker.conf` y las macros. Después del downgrade
 **no restaures `printer.cfg` a ciegas** (cambia entre ramas de firmware): úsalo
 solo como referencia para volver a aplicar lo tuyo.
 
-## Paso 3 — USB con el firmware
+## Paso 3 — Dejar el `.img` en la máquina
+
+**Con pendrive (recomendado):**
 
 - Pendrive en **FAT32**.
 - El `.img` va en la **raíz** del pendrive, sin carpetas y sin renombrar.
-- Enchúfalo en el puerto USB de la K1.
+- Enchúfalo en el puerto USB de la K1 y confirma dónde montó:
+  `ssh root@$K1 'ls /tmp/udisk/*'` (puede ser `sda1`, `sdb1`, …).
+
+**Sin pendrive**, copiándolo por red a la partición de datos:
+
+```bash
+scp ~/Downloads/CR4CU220812S11_ota_img_V1.3.5.22.img root@$K1:/usr/data/
+ssh root@$K1 'df -h /usr/data'
+```
+
+Va a `/usr/data` (eMMC), **no a `/tmp`** — `/tmp` es RAM y el `.img` pasa de 100 MB.
 
 ## Paso 4 — Intento normal (por pantalla)
 
@@ -98,6 +119,8 @@ chmod +x /tmp/local_ota_update_forced.sh
 
 # 3. Flashear (ajusta el nombre del archivo al que bajaste)
 /tmp/local_ota_update_forced.sh /tmp/udisk/sda1/CR4CU220812S11_ota_img_V1.3.5.22.img
+# o, si lo copiaste por scp en el paso 3:
+# /tmp/local_ota_update_forced.sh /usr/data/CR4CU220812S11_ota_img_V1.3.5.22.img
 ```
 
 Termina con `ota: stoped success` y reinicia sola en la versión monocolor.
