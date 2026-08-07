@@ -2257,7 +2257,11 @@ async function emitirDTE(){
     const tipoDTE=document.getElementById('dteTipoDoc').value;
     const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||(dteNum?cfg.webhookUrl+'/pdf/'+tipoDTE+'/'+dteNum:'');
     if(dteNum){
-      try{await airtableWrite('Pedidos','PATCH',pedidoId,{'DTE N°':String(dteNum)});}catch(e){}
+      // El folio ya se consumió en el SII: si aquí falla el guardado, el número
+      // queda solo en memoria y al recargar el pedido aparece sin DTE. Hay que
+      // avisar sí o sí — el documento tributario existe aunque el dashboard lo pierda.
+      try{await airtableWrite('Pedidos','PATCH',pedidoId,{'DTE N°':String(dteNum)});}
+      catch(e){avisoNoGuardado(`el DTE N° ${dteNum} en el pedido (ya fue emitido en el SII — anótalo)`,e);}
       const p=state.pedidosById[pedidoId];if(p) p.fields['DTE N°']=String(dteNum);
       // Materializa el DTE como Factura ligada al pedido (para cobranza y reportes)
       try{

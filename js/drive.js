@@ -200,7 +200,11 @@ async function subirFactura(pedidoId){
       const result=await r.json();
       const link=result.webViewLink;
       localStorage.setItem('factura_drive_'+pedidoId,link);
-      try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Factura URL':link});}catch(e){}
+      // El archivo ya está en Drive; lo que se pierde es el enlace en el pedido.
+      // Sin aviso, desde otro computador la factura simplemente no existe (el
+      // link de respaldo vive en el localStorage de este equipo).
+      try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Factura URL':link});}
+      catch(e){avisoNoGuardado('el enlace de la factura en el pedido (el archivo sí está en Drive)',e);}
       if(p) p.fields['Factura URL']=link;
       renderPedidos();
       toast('✅ Factura subida — <a href="'+escapeHtml(link)+'" target="_blank" style="color:var(--accent)">Ver en Drive</a>','success');

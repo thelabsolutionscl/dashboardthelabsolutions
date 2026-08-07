@@ -9906,11 +9906,15 @@ async function marcarFiltradasCobradas(){
   if(_facBuscar){const q=_facBuscar.toLowerCase();targets=targets.filter(r=>String(r.fields['Folio']||'').includes(q)||(r.fields['Notas']||'').toLowerCase().includes(q));}
   if(!targets.length){toast('Sin facturas pendientes para marcar','info');return;}
   if(!confirm(`¿Marcar ${targets.length} factura${targets.length>1?'s':''} como cobradas?`)) return;
-  let ok=0;
+  let ok=0,fallidas=[];
   for(const r of targets){
-    try{await airtableWrite('Facturas','PATCH',r.id,{'Estado Pago':'Cobrada'});r.fields['Estado Pago']='Cobrada';ok++;}catch(e){}
+    try{await airtableWrite('Facturas','PATCH',r.id,{'Estado Pago':'Cobrada'});r.fields['Estado Pago']='Cobrada';ok++;}
+    catch(e){fallidas.push(r.fields['Folio']||r.id);console.warn('[cobranza] no se pudo marcar la factura',r.id,e&&e.message);}
   }
-  toast(`${ok} marcada${ok!==1?'s':''} como cobradas ✓`,'success');
+  // Antes solo se anunciaban las que sí salieron: si fallaban 8 de 10, el aviso
+  // verde decía "2 marcadas ✓" y las otras 8 desaparecían del radar.
+  if(fallidas.length) toast(`${ok} marcada${ok!==1?'s':''} ✓ — ${fallidas.length} no se pudo${fallidas.length>1?'n':''}: folio ${fallidas.slice(0,5).join(', ')}${fallidas.length>5?'…':''}`,'error');
+  else toast(`${ok} marcada${ok!==1?'s':''} como cobradas ✓`,'success');
   renderClienteFacturas(cdCurrentId,cdCurrentEmpresa);
   if(typeof finRenderFacturas==='function') finRenderFacturas();
 }
@@ -10359,7 +10363,7 @@ async function _advanceEtapaCliente(clienteId,nuevaEtapa,desde){
     await airtableWrite('Clientes','PATCH',clienteId,patch);
     Object.assign(c.fields,patch);
     toast(patch['Validado']?`✅ Cliente validado → ${nuevaEtapa}`:`Etapa cliente → ${nuevaEtapa}`,'info');
-  }catch(e){}
+  }catch(e){avisoNoGuardado(`la etapa de ${c.fields['Empresa']||'el cliente'} (${nuevaEtapa})`,e);}
 }
 async function updateCotizacionEstado(id,estado){
   if(!confirm(`¿Marcar como ${estado}?`)) return;
@@ -11604,7 +11608,8 @@ async function qaUploadFotoDrive(silent){
     const res=await _driveUploadDataUrl(`QA_${num}_${Date.now()}.jpg`,qaFotoData,folderId);
     qaFotoLink=res.webViewLink||null;
     const lk=_qaFotoLinkKey();if(lk&&qaFotoLink)localStorage.setItem(lk,qaFotoLink);
-    try{if(qaFotoLink)await airtableWrite('Pedidos','PATCH',id,{'Foto QA URL':qaFotoLink});}catch(e){}
+    try{if(qaFotoLink)await airtableWrite('Pedidos','PATCH',id,{'Foto QA URL':qaFotoLink});}
+    catch(e){avisoNoGuardado('el enlace de la evidencia QA en el pedido (la foto sí está en Drive)',e);}
     renderQAFoto();toast('✓ Evidencia guardada en Drive','success');
   }catch(e){if(!silent)toast('Error Drive: '+e.message,'error');}
   finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
@@ -11883,6 +11888,15 @@ const AGENT_QUEUE_TABLE='Agent_Queue';
 let _agentQueue=[];
 
 // Escritura tolerante: si Airtable rechaza un campo inexistente, lo quita y reintenta.
+// Un guardado que falla en silencio es peor que uno que falla a la vista: el
+// dato se pinta en pantalla, el usuario cree que quedó y al recargar no está.
+// Esto avisa y deja rastro en consola, sin cortar el flujo que venía después
+// (que suele ser lo importante: la factura ya está en Drive, el DTE ya se
+// emitió en el SII…). Se usa en los catch que antes estaban vacíos.
+function avisoNoGuardado(que,e){
+  try{console.warn('[no se guardó]',que,e&&e.message||e);}catch(_){}
+  try{toast('⚠ No se pudo guardar '+que+' — quedó solo en pantalla, reintenta','error');}catch(_){}
+}
 async function airtableWriteTolerant(table,method,recordId,fields,maxTries=10){
   let f={...fields};
   for(let i=0;i<maxTries;i++){

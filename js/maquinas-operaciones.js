@@ -804,7 +804,14 @@ async function maybeCompleteOrder(pedidoId){
   if(keys.length||existing){
     const w=ensureWorkflow(pedidoId,keys);persist('Pedido enviado a postproducción');
     if(w.stages.length&&w.stages.every(s=>s.status==='done')){w.status='done';w.completedAt=w.completedAt||nowIso();await markOrderReady(pedidoId);}
-    else{const p=state.pedidosById?.[pedidoId];if(p){p.fields['Estado pedido']='En producción';p.fields['Resultado QA']='QA aprobado';try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Estado pedido':'En producción','Resultado QA':'QA aprobado'});}catch(_){}toast(`${p.fields['N° Pedido']||'Pedido'} pasó a postproducción`,'success');}}
+    else{const p=state.pedidosById?.[pedidoId];if(p){p.fields['Estado pedido']='En producción';p.fields['Resultado QA']='QA aprobado';
+      // Igual que markOrderReady: si Airtable no acepta el cambio hay que
+      // decirlo, o el pedido queda en un estado en pantalla que no existe.
+      let ok=true;
+      try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Estado pedido':'En producción','Resultado QA':'QA aprobado'});}
+      catch(e){ok=false;console.warn('[MachineOps] no se pudo pasar el pedido a postproducción',e);}
+      if(ok) toast(`${p.fields['N° Pedido']||'Pedido'} pasó a postproducción`,'success');
+      else toast('Pasó a postproducción; Airtable no pudo actualizar el pedido','error');}}
     return;
   }
   await markOrderReady(pedidoId);

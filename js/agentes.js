@@ -74,10 +74,19 @@ async function marcarReactivado(cliId,via){
 async function quitarReactivado(cliId){
   const c=state.clientes&&state.clientes.find(x=>x.id===cliId); if(!c) return;
   if(!confirm('¿Quitar la marca de Reactivado de '+(c.fields['Empresa']||'este cliente')+'?')) return;
+  const antes={r:c.fields['Reactivado'],f:c.fields['Fecha reactivación']};
   c.fields['Reactivado']=false; c.fields['Fecha reactivación']=null;   // optimista en local
   try{if(typeof renderClientes==='function') renderClientes(true);}catch(e){}
   try{toast('Marca de Reactivado quitada','info');}catch(e){}
-  try{await airtableWrite('Clientes','PATCH',cliId,{'Reactivado':false,'Fecha reactivación':null});}catch(e){}
+  // El aviso de arriba es optimista. Si el guardado falla hay que deshacer lo
+  // local: si no, la marca "vuelve" al recargar y el cliente reaparece en la
+  // campaña de reactivación sin explicación.
+  try{await airtableWrite('Clientes','PATCH',cliId,{'Reactivado':false,'Fecha reactivación':null});}
+  catch(e){
+    c.fields['Reactivado']=antes.r; c.fields['Fecha reactivación']=antes.f;
+    try{if(typeof renderClientes==='function') renderClientes(true);}catch(_){}
+    avisoNoGuardado('quitar la marca de Reactivado',e);
+  }
 }
 async function ensureClienteReactivadoFields(){
   try{

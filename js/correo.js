@@ -828,12 +828,18 @@ const MAIL={
     const patch={};
     if((f['Estado cotización']||'')==='Solicitada') patch['Estado cotización']='Enviada';
     if(!f['Fecha cotización']) patch['Fecha cotización']=new Date().toISOString().slice(0,10);
+    let guardado=true;
     if(Object.keys(patch).length){
-      try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,patch);Object.assign(f,patch);}catch(e){}
+      try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,patch);Object.assign(f,patch);}
+      catch(e){guardado=false;console.warn('[correo] no se registró el envío de la cotización',e&&e.message);}
     }
     try{const arr=_getNotas('cot',cotId);arr.push({id:'n'+Date.now(),ts:Date.now(),text:'📧 Cotización enviada por correo a '+to+' (PDF adjunto)'});_saveNotas('cot',cotId,arr);}catch(e){}
     try{renderCotizaciones();}catch(e){}
-    toast('✓ Cotización '+(f['N° Cotización']||'')+' registrada como enviada','success');
+    // El correo ya salió; lo que puede fallar es dejarlo registrado. Decir
+    // "registrada como enviada" cuando el estado no cambió deja la cotización
+    // fuera del seguimiento sin que nadie se entere.
+    if(guardado) toast('✓ Cotización '+(f['N° Cotización']||'')+' registrada como enviada','success');
+    else toast('Correo enviado, pero la cotización '+(f['N° Cotización']||'')+' quedó sin marcar como enviada — cámbiala a mano','error');
   },
 
   async sendCotizacion(cotId){
