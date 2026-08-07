@@ -8249,19 +8249,49 @@ async function callClaude(system,user){
 const AGENT_MODEL='claude-haiku-4-5';
 const _CLAUDE_BODY=(system,user)=>JSON.stringify({model:AGENT_MODEL,max_tokens:1500,system,messages:[{role:'user',content:user}]});
 function _claudeText(j){return j.content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
+// Llamada a Claude con tiempo límite y reintentos. Los 21 agentes pasaban por un
+// fetch pelado: si Anthropic o el proxy se colgaban, el modal se quedaba en "está
+// pensando…" para siempre, sin forma de saber que ya no iba a llegar nada. Y un
+// 429 o un 503 pasajero —que Anthropic devuelve cuando está cargado— mataba la
+// consulta en vez de reintentarla. KAI ya tenía este cinturón (60 s + 3 intentos);
+// esto lo trae al resto, igual que airtableHttp hace con Airtable.
+async function _claudeHttp(url,opts,{reintentos=2,limite=60000}={}){
+  let ultimo;
+  for(let intento=0;intento<=reintentos;intento++){
+    const ctrl=new AbortController();
+    const t=setTimeout(()=>ctrl.abort(),limite);
+    try{
+      const r=await fetch(url,{...opts,signal:ctrl.signal});
+      // 429 = límite de la API, 5xx = caída pasajera. Ambos se reintentan.
+      if((r.status===429||r.status>=500)&&intento<reintentos){
+        const espera=r.status===429?((parseInt(r.headers.get('retry-after'))||2)*1000):(800*(intento+1));
+        await new Promise(res=>setTimeout(res,espera));
+        continue;
+      }
+      return r;
+    }catch(e){
+      ultimo=(e&&e.name==='AbortError')?new Error(`La IA no respondió en ${Math.round(limite/1000)} segundos — reintenta en un momento`):e;
+      if(intento<reintentos){await new Promise(res=>setTimeout(res,700*(intento+1)));continue;}
+      throw ultimo;
+    }finally{clearTimeout(t);}
+  }
+  throw ultimo||new Error('No se pudo consultar a la IA');
+}
 async function _callClaudeViaProxy(system,user,px){
   // No mandamos 'anthropic-version' como header: dispara un preflight CORS que el Worker podría no permitir.
   // El Worker la inyecta por defecto. Sólo 'Content-Type' y 'X-App-Key' (ambos ya permitidos por el Worker).
   let r;
   try{
-    r=await fetch(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key},body:_CLAUDE_BODY(system,user)});
+    r=await _claudeHttp(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key},body:_CLAUDE_BODY(system,user)});
   }catch(e){
+    // Un vencimiento por tiempo se explica solo; no lo disfraces de "revisa la URL".
+    if(/no respondió en \d+ segundos/.test(e.message||'')) throw e;
     throw new Error('no se pudo conectar al proxy IA — revisa la URL/clave en Mi cuenta → Proxy y que el Worker esté desplegado');
   }
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`Proxy IA error ${r.status}`);}
   return _claudeText(await r.json());
 }
-async function _callClaudeRaw(system,user,k){const sk=k.replace(/[^\x20-\x7E]/g,'').trim();const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':sk,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:new Blob([_CLAUDE_BODY(system,user)],{type:'application/json'})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return _claudeText(await r.json());}
+async function _callClaudeRaw(system,user,k){const sk=k.replace(/[^\x20-\x7E]/g,'').trim();const r=await _claudeHttp('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':sk,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:new Blob([_CLAUDE_BODY(system,user)],{type:'application/json'})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return _claudeText(await r.json());}
 
 // ── HELPERS ───────────────────────────────────────────────────
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
