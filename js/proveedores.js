@@ -568,8 +568,8 @@ function exportToCSV(t){
 // comparar y elegir el mejor precio por ítem. localStorage + respaldo en
 // Airtable (Monitor Sistema · PRECIOS_PROV) para sobrevivir a limpiar caché.
 const _PRECIOS_PROV_KEY='thelab_precios_prov_v1';
-function _preciosProv(){try{return JSON.parse(localStorage.getItem(_PRECIOS_PROV_KEY)||'[]');}catch(e){return[];}}
-function _preciosProvSaveArr(arr){try{localStorage.setItem(_PRECIOS_PROV_KEY,JSON.stringify(arr||[]));}catch(e){}_preciosProvBackup();}
+function _preciosProv(){return _listaVivos(_PRECIOS_PROV_KEY);}
+function _preciosProvSaveArr(arr){_listaGuardar(_PRECIOS_PROV_KEY,arr);_preciosProvBackup();}
 async function _preciosProvBackup(){
   try{
     const notes=localStorage.getItem(_PRECIOS_PROV_KEY)||'[]';
@@ -678,8 +678,8 @@ function renderMejorPrecio(){
 // Genera órdenes de compra formales a un proveedor con ítems, totales (IVA),
 // PDF imprimible y envío. Reutiliza los precios registrados (N5) como ayuda.
 const _OC_KEY='thelab_oc_v1';
-function _ocAll(){try{return JSON.parse(localStorage.getItem(_OC_KEY)||'[]');}catch(e){return[];}}
-function _ocSaveArr(arr){try{localStorage.setItem(_OC_KEY,JSON.stringify(arr||[]));}catch(e){}_ocBackup();}
+function _ocAll(){return _listaVivos(_OC_KEY);}
+function _ocSaveArr(arr){_listaGuardar(_OC_KEY,arr);_ocBackup();}
 async function _ocBackup(){
   try{const notes=localStorage.getItem(_OC_KEY)||'[]';
     await _monitorUpsert('ORDENES_COMPRA',notes,'ocRecordId');

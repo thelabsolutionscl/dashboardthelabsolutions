@@ -7909,6 +7909,65 @@ function _restoreShared(key,parsed){
   if(isEmpty(parsed)){let local=null;try{local=JSON.parse(localStorage.getItem(key)||'null');}catch(e){}if(!isEmpty(local))return;}
   localStorage.setItem(key,JSON.stringify(parsed));
 }
+/* ── Listas compartidas entre computadores ───────────────────────────────
+ * Órdenes de compra, catálogo, reclamos, contratos recurrentes y precios de
+ * proveedor viven en el navegador y se respaldan en 'Monitor Sistema' como una
+ * sola lista. Con _restoreShared el respaldo se pisaba entero: si Nicanor creaba
+ * la OC-2026-005 y Gustavo guardaba después, la de Nicanor desaparecía.
+ *
+ * Aquí se fusiona en vez de reemplazar, con el mismo criterio que ya usa la
+ * agenda: se cruza por id, gana la versión con fecha de modificación (mts) más
+ * nueva, y un borrado se conserva como lápida (del:true) para que la fusión no
+ * lo resucite desde el otro equipo. Las lápidas se descartan a los 60 días.
+ *
+ * _listaGuardar detecta solo lo que salió de la lista, así que los borrados que
+ * ya existen en el código (…filter(x=>x.id!==id)) siguen funcionando sin tocarlos.
+ */
+function _listaCruda(key){try{const a=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(a)?a:[];}catch(e){return[];}}
+function _listaVivos(key){return _listaCruda(key).filter(x=>x&&!x.del);}
+function _listaHuella(it){const o={};Object.keys(it||{}).filter(k=>k!=='mts').sort().forEach(k=>{o[k]=it[k];});return JSON.stringify(o);}
+function _listaPrune(arr){
+  const corte=Date.now()-60*864e5;
+  return (Array.isArray(arr)?arr:[]).filter(it=>it&&(!it.del||(+(it.mts||it.ts||0))>=corte));
+}
+function _listaMerge(a,b){
+  const by={},sinId=[];
+  const put=(it,esLocal)=>{
+    if(!it)return;
+    if(!it.id){if(esLocal)sinId.push(it);return;}   // sin id no se puede cruzar: se respeta lo local
+    const p=by[it.id];
+    if(!p){by[it.id]={...it};return;}
+    const tp=+(p.mts||p.ts||0),ti=+(it.mts||it.ts||0);
+    const base=ti>=tp?{...it}:{...p};
+    base.del=!!(p.del||it.del);                     // un borrado deliberado manda
+    base.mts=Math.max(tp,ti)||base.mts||base.ts||0;
+    by[it.id]=base;
+  };
+  (Array.isArray(a)?a:[]).forEach(it=>put(it,true));
+  (Array.isArray(b)?b:[]).forEach(it=>put(it,false));
+  return [...Object.values(by),...sinId];
+}
+function _listaGuardar(key,arr){
+  const ahora=Date.now();
+  const previos={};_listaCruda(key).forEach(x=>{if(x&&x.id)previos[x.id]=x;});
+  const vivos=new Set();
+  const out=(arr||[]).map(it=>{
+    if(!it||!it.id)return it;
+    vivos.add(it.id);
+    const p=previos[it.id];
+    return (p&&_listaHuella(p)===_listaHuella(it))?{...it,mts:p.mts||ahora}:{...it,mts:ahora};
+  });
+  // Lo que ya no viene en la lista se borró en este navegador.
+  Object.keys(previos).forEach(id=>{
+    if(vivos.has(id))return;
+    out.push(previos[id].del?previos[id]:{...previos[id],del:true,mts:ahora});
+  });
+  try{localStorage.setItem(key,JSON.stringify(_listaPrune(out)));}catch(e){}
+}
+function _restoreLista(key,remoto){
+  if(!Array.isArray(remoto))return;
+  try{localStorage.setItem(key,JSON.stringify(_listaPrune(_listaMerge(_listaCruda(key),remoto))));}catch(e){}
+}
 // Aplica config desde la tabla 'Monitor Sistema' (META_REVENUE / WATI_CONFIG / FIN_VENTAS).
 function _applyMonitorSistema(recs){
   recs=recs||[];
@@ -7981,7 +8040,7 @@ function _applyMonitorSistema(recs){
   const ocRec=recs.find(r=>r.fields['Name']==='ORDENES_COMPRA');
   if(ocRec){
     state.ocRecordId=ocRec.id;
-    try{const arr=JSON.parse(ocRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_oc_v1',arr);}catch(e){logErr('monitorSistema:oc',e);}
+    try{const arr=JSON.parse(ocRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreLista('thelab_oc_v1',arr);}catch(e){logErr('monitorSistema:oc',e);}
   }
   // Descuentos por cliente respaldados (registro compartido).
   const dcRec=recs.find(r=>r.fields['Name']==='DESC_CLIENTE');
@@ -7993,25 +8052,25 @@ function _applyMonitorSistema(recs){
   const retRec=recs.find(r=>r.fields['Name']==='RETAINERS');
   if(retRec){
     state.retainersRecordId=retRec.id;
-    try{const arr=JSON.parse(retRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_retainers_v1',arr);}catch(e){logErr('monitorSistema:retainers',e);}
+    try{const arr=JSON.parse(retRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreLista('thelab_retainers_v1',arr);}catch(e){logErr('monitorSistema:retainers',e);}
   }
   // Reclamos / garantías respaldados (registro compartido).
   const rclRec=recs.find(r=>r.fields['Name']==='RECLAMOS');
   if(rclRec){
     state.reclamosRecordId=rclRec.id;
-    try{const arr=JSON.parse(rclRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_reclamos_v1',arr);}catch(e){logErr('monitorSistema:reclamos',e);}
+    try{const arr=JSON.parse(rclRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreLista('thelab_reclamos_v1',arr);}catch(e){logErr('monitorSistema:reclamos',e);}
   }
   // Catálogo de productos respaldado (registro compartido).
   const catRec=recs.find(r=>r.fields['Name']==='CATALOGO');
   if(catRec){
     state.catalogoRecordId=catRec.id;
-    try{const arr=JSON.parse(catRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_catalogo_v1',arr);}catch(e){logErr('monitorSistema:catalogo',e);}
+    try{const arr=JSON.parse(catRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreLista('thelab_catalogo_v1',arr);}catch(e){logErr('monitorSistema:catalogo',e);}
   }
   // Historial de precios de proveedores respaldado (registro compartido).
   const ppRec=recs.find(r=>r.fields['Name']==='PRECIOS_PROV');
   if(ppRec){
     state.preciosProvRecordId=ppRec.id;
-    try{const arr=JSON.parse(ppRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreShared('thelab_precios_prov_v1',arr);}catch(e){logErr('monitorSistema:precios',e);}
+    try{const arr=JSON.parse(ppRec.fields['Notes']||'[]');if(Array.isArray(arr)) _restoreLista('thelab_precios_prov_v1',arr);}catch(e){logErr('monitorSistema:precios',e);}
   }
   renderWatiConfigBtn();
 }
@@ -12487,8 +12546,8 @@ function _restoreCotItems(json,addFn){
 // Lista de productos/servicios con costo y precio base, para insertar en las
 // cotizaciones sin re-teclear. localStorage + respaldo en Monitor Sistema.
 const _CATALOGO_KEY='thelab_catalogo_v1';
-function _catalogo(){try{return JSON.parse(localStorage.getItem(_CATALOGO_KEY)||'[]');}catch(e){return[];}}
-function _catalogoSaveArr(arr){try{localStorage.setItem(_CATALOGO_KEY,JSON.stringify(arr||[]));}catch(e){}_catalogoBackup();}
+function _catalogo(){return _listaVivos(_CATALOGO_KEY);}
+function _catalogoSaveArr(arr){_listaGuardar(_CATALOGO_KEY,arr);_catalogoBackup();}
 async function _catalogoBackup(){
   try{
     const notes=localStorage.getItem(_CATALOGO_KEY)||'[]';
@@ -12506,7 +12565,9 @@ function addCatalogoItem(){
   const precioRaw=prompt('Precio de venta unitario (CLP, neto sin IVA):','');if(precioRaw==null)return;
   const precio=Math.round(parseFloat(String(precioRaw).replace(/[^\d.-]/g,''))||0);
   if(!(precio>0)){toast('Precio inválido','error');return;}
-  const arr=_catalogo();arr.push({id:'cat'+arr.length+'_'+nombre.length+'_'+precio,nombre,unidad,costo,precio});
+  // El id se derivaba de la posición y del precio: dos computadores agregando su
+  // 3er producto podían generar el mismo id y pisarse al fusionar. Ahora lleva hora.
+  const arr=_catalogo();arr.push({id:'cat'+Date.now()+'_'+arr.length,nombre,unidad,costo,precio});
   _catalogoSaveArr(arr);renderCatalogoModal();toast('✓ Producto agregado al catálogo','success');
 }
 function delCatalogoItem(id){if(!confirm('¿Eliminar del catálogo?'))return;_catalogoSaveArr(_catalogo().filter(x=>x.id!==id));renderCatalogoModal();}
@@ -12545,8 +12606,8 @@ function renderCatalogoModal(){
 // Registro de reclamos/RMA por pedido con estado y resolución. localStorage +
 // respaldo en Monitor Sistema (RECLAMOS). Los abiertos aparecen en Pedidos.
 const _RECLAMOS_KEY='thelab_reclamos_v1';
-function _reclamos(){try{return JSON.parse(localStorage.getItem(_RECLAMOS_KEY)||'[]');}catch(e){return[];}}
-function _reclamosSaveArr(arr){try{localStorage.setItem(_RECLAMOS_KEY,JSON.stringify(arr||[]));}catch(e){}_reclamosBackup();}
+function _reclamos(){return _listaVivos(_RECLAMOS_KEY);}
+function _reclamosSaveArr(arr){_listaGuardar(_RECLAMOS_KEY,arr);_reclamosBackup();}
 async function _reclamosBackup(){
   try{
     const notes=localStorage.getItem(_RECLAMOS_KEY)||'[]';
@@ -12620,8 +12681,8 @@ function renderReclamos(){
 // Clientes con un pedido mensual fijo: cada mes (desde el día indicado) se
 // genera el pedido automáticamente, una sola vez por mes (idempotente).
 const _RETAINERS_KEY='thelab_retainers_v1';
-function _retainers(){try{return JSON.parse(localStorage.getItem(_RETAINERS_KEY)||'[]');}catch(e){return[];}}
-function _retainersSaveArr(arr){try{localStorage.setItem(_RETAINERS_KEY,JSON.stringify(arr||[]));}catch(e){}_retainersBackup();}
+function _retainers(){return _listaVivos(_RETAINERS_KEY);}
+function _retainersSaveArr(arr){_listaGuardar(_RETAINERS_KEY,arr);_retainersBackup();}
 async function _retainersBackup(){
   try{
     const notes=localStorage.getItem(_RETAINERS_KEY)||'[]';

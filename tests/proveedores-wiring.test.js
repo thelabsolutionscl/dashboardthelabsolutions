@@ -131,7 +131,11 @@ test('el formulario público aplica controles antiabuso y crea postulación', ()
 });
 
 test('precios se comparan por ítem y tienen respaldo best-effort', () => {
-  assert.match(fn('_preciosProv'), /localStorage/);
+  // La lectura pasa por el helper de listas compartidas: guarda igual en el
+  // navegador, pero filtra los borrados y permite fusionar con el otro equipo
+  // en vez de pisarlo (ver tests/listas-compartidas.test.js).
+  assert.match(fn('_preciosProv'), /_listaVivos\(_PRECIOS_PROV_KEY\)/);
+  assert.match(fn('_preciosProvSaveArr'), /_listaGuardar\(_PRECIOS_PROV_KEY/);
   assert.match(fn('_preciosProvSaveArr'), /_preciosProvBackup/);
   assert.match(fn('_preciosProvBackup'), /_monitorUpsert\(['"]PRECIOS_PROV['"]/);
   assert.match(fn('_mejorPrecioPorItem'), /precio\s*<\s*best\[k\]\.precio/);
