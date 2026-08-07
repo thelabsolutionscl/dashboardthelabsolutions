@@ -133,6 +133,10 @@ function draftAgentEmail(toEmail,subject,cliId,fuCotId){
 
 async function runAgentInline(agentId,contextText,actionsFn){
   const cfg=AGENTES_CFG.find(a=>a.id===agentId);if(!cfg) return;
+  // Los agentes también se lanzan desde botones repartidos por el dashboard
+  // (una ficha de cliente, una cotización…), no solo desde la parrilla: el
+  // permiso tiene que comprobarse aquí igual.
+  if(typeof agenteVisible==='function'&&!agenteVisible(cfg)){try{toast('Este agente pertenece a una sección que no tienes','error');}catch(e){}return;}
   window._fuCotId=null;   // evita registrar seguimientos de una cotización anterior
   const modal=document.getElementById('agentInlineModal');
   const resultEl=document.getElementById('agentInlineResult');
