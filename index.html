@@ -10429,6 +10429,22 @@ async function ensurePedidoCotField(){
     await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'N° Cotización',type:'singleLineText'})});
   }catch(e){}
 }
+// Correlativo de pedidos. Antes cada sitio lo calculaba sobre state.pedidos, que
+// puede llevar horas sin refrescar: si Nicanor creó el PED-2026-025 desde su
+// computador, la pestaña de Gustavo seguía creyendo que el último era el 024 y
+// asignaba el mismo número — Airtable no impide repetirlo. Aquí se relee justo
+// antes de asignar y se toma el mayor entre lo remoto y lo local, para no
+// retroceder nunca. Si la lectura falla se sigue con lo local: es preferible a
+// no crear el pedido.
+async function _nextNumPedido(){
+  const year=new Date().getFullYear();
+  const re=new RegExp(`PED-${year}-(\\d+)`);
+  const mayor=(arr)=>(arr||[]).reduce((mx,p)=>{const m=String((p&&p.fields&&p.fields['N° Pedido'])||'').match(re);return m?Math.max(mx,parseInt(m[1],10)):mx;},0);
+  let mx=mayor(state.pedidos);
+  try{const r=await airtableFetch('Pedidos',1000);mx=Math.max(mx,mayor(r.records));}
+  catch(e){console.warn('[pedidos] no se pudo releer el correlativo; se usa el local',e&&e.message);}
+  return `PED-${year}-${String(mx+1).padStart(3,'0')}`;
+}
 async function crearPedidoDesdeCotizacion(cotId,opts){
   opts=opts||{};
   const cot=state.cotizacionesById[cotId];if(!cot) return false;const f=cot.fields;
@@ -10436,8 +10452,7 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   // Guard anti-duplicado: si ya existe un pedido para esta cotización, no crear otro.
   const existente=_pedidoDeCot(cot);
   if(existente){ if(!opts.silent) toast(`Esta cotización ya tiene el pedido ${existente.fields['N° Pedido']||''}`,'info'); return false; }
-  const year=new Date().getFullYear();let maxNum=0;state.pedidos.forEach(p=>{const m=(p.fields['N° Pedido']||'').toString().match(new RegExp(`PED-${year}-(\\d+)`));if(m) maxNum=Math.max(maxNum,parseInt(m[1]));});
-  const numPedido=`PED-${year}-${String(maxNum+1).padStart(3,'0')}`;
+  const numPedido=await _nextNumPedido();
   const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0};
   if(Array.isArray(f['Cliente'])&&f['Cliente'].length>0) fields['Cliente']=f['Cliente'];
   if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
@@ -10461,7 +10476,10 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
     else { toast(`⚠ Error: ${e.message}`,'error'); return false; }
   }
   toast(`✓ Pedido ${numPedido} creado desde ${numCot||'la cotización'}`,'success');
-  try{const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
+  // Con tope 50 la lista se truncaba: pasados los 50 pedidos, crear uno hacía
+  // desaparecer el resto de la pantalla hasta recargar, y dejaba ciego al
+  // correlativo. Mismo tope que la carga inicial.
+  try{const pRes=await airtableFetch('Pedidos',1000);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
   try{renderPedidos();}catch(e){}try{renderCotizaciones();}catch(e){}
   if(!opts.silent) _offerAgentChain(numPedido,solicitudCot);
   return true;
@@ -12643,14 +12661,16 @@ function guardarRetainer(){
 function delRetainer(id){if(!confirm('¿Eliminar este contrato recurrente?'))return;_retainersSaveArr(_retainers().filter(x=>x.id!==id));renderRetainers();}
 function toggleRetainer(id){const arr=_retainers();const r=arr.find(x=>x.id===id);if(!r)return;r.activo=!r.activo;_retainersSaveArr(arr);renderRetainers();}
 async function _retainerCrearPedido(ret){
-  const year=new Date().getFullYear();let maxNum=0;(state.pedidos||[]).forEach(p=>{const m=(p.fields['N° Pedido']||'').toString().match(new RegExp(`PED-${year}-(\\d+)`));if(m) maxNum=Math.max(maxNum,parseInt(m[1]));});
-  const numPedido=`PED-${year}-${String(maxNum+1).padStart(3,'0')}`;
+  const numPedido=await _nextNumPedido();
   const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0,'Detalle productos':ret.concepto||'','Solicitud cliente (texto libre)':'[Contrato recurrente] '+(ret.concepto||'')};
   if(ret.clienteId) fields['Cliente']=[ret.clienteId];
   const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0};if(fields['Cliente'])base['Cliente']=fields['Cliente'];
   try{await airtableWrite('Pedidos','POST',null,fields);}
   catch(e){const m=(e.message||'').toLowerCase();if(/unknown|field|cliente|invalid|422/.test(m)){try{await airtableWrite('Pedidos','POST',null,base);}catch(e2){return false;}}else return false;}
-  try{const pRes=await airtableFetch('Pedidos',50);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
+  // Con tope 50 la lista se truncaba: pasados los 50 pedidos, crear uno hacía
+  // desaparecer el resto de la pantalla hasta recargar, y dejaba ciego al
+  // correlativo. Mismo tope que la carga inicial.
+  try{const pRes=await airtableFetch('Pedidos',1000);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
   try{renderPedidos();}catch(e){}
   return numPedido;
 }
