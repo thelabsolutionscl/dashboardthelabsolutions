@@ -1956,9 +1956,9 @@ const GS_ACTIONS=[
   {tab:'pedidos',     icon:'icon-warning',  title:'Ver pedidos atrasados',        kw:'atrasados retraso urgente pendientes',                    run:()=>{switchTab('pedidos');setTimeout(()=>{try{renderPedidos('atrasados');}catch(e){}},200);}},
   {tab:'overview',    icon:'icon-chart',    title:'Generar reporte CEO',          kw:'reporte ceo ejecutivo ia generar semanal analisis',       run:()=>{switchTab('overview');setTimeout(()=>{try{ovGenerarReporteCEO();}catch(e){}},300);}},
   {tab:'overview',    icon:'icon-target',   title:'Definir metas de revenue',     kw:'meta objetivo mensual semanal proyeccion goal',           run:()=>{switchTab('overview');setTimeout(()=>{try{openMetaModal();}catch(e){}},250);}},
-  {icon:'icon-download',   title:'Respaldar CRM ahora',        kw:'backup respaldo airtable copia seguridad',   run:()=>{try{backupAirtable();}catch(e){}}},
+  {config:true, icon:'icon-download',   title:'Respaldar CRM ahora',        kw:'backup respaldo airtable copia seguridad',   run:()=>{try{backupAirtable();}catch(e){}}},
   {icon:'icon-chat',       title:'Abrir KAI (asistente)',      kw:'kai asistente chat ia ayuda hablar',         run:()=>{try{openKai();}catch(e){}}},
-  {icon:'icon-laptop',     title:'Modo TV (taller)',           kw:'tv taller pantalla fullscreen monitor kiosco rotacion', run:()=>{try{tvStart();}catch(e){}}},
+  {tab:'maquinas', icon:'icon-laptop',     title:'Modo TV (taller)',           kw:'tv taller pantalla fullscreen monitor kiosco rotacion', run:()=>{try{tvStart();}catch(e){}}},
   {icon:'icon-calendar',   title:'Agendar compromiso',         kw:'agenda compromiso recordatorio tarea pendiente fecha llamar', run:()=>{try{openAgendaModal();}catch(e){}}},
   {tab:'overview',icon:'icon-reporte', title:'Enviar cierre de mes por correo', kw:'cierre mes informe mensual ejecutivo revenue enviar reporte', run:()=>{try{enviarCierreMes();}catch(e){}}},
   {tab:'overview',icon:'icon-reporte', title:'PDF ejecutivo del cierre de mes', kw:'pdf cierre mes informe ejecutivo imprimir reporte descargar compartir', run:()=>{try{generarCierrePDF(0);}catch(e){}}},
@@ -1967,10 +1967,10 @@ const GS_ACTIONS=[
   {tab:'cotizaciones',icon:'icon-cotizaciones', title:'Configurar piso de margen', kw:'margen minimo piso rentabilidad alerta cotizacion precio objetivo', run:()=>{try{setMargenPiso();}catch(e){}}},
   {tab:'pedidos',icon:'icon-pedidos', title:'Registrar reclamo / garantía', kw:'reclamo garantia postventa rma defecto devolucion problema queja', run:()=>{try{openReclamoModal();}catch(e){}}},
   {tab:'clientes',icon:'icon-clientes', title:'Contrato recurrente (retainer)', kw:'contrato recurrente retainer mensual suscripcion abono fijo pedido automatico', run:()=>{try{openRetainerModal();}catch(e){}}},
-  {icon:'icon-dollar', title:'Arqueo de caja del día', kw:'arqueo caja efectivo cuadre diario cierre conteo dinero', run:()=>{try{finSwitchTab('diario');setTimeout(()=>{try{renderArqueo();document.getElementById('arqueoCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
+  {tab:'finanzas', icon:'icon-dollar', title:'Arqueo de caja del día', kw:'arqueo caja efectivo cuadre diario cierre conteo dinero', run:()=>{try{finSwitchTab('diario');setTimeout(()=>{try{renderArqueo();document.getElementById('arqueoCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
   {tab:'proveedores',icon:'icon-proveedores', title:'Nueva orden de compra', kw:'orden compra oc proveedor comprar insumos pedido materiales', run:()=>{try{openOCModal();}catch(e){}}},
-  {icon:'icon-target', title:'Punto de equilibrio', kw:'punto equilibrio break even costos fijos cuanto vender rentabilidad', run:()=>{try{finSwitchTab('presupuesto');setTimeout(()=>{try{renderBreakEven();document.getElementById('breakEvenCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
-  {icon:'icon-dollar', title:'IVA del mes (F29)', kw:'iva f29 impuesto sii debito credito fiscal pagar mensual', run:()=>{try{finSwitchTab('resumen');setTimeout(()=>{try{renderIvaMensual();document.getElementById('ivaMensualCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
+  {tab:'finanzas', icon:'icon-target', title:'Punto de equilibrio', kw:'punto equilibrio break even costos fijos cuanto vender rentabilidad', run:()=>{try{finSwitchTab('presupuesto');setTimeout(()=>{try{renderBreakEven();document.getElementById('breakEvenCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
+  {tab:'finanzas', icon:'icon-dollar', title:'IVA del mes (F29)', kw:'iva f29 impuesto sii debito credito fiscal pagar mensual', run:()=>{try{finSwitchTab('resumen');setTimeout(()=>{try{renderIvaMensual();document.getElementById('ivaMensualCard')?.scrollIntoView({behavior:'smooth'});}catch(e){}},100);}catch(e){}}},
 ];
 
 function _gsNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
@@ -2008,14 +2008,24 @@ function globalSearchOnInput(raw){
   if(secs.length) groups.push({cat:'Secciones',items:secs.map(s=>({icon:s.icon,bg:s.c,title:s.title,sub:'',go:'Ir →',run:()=>switchTab(s.tab)}))});
 
   // 2. Acciones rápidas
-  const acts=GS_ACTIONS.filter(a=>(!a.nuevo||_gsAllowed(a.nuevo))&&(!a.tab||_gsAllowed(a.tab))).filter(a=>!q||_gsNorm(a.title).includes(nq)||_gsNorm(a.kw).includes(nq));
+  // Una acción sin sección declarada quedaba visible para todos: por ahí un rol
+  // sin acceso a Finanzas llegaba al arqueo de caja, al IVA del mes o al
+  // respaldo completo del CRM. Las de configuración se acotan por rol.
+  const _u=AUTH.getUser();
+  const _config=!_u||RBAC.canConfigRole(_u.role);
+  const acts=GS_ACTIONS.filter(a=>(!a.nuevo||_gsAllowed(a.nuevo))&&(!a.tab||_gsAllowed(a.tab))&&(!a.config||_config)).filter(a=>!q||_gsNorm(a.title).includes(nq)||_gsNorm(a.kw).includes(nq));
   if(acts.length) groups.push({cat:'Acciones',items:acts.map(a=>({icon:a.icon,bg:'',title:a.title,sub:'',go:'',run:a.run}))});
 
   // 3. Datos (sólo con 2+ caracteres)
   if(q.length>=2){
     const st=window.state||{}; const byCat={};
     const push=(cat,it)=>{(byCat[cat]=byCat[cat]||[]).push(it);};
-    if(_gsAllowed('clientes')) (st.clientes||[]).forEach(c=>{
+    // El permiso de la paleta era solo por sección: un comercial tiene acceso a
+    // Clientes, Pedidos y Cotizaciones, así que la búsqueda le mostraba los de
+    // TODA la empresa —con montos y con "Ver PDF" de cualquier cotización—
+    // aunque las listas de esas mismas secciones sí filtran por vendedor.
+    const _mio=(r)=>(typeof isVendorMode!=='function'||!isVendorMode())||vendorOwnsRecord(r);
+    if(_gsAllowed('clientes')) (st.clientes||[]).filter(_mio).forEach(c=>{
       const nom=c.fields['Empresa']||c.fields['Contacto']||'—';
       if(_gsNorm(nom).includes(nq)||_gsNorm(c.fields['Contacto']||'').includes(nq)){
         // Acciones directas sobre el cliente, sin salir del palette
@@ -2028,12 +2038,12 @@ function globalSearchOnInput(raw){
         push('Clientes',{icon:'icon-clientes',bg:'#3b82f6',title:nom,sub:'Cliente',go:'Abrir →',extras,run:()=>{switchTab('clientes');setTimeout(()=>_gsFocusRow(c.id),250);}});
       }
     });
-    if(_gsAllowed('pedidos')) (st.pedidos||[]).forEach(p=>{
+    if(_gsAllowed('pedidos')) (st.pedidos||[]).filter(_mio).forEach(p=>{
       const num=p.fields['N° Pedido']||p.id; const cli=_gsClienteNombre(p);
       if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq))
         push('Pedidos',{icon:'icon-pedidos',bg:'#ff6b35',title:num,sub:'Pedido'+(p.fields['Estado pedido']?' · '+p.fields['Estado pedido']:'')+(cli?' · '+cli:''),go:'Abrir →',run:()=>{switchTab('pedidos');setTimeout(()=>_gsFocusRow(p.id),250);}});
     });
-    if(_gsAllowed('cotizaciones')) (st.cotizaciones||[]).forEach(co=>{
+    if(_gsAllowed('cotizaciones')) (st.cotizaciones||[]).filter(_mio).forEach(co=>{
       const num=co.fields['N° Cotización']||co.id; const cli=_gsClienteNombre(co);
       if(_gsNorm(num).includes(nq)||_gsNorm(cli).includes(nq)){
         const extras=[];

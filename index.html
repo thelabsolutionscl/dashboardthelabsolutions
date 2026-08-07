@@ -6930,6 +6930,14 @@ function getOpenAIKey(){return _realKey(localStorage.getItem('fp_openai_key'))||
 // ── VENDOR LAYER ─────────────────────────────────────────────
 function currentVendorId(){const u=AUTH.getUser();return u?u.username.split('@')[0].toLowerCase():null;}
 function isVendorMode(){const u=AUTH.getUser();return!!(u&&u.role==='comercial');}
+// Los pedidos que le corresponde ver a quien está en pantalla. El filtro por
+// vendedor estaba repetido a mano en cada vista, y las de Kanban, Planificación
+// y Calendario se lo habían saltado: la misma pestaña mostraba unos pedidos u
+// otros según el botón de vista. Un solo sitio evita que vuelva a pasar.
+function _pedidosVisibles(){
+  const todos=state.pedidos||[];
+  return isVendorMode()?todos.filter(vendorOwnsRecord):todos;
+}
 function vendorOwnsRecord(r){
   if(!isVendorMode()) return true;
   const vid=currentVendorId();if(!vid) return false;
@@ -14442,7 +14450,9 @@ function renderPedidosKanban(){
   const today=new Date();today.setHours(0,0,0,0);
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
   const colores={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
-  const activos=state.pedidos.filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||''));
+  // La vista Tabla filtra por vendedor; Kanban no lo hacía, así que cambiar de
+  // vista dentro de la misma pestaña mostraba los pedidos (y montos) de todos.
+  const activos=_pedidosVisibles().filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||''));
   const cols=stages.map(stage=>{
     const items=activos.filter(p=>(p.fields['Estado pedido']||'')==stage);
     const nextStage=stages[stages.indexOf(stage)+1]||(stage==='Despachado'?'Completado':null);
@@ -14597,8 +14607,9 @@ function renderPedidosPlanificacion(){
   const today=new Date();today.setHours(0,0,0,0);
   const dias=14;
   const fechas=Array.from({length:dias},(_,i)=>{const d=new Date(today);d.setDate(d.getDate()+i);return d;});
-  const activos=state.pedidos.filter(p=>!['Cancelado','Despachado','Completado'].includes(p.fields['Estado pedido']||''));
-  const atrasados=state.pedidos.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];return fe&&new Date(fe+'T00:00:00')<today&&!['Cancelado','Despachado','Completado'].includes(f['Estado pedido']||'');});
+  const _vis=_pedidosVisibles();
+  const activos=_vis.filter(p=>!['Cancelado','Despachado','Completado'].includes(p.fields['Estado pedido']||''));
+  const atrasados=_vis.filter(p=>{const f=p.fields,fe=f['Fecha entrega'];return fe&&new Date(fe+'T00:00:00')<today&&!['Cancelado','Despachado','Completado'].includes(f['Estado pedido']||'');});
   const enProd=activos.filter(p=>p.fields['Estado pedido']==='En producción').length;
   const listos=activos.filter(p=>p.fields['Estado pedido']==='Listo para despacho').length;
   const estaSemana=activos.filter(p=>{const fe=p.fields['Fecha entrega'];if(!fe)return false;const d=new Date(fe+'T00:00:00'),diff=Math.floor((d-today)/86400000);return diff>=0&&diff<=7;}).length;
@@ -14651,7 +14662,7 @@ function renderPedidosCalendario(){
   const stageColors={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
   // Agrupar pedidos por Fecha entrega del mes
   const byDate={};
-  state.pedidos.filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||'')).forEach(p=>{
+  _pedidosVisibles().filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||'')).forEach(p=>{
     const fe=p.fields['Fecha entrega'];if(!fe) return;
     const [py,pm]=fe.split('-').map(Number);
     if(py===y&&pm===m+1){if(!byDate[fe]) byDate[fe]=[];byDate[fe].push(p);}
