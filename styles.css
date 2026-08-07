@@ -706,6 +706,23 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   #proveedoresTableBody .pv-acc{grid-area:acc;border-top:1px solid var(--border)!important;padding-top:8px!important;min-height:auto!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;}
   #proveedoresTableBody .pv-plazo::before,#proveedoresTableBody .pv-acc::before{display:none!important;}
   #proveedoresTableBody .pv-comuna{display:none!important;}
+
+  /* iOS hace zoom automático al enfocar un campo con letra menor a 16px, y deja
+     la página descuadrada hasta que la achicas a mano. Los campos del cotizador
+     (descripción, unidades, costo, venta, descuento) estaban en 12px por estilo
+     en línea, así que pasaba en CADA ítem de una cotización — que es donde más
+     se escribe, y muchas veces con el cliente al lado. El resto de formularios
+     ya estaba en 16px: esto empareja. Va con !important porque el tamaño viene
+     en el atributo style, que gana a la hoja de estilos.
+     Casillas y radios quedan fuera: no provocan zoom y su tamaño es su caja. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),
+  select,textarea{font-size:16px!important;}
+
+  /* Zonas de toque. En un teléfono estos son los accesos principales —correo,
+     notificaciones y el menú— y medían 32px de alto: por debajo de lo que se
+     acierta con el pulgar sin apuntar. */
+  .notif-btn{min-width:40px;min-height:40px;justify-content:center;}
+  .mobile-menu-btn:not(#mobilePlusBtn){min-width:40px;min-height:40px;}
 }
 #clientesTableBody tr.cliente-hidden{display:none!important;}
 body.kiosk .topbar{display:none!important;}
