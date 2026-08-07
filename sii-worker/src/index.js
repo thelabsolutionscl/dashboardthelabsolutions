@@ -9,6 +9,17 @@ const CORS = {
   'Access-Control-Max-Age': '86400',
 };
 
+// Comparación en tiempo constante: evita filtrar la clave por diferencias de
+// tiempo al comparar carácter a carácter.
+function timingSafeEqual(a, b) {
+  const x = String(a || '');
+  const y = String(b || '');
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i += 1) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
@@ -16,6 +27,22 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    // ── Autenticación ────────────────────────────────────────────────────
+    // Este worker EMITE documentos tributarios y administra folios (CAF): no
+    // debe quedar abierto. Se exige la clave en cuanto exista el secret
+    // WORKER_KEY; sin él, se sigue aceptando todo para no cortar la facturación
+    // en caliente (ver README: hay que configurarlo). /health queda libre para
+    // los monitores de uptime.
+    if (env.WORKER_KEY && url.pathname !== '/health') {
+      const key = request.headers.get('X-Worker-Key') || '';
+      if (!timingSafeEqual(key, env.WORKER_KEY)) {
+        return new Response(JSON.stringify({ error: 'No autorizado' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', ...CORS },
+        });
+      }
+    }
 
     try {
       // Latido para la "Oficina Virtual" del dashboard. Opcional: solo si se
@@ -26,11 +53,14 @@ export default {
 
       // GET /health — verifica configuración básica
       if (request.method === 'GET' && url.pathname === '/health') {
+        // /health es público (lo consultan los monitores de uptime): informa si
+        // está configurado, pero sin exponer el RUT del emisor.
         return ok({
           status: 'ok',
           sii_env: env.SII_ENV || 'certificacion',
-          rut_emisor: env.RUT_EMISOR || 'no configurado',
+          rut_emisor_configurado: !!env.RUT_EMISOR,
           cert_loaded: !!env.CERT_PFX_BASE64,
+          auth: env.WORKER_KEY ? 'on' : 'off',
         });
       }
 

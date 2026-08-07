@@ -6234,6 +6234,7 @@ const _DEFAULTS={
   OPENAI_KEY:'%%OPENAI_KEY%%',
   GOOGLE_CLIENT_ID:'%%GOOGLE_CLIENT_ID%%',
   SII_WORKER_URL:'%%SII_WORKER_URL%%',
+  SII_WORKER_KEY:'%%SII_WORKER_KEY%%',
   SII_RUT_EMISOR:'%%SII_RUT_EMISOR%%',
   SII_RAZON_SOCIAL:'%%SII_RAZON_SOCIAL%%',
   ANTHROPIC_KEY:'%%ANTHROPIC_KEY%%',
@@ -9691,6 +9692,20 @@ function siiEstadoBadge(estado){
   return `<span class="badge ${cls}">${escapeHtml(estado)}</span>`;
 }
 function getSiiWorkerUrl(){return(localStorage.getItem('sii_worker_url')||_DEFAULTS.SII_WORKER_URL).replace(/\/$/,'');}
+// Clave del worker tributario. El worker la exige en cuanto exista su secret
+// WORKER_KEY; mientras no esté configurada, esto no envía nada y todo sigue igual.
+function getSiiWorkerKey(){
+  const k=localStorage.getItem('sii_worker_key')||_DEFAULTS.SII_WORKER_KEY||'';
+  // Si el deploy no reemplazó el marcador (%%…%%), no hay clave: no se envía
+  // nada. Mandar el marcador como cabecera provocaría un 401 al activar el guard.
+  return (!k||String(k).startsWith('%%'))?'':k;
+}
+// Cabeceras para hablar con el worker del SII (emite DTE y administra folios).
+function siiHeaders(extra){
+  const h=Object.assign({},extra||{});
+  const k=getSiiWorkerKey(); if(k) h['X-Worker-Key']=k;
+  return h;
+}
 function configurarSiiUrl(){
   const nueva=prompt('URL del servidor SII (ej: http://localhost:3000 o tu URL de ngrok):',getSiiWorkerUrl());
   if(nueva!==null){localStorage.setItem('sii_worker_url',nueva.trim().replace(/\/$/,''));toast('URL del servidor SII guardada','success');}
@@ -9932,7 +9947,7 @@ async function actualizarTodosEstadosSII(){
   let ok=0,err=0;
   for(const r of facs){
     try{
-      const res=await fetch(`${getSiiWorkerUrl()}/estado/${r.fields['Track ID']}`);
+      const res=await fetch(`${getSiiWorkerUrl()}/estado/${r.fields['Track ID']}`,{headers:siiHeaders()});
       const data=await res.json();
       const estado=data.estado||data.ESTADO||data.glosa||JSON.stringify(data).slice(0,40);
       await airtableWrite('Facturas','PATCH',r.id,{'Estado SII':estado});
@@ -10127,7 +10142,7 @@ function copiarFolio(folio){navigator.clipboard.writeText(String(folio)).then(()
 async function consultarEstadoSII(trackId,facturaId,empresa){
   if(!trackId){toast('Sin Track ID','error');return;}
   try{
-    const r=await fetch(`${getSiiWorkerUrl()}/estado/${trackId}`);
+    const r=await fetch(`${getSiiWorkerUrl()}/estado/${trackId}`,{headers:siiHeaders()});
     const data=await r.json();
     const estadoSII=data.estado||data.ESTADO||data.glosa||JSON.stringify(data).slice(0,40);
     await airtableWrite('Facturas','PATCH',facturaId,{'Estado SII':estadoSII});
@@ -10153,7 +10168,7 @@ async function abrirImportarDtes(){
   modal.style.display='flex';
   body.innerHTML='<div style="color:var(--text2);padding:20px;text-align:center">Conectando con servidor SII...</div>';
   try{
-    const r=await fetch(`${getSiiWorkerUrl()}/emitted-dtes`);
+    const r=await fetch(`${getSiiWorkerUrl()}/emitted-dtes`,{headers:siiHeaders()});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const data=await r.json();
     if(!data.dtes?.length){body.innerHTML='<div style="color:var(--text3);padding:20px;text-align:center">No hay DTEs emitidos en el servidor todavía.</div>';return;}

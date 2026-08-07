@@ -2154,7 +2154,7 @@ async function uploadCAF(tipo,input){
   if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='⏳ Subiendo...';}
   try{
     const caf_xml=await file.text();
-    const r=await fetch(cfg.webhookUrl+'/caf',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo_documento:tipo,caf_xml})});
+    const r=await fetch(cfg.webhookUrl+'/caf',{method:'PUT',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify({tipo_documento:tipo,caf_xml})});
     const d=await r.json();
     if(r.ok){
       if(statusEl){statusEl.style.color='var(--accent)';statusEl.textContent='✅ Folios '+d.rango?.desde+'–'+d.rango?.hasta;}
@@ -2175,7 +2175,7 @@ async function checkFolios(tipo){
   const statusEl=document.getElementById('cafStatus'+tipo);
   if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='⏳...';}
   try{
-    const r=await fetch(cfg.webhookUrl+'/folio/'+tipo);
+    const r=await fetch(cfg.webhookUrl+'/folio/'+tipo,{headers:siiHeaders()});
     const d=await r.json();
     if(r.ok){
       const disp=d.folios_disponibles;
@@ -2250,7 +2250,7 @@ async function emitirDTE(){
     observaciones:document.getElementById('dteObservaciones').value
   };
   try{
-    const r=await fetch(cfg.webhookUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const r=await fetch(cfg.webhookUrl,{method:'POST',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
     if(!r.ok) throw new Error(`HTTP ${r.status} — verifica la URL del webhook`);
     let resp={};try{resp=await r.json();}catch(e){}
     const dteNum=resp.dte_numero||resp.folio||resp.numero||resp.id||'';

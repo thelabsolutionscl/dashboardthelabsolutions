@@ -65,3 +65,17 @@ echo ""
 echo "👉 Luego crear el KV namespace (si no existe):"
 echo "   npx wrangler kv namespace create FOLIOS_KV"
 echo "   (Copia el id que devuelve y ponlo en wrangler.toml)"
+
+# ── Clave de acceso al worker (WORKER_KEY) ────────────────────────────────
+# Este worker EMITE documentos tributarios (POST /) y administra folios CAF.
+# Sin WORKER_KEY el worker acepta cualquier llamada: configúrala.
+#
+#   1) Genera una clave larga y aleatoria:      openssl rand -hex 32
+#   2) Cárgala acá (Cloudflare):                 abajo
+#   3) Cárgala en GitHub como secret SII_WORKER_KEY (Settings → Secrets →
+#      Actions) y relanza "Deploy Dashboard" para que el panel la envíe.
+#
+# Mientras el paso 3 no esté hecho, NO actives el paso 2 o el panel dejará de
+# emitir DTE (recibirá 401). Hazlos juntos.
+#
+# printf 'TU_CLAVE_GENERADA' | npx wrangler secret put WORKER_KEY

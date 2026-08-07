@@ -32,6 +32,7 @@ jobs:
           OPENAI_KEY: ${{ secrets.OPENAI }}             # el secret se llama OPENAI
           GOOGLE_CLIENT_ID: ${{ secrets.DRIVE }}        # el secret se llama DRIVE
           SII_WORKER_URL: ${{ secrets.SII_WORKER_URL }}
+          SII_WORKER_KEY: ${{ secrets.SII_WORKER_KEY }}   # clave del worker tributario (ver sii-worker)
           SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
           ANTHROPIC_KEY: ${{ secrets.CLAUDE }}          # el secret se llama CLAUDE
@@ -64,6 +65,7 @@ jobs:
           if [ -n "${PUBLIC_LEAD_KEY}" ]; then sed -i "s|%%PUBLIC_LEAD_KEY%%|${PUBLIC_LEAD_KEY}|g" index.html; fi
           if [ -n "${PORTAL_ADMIN_KEY}" ]; then sed -i "s|%%PORTAL_ADMIN_KEY%%|${PORTAL_ADMIN_KEY}|g" index.html; fi
           sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
+          if [ -n "${SII_WORKER_KEY}" ]; then sed -i "s|%%SII_WORKER_KEY%%|${SII_WORKER_KEY}|g" index.html; fi
           sed -i "s|%%SII_RUT_EMISOR%%|${SII_RUT_EMISOR}|g" index.html
           sed -i "s|%%SII_RAZON_SOCIAL%%|${SII_RAZON_SOCIAL}|g" index.html
           sed -i "s|%%PROXY_URL%%|${PROXY_URL}|g" index.html

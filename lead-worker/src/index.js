@@ -1926,8 +1926,11 @@ async function sendLeadAutoReply(env, norm) {
   const from =
     env.RESEND_FROM_CLIENTE || "Andrea Garrido - The Lab Solutions <hola@thelab.solutions>";
   const wa = env.WHATSAPP_NUMBER ? `https://wa.me/${env.WHATSAPP_NUMBER}` : null;
-  const name = norm.name ? norm.name.split(" ")[0] : "";
-  const svc = norm.service ? ` sobre <strong>${norm.service}</strong>` : "";
+  // El nombre y el servicio llegan del formulario PÚBLICO: van escapados, igual
+  // que en el resto de los correos. Sin esto, un lead con HTML en el nombre se
+  // inyectaba en el cuerpo de la respuesta automática.
+  const name = norm.name ? escapeHtmlW(norm.name.split(" ")[0]) : "";
+  const svc = norm.service ? ` sobre <strong>${escapeHtmlW(norm.service)}</strong>` : "";
   const waBlock = wa
     ? `<p style="font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#3f454b;margin:0 0 16px;">¿Prefieres adelantar? Escríbenos por WhatsApp: <a href="${wa}" style="color:#009c94;text-decoration:none;font-weight:600;">${wa.replace("https://", "")}</a></p>`
     : "";
