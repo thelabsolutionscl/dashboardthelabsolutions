@@ -1,8 +1,12 @@
-# Firmware K1 — bajar de multicolor (2.3.5.x) a monocolor (1.3.5.x)
+# Firmware K1 — cambiar de versión (monocolor / multicolor)
 
-Runbook para volver una K1 desde la rama **multicolor/CFS** (`V2.3.5.xx`) a la
-rama **monocolor** (`V1.3.5.xx`). Caso de origen: **K1 #2**, que tiene
-`V2.3.5.33` y se quiere dejar en `V1.3.5.22`.
+Runbook para actualizar o bajar el firmware de las K1 del taller. Cubre los dos
+casos, que **no tienen la misma dificultad**:
+
+| Caso | Qué es | Dificultad |
+|---|---|---|
+| **A** — subir dentro de la rama monocolor (`1.3.3.5` → `1.3.5.22`) | Actualización normal | Pendrive y listo |
+| **B** — bajar de multicolor a monocolor (`2.3.5.xx` → `1.3.5.xx`) | Downgrade entre ramas | La OTA lo rechaza; hay que forzarlo por SSH y se pierde la config |
 
 > **"COLOR" y "MONOCROMÁTICO" no son el tipo de pantalla.** Son dos ramas
 > distintas del firmware de Creality: la `2.x` trae soporte multicolor (CFS) y
@@ -10,130 +14,148 @@ rama **monocolor** (`V1.3.5.xx`). Caso de origen: **K1 #2**, que tiene
 
 ---
 
-## Antes de empezar
+## Paso 0 — Identificar la máquina y su versión real
 
-| Punto | Por qué importa |
+**No te fíes del número rotulado ni de la memoria.** Pregúntale a la máquina.
+
+IPs según Airtable (tabla `Maquinas`, campo `ip`) — ojo que el dashboard guarda
+además una IP por equipo en `localStorage` que pisa a Airtable
+(`js/maquinas.js:211`), y que estas IPs son DHCP y pueden cambiar:
+
+| Máquina | IP |
 |---|---|
-| **No es un update, es un downgrade** | Creality no lo soporta oficialmente. La OTA compara versiones y rechaza `1.x` estando en `2.x` (`version_is_new`). Casi seguro hay que forzarlo por SSH. |
-| **La máquina tiene que estar libre** | Nunca durante un print. Y ojo con la mantención automática de las **9:00** del bridge (`printer-bridge/maint-config.json`): si vas a flashear cerca de esa hora, desactívala o saca la impresora de la lista ese día. |
-| **Energía estable** | Un corte a mitad de la OTA deja la máquina en brick. Enchufe directo, sin regletas dudosas. |
-| **El `.img` es por modelo** | Flashear el archivo de otro modelo (K1C / K1 Max) es la forma más rápida de brickearla. Ver paso 1. |
-| **El downgrade resetea la máquina** | Se pierde lo que esté en el overlay: config de Moonraker (CORS), macros propias, Helper Script, Fluidd/Mainsail instalados a mano. Respaldar antes (paso 2). |
+| K1 #1 | 192.168.100.51 |
+| K1 #2 | 192.168.100.126 |
+| K1 #3 | 192.168.100.7 |
+| K1 #4 | 192.168.100.68 |
+| K1 #5 | sin IP (en mantención) |
 
----
+Desde el iMac (que está en `192.168.100.6`, misma red), barrido de qué está encendido:
 
-## Paso 1 — Confirmar modelo y versión en la máquina
+```bash
+for ip in 51 126 7 68; do printf "%s: " $ip; curl -s -m 3 -o /dev/null -w "%{http_code}\n" "http://192.168.100.$ip:7125/printer/info"; done
+```
 
-En la pantalla: **Ajustes → Acerca de**. Anota:
+`200` = viva. `000` = apagada o IP cambiada. Para las que respondan:
 
-- **Modelo / código de máquina** (algo tipo `CR4CU220812S11`).
-- **Versión de firmware** actual (debería decir `V2.3.5.33`).
+```bash
+ssh root@192.168.100.XX 'cat /etc/ota_info'      # password por defecto: creality
+```
 
-El archivo que descargues tiene que empezar **exactamente con ese mismo código**.
-Para la K1 el monocolor es:
+```
+ota_version=1.3.3.5              ← versión instalada
+ota_board_name=CR4CU220812S11    ← código de modelo
+ota_compile_time=2024 01.11 18:58:36
+```
+
+De acá salen los dos datos que mandan todo lo demás:
+
+- **`ota_version`** define si vas por el caso A o el B.
+- **`ota_board_name`** tiene que ser el **prefijo exacto** del `.img` que bajes.
+  Flashear el archivo de otro modelo (K1C / K1 Max) es la forma más rápida de
+  brickear la máquina.
+
+> Estado verificado el 2026-08-07: la K1 #2 (`192.168.100.126`) está en
+> **`1.3.3.5`**, board `CR4CU220812S11`, imagen de enero 2024 — o sea rama
+> monocolor antigua, **caso A**. Las #1, #3 y #4 estaban apagadas y no se
+> pudieron revisar.
+
+### Descargar el `.img`
+
+Monocolor para board `CR4CU220812S11`:
 
 ```
 CR4CU220812S11_ota_img_V1.3.5.22.img      (publicado 2026-07-10)
 ```
 
-Si la pantalla muestra otro código (porque la #2 fuera K1C o K1 Max), baja el
-`.img` monocolor **de ese modelo** desde el centro de descargas y usa ese nombre
-en todos los comandos de abajo. No asumas que el archivo sirve para toda la serie K1.
-
-Descarga: [Creality — K1 Downloads Center](https://www.creality.com/download/creality-k1-3d-printer)
+[Creality — K1 Downloads Center](https://www.creality.com/download/creality-k1-3d-printer)
 · [Creality Cloud — Flagship Series](https://www.crealitycloud.com/downloads/firmware/flagship-series/k1)
 
-## Paso 2 — Preflight y respaldo (desde el iMac)
+### Antes de flashear, en cualquiera de los dos casos
 
-Con la IP de la K1 #2 (según `maint-config.example.json` sería
-`192.168.100.22` — confírmala en el dashboard, sección **Máquinas → 🔌 Conexión**):
+- **Máquina libre**, nunca durante un print: `curl -s "http://$K1:7125/printer/objects/query?print_stats" | grep -o '"state":"[a-z]*"'` → `standby`.
+- **Ojo con la mantención de las 9:00** del bridge (`printer-bridge/maint-config.json`):
+  saca esa impresora de `printers` mientras dure la intervención.
+- **Energía estable.** Un corte a mitad de la OTA deja la máquina en brick.
+
+---
+
+## Caso A — subir dentro de la rama monocolor
+
+Es una actualización normal: la OTA la acepta sin pelear y **no se pierde la
+configuración**.
+
+1. Pendrive en **FAT32**, el `.img` en la **raíz**, sin renombrar ni meter en carpetas.
+2. Enchúfalo en el puerto USB de la K1.
+3. En la pantalla: **Ajustes → Actualizar firmware** → confirmar.
+4. Espera a que termine y reinicie sola. No la desenchufes.
+5. Verifica: `ssh root@$K1 'cat /etc/ota_info'` → `ota_version=1.3.5.22`.
+6. Comprueba en el dashboard (**Máquinas**) que vuelve a salir online, y corre
+   `G28` + `BED_MESH_CALIBRATE` (botón 📐) antes de mandarla a producción.
+
+---
+
+## Caso B — bajar de multicolor (2.3.5.x) a monocolor (1.3.5.x)
+
+Creality no soporta este downgrade: la OTA compara versiones y lo rechaza
+(`version_is_new`). Hay que forzarlo por SSH, y el proceso **borra el overlay**:
+se pierde la config de Moonraker (CORS), macros propias, Helper Script y
+Fluidd/Mainsail instalados a mano.
+
+### B.1 — Respaldar
 
 ```bash
-K1=192.168.100.22
-curl -s "http://$K1:7125/printer/info"
-curl -s "http://$K1:7125/printer/objects/query?print_stats" | grep -o '"state":"[a-z]*"'
+K1=192.168.100.XX
+ssh root@$K1 'tar czf /tmp/backup-k1.tar.gz /usr/data/printer_data/config'
+scp root@$K1:/tmp/backup-k1.tar.gz ~/Desktop/
 ```
 
-Tiene que responder y estar en `standby` (ni `printing` ni `paused`).
+Si el SSH te rechaza, **para acá**: sin acceso root este camino no existe y hay
+que ir por soporte Creality. Algunas builds de la rama CFS traen root desactivado.
 
-Respaldo de la configuración:
+### B.2 — Dejar el `.img` en la máquina
+
+**Con pendrive:** FAT32, archivo en la raíz, enchufado. Confirma dónde montó:
 
 ```bash
-ssh root@192.168.100.22            # password por defecto en K1 rooteada: creality
+ssh root@$K1 'ls /tmp/udisk/*'      # puede ser sda1, sdb1, …
 ```
 
-```bash
-tar czf /tmp/backup-k1-2.tar.gz /usr/data/printer_data/config
-exit
-scp root@192.168.100.22:/tmp/backup-k1-2.tar.gz ~/Desktop/
-```
-
-Guarda ahí `printer.cfg`, `moonraker.conf` y las macros. Después del downgrade
-**no restaures `printer.cfg` a ciegas** (cambia entre ramas de firmware): úsalo
-solo como referencia para volver a aplicar lo tuyo.
-
-## Paso 3 — Dejar el `.img` en la máquina
-
-**Con pendrive (recomendado):**
-
-- Pendrive en **FAT32**.
-- El `.img` va en la **raíz** del pendrive, sin carpetas y sin renombrar.
-- Enchúfalo en el puerto USB de la K1 y confirma dónde montó:
-  `ssh root@$K1 'ls /tmp/udisk/*'` (puede ser `sda1`, `sdb1`, …).
-
-**Sin pendrive**, copiándolo por red a la partición de datos:
+**Sin pendrive**, por red a la partición de datos (`/usr/data`, eMMC — **no
+`/tmp`**, que es RAM y el `.img` pasa de 100 MB):
 
 ```bash
 scp ~/Downloads/CR4CU220812S11_ota_img_V1.3.5.22.img root@$K1:/usr/data/
 ssh root@$K1 'df -h /usr/data'
 ```
 
-Va a `/usr/data` (eMMC), **no a `/tmp`** — `/tmp` es RAM y el `.img` pasa de 100 MB.
-
-## Paso 4 — Intento normal (por pantalla)
-
-**Ajustes → Actualizar firmware** (con el USB puesto) y confirma.
-
-- Si arranca y termina → listo, salta al paso 6.
-- Si dice que la versión instalada es más nueva / no aparece el archivo → es el
-  bloqueo de downgrade esperado. Sigue al paso 5.
-
-## Paso 5 — Forzar el downgrade por SSH
-
-Requiere **root/SSH habilitado**. Algunas builds de la rama CFS lo traen
-desactivado; si no puedes entrar por SSH, no sigas por acá — este camino se
-cierra y hay que ir por soporte Creality (ver "Si algo sale mal").
+### B.3 — Forzar el downgrade
 
 ```bash
-ssh root@192.168.100.22
+ssh root@$K1
+```
 
-# 1. Limpiar overlay y montar el root en escritura
-#    OJO: esto borra TODAS las modificaciones de la máquina. Respaldo del paso 2 hecho.
+```bash
 rm -rf /overlay/upper/*
 mount -o remount,rw /
 
-# 2. Copia del script de OTA sin el corte por versión
 cp /etc/ota_bin/local_ota_update.sh /tmp/local_ota_update_forced.sh
 sed -i 's/exit 1/echo "Ignoring lock..."/g' /tmp/local_ota_update_forced.sh
 chmod +x /tmp/local_ota_update_forced.sh
 
-# 3. Flashear (ajusta el nombre del archivo al que bajaste)
 /tmp/local_ota_update_forced.sh /tmp/udisk/sda1/CR4CU220812S11_ota_img_V1.3.5.22.img
-# o, si lo copiaste por scp en el paso 3:
+# o, si lo copiaste por scp:
 # /tmp/local_ota_update_forced.sh /usr/data/CR4CU220812S11_ota_img_V1.3.5.22.img
 ```
 
-Termina con `ota: stoped success` y reinicia sola en la versión monocolor.
-**No la desenchufes ni cortes la sesión SSH mientras corre.**
+Termina con `ota: stoped success` y reinicia sola. **No cortes la sesión ni la
+energía mientras corre.**
 
-> Si el `.img` no está en `/tmp/udisk/sda1/`, búscalo con `ls /tmp/udisk/*` —
-> según el pendrive puede montarse en `sda`, `sdb1`, etc.
+### B.4 — Dejarla operativa
 
-## Paso 6 — Dejarla operativa de nuevo
-
-1. **Ajustes → Acerca de** → confirma `V1.3.5.22`.
-2. **Moonraker / CORS** (se perdió con el downgrade). En
-   `~/printer_data/config/moonraker.conf`, según `printer-bridge/README.md` (Paso 4):
+1. `ssh root@$K1 'cat /etc/ota_info'` → confirma la versión.
+2. **Reponer CORS** en `~/printer_data/config/moonraker.conf` (se borró con el
+   overlay), según `printer-bridge/README.md` paso 4:
    ```ini
    [authorization]
    cors_domains:
@@ -142,12 +164,14 @@ Termina con `ota: stoped success` y reinicia sola en la versión monocolor.
      127.0.0.1
      192.168.100.0/24
    ```
-   y reinicia Moonraker.
-3. **Dashboard → Máquinas**: en modo `🌐 Remoto` la K1 #2 debe salir de "Offline"
-   en ~15 s. Si no, revisa que Moonraker responda: `curl http://192.168.100.22:7125/printer/info`.
-4. **Calibrar**: `G28` + `BED_MESH_CALIBRATE` (botón 📐 en la tarjeta de la máquina)
-   y una pieza de prueba antes de mandarla a producción.
-5. Vuelve a habilitar la mantención de las 9:00 si la desactivaste.
+   y reiniciar Moonraker.
+3. Dashboard → **Máquinas** en `🌐 Remoto`: debe salir de "Offline" en ~15 s.
+   Si no: `curl http://$K1:7125/printer/info`.
+4. `G28` + `BED_MESH_CALIBRATE` y una pieza de prueba.
+5. Volver a habilitar la mantención de las 9:00.
+
+No restaures `printer.cfg` del respaldo tal cual — cambió de rama de firmware.
+Úsalo solo como referencia para reaplicar lo tuyo.
 
 ---
 
@@ -155,14 +179,20 @@ Termina con `ota: stoped success` y reinicia sola en la versión monocolor.
 
 | Síntoma | Qué hacer |
 |---|---|
-| La OTA rechaza el archivo aun forzada | Verifica que el prefijo del `.img` coincide con el código de la pantalla (paso 1). Es el error más común. |
-| No hay acceso SSH en la rama CFS | Sin SSH no hay downgrade por este camino. Pide a soporte Creality el paquete de recuperación para tu modelo. |
-| Se cortó la luz a mitad / no arranca | Es recuperación por eMMC con soporte Creality. No insistas con más OTAs. |
-| Volvió a 1.3.5.22 pero perdió nivelación / macros | Esperado: el overlay se borró. Recalibra y reaplica lo del respaldo del paso 2. |
+| La OTA rechaza el archivo aun forzada | Verifica que el prefijo del `.img` coincide con `ota_board_name`. Es el error más común. |
+| No hay acceso SSH en la rama CFS | Sin SSH no hay downgrade. Pide a soporte Creality el paquete de recuperación de tu modelo. |
+| Se cortó la luz a mitad / no arranca | Recuperación por eMMC con soporte Creality. No insistas con más OTAs. |
+| Volvió a la versión vieja pero perdió nivelación / macros | Esperado en el caso B: el overlay se borró. Recalibra y reaplica del respaldo. |
+| `curl` da timeout contra una IP | Puede estar apagada o haberle cambiado la IP (DHCP). Revisa con `arp -a \| grep 192.168.100`. |
+
+> **Gotcha de zsh:** en la Terminal del Mac, `VAR=valor   # comentario` **no
+> define la variable** (zsh interactivo no acepta comentarios en línea por
+> defecto: los lee como comando). Pega los comandos sin comentarios, o corre
+> antes `setopt interactive_comments`.
 
 ## Fuentes
 
 - [K1 — How to downgrade to monochrome firmware after installing multicolor firmware (foro Creality)](https://forum.creality.com/t/k1-how-to-downgrade-to-monochrome-firmware-after-installing-multicolor-firmware/48449)
 - [New K1C firmware v1.3.5.22 (Mono-color) — foro Creality](https://forum.creality.com/t/new-k1c-firmware-v1-3-5-22-mono-color/52410)
-- [K1 Max fails to downgrade or update Firmware for CFS-C — Creality-Helper-Script-Wiki #877](https://github.com/Guilouz/Creality-Helper-Script-Wiki/discussions/877) (de aquí sale el forzado por SSH del paso 5)
+- [K1 Max fails to downgrade or update Firmware for CFS-C — Creality-Helper-Script-Wiki #877](https://github.com/Guilouz/Creality-Helper-Script-Wiki/discussions/877) (de aquí sale el forzado por SSH del caso B)
 - [Firmware Upgrade Guidance — Creality Wiki](https://wiki.creality.com/en/k1-flagship-series/k1/quick-start-guide/firmware-upgrade-guidance)
