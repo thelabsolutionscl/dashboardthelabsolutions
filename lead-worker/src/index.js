@@ -780,6 +780,14 @@ function _npsDecodeToken(t) {
 async function handleNps(request, env, ctx, cors) {
   const url = new URL(request.url);
 
+  // El token es base64 del recId, sin firma: el límite por IP evita que alguien
+  // pruebe tokens en masa o inunde de escrituras a Airtable. 30/h da de sobra
+  // para el flujo real (abrir la página, calificar y comentar).
+  if (await rateLimited(env, request, "nps", 30, 3600)) {
+    if (request.method === "POST") return json({ ok: false, error: "Demasiados intentos, intenta más tarde" }, 429, cors);
+    return htmlPage("Demasiados intentos", "Espera unos minutos y vuelve a abrir el enlace.", false, 429);
+  }
+
   // POST → comentario opcional
   if (request.method === "POST") {
     const body = await readJson(request);
@@ -922,6 +930,11 @@ async function sendNpsAlert(env, { pedId, score, comentario, comentarioOnly }) {
  * ══════════════════════════════════════════════════════════════════════ */
 async function handlePod(request, env, ctx, cors) {
   const url = new URL(request.url);
+  // Mismo motivo que en /nps: este enlace marca "Recepción confirmada", así que
+  // no puede quedar expuesto a que se prueben tokens sin límite.
+  if (await rateLimited(env, request, "pod", 30, 3600)) {
+    return htmlPage("Demasiados intentos", "Espera unos minutos y vuelve a abrir el enlace.", false, 429);
+  }
   const pedId = _npsDecodeToken(url.searchParams.get("p"));
   if (!pedId) return htmlPage("Enlace inválido", "Este enlace de confirmación no es válido o ya expiró.", false);
   const confirm = url.searchParams.get("c") === "1";
@@ -977,6 +990,11 @@ async function sendPodAlert(env, pedId) {
  * ══════════════════════════════════════════════════════════════════════ */
 async function handlePedidoEstado(request, env) {
   const url = new URL(request.url);
+  // Seguimiento: el cliente recarga la página varias veces mientras espera, por
+  // eso el límite es más holgado que en /nps y /pod (que son de un solo uso).
+  if (await rateLimited(env, request, "pedido", 60, 3600)) {
+    return htmlPage("Demasiados intentos", "Espera unos minutos y vuelve a abrir el enlace.", false, 429);
+  }
   const pedId = _npsDecodeToken(url.searchParams.get("p"));
   if (!pedId) return htmlPage("Enlace inválido", "Este enlace de seguimiento no es válido o ya expiró.", false);
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return htmlPage("No disponible", "El seguimiento no está disponible en este momento.", false);
@@ -1448,7 +1466,7 @@ function logoHeader(centrado) {
 function escapeHtmlW(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
-function htmlPage(title, msg, ok) {
+function htmlPage(title, msg, ok, status = 200) {
   const color = ok ? "#00b3a4" : "#e5484d";
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtmlW(title)} — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
@@ -1458,7 +1476,7 @@ ${logoHeader(true)}
 <p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 24px">${escapeHtmlW(msg)}</p>
 <a href="https://thelab.solutions" style="display:inline-block;background:#00b3a4;color:#06231f;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:9px;font-size:14px">Ir a thelab.solutions</a>
 </div></body></html>`;
-  return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+  return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 async function sendNewsletterConfirm(env, email, name, confirmUrl) {
   if (!env.RESEND_API_KEY) return;
