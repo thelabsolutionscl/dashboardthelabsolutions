@@ -7885,6 +7885,10 @@ function _hydrateFromCache(){
   try{
     const raw=localStorage.getItem(k);if(!raw) return false;
     const o=JSON.parse(raw);if(!o||!o.d) return false;
+    // El snapshot se guarda con {v:1} pero nadie lo miraba. Si algún día cambia
+    // la forma de lo guardado, una caché vieja se hidrataría igual y pintaría
+    // datos mal formados como si fueran buenos. Mejor descartarla y recargar.
+    if(o.v!==1){try{localStorage.removeItem(k);}catch(e2){}return false;}
     state.clientes=o.d.clientes||[];state.cotizaciones=o.d.cotizaciones||[];
     state.pedidos=o.d.pedidos||[];state.reportes=o.d.reportes||[];
     state.proveedores=o.d.proveedores||[];state.facturas=o.d.facturas||[];
@@ -17619,8 +17623,47 @@ trusted_clients:
 <script>
 // PWA: registra el service worker solo en https (en file:// o http no aplica).
 // La ?v= cambia en cada deploy → el navegador re-instala el SW y purga cachés viejos.
-if('serviceWorker' in navigator && location.protocol==='https:'){
-  window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js?v=%%BUILD%%').catch(()=>{});});
+// localhost también es contexto seguro según la especificación, así que el
+// service worker funciona ahí igual que en https. Exigir solo 'https:' lo dejaba
+// muerto al servir el dashboard en local, que es donde se puede probar el flujo
+// de actualización sin desplegar. En file:// sigue sin aplicar.
+const _origenSeguro=location.protocol==='https:'||['localhost','127.0.0.1','[::1]'].includes(location.hostname);
+if('serviceWorker' in navigator && _origenSeguro){
+  // Aviso de versión nueva. Sin esto, una pestaña que queda abierta todo el día
+  // sigue corriendo el código viejo indefinidamente: los arreglos desplegados no
+  // llegan hasta que alguien recarga por su cuenta. NO se recarga sola — podrías
+  // estar a medio redactar un correo o una cotización; se avisa y tú decides.
+  const _habiaSW=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(_habiaSW) _avisarVersionNueva();
+  });
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js?v=%%BUILD%%').then(reg=>{
+      // El navegador solo busca versiones nuevas al cargar la página, que es
+      // justo cuando ya la habrías tomado. Sin esta comprobación periódica el
+      // aviso de arriba no se dispararía nunca en una pestaña de largo aliento.
+      let _ultimaBusqueda=Date.now();
+      const buscar=()=>{
+        if(document.visibilityState!=='visible'||!navigator.onLine) return;
+        if(Date.now()-_ultimaBusqueda<15*60*1000) return;
+        _ultimaBusqueda=Date.now();
+        try{reg.update();}catch(e){}
+      };
+      document.addEventListener('visibilitychange',buscar);
+      setInterval(buscar,15*60*1000);
+    }).catch(()=>{});
+  });
+}
+function _avisarVersionNueva(){
+  if(document.getElementById('versionBanner')) return;
+  const b=document.createElement('div');b.id='versionBanner';
+  b.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:10001;background:#052b28;color:#00d4cc;border:1px solid rgba(0,212,204,.45);border-radius:10px;font-size:12.5px;font-weight:600;padding:11px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 28px rgba(0,0,0,.45);max-width:calc(100vw - 32px)';
+  b.innerHTML='<span>✨ Hay una versión nueva del dashboard</span>'
+    +'<button id="versionBannerGo" style="background:#00d4cc;color:#052b28;border:0;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">Recargar</button>'
+    +'<button id="versionBannerNo" style="background:none;color:#00d4cc;border:0;font-size:16px;line-height:1;cursor:pointer;opacity:.7" title="Después">✕</button>';
+  document.body.appendChild(b);
+  b.querySelector('#versionBannerGo').onclick=()=>location.reload();
+  b.querySelector('#versionBannerNo').onclick=()=>b.remove();
 }
 </script>
 </body>

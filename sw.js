@@ -25,10 +25,16 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Shell: red primero, respaldo offline
+  // Shell: red primero, respaldo offline.
+  // cache:'no-cache' obliga a revalidar contra el servidor. Sin esto el fetch
+  // pasaba por la caché HTTP del navegador, y GitHub Pages sirve el HTML con
+  // max-age=600: durante 10 minutos se recibía un index.html viejo, que apunta
+  // a los ?v= viejos, que este mismo worker sirve desde su caché. Resultado: la
+  // app entera quedaba en la versión anterior y solo se salía con Ctrl+Shift+R.
+  // El costo es una revalidación (304 si no cambió), no una descarga.
   if (req.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
     e.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-cache' })
         .then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return r; })
         .catch(() => caches.match(req))
     );
