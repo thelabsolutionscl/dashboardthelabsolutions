@@ -34,6 +34,42 @@ CR4CU220812S11
 - El **board name** tiene que ser el prefijo exacto del `.img`. Flashear el
   archivo de otro modelo (K1C / K1 Max) es la forma más rápida de brickear.
 
+### La pantalla puede mentir
+
+Lo que muestra **Ajustes → Acerca de** no sale del firmware: sale de
+`/usr/data/creality/userdata/config/system_version.json`, campo `sys_version`.
+Ese archivo vive en la partición de datos, **el OTA no lo toca**, y se puede
+editar a mano.
+
+En la K1 #2 alguien lo había puesto en `2.3.5.33` (multicolor) el 23-06-2026
+mientras el rootfs estaba en `1.3.3.5` monocolor. La delató un enlace en formato
+Markdown dentro del JSON (`"website":"[www.creality.com](https://…)"`), que
+ningún firmware de Creality escribe. Consecuencia práctica: el actualizador del
+display comparaba contra una versión inexistente y rechazaba toda imagen
+monocromática.
+
+Si el número de la pantalla no coincide con `get_ota_current_version.sh`, manda
+el segundo. Para corregirlo (respaldo primero):
+
+```bash
+ssh root@$K1 'cp /usr/data/creality/userdata/config/system_version.json /usr/data/creality/userdata/config/system_version.json.bak'
+ssh root@$K1 'cat > /usr/data/creality/userdata/config/system_version.json <<EOF
+{
+  "sys_version":"1.3.5.22",
+  "fw_version":"",
+  "app_version":1,
+  "hw_version":"CR4CU220812S11",
+  "hw1_version":"",
+  "st_version":"0",
+  "website":"www.creality.com"
+}
+EOF'
+ssh root@$K1 'reboot'
+```
+
+> **Pendiente:** revisar si las K1 #1, #3 y #4 tienen el mismo archivo alterado.
+> Estaban apagadas el 2026-08-07 y no se pudieron comprobar.
+
 IPs del parque (Airtable, tabla `Maquinas`, campo `ip`) — son DHCP y pueden
 cambiar; el dashboard además guarda una IP por equipo en `localStorage` que pisa
 a Airtable (`js/maquinas.js:211`):
@@ -175,7 +211,8 @@ curl -s "http://$K1:7125/printer/info"
 | Síntoma | Causa / solución |
 |---|---|
 | `scp: Connection closed` | Falta el `-O` (SFTP vs SCP clásico). |
-| La pantalla rechaza el `.img` | Chequeo de la app del display. Ignóralo y usa SSH. |
+| La pantalla rechaza el `.img` | Chequeo de la app del display, que compara contra `system_version.json` — un archivo editable que puede no reflejar el firmware real. Ignóralo y usa SSH. |
+| La versión de la pantalla no cambia tras flashear | `system_version.json` vive en `/usr/data` y el OTA no lo toca. Ver "La pantalla puede mentir". |
 | `ls /tmp/udisk/` vacío, `Not a file` | La impresora no montó el pendrive. Revisa `dmesg \| tail` y `ls /dev/sd*`; o mejor, copia por red (paso 4). |
 | `ls: /usr/data/creality/ota_updater*: No such file` | Mensaje inofensivo de una limpieza previa, no es el punto de falla. |
 | `curl` da timeout contra una IP | Apagada o IP cambiada (DHCP). Revisa con `arp -a \| grep 192.168.100`. |
