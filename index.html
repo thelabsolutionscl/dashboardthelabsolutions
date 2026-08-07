@@ -7482,14 +7482,14 @@ function _pedidosActivosProd(){
 const _PROD_TIMER_KEY='thelab_prod_timer_v1';
 function _prodTimers(){try{return JSON.parse(localStorage.getItem(_PROD_TIMER_KEY)||'{}');}catch(e){return{};}}
 async function _prodTimersBackup(){
-  try{const notes=localStorage.getItem(_PROD_TIMER_KEY)||'{}';
+  try{const notes=_mapaPayload(_PROD_TIMER_KEY);
     await _monitorUpsert('PROD_TIMERS',notes,'prodTimersRecordId');
   }catch(e){}
 }
 function _prodState(pedidoId){const t=_prodTimers()[pedidoId];if(!t||!t.start)return null;return{running:!t.end,ms:(t.end||Date.now())-t.start};}
 function _fmtDur(ms){const h=Math.floor(ms/3.6e6),m=Math.floor((ms%3.6e6)/6e4);return h>0?`${h}h ${m}m`:`${m}m`;}
-function prodStart(pedidoId){const o=_prodTimers();o[pedidoId]={start:Date.now()};try{localStorage.setItem(_PROD_TIMER_KEY,JSON.stringify(o));}catch(e){}_prodTimersBackup();toast('▶ Cronómetro de producción iniciado','success');try{renderCargaMaquinas();}catch(e){}}
-function prodStop(pedidoId){const o=_prodTimers();if(!o[pedidoId]||!o[pedidoId].start){toast('Inicia el cronómetro primero','info');return;}o[pedidoId].end=Date.now();try{localStorage.setItem(_PROD_TIMER_KEY,JSON.stringify(o));}catch(e){}_prodTimersBackup();toast('⏹ Ciclo registrado: '+_fmtDur(o[pedidoId].end-o[pedidoId].start),'success');try{renderCargaMaquinas();}catch(e){}}
+function prodStart(pedidoId){const o=_prodTimers();o[pedidoId]={start:Date.now()};_mapaGuardar(_PROD_TIMER_KEY,o);_prodTimersBackup();toast('▶ Cronómetro de producción iniciado','success');try{renderCargaMaquinas();}catch(e){}}
+function prodStop(pedidoId){const o=_prodTimers();if(!o[pedidoId]||!o[pedidoId].start){toast('Inicia el cronómetro primero','info');return;}o[pedidoId].end=Date.now();_mapaGuardar(_PROD_TIMER_KEY,o);_prodTimersBackup();toast('⏹ Ciclo registrado: '+_fmtDur(o[pedidoId].end-o[pedidoId].start),'success');try{renderCargaMaquinas();}catch(e){}}
 function _cicloPromedio(){const ts=Object.values(_prodTimers()).filter(t=>t&&t.start&&t.end);if(!ts.length)return null;return ts.reduce((s,t)=>s+(t.end-t.start),0)/ts.length;}
 function _prodTimerBtn(p){
   const st=_prodState(p.id);
@@ -8020,6 +8020,66 @@ function _restoreLista(key,remoto){
   if(!Array.isArray(remoto))return;
   try{localStorage.setItem(key,JSON.stringify(_listaPrune(_listaMerge(_listaCruda(key),remoto))));}catch(e){}
 }
+
+/* ── Respaldos con forma de mapa {clave: valor} ───────────────────────────
+ * Descuentos por cliente, fechas clave, onboarding y cronómetros de producción.
+ * Mismo problema que las listas: el respaldo se restauraba reemplazando, así que
+ * el último en guardar pisaba lo del otro computador. Aquí se pierde el valor de
+ * un cliente en vez de un registro entero, pero duele igual: un descuento que
+ * pusiste desaparece sin rastro.
+ *
+ * La diferencia es que aquí no se puede meter la fecha DENTRO del valor sin
+ * cambiar todo lo que lo lee. Va aparte, en una clave hermana «…__mts»:
+ * fecha positiva para lo vivo, negativa para lo borrado a propósito. Eso último
+ * importa porque quitar un descuento o un cumpleaños tiene que propagarse al
+ * otro equipo, no revivir en la siguiente sincronización.
+ */
+function _mapaCrudo(key){
+  try{const o=JSON.parse(localStorage.getItem(key)||'{}');return(o&&typeof o==='object'&&!Array.isArray(o))?o:{};}catch(e){return{};}
+}
+function _mapaSellos(key){return _mapaCrudo(key+'__mts');}
+function _mapaGuardar(key,obj){
+  const ahora=Date.now(),corte=ahora-60*864e5;
+  const previo=_mapaCrudo(key),sellos=_mapaSellos(key);
+  const nuevo=(obj&&typeof obj==='object'&&!Array.isArray(obj))?obj:{};
+  const huella=v=>{try{return JSON.stringify(v);}catch(e){return String(v);}};
+  Object.keys(nuevo).forEach(k=>{
+    if(!(k in previo)||huella(previo[k])!==huella(nuevo[k])) sellos[k]=ahora;   // cambió
+    else if(!(k in sellos)||sellos[k]<0) sellos[k]=ahora;                        // resucitado o sin sellar
+  });
+  Object.keys(previo).forEach(k=>{if(!(k in nuevo)) sellos[k]=-ahora;});         // borrado aquí
+  Object.keys(sellos).forEach(k=>{if(sellos[k]<0&&-sellos[k]<corte) delete sellos[k];});
+  try{localStorage.setItem(key,JSON.stringify(nuevo));localStorage.setItem(key+'__mts',JSON.stringify(sellos));}catch(e){}
+}
+// El respaldo lleva los sellos adentro, bajo «__mts». No puede chocar con una
+// clave real: todas son ids de Airtable y empiezan por «rec».
+function _mapaPayload(key){
+  const o={..._mapaCrudo(key)},s=_mapaSellos(key);
+  if(Object.keys(s).length) o.__mts=s;
+  return JSON.stringify(o);
+}
+function _restoreMapa(key,remoto){
+  if(!remoto||typeof remoto!=='object'||Array.isArray(remoto))return;
+  const rem={...remoto};
+  const sRem=(rem.__mts&&typeof rem.__mts==='object')?rem.__mts:{};
+  delete rem.__mts;
+  const loc=_mapaCrudo(key),sLoc=_mapaSellos(key);
+  const out={},sOut={},corte=Date.now()-60*864e5;
+  const claves=new Set([...Object.keys(loc),...Object.keys(rem),...Object.keys(sLoc),...Object.keys(sRem)]);
+  for(const k of claves){
+    const tl=Number(sLoc[k])||0,tr=Number(sRem[k])||0;
+    // Sin sellos por ninguna parte (datos de antes de este cambio) manda lo
+    // local, pero lo que solo existe en el remoto igual se conserva: al migrar
+    // no se puede perder nada.
+    const ganaLocal=Math.abs(tl)>=Math.abs(tr);
+    const t=ganaLocal?tl:tr;
+    if(t<0){if(-t>=corte) sOut[k]=t;continue;}                                   // borrado: no revive
+    const v=ganaLocal?((k in loc)?loc[k]:rem[k]):((k in rem)?rem[k]:loc[k]);
+    if(v===undefined)continue;
+    out[k]=v;if(t)sOut[k]=t;
+  }
+  try{localStorage.setItem(key,JSON.stringify(out));localStorage.setItem(key+'__mts',JSON.stringify(sOut));}catch(e){}
+}
 // Aplica config desde la tabla 'Monitor Sistema' (META_REVENUE / WATI_CONFIG / FIN_VENTAS).
 function _applyMonitorSistema(recs){
   recs=recs||[];
@@ -8074,19 +8134,19 @@ function _applyMonitorSistema(recs){
   const ptRec=recs.find(r=>r.fields['Name']==='PROD_TIMERS');
   if(ptRec){
     state.prodTimersRecordId=ptRec.id;
-    try{const o=JSON.parse(ptRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreShared('thelab_prod_timer_v1',o);}catch(e){logErr('monitorSistema:prodTimers',e);}
+    try{const o=JSON.parse(ptRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreMapa('thelab_prod_timer_v1',o);}catch(e){logErr('monitorSistema:prodTimers',e);}
   }
   // Fechas clave de clientes respaldadas (registro compartido).
   const fcRec=recs.find(r=>r.fields['Name']==='FECHAS_CLIENTE');
   if(fcRec){
     state.fechasCliRecordId=fcRec.id;
-    try{const o=JSON.parse(fcRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreShared('thelab_fechas_cliente_v1',o);}catch(e){logErr('monitorSistema:fechasCli',e);}
+    try{const o=JSON.parse(fcRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreMapa('thelab_fechas_cliente_v1',o);}catch(e){logErr('monitorSistema:fechasCli',e);}
   }
   // Onboarding de clientes respaldado (registro compartido).
   const obRec=recs.find(r=>r.fields['Name']==='ONBOARDING');
   if(obRec){
     state.onboardingRecordId=obRec.id;
-    try{const o=JSON.parse(obRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreShared('thelab_onboarding_v1',o);}catch(e){logErr('monitorSistema:onboarding',e);}
+    try{const o=JSON.parse(obRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreMapa('thelab_onboarding_v1',o);}catch(e){logErr('monitorSistema:onboarding',e);}
   }
   // Órdenes de compra respaldadas (registro compartido).
   const ocRec=recs.find(r=>r.fields['Name']==='ORDENES_COMPRA');
@@ -8098,7 +8158,7 @@ function _applyMonitorSistema(recs){
   const dcRec=recs.find(r=>r.fields['Name']==='DESC_CLIENTE');
   if(dcRec){
     state.descClienteRecordId=dcRec.id;
-    try{const o=JSON.parse(dcRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreShared('thelab_desc_cliente_v1',o);}catch(e){logErr('monitorSistema:descCliente',e);}
+    try{const o=JSON.parse(dcRec.fields['Notes']||'{}');if(o&&typeof o==='object') _restoreMapa('thelab_desc_cliente_v1',o);}catch(e){logErr('monitorSistema:descCliente',e);}
   }
   // Contratos recurrentes respaldados (registro compartido).
   const retRec=recs.find(r=>r.fields['Name']==='RETAINERS');
@@ -9600,7 +9660,7 @@ const _DESC_CLIENTE_KEY='thelab_desc_cliente_v1';
 function _descClientes(){try{return JSON.parse(localStorage.getItem(_DESC_CLIENTE_KEY)||'{}');}catch(e){return{};}}
 function _descCliente(clienteId){const v=parseFloat(_descClientes()[clienteId]);return(v>0&&v<=90)?v:0;}
 async function _descClienteBackup(){
-  try{const notes=localStorage.getItem(_DESC_CLIENTE_KEY)||'{}';
+  try{const notes=_mapaPayload(_DESC_CLIENTE_KEY);
     await _monitorUpsert('DESC_CLIENTE',notes,'descClienteRecordId');
   }catch(e){}
 }
@@ -9610,7 +9670,7 @@ function setDescCliente(clienteId){
   if(v===null)return;const n=parseFloat(String(v).replace(/[^\d.]/g,''))||0;
   if(!(n>=0&&n<=90)){toast('Ingresa un porcentaje entre 0 y 90','error');return;}
   const m=_descClientes();if(n>0)m[clienteId]=n;else delete m[clienteId];
-  try{localStorage.setItem(_DESC_CLIENTE_KEY,JSON.stringify(m));}catch(e){}_descClienteBackup();
+  _mapaGuardar(_DESC_CLIENTE_KEY,m);_descClienteBackup();
   toast(n>0?`✓ Descuento ${n}% para este cliente`:'Descuento quitado','success');
   try{_renderCdDescChip(clienteId);}catch(e){}
 }
@@ -9627,7 +9687,7 @@ function _renderCdDescChip(clienteId){
 const _FECHAS_CLI_KEY='thelab_fechas_cliente_v1';
 function _fechasCliente(){try{return JSON.parse(localStorage.getItem(_FECHAS_CLI_KEY)||'{}');}catch(e){return{};}}
 async function _fechasClienteBackup(){
-  try{const notes=localStorage.getItem(_FECHAS_CLI_KEY)||'{}';
+  try{const notes=_mapaPayload(_FECHAS_CLI_KEY);
     await _monitorUpsert('FECHAS_CLIENTE',notes,'fechasCliRecordId');
   }catch(e){}
 }
@@ -9638,7 +9698,7 @@ function setFechaCliente(clienteId){
   if(t&&!/^\d{2}-\d{2}$/.test(t)){toast('Formato inválido — usa MM-DD (ej: 03-25)','error');return;}
   const o=all[clienteId]||{};if(t)o.cumple=t;else delete o.cumple;
   if(Object.keys(o).length)all[clienteId]=o;else delete all[clienteId];
-  try{localStorage.setItem(_FECHAS_CLI_KEY,JSON.stringify(all));}catch(e){}_fechasClienteBackup();
+  _mapaGuardar(_FECHAS_CLI_KEY,all);_fechasClienteBackup();
   toast(t?'✓ Cumpleaños guardado':'Cumpleaños quitado','success');
   try{_renderCdFechaChip(clienteId);}catch(e){}
 }
@@ -9719,7 +9779,7 @@ const _ONBOARDING_STEPS=[
 ];
 function _onboarding(){try{return JSON.parse(localStorage.getItem(_ONBOARDING_KEY)||'{}');}catch(e){return{};}}
 async function _onboardingBackup(){
-  try{const notes=localStorage.getItem(_ONBOARDING_KEY)||'{}';
+  try{const notes=_mapaPayload(_ONBOARDING_KEY);
     await _monitorUpsert('ONBOARDING',notes,'onboardingRecordId');
   }catch(e){}
 }
@@ -9738,7 +9798,7 @@ function toggleOnboarding(clienteId,key){
   const steps=_onboardingSteps(clienteId);const st=steps.find(s=>s.key===key);
   cur[key]=!(st&&st.done);
   all[clienteId]=cur;
-  try{localStorage.setItem(_ONBOARDING_KEY,JSON.stringify(all));}catch(e){}_onboardingBackup();
+  _mapaGuardar(_ONBOARDING_KEY,all);_onboardingBackup();
   renderOnboarding(clienteId);
 }
 function renderOnboarding(clienteId){
