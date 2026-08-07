@@ -780,7 +780,24 @@ function prefillQA(){const j=data().jobs.find(x=>x.id===inputVal('mopsQAJob'));i
 function consumeJobMaterial(j,actualGrams){
   if(j.materialConsumed)return;
   const grams=Math.max(0,num(actualGrams,j.grams)),s=data().spools.find(x=>x.id===j.spoolId);
-  if(s){s.remaining=Math.max(0,num(s.remaining)-grams);if(s.remaining<=0)s.status='agotado';s.updatedAt=nowIso();}
+  // El material YA se gastó: la impresión ocurrió. Así que aquí no se bloquea
+  // nada (a diferencia del consumo desde Pedidos, donde todavía se puede
+  // frenar). Pero los dos descuadres posibles se avisan, porque si no el
+  // registro queda mintiendo y nadie se entera:
+  //  · Sin bobina asignada, los gramos no se descontaban de ningún lado.
+  //  · Si la bobina no alcanzaba, el sobrante se recortaba a 0 en silencio.
+  if(!s){
+    if(grams>0) try{toast(`${j.name||'Trabajo'}: ${Math.round(grams)} g impresos sin bobina asignada — no se descontaron de ninguna`,'error');}catch(e){}
+  }else{
+    const habia=num(s.remaining);
+    if(grams>habia){
+      const falta=Math.round(grams-habia);
+      try{toast(`${s.name||'Bobina'}: se gastaron ${Math.round(grams)} g pero quedaban ${Math.round(habia)} — faltan ${falta} g por cuadrar`,'error');}catch(e){}
+    }
+    s.remaining=Math.max(0,habia-grams);
+    if(s.remaining<=0)s.status='agotado';
+    s.updatedAt=nowIso();
+  }
   j.materialConsumed=grams;
 }
 function requiredPostStages(pedidoId){return[...new Set(data().jobs.filter(j=>j.pedidoId===pedidoId&&!j.archived).flatMap(j=>j.postStages||[]))].filter(k=>POST_STAGES.some(s=>s.key===k));}

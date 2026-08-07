@@ -14006,8 +14006,18 @@ async function ensureInventarioTable(){
 let _invLoaded=false;
 async function loadInventario(force){
   if(_invLoaded&&!force){renderInventario();return;}
+  // Distinguir "no hay materiales" de "no se pudo cargar". Antes el error se
+  // tragaba y la pantalla mostraba «Sin materiales aún — agrega el primero»:
+  // idéntico a un inventario vacío. Con Airtable caído o el token sin permiso,
+  // se podría empezar a re-agregar material que ya existe.
+  state._invError=null;
   try{const r=await airtableFetch('Inventario',500);state.inventario=r.records||[];_invLoaded=true;}
-  catch(e){state.inventario=state.inventario||[];}
+  catch(e){
+    state.inventario=state.inventario||[];
+    // La tabla se crea sola al agregar el primer material: que no exista todavía
+    // es lo normal al empezar, no un fallo que haya que reportar.
+    if(!/NOT_FOUND|404|Could not find|no se encontr/i.test(String(e&&e.message||''))) state._invError=String(e&&e.message||e);
+  }
   renderInventario();
 }
 function _invEstado(m){const s=+m.fields['Stock actual']||0,ro=+m.fields['Punto de reorden']||0;
@@ -14018,7 +14028,9 @@ function renderInventario(){
   const tb=document.getElementById('inventarioTableBody');if(!tb)return;
   const inv=(state.inventario||[]).slice().sort((a,b)=>_invEstado(b).sev-_invEstado(a).sev||String(a.fields['Material']||'').localeCompare(String(b.fields['Material']||'')));
   const cnt=document.getElementById('invCount');if(cnt)cnt.textContent=inv.length;
-  if(!inv.length){tb.innerHTML='<tr><td colspan="6"><div class="empty-state" style="padding:24px">Sin materiales aún — agrega el primero con ＋ Material.</div></td></tr>';return;}
+  if(!inv.length){tb.innerHTML=state._invError
+    ?`<tr><td colspan="6"><div class="empty-state" style="padding:24px;color:var(--danger)">⚠ No se pudo leer el inventario — <strong>esto no significa que esté vacío</strong>.<br><span style="font-size:11px;opacity:.8">${escapeHtml(state._invError)}</span><br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="loadInventario(true)">Reintentar</button></div></td></tr>`
+    :'<tr><td colspan="6"><div class="empty-state" style="padding:24px">Sin materiales aún — agrega el primero con ＋ Material.</div></td></tr>';return;}
   const _in='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;font-size:12px;padding:5px 8px;width:100%;box-sizing:border-box';
   tb.innerHTML=inv.map(m=>{const e=_invEstado(m),f=m.fields;
     return `<tr>
