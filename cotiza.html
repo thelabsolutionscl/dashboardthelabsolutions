@@ -142,6 +142,12 @@ function _utm(){
           utmTerm:g('utm_term'),utmContent:g('utm_content'),gclid:g('gclid'),landingUrl:location.href.split('?')[0]};
 }
 function _show(cls,html){const m=document.getElementById('formMsg');m.className='msg '+cls;m.innerHTML=html;}
+// _show pinta con innerHTML, así que todo lo que no sea texto escrito en esta
+// página tiene que escaparse antes. Hoy los errores que devuelve /lead son
+// mensajes fijos, pero basta que alguien agregue uno que repita lo que escribió
+// el visitante ("el email X no es válido") para volverlo ejecutable — en una
+// página pública, sin que nadie se entere.
+function _esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 let _navigate=u=>{location.href=u;};
 
 // Adjunto opcional: se manda en base64 dentro del JSON (el worker lo valida
@@ -204,7 +210,7 @@ document.getElementById('cotForm').addEventListener('submit',async ev=>{
       document.getElementById('cotForm').reset();_tsToken='';
       _show('ok','✓ ¡Recibido! Tu solicitud ya está en nuestro sistema.<br>Te contactaremos a la brevedad — normalmente dentro de 24 horas hábiles.');
     }else{
-      _show('err',(res&&res.error?res.error+'. ':'No pudimos registrar tu solicitud. ')+`También puedes <a style="color:var(--accent)" href="${_mailtoFallback(d)}">enviarla por correo</a>.`);
+      _show('err',(res&&res.error?_esc(res.error)+'. ':'No pudimos registrar tu solicitud. ')+`También puedes <a style="color:var(--accent)" href="${_mailtoFallback(d)}">enviarla por correo</a>.`);
     }
   }catch(e){
     _show('err',`Problema de conexión. Puedes <a style="color:var(--accent)" href="${_mailtoFallback(d)}">enviarla por correo</a> o escribirnos por WhatsApp.`);
