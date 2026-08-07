@@ -107,8 +107,14 @@ Fluidd/Mainsail instalados a mano.
 ```bash
 K1=192.168.100.XX
 ssh root@$K1 'tar czf /tmp/backup-k1.tar.gz /usr/data/printer_data/config'
-scp root@$K1:/tmp/backup-k1.tar.gz ~/Desktop/
+scp -O root@$K1:/tmp/backup-k1.tar.gz ~/Desktop/
 ```
+
+> **El `-O` no es opcional.** macOS trae OpenSSH 9+, que copia por SFTP, y el
+> BusyBox de la K1 no tiene `sftp-server` → `scp: Connection closed`. El `-O`
+> fuerza el protocolo SCP clásico. Aplica en las dos direcciones (bajar el
+> respaldo y subir el `.img`). Alternativa sin scp:
+> `ssh root@$K1 'cat /tmp/backup-k1.tar.gz' > ~/Desktop/backup-k1.tar.gz`
 
 Si el SSH te rechaza, **para acá**: sin acceso root este camino no existe y hay
 que ir por soporte Creality. Algunas builds de la rama CFS traen root desactivado.
@@ -125,7 +131,7 @@ ssh root@$K1 'ls /tmp/udisk/*'      # puede ser sda1, sdb1, …
 `/tmp`**, que es RAM y el `.img` pasa de 100 MB):
 
 ```bash
-scp ~/Downloads/CR4CU220812S11_ota_img_V1.3.5.22.img root@$K1:/usr/data/
+scp -O ~/Downloads/CR4CU220812S11_ota_img_V1.3.5.22.img root@$K1:/usr/data/
 ssh root@$K1 'df -h /usr/data'
 ```
 
