@@ -7231,34 +7231,64 @@ async function airtableDelete(table,recordId){
 }
 
 // ── CREAR CAMPOS ──────────────────────────────────────────────
+// Esquema de la base, leído una vez por sesión. Cada ensure*() lo pedía por su
+// cuenta —y el esquema completo no es una respuesta liviana—, así que se
+// repetía en cada arranque. Se cachea 10 minutos y se invalida al crear algo.
+// Se guarda la promesa EN VUELO, no solo el resultado: los ensure*() se lanzan
+// a la vez al arrancar, así que si solo se cacheara el resultado las tres
+// saldrían a la red antes de que ninguna alcance a llenar la caché.
+let _esquemaCache=null,_esquemaTs=0,_esquemaEnVuelo=null;
+function _esquemaBase(){
+  if(_esquemaCache&&Date.now()-_esquemaTs<10*60*1000) return Promise.resolve(_esquemaCache);
+  if(_esquemaEnVuelo) return _esquemaEnVuelo;
+  _esquemaEnVuelo=(async()=>{
+    try{
+      const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+      if(!r.ok) return null;
+      const d=await r.json();
+      if(!d||!Array.isArray(d.tables)) return null;
+      _esquemaCache=d;_esquemaTs=Date.now();
+      return d;
+    }catch(e){return null;}
+    finally{_esquemaEnVuelo=null;}
+  })();
+  return _esquemaEnVuelo;
+}
+// Crea SOLO los campos que faltan. Antes se disparaba un POST por cada campo
+// sin mirar si ya existía: 7 peticiones en cada carga del dashboard, las 7
+// rechazadas por "ya existe" y con el error tragado en silencio. Contra el
+// límite de Airtable (5 peticiones por segundo) eso competía con la carga de
+// datos de verdad, que es lo que el usuario está esperando.
+async function _crearCamposFaltantes(nombreTabla,necesarios){
+  const d=await _esquemaBase();
+  if(!d) return 0;
+  const tbl=d.tables.find(x=>x.name===nombreTabla);
+  if(!tbl) return 0;
+  const hay=new Set((tbl.fields||[]).map(f=>f.name));
+  const faltan=(necesarios||[]).filter(c=>c&&!hay.has(c.name));
+  if(!faltan.length) return 0;
+  for(const c of faltan){
+    try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}
+    catch(e){console.warn('[esquema] no se pudo crear el campo',c.name,e&&e.message);}
+  }
+  _esquemaCache=null;   // el esquema cambió: la próxima lectura vuelve a la red
+  return faltan.length;
+}
 async function ensureCotizacionFields(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
-  const tableId='tblvVAc4TtiERA0Tc';
   const needed=[{name:'Tiempo de producción',type:'number',options:{precision:0}},{name:'Tiempo de producción máx',type:'number',options:{precision:0}},{name:'Tipo días producción',type:'singleLineText'},{name:'Fecha de entrega',type:'date',options:{dateFormat:{name:'iso',format:'YYYY-MM-DD'}}},{name:'Fecha límite cotización',type:'date',options:{dateFormat:{name:'iso',format:'YYYY-MM-DD'}}},{name:'Historial fechas calendario',type:'multilineText'},{name:'Detalle JSON',type:'multilineText'}];
-  for(const c of needed){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
+  await _crearCamposFaltantes('Cotizaciones',needed);
 }
 async function ensureFichaTecnicaField(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
-  try{
-    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
-    if(!r.ok) return;
-    const d=await r.json();
-    const tbl=d.tables?.find(x=>x.name==='Pedidos');
-    if(!tbl) return;
-    if(tbl.fields?.some(x=>x.name==='Ficha Tecnica')) return;
-    await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Tecnica',type:'multilineText'})});
-  }catch(e){}
+  // Pedía el esquema por su cuenta: al arrancar salían tres lecturas del
+  // esquema completo en paralelo. Ahora las tres comparten la misma.
+  await _crearCamposFaltantes('Pedidos',[{name:'Ficha Tecnica',type:'multilineText'}]);
 }
 async function ensureFichaPropuestaField(){
   const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
-    const r=await _atHttp(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
-    if(!r.ok) return;
-    const d=await r.json();
-    const tbl=d.tables?.find(x=>x.name==='Cotizaciones');
-    if(!tbl) return;
-    if(tbl.fields?.some(x=>x.name==='Ficha Propuesta')) return;
-    await _atHttp(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Ficha Propuesta',type:'multilineText'})});
+    await _crearCamposFaltantes('Cotizaciones',[{name:'Ficha Propuesta',type:'multilineText'}]);
   }catch(e){}
 }
 async function crearCamposItemsAirtable(){

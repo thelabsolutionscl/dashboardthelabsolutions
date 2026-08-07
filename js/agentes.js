@@ -92,9 +92,10 @@ async function ensureClienteReactivadoFields(){
   try{
     const t=(typeof getToken==='function'?getToken():'')||'';
     if(!t&&typeof _proxyCfg==='function'&&!_proxyCfg()) return;
-    const tableId='tblKCNnXwAfDiKbQz';
+    // Mismo caso que ensureCotizacionFields: se pedía crear los dos campos sin
+    // mirar si ya estaban, y los dos rechazos se tragaban en silencio.
     const needed=[{name:'Reactivado',type:'checkbox',options:{icon:'check',color:'greenBright'}},{name:'Fecha reactivación',type:'date',options:{dateFormat:{name:'iso'}}}];
-    for(const c of needed){try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tableId}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});}catch(e){}}
+    await _crearCamposFaltantes('Clientes',needed);
   }catch(e){}
 }
 function _markAgentModalReactivado(){
