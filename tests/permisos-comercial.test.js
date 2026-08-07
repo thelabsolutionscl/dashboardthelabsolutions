@@ -104,6 +104,31 @@ test('las acciones de finanzas y el respaldo quedan fuera del alcance comercial'
   assert.match(fn, /canConfigRole/, 'y resolverla con el rol del usuario');
 });
 
+test('Remuneraciones es del comercial, no de los socios (decisión, no olvido)', () => {
+  // Gustavo y Nicanor son socios: hacen retiros, no cobran comisión, así que la
+  // sección no les corresponde. Parece un error de la tabla de permisos y no lo
+  // es — esta prueba existe para que nadie la "complete".
+  const i = HTML.indexOf('const RBAC={');
+  const tabla = HTML.slice(i, HTML.indexOf('nuevos:{', i));
+  const deRol = (rol) => (new RegExp(`${rol}:\\s*\\[([^\\]]*)\\]`).exec(tabla) || [])[1] || '';
+  assert.match(deRol('comercial'), /'remuneraciones'/, 'el comercial sí cobra comisión');
+  for (const rol of ['admin', 'gerencia']) {
+    assert.doesNotMatch(deRol(rol), /'remuneraciones'/, `${rol} son socios: retiros, no comisión`);
+  }
+  assert.match(HTML.slice(i, i + 900), /retiros, no cobran comisi/, 'el motivo debe quedar escrito junto a la tabla');
+});
+
+test('Newsletter y Redes son de toda la empresa y no filtran plata', () => {
+  // La audiencia es la cartera completa a propósito. Lo que no puede pasar es
+  // que por ahí se cuelen montos o márgenes de pedidos de otros vendedores.
+  const redes = fs.readFileSync(path.join(ROOT, 'js', 'redes.js'), 'utf8');
+  for (const fn of ['redesGenerateFromPedido', 'nlPopulatePedidos', 'redesPopulatePedidos', '_nlBuildContext']) {
+    const cuerpo = extraer(redes, fn);
+    assert.doesNotMatch(cuerpo, /Monto total|Total final|Subtotal|costoUnit|ventaUnit|margen/i,
+      `${fn} no puede exponer importes`);
+  }
+});
+
 test('el rol comercial no gana secciones por la puerta de atrás', () => {
   // switchTab es la única entrada a una sección: si no valida, las secciones
   // ocultas se alcanzan igual desde cualquier enlace o atajo.

@@ -15951,6 +15951,17 @@ const AUTH={
 
 // ── RBAC — Control de acceso por rol ─────────────────────────
 const RBAC={
+  // Decisiones deliberadas de esta tabla (parecen errores y no lo son):
+  //
+  // · 'remuneraciones' está en comercial pero NO en admin ni gerencia. Los
+  //   socios (Gustavo y Nicanor) hacen retiros, no cobran comisión, así que la
+  //   sección no les aplica. No agregarla "para completar".
+  //
+  // · 'newsletter' y 'redes' están en comercial a propósito, y su audiencia es
+  //   la cartera completa de la empresa. Es una herramienta de marketing común:
+  //   acotarla al vendedor la dejaría sin sentido. Solo expone empresa, correo,
+  //   N° de pedido y material — nunca montos, costos ni márgenes.
+  //
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
     admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
