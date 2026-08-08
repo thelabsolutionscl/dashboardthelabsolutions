@@ -27,9 +27,15 @@
   function buildContext(){
     try{
       const s = window.state || {};
-      const ped = s.pedidos || [];
-      const cot = s.cotizaciones || [];
-      const cli = s.clientes || [];
+      // Este panorama se inyecta en CADA mensaje a KAI, se pregunte o no. Sin
+      // acotarlo, a un comercial le bastaba con abrir el chat para recibir los
+      // ingresos acumulados, la cobranza y los últimos pedidos de toda la
+      // empresa con cliente y monto — todo lo que sus listas sí le ocultan.
+      const _av = (typeof isVendorMode==='function' && isVendorMode());
+      const _mio = r => !_av || (typeof vendorOwnsRecord!=='function') || vendorOwnsRecord(r);
+      const ped = (s.pedidos || []).filter(_mio);
+      const cot = (s.cotizaciones || []).filter(_mio);
+      const cli = (s.clientes || []).filter(_mio);
       const cliById = s.clientesById || {};
       const today = new Date(); today.setHours(0,0,0,0);
 
@@ -71,13 +77,17 @@
         return `  • Cot ${f['N° Cotización']||'—'} | ${resolveCli(f['Cliente'])} | ${f['Estado cotización']||'—'} | $${Math.round((f['Total final (CLP)']||0)/1.19).toLocaleString('es-CL')} neto`;
       }).join('\n');
 
-      return `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')}):
-- Pedidos totales: ${ped.length} | Activos: ${activos.length} | Atrasados: ${atrasados.length}
-- Cotizaciones totales: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
-- Clientes registrados: ${cli.length}
-- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP
+      // Cobranza, proveedores y máquinas son de secciones que un comercial no
+      // tiene: no se le entregan por esta vía.
+      const lineasEmpresa = _av ? '' :
+`
 - Cobranza: ${porCobrar.length} facturas por cobrar ($${sumCobrar.toLocaleString('es-CL')}) | ${vencidas.length} vencidas
-- Proveedores: ${prov.length} (${provAct} activos)${maqLine}
+- Proveedores: ${prov.length} (${provAct} activos)${maqLine}`;
+      return `DATOS EN VIVO DEL DASHBOARD (${new Date().toLocaleString('es-CL')})${_av?' — SOLO tus clientes y pedidos':''}:
+- Pedidos${_av?' tuyos':' totales'}: ${ped.length} | Activos: ${activos.length} | Atrasados: ${atrasados.length}
+- Cotizaciones${_av?' tuyas':' totales'}: ${cot.length} | Pendientes de respuesta: ${cotPend.length}
+- Clientes${_av?' tuyos':' registrados'}: ${cli.length}
+- Ingresos netos acumulados: $${revTotal.toLocaleString('es-CL')} CLP${lineasEmpresa}
 
 PEDIDOS ACTIVOS:
 ${pedRows||'  (ninguno)'}
@@ -87,6 +97,16 @@ ${cotRows||'  (ninguna)'}`;
     }catch(e){ return 'Datos del dashboard no disponibles en este momento.'; }
   }
 
+  // Los agentes que este rol sí puede correr. Se le dicen a KAI para que no
+  // ofrezca lo que después va a rechazar: la lista fija incluía los 18 y KAI
+  // proponía delegar al de finanzas a quien no tiene esa sección.
+  function _kaiAgentesPermitidos(){
+    try{
+      if(typeof AGENTES_CFG==='undefined') return 'ninguno';
+      const ok=AGENTES_CFG.filter(a=>typeof agenteVisible!=='function'||agenteVisible(a)).map(a=>a.id);
+      return ok.length?ok.join(', '):'ninguno';
+    }catch(e){return 'ninguno';}
+  }
   const SYS_RULES = () => `Eres KAI, asistente de IA del Centro de Comando de The Lab Solutions (empresa chilena de impresion 3D, letreros neon y trofeos). Tienes 14 impresoras 3D. Moneda: CLP.
 
 CAPACIDADES Y REGLAS:
@@ -97,7 +117,7 @@ CAPACIDADES Y REGLAS:
   - abrir_formulario(tipo): abre un formulario de nuevo registro. Tipos: cliente, cotizacion, proveedor, venta, diario.
   - cotizar(): abre el cotizador guiado paso a paso cuando el usuario quiere armar un presupuesto.
   - asistente(tipo): abre un asistente guiado. Tipos: cliente, proveedor, pago, mantencion, cotizar.
-  - delegar(agente, instruccion): delega a un agente y recibes su resultado para resumirlo. Agentes: SALES, QUOTE, PRODUCTION, QA, FOLLOWUP, CEO, LEADGEN, FINANCE, ONBOARDING, REPCLIENTE, CONTENT, ADS, SOCIAL_STRATEGIST, CAPTION_AGENT, COMMUNITY_AGENT, SOCIAL_ADS_AGENT, TREND_AGENT, REPORT_SOCIAL_AGENT. Usalo cuando pidan redactar, cotizar, generar checklist, reporte, analisis o contenido de redes sociales.
+  - delegar(agente, instruccion): delega a un agente y recibes su resultado para resumirlo. Agentes: ${_kaiAgentesPermitidos()}. Usalo cuando pidan redactar, cotizar, generar checklist, reporte, analisis o contenido de redes sociales.
   - sugerir_acciones(botones): cuando sea util, ofrece 1 a 3 botones de seguimiento; cada boton tiene texto (2-4 palabras que ve el usuario) y comando (lo que recibirias si lo pulsa).
   - consultar_crm(consulta, nombre, periodo): consulta datos precisos del CRM. Usala SIEMPRE que pregunten por algo concreto: un cliente o proveedor por nombre (consulta=cliente/proveedor con nombre), pedidos atrasados, cartera por cobrar, finanzas o top de clientes de un mes (periodo actual o anterior), cotizaciones pendientes o inventario bajo. Responde con las cifras que te devuelva, sin inventar.
 - Acompana SIEMPRE el uso de una herramienta con una frase breve hablada que diga lo que estas haciendo.
@@ -301,7 +321,17 @@ CAPACIDADES Y REGLAS:
   // state y helpers globales del dashboard, para que KAI responda con cifras reales.
   function _kaiConsultarCRM(input){
     input=input||{};
-    const s=window.state||{};
+    // KAI leía el estado COMPLETO: un comercial preguntándole "¿cómo vamos?"
+    // recibía pedidos, cotizaciones, clientes y el total por cobrar de toda la
+    // empresa — justo lo que sus propias listas, la búsqueda global y los
+    // agentes sí acotan. El chat era la puerta de atrás.
+    const _st=window.state||{};
+    const _av=(typeof isVendorMode==='function'&&isVendorMode());
+    const _mio=(r)=>!_av||(typeof vendorOwnsRecord!=='function')||vendorOwnsRecord(r);
+    const s=_av?{..._st,
+      pedidos:(_st.pedidos||[]).filter(_mio),
+      cotizaciones:(_st.cotizaciones||[]).filter(_mio),
+      clientes:(_st.clientes||[]).filter(_mio)}:_st;
     const clp=n=>'$'+Math.round(n||0).toLocaleString('es-CL');
     const norm=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
     const consulta=String(input.consulta||'').toLowerCase().trim();
@@ -396,7 +426,10 @@ CAPACIDADES Y REGLAS:
         const ped=s.pedidos||[];const activos=ped.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
         const at=activos.filter(p=>{const f=p.fields||{};return f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today;});
         const cotPend=(s.cotizaciones||[]).filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
-        let porCobrar=0;try{porCobrar=(typeof finGetAllFacturas==='function'?finGetAllFacturas():[]).filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);}catch(e){}
+        // La cobranza pertenece a Finanzas: si el rol no tiene esa sección, no
+        // se le entrega el total de la empresa por esta vía.
+        let porCobrar=null;
+        if(!_av) try{porCobrar=(typeof finGetAllFacturas==='function'?finGetAllFacturas():[]).filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);}catch(e){porCobrar=0;}
         return 'Resumen: '+activos.length+' pedidos activos ('+at.length+' atrasados), '+cotPend+' cotizaciones pendientes, '+clp(porCobrar)+' por cobrar, '+(s.clientes||[]).length+' clientes.';
       }
       return 'Consulta no reconocida.';
@@ -425,6 +458,9 @@ CAPACIDADES Y REGLAS:
         if(typeof AGENTES_CFG==='undefined'||typeof callClaude!=='function') return 'Los agentes no están disponibles ahora.';
         const cfg=AGENTES_CFG.find(a=>a.id===agentId);
         if(!cfg) return 'El agente '+agentId+' no existe.';
+        // Cada agente pertenece a una sección; el chat no puede ser la puerta de
+        // atrás para correr uno que el rol no tiene en la parrilla.
+        if(typeof agenteVisible==='function'&&!agenteVisible(cfg)) return 'Ese agente pertenece a una sección que este usuario no tiene.';
         addMsg('a','Delegando a '+cfg.label+'...');
         const ctx=(typeof buildAgentContext==='function'&&typeof state!=='undefined'&&state.loaded)?buildAgentContext(agentId):'';
         const result=await callClaude(cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+(input.instruccion||''));
