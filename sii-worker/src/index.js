@@ -126,10 +126,17 @@ async function handleEmitDTE(request, env) {
   // Subir al SII
   const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
 
-  // Persistir el folio consumido solo si no hubo error grave
-  if (siiResult.estado !== '-11' && siiResult.estado !== '-1') {
-    await env.FOLIOS_KV.put(`folio_${data.tipo_documento}`, String(folio));
-  }
+  // El folio se marca consumido SIEMPRE que la llamada haya llegado hasta aquí.
+  // La condición anterior (estado !== '-11' && estado !== '-1') era código
+  // muerto: uploadDTE LANZA en esos dos casos y nunca alcanzaba esta línea.
+  // La regla real es la que importa: repetir un folio que sí entró al SII
+  // produce dos documentos tributarios con el mismo número, y eso es mucho peor
+  // que perder un folio del CAF. Ante la duda, se consume.
+  await env.FOLIOS_KV.put(`folio_${data.tipo_documento}`, String(folio));
+
+  // Sin TrackID no hay constancia de que el SII haya recibido nada. Antes esto
+  // se devolvía igual que un envío exitoso y el dashboard lo daba por emitido.
+  const recibido = !!siiResult.trackid;
 
   return ok({
     dte_numero: folio,
@@ -137,6 +144,11 @@ async function handleEmitDTE(request, env) {
     trackid: siiResult.trackid,
     estado_sii: siiResult.estado,
     glosa_sii: siiResult.glosa || '',
+    recibido,
+    aviso: recibido ? null
+      : 'El SII no devolvió TrackID: no hay constancia de que haya recibido el envío. '
+      + `El folio ${folio} queda consumido para no arriesgar un número repetido. `
+      + 'Revisa en el portal del SII antes de volver a emitir.',
     pdf_url: null,  // Generación de PDF requiere paso adicional con tu proveedor
   });
 }
@@ -154,13 +166,30 @@ async function handleCafUpload(request, env) {
     return err('tipo_documento no soportado', 400);
   }
 
-  const range = parseCafRange(caf_xml);
+  let range;
+  try { range = parseCafRange(caf_xml); }
+  catch (e) { return err(e.message, 400); }
+
+  // Volver a subir el MISMO CAF no puede rebobinar el contador: los folios ya
+  // emitidos se reemitirían con el mismo número. Solo se parte del inicio del
+  // rango cuando el contador actual queda FUERA de él, que es lo que ocurre con
+  // un CAF nuevo de verdad.
+  const actual = parseInt(await env.FOLIOS_KV.get(`folio_${tipo_documento}`) || '0', 10);
+  const dentro = Number.isInteger(actual) && actual >= range.desde - 1 && actual <= range.hasta;
+  const inicio = dentro ? actual : range.desde - 1;
 
   await env.FOLIOS_KV.put(`caf_${tipo_documento}`, caf_xml);
-  // Resetea el contador al inicio del rango
-  await env.FOLIOS_KV.put(`folio_${tipo_documento}`, String(range.desde - 1));
+  await env.FOLIOS_KV.put(`folio_${tipo_documento}`, String(inicio));
 
-  return ok({ ok: true, tipo_documento, rango: range, siguiente_folio: range.desde });
+  return ok({
+    ok: true,
+    tipo_documento,
+    rango: range,
+    siguiente_folio: inicio + 1,
+    // Solo es "conservado" si de verdad se evitó un rebobinado: un contador que
+    // cae justo en desde-1 (CAF nuevo que sigue al anterior) no conservó nada.
+    contador_conservado: dentro && actual > range.desde - 1,
+  });
 }
 
 async function handleFolioStatus(tipo, env) {
@@ -199,9 +228,15 @@ async function nextFolio(tipoDTE, cafXml, env) {
   return next;
 }
 
+// Antes, un CAF que no calzara con el patrón se convertía en el rango 1–100 sin
+// decir una palabra: se habrían emitido documentos tributarios con folios que el
+// SII nunca autorizó. Un CAF ilegible tiene que detener todo.
 function parseCafRange(cafXml) {
-  const desde = parseInt((cafXml.match(/<D>(\d+)<\/D>/) || [])[1] || '1');
-  const hasta = parseInt((cafXml.match(/<H>(\d+)<\/H>/) || [])[1] || '100');
+  const desde = parseInt((String(cafXml).match(/<D>(\d+)<\/D>/) || [])[1], 10);
+  const hasta = parseInt((String(cafXml).match(/<H>(\d+)<\/H>/) || [])[1], 10);
+  if (!Number.isInteger(desde) || !Number.isInteger(hasta) || desde < 1 || hasta < desde) {
+    throw new Error('CAF inválido: no se pudo leer el rango de folios (se espera <RNG><D>desde</D><H>hasta</H></RNG>).');
+  }
   return { desde, hasta };
 }
 
@@ -225,6 +260,19 @@ function validatePayload(data) {
   if (!data.detalle?.length) throw new Error('detalle[] es requerido y no puede estar vacío');
   if (!data.totales?.neto || data.totales.neto <= 0) throw new Error('totales.neto debe ser mayor a 0');
   if (!data.totales?.total) throw new Error('totales.total es requerido');
+  // Un documento cuyos totales no cuadran lo rechaza el SII —o peor, lo acepta
+  // y queda una diferencia tributaria—. Vale la pena verlo ANTES de gastar un
+  // folio del CAF. Se admite 1 peso de holgura por redondeo del IVA.
+  const neto = Number(data.totales.neto) || 0;
+  const exento = Number(data.totales.exento) || 0;
+  const iva = Number(data.totales.iva) || 0;
+  const total = Number(data.totales.total);
+  if (!Number.isFinite(total) || Math.abs(neto + exento + iva - total) > 1) {
+    throw new Error(
+      `totales inconsistentes: neto ${neto} + exento ${exento} + IVA ${iva} = ${neto + exento + iva}, `
+      + `pero totales.total dice ${total}.`
+    );
+  }
 }
 
 function ok(data) {

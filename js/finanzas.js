@@ -2265,6 +2265,12 @@ async function emitirDTE(){
     let resp={};try{resp=await r.json();}catch(e){}
     const dteNum=resp.dte_numero||resp.folio||resp.numero||resp.id||'';
     const tipoDTE=document.getElementById('dteTipoDoc').value;
+    // Sin TrackID no hay constancia de que el SII haya recibido el envío. Antes
+    // esto se celebraba igual —"✅ DTE emitido"—, se anotaba en el pedido y se
+    // creaba la Factura con Estado SII "Enviado": un documento tributario dado
+    // por bueno sin que nadie del SII lo hubiera acusado.
+    const _trackId=resp.trackid||resp.track_id||'';
+    const _recibido=(resp.recibido!==false)&&!!_trackId;
     const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||(dteNum?cfg.webhookUrl+'/pdf/'+tipoDTE+'/'+dteNum:'');
     if(dteNum){
       // El folio ya se consumió en el SII: si aquí falla el guardado, el número
@@ -2281,16 +2287,24 @@ async function emitirDTE(){
         await airtableWrite('Facturas','POST',null,{
           'Cliente':razonSocial,'Cliente ID':cid||'','Tipo DTE':tipoDTE,'Folio':Number(dteNum)||0,
           'Fecha':hoyCL(),'Neto':neto,'IVA':iva,'Total':neto+iva,
-          'Track ID':resp.trackid||resp.track_id||'','Estado SII':resp.estado_sii||resp.estado||'Enviado',
+          'Track ID':_trackId,'Estado SII':_recibido?(resp.estado_sii||resp.estado||'Enviado'):'Sin confirmar',
           'Estado Pago':'Pendiente','Fecha Vencimiento':venc,'N° Pedido':p?.fields['N° Pedido']||''
         });
         try{await loadAllDataSilent();}catch(e){}
       }catch(e){console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);}
       renderPedidos();
     }
-    toast('\u2705 DTE emitido'+(dteNum?' \u2014 N\u00b0 '+dteNum:'')+(pdfUrl?' \u00b7 <a href="'+escapeHtml(pdfUrl)+'" target="_blank" style="color:var(--accent)">Ver PDF</a>':''),'success');
-    if(pdfUrl) window.open(pdfUrl,'_blank');
-    closeDTEModal();
+    if(_recibido){
+      toast('\u2705 DTE emitido'+(dteNum?' \u2014 N\u00b0 '+dteNum:'')+(pdfUrl?' \u00b7 <a href="'+escapeHtml(pdfUrl)+'" target="_blank" style="color:var(--accent)">Ver PDF</a>':''),'success');
+      if(pdfUrl) window.open(pdfUrl,'_blank');
+      closeDTEModal();
+    }else{
+      // El folio queda consumido igual (reemitirlo arriesga dos documentos con
+      // el mismo número), así que hay que decir exactamente qué revisar.
+      toast(escapeHtml(resp.aviso||('El SII no acus\u00f3 recibo del env\u00edo'+(dteNum?' (folio '+dteNum+')':'')+'. El folio queda consumido: rev\u00edsalo en el portal del SII antes de reemitir.')),'error');
+      const _sb=document.getElementById('dteSIIStatus');
+      if(_sb){_sb.style.color='var(--danger)';_sb.textContent='\u26a0 Sin confirmaci\u00f3n del SII'+(dteNum?' \u2014 folio '+dteNum:'')+'. No reemitas sin revisar el portal.';}
+    }
   }catch(e){toast('Error al emitir DTE: '+e.message,'error');}
   btn.disabled=false;btn.textContent='📤 Emitir DTE';
 }
