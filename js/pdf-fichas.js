@@ -30,7 +30,7 @@ function cotPlazoCorto(f){
 function buildCotizacionDoc(id){
   const c=state.cotizacionesById[id];if(!c) return null;
   const f=c.fields;const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;const cf=(clienteId?state.clientes.find(x=>x.id===clienteId):null)?.fields||{};
-  const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||hoyCL(),vto=f['Fecha vencimiento']||'—',urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
+  const num=f['N° Cotización']||'—',fecha=f['Fecha cotización']||hoyCL(),vto=f['Fecha vencimiento']||(typeof calBusinessDate==='function'?calBusinessDate(fecha,10):'—'),urgente=f['Urgencia (+25%)'],solicitud=f['Solicitud cliente (texto libre)']||'',detalle=f['Detalle productos']||'',total=f['Total final (CLP)']||0,neto=Math.round(total/1.19),iva=total-neto;
   const plazotxt=cotPlazoTexto(f)||'A coordinar con el cliente.';
   const formaPago=f['Forma de pago']||'';
   const formaDescMap={'AL CONTADO':'Pago total al momento de confirmar el pedido, vía transferencia bancaria, vale vista o cheque al día.','30 DÍAS DESDE OC':'Pago total a 30 días desde la emisión de la Orden de Compra, vía transferencia bancaria.','45 DÍAS DESDE OC':'Pago total a 45 días desde la emisión de la Orden de Compra, vía transferencia bancaria.','70% ABONO Y 30% CONTRA ENTREGA':'70% de abono al confirmar el pedido (Facturable inmediatamente), 30% restante contra entrega y conformidad de recepción, vía transferencia bancaria, vale vista o cheque al día.','50% ABONO Y 50% 30 DÍAS':'50% de abono al confirmar el pedido (Facturable inmediatamente), 50% restante a 30 días desde la Orden de Compra, vía transferencia bancaria.'};
@@ -86,7 +86,7 @@ table.items thead th:nth-child(2){text-align:center;}table.items thead th:nth-ch
 @media print{body{padding:10px 14px;}@page{margin:8mm;size:A4;}}</style></head><body>
 <div class="header"><div class="logo-area"><img loading="lazy" decoding="async" src="https://dashboard.thelab.solutions/logo-thelab-black.png" onerror="this.style.display='none'"><div class="tagline">Impresión 3D · Neones · Trofeos</div></div>
 <div class="cot-meta"><h1>Cotización</h1><div class="num">${escHtml(num)}</div><div class="fechas">Emitida: <strong>${escHtml(fecha)}</strong><br>Válida hasta: <strong>${escHtml(vto)}</strong></div></div></div>
-${urgente?'<div class="urgente-strip">⚡ Cotización con urgencia — se aplica recargo del 25%</div>':''}
+${urgente?'<div class="urgente-strip">⚡ Cotización con urgencia — producción prioritaria</div>':''}
 <div class="info-grid">
 <div class="info-box"><h3>Cliente</h3><table>${infoRow('Empresa',cf['Empresa']||resolveClienteName(f['Cliente']))}${infoRow('RUT',cf['RUT'])}${infoRow('Contacto',cf['Contacto'])}${infoRow('Teléfono',cf['Teléfono'])}${infoRow('Email',cf['Email'])}${infoRow('Dirección',cf['Dirección']||cf['Direccion'])}${infoRow('Comuna',cf['Comuna'])}${infoRow('Región',cf['Región']||cf['Region'])}</table></div>
 <div class="info-box"><h3>The Lab Solutions</h3><table>${infoRow('Web','thelab.solutions')}${infoRow('Teléfono','+56 9 7180 6142')}${infoRow('Email','hola@thelab.solutions')}${infoRow('Dirección','Zaragoza 8882, Las Condes')}${infoRow('Ciudad','Santiago, Chile')}</table></div>
@@ -341,8 +341,14 @@ async function saveFPImgCache(cotId){
     for(const c of campos){if(_fpItems[i][c]){try{cache[i+'_'+c]=await _fpImgCompress(_fpItems[i][c]);}catch(e){}}}
     if(_fpRawImages[i]?.dataUrl){try{cache[i+'_raw']=await _fpImgCompress(_fpRawImages[i].dataUrl,400);}catch(e){}}
   }
+  // Estas imágenes se generaron con IA y cada una se cobra. Si no caben en el
+  // navegador hay que decirlo: en silencio, al recargar desaparecen y se vuelven
+  // a pagar sin que nadie sepa por qué.
   try{localStorage.setItem('fp_imgs_'+cotId,JSON.stringify(cache));}
-  catch(e){console.warn('[fp cache] quota excedida, omitiendo imágenes');}
+  catch(e){
+    console.warn('[fp cache] no se pudieron guardar las imágenes:',e&&e.message);
+    try{toast('⚠ No se pudieron guardar las imágenes de la propuesta en este navegador (espacio lleno). Si recargas hay que volver a generarlas, y eso se cobra: descarga el PDF antes de salir.','error');}catch(_){}
+  }
 }
 function loadFPImgCache(cotId){
   try{
@@ -429,9 +435,15 @@ async function testIAKey(){
 }
 function saveIAConfig(){
   const o=document.getElementById('iaOpenaiKey');
-  if(o?.value.trim()) localStorage.setItem('fp_openai_key',o.value.trim());
+  const v=(o?.value||'').trim();
+  // Vaciar el campo y guardar tiene que BORRAR la key. Antes el if la dejaba
+  // intacta —seguía guardada y seguía usándose— y encima avisaba "Sin API key
+  // configurada": quien la quitaba de un computador prestado se iba creyendo
+  // que ya no estaba.
+  if(v) localStorage.setItem('fp_openai_key',v);
+  else localStorage.removeItem('fp_openai_key');
   closeIAConfigModal();
-  toast(o?.value.trim()?'OpenAI key guardada ✓':'Sin API key configurada','success');
+  toast(v?'OpenAI key guardada ✓':'API key borrada de este navegador','success');
 }
 
 // Reduce un data URL de imagen para que su base64 quepa HOLGADO en una celda de
