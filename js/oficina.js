@@ -27,6 +27,12 @@ let _ofComms=[];                            // comunicaciones recientes entre ag
 let _ofLastExec=null;                        // última ejecución registrada (para detectar handoffs/comunicación)
 let _ofCommTimer=null, _ofCelebTimer=null;   // timeouts de limpieza cancelables/coalescidos (B21)
 const _OF_COMM_MS=9000;
+// Sin latido en 24 h, una automatización deja de contar como "Activa" aunque su
+// campo Estado lo diga: el estado lo escribe el propio proceso, y un proceso
+// caído no escribe nada. Gris ("sin señal") es honesto — no es un error, es que
+// no hay evidencia. Los que tienen cadencia esperada (expectMins) se marcan
+// "Atrasado" mucho antes.
+const _OF_SIN_SENAL_MS=24*60*60*1000;
 function ofLogComm(from,to){
   if(!from||!to||from===to) return;
   const now=Date.now();
@@ -717,6 +723,16 @@ async function _renderOficina(){
       cls=_ofEstadoCls(f['Estado']) || _ofStatus(lastT).cls;            // B1: el campo Estado manda
       lbl=f['Estado']||_ofStatus(lastT).lbl;
       if(a.expectMins && lastT && (Date.now()-lastT)>a.expectMins*60000 && cls!=='of-error'){ cls='of-off'; lbl='Atrasado'; }  // atraso auto
+      // El campo Estado manda, pero no puede pintar verde sin evidencia. Se
+      // escribe una vez al crear la fila y solo lo actualiza el propio proceso
+      // al latir: si nunca latió, o dejó de hacerlo, "Activo" es una foto vieja.
+      // Verificado con datos reales: Mail API llevaba desde junio en verde sin
+      // un solo latido — la oficina decía que el correo estaba operativo sin
+      // ninguna prueba de ello.
+      if(cls==='of-work'||cls==='of-active'){
+        if(!lastT){ cls='of-off'; lbl='Sin telemetría'; }
+        else if(Date.now()-lastT>_OF_SIN_SENAL_MS){ cls='of-off'; lbl='Sin señal '+_ofAgo(lastT); }
+      }
       if(cls==='of-work') working++;
       task=(f['TareaActual']||f['Tarea Actual']||a.role).toString();
       const ej=Number(f['EjecucionesHoy']||f['Ejecuciones Hoy']||0); autoToday+=ej;   // B2
