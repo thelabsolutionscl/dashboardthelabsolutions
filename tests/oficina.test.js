@@ -1,15 +1,11 @@
 #!/usr/bin/env node
 /*
- * Oficina Virtual: que el color diga la verdad.
+ * Oficina Virtual: el semáforo, el vigilante y el panel de bloqueos.
  *
- * La oficina existe para ver de un vistazo qué está vivo. Su semáforo se
- * alimenta del campo Estado de la tabla Automations — pero ese campo lo escribe
- * el propio proceso al latir, y un proceso caído no escribe nada. Así que
- * "Activo" sin latido reciente no es un estado: es una foto vieja.
- *
- * Verificado contra la base real: Mail API llevaba desde junio marcado Activo
- * sin un solo latido registrado. La oficina afirmaba que el correo estaba
- * operativo sin ninguna evidencia.
+ * El semáforo se alimenta del campo Estado de la tabla Automations, que escribe
+ * el propio proceso al latir. Un proceso caído no escribe nada, así que "Activo"
+ * sin latido reciente no es un estado: es una foto vieja. Verificado contra la
+ * base real — Mail API llevaba desde junio en verde sin un solo latido.
  *
  * Correr:  node --test tests/oficina.test.js
  */
@@ -20,118 +16,168 @@ const fs = require('fs');
 const path = require('path');
 
 const OF = fs.readFileSync(path.join(__dirname, '..', 'js', 'oficina.js'), 'utf8');
+const HTML = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 
-function cuerpo(nombre) {
-  const i = OF.indexOf(nombre);
+function cuerpo(nombre, src) {
+  const s = src || OF;
+  const i = s.indexOf(nombre);
   assert.ok(i > 0, `debe existir ${nombre}`);
   let d = 0;
-  for (let x = OF.indexOf('{', i); x < OF.length; x++) {
-    if (OF[x] === '{') d++;
-    if (OF[x] === '}') { d--; if (!d) return OF.slice(i, x + 1); }
+  for (let x = s.indexOf('{', i); x < s.length; x++) {
+    if (s[x] === '{') d++;
+    if (s[x] === '}') { d--; if (!d) return s.slice(i, x + 1); }
   }
   assert.fail(`no se pudo cerrar ${nombre}`);
 }
 
-// Réplica del bloque que decide el estado de una automatización, montada con
-// las funciones reales del módulo.
-const estado = (() => {
-  const piezas = ['function _ofAgo(', 'function _ofStatus(', 'function _ofEstadoCls('].map(cuerpo).join('\n');
-  const bloque = `
-    function estado(a,f){
-      let cls='of-off',lbl='Sin telemetría';
-      if(f){
-        const lastT=Date.parse(f['UltimaEjecucion']||'')||0;
-        cls=_ofEstadoCls(f['Estado'])||_ofStatus(lastT).cls;
-        lbl=f['Estado']||_ofStatus(lastT).lbl;
-        if(a.expectMins&&lastT&&(Date.now()-lastT)>a.expectMins*60000&&cls!=='of-error'){cls='of-off';lbl='Atrasado';}
-        if(cls==='of-work'||cls==='of-active'){
-          if(!lastT){cls='of-off';lbl='Sin telemetría';}
-          else if(Date.now()-lastT>_OF_SIN_SENAL_MS){cls='of-off';lbl='Sin señal '+_ofAgo(lastT);}
-        }
-      }
-      return {cls,lbl};
-    }`;
-  return new Function(`${piezas}\nconst _OF_SIN_SENAL_MS=24*60*60*1000;${bloque}\nreturn estado;`)();
+// Se monta la función REAL del módulo, no una copia. Una versión anterior de
+// estas pruebas replicaba el bloque, y por eso una mutación al módulo no rompía
+// nada: pasaban en verde sobre código roto. Se detectó mutando.
+const { _ofEstadoAutomatizacion, _ofHorarioHabil } = (() => {
+  const piezas = ['function _ofAgo(', 'function _ofStatus(', 'function _ofEstadoCls(',
+                  'function _ofHorarioHabil(', 'function _ofEstadoAutomatizacion('].map((n) => cuerpo(n)).join('\n');
+  return new Function(`const _OF_SIN_SENAL_MS=24*60*60*1000;\n${piezas}\nreturn {_ofEstadoAutomatizacion,_ofHorarioHabil};`)();
 })();
 
 const ahora = () => new Date().toISOString();
 const hace = (d) => new Date(Date.now() - d * 864e5).toISOString();
 
 test('"Activo" sin un solo latido no puede pintarse en verde', () => {
-  // El caso literal de la base: fila creada con Estado=Activo y nunca actualizada.
-  const r = estado({}, { Estado: 'Activo' });
-  assert.equal(r.cls, 'of-off', 'sin telemetría no hay verde');
+  const r = _ofEstadoAutomatizacion({}, { Estado: 'Activo' });
+  assert.equal(r.cls, 'of-off');
   assert.equal(r.lbl, 'Sin telemetría');
 });
 
 test('"Activo" con el latido viejo tampoco', () => {
-  const r = estado({}, { Estado: 'Activo', UltimaEjecucion: hace(3) });
+  const r = _ofEstadoAutomatizacion({}, { Estado: 'Activo', UltimaEjecucion: hace(3) });
   assert.equal(r.cls, 'of-off');
   assert.match(r.lbl, /Sin señal hace 3d/, 'y se dice desde cuándo');
 });
 
 test('lo que sí está vivo sigue en verde', () => {
   for (const cfg of [{}, { expectMins: 90 }]) {
-    const r = estado(cfg, { Estado: 'Activo', UltimaEjecucion: ahora() });
-    assert.ok(r.cls === 'of-active' || r.cls === 'of-work', 'un latido reciente debe verse activo');
+    const r = _ofEstadoAutomatizacion(cfg, { Estado: 'Activo', UltimaEjecucion: ahora() });
+    assert.ok(r.cls === 'of-active' || r.cls === 'of-work');
     assert.equal(r.lbl, 'Activo');
   }
 });
 
 test('el que tiene cadencia esperada se marca atrasado mucho antes', () => {
-  // lead-worker late cada hora por cron: a las 3 horas ya es un problema, no
-  // hay que esperar las 24 del corte general.
-  const r = estado({ expectMins: 90 }, { Estado: 'Activo', UltimaEjecucion: hace(3 / 24) });
+  const r = _ofEstadoAutomatizacion({ expectMins: 90 }, { Estado: 'Activo', UltimaEjecucion: hace(3 / 24) });
   assert.equal(r.cls, 'of-off');
   assert.equal(r.lbl, 'Atrasado');
 });
 
-test('un error sigue mandando sobre todo lo demás', () => {
-  const r = estado({}, { Estado: 'Error de conexión', UltimaEjecucion: ahora() });
-  assert.equal(r.cls, 'of-error');
+test('sin telemetría no se reclama cadencia (no hay nada que atrasar)', () => {
+  const r = _ofEstadoAutomatizacion({ expectMins: 90 }, { Estado: 'Activo' });
+  assert.equal(r.lbl, 'Sin telemetría', 'primero falta la evidencia, no el reloj');
+});
+
+test('un error manda sobre todo lo demás', () => {
+  assert.equal(_ofEstadoAutomatizacion({}, { Estado: 'Error de conexión', UltimaEjecucion: ahora() }).cls, 'of-error');
+  // Ni la cadencia ni la falta de señal deben tapar un error explícito.
+  assert.equal(_ofEstadoAutomatizacion({ expectMins: 5 }, { Estado: 'Error', UltimaEjecucion: hace(9) }).cls, 'of-error');
 });
 
 test('"En reposo" se respeta tal cual', () => {
-  const r = estado({}, { Estado: 'En reposo' });
+  const r = _ofEstadoAutomatizacion({}, { Estado: 'En reposo' });
   assert.equal(r.cls, 'of-off');
   assert.equal(r.lbl, 'En reposo');
 });
 
-test('la lógica probada arriba es la que está en el módulo', () => {
-  // Las pruebas de comportamiento montan una réplica del bloque, porque el
-  // original vive dentro de una función enorme y no se puede aislar. Eso solo
-  // vale si la réplica y el original coinciden: si alguien toca el módulo y
-  // aquí no se refleja, estas comprobaciones dejan de decir nada.
-  assert.match(OF, /if\(cls==='of-work'\|\|cls==='of-active'\)\{/, 'el degradado se aplica solo a los estados que afirman vida');
-  assert.match(OF, /if\(!lastT\)\{ cls='of-off'; lbl='Sin telemetría'; \}/, 'sin latido, gris');
-  assert.match(OF, /else if\(Date\.now\(\)-lastT>_OF_SIN_SENAL_MS\)\{ cls='of-off'; lbl='Sin señal '\+_ofAgo\(lastT\); \}/, 'con latido viejo, gris');
-  assert.match(OF, /if\(a\.expectMins && lastT && \(Date\.now\(\)-lastT\)>a\.expectMins\*60000 && cls!=='of-error'\)/, 'y la cadencia esperada se sigue respetando');
+test('al proxy solo se le exige cadencia en horario de trabajo', () => {
+  // Late a golpe de uso del dashboard, no por reloj: exigirle un domingo a las
+  // 3 AM sería gritar por nada, y una alarma que grita sin motivo se ignora.
+  const cfg = { expectMins: 45, soloHabil: true };
+  const mudo = { Estado: 'Activo', UltimaEjecucion: new Date(Date.now() - 2 * 3600e3).toISOString() };
+  const r = _ofEstadoAutomatizacion(cfg, mudo);
+  if (_ofHorarioHabil()) assert.equal(r.lbl, 'Atrasado', 'en hábil sí se le exige');
+  else assert.equal(r.lbl, 'Activo', 'fuera de hábil no se le exige nada');
+  // Un domingo a las 4 de la mañana nunca es horario hábil.
+  assert.equal(_ofHorarioHabil(new Date('2026-08-09T08:00:00Z')), false, 'domingo de madrugada');
+  // Un martes a mediodía sí.
+  assert.equal(_ofHorarioHabil(new Date('2026-08-11T16:00:00Z')), true, 'martes al mediodía');
+  assert.match(OF, /expectMins:45, soloHabil:true/, 'el proxy debe declararlo');
 });
 
-test('el corte por falta de señal está declarado y es razonable', () => {
-  assert.match(OF, /const _OF_SIN_SENAL_MS=24\*60\*60\*1000;/, 'debe existir el umbral');
-  // El degradado tiene que ocurrir ANTES de contar "trabajando", o el resumen
-  // seguiría inflado aunque la tarjeta se vea gris.
-  const i = OF.indexOf("if(!lastT){ cls='of-off'; lbl='Sin telemetría'; }");
+test('el degradado ocurre antes de contar quién trabaja', () => {
+  // Si no, el resumen seguiría inflado aunque la tarjeta se vea gris.
+  const i = OF.indexOf('const st=_ofEstadoAutomatizacion(a,f);');
   const j = OF.indexOf("if(cls==='of-work') working++;", i);
-  assert.ok(i > 0 && j > i, 'el conteo de trabajando va después del degradado');
+  assert.ok(i > 0 && j > i);
+});
+
+test('el vigilante avisa solo en los cambios', () => {
+  // Verificado además en navegador: 0 avisos en la primera lectura, 0 sin
+  // cambios, 1 al caerse y 1 al recuperarse.
+  const fn = cuerpo('function _ofVigilar(');
+  assert.match(fn, /if\(antes===undefined\) continue;/, 'la primera lectura no avisa de nada');
+  assert.match(fn, /if\(antes===m\.cls\) continue;/, 'sin cambios, silencio');
+  assert.match(fn, /_ofSano\(antes\)&&!_ofSano\(m\.cls\)/, 'avisa al caerse');
+  assert.match(fn, /!_ofSano\(antes\)&&_ofSano\(m\.cls\)/, 'y al recuperarse');
+  assert.match(fn, /localStorage\.setItem\(_OF_VIG_KEY/, 'el estado previo sobrevive a la recarga');
+});
+
+test('el vigilante corre en segundo plano sin gastar de más', () => {
+  const remoto = cuerpo('async function _ofVigilarRemoto(');
+  assert.match(remoto, /if\(document\.hidden\|\|!navigator\.onLine\) return;/, 'no consulta con la ventana oculta');
+  assert.match(remoto, /airtableFetch\('Automations',\s*50\)/, 'solo lee la tabla que necesita');
+  const start = cuerpo('function startOficinaWatch(');
+  assert.match(start, /clearInterval\(_ofVigTimer\)/, 'no apila temporizadores');
+  assert.match(start, /10\*60\*1000/, 'cada 10 minutos');
+  // Y tiene que arrancar con el dashboard, no solo al abrir la Oficina: el
+  // sentido es enterarse estando en otra sección.
+  assert.match(HTML, /startOficinaWatch\(\)/, 'debe arrancarse en el init');
+});
+
+test('el modo taller se puede dejar fijo en una pantalla', () => {
+  const auto = cuerpo('function _ofAutoTaller(');
+  const re = /\(\^\|\[#&\?\]\)taller\(=1\)\?\\b/;
+  assert.match(auto, re, 'debe reconocer #taller y ?taller=1');
+  // Comprobado en navegador que #tallerx y #detalle NO lo activan.
+  const modo = cuerpo('function ofModoTaller(');
+  assert.match(modo, /switchTab\('oficina'\)/);
+  assert.match(modo, /ofSetView\('iso'\)/, 'entra en la vista isométrica');
+  assert.match(modo, /ofFullscreen\(\)/);
+  assert.match(modo, /_ofMantenerPantalla\(true\)/, 'y evita que el monitor se duerma');
+  const wake = cuerpo('async function _ofMantenerPantalla(');
+  assert.match(wake, /navigator\.wakeLock/);
+  assert.match(wake, /catch\(e\)\{ _ofWakeLock=null; \}/, 'sin soporte, el modo taller igual funciona');
+});
+
+test('el panel de bloqueos mira lo que NO avanza', () => {
+  const fn = cuerpo('function _ofBloqueos(');
+  // Las cinco cosas que frenan el trabajo, todas de datos ya cargados.
+  assert.match(fn, /Fecha entrega'\]\+'T00:00:00'\)<hoy/, 'pedidos pasados de fecha');
+  assert.match(fn, /==='Listo para despacho'/, 'listos sin despachar');
+  assert.match(fn, /!f\['Fecha entrega'\]/, 'activos sin fecha');
+  assert.match(fn, /dias\(d\)>=7/, 'cotizaciones frías');
+  assert.match(fn, /Punto de reorden/, 'material bajo mínimo');
+  assert.match(fn, /sort\(\(a,b\)=>b\.sev-a\.sev\)/, 'lo más urgente primero');
+  // Respeta el alcance del vendedor, como el resto del dashboard.
+  assert.match(fn, /isVendorMode/, 'y el alcance del vendedor');
+  assert.match(fn, /vendorOwnsRecord/);
+});
+
+test('los atajos del panel no llevan a secciones vetadas', () => {
+  const fn = cuerpo('function _ofRenderBloqueos(');
+  assert.match(fn, /RBAC\.tabs\[u\.role\]/, 'debe consultarse el rol');
+  assert.match(fn, /const puede=!permitidas\|\|permitidas\.includes\(b\.tab\)/);
+  assert.match(fn, /Nada frenado/, 'y decir cuando no hay nada que frene');
 });
 
 test('el sondeo no se apila ni corre con la pestaña oculta', () => {
   const start = cuerpo('function startOficinaPolling(');
-  assert.match(start, /clearInterval\(_oficinaInterval\);\s*_oficinaInterval=setInterval/, 'debe limpiarse antes de armar');
-  assert.match(start, /if\(!document\.hidden\)/, 'no debe refrescar con la pestaña oculta');
+  assert.match(start, /clearInterval\(_oficinaInterval\);\s*_oficinaInterval=setInterval/);
+  assert.match(start, /if\(!document\.hidden\)/);
   const stop = cuerpo('function stopOficinaPolling(');
   assert.match(stop, /clearInterval\(_oficinaInterval\)/);
   assert.match(stop, /_oficinaInterval=null/);
 });
 
 test('si Airtable falla, la oficina lo dice en vez de fingir', () => {
-  // Es lo contrario de lo que hacía Inventario: aquí sí estaba bien resuelto.
-  assert.match(OF, /_ofErr=true/, 'debe registrarse el fallo de lectura');
-  // El aviso tiene que ESCRIBIRSE en el banner, no solo existir como texto en
-  // algún tooltip: la primera versión de esta prueba pasaba con el banner vacío.
+  assert.match(OF, /_ofErr=true/);
   assert.match(OF, /errEl\.textContent='⚠ Sin conexión con Airtable[^']*'/, 'el banner debe decirlo');
   assert.match(OF, /errEl\.style\.display=''/, 'y hacerse visible');
-  assert.match(OF, /Datos en caché/, 'con un distintivo visible');
+  assert.match(OF, /Datos en caché/);
 });

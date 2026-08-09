@@ -10,7 +10,10 @@ const AUTOMATIONS_CFG=[
   {id:'sii-worker',     label:'SII Worker',     icon:'🧾', role:'Sincroniza documentos tributarios (SII)', tipo:'Cloudflare Worker'},
   {id:'printer-bridge', label:'Printer Bridge', icon:'🖨️', role:'Puente de impresión hacia la planta',   tipo:'Bridge local'},
   {id:'mail-api',       label:'Mail API',       icon:'✉️', role:'Envío y recepción de correo',           tipo:'API PHP'},
-  {id:'airtable-proxy', label:'Airtable Proxy', icon:'🛡️', role:'Proxy seguro Airtable + Claude',         tipo:'Cloudflare Worker'},
+  // El proxy late en CADA acción del dashboard, no por reloj: si estás
+  // trabajando y lleva 45 min mudo, algo se rompió. Fuera de horario no se le
+  // exige nada — nadie lo está usando.
+  {id:'airtable-proxy', label:'Airtable Proxy', icon:'🛡️', role:'Proxy seguro Airtable + Claude',         tipo:'Cloudflare Worker', expectMins:45, soloHabil:true},
 ];
 let _oficinaInterval=null, _oficinaBusy=false;
 const _ofActive=new Set();                 // agentes IA ejecutándose AHORA (en memoria, en vivo)
@@ -33,6 +36,40 @@ const _OF_COMM_MS=9000;
 // no hay evidencia. Los que tienen cadencia esperada (expectMins) se marcan
 // "Atrasado" mucho antes.
 const _OF_SIN_SENAL_MS=24*60*60*1000;
+// ¿Estamos en horario de trabajo en Chile? Se usa para las automatizaciones que
+// solo laten cuando alguien usa el dashboard: exigirles cadencia un domingo a
+// las 3 AM sería gritar por nada, y una alarma que grita sin motivo se ignora.
+function _ofHorarioHabil(d){
+  try{
+    const f=new Intl.DateTimeFormat('en-US',{timeZone:'America/Santiago',weekday:'short',hour:'2-digit',hour12:false}).formatToParts(d||new Date());
+    const dia=(f.find(x=>x.type==='weekday')||{}).value||'';
+    const h=parseInt((f.find(x=>x.type==='hour')||{}).value,10);
+    return !['Sat','Sun'].includes(dia) && h>=9 && h<19;
+  }catch(e){ return true; }   // sin husos, no bloquear la comprobación
+}
+// Estado de una automatización a partir de su fila de la tabla Automations.
+// Vive aparte porque lo usan dos sitios: el render de la oficina y el vigilante
+// que avisa cuando algo se cae con la pestaña cerrada.
+function _ofEstadoAutomatizacion(a,f){
+  if(!f) return {cls:'of-off', lbl:'Sin telemetría'};
+  const lastT=Date.parse(f['UltimaEjecucion']||f['Ultima Ejecucion']||f['Fecha']||'')||0;
+  let cls=_ofEstadoCls(f['Estado']) || _ofStatus(lastT).cls;        // el campo Estado manda
+  let lbl=f['Estado']||_ofStatus(lastT).lbl;
+  // Cadencia esperada. Las marcadas soloHabil solo se exigen en horario de
+  // trabajo, porque laten a golpe de uso y no por reloj.
+  if(a.expectMins && lastT && cls!=='of-error' && (!a.soloHabil || _ofHorarioHabil()) && (Date.now()-lastT)>a.expectMins*60000){
+    cls='of-off'; lbl='Atrasado';
+  }
+  // El campo Estado manda, pero no puede pintar verde sin evidencia. Se escribe
+  // una vez al crear la fila y solo lo actualiza el propio proceso al latir: si
+  // nunca latió, o dejó de hacerlo, "Activo" es una foto vieja. Verificado con
+  // datos reales: Mail API llevaba desde junio en verde sin un solo latido.
+  if(cls==='of-work'||cls==='of-active'){
+    if(!lastT){ cls='of-off'; lbl='Sin telemetría'; }
+    else if(Date.now()-lastT>_OF_SIN_SENAL_MS){ cls='of-off'; lbl='Sin señal '+_ofAgo(lastT); }
+  }
+  return {cls,lbl};
+}
 function ofLogComm(from,to){
   if(!from||!to||from===to) return;
   const now=Date.now();
@@ -185,6 +222,124 @@ function ofAutoInfo(el){ const id=el?.dataset?.autoId||''; const a=AUTOMATIONS_C
   }
   toast(id||'Elemento','info'); }
 // Refresca la Oficina forzando datos frescos (el polling usa caché corta; el botón manual la invalida)
+/* ── Vigilante de automatizaciones ────────────────────────────────────────
+ * La Oficina solo se refresca con su pestaña abierta, así que un worker podía
+ * caerse el lunes y enterarte el jueves al pasar por ahí. Esto revisa el estado
+ * cada 10 minutos aunque estés en Pedidos, y avisa SOLO en los cambios: cuando
+ * algo sano deja de estarlo, y cuando se recupera. Sin cambios, silencio.
+ */
+const _OF_VIG_KEY='thelab_oficina_estados_v1';
+let _ofVigTimer=null;
+const _ofSano=cls=>cls==='of-work'||cls==='of-active';
+function _ofVigilar(modelo){
+  if(!Array.isArray(modelo)||!modelo.length) return;
+  let previo={};
+  try{previo=JSON.parse(localStorage.getItem(_OF_VIG_KEY)||'{}')||{};}catch(e){}
+  const ahora={};
+  for(const m of modelo){
+    if(!m||!m.id) continue;
+    ahora[m.id]=m.cls;
+    const antes=previo[m.id];
+    if(antes===undefined) continue;                 // primera vez: no se avisa de nada
+    if(antes===m.cls) continue;
+    try{
+      if(_ofSano(antes)&&!_ofSano(m.cls)){
+        NOTIFY.add(m.cls==='of-error'?'warning':'info',
+          `⚠ ${m.label}: ${m.lbl}`,
+          'Estaba operativo y dejó de responder',
+          'oficina',{key:'of-caida-'+m.id});
+      }else if(!_ofSano(antes)&&_ofSano(m.cls)){
+        NOTIFY.add('success',`✓ ${m.label} volvió a responder`,m.lbl,'oficina',{key:'of-ok-'+m.id});
+      }
+    }catch(e){}
+  }
+  try{localStorage.setItem(_OF_VIG_KEY,JSON.stringify(ahora));}catch(e){}
+}
+// Comprobación ligera en segundo plano: solo la tabla Automations, y solo con la
+// ventana visible (no gasta cuota con el navegador minimizado).
+async function _ofVigilarRemoto(){
+  try{
+    if(document.hidden||!navigator.onLine) return;
+    if(typeof hasAirtableAccess==='function'&&!hasAirtableAccess()) return;
+    const r=await airtableFetch('Automations',50);
+    const porId={};(r.records||[]).forEach(x=>{const k=String(x.fields['ID']||x.fields['Nombre']||'').toLowerCase();if(k)porId[k]=x.fields;});
+    const modelo=AUTOMATIONS_CFG.map(a=>{
+      const f=porId[a.id.toLowerCase()]||porId[(a.label||'').toLowerCase()]||null;
+      const st=_ofEstadoAutomatizacion(a,f);
+      return {id:a.id,label:a.label,cls:st.cls,lbl:st.lbl};
+    });
+    _ofVigilar(modelo);
+  }catch(e){}   // best-effort: un fallo aquí no debe estorbar el resto
+}
+function startOficinaWatch(){
+  clearInterval(_ofVigTimer);
+  _ofVigTimer=setInterval(_ofVigilarRemoto,10*60*1000);
+  setTimeout(_ofVigilarRemoto,20000);   // primera pasada al poco de cargar
+}
+/* ── Qué está frenado hoy ─────────────────────────────────────────────────
+ * La Oficina mostraba quién está activo. Lo accionable es lo contrario: qué NO
+ * avanza. Todo sale de datos ya cargados, así que no cuesta una sola petición.
+ * Respeta el alcance del vendedor, igual que el resto del dashboard.
+ */
+function _ofBloqueos(){
+  const av=(typeof isVendorMode==='function'&&isVendorMode());
+  const mio=r=>!av||(typeof vendorOwnsRecord!=='function')||vendorOwnsRecord(r);
+  const P=((typeof state!=='undefined'&&state.pedidos)||[]).filter(mio);
+  const C=((typeof state!=='undefined'&&state.cotizaciones)||[]).filter(mio);
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const dias=d=>Math.floor((hoy-new Date(d+'T00:00:00'))/864e5);
+  const cerrado=e=>['Despachado','Completado','Cancelado'].includes(e||'');
+  const out=[];
+
+  const atrasados=P.filter(p=>{const f=p.fields;return !cerrado(f['Estado pedido'])&&f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<hoy;});
+  if(atrasados.length) out.push({sev:3,icon:'🔴',txt:`${atrasados.length} pedido${atrasados.length>1?'s':''} pasado${atrasados.length>1?'s':''} de su fecha de entrega`,
+    detalle:atrasados.slice(0,3).map(p=>`${p.fields['N° Pedido']||''} (${dias(p.fields['Fecha entrega'])}d)`).join(' · '),tab:'pedidos'});
+
+  const listos=P.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho');
+  if(listos.length) out.push({sev:2,icon:'📦',txt:`${listos.length} pedido${listos.length>1?'s':''} listo${listos.length>1?'s':''} esperando despacho`,
+    detalle:listos.slice(0,3).map(p=>p.fields['N° Pedido']||'').filter(Boolean).join(' · '),tab:'pedidos'});
+
+  const sinFecha=P.filter(p=>{const f=p.fields;return !cerrado(f['Estado pedido'])&&!f['Fecha entrega'];});
+  if(sinFecha.length) out.push({sev:1,icon:'📅',txt:`${sinFecha.length} pedido${sinFecha.length>1?'s':''} activo${sinFecha.length>1?'s':''} sin fecha de entrega`,
+    detalle:'No se pueden planificar',tab:'pedidos'});
+
+  // Una cotización enviada que lleva más de una semana sin respuesta necesita
+  // que alguien la empuje: es donde se pierde plata sin que se note.
+  const frias=C.filter(c=>{const f=c.fields;if((f['Estado cotización']||'')!=='Enviada')return false;
+    const d=f['Fecha cotización'];return d&&dias(d)>=7;});
+  if(frias.length) out.push({sev:2,icon:'💬',txt:`${frias.length} cotizacion${frias.length>1?'es':''} enviada${frias.length>1?'s':''} sin respuesta hace +7 días`,
+    detalle:frias.slice(0,3).map(c=>`${c.fields['N° Cotización']||''} (${dias(c.fields['Fecha cotización'])}d)`).join(' · '),tab:'cotizaciones'});
+
+  const bajos=((typeof state!=='undefined'&&state.inventario)||[]).filter(m=>{
+    const s=+m.fields['Stock actual']||0,ro=+m.fields['Punto de reorden']||0;
+    return s<=0||(ro>0&&s<=ro);});
+  if(bajos.length) out.push({sev:2,icon:'📉',txt:`${bajos.length} material${bajos.length>1?'es':''} en o bajo el punto de reorden`,
+    detalle:bajos.slice(0,3).map(m=>m.fields['Material']||'').filter(Boolean).join(' · '),tab:'inventario'});
+
+  return out.sort((a,b)=>b.sev-a.sev);
+}
+function _ofRenderBloqueos(){
+  const el=document.getElementById('oficinaBloqueos'); if(!el) return;
+  let items=[];
+  try{items=_ofBloqueos();}catch(e){}
+  // Solo se ofrecen los atajos a secciones que el rol tenga.
+  const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;
+  const permitidas=u?((typeof RBAC!=='undefined'&&RBAC.tabs[u.role])||[]):null;
+  if(!items.length){
+    el.innerHTML='<div class="of-bloq-ok">✓ Nada frenado — todo va al día</div>';
+    el.style.display=''; return;
+  }
+  el.innerHTML=items.map(b=>{
+    const puede=!permitidas||permitidas.includes(b.tab);
+    const cls=b.sev>=3?'of-bloq-alto':(b.sev===2?'of-bloq-medio':'of-bloq-bajo');
+    const accion=puede?`onclick="switchTab('${b.tab}')" style="cursor:pointer"`:'';
+    return `<div class="of-bloq ${cls}" ${accion} title="${puede?'Ir a '+b.tab:''}">
+      <span class="of-bloq-ico">${b.icon}</span>
+      <span class="of-bloq-txt">${escapeHtml(b.txt)}${b.detalle?`<span class="of-bloq-det">${escapeHtml(b.detalle)}</span>`:''}</span>
+    </div>`;
+  }).join('');
+  el.style.display='';
+}
 function refreshOficina(){ _ofRunsCache={t:0,data:null}; _ofQueueCache={t:0,len:null}; _ofAutoCache={t:0,data:null}; _ofMaqCache={t:0,data:null}; _ofInvCache={t:0,data:null};
   const _iso=document.getElementById('oficinaIso'); if(_iso) _iso.dataset.sig='';   // fuerza reconstruir la escena 3D aunque los datos coincidan
   renderOficina(); try{toast('Oficina actualizada','success');}catch(e){}
@@ -503,6 +658,44 @@ function ofFullscreen(){
     else { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
   } else { _ofToggleFsCss(el); }   // navegador sin Fullscreen API → fallback CSS
 }
+/* ── Modo taller ──────────────────────────────────────────────────────────
+ * Para dejar la Oficina puesta en una pantalla del taller. Abriendo el
+ * dashboard con #taller (o ?taller=1) entra solo: va a la Oficina, vista
+ * isométrica, pantalla completa y con el recorrido automático de cámara que ya
+ * existía. Se marca la URL una vez en el navegador de esa pantalla y listo.
+ * Además pide mantener la pantalla encendida, o el monitor se duerme y hay que
+ * ir a moverle el mouse — que es justo lo que se quiere evitar.
+ */
+let _ofWakeLock=null;
+async function _ofMantenerPantalla(on){
+  try{
+    if(on){
+      if(_ofWakeLock||!navigator.wakeLock) return;
+      _ofWakeLock=await navigator.wakeLock.request('screen');
+      // El sistema lo suelta al minimizar o cambiar de pestaña: se repide al volver.
+      _ofWakeLock.addEventListener('release',()=>{_ofWakeLock=null;});
+    }else if(_ofWakeLock){ await _ofWakeLock.release(); _ofWakeLock=null; }
+  }catch(e){ _ofWakeLock=null; }   // sin soporte o denegado: el modo taller igual funciona
+}
+document.addEventListener('visibilitychange',()=>{
+  const el=document.getElementById('tab-oficina');
+  const fs=el&&(el.classList.contains('of-fs')||(document.fullscreenElement===el));
+  if(!document.hidden&&fs) _ofMantenerPantalla(true);
+});
+function ofModoTaller(){
+  try{
+    if(typeof switchTab==='function') switchTab('oficina');
+    ofSetView('iso');
+    setTimeout(()=>{ try{ ofFullscreen(); }catch(e){} _ofMantenerPantalla(true); },600);
+  }catch(e){}
+}
+// Arranque automático cuando la URL lo pide (la pantalla del taller la deja fija).
+function _ofAutoTaller(){
+  try{
+    const pide=/(^|[#&?])taller(=1)?\b/.test(location.hash+location.search);
+    if(pide) setTimeout(ofModoTaller,1500);   // espera a que el dashboard termine de montar
+  }catch(e){}
+}
 let _ofWasFs=false;   // ¿la Oficina fue la que entró a pantalla completa? (evita reaccionar a fullscreen de otros módulos)
 // En pantalla completa sólo se renderiza lo que está DENTRO del elemento fullscreen (top-layer);
 // además el fallback CSS usa z-index 99999 > modales (10000). Mover los modales de la Oficina y
@@ -720,19 +913,8 @@ async function _renderOficina(){
     let cls='of-off', lbl='Sin telemetría', task=a.role, stats=a.tipo;
     if(f){
       const lastT=Date.parse(f['UltimaEjecucion']||f['Ultima Ejecucion']||f['Fecha']||'')||0;
-      cls=_ofEstadoCls(f['Estado']) || _ofStatus(lastT).cls;            // B1: el campo Estado manda
-      lbl=f['Estado']||_ofStatus(lastT).lbl;
-      if(a.expectMins && lastT && (Date.now()-lastT)>a.expectMins*60000 && cls!=='of-error'){ cls='of-off'; lbl='Atrasado'; }  // atraso auto
-      // El campo Estado manda, pero no puede pintar verde sin evidencia. Se
-      // escribe una vez al crear la fila y solo lo actualiza el propio proceso
-      // al latir: si nunca latió, o dejó de hacerlo, "Activo" es una foto vieja.
-      // Verificado con datos reales: Mail API llevaba desde junio en verde sin
-      // un solo latido — la oficina decía que el correo estaba operativo sin
-      // ninguna prueba de ello.
-      if(cls==='of-work'||cls==='of-active'){
-        if(!lastT){ cls='of-off'; lbl='Sin telemetría'; }
-        else if(Date.now()-lastT>_OF_SIN_SENAL_MS){ cls='of-off'; lbl='Sin señal '+_ofAgo(lastT); }
-      }
+      const st=_ofEstadoAutomatizacion(a,f);
+      cls=st.cls; lbl=st.lbl;
       if(cls==='of-work') working++;
       task=(f['TareaActual']||f['Tarea Actual']||a.role).toString();
       const ej=Number(f['EjecucionesHoy']||f['Ejecuciones Hoy']||0); autoToday+=ej;   // B2
@@ -805,6 +987,7 @@ async function _renderOficina(){
   _ofTeamLastT=(runs&&runs.length&&runs[0].t)?runs[0].t:0; _ofTickTeamLast();
   _ofKpiSnap={working,runsToday,queue:queueLen};                              // snapshot para la pantalla de pared del 3D
   _ofTickBoard();
+  try{_ofRenderBloqueos();}catch(e){}
   // Franja de insight bajo los KPIs (comparación vs semana pasada, pico y líder del día)
   const insEl=document.getElementById('oficinaInsight');
   if(insEl){
