@@ -2209,6 +2209,21 @@ self.onmessage=function(ev){
     xhr.send(fd);
   }
   function _money(n){return '$'+Math.round(n||0).toLocaleString('es-CL');}
+  // Un solo lugar para el margen objetivo y para el precio. El panel de costo lo
+  // acotaba a 0–95 y lo guardaba en sl_margen_obj; el traspaso a cotización no
+  // acotaba nada y leía OTRA clave (cot_margen_min, que es el piso de margen de
+  // las cotizaciones, otra cosa). Con `||`, escribir 0 % caía al respaldo y la
+  // cotización decía 25 %; escribir 150 % dejaba el precio igual al costo —o sea
+  // cotizar sin margen— mientras el panel mostraba otra cifra.
+  function _margenObj(){
+    const e=el('slMargen');
+    let v=(e&&String(e.value).trim()!=='')?+e.value:parseFloat(localStorage.getItem('sl_margen_obj'));
+    if(!isFinite(v))v=25;
+    return Math.max(0,Math.min(95,v));
+  }
+  // precio = costo / (1 - margen); el divisor se acota para que el tope de 95 %
+  // no termine en división por cero ni en un precio de 0.
+  function _precioSug(costo,m){return (costo||0)/Math.max(0.05,1-m/100);}
   function costRecalc(){
     const pk=+(el('slPriceKg')?.value)||0,rh=+(el('slRateH')?.value)||0;
     try{localStorage.setItem('sl_price_kg',pk);localStorage.setItem('sl_rate_h',rh);}catch(e){}
@@ -2217,10 +2232,10 @@ self.onmessage=function(ev){
     const out=el('slCostOut');
     if(out)out.innerHTML=`<b style="color:var(--accent3);font-size:16px">${_money(tot)}</b> <span style="color:var(--text3);font-size:10px">= filamento ${_money(fc)} + máquina ${_money(tc)}</span>`;
     // Precio sugerido al margen objetivo del taller (precio = costo / (1 - margen))
-    const mEl=el('slMargen');const m=Math.max(0,Math.min(95,+(mEl?.value)||0));
+    const mEl=el('slMargen');const m=_margenObj();
     try{if(mEl)localStorage.setItem('sl_margen_obj',m);}catch(e){}
     const sug=el('slPriceSuggest');
-    if(sug){const precio=m<95?tot/(1-m/100):0;sug.innerHTML=precio>0?`<b style="color:var(--accent);font-size:14px">${_money(precio)}</b> <span style="color:var(--text3);font-size:9px">+ IVA = ${_money(precio*1.19)}</span>`:'—';}
+    if(sug){const precio=_precioSug(tot,m);sug.innerHTML=tot>0?`<b style="color:var(--accent);font-size:14px">${_money(precio)}</b> <span style="color:var(--text3);font-size:9px">+ IVA = ${_money(precio*1.19)}</span>`:'—';}
   }
   // ── Vista previa del G-code por capas ───────────────────────
   function _parseGcodeLayers(){
@@ -2420,21 +2435,46 @@ self.onmessage=function(ev){
     a.download=gcodeFileName();a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
   }
-  function enviar(){
-    const id=el('slTarget')?.value;if(!id||!S.gcode)return;
+  // El G-code se laminó para UN modelo concreto: lleva dentro el tamaño de esa
+  // cama, su aceleración y su G-code de arranque. Mandarlo a una máquina más
+  // chica es estrellar el cabezal contra el marco, y no había nada que lo
+  // impidiera: el selector deja elegir cualquier impresora.
+  function _cabeEn(m){
+    const spec=SPECS[m&&m.modelo];
+    if(!spec||!S.stats)return true;   // modelo desconocido: no se puede afirmar que NO cabe
+    return fitsIn(spec);              // exactamente la misma regla que al laminar, no una copia
+  }
+  function _destinoOk(m){
+    const laminado=el('slPrinter')?.value;
+    if(!m||!m.modelo||m.modelo===laminado)return true;
+    if(!_cabeEn(m)){
+      const st=S.stats;
+      toast(`No se envía: la pieza (${st.dx.toFixed(0)}×${st.dy.toFixed(0)}×${st.dz.toFixed(0)}mm) no cabe en ${m.nombre} #${m.numG}, que es ${m.modelo}. Lamina para esa impresora.`,'error');
+      return false;
+    }
+    return confirm(`Este G-code se laminó para ${laminado} y lo vas a mandar a ${m.nombre} #${m.numG}, que es ${m.modelo}.\n\nCabe en la cama, pero la aceleración y el G-code de arranque son los de ${laminado}.\n\n¿Enviar igual?`);
+  }
+  // idExplicito: al enviar a varias, cada llamada trae SU impresora. Antes la
+  // función no recibía nada y siempre leía el selector, así que "enviar a todas"
+  // mandaba el mismo archivo N veces a la misma máquina.
+  function enviar(idExplicito,yaChequeado){
+    const id=idExplicito||el('slTarget')?.value;if(!id||!S.gcode)return;
     const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);
     if(!ip){toast('Esa impresora no tiene IP configurada','error');return;}
+    if(!yaChequeado&&!_destinoOk(m))return;
     const fname=gcodeFileName(),autoStart=el('slAutoStart')?.checked;
-    const btn=el('slBtnSend');btn.disabled=true;btn.textContent='⏳ Subiendo…';
+    // Con varias en vuelo el botón es uno solo: no se toca desde los envíos en lote.
+    const btn=idExplicito?null:el('slBtnSend');
+    if(btn){btn.disabled=true;btn.textContent='⏳ Subiendo…';}
     const fd=new FormData();
     fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);
     fd.append('root','gcodes');
     const xhr=new XMLHttpRequest();
     xhr.open('POST',printerUrl(ip,'/server/files/upload'));
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
-    xhr.upload.onprogress=ev=>{if(ev.lengthComputable)btn.textContent='⏳ '+Math.round(ev.loaded/ev.total*100)+'%';};
+    xhr.upload.onprogress=ev=>{if(btn&&ev.lengthComputable)btn.textContent='⏳ '+Math.round(ev.loaded/ev.total*100)+'%';};
     xhr.onload=async()=>{
-      btn.disabled=false;btn.textContent='📤 Enviar a impresora';
+      if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}
       if(xhr.status>=200&&xhr.status<300){
         toast(`✓ ${fname} subido a ${m.nombre} #${m.numG}`,'success');
         if(autoStart){
@@ -2446,7 +2486,7 @@ self.onmessage=function(ev){
         }
       }else toast('Error al subir ('+xhr.status+')','error');
     };
-    xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Enviar a impresora';toast('Impresora inaccesible — revisa modo Local/Remoto y el túnel','error');};
+    xhr.onerror=()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}toast(`${m.nombre} #${m.numG}: impresora inaccesible — revisa modo Local/Remoto y el túnel`,'error');};
     xhr.send(fd);
   }
   function encolar(){
@@ -2470,14 +2510,20 @@ self.onmessage=function(ev){
     // Costo y precio sugerido (mismo cálculo que el panel de costo) para llevarlo como referencia a la cotización
     const pk=+(el('slPriceKg')?.value)||+localStorage.getItem('sl_price_kg')||15000;
     const rh=+(el('slRateH')?.value)||+localStorage.getItem('sl_rate_h')||1500;
-    const mg=+(el('slMargen')?.value)||+localStorage.getItem('cot_margen_min')||25;
+    const mg=_margenObj();
     const costo=S.est.grams/1000*pk+secs/3600*rh;
-    const precio=mg<95?costo/(1-mg/100):costo;
+    const precio=_precioSug(costo,mg);
     if(typeof switchTab==='function')switchTab('nueva-cot');
     setTimeout(()=>{
-      const obs=document.getElementById('cotObs')||document.querySelector('textarea[id*="obs"],textarea[placeholder*="observ" i]');
-      if(obs)obs.value=`Impresión 3D: ${nom} — Material: ${matName}, ~${grams}g, ~${typeof fmtTime==='function'?fmtTime(secs):Math.round(secs/60)+'min'} · Costo est. ${_money(costo)} · Precio sugerido ${_money(precio)} (margen ${mg}%, neto)`;
-      toast('Datos del slicer copiados a cotización','success');
+      // Iba a un id que NO existe (cotObs) y caía a un selector por placeholder
+      // que enganchaba "Notas de producción" de la ficha, en la pestaña Pedidos:
+      // escribía ahí —pisando lo que hubiera— y avisaba "copiado a cotización".
+      const linea=`Impresión 3D: ${nom} — Material: ${matName}, ~${grams}g, ~${typeof fmtTime==='function'?fmtTime(secs):Math.round(secs/60)+'min'} · Costo est. ${_money(costo)} · Precio sugerido ${_money(precio)} (margen ${mg}%, neto)`;
+      const obs=document.getElementById('cot-notas');
+      if(!obs){toast('No se pudo abrir Nueva Cotización. Copia a mano: '+linea,'error');return;}
+      obs.value=(obs.value.trim()?obs.value.trim()+'\n':'')+linea;   // se agrega, no se pisa
+      try{obs.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
+      toast('Datos del slicer copiados a las notas internas de la cotización','success');
     },300);
   }
   // ── Enviar a todas las impresoras libres ──
@@ -2488,13 +2534,20 @@ self.onmessage=function(ev){
       return(st==='idle'||st==='ready'||st==='standby')&&(typeof getPrinterIp==='function'&&getPrinterIp(m));
     });
     if(!libres.length){toast('No hay impresoras libres con IP configurada','error');return;}
-    if(!confirm(`¿Enviar a ${libres.length} impresora(s) libre(s)?\n${libres.map(m=>m.nombre+' #'+m.numG).join(', ')}`))return;
-    libres.forEach(m=>{
-      // enviar() recibe el id explícito; el select sólo se sincroniza si existe
-      const slSel=document.getElementById('slSendTo');if(slSel)slSel.value=m.id;
-      enviar(m.id);
-    });
-    toast(`Enviando a ${libres.length} impresora(s)…`,'success');
+    // La pieza tiene que caber en CADA destino: el G-code es uno solo, laminado
+    // para la cama de un modelo. Las que no dan se dejan fuera y se dicen.
+    const aptas=libres.filter(_cabeEn),fuera=libres.filter(m=>!_cabeEn(m));
+    if(!aptas.length){
+      toast(`La pieza no cabe en ninguna de las ${libres.length} impresoras libres. Lamina para una de ellas.`,'error');return;
+    }
+    const laminado=el('slPrinter')?.value;
+    const distintas=aptas.filter(m=>m.modelo&&m.modelo!==laminado);
+    const aviso=`¿Enviar a ${aptas.length} impresora(s) libre(s)?\n${aptas.map(m=>m.nombre+' #'+m.numG).join(', ')}`
+      +(fuera.length?`\n\nSe dejan fuera (la pieza no cabe): ${fuera.map(m=>m.nombre+' #'+m.numG).join(', ')}`:'')
+      +(distintas.length?`\n\nOJO: el G-code se laminó para ${laminado}. Estas son de otro modelo y usarán la aceleración y el arranque de ${laminado}: ${distintas.map(m=>m.nombre+' ('+m.modelo+')').join(', ')}`:'');
+    if(!confirm(aviso))return;
+    aptas.forEach(m=>enviar(m.id,true));   // ya chequeadas aquí arriba
+    toast(`Enviando a ${aptas.length} impresora(s)…`,'success');
   }
   // ── Init ────────────────────────────────────────────────────
   function onPrinterChange(){if(S.stats)renderStats();loadMachineGcode();}
