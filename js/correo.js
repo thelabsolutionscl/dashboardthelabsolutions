@@ -181,7 +181,10 @@ const MAIL={
     this._init=true;
     document.getElementById('mailConnStatus').textContent='Conectando...';
     try{
-      await this.loadFolders();
+      if(await this.loadFolders()===false){   // clave rechazada: el modal ya está pidiendo otra
+        document.getElementById('mailConnStatus').textContent='';
+        return;
+      }
       await this.loadMessages();
       document.getElementById('mailConnStatus').textContent='';
       _mailPollErrors=0;
@@ -217,7 +220,7 @@ const MAIL={
       if(data.error.toLowerCase().includes('auth')||data.error.toLowerCase().includes('login')){
         this.clearMailPass();this._init=false;
         this.showPassModal('Contraseña incorrecta. Inténtalo de nuevo.');
-        return;
+        return false;   // corta init(): sin clave, pedir la lista es un viaje perdido
       }
       document.getElementById('mailFolderList').innerHTML=`<div style="padding:8px;font-size:11px;color:var(--danger)">${this.esc(data.error)}</div>`;return;
     }
@@ -243,11 +246,13 @@ const MAIL={
       const isActive=f.name===this.folder;
       const meta=labelFor(f.name);
       return `<button class="mail-folder-item${isActive?' active':''}" data-folder="${this.esc(f.name)}" onclick="MAIL.selectFolder(this.dataset.folder)">
-        <span class="mail-folder-name">${svgIcon(meta.icon)} ${meta.label}</span>
+        <span class="mail-folder-name">${svgIcon(meta.icon)} ${this.esc(meta.label)}</span>
         ${f.unseen>0?`<span class="mail-unseen-badge">${f.unseen}</span>`:''}
       </button>`;
     }).join('');
     document.getElementById('mailFolderList').innerHTML=html||'<div style="padding:8px;font-size:11px;color:var(--text3)">Sin carpetas</div>';
+    this._folders=data.folders||[];   // reutilizable: preloadSentAddrs ya no las vuelve a pedir
+    return true;
   },
 
   async loadMessages(folder,page){
@@ -379,23 +384,34 @@ const MAIL={
     const _crmLine=_cli
       ?`<div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="badge-cliente">👤 Cliente: ${this.esc(_cli.fields['Empresa']||_cli.fields['Contacto']||'—')}</span><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="openClienteDetalle('${_cli.id}')">Ver ficha CRM →</button></div>`
       :(!_propio&&this._fromEmail(data.from_email)?`<div style="margin-top:7px"><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="MAIL.crearLeadDesdeCorreo()" title="Crea un lead en el CRM con los datos de este correo">➕ Crear lead desde este correo</button></div>`:'');
+    // Todas estas piezas son cabeceras que escribe QUIEN ENVÍA el correo: van
+    // escapadas sin excepción. La fecha se escapaba sola por olvido, y es una
+    // cabecera más (Date:), así que bastaba un correo para inyectar aquí.
     document.getElementById('mailRdrMeta').innerHTML=
       `<strong>${this.esc(data.from_name||data.from_email)}</strong> &lt;${this.esc(data.from_email)}&gt;<br>`+
-      `Para: ${data.to.map(t=>this.esc(t)).join(', ')}<br>`+
-      `${data.date}`+_crmLine;
+      `Para: ${(Array.isArray(data.to)?data.to:[data.to]).map(t=>this.esc(t)).join(', ')}<br>`+
+      `${this.esc(data.date)}`+_crmLine;
     // Render body (respeta el modo claro/oscuro compartido con el editor)
     this._renderMsgBody(data);
     // Adjuntos del mensaje
     const attsDiv=document.getElementById('mailRdrAtts');
     if(data.attachments&&data.attachments.length){
       attsDiv.style.display='flex';
+      // El nombre del adjunto lo elige quien envía el correo. Metido dentro de
+      // un onclick como texto de código, un nombre como \');algo();// cerraba
+      // la llamada y ejecutaba lo que viniera detrás (verificado en navegador).
+      // Con data-* el nombre nunca es código: es un valor que se lee.
       attsDiv.innerHTML=data.attachments.map(a=>
-        `<span class="mail-att-chip" onclick="MAIL.downloadAtt('${this.esc(a.part)}','${this.esc(a.name).replace(/'/g,"\\'")}')">📎 <span class="att-name">${this.esc(a.name)}</span></span>`
+        `<span class="mail-att-chip" data-part="${this.esc(a.part)}" data-name="${this.esc(a.name)}" onclick="MAIL.downloadAtt(this.dataset.part,this.dataset.name)">📎 <span class="att-name">${this.esc(a.name)}</span></span>`
       ).join('');
     }else{attsDiv.style.display='none';attsDiv.innerHTML='';}
     // Estado del botón destacar
     const listItem=this.msgs.find(x=>x.uid===uid);
     this._updateFlagBtn(listItem?!!listItem.flagged:false);
+    // El servidor ya lo marcó leído al abrirlo; si la copia local no se entera,
+    // cualquier re-pintado de la lista (destacar, eliminar en lote) lo devuelve
+    // a negrita como si estuviera sin leer.
+    if(listItem) listItem.seen=1;
     // Mark read in list
     const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
     if(item) item.classList.remove('unread');
@@ -633,16 +649,28 @@ const MAIL={
 
   _cmpAtts:[],
 
+  // El tope se contaba sobre _cmpAtts, que solo se llena cuando el FileReader
+  // TERMINA de leer. Al elegir varios archivos de una vez, ninguno se había
+  // añadido todavía: cuatro de 6 MB pasaban los cuatro (24 MB) y el envío
+  // reventaba después, en el servidor. Ahora se cuenta al elegir.
+  _cmpPend:0,
   addFiles(files){
     const MAX=15*1024*1024;
+    let total=this._cmpAtts.reduce((s,a)=>s+a.size,0)+(this._cmpPend||0);
     for(const f of files){
-      const cur=this._cmpAtts.reduce((s,a)=>s+a.size,0);
-      if(cur+f.size>MAX){toast('Límite 15 MB de adjuntos','error');break;}
+      if(total+f.size>MAX){toast('Límite 15 MB de adjuntos','error');break;}
+      total+=f.size;
+      this._cmpPend=(this._cmpPend||0)+f.size;
       const reader=new FileReader();
+      const listo=()=>{this._cmpPend=Math.max(0,(this._cmpPend||0)-f.size);};
       reader.onload=()=>{
+        listo();
         this._cmpAtts.push({name:f.name,type:f.type||'application/octet-stream',size:f.size,data:reader.result.split(',')[1]});
         this.renderCmpAtts();
       };
+      // Sin esto, un archivo ilegible desaparecía sin decir nada y el correo
+      // salía sin él.
+      reader.onerror=()=>{listo();toast('No se pudo leer '+f.name,'error');};
       reader.readAsDataURL(f);
     }
   },
@@ -763,7 +791,10 @@ const MAIL={
     if(localStorage.getItem(flag))return;
     try{
       let folder='';
-      try{const fd=await this.post({action:'folders'});const f=(fd.folders||[]).find(x=>/(^|[.\/])(sent|enviad)/i.test(x.name||''));if(f)folder=f.name;}catch(e){}
+      try{
+        const fl=(this._folders&&this._folders.length)?this._folders:((await this.post({action:'folders'})).folders||[]);
+        const f=fl.find(x=>/(^|[.\/])(sent|enviad)/i.test(x.name||''));if(f)folder=f.name;
+      }catch(e){}
       const data=await this.post({action:'sent_addrs',folder});
       if(data&&!data.error){
         if(Array.isArray(data.addresses)&&data.addresses.length) this.addSentAddrs(data.addresses.join(','));
@@ -855,7 +886,10 @@ const MAIL={
       if(cli){email=cli.fields['Email']||'';empresa=cli.fields['Empresa']||'';}
     }
     // Generar PDF de la cotización como adjunto
-    this._cmpAtts=[];
+    this._cmpAtts=[];this._cmpPend=0;
+    // Si el PDF no sale, el borrador NO puede seguir diciendo "adjuntamos":
+    // sería mandarle al cliente un correo que promete un archivo que no va.
+    let pdfOk=false;
     try{
       const res=buildCotizacionDoc(cotId);
       if(res&&res.html){
@@ -869,8 +903,10 @@ const MAIL={
         });
         const fname=`Cotizacion_${numCot.replace(/[^\w-]/g,'_')}.pdf`;
         this._cmpAtts.push({name:fname,type:'application/pdf',size:pdfBlob.size,data:b64});
+        pdfOk=true;
       }
     }catch(e){toast('Error generando PDF','error');}
+    if(!pdfOk) toast('⚠ El PDF no se generó: el borrador va SIN adjunto y sin prometerlo. Adjúntalo a mano o reintenta.','error');
     // Link del portal del cliente (firmado, con vencimiento). Si no se pudo
     // generar, el correo sale igual sin el bloque: nunca bloquea el envío.
     let portalHtml='';
@@ -895,14 +931,14 @@ const MAIL={
         title:'Enviar cotización',
         to:email,
         subject:`Cotización ${numCot} — The Lab Solutions`,
-        body:`<p>Estimado${empresa?' equipo de '+this.esc(empresa):''},</p><p>Adjuntamos la cotización <strong>${this.esc(numCot)}</strong> solicitada. Quedamos atentos a sus comentarios.</p>${portalHtml}<p>Saludos cordiales,</p>`
+        body:`<p>Estimado${empresa?' equipo de '+this.esc(empresa):''},</p><p>${pdfOk?'Adjuntamos la':'Le escribimos por la'} cotización <strong>${this.esc(numCot)}</strong> solicitada. Quedamos atentos a sus comentarios.</p>${portalHtml}<p>Saludos cordiales,</p>`
       });
       this.renderCmpAtts();
     },300);
   },
 
   openCompose(opts={}){
-    if(!opts._keepAtts){this._cmpAtts=[];this.renderCmpAtts();}
+    if(!opts._keepAtts){this._cmpAtts=[];this._cmpPend=0;this.renderCmpAtts();}
     this._cmpCotId=opts._cotId||null;   // vínculo con la cotización (registro al enviar)
     this._cmpReactivarCli=opts._reactivarCli||null;   // marcar cliente "Reactivado" al enviar
     this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
@@ -1040,7 +1076,7 @@ const MAIL={
       title:'Responder',
       to:m.from_email,
       subject:'Re: '+m.subject.replace(/^Re:\s*/i,''),
-      body:`<br><br><hr style="border:none;border-top:1px solid #333;margin:16px 0"><p style="color:#888;font-size:12px">De: ${this.esc(m.from_name||m.from_email)} &lt;${m.from_email}&gt;<br>Fecha: ${m.date}<br>Asunto: ${this.esc(m.subject)}</p>${m.body_html||this.esc(m.body_text||'')}`
+      body:`<br><br><hr style="border:none;border-top:1px solid #333;margin:16px 0"><p style="color:#888;font-size:12px">De: ${this.esc(m.from_name||m.from_email)} &lt;${this.esc(m.from_email)}&gt;<br>Fecha: ${this.esc(m.date)}<br>Asunto: ${this.esc(m.subject)}</p>${m.body_html?this._sanitizarCita(m.body_html):this.esc(m.body_text||'')}`
     });
   },
 
@@ -1050,7 +1086,7 @@ const MAIL={
     this.openCompose({
       title:'Reenviar',
       subject:'Fwd: '+m.subject.replace(/^Fwd:\s*/i,''),
-      body:`<br><br><hr style="border:none;border-top:1px solid #333;margin:16px 0"><p style="color:#888;font-size:12px">Reenviado de: ${this.esc(m.from_name||m.from_email)} &lt;${m.from_email}&gt;<br>Fecha: ${m.date}<br>Asunto: ${this.esc(m.subject)}</p>${m.body_html||this.esc(m.body_text||'')}`
+      body:`<br><br><hr style="border:none;border-top:1px solid #333;margin:16px 0"><p style="color:#888;font-size:12px">Reenviado de: ${this.esc(m.from_name||m.from_email)} &lt;${this.esc(m.from_email)}&gt;<br>Fecha: ${this.esc(m.date)}<br>Asunto: ${this.esc(m.subject)}</p>${m.body_html?this._sanitizarCita(m.body_html):this.esc(m.body_text||'')}`
     });
   },
 
@@ -1097,7 +1133,7 @@ const MAIL={
         // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
         if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
         this._cmpFromName=null;this._cmpFromEmail=null;
-        this._cmpAtts=[];this.renderCmpAtts();
+        this._cmpAtts=[];this._cmpPend=0;this.renderCmpAtts();
         setTimeout(()=>this.closeCompose(),1500);
       }
     }finally{
@@ -1198,5 +1234,40 @@ const MAIL={
     }catch(e){return dateStr.substring(0,10);}
   },
 
-  esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');},
+
+  /* Limpia el HTML de un correo recibido antes de citarlo en una respuesta.
+   *
+   * Al LEER, el mensaje se pinta dentro de un <iframe> con sandbox sin
+   * allow-scripts: nada de lo que traiga puede ejecutarse. Pero al Responder o
+   * Reenviar, ese mismo HTML se metía con innerHTML en el editor, sin ninguna
+   * contención — y ahí un <img src=x onerror="..."> SÍ corre. O sea: bastaba con
+   * escribirle a hola@thelab.solutions (una dirección pública) y esperar a que
+   * alguien pulsara Responder.
+   *
+   * Citar en HTML es justo lo que se espera de una respuesta, así que no se
+   * convierte a texto plano: se quita lo que ejecuta o navega y se conserva el
+   * formato. DOMParser no ejecuta scripts ni descarga nada al analizar.
+   */
+  _sanitizarCita(html){
+    const s=String(html||'');
+    if(!s) return '';
+    try{
+      const doc=new DOMParser().parseFromString(s,'text/html');
+      // Elementos que ejecutan, cargan o reescriben el documento que los aloja.
+      doc.body.querySelectorAll('script,iframe,object,embed,link,meta,base,form,input,button,textarea,select,style,svg,math').forEach(el=>el.remove());
+      doc.body.querySelectorAll('*').forEach(el=>{
+        for(const at of [...el.attributes]){
+          const n=at.name.toLowerCase(), v=String(at.value||'');
+          if(n.startsWith('on')){ el.removeAttribute(at.name); continue; }        // onerror, onload, onclick…
+          if(n==='srcdoc'){ el.removeAttribute(at.name); continue; }
+          if(/^(href|action|formaction|xlink:href|background)$/.test(n) && /^\s*(javascript|vbscript|data):/i.test(v)){ el.removeAttribute(at.name); continue; }
+          // Las imágenes incrustadas (data:image/...) son normales en un correo;
+          // cualquier otro data: en src, no.
+          if(n==='src' && (/^\s*(javascript|vbscript):/i.test(v) || (/^\s*data:/i.test(v) && !/^\s*data:image\//i.test(v)))) el.removeAttribute(at.name);
+        }
+      });
+      return doc.body.innerHTML;
+    }catch(e){ return this.esc(s); }   // ante la duda, se cita como texto plano
+  }
 };

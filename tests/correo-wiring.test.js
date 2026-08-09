@@ -136,12 +136,16 @@ test('las lecturas IMAP están acotadas y toleran mensajes dañados', () => {
   assert.match(PHP, /mb_check_encoding/);
 });
 
-test('el polling respeta al hosting y se detiene ante errores repetidos', () => {
+// Antes esta prueba exigía que el polling se DETUVIERA tras 10 errores. Eso
+// era el fallo, no la garantía: una racha de 10 minutos dejaba al usuario sin
+// aviso de correo nuevo el resto de la sesión. Ahora baja la cadencia y vuelve
+// sola. El detalle está en tests/correo.test.js.
+test('el polling respeta al hosting y baja la cadencia ante errores repetidos', () => {
   assert.match(NOTIFY, /const\s+_POLL_INTERVAL\s*=\s*60000/);
   assert.match(NOTIFY, /if\s*\(document\.hidden\)\s*return/);
   assert.match(NOTIFY, /_mailPollErrors\s*>=\s*10/);
-  assert.match(NOTIFY, /clearInterval\(_mailPollTimer\)/);
-  assert.match(NOTIFY, /if\s*\(_mailPollTimer\)\s*return/);
+  assert.match(NOTIFY, /_mailPollCadencia\(true/, 'degrada en vez de morirse');
+  assert.match(NOTIFY, /if\s*\(_mailPollTimer\s*\|\|\s*_mailPollArmando\)\s*return/, 'y nunca deja dos temporizadores');
 });
 
 test('Correo mantiene vínculos trazables con CRM y cotizaciones', () => {

@@ -439,21 +439,39 @@ function playMailSound(){
 }
 
 let _mailPollErrors = 0;
+let _mailPollLento = false;
+const _POLL_LENTO = 600000; // 10 min
+
+// Antes, tras 10 errores seguidos el polling se DETENÍA para siempre: bastaba
+// un corte de 10 minutos del servidor de correo (o una racha del WAF, que
+// bloquea de forma intermitente) para quedarse sin aviso de correo nuevo el
+// resto de la sesión, sin más rastro que un console.warn. Ahora baja la
+// cadencia a 10 min, lo dice en el panel de avisos, y vuelve al ritmo normal
+// en cuanto una consulta responde bien.
+function _mailPollCadencia(lento, motivo){
+  if(_mailPollLento===lento) return;
+  _mailPollLento=lento;
+  clearInterval(_mailPollTimer);
+  _mailPollTimer=setInterval(_mailCheck, lento?_POLL_LENTO:_POLL_INTERVAL);
+  if(lento){
+    console.warn('Polling de correo en cadencia lenta tras errores repetidos:',motivo);
+    try{NOTIFY.add('mail','Aviso de correo nuevo a media máquina','No se pudo consultar el servidor de correo; se reintenta cada 10 min','correo');}catch(e){}
+  }else{
+    try{NOTIFY.add('mail','Aviso de correo nuevo restablecido','El servidor de correo volvió a responder','correo');}catch(e){}
+  }
+}
+
 async function _mailCheck(){
   if(document.hidden) return;          // no consultar el servidor de correo con la pestaña oculta
   if(!MAIL.getMailPass || !MAIL.getMailPass()) return;
   try{
     const data = await MAIL.post({action:'check'});
     if(data.error){
-      // Backoff: tras 10 errores consecutivos (clave inválida, server caído)
-      // se detiene el polling para no martillar el servidor
-      if(++_mailPollErrors>=10){
-        clearInterval(_mailPollTimer);_mailPollTimer=null;
-        console.warn('Polling de correo detenido tras errores repetidos:',data.error);
-      }
+      if(++_mailPollErrors>=10) _mailPollCadencia(true, data.error);
       return;
     }
     _mailPollErrors=0;
+    _mailPollCadencia(false);
     const unseen = data.unseen ?? 0;
     updateTabTitle(unseen);
     if(_mailLastUnseen >= 0 && unseen > _mailLastUnseen){
@@ -469,18 +487,24 @@ async function _mailCheck(){
   }catch(e){}
 }
 
+let _mailPollArmando = false;
 function startMailPolling(){
-  if(_mailPollTimer) return;
+  // El guard miraba _mailPollTimer, que no existe hasta 4 s después: dos
+  // llamadas dentro de esos 4 s (la del arranque y la de abrir Correo) dejaban
+  // DOS intervalos consultando el servidor, justo lo que el hosting pidió evitar.
+  if(_mailPollTimer || _mailPollArmando) return;
+  _mailPollArmando=true;
   // Establece el baseline inmediatamente (sin notificar), luego empieza el polling
   setTimeout(async()=>{
-    if(!MAIL.getMailPass || !MAIL.getMailPass()) return;
     try{
+      if(!MAIL.getMailPass || !MAIL.getMailPass()) return;   // sin clave no hay nada que consultar
       const data = await MAIL.post({action:'check'});
       if(!data.error) _mailLastUnseen = data.unseen ?? 0;
       updateTabTitle(_mailLastUnseen);
+      // Ahora sí arranca el intervalo de detección
+      _mailPollTimer = setInterval(_mailCheck, _POLL_INTERVAL);
     }catch(e){}
-    // Ahora sí arranca el intervalo de detección
-    _mailPollTimer = setInterval(_mailCheck, _POLL_INTERVAL);
+    finally{ _mailPollArmando=false; }   // si no llegó a armarse, se puede reintentar
   }, 4000); // espera 4s a que cargue la bandeja inicial
   // Solicita permiso para notificaciones del SO
   requestWebNotifPermission();

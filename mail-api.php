@@ -32,7 +32,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-07-22-sent-addrs');
+define('MAIL_API_BUILD', '2026-08-09-cabeceras');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -305,6 +305,17 @@ function parse_part($conn, $msgno, $structure, $partno, &$html, &$text, &$atts) 
 
 // ── Envío SMTP ────────────────────────────────────────────────
 function smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments = [], $bcc = '') {
+    // Todo lo que termina dentro de una cabecera va sin saltos de línea: un \n
+    // en el destinatario o en el nombre del remitente inyecta cabeceras nuevas
+    // en el mensaje (un Bcc: oculto, un Reply-To falso). Los nombres de adjunto
+    // ya se limpiaban más abajo; estos cuatro no. Basta un correo con un salto
+    // de línea guardado en la ficha del cliente en Airtable.
+    $limpia_cab = function ($s) { return trim(preg_replace('/[\r\n"]+/', ' ', (string)$s)); };
+    $from_name = $limpia_cab($from_name);
+    $to        = $limpia_cab($to);
+    $cc        = $limpia_cab($cc);
+    $bcc       = $limpia_cab($bcc);
+
     $sock = @fsockopen('ssl://' . SMTP_HOST, SMTP_PORT, $errno, $errstr, 15);
     if (!$sock) return "No se pudo conectar al servidor SMTP ($errstr)";
 
