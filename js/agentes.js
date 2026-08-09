@@ -1041,7 +1041,16 @@ function applyAdsAction(i){
   let data,desc;
   if(a.tipo==='pausar'){data={...base,estado:'PAUSED'};desc='Pausar '+camp.nombre;}
   else if(a.tipo==='activar'){data={...base,estado:'ENABLED'};desc='Activar '+camp.nombre;}
-  else if(a.tipo==='presupuesto'){const nb=Math.max(1000,Math.round(+a.nuevo||0));data={...base,presupuesto:nb};desc='Ppto '+camp.nombre+' → '+fmtMoney(nb);}
+  else if(a.tipo==='presupuesto'){
+    // El número lo propuso un modelo de lenguaje y de aquí sale hacia la cuenta
+    // real. Antes: Math.max(1000, +a.nuevo||0) — sin techo, y con el campo
+    // ausente dejaba la campaña en $1.000/día sin decir nada.
+    const nb=(typeof adsPresupuestoValido==='function')
+      ? adsPresupuestoValido(a.nuevo,camp.presupuesto,camp.nombre)
+      : null;
+    if(nb===null){if(typeof adsPresupuestoValido!=='function')toast('Freno de presupuesto no disponible — no se envía','error');return;}
+    data={...base,presupuesto:nb};desc='Ppto '+camp.nombre+' → '+fmtMoney(nb);
+  }
   else{toast('Tipo de acción no soportado','error');return;}
   if(typeof _adsQueueMutation==='function'){_adsQueueMutation({op:'edit',id:camp.id,data,timestamp:new Date().toISOString(),status:'pending'});toast('✓ En cola: '+desc,'success');}
   else toast('Cola de mutaciones no disponible','error');

@@ -115,7 +115,11 @@ test('loadAdsData respeta el orden lógico completo del panel',()=>{
 
 test('las campañas validan presupuesto, URL, anuncios y límites de Google Ads',()=>{
   const body=functionBlock(SOURCE,'saveCampaignMutation');
-  assert.match(body,/presupuesto\s*<\s*1000/);
+  // El piso de $1.000 ya no se comprueba suelto aquí: lo aplica el freno
+  // compartido con el botón del agente, que además pone techo. El detalle está
+  // en tests/ads-presupuesto.test.js.
+  assert.match(body,/adsPresupuestoValido\(/);
+  assert.match(SOURCE,/if\(n<1000\)\{toast\('El presupuesto diario debe ser al menos \$1\.000 CLP\.'/);
   assert.match(body,/^\s*if\(!nombre\)/m);
   assert.match(body,/La URL final del anuncio debe empezar con http:\/\/ o https:\/\//);
   assert.match(body,/titulos\.length\s*<\s*3/);

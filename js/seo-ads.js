@@ -1019,6 +1019,47 @@ function closeAdsDeleteModal(){
   document.getElementById('adsDeleteModal').style.display='none';
 }
 
+// ── FRENO DE PRESUPUESTO ──────────────────────────────────────────────
+// El presupuesto DIARIO de una campaña se cambia con un clic y va derecho al
+// Script 2, que lo aplica en la cuenta real. Había piso ($1.000) pero ningún
+// techo, y el número lo puede proponer el agente de IA: un cero de más pasaba
+// entero. Peor todavía, si el agente omitía el campo, Math.max(1000, NaN||0)
+// lo dejaba en $1.000 — bajar una campaña de $8.000 a $1.000 sin que nadie se
+// entere. Las líneas del taller van entre $2.000 y $8.000 al día.
+const _ADS_TOPE_KEY='ads_tope_diario';
+function adsTopeDiario(){const v=parseInt(localStorage.getItem(_ADS_TOPE_KEY),10);return v>0?v:20000;}
+function setAdsTopeDiario(){
+  const v=prompt('Tope de presupuesto DIARIO por campaña (CLP).\nEs una red de seguridad: nada por encima de este monto se envía a Google Ads sin que lo subas a propósito.',String(adsTopeDiario()));
+  if(v===null) return;
+  const n=parseInt(v,10);
+  if(!(n>=1000)){toast('El tope debe ser al menos $1.000','error');return;}
+  localStorage.setItem(_ADS_TOPE_KEY,String(n));
+  toast('🛡 Tope diario por campaña: '+fmtMoney(n),'success');
+}
+// Único lugar donde se decide si un presupuesto puede salir hacia Google Ads.
+// Lo usan las dos rutas —el botón del agente y el modal a mano— para que no
+// puedan separarse. Devuelve el monto a aplicar, o null si no debe enviarse.
+function adsPresupuestoValido(nuevo,actual,nombre){
+  const crudo=(nuevo===''||nuevo===null||nuevo===undefined)?NaN:Number(nuevo);
+  if(!Number.isFinite(crudo)){
+    toast('No se entendió el presupuesto propuesto para '+(nombre||'la campaña')+' — escríbelo a mano.','error');
+    return null;
+  }
+  const n=Math.round(crudo);
+  if(n<1000){toast('El presupuesto diario debe ser al menos $1.000 CLP.','error');return null;}
+  const tope=adsTopeDiario();
+  if(n>tope){
+    toast('🛡 '+fmtMoney(n)+' al día supera el tope de '+fmtMoney(tope)+' para '+(nombre||'esta campaña')+'. No se envía. Si de verdad lo quieres, sube el tope con el botón 🛡.','error');
+    return null;
+  }
+  // Un salto grande dentro del tope puede ser correcto, pero no en piloto automático.
+  const act=Math.round(Number(actual)||0);
+  if(act>0&&(n>act*3||n<act/3)){
+    if(!confirm('Cambio fuerte de presupuesto en "'+(nombre||'la campaña')+'":\n\n'+fmtMoney(act)+' → '+fmtMoney(n)+' al día\n\n¿Lo aplicas?')) return null;
+  }
+  return n;
+}
+
 // Encola una mutación reemplazando cualquier mutación pendiente equivalente (evita duplicados)
 function _adsQueueMutation(mutation){
   const keyOf=m=>m.op+'|'+(m.id||'')+'|'+(m.op==='create'?((m.data&&m.data.nombre)||''):(m.op==='negative'||m.op==='pause_keyword')?((m.data&&m.data.termino)||'')+'|'+((m.data&&m.data.campana)||''):'');
@@ -1040,8 +1081,11 @@ function saveCampaignMutation(){
   const estado=document.getElementById('adsCampaignModalEstado').value;
   const tipo=document.getElementById('adsCampaignModalTipo').value;
   if(!nombre){alert('El nombre de la campaña es obligatorio.');return;}
-  if(presupuesto<1000){alert('El presupuesto debe ser al menos $1.000 CLP.');return;}
-  const data={nombre,presupuesto,estado,tipo};
+  // Mismo freno que usa el botón del agente: si se separan, uno de los dos queda sin techo.
+  const _actual=(window._adsLastData?.campanas||[]).find(c=>String(c.id)===String(id))?.presupuesto||0;
+  const _ppto=adsPresupuestoValido(document.getElementById('adsCampaignModalPresupuesto').value,_actual,nombre);
+  if(_ppto===null) return;
+  const data={nombre,presupuesto:_ppto,estado,tipo};
   if(op==='create'){
     // Sin comillas/corchetes: la concordancia la aplica el Script 2 según el selector
     const kwText=(document.getElementById('adsCampaignModalKeywords').value||'').split('\n').map(_adsCleanKw).filter(Boolean);
