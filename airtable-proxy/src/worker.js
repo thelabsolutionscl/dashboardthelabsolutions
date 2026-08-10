@@ -34,8 +34,15 @@ export default {
       return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN }, 200, CORS);
     }
 
-    // Allowlist de origen: un navegador en otro sitio (Origin distinto) se rechaza.
-    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    // Allowlist de origen: solo se aceptan peticiones cuyo Origin esté en la lista.
+    // Antes el chequeo era `if (origin && ...)`, así que una petición SIN header
+    // Origin (curl, un script, server-to-server) se lo saltaba por completo: con la
+    // APP_KEY —que va horneada en el HTML público— cualquiera podía leer/escribir
+    // Airtable o gastar créditos de Claude/OpenAI desde fuera del navegador. Todo
+    // cliente legítimo es un navegador en el dashboard, que SIEMPRE manda Origin
+    // (la petición lleva X-App-Key, un header que fuerza CORS y no se puede falsear
+    // desde otra página). /health queda libre más arriba para los monitores.
+    if (!ALLOWED_ORIGINS.includes(origin)) {
       return json({ error: 'Forbidden origin' }, 403, CORS);
     }
 
