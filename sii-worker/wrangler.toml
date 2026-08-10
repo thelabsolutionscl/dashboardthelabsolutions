@@ -1,6 +1,6 @@
 name = "sii-dte-worker"
 main = "src/index.js"
-compatibility_date = "2024-09-01"
+compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 # Cambiar a "certificacion" para pruebas con maullin.sii.cl

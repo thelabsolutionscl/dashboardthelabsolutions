@@ -1,8 +1,5 @@
-import { createRequire } from 'node:module';
+import { SignedXml } from 'xml-crypto';
 import { sha1b64, rsaSha1b64, certDerb64, rsaModulusb64, rsaExponentb64, privateKeyPem } from './sii-crypto.js';
-
-const require = createRequire(import.meta.url);
-const { SignedXml } = require('xml-crypto');
 
 function debugSii(env, ...args) {
   if (env && env.SII_DEBUG === 'true') console.log(...args);

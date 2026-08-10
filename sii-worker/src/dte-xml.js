@@ -1,8 +1,5 @@
-import { createRequire } from 'node:module';
+import { SignedXml } from 'xml-crypto';
 import { rsaSha1b64Pem, certDerb64, rsaModulusb64, rsaExponentb64, privateKeyPem } from './sii-crypto.js';
-
-const require = createRequire(import.meta.url);
-const { SignedXml } = require('xml-crypto');
 
 function x(str) {
   return (str || '')
