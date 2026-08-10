@@ -68,6 +68,14 @@ const NOTIFY={
 
   // ── SYNC ALERTAS ─────────────────────────────────────────────
   syncAlertas(alertas){
+    alertas=alertas||[];
+    // Una lista vacía mientras los datos AÚN no cargan es transitoria, no un
+    // "se resolvieron todas las alertas a la vez". Si la tomáramos como cierre
+    // total, sobreescribiríamos la memoria de deduplicación (_alertKeysKey) con
+    // el vacío y, al terminar de cargar, TODAS las alertas se re-notificarían de
+    // nuevo — incluido un WhatsApp por cada crítica. Con los datos ya cargados,
+    // una lista vacía sí es un cierre real y se deja limpiar la memoria.
+    if(!alertas.length && !(typeof state!=='undefined'&&state.loaded)) return;
     let known;
     try{known=new Set(JSON.parse(localStorage.getItem(this._alertKeysKey)||'[]'));}catch(e){known=new Set();}
     const current=new Set();
