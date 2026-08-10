@@ -354,11 +354,20 @@ function _calAlarmTick(){
       if(ev.del||ev.avisoApp===false||!ev.fecha||ev.fecha<desde||ev.fecha>hasta)return;
       const ini=new Date(ev.fecha+'T'+(ev.allDay?'09:00':(ev.hIni||'09:00'))+':00').getTime();
       const mins=Array.isArray(ev.reminders)?ev.reminders:(ev.alarmMin==null?[]:[+ev.alarmMin]);
-      const ready=mins.slice().sort((a,b)=>a-b).find(min=>now>=ini-(+min)*60000&&!fired[ev.id+'@'+ev.fecha+'@'+min]);
+      // Tiers cuyo momento de aviso ya llegó, de la más cercana al evento a la más lejana.
+      const open=mins.slice().sort((a,b)=>a-b).filter(min=>now>=ini-(+min)*60000);
+      const ready=open.find(min=>!fired[ev.id+'@'+ev.fecha+'@'+min]);
       const overdue=ev.source==='crm'&&now>=ini+5*60000;
       const keyMin=overdue?'overdue-'+hoyCL():ready;
       if(keyMin===undefined||(!overdue&&now>=ini+5*60000))return;
-      const k=ev.id+'@'+ev.fecha+'@'+keyMin;if(fired[k])return;fired[k]=now;dirty=true;
+      const k=ev.id+'@'+ev.fecha+'@'+keyMin;if(fired[k])return;
+      // Al reabrir la app cerca de un evento, varias tiers pueden haberse "abierto"
+      // mientras el navegador estuvo cerrado (la de 3 días y la de 1 día, p.ej.).
+      // Antes se disparaba UNA por tick → una ráfaga de avisos DUPLICADOS (mismo
+      // texto, derivado de los días restantes reales) cada 30s. Se marcan todas las
+      // tiers ya abiertas y se notifica una sola vez: la más cercana al evento (ready).
+      if(!overdue)open.forEach(min=>{fired[ev.id+'@'+ev.fecha+'@'+min]=now;});
+      fired[k]=now;dirty=true;
       const quien=(ev.personas||[]).map(p=>{const per=_calPersona(p);return per?per.nombre.split(' ')[0]:p;}).join(', ');
       const days=_calDays(ev.fecha),when=days<0?`${Math.abs(days)} día${Math.abs(days)!==1?'s':''} atrasado`:days===0?'vence hoy':days===1?'vence mañana':`faltan ${days} días`;
       const sub=(ev.source==='crm'?when:(ev.allDay?'Todo el día':((ev.hIni||'')+(ev.hFin?'–'+ev.hFin:''))))+(quien?' · '+quien:'');
