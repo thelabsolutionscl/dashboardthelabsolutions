@@ -737,10 +737,18 @@ function guardarOC(conPDF){
   if(!proveedor){toast('Selecciona un proveedor','error');return;}
   const items=_ocRows().filter(x=>x.item&&x.cantidad>0).map(x=>({item:x.item,cantidad:x.cantidad,precio:x.precio}));
   if(!items.length){toast('Agrega al menos un ítem con cantidad','error');return;}
-  const t=ocCalc();
+  // El total tiene que salir de los MISMOS ítems que se guardan. Antes venía de
+  // ocCalc(), que suma TODAS las filas del formulario —incluida una con números
+  // pero sin nombre—, así que el PDF podía mostrar un total mayor que la suma de
+  // las líneas visibles: el proveedor veía un número que no le cuadraba. Un ítem
+  // con cantidad pero sin nombre no se guarda, luego tampoco puede sumar.
+  const neto=items.reduce((s,x)=>s+Math.round(x.cantidad*x.precio),0);
+  const total=neto+Math.round(neto*0.19);
+  const fantasmas=_ocRows().filter(x=>x.cantidad>0&&x.precio>0&&!x.item).length;
+  if(fantasmas) toast(`⚠ ${fantasmas} fila(s) con precio pero sin nombre no se incluyeron. Ponles nombre o bórralas.`,'info');
   const arr=_ocAll();const id=document.getElementById('ocId').value;
   let oc;
-  const base={proveedor,fecha:document.getElementById('ocFecha').value||hoyCL(),notas:(document.getElementById('ocNotas').value||'').trim(),items,neto:t.neto,total:t.total,estado:'Emitida'};
+  const base={proveedor,fecha:document.getElementById('ocFecha').value||hoyCL(),notas:(document.getElementById('ocNotas').value||'').trim(),items,neto,total,estado:'Emitida'};
   if(id){oc=arr.find(x=>x.id===id);if(oc)Object.assign(oc,base);}
   else{oc={id:'oc'+Date.now()+'_'+arr.length,numero:_ocNextNum(),ts:Date.now(),...base};arr.push(oc);}
   _ocSaveArr(arr);closeOCModal();toast(`✓ Orden de compra ${oc.numero} guardada`,'success');
