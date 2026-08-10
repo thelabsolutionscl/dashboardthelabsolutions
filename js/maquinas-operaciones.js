@@ -771,12 +771,13 @@ function qaJobOptions(selected=''){
   const el=input('mopsQAJob');if(el)el.innerHTML='<option value="">— seleccionar trabajo —</option>'+jobs.map(j=>`<option value="${j.id}"${selected===j.id?' selected':''}>${esc(j.name)} · ${esc(orderLabel(j.pedidoId)||'sin pedido')}</option>`).join('');
 }
 function openQA(jobId=''){
-  qaJobOptions(jobId);setVal('mopsQAId','');setVal('mopsQAResult','aprobado');setVal('mopsQAReason','Warping');setVal('mopsQAWaste',0);setVal('mopsQANotes','');setVal('mopsQAPhoto','');
+  const pre=jobId?data().jobs.find(x=>x.id===jobId):null;
+  qaJobOptions(jobId);setVal('mopsQAId','');setVal('mopsQAResult','aprobado');setVal('mopsQAReason','Warping');setVal('mopsQAWaste',pre?num(pre.grams):'');setVal('mopsQANotes','');setVal('mopsQAPhoto','');
   toggleQAFailure();input('mopsQAModal').style.display='flex';
 }
 function closeQA(){input('mopsQAModal').style.display='none';}
 function toggleQAFailure(){const el=input('mopsQAFailureFields');if(el)el.style.display=inputVal('mopsQAResult')==='fallido'?'grid':'none';}
-function prefillQA(){const j=data().jobs.find(x=>x.id===inputVal('mopsQAJob'));if(j&&j.failureReason)setVal('mopsQAReason',j.failureReason);}
+function prefillQA(){const j=data().jobs.find(x=>x.id===inputVal('mopsQAJob'));if(j){if(j.failureReason)setVal('mopsQAReason',j.failureReason);setVal('mopsQAWaste',num(j.grams));}}
 function consumeJobMaterial(j,actualGrams){
   if(j.materialConsumed)return;
   const grams=Math.max(0,num(actualGrams,j.grams)),s=data().spools.find(x=>x.id===j.spoolId);
@@ -833,13 +834,23 @@ async function maybeCompleteOrder(pedidoId){
   }
   await markOrderReady(pedidoId);
 }
+// Desperdicio efectivo de un fallido: un 0 explícito significa 0 (falló antes de
+// extruir); solo un campo EN BLANCO asume el total planificado del trabajo. Antes
+// `waste||job.grams` descontaba el total aun con un 0 escrito a mano, sobre-
+// consumiendo la bobina y distorsionando el costo.
+function _qaFailWaste(wasteRaw,jobGrams){
+  const t=String(wasteRaw==null?'':wasteRaw).trim();
+  return t===''?Math.max(0,num(jobGrams)):Math.max(0,num(t));
+}
 function saveQA(){
   const job=data().jobs.find(j=>j.id===inputVal('mopsQAJob'));if(!job){toast('Selecciona un trabajo','error');return;}
-  const result=inputVal('mopsQAResult'),waste=Math.max(0,num(inputVal('mopsQAWaste'))),photo=inputVal('mopsQAPhoto').trim();
+  const result=inputVal('mopsQAResult'),photo=inputVal('mopsQAPhoto').trim();
+  const failWaste=_qaFailWaste(inputVal('mopsQAWaste'),job.grams);
+  const waste=result==='fallido'?failWaste:0;
   if(photo&&!/^https?:\/\//i.test(photo)){toast('La evidencia debe ser una URL http o https','error');return;}
   const q={id:uid('qa'),jobId:job.id,pedidoId:job.pedidoId,machineId:job.machineId,result,reason:result==='fallido'?inputVal('mopsQAReason'):'',
     wasteGrams:waste,notes:inputVal('mopsQANotes').trim(),photo,actor:actor(),createdAt:nowIso(),updatedAt:nowIso()};
-  data().qa.unshift(q);consumeJobMaterial(job,result==='fallido'?(waste||job.grams):job.grams);
+  data().qa.unshift(q);consumeJobMaterial(job,result==='fallido'?failWaste:job.grams);
   if(result==='fallido'){
     job.status='fallido';job.failureReason=q.reason;job.wasteGrams=waste;
     const reprint={...job,id:uid('job'),name:job.name+' · reimpresión',status:'pendiente',machineId:'',spoolId:'',archived:false,reprintOf:job.id,
