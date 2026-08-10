@@ -190,7 +190,8 @@ function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); const t
 function _ofDayInsight(runs){
   const now=new Date(), day0=new Date(now); day0.setHours(0,0,0,0);
   const today=(runs||[]).filter(r=>_ofSameDay(r.t)).length;
-  const lw0=day0.getTime()-7*864e5, lw1=lw0+864e5;
+  const lwDay=new Date(day0); lwDay.setDate(lwDay.getDate()-7); const lw0=lwDay.getTime();
+  const lwNext=new Date(lwDay); lwNext.setDate(lwNext.getDate()+1); const lw1=lwNext.getTime();
   const lastWeek=(runs||[]).filter(r=>r.t>=lw0&&r.t<lw1).length;
   const hours=new Array(24).fill(0);
   (runs||[]).forEach(r=>{ if(r.t>=day0.getTime()) hours[new Date(r.t).getHours()]++; });
@@ -206,7 +207,10 @@ function _ofStreakRecord(runs){
   (runs||[]).forEach(r=>{ if(!r.t)return; const d=new Date(r.t); d.setHours(0,0,0,0); const k=d.getTime(); days.add(k); byDay[k]=(byDay[k]||0)+1; });
   const t0=new Date(); t0.setHours(0,0,0,0);
   let streak=0;
-  for(let i=0;i<3650;i++){ const k=t0.getTime()-i*864e5;
+  // Se avanza por día CALENDARIO, no restando 24 h fijas: en los dos cambios de
+  // horario de Chile al año un día dura 23 o 25 h, y la resta fija desalineaba la
+  // llave del día → la racha se cortaba antes de tiempo.
+  for(let i=0;i<3650;i++){ const dk=new Date(t0); dk.setDate(dk.getDate()-i); const k=dk.getTime();
     if(days.has(k)) streak++;
     else { if(i===0) continue; break; } }   // hoy sin actividad no corta la racha de ayer
   let recordN=0, recordK=0;
