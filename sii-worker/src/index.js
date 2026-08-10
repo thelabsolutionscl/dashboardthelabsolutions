@@ -1,6 +1,6 @@
 import { parsePFX } from './sii-crypto.js';
 import { getSIIToken, uploadDTE } from './sii-auth.js';
-import { generateSignedDTE, buildEnvioDTE } from './dte-xml.js';
+import { buildSignedEnvioDTE } from './dte-xml.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -117,11 +117,10 @@ async function handleEmitDTE(request, env) {
   // Autenticar con SII
   const token = await getSIIToken(privateKey, certificate, env);
 
-  // Generar y firmar DTE
-  const signedDte = generateSignedDTE(data, folio, cafXml, privateKey, certificate, env);
-
-  // Construir EnvioDTE y firmarlo
-  const envioDte = buildEnvioDTE(signedDte, data, folio, env, privateKey, certificate);
+  // Generar el DTE, firmarlo y envolverlo en un EnvioDTE listo para el SII
+  // (buildSignedEnvioDTE hace el DTE + TED, la carátula y firma cada Documento
+  //  y el SetDTE, y devuelve el XML completo que espera uploadDTE).
+  const envioDte = buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env);
 
   // Subir al SII
   const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
