@@ -467,15 +467,27 @@ function _pagoOcurrencias(p,horizIni,horizFin){
   const base=new Date(p.fecha+'T00:00:00').getTime();
   if(isNaN(base))return[];
   if(!p.recurrente)return(base>=horizIni&&base<horizFin)?[base]:[];
-  const out=[];const d0=new Date(p.fecha+'T00:00:00');const dia=d0.getDate();
-  let d=new Date(d0.getTime());
-  // Retrocede/avanza hasta el inicio del horizonte
-  while(d.getTime()>=horizIni){d.setMonth(d.getMonth()-1);}
-  while(d.getTime()<horizFin){
-    if(d.getTime()>=horizIni){const cand=new Date(d.getFullYear(),d.getMonth(),dia);out.push(cand.getTime());}
-    d.setMonth(d.getMonth()+1);
+  // El día del mes en que cae el pago. Si el pago es "el 31" y el mes no tiene
+  // 31 días, cae el último día de ese mes (arriendo/sueldos: pagas igual).
+  const d0=new Date(p.fecha+'T00:00:00');
+  const dia=d0.getDate();
+  // Se recorre mes a mes con year/month explícitos. Antes se avanzaba con
+  // setMonth() sobre una fecha que ya tenía día 31: al pasar a un mes más corto,
+  // JS desborda al mes siguiente (feb 31 → mar 3) y ESE mes se saltaba. Un pago
+  // el día 31 daba 4 ocurrencias en vez de 6, y en el día equivocado —los
+  // egresos salían subestimados y la caja se veía más sana de lo real.
+  const finDate=new Date(horizFin);
+  const out=[];
+  let y=new Date(horizIni).getFullYear();
+  let m=new Date(horizIni).getMonth()-1;   // arranca un mes antes por si el horizonte parte a mitad de mes
+  for(let i=0;i<14;i++){                    // 8 semanas ≈ 2-3 meses; 14 cubre de sobra sin poder colgarse
+    const ultimo=new Date(y,m+1,0).getDate();          // último día de ese mes
+    const cand=new Date(y,m,Math.min(dia,ultimo)).getTime();
+    if(cand>=horizIni&&cand<horizFin) out.push(cand);
+    m++; if(m>11){m=0;y++;}
+    if(new Date(y,m,1).getTime()>=finDate.getTime()+31*864e5) break;
   }
-  return out.filter(t=>t>=horizIni&&t<horizFin);
+  return out;
 }
 function finRenderFlujoCaja(){
   const box=document.getElementById('finFlujoCaja'); if(!box) return;
