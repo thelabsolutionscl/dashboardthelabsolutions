@@ -63,6 +63,17 @@ async function _driveUploadDataUrl(filename,dataUrl,folderId){
   return r.json();
 }
 
+// Igual que subir un data URL, pero REEMPLAZA el archivo si ya existe uno con
+// ese nombre en la carpeta (usa _driveUpsertFile). Sin esto, reguardar una
+// propuesta en Drive duplicaba cada foto, cada vista y el PDF: Drive permite
+// nombres repetidos en una carpeta, así que dos guardados = dos copias, tres =
+// tres, y el cliente terminaba viendo varios "ficha_propuesta_COT-xxx.pdf" sin
+// saber cuál es el vigente.
+async function _driveUpsertDataUrl(folderId,filename,dataUrl,mimeType){
+  const res=await fetch(dataUrl);const blob=await res.blob();
+  return _driveUpsertFile(folderId,filename,blob,mimeType||blob.type||'application/octet-stream');
+}
+
 async function _driveUploadText(filename,content,mimeType,folderId){
   const token=await _driveGetToken();
   const meta={name:filename};if(folderId) meta.parents=[folderId];
@@ -239,7 +250,7 @@ async function guardarFichaEnDrive(cotId){
     for(let i=0;i<_fpItems.length;i++){
       if(_fpRawImages[i]?.dataUrl){
         setDriveStatus('⬆️ Foto producto '+(i+1)+'...');
-        await _driveUploadDataUrl('foto_producto_'+(i+1)+'.jpg',_fpRawImages[i].dataUrl,cotFolderId);
+        await _driveUpsertDataUrl(cotFolderId,'foto_producto_'+(i+1)+'.jpg',_fpRawImages[i].dataUrl,'image/jpeg');
         uploadedCount++;
       }
     }
@@ -249,7 +260,7 @@ async function guardarFichaEnDrive(cotId){
       for(const[campo,nombre]of Object.entries(vistaMap)){
         if(_fpItems[i][campo]){
           setDriveStatus('⬆️ Vista '+nombre+' muestra '+(i+1)+'...');
-          await _driveUploadDataUrl('muestra_'+(i+1)+'_'+nombre+'.png',_fpItems[i][campo],cotFolderId);
+          await _driveUpsertDataUrl(cotFolderId,'muestra_'+(i+1)+'_'+nombre+'.png',_fpItems[i][campo],'image/png');
           uploadedCount++;
         }
       }
@@ -261,20 +272,13 @@ async function guardarFichaEnDrive(cotId){
       try{
         const pdfBlob=await _fichaHTMLtoPdfBlob(docResult.html);
         setDriveStatus('⬆️ Subiendo ficha PDF...');
-        const token=await _driveGetToken();
-        const meta={name:'ficha_propuesta_'+numCot+'.pdf'};if(cotFolderId) meta.parents=[cotFolderId];
-        const form=new FormData();
-        form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
-        form.append('file',pdfBlob,'ficha_propuesta_'+numCot+'.pdf');
-        const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{
-          method:'POST',headers:{'Authorization':'Bearer '+token},body:form
-        });
-        if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||r.statusText);}
+        // Reemplaza el PDF anterior en vez de apilar copias con el mismo nombre.
+        await _driveUpsertFile(cotFolderId,'ficha_propuesta_'+numCot+'.pdf',pdfBlob,'application/pdf');
         uploadedCount++;
       }catch(pdfErr){
         console.warn('[Drive PDF]',pdfErr);
         setDriveStatus('⬆️ Subiendo ficha (HTML fallback)...');
-        await _driveUploadText('ficha_propuesta_'+numCot+'.html',docResult.html,'text/html',cotFolderId);
+        await _driveUpsertFile(cotFolderId,'ficha_propuesta_'+numCot+'.html',new Blob([docResult.html],{type:'text/html'}),'text/html');
         uploadedCount++;
       }
     }
