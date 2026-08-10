@@ -1096,12 +1096,15 @@ async function nlDestSend(){
   nlDestSave(false);
   const btn=document.getElementById('nlDestSendBtn');const prev=btn.textContent;btn.disabled=true;
   const body=_nlEmailHtml(f),subject=f['Asunto']||f['Campaña']||'Newsletter';
-  let ok=0,fail=0;
+  let ok=0,fail=0;const enviados=[];
   for(let i=0;i<list.length;i++){
     btn.textContent=`Enviando ${i+1}/${list.length}…`;
-    try{const r=await MAIL.post({action:'send',to:list[i].email,subject,body,from_name:'The Lab Solutions'});if(r&&!r.error)ok++;else fail++;}catch(_){fail++;}
+    try{const r=await MAIL.post({action:'send',to:list[i].email,subject,body,from_name:'The Lab Solutions'});if(r&&!r.error){ok++;enviados.push(list[i].email);}else fail++;}catch(_){fail++;}
     await new Promise(r=>setTimeout(r,120));
   }
+  // Se registra a quién SÍ le llegó, para que "no reenviar" funcione la próxima
+  // vez aunque Make no escriba la fila en Newsletter_Envios.
+  _nlRecordSent(enviados);
   btn.disabled=false;btn.textContent=prev;
   try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Estado':'Enviada','Enviados':ok,'Fecha envío':c.fields['Fecha envío']||hoyCL()});Object.assign(c.fields,{'Estado':'Enviada','Enviados':ok});}catch(_){}
   toast(`✓ Enviado a ${ok}${fail?` · ${fail} con error`:''}`,fail?'info':'success');
@@ -1475,11 +1478,28 @@ function _nlEngByEmail(){
   });
   return m;
 }
-// Emails que ya recibieron una campaña en los últimos N días (anti-doble-envío)
+// Registro LOCAL de a quién se le envió, por si Make no alcanza a escribir la
+// fila en Newsletter_Envios. El newsletter se manda directo por MAIL.post (no
+// pasa por Make), así que sin esto la tabla de envíos no se entera de los
+// correos salidos desde el dashboard, y el "no reenviar" filtraba contra el
+// vacío: los clientes recibían la campaña de nuevo pese al aviso.
+const _NL_SENT_LOG_KEY='thelab_nl_sent_log_v1';
+function _nlSentLog(){try{return JSON.parse(localStorage.getItem(_NL_SENT_LOG_KEY)||'[]');}catch(_){return[];}}
+function _nlRecordSent(emails){
+  if(!emails||!emails.length)return;
+  const now=Date.now(), keep=now-60*864e5;   // se guardan 60 días; el dedup usa ventanas más cortas
+  const prev=_nlSentLog().filter(x=>x&&x.ts>=keep);
+  emails.forEach(em=>{const e=String(em||'').toLowerCase();if(e)prev.push({email:e,ts:now});});
+  try{localStorage.setItem(_NL_SENT_LOG_KEY,JSON.stringify(prev.slice(-5000)));}catch(_){}
+}
+// Emails que ya recibieron una campaña en los últimos N días (anti-doble-envío).
+// Une lo que registró Make (Newsletter_Envios) con el registro local del propio
+// dashboard: cualquiera de las dos fuentes cuenta como "ya recibió".
 function _nlRecentRecipients(days){
   const cut=Date.now()-(days||14)*864e5, set=new Set();
   (state.nlEnvios||[]).forEach(e=>{ const em=String(e.fields['Email']||'').toLowerCase(); if(!em) return;
     const t=Date.parse(e.fields['Fecha envío']||e.createdTime||'')||0; if(t>=cut) set.add(em); });
+  _nlSentLog().forEach(x=>{ if(x&&x.ts>=cut&&x.email) set.add(String(x.email).toLowerCase()); });
   return set;
 }
 

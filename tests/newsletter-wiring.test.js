@@ -88,7 +88,10 @@ test('el envío directo confirma, separa destinatarios y no reintenta en lote po
   assert.match(send, /for\s*\(let\s+i\s*=\s*0;\s*i\s*<\s*list\.length/);
   assert.match(send, /MAIL\.post\(\{action:['"]send['"],to:list\[i\]\.email/);
   assert.doesNotMatch(send, /bcc\s*:/i, 'la audiencia no debe exponerse por CCO compartido');
-  assert.match(send, /if\(r&&!r\.error\)ok\+\+;else fail\+\+/);
+  // El éxito ahora además registra al destinatario para el anti-doble-envío
+  // (ver tests/newsletter.test.js). Sigue contando ok/fail por separado.
+  assert.match(send, /if\(r&&!r\.error\)\{ok\+\+;enviados\.push\(list\[i\]\.email\)\;\}else fail\+\+/);
+  assert.match(send, /_nlRecordSent\(enviados\)/, 'registra a quién le llegó');
 });
 
 test('el ciclo editorial conserva borrador, revisión, programación y envío', () => {
