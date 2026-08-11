@@ -15,15 +15,33 @@ if (!TOKEN) { console.error('Falta AIRTABLE_TOKEN'); process.exit(1); }
 const BASE_ID = 'app1YtD74AqiPWQhy';
 const API = process.env.AIRTABLE_API || 'https://api.airtable.com'; // sobreescribible para tests
 const TABLAS = ['Clientes', 'Cotizaciones', 'Pedidos', 'Proveedores', 'Facturas', 'Reportes', 'Maquinas', 'Automations', 'Social_Posts', 'Social_Interactions', 'Agent_Log'];
+const MAX_REINTENTOS = Number(process.env.BACKUP_REINTENTOS || 4);
+const dormir = (ms) => new Promise((res) => setTimeout(res, ms));
+
+// GET de una página con reintentos ante fallos TRANSITORIOS (429 rate-limit de
+// Airtable, 5xx, cortes de red). Sin esto un blip momentáneo botaba la tabla
+// entera del respaldo "completo" y el job igual salía OK: pérdida de datos
+// silenciosa que solo se descubre al restaurar. Los errores reales (401/403/404)
+// no se reintentan: fallan al toque.
+async function getPagina(url, tabla) {
+  for (let intento = 0; ; intento++) {
+    let r, err;
+    try { r = await fetch(url, { headers: { Authorization: 'Bearer ' + TOKEN } }); }
+    catch (e) { err = e; }
+    if (r && r.ok) return r.json();
+    const transitorio = err || r.status === 429 || r.status >= 500;
+    if (!transitorio) throw new Error(`HTTP ${r.status} en ${tabla}: ${(await r.text()).slice(0, 200)}`);
+    if (intento >= MAX_REINTENTOS) throw err || new Error(`HTTP ${r.status} en ${tabla} tras ${MAX_REINTENTOS} reintentos`);
+    await dormir(Math.min(30000, 1000 * 2 ** intento)); // 1s, 2s, 4s, 8s… tope 30s
+  }
+}
 
 async function fetchTable(tabla) {
   const records = [];
   let offset = '';
   do {
     const url = `${API}/v0/${BASE_ID}/${encodeURIComponent(tabla)}?pageSize=100${offset ? '&offset=' + offset : ''}`;
-    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + TOKEN } });
-    if (!r.ok) throw new Error(`HTTP ${r.status} en ${tabla}: ${(await r.text()).slice(0, 200)}`);
-    const j = await r.json();
+    const j = await getPagina(url, tabla);
     records.push(...(j.records || []));
     offset = j.offset || '';
   } while (offset);
