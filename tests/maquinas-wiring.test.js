@@ -123,12 +123,30 @@ test('Pedidos se enlaza con planificación sin incluir pedidos terminados',()=>{
 
 test('las áreas del centro operacional están enlazadas con su navegación',()=>{
   const views=['operacion','inteligencia','planificacion','postproduccion','capacidad','materiales','calidad','mantenimiento','seguridad','analitica','perfiles','laminado'];
-  for(const view of views){
-    assert.match(INDEX,new RegExp(`data-maq-nav=["']${view}["']`),`falta navegación ${view}`);
-    assert.match(INDEX,new RegExp(`data-maq-view=["']${view}["']`),`falta vista ${view}`);
-  }
+  // Las 12 áreas siguen existiendo como secciones; lo que cambió es que se
+  // agrupan en tres pantallas en vez de tener una pestaña cada una.
+  for(const view of views)assert.match(INDEX,new RegExp(`data-maq-view=["']${view}["']`),`falta vista ${view}`);
+  for(const screen of ['hoy','trabajos','taller'])assert.match(INDEX,new RegExp(`data-maq-nav=["']${screen}["']`),`falta la pantalla ${screen}`);
   assert.match(OPS,/showView/);
   assert.match(INDEX,/MachineOps\.showView\(/);
+
+  // Una sección que no pertenezca a ninguna pantalla queda inalcanzable para
+  // siempre: nada la mostraría nunca. Esto lo detecta antes de que pase.
+  const groups=OPS.slice(OPS.indexOf('const VIEW_GROUPS='),OPS.indexOf('const VIEW_TITLES='));
+  const agrupadas=(groups.match(/'([a-z]+)'/g)||[]).map(s=>s.replace(/'/g,''));
+  for(const view of views)assert.ok(agrupadas.includes(view),`${view} no pertenece a ninguna pantalla`);
+  const declaradas=[...INDEX.matchAll(/data-maq-view=["']([a-z]+)["']/g)].map(m=>m[1]);
+  for(const view of new Set(declaradas))assert.ok(agrupadas.includes(view),`la sección ${view} existe en el HTML pero ninguna pantalla la muestra`);
+});
+
+test('los enlaces al esquema anterior de áreas siguen funcionando',()=>{
+  // Hay QR impresos, enlaces guardados y llamadas internas que usan los nombres
+  // viejos ('planificacion', 'materiales'). Deben resolverse a su pantalla.
+  assert.match(OPS,/function groupOf\(/,'falta la resolución de nombres antiguos');
+  const show=functionSource(OPS,'showView');
+  assert.match(show,/groupOf\(/,'showView debe resolver el nombre recibido a su pantalla');
+  assert.match(show,/goToSection\(/,'un nombre de área concreto debe llevar la vista hasta esa sección');
+  assert.match(OPS,/showView\(['"]planificacion['"]\)/,'los atajos internos siguen usando nombres de área');
 });
 
 test('NFC y enlaces directos vuelven a Máquinas después del login',()=>{
