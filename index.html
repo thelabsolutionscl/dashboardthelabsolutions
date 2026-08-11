@@ -3098,30 +3098,20 @@
   </div>
 
   <div id="maqWorkspaceNav" class="maq-workspace-nav" role="tablist" aria-label="Áreas de Máquinas">
-    <!-- Orden por FLUJO DE TRABAJO: vigilar → preparar → producir → cerrar → soporte.
-         Cada grupo se rotula para que 12 áreas se lean de un vistazo. -->
-    <span class="maq-nav-group">Vigilar</span>
-    <button class="active" data-maq-nav="operacion" onclick="MachineOps.showView('operacion',this)">📡 Operación</button>
-    <button data-maq-nav="inteligencia" onclick="MachineOps.showView('inteligencia',this)">🧠 Centro inteligente <span id="mopsNavIntel" class="maq-nav-count">0</span></button>
-    <span class="maq-nav-sep" aria-hidden="true"></span>
-    <span class="maq-nav-group">Preparar</span>
-    <button data-maq-nav="laminado" onclick="MachineOps.showView('laminado',this)">🖨 Laminado</button>
-    <button data-maq-nav="perfiles" onclick="MachineOps.showView('perfiles',this)">🎛 Perfiles</button>
-    <button data-maq-nav="materiales" onclick="MachineOps.showView('materiales',this)">🧵 Materiales <span id="mopsNavSpools" class="maq-nav-count">0</span></button>
-    <span class="maq-nav-sep" aria-hidden="true"></span>
-    <span class="maq-nav-group">Producir</span>
-    <button data-maq-nav="planificacion" onclick="MachineOps.showView('planificacion',this)">🗓 Planificación <span id="mopsNavPending" class="maq-nav-count">0</span></button>
-    <button data-maq-nav="capacidad" onclick="MachineOps.showView('capacidad',this)">🧮 Capacidad</button>
-    <span class="maq-nav-sep" aria-hidden="true"></span>
-    <span class="maq-nav-group">Cerrar</span>
-    <button data-maq-nav="calidad" onclick="MachineOps.showView('calidad',this)">✅ Calidad <span id="mopsNavQa" class="maq-nav-count">0</span></button>
-    <button data-maq-nav="postproduccion" onclick="MachineOps.showView('postproduccion',this)">🧩 Postproducción <span id="mopsNavPost" class="maq-nav-count">0</span></button>
-    <span class="maq-nav-sep" aria-hidden="true"></span>
-    <span class="maq-nav-group">Soporte</span>
-    <button data-maq-nav="mantenimiento" onclick="MachineOps.showView('mantenimiento',this)">🔧 Mantenimiento <span id="mopsNavMaint" class="maq-nav-count">0</span></button>
-    <button data-maq-nav="seguridad" onclick="MachineOps.showView('seguridad',this)">🛡 Seguridad <span id="mopsNavSafety" class="maq-nav-count">0</span></button>
-    <button data-maq-nav="analitica" onclick="MachineOps.showView('analitica',this)">📊 Analítica</button>
+    <!-- Tres pantallas, una pregunta cada una: ¿qué hago ahora? ¿cómo va cada
+         pieza? ¿con qué cuento? Las 12 áreas siguen existiendo como secciones
+         apiladas dentro de su pantalla (ver VIEW_GROUPS en maquinas-operaciones.js);
+         lo que desaparece es tener que elegir entre doce pestañas para
+         responder una sola de esas preguntas. -->
+    <button class="active" data-maq-nav="hoy" onclick="MachineOps.showView('hoy',this)">📡 Hoy <span id="mopsNavIntel" class="maq-nav-count">0</span></button>
+    <button data-maq-nav="trabajos" onclick="MachineOps.showView('trabajos',this)">🗓 Trabajos <span id="mopsNavPending" class="maq-nav-count">0</span></button>
+    <button data-maq-nav="taller" onclick="MachineOps.showView('taller',this)">🧵 Taller <span id="mopsNavTaller" class="maq-nav-count">0</span></button>
   </div>
+
+  <!-- Índice de la pantalla activa: enlaces a cada sección apilada debajo. Con
+       varias secciones por pantalla, esto reemplaza lo que antes hacían las
+       pestañas — saltar directo a lo que buscas sin perder el contexto. -->
+  <div id="maqSectionIndex" class="maq-section-index"></div>
 
   <!-- ── CENTRO INTELIGENTE DE OPERACIÓN ── -->
   <div id="maquinaIntelligenceView" data-maq-view="inteligencia" style="display:none;margin-bottom:28px">
@@ -3133,14 +3123,6 @@
   </div>
 
   <!-- ── POSTPRODUCCIÓN ── -->
-  <div id="maquinaPostView" data-maq-view="postproduccion" style="display:none;margin-bottom:28px">
-    <div class="maq-view-head">
-      <div><div class="maq-view-title">🧩 Flujo de postproducción</div><div class="maq-view-sub">Continúa la trazabilidad después del QA 3D: lijado, pintura, gráfica, acrílico, armado y empaque.</div></div>
-      <div class="maq-view-actions"><button class="btn btn-primary btn-sm" onclick="MachineOps.openScanner()">▦ Escanear QR</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.clearScanMachine()">Limpiar máquina escaneada</button></div>
-    </div>
-    <div id="mopsPostProduction"></div>
-  </div>
-
   <!-- ── SIMULADOR DE CAPACIDAD ── -->
   <div id="maquinaCapacityView" data-maq-view="capacidad" style="display:none;margin-bottom:28px">
     <div class="maq-view-head"><div><div class="maq-view-title">🧮 Simulador de capacidad y promesa</div><div class="maq-view-sub">Calcula ciclos, distribución, costo y fecha realista usando la carga actual de la granja.</div></div></div>
@@ -3193,14 +3175,6 @@
   </div>
 
   <!-- ── CONTROL DE CALIDAD Y REIMPRESIONES ── -->
-  <div id="maquinaQualityView" data-maq-view="calidad" style="display:none;margin-bottom:28px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
-      <span class="maq-view-title">✅ Control de calidad y reimpresiones</span>
-      <button class="btn btn-ghost btn-sm" onclick="MachineOps.openQA()">+ Registrar control</button>
-    </div>
-    <div id="mopsQuality"></div>
-  </div>
-
   <!-- ── PLANIFICADOR DE TRABAJOS ── -->
   <div id="maquinaPlanningOpsView" data-maq-view="planificacion" style="display:none;margin-bottom:28px">
     <div class="maq-view-head">
@@ -3361,6 +3335,27 @@
     <div id="heatmapSemanas" style="margin-bottom:12px"></div>
     <div id="maquinasKPIs" style="margin-bottom:14px"></div>
     <div class="card"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px"><thead id="maquinasHeader"></thead><tbody id="maquinasBody"></tbody></table></div></div>
+  </div>
+
+  <!-- ── CONTROL DE CALIDAD ──
+       Vive dentro de la pantalla Trabajos: un trabajo pasa de planificado a
+       impreso, a revisado, a terminado sin cambiar de pantalla. El orden en el
+       DOM es el orden en que se apilan las secciones. -->
+  <div id="maquinaQualityView" data-maq-view="calidad" style="display:none;margin-bottom:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
+      <span class="maq-view-title">✅ Control de calidad y reimpresiones</span>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.openQA()">+ Registrar control</button>
+    </div>
+    <div id="mopsQuality"></div>
+  </div>
+
+  <!-- ── POSTPRODUCCIÓN ── -->
+  <div id="maquinaPostView" data-maq-view="postproduccion" style="display:none;margin-bottom:28px">
+    <div class="maq-view-head">
+      <div><div class="maq-view-title">🧩 Flujo de postproducción</div><div class="maq-view-sub">Continúa la trazabilidad después del QA 3D: lijado, pintura, gráfica, acrílico, armado y empaque.</div></div>
+      <div class="maq-view-actions"><button class="btn btn-primary btn-sm" onclick="MachineOps.openScanner()">▦ Escanear QR</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.clearScanMachine()">Limpiar máquina escaneada</button></div>
+    </div>
+    <div id="mopsPostProduction"></div>
   </div>
 
   <!-- ── ROLLOS Y MATERIALES ── -->

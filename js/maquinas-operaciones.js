@@ -439,13 +439,54 @@ function kpi(label,value,sub='',color='var(--text)'){
   return`<div class="mops-kpi"><div class="mops-kpi-label">${esc(label)}</div><div class="mops-kpi-value" style="color:${color}">${value}</div><div class="mops-kpi-sub">${esc(sub)}</div></div>`;
 }
 function setText(id,value){const el=document.getElementById(id);if(el)el.textContent=value;}
+// Tres pantallas, una pregunta cada una: ¿qué hago ahora? ¿cómo va cada pieza?
+// ¿con qué cuento? Las 12 áreas siguen existiendo como secciones apiladas; lo
+// que se elimina es tener que elegir entre doce pestañas para responder una.
+// El orden real de apilado lo da el DOM en index.html, no este array.
+const VIEW_GROUPS={
+  hoy:['inteligencia','operacion'],
+  trabajos:['planificacion','calidad','postproduccion'],
+  taller:['capacidad','perfiles','laminado','materiales','mantenimiento','seguridad','analitica'],
+};
+const VIEW_TITLES={
+  inteligencia:'🧠 Alertas',operacion:'📡 Máquinas',
+  planificacion:'🗓 Planificación',calidad:'✅ Calidad',postproduccion:'🧩 Postproducción',
+  capacidad:'🧮 Capacidad',perfiles:'🎛 Perfiles',laminado:'🖨 Laminado',materiales:'🧵 Materiales',
+  mantenimiento:'🔧 Mantenimiento',seguridad:'🛡 Seguridad',analitica:'📊 Analítica',
+};
+// Los enlaces guardados, el localStorage y las llamadas internas siguen usando
+// los nombres de área antiguos ('planificacion', 'materiales'…). Se resuelven a
+// su pantalla para que ningún atajo ni QR existente se rompa.
+function groupOf(view){
+  if(VIEW_GROUPS[view])return view;
+  return Object.keys(VIEW_GROUPS).find(g=>VIEW_GROUPS[g].includes(view))||'hoy';
+}
+function goToSection(view){
+  if(!VIEW_TITLES[view])return;
+  const el=document.querySelector(`[data-maq-view="${view}"]`);
+  if(!el||typeof el.scrollIntoView!=='function')return;
+  try{el.scrollIntoView({behavior:'smooth',block:'start'});}catch(_){el.scrollIntoView();}
+}
+function renderSectionIndex(group){
+  const el=document.getElementById('maqSectionIndex');if(!el)return;
+  const members=VIEW_GROUPS[group]||[];
+  // Con una sola sección el índice no aporta nada: se oculta.
+  el.innerHTML=members.length<2?'':members.map(v=>`<button type="button" onclick="MachineOps.goToSection('${v}')">${esc(VIEW_TITLES[v]||v)}</button>`).join('');
+}
 function showView(view,button){
-  _activeView=view||'operacion';
-  document.querySelectorAll('[data-maq-view]').forEach(el=>{el.style.display=el.dataset.maqView===_activeView?'':'none';});
-  document.querySelectorAll('[data-maq-nav]').forEach(b=>b.classList.toggle('active',b.dataset.maqNav===_activeView));
+  const target=view||'hoy';
+  const group=groupOf(target);
+  _activeView=group;
+  const members=VIEW_GROUPS[group];
+  document.querySelectorAll('[data-maq-view]').forEach(el=>{el.style.display=members.includes(el.dataset.maqView)?'':'none';});
+  document.querySelectorAll('[data-maq-nav]').forEach(b=>b.classList.toggle('active',b.dataset.maqNav===group));
   if(button)button.classList.add('active');
-  localStorage.setItem('machine_ops_view',_activeView);
+  localStorage.setItem('machine_ops_view',group);
+  renderSectionIndex(group);
   renderAll();
+  // Si llegó un nombre de área concreto (enlace directo, QR, botón interno),
+  // la pantalla ya es la correcta: falta llevar la vista hasta esa sección.
+  if(target!==group)goToSection(target);
 }
 
 function renderOpsOverview(){
@@ -1069,15 +1110,23 @@ function renderAnalytics(){
     <div class="card" style="overflow-x:auto"><div style="padding:11px 13px 4px;font-size:10px;font-weight:700;color:var(--text3)">RENDIMIENTO POR IMPRESORA</div><table class="mops-job-table" style="min-width:850px"><thead><tr><th>Máquina</th><th>Terminados</th><th>Fallidos</th><th>Tasa éxito</th><th>Horas</th><th>Material</th><th>Costo 3D</th><th>Contribución</th></tr></thead><tbody>${machineRows.map(r=>`<tr><td><b style="color:var(--text)">${esc(r.m.nombre)} #${r.m.numG}</b><div style="font-size:9px;color:var(--text3)">${esc(r.m.modelo)}</div></td><td>${r.done}</td><td style="color:${r.fail?'var(--danger)':'var(--text2)'}">${r.fail}</td><td style="color:${r.rate<90?'var(--danger)':'var(--accent3)'}">${r.rate.toFixed(0)}%</td><td>${r.hours.toFixed(1)}h</td><td>${Math.round(r.grams)}g</td><td>${fmtMoney(r.prodCost)}</td><td style="color:${r.contrib<0?'var(--danger)':'var(--accent3)'}">${fmtMoney(r.contrib)}</td></tr>`).join('')}</tbody></table></div>
     <div class="card" style="padding:12px;margin-top:12px"><div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px">AUDITORÍA OPERACIONAL</div><div class="mops-audit-list">${data().audit.slice(0,40).map(a=>`<div class="mops-audit-row"><span>${new Date(a.at).toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'})}</span><b style="color:var(--text2)">${esc(a.actor)}</b><span>${esc(a.action)}${a.machineId?' · '+esc(machineLabel(a.machineId)):''}${a.detail?' · '+esc(a.detail):''}</span></div>`).join('')||'<div style="color:var(--text3);font-size:10px">Sin acciones registradas</div>'}</div></div>`;
 }
+// Con tres pantallas, cada contador suma lo que hay pendiente dentro de ella.
+// Los identificadores de las áreas viejas se conservan: setText ignora los que
+// ya no existen en el DOM, y así los contadores antiguos no dejan huecos.
 function updateNavCounts(){
   setText('mopsNavPending',activeJobs().length);
   setText('mopsNavSpools',data().spools.filter(s=>!s.archived&&spoolAvailable(s)>0).length);
   setText('mopsNavQa',data().jobs.filter(j=>!j.archived&&j.status==='qa').length);
   setText('mopsNavPost',data().workflows.filter(w=>!w.archived&&w.status!=='done').length);
-  const sd=safetyDecision(data().safetyConfig,latestSafetyReading(),{unattended:true,cameraConfigured:true});setText('mopsNavSafety',sd.blockers.length+sd.warnings.length);
+  const sd=safetyDecision(data().safetyConfig,latestSafetyReading(),{unattended:true,cameraConfigured:true});
+  const safety=sd.blockers.length+sd.warnings.length;
+  setText('mopsNavSafety',safety);
   let alerts=0;try{(MAQUINAS||[]).forEach(m=>alerts+=getMaintAlerts(m).length);}catch(_){}
   setText('mopsNavMaint',alerts);
   const smart=buildSmartAlerts();setText('mopsNavIntel',smart.length);
+  // Taller es la pantalla de consulta: solo avisa de lo que exige una acción
+  // (mantenciones vencidas o próximas y bloqueos de seguridad), no del stock.
+  setText('mopsNavTaller',alerts+safety);
 }
 function renderAll(){
   renderOpsOverview();renderIntelligence();renderPlanning();renderMaterials();renderQuality();renderPostProduction();renderProfiles();renderMaintenanceProfiles();renderAnalytics();renderSafety();fillCapacityOrders();updateNavCounts();
@@ -1429,7 +1478,9 @@ async function init(){
   if(_initPromise)return _initPromise;
   _initPromise=(async()=>{
     data();await loadRemote();await restoreLegacyQueues();importLegacyProfiles();_initialized=true;
-    _activeView=localStorage.getItem('machine_ops_view')||'operacion';showView(_activeView);renderAll();bindTechStatusListener();restartBridgeTimer();setTimeout(()=>checkBridgeHealth(true),600);
+    // Un valor guardado del esquema anterior ('materiales', 'calidad'…) se
+    // resuelve solo a su pantalla dentro de showView.
+    _activeView=localStorage.getItem('machine_ops_view')||'hoy';showView(_activeView);renderAll();bindTechStatusListener();restartBridgeTimer();setTimeout(()=>checkBridgeHealth(true),600);
     const route=directRoute();
     if(route)setTimeout(()=>handleScan(opsLink(route.type,route.id)),120);
     if(data().safetyConfig.sensorUrl){setTimeout(refreshSafety,900);setInterval(()=>{if(!document.hidden)refreshSafety();},60000);}
@@ -1438,7 +1489,7 @@ async function init(){
 }
 
 const api={
-  init,showView,renderAll,renderPlanning,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,archiveJob,
+  init,showView,goToSection,renderAll,renderPlanning,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,archiveJob,
   openPreflight,closePreflight,confirmPreflight,
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
   renderPostProduction,advancePost,blockPost,
