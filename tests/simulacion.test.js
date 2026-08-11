@@ -19,7 +19,14 @@ const DOCS = fs.readFileSync(path.join(ROOT, 'docs', 'SIMULACION.md'), 'utf8');
 function cargar() {
   const sandbox = {
     document: { getElementById: () => null },
-    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    localStorage: (() => {
+      const m = new Map();
+      return {
+        getItem: (k) => (m.has(k) ? m.get(k) : null),
+        setItem: (k, v) => m.set(k, String(v)),
+        removeItem: (k) => m.delete(k),
+      };
+    })(),
     navigator: { clipboard: { writeText: () => Promise.resolve() } },
     console,
     escapeHtml: (s) => String(s),
@@ -28,7 +35,7 @@ function cargar() {
   vm.createContext(sandbox);
   // Las `function` de nivel superior sí quedan en el objeto global del sandbox,
   // pero los `const` viven en el scope léxico del script: hay que exponerlos.
-  const epilogo = ';Object.assign(globalThis,{SIM_PERFILES,SIM_LINEAS,SIM_SYSTEM,SIM_MAX_CONCEPTOS,SIM_PANEL_VERSION,SIM_MODEL});';
+  const epilogo = ';Object.assign(globalThis,{SIM_PERFILES,SIM_LINEAS,SIM_SYSTEM,SIM_MAX_CONCEPTOS,SIM_PANEL_VERSION,SIM_MODEL,SIM_COBERTURA_MIN,SIM_HIST_KEY});';
   vm.runInContext(SRC + epilogo, sandbox);
   return sandbox;
 }
@@ -266,4 +273,176 @@ test('el módulo no hornea claves ni llama a Anthropic sin pasar por el proxy', 
 test('la documentación existe y advierte los límites', () => {
   assert.match(DOCS, /no mide estética/i);
   assert.match(DOCS, /SIM_PANEL_VERSION/);
+});
+
+// ── Regresiones de la auditoría ────────────────────────────────
+
+test('un panel incompleto no emite veredicto en vez de inflar el porcentaje', () => {
+  // 20 respuestas de un panel de 44, con 8 compradores.
+  // Sobre 20 da 40% (dudoso); sobre el panel real de 44 es 18%.
+  const votos = Array.from({ length: 20 }, (_, i) => ({
+    id: `C${String(i + 1).padStart(2, '0')}`, compra: i < 8 ? 5 : 0, freno: 'x', alternativa: 'y',
+  }));
+  const r = S._simAgrega('Concepto X', 49900, votos, { frenos: '', comprador: '', precio: '' }, 44);
+  assert.equal(r.veredicto, 'incompleto', 'con 45% de cobertura no puede haber veredicto');
+  assert.equal(r.cobertura, 45);
+  assert.equal(r.n, 20);
+  assert.equal(r.esperados, 44);
+});
+
+test('un panel completo sí emite veredicto', () => {
+  const votos = Array.from({ length: 44 }, (_, i) => ({
+    id: `C${i}`, compra: i < 4 ? 5 : 1, freno: 'x', alternativa: 'y',
+  }));
+  const r = S._simAgrega('Concepto Y', 49900, votos, { frenos: '', comprador: '', precio: '' }, 44);
+  assert.equal(r.cobertura, 100);
+  assert.notEqual(r.veredicto, 'incompleto');
+});
+
+test('el corte de cobertura tolera que falte algún perfil suelto', () => {
+  const votos = Array.from({ length: 42 }, (_, i) => ({ id: `C${i}`, compra: 1, freno: 'x', alternativa: 'y' }));
+  const r = S._simAgrega('Z', 0, votos, { frenos: '', comprador: '', precio: '' }, 44);
+  assert.equal(r.cobertura, 95);
+  assert.notEqual(r.veredicto, 'incompleto', '95% debe seguir dando veredicto');
+  assert.ok(S.SIM_COBERTURA_MIN >= 85 && S.SIM_COBERTURA_MIN <= 95, 'el corte debe ser exigente pero no imposible');
+});
+
+test('_simMaxTokens da margen suficiente para el panel completo', () => {
+  // 44 líneas de ~40 tokens + resumen. 3000 (el valor viejo) quedaba corto.
+  assert.ok(S._simMaxTokens(44) > 3000, 'el techo viejo de 3000 era el que provocaba el truncado');
+  assert.ok(S._simMaxTokens(44) <= 8000);
+  assert.ok(S._simMaxTokens(16) < S._simMaxTokens(44), 'medio panel necesita menos techo');
+});
+
+test('_simClaude detecta el truncado por max_tokens', () => {
+  assert.match(SRC, /stop_reason === 'max_tokens'/, 'debe leer stop_reason');
+  assert.match(SRC, /truncado/, 'debe propagar la señal de truncado');
+  assert.match(SRC, /r\.truncado \|\|/, 'el truncado debe disparar el reintento');
+});
+
+test('_simPrevia compara contra la corrida anterior, no contra una posterior', () => {
+  const mk = (id, ts, pct) => ({
+    id, ts, fecha: '2026-08-11', linea: 'L', lineaKey: 'lamparas', publico: 'ambos',
+    panel: S.SIM_PANEL_VERSION, nPerfiles: 44,
+    items: [{ concepto: 'Lámpara A', precio: 49900, veredicto: 'dudoso', pctCompra: pct, promedio: 2.5 }],
+  });
+  // El historial se guarda con la más nueva primero.
+  const hist = [mk('sim_3', 3000, 40), mk('sim_2', 2000, 25), mk('sim_1', 1000, 10)];
+  S.localStorage.setItem(S.SIM_HIST_KEY, JSON.stringify(hist));
+
+  const contra = (id) => {
+    const run = hist.find((h) => h.id === id);
+    const prev = S._simPrevia(run);
+    return prev ? Object.values(prev)[0].pctCompra : null;
+  };
+  assert.equal(contra('sim_3'), 25, 'la más nueva compara contra la del medio');
+  assert.equal(contra('sim_2'), 10, 'la del medio compara contra la más vieja');
+  assert.equal(contra('sim_1'), null, 'la más vieja no tiene anterior');
+  S.localStorage.removeItem(S.SIM_HIST_KEY);
+});
+
+test('_simPrevia no cruza líneas ni versiones de panel distintas', () => {
+  const base = { fecha: '2026-08-11', publico: 'ambos', nPerfiles: 44, items: [{ concepto: 'A', pctCompra: 50 }] };
+  S.localStorage.setItem(S.SIM_HIST_KEY, JSON.stringify([
+    { ...base, id: 'otra_linea', ts: 1000, lineaKey: 'trofeos', panel: S.SIM_PANEL_VERSION },
+    { ...base, id: 'otro_panel', ts: 1000, lineaKey: 'lamparas', panel: S.SIM_PANEL_VERSION + 1 },
+  ]));
+  const run = { id: 'x', ts: 5000, lineaKey: 'lamparas', panel: S.SIM_PANEL_VERSION };
+  assert.equal(S._simPrevia(run), null);
+  S.localStorage.removeItem(S.SIM_HIST_KEY);
+});
+
+test('_simParseBarrido limpia, ordena, deduplica y acota', () => {
+  assert.deepEqual(plano(S._simParseBarrido('49900, $34.900, 79900')), [34900, 49900, 79900]);
+  assert.deepEqual(plano(S._simParseBarrido('50000, 50000')), [50000], 'deduplica');
+  assert.deepEqual(plano(S._simParseBarrido('')), []);
+  assert.deepEqual(plano(S._simParseBarrido('abc, 0, -5')), [], 'basura y negativos se descartan');
+  assert.deepEqual(plano(S._simParseBarrido('3, 49900')), [49900], 'un dedazo bajo el piso no pasa');
+  assert.equal(S._simParseBarrido('1000,2000,3000,4000,5000,6000,7000').length, 5, 'máximo 5 precios');
+});
+
+test('_simExpandir cruza conceptos por precios y respeta el tope', () => {
+  const c = [{ nombre: 'A', precio: 1000 }, { nombre: 'B', precio: 2000 }];
+  const sin = S._simExpandir(c, []);
+  assert.equal(sin.length, 2);
+  assert.equal(sin[0].precio, 1000, 'sin barrido conserva el precio propio');
+  assert.equal(sin[0].base, 'A');
+
+  const con = S._simExpandir(c, [100, 200, 300]);
+  assert.equal(con.length, 6, '2 conceptos × 3 precios');
+  assert.deepEqual(plano(con.map((x) => x.precio)), [100, 200, 300, 100, 200, 300]);
+  assert.ok(con.every((x) => ['A', 'B'].includes(x.base)), 'todas las variantes conservan su base');
+
+  const muchos = Array.from({ length: 10 }, (_, i) => ({ nombre: `C${i}`, precio: 0 }));
+  assert.equal(S._simExpandir(muchos, [1, 2, 3, 4, 5]).length, S.SIM_MAX_CONCEPTOS, 'el tope se aplica tras expandir');
+});
+
+test('el respaldo remoto no se intenta si el rol no puede escribir', () => {
+  const llamadas = [];
+  S._monitorUpsert = (...a) => { llamadas.push(a); return Promise.resolve(); };
+  S.AUTH = { getUser: () => ({ role: 'marketing' }) };
+  S.RBAC = { canWriteTable: (rol) => rol !== 'marketing' };
+  S._simRespaldar([]);
+  assert.equal(llamadas.length, 0, 'marketing no debe disparar la escritura');
+
+  S.AUTH = { getUser: () => ({ role: 'admin' }) };
+  S._simRespaldar([]);
+  assert.equal(llamadas.length, 1, 'admin sí respalda');
+});
+
+test('el respaldo remoto no deja rechazos sin atrapar', async () => {
+  S._monitorUpsert = () => Promise.reject(new Error('RBAC: escritura no permitida'));
+  S.AUTH = { getUser: () => ({ role: 'admin' }) };
+  S.RBAC = { canWriteTable: () => true };
+  let suelto = null;
+  const onRej = (e) => { suelto = e; };
+  process.on('unhandledRejection', onRej);
+  S._simRespaldar([]);
+  await new Promise((r) => setTimeout(r, 30));
+  process.off('unhandledRejection', onRej);
+  assert.equal(suelto, null, 'el rechazo debe quedar atrapado, no escaparse');
+});
+
+test('la tarjeta no promete votos cuando el historial no los guarda', () => {
+  const it = {
+    concepto: 'A', precio: 49900, veredicto: 'dudoso', n: 44, esperados: 44, cobertura: 100,
+    promedio: 2.5, pctCompra: 20, frenos: 'caro (10)', comprador: 'x', precioSugerido: 'y', votos: [],
+  };
+  const html = S._simCardConcepto(it, null);
+  assert.ok(!html.includes('<details'), 'sin votos crudos no debe dibujarse el bloque de detalle');
+  assert.ok(html.includes('caro (10)'), 'el agregado sí se muestra');
+});
+
+test('la tarjeta incompleta explica por qué no hay número', () => {
+  const it = {
+    concepto: 'A', precio: 49900, veredicto: 'incompleto', n: 20, esperados: 44, cobertura: 45,
+    promedio: 2.5, pctCompra: 40, frenos: '', comprador: '', precioSugerido: '', votos: [],
+  };
+  const html = S._simCardConcepto(it, null);
+  assert.ok(html.includes('SIN VEREDICTO'));
+  assert.ok(!html.includes('40%'), 'no puede mostrar el porcentaje inflado');
+  assert.match(html, /20 de 44 perfiles/);
+});
+
+test('la curva de precio solo aparece con barrido y omite lo no concluyente', () => {
+  const item = (base, precio, pct, veredicto) => ({
+    concepto: base, base, precio, pctCompra: pct, promedio: 2.5, veredicto,
+    n: 44, esperados: 44, cobertura: 100, frenos: '', comprador: '', precioSugerido: '', votos: [],
+  });
+  assert.equal(S._simCurvaPrecio({ barrido: [], items: [item('A', 1000, 10, 'dudoso')] }), '');
+
+  const html = S._simCurvaPrecio({
+    barrido: [34900, 49900],
+    items: [item('A', 34900, 30, 'prototipar'), item('A', 49900, 12, 'dudoso'), item('B', 34900, 5, 'incompleto')],
+  });
+  assert.match(html, /Curva de precio/);
+  assert.match(html, /30%/);
+  assert.match(html, /12%/);
+  assert.ok(!html.includes('>B<'), 'un concepto sin veredicto no entra a la curva');
+});
+
+test('el panel del dashboard expone el campo de barrido', () => {
+  const panel = INDEX.slice(INDEX.indexOf('id="tab-simulacion"'), INDEX.indexOf('<!-- MÁQUINAS -->'));
+  assert.ok(panel.includes('id="simBarrido"'), 'falta el input de barrido');
+  assert.match(panel, /Barrido de precio/);
 });

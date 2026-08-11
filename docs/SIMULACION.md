@@ -41,7 +41,15 @@ La única prueba que manda son prototipos reales con fotos y botón de compra.
    ```
    El precio es opcional pero sin él no se evalúa la objeción de precio, que suele
    ser la más informativa. Máximo 25 conceptos por corrida.
-5. Revisa el **costo estimado** que aparece a la derecha y pulsa **Correr panel**.
+5. Opcional: **Barrido de precio**. Escribe hasta 5 precios separados por coma
+   (`34900, 49900, 79900`) y cada concepto se evalúa una vez por precio,
+   ignorando el precio propio de su línea. Arriba del ranking aparece una **curva
+   de precio** con el porcentaje de intención por escalón: si casi no baja al
+   subir, estás dejando plata en la mesa; si se desploma entre dos escalones, ahí
+   está tu techo.
+   Ojo: multiplica las llamadas (3 conceptos × 3 precios = 9 corridas). El
+   estimado lo refleja.
+6. Revisa el **costo estimado** que aparece a la derecha y pulsa **Correr panel**.
 
 El resultado sale **ordenado de peor a mejor**, porque la pega es descartar.
 
@@ -54,9 +62,21 @@ El resultado sale **ordenado de peor a mejor**, porque la pega es descartar.
 | **DESCARTAR** | menos del 10% compraría, o nota promedio bajo 1,8 | mátalo, no fabriques |
 | **DUDOSO** | entre medio | reformula el concepto o el precio y vuelve a correr |
 | **PROTOTIPAR** | 25% o más compraría y nota 2,8 o más | candidato a prototipo físico |
+| **SIN VEREDICTO** | el panel respondió incompleto | vuelve a correr ese concepto solo |
 
 Los cortes son deliberadamente duros. Un producto nuevo sin marca con menos del
 10% de intención declarada no despega.
+
+### Por qué existe SIN VEREDICTO
+
+Si la IA contesta por menos del **90%** del panel (`SIM_COBERTURA_MIN`), no se
+emite veredicto y no se muestra porcentaje.
+
+La razón: el porcentaje se calcula sobre las respuestas recibidas. Con 8
+compradores sobre 20 respuestas de un panel de 44, el número sería 40% cuando la
+intención real es 18% — la diferencia entre "prototipar" y "descartar". Antes eso
+se reportaba en silencio. Ahora, cuando la cobertura es baja, el motor **reintenta
+una vez** con el doble de techo de tokens y, si sigue incompleto, se planta.
 
 Lo más útil de la pantalla **no es el porcentaje, son los frenos**. Si 12 de 44
 perfiles dicen "no sé si aguanta el calor de la ampolleta", eso no es un problema
