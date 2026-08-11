@@ -98,6 +98,14 @@ let _simAbort = false;
 // Reusa el proxy que ya existe (airtable-proxy expone /anthropic/v1/messages), así
 // la API key no sale al navegador. No usa callClaude() del index porque ese está
 // fijo en max_tokens 1500 y una corrida de 44 perfiles no cabe en eso.
+// Techo de salida según el tamaño del panel. Antes era 3000 fijo: con 44 perfiles
+// el margen quedaba apretado (44 líneas × ~40 tokens + resumen) y si el modelo se
+// ponía verboso cortaba a media línea, perdiendo perfiles Y el bloque de resumen
+// sin que nadie se enterara.
+function _simMaxTokens(nPerfiles){ return Math.min(8000, nPerfiles*70 + 600); }
+
+// Devuelve {texto, truncado}. `truncado` es la señal de que la respuesta se cortó
+// por techo de tokens: sin ella, una respuesta parcial se procesa como completa.
 async function _simClaude(system, user, maxTokens){
   const body = JSON.stringify({model:SIM_MODEL, max_tokens:maxTokens||3000, system, messages:[{role:'user', content:user}]});
   const px = (typeof _proxyCfg === 'function') ? _proxyCfg() : null;
@@ -115,7 +123,10 @@ async function _simClaude(system, user, maxTokens){
   }
   if(!r.ok){const e = await r.json().catch(()=>({})); throw new Error(e.error?.message || `IA error ${r.status}`);}
   const j = await r.json();
-  return j.content?.find(b=>b.type==='text')?.text || '';
+  return {
+    texto: j.content?.find(b=>b.type==='text')?.text || '',
+    truncado: j.stop_reason === 'max_tokens',
+  };
 }
 
 function simHasIA(){
@@ -212,22 +223,36 @@ function _simVeredicto(pctCompra, promedio){
   return 'dudoso';
 }
 
-function _simAgrega(concepto, precio, votos, resumen){
+// Cobertura mínima para dar un veredicto. Bajo esto el porcentaje se calcularía
+// sobre una base más chica que el panel y saldría inflado: 8 compradores sobre 20
+// respuestas es 40%, pero sobre el panel real de 44 es 18% — la diferencia entre
+// "prototipar" y "descartar". Antes se reportaba el 40% en silencio.
+const SIM_COBERTURA_MIN = 90;
+
+function _simAgrega(concepto, precio, votos, resumen, esperados, extra){
   const n = votos.length || 1;
   const suma = votos.reduce((a,v)=>a+v.compra, 0);
   const promedio = suma / n;
   const compradores = votos.filter(v=>v.compra >= 4);
   const pctCompra = Math.round(compradores.length / n * 100);
+  const esp = esperados || votos.length || 1;
+  const cobertura = Math.round(votos.length / esp * 100);
+  const incompleto = cobertura < SIM_COBERTURA_MIN;
   return {
     concepto, precio,
     n: votos.length,
+    esperados: esp,
+    cobertura,
     promedio: Math.round(promedio*100)/100,
     pctCompra,
-    veredicto: _simVeredicto(pctCompra, promedio),
+    // Sin panel completo no se emite veredicto: un número calculado sobre media
+    // muestra es peor que no tener número, porque igual se usa para decidir.
+    veredicto: incompleto ? 'incompleto' : _simVeredicto(pctCompra, promedio),
     frenos: resumen.frenos,
     comprador: resumen.comprador,
     precioSugerido: resumen.precio,
     votos,
+    ...(extra || {}),
   };
 }
 
@@ -246,6 +271,35 @@ function _simParseConceptos(texto){
         : {nombre:l, precio:0};
     })
     .filter(c=>c.nombre);
+}
+
+// ── BARRIDO DE PRECIO ──────────────────────────────────────────
+// "34900, 49900, 79900" → [34900,49900,79900]. Con barrido activo cada concepto se
+// evalúa una vez por precio y el precio propio del concepto se ignora: la gracia
+// es ver la curva, no mezclar anclas distintas.
+// Se limpian los no-dígitos para aceptar "$34.900". Efecto lateral: "-5" quedaría
+// como 5, y un dedazo tipo "3" pasaría como precio válido. El piso de $100 los
+// descarta: no existe un producto de The Lab bajo esa cifra.
+const SIM_PRECIO_MIN = 100;
+function _simParseBarrido(texto){
+  return String(texto||'').split(',')
+    .map(s=>parseInt(String(s).replace(/[^\d]/g,''), 10))
+    .filter(n=>Number.isFinite(n) && n >= SIM_PRECIO_MIN)
+    .filter((n,i,a)=>a.indexOf(n)===i)
+    .sort((a,b)=>a-b)
+    .slice(0, 5);
+}
+
+// Expande conceptos × precios. `base` agrupa las variantes del mismo concepto para
+// poder dibujar la curva. El tope se aplica DESPUÉS de expandir: lo que cuesta
+// plata son las llamadas, y cada par (concepto, precio) es una llamada.
+function _simExpandir(conceptos, precios){
+  if(!precios.length) return conceptos.map(c=>({...c, base:c.nombre}));
+  const out = [];
+  for(const c of conceptos){
+    for(const p of precios) out.push({nombre:c.nombre, precio:p, base:c.nombre});
+  }
+  return out.slice(0, SIM_MAX_CONCEPTOS);
 }
 
 function _simPerfiles(publico){
@@ -269,6 +323,7 @@ function initSimulacion(){
   if(sel && !sel.options.length){
     sel.innerHTML = Object.entries(SIM_LINEAS).map(([k,v])=>`<option value="${k}">${escapeHtml(v.nombre)}</option>`).join('');
   }
+  _simCtxAuto = '';   // primera carga: el textarea viene vacío, no hay edición que proteger
   simLineaChange();
   simEstimar();
   renderSimHistorial();
@@ -276,32 +331,53 @@ function initSimulacion(){
   if(av && !simHasIA()) av.textContent = 'Sin acceso a la IA — configura el proxy o la API key en Mi cuenta para poder correr el panel.';
 }
 
+// Último contexto puesto automáticamente. Sirve para distinguir "el usuario no lo
+// tocó" de "lo editó a mano": pisar una edición al cambiar de línea y volver hacía
+// perder el texto sin aviso.
+let _simCtxAuto = '';
+
 function simLineaChange(){
   const k = document.getElementById('simLinea')?.value || 'lamparas';
   const L = SIM_LINEAS[k] || SIM_LINEAS.lamparas;
   const ctx = document.getElementById('simContexto');
-  if(ctx) ctx.value = L.contexto;
+  if(ctx){
+    const editado = ctx.value.trim() && ctx.value !== _simCtxAuto;
+    if(!editado || confirm('Editaste el contexto a mano. ¿Reemplazarlo por el de esta línea?')){
+      ctx.value = L.contexto;
+      _simCtxAuto = L.contexto;
+    }
+  }
   const pub = document.getElementById('simPublico');
   if(pub) pub.value = L.publico;
   simEstimar();
 }
 
 function simEstimar(){
-  const conceptos = _simParseConceptos(document.getElementById('simConceptos')?.value);
+  const base = _simParseConceptos(document.getElementById('simConceptos')?.value);
+  const precios = _simParseBarrido(document.getElementById('simBarrido')?.value);
+  const conceptos = _simExpandir(base, precios);
   const publico = document.getElementById('simPublico')?.value || 'ambos';
   const perfiles = _simPerfiles(publico);
   const el = document.getElementById('simEstimado');
   if(!el) return;
   if(!conceptos.length){ el.textContent = 'Escribe al menos un concepto.'; return; }
-  el.textContent = `${conceptos.length} concepto${conceptos.length>1?'s':''} × ${perfiles.length} perfiles · costo estimado ≈ $${_simCosto(conceptos.length, perfiles.length).toLocaleString('es-CL')} CLP`;
+  const detalle = precios.length
+    ? `${base.length} concepto${base.length>1?'s':''} × ${precios.length} precios = ${conceptos.length} corridas`
+    : `${conceptos.length} concepto${conceptos.length>1?'s':''}`;
+  el.textContent = `${detalle} × ${perfiles.length} perfiles · costo estimado ≈ $${_simCosto(conceptos.length, perfiles.length).toLocaleString('es-CL')} CLP`;
 }
 
 // ── CORRIDA ────────────────────────────────────────────────────
 async function simCorrer(){
   if(_simBusy) return;
   if(!simHasIA()){ toast('Sin acceso a la IA — configúralo en Mi cuenta','error'); return; }
-  const conceptos = _simParseConceptos(document.getElementById('simConceptos')?.value);
-  if(!conceptos.length){ toast('Escribe al menos un concepto','error'); return; }
+  const base = _simParseConceptos(document.getElementById('simConceptos')?.value);
+  if(!base.length){ toast('Escribe al menos un concepto','error'); return; }
+  const precios = _simParseBarrido(document.getElementById('simBarrido')?.value);
+  const conceptos = _simExpandir(base, precios);
+  if(precios.length && base.length*precios.length > SIM_MAX_CONCEPTOS){
+    toast(`Barrido recortado a ${SIM_MAX_CONCEPTOS} combinaciones`,'info');
+  }
 
   const lineaKey = document.getElementById('simLinea')?.value || 'lamparas';
   const linea = SIM_LINEAS[lineaKey]?.nombre || lineaKey;
@@ -317,7 +393,7 @@ async function simCorrer(){
   if(stop) stop.style.display = 'inline-flex';
 
   const resultados = new Array(conceptos.length).fill(null);
-  let hechos = 0, fallidos = 0;
+  let hechos = 0, fallidos = 0, reintentos = 0;
   const progreso = (msg)=>{ const p = document.getElementById('simProgreso'); if(p) p.textContent = msg; };
   progreso(`0 de ${conceptos.length} conceptos…`);
 
@@ -328,13 +404,23 @@ async function simCorrer(){
       const i = cursor++;
       const c = conceptos[i];
       try{
-        const txt = await _simClaude(SIM_SYSTEM, _simUserPrompt(linea, contexto, c.nombre, c.precio, perfiles), 3000);
-        const {votos, resumen} = _simParse(txt, perfiles);
-        if(!votos.length) throw new Error('la IA no devolvió votos legibles');
-        resultados[i] = _simAgrega(c.nombre, c.precio, votos, resumen);
+        const prompt = _simUserPrompt(linea, contexto, c.nombre, c.precio, perfiles);
+        const tope = _simMaxTokens(perfiles.length);
+        let r = await _simClaude(SIM_SYSTEM, prompt, tope);
+        let p = _simParse(r.texto, perfiles);
+        // Un panel a medias da un porcentaje inflado. Antes de rendirse, un
+        // reintento con el doble de techo: casi siempre el problema era el corte.
+        if(r.truncado || p.votos.length < perfiles.length * SIM_COBERTURA_MIN/100){
+          reintentos++;
+          const r2 = await _simClaude(SIM_SYSTEM, prompt, Math.min(8000, tope*2));
+          const p2 = _simParse(r2.texto, perfiles);
+          if(p2.votos.length > p.votos.length){ r = r2; p = p2; }
+        }
+        if(!p.votos.length) throw new Error('la IA no devolvió votos legibles');
+        resultados[i] = _simAgrega(c.nombre, c.precio, p.votos, p.resumen, perfiles.length, {base:c.base||c.nombre});
       }catch(e){
         fallidos++;
-        resultados[i] = {concepto:c.nombre, precio:c.precio, error:String(e.message||e), veredicto:'error', n:0, promedio:0, pctCompra:0, votos:[]};
+        resultados[i] = {concepto:c.nombre, precio:c.precio, base:c.base||c.nombre, error:String(e.message||e), veredicto:'error', n:0, esperados:perfiles.length, cobertura:0, promedio:0, pctCompra:0, votos:[]};
       }
       hechos++;
       progreso(`${hechos} de ${conceptos.length} conceptos…`);
@@ -357,21 +443,27 @@ async function simCorrer(){
     linea, lineaKey, contexto, publico,
     panel: SIM_PANEL_VERSION,
     nPerfiles: perfiles.length,
+    barrido: precios,
     items,
   };
   renderSimResultados(_simRun);
   simGuardar(_simRun);
+  const incompletos = items.filter(i=>i.veredicto === 'incompleto').length;
   if(fallidos) toast(`${fallidos} concepto(s) fallaron — revisa el detalle`,'error');
-  else toast(`✓ Panel corrido: ${items.length} concepto(s)`,'success');
+  else if(incompletos) toast(`${incompletos} concepto(s) sin panel completo — sin veredicto`,'error');
+  else toast(`✓ Panel corrido: ${items.length} concepto(s)`+(reintentos?` (${reintentos} reintento/s)`:''),'success');
 }
 
-function simDetener(){ _simAbort = true; toast('Deteniendo al terminar los conceptos en curso…','info'); }
+// No aborta lo que ya salió: esas llamadas se pagan igual. Se dice en el toast
+// para que nadie crea que detener es gratis.
+function simDetener(){ _simAbort = true; toast('Se detiene al terminar los conceptos en vuelo (esos se cobran igual)','info'); }
 
 // ── RENDER ─────────────────────────────────────────────────────
 const SIM_VEREDICTO_UI = {
   descartar:  {label:'DESCARTAR',  color:'#ff4444', bg:'rgba(255,68,68,.10)',  borde:'rgba(255,68,68,.35)'},
   dudoso:     {label:'DUDOSO',     color:'#f5a524', bg:'rgba(245,165,36,.10)', borde:'rgba(245,165,36,.35)'},
   prototipar: {label:'PROTOTIPAR', color:'#00d4aa', bg:'rgba(0,212,170,.10)',  borde:'rgba(0,212,170,.35)'},
+  incompleto: {label:'SIN VEREDICTO', color:'#9b6bff', bg:'rgba(155,107,255,.10)', borde:'rgba(155,107,255,.35)'},
   error:      {label:'ERROR',      color:'#9a9a9a', bg:'rgba(154,154,154,.10)',borde:'rgba(154,154,154,.3)'},
 };
 
@@ -398,6 +490,7 @@ function renderSimResultados(run){
       Úsalo para bajar de muchas ideas a pocas — la ganadora la eligen prototipos reales con fotos y botón de compra.
     </div>
   </div>
+  ${_simCurvaPrecio(run)}
   ${orden.map(it=>_simCardConcepto(it, prev)).join('')}`;
 }
 
@@ -428,10 +521,15 @@ function _simCardConcepto(it, prev){
         </div>
         <div style="text-align:right">
           <div style="font-size:10.5px;font-weight:700;letter-spacing:.8px;color:${ui.color}">${ui.label}</div>
-          <div style="font-size:20px;font-weight:700;color:${ui.color};line-height:1.2">${it.pctCompra}%</div>
-          <div style="font-size:10.5px;color:var(--text3)">compraría · nota ${it.promedio.toFixed(1)}/5${deltaTxt}</div>
+          <div style="font-size:20px;font-weight:700;color:${ui.color};line-height:1.2">${it.veredicto==='incompleto'?'—':it.pctCompra+'%'}</div>
+          <div style="font-size:10.5px;color:var(--text3)">${it.veredicto==='incompleto'?`solo ${it.n} de ${it.esperados} perfiles`:`compraría · nota ${it.promedio.toFixed(1)}/5${deltaTxt}`}</div>
         </div>
       </div>
+
+      ${it.veredicto==='incompleto' ? `<div style="margin-top:10px;font-size:12px;line-height:1.55;color:#c9a9ff">
+        El panel respondió incompleto (${it.cobertura}% de cobertura) incluso tras reintentar. No se emite veredicto:
+        calcular el porcentaje sobre ${it.n} respuestas en vez de ${it.esperados} lo dejaría inflado. Vuelve a correr este concepto solo.
+      </div>`:''}
 
       ${frenos.length ? `<div style="margin-top:12px">
         <div style="font-size:10.5px;font-weight:700;letter-spacing:.7px;color:var(--text3);text-transform:uppercase;margin-bottom:5px">Qué los frena</div>
@@ -448,6 +546,7 @@ function _simCardConcepto(it, prev){
         <div style="font-size:12.5px;line-height:1.5">${escapeHtml(it.precioSugerido)}</div>
       </div>`:''}
 
+      ${!it.votos.length ? '' : `
       <details style="margin-top:12px">
         <summary style="cursor:pointer;font-size:11.5px;color:var(--text2)">Ver los ${it.n} votos del panel (${compran.length} compran · ${noCompran.length} no)</summary>
         <div style="margin-top:8px;max-height:320px;overflow:auto">
@@ -463,7 +562,44 @@ function _simCardConcepto(it, prev){
             </div>`;
           }).join('')}
         </div>
-      </details>
+      </details>`}
+    </div>
+  </div>`;
+}
+
+// ── CURVA DE PRECIO ────────────────────────────────────────────
+// El entregable del barrido: el mismo concepto a varios precios, para ver dónde se
+// cae la intención. Es lo que no se lee bien en el ranking, porque las variantes
+// quedan repartidas entre otros conceptos.
+function _simCurvaPrecio(run){
+  if(!run.barrido || !run.barrido.length) return '';
+  const grupos = new Map();
+  for(const it of run.items){
+    if(it.veredicto === 'error' || it.veredicto === 'incompleto') continue;
+    if(!grupos.has(it.base||it.concepto)) grupos.set(it.base||it.concepto, []);
+    grupos.get(it.base||it.concepto).push(it);
+  }
+  if(!grupos.size) return '';
+  const filas = [...grupos.entries()].map(([nombre, vs])=>{
+    const orden = vs.slice().sort((a,b)=>a.precio-b.precio);
+    const mejor = orden.reduce((a,b)=>b.pctCompra > a.pctCompra ? b : a, orden[0]);
+    return `<tr>
+      <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid var(--border)">${escapeHtml(nombre)}</td>
+      ${orden.map(v=>`<td style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border);white-space:nowrap">
+        <div style="font-size:13px;font-weight:700;color:${v===mejor?'#00d4aa':'var(--text2)'}">${v.pctCompra}%</div>
+        <div style="font-size:10px;color:var(--text3)">${_simMoneda(v.precio)}</div>
+      </td>`).join('')}
+    </tr>`;
+  }).join('');
+  return `<div class="card" style="margin-bottom:16px">
+    <div class="card-header"><span class="card-title">Curva de precio</span>
+      <span class="badge badge-purple">${run.barrido.map(p=>_simMoneda(p)).join(' · ')}</span></div>
+    <div style="padding:4px 6px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse"><tbody>${filas}</tbody></table>
+    </div>
+    <div style="padding:8px 16px 12px;font-size:11px;color:var(--text3);line-height:1.5">
+      En verde el precio con más intención de compra de cada concepto. Si la intención casi no baja al subir el precio,
+      estás dejando plata en la mesa; si se desploma entre dos escalones, ahí está tu techo.
     </div>
   </div>`;
 }
@@ -495,21 +631,37 @@ function _simHist(){ try{ return JSON.parse(localStorage.getItem(SIM_HIST_KEY)||
 function simGuardar(run){
   const liviano = {
     id:run.id, fecha:run.fecha, ts:run.ts, linea:run.linea, lineaKey:run.lineaKey,
-    publico:run.publico, panel:run.panel, nPerfiles:run.nPerfiles,
-    items: run.items.map(i=>({concepto:i.concepto, precio:i.precio, veredicto:i.veredicto, pctCompra:i.pctCompra, promedio:i.promedio, frenos:i.frenos, comprador:i.comprador, precioSugerido:i.precioSugerido})),
+    publico:run.publico, panel:run.panel, nPerfiles:run.nPerfiles, barrido:run.barrido||[],
+    items: run.items.map(i=>({concepto:i.concepto, base:i.base, precio:i.precio, veredicto:i.veredicto, pctCompra:i.pctCompra, promedio:i.promedio, cobertura:i.cobertura, esperados:i.esperados, frenos:i.frenos, comprador:i.comprador, precioSugerido:i.precioSugerido})),
   };
   const arr = [liviano, ..._simHist()].slice(0, SIM_HIST_MAX);
   try{ localStorage.setItem(SIM_HIST_KEY, JSON.stringify(arr)); }catch(e){}
   renderSimHistorial();
-  // Respaldo remoto best-effort: si Airtable no está, el historial local igual quedó.
+  _simRespaldar(arr);
+}
+
+// Respaldo remoto best-effort. Dos cuidados:
+//  · _monitorUpsert devuelve una promesa: un try/catch síncrono NO atrapa su
+//    rechazo y se escapa como unhandled rejection.
+//  · marketing no tiene escritura global y 'Monitor Sistema' no está en los
+//    carve-outs de Redes/Newsletter, así que airtableWrite lanza y saca un toast
+//    rojo en cada corrida. Si el rol no puede escribir, ni se intenta.
+function _simRespaldar(arr){
   try{
-    if(typeof _monitorUpsert === 'function') _monitorUpsert('SIMULACION', JSON.stringify(arr).slice(0,95000), 'simRecordId');
+    if(typeof _monitorUpsert !== 'function') return;
+    const u = (typeof AUTH !== 'undefined' && AUTH.getUser) ? AUTH.getUser() : null;
+    if(u && typeof RBAC !== 'undefined' && RBAC.canWriteTable && !RBAC.canWriteTable(u.role, 'Monitor Sistema')) return;
+    Promise.resolve(_monitorUpsert('SIMULACION', JSON.stringify(arr).slice(0,95000), 'simRecordId')).catch(()=>{});
   }catch(e){}
 }
 
-// Corrida anterior de la MISMA línea, indexada por concepto, para mostrar el delta.
+// Corrida INMEDIATAMENTE ANTERIOR de la misma línea, indexada por concepto.
+// Debe filtrarse por ts: antes tomaba la más nueva del historial, así que al abrir
+// una corrida vieja la comparaba contra una posterior y mostraba el delta al revés.
 function _simPrevia(run){
-  const prev = _simHist().find(h=>h.lineaKey===run.lineaKey && h.id!==run.id && h.panel===run.panel);
+  const prev = _simHist()
+    .filter(h=>h.lineaKey===run.lineaKey && h.id!==run.id && h.panel===run.panel && h.ts < run.ts)
+    .sort((a,b)=>b.ts - a.ts)[0];
   if(!prev) return null;
   const map = {};
   prev.items.forEach(i=>{ map[i.concepto] = i; });
@@ -547,15 +699,16 @@ function _simFechaCL(f){
 function simVerHistorial(id){
   const r = _simHist().find(x=>x.id===id);
   if(!r){ toast('Corrida no encontrada','error'); return; }
-  // El historial no guarda los votos crudos: se re-renderiza el agregado.
-  renderSimResultados({...r, items:r.items.map(i=>({...i, n:r.nPerfiles, votos:[]}))});
+  // El historial no guarda los votos crudos: se re-renderiza el agregado y la
+  // tarjeta omite el bloque de detalle en vez de prometer votos que no tiene.
+  renderSimResultados({...r, items:r.items.map(i=>({...i, n:i.n||r.nPerfiles, esperados:i.esperados||r.nPerfiles, votos:[]}))});
   document.getElementById('simResultados')?.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 function simBorrarHistorial(){
   if(!confirm('¿Borrar el historial completo de corridas? No se puede deshacer.')) return;
   try{ localStorage.removeItem(SIM_HIST_KEY); }catch(e){}
-  try{ if(typeof _monitorUpsert === 'function') _monitorUpsert('SIMULACION','[]','simRecordId'); }catch(e){}
+  _simRespaldar([]);
   renderSimHistorial();
   toast('Historial borrado','info');
 }

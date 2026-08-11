@@ -3064,6 +3064,10 @@
           <textarea class="field-input" id="simContexto" rows="2" placeholder="Qué es, cómo se fabrica, cómo se vende y qué tan conocida es la marca."></textarea>
         </div>
         <div class="field-group" style="grid-column:1/-1">
+          <label class="field-label" for="simBarrido">Barrido de precio <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">— opcional. Prueba cada concepto a varios precios y dibuja la curva. Reemplaza el precio de cada línea.</span></label>
+          <input class="field-input" id="simBarrido" oninput="simEstimar()" placeholder="ej: 34900, 49900, 79900  (máx. 5 precios)">
+        </div>
+        <div class="field-group" style="grid-column:1/-1">
           <label class="field-label" for="simConceptos">Conceptos a evaluar — uno por línea, precio opcional después de <b>|</b></label>
           <textarea class="field-input" id="simConceptos" rows="7" oninput="simEstimar()" placeholder="Lámpara de mesa tubo de neón ámbar, base de madera | 49900&#10;Aplique de pared impreso en 3D, patrón orgánico, luz cálida | 34900&#10;Lámpara colgante de acrílico translúcido para comedor | 79900"></textarea>
         </div>
