@@ -3157,7 +3157,7 @@
   <!-- ── MONITOR EN VIVO ── -->
   <div id="maquinaMonitorView" data-maq-view="operacion" style="margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">📡 Monitor en vivo</span>
+      <span class="maq-view-title">📡 Monitor en vivo</span>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span style="font-size:10px;color:var(--text3)">↻ <span id="monitorLastUpdate">cargando...</span></span>
         <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:11px">Actualizar</button>
@@ -3201,7 +3201,7 @@
   <!-- ── CARGA DE PRODUCCIÓN POR MÁQUINA (O7) ── -->
   <div id="maquinaCargaLegacyView" data-maq-view="planificacion" style="display:none;margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🗂️ Carga de producción</span>
+      <span class="maq-view-title">🗂️ Carga de producción</span>
       <span style="font-size:10.5px;color:var(--text3)">asigna pedidos a impresoras y ve la cola y horas por máquina</span>
     </div>
     <div id="cargaMaquinas"></div>
@@ -3210,7 +3210,7 @@
   <!-- ── AGENTE DE IMPRESIÓN 3D — STL/OBJ → G-CODE CON IA ── -->
   <div id="maquinaSlicerView" class="maquina-section" data-maq-view="laminado" style="display:none;margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🧠 Agente de impresión 3D</span>
+      <span class="maq-view-title">🧠 Agente de impresión 3D</span>
       <span class="badge badge-purple">STL / OBJ → G-code · IA + slicer nativo</span>
     </div>
     <div class="card" style="padding:18px">
@@ -3325,7 +3325,7 @@
 
   <!-- ── CALENDARIO ── -->
   <div id="maquinaCalView" class="maquina-section" data-maq-view="planificacion" style="display:none">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">📅 Disponibilidad semanal</div>
+    <div class="maq-view-title" style="margin-bottom:12px">📅 Disponibilidad semanal</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="navSemana(-1)">← Anterior</button>
       <span id="semanaLabel" style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)"></span>
@@ -3374,7 +3374,7 @@
   <!-- ── MANTENIMIENTO PREVENTIVO ── -->
   <div id="maquinaMaintView" class="maquina-section" data-maq-view="mantenimiento" style="display:none;margin-top:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mantenimiento preventivo</span>
+      <span class="maq-view-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mantenimiento preventivo</span>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary btn-sm" onclick="startMaintFlow()" style="font-size:11px" title="Registrar mantención paso a paso">🔧 Registrar mantención</button>
         <button class="btn btn-ghost btn-sm" onclick="openMaintConfig()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar umbrales</button>
@@ -3388,7 +3388,7 @@
   <!-- ── AUDITORÍA Y MANTENCIÓN 3D (agente) ── -->
   <div id="maquinaAuditView" class="maquina-section" data-maq-view="mantenimiento" style="display:none;margin-top:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg> Auditoría y mantención 3D</span>
+      <span class="maq-view-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg> Auditoría y mantención 3D</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="audit3DRun()" style="font-size:11px">🔍 Auditar ahora</button>
         <button class="btn btn-ghost btn-sm" onclick="audit3DCalibrateAll()" style="font-size:11px" title="Lanza bed mesh en todas las impresoras libres">📐 Calibrar todas las libres</button>
@@ -3439,7 +3439,7 @@
 
   <!-- ── ANALÍTICA ── -->
   <div id="maquinaAnalyticsView" class="maquina-section" data-maq-view="analitica" style="display:none;margin-top:28px">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:14px"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chart"/></svg> Analítica de producción</div>
+    <div class="maq-view-title" style="margin-bottom:14px"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chart"/></svg> Analítica de producción</div>
     <div id="mopsAnalytics" style="margin-bottom:16px"></div>
     <div id="analyticsContent"></div>
   </div>
