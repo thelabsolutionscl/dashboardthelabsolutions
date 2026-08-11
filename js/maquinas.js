@@ -1108,6 +1108,23 @@ function _sendWaAlertIfEnabled(title,body){
   const phone=localStorage.getItem('monitor_wa_phone');if(!phone)return;
   sendWatiMessage(phone,`${title}\n${body}`).catch(()=>{});
 }
+// Decide qué hacer con la sesión de impresión según el estado actual:
+//   open  = abrir sesión nueva (empezó a imprimir y no había una viva)
+//   close = cerrar la sesión (llegó a un estado terminal)
+//   result= 'Completado' | 'Cancelado' cuando close
+// PAUSA y la pérdida de telemetría (offline/connecting/startup/unknown/noip) NO
+// abren ni cierran: la impresión sigue viva, solo está pausada o no la estamos
+// viendo. Reanudar desde pausa conserva el inicio real (no reabre la sesión).
+// Antes cualquier salida de 'printing' salvo 'offline' cerraba la sesión: una
+// pausa (printing→paused) se registraba como "Cancelado", perdía el inicio y, al
+// completar, calculaba la duración solo desde la reanudación — corrompiendo horas
+// de odómetro/mantención y la autocalibración de tiempo que usa el cotizador.
+function _printSessionAction(st,hasSession){
+  const transitorio=st==='paused'||st==='offline'||st==='connecting'||st==='startup'||st==='unknown'||st==='noip';
+  const open=st==='printing'&&!hasSession;
+  const close=hasSession&&st!=='printing'&&!transitorio;
+  return{open,close,result:close?(st==='complete'?'Completado':'Cancelado'):null};
+}
 function checkTransitions(m,s){
   const prev=_prevState[m.id];const st=s.state;
   if(st==='error'&&prev!=='error'){
@@ -1123,20 +1140,19 @@ function checkTransitions(m,s){
     sendWebhookAlert(m,'shutdown');
     _sendWaAlertIfEnabled(title,detail);
   }
-  if(st==='printing'&&prev!=='printing')_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
-  // 'offline' NO es fin de impresión: la impresora puede seguir imprimiendo y
-  // ser solo inalcanzable. No cerramos la sesión (evita un falso "Cancelado").
-  if(prev==='printing'&&st!=='printing'&&st!=='offline'){
+  const act=_printSessionAction(st,!!_sessions[m.id]);
+  if(act.open)_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
+  if(act.close){
     const sess=_sessions[m.id];
     if(sess){
       const dur=Math.round((Date.now()-sess.start)/60000);
       const filamentMm=Math.max(0,(s.filamentMm||0)-sess.filamentStart);
-      saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,st==='complete'?'Completado':'Cancelado',filamentMm);
+      saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,act.result,filamentMm);
       delete _sessions[m.id];
       if(st==='complete'){
         // Auto-calibrar estimación de tiempo por modelo de impresora
         const estKey='sl_last_est_secs';const estSecs=parseFloat(localStorage.getItem(estKey));
-        if(estSecs>0&&dur>0){const ratio=(dur*60)/estSecs;if(ratio>0.4&&ratio<4){const calKey='sl_time_cal_'+(m.modelo||'default');const prev=parseFloat(localStorage.getItem(calKey))||1;localStorage.setItem(calKey,(prev*0.75+ratio*0.25).toFixed(4));}}
+        if(estSecs>0&&dur>0){const ratio=(dur*60)/estSecs;if(ratio>0.4&&ratio<4){const calKey='sl_time_cal_'+(m.modelo||'default');const prevCal=parseFloat(localStorage.getItem(calKey))||1;localStorage.setItem(calKey,(prevCal*0.75+ratio*0.25).toFixed(4));}}
         localStorage.removeItem(estKey);
         const title=`✅ ${m.nombre} #${m.numG} completado`;
         sendBrowserNotification(title,`${sess.file} · ${dur}m`);
