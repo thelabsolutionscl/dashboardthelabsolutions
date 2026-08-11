@@ -109,7 +109,7 @@ test('estado administrativo y estado técnico conservan responsabilidades distin
     assert.match(MAQ,new RegExp(`${state}:\\{`),`falta estado administrativo ${state}`);
   }
   assert.match(OPS,/getMaquinaEstadoGlobal\(m\.id\)!==['"]disponible['"]/,'MachineOps debe respetar bloqueos administrativos');
-  assert.match(OPS,/\['offline','noip','shutdown','error'\]\.includes\(liveState\(m\.id\)\)/,'MachineOps debe respetar fallas técnicas');
+  assert.match(OPS,/\['offline','apidown','noip','shutdown','error'\]\.includes\(liveState\(m\.id\)\)/,'MachineOps debe respetar fallas técnicas');
 });
 
 test('Pedidos se enlaza con planificación sin incluir pedidos terminados',()=>{

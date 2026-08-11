@@ -188,7 +188,9 @@ function machineLabel(id){const m=getMachine(id);return m?`${m.nombre} #${m.numG
 function liveState(id){try{return (_printerStatus[id]||{}).state||'';}catch(_){return'';}}
 function machineOperational(m){
   if(!m||getMaquinaEstadoGlobal(m.id)!=='disponible')return false;
-  return !['offline','noip','shutdown','error'].includes(liveState(m.id));
+  // 'apidown' = la máquina responde pero Moonraker no. No se puede planificar
+  // sobre ella: no sabemos si está libre ni podríamos lanzarle un archivo.
+  return !['offline','apidown','noip','shutdown','error'].includes(liveState(m.id));
 }
 function machineCapabilities(m){return MODEL_CAPS[m?.modelo]||MODEL_CAPS.K1;}
 function jobMinutes(j){return Math.max(1,num(j.cycles,1))*Math.max(1,num(j.minutesPerCycle,60));}
@@ -327,6 +329,7 @@ function buildSmartAlerts(now=Date.now()){
   (MAQUINAS||[]).forEach(machine=>{
     const live=typeof _printerStatus!=='undefined'?_printerStatus[machine.id]||{}:{},stateNow=live.state||'connecting',watch=_telemetryWatch[machine.id]||{};
     if(stateNow==='noip'||(stateNow==='offline'&&now-num(watch.offlineAt,now)>=num(data().automation.offlineMinutes,2)*60000))rows.push(alertRow('offline-'+machine.id,machine.id,'critical',stateNow==='noip'?'Máquina sin IP':'Máquina sin conexión',live.connectionError||'Sin telemetría','machine:'+machine.id));
+    if(stateNow==='apidown')rows.push(alertRow('apidown-'+machine.id,machine.id,'critical','Telemetría caída, máquina viva',`Responde en el puerto ${num(live.alivePort,4408)} pero Moonraker no: puede estar imprimiendo sin que el dashboard lo vea`,'machine:'+machine.id));
     if(['error','shutdown'].includes(stateNow))rows.push(alertRow('error-'+machine.id,machine.id,'critical','Impresora detenida',live.klMsg||'Klipper requiere atención','machine:'+machine.id));
     if(stateNow==='paused')rows.push(alertRow('paused-'+machine.id,machine.id,'warning','Impresión pausada',live.filename||'Archivo sin nombre','machine:'+machine.id));
     if(stateNow==='cancelled')rows.push(alertRow('cancelled-'+machine.id,machine.id,'warning','Última impresión cancelada',live.filename||'Revisa la máquina','machine:'+machine.id));

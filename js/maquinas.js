@@ -236,7 +236,42 @@ function getPrinterApiKey(id){
 function getPrinterAuthHeaders(id){const headers={},k=getPrinterApiKey(id);if(k)headers['X-Api-Key']=k;if(!(typeof _isLocalMode==='function'&&_isLocalMode())){const token=getPrinterTunnelToken();if(token)headers['X-Bridge-Token']=token;}return headers;}
 
 function _printerInitialStatus(m){return{state:getPrinterIp(m)?'connecting':'noip',checkedAt:0,lastSeenAt:0};}
-function _printerFetchFailure(ip,reason,code=0){return{state:'offline',_fetchFail:true,ip,connectionError:reason||'No se pudo consultar la impresora',httpStatus:code||0,checkedAt:Date.now()};}
+// Una impresora que no contesta en Moonraker puede estar apagada o estar
+// perfectamente encendida e imprimiendo con solo la telemetría caída. Son dos
+// situaciones opuestas —una no necesita nada, la otra atención inmediata— y
+// antes se veían idénticas: el 2026-08-11 dos K1 imprimían TPU y aparecían como
+// desenchufadas. Se distinguen sondeando la UI web de la impresora (Fluidd en
+// 4408, nginx en 80): si esa contesta, la máquina está viva y lo caído es la API.
+const _ALIVE_PROBE_PORTS=[4408,80];
+const _ALIVE_PROBE_TTL_MS=45000;
+const _ALIVE_PROBE_TIMEOUT_MS=4000;
+const _aliveProbe={};
+function _printerPortUrl(ip,port,path){
+  if(typeof _isLocalMode==='function'&&_isLocalMode())return`http://${ip}:${port}${path}`;
+  return _appendBridgeToken(`${getPrinterTunnel()}/${ip}:${port}${path}`);
+}
+// Solo se llama cuando la consulta a Moonraker YA falló, y como mucho una vez
+// cada 45s por máquina: el camino normal no paga ninguna petición extra.
+async function _probePrinterAlive(id,ip){
+  const cached=_aliveProbe[id];
+  if(cached&&cached.ip===ip&&Date.now()-cached.at<_ALIVE_PROBE_TTL_MS)return cached.port;
+  let port=0;
+  for(const p of _ALIVE_PROBE_PORTS){
+    try{
+      const r=await fetch(_printerPortUrl(ip,p,'/'),{method:'GET',cache:'no-store',signal:AbortSignal.timeout(_ALIVE_PROBE_TIMEOUT_MS)});
+      // Cualquier respuesta del propio servidor prueba que hay algo escuchando,
+      // incluido un 404. Los 5xx los emite el bridge cuando NO pudo conectar.
+      if(r&&r.status>0&&r.status<500){port=p;break;}
+    }catch(_){/* puerto cerrado o inalcanzable: probamos el siguiente */}
+  }
+  _aliveProbe[id]={ip,port,at:Date.now()};
+  return port;
+}
+async function _printerFetchFailure(id,ip,reason,code=0){
+  const base={_fetchFail:true,ip,connectionError:reason||'No se pudo consultar la impresora',httpStatus:code||0,checkedAt:Date.now()};
+  const alivePort=await _probePrinterAlive(id,ip);
+  return alivePort?{...base,state:'apidown',alivePort}:{...base,state:'offline'};
+}
 function _emitPrinterStatus(m,status){
   if(typeof window==='undefined'||typeof window.dispatchEvent!=='function'||typeof CustomEvent==='undefined')return;
   try{window.dispatchEvent(new CustomEvent('printerstatus',{detail:{id:m.id,status}}));}catch(_){}
@@ -380,13 +415,13 @@ async function fetchPrinterStatus(m){
     const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
     if(!r.ok){
       const reason=r.status===401?'Token del bridge inválido o vencido':r.status===502?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
-      return _printerFetchFailure(ip,reason,r.status);
+      return _printerFetchFailure(m.id,ip,reason,r.status);
     }
     const d=await r.json();const s=d.result?.status||{};
     const st=_deriveStatus(m,s,ip);
     st.thumbUrl=await _ensureThumb(m,ip,st);
     return st;
-  }catch(e){return _printerFetchFailure(ip,e?.name==='TimeoutError'||e?.name==='AbortError'?'Tiempo de espera agotado al consultar Moonraker':'No se pudo alcanzar Moonraker');}
+  }catch(e){return _printerFetchFailure(m.id,ip,e?.name==='TimeoutError'||e?.name==='AbortError'?'Tiempo de espera agotado al consultar Moonraker':'No se pudo alcanzar Moonraker');}
 }
 
 // ── Estado en vivo por WebSocket (Moonraker) ──────────────────────────────
@@ -485,6 +520,7 @@ function printerStateMeta(state){
     shutdown:{label:'⚠ Detenida',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
     startup:{label:'Iniciando…',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
     offline:{label:'Sin conexión',color:'#888',bg:'rgba(120,120,120,0.12)'},
+    apidown:{label:'Telemetría caída',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
     noip:{label:'Sin IP',color:'#ff6b35',bg:'rgba(255,107,53,0.12)'},
   }[state])||{label:state,color:'var(--text3)',bg:'var(--surface2)'};
 }
@@ -512,8 +548,8 @@ function filterMonitor(grupo){_monitorFilter=grupo;renderMonitorFilterTabs();ren
 function renderMonitorKPIs(){
   const el=document.getElementById('monitorKPIs');if(!el)return;
   const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
-  let printing=0,paused=0,idle=0,error=0,down=0,offline=0,noip=0,connecting=0;
-  lista.forEach(m=>{const st=(_printerStatus[m.id]||_printerInitialStatus(m)).state;if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='offline')offline++;else if(st==='connecting')connecting++;else idle++;});
+  let printing=0,paused=0,idle=0,error=0,down=0,offline=0,noip=0,connecting=0,apidown=0;
+  lista.forEach(m=>{const st=(_printerStatus[m.id]||_printerInitialStatus(m)).state;if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='apidown')apidown++;else if(st==='offline')offline++;else if(st==='connecting')connecting++;else idle++;});
   const total=lista.length,utilPct=total>0?Math.round((printing+paused)/total*100):0;
   el.innerHTML=`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:11px">
     ${printing>0?`<span style="color:#00d4aa;font-weight:700">🟢 ${printing} Imprimiendo</span>`:''}
@@ -522,6 +558,7 @@ function renderMonitorKPIs(){
     ${connecting>0?`<span style="color:#38bdf8">◌ ${connecting} Conectando</span>`:''}
     ${error>0?`<span style="color:#ff4444;font-weight:700">🔴 ${error} Error</span>`:''}
     ${down>0?`<span style="color:#ff4444;font-weight:700">⚠ ${down} Detenida${down>1?'s':''} (Klipper)</span>`:''}
+    ${apidown>0?`<span style="color:#ffaa00;font-weight:700">📡 ${apidown} Telemetría caída</span>`:''}
     ${offline>0?`<span style="color:#888">⚫ ${offline} Sin conexión</span>`:''}
     ${noip>0?`<span style="color:#ff6b35">❓ ${noip} Sin IP</span>`:''}
     <span style="margin-left:auto;font-weight:700;color:${utilPct>0?'#00d4aa':'var(--text3)'}">Utilización ${utilPct}%</span>
@@ -537,7 +574,7 @@ function renderMaqOcupacion(){
   const el=document.getElementById('maqOcupacion');if(!el)return;
   const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
   if(!lista.length){el.style.display='none';return;}
-  const clasif=st=>st==='printing'?'print':st==='paused'?'paused':(st==='error'||st==='shutdown')?'error':(st==='offline'||st==='noip')?'off':st==='connecting'?'connecting':'idle';
+  const clasif=st=>st==='printing'?'print':st==='paused'?'paused':(st==='error'||st==='shutdown'||st==='apidown')?'error':(st==='offline'||st==='noip')?'off':st==='connecting'?'connecting':'idle';
   const rows=lista.map(m=>{const s=_printerStatus[m.id]||_printerInitialStatus(m);return{m,s,k:clasif(s.state),eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
   const etas=rows.filter(r=>r.eta>0).map(r=>r.eta);
   const horizon=Math.max(4*3600,Math.min(12*3600,etas.length?Math.max(...etas)*1.15:4*3600));
@@ -630,6 +667,17 @@ function renderMonitorGrid(){
         <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button></div>
         <div style="display:flex;gap:6px"><input id="ipkey_${m.id}" type="password" placeholder="API Key (opcional)" value="${getPrinterApiKey(m.id)}" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
         <button onclick="savePrinterApiKey('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;flex-shrink:0;color:var(--text3)">Key</button></div>
+      </div>`;
+    } else if(s.state==='apidown'){
+      // La máquina contesta en su UI web pero no en Moonraker. NO es lo mismo
+      // que estar apagada: puede estar imprimiendo ahora mismo.
+      const uiPort=s.alivePort||_ALIVE_PROBE_PORTS[0];
+      const svc=m.modelo==='K1'?'/etc/init.d/S56moonraker_service restart':'/etc/init.d/moonraker restart';
+      body=`<div style="margin-top:10px;padding:10px;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.3);border-radius:8px">
+        <div style="font-size:11px;color:#ffaa00;font-weight:700;margin-bottom:4px">📡 Telemetría caída · la máquina está viva</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:6px;line-height:1.45">Responde en el puerto ${uiPort} pero Moonraker no contesta. <b style="color:var(--text2)">Puede estar imprimiendo sin que el dashboard lo vea</b> — revísala antes de darla por libre.</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-bottom:9px;line-height:1.4">Para recuperarla, por SSH:<br><span style="font-family:monospace;color:var(--text2)">${escapeHtml(svc)}</span></div>
+        <a href="${escapeHtml(_printerPortUrl(ip,uiPort,'/'))}" target="_blank" rel="noopener" style="display:block;text-align:center;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.45);color:#ffaa00;border-radius:7px;padding:7px;font-size:11px;font-weight:700;text-decoration:none">🔎 Abrir la impresora</a>
       </div>`;
     } else if(s.state==='offline'){
       body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:11px;padding:8px 0"><b>Sin telemetría</b><br><span style="font-family:monospace;font-size:10px">${ip}</span><br><span style="font-size:10px">${escapeHtml(s.connectionError||'La impresora no respondió')}</span><br><span style="font-size:9px;color:#777">${escapeHtml(fmtPrinterSeen(s.lastSeenAt))}</span></div>`;
@@ -1120,7 +1168,7 @@ function _sendWaAlertIfEnabled(title,body){
 // completar, calculaba la duración solo desde la reanudación — corrompiendo horas
 // de odómetro/mantención y la autocalibración de tiempo que usa el cotizador.
 function _printSessionAction(st,hasSession){
-  const transitorio=st==='paused'||st==='offline'||st==='connecting'||st==='startup'||st==='unknown'||st==='noip';
+  const transitorio=st==='paused'||st==='offline'||st==='apidown'||st==='connecting'||st==='startup'||st==='unknown'||st==='noip';
   const open=st==='printing'&&!hasSession;
   const close=hasSession&&st!=='printing'&&!transitorio;
   return{open,close,result:close?(st==='complete'?'Completado':'Cancelado'):null};
@@ -1308,7 +1356,7 @@ function closeAlertSettings(){document.getElementById('alertSettingsModal').styl
 
 // ── SORT & KIOSK ──────────────────────────────────────────────
 let _sortByState=true,_kioskMode=false;
-function stateOrder(s){return{printing:0,paused:1,error:2,complete:3,standby:4,offline:5,noip:6}[s]??7;}
+function stateOrder(s){return{printing:0,paused:1,error:2,apidown:3,complete:4,standby:5,offline:6,noip:7}[s]??8;}
 function sortedList(lista){if(!_sortByState)return lista;return[...lista].sort((a,b)=>stateOrder((_printerStatus[a.id]||{}).state||'offline')-stateOrder((_printerStatus[b.id]||{}).state||'offline'));}
 function toggleSort(){_sortByState=!_sortByState;const btn=document.getElementById('btnSort');if(btn)btn.style.color=_sortByState?'var(--accent)':'var(--text3)';renderMonitorGrid();}
 function toggleKiosk(){
