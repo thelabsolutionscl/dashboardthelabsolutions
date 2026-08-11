@@ -1,0 +1,54 @@
+name: Simulación audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/simulacion.js'
+      - 'docs/SIMULACION.md'
+      - 'tests/simulacion.test.js'
+      - 'tests/fechas-chile.test.js'
+      - '.github/workflows/simulacion-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/simulacion.js'
+      - 'docs/SIMULACION.md'
+      - 'tests/simulacion.test.js'
+      - 'tests/fechas-chile.test.js'
+      - '.github/workflows/simulacion-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  panel-sintetico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate audit syntax
+        run: node --check tests/simulacion.test.js
+
+      - name: Validate module
+        run: node --check js/simulacion.js
+
+      - name: Audit panel, veredicto y cableado
+        run: node --test tests/simulacion.test.js
+
+      # El panel guarda la fecha de cada corrida: si vuelve a colarse un
+      # toISOString(), el historial queda fechado un día adelante.
+      - name: Audit fechas en horario de Chile
+        run: node --test tests/fechas-chile.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js

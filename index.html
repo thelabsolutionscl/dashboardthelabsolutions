@@ -114,6 +114,7 @@
 <symbol id="icon-correo" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="2 7 12 13 22 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="icon-redes" viewBox="0 0 24 24" fill="none"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke-linecap="round"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke-linecap="round"/></symbol>
 <symbol id="icon-newsletter" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="9" x2="17" y2="9" stroke-linecap="round"/><line x1="7" y1="13" x2="17" y2="13" stroke-linecap="round"/><line x1="7" y1="17" x2="13" y2="17" stroke-linecap="round"/></symbol>
+<symbol id="icon-simulacion" viewBox="0 0 24 24" fill="none"><path d="M4 19V5" stroke-linecap="round"/><path d="M20 19H4" stroke-linecap="round"/><rect x="7" y="12" width="3" height="4" rx="1"/><rect x="12" y="8" width="3" height="8" rx="1"/><rect x="17" y="14" width="3" height="2" rx="1"/></symbol>
 <symbol id="ig-glyph" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.4" cy="6.6" r="1.25" fill="currentColor"/></symbol>
 <symbol id="li-glyph" viewBox="0 0 24 24"><path fill="currentColor" d="M4.98 3.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM3 9.2h4V21H3zM9 9.2h3.8v1.65h.05c.53-.95 1.83-1.95 3.77-1.95 4.03 0 4.78 2.6 4.78 6V21H20.6v-5.3c0-1.27-.02-2.9-1.78-2.9-1.78 0-2.05 1.37-2.05 2.8V21H9z"/></symbol>
 <symbol id="tt-glyph" viewBox="0 0 24 24"><path fill="currentColor" d="M16.2 3c.32 2.3 1.78 3.86 4 4.05v2.96c-1.46.05-2.84-.42-4-1.2v5.86A5.83 5.83 0 1110.5 9v3.07a2.78 2.78 0 102 2.67V3z"/></symbol>
@@ -358,6 +359,7 @@
     <button class="dock-btn" data-tab="correo" onclick="switchTab('correo')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-correo"/></svg></span><span class="dock-label">Correo</span></button>
     <button class="dock-btn" data-tab="redes" onclick="switchTab('redes')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-redes"/></svg></span><span class="dock-label">Redes</span><span class="dock-badge" id="badge-redes" style="display:none">0</span></button>
     <button class="dock-btn" data-tab="newsletter" onclick="switchTab('newsletter')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-newsletter"/></svg></span><span class="dock-label">Newsletter</span><span class="dock-badge" id="badge-newsletter" style="display:none">0</span></button>
+    <button class="dock-btn" data-tab="simulacion" onclick="switchTab('simulacion')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-simulacion"/></svg></span><span class="dock-label">Simulación</span></button>
   </div>
 </div>
 
@@ -402,6 +404,7 @@
     <button class="mobile-tab-btn" data-tab="correo" onclick="switchTabMobile('correo')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-correo"/></svg></span>Correo</button>
     <button class="mobile-tab-btn" data-tab="redes" onclick="switchTabMobile('redes')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-redes"/></svg></span>Redes Sociales</button>
     <button class="mobile-tab-btn" data-tab="newsletter" onclick="switchTabMobile('newsletter')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-newsletter"/></svg></span>Newsletter</button>
+    <button class="mobile-tab-btn" data-tab="simulacion" onclick="switchTabMobile('simulacion')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-simulacion"/></svg></span>Simulación</button>
     <!-- Acordeón Configuración / Tokens -->
     <div style="border-top:1px solid var(--border);display:none">
       <button onclick="toggleMobileConfig()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 18px;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.3px">
@@ -3014,6 +3017,72 @@
       </div>
       <iframe id="nlPreviewFrame" title="Vista previa del newsletter" style="flex:1;border:0;border-radius:0 0 12px 12px;background:#fff"></iframe>
     </div>
+  </div>
+</div>
+
+<!-- SIMULACIÓN DE DEMANDA -->
+<div class="tab-panel" id="tab-simulacion">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Simulación de demanda</div>
+      <div class="section-desc">Panel sintético de 44 perfiles chilenos fijos para probar conceptos de producto antes de fabricar prototipos. Le das ideas con precio y te devuelve cuáles descartar y por qué. Sirve para bajar de muchas ideas a pocas — no para elegir la ganadora.</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="simBorrarHistorial()" style="flex-shrink:0">Borrar historial</button>
+  </div>
+
+  <!-- Advertencia en pantalla, no enterrada en la documentación: es el límite real
+       de la herramienta y quien la use tiene que verlo cada vez. -->
+  <div class="card" style="margin-bottom:16px;border-color:rgba(245,165,36,.35);background:rgba(245,165,36,.07)">
+    <div style="padding:12px 16px;font-size:12px;line-height:1.6;color:var(--text2)">
+      <b style="color:#f5a524">Esto no mide estética.</b> Los perfiles leen una descripción de texto, no ven el producto.
+      Mide reacción al concepto, al precio y al para-qué. Un diseño lindo con mal concepto igual sale mal acá, y al revés.
+      La prueba que manda son prototipos reales con fotos y botón de compra.
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-simulacion"/></svg> Nueva corrida</span>
+      <span class="badge badge-purple">IA · panel fijo</span>
+    </div>
+    <div style="padding:14px 16px">
+      <div class="ss-form-grid">
+        <div class="field-group">
+          <label class="field-label" for="simLinea">Línea de producto</label>
+          <select class="field-select" id="simLinea" onchange="simLineaChange()"></select>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="simPublico">Quién opina</label>
+          <select class="field-select" id="simPublico" onchange="simEstimar()">
+            <option value="ambos">Panel completo (44)</option>
+            <option value="consumidor">Solo consumidor final (28)</option>
+            <option value="negocio">Solo negocios (16)</option>
+          </select>
+        </div>
+        <div class="field-group" style="grid-column:1/-1">
+          <label class="field-label" for="simContexto">Contexto de la línea</label>
+          <textarea class="field-input" id="simContexto" rows="2" placeholder="Qué es, cómo se fabrica, cómo se vende y qué tan conocida es la marca."></textarea>
+        </div>
+        <div class="field-group" style="grid-column:1/-1">
+          <label class="field-label" for="simConceptos">Conceptos a evaluar — uno por línea, precio opcional después de <b>|</b></label>
+          <textarea class="field-input" id="simConceptos" rows="7" oninput="simEstimar()" placeholder="Lámpara de mesa tubo de neón ámbar, base de madera | 49900&#10;Aplique de pared impreso en 3D, patrón orgánico, luz cálida | 34900&#10;Lámpara colgante de acrílico translúcido para comedor | 79900"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px">
+        <button class="btn btn-primary" id="simCorrerBtn" onclick="simCorrer()">▶ Correr panel</button>
+        <button class="btn btn-ghost btn-sm" id="simDetenerBtn" onclick="simDetener()" style="display:none">■ Detener</button>
+        <span id="simProgreso" style="font-size:12px;color:var(--accent)"></span>
+        <span id="simEstimado" style="font-size:11.5px;color:var(--text3);margin-left:auto"></span>
+      </div>
+      <div id="simAviso" style="font-size:11.5px;color:#ff6b6b;margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div id="simResultados"></div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title">Corridas anteriores</span></div>
+    <div id="simHistorial"></div>
   </div>
 </div>
 
@@ -6854,6 +6923,7 @@ function openMobileGrid(){
     {tab:'correo',label:'Correo'},
     {tab:'redes',label:'Redes'},
     {tab:'newsletter',label:'Newsletter'},
+    {tab:'simulacion',label:'Simulación'},
   ];
   const u=AUTH.getUser();
   const allowed=(typeof RBAC!=='undefined'&&u)?(RBAC.tabs[u.role]||RBAC.tabs.demo):null;
@@ -8505,6 +8575,7 @@ function switchTab(name){
   if(name==='correo') MAIL.init();
   if(name==='redes') initRedes();
   if(name==='newsletter') initNewsletter();
+  if(name==='simulacion') initSimulacion();
   if(name==='maquinas') initMaquinas();
   else{clearInterval(_monitorInterval);_monitorInterval=null;if(typeof disconnectAllPrinterWs==='function')disconnectAllPrinterWs();}
   if(name==='equipo') initEquipo();
@@ -16139,13 +16210,13 @@ const RBAC={
   //
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','simulacion','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','simulacion','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
     comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','oficina','calendario','remuneraciones','correo','redes','newsletter','nuevo-lead','nueva-cot','cot3d'],
     produccion: ['overview','pedidos','maquinas','inventario','equipo','visual','correo'],
     finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo'],
-    marketing:  ['overview','web','agentes','oficina','reporte','correo','redes','newsletter'],
-    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','reporte','web','finanzas','visual','remuneraciones','redes','newsletter'],
+    marketing:  ['overview','web','agentes','oficina','reporte','correo','redes','newsletter','simulacion'],
+    demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','reporte','web','finanzas','visual','remuneraciones','redes','newsletter','simulacion'],
   },
   // Items del menú "Nuevo" visibles por rol
   nuevos:{
@@ -16455,6 +16526,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 </script>
 <script src="js/seo-ads.js?v=%%BUILD%%"></script>
+<script src="js/simulacion.js?v=%%BUILD%%"></script>
 <script>
 </script>
 <script src="js/web-analytics.js?v=%%BUILD%%"></script>
