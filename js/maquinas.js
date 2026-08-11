@@ -178,8 +178,21 @@ function _queueAdd(id,gcode,filename,secs,grams){
 }
 async function _queueStartNext(id){
   const q=_printQueue[id];if(!q||!q.length)return;
-  const job=q.shift();renderMonitorGrid();
-  const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);if(!ip)return;
+  const job=q[0];                                    // peek: no se saca hasta confirmar la subida
+  const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);
+  if(!ip)return;                                     // sin IP: el trabajo queda en cola, se reintenta luego
+  if(job._starting)return;                           // ya hay un intento en curso, no duplicar
+  job._starting=true;
+  // Antes se hacía q.shift() ANTES de subir: si la subida fallaba (la impresora
+  // recién terminó y está ocupada un instante) el trabajo encolado se PERDÍA, y
+  // como el disparo es por-transición no se reintentaba. Ahora solo se saca de la
+  // cola tras una subida exitosa; ante fallo se reintenta unas veces y, si no,
+  // queda en la cola para lanzarlo a mano.
+  const reintentar=(msg)=>{
+    job._starting=false;job._tries=(job._tries||0)+1;
+    if(job._tries<3){toast(msg+' — reintentando…','info');setTimeout(()=>_queueStartNext(id),5000);}
+    else toast(msg+' — el trabajo quedó en la cola; inícialo a mano','error');
+  };
   try{
     const fd=new FormData();
     fd.append('file',new Blob([job.gcode],{type:'text/plain'}),job.filename);
@@ -189,14 +202,16 @@ async function _queueStartNext(id){
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
     xhr.onload=async()=>{
       if(xhr.status>=200&&xhr.status<300){
-        await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
+        job._starting=false;
+        if(_printQueue[id]&&_printQueue[id][0]===job){_printQueue[id].shift();renderMonitorGrid();}  // recién ahora se consume
+        try{await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});}catch(_){}
         toast(`▶ Cola: iniciando ${job.filename} en ${m?.nombre||id}`,'success');
         if(typeof pollPrinters==='function')pollPrinters();
-      }else toast('Cola: error al subir siguiente trabajo','error');
+      }else reintentar('Cola: no se pudo subir el trabajo ('+xhr.status+')');
     };
-    xhr.onerror=()=>toast('Cola: impresora inaccesible','error');
+    xhr.onerror=()=>reintentar('Cola: impresora inaccesible');
     xhr.send(fd);
-  }catch(e){toast('Cola: '+e.message,'error');}
+  }catch(e){reintentar('Cola: '+e.message);}
 }
 
 const MONITOR_GRUPOS=[
