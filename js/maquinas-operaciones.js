@@ -955,8 +955,16 @@ function createCapacityJobs(){
 // ── Seguridad ambiental y compuerta de inicio ────────────────
 function latestSafetyReading(){return data().safetyReadings.slice().sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0))[0]||null;}
 function safetyDecision(config,reading,context={},nowMs=Date.now()){
-  const cfg={...DEFAULT_SAFETY,...(config||{})},blockers=[],warnings=[],fresh=!!reading&&nowMs-Date.parse(reading.at||0)<=num(cfg.staleMinutes,10)*60000;
-  if(fresh&&reading.online!==false){
+  // "Fresco" = hay lectura, es reciente Y el sensor está EN LÍNEA. Un sensor
+  // caído (online:false) no es dato confiable aunque su marca de tiempo sea
+  // reciente. Antes `fresh` miraba solo el timestamp: una lectura caída se
+  // trataba como fresca, así que se saltaban los chequeos de humo/temp/VOC (por
+  // el `online!==false`) PERO también la red "lectura ausente o vencida" (que
+  // depende de !fresh). Una lectura {online:false, smoke:true} no levantaba ni
+  // el bloqueo de humo ni el aviso: el peligro se perdía. Tratando el sensor
+  // caído como NO fresco, cae en la red de "ausente o vencida".
+  const cfg={...DEFAULT_SAFETY,...(config||{})},blockers=[],warnings=[],fresh=!!reading&&reading.online!==false&&nowMs-Date.parse(reading.at||0)<=num(cfg.staleMinutes,10)*60000;
+  if(fresh){
     if(reading.smoke===true)blockers.push('El sensor detecta humo.');
     if(num(reading.temperature)>num(cfg.maxTemperature))blockers.push(`Temperatura ambiental ${num(reading.temperature).toFixed(1)}°C sobre el máximo.`);
     if(num(reading.voc)>num(cfg.maxVoc))blockers.push(`VOC ${Math.round(num(reading.voc))} sobre el máximo configurado.`);
