@@ -413,12 +413,15 @@ function restartBridgeTimer(){clearInterval(_bridgeTimer);_bridgeTimer=null;if(d
 function renderIntelligence(){
   const el=input('mopsIntelligence');if(!el)return;const alerts=buildSmartAlerts(),critical=alerts.filter(row=>row.severity==='critical').length;
   const unlinked=(MAQUINAS||[]).filter(m=>liveState(m.id)==='printing'&&!data().jobs.some(j=>j.machineId===m.id&&j.status==='imprimiendo'&&!j.archived)).length;
-  const reliability=(MAQUINAS||[]).map(machine=>({machine,...machineReliability(machine.id)})),avg=reliability.length?reliability.reduce((sum,row)=>sum+row.score,0)/reliability.length:100;
+  // El promedio de fiabilidad de la flota tenía su propio indicador arriba,
+  // justo encima de la grilla que muestra el puntaje de cada máquina: el mismo
+  // dato agregado y detallado a dos centímetros. Queda solo el detalle.
+  const reliability=(MAQUINAS||[]).map(machine=>({machine,...machineReliability(machine.id)}));
   const monthCut=Date.now()-30*86400000,costRows=data().jobs.filter(j=>['terminado','fallido'].includes(j.status)&&Date.parse(j.completedAt||j.updatedAt||0)>=monthCut).map(jobCostBreakdown),monthCost=costRows.reduce((sum,row)=>sum+row.total,0);
   const recommend=data().jobs.filter(j=>!j.archived&&['pendiente','planificado','en_cola'].includes(j.status)).sort((a,b)=>dueUrgency(a)-dueUrgency(b)).slice(0,6).map(job=>({job,...recommendationForJob(job)}));
   const cfs=(MAQUINAS||[]).map(machine=>({machine,filament:(typeof _printerStatus!=='undefined'?_printerStatus[machine.id]?.filament:null)})).filter(row=>row.filament?.cfsConnected||row.machine.modelo==='K2'||row.machine.modelo==='K2 Plus');
   const bridgeLabel={up:'Operativo',down:'Sin respuesta',checking:'Comprobando…'}[_bridgeHealth.state]||'Sin comprobar',bridgeColor=_bridgeHealth.state==='up'?'var(--accent3)':_bridgeHealth.state==='down'?'var(--danger)':'var(--warn)';
-  el.innerHTML=`<div class="mops-kpis">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Fiabilidad flota',avg.toFixed(0)+'%','éxito + conexión + mantención',avg<85?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
+  el.innerHTML=`<div class="mops-kpis">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
     <div class="mops-intel-grid">
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Priorizadas por impacto; una alerta atendida reaparece en 4 horas si persiste.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Sin alertas operacionales activas.</div>'}</div></section>
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🎯 Asignación recomendada</b><small>Considera compatibilidad, carga, telemetría, material y mantenimiento.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">Aplicar a todas</button></div><div class="mops-recommendations">${recommend.length?recommend.map(({job,best})=>{return`<article><div><b>${esc(job.name)}</b><small>${esc(orderLabel(job.pedidoId)||'Sin pedido')} · ${fmtMin(jobMinutes(job))} · ${esc(job.material)}</small></div>${best?`<div class="mops-rec-target"><b>${esc(machineLabel(best.machine.id))}</b><small>${esc(best.reasons.join(' · '))}</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.applyRecommendation('${job.id}')">Asignar</button>`:'<span class="mops-status" style="color:var(--danger)">Sin opción</span>'}</article>`;}).join(''):'<div class="mops-intel-empty">No hay trabajos pendientes de asignación.</div>'}</div></section>
@@ -427,8 +430,14 @@ function renderIntelligence(){
     <div class="mops-intel-grid" style="margin-top:12px">
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🧵 CFS y filamento físico</b><small>Lectura real de las K2; no se confunde con el inventario manual.</small></div></div><div class="mops-cfs-grid">${cfs.map(({machine,filament})=>`<article><div><b>${esc(machineLabel(machine.id))}</b><span class="mops-cfs-state ${filament?.cfsConnected?'online':'offline'}">${filament?.cfsConnected?'CFS conectado':'Sin lectura CFS'}</span></div>${filament?.cfsSlots?.length?`<div class="mops-cfs-slots">${filament.cfsSlots.map(slot=>`<span><i style="background:${cssColor(slot.color)}"></i><b>${esc(slot.slot)}</b><small>${esc(slot.material||'—')} · ${Math.round(num(slot.remain))} restante</small></span>`).join('')}</div>`:`<small>${filament?.detected===true?'Filamento detectado':filament?.detected===false?'Sensor reporta vacío':'Esperando telemetría física'}</small>`}</article>`).join('')||'<div class="mops-intel-empty">No hay equipos CFS configurados.</div>'}</div></section>
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🧰 Incidentes recientes</b><small>Registro trazable con causa, responsable y evidencia.</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.openIncident()">Registrar</button></div><div class="mops-incidents">${data().incidents.slice(0,10).map(row=>`<article class="${row.resolvedAt?'resolved':''}">${row.photo?`<img src="${esc(row.photo)}" alt="Evidencia">`:''}<div><b>${esc(INCIDENT_TYPES[row.type]||INCIDENT_TYPES.other)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(fmtStamp(row.at))} · ${esc(row.actor||'Sistema')}</small><p>${esc(row.note||'Sin observaciones')}</p></div>${row.resolvedAt?'<span class="mops-status" style="color:var(--accent3)">Resuelto</span>':`<button class="btn btn-ghost btn-sm" onclick="MachineOps.resolveIncident('${row.id}')">Resolver</button>`}</article>`).join('')||'<div class="mops-intel-empty">Sin incidentes registrados.</div>'}</div></section>
-    </div>
-    <section class="card mops-intel-panel" style="margin-top:12px"><div class="mops-intel-head"><div><b>⚙ Automatización y costo real</b><small>Ajusta umbrales a la operación del taller; los cambios se sincronizan con el equipo.</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.saveIntelligenceConfig()">Guardar configuración</button></div><div class="mops-config-grid"><label><span>Automatización</span><input id="mopsAutoEnabled" type="checkbox" ${data().automation.enabled?'checked':''}> Activa</label><label><span>Vincular G-code</span><input id="mopsAutoLink" type="checkbox" ${data().automation.autoLink?'checked':''}> Automático</label><label><span>Incidente por falla</span><input id="mopsAutoIncident" type="checkbox" ${data().automation.autoIncident?'checked':''}> Automático</label><label><span>Progreso detenido (min)</span><input id="mopsAutoStall" class="field-input" type="number" min="3" value="${num(data().automation.stallMinutes)}"></label><label><span>Offline confirmado (min)</span><input id="mopsAutoOffline" class="field-input" type="number" min="1" value="${num(data().automation.offlineMinutes)}"></label><label><span>Tolerancia temperatura (°C)</span><input id="mopsAutoTemp" class="field-input" type="number" min="5" value="${num(data().automation.tempTolerance)}"></label><label><span>Revisar bridge (seg)</span><input id="mopsBridgeInterval" class="field-input" type="number" min="30" value="${num(data().automation.bridgeIntervalSeconds)}"></label><label><span>Electricidad (CLP/kWh)</span><input id="mopsCostElectricity" class="field-input" type="number" min="0" value="${num(data().costConfig.electricityClpKwh)}"></label><label><span>Consumo impresora (kW)</span><input id="mopsCostKw" class="field-input" type="number" min="0" step="0.01" value="${num(data().costConfig.machineKw)}"></label><label><span>Mano de obra (CLP/h)</span><input id="mopsCostLabor" class="field-input" type="number" min="0" value="${num(data().costConfig.laborClpHour)}"></label><label><span>Operador por trabajo (min)</span><input id="mopsCostOperator" class="field-input" type="number" min="0" value="${num(data().costConfig.operatorMinutes)}"></label><label><span>Desgaste máquina (CLP/h)</span><input id="mopsCostWear" class="field-input" type="number" min="0" value="${num(data().costConfig.wearClpHour)}"></label><label><span>Recargo falla (%)</span><input id="mopsCostFailure" class="field-input" type="number" min="0" max="100" value="${num(data().costConfig.failureOverheadPct)}"></label></div></section>`;
+    </div>`;
+}
+
+// La configuración de automatización y costos se ajusta cada varios meses, no
+// cada turno: vive en Taller, no en la pantalla diaria del operador.
+function renderAutomationConfig(){
+  const el=input('mopsAutomationConfig');if(!el)return;
+  el.innerHTML=`<section class="card mops-intel-panel" style="margin-top:12px"><div class="mops-intel-head"><div><b>⚙ Automatización y costo real</b><small>Ajusta umbrales a la operación del taller; los cambios se sincronizan con el equipo.</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.saveIntelligenceConfig()">Guardar configuración</button></div><div class="mops-config-grid"><label><span>Automatización</span><input id="mopsAutoEnabled" type="checkbox" ${data().automation.enabled?'checked':''}> Activa</label><label><span>Vincular G-code</span><input id="mopsAutoLink" type="checkbox" ${data().automation.autoLink?'checked':''}> Automático</label><label><span>Incidente por falla</span><input id="mopsAutoIncident" type="checkbox" ${data().automation.autoIncident?'checked':''}> Automático</label><label><span>Progreso detenido (min)</span><input id="mopsAutoStall" class="field-input" type="number" min="3" value="${num(data().automation.stallMinutes)}"></label><label><span>Offline confirmado (min)</span><input id="mopsAutoOffline" class="field-input" type="number" min="1" value="${num(data().automation.offlineMinutes)}"></label><label><span>Tolerancia temperatura (°C)</span><input id="mopsAutoTemp" class="field-input" type="number" min="5" value="${num(data().automation.tempTolerance)}"></label><label><span>Revisar bridge (seg)</span><input id="mopsBridgeInterval" class="field-input" type="number" min="30" value="${num(data().automation.bridgeIntervalSeconds)}"></label><label><span>Electricidad (CLP/kWh)</span><input id="mopsCostElectricity" class="field-input" type="number" min="0" value="${num(data().costConfig.electricityClpKwh)}"></label><label><span>Consumo impresora (kW)</span><input id="mopsCostKw" class="field-input" type="number" min="0" step="0.01" value="${num(data().costConfig.machineKw)}"></label><label><span>Mano de obra (CLP/h)</span><input id="mopsCostLabor" class="field-input" type="number" min="0" value="${num(data().costConfig.laborClpHour)}"></label><label><span>Operador por trabajo (min)</span><input id="mopsCostOperator" class="field-input" type="number" min="0" value="${num(data().costConfig.operatorMinutes)}"></label><label><span>Desgaste máquina (CLP/h)</span><input id="mopsCostWear" class="field-input" type="number" min="0" value="${num(data().costConfig.wearClpHour)}"></label><label><span>Recargo falla (%)</span><input id="mopsCostFailure" class="field-input" type="number" min="0" max="100" value="${num(data().costConfig.failureOverheadPct)}"></label></div></section>`;
 }
 
 function statusBadge(status){
@@ -446,13 +455,13 @@ function setText(id,value){const el=document.getElementById(id);if(el)el.textCon
 const VIEW_GROUPS={
   hoy:['inteligencia','operacion'],
   trabajos:['planificacion','calidad','postproduccion'],
-  taller:['capacidad','perfiles','laminado','materiales','mantenimiento','seguridad','analitica'],
+  taller:['capacidad','perfiles','laminado','materiales','mantenimiento','seguridad','analitica','automatizacion'],
 };
 const VIEW_TITLES={
   inteligencia:'🧠 Alertas',operacion:'📡 Máquinas',
   planificacion:'🗓 Planificación',calidad:'✅ Calidad',postproduccion:'🧩 Postproducción',
   capacidad:'🧮 Capacidad',perfiles:'🎛 Perfiles',laminado:'🖨 Laminado',materiales:'🧵 Materiales',
-  mantenimiento:'🔧 Mantenimiento',seguridad:'🛡 Seguridad',analitica:'📊 Analítica',
+  mantenimiento:'🔧 Mantenimiento',seguridad:'🛡 Seguridad',analitica:'📊 Analítica',automatizacion:'⚙ Automatización',
 };
 // Los enlaces guardados, el localStorage y las llamadas internas siguen usando
 // los nombres de área antiguos ('planificacion', 'materiales'…). Se resuelven a
@@ -495,12 +504,11 @@ function renderOpsOverview(){
   const qa=jobs.filter(j=>j.status==='qa').length,unassigned=jobs.filter(j=>!j.machineId).length;
   const grams=jobs.reduce((s,j)=>s+num(j.grams),0);
   const availableSpools=data().spools.filter(s=>!s.archived&&spoolAvailable(s)>0).length;
-  const late=jobs.filter(j=>j.dueDate&&dateValue(j.dueDate)<Date.now()&&!['terminado','archivado'].includes(j.status)).length;
   const notReady=(MAQUINAS||[]).filter(m=>!machineOperational(m)).length;
-  const alerts=[];
-  if(late)alerts.push(`<div class="mops-alert danger">🚨 <span><b>${late} trabajo${late!==1?'s':''} atrasado${late!==1?'s':''}</b> — replanifica la carga o cambia la fecha comprometida.</span></div>`);
-  if(unassigned)alerts.push(`<div class="mops-alert warn">🎯 <span><b>${unassigned} trabajo${unassigned!==1?'s':''} sin máquina</b> — usa Planificar automáticamente.</span></div>`);
-  if(qa)alerts.push(`<div class="mops-alert warn">✅ <span><b>${qa} trabajo${qa!==1?'s':''} esperando QA</b> antes de liberar el pedido.</span></div>`);
+  // Aquí había tres avisos —atrasados, sin máquina, esperando QA— que repetían
+  // datos ya visibles en la misma pantalla: los dos últimos son literalmente el
+  // número del indicador de al lado, y los atrasados salen uno por uno en el
+  // panel de alertas, ahí sí con botón para actuar. Quedan solo indicadores.
   el.innerHTML=`<div class="mops-kpis">
     ${kpi('Trabajos activos',jobs.length,`${printing} imprimiendo`,'var(--accent)')}
     ${kpi('Esperando QA',qa,'requieren revisión',qa?'var(--warn)':'var(--accent3)')}
@@ -508,7 +516,7 @@ function renderOpsOverview(){
     ${kpi('Carga estimada',fmtMin(jobs.reduce((s,j)=>s+jobMinutes(j),0)),`${(grams/1000).toFixed(2)} kg reservados`)}
     ${kpi('Máquinas no listas',notReady,`de ${(MAQUINAS||[]).length}`,notReady?'var(--warn)':'var(--accent3)')}
     ${kpi('Rollos disponibles',availableSpools,'con saldo utilizable')}
-  </div>${alerts.length?`<div style="display:grid;gap:7px;margin-bottom:16px">${alerts.join('')}</div>`:''}`;
+  </div>`;
 }
 
 function renderPlanning(){
@@ -1129,7 +1137,7 @@ function updateNavCounts(){
   setText('mopsNavTaller',alerts+safety);
 }
 function renderAll(){
-  renderOpsOverview();renderIntelligence();renderPlanning();renderMaterials();renderQuality();renderPostProduction();renderProfiles();renderMaintenanceProfiles();renderAnalytics();renderSafety();fillCapacityOrders();updateNavCounts();
+  renderOpsOverview();renderIntelligence();renderAutomationConfig();renderPlanning();renderMaterials();renderQuality();renderPostProduction();renderProfiles();renderMaintenanceProfiles();renderAnalytics();renderSafety();fillCapacityOrders();updateNavCounts();
 }
 
 async function syncNow(){
