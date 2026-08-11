@@ -115,6 +115,52 @@ test('dos fallos iniciales siguen conectando y el tercero declara desconexión',
   assert.equal(context._printerStatus[machine.id].state,'offline');
 });
 
+// Una impresora encendida e imprimiendo con Moonraker caído NO puede verse
+// igual que una desenchufada: son la misma respuesta de red y acciones opuestas.
+function failureApi(probePorts){
+  const context={
+    Date,Math,Object,Promise,AbortSignal:{timeout:()=>null},
+    _isLocalMode:()=>true,
+    _appendBridgeToken:u=>u,
+    getPrinterTunnel:()=>'https://tunel',
+    fetch:async url=>{
+      const port=Number(String(url).split(':')[2]?.split('/')[0]);
+      if(probePorts.includes(port))return{status:200};
+      throw new Error('conexión rechazada');
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext([
+    SOURCE.slice(SOURCE.indexOf('const _ALIVE_PROBE_PORTS'),SOURCE.indexOf('async function fetchPrinterStatus')),
+    'this.fail=_printerFetchFailure;this.cache=_aliveProbe;',
+  ].join('\n'),context);
+  return context;
+}
+
+test('una impresora que responde en su UI web queda como telemetría caída, no offline',async()=>{
+  const ctx=failureApi([4408]);
+  const st=await ctx.fail('k1-4','192.168.100.68','No se pudo alcanzar Moonraker');
+  assert.equal(st.state,'apidown');
+  assert.equal(st.alivePort,4408);
+  assert.equal(st.connectionError,'No se pudo alcanzar Moonraker');
+});
+
+test('una impresora que no responde en ningún puerto sigue siendo offline',async()=>{
+  const ctx=failureApi([]);
+  const st=await ctx.fail('k1-1','192.168.100.51','Tiempo de espera agotado al consultar Moonraker');
+  assert.equal(st.state,'offline');
+  assert.equal(st.alivePort,undefined);
+});
+
+test('el sondeo se cachea por máquina para no repetirse en cada ciclo',async()=>{
+  const ctx=failureApi([80]);
+  await ctx.fail('k1-3','192.168.100.7','sin respuesta');
+  const primera=ctx.cache['k1-3'].at;
+  await ctx.fail('k1-3','192.168.100.7','sin respuesta');
+  assert.equal(ctx.cache['k1-3'].at,primera,'no debe re-sondear dentro de la ventana de caché');
+  assert.equal(ctx.cache['k1-3'].port,80);
+});
+
 test('un fallo transitorio conserva la última impresión conocida',()=>{
   const context=statusApi({'k2-2':{state:'printing',progress:61,lastSeenAt:12345}}),machine={id:'k2-2'};
   context.apply(machine,{state:'offline',_fetchFail:true,connectionError:'timeout',checkedAt:Date.now()});
