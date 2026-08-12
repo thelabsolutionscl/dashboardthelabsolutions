@@ -347,7 +347,7 @@ const NOTIFY={
       const _ped=state.pedidos||[],_cot=state.cotizaciones||[];
       const revSem=_ped.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=_ws?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
       const pedAct=_ped.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
-      const atras=_ped.filter(p=>{const f=p.fields;if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<_t;}).length;
+      const atras=_ped.filter(p=>pedidoAtrasado(p.fields)).length;
       const cotPend=_cot.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||'')).length;
       const cell=(lb,val,col)=>`<td style="padding:12px;text-align:center;border:1px solid #222;background:#1a1a1a"><div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.5px">${lb}</div><div style="font-size:19px;font-weight:700;color:${col};margin-top:3px">${val}</div></td>`;
       kpiTable=`<table style="width:100%;border-collapse:collapse;margin-bottom:20px"><tr>${cell('Revenue sem.',formatCLP(revSem),'#00f3ff')}${cell('Pedidos activos',pedAct,'#fff')}${cell('Cot. pendientes',cotPend,'#ffaa00')}${cell('Atrasados',atras,atras>0?'#ff4444':'#4caf50')}</tr></table>`;

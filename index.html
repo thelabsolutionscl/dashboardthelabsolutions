@@ -6955,6 +6955,18 @@ function hoyCL(){
   try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago'}).format(new Date());}
   catch(e){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 }
+// Un pedido está ATRASADO si su fecha de entrega YA pasó respecto de HOY en Chile.
+// La fecha viene 'YYYY-MM-DD' y se compara como TEXTO contra hoyCL(): así se evita
+// el parseo UTC de new Date('YYYY-MM-DD'), que en Chile (UTC-4/-3) cae antes de la
+// medianoche local y hacía contar las entregas de HOY como atrasadas todos los
+// días (en la bandeja de pedidos, KAI y el correo diario). Una entrega de hoy NO
+// está atrasada; lo estará mañana.
+function pedidoAtrasado(fields,hoyStr){
+  const f=fields||{};
+  if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||''))return false;
+  const fe=String(f['Fecha entrega']||'').slice(0,10);
+  return fe.length===10&&fe<(hoyStr||hoyCL());
+}
 function isVendorMode(){const u=AUTH.getUser();return!!(u&&u.role==='comercial');}
 // Los pedidos que le corresponde ver a quien está en pantalla. El filtro por
 // vendedor estaba repetido a mano en cada vista, y las de Kanban, Planificación
@@ -8868,7 +8880,7 @@ function renderKPIs(){
     }
     if(!despCanc)pedActivos++;
     const fe=f['Fecha entrega'];
-    if(!despCanc&&fe&&new Date(fe)<today)atrasados++;
+    if(pedidoAtrasado(f))atrasados++;
     if(!f['Anticipo pagado (50%)']&&(est==='Confirmado'||est==='En producción'))_aAnticipo++;
     if(fe&&!despCanc){const de=new Date(fe+'T00:00:00');if(de>=today&&de<=in2days)_aEntrega++;}
   }
@@ -9012,7 +9024,7 @@ function renderPipelineArea(){
   const counts={};stages.forEach(s=>counts[s]=0);todos.forEach(p=>{const e=p.fields['Estado pedido']||'';if(counts[e]!==undefined) counts[e]++;});
   const resumen=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 16px;border-bottom:1px solid var(--border)">${stages.map(s=>`<div style="text-align:center;background:var(--surface2);border-radius:7px;padding:8px 4px;border:1px solid var(--border2)"><div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:${colores[s]}">${counts[s]}</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;line-height:1.3">${s}</div></div>`).join('')}</div>`;
   const today=new Date();today.setHours(0,0,0,0);
-  const lista=activos.map(p=>{const f=p.fields,estado=f['Estado pedido']||'Confirmado',idx=stages.indexOf(estado),entrega=f['Fecha entrega'],atrasado=entrega&&new Date(entrega)<today;return`<div style="padding:10px 16px;border-bottom:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Pedido']||'—')}</span><span class="text-muted text-small" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(f['Cliente']))}</span>${atrasado?`<span style="color:var(--danger);font-size:9px;font-weight:700">⚠ ATRASADO</span>`:''}<span class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</span></div><div style="display:flex;align-items:center;gap:3px">${stages.map((s,i)=>`<div style="display:flex;align-items:center;gap:3px;${i<stages.length-1?'flex:1':''}"><div style="width:18px;height:18px;border-radius:50%;border:2px solid ${i<=idx?colores[s]:'var(--border2)'};background:${i<idx?colores[s]:i===idx?'rgba(0,212,204,0.15)':'var(--surface2)'};display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;color:${i<idx?'var(--black)':'var(--text3)'}">${i<idx?'✓':i===idx?'●':'○'}</div>${i<stages.length-1?`<div style="height:2px;flex:1;background:${i<idx?colores[s]:'var(--border2)'}"></div>`:''}</div>`).join('')}</div></div>`;}).join('');
+  const lista=activos.map(p=>{const f=p.fields,estado=f['Estado pedido']||'Confirmado',idx=stages.indexOf(estado),entrega=f['Fecha entrega'],atrasado=pedidoAtrasado(f);return`<div style="padding:10px 16px;border-bottom:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="mono" style="color:var(--accent)">${escapeHtml(f['N° Pedido']||'—')}</span><span class="text-muted text-small" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(f['Cliente']))}</span>${atrasado?`<span style="color:var(--danger);font-size:9px;font-weight:700">⚠ ATRASADO</span>`:''}<span class="clp">${formatCLP(Math.round((f['Monto total (CLP)']||0)/1.19))}</span></div><div style="display:flex;align-items:center;gap:3px">${stages.map((s,i)=>`<div style="display:flex;align-items:center;gap:3px;${i<stages.length-1?'flex:1':''}"><div style="width:18px;height:18px;border-radius:50%;border:2px solid ${i<=idx?colores[s]:'var(--border2)'};background:${i<idx?colores[s]:i===idx?'rgba(0,212,204,0.15)':'var(--surface2)'};display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;color:${i<idx?'var(--black)':'var(--text3)'}">${i<idx?'✓':i===idx?'●':'○'}</div>${i<stages.length-1?`<div style="height:2px;flex:1;background:${i<idx?colores[s]:'var(--border2)'}"></div>`:''}</div>`).join('')}</div></div>`;}).join('');
   document.getElementById('pipelineArea').innerHTML=resumen+`<div style="max-height:300px;overflow-y:auto">${lista||'<div class="empty-state">Sin pedidos activos</div>'}</div>`;
 }
 function renderCotTable(){
@@ -11434,7 +11446,7 @@ function renderPedidos(filter){
   const basePedidos=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
   const archivados=basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Completado');
   const archivoCount=document.getElementById('pedidosArchivoCount');if(archivoCount)archivoCount.textContent=archivados.length;
-  let data=filter==='all'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'):filter==='atrasados'?basePedidos.filter(p=>{const f=p.fields;if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||'')) return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'&&(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
+  let data=filter==='all'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'):filter==='atrasados'?basePedidos.filter(p=>pedidoAtrasado(p.fields)):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'&&(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
   data=_pedApplySearchSort(data);
   _pedRowIds=data.map(p=>p.id);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
