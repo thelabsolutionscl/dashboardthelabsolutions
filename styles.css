@@ -752,6 +752,11 @@ body.kiosk .tab-content{padding-top:12px!important;}
 /* Kiosko: agranda lo esencial y oculta los controles para verlo de lejos */
 body.kiosk #maquinaMonGrid .pcard{padding:18px!important}
 body.kiosk #maquinaMonGrid .pcard-actions,body.kiosk #maquinaMonGrid .pcard-iprow{display:none!important}
+/* La fila de IP + acciones tiene seis botones y no cabe en una tarjeta angosta:
+   sin envolver, el último queda cortado contra el borde. Envolver es el
+   comportamiento correcto en cualquier ancho, no solo en móvil. */
+.pcard-iprow{flex-wrap:wrap;row-gap:6px}
+.pcard-actions{flex-wrap:wrap;row-gap:4px}
 body.kiosk #maquinaMonGrid .pcard-name{font-size:15px!important}
 body.kiosk #maquinaMonGrid .pbig{font-size:30px!important}
 body.kiosk #maquinaMonGrid .ptemp{font-size:24px!important}
