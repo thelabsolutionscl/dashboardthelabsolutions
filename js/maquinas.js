@@ -748,7 +748,7 @@ function renderMonitorGrid(){
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img loading="lazy" decoding="async" src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
-          <div class="pcard-name" style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(m.nombre)}</div>
+          <div class="pcard-name" style="font-size:12px;font-weight:700;color:var(--text);line-height:1.25">${escHtml(m.nombre)}</div>
           <div style="font-size:10.5px;color:var(--text3)">Máquina #${m.numG}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
