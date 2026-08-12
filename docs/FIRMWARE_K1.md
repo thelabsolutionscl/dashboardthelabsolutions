@@ -1,5 +1,9 @@
 # Firmware K1 — cambiar de versión
 
+> Para problemas de operación diaria —una impresora que no aparece en el
+> dashboard, una cámara que no se ve— ver
+> [TALLER_IMPRESORAS.md](TALLER_IMPRESORAS.md).
+
 Runbook para cambiar el firmware de las K1 del taller. Escrito después de hacerlo
 de verdad en la **K1 #2** (`192.168.100.126`), que pasó de `1.3.3.5` a `1.3.5.22`
 el 2026-08-07.

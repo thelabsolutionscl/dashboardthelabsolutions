@@ -1,0 +1,300 @@
+# Taller de impresoras — diagnóstico y arreglo
+
+Runbook operativo del parque: qué hacer cuando una impresora desaparece del
+dashboard o su cámara deja de verse. Escrito el 2026-08-12 después de resolver
+los cuatro casos de esta página en máquinas reales.
+
+Para cambiar la **versión de firmware** de una K1, ver
+[FIRMWARE_K1.md](FIRMWARE_K1.md).
+
+---
+
+## El parque
+
+| Máquina | IP | Arquitectura | Sistema | Cámara se publica con |
+|---|---|---|---|---|
+| K1 #1 | 192.168.100.51 | mips | Buildroot | mjpg_streamer · 8080 |
+| K1 #2 | 192.168.100.126 | mips | Buildroot | mjpg_streamer · 8080 |
+| K1 #3 | 192.168.100.7 | mips | Buildroot | mjpg_streamer · 8080 |
+| K1 #4 | 192.168.100.68 | mips | Buildroot | mjpg_streamer · 8080 |
+| K1 #5 | sin IP | — | — | en mantención |
+| Ender-5 Max #6 | 192.168.100.67 | mips | Buildroot | mjpg_streamer · 8080 |
+| Ender-5 Max #7 | 192.168.100.64 | mips | Buildroot | mjpg_streamer · 8080 |
+| Ender-5 Max #8 | 192.168.100.95 | mips | Buildroot | mjpg_streamer · 8080 |
+| K2 #12 | 192.168.100.70 | armv7l | Tina/OpenWrt | go2rtc · 1984 |
+| K2 #13 | 192.168.100.71 | armv7l | Tina/OpenWrt | go2rtc · 1984 |
+| K2 Plus #11 | 192.168.100.75 | armv7l | Tina/OpenWrt | go2rtc · 1984 |
+
+> **Las IPs son DHCP y se mueven.** Las de arriba son las del 2026-08-12. La
+> fuente viva es Airtable (tabla `Maquinas`, campo `ip`), pero el dashboard
+> guarda además una IP por equipo en `localStorage` que la pisa
+> (`js/maquinas.js:211`). Antes de dar una máquina por muerta, confirma su IP:
+> en la pantalla, **Ajustes → Red**; o barriendo la red por el puerto de
+> Moonraker.
+
+Password SSH en todas: `creality`.
+
+### Barrer la red buscando impresoras
+
+```bash
+bash -c 'rm -f /tmp/scan.txt; for i in $(seq 2 254); do (curl -s -m 6 -o /dev/null "http://192.168.100.$i:7125/printer/info" && echo "192.168.100.$i" >> /tmp/scan.txt) & done; wait'; sort -t. -k4 -n /tmp/scan.txt
+```
+
+El `bash -c` evita la avalancha de mensajes de control de trabajos de zsh. Usa
+6 segundos de espera: con 2 no alcanzan las máquinas por WiFi y aparecen y
+desaparecen entre corridas.
+
+---
+
+## Caso 1 · La impresora imprime pero el dashboard no la ve
+
+Klipper y Moonraker son dos cosas distintas. **Klipper mueve la máquina;
+Moonraker es la API que consulta el dashboard.** Si Moonraker está caído, la
+impresora imprime perfectamente y el dashboard la muestra como si estuviera
+desenchufada.
+
+Pasó el 2026-08-12 con las K1 #3 y #4: imprimiendo TPU, invisibles.
+
+### Diagnóstico
+
+```bash
+K1=192.168.100.68
+curl -s -m 10 -o /dev/null -w "%{http_code}\n" "http://$K1:7125/printer/info"
+ssh root@$K1 'ps | grep -c "[m]oonraker"'
+```
+
+`000` y `0` procesos = Moonraker caído. Si además el `4408` (Fluidd) sí
+responde, la máquina está viva y el dashboard debería mostrarla como
+**"Telemetría caída"** en ámbar, no como "Sin conexión".
+
+### La causa que ya nos pasó dos veces: falta el archivo de configuración
+
+```bash
+ssh root@$K1 'tail -20 /usr/data/printer_data/logs/moonraker.log'
+```
+
+```
+ConfigError: Configuration File Not Found:
+'/usr/data/printer_data/config/moonraker.conf'
+```
+
+Moonraker arranca, no encuentra su configuración y se apaga. Arrancar el
+servicio otra vez no sirve de nada hasta reponer el archivo.
+
+### Arreglo
+
+Si la máquina tiene su propio respaldo (lo mejor):
+
+```bash
+ssh root@$K1 'cd /usr/data/printer_data/config && ls -la .moonraker.conf.bkp'
+ssh root@$K1 'cd /usr/data/printer_data/config && cp .moonraker.conf.bkp moonraker.conf'
+ssh root@$K1 '/etc/init.d/S56moonraker_service start'
+```
+
+Si no lo tiene, se copia desde otra K1 sana (el archivo no trae nada propio de
+cada máquina):
+
+```bash
+ssh root@192.168.100.68 'cat /usr/data/printer_data/config/moonraker.conf' > /tmp/moonraker-k1.conf
+wc -l /tmp/moonraker-k1.conf     # ~57 líneas; si sale 0, no copies nada
+scp -O /tmp/moonraker-k1.conf root@192.168.100.7:/usr/data/printer_data/config/moonraker.conf
+ssh root@192.168.100.7 '/etc/init.d/S56moonraker_service start'
+```
+
+Y se le deja respaldo, que es lo que salvó a la otra:
+
+```bash
+ssh root@192.168.100.7 'cd /usr/data/printer_data/config && cp moonraker.conf .moonraker.conf.bkp'
+```
+
+Verificación:
+
+```bash
+curl -s -m 10 -o /dev/null -w "%{http_code}\n" "http://$K1:7125/printer/info"
+```
+
+> Un `404` justo después de arrancar es normal: Moonraker todavía está
+> registrando sus endpoints y conectándose con Klipper. Espera 15 segundos y
+> vuelve a probar. Para ver si está sano de verdad:
+> `curl -s "http://$K1:7125/server/info"` → busca `"klippy_state":"ready"`.
+
+### Sobre el arranque automático
+
+En estas máquinas **no existe `/etc/rc.d`**. El prefijo `S56` de
+`/etc/init.d/S56moonraker_service` *es* el mecanismo de arranque. Si el script
+está ahí, arranca solo — no falta ningún enlace.
+
+---
+
+## Caso 2 · La cámara no se ve
+
+Hay **dos arquitecturas distintas** en el parque y cada una falla distinto. El
+mensaje de la tarjeta dice cuál es el problema:
+
+| Mensaje en la tarjeta | Significa |
+|---|---|
+| "Cámara sin señal · verifica la URL" | Hay una URL guardada de tipo MJPEG y no responde |
+| "Cámara sin señal · reintentando…" | Es una URL de snapshot (go2rtc) que no responde |
+
+El dashboard trae diagnóstico integrado: en la tarjeta, botón **📷** →
+**Probar**. Distingue token inválido, puerto bloqueado, ruta equivocada y
+cámara que no contesta.
+
+> Moonraker responde `{"webcams":[]}` en **todas** estas máquinas. No significa
+> nada: ninguna publica su cámara a través de Moonraker.
+
+### K1 y Ender-5 Max — mjpg_streamer
+
+`cam_app` toma la cámara y la publica en memoria compartida; `mjpg_streamer` la
+sirve por HTTP leyendo de ahí con `input_memfd.so`. Conviven por diseño.
+
+En las Ender-5 Max ya viene corriendo de fábrica. **En las K1 no**, aunque el
+binario y los plugins estén instalados.
+
+```bash
+K1=192.168.100.126
+ssh root@$K1 'LD_LIBRARY_PATH=/usr/lib/mjpg-streamer /usr/bin/mjpg_streamer -b -i "input_memfd.so -t 0" -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"'
+curl -s -m 8 -o /dev/null -w "%{http_code} %{content_type}\n" "http://$K1:8080/?action=snapshot"
+```
+
+Esperado: `200 image/jpeg`. URL para el **📷** del dashboard:
+
+```
+http://192.168.100.126:8080/?action=stream
+```
+
+> **`LD_LIBRARY_PATH` no es opcional en las K1.** Sin él falla con
+> `dlopen: input_memfd.so: cannot open shared object file`, aunque el plugin
+> exista en `/usr/lib/mjpg-streamer/`: el cargador no busca en esa carpeta. En
+> las Ender-5 Max sí está en la ruta y por eso ahí no hace falta.
+>
+> **Los parámetros del plugin van dentro de las comillas.** `-i "input_memfd.so
+> -t 0"` es un solo argumento. `ps` los muestra sin comillas y copiarlos tal
+> cual da `invalid option -- 't'`.
+
+### K2 y K2 Plus — go2rtc sobre WebRTC
+
+Estas no publican MJPEG. La cámara sale por WebRTC y hay un puente de tres
+piezas, instalado a mano en `/mnt/UDISK/helper-script/`:
+
+1. `k2rtc.py` — expone el WebRTC de la impresora como endpoint local en `127.0.0.1:8090`
+2. `go2rtc` — lo convierte a JPEG y lo sirve en el `1984`
+3. `camera_watchdog.py` — lo mantiene vivo
+
+Copiar solo go2rtc no sirve: sin `k2rtc.py` no hay nada que convertir.
+
+```bash
+K2=192.168.100.75
+curl -s -m 5 -o /dev/null -w "%{http_code}\n" "http://$K2:1984/api/streams"
+```
+
+`000` = go2rtc caído. Se levanta así (`nohup` no existe en estas máquinas):
+
+```bash
+ssh root@$K2 'start-stop-daemon -S -b -x /usr/bin/python3 -- /mnt/UDISK/helper-script/k2rtc.py'
+ssh root@$K2 'start-stop-daemon -S -b -x /mnt/UDISK/helper-script/go2rtc -- -config /mnt/UDISK/helper-script/go2rtc.yaml'
+curl -s -m 20 -o /dev/null -w "%{http_code} %{content_type}\n" "http://$K2:1984/api/frame.jpeg?src=k2plus"
+```
+
+URL para el **📷** (el stream se llama `k2plus` en las tres, también en las K2):
+
+```
+http://192.168.100.75:1984/api/frame.jpeg?src=k2plus
+```
+
+> El primer cuadro tarda: hay que negociar WebRTC con la cámara. Dale hasta 20
+> segundos antes de darlo por fallido.
+>
+> Si hay que instalar el puente en una K2 desde cero, se copia la carpeta
+> completa desde una que funcione, y en el `go2rtc.yaml` hay que cambiar
+> `candidates:` por la IP de la máquina de destino. **El binario es armv7l: no
+> sirve en las K1, que son mips.**
+
+### Arranque automático de las cámaras
+
+Nada de esto sobrevive a un corte de luz por sí solo. El script va en
+`/etc/init.d/` con prefijo `S99`; el `sleep` inicial le da tiempo a `cam_app` a
+publicar antes de que el streamer intente leer.
+
+K2 / K2 Plus: `S99camera` levanta las tres piezas (ya existe en las que
+funcionan, se copia tal cual). K1: script propio, porque cambia el mecanismo y
+la ruta de la partición de datos (`/usr/data`, no `/mnt/UDISK`):
+
+```sh
+#!/bin/sh
+PLUGINS=/usr/lib/mjpg-streamer
+start() {
+    sleep 30
+    LD_LIBRARY_PATH=$PLUGINS /usr/bin/mjpg_streamer -b \
+      -i "input_memfd.so -t 0" \
+      -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"
+}
+stop() { killall mjpg_streamer 2>/dev/null; }
+case "$1" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop; sleep 1; start ;;
+  *) echo "Usage: $0 {start|stop|restart}" ;;
+esac
+```
+
+```bash
+for ip in 126 7 68; do scp -O ~/Desktop/S99camera-k1 root@192.168.100.$ip:/etc/init.d/S99camera; ssh root@192.168.100.$ip 'chmod +x /etc/init.d/S99camera'; done
+```
+
+### El bridge solo deja pasar ciertos puertos
+
+`7125, 8080, 4408, 4409, 80, 1984`. El `8080` y el `1984` están permitidos, así
+que ambos esquemas funcionan en modo `🌐 Remoto` sin tocar nada. Una cámara en
+otro puerto daría **403** en remoto aunque funcione en local; se agrega con la
+variable `BRIDGE_PORTS` del bridge en el iMac.
+
+---
+
+## Caso 3 · La versión que muestra la pantalla no es la instalada
+
+Ver [FIRMWARE_K1.md](FIRMWARE_K1.md), sección "La pantalla puede mentir". En
+resumen: el número de la pantalla sale de un archivo editable en `/usr/data`
+que el OTA no toca, y en la K1 #2 estaba alterado a mano.
+
+Chequeo rápido de una máquina:
+
+```bash
+ssh root@192.168.100.X 'sh /etc/ota_bin/get_ota_current_version.sh; grep -o "\"sys_version\":\"[^\"]*\"" /usr/data/creality/userdata/config/system_version.json'
+```
+
+Si los dos números no coinciden, está alterado. Al 2026-08-12: las #2 (ya
+corregida), #3 y #4 coinciden; la #1 no se pudo revisar.
+
+---
+
+## Trampas del entorno
+
+Cosas que cuestan media hora la primera vez y treinta segundos la segunda.
+
+| Síntoma | Causa |
+|---|---|
+| `scp: Connection closed` | macOS usa SFTP y el BusyBox de las impresoras no lo tiene. **Usa `scp -O`**, en ambas direcciones. |
+| `ash: nohup: not found` | No existe en estas máquinas. Usa `start-stop-daemon -S -b -x <binario> -- <args>`. |
+| `netstat: /proc/net/tcp6: No such file` | Ruido, no error. La salida de IPv4 sale igual. |
+| `zsh: command not found: #` | zsh interactivo no acepta comentarios en línea, y además deja la variable **sin definir**. Pega los comandos sin comentarios. |
+| Un `grep` de estado que nunca coincide | Moonraker devuelve el JSON con espacio: `"state": "standby"`. Usa `grep -o '"state": *"[a-z]*"'`. |
+| Una impresora que aparece y desaparece del barrido | Las K1 están por WiFi y responden lento. Sube el timeout a 6-10 segundos. |
+| El comando de arranque no dice nada y el puerto sigue muerto | El modo daemon se traga los errores. Córrelo en primer plano redirigiendo a un archivo y léelo. |
+
+---
+
+## Pendientes
+
+- **¿Por qué desapareció `moonraker.conf`?** Faltaba en dos de cuatro K1. No se
+  borra solo. Las fechas apuntan al 23 de junio, el mismo día que apareció el
+  `downgrade.sh` en la #2 y se editó su `system_version.json`. Si fue un
+  procedimiento manual, va a repetirse.
+- **`printer.cfg` crece solo.** En la #4 pasó de 8,8 KB a 24 KB en cinco días,
+  con un respaldo nuevo en cada cambio. A ese ritmo termina siendo un problema.
+- **Reservas DHCP fijas** para las once máquinas. Media hora perdida el
+  2026-08-11 buscando cuál impresora era cuál, y una IP documentada que no
+  existía en el parque.
+- **La K2 #12 se quedó sin imagen con el modal abierto** y se recuperó sola.
+  Posible causa: el WebRTC de la impresora admite un consumidor a la vez y la
+  tarjeta y el modal se lo disputan. Sin confirmar.
