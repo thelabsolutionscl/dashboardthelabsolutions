@@ -47,7 +47,7 @@
       };
 
       const activos = ped.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields?.['Estado pedido']||''));
-      const atrasados = ped.filter(p=>{const f=p.fields||{};if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;});
+      const atrasados = ped.filter(p=>pedidoAtrasado(p.fields));
       const cotPend = cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||''));
       const revTotal = ped.reduce((a,p)=>a+Math.round((p.fields?.['Monto total (CLP)']||0)/1.19),0);
 
@@ -219,7 +219,7 @@ CAPACIDADES Y REGLAS:
       const s=window.state||{};
       const ped=s.pedidos||[], cot=s.cotizaciones||[], fac=s.facturas||[];
       const today=new Date(); today.setHours(0,0,0,0);
-      const atrasados=ped.filter(p=>{const f=p.fields||{};if(['Despachado','Completado','Cancelado'].includes(f['Estado pedido']||''))return false;return f['Fecha entrega']&&new Date(f['Fecha entrega'])<today;}).length;
+      const atrasados=ped.filter(p=>pedidoAtrasado(p.fields)).length;
       const vencidas=fac.filter(x=>x.fields&&(x.fields['Estado Pago']||'')==='Vencida').length;
       const cotPend=cot.filter(c=>['Enviada','Solicitada'].includes(c.fields?.['Estado cotización']||'')).length;
       const parts=[];
