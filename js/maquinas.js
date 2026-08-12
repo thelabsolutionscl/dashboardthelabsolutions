@@ -539,7 +539,7 @@ function renderMonitorFilterTabs(){
   el.innerHTML=MONITOR_GRUPOS.map(g=>{
     const active=_monitorFilter===g.key;
     const count=g.key==='all'?MAQUINAS.length:MAQUINAS.filter(m=>m.modelo===g.key).length;
-    return`<button onclick="filterMonitor('${g.key}')" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid ${active?g.color:'var(--border2)'};background:${active?g.color+'22':'var(--surface2)'};color:${active?g.color:'var(--text3)'};font-size:11px;font-weight:${active?700:500};cursor:pointer;transition:all 0.15s">${g.label}<span style="background:${active?g.color+'33':'var(--surface3)'};border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700">${count}</span></button>`;
+    return`<button onclick="filterMonitor('${g.key}')" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid ${active?g.color:'var(--border2)'};background:${active?g.color+'22':'var(--surface2)'};color:${active?g.color:'var(--text3)'};font-size:12px;font-weight:${active?700:500};cursor:pointer;transition:all 0.15s">${g.label}<span style="background:${active?g.color+'33':'var(--surface3)'};border-radius:10px;padding:1px 6px;font-size:10.5px;font-weight:700">${count}</span></button>`;
   }).join('');
 }
 
@@ -551,7 +551,7 @@ function renderMonitorKPIs(){
   let printing=0,paused=0,idle=0,error=0,down=0,offline=0,noip=0,connecting=0,apidown=0;
   lista.forEach(m=>{const st=(_printerStatus[m.id]||_printerInitialStatus(m)).state;if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='apidown')apidown++;else if(st==='offline')offline++;else if(st==='connecting')connecting++;else idle++;});
   const total=lista.length,utilPct=total>0?Math.round((printing+paused)/total*100):0;
-  el.innerHTML=`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:11px">
+  el.innerHTML=`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:12px">
     ${printing>0?`<span style="color:#00d4aa;font-weight:700">🟢 ${printing} Imprimiendo</span>`:''}
     ${paused>0?`<span style="color:#ffaa00;font-weight:700">⏸ ${paused} Pausado</span>`:''}
     ${idle>0?`<span style="color:var(--accent3)">⚪ ${idle} En línea · libres</span>`:''}
@@ -584,44 +584,44 @@ function renderMaqOcupacion(){
   const proxima=etas.length?hhmm(Math.min(...etas)):null;
   // Eje: marcas de hora sobre el horizonte
   const marks=[];const stepH=horizon>6*3600?2:1;
-  for(let hh=stepH;hh*3600<horizon;hh+=stepH) marks.push(`<span style="position:absolute;left:${(hh*3600/horizon*100).toFixed(1)}%;transform:translateX(-50%);font-size:8.5px;color:var(--text3)">+${hh}h</span>`);
+  for(let hh=stepH;hh*3600<horizon;hh+=stepH) marks.push(`<span style="position:absolute;left:${(hh*3600/horizon*100).toFixed(1)}%;transform:translateX(-50%);font-size:10px;color:var(--text3)">+${hh}h</span>`);
   const fila=r=>{
     const nom=`${escapeHtml(r.m.nombre||'—')} <span style="color:var(--text3)">#${r.m.numG||r.m.num||''}</span>`;
     let bar='',lbl='';
     if(r.k==='print'&&r.eta>0){
       const w=Math.min(100,r.eta/horizon*100).toFixed(1);
       const pct=(typeof r.s.progress==='number'&&r.s.progress>=0)?Math.round(r.s.progress<=1?r.s.progress*100:r.s.progress):null;
-      bar=`<div title="${escapeHtml(r.s.filename||'Imprimiendo')}${pct!=null?' · '+pct+'%':''}" style="height:100%;width:${w}%;background:linear-gradient(90deg,#00d4aa,#00d4cc);border-radius:5px;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;min-width:52px"><span style="font-size:9px;font-weight:700;color:#04121a;white-space:nowrap">${pct!=null?pct+'% · ':''}libre ${hhmm(r.eta)}</span></div>`;
+      bar=`<div title="${escapeHtml(r.s.filename||'Imprimiendo')}${pct!=null?' · '+pct+'%':''}" style="height:100%;width:${w}%;background:linear-gradient(90deg,#00d4aa,#00d4cc);border-radius:5px;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;min-width:52px"><span style="font-size:10px;font-weight:700;color:#04121a;white-space:nowrap">${pct!=null?pct+'% · ':''}libre ${hhmm(r.eta)}</span></div>`;
       lbl=`<span style="color:#00d4aa">🟢</span>`;
     }else if(r.k==='print'){
-      bar=`<div title="Imprimiendo — sin ETA del bridge" style="height:100%;width:100%;background:repeating-linear-gradient(45deg,rgba(0,212,170,0.5),rgba(0,212,170,0.5) 8px,rgba(0,212,170,0.25) 8px,rgba(0,212,170,0.25) 16px);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:#04121a">en curso · sin ETA</span></div>`;
+      bar=`<div title="Imprimiendo — sin ETA del bridge" style="height:100%;width:100%;background:repeating-linear-gradient(45deg,rgba(0,212,170,0.5),rgba(0,212,170,0.5) 8px,rgba(0,212,170,0.25) 8px,rgba(0,212,170,0.25) 16px);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#04121a">en curso · sin ETA</span></div>`;
       lbl=`<span style="color:#00d4aa">🟢</span>`;
     }else if(r.k==='paused'){
-      bar=`<div style="height:100%;width:45%;background:rgba(255,170,0,0.6);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:#1a1206">⏸ en pausa</span></div>`;
+      bar=`<div style="height:100%;width:45%;background:rgba(255,170,0,0.6);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#1a1206">⏸ en pausa</span></div>`;
       lbl=`<span style="color:#ffaa00">⏸</span>`;
     }else if(r.k==='error'){
-      bar=`<div style="height:100%;width:100%;background:rgba(255,68,68,0.14);border:1px dashed rgba(255,68,68,0.5);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:var(--danger)">⚠ con falla — revisar</span></div>`;
+      bar=`<div style="height:100%;width:100%;background:rgba(255,68,68,0.14);border:1px dashed rgba(255,68,68,0.5);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:var(--danger)">⚠ con falla — revisar</span></div>`;
       lbl=`<span style="color:var(--danger)">🔴</span>`;
     }else if(r.k==='connecting'){
-      bar=`<div style="height:100%;width:100%;background:rgba(56,189,248,.08);border:1px dashed rgba(56,189,248,.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;color:#38bdf8">consultando telemetría…</span></div>`;
+      bar=`<div style="height:100%;width:100%;background:rgba(56,189,248,.08);border:1px dashed rgba(56,189,248,.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;color:#38bdf8">consultando telemetría…</span></div>`;
       lbl=`<span style="color:#38bdf8">◌</span>`;
     }else if(r.k==='off'){
-      bar=`<div style="height:100%;width:100%;background:var(--surface3);border-radius:5px;display:flex;align-items:center;padding-left:8px;opacity:.55"><span style="font-size:9px;color:var(--text3)">sin conexión</span></div>`;
+      bar=`<div style="height:100%;width:100%;background:var(--surface3);border-radius:5px;display:flex;align-items:center;padding-left:8px;opacity:.55"><span style="font-size:10px;color:var(--text3)">sin conexión</span></div>`;
       lbl=`<span style="color:var(--text3)">⚫</span>`;
     }else{
-      bar=`<div style="height:100%;width:100%;background:rgba(0,212,170,0.08);border:1px dashed rgba(0,212,170,0.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:9px;font-weight:700;color:#00d4aa">✓ libre ahora</span></div>`;
+      bar=`<div style="height:100%;width:100%;background:rgba(0,212,170,0.08);border:1px dashed rgba(0,212,170,0.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#00d4aa">✓ libre ahora</span></div>`;
       lbl=`<span style="color:#00d4aa">⚪</span>`;
     }
     return`<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
-      <span style="flex-shrink:0;width:14px;text-align:center;font-size:11px">${lbl}</span>
-      <span style="flex-shrink:0;width:158px;font-size:10.5px;font-weight:600;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</span>
+      <span style="flex-shrink:0;width:14px;text-align:center;font-size:12px">${lbl}</span>
+      <span style="flex-shrink:0;width:158px;font-size:11.5px;font-weight:600;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</span>
       <div style="flex:1;height:20px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:2px;position:relative">${bar}</div>
     </div>`;
   };
   el.style.display='';
   el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-      <span style="font-size:11px;font-weight:700;color:var(--text)">⏱️ Ocupación de máquinas</span>
-      <span style="font-size:10px;color:var(--text3)">${libres} libre${libres!==1?'s':''} ahora · ${imprimiendo} imprimiendo${proxima?' · próxima máquina libre ~'+proxima:''}</span>
+      <span style="font-size:12px;font-weight:700;color:var(--text)">⏱️ Ocupación de máquinas</span>
+      <span style="font-size:10.5px;color:var(--text3)">${libres} libre${libres!==1?'s':''} ahora · ${imprimiendo} imprimiendo${proxima?' · próxima máquina libre ~'+proxima:''}</span>
     </div>
     <div style="position:relative;height:12px;margin:0 0 4px 181px">${marks.join('')}</div>
     ${rows.sort((a,b)=>(a.eta||(a.k==='idle'?-1:1e9))-(b.eta||(b.k==='idle'?-1:1e9))).map(fila).join('')}`;
@@ -659,14 +659,14 @@ function renderMonitorGrid(){
 
     let body='';
     if(s.state==='connecting'){
-      body=`<div class="printer-connecting" style="margin-top:12px;text-align:center;color:#38bdf8;font-size:11px;padding:16px 8px"><span class="printer-connecting-dot">◌</span><br><b>Consultando telemetría…</b><br><span style="font-family:monospace;font-size:10px;color:var(--text3)">${ip}</span></div>`;
+      body=`<div class="printer-connecting" style="margin-top:12px;text-align:center;color:#38bdf8;font-size:12px;padding:16px 8px"><span class="printer-connecting-dot">◌</span><br><b>Consultando telemetría…</b><br><span style="font-family:monospace;font-size:10.5px;color:var(--text3)">${ip}</span></div>`;
     } else if(s.state==='noip'){
       body=`<div style="margin-top:10px">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:600">Conexión OrcaSlicer / Moonraker</div>
-        <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ipin_${m.id}" type="text" placeholder="IP  192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
-        <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button></div>
-        <div style="display:flex;gap:6px"><input id="ipkey_${m.id}" type="password" placeholder="API Key (opcional)" value="${getPrinterApiKey(m.id)}" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;min-width:0">
-        <button onclick="savePrinterApiKey('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;flex-shrink:0;color:var(--text3)">Key</button></div>
+        <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px;font-weight:600">Conexión OrcaSlicer / Moonraker</div>
+        <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ipin_${m.id}" type="text" placeholder="IP  192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;font-family:monospace;min-width:0">
+        <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button></div>
+        <div style="display:flex;gap:6px"><input id="ipkey_${m.id}" type="password" placeholder="API Key (opcional)" value="${getPrinterApiKey(m.id)}" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;font-family:monospace;min-width:0">
+        <button onclick="savePrinterApiKey('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;flex-shrink:0;color:var(--text3)">Key</button></div>
       </div>`;
     } else if(s.state==='apidown'){
       // La máquina contesta en su UI web pero no en Moonraker. NO es lo mismo
@@ -674,24 +674,24 @@ function renderMonitorGrid(){
       const uiPort=s.alivePort||_ALIVE_PROBE_PORTS[0];
       const svc=m.modelo==='K1'?'/etc/init.d/S56moonraker_service restart':'/etc/init.d/moonraker restart';
       body=`<div style="margin-top:10px;padding:10px;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.3);border-radius:8px">
-        <div style="font-size:11px;color:#ffaa00;font-weight:700;margin-bottom:4px">📡 Telemetría caída · la máquina está viva</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:6px;line-height:1.45">Responde en el puerto ${uiPort} pero Moonraker no contesta. <b style="color:var(--text2)">Puede estar imprimiendo sin que el dashboard lo vea</b> — revísala antes de darla por libre.</div>
-        <div style="font-size:9.5px;color:var(--text3);margin-bottom:9px;line-height:1.4">Para recuperarla, por SSH:<br><span style="font-family:monospace;color:var(--text2)">${escapeHtml(svc)}</span></div>
-        <a href="${escapeHtml(_printerPortUrl(ip,uiPort,'/'))}" target="_blank" rel="noopener" style="display:block;text-align:center;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.45);color:#ffaa00;border-radius:7px;padding:7px;font-size:11px;font-weight:700;text-decoration:none">🔎 Abrir la impresora</a>
+        <div style="font-size:12px;color:#ffaa00;font-weight:700;margin-bottom:4px">📡 Telemetría caída · la máquina está viva</div>
+        <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px;line-height:1.45">Responde en el puerto ${uiPort} pero Moonraker no contesta. <b style="color:var(--text2)">Puede estar imprimiendo sin que el dashboard lo vea</b> — revísala antes de darla por libre.</div>
+        <div style="font-size:10.5px;color:var(--text3);margin-bottom:9px;line-height:1.4">Para recuperarla, por SSH:<br><span style="font-family:monospace;color:var(--text2)">${escapeHtml(svc)}</span></div>
+        <a href="${escapeHtml(_printerPortUrl(ip,uiPort,'/'))}" target="_blank" rel="noopener" style="display:block;text-align:center;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.45);color:#ffaa00;border-radius:7px;padding:7px;font-size:12px;font-weight:700;text-decoration:none">🔎 Abrir la impresora</a>
       </div>`;
     } else if(s.state==='offline'){
-      body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:11px;padding:8px 0"><b>Sin telemetría</b><br><span style="font-family:monospace;font-size:10px">${ip}</span><br><span style="font-size:10px">${escapeHtml(s.connectionError||'La impresora no respondió')}</span><br><span style="font-size:9px;color:#777">${escapeHtml(fmtPrinterSeen(s.lastSeenAt))}</span></div>`;
+      body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:12px;padding:8px 0"><b>Sin telemetría</b><br><span style="font-family:monospace;font-size:10.5px">${ip}</span><br><span style="font-size:10.5px">${escapeHtml(s.connectionError||'La impresora no respondió')}</span><br><span style="font-size:10px;color:#777">${escapeHtml(fmtPrinterSeen(s.lastSeenAt))}</span></div>`;
     } else if(s.state==='shutdown'){
       body=`<div style="margin-top:10px;padding:10px;background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);border-radius:8px">
-        <div style="font-size:11px;color:#ff6b6b;font-weight:700;margin-bottom:4px">⚠ Klipper detenido</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:9px;line-height:1.4">${escapeHtml(s.klMsg||'La impresora reportó un error y se detuvo. La impresión en curso se interrumpió.')}</div>
-        <button onclick="printerFirmwareRestart('${m.id}')" style="width:100%;background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.45);color:#ff6b6b;border-radius:7px;padding:7px;font-size:11px;font-weight:700;cursor:pointer">🔄 Reiniciar firmware</button>
+        <div style="font-size:12px;color:#ff6b6b;font-weight:700;margin-bottom:4px">⚠ Klipper detenido</div>
+        <div style="font-size:10.5px;color:var(--text3);margin-bottom:9px;line-height:1.4">${escapeHtml(s.klMsg||'La impresora reportó un error y se detuvo. La impresión en curso se interrumpió.')}</div>
+        <button onclick="printerFirmwareRestart('${m.id}')" style="width:100%;background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.45);color:#ff6b6b;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">🔄 Reiniciar firmware</button>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-          <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}</span>
+          <span style="font-size:10px;color:var(--text3);font-family:monospace">${ip}</span>
           <div style="display:flex;gap:4px">
-            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">⚙</button>
-            <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
-            <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}</button>
+            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">⚙</button>
+            <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
+            <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}</button>
           </div>
         </div>
       </div>`;
@@ -700,46 +700,46 @@ function renderMonitorGrid(){
         ${isActive?`<div style="margin:10px 0 6px;display:flex;gap:9px;align-items:center">
           ${_safePrinterMediaUrl(s.thumbUrl)?`<img loading="lazy" decoding="async" src="${_safePrinterMediaUrl(s.thumbUrl)}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
           <div style="flex:1;min-width:0">
-            <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
+            <div style="font-size:10.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'—')}</div>
             <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:5px">
               <span class="pbig" id="pbig_${m.id}" style="font-size:22px;font-weight:800;color:${sm.color}">${s.progress}%</span>
-              <span id="peta_${m.id}" style="font-size:10px;color:var(--text3);margin-left:auto">⏱ ${fmtSecs(s.eta)} restante</span>
+              <span id="peta_${m.id}" style="font-size:10.5px;color:var(--text3);margin-left:auto">⏱ ${fmtSecs(s.eta)} restante</span>
             </div>
             <div class="pbar ${isPrinting?'live':''}"><i id="pbar_${m.id}" style="width:${s.progress}%"></i></div>
           </div>
         </div>`:''}
         <div style="display:flex;gap:6px;margin-top:8px">
           <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
-            <div style="font-size:9px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">HOTEND</div>
+            <div style="font-size:10px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">HOTEND</div>
             <div class="ptemp" id="phot_${m.id}" style="font-size:17px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'};line-height:1">${s.hotend?.actual||0}°</div>
-            <div style="font-size:9px;color:var(--text3);margin-top:2px">${s.hotend?.target>0?'→ '+s.hotend.target+'°':'fría'}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">${s.hotend?.target>0?'→ '+s.hotend.target+'°':'fría'}</div>
           </div>
           <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
-            <div style="font-size:9px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">CAMA</div>
+            <div style="font-size:10px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">CAMA</div>
             <div class="ptemp" id="pbed_${m.id}" style="font-size:17px;font-weight:700;color:${s.bed?.target>0?'#ffaa00':'var(--text)'};line-height:1">${s.bed?.actual||0}°</div>
-            <div style="font-size:9px;color:var(--text3);margin-top:2px">${s.bed?.target>0?'→ '+s.bed.target+'°':'fría'}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">${s.bed?.target>0?'→ '+s.bed.target+'°':'fría'}</div>
           </div>
         </div>
         ${isActive?`<div style="display:flex;gap:6px;margin-top:8px">
-          ${isPrinting?`<button onclick="printerControl('${m.id}','pause')" style="flex:1;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.4);color:#ffaa00;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">⏸ Pausar</button>`:''}
-          ${isPaused?`<button onclick="printerControl('${m.id}','resume')" style="flex:1;background:rgba(0,212,170,0.15);border:1px solid rgba(0,212,170,0.4);color:#00d4aa;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">▶ Reanudar</button>`:''}
-          <button onclick="printerControl('${m.id}','cancel')" style="flex:1;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.35);color:#ff4444;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">■ Cancelar</button>
+          ${isPrinting?`<button onclick="printerControl('${m.id}','pause')" style="flex:1;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.4);color:#ffaa00;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">⏸ Pausar</button>`:''}
+          ${isPaused?`<button onclick="printerControl('${m.id}','resume')" style="flex:1;background:rgba(0,212,170,0.15);border:1px solid rgba(0,212,170,0.4);color:#00d4aa;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">▶ Reanudar</button>`:''}
+          <button onclick="printerControl('${m.id}','cancel')" style="flex:1;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.35);color:#ff4444;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">■ Cancelar</button>
         </div>`:''}
         ${th.length>=2?`<div style="margin-top:8px;padding:6px 8px;background:var(--surface2);border-radius:7px">
-          <div style="font-size:9px;color:var(--text3);margin-bottom:3px">Temperatura hotend</div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Temperatura hotend</div>
           <div id="pspark_${m.id}">${renderSparkline(th,'h','#ff6b35')}</div>
         </div>`:''}
         <div class="pcard-iprow" style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-          <span style="font-size:9px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">🔑</span>`:''}</span>
+          <span style="font-size:10px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">🔑</span>`:''}</span>
           <div class="pcard-actions" style="display:flex;gap:4px">
             ${_renderPrinterLightButton(m.id)}
-            <button onclick="openPrinterControl('${m.id}')" style="background:${isActive?'rgba(0,212,170,0.12)':'var(--surface2)'};border:1px solid ${isActive?'rgba(0,212,170,0.35)':'var(--border2)'};border-radius:6px;color:${isActive?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Control de impresora">🎛️</button>
-            <button onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Enviar G-code">📤</button>
-            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">⚙</button>
-            <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
-            <button onclick="openBedMesh('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Bed mesh (mapa de nivelación de cama)">🗺️</button>
-            <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
-            ${_queueCount(m.id)>0?`<button onclick="openQueueModal('${m.id}')" style="background:rgba(255,170,0,0.12);border:1px solid rgba(255,170,0,0.4);border-radius:6px;color:#ffaa00;font-size:10px;padding:3px 7px;cursor:pointer" title="${_queueCount(m.id)} trabajo(s) en cola">🔁 ${_queueCount(m.id)}</button>`:''}
+            <button onclick="openPrinterControl('${m.id}')" style="background:${isActive?'rgba(0,212,170,0.12)':'var(--surface2)'};border:1px solid ${isActive?'rgba(0,212,170,0.35)':'var(--border2)'};border-radius:6px;color:${isActive?'var(--accent)':'var(--text3)'};font-size:10.5px;padding:3px 7px;cursor:pointer" title="Control de impresora">🎛️</button>
+            <button onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Enviar G-code">📤</button>
+            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">⚙</button>
+            <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
+            <button onclick="openBedMesh('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Bed mesh (mapa de nivelación de cama)">🗺️</button>
+            <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">📋${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
+            ${_queueCount(m.id)>0?`<button onclick="openQueueModal('${m.id}')" style="background:rgba(255,170,0,0.12);border:1px solid rgba(255,170,0,0.4);border-radius:6px;color:#ffaa00;font-size:10.5px;padding:3px 7px;cursor:pointer" title="${_queueCount(m.id)} trabajo(s) en cola">🔁 ${_queueCount(m.id)}</button>`:''}
           </div>
         </div>`;
     }
@@ -748,14 +748,14 @@ function renderMonitorGrid(){
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img loading="lazy" decoding="async" src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
-          <div class="pcard-name" style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(m.nombre)}</div>
-          <div style="font-size:10px;color:var(--text3)">Máquina #${m.numG}</div>
+          <div class="pcard-name" style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(m.nombre)}</div>
+          <div style="font-size:10.5px;color:var(--text3)">Máquina #${m.numG}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
-          <span style="display:inline-flex;align-items:center;gap:5px;background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700;border:1px solid ${sm.color}33"><span class="pdot${isActive?' live':''}"></span>${sm.label}</span>
-          ${s.stale?`<span style="background:rgba(120,120,120,0.15);color:#999;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(120,120,120,0.25)" title="Sin señal momentánea — mostrando el último estado conocido">⟳ reconectando</span>`:''}
-          ${maintAlerts.length?`<span style="background:rgba(255,170,0,0.15);color:#ffaa00;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(255,170,0,0.3)" title="${maintAlerts.map(a=>a.label).join(', ')}">🔧 ${maintAlerts.length} alerta${maintAlerts.length>1?'s':''}</span>`:''}
-          ${idleWarn?`<span style="background:rgba(100,100,100,0.15);color:#888;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;border:1px solid rgba(100,100,100,0.2)">💤 ${idleHours}h idle</span>`:''}
+          <span style="display:inline-flex;align-items:center;gap:5px;background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;border:1px solid ${sm.color}33"><span class="pdot${isActive?' live':''}"></span>${sm.label}</span>
+          ${s.stale?`<span style="background:rgba(120,120,120,0.15);color:#999;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;border:1px solid rgba(120,120,120,0.25)" title="Sin señal momentánea — mostrando el último estado conocido">⟳ reconectando</span>`:''}
+          ${maintAlerts.length?`<span style="background:rgba(255,170,0,0.15);color:#ffaa00;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;border:1px solid rgba(255,170,0,0.3)" title="${maintAlerts.map(a=>a.label).join(', ')}">🔧 ${maintAlerts.length} alerta${maintAlerts.length>1?'s':''}</span>`:''}
+          ${idleWarn?`<span style="background:rgba(100,100,100,0.15);color:#888;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;border:1px solid rgba(100,100,100,0.2)">💤 ${idleHours}h idle</span>`:''}
         </div>
       </div>
       ${body}
@@ -809,7 +809,7 @@ function _syncPrinterCam(id,camKey,force){
   // bueno (onload) la capa se esconde de nuevo.
   slot.innerHTML=`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative;min-height:56px">
     <img loading="lazy" decoding="async" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" onload="this.style.opacity='1';var o=this.parentElement.querySelector('.pcam-off');if(o)o.style.display='none'" onerror="this.style.opacity='0';var o=this.parentElement.querySelector('.pcam-off');if(o)o.style.display='flex'">
-    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8a8a;font-size:10px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:8.5px;color:#666">${snap?'reintentando…':'verifica la URL'}</span></div>
+    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8a8a;font-size:10.5px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:10px;color:#666">${snap?'reintentando…':'verifica la URL'}</span></div>
   </div>`;
   slot.__camKey=camKey;
 }
@@ -926,16 +926,16 @@ function audit3DRenderResult(res){
   const cards=res.map(a=>{
     const stCol=a.errored?'var(--danger)':a.busy?'var(--accent)':(a.state==='offline'||a.state==='noip')?'var(--text3)':'var(--success)';
     const stTxt=a.errored?'⚠ Detenida (Klipper)':a.busy?'🖨 Imprimiendo':a.state==='offline'?'⚫ Offline':a.state==='noip'?'Sin IP':'✓ Lista';
-    const issues=(a.issues||[]).map(i=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)"><span style="width:6px;height:6px;border-radius:50%;background:${_audit3DDot(i.sev)};flex-shrink:0"></span>${escapeHtml(i.txt)}</div>`).join('');
-    const acts=(a.actions||[]).map(ac=>{const fn=ac.key==='firmware'?`printerFirmwareRestart('${a.id}')`:ac.key==='home'?`audit3DHome('${a.id}')`:`audit3DCalibrate('${a.id}')`;return `<button class="btn btn-ghost btn-sm" onclick="${fn}" style="font-size:10px">${escapeHtml(ac.txt)}</button>`;}).join('');
+    const issues=(a.issues||[]).map(i=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)"><span style="width:6px;height:6px;border-radius:50%;background:${_audit3DDot(i.sev)};flex-shrink:0"></span>${escapeHtml(i.txt)}</div>`).join('');
+    const acts=(a.actions||[]).map(ac=>{const fn=ac.key==='firmware'?`printerFirmwareRestart('${a.id}')`:ac.key==='home'?`audit3DHome('${a.id}')`:`audit3DCalibrate('${a.id}')`;return `<button class="btn btn-ghost btn-sm" onclick="${fn}" style="font-size:10.5px">${escapeHtml(ac.txt)}</button>`;}).join('');
     return `<div style="padding:11px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--surface2)">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px">
         <b style="font-size:12px">${escapeHtml(a.nombre)} <span style="color:var(--text3)">#${a.numG}</span></b>
-        <span style="font-size:11px;color:${stCol};font-weight:600">${stTxt}</span>
-        ${!a.busy&&a.state!=='offline'&&a.state!=='noip'&&a.state!=='error'?`<span style="font-size:10px;color:var(--text3)">🌡 ${a.hotend}°/${a.bed}°${a.homed?' · home ✓':''}${a.meshOk?' · malla ✓':''}</span>`:''}
+        <span style="font-size:12px;color:${stCol};font-weight:600">${stTxt}</span>
+        ${!a.busy&&a.state!=='offline'&&a.state!=='noip'&&a.state!=='error'?`<span style="font-size:10.5px;color:var(--text3)">🌡 ${a.hotend}°/${a.bed}°${a.homed?' · home ✓':''}${a.meshOk?' · malla ✓':''}</span>`:''}
         <span style="margin-left:auto;display:flex;gap:5px;flex-wrap:wrap">${acts}</span>
       </div>
-      ${issues||'<div style="font-size:11px;color:var(--success)">Sin observaciones — lista para imprimir.</div>'}
+      ${issues||'<div style="font-size:12px;color:var(--success)">Sin observaciones — lista para imprimir.</div>'}
     </div>`;}).join('');
   el.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:10px">✓ <b style="color:var(--success)">${okN}</b> lista(s) · <b style="color:var(--danger)">${errN}</b> con error · ${offN} offline · ${res.length} total</div>`+cards;
 }
@@ -966,7 +966,7 @@ async function audit3DReport(){
 async function audit3DLoadDaily(){
   const el=document.getElementById('audit3DDaily');if(!el)return;
   try{const r=await airtableFetch('Maquinas_Auditoria',1);const rec=(r.records||[])[0];if(!rec){el.innerHTML='';return;}
-    const f=rec.fields;el.innerHTML=`<div style="padding:11px 14px;border:1px dashed var(--border2);border-radius:10px;font-size:11px;color:var(--text3)"><b style="color:var(--text2)">📋 Última auditoría automática</b> · ${escapeHtml(String(f['Fecha']||rec.createdTime||''))}<br><span style="white-space:pre-wrap">${escapeHtml(String(f['Resumen']||f['Detalle']||'').slice(0,700))}</span></div>`;
+    const f=rec.fields;el.innerHTML=`<div style="padding:11px 14px;border:1px dashed var(--border2);border-radius:10px;font-size:12px;color:var(--text3)"><b style="color:var(--text2)">📋 Última auditoría automática</b> · ${escapeHtml(String(f['Fecha']||rec.createdTime||''))}<br><span style="white-space:pre-wrap">${escapeHtml(String(f['Resumen']||f['Detalle']||'').slice(0,700))}</span></div>`;
   }catch(_){el.innerHTML='';}
 }
 async function _moonrakerGet(id,path,timeout=6000){
@@ -1015,18 +1015,18 @@ function printerEmergencyStop(id){
 // Archivos en la impresora
 async function loadPrinterFiles(id){
   const cont=document.getElementById('pcFiles');if(!cont)return;
-  cont.innerHTML='<div style="color:var(--text3);font-size:11px;padding:8px">Cargando archivos…</div>';
+  cont.innerHTML='<div style="color:var(--text3);font-size:12px;padding:8px">Cargando archivos…</div>';
   const d=await _moonrakerGet(id,'/server/files/list?root=gcodes');
-  if(!d||!Array.isArray(d.result)){cont.innerHTML='<div style="color:var(--text3);font-size:11px;padding:8px">No se pudo leer la lista de archivos</div>';return;}
+  if(!d||!Array.isArray(d.result)){cont.innerHTML='<div style="color:var(--text3);font-size:12px;padding:8px">No se pudo leer la lista de archivos</div>';return;}
   const files=d.result.sort((a,b)=>(b.modified||0)-(a.modified||0)).slice(0,30);
   const busy=_isPrinterBusy(_pcState(id));
   cont.innerHTML=files.length?files.map(f=>{
     const kb=Math.round((f.size||0)/1024),path=escapeHtml(f.path||'');
     return`<div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border)">
-      <div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${path}">${path}</div><div style="font-size:9px;color:var(--text3)">${kb.toLocaleString('es-CL')} KB</div></div>
-      <button data-f="${path}" onclick="reprintFile('${id}',this.dataset.f)" ${busy?'disabled':''} style="background:${busy?'var(--surface3)':'rgba(0,212,170,0.15)'};border:1px solid ${busy?'var(--border2)':'rgba(0,212,170,0.4)'};color:${busy?'var(--text3)':'#00d4aa'};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:${busy?'not-allowed':'pointer'};flex-shrink:0">▶ Imprimir</button>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${path}">${path}</div><div style="font-size:10px;color:var(--text3)">${kb.toLocaleString('es-CL')} KB</div></div>
+      <button data-f="${path}" onclick="reprintFile('${id}',this.dataset.f)" ${busy?'disabled':''} style="background:${busy?'var(--surface3)':'rgba(0,212,170,0.15)'};border:1px solid ${busy?'var(--border2)':'rgba(0,212,170,0.4)'};color:${busy?'var(--text3)':'#00d4aa'};border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:700;cursor:${busy?'not-allowed':'pointer'};flex-shrink:0">▶ Imprimir</button>
     </div>`;
-  }).join(''):'<div style="color:var(--text3);font-size:11px;padding:8px">Sin archivos g-code en esta impresora</div>';
+  }).join(''):'<div style="color:var(--text3);font-size:12px;padding:8px">Sin archivos g-code en esta impresora</div>';
 }
 async function reprintFile(id,filename){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
@@ -1038,11 +1038,11 @@ async function reprintFile(id,filename){
 // Historial real de Moonraker (para costos)
 async function loadPrinterHistory(id){
   const cont=document.getElementById('pcHistory');if(!cont)return;
-  cont.innerHTML='<div style="color:var(--text3);font-size:11px;padding:8px">Cargando historial…</div>';
+  cont.innerHTML='<div style="color:var(--text3);font-size:12px;padding:8px">Cargando historial…</div>';
   const d=await _moonrakerGet(id,'/server/history/list?limit=15&order=desc');
-  if(!d||!d.result||!Array.isArray(d.result.jobs)){cont.innerHTML='<div style="color:var(--text3);font-size:11px;padding:8px">Historial no disponible (la impresora necesita el componente [history] de Moonraker, activo por defecto en Fluidd/Mainsail)</div>';return;}
+  if(!d||!d.result||!Array.isArray(d.result.jobs)){cont.innerHTML='<div style="color:var(--text3);font-size:12px;padding:8px">Historial no disponible (la impresora necesita el componente [history] de Moonraker, activo por defecto en Fluidd/Mainsail)</div>';return;}
   const jobs=d.result.jobs;
-  if(!jobs.length){cont.innerHTML='<div style="color:var(--text3);font-size:11px;padding:8px">Sin trabajos registrados aún</div>';return;}
+  if(!jobs.length){cont.innerHTML='<div style="color:var(--text3);font-size:12px;padding:8px">Sin trabajos registrados aún</div>';return;}
   let totT=0,totF=0,ok=0;
   jobs.forEach(j=>{totT+=j.print_duration||0;totF+=j.filament_used||0;if(j.status==='completed')ok++;});
   const rows=jobs.map(j=>{
@@ -1050,10 +1050,10 @@ async function loadPrinterHistory(id){
     const dur=fmtSecs(j.print_duration||0),fm=((j.filament_used||0)/1000).toFixed(1);
     const okj=j.status==='completed';
     return`<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;font-size:10px;color:var(--text);max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${fn}">${fn}</td>
-      <td style="padding:5px 6px;font-size:10px;color:var(--text3);text-align:right">${dur}</td>
-      <td style="padding:5px 6px;font-size:10px;color:var(--text3);text-align:right">${fm} m</td>
-      <td style="padding:5px 6px;text-align:right"><span style="font-size:9px;font-weight:700;color:${okj?'#00d4aa':'#ff6b35'}">${okj?'✓':'✕'}</span></td>
+      <td style="padding:5px 6px;font-size:10.5px;color:var(--text);max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${fn}">${fn}</td>
+      <td style="padding:5px 6px;font-size:10.5px;color:var(--text3);text-align:right">${dur}</td>
+      <td style="padding:5px 6px;font-size:10.5px;color:var(--text3);text-align:right">${fm} m</td>
+      <td style="padding:5px 6px;text-align:right"><span style="font-size:10px;font-weight:700;color:${okj?'#00d4aa':'#ff6b35'}">${okj?'✓':'✕'}</span></td>
     </tr>`;
   }).join('');
   cont.innerHTML=`
@@ -1063,7 +1063,7 @@ async function loadPrinterHistory(id){
       <span class="badge badge-gray">🧵 ${(totF/1000).toFixed(1)} m filamento</span>
     </div>
     <table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--text3)">
-      <th style="text-align:left;font-size:9px;padding:3px 6px;font-weight:600">ARCHIVO</th><th style="text-align:right;font-size:9px;padding:3px 6px;font-weight:600">TIEMPO</th><th style="text-align:right;font-size:9px;padding:3px 6px;font-weight:600">FILAM.</th><th style="text-align:right;font-size:9px;padding:3px 6px;font-weight:600">OK</th>
+      <th style="text-align:left;font-size:10px;padding:3px 6px;font-weight:600">ARCHIVO</th><th style="text-align:right;font-size:10px;padding:3px 6px;font-weight:600">TIEMPO</th><th style="text-align:right;font-size:10px;padding:3px 6px;font-weight:600">FILAM.</th><th style="text-align:right;font-size:10px;padding:3px 6px;font-weight:600">OK</th>
     </tr></thead><tbody>${rows}</tbody></table>`;
 }
 // Modal de control
@@ -1073,29 +1073,29 @@ function openPrinterControl(id){
   const s=_printerStatus[id]||{};const busy=_isPrinterBusy(s.state);
   document.getElementById('pcTitle').textContent=`${m.nombre} #${m.numG}`;
   const dis=busy?'disabled':'';
-  const lockBanner=busy?`<div style="background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:9px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#ffaa00;line-height:1.5">🔒 <b>Imprimiendo ahora</b> — los controles de temperatura y máquina están bloqueados para no arriesgar el trabajo en curso. Solo lectura de archivos e historial. La parada de emergencia sigue disponible.</div>`:'';
-  const btn=(label,onclick,extra='')=>`<button onclick="${onclick}" ${dis} style="background:${busy?'var(--surface3)':'var(--surface2)'};border:1px solid var(--border2);color:${busy?'var(--text3)':'var(--text)'};border-radius:7px;padding:7px 10px;font-size:11px;font-weight:600;cursor:${busy?'not-allowed':'pointer'};${extra}">${label}</button>`;
+  const lockBanner=busy?`<div style="background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:9px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#ffaa00;line-height:1.5">🔒 <b>Imprimiendo ahora</b> — los controles de temperatura y máquina están bloqueados para no arriesgar el trabajo en curso. Solo lectura de archivos e historial. La parada de emergencia sigue disponible.</div>`:'';
+  const btn=(label,onclick,extra='')=>`<button onclick="${onclick}" ${dis} style="background:${busy?'var(--surface3)':'var(--surface2)'};border:1px solid var(--border2);color:${busy?'var(--text3)':'var(--text)'};border-radius:7px;padding:7px 10px;font-size:12px;font-weight:600;cursor:${busy?'not-allowed':'pointer'};${extra}">${label}</button>`;
   document.getElementById('pcBody').innerHTML=`
     ${lockBanner}
     <!-- TEMPERATURA -->
-    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🌡️ Temperatura</div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🌡️ Temperatura</div>
     <div style="display:flex;gap:10px;margin-bottom:10px">
       <div style="flex:1">
-        <div style="font-size:9px;color:var(--text3);margin-bottom:3px">HOTEND · actual ${s.hotend?.actual||0}°${s.hotend?.target>0?' → '+s.hotend.target+'°':''}</div>
-        <div style="display:flex;gap:5px"><input id="pcTemp_hotend" type="number" min="0" max="300" placeholder="${s.hotend?.target||0}" ${dis} style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"><button onclick="setPrinterTemp('${id}','hotend')" ${dis} style="background:${busy?'var(--surface3)':'var(--accent2)'};border:none;color:${busy?'var(--text3)':'#000'};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:${busy?'not-allowed':'pointer'}">OK</button></div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">HOTEND · actual ${s.hotend?.actual||0}°${s.hotend?.target>0?' → '+s.hotend.target+'°':''}</div>
+        <div style="display:flex;gap:5px"><input id="pcTemp_hotend" type="number" min="0" max="300" placeholder="${s.hotend?.target||0}" ${dis} style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"><button onclick="setPrinterTemp('${id}','hotend')" ${dis} style="background:${busy?'var(--surface3)':'var(--accent2)'};border:none;color:${busy?'var(--text3)':'#000'};border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:${busy?'not-allowed':'pointer'}">OK</button></div>
       </div>
       <div style="flex:1">
-        <div style="font-size:9px;color:var(--text3);margin-bottom:3px">CAMA · actual ${s.bed?.actual||0}°${s.bed?.target>0?' → '+s.bed.target+'°':''}</div>
-        <div style="display:flex;gap:5px"><input id="pcTemp_bed" type="number" min="0" max="120" placeholder="${s.bed?.target||0}" ${dis} style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"><button onclick="setPrinterTemp('${id}','bed')" ${dis} style="background:${busy?'var(--surface3)':'#ffaa00'};border:none;color:${busy?'var(--text3)':'#000'};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:${busy?'not-allowed':'pointer'}">OK</button></div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">CAMA · actual ${s.bed?.actual||0}°${s.bed?.target>0?' → '+s.bed.target+'°':''}</div>
+        <div style="display:flex;gap:5px"><input id="pcTemp_bed" type="number" min="0" max="120" placeholder="${s.bed?.target||0}" ${dis} style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"><button onclick="setPrinterTemp('${id}','bed')" ${dis} style="background:${busy?'var(--surface3)':'#ffaa00'};border:none;color:${busy?'var(--text3)':'#000'};border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:${busy?'not-allowed':'pointer'}">OK</button></div>
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
-      <span style="font-size:9px;color:var(--text3);align-self:center">Precalentar:</span>
+      <span style="font-size:10px;color:var(--text3);align-self:center">Precalentar:</span>
       ${Object.keys(PREHEAT_PRESETS).map(mat=>btn(mat,`preheatPrinter('${id}','${mat}')`,'padding:5px 10px')).join('')}
       ${btn('❄️ Enfriar',`cooldownPrinter('${id}')`,'padding:5px 10px;margin-left:auto')}
     </div>
     <!-- MÁQUINA -->
-    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🎮 Máquina</div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🎮 Máquina</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
       ${btn('🏠 Home',`printerHome('${id}')`)}
       ${btn('⬇️ Cargar filamento',`printerFilament('${id}','load')`)}
@@ -1103,22 +1103,22 @@ function openPrinterControl(id){
       ${btn('💤 Soltar motores',`printerMotorsOff('${id}')`)}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-      <span style="font-size:9px;color:var(--text3)">Mover:</span>
+      <span style="font-size:10px;color:var(--text3)">Mover:</span>
       ${['X','Y','Z'].map(ax=>`${btn(ax+'+',`printerJog('${id}','${ax}',${ax==='Z'?1:10})`,'padding:5px 9px')}${btn(ax+'−',`printerJog('${id}','${ax}',${ax==='Z'?-1:-10})`,'padding:5px 9px')}`).join('<span style="width:6px"></span>')}
     </div>
-    <div style="margin-bottom:18px"><button onclick="printerEmergencyStop('${id}')" style="background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.4);color:#ff4444;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;width:100%">⛔ Parada de emergencia</button></div>
+    <div style="margin-bottom:18px"><button onclick="printerEmergencyStop('${id}')" style="background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.4);color:#ff4444;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;width:100%">⛔ Parada de emergencia</button></div>
     <!-- ARCHIVOS -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">📂 Archivos en la impresora</span>
-      <button onclick="loadPrinterFiles('${id}')" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:10px;cursor:pointer">↻ Cargar</button>
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">📂 Archivos en la impresora</span>
+      <button onclick="loadPrinterFiles('${id}')" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:10.5px;cursor:pointer">↻ Cargar</button>
     </div>
-    <div id="pcFiles" style="max-height:160px;overflow-y:auto;margin-bottom:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px"><div style="color:var(--text3);font-size:11px;padding:8px">Pulsa "Cargar" para ver los g-code y reimprimir.</div></div>
+    <div id="pcFiles" style="max-height:160px;overflow-y:auto;margin-bottom:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px"><div style="color:var(--text3);font-size:12px;padding:8px">Pulsa "Cargar" para ver los g-code y reimprimir.</div></div>
     <!-- HISTORIAL -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">📊 Historial real (Moonraker)</span>
-      <button onclick="loadPrinterHistory('${id}')" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:10px;cursor:pointer">↻ Cargar</button>
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">📊 Historial real (Moonraker)</span>
+      <button onclick="loadPrinterHistory('${id}')" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:10.5px;cursor:pointer">↻ Cargar</button>
     </div>
-    <div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:11px;padding:8px">Tiempo y filamento reales de cada trabajo — útil para costos.</div></div>`;
+    <div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:12px;padding:8px">Tiempo y filamento reales de cada trabajo — útil para costos.</div></div>`;
   document.getElementById('printerControlModal').style.display='flex';
 }
 function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';}
@@ -1130,12 +1130,12 @@ function openQueueModal(id){
   const fmtTime=s=>{const h=Math.floor(s/3600),mn=Math.floor((s%3600)/60);return h?`${h}h ${mn}m`:`${mn}m`;};
   const rows=q.map((j,i)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
-      <span style="font-size:11px;font-weight:700;color:var(--accent);min-width:18px">#${i+1}</span>
+      <span style="font-size:12px;font-weight:700;color:var(--accent);min-width:18px">#${i+1}</span>
       <div style="flex:1;min-width:0">
-        <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(j.filename)}</div>
-        <div style="font-size:10px;color:var(--text3)">⏱ ~${j.secs?fmtTime(j.secs):'—'} · ⚖ ~${j.grams?j.grams.toFixed(0):'—'}g</div>
+        <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(j.filename)}</div>
+        <div style="font-size:10.5px;color:var(--text3)">⏱ ~${j.secs?fmtTime(j.secs):'—'} · ⚖ ~${j.grams?j.grams.toFixed(0):'—'}g</div>
       </div>
-      <button onclick="_queueRemove('${id}',${i})" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.3);border-radius:6px;color:#ff4444;font-size:10px;padding:3px 8px;cursor:pointer">✕</button>
+      <button onclick="_queueRemove('${id}',${i})" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.3);border-radius:6px;color:#ff4444;font-size:10.5px;padding:3px 8px;cursor:pointer">✕</button>
     </div>`).join('');
   const body=q.length?`<div style="display:flex;flex-direction:column;gap:6px">${rows}</div>`:`<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Cola vacía</div>`;
   document.getElementById('queueModalTitle').textContent=`Cola de impresión — ${m.nombre} #${m.numG}`;
@@ -1259,16 +1259,16 @@ async function openBedMesh(id){
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:16px">
         <div>
           <div style="font-weight:700;font-size:13px;margin-bottom:4px">🗺️ Bed Mesh — ${escapeHtml(m.nombre)} #${m.numG}</div>
-          <div style="font-size:10px;color:var(--text3)">Desviación: ${mn.toFixed(3)}mm … ${mx.toFixed(3)}mm &nbsp;·&nbsp; rango: <b>${(range*1000).toFixed(0)}µm</b> &nbsp;·&nbsp; ${rows}×${cols} puntos</div>
+          <div style="font-size:10.5px;color:var(--text3)">Desviación: ${mn.toFixed(3)}mm … ${mx.toFixed(3)}mm &nbsp;·&nbsp; rango: <b>${(range*1000).toFixed(0)}µm</b> &nbsp;·&nbsp; ${rows}×${cols} puntos</div>
         </div>
         <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;flex-shrink:0;line-height:1">✕</button>
       </div>
       <svg width="${W}" height="${H}" style="display:block;border-radius:8px;overflow:hidden">${svgCells}</svg>
-      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;font-size:10px;color:var(--text3)">
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;font-size:10.5px;color:var(--text3)">
         <div style="width:80px;height:10px;background:linear-gradient(to right,rgb(0,120,220),rgb(0,180,0),rgb(220,0,0));border-radius:3px;flex-shrink:0"></div>
         <span>plano/bajo (azul) → promedio (verde) → alto (rojo)</span>
       </div>
-      ${range>0.4?`<div style="margin-top:8px;padding:8px 10px;background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:8px;font-size:10px;color:#ffaa00">⚠ Rango &gt;400µm — la cama puede necesitar nivelación manual antes de usar mesh compensation</div>`:''}
+      ${range>0.4?`<div style="margin-top:8px;padding:8px 10px;background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:8px;font-size:10.5px;color:#ffaa00">⚠ Rango &gt;400µm — la cama puede necesitar nivelación manual antes de usar mesh compensation</div>`:''}
     </div>`;
     modal.onclick=e=>{if(e.target===modal)modal.remove();};
     document.body.appendChild(modal);
@@ -1329,9 +1329,9 @@ function openHistoryModal(id){
   const hist=getHistoryForPrinter(id);
   const el=document.getElementById('histModalBody');
   el.innerHTML=hist.length?hist.slice(0,50).map(h=>{const d=new Date(h.start);return`<div style="padding:8px 0;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px">
-    <span style="background:${h.result==='Completado'?'rgba(0,212,170,0.15)':'rgba(255,68,68,0.12)'};color:${h.result==='Completado'?'#00d4aa':'#ff4444'};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:700;flex-shrink:0">${h.result}</span>
-    <div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.file||'—')}</div>
-    <div style="font-size:10px;color:var(--text3)">${d.toLocaleDateString('es-CL')} ${d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})} · ${h.dur}m</div></div>
+    <span style="background:${h.result==='Completado'?'rgba(0,212,170,0.15)':'rgba(255,68,68,0.12)'};color:${h.result==='Completado'?'#00d4aa':'#ff4444'};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;flex-shrink:0">${h.result}</span>
+    <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.file||'—')}</div>
+    <div style="font-size:10.5px;color:var(--text3)">${d.toLocaleDateString('es-CL')} ${d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})} · ${h.dur}m</div></div>
   </div>`;}).join(''):'<div style="text-align:center;color:var(--text3);padding:24px;font-size:12px">Sin historial registrado aún</div>';
   document.getElementById('histModal').style.display='flex';
 }
@@ -1470,41 +1470,41 @@ function renderMaintenanceTable(){
       const ok=pct<0.9,over=pct>=1;
       const lastStr=last?_DTF_DM.format(new Date(last.ts)):'sin reg.';
       const statusIcon=over?'⚠':ok?'✓':'~';
-      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h (${Math.round(pct*100)}%) · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':last?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':last?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':last?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${Math.round(pct*100)}%</span></span>`;
+      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h (${Math.round(pct*100)}%) · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':last?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':last?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':last?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${Math.round(pct*100)}%</span></span>`;
     }).join('');
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
     const alerts={length:alertsN};
     const rate=getWeeklyPrintRate(m.id);let fc=null;
     perType.forEach(p=>{const left=p.thresh-p.h;const weeks=left<=0?0:(rate>0?left/rate:Infinity);if(!fc||weeks<fc.weeks)fc={tipo:p.t.label,hoursLeft:left,weeks,rate};});
     let fcHtml;
-    if(!fc||(fc.rate<=0&&fc.hoursLeft>0)){const _disp=(typeof getMaquinaEstadoGlobal==='function'?getMaquinaEstadoGlobal(m.id):'disponible')==='disponible';fcHtml=_disp?`<span style="color:#ffaa00;font-size:10px;font-weight:600" title="Habilitada pero sin impresiones completadas en 4 semanas — capacidad ociosa">⚠ subutilizada</span>`:`<span style="color:var(--text3);font-size:10px" title="Sin impresiones recientes">sin uso reciente</span>`;}
-    else if(fc.hoursLeft<=0)fcHtml=`<span style="color:#ff4444;font-size:10px;font-weight:700">⚠ ${escapeHtml(fc.tipo)} vencida</span>`;
-    else{const w=fc.weeks;const col=w<1?'#ff4444':w<2?'#ffaa00':'#00d4aa';const lbl=w<1?'esta semana':w<2?`~${Math.round(w*7)} días`:`~${Math.round(w)} sem`;fcHtml=`<span style="color:${col};font-size:10px;font-weight:600" title="${escapeHtml(fc.tipo)}: faltan ${fc.hoursLeft.toFixed(0)}h al ritmo de ${fc.rate.toFixed(1)}h/semana">${escapeHtml(fc.tipo)} en ${lbl}</span> <span style="color:var(--text3);font-size:9px">· ${fc.rate.toFixed(0)}h/sem</span>`;}
+    if(!fc||(fc.rate<=0&&fc.hoursLeft>0)){const _disp=(typeof getMaquinaEstadoGlobal==='function'?getMaquinaEstadoGlobal(m.id):'disponible')==='disponible';fcHtml=_disp?`<span style="color:#ffaa00;font-size:10.5px;font-weight:600" title="Habilitada pero sin impresiones completadas en 4 semanas — capacidad ociosa">⚠ subutilizada</span>`:`<span style="color:var(--text3);font-size:10.5px" title="Sin impresiones recientes">sin uso reciente</span>`;}
+    else if(fc.hoursLeft<=0)fcHtml=`<span style="color:#ff4444;font-size:10.5px;font-weight:700">⚠ ${escapeHtml(fc.tipo)} vencida</span>`;
+    else{const w=fc.weeks;const col=w<1?'#ff4444':w<2?'#ffaa00':'#00d4aa';const lbl=w<1?'esta semana':w<2?`~${Math.round(w*7)} días`:`~${Math.round(w)} sem`;fcHtml=`<span style="color:${col};font-size:10.5px;font-weight:600" title="${escapeHtml(fc.tipo)}: faltan ${fc.hoursLeft.toFixed(0)}h al ritmo de ${fc.rate.toFixed(1)}h/semana">${escapeHtml(fc.tipo)} en ${lbl}</span> <span style="color:var(--text3);font-size:10px">· ${fc.rate.toFixed(0)}h/sem</span>`;}
     return`<tr style="border-bottom:1px solid var(--border2)">
-      <td style="padding:9px 10px;font-size:11px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc?.color||'#888'};margin-right:6px"></span><b>${m.nombre}</b> <span style="color:var(--text3)">#${m.numG}</span></td>
-      <td style="padding:9px 10px;font-size:11px;text-align:center;font-weight:700;color:var(--accent)">${totalH}h</td>
+      <td style="padding:9px 10px;font-size:12px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc?.color||'#888'};margin-right:6px"></span><b>${m.nombre}</b> <span style="color:var(--text3)">#${m.numG}</span></td>
+      <td style="padding:9px 10px;font-size:12px;text-align:center;font-weight:700;color:var(--accent)">${totalH}h</td>
       <td style="padding:9px 10px"><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div></td>
       <td style="padding:9px 10px;white-space:nowrap">${fcHtml}</td>
-      <td style="padding:9px 10px;font-size:10px;color:var(--text3);white-space:nowrap">${filKg}kg${filCost>0?` · $${filCost.toLocaleString('es-CL')}`:''}  </td>
-      <td style="padding:9px 10px"><button onclick="openMaintModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10px;padding:4px 10px;cursor:pointer;white-space:nowrap" ${alerts.length?'style="border-color:rgba(255,170,0,0.5)"':''}>+ Registrar</button></td>
+      <td style="padding:9px 10px;font-size:10.5px;color:var(--text3);white-space:nowrap">${filKg}kg${filCost>0?` · $${filCost.toLocaleString('es-CL')}`:''}  </td>
+      <td style="padding:9px 10px"><button onclick="openMaintModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:4px 10px;cursor:pointer;white-space:nowrap" ${alerts.length?'style="border-color:rgba(255,170,0,0.5)"':''}>+ Registrar</button></td>
     </tr>`;
   }).join('');
   el.innerHTML=`<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:700px">
     <thead><tr style="border-bottom:1px solid var(--border)">
-      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Máquina</th>
-      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:center">Horas totales</th>
-      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Estado mantención</th>
-      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left" title="Proyección según horas de impresión de las últimas 4 semanas">Próxima mantención</th>
-      <th style="padding:8px 10px;font-size:10px;color:var(--text3);text-align:left">Filamento</th>
-      <th style="padding:8px 10px;font-size:10px;color:var(--text3)"></th>
+      <th style="padding:8px 10px;font-size:10.5px;color:var(--text3);text-align:left">Máquina</th>
+      <th style="padding:8px 10px;font-size:10.5px;color:var(--text3);text-align:center">Horas totales</th>
+      <th style="padding:8px 10px;font-size:10.5px;color:var(--text3);text-align:left">Estado mantención</th>
+      <th style="padding:8px 10px;font-size:10.5px;color:var(--text3);text-align:left" title="Proyección según horas de impresión de las últimas 4 semanas">Próxima mantención</th>
+      <th style="padding:8px 10px;font-size:10.5px;color:var(--text3);text-align:left">Filamento</th>
+      <th style="padding:8px 10px;font-size:10.5px;color:var(--text3)"></th>
     </tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr style="border-top:2px solid var(--border);background:var(--surface2)">
-      <td style="padding:9px 10px;font-size:10px;font-weight:700;color:var(--text)">FLOTA · ${MAQUINAS.length} máq.</td>
-      <td style="padding:9px 10px;font-size:11px;text-align:center;font-weight:700;color:var(--accent)">${totH.toFixed(0)}h</td>
-      <td style="padding:9px 10px;font-size:10px;color:${totAlerts>0?'#ffaa00':'var(--text3)'};font-weight:700">${totAlerts>0?`🔧 ${totAlerts} alerta${totAlerts>1?'s':''}`:'✓ sin alertas'}</td>
-      <td style="padding:9px 10px;font-size:10px;color:var(--text3)">${totPrints} impresiones</td>
-      <td style="padding:9px 10px;font-size:10px;color:var(--text3);white-space:nowrap;font-weight:700">${totKg.toFixed(2)}kg${totCost>0?` · $${totCost.toLocaleString('es-CL')}`:''}</td>
+      <td style="padding:9px 10px;font-size:10.5px;font-weight:700;color:var(--text)">FLOTA · ${MAQUINAS.length} máq.</td>
+      <td style="padding:9px 10px;font-size:12px;text-align:center;font-weight:700;color:var(--accent)">${totH.toFixed(0)}h</td>
+      <td style="padding:9px 10px;font-size:10.5px;color:${totAlerts>0?'#ffaa00':'var(--text3)'};font-weight:700">${totAlerts>0?`🔧 ${totAlerts} alerta${totAlerts>1?'s':''}`:'✓ sin alertas'}</td>
+      <td style="padding:9px 10px;font-size:10.5px;color:var(--text3)">${totPrints} impresiones</td>
+      <td style="padding:9px 10px;font-size:10.5px;color:var(--text3);white-space:nowrap;font-weight:700">${totKg.toFixed(2)}kg${totCost>0?` · $${totCost.toLocaleString('es-CL')}`:''}</td>
       <td></td>
     </tr></tfoot>
   </table></div>`;
@@ -1592,21 +1592,21 @@ function renderProductionAnalytics(){
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
       <div class="card" style="padding:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px">IMPRESIONES POR DÍA</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:12px">IMPRESIONES POR DÍA</div>
         <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
-          ${dayData.map(d=>{const h=Math.max(d.count/maxCount*76,d.count>0?4:1);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="background:var(--accent);border-radius:3px 3px 0 0;width:100%;height:${h}px;min-height:${d.count>0?4:1}px;opacity:0.85"></div><div style="font-size:9px;color:var(--text3)">${d.label}</div>${d.count>0?`<div style="font-size:9px;font-weight:700;color:var(--accent)">${d.count}</div>`:'<div style="font-size:9px;color:var(--border2)">—</div>'}</div>`;}).join('')}
+          ${dayData.map(d=>{const h=Math.max(d.count/maxCount*76,d.count>0?4:1);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="background:var(--accent);border-radius:3px 3px 0 0;width:100%;height:${h}px;min-height:${d.count>0?4:1}px;opacity:0.85"></div><div style="font-size:10px;color:var(--text3)">${d.label}</div>${d.count>0?`<div style="font-size:10px;font-weight:700;color:var(--accent)">${d.count}</div>`:'<div style="font-size:10px;color:var(--border2)">—</div>'}</div>`;}).join('')}
         </div>
       </div>
       <div class="card" style="padding:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px">HORAS ACTIVAS POR DÍA</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:12px">HORAS ACTIVAS POR DÍA</div>
         <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
-          ${dayData.map(d=>{const h=Math.max(d.hours/maxHours*76,d.hours>0?4:1);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="background:#a78bfa;border-radius:3px 3px 0 0;width:100%;height:${h}px;min-height:${d.hours>0?4:1}px;opacity:0.85"></div><div style="font-size:9px;color:var(--text3)">${d.label}</div>${d.hours>0?`<div style="font-size:9px;font-weight:700;color:#a78bfa">${d.hours}h</div>`:'<div style="font-size:9px;color:var(--border2)">—</div>'}</div>`;}).join('')}
+          ${dayData.map(d=>{const h=Math.max(d.hours/maxHours*76,d.hours>0?4:1);return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="background:#a78bfa;border-radius:3px 3px 0 0;width:100%;height:${h}px;min-height:${d.hours>0?4:1}px;opacity:0.85"></div><div style="font-size:10px;color:var(--text3)">${d.label}</div>${d.hours>0?`<div style="font-size:10px;font-weight:700;color:#a78bfa">${d.hours}h</div>`:'<div style="font-size:10px;color:var(--border2)">—</div>'}</div>`;}).join('')}
         </div>
       </div>
     </div>
     <div class="card" style="padding:14px">
-      <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px">TOP MÁQUINAS POR HORAS ACUMULADAS</div>
-      ${byPrinter.map(({m,h})=>{const pct=Math.round(h/maxPH*100);const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div style="font-size:11px;color:var(--text);white-space:nowrap;min-width:160px">${m.nombre} <span style="color:var(--text3)">#${m.numG}</span></div><div style="flex:1;background:var(--surface2);border-radius:4px;height:8px;overflow:hidden"><div style="background:${gc?.color||'var(--accent)'};height:100%;width:${pct}%;border-radius:4px"></div></div><div style="font-size:10px;color:var(--text3);min-width:40px;text-align:right">${h.toFixed(1)}h</div></div>`;}).join('')}
+      <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:12px">TOP MÁQUINAS POR HORAS ACUMULADAS</div>
+      ${byPrinter.map(({m,h})=>{const pct=Math.round(h/maxPH*100);const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div style="font-size:12px;color:var(--text);white-space:nowrap;min-width:160px">${m.nombre} <span style="color:var(--text3)">#${m.numG}</span></div><div style="flex:1;background:var(--surface2);border-radius:4px;height:8px;overflow:hidden"><div style="background:${gc?.color||'var(--accent)'};height:100%;width:${pct}%;border-radius:4px"></div></div><div style="font-size:10.5px;color:var(--text3);min-width:40px;text-align:right">${h.toFixed(1)}h</div></div>`;}).join('')}
     </div>`;
 }
 
@@ -1801,9 +1801,9 @@ function renderHeatmapSemanas(){
     const isCur=w===maquinaState.semanaOffset;
     const isNow=w===0;
     chips.push(`<button onclick="jumpToSemana(${w})" title="${fmtC(lun)}" style="flex-shrink:0;background:${isCur?'rgba(0,212,204,0.1)':pctBg(pct)};border:1px solid ${isCur?'var(--accent)':'var(--border2)'};border-radius:8px;padding:6px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:68px;transition:border-color 0.12s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='${isCur?'var(--accent)':'var(--border2)'}'">
-      <div style="font-size:8px;color:${isCur?'var(--accent)':isNow?'var(--text)':'var(--text3)'};font-family:'JetBrains Mono',monospace;white-space:nowrap;font-weight:${isNow?700:400}">${isNow?'← HOY':fmtC(lun)}</div>
+      <div style="font-size:9.5px;color:${isCur?'var(--accent)':isNow?'var(--text)':'var(--text3)'};font-family:'JetBrains Mono',monospace;white-space:nowrap;font-weight:${isNow?700:400}">${isNow?'← HOY':fmtC(lun)}</div>
       <div style="width:46px;height:4px;border-radius:2px;background:var(--surface3);overflow:hidden"><div style="width:${pct}%;height:100%;background:${pctColor(pct)};border-radius:2px;transition:width 0.3s"></div></div>
-      <div style="font-size:9px;font-weight:700;color:${isCur?'var(--accent)':pctColor(pct)}">${pct>0?pct+'%':'libre'}</div>
+      <div style="font-size:10px;font-weight:700;color:${isCur?'var(--accent)':pctColor(pct)}">${pct>0?pct+'%':'libre'}</div>
     </button>`);
   }
   el.innerHTML=`<div style="display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px">${chips.join('')}</div>`;
@@ -1816,7 +1816,7 @@ function renderMaquinasCalendar(){
   document.getElementById('semanaLabel').textContent=`${dias[0].toLocaleDateString('es-CL',opts)} — ${dias[6].toLocaleDateString('es-CL',opts)} ${dias[0].getFullYear()}`;
   renderHeatmapSemanas();
   renderMaquinasKPIs(dias,today);
-  document.getElementById('maquinasHeader').innerHTML=`<tr><th style="padding:9px 14px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);min-width:160px;background:var(--surface);position:sticky;left:0;z-index:3">Máquina</th><th style="padding:9px 10px;font-size:10px;color:var(--text3);text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:3;min-width:70px">Estado</th>${dias.map(d=>{const isH=fmtDate(d)===today;return`<th style="padding:7px 4px;font-size:10px;font-weight:${isH?700:500};color:${isH?'var(--accent)':'var(--text3)'};text-align:center;border-bottom:1px solid var(--border);min-width:95px;background:var(--surface)">${fmtDayLabel(d)}</th>`;}).join('')}</tr>`;
+  document.getElementById('maquinasHeader').innerHTML=`<tr><th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);min-width:160px;background:var(--surface);position:sticky;left:0;z-index:3">Máquina</th><th style="padding:9px 10px;font-size:10.5px;color:var(--text3);text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:3;min-width:70px">Estado</th>${dias.map(d=>{const isH=fmtDate(d)===today;return`<th style="padding:7px 4px;font-size:10.5px;font-weight:${isH?700:500};color:${isH?'var(--accent)':'var(--text3)'};text-align:center;border-bottom:1px solid var(--border);min-width:95px;background:var(--surface)">${fmtDayLabel(d)}</th>`;}).join('')}</tr>`;
   // pre-calcular stats por modelo para los headers de grupo
   const modeloStats={};[...new Set(MAQUINAS.map(m=>m.modelo))].forEach(modelo=>{
     const mqs=MAQUINAS.filter(x=>x.modelo===modelo);
@@ -1836,18 +1836,18 @@ function renderMaquinasCalendar(){
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         ${MODELO_IMGS[m.modelo]?`<img loading="lazy" decoding="async" src="${MODELO_IMGS[m.modelo]}" alt="${m.modelo}" style="height:32px;width:auto;object-fit:contain;filter:brightness(0.9)" onerror="this.style.display='none'">`:''}
         <div>
-          <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${m.color}">${m.modelo}</div>
-          <div style="font-size:9px;color:var(--text3);margin-top:1px">${MODEL_SPECS[m.modelo]||''}</div>
+          <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${m.color}">${m.modelo}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:1px">${MODEL_SPECS[m.modelo]||''}</div>
         </div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-          <span style="font-size:9px;font-weight:700;color:${dispColor};background:${dispBg};border:1px solid ${dispBorder};border-radius:4px;padding:2px 8px">${ms.disp}/${ms.total} disponibles hoy</span>
-          ${ms.pct>0?`<span style="font-size:9px;color:var(--text3)">${ms.pct>0?ms.pct+'% uso semana':''}</span>`:''}
+          <span style="font-size:10px;font-weight:700;color:${dispColor};background:${dispBg};border:1px solid ${dispBorder};border-radius:4px;padding:2px 8px">${ms.disp}/${ms.total} disponibles hoy</span>
+          ${ms.pct>0?`<span style="font-size:10px;color:var(--text3)">${ms.pct>0?ms.pct+'% uso semana':''}</span>`:''}
         </div>
       </div>
     </td></tr>`:'' ;
     const estadoGlobal=getMaquinaEstadoGlobal(m.id),estadoMeta=maquinaEstadoMeta(estadoGlobal);
     const estadoBtn=`<button class="btn-mini btn-mini-${estadoMeta.color}" onclick="toggleMaquinaEstado('${m.id}')" title="${escapeHtml(estadoMeta.label)} · clic para ${estadoGlobal==='disponible'?'poner en mantención':'marcar disponible'}">${estadoMeta.short}</button>`;
-    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key],isH=ds===today;let bg='',content='';if(ev){if(ev.tipo==='mantencion'){bg='rgba(255,68,68,0.2)';content=`<div style="font-size:9px;font-weight:700;color:var(--danger)">🔧 MANT.</div>`;}else if(ev.tipo==='uso'){bg='rgba(255,107,53,0.2)';const pedLabel=ev.pedidoId?state.pedidosById[ev.pedidoId]?.fields['N° Pedido']||null:null;const descLabel=pedLabel?`🔗 ${pedLabel}`:(ev.desc||'En uso');content=`<div style="font-size:9px;color:${pedLabel?'var(--accent)':'var(--accent2)'};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85px" title="${escapeHtml(ev.desc||'')}">${escapeHtml(descLabel)}</div>${ev.tiempo?`<div style="font-size:8px;color:var(--text3)">${ev.tiempo}h</div>`:''}`;}else{bg='rgba(0,212,170,0.12)';content=`<div style="font-size:9px;color:var(--accent3);font-weight:600">✓ Libre</div>`;}}return`<td onclick="openMaquinaModal('${m.id}','${m.nombre} #${m.num}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg||'transparent'};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.5)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content||`<span style="color:var(--text3);font-size:10px">+</span>`}${ev?`<button onclick="event.stopPropagation();deleteMaquinaEvento('${m.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:8px;padding:0">✕</button>`:''}</div></td>`;}).join('');
+    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${m.id}_${ds}`,ev=maquinaState.eventos[key],isH=ds===today;let bg='',content='';if(ev){if(ev.tipo==='mantencion'){bg='rgba(255,68,68,0.2)';content=`<div style="font-size:10px;font-weight:700;color:var(--danger)">🔧 MANT.</div>`;}else if(ev.tipo==='uso'){bg='rgba(255,107,53,0.2)';const pedLabel=ev.pedidoId?state.pedidosById[ev.pedidoId]?.fields['N° Pedido']||null:null;const descLabel=pedLabel?`🔗 ${pedLabel}`:(ev.desc||'En uso');content=`<div style="font-size:10px;color:${pedLabel?'var(--accent)':'var(--accent2)'};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85px" title="${escapeHtml(ev.desc||'')}">${escapeHtml(descLabel)}</div>${ev.tiempo?`<div style="font-size:9.5px;color:var(--text3)">${ev.tiempo}h</div>`:''}`;}else{bg='rgba(0,212,170,0.12)';content=`<div style="font-size:10px;color:var(--accent3);font-weight:600">✓ Libre</div>`;}}return`<td onclick="openMaquinaModal('${m.id}','${m.nombre} #${m.num}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg||'transparent'};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.5)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content||`<span style="color:var(--text3);font-size:10.5px">+</span>`}${ev?`<button onclick="event.stopPropagation();deleteMaquinaEvento('${m.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:9.5px;padding:0">✕</button>`:''}</div></td>`;}).join('');
     return`${groupRow}<tr><td style="padding:9px 14px;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:0;z-index:2"><span style="width:7px;height:7px;border-radius:50%;background:${m.color};display:inline-block;margin-right:6px"></span>${escapeHtml(m.nombre)} <span style="color:var(--text3)">#${m.num}</span></td><td style="padding:4px 6px;text-align:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:160px;z-index:2">${estadoBtn}</td>${celdas}</tr>`;
   }).join('');
   document.getElementById('maquinasSubtitle').textContent=`${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)==='disponible').length} disponibles · ${MAQUINAS.filter(m=>getMaquinaEstadoGlobal(m.id)!=='disponible').length} no operativas`;
@@ -1924,7 +1924,7 @@ async function deleteMaquinaEvento(maqId,dateStr){
 // ── EQUIPO ────────────────────────────────────────────────────
 async function initEquipo(){
   await loadEquipoEventosAirtable();
-  const el=document.getElementById('gcalPersonasConfig');if(el) el.innerHTML=PERSONAS.map(p=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">${_avHtml(p,28)}<span style="min-width:140px;font-size:12px">${p.nombre}</span><input class="field-input" id="gcal_cid_${p.id}" placeholder="email@gmail.com" value="${p.gcalId}" style="font-size:11px;flex:1"><input class="field-input" id="gcal_key_${p.id}" placeholder="AIza... API Key" value="${sessionStorage.getItem('gcal_api_key')||''}" style="font-size:11px;flex:1"></div>`).join('');
+  const el=document.getElementById('gcalPersonasConfig');if(el) el.innerHTML=PERSONAS.map(p=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">${_avHtml(p,28)}<span style="min-width:140px;font-size:12px">${p.nombre}</span><input class="field-input" id="gcal_cid_${p.id}" placeholder="email@gmail.com" value="${p.gcalId}" style="font-size:12px;flex:1"><input class="field-input" id="gcal_key_${p.id}" placeholder="AIza... API Key" value="${sessionStorage.getItem('gcal_api_key')||''}" style="font-size:12px;flex:1"></div>`).join('');
   const anyGcal=PERSONAS.some(p=>sessionStorage.getItem('gcal_persona_'+p.id));if(anyGcal){PERSONAS.forEach(p=>{const cid=sessionStorage.getItem('gcal_persona_'+p.id);if(cid) p.gcalId=cid;});document.getElementById('gcalEquipoSyncBtn').style.display='inline-flex';}
   renderEquipoCalendar();
   try{renderComisiones();}catch(e){}
@@ -1939,11 +1939,11 @@ function renderEquipoCalendar(){
   const today=fmtDate(new Date());const opts={day:'numeric',month:'short'};
   document.getElementById('equipoSemanaLabel').textContent=`${dias[0].toLocaleDateString('es-CL',opts)} — ${dias[6].toLocaleDateString('es-CL',opts)} ${dias[0].getFullYear()}`;
   renderEquipoResumenHoy(today);
-  document.getElementById('equipoHeader').innerHTML=`<tr><th style="padding:10px 14px;font-size:10px;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);min-width:170px;background:var(--surface);position:sticky;left:0;z-index:2">Persona</th>${dias.map(d=>{const isH=fmtDate(d)===today,esFinde=d.getDay()===0||d.getDay()===6;return`<th style="padding:7px 5px;font-size:10px;font-weight:${isH?700:500};color:${isH?'var(--accent)':esFinde?'var(--text3)':'var(--text2)'};text-align:center;border-bottom:1px solid var(--border);min-width:100px;background:var(--surface)">${fmtDayLabel(d)}${esFinde?'<br><span style="font-size:8px;color:var(--text3)">finde</span>':''}</th>`;}).join('')}</tr>`;
+  document.getElementById('equipoHeader').innerHTML=`<tr><th style="padding:10px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);min-width:170px;background:var(--surface);position:sticky;left:0;z-index:2">Persona</th>${dias.map(d=>{const isH=fmtDate(d)===today,esFinde=d.getDay()===0||d.getDay()===6;return`<th style="padding:7px 5px;font-size:10.5px;font-weight:${isH?700:500};color:${isH?'var(--accent)':esFinde?'var(--text3)':'var(--text2)'};text-align:center;border-bottom:1px solid var(--border);min-width:100px;background:var(--surface)">${fmtDayLabel(d)}${esFinde?'<br><span style="font-size:9.5px;color:var(--text3)">finde</span>':''}</th>`;}).join('')}</tr>`;
   document.getElementById('equipoBody').innerHTML=PERSONAS.map(p=>{
-    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${p.id}_${ds}`,ev=equipoState.eventos[key],isH=ds===today,esFinde=d.getDay()===0||d.getDay()===6;const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):null;const bg=cfg?cfg.bg:esFinde?'rgba(255,255,255,0.01)':'transparent';let content='';if(cfg){content=`<div style="font-size:10px;font-weight:700;color:${cfg.color}">${cfg.icon} ${cfg.label}</div>${ev.desc?`<div style="font-size:9px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:88px">${escapeHtml(ev.desc)}</div>`:''}<button onclick="event.stopPropagation();deleteEquipoEvento('${p.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:8px;padding:0">✕</button>`;}else{content=`<span style="color:var(--text3);font-size:10px">${esFinde?'—':'+'}</span>`;}return`<td onclick="openEquipoModal('${p.id}','${p.nombre}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.4)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content}</div></td>`;}).join('');
+    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${p.id}_${ds}`,ev=equipoState.eventos[key],isH=ds===today,esFinde=d.getDay()===0||d.getDay()===6;const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):null;const bg=cfg?cfg.bg:esFinde?'rgba(255,255,255,0.01)':'transparent';let content='';if(cfg){content=`<div style="font-size:10.5px;font-weight:700;color:${cfg.color}">${cfg.icon} ${cfg.label}</div>${ev.desc?`<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:88px">${escapeHtml(ev.desc)}</div>`:''}<button onclick="event.stopPropagation();deleteEquipoEvento('${p.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:9.5px;padding:0">✕</button>`;}else{content=`<span style="color:var(--text3);font-size:10.5px">${esFinde?'—':'+'}</span>`;}return`<td onclick="openEquipoModal('${p.id}','${p.nombre}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.4)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content}</div></td>`;}).join('');
     const dispCount=dias.filter(d=>{const ev=equipoState.eventos[`${p.id}_${fmtDate(d)}`];return !ev||ev.tipo==='disponible';}).length;
-    return`<tr><td style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:0;z-index:1"><div style="display:flex;align-items:center;gap:9px">${_avHtml(p,34)}<div><div style="font-size:12px;font-weight:600">${escapeHtml(p.nombre)}</div><div style="font-size:10px;color:var(--text3)">${p.rol} · ${dispCount}/7 disp.</div></div></div></td>${celdas}</tr>`;
+    return`<tr><td style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:0;z-index:1"><div style="display:flex;align-items:center;gap:9px">${_avHtml(p,34)}<div><div style="font-size:12px;font-weight:600">${escapeHtml(p.nombre)}</div><div style="font-size:10.5px;color:var(--text3)">${p.rol} · ${dispCount}/7 disp.</div></div></div></td>${celdas}</tr>`;
   }).join('');
   renderEquipoDetalleSemana(dias);
   const ausentes=PERSONAS.filter(p=>{const ev=equipoState.eventos[`${p.id}_${today}`];return ev&&['ausente','vacaciones'].includes(ev.tipo);}).length;
@@ -1965,8 +1965,8 @@ function renderEquipoResumenHoy(today){
       .map(x=>x.fields['Fecha entrega']).sort()[0];
     const proxLabel=proxEntrega?` · próx: ${proxEntrega.substring(5).replace('-','/')}` :'';
     const cargaHtml=misPedidos.length
-      ?`<div style="font-size:10px;color:var(--accent);margin-top:3px">📦 ${misPedidos.length} pedido${misPedidos.length>1?'s':''} activo${misPedidos.length>1?'s':''}${proxLabel}</div>`
-      :`<div style="font-size:10px;color:var(--text3);margin-top:3px">Sin pedidos activos</div>`;
+      ?`<div style="font-size:10.5px;color:var(--accent);margin-top:3px">📦 ${misPedidos.length} pedido${misPedidos.length>1?'s':''} activo${misPedidos.length>1?'s':''}${proxLabel}</div>`
+      :`<div style="font-size:10.5px;color:var(--text3);margin-top:3px">Sin pedidos activos</div>`;
     // #2 Alertas de cobertura: ausencia coincide con fecha entrega de un pedido
     const conflictos=[];
     Object.entries(equipoState.eventos).forEach(([key,ev2])=>{
@@ -1978,9 +1978,9 @@ function renderEquipoResumenHoy(today){
       });
     });
     const alertaHtml=conflictos.length
-      ?`<div style="font-size:10px;color:var(--danger);font-weight:700;margin-top:3px">⚠ Conflicto: ${conflictos.map(c=>`${c.ped} vence el ${c.fecha}`).join(' · ')}</div>`
+      ?`<div style="font-size:10.5px;color:var(--danger);font-weight:700;margin-top:3px">⚠ Conflicto: ${conflictos.map(c=>`${c.ped} vence el ${c.fecha}`).join(' · ')}</div>`
       :'';
-    return`<div class="card" style="padding:14px;display:flex;align-items:center;gap:10px${conflictos.length?';border-color:rgba(255,68,68,0.4)':''}">${_avHtml(p,40)}<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:12px;color:${cfg.color};font-weight:700">${cfg.icon} ${cfg.label}</div>${ev?.desc?`<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(ev.desc)}</div>`:''}${cargaHtml}${alertaHtml}</div><button class="btn-mini ${ev&&ev.tipo!=='disponible'?'btn-mini-red':'btn-mini-green'}" onclick="quickToggleEquipo('${p.id}','${today}')">${ev&&ev.tipo!=='disponible'?'🔴 Disp.':'🟢 OK'}</button></div>`;
+    return`<div class="card" style="padding:14px;display:flex;align-items:center;gap:10px${conflictos.length?';border-color:rgba(255,68,68,0.4)':''}">${_avHtml(p,40)}<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:12px;color:${cfg.color};font-weight:700">${cfg.icon} ${cfg.label}</div>${ev?.desc?`<div style="font-size:10.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(ev.desc)}</div>`:''}${cargaHtml}${alertaHtml}</div><button class="btn-mini ${ev&&ev.tipo!=='disponible'?'btn-mini-red':'btn-mini-green'}" onclick="quickToggleEquipo('${p.id}','${today}')">${ev&&ev.tipo!=='disponible'?'🔴 Disp.':'🟢 OK'}</button></div>`;
   }).join('');
 }
 function renderEquipoDetalleSemana(dias){
@@ -2002,16 +2002,16 @@ function renderEquipoDetalleSemana(dias){
       const pedEseDia=entregasDias[ds]||[];
       const estaAusente=ev&&['ausente','vacaciones'].includes(ev.tipo);
       const conflicto=estaAusente&&pedEseDia.length>0;
-      const pedTag=pedEseDia.length?`<span style="font-size:9px;font-weight:700;color:${conflicto?'var(--danger)':'var(--accent)'};margin-left:auto;flex-shrink:0">${conflicto?'⚠ ':'📦 '}${pedEseDia.join(', ')}</span>`:'';
-      return`<div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--border)${conflicto?';background:rgba(255,68,68,0.06)':''}"><span style="font-size:10px;color:var(--text3);min-width:44px">${fmtDayLabel(d)}</span>${cfg?`<span style="font-size:10px;font-weight:600;color:${cfg.color}">${cfg.icon} ${cfg.label}</span>${ev.desc?`<span style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;flex:1">${escapeHtml(ev.desc)}</span>`:''}`: `<span style="font-size:10px;color:${esFinde?'var(--text3)':'var(--accent3)'}">✓ ${esFinde?'Finde':'Disponible'}</span>`}${pedTag}</div>`;
+      const pedTag=pedEseDia.length?`<span style="font-size:10px;font-weight:700;color:${conflicto?'var(--danger)':'var(--accent)'};margin-left:auto;flex-shrink:0">${conflicto?'⚠ ':'📦 '}${pedEseDia.join(', ')}</span>`:'';
+      return`<div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--border)${conflicto?';background:rgba(255,68,68,0.06)':''}"><span style="font-size:10.5px;color:var(--text3);min-width:44px">${fmtDayLabel(d)}</span>${cfg?`<span style="font-size:10.5px;font-weight:600;color:${cfg.color}">${cfg.icon} ${cfg.label}</span>${ev.desc?`<span style="font-size:10.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;flex:1">${escapeHtml(ev.desc)}</span>`:''}`: `<span style="font-size:10.5px;color:${esFinde?'var(--text3)':'var(--accent3)'}">✓ ${esFinde?'Finde':'Disponible'}</span>`}${pedTag}</div>`;
     }).join('');
     const dispDias=dias.filter(d=>{const ev=equipoState.eventos[`${p.id}_${fmtDate(d)}`];return !ev||ev.tipo==='disponible';}).length;
     const pct=Math.round((dispDias/7)*100);
     const barColor=pct>=70?'var(--accent3)':pct>=40?'var(--warn)':'var(--danger)';
     const statHtml=misPedidos.length
-      ?`<div style="font-size:9px;color:${conflictCount?'var(--danger)':'var(--accent)'};margin-top:2px">${conflictCount?`⚠ ${conflictCount} conflicto${conflictCount>1?'s':''}`:`📦 ${misPedidos.length} ped. activo${misPedidos.length>1?'s':''}`}</div>`
+      ?`<div style="font-size:10px;color:${conflictCount?'var(--danger)':'var(--accent)'};margin-top:2px">${conflictCount?`⚠ ${conflictCount} conflicto${conflictCount>1?'s':''}`:`📦 ${misPedidos.length} ped. activo${misPedidos.length>1?'s':''}`}</div>`
       :'';
-    return`<div class="card"><div class="card-header"><div style="display:flex;align-items:center;gap:9px">${_avHtml(p,30)}<div><div style="font-size:11px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:10px;color:var(--text3)">${p.rol}</div></div></div><div style="text-align:right"><div style="font-size:16px;font-family:'Bebas Neue';color:${barColor}">${dispDias}/7</div><div style="font-size:9px;color:var(--text3)">días disp.</div>${statHtml}</div></div><div style="padding:0 14px 6px"><div style="height:3px;background:var(--surface3);border-radius:2px;margin-bottom:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px"></div></div>${eventosHtml}</div></div>`;
+    return`<div class="card"><div class="card-header"><div style="display:flex;align-items:center;gap:9px">${_avHtml(p,30)}<div><div style="font-size:12px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:10.5px;color:var(--text3)">${p.rol}</div></div></div><div style="text-align:right"><div style="font-size:16px;font-family:'Bebas Neue';color:${barColor}">${dispDias}/7</div><div style="font-size:10px;color:var(--text3)">días disp.</div>${statHtml}</div></div><div style="padding:0 14px 6px"><div style="height:3px;background:var(--surface3);border-radius:2px;margin-bottom:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px"></div></div>${eventosHtml}</div></div>`;
   }).join('');
 }
 async function quickToggleEquipo(personaId,dateStr){const key=`${personaId}_${dateStr}`,ev=equipoState.eventos[key];if(ev&&ev.tipo!=='disponible'){delete equipoState.eventos[key];renderEquipoCalendar();await saveEquipoEventosAirtable();toast('✓ Disponible','success');}else openEquipoModal(personaId,PERSONAS.find(p=>p.id===personaId)?.nombre||'',dateStr);}
@@ -2146,7 +2146,7 @@ function onClienteSearchInput(){
   if(q&&!src.some(c=>(c.fields['Empresa']||'').toLowerCase()===q)) html+=`<div class="search-select-item create-new" onclick="selectClienteNew()">+ Usar "${escapeHtml(inp.value)}"</div>`;
   dropdown.innerHTML=html;dropdown.classList.toggle('open',!!html);
 }
-function selectCliente(id){const c=state.clientesByIdRec[id];if(!c) return;document.getElementById('cot-cliente-search').value=c.fields['Empresa']||'';document.getElementById('cot-cliente-id').value=id;document.getElementById('cot-cliente-dropdown').classList.remove('open');const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('cot-cliente-info');const prevCots=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return Array.isArray(cl)?cl.includes(id):cl===id;}).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));const prevBtn=prevCots.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('n')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">📋 Cot. anterior (${prevCots.length})</button>`:'';let descTag='';try{const d=(typeof _descCliente==='function')?_descCliente(id):0;if(d>0){const disc=document.getElementById('cot-descuento');if(disc&&(!disc.value||parseFloat(disc.value)===0)){disc.value=d;if(typeof updateItemsTotal==='function')updateItemsTotal();}descTag=` &nbsp;<span style="color:var(--accent4);font-size:11px">🏷️ ${d}% dto. cliente</span>`;}}catch(e){}
+function selectCliente(id){const c=state.clientesByIdRec[id];if(!c) return;document.getElementById('cot-cliente-search').value=c.fields['Empresa']||'';document.getElementById('cot-cliente-id').value=id;document.getElementById('cot-cliente-dropdown').classList.remove('open');const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('cot-cliente-info');const prevCots=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return Array.isArray(cl)?cl.includes(id):cl===id;}).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));const prevBtn=prevCots.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('n')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10.5px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">📋 Cot. anterior (${prevCots.length})</button>`:'';let descTag='';try{const d=(typeof _descCliente==='function')?_descCliente(id):0;if(d>0){const disc=document.getElementById('cot-descuento');if(disc&&(!disc.value||parseFloat(disc.value)===0)){disc.value=d;if(typeof updateItemsTotal==='function')updateItemsTotal();}descTag=` &nbsp;<span style="color:var(--accent4);font-size:12px">🏷️ ${d}% dto. cliente</span>`;}}catch(e){}
   info.innerHTML=(venc>=2?`<span style="color:var(--danger)">⚠ ${venc} facturas vencidas</span>`:`<span style="color:var(--text2)">✓ Cliente seleccionado</span>`)+descTag+prevBtn;}
 function selectClienteNew(){document.getElementById('cot-cliente-id').value='';document.getElementById('cot-cliente-dropdown').classList.remove('open');}
 document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap')) document.querySelectorAll('.search-select-dropdown').forEach(d=>d.classList.remove('open'));});

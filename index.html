@@ -3094,7 +3094,7 @@
 <div class="tab-panel pf" id="tab-maquinas">
   <div class="section-header">
     <div><div class="section-title">Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div><div class="section-desc">Monitorea en tiempo real el estado de cada impresora 3D: disponible, imprimiendo o en mantención. Gestiona colas de trabajo y recibe alertas de fallos automáticamente.</div></div>
-    <div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="MachineOps.openScanner()" style="font-size:11px">▦ Escanear QR</button><button class="btn btn-ghost btn-sm" onclick="openMaquinasManager()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Gestionar máquinas</button></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="MachineOps.openScanner()" style="font-size:12px">▦ Escanear QR</button><button class="btn btn-ghost btn-sm" onclick="openMaquinasManager()" style="font-size:12px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Gestionar máquinas</button></div>
   </div>
 
   <div id="maqWorkspaceNav" class="maq-workspace-nav" role="tablist" aria-label="Áreas de Máquinas">
@@ -3140,7 +3140,7 @@
         <div class="field-group"><label class="field-label">Tarifa máquina (CLP/h)</label><input id="mopsCapRate" type="number" min="0" value="1500" class="field-input"></div>
         <div class="field-group"><label class="field-label">Dimensiones X × Y × Z (mm)</label><div style="display:flex;gap:5px"><input id="mopsCapX" type="number" min="0" class="field-input" placeholder="X"><input id="mopsCapY" type="number" min="0" class="field-input" placeholder="Y"><input id="mopsCapZ" type="number" min="0" class="field-input" placeholder="Z"></div></div>
         <div class="field-group"><label class="field-label">Fecha límite</label><input id="mopsCapDue" type="date" class="field-input"></div>
-        <div class="field-group"><label class="field-label">Margen de seguridad</label><div style="display:flex;align-items:center;gap:7px"><input id="mopsCapBuffer" type="number" min="0" max="100" value="15" class="field-input"><span style="font-size:11px;color:var(--text3)">%</span></div></div>
+        <div class="field-group"><label class="field-label">Margen de seguridad</label><div style="display:flex;align-items:center;gap:7px"><input id="mopsCapBuffer" type="number" min="0" max="100" value="15" class="field-input"><span style="font-size:12px;color:var(--text3)">%</span></div></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-primary btn-sm" onclick="MachineOps.runCapacitySimulation()">Calcular capacidad</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.createCapacityJobs()">Crear trabajos planificados</button></div>
     </div>
@@ -3157,15 +3157,15 @@
   <!-- ── MONITOR EN VIVO ── -->
   <div id="maquinaMonitorView" data-maq-view="operacion" style="margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">📡 Monitor en vivo</span>
+      <span class="maq-view-title">📡 Monitor en vivo</span>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:10px;color:var(--text3)">↻ <span id="monitorLastUpdate">cargando...</span></span>
-        <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:11px">Actualizar</button>
-        <button id="btnSort" class="btn btn-ghost btn-sm" onclick="toggleSort()" style="font-size:11px" title="Ordenar por estado">↕ Estado</button>
-        <button class="btn btn-ghost btn-sm" onclick="toggleKiosk()" style="font-size:11px" title="Modo pantalla completa">⛶ Kiosko</button>
-        <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:11px" title="Configurar alertas"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-bell"/></svg> Alertas</button>
-        <button id="btnLocalMode" class="btn btn-ghost btn-sm" onclick="toggleLocalMode()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Remoto</button>
-        <button class="btn btn-ghost btn-sm" onclick="openOrcaConfigModal()" style="font-size:11px" title="Configurar OrcaSlicer">🦙 OrcaSlicer</button>
+        <span style="font-size:10.5px;color:var(--text3)">↻ <span id="monitorLastUpdate">cargando...</span></span>
+        <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:12px">Actualizar</button>
+        <button id="btnSort" class="btn btn-ghost btn-sm" onclick="toggleSort()" style="font-size:12px" title="Ordenar por estado">↕ Estado</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleKiosk()" style="font-size:12px" title="Modo pantalla completa">⛶ Kiosko</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:12px" title="Configurar alertas"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-bell"/></svg> Alertas</button>
+        <button id="btnLocalMode" class="btn btn-ghost btn-sm" onclick="toggleLocalMode()" style="font-size:12px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Remoto</button>
+        <button class="btn btn-ghost btn-sm" onclick="openOrcaConfigModal()" style="font-size:12px" title="Configurar OrcaSlicer">🦙 OrcaSlicer</button>
       </div>
     </div>
     <div id="monitorFilterTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
@@ -3201,8 +3201,8 @@
   <!-- ── CARGA DE PRODUCCIÓN POR MÁQUINA (O7) ── -->
   <div id="maquinaCargaLegacyView" data-maq-view="planificacion" style="display:none;margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🗂️ Carga de producción</span>
-      <span style="font-size:10.5px;color:var(--text3)">asigna pedidos a impresoras y ve la cola y horas por máquina</span>
+      <span class="maq-view-title">🗂️ Carga de producción</span>
+      <span style="font-size:11.5px;color:var(--text3)">asigna pedidos a impresoras y ve la cola y horas por máquina</span>
     </div>
     <div id="cargaMaquinas"></div>
   </div>
@@ -3210,7 +3210,7 @@
   <!-- ── AGENTE DE IMPRESIÓN 3D — STL/OBJ → G-CODE CON IA ── -->
   <div id="maquinaSlicerView" class="maquina-section" data-maq-view="laminado" style="display:none;margin-bottom:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)">🧠 Agente de impresión 3D</span>
+      <span class="maq-view-title">🧠 Agente de impresión 3D</span>
       <span class="badge badge-purple">STL / OBJ → G-code · IA + slicer nativo</span>
     </div>
     <div class="card" style="padding:18px">
@@ -3220,8 +3220,8 @@
           <div id="slDrop" style="border:2px dashed var(--border2);border-radius:10px;padding:26px 14px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s" onclick="document.getElementById('slFileInput').click()">
             <div style="font-size:26px;margin-bottom:6px">📦</div>
             <div style="font-size:12px;color:var(--text2);font-weight:600">Arrastra archivos <span style="color:var(--accent)">STL</span>, <span style="color:var(--accent)">OBJ</span> o <span style="color:var(--accent)">3MF</span> aquí</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:4px">uno o varios (se acomodan en el plato) · el archivo no sale de tu navegador</div>
-            <div id="slFileName" style="font-size:11px;color:var(--accent);margin-top:8px;font-weight:700;display:none"></div>
+            <div style="font-size:10.5px;color:var(--text3);margin-top:4px">uno o varios (se acomodan en el plato) · el archivo no sale de tu navegador</div>
+            <div id="slFileName" style="font-size:12px;color:var(--accent);margin-top:8px;font-weight:700;display:none"></div>
           </div>
           <input type="file" id="slFileInput" accept=".stl,.obj,.3mf" multiple style="display:none" onchange="SL3D.loadFiles(this.files)">
           <input type="file" id="slAddInput" accept=".stl,.obj,.3mf" multiple style="display:none" onchange="SL3D.addObject(this.files)">
@@ -3249,63 +3249,63 @@
           </div>
           <div id="slRazon" style="display:none;margin:12px 0;padding:12px 14px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);border-radius:9px;font-size:11.5px;color:var(--text2);line-height:1.55"></div>
           <div id="slParamsWrap" style="display:none">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin:10px 0 8px">Parámetros de laminado <span style="color:var(--text3);font-weight:400;text-transform:none">(editables)</span></div>
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin:10px 0 8px">Parámetros de laminado <span style="color:var(--text3);font-weight:400;text-transform:none">(editables)</span></div>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px">
-              <span style="font-size:10px;font-weight:700;color:var(--text3)">PERFIL</span>
-              <select id="slProfileSel" class="field-select" style="font-size:11px;padding:5px 8px;flex:1;min-width:120px" onchange="SL3D.loadProfile(this.value)"><option value="">— elegir perfil guardado —</option></select>
-              <button class="btn btn-ghost btn-sm" onclick="SL3D.saveProfile()" style="font-size:10px;padding:5px 10px">💾 Guardar</button>
-              <button class="btn btn-ghost btn-sm" onclick="SL3D.deleteProfile()" style="font-size:10px;padding:5px 10px;color:var(--danger)">✕</button>
+              <span style="font-size:10.5px;font-weight:700;color:var(--text3)">PERFIL</span>
+              <select id="slProfileSel" class="field-select" style="font-size:12px;padding:5px 8px;flex:1;min-width:120px" onchange="SL3D.loadProfile(this.value)"><option value="">— elegir perfil guardado —</option></select>
+              <button class="btn btn-ghost btn-sm" onclick="SL3D.saveProfile()" style="font-size:10.5px;padding:5px 10px">💾 Guardar</button>
+              <button class="btn btn-ghost btn-sm" onclick="SL3D.deleteProfile()" style="font-size:10.5px;padding:5px 10px;color:var(--danger)">✕</button>
             </div>
             <div id="slParamsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:8px;margin-bottom:14px"></div>
             <!-- ── Modificadores por altura y regiones de soporte (opcional) ── -->
             <div style="border-top:1px solid var(--border2);padding-top:10px;margin-bottom:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="SL3D.toggleAdvanced()">
-                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2)">⚙ Avanzado <span style="color:var(--text3);font-weight:400;text-transform:none">— modificadores por altura · regiones de soporte</span></div>
+                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2)">⚙ Avanzado <span style="color:var(--text3);font-weight:400;text-transform:none">— modificadores por altura · regiones de soporte</span></div>
                 <span id="slAdvCaret" style="color:var(--text3);font-size:12px">▾</span>
               </div>
               <div id="slAdvBody" style="display:none;margin-top:10px">
                 <div id="slObjSetWrap" style="display:none;margin-bottom:14px">
-                  <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">AJUSTES POR PIEZA <span style="font-weight:400">(relleno/perímetros/soporte distintos por pieza del plato — vacío = global)</span></div>
+                  <div style="font-size:10.5px;font-weight:700;color:var(--text3);margin-bottom:6px">AJUSTES POR PIEZA <span style="font-weight:400">(relleno/perímetros/soporte distintos por pieza del plato — vacío = global)</span></div>
                   <div id="slObjSetList"></div>
                 </div>
-                <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">MODIFICADORES POR ALTURA <span style="font-weight:400">(distintos parámetros en un rango de Z)</span></div>
+                <div style="font-size:10.5px;font-weight:700;color:var(--text3);margin-bottom:6px">MODIFICADORES POR ALTURA <span style="font-weight:400">(distintos parámetros en un rango de Z)</span></div>
                 <div id="slModList"></div>
                 <button class="btn btn-ghost btn-sm" onclick="SL3D.addModifier()" style="margin:4px 0 12px">+ Agregar modificador</button>
-                <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">REGIONES DE SOPORTE <span style="font-weight:400">(forzar o bloquear soporte en una caja XY·Z)</span></div>
+                <div style="font-size:10.5px;font-weight:700;color:var(--text3);margin-bottom:6px">REGIONES DE SOPORTE <span style="font-weight:400">(forzar o bloquear soporte en una caja XY·Z)</span></div>
                 <div id="slSupRegList"></div>
                 <button class="btn btn-ghost btn-sm" onclick="SL3D.addSupRegion()" style="margin:4px 0 4px">+ Agregar región</button>
                 <!-- ── G-code de máquina (inicio/fin) por impresora ── -->
                 <div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:12px">
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-                    <div style="font-size:10px;font-weight:700;color:var(--text3)">G-CODE MÁQUINA <span style="font-weight:400">(inicio/fin para <span id="slGcMachineName">la impresora</span>)</span></div>
+                    <div style="font-size:10.5px;font-weight:700;color:var(--text3)">G-CODE MÁQUINA <span style="font-weight:400">(inicio/fin para <span id="slGcMachineName">la impresora</span>)</span></div>
                     <div style="display:flex;gap:5px">
-                      <button class="btn btn-ghost btn-sm" onclick="SL3D.gcodePreset('marlin')" style="font-size:10px;padding:3px 8px">Marlin</button>
-                      <button class="btn btn-ghost btn-sm" onclick="SL3D.gcodePreset('klipper')" style="font-size:10px;padding:3px 8px">Klipper</button>
+                      <button class="btn btn-ghost btn-sm" onclick="SL3D.gcodePreset('marlin')" style="font-size:10.5px;padding:3px 8px">Marlin</button>
+                      <button class="btn btn-ghost btn-sm" onclick="SL3D.gcodePreset('klipper')" style="font-size:10.5px;padding:3px 8px">Klipper</button>
                     </div>
                   </div>
-                  <label style="font-size:9px;color:var(--text3)">Inicio (reemplaza homing/calentado). Placeholders: {nozzle} {bed} {accel} {flow} {pa} {first_layer_height} {material} {model}</label>
-                  <textarea id="slStartGcode" rows="3" placeholder="vacío = secuencia Marlin por defecto (M140/M104/G28/M190/M109)" style="width:100%;resize:vertical;font-size:11px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 8px" oninput="SL3D.saveMachineGcode()"></textarea>
-                  <label style="font-size:9px;color:var(--text3)">Fin (reemplaza el apagado). Vacío = footer Marlin por defecto.</label>
-                  <textarea id="slEndGcode" rows="2" placeholder="vacío = footer por defecto (M104 S0 / M140 S0 / M84…)" style="width:100%;resize:vertical;font-size:11px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 4px" oninput="SL3D.saveMachineGcode()"></textarea>
-                  <label style="font-size:9px;color:var(--text3)">Por cada capa (timelapse/macros). Placeholders extra: {layer} {z}</label>
-                  <textarea id="slLayerGcode" rows="1" placeholder="ej: TIMELAPSE_TAKE_FRAME" style="width:100%;resize:vertical;font-size:11px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 4px" oninput="SL3D.saveMachineGcode()"></textarea>
-                  <div style="font-size:9px;color:var(--text3);line-height:1.5">El preset <b>Klipper</b> usa <code>PRINT_START</code>/<code>PRINT_END</code> — funciona solo si esas macros existen en tu <code>printer.cfg</code>. Se guarda por impresora.</div>
+                  <label style="font-size:10px;color:var(--text3)">Inicio (reemplaza homing/calentado). Placeholders: {nozzle} {bed} {accel} {flow} {pa} {first_layer_height} {material} {model}</label>
+                  <textarea id="slStartGcode" rows="3" placeholder="vacío = secuencia Marlin por defecto (M140/M104/G28/M190/M109)" style="width:100%;resize:vertical;font-size:12px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 8px" oninput="SL3D.saveMachineGcode()"></textarea>
+                  <label style="font-size:10px;color:var(--text3)">Fin (reemplaza el apagado). Vacío = footer Marlin por defecto.</label>
+                  <textarea id="slEndGcode" rows="2" placeholder="vacío = footer por defecto (M104 S0 / M140 S0 / M84…)" style="width:100%;resize:vertical;font-size:12px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 4px" oninput="SL3D.saveMachineGcode()"></textarea>
+                  <label style="font-size:10px;color:var(--text3)">Por cada capa (timelapse/macros). Placeholders extra: {layer} {z}</label>
+                  <textarea id="slLayerGcode" rows="1" placeholder="ej: TIMELAPSE_TAKE_FRAME" style="width:100%;resize:vertical;font-size:12px;font-family:monospace;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;margin:3px 0 4px" oninput="SL3D.saveMachineGcode()"></textarea>
+                  <div style="font-size:10px;color:var(--text3);line-height:1.5">El preset <b>Klipper</b> usa <code>PRINT_START</code>/<code>PRINT_END</code> — funciona solo si esas macros existen en tu <code>printer.cfg</code>. Se guarda por impresora.</div>
                 </div>
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <button class="btn btn-primary" id="slBtnGcode" onclick="SL3D.generarGcode()">⚙ Generar G-code</button>
-              <span style="font-size:10px;color:var(--text3)">Slicer nativo · sin dependencias externas</span>
+              <span style="font-size:10.5px;color:var(--text3)">Slicer nativo · sin dependencias externas</span>
             </div>
           </div>
           <div id="slProgWrap" style="display:none;margin-top:12px">
             <div style="height:6px;background:var(--surface3);border-radius:3px;overflow:hidden"><div id="slProgBar" style="height:100%;width:0%;background:var(--accent);transition:width .3s"></div></div>
-            <div id="slProgTxt" style="font-size:10px;color:var(--text3);margin-top:4px">—</div>
+            <div id="slProgTxt" style="font-size:10.5px;color:var(--text3);margin-top:4px">—</div>
           </div>
           <div id="slResult" style="display:none;margin-top:14px"></div>
           <!-- ── Suite de calibración ── -->
           <div style="margin-top:16px;border-top:1px solid var(--border2);padding-top:12px">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:8px">🔧 Calibración <span style="color:var(--text3);font-weight:400;text-transform:none">(no necesita modelo)</span></div>
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:8px">🔧 Calibración <span style="color:var(--text3);font-weight:400;text-transform:none">(no necesita modelo)</span></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <select class="field-select" id="slCalType" style="width:auto;min-width:180px">
                 <option value="temp">🌡 Torre de temperatura</option>
@@ -3325,7 +3325,7 @@
 
   <!-- ── CALENDARIO ── -->
   <div id="maquinaCalView" class="maquina-section" data-maq-view="planificacion" style="display:none">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">📅 Disponibilidad semanal</div>
+    <div class="maq-view-title" style="margin-bottom:12px">📅 Disponibilidad semanal</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="navSemana(-1)">← Anterior</button>
       <span id="semanaLabel" style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)"></span>
@@ -3374,11 +3374,11 @@
   <!-- ── MANTENIMIENTO PREVENTIVO ── -->
   <div id="maquinaMaintView" class="maquina-section" data-maq-view="mantenimiento" style="display:none;margin-top:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mantenimiento preventivo</span>
+      <span class="maq-view-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-wrench"/></svg> Mantenimiento preventivo</span>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary btn-sm" onclick="startMaintFlow()" style="font-size:11px" title="Registrar mantención paso a paso">🔧 Registrar mantención</button>
-        <button class="btn btn-ghost btn-sm" onclick="openMaintConfig()" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar umbrales</button>
-        <button class="btn btn-ghost btn-sm" onclick="renderMaintenanceTable()" style="font-size:11px">↻ Actualizar</button>
+        <button class="btn btn-primary btn-sm" onclick="startMaintFlow()" style="font-size:12px" title="Registrar mantención paso a paso">🔧 Registrar mantención</button>
+        <button class="btn btn-ghost btn-sm" onclick="openMaintConfig()" style="font-size:12px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Configurar umbrales</button>
+        <button class="btn btn-ghost btn-sm" onclick="renderMaintenanceTable()" style="font-size:12px">↻ Actualizar</button>
       </div>
     </div>
     <div id="mopsMaintenanceProfiles" style="margin-bottom:12px"></div>
@@ -3388,14 +3388,14 @@
   <!-- ── AUDITORÍA Y MANTENCIÓN 3D (agente) ── -->
   <div id="maquinaAuditView" class="maquina-section" data-maq-view="mantenimiento" style="display:none;margin-top:28px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent)"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg> Auditoría y mantención 3D</span>
+      <span class="maq-view-title"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-check-circle"/></svg> Auditoría y mantención 3D</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="audit3DRun()" style="font-size:11px">🔍 Auditar ahora</button>
-        <button class="btn btn-ghost btn-sm" onclick="audit3DCalibrateAll()" style="font-size:11px" title="Lanza bed mesh en todas las impresoras libres">📐 Calibrar todas las libres</button>
-        <button class="btn btn-ghost btn-sm" onclick="audit3DReport()" style="font-size:11px">🧠 Reporte IA</button>
+        <button class="btn btn-primary btn-sm" onclick="audit3DRun()" style="font-size:12px">🔍 Auditar ahora</button>
+        <button class="btn btn-ghost btn-sm" onclick="audit3DCalibrateAll()" style="font-size:12px" title="Lanza bed mesh en todas las impresoras libres">📐 Calibrar todas las libres</button>
+        <button class="btn btn-ghost btn-sm" onclick="audit3DReport()" style="font-size:12px">🧠 Reporte IA</button>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Revisa cada impresora (errores de Klipper, consola, home, malla de cama, mantención) y corrige/calibra con un clic. Las acciones <b>nunca</b> tocan una máquina imprimiendo. La rutina automática de las 9 AM (auditoría + reinicio de firmware + calibración) corre en el printer-bridge del taller.</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Revisa cada impresora (errores de Klipper, consola, home, malla de cama, mantención) y corrige/calibra con un clic. Las acciones <b>nunca</b> tocan una máquina imprimiendo. La rutina automática de las 9 AM (auditoría + reinicio de firmware + calibración) corre en el printer-bridge del taller.</div>
     <div id="audit3DResult"><div style="padding:16px;color:var(--text3);font-size:12px">Pulsa “Auditar ahora” para revisar todas las impresoras.</div></div>
     <div id="audit3DAiOut" style="display:none;margin-top:12px;padding:14px;background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.22);border-radius:10px;font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.6"></div>
     <div id="audit3DDaily" style="margin-top:12px"></div>
@@ -3407,7 +3407,7 @@
     <div id="mopsSafety"></div>
     <div class="data-grid" style="align-items:start">
       <div class="card maq-ops-card">
-        <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:11px">CONFIGURACIÓN Y COMPUERTAS</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:11px">CONFIGURACIÓN Y COMPUERTAS</div>
         <div class="maq-check-grid" style="margin-bottom:11px">
           <label><input id="mopsSafetyEnforce" type="checkbox"> Bloqueo estricto</label>
           <label><input id="mopsSafetyCamera" type="checkbox" checked> Cámara obligatoria</label>
@@ -3424,7 +3424,7 @@
         <button class="btn btn-primary btn-sm" onclick="MachineOps.saveSafetyConfig()" style="margin-top:12px">Guardar seguridad</button>
       </div>
       <div class="card maq-ops-card">
-        <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:11px">LECTURA MANUAL DE RESPALDO</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:11px">LECTURA MANUAL DE RESPALDO</div>
         <div class="maq-form-grid">
           <div class="field-group"><label class="field-label">Temperatura °C</label><input id="mopsSafetyTemp" type="number" step="0.1" value="24" class="field-input"></div>
           <div class="field-group"><label class="field-label">Humedad %</label><input id="mopsSafetyHumidity" type="number" value="45" class="field-input"></div>
@@ -3432,14 +3432,14 @@
         </div>
         <div class="maq-check-grid" style="margin-top:10px"><label><input id="mopsSafetyVentNow" type="checkbox" checked> Ventilación activa</label><label><input id="mopsSafetySmokeNow" type="checkbox"> Humo detectado</label></div>
         <button class="btn btn-ghost btn-sm" onclick="MachineOps.recordSafetyManual()" style="margin-top:12px">Registrar lectura manual</button>
-        <div style="font-size:9.5px;color:var(--text3);line-height:1.5;margin-top:9px">La lectura manual permite operar mientras instalas sensores, pero debe renovarse. El token nunca se guarda de forma permanente.</div>
+        <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-top:9px">La lectura manual permite operar mientras instalas sensores, pero debe renovarse. El token nunca se guarda de forma permanente.</div>
       </div>
     </div>
   </div>
 
   <!-- ── ANALÍTICA ── -->
   <div id="maquinaAnalyticsView" class="maquina-section" data-maq-view="analitica" style="display:none;margin-top:28px">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--accent);margin-bottom:14px"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chart"/></svg> Analítica de producción</div>
+    <div class="maq-view-title" style="margin-bottom:14px"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chart"/></svg> Analítica de producción</div>
     <div id="mopsAnalytics" style="margin-bottom:16px"></div>
     <div id="analyticsContent"></div>
   </div>
