@@ -25,6 +25,10 @@ Para cambiar la **versión de firmware** de una K1, ver
 | K2 #13 | 192.168.100.71 | armv7l | Tina/OpenWrt | go2rtc · 1984 |
 | K2 Plus #11 | 192.168.100.75 | armv7l | Tina/OpenWrt | go2rtc · 1984 |
 
+> Esta tabla es del 2026-08-12. Al 2026-08-17 el monitor lista 14 máquinas: se
+> sumaron **Ender-5 Max #9 y #10** (la #10 en `192.168.100.162`) y la
+> **OrangeStorm Giga**. La lista viva está siempre en el dashboard.
+
 > **Las IPs son DHCP y se mueven.** Las de arriba son las del 2026-08-12. La
 > fuente viva es Airtable (tabla `Maquinas`, campo `ip`), pero el dashboard
 > guarda además una IP por equipo en `localStorage` que la pisa
@@ -81,7 +85,22 @@ ConfigError: Configuration File Not Found:
 Moonraker arranca, no encuentra su configuración y se apaga. Arrancar el
 servicio otra vez no sirve de nada hasta reponer el archivo.
 
-### Arreglo
+### Arreglo — desde el dashboard (lo primero que hay que probar)
+
+En la tarjeta ámbar de la máquina: **🔧 Recuperar telemetría**. El bridge del
+iMac entra por SSH, repone `moonraker.conf` desde el respaldo si falta,
+reinicia el servicio (el nombre correcto según el modelo) y espera a que
+Moonraker conteste. No interrumpe una impresión en curso.
+
+Requiere que el bridge del iMac esté **actualizado** (`git pull` + reiniciarlo)
+y con **acceso SSH a las impresoras** —una vez—:
+`printer-bridge/install-printer-keys.sh`. Si el botón responde *"Este bridge
+todavía no sabe recuperar"*, falta esa actualización.
+
+Si el botón falla, dice por qué (SSH rechazado, no hay respaldo del config,
+Moonraker no volvió) y se sigue a mano:
+
+### Arreglo — a mano
 
 Si la máquina tiene su propio respaldo (lo mejor):
 
