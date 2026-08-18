@@ -162,7 +162,7 @@ test('credenciales y enlaces remotos no quedan expuestos permanentemente',()=>{
   assert.match(MAQ,/sessionStorage\.getItem\('printer_tunnel_token'\)/);
   assert.match(MAQ,/sessionStorage\.setItem\('printer_tunnel_token'/);
   assert.match(MAQ,/localStorage\.removeItem\('printer_tunnel_token'\)/);
-  assert.match(MAQ,/headers\['X-Bridge-Token'\]=token/);
+  assert.match(MAQ,/function _appendBridgeToken\(u\)\{if\(\/\[\?&\]bt=\/\.test\(u\)\)return u;/,'el token va en la URL y sin duplicarse');
   assert.match(MAQ,/function printerMediaUrl\(ip,path\)\{return _appendBridgeToken\(printerUrl\(ip,path\)\);\}/);
 });
 
