@@ -89,7 +89,13 @@ function _calCrmEvents(){
 }
 function _calDisplayEvents(){return _calAll().filter(e=>!e.del).map(e=>({...e,source:e.source||'manual',type:e.type||'manual',color:_calColor(e)})).concat(_calCrmEvents());}
 function _calEventById(id){return _calDisplayEvents().find(e=>e.id===id)||null;}
-function _calAllowedSync(ev){const p=_calSyncPrefs();if(ev.source!=='crm')return p.manual!==false;const mine=_calUserId();return p[ev.syncKey]!==false&&(!p.onlyMine||(!!mine&&(ev.personas||[]).includes(mine)));}
+function _calAllowedSync(ev){const p=_calSyncPrefs();if(ev.source!=='crm')return p.manual!==false;const mine=_calUserId();
+  // "Solo los míos" filtra por identidad. Si el login NO está mapeado a una
+  // persona (mine===''; p.ej. hola@thelab.solutions), no hay "míos" que filtrar:
+  // se trata onlyMine como inactivo. Antes excluía TODOS los eventos, y como los
+  // ya sincronizados con gcal se convierten en lápidas (del:true), activar
+  // "Solo los míos" sin identidad BORRABA de Google los calendarios del equipo.
+  return p[ev.syncKey]!==false&&(!p.onlyMine||!mine||(ev.personas||[]).includes(mine));}
 function _calSyncCandidates(){
   const current=_calDisplayEvents(),meta=_calCrmMeta(),ids=new Set(current.map(e=>e.id)),out=[];
   current.forEach(ev=>{const allowed=_calAllowedSync(ev);if(allowed)out.push(ev);else if(Object.keys(ev.gcal||{}).length)out.push({...ev,del:true,_syncDisabled:true});});
@@ -306,6 +312,18 @@ function _calNeedsSync(ev){
   const editado=(+(ev.gsyncMts||0))<(+(ev.mts||0))&&Object.keys(ev.gcal||{}).length>0;
   return falta||sobra||editado;
 }
+// Los eventos MANUALES guardan su vínculo con Google (gcal) dentro del propio
+// arreglo del calendario. _calSyncEvento muta una COPIA (los candidatos vienen de
+// _calDisplayEvents, otro parse distinto del `arr` que se persiste), así que sin
+// este writeback la mutación se pierde: el evento queda con gcal:{}, _calNeedsSync
+// lo cree pendiente en CADA sync y se RE-CREA en Google una y otra vez —
+// duplicados, que además se multiplican entre las dos máquinas. Los CRM ya
+// persisten aparte vía _calPersistCrmSync; esto cierra la ruta manual, simétrico.
+function _calWritebackSync(arr,ev){
+  if(ev.source==='crm')return;
+  const t=(arr||[]).find(x=>x.id===ev.id);
+  if(t){t.gcal=ev.gcal;t.gcalRemoved=ev.gcalRemoved;t.gsyncMts=ev.gsyncMts;}
+}
 async function calSyncAll(){
   const btn=document.getElementById('calSyncBtn');if(btn){btn.disabled=true;btn.textContent='Sincronizando…';}
   try{
@@ -314,7 +332,7 @@ async function calSyncAll(){
     if(!pend.length){toast('✓ Todo sincronizado con Google','success');}
     else{
       let ok=0;const errs=[];
-      for(const ev of pend){const e=await _calSyncEvento(ev);if(e.length)errs.push(...e);else{ok++;_calPersistCrmSync(ev);}}
+      for(const ev of pend){const e=await _calSyncEvento(ev);if(e.length)errs.push(...e);else{ok++;_calPersistCrmSync(ev);_calWritebackSync(arr,ev);}}
       _calSave(arr);
       if(errs.length)toast(`Sincronizados ${ok}/${pend.length} · errores: ${errs[0]}`,'error');
       else toast(`✓ ${ok} evento${ok!==1?'s':''} sincronizado${ok!==1?'s':''} con Google`,'success');
@@ -330,7 +348,7 @@ async function _calAutoSync(){
     const arr=_calAll();const pend=_calSyncCandidates().filter(_calNeedsSync);
     if(!pend.length)return;
     let changed=false;
-    for(const ev of pend){const e=await _calSyncEvento(ev);if(!e.length){changed=true;_calPersistCrmSync(ev);}}
+    for(const ev of pend){const e=await _calSyncEvento(ev);if(!e.length){changed=true;_calPersistCrmSync(ev);_calWritebackSync(arr,ev);}}
     if(changed){_calSave(arr);try{renderCalendario();}catch(e){}}
   }catch(e){}
 }
