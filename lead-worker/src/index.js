@@ -178,8 +178,10 @@ export default {
     }
     ctx.waitUntil(retryDeadLetters(env));
     // Una vez al día (07:17 UTC ≈ madrugada en Chile): poda de la cola de agentes
+    // y canario del formulario web (ver checkLeadFormHealth).
     if (new Date(event.scheduledTime || Date.now()).getUTCHours() === 7) {
       ctx.waitUntil(cleanupAgentQueue(env));
+      ctx.waitUntil(checkLeadFormHealth(env));
     }
   },
 };
@@ -190,6 +192,74 @@ export default {
  * La cola queda como semáforo: casi vacía = todo bien. Pendiente, Procesando
  * y Error se conservan SIEMPRE — son las que piden atención humana.
  * ══════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════
+ * Canario diario del formulario web
+ *
+ * El 2026-08-18 se descubrió que los formularios de la web llevaban casi un mes
+ * entregando los leads SOLO por email: entraban al correo y nunca al CRM. Nada
+ * fallaba a la vista —el sitio compilaba, el formulario decía "¡Registro
+ * recibido!"— y por eso duró tanto.
+ *
+ * El deploy de la web ya verifica esto al publicar, pero eso no cubre la deriva
+ * posterior: si alguien borra una variable del Worker de la web, el formulario
+ * vuelve a perder leads sin que ningún deploy lo note. Este canario lo mira una
+ * vez al día desde fuera y avisa. Cuando todo está bien no manda nada: un
+ * canario que canta todos los días deja de escucharse.
+ * ══════════════════════════════════════════════════════════════════════ */
+const LEAD_FORM_HEALTH_URL = "https://thelab.solutions/api/lead/health";
+async function checkLeadFormHealth(env) {
+  let motivo, detalle = "";
+  try {
+    const r = await fetch(env.LEAD_FORM_HEALTH_URL || LEAD_FORM_HEALTH_URL, {
+      signal: AbortSignal.timeout(15000),
+    });
+    const d = await r.json().catch(() => null);
+    if (d && d.ok === true) return; // sano: silencio
+    if (d) {
+      motivo = "el sitio responde que los formularios NO entregan al CRM";
+      detalle = JSON.stringify(d);
+    } else {
+      motivo = `la respuesta del sitio no se pudo leer (HTTP ${r.status})`;
+      detalle = "¿quedó desplegada una versión sin /api/lead/health?";
+    }
+  } catch (e) {
+    motivo = "no se pudo consultar el sitio";
+    detalle = e.message;
+  }
+  console.error("[canario-leads]", motivo, detalle);
+  await sendLeadFormBrokenAlert(env, motivo, detalle);
+}
+async function sendLeadFormBrokenAlert(env, motivo, detalle) {
+  if (!env.RESEND_API_KEY) return;
+  const esc = (s) =>
+    String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+      c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"
+    );
+  const html =
+    `<div style="font-family:system-ui,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px">` +
+    `<h2 style="margin:0 0 12px;color:#b00020">⚠️ El formulario de la web puede estar perdiendo leads</h2>` +
+    `<p>El chequeo diario encontró que <strong>${esc(motivo)}</strong>.</p>` +
+    `<p>Mientras esto siga así, una ficha enviada desde thelab.solutions llega por correo pero <strong>no entra a Clientes ni a la cola de agentes</strong>.</p>` +
+    `<p style="background:#fff3f3;border:1px solid #f3caca;border-radius:8px;padding:8px 12px;color:#a00"><strong>Detalle:</strong> ${esc(detalle)}</p>` +
+    `<p>Comprobar a mano:<br><code>curl -s https://thelab.solutions/api/lead/health</code></p>` +
+    `<p style="color:#666;font-size:13px">Revisa que <code>LEAD_ENDPOINT</code> y <code>LEAD_KEY</code> sigan definidas en el Worker de la web (Cloudflare → Workers &amp; Pages → web-thelab-solutions → Settings → Variables).</p>` +
+    `</div>`;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: env.RESEND_FROM || "The Lab Solutions <hola@thelab.solutions>",
+        to: env.LEADS_NOTIFY_TO || "thelabsolutionscl@gmail.com",
+        subject: "⚠️ El formulario de la web puede estar perdiendo leads",
+        html,
+      }),
+    });
+  } catch (e) {
+    console.error("[canario-leads] no se pudo avisar:", e.message);
+  }
+}
+
 async function cleanupAgentQueue(env) {
   try {
     if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return;
