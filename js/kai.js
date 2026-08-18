@@ -317,6 +317,15 @@ CAPACIDADES Y REGLAS:
     {name:'sugerir_acciones', description:'Muestra 1 a 3 botones de acción rápida bajo tu respuesta.', input_schema:{type:'object',properties:{botones:{type:'array',maxItems:3,items:{type:'object',properties:{texto:{type:'string',description:'2-4 palabras que ve el usuario'},comando:{type:'string',description:'Instrucción que recibirías si lo pulsa'}},required:['texto','comando']}}},required:['botones']}},
     {name:'consultar_crm', description:'Consulta datos precisos del CRM para responder preguntas concretas sobre clientes, pedidos, cobranza, finanzas, proveedores o inventario. Úsalo SIEMPRE que pregunten por un cliente/proveedor específico, un saldo, pedidos atrasados, ingresos de un mes, top de clientes, precios de un proveedor o materiales con stock bajo. Devuelve datos reales calculados en vivo.', input_schema:{type:'object',properties:{consulta:{type:'string',enum:['cliente','proveedor','pedidos_atrasados','por_cobrar','finanzas_mes','top_clientes','cotizaciones_pendientes','inventario_bajo','resumen'],description:'Tipo de consulta.'},nombre:{type:'string',description:'Nombre del cliente o proveedor a buscar (solo para consulta=cliente o proveedor).'},periodo:{type:'string',enum:['actual','anterior'],description:'Mes a consultar para finanzas_mes/top_clientes: actual (en curso) o anterior (cerrado). Por defecto actual.'}},required:['consulta']}}
   ];
+  // Consultas de consultar_crm que exponen datos de secciones que el rol
+  // COMERCIAL no tiene (Finanzas, Proveedores, Inventario). Estas consultas leen
+  // helpers globales (empresa completa) que saltan el acotamiento por vendedor de
+  // `s`, así que se niegan explícitamente — igual que `resumen` ya oculta el por
+  // cobrar. Devuelve el nombre de la sección vedada, o '' si está permitida.
+  function _kaiConsultaVedada(consulta,esVendedor){
+    if(!esVendedor) return '';
+    return ({por_cobrar:'Finanzas',finanzas_mes:'Finanzas',top_clientes:'Finanzas',proveedor:'Proveedores',inventario_bajo:'Inventario'})[consulta]||'';
+  }
   // Consulta de datos del CRM (solo lectura): calcula la respuesta en vivo desde
   // state y helpers globales del dashboard, para que KAI responda con cifras reales.
   function _kaiConsultarCRM(input){
@@ -340,6 +349,8 @@ CAPACIDADES Y REGLAS:
     const cliNombre=id=>((s.clientesById||{})[id])||'(cliente)';
     try{
       if(!s.loaded) return 'Los datos aún se están cargando. Pide al usuario que actualice con el botón ↺ y reintenta.';
+      const _vedada=_kaiConsultaVedada(consulta,_av);
+      if(_vedada) return 'Esa información pertenece a '+_vedada+', una sección fuera de tu acceso. Puedo ayudarte con tus clientes, cotizaciones y pedidos.';
       if(consulta==='cliente'){
         if(!nombre) return 'Falta el nombre del cliente a consultar.';
         const q=norm(nombre);
