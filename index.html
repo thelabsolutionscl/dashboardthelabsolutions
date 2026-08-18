@@ -8833,7 +8833,7 @@ function renderAccionesHoy(){
       const cutoff=new Date(Date.now()-adsDays*86400000);
       const ingresoCRM=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=cutoff;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
       const gasto=ad.gasto||0,roasReal=gasto>0?ingresoCRM/gasto:0;
-      const prev=typeof adsGetPrevSnapshot==='function'?adsGetPrevSnapshot():null;
+      const prev=typeof adsGetPrevSnapshot==='function'?adsGetPrevSnapshot(adsDays):null;
       if(prev&&prev.roasReal>0&&roasReal>0&&roasReal<prev.roasReal*0.75)
         push('ads',1,'📉',`Ads: ROAS-real bajó a <b>${roasReal.toFixed(2)}x</b> (era ${prev.roasReal.toFixed(2)}x)`,'Analizar IA',`switchTab('web')`,'var(--danger)');
     }catch(e){}
