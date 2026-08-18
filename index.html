@@ -6999,10 +6999,22 @@ function initMobileDockSwipe(){
 }
 
 // ── NUMERACIÓN COT ────────────────────────────────────────────
-function generarNumeroCotizacion(){
-  const now=new Date();const yy=String(now.getFullYear()).slice(2);const mm=String(now.getMonth()+1).padStart(2,'0');const prefix=yy+mm;
-  let maxSeq=0;state.cotizaciones.forEach(c=>{const num=String(c.fields['N° Cotización']||'');if(num.startsWith(prefix)&&num.length===6){const seq=parseInt(num.slice(4))||0;if(seq>maxSeq) maxSeq=seq;}});
-  return prefix+String(maxSeq+1).padStart(2,'0');
+function _prefijoMesCot(){const now=new Date();return String(now.getFullYear()).slice(2)+String(now.getMonth()+1).padStart(2,'0');}
+// Máxima secuencia del mes en un arreglo de cotizaciones. Parsea CUALQUIER sufijo
+// numérico tras el prefijo YYMM: antes filtraba por num.length===6, así que a
+// partir de la cotización 100 del mes (secuencia de 3 dígitos) esa se excluía del
+// máximo y se regeneraba el mismo número → duplicado determinista.
+function _maxSeqCot(arr){const prefix=_prefijoMesCot();let mx=0;(arr||[]).forEach(c=>{const num=String((c.fields||{})['N° Cotización']||'');if(num.startsWith(prefix)){const rest=num.slice(4);if(/^\d+$/.test(rest)){const seq=parseInt(rest,10);if(seq>mx)mx=seq;}}});return mx;}
+function generarNumeroCotizacion(){return _prefijoMesCot()+String(_maxSeqCot(state.cotizaciones)+1).padStart(2,'0');}
+// Correlativo de cotización RELEYENDO Airtable antes de asignar (como _nextNumPedido).
+// El generador síncrono solo mira state.cotizaciones (copia local que puede estar
+// vieja: otra pestaña/otro vendedor ya creó números que este tab no recargó), y
+// Airtable no impone unicidad → dos cotizaciones podían salir con el MISMO N°.
+async function _nextNumCotizacion(){
+  let mx=_maxSeqCot(state.cotizaciones);
+  try{const r=await airtableFetch('Cotizaciones',1000);mx=Math.max(mx,_maxSeqCot(r.records));}
+  catch(e){console.warn('[cotizaciones] no se pudo releer el correlativo; se usa el local',e&&e.message);}
+  return _prefijoMesCot()+String(mx+1).padStart(2,'0');
 }
 
 // ── AUTH ──────────────────────────────────────────────────────
@@ -13048,10 +13060,16 @@ function cotPopulaComunas(regionSelId,comunaSelId,valorActual){
   sel.disabled=!comunas.length;
 }
 async function createCotizacion(){
-  const btn=document.getElementById('createCotBtn');const num=(document.getElementById('cot-num')?.value||'').trim();
+  const btn=document.getElementById('createCotBtn');let num=(document.getElementById('cot-num')?.value||'').trim();
   if(!num){toast('N° Cotización requerido','error');return;}if(!hasAirtableAccess()){toast('Conecta Airtable primero (token o proxy)','error');showTokenModal();return;}
   updateItemsDetalle();const tots=calcItemsTotals();const s=tots.costo;const _descPctN=Math.min(100,Math.max(0,parseFloat(document.getElementById('cot-descuento')?.value)||0));const _netoDescN=Math.round(tots.neto*(1-_descPctN/100));const t=Math.round(_netoDescN*1.19);btn.disabled=true;btn.textContent='Guardando...';
   try{
+    // Reasegurar el correlativo: el N° del input se precargó al ABRIR el formulario
+    // y pudo quedar obsoleto (otra pestaña/otro equipo tomó ese N° mientras tanto).
+    // Airtable no impone unicidad, así que si ya existe, se reasigna el siguiente libre.
+    try{const _fresh=await airtableFetch('Cotizaciones',1000);const _todos=[...(state.cotizaciones||[]),...((_fresh&&_fresh.records)||[])];
+      if(_todos.some(c=>String((c.fields||{})['N° Cotización']||'')===num)){num=_prefijoMesCot()+String(_maxSeqCot(_todos)+1).padStart(2,'0');const _cn=document.getElementById('cot-num');if(_cn)_cn.value=num;toast('Ese N° ya existía; se reasignó '+num,'info');}
+    }catch(_e){}
     const clienteId=document.getElementById('cot-cliente-id')?.value||'';
     const fechaCot=document.getElementById('cot-fecha')?.value||hoyCL();
     const vtoStr=calBusinessDate(fechaCot,10);
@@ -13256,7 +13274,7 @@ function gfItemAdd(){GF.answers._items=_gfReadItems();GF.answers._items.push({de
 function gfItemRemove(i){GF.answers._items=_gfReadItems();GF.answers._items.splice(i,1);if(!GF.answers._items.length)GF.answers._items.push({desc:'',und:1,costoUnit:0,ventaUnit:0});gfRender();}
 // ── Crea la cotización real (Airtable + etapa + Drive) desde datos guiados ──
 async function crearCotizacionGuiada(d){
-  const num=generarNumeroCotizacion();
+  const num=await _nextNumCotizacion();
   let costo=0,venta=0;(d.items||[]).forEach(it=>{costo+=(it.costo||0)*(it.und||1);venta+=(it.venta||0)*(it.und||1);});
   costo=Math.round(costo);const descPct=d.descuento||0;const netoDesc=Math.round(venta*(1-descPct/100));const total=Math.round(netoDesc*1.19);
   const detalle=(d.items||[]).map(it=>it.desc+' | '+(it.und||1)+' und. | Costo: $'+(it.costo||0)+' | Venta: $'+(it.venta||0)).join('\n');
