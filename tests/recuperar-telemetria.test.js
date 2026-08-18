@@ -103,7 +103,7 @@ test('la tarjeta de telemetría caída ofrece el botón de recuperación',()=>{
   assert.match(tarjeta,/recoverPrinterTelemetry\('\$\{m\.id\}'\)/,'el botón llama a la recuperación');
   assert.match(tarjeta,/id="recov_\$\{m\.id\}"/,'con id propio para mostrar el progreso');
   assert.match(tarjeta,/No interrumpe la impresión en curso/,'hay que decirlo: la máquina puede estar imprimiendo');
-  assert.match(tarjeta,/\$\{escapeHtml\(svc\)\}/,'se mantiene el comando SSH como alternativa manual');
+  assert.match(tarjeta,/ssh root@\$\{ip\} '\$\{escapeHtml\(svc\)\}'/,'el comando SSH manual trae la IP: sin ella no se puede copiar y pegar');
 });
 
 test('el dashboard pide la recuperación al bridge, con token y sin bloquear para siempre',()=>{
