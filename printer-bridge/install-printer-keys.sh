@@ -29,32 +29,55 @@ if [[ ! -f "$KEY" ]]; then
   ssh-keygen -t ed25519 -N '' -C "printer-bridge@$(hostname -s)" -f "$KEY" || { red "✗ No se pudo crear la llave"; exit 1; }
 fi
 
-# 2) Impresoras destino: las de los argumentos, o un barrido por el puerto de Moonraker
-IPS=("$@")
+# 2) Impresoras destino: las de los argumentos (validadas) o un barrido de la red
+IPS=()
+for a in "$@"; do
+  if [[ "$a" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    IPS+=("$a")
+  else
+    red "✗ \"$a\" no es una IP — pásale la dirección real (p. ej. 192.168.100.7)."
+  fi
+done
+if [[ $# -gt 0 && ${#IPS[@]} -eq 0 ]]; then
+  red "Ninguna IP válida. Corre el script sin argumentos y te las busca solo."
+  exit 1
+fi
+
+# El barrido busca el puerto 22, no Moonraker: así también encuentra a las
+# impresoras con la telemetría caída, que son justo las que hay que poder
+# recuperar (con Moonraker muerto no aparecerían en un barrido del 7125).
 if [[ ${#IPS[@]} -eq 0 ]]; then
-  ylw "Barriendo $SUBNET.0/24 por el puerto 7125 (Moonraker)… ~15s"
+  command -v nc >/dev/null 2>&1 || { red "✗ Falta nc para barrer la red — pásale las IPs como argumento."; exit 1; }
+  ylw "Buscando impresoras con SSH abierto en $SUBNET.0/24… ~20s"
   SCAN="$(mktemp)"
   for i in $(seq 2 254); do
-    ( curl -s -m 6 -o /dev/null "http://$SUBNET.$i:7125/printer/info" && echo "$SUBNET.$i" >> "$SCAN" ) &
+    ( nc -z -G 2 -w 2 "$SUBNET.$i" 22 >/dev/null 2>&1 && echo "$SUBNET.$i" >> "$SCAN" ) &
   done
   wait
-  # Ojo: el barrido solo ve las que TIENEN Moonraker vivo. Una impresora con la
-  # telemetría caída —justo la que hay que poder recuperar— no aparece aquí;
-  # pásala a mano como argumento.
-  while read -r ip; do IPS+=("$ip"); done < <(sort -t. -k4 -n "$SCAN" 2>/dev/null)
+  while read -r ip; do [[ -n "$ip" ]] && IPS+=("$ip"); done < <(sort -t. -k4 -n "$SCAN" 2>/dev/null)
   rm -f "$SCAN"
-  [[ ${#IPS[@]} -eq 0 ]] && { red "✗ No se encontró ninguna impresora. Pásalas como argumento."; exit 1; }
-  grn "Encontradas: ${IPS[*]}"
+  if [[ ${#IPS[@]} -eq 0 ]]; then
+    red "✗ Ninguna máquina con SSH abierto en $SUBNET.0/24."
+    ylw "  O las IPs están en otra subred (PRINTER_SUBNET=…), o tienen SSH/modo root apagado."
+    exit 1
+  fi
+  grn "Con SSH abierto: ${IPS[*]}"
 fi
 
 # 3) Copiar la llave y verificar
 OK=0; BAD=0
 for ip in "${IPS[@]}"; do
   printf '\n── %s ─────────────────\n' "$ip"
-  # ssh-copy-id no viene en todos los macOS; el fallback hace lo mismo a mano.
+  # Primero el puerto: sin SSH escuchando, ssh-copy-id solo confunde. Un
+  # "Connection refused" aquí suele ser una IP vieja (DHCP) o el modo root
+  # apagado en la impresora.
+  if command -v nc >/dev/null 2>&1 && ! nc -z -G 3 -w 3 "$ip" 22 >/dev/null 2>&1; then
+    red "✗ $ip — nadie escucha en el puerto 22."
+    ylw "   ¿IP correcta? (son DHCP y se mueven) ¿modo root/SSH activado en la máquina?"
+    BAD=$((BAD+1)); continue
+  fi
   if command -v ssh-copy-id >/dev/null 2>&1; then
-    ssh-copy-id -i "$KEY.pub" -o StrictHostKeyChecking=no "$USER_SSH@$ip" >/dev/null 2>&1 || \
-      ssh-copy-id -i "$KEY.pub" -o StrictHostKeyChecking=no "$USER_SSH@$ip"
+    ssh-copy-id -i "$KEY.pub" -o StrictHostKeyChecking=no "$USER_SSH@$ip"
   else
     ssh -o StrictHostKeyChecking=no "$USER_SSH@$ip" \
       'mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys' < "$KEY.pub"
@@ -62,7 +85,7 @@ for ip in "${IPS[@]}"; do
   if ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=8 "$USER_SSH@$ip" 'echo ok' >/dev/null 2>&1; then
     grn "✅ $ip — el bridge ya puede recuperarla sin contraseña"; OK=$((OK+1))
   else
-    red "✗ $ip — sigue pidiendo contraseña. Revisa usuario/clave y reintenta."; BAD=$((BAD+1))
+    red "✗ $ip — la llave no quedó instalada (¿contraseña incorrecta, o /home sin permiso de escritura?)"; BAD=$((BAD+1))
   fi
 done
 

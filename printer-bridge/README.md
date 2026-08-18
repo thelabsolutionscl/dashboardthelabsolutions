@@ -257,9 +257,13 @@ cd ~/dashboardthelabsolutions/printer-bridge
 ```
 
 Copia la llave pública del iMac a cada impresora (pide la contraseña una vez;
-en el parque es `creality`) y verifica que después entra sin ella. Ojo: el
-barrido automático solo ve impresoras con Moonraker **vivo** — las que están
-caídas, que son justo las que hay que poder recuperar, pásalas como argumento.
+en el parque es `creality`) y verifica que después entra sin ella. Sin
+argumentos barre la red buscando el **puerto 22**, no Moonraker, así también
+encuentra a las que tienen la telemetría caída.
+
+Si una máquina sale como *"nadie escucha en el puerto 22"*, o su IP cambió
+(son DHCP) o tiene el modo root/SSH apagado — y sin SSH el botón del
+dashboard tampoco podrá recuperarla.
 
 > Alternativa sin llaves: `PRINTER_SSH_PASS=creality` en el entorno del bridge.
 > Requiere `sshpass` en el iMac (`brew install hudochenkov/sshpass/sshpass`) y
