@@ -346,8 +346,12 @@ function finPlazoDefault(){const v=parseInt(localStorage.getItem('fin_plazo_defa
 function setFinPlazoDefault(v){const n=parseInt(v)||30;localStorage.setItem('fin_plazo_default',Math.max(0,Math.min(365,n)));try{finRenderCobrar();finRenderAging();}catch(e){}}
 // Vencimiento real de una factura: usa fecha explícita o plazo propio si existen; si no, el plazo por defecto
 function finVenc(r){
-  if(r&&r.venc){const d=new Date(r.venc);if(!isNaN(d))return d;}
-  const base=new Date(`${r.year}-${r.mes}-01`).getTime();
+  // Anclar a medianoche LOCAL (Chile). new Date('YYYY-MM-DD') se parsea como UTC,
+  // que en Chile (UTC-4/-3) cae ~20:00 del día ANTERIOR: los "días de mora" se
+  // adelantaban un día durante la tarde/noche (aging inflado, cobranza gatillada
+  // antes de tiempo, CSV descuadrado). El resto del repo ya ancla con 'T00:00:00'.
+  if(r&&r.venc){const d=new Date(String(r.venc).slice(0,10)+'T00:00:00');if(!isNaN(d))return d;}
+  const base=new Date(`${r.year}-${r.mes}-01T00:00:00`).getTime();
   const plazo=(r&&r.plazoDias>0)?r.plazoDias:finPlazoDefault();
   return new Date(base+plazo*86400000);
 }
