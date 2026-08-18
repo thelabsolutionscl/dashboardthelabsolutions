@@ -121,3 +121,15 @@ test('el dashboard pide la recuperación al bridge, con token y sin bloquear par
   const waitMs=Number(BRIDGE.match(/const RECOVER_WAIT_MS = (\d+)/)[1]);
   assert.ok(ms>sshMs+waitMs,`el dashboard (${ms}ms) debe esperar más que el peor caso del bridge (${sshMs+waitMs}ms)`);
 });
+
+// Cloudflare descarta los 5xx del origen y los reemplaza por su página de error,
+// que no lleva cabeceras CORS: en el navegador eso no es "recibí un 502", es un
+// fetch rechazado sin explicación. Por el túnel, un 5xx honesto es invisible.
+test('el bridge no responde con 5xx a través del túnel',()=>{
+  const handler=BRIDGE.slice(BRIDGE.indexOf('const mRec ='),BRIDGE.indexOf('// Mantención: estado de config'));
+  assert.match(handler,/res\.writeHead\(200, \{ 'Content-Type': 'application\/json' \}\)/,'el veredicto va en el cuerpo, no en el status');
+  assert.doesNotMatch(handler,/writeHead\(5\d\d/,'ningún 5xx: Cloudflare se lo come');
+  assert.doesNotMatch(handler,/jsonError\(res, 5\d\d/,'tampoco por la vía de error');
+  assert.match(BRIDGE,/jsonError\(res, 424, 'impresora inaccesible/,'el proxy usa 424, que sí atraviesa el túnel');
+  assert.match(MAQ,/\(r\.status===424\|\|r\.status===502\)\?'La impresora no responde al bridge'/,'el dashboard entiende el 424 nuevo y el 502 de un bridge viejo');
+});

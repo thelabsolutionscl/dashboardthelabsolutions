@@ -420,7 +420,7 @@ async function fetchPrinterStatus(m){
     const path='/printer/objects/query?'+objects.map(encodeURIComponent).join('&')+_printerLightQuerySuffix(m.id);
     const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
     if(!r.ok){
-      const reason=r.status===401?'Token del bridge inválido o vencido':r.status===502?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
+      const reason=r.status===401?'Token del bridge inválido o vencido':(r.status===424||r.status===502)?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
       return _printerFetchFailure(m.id,ip,reason,r.status);
     }
     const d=await r.json();const s=d.result?.status||{};
