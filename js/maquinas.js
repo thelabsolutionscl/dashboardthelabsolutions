@@ -677,7 +677,7 @@ function renderMonitorGrid(){
         <div style="font-size:12px;color:#ffaa00;font-weight:700;margin-bottom:4px">📡 Telemetría caída · la máquina está viva</div>
         <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px;line-height:1.45">Responde en el puerto ${uiPort} pero Moonraker no contesta. <b style="color:var(--text2)">Puede estar imprimiendo sin que el dashboard lo vea</b> — revísala antes de darla por libre.</div>
         <button id="recov_${m.id}" onclick="recoverPrinterTelemetry('${m.id}')" style="width:100%;background:rgba(255,170,0,0.18);border:1px solid rgba(255,170,0,0.5);color:#ffaa00;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:6px">🔧 Recuperar telemetría</button>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.4">Reinicia Moonraker desde el bridge del taller. No interrumpe la impresión en curso.<br>A mano, por SSH: <span style="font-family:monospace;color:var(--text2)">${escapeHtml(svc)}</span></div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.4">Reinicia Moonraker desde el bridge del taller. No interrumpe la impresión en curso.<br>A mano, por SSH: <span style="font-family:monospace;color:var(--text2)">ssh root@${ip} '${escapeHtml(svc)}'</span></div>
         <a href="${escapeHtml(_printerPortUrl(ip,uiPort,'/'))}" target="_blank" rel="noopener" style="display:block;text-align:center;background:var(--surface2);border:1px solid var(--border2);color:var(--text3);border-radius:7px;padding:7px;font-size:12px;font-weight:700;text-decoration:none">🔎 Abrir la impresora</a>
       </div>`;
     } else if(s.state==='offline'){
