@@ -257,13 +257,25 @@ cd ~/dashboardthelabsolutions/printer-bridge
 ```
 
 Copia la llave pública del iMac a cada impresora (pide la contraseña una vez;
-en el parque es `creality`) y verifica que después entra sin ella. Sin
-argumentos barre la red buscando el **puerto 22**, no Moonraker, así también
-encuentra a las que tienen la telemetría caída.
+en el parque es `creality`) y verifica que después entra sin ella.
 
-Si una máquina sale como *"nadie escucha en el puerto 22"*, o su IP cambió
-(son DHCP) o tiene el modo root/SSH apagado — y sin SSH el botón del
-dashboard tampoco podrá recuperarla.
+**Sin argumentos barre la red y te imprime el mapa** — SSH, Moonraker y web por
+IP — antes de instalar nada. Es la forma rápida de ver dónde quedó cada máquina
+cuando el DHCP las movió: `moonraker:200` es una impresora sana, `moonraker:000`
+con `web:200` es una con la telemetría caída.
+
+Tres cosas que resuelve solo, porque el parque las provoca:
+
+- **Host key cambiada** (`REMOTE HOST IDENTIFICATION HAS CHANGED`): pasa cuando
+  una IP cambia de dueño o se reflashea una máquina. Limpia la entrada vieja y
+  no guarda las nuevas — igual que hace el bridge.
+- **Dropbear antiguo**: las K1/Ender mips aceptan la llave ed25519, dicen
+  "1 key added" y aun así no dejan entrar. Al detectarlo reintenta con RSA.
+- **`Too many authentication failures`**: ofrece solo la llave que corresponde,
+  sin vaciar los intentos con las del agente.
+
+Si una máquina queda sin llave, el mensaje dice cuál de las causas fue. Sin SSH
+no hay recuperación posible: hay que activarle el modo root en la impresora.
 
 > Alternativa sin llaves: `PRINTER_SSH_PASS=creality` en el entorno del bridge.
 > Requiere `sshpass` en el iMac (`brew install hudochenkov/sshpass/sshpass`) y
