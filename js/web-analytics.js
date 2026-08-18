@@ -103,7 +103,7 @@ function renderAdsKPIs(data,days){
   renderAdsCRMPanel(data,days);
   // — Snapshot, tendencias vs período anterior, sync label, stale warning
   if(!data.demo) adsSaveSnapshot(data,days);
-  const prev=adsGetPrevSnapshot();
+  const prev=adsGetPrevSnapshot(days);
   if(prev){
     const trendHtml=(curr,old,higherGood)=>{
       if(!old||old===0) return '';

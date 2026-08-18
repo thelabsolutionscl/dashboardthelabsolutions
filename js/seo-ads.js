@@ -501,10 +501,16 @@ function adsSaveSnapshot(data,days){
   localStorage.setItem('ads_snapshots',JSON.stringify(snaps));
   localStorage.setItem('ads_last_sync',new Date().toISOString());
 }
-function adsGetPrevSnapshot(){
+function adsGetPrevSnapshot(days){
   let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
-  if(snaps.length<2) return null;
-  return snaps[snaps.length-2];
+  // Comparar SOLO contra un snapshot del MISMO largo de ventana. Los totales
+  // (impresiones/clics/conversiones) escalan con los días, así que tomar el
+  // snapshot anterior sin mirar `days` comparaba 7 vs 30 días y pintaba subidas o
+  // caídas falsas de ~±300%. snaps va ordenado por fecha; el de HOY es el último
+  // (mismo `date`); el "anterior" válido es el más reciente ANTES de hoy con igual `days`.
+  const today=hoyCL();
+  const previos=snaps.filter(s=>s&&s.date!==today&&(days==null||s.days===days));
+  return previos.length?previos[previos.length-1]:null;
 }
 function adsLastSyncStr(){
   const ts=localStorage.getItem('ads_last_sync');
