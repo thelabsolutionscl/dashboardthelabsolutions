@@ -12985,9 +12985,18 @@ async function generarRetainer(id,silent){
   const arr=_retainers();const ret=arr.find(x=>x.id===id);if(!ret)return false;
   const mk=_mesActualKey();
   if(ret.ultimoGenerado===mk){if(!silent)toast('Este contrato ya generó el pedido de este mes','info');return false;}
-  const num=await _retainerCrearPedido(ret);
-  if(!num){if(!silent)toast('No se pudo generar el pedido','error');return false;}
+  // Marca el mes ANTES de crear el pedido (que es async). Si no, un doble clic en
+  // "▶ Generar" —o un clic durante el auto-chequeo— pasan ambos este guard y crean
+  // DOS pedidos del mismo mes: como JS es de un solo hilo, este check→marca→save
+  // corre atómico antes de ceder en el await, y la llamada concurrente ya ve la marca.
+  const prev=ret.ultimoGenerado;
   ret.ultimoGenerado=mk;_retainersSaveArr(arr);
+  const num=await _retainerCrearPedido(ret);
+  if(!num){
+    // La creación falló: revertir la marca para poder reintentar (solo si nadie más la avanzó).
+    const a2=_retainers();const r2=a2.find(x=>x.id===id);if(r2&&r2.ultimoGenerado===mk){r2.ultimoGenerado=prev;_retainersSaveArr(a2);}
+    if(!silent)toast('No se pudo generar el pedido','error');return false;
+  }
   if(!silent)toast(`✓ Pedido ${num} generado para ${ret.clienteNombre||'el cliente'}`,'success');
   try{renderRetainers();}catch(e){}
   return true;
