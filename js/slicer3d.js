@@ -585,7 +585,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const noz=+el('slNozzle').value,spec=SPECS[el('slPrinter').value];
     const mat=MATS[el('slMaterial').value]||{};
     const vmax=Math.min(spec.vmax,mat.vcap||spec.vmax); // tope de velocidad por impresora Y material (TPU 35mm/s)
-    const cl=(v,a,b,d)=>{v=+v;return isFinite(v)?Math.min(b,Math.max(a,v)):d;};
+    const cl=(v,a,b,d)=>{v=+v;return Math.min(b,Math.max(a,isFinite(v)?v:d));}; // el default también se acota: speed=60 no debe superar el tope del material (TPU 35mm/s) si la IA omite el campo
     return{
       layerHeight:cl(p.layerHeight,0.05,noz*0.8,noz*0.5),
       firstLayerHeight:cl(p.firstLayerHeight,0.1,noz*0.9,noz*0.6),
@@ -608,7 +608,8 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
       excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
-      seamMode:['cercano','alineado','agudo'].includes(p.seamMode)?p.seamMode:'cercano',
+      seamMode:['cercano','alineado','agudo','aleatorio'].includes(p.seamMode)?p.seamMode:'cercano', // 'aleatorio' lo ofrece la UI, lo pide el prompt y lo implementa _seamStart; sin él aquí se descartaba en silencio
+
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
       bridgeDetect:!!p.bridgeDetect&&p.bridgeDetect!=='no',
       arcFitting:!!p.arcFitting&&p.arcFitting!=='no',
