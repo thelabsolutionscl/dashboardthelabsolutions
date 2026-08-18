@@ -578,6 +578,11 @@ async function _preciosProvBackup(){
 }
 // Normaliza el nombre de ítem para agrupar (minúsculas, sin tildes ni espacios extra)
 function _normItem(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();}
+// Clave para comparar precios de un mismo ítem: incluye la UNIDAD. Un precio en
+// $/kg y otro en $/caja del mismo ítem NO son comparables; agrupar solo por
+// nombre elegía como "más barato" al de la unidad con menor número absoluto y
+// anunciaba un ahorro inexistente. La unidad entra en la identidad del ítem.
+function _precioKey(item,unidad){return _normItem(item)+'|'+_normItem(unidad);}
 function _preciosDeProv(prov){
   const k=String(prov||'').toLowerCase();
   return _preciosProv().filter(p=>String(p.prov||'').toLowerCase()===k).sort((a,b)=>_normItem(a.item).localeCompare(_normItem(b.item))||String(b.fecha||'').localeCompare(String(a.fecha||'')));
@@ -623,7 +628,7 @@ function _preciosProvFichaHtml(prov){
     const idx=mismos.findIndex(x=>x.id===p.id);const prev=idx>0?mismos[idx-1]:null;
     let trend='';
     if(prev){const d=p.precio-prev.precio;if(d>0)trend=`<span style="color:var(--danger);font-size:10px" title="Subió desde ${formatCLP(prev.precio)}">▲ ${formatCLP(Math.abs(d))}</span>`;else if(d<0)trend=`<span style="color:var(--accent3);font-size:10px" title="Bajó desde ${formatCLP(prev.precio)}">▼ ${formatCLP(Math.abs(d))}</span>`;else trend=`<span style="color:var(--text3);font-size:10px">=</span>`;}
-    const b=best[_normItem(p.item)];
+    const b=best[_precioKey(p.item,p.unidad)];
     const esMejor=b&&b.prov.toLowerCase()===String(prov).toLowerCase()&&b.precio===p.precio;
     return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;background:var(--surface3);border-radius:5px;padding:6px 10px">
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.item)}${esMejor?' <span class="badge badge-green" style="font-size:8px" title="Mejor precio registrado para este ítem">mejor precio</span>':''}${p.nota?` <span style="color:var(--text3)" title="${escapeHtml(p.nota)}">🛈</span>`:''}</span>
@@ -639,8 +644,9 @@ function _preciosProvFichaHtml(prov){
 function _mejorPrecioPorItem(){
   const best={};
   _preciosProv().forEach(p=>{
-    const k=_normItem(p.item);if(!k)return;
-    if(!best[k]||p.precio<best[k].precio) best[k]={prov:p.prov,precio:p.precio,unidad:p.unidad,fecha:p.fecha,item:p.item};
+    if(!_normItem(p.item))return;
+    const key=_precioKey(p.item,p.unidad);
+    if(!best[key]||p.precio<best[key].precio) best[key]={prov:p.prov,precio:p.precio,unidad:p.unidad,fecha:p.fecha,item:p.item};
   });
   return best;
 }
@@ -650,13 +656,13 @@ function renderMejorPrecio(){
   const all=_preciosProv();
   if(!all.length){el.innerHTML='';return;}
   const byItem={};
-  all.forEach(p=>{const k=_normItem(p.item);if(!k)return;(byItem[k]=byItem[k]||{item:p.item,ofertas:[]}).ofertas.push(p);});
-  // último precio por proveedor por ítem (no acumular históricos del mismo proveedor)
+  all.forEach(p=>{if(!_normItem(p.item))return;const key=_precioKey(p.item,p.unidad);(byItem[key]=byItem[key]||{item:p.item,unidad:p.unidad,ofertas:[]}).ofertas.push(p);});
+  // último precio por proveedor por ítem+unidad (no acumular históricos del mismo proveedor)
   const filas=Object.values(byItem).map(g=>{
     const ultimoPorProv={};
     g.ofertas.forEach(o=>{const kp=String(o.prov||'').toLowerCase();if(!ultimoPorProv[kp]||String(o.fecha||'')>String(ultimoPorProv[kp].fecha||''))ultimoPorProv[kp]=o;});
     const ofs=Object.values(ultimoPorProv).sort((a,b)=>a.precio-b.precio);
-    return {item:g.item,ofs};
+    return {item:g.item,unidad:g.unidad,ofs};
   }).filter(f=>f.ofs.length>=2).sort((a,b)=>b.ofs.length-a.ofs.length);
   if(!filas.length){el.innerHTML='';return;}
   const rows=filas.map(f=>{
@@ -665,7 +671,7 @@ function renderMejorPrecio(){
     const chips=f.ofs.map((o,i)=>`<span class="badge ${i===0?'badge-green':'badge-gray'}" style="font-size:9px" title="${escapeHtml(o.fecha||'')}">${escapeHtml(o.prov||'—')}: ${formatCLP(o.precio)}</span>`).join(' ');
     return `<div style="padding:9px 14px;border-top:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span style="flex:1;min-width:0;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.item)}</span>
+        <span style="flex:1;min-width:0;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.item)} <span style="color:var(--text3);font-weight:400;font-size:10px">/${escapeHtml(f.unidad||'u')}</span></span>
         ${ahorro>0?`<span style="font-size:10.5px;color:var(--accent3)" title="Ahorro del más barato frente al más caro">ahorro hasta ${formatCLP(ahorro)} (${pct}%)</span>`:''}
       </div>
       <div style="display:flex;gap:5px;flex-wrap:wrap">${chips}</div>

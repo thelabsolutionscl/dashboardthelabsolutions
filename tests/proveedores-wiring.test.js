@@ -138,7 +138,9 @@ test('precios se comparan por ítem y tienen respaldo best-effort', () => {
   assert.match(fn('_preciosProvSaveArr'), /_listaGuardar\(_PRECIOS_PROV_KEY/);
   assert.match(fn('_preciosProvSaveArr'), /_preciosProvBackup/);
   assert.match(fn('_preciosProvBackup'), /_monitorUpsert\(['"]PRECIOS_PROV['"]/);
-  assert.match(fn('_mejorPrecioPorItem'), /precio\s*<\s*best\[k\]\.precio/);
+  assert.match(fn('_mejorPrecioPorItem'), /precio\s*<\s*best\[key\]\.precio/);
+  // La clave incluye la UNIDAD: no se comparan precios de unidades distintas.
+  assert.match(fn('_mejorPrecioPorItem'), /_precioKey\(p\.item,p\.unidad\)/);
   assert.match(fn('renderMejorPrecio'), /ultimoPorProv|último precio por proveedor/);
 });
 

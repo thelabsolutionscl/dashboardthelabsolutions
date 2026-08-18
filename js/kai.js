@@ -381,7 +381,7 @@ CAPACIDADES Y REGLAS:
         if(f['Condiciones de pago'])L.push('Pago: '+f['Condiciones de pago']);
         try{const pr=(typeof _preciosDeProv==='function')?_preciosDeProv(f['Nombre']):[];
           if(pr.length){const best=(typeof _mejorPrecioPorItem==='function')?_mejorPrecioPorItem():{};
-            L.push('Precios registrados ('+pr.length+'): '+pr.slice(0,6).map(p=>{const b=best[norm(p.item)];const mejor=b&&norm(b.prov)===norm(f['Nombre'])&&b.precio===p.precio;return p.item+' '+clp(p.precio)+'/'+(p.unidad||'u')+(mejor?' (mejor precio)':'');}).join('; '));}
+            L.push('Precios registrados ('+pr.length+'): '+pr.slice(0,6).map(p=>{const b=best[typeof _precioKey==='function'?_precioKey(p.item,p.unidad):norm(p.item)];const mejor=b&&norm(b.prov)===norm(f['Nombre'])&&b.precio===p.precio;return p.item+' '+clp(p.precio)+'/'+(p.unidad||'u')+(mejor?' (mejor precio)':'');}).join('; '));}
           else L.push('Sin precios registrados aún.');
         }catch(e){}
         return L.join('\n');
