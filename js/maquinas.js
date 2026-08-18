@@ -70,7 +70,11 @@ function getPrinterTunnelToken(){
   // token antiguo guardado en un teléfono no invalida silenciosamente la ficha.
   return !custom||custom===defaultTunnel?(d||local):(local||d);
 }
-function _appendBridgeToken(u){const tk=getPrinterTunnelToken();return tk?u+(u.includes('?')?'&':'?')+'bt='+encodeURIComponent(tk):u;}
+// El token viaja en la URL, no en una cabecera: una cabecera propia obliga al
+// navegador a un preflight OPTIONS, y en redes móviles ese preflight se cae —
+// el fetch se rechaza y la máquina parece muerta. Con ?bt= no hay preflight.
+// Idempotente: printerMediaUrl lo aplica sobre URLs que ya lo traen.
+function _appendBridgeToken(u){if(/[?&]bt=/.test(u))return u;const tk=getPrinterTunnelToken();return tk?u+(u.includes('?')?'&':'?')+'bt='+encodeURIComponent(tk):u;}
 // Diagnóstico del túnel/bridge desde el propio dashboard (Mi cuenta → Túnel Impresoras)
 async function testPrinterBridge(statusId){
   const el=document.getElementById(statusId);
@@ -81,7 +85,7 @@ async function testPrinterBridge(statusId){
   catch(e){set('var(--danger)',`✗ No se alcanza ${url}. Revisa que el bridge y el túnel estén corriendo en el iMac.`);return;}
   if(!tk){set('var(--warn)','⚠ Túnel OK, pero falta el token del bridge. Pégalo y pulsa Guardar.');return;}
   try{
-    const r=await fetch(url+'/authcheck',{signal:AbortSignal.timeout(7000),headers:{'X-Bridge-Token':tk}});
+    const r=await fetch(url+'/authcheck?bt='+encodeURIComponent(tk),{signal:AbortSignal.timeout(7000)});
     if(r.status===401){set('var(--danger)','✗ Token incorrecto. Copia el token actual del bridge (lo imprime al arrancar / lo da install-launchd.sh).');return;}
     if(!r.ok)throw 0;
     set('var(--accent3)','✅ Bridge OK y token válido. Pon Máquinas en 🌐 Remoto.');
@@ -94,14 +98,14 @@ async function restartPrinterBridge(statusId){
   if(!tk){set('var(--warn)','Necesitas el token guardado para reiniciar el bridge.');return;}
   if(!confirm('¿Reiniciar el bridge del iMac? Se reconecta en unos segundos.'))return;
   set('var(--text3)','Reiniciando bridge…');
-  try{await fetch(url+'/restart',{method:'POST',signal:AbortSignal.timeout(7000),headers:{'X-Bridge-Token':tk}});}
+  try{await fetch(url+'/restart?bt='+encodeURIComponent(tk),{method:'POST',signal:AbortSignal.timeout(7000)});}
   catch(e){/* la conexión se corta al salir el proceso: es esperado */}
   set('var(--text3)','Bridge reiniciándose… reprobando en unos segundos.');
   setTimeout(()=>testPrinterBridge(statusId),4500);
 }
 function printerUrl(ip,path){
   if(typeof _isLocalMode==='function'&&_isLocalMode())return`http://${ip}:${MOONRAKER_PORT}${path}`;
-  return`${getPrinterTunnel()}/${ip}${path}`;
+  return _appendBridgeToken(`${getPrinterTunnel()}/${ip}${path}`);
 }
 function printerMediaUrl(ip,path){return _appendBridgeToken(printerUrl(ip,path));}
 // Webcam: en modo remoto reescribe http://IP_LAN:PUERTO/ruta → túnel /{ip}:{puerto}/ruta
@@ -233,7 +237,9 @@ function getPrinterApiKey(id){
   if(legacy){sessionStorage.setItem(key,legacy);localStorage.removeItem(key);}
   return legacy;
 }
-function getPrinterAuthHeaders(id){const headers={},k=getPrinterApiKey(id);if(k)headers['X-Api-Key']=k;if(!(typeof _isLocalMode==='function'&&_isLocalMode())){const token=getPrinterTunnelToken();if(token)headers['X-Bridge-Token']=token;}return headers;}
+// En remoto el token va en la URL (printerUrl lo agrega): mandarlo además como
+// cabecera solo añadiría el preflight que queremos evitar.
+function getPrinterAuthHeaders(id){const headers={},k=getPrinterApiKey(id);if(k)headers['X-Api-Key']=k;return headers;}
 
 function _printerInitialStatus(m){return{state:getPrinterIp(m)?'connecting':'noip',checkedAt:0,lastSeenAt:0};}
 // Una impresora que no contesta en Moonraker puede estar apagada o estar
@@ -873,7 +879,7 @@ async function recoverPrinterTelemetry(id){
   toast(`🔧 Reiniciando Moonraker en ${m.nombre} #${m.numG}…`,'info');
   const tk=getPrinterTunnelToken();
   try{
-    const r=await fetch(`${getPrinterTunnel()}/recover/${ip}`,{method:'POST',signal:AbortSignal.timeout(_RECOVER_TIMEOUT_MS),headers:tk?{'X-Bridge-Token':tk}:{}});
+    const r=await fetch(_appendBridgeToken(`${getPrinterTunnel()}/recover/${ip}`),{method:'POST',signal:AbortSignal.timeout(_RECOVER_TIMEOUT_MS)});
     let d={};try{d=await r.json();}catch(_){}
     const detalle=d.error||(Array.isArray(d.steps)?d.steps[d.steps.length-1]:'')||`HTTP ${r.status}`;
     if(r.status===401)toast('Token del bridge inválido — pégalo de nuevo en Mi cuenta → Túnel Impresoras','error');
@@ -882,9 +888,11 @@ async function recoverPrinterTelemetry(id){
     else if(r.ok&&d.ok)toast(`✅ Telemetría recuperada · ${m.nombre} #${m.numG}`,'success');
     else toast('No se pudo recuperar: '+detalle,'error');
   }catch(e){
+    console.error('[recover]',e);
+    let host=getPrinterTunnel();try{host=new URL(host).host;}catch(_){}
     toast(e?.name==='TimeoutError'||e?.name==='AbortError'
       ?'La recuperación tardó demasiado — revisa la impresora y su moonraker.log'
-      :'No se pudo hablar con el bridge del taller','error');
+      :`No se pudo hablar con el bridge (${host}) — ${e?.name||'error de red'}`,'error');
   }finally{
     if(btn){btn.disabled=false;btn.style.opacity='';btn.innerHTML=label;}
     delete _aliveProbe[id];   // el sondeo cacheado quedó obsoleto

@@ -174,8 +174,10 @@ test('credenciales Moonraker quedan limitadas a la sesión',()=>{
   assert.match(MAQ,/sessionStorage\.setItem\(key,val\)/);
   assert.match(MAQ,/return !custom\|\|custom===defaultTunnel\?\(d\|\|local\):\(local\|\|d\)/);
   assert.match(MAQ,/sessionStorage\.getItem\('printer_tunnel_token'\)/);
-  assert.match(MAQ,/headers\['X-Bridge-Token'\]=token/);
-  assert.match(MAQ,/function printerUrl\(ip,path\)[\s\S]*?return`\$\{getPrinterTunnel\(\)\}\/\$\{ip\}\$\{path\}`/);
+  // El token viaja en la URL (?bt=), no como cabecera: una cabecera propia
+  // dispara un preflight OPTIONS que en redes móviles tumba la petición entera.
+  assert.match(MAQ,/function printerUrl\(ip,path\)[\s\S]*?return _appendBridgeToken\(`\$\{getPrinterTunnel\(\)\}\/\$\{ip\}\$\{path\}`\)/);
+  assert.doesNotMatch(MAQ,/headers\['X-Bridge-Token'\]/);
   assert.match(MAQ,/function printerMediaUrl\(ip,path\)\{return _appendBridgeToken\(printerUrl\(ip,path\)\);\}/);
 });
 

@@ -110,7 +110,7 @@ test('el dashboard pide la recuperación al bridge, con token y sin bloquear par
   const fn=functionSource(MAQ,'recoverPrinterTelemetry');
   assert.match(fn,/\$\{getPrinterTunnel\(\)\}\/recover\/\$\{ip\}/,'va al bridge del taller, no a Moonraker (que está caído)');
   assert.match(fn,/method:'POST'/);
-  assert.match(fn,/'X-Bridge-Token':tk/,'autenticado con el token del bridge');
+  assert.match(fn,/_appendBridgeToken\(`\$\{getPrinterTunnel\(\)\}\/recover\/\$\{ip\}`\)/,'token en la URL: una cabecera propia obliga a un preflight que en móvil se cae');
   assert.match(fn,/AbortSignal\.timeout\(_RECOVER_TIMEOUT_MS\)/,'no puede quedarse colgado');
   assert.match(fn,/r\.status===404/,'un bridge sin actualizar debe explicarse, no fallar en silencio');
   assert.match(fn,/delete _aliveProbe\[id\]/,'el sondeo cacheado queda obsoleto tras recuperar');
