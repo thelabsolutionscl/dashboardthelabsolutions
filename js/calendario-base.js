@@ -89,7 +89,13 @@ function _calCrmEvents(){
 }
 function _calDisplayEvents(){return _calAll().filter(e=>!e.del).map(e=>({...e,source:e.source||'manual',type:e.type||'manual',color:_calColor(e)})).concat(_calCrmEvents());}
 function _calEventById(id){return _calDisplayEvents().find(e=>e.id===id)||null;}
-function _calAllowedSync(ev){const p=_calSyncPrefs();if(ev.source!=='crm')return p.manual!==false;const mine=_calUserId();return p[ev.syncKey]!==false&&(!p.onlyMine||(!!mine&&(ev.personas||[]).includes(mine)));}
+function _calAllowedSync(ev){const p=_calSyncPrefs();if(ev.source!=='crm')return p.manual!==false;const mine=_calUserId();
+  // "Solo los míos" filtra por identidad. Si el login NO está mapeado a una
+  // persona (mine===''; p.ej. hola@thelab.solutions), no hay "míos" que filtrar:
+  // se trata onlyMine como inactivo. Antes excluía TODOS los eventos, y como los
+  // ya sincronizados con gcal se convierten en lápidas (del:true), activar
+  // "Solo los míos" sin identidad BORRABA de Google los calendarios del equipo.
+  return p[ev.syncKey]!==false&&(!p.onlyMine||!mine||(ev.personas||[]).includes(mine));}
 function _calSyncCandidates(){
   const current=_calDisplayEvents(),meta=_calCrmMeta(),ids=new Set(current.map(e=>e.id)),out=[];
   current.forEach(ev=>{const allowed=_calAllowedSync(ev);if(allowed)out.push(ev);else if(Object.keys(ev.gcal||{}).length)out.push({...ev,del:true,_syncDisabled:true});});
