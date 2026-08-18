@@ -13620,6 +13620,17 @@ function startQAFlow(id){
 window.startMaintFlow=startMaintFlow;window.startNewProveedorFlow=startNewProveedorFlow;window.startPaymentFlow=startPaymentFlow;window.startPedidoOnboardingFlow=startPedidoOnboardingFlow;window.startQAFlow=startQAFlow;
 
 // ── REPORTES ──────────────────────────────────────────────────
+// ¿El pedido cuenta como DESPACHADO dentro de la semana que arranca en weekStart?
+// Un solo criterio para "Revenue semana" y para "Pedidos despachados": estado
+// Despachado/Completado y fecha de despacho (real, o la de entrega como respaldo)
+// dentro de la semana. Antes el revenue NO filtraba por estado ni tenía tope, así
+// que sumaba TODO el backlog activo con entrega FUTURA (planificada) e inflaba el
+// número que se guarda en la tabla Reportes — contradiciendo al conteo de al lado.
+function _pedDespachadoEnSemana(f,weekStart){
+  if(!['Despachado','Completado'].includes((f&&f['Estado pedido'])||'')) return false;
+  const d=(f&&(f['Fecha despacho']||f['Fecha entrega']))||'';
+  return !!d&&new Date(d+'T00:00:00')>=weekStart;
+}
 function prefillReporte(){
   const today=new Date();today.setHours(0,0,0,0);
   const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
@@ -13628,11 +13639,8 @@ function prefillReporte(){
   const weekNum=Math.ceil(((today-jan1)/86400000+jan1.getDay()+1)/7);
   const mesLabel=today.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
   document.getElementById('rep-semana').value=`Semana ${weekNum} — ${mesLabel}`;
-  // Revenue neto esta semana
-  const revSemana=state.pedidos.reduce((s,p)=>{
-    const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||'';
-    return d&&new Date(d+'T00:00:00')>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;
-  },0);
+  // Revenue neto de lo DESPACHADO esta semana (mismo criterio que "pedidos despachados")
+  const revSemana=state.pedidos.reduce((s,p)=>_pedDespachadoEnSemana(p.fields,weekStart)?s+Math.round((p.fields['Monto total (CLP)']||0)/1.19):s,0);
   document.getElementById('rep-revenue').value=revSemana;
   // Cotizaciones creadas esta semana
   const cotSem=state.cotizaciones.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart);
@@ -13640,12 +13648,7 @@ function prefillReporte(){
   document.getElementById('rep-cot-apr').value=cotSem.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
   // Pedidos activos y despachados esta semana
   document.getElementById('rep-ped-act').value=state.pedidos.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
-  const pedDesSem=state.pedidos.filter(p=>{
-    const f=p.fields;
-    if(!['Despachado','Completado'].includes(f['Estado pedido']||'')) return false;
-    const d=f['Fecha despacho']||f['Fecha entrega']||'';
-    return d&&new Date(d+'T00:00:00')>=weekStart;
-  }).length;
+  const pedDesSem=state.pedidos.filter(p=>_pedDespachadoEnSemana(p.fields,weekStart)).length;
   document.getElementById('rep-ped-des').value=pedDesSem;
   toast('✓ Métricas cargadas desde datos actuales','success');
 }
