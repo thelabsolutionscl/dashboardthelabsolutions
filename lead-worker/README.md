@@ -45,6 +45,30 @@ Secretos (`npx wrangler secret put NOMBRE`):
 `TURNSTILE_SECRET` (opc.), `ANTHROPIC_API_KEY` (opc., si `AUTO_PROCESS_LEADS=true`),
 `PORTAL_SECRET` y `PORTAL_ADMIN_KEY` (portal del cliente).
 
+## Canario del formulario web (diario, 07:17 UTC)
+
+Una vez al día el Worker consulta `https://thelab.solutions/api/lead/health` —el
+chequeo que resuelve el endpoint igual que las server actions de la web— y
+**avisa por correo solo si los formularios dejaron de entregar al CRM**. Si todo
+está bien no manda nada.
+
+Nace del incidente del 2026-08-18: las fichas de la web entraron por email y no
+al CRM durante casi un mes, sin que nada fallara a la vista. El deploy de la web
+ya lo verifica al publicar; este canario cubre lo otro, que alguien borre una
+variable después y nadie se entere.
+
+| Variable | Default | Para qué |
+|---|---|---|
+| `LEAD_FORM_HEALTH_URL` | `https://thelab.solutions/api/lead/health` | Sobrescribe la URL del chequeo (staging, dominio nuevo) |
+| `LEADS_NOTIFY_TO` | `thelabsolutionscl@gmail.com` | Destino del aviso |
+
+Comprobarlo a mano en cualquier momento:
+
+```bash
+curl -s https://thelab.solutions/api/lead/health
+# {"ok":true,...} = los formularios entregan al pipeline
+```
+
 ## Desarrollo local
 ```bash
 cd lead-worker
