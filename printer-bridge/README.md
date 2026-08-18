@@ -288,9 +288,17 @@ curl -X POST "http://localhost:8347/recover/192.168.100.7?bt=TU_TOKEN"
 # {"ok":true,"moonraker":"up","steps":["moonraker.conf repuesto…","servicio reiniciado: …"]}
 ```
 
-Respuestas: `403` IP no privada · `409` ya hay una recuperación en curso para
-esa impresora · `503` desactivada (`BRIDGE_RECOVER=0`) · `502` con `error`
-explicando qué falló (SSH rechazado, sin `ssh`/`sshpass`, Moonraker no volvió).
+Responde **siempre 200**, con el veredicto en `ok` y el motivo en `error`
+(SSH rechazado, sin `ssh`/`sshpass`, Moonraker no volvió, recuperación
+desactivada). Los códigos de error quedan para lo que es culpa de quien llama:
+`401` token, `403` IP no privada, `405` no es POST, `409` ya hay una
+recuperación en curso.
+
+> **Por qué nunca un 5xx:** Cloudflare descarta los 5xx del origen y sirve su
+> propia página de error, que no lleva cabeceras CORS. En el navegador eso no
+> se ve como "recibí un 502" sino como un fetch rechazado sin explicación. Por
+> eso el proxy de impresoras también responde `424` —no `502`— cuando no
+> alcanza a la máquina.
 
 ## Seguridad
 

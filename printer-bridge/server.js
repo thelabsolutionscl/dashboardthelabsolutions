@@ -244,13 +244,22 @@ const server = http.createServer((req, res) => {
     const ip = mRec[1];
     if (req.method !== 'POST') { jsonError(res, 405, 'usa POST'); return; }
     if (!isPrivateIp(ip)) { jsonError(res, 403, 'solo IPs de red privada'); return; }
-    if (!RECOVER_ENABLED) { jsonError(res, 503, 'recuperación desactivada en el bridge (BRIDGE_RECOVER=0)'); return; }
+    if (!RECOVER_ENABLED) {
+      // 200 con ok:false, no 503: por el túnel un 5xx no llega nunca (ver más abajo)
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, code: 'desactivada', error: 'recuperación desactivada en el bridge (BRIDGE_RECOVER=0)', steps: [] }));
+      return;
+    }
     // Dos clics seguidos reiniciarían Moonraker en medio de su propio arranque
     if (_recovering.has(ip)) { jsonError(res, 409, 'ya hay una recuperación en curso para esa impresora'); return; }
     _recovering.add(ip);
+    // SIEMPRE 200, incluso cuando la recuperación falla: el veredicto va en el
+    // campo `ok` del cuerpo. Cloudflare descarta cualquier 5xx del origen y lo
+    // reemplaza por su página de error —sin cabeceras CORS—, así que un 502
+    // honesto llegaba al dashboard como un fetch rechazado sin explicación.
     recoverPrinter(ip)
-      .then(r => { res.writeHead(r.ok ? 200 : 502, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r)); })
-      .catch(e => jsonError(res, 500, e.message))
+      .then(r => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r)); })
+      .catch(e => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, code: 'error-interno', error: e.message, steps: [] })); })
       .finally(() => _recovering.delete(ip));
     return;
   }
@@ -311,7 +320,10 @@ const server = http.createServer((req, res) => {
     pres.pipe(res);
   });
   preq.on('timeout', () => preq.destroy(new Error('timeout — impresora no responde')));
-  preq.on('error', err => jsonError(res, 502, 'impresora inaccesible: ' + err.message));
+  // 424 y no 502 por lo mismo: Cloudflare no deja pasar los 5xx del origen, y
+  // el dashboard necesita distinguir "el bridge no llega a la impresora" de
+  // "no llego al bridge". Los 4xx sí atraviesan el túnel intactos.
+  preq.on('error', err => jsonError(res, 424, 'impresora inaccesible: ' + err.message));
   req.pipe(preq);
 });
 
