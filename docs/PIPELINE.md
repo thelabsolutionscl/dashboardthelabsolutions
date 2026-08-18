@@ -200,3 +200,44 @@ BASE_URL=http://localhost:8787 LEAD_KEY=tu_key ./scripts/test-pipeline.sh
 ```
 El script ejercita `/health`, `/lead`, `/webhooks/google-ads` y `/webhooks/linkedin`
 (incluye el caso de María) y verifica que cada respuesta traiga `clienteId` y `queueId`.
+
+---
+
+## 7. Cuando el lead llega por email pero no al CRM
+
+Pasó el **2026-08-18** con una ficha de Audit Partner SpA: el aviso llegó al
+correo y en Airtable no existía nada. El Worker estaba sano.
+
+**El síntoma engaña**: recibir el email hace pensar que el formulario funciona.
+Pero la web intenta **dos entregas independientes** —Worker y email (Resend)— y
+declaraba éxito si cualquiera de las dos salía. Con el email saliendo siempre,
+la pata del pipeline puede estar caída semanas sin que nadie lo note. Lo estuvo:
+el último lead web anterior en el CRM era del 20 de julio.
+
+**La causa**: las server actions de la web leían `NEXT_PUBLIC_LEAD_ENDPOINT`, y
+las `NEXT_PUBLIC_*` se **inlinean en tiempo de build**. Si el build de
+producción no las tiene, quedan horneadas como `undefined` y el lead nunca sale
+hacia el Worker. La ruta `/api/lead` seguía funcionando porque prefiere
+`LEAD_ENDPOINT`, que sí se lee del runtime.
+
+### Diagnóstico en dos minutos
+
+```bash
+# 1) ¿El Worker está vivo y acepta? (payload inválido: no crea nada)
+curl -s -X POST https://thelab.solutions/api/lead \
+  -H "Content-Type: application/json" -d '{"diagnostico":true}'
+# → {"ok":false,"error":"Falta nombre o empresa"}  = Worker + clave OK
+# → 401 / 403                                      = clave o Turnstile
+# → "no configurado"                               = falta LEAD_ENDPOINT
+```
+
+2. Busca el lead en Airtable (`Clientes` y `Agent_Queue`). Si no está en
+   **ninguna** de las dos, el Worker nunca lo recibió: el problema es de la web,
+   no del pipeline. Si está en `Clientes` pero no en `Agent_Queue`, el Worker lo
+   guardó y falló al encolar (revisa el aviso de "lead no guardado").
+
+3. Rescátalo a mano desde los datos del email, marcándolo en `Notas internas`
+   para que se note que no pasó por el pipeline (sin tarea de agente ni scoring).
+
+> Un lead que llegó solo por email es un lead **perdido a medias**: nadie lo
+> sigue, no tiene scoring y no cuenta en los reportes de conversión.
