@@ -133,3 +133,30 @@ test('el bridge no responde con 5xx a través del túnel',()=>{
   assert.match(BRIDGE,/jsonError\(res, 424, 'impresora inaccesible/,'el proxy usa 424, que sí atraviesa el túnel');
   assert.match(MAQ,/\(r\.status===424\|\|r\.status===502\)\?'La impresora no responde al bridge'/,'el dashboard entiende el 424 nuevo y el 502 de un bridge viejo');
 });
+
+// Enrolar una impresora desde el MacBook no sirve si instala la llave DEL
+// MACBOOK: quien entra a las impresoras es el iMac. Por eso el bridge publica
+// su llave pública y responde si ya puede entrar.
+test('el bridge publica su llave y sabe decir si puede entrar a una impresora',()=>{
+  const SCRIPT=fs.readFileSync(path.join(__dirname,'..','printer-bridge','install-printer-keys.sh'),'utf8');
+  const pub=functionSource(BRIDGE,'bridgePublicKeys');
+  assert.match(pub,/\.pub/,'solo llaves públicas, jamás la privada');
+  assert.doesNotMatch(pub,/id_ed25519'\)\]|readFileSync\(SSH_KEY\)/,'nunca leer el archivo de la llave privada');
+  assert.ok(BRIDGE.indexOf("if (given !== TOKEN)")<BRIDGE.indexOf("rawPath === '/pubkey'"),'/pubkey va detrás del token');
+  const chk=BRIDGE.slice(BRIDGE.indexOf('const mChk ='),BRIDGE.indexOf("if (rawPath === '/update'"));
+  assert.match(chk,/isPrivateIp\(mChk\[1\]\)/,'sshcheck solo hacia la red privada');
+  assert.match(chk,/writeHead\(200/,'responde 200: un 5xx no cruza el túnel');
+  assert.match(SCRIPT,/\$BRIDGE_URL\/pubkey\?bt=/,'el modo --bridge pide la llave al bridge');
+  assert.match(SCRIPT,/\$BRIDGE_URL\/sshcheck\/\$ip\?bt=/,'y verifica preguntándole al bridge, no localmente');
+});
+
+test('actualizar el bridge en remoto es POST, reversible y sin 5xx',()=>{
+  const upd=BRIDGE.slice(BRIDGE.indexOf("if (rawPath === '/update'"),BRIDGE.indexOf('// Recuperar la telemetría'));
+  assert.match(upd,/req\.method === 'POST'/,'un GET no puede reiniciar el bridge');
+  assert.match(upd,/UPDATE_ENABLED/,'se puede apagar con BRIDGE_UPDATE=0');
+  assert.match(upd,/writeHead\(200/);
+  assert.doesNotMatch(upd,/writeHead\(5\d\d/);
+  const fn=functionSource(BRIDGE,'updateBridge');
+  assert.match(fn,/'pull', '--ff-only', 'origin', 'main'/,'solo fast-forward desde origin/main');
+  assert.doesNotMatch(fn,/reset|--force|checkout/,'nunca reescribir el árbol de trabajo del iMac');
+});

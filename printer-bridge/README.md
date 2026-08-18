@@ -256,6 +256,18 @@ cd ~/dashboardthelabsolutions/printer-bridge
 ./install-printer-keys.sh 192.168.100.7 192.168.100.68     # o sin IPs: las busca solas
 ```
 
+**Desde otro equipo de la red** (un MacBook, no el iMac) usa `--bridge`: instala
+la llave **del bridge**, no la tuya. Quien tiene que entrar a las impresoras es
+el iMac, así que enrolar tu propia llave desde el portátil no sirve de nada.
+
+```bash
+BRIDGE_TOKEN=xxxxx ./install-printer-keys.sh --bridge 192.168.100.66
+```
+
+La toma de `GET /pubkey` y verifica el resultado con `GET /sshcheck/{IP}`, que
+le pregunta al propio bridge si ya puede entrar. Necesitas estar en la red del
+taller: el túnel expone el bridge, no las impresoras por SSH.
+
 Copia la llave pública del iMac a cada impresora (pide la contraseña una vez;
 en el parque es `creality`) y verifica que después entra sin ella.
 
@@ -299,6 +311,20 @@ recuperación en curso.
 > se ve como "recibí un 502" sino como un fetch rechazado sin explicación. Por
 > eso el proxy de impresoras también responde `424` —no `502`— cuando no
 > alcanza a la máquina.
+
+## Actualizar el bridge sin ir al iMac
+
+```bash
+curl -X POST "https://printers.thelab.solutions/update?bt=TU_TOKEN"
+```
+
+Hace `git pull --ff-only origin main` y sale; launchd lo levanta con el código
+nuevo en un par de segundos. Responde `{"ok":true,...}` con la salida de git, o
+`{"ok":false,"error":...}` si el clon del iMac tiene cambios locales o está en
+otra rama. Se apaga con `BRIDGE_UPDATE=0`.
+
+> Solo fast-forward desde `origin/main`: nunca reescribe el árbol de trabajo
+> del iMac ni cambia de rama.
 
 ## Seguridad
 

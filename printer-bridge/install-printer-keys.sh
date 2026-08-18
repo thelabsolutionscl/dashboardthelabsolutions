@@ -10,6 +10,12 @@
 #   ./install-printer-keys.sh            # barre la red y te muestra el mapa
 #   ./install-printer-keys.sh 192.168.100.7 192.168.100.68 …
 #
+# DESDE OTRO EQUIPO DE LA RED (MacBook, no el iMac) usa --bridge: instala la
+# llave DEL BRIDGE, no la tuya. Quien tiene que entrar a las impresoras es el
+# iMac; enrolar tu propia llave desde el portátil no sirve de nada.
+#
+#   BRIDGE_TOKEN=xxxxx ./install-printer-keys.sh --bridge 192.168.100.66
+#
 # Pide la contraseña de cada impresora una vez (en el parque es `creality`).
 # Es idempotente: correrlo de nuevo sobre una máquina ya lista no hace daño.
 # ─────────────────────────────────────────────────────────────────────
@@ -48,7 +54,27 @@ copy_key() {     # $1 ip  $2 llave  $3 log
     -o PreferredAuthentications=password,keyboard-interactive "$USER_SSH@$1" 2>&1 | tee "$3"
 }
 
-ensure_key "$KEY" ed25519 || { red "✗ No se pudo crear la llave"; exit 1; }
+# ── Modo --bridge: la llave que se instala es la del iMac ────────────
+BRIDGE_URL="${PRINTER_BRIDGE_URL:-https://printers.thelab.solutions}"
+BRIDGE_TOKEN="${BRIDGE_TOKEN:-}"
+MODE_BRIDGE=0
+ARGS=()
+for a in "$@"; do
+  case "$a" in --bridge) MODE_BRIDGE=1 ;; *) ARGS+=("$a") ;; esac
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+
+BRIDGE_KEYS=""
+if [[ $MODE_BRIDGE -eq 1 ]]; then
+  [[ -z "$BRIDGE_TOKEN" && -f "$(dirname "$0")/.bridge-token" ]] && BRIDGE_TOKEN="$(tr -d '\n' < "$(dirname "$0")/.bridge-token")"
+  [[ -n "$BRIDGE_TOKEN" ]] || { red "✗ Falta el token: BRIDGE_TOKEN=xxxxx $0 --bridge …"; exit 1; }
+  BRIDGE_KEYS="$(mktemp)"
+  curl -fsS -m 20 "$BRIDGE_URL/pubkey?bt=$BRIDGE_TOKEN" -o "$BRIDGE_KEYS" || { red "✗ No pude pedirle la llave pública al bridge ($BRIDGE_URL)"; exit 1; }
+  [[ -s "$BRIDGE_KEYS" ]] || { red "✗ El bridge no tiene llave SSH todavía. Córrelo sin --bridge en el iMac una vez."; exit 1; }
+  grn "Llave(s) del bridge obtenidas de $BRIDGE_URL — se instalarán a nombre del iMac"
+else
+  ensure_key "$KEY" ed25519 || { red "✗ No se pudo crear la llave"; exit 1; }
+fi
 
 # ── Destinos: argumentos validados, o barrido de la red ──────────────
 IPS=()
@@ -93,6 +119,27 @@ OK=0; BAD=0
 for ip in "${IPS[@]}"; do
   printf '\n── %s ─────────────────\n' "$ip"
   ssh-keygen -R "$ip" >/dev/null 2>&1   # limpia la entrada vieja para tus ssh a mano
+
+  # Modo bridge: instalamos una llave cuya privada no tenemos, así que ni
+  # ssh-copy-id ni una verificación local sirven. Se anexa a authorized_keys y
+  # se le pregunta al propio bridge si ya puede entrar.
+  if [[ $MODE_BRIDGE -eq 1 ]]; then
+    if curl -fsS -m 25 "$BRIDGE_URL/sshcheck/$ip?bt=$BRIDGE_TOKEN" | grep -q '"ok":true'; then
+      grn "✅ $ip — el bridge ya entraba sin contraseña"; OK=$((OK+1)); continue
+    fi
+    ylw "   Contraseña de la impresora (en el parque: creality)"
+    ssh "${SSHOPTS[@]}" -o PreferredAuthentications=password,keyboard-interactive \
+      "$USER_SSH@$ip" 'mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys' < "$BRIDGE_KEYS"
+    if curl -fsS -m 25 "$BRIDGE_URL/sshcheck/$ip?bt=$BRIDGE_TOKEN" | grep -q '"ok":true'; then
+      grn "✅ $ip — el bridge ya puede recuperarla"; OK=$((OK+1))
+    else
+      red "✗ $ip — el bridge sigue sin poder entrar."
+      dim "   $(curl -fsS -m 25 "$BRIDGE_URL/sshcheck/$ip?bt=$BRIDGE_TOKEN")"
+      BAD=$((BAD+1))
+    fi
+    continue
+  fi
+
   if verify_key "$ip" "$KEY" || { [[ -f "$KEY_RSA" ]] && verify_key "$ip" "$KEY_RSA"; }; then
     grn "✅ $ip — ya entraba sin contraseña"; OK=$((OK+1)); continue
   fi

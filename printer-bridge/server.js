@@ -13,6 +13,9 @@
 //   GET  /authcheck                → 200 si el token es válido (para "Probar" en el dashboard)
 //   POST /restart                  → reinicia el bridge (sale; launchd lo levanta de nuevo)
 //   POST /recover/{IP}             → reinicia Moonraker en la impresora (SSH) — telemetría caída
+//   GET  /sshcheck/{IP}            → ¿puede el bridge entrar por SSH a esa impresora?
+//   GET  /pubkey                   → llave pública del bridge (enrolar impresoras desde otro equipo)
+//   POST /update                   → git pull + reinicio (actualiza el bridge sin ir al iMac)
 //   *    /{IP}/{ruta...}           → http://{IP}:7125/{ruta...}   (Moonraker)
 //   *    /{IP}:{puerto}/{ruta...}  → http://{IP}:{puerto}/{ruta...} (webcam, etc.)
 //
@@ -43,6 +46,8 @@ const RECOVER_ENABLED = process.env.BRIDGE_RECOVER !== '0';
 const SSH_USER = process.env.PRINTER_SSH_USER || 'root';
 const SSH_PASS = process.env.PRINTER_SSH_PASS || '';
 const SSH_KEY = process.env.PRINTER_SSH_KEY || '';
+const UPDATE_ENABLED = process.env.BRIDGE_UPDATE !== '0';
+const REPO_DIR = path.join(__dirname, '..');
 const RECOVER_SSH_TIMEOUT_MS = 30000;   // la shell de la impresora es lenta por WiFi
 const RECOVER_WAIT_MS = 45000;          // Moonraker tarda ~15s en registrar sus endpoints
 
@@ -173,6 +178,46 @@ async function waitMoonrakerUp(ip, maxMs) {
   }
   return false;
 }
+// La llave pública del bridge, para que cualquier equipo de la red pueda
+// enrolar una impresora A NOMBRE DEL IMAC. Sin esto hay que estar sentado
+// frente al iMac: quien entra a las impresoras es él, no el portátil desde el
+// que se corre el script. Una llave pública no es un secreto.
+function bridgePublicKeys() {
+  const home = process.env.HOME || '';
+  const cands = SSH_KEY ? [SSH_KEY + '.pub']
+    : [path.join(home, '.ssh', 'id_ed25519.pub'), path.join(home, '.ssh', 'id_rsa.pub')];
+  const keys = [];
+  for (const f of cands) {
+    try { const t = fs.readFileSync(f, 'utf8').trim(); if (t) keys.push(t); } catch (e) {}
+  }
+  return keys;
+}
+// ¿Puede el bridge entrar a esta impresora? Es la pregunta que decide si el
+// botón de recuperar va a servir, y solo el bridge puede responderla.
+function sshCheck(ip) {
+  return new Promise(resolve => {
+    const { cmd, args, env } = recoverSshCommand(ip);
+    const probe = args.slice(0, -1).concat('echo ok');   // mismo login, sin el guion de recuperación
+    execFile(cmd, probe, { timeout: 20000, env }, (err, stdout, stderr) => {
+      if (err && err.code === 'ENOENT') return resolve({ ok: false, error: `falta ${cmd} en el iMac` });
+      if (err) return resolve({ ok: false, error: (String(stderr || '').trim() || err.message).split('\n')[0] });
+      resolve({ ok: String(stdout || '').includes('ok') });
+    });
+  });
+}
+// git pull + salir: launchd lo levanta con el código nuevo. Así el bridge se
+// actualiza desde el dashboard, sin ir hasta el iMac. Solo fast-forward.
+function updateBridge() {
+  return new Promise(resolve => {
+    const run = git => execFile(git, ['-C', REPO_DIR, 'pull', '--ff-only', 'origin', 'main'], { timeout: 90000 }, (err, stdout, stderr) => {
+      if (err && err.code === 'ENOENT' && git === 'git') return run('/usr/bin/git');
+      const out = String(stdout || '').trim(), errOut = String(stderr || '').trim();
+      if (err) return resolve({ ok: false, error: errOut || out || err.message });
+      resolve({ ok: true, out });
+    });
+    run('git');
+  });
+}
 const _recovering = new Set();
 async function recoverPrinter(ip) {
   const t0 = Date.now();
@@ -238,6 +283,33 @@ const server = http.createServer((req, res) => {
     setTimeout(() => process.exit(0), 250);
     return;
   }
+  if (rawPath === '/pubkey') {
+    const keys = bridgePublicKeys();
+    // texto plano, una llave por línea: es un authorized_keys listo para usar
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(keys.join('\n') + (keys.length ? '\n' : ''));
+    return;
+  }
+  const mChk = rawPath.match(/^\/sshcheck\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mChk) {
+    if (!isPrivateIp(mChk[1])) { jsonError(res, 403, 'solo IPs de red privada'); return; }
+    sshCheck(mChk[1]).then(r => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r)); });
+    return;
+  }
+  if (rawPath === '/update' && req.method === 'POST') {
+    if (!UPDATE_ENABLED) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'actualización desactivada (BRIDGE_UPDATE=0)' }));
+      return;
+    }
+    updateBridge().then(r => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ...r, restarting: !!r.ok }));
+      if (r.ok) { console.log('Actualizado vía /update — saliendo (launchd lo levanta con el código nuevo).'); setTimeout(() => process.exit(0), 400); }
+    });
+    return;
+  }
+
   // Recuperar la telemetría de una impresora viva con Moonraker caído
   const mRec = rawPath.match(/^\/recover\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
   if (mRec) {
