@@ -676,8 +676,9 @@ function renderMonitorGrid(){
       body=`<div style="margin-top:10px;padding:10px;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.3);border-radius:8px">
         <div style="font-size:12px;color:#ffaa00;font-weight:700;margin-bottom:4px">📡 Telemetría caída · la máquina está viva</div>
         <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px;line-height:1.45">Responde en el puerto ${uiPort} pero Moonraker no contesta. <b style="color:var(--text2)">Puede estar imprimiendo sin que el dashboard lo vea</b> — revísala antes de darla por libre.</div>
-        <div style="font-size:10.5px;color:var(--text3);margin-bottom:9px;line-height:1.4">Para recuperarla, por SSH:<br><span style="font-family:monospace;color:var(--text2)">${escapeHtml(svc)}</span></div>
-        <a href="${escapeHtml(_printerPortUrl(ip,uiPort,'/'))}" target="_blank" rel="noopener" style="display:block;text-align:center;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.45);color:#ffaa00;border-radius:7px;padding:7px;font-size:12px;font-weight:700;text-decoration:none">🔎 Abrir la impresora</a>
+        <button id="recov_${m.id}" onclick="recoverPrinterTelemetry('${m.id}')" style="width:100%;background:rgba(255,170,0,0.18);border:1px solid rgba(255,170,0,0.5);color:#ffaa00;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:6px">🔧 Recuperar telemetría</button>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.4">Reinicia Moonraker desde el bridge del taller. No interrumpe la impresión en curso.<br>A mano, por SSH: <span style="font-family:monospace;color:var(--text2)">${escapeHtml(svc)}</span></div>
+        <a href="${escapeHtml(_printerPortUrl(ip,uiPort,'/'))}" target="_blank" rel="noopener" style="display:block;text-align:center;background:var(--surface2);border:1px solid var(--border2);color:var(--text3);border-radius:7px;padding:7px;font-size:12px;font-weight:700;text-decoration:none">🔎 Abrir la impresora</a>
       </div>`;
     } else if(s.state==='offline'){
       body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:12px;padding:8px 0"><b>Sin telemetría</b><br><span style="font-family:monospace;font-size:10.5px">${ip}</span><br><span style="font-size:10.5px">${escapeHtml(s.connectionError||'La impresora no respondió')}</span><br><span style="font-size:10px;color:#777">${escapeHtml(fmtPrinterSeen(s.lastSeenAt))}</span></div>`;
@@ -855,6 +856,41 @@ async function printerFirmwareRestart(id){
     else toast('Error: '+r.status,'error');
   }catch(e){toast('🔄 Comando enviado — la conexión se reinicia…','info');}
   setTimeout(pollPrinters,4000);
+}
+
+// Recupera la telemetría de una máquina viva cuyo Moonraker se cayó. El
+// navegador no puede abrir una shell en la impresora, así que se lo pide al
+// bridge del taller (POST /recover/{IP}), que sí está en la LAN: repone
+// moonraker.conf si falta y reinicia el servicio. Klipper no se toca — una
+// impresión en curso sigue su camino.
+const _RECOVER_TIMEOUT_MS=90000;   // el bridge hace SSH + espera a que Moonraker vuelva (~75s peor caso)
+async function recoverPrinterTelemetry(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return;}
+  const btn=document.getElementById('recov_'+id);
+  const label=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.style.opacity='.7';btn.innerHTML='⏳ Recuperando… (hasta 1 min)';}
+  toast(`🔧 Reiniciando Moonraker en ${m.nombre} #${m.numG}…`,'info');
+  const tk=getPrinterTunnelToken();
+  try{
+    const r=await fetch(`${getPrinterTunnel()}/recover/${ip}`,{method:'POST',signal:AbortSignal.timeout(_RECOVER_TIMEOUT_MS),headers:tk?{'X-Bridge-Token':tk}:{}});
+    let d={};try{d=await r.json();}catch(_){}
+    const detalle=d.error||(Array.isArray(d.steps)?d.steps[d.steps.length-1]:'')||`HTTP ${r.status}`;
+    if(r.status===401)toast('Token del bridge inválido — pégalo de nuevo en Mi cuenta → Túnel Impresoras','error');
+    else if(r.status===404)toast('Este bridge todavía no sabe recuperar: actualízalo en el iMac (git pull + reiniciar)','error');
+    else if(r.status===409)toast('Ya hay una recuperación en curso para esa impresora','info');
+    else if(r.ok&&d.ok)toast(`✅ Telemetría recuperada · ${m.nombre} #${m.numG}`,'success');
+    else toast('No se pudo recuperar: '+detalle,'error');
+  }catch(e){
+    toast(e?.name==='TimeoutError'||e?.name==='AbortError'
+      ?'La recuperación tardó demasiado — revisa la impresora y su moonraker.log'
+      :'No se pudo hablar con el bridge del taller','error');
+  }finally{
+    if(btn){btn.disabled=false;btn.style.opacity='';btn.innerHTML=label;}
+    delete _aliveProbe[id];   // el sondeo cacheado quedó obsoleto
+    _failCount[id]=0;
+    pollPrinters();
+  }
 }
 
 // ── CONTROL MOONRAKER (temperatura · máquina · archivos · historial) ──

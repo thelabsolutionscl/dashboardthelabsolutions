@@ -12,6 +12,7 @@
 //   GET  /healthz                  → estado del bridge (sin token)
 //   GET  /authcheck                → 200 si el token es válido (para "Probar" en el dashboard)
 //   POST /restart                  → reinicia el bridge (sale; launchd lo levanta de nuevo)
+//   POST /recover/{IP}             → reinicia Moonraker en la impresora (SSH) — telemetría caída
 //   *    /{IP}/{ruta...}           → http://{IP}:7125/{ruta...}   (Moonraker)
 //   *    /{IP}:{puerto}/{ruta...}  → http://{IP}:{puerto}/{ruta...} (webcam, etc.)
 //
@@ -23,6 +24,7 @@ const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 
 // Reutiliza conexiones TCP hacia las impresoras (keep-alive) en vez de abrir
 // una nueva por cada petición. Con el dashboard sondeando 14 máquinas cada
@@ -36,6 +38,13 @@ const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
 const ALLOWED_PORTS = (process.env.BRIDGE_PORTS || '7125,8080,4408,4409,80,1984')
   .split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
 const TOKEN_FILE = path.join(__dirname, '.bridge-token');
+// Recuperación de telemetría (ver "RECUPERAR MOONRAKER" más abajo)
+const RECOVER_ENABLED = process.env.BRIDGE_RECOVER !== '0';
+const SSH_USER = process.env.PRINTER_SSH_USER || 'root';
+const SSH_PASS = process.env.PRINTER_SSH_PASS || '';
+const SSH_KEY = process.env.PRINTER_SSH_KEY || '';
+const RECOVER_SSH_TIMEOUT_MS = 30000;   // la shell de la impresora es lenta por WiFi
+const RECOVER_WAIT_MS = 45000;          // Moonraker tarda ~15s en registrar sus endpoints
 
 function loadToken() {
   if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN.trim();
@@ -59,6 +68,127 @@ function isPrivateIp(ip) {
   if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
   if (o[0] === 192 && o[1] === 168) return true;
   return false;
+}
+
+// ── RECUPERAR MOONRAKER (telemetría caída) ───────────────────────────────
+// Klipper y Moonraker son procesos distintos: cuando Moonraker se cae la
+// máquina sigue imprimiendo pero el dashboard queda ciego ("Telemetría
+// caída"). Levantarlo necesita una shell en la impresora, algo que el proxy
+// HTTP no puede hacer — pero el bridge sí está en la LAN, así que lo hace por
+// SSH. Reiniciar Moonraker NO interrumpe la impresión en curso: Klipper sigue
+// moviendo la máquina por su cuenta.
+//
+// El guion reproduce el runbook (docs/TALLER_IMPRESORAS.md, Caso 1): repone
+// moonraker.conf desde el respaldo cuando falta —la causa real de los dos
+// incidentes de agosto— y reinicia el servicio se llame como se llame
+// (S56moonraker_service en las K1, moonraker en las Ender-5 Max, systemd en
+// una Klipper genérica).
+function moonrakerRecoverScript() {
+  return [
+    'CFGDIRS="/usr/data/printer_data/config /mnt/UDISK/printer_data/config /root/printer_data/config /home/pi/printer_data/config"',
+    'for d in $CFGDIRS; do',
+    '  [ -d "$d" ] || continue',
+    '  if [ ! -f "$d/moonraker.conf" ] && [ -f "$d/.moonraker.conf.bkp" ]; then',
+    '    cp "$d/.moonraker.conf.bkp" "$d/moonraker.conf" && echo "moonraker.conf repuesto desde el respaldo ($d)"',
+    '  elif [ -f "$d/moonraker.conf" ] && [ ! -f "$d/.moonraker.conf.bkp" ]; then',
+    '    cp "$d/moonraker.conf" "$d/.moonraker.conf.bkp" && echo "respaldo de moonraker.conf creado ($d)"',
+    '  fi',
+    '  if [ ! -f "$d/moonraker.conf" ]; then echo "falta $d/moonraker.conf y no hay respaldo — copialo desde otra maquina sana"; fi',
+    'done',
+    'SVC=""',
+    'for s in /etc/init.d/S56moonraker_service /etc/init.d/moonraker /etc/init.d/S56moonraker; do',
+    '  [ -x "$s" ] && SVC="$s" && break',
+    'done',
+    '[ -n "$SVC" ] || SVC=$(ls /etc/init.d/ 2>/dev/null | grep -i moonraker | head -n 1 | sed "s|^|/etc/init.d/|")',
+    'if [ -n "$SVC" ] && [ -x "$SVC" ]; then',
+    // restart falla en algunos init de BusyBox si el proceso no estaba vivo —
+    // que es justo nuestro caso — así que start es el segundo intento.
+    '  if "$SVC" restart >/dev/null 2>&1 || "$SVC" start >/dev/null 2>&1; then',
+    '    echo "servicio reiniciado: $SVC"',
+    '  else',
+    '    echo "$SVC devolvio error al arrancar — revisa moonraker.log"; exit 3',
+    '  fi',
+    'elif command -v systemctl >/dev/null 2>&1; then',
+    '  if systemctl restart moonraker >/dev/null 2>&1; then',
+    '    echo "servicio reiniciado: systemd/moonraker"',
+    '  else',
+    '    echo "systemctl no pudo reiniciar moonraker"; exit 3',
+    '  fi',
+    'else',
+    '  echo "no se encontro el servicio de Moonraker en esta maquina"; exit 3',
+    'fi',
+    'exit 0',
+  ].join('\n');
+}
+// El guion viaja como UN solo argumento de ssh: no pasa por ninguna shell
+// local, y la IP ya viene validada por isPrivateIp, así que no hay forma de
+// inyectar comandos desde la petición.
+function recoverSshCommand(ip) {
+  const opts = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
+    '-o', 'ConnectTimeout=8', '-o', 'LogLevel=ERROR'];
+  if (SSH_KEY) opts.push('-i', SSH_KEY, '-o', 'IdentitiesOnly=yes');
+  const target = `${SSH_USER}@${ip}`;
+  const script = moonrakerRecoverScript();
+  if (SSH_PASS) {
+    // sshpass -e toma la clave de la variable SSHPASS: nunca aparece en argv
+    // (visible en `ps`) ni en los logs del bridge.
+    return {
+      cmd: 'sshpass',
+      args: ['-e', 'ssh', ...opts, '-o', 'PubkeyAuthentication=no',
+        '-o', 'PreferredAuthentications=password,keyboard-interactive', target, script],
+      env: { ...process.env, SSHPASS: SSH_PASS },
+    };
+  }
+  // Sin contraseña configurada solo se intenta con llave: BatchMode evita que
+  // ssh se quede esperando una contraseña que nadie va a escribir.
+  return { cmd: 'ssh', args: ['-o', 'BatchMode=yes', ...opts, target, script], env: process.env };
+}
+function runRecoverSsh(ip) {
+  return new Promise(resolve => {
+    const { cmd, args, env } = recoverSshCommand(ip);
+    execFile(cmd, args, { timeout: RECOVER_SSH_TIMEOUT_MS, env, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
+      const out = String(stdout || '').trim();
+      const errOut = String(stderr || '').trim();
+      if (err && err.code === 'ENOENT') {
+        return resolve({ ok: false, code: 'sin-ssh', out, error: cmd === 'sshpass'
+          ? 'falta sshpass en el iMac (brew install sshpass) — o usa una llave SSH y quita PRINTER_SSH_PASS'
+          : 'no se encontró el comando ssh en el iMac' });
+      }
+      if (err) {
+        const detalle = errOut || out || err.message;
+        return resolve({ ok: false, code: err.killed ? 'timeout-ssh' : 'ssh-falló', out, error: /permission denied|publickey/i.test(detalle)
+          ? 'SSH rechazó la conexión — configura la llave (install-printer-keys.sh) o PRINTER_SSH_PASS'
+          : detalle });
+      }
+      resolve({ ok: true, out });
+    });
+  });
+}
+async function waitMoonrakerUp(ip, maxMs) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    const r = await moonraker({ ip }, 'GET', '/printer/info', 5000);
+    if (r.ok) return true;
+    await _sleep(3000);
+  }
+  return false;
+}
+const _recovering = new Set();
+async function recoverPrinter(ip) {
+  const t0 = Date.now();
+  // Si contesta, no hay nada que reiniciar: pudo recuperarse sola entre que se
+  // pintó la tarjeta y se pulsó el botón.
+  const antes = await moonraker({ ip }, 'GET', '/printer/info', 4000);
+  if (antes.ok) return { ok: true, moonraker: 'up', steps: ['Moonraker ya respondía — no hizo falta reiniciarlo'] };
+  const r = await runRecoverSsh(ip);
+  const steps = String(r.out || '').split('\n').map(s => s.trim()).filter(Boolean);
+  console.log(`[recover] ${ip}: ${r.ok ? steps.join('; ') || 'sin salida' : 'ERROR ' + r.error}`);
+  if (!r.ok) return { ok: false, code: r.code, error: r.error, steps };
+  const up = await waitMoonrakerUp(ip, RECOVER_WAIT_MS);
+  steps.push(up
+    ? `Moonraker respondió tras ${Math.round((Date.now() - t0) / 1000)}s`
+    : 'el servicio se reinició pero Moonraker no contestó — revisa moonraker.log en la impresora');
+  return { ok: up, moonraker: up ? 'up' : 'down', steps };
 }
 
 function setCors(res) {
@@ -108,6 +238,23 @@ const server = http.createServer((req, res) => {
     setTimeout(() => process.exit(0), 250);
     return;
   }
+  // Recuperar la telemetría de una impresora viva con Moonraker caído
+  const mRec = rawPath.match(/^\/recover\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mRec) {
+    const ip = mRec[1];
+    if (req.method !== 'POST') { jsonError(res, 405, 'usa POST'); return; }
+    if (!isPrivateIp(ip)) { jsonError(res, 403, 'solo IPs de red privada'); return; }
+    if (!RECOVER_ENABLED) { jsonError(res, 503, 'recuperación desactivada en el bridge (BRIDGE_RECOVER=0)'); return; }
+    // Dos clics seguidos reiniciarían Moonraker en medio de su propio arranque
+    if (_recovering.has(ip)) { jsonError(res, 409, 'ya hay una recuperación en curso para esa impresora'); return; }
+    _recovering.add(ip);
+    recoverPrinter(ip)
+      .then(r => { res.writeHead(r.ok ? 200 : 502, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r)); })
+      .catch(e => jsonError(res, 500, e.message))
+      .finally(() => _recovering.delete(ip));
+    return;
+  }
+
   // Mantención: estado de config y ejecución on-demand (para probar sin esperar a la hora)
   if (rawPath === '/maint/status') {
     const cfg = loadMaintConfig();
@@ -234,6 +381,7 @@ server.listen(PORT, () => {
   console.log(`  Token          : ${TOKEN}`);
   console.log(`  Puertos        : ${ALLOWED_PORTS.join(', ')}`);
   console.log(`  WebSocket      : proxy activo (/{IP}/websocket → tiempo real)`);
+  console.log(`  Recuperación   : ${RECOVER_ENABLED ? `activa por SSH como ${SSH_USER} (${SSH_PASS ? 'contraseña' : SSH_KEY ? 'llave ' + SSH_KEY : 'llave por defecto'})` : 'APAGADA (BRIDGE_RECOVER=0)'}`);
   console.log(`  CORS origin    : ${ALLOW_ORIGIN}`);
   console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
   console.log('─'.repeat(60));

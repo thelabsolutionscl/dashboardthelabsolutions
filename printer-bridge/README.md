@@ -229,9 +229,59 @@ las ráfagas de polling.
   sondeando de respaldo. Para desactivarlo del todo (volver a solo-polling):
   en la consola del navegador `localStorage.setItem('printer_ws_enabled','0')`.
 
+## 🔧 Recuperar la telemetría con un clic (Moonraker caído)
+
+Klipper y Moonraker son procesos distintos: si Moonraker se cae, la impresora
+**sigue imprimiendo** pero el dashboard queda ciego y la muestra en ámbar como
+**"Telemetría caída"**. Levantarlo necesita una shell en la impresora, así que
+lo hace el bridge —que está en la misma red— cuando pulsas
+**🔧 Recuperar telemetría** en la tarjeta.
+
+Qué hace en la impresora (el mismo runbook de
+[docs/TALLER_IMPRESORAS.md](../docs/TALLER_IMPRESORAS.md), Caso 1):
+
+1. Si falta `moonraker.conf` y hay respaldo (`.moonraker.conf.bkp`), lo repone
+   — esa fue la causa real de los dos incidentes de agosto. Si hay config pero
+   no respaldo, se lo crea.
+2. Reinicia el servicio, se llame como se llame: `S56moonraker_service` (K1),
+   `moonraker` (Ender-5 Max) o systemd.
+3. Espera hasta 45 s a que Moonraker vuelva a contestar y responde qué pasó.
+
+**Nunca toca Klipper**: una impresión en curso sigue su camino.
+
+### Darle acceso SSH (una vez)
+
+```bash
+cd ~/dashboardthelabsolutions/printer-bridge
+./install-printer-keys.sh 192.168.100.7 192.168.100.68     # o sin IPs: las busca solas
+```
+
+Copia la llave pública del iMac a cada impresora (pide la contraseña una vez;
+en el parque es `creality`) y verifica que después entra sin ella. Ojo: el
+barrido automático solo ve impresoras con Moonraker **vivo** — las que están
+caídas, que son justo las que hay que poder recuperar, pásalas como argumento.
+
+> Alternativa sin llaves: `PRINTER_SSH_PASS=creality` en el entorno del bridge.
+> Requiere `sshpass` en el iMac (`brew install hudochenkov/sshpass/sshpass`) y
+> deja la contraseña en la configuración de launchd — la llave es más limpia.
+
+Probar a mano:
+
+```bash
+curl -X POST "http://localhost:8347/recover/192.168.100.7?bt=TU_TOKEN"
+# {"ok":true,"moonraker":"up","steps":["moonraker.conf repuesto…","servicio reiniciado: …"]}
+```
+
+Respuestas: `403` IP no privada · `409` ya hay una recuperación en curso para
+esa impresora · `503` desactivada (`BRIDGE_RECOVER=0`) · `502` con `error`
+explicando qué falló (SSH rechazado, sin `ssh`/`sshpass`, Moonraker no volvió).
+
 ## Seguridad
 
 - El bridge **exige token** en cada petición (header `X-Bridge-Token` o `?bt=`).
+- `/recover/{IP}` ejecuta **un guion fijo** por SSH: la IP va validada como
+  privada y como argumento suelto, nunca concatenada a una shell. Se apaga con
+  `BRIDGE_RECOVER=0` si prefieres que el bridge no toque nada.
 - Solo hace proxy hacia **IPs privadas** (RFC 1918) y **puertos permitidos** — nunca a internet.
 - El token vive en `.bridge-token` (no se sube a git) y en el `localStorage` del navegador.
 - Si el token se filtra: borra `.bridge-token`, reinicia el bridge (genera uno nuevo) y actualiza el dashboard.
@@ -244,6 +294,10 @@ las ráfagas de polling.
 | `BRIDGE_TOKEN` | (autogenerado) | Token fijo, si prefieres definirlo tú |
 | `BRIDGE_PORTS` | `7125,8080,4408,4409,80,1984` | Puertos de destino permitidos (1984 = go2rtc cámaras K2) |
 | `BRIDGE_ALLOW_ORIGIN` | `*` | Origen CORS (puedes restringirlo a la URL del dashboard) |
+| `BRIDGE_RECOVER` | `1` | `0` apaga la recuperación de telemetría por SSH |
+| `PRINTER_SSH_USER` | `root` | Usuario SSH de las impresoras |
+| `PRINTER_SSH_KEY` | (la de por defecto) | Llave privada para entrar a las impresoras |
+| `PRINTER_SSH_PASS` | (vacío) | Contraseña SSH; necesita `sshpass`. Mejor usa llave. |
 
 ---
 
