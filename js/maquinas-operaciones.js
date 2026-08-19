@@ -866,10 +866,20 @@ async function markOrderReady(pedidoId){
   try{await airtableWrite('Pedidos','PATCH',pedidoId,{'Estado pedido':'Listo para despacho','Resultado QA':'QA aprobado'});toast(`${p.fields['N° Pedido']||'Pedido'} listo para despacho ✓`,'success');}
   catch(e){console.warn('[MachineOps] no se pudo avanzar pedido',e);toast('Producción terminada; Airtable no pudo actualizar el pedido','info');}
 }
+// ¿Están listos TODOS los trabajos efectivos del pedido? Ignora los originales ya
+// REEMPLAZADOS por una reimpresión (otro job con reprintOf===su id): un fallo de QA
+// deja el original 'fallido' sin archivar, y sin esta exclusión bloquearía el
+// cierre del pedido para siempre aunque la reimpresión pase QA (nada lo reevalúa
+// después). Devuelve true solo si hay trabajos efectivos y todos están 'terminado'.
+function _pedidoTrabajosListos(activos){
+  const reemplazados=new Set((activos||[]).map(j=>j.reprintOf).filter(Boolean));
+  const efectivos=(activos||[]).filter(j=>!reemplazados.has(j.id));
+  return efectivos.length>0&&efectivos.every(j=>j.status==='terminado');
+}
 async function maybeCompleteOrder(pedidoId){
   if(!pedidoId)return;
   const jobs=data().jobs.filter(j=>j.pedidoId===pedidoId&&!j.archived);
-  if(!jobs.length||jobs.some(j=>j.status!=='terminado'))return;
+  if(!_pedidoTrabajosListos(jobs))return;
   const keys=requiredPostStages(pedidoId),existing=data().workflows.find(w=>w.pedidoId===pedidoId&&!w.archived);
   if(keys.length||existing){
     const w=ensureWorkflow(pedidoId,keys);persist('Pedido enviado a postproducción');
