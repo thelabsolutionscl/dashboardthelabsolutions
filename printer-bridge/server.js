@@ -246,11 +246,18 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Api-Key,X-Bridge-Token,Authorization');
+  // Sin exponerla, el navegador no puede leer X-Bridge-Error entre orígenes.
+  res.setHeader('Access-Control-Expose-Headers', 'X-Bridge-Error');
   res.setHeader('Access-Control-Max-Age', '86400');
 }
 
+// Todo lo que sale por aquí lo generó el bridge, no la impresora, y esa
+// diferencia importa: un 404 de la impresora prueba que está encendida; uno
+// del bridge no prueba nada. Como los códigos ya no alcanzan para
+// distinguirlos (el 424 de "no pude conectar" está en el mismo rango que
+// cualquier respuesta legítima), lo decimos explícitamente en una cabecera.
 function jsonError(res, code, msg) {
-  if (!res.headersSent) res.writeHead(code, { 'Content-Type': 'application/json' });
+  if (!res.headersSent) res.writeHead(code, { 'Content-Type': 'application/json', 'X-Bridge-Error': '1' });
   res.end(JSON.stringify({ error: msg }));
 }
 

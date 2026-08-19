@@ -28,6 +28,9 @@ Para cambiar la **versión de firmware** de una K1, ver
 > Esta tabla es del 2026-08-12. Al 2026-08-17 el monitor lista 14 máquinas: se
 > sumaron **Ender-5 Max #9 y #10** (la #10 en `192.168.100.162`) y la
 > **OrangeStorm Giga**. La lista viva está siempre en el dashboard.
+>
+> Al 2026-08-19 la **Ender-5 Max #9 está en `192.168.100.90`** (antes `.66`).
+> Ninguna de las dos contesta: la máquina no aparece en la red.
 
 > **Las IPs son DHCP y se mueven.** Las de arriba son las del 2026-08-12. La
 > fuente viva es Airtable (tabla `Maquinas`, campo `ip`), pero el dashboard
@@ -197,6 +200,55 @@ Moonraker no depende del modelo, habla con Klipper por `/tmp/klippy_uds`.
 > (puerto 4408). Lo definitivo es reflashear con el firmware rooteado
 > ([FIRMWARE_K1.md](FIRMWARE_K1.md)), con la máquina libre.
 
+
+### Caso 1c · La misma enfermedad en la K1 #4 (2026-08-19)
+
+Barriendo la red después de arreglar la #3 apareció otra igual: la **K1 #4
+(`192.168.100.68`)** sirve su web de fábrica en el puerto 80, tiene SSH
+levantado, y **no tiene Moonraker** (7125, 4408, 4409, 8080 y 1984 todos
+inaccesibles). Es el mismo cuadro del Caso 1b, así que el arreglo es el mismo
+injerto — pero antes hay que instalarle la llave del bridge, porque hoy
+responde `Permission denied (publickey,password)`:
+
+```bash
+printer-bridge/install-printer-keys.sh --bridge 192.168.100.68
+```
+
+#### Identificar qué modelo hay en una IP sin entrar a la máquina
+
+Todas las Creality sirven la misma página en el puerto 80 (`<title>Creality</title>`),
+así que el título no distingue nada. **El hash del bundle sí**: es distinto por
+familia de firmware.
+
+```bash
+curl -s "http://IP/" | grep -o 'app\.[a-f0-9]*\.js' | head -1
+```
+
+| Bundle | Modelo |
+|---|---|
+| `app.b05d1c1a.js` | K1 |
+| `app.d82c63bc.js` | Ender-5 Max |
+
+Así se confirmó que la `.68` es la K1 #4 y no la Ender-5 Max #9 que andábamos
+buscando: su bundle es el de las K1.
+
+#### Barrer la red desde fuera del taller
+
+El barrido de más arriba necesita estar en la LAN. Desde cualquier parte se
+puede hacer por el bridge, que ahora responde **424** cuando la impresora no
+contesta (nunca 5xx, porque Cloudflare se los come):
+
+```bash
+B=https://printers.thelab.solutions; T=<token del bridge>
+for i in $(seq 2 254); do
+  (c=$(curl -s -m 6 -o /dev/null -w "%{http_code}" "$B/192.168.100.$i/printer/info?bt=$T")
+   [ "$c" = "200" ] && echo "192.168.100.$i") &
+done; wait
+```
+
+El cuerpo del 424 dice **por qué** falló, y la diferencia importa:
+`ECONNREFUSED` = la máquina está viva pero ese servicio no corre;
+`EHOSTDOWN` / `EHOSTUNREACH` = la máquina no está en la red.
 ---
 
 ## Caso 2 · La cámara no se ve
@@ -355,6 +407,7 @@ Cosas que cuestan media hora la primera vez y treinta segundos la segunda.
 | `zsh: unknown file attribute` al pegar comandos | zsh interactivo no trata `#` como comentario: `# 1 · copiar (70 MB)` se ejecuta y los paréntesis se leen como filtros de archivo. **Pega los bloques sin comentarios.** |
 | Un `grep` de estado que nunca coincide | Moonraker devuelve el JSON con espacio: `"state": "standby"`. Usa `grep -o '"state": *"[a-z]*"'`. |
 | Una impresora que aparece y desaparece del barrido | Las K1 están por WiFi y responden lento. Sube el timeout a 6-10 segundos. |
+| El dashboard da por vivas máquinas apagadas | La sonda de vida tomaba por buena **cualquier respuesta &lt;500**, y al cambiar el error del bridge de 502 a 424 (Cloudflare se come los 5xx) sus propios errores entraron en ese rango. Ahora el bridge marca lo suyo con `X-Bridge-Error`. **Si tocas el código de error del bridge, mira quién lo interpreta.** |
 | El comando de arranque no dice nada y el puerto sigue muerto | El modo daemon se traga los errores. Córrelo en primer plano redirigiendo a un archivo y léelo. |
 
 ---
@@ -367,6 +420,13 @@ Cosas que cuestan media hora la primera vez y treinta segundos la segunda.
   procedimiento manual, va a repetirse.
 - **`printer.cfg` crece solo.** En la #4 pasó de 8,8 KB a 24 KB en cinco días,
   con un respaldo nuevo en cada cambio. A ese ritmo termina siendo un problema.
+- **La K1 #4 (`192.168.100.68`) está sin Moonraker**, igual que la #3. Falta
+  instalarle la llave (`install-printer-keys.sh --bridge 192.168.100.68`) y
+  hacerle el injerto del Caso 1b.
+- **Seis máquinas no aparecen en la red** (2026-08-19): K1 #1 `.51`, K1 #2
+  `.126`, K2 Plus #11 `.75`, Ender-5 Max #9 `.90`, Ender-5 Max #10 `.162` y
+  la Giga `.44`. Todas dan `EHOSTDOWN`, o sea que no están encendidas o no
+  están en esta red — no es un problema de telemetría.
 - **Reservas DHCP fijas** para las once máquinas. Media hora perdida el
   2026-08-11 buscando cuál impresora era cuál, y una IP documentada que no
   existía en el parque.
