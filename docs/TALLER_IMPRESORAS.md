@@ -29,7 +29,7 @@ Para cambiar la **versión de firmware** de una K1, ver
 > sumaron **Ender-5 Max #9 y #10** (la #10 en `192.168.100.162`) y la
 > **OrangeStorm Giga**. La lista viva está siempre en el dashboard.
 >
-> Al 2026-08-19, tras un baile de DHCP: **#8 = `.66`**, **#9 = `.95`**
+> Al 2026-08-19, tras un baile de DHCP: **#8 = `.95`**, **#9 = `.66`**
 > (confirmado por Gustavo en el taller — el hostname de Moonraker dice
 > `Ender-5` a secas, no numera). La `.90` que apareció un rato ya no está.
 
@@ -253,7 +253,7 @@ El cuerpo del 424 dice **por qué** falló, y la diferencia importa:
 
 ### Caso 1d · El injerto encadenado se cuelga pidiendo contraseña (2026-08-19)
 
-El 2026-08-19 hicieron falta dos injertos el mismo día: la **Ender-5 Max #8
+El 2026-08-19 hicieron falta dos injertos el mismo día: la **Ender-5 Max #9
 (`.66`)** —a la que alguien le había borrado medio Moonraker (42 MB de 70, sin
 `moonraker-env/bin/` ni la carpeta `moonraker/` del código, pero la
 `moonraker.conf` intacta)— y la **K1 #4 (`.68`)**, sin Moonraker del todo como
@@ -469,7 +469,7 @@ Cosas que cuestan media hora la primera vez y treinta segundos la segunda.
   procedimiento manual, va a repetirse.
 - **`printer.cfg` crece solo.** En la #4 pasó de 8,8 KB a 24 KB en cinco días,
   con un respaldo nuevo en cada cambio. A ese ritmo termina siendo un problema.
-- **La K1 #4 (`.68`) y la Ender-5 Max #8 (`.66`) ya recibieron el injerto**
+- **La K1 #4 (`.68`) y la Ender-5 Max #9 (`.66`) ya recibieron el injerto**
   el 2026-08-19 (ver Caso 1d). Ambas siguen sin nginx/Fluidd ni cámara; lo
   de fondo es reflashear.
 - **Cinco máquinas no aparecen en la red** (2026-08-19): K1 #1 `.51`, K1 #2
