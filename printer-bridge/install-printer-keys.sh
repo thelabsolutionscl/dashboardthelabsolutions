@@ -35,7 +35,13 @@ dim() { printf '\033[90m%s\033[0m\n' "$*"; }
 # reflashear o al heredar una IP por DHCP: guardarlas en known_hosts solo
 # produce el "REMOTE HOST IDENTIFICATION HAS CHANGED" que bloquea la copia.
 # El bridge usa exactamente las mismas opciones.
-SSHOPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=8)
+#
+# PubkeyAcceptedAlgorithms/HostKeyAlgorithms: las Ender-5 Max traen dropbear
+# 2019.78, que no conoce ed25519 (llegó en 2020.79) y solo firma RSA con SHA-1.
+# OpenSSH ≥8.8 desactivó ssh-rsa por defecto, así que sin esto la llave se copia,
+# los permisos quedan 700/700/600 y el login falla igual.
+SSHOPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=8
+  -o PubkeyAcceptedAlgorithms=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa)
 
 ensure_key() {   # $1 ruta  $2 tipo  $3 bits (opcional)
   [[ -f "$1" ]] && return 0

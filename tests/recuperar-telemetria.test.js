@@ -160,3 +160,17 @@ test('actualizar el bridge en remoto es POST, reversible y sin 5xx',()=>{
   assert.match(fn,/'pull', '--ff-only', 'origin', 'main'/,'solo fast-forward desde origin/main');
   assert.doesNotMatch(fn,/reset|--force|checkout/,'nunca reescribir el árbol de trabajo del iMac');
 });
+
+// dropbear 2019.78 (Ender-5 Max) no conoce ed25519 —llegó en 2020.79— y solo
+// firma RSA con SHA-1, que OpenSSH ≥8.8 desactivó por defecto. El síntoma
+// engaña: la llave se copia, los permisos quedan 700/700/600 y el login falla
+// igual, porque quien se niega es el cliente.
+test('el bridge habla con el SSH viejo de las Ender-5 Max',()=>{
+  const SCRIPT=fs.readFileSync(path.join(__dirname,'..','printer-bridge','install-printer-keys.sh'),'utf8');
+  const {ssh}=bridgeApi();
+  const {args}=ssh('192.168.100.67');
+  assert.ok(args.includes('PubkeyAcceptedAlgorithms=+ssh-rsa'),'sin esto la llave RSA se rechaza en silencio');
+  assert.ok(args.includes('HostKeyAlgorithms=+ssh-rsa'),'y una host key RSA vieja no negocia');
+  assert.match(SCRIPT,/PubkeyAcceptedAlgorithms=\+ssh-rsa/,'el script debe usar las mismas opciones: si no, su verificación miente sobre lo que podrá hacer el bridge');
+  assert.match(SCRIPT,/HostKeyAlgorithms=\+ssh-rsa/);
+});
