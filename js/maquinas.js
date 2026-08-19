@@ -256,6 +256,15 @@ function _printerPortUrl(ip,port,path){
   if(typeof _isLocalMode==='function'&&_isLocalMode())return`http://${ip}:${port}${path}`;
   return _appendBridgeToken(`${getPrinterTunnel()}/${ip}:${port}${path}`);
 }
+// El bridge marca sus propios errores con X-Bridge-Error. El 424 queda como
+// respaldo para un bridge viejo que todavía no manda la cabecera, o si algo en
+// el camino la borra.
+function _esErrorDelBridge(r){
+  if(!r)return false;
+  try{ if(r.headers&&typeof r.headers.get==='function'&&r.headers.get('X-Bridge-Error'))return true; }catch(_){}
+  return r.status===424;
+}
+
 // Solo se llama cuando la consulta a Moonraker YA falló, y como mucho una vez
 // cada 45s por máquina: el camino normal no paga ninguna petición extra.
 async function _probePrinterAlive(id,ip){
@@ -265,8 +274,13 @@ async function _probePrinterAlive(id,ip){
   for(const p of _ALIVE_PROBE_PORTS){
     try{
       const r=await fetch(_printerPortUrl(ip,p,'/'),{method:'GET',cache:'no-store',signal:AbortSignal.timeout(_ALIVE_PROBE_TIMEOUT_MS)});
-      // Cualquier respuesta del propio servidor prueba que hay algo escuchando,
-      // incluido un 404. Los 5xx los emite el bridge cuando NO pudo conectar.
+      // Cualquier respuesta de la propia impresora prueba que hay algo
+      // escuchando, incluido un 404. Pero el bridge también contesta por su
+      // cuenta cuando NO logró conectar, y eso no prueba nada: el 2026-08-19 el
+      // dashboard daba por vivas cinco máquinas apagadas porque el bridge había
+      // pasado de responder 502 a 424 (Cloudflare se come los 5xx) y 424 caía
+      // dentro del rango que aquí se tomaba por buena señal.
+      if(_esErrorDelBridge(r))continue;
       if(r&&r.status>0&&r.status<500){port=p;break;}
     }catch(_){/* puerto cerrado o inalcanzable: probamos el siguiente */}
   }
