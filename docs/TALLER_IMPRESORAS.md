@@ -297,6 +297,7 @@ Cosas que cuestan media hora la primera vez y treinta segundos la segunda.
 | `ash: nohup: not found` | No existe en estas máquinas. Usa `start-stop-daemon -S -b -x <binario> -- <args>`. |
 | `netstat: /proc/net/tcp6: No such file` | Ruido, no error. La salida de IPv4 sale igual. |
 | `zsh: command not found: #` | zsh interactivo no acepta comentarios en línea, y además deja la variable **sin definir**. Pega los comandos sin comentarios. |
+| La llave SSH se copia pero el login sigue fallando | Las Ender-5 Max traen **dropbear 2019.78**: no conoce ed25519 (llegó en 2020.79) y solo firma RSA con SHA-1, que OpenSSH ≥8.8 desactivó. Engaña porque `ssh-copy-id` dice "1 key added" y los permisos quedan 700/700/600. Se arregla en el **cliente**: `-o PubkeyAcceptedAlgorithms=+ssh-rsa`. |
 | Un `grep` de estado que nunca coincide | Moonraker devuelve el JSON con espacio: `"state": "standby"`. Usa `grep -o '"state": *"[a-z]*"'`. |
 | Una impresora que aparece y desaparece del barrido | Las K1 están por WiFi y responden lento. Sube el timeout a 6-10 segundos. |
 | El comando de arranque no dice nada y el puerto sigue muerto | El modo daemon se traga los errores. Córrelo en primer plano redirigiendo a un archivo y léelo. |

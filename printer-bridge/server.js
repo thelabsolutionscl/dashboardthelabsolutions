@@ -130,7 +130,13 @@ function moonrakerRecoverScript() {
 // inyectar comandos desde la petición.
 function recoverSshCommand(ip) {
   const opts = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
-    '-o', 'ConnectTimeout=8', '-o', 'LogLevel=ERROR'];
+    '-o', 'ConnectTimeout=8', '-o', 'LogLevel=ERROR',
+    // Las Ender-5 Max traen dropbear 2019.78: no conoce ed25519 (llegó en
+    // 2020.79) y solo firma RSA con SHA-1 (ssh-rsa), que OpenSSH ≥8.8 desactivó
+    // por defecto. Sin estas dos opciones la llave se copia bien, los permisos
+    // quedan perfectos y el login falla igual, porque el cliente se niega a
+    // firmar con el único algoritmo que la impresora entiende.
+    '-o', 'PubkeyAcceptedAlgorithms=+ssh-rsa', '-o', 'HostKeyAlgorithms=+ssh-rsa'];
   if (SSH_KEY) opts.push('-i', SSH_KEY, '-o', 'IdentitiesOnly=yes');
   const target = `${SSH_USER}@${ip}`;
   const script = moonrakerRecoverScript();
