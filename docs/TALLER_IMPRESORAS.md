@@ -143,6 +143,60 @@ En estas máquinas **no existe `/etc/rc.d`**. El prefijo `S56` de
 `/etc/init.d/S56moonraker_service` *es* el mecanismo de arranque. Si el script
 está ahí, arranca solo — no falta ningún enlace.
 
+### Caso 1b · No se cayó Moonraker: no está instalado (2026-08-19, K1 #3)
+
+El botón de recuperar respondió algo que el runbook no contemplaba:
+
+```
+falta /usr/data/printer_data/config/moonraker.conf y no hay respaldo
+no se encontro el servicio de Moonraker en esta maquina
+```
+
+No faltaba la configuración: faltaba **todo el stack**. Comparando con una
+máquina sana se ve de una:
+
+| | K1 #3 (rota) | Ender #6 (sana) |
+|---|---|---|
+| `/etc/init.d/S56moonraker_service` | ❌ | ✅ |
+| `/etc/init.d/S50nginx` | ❌ | ✅ |
+| `/usr/data/moonraker/` | ❌ | ✅ (70,7 MB) |
+| `printer_data/` | solo `config`, `gcodes`, `logs` | + `database`, `comms`, `certs`, `misc` |
+
+Klipper en cambio estaba intacto **y la máquina imprimiendo al 96%**. Faltaban
+archivos del sistema (init scripts), no solo de datos: eso apunta a un firmware
+sin el stack de root, no a un borrado. Firmware encontrado: `1.3.5.22`.
+
+**Moonraker no vive en `/usr/share`** — está en `/usr/data/moonraker/`, con su
+propio venv. El init script es quien lo dice:
+`PROG=/usr/data/moonraker/moonraker-env/bin/python`.
+
+#### El injerto (no toca Klipper: se puede hacer imprimiendo)
+
+```bash
+ssh 192.168.100.67 'tar czf - -C /usr/data moonraker' | ssh 192.168.100.7 'tar xzf - -C /usr/data'
+ssh 192.168.100.67 'cat /etc/init.d/S56moonraker_service' | ssh 192.168.100.7 'cat > /etc/init.d/S56moonraker_service && chmod +x /etc/init.d/S56moonraker_service'
+ssh 192.168.100.67 'cat /usr/data/printer_data/moonraker.asvc' | ssh 192.168.100.7 'cat > /usr/data/printer_data/moonraker.asvc'
+ssh 192.168.100.67 'cat /usr/data/printer_data/config/moonraker.conf' > /tmp/mk.conf
+sed '/^\[update_manager Creality-Helper-Script\]/,$d' /tmp/mk.conf > /tmp/mk-k1.conf
+scp -O /tmp/mk-k1.conf 192.168.100.7:/usr/data/printer_data/config/moonraker.conf
+ssh 192.168.100.7 'cd /usr/data/printer_data/config && cp moonraker.conf .moonraker.conf.bkp'
+ssh 192.168.100.7 '/etc/init.d/S56moonraker_service start'
+```
+
+El tar tarda 2-6 min y **no imprime nada mientras corre** (el CPU mips comprime
+lento); no lo cortes. Se le quita el bloque `[update_manager
+Creality-Helper-Script]` porque apunta a `/usr/data/helper-script`, que esta
+máquina no tiene. Para comprobar qué configuración quedó realmente activa,
+pregúntale a Moonraker en vez de leer el archivo:
+`curl -s "http://IP:7125/server/config"`.
+
+Sirve entre modelos distintos (la Ender-5 Max le prestó el suyo a una K1):
+Moonraker no depende del modelo, habla con Klipper por `/tmp/klippy_uds`.
+
+> Es un injerto, no una reparación de fondo: esa K1 sigue sin nginx ni Fluidd
+> (puerto 4408). Lo definitivo es reflashear con el firmware rooteado
+> ([FIRMWARE_K1.md](FIRMWARE_K1.md)), con la máquina libre.
+
 ---
 
 ## Caso 2 · La cámara no se ve
@@ -298,6 +352,7 @@ Cosas que cuestan media hora la primera vez y treinta segundos la segunda.
 | `netstat: /proc/net/tcp6: No such file` | Ruido, no error. La salida de IPv4 sale igual. |
 | `zsh: command not found: #` | zsh interactivo no acepta comentarios en línea, y además deja la variable **sin definir**. Pega los comandos sin comentarios. |
 | La llave SSH se copia pero el login sigue fallando | Las Ender-5 Max traen **dropbear 2019.78**: no conoce ed25519 (llegó en 2020.79) y solo firma RSA con SHA-1, que OpenSSH ≥8.8 desactivó. Engaña porque `ssh-copy-id` dice "1 key added" y los permisos quedan 700/700/600. Se arregla en el **cliente**: `-o PubkeyAcceptedAlgorithms=+ssh-rsa`. |
+| `zsh: unknown file attribute` al pegar comandos | zsh interactivo no trata `#` como comentario: `# 1 · copiar (70 MB)` se ejecuta y los paréntesis se leen como filtros de archivo. **Pega los bloques sin comentarios.** |
 | Un `grep` de estado que nunca coincide | Moonraker devuelve el JSON con espacio: `"state": "standby"`. Usa `grep -o '"state": *"[a-z]*"'`. |
 | Una impresora que aparece y desaparece del barrido | Las K1 están por WiFi y responden lento. Sube el timeout a 6-10 segundos. |
 | El comando de arranque no dice nada y el puerto sigue muerto | El modo daemon se traga los errores. Córrelo en primer plano redirigiendo a un archivo y léelo. |
