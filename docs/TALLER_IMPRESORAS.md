@@ -29,8 +29,9 @@ Para cambiar la **versión de firmware** de una K1, ver
 > sumaron **Ender-5 Max #9 y #10** (la #10 en `192.168.100.162`) y la
 > **OrangeStorm Giga**. La lista viva está siempre en el dashboard.
 >
-> Al 2026-08-19 la **Ender-5 Max #9 está en `192.168.100.90`** (antes `.66`).
-> Ninguna de las dos contesta: la máquina no aparece en la red.
+> Al 2026-08-19, tras un baile de DHCP: **#8 = `.66`**, **#9 = `.95`**
+> (confirmado por Gustavo en el taller — el hostname de Moonraker dice
+> `Ender-5` a secas, no numera). La `.90` que apareció un rato ya no está.
 
 > **Las IPs son DHCP y se mueven.** Las de arriba son las del 2026-08-12. La
 > fuente viva es Airtable (tabla `Maquinas`, campo `ip`), pero el dashboard
@@ -249,6 +250,54 @@ done; wait
 El cuerpo del 424 dice **por qué** falló, y la diferencia importa:
 `ECONNREFUSED` = la máquina está viva pero ese servicio no corre;
 `EHOSTDOWN` / `EHOSTUNREACH` = la máquina no está en la red.
+
+### Caso 1d · El injerto encadenado se cuelga pidiendo contraseña (2026-08-19)
+
+El 2026-08-19 hicieron falta dos injertos el mismo día: la **Ender-5 Max #8
+(`.66`)** —a la que alguien le había borrado medio Moonraker (42 MB de 70, sin
+`moonraker-env/bin/` ni la carpeta `moonraker/` del código, pero la
+`moonraker.conf` intacta)— y la **K1 #4 (`.68`)**, sin Moonraker del todo como
+la #3.
+
+El injerto de una línea del Caso 1b **se cuelga si el iMac entra a las
+impresoras con contraseña** (no con llave). El problema es el pipe:
+
+```bash
+ssh DONANTE 'tar czf - ...' | ssh PACIENTE 'tar xzf - ...'
+```
+
+Las dos conexiones abren a la vez y **chocan pidiendo la clave**: el `ssh` del
+paciente la pide y corre su lado (llega a ejecutar el `rm -rf` de la carpeta
+vieja), pero el del donante se queda esperando una contraseña que el pipe no
+deja escribir. Resultado: cursor congelado, y el paciente con la carpeta ya
+borrada y nada nuevo dentro (`du` da 48 K). La pista es justo esa: el `rm` corrió
+pero el `tar` no llenó nada.
+
+**El arreglo es partirlo en dos tiempos con un archivo intermedio en el iMac.**
+Cada comando pide su clave por separado, sin pisarse:
+
+```bash
+ssh DONANTE 'tar czf - -C /usr/data moonraker' > /tmp/mk.tgz
+ls -lh /tmp/mk.tgz                       # ~26 MB comprimido; si da 0, algo falló
+scp -O /tmp/mk.tgz PACIENTE:/usr/data/
+ssh PACIENTE 'tar xzf /usr/data/mk.tgz -C /usr/data && rm /usr/data/mk.tgz && du -sh /usr/data/moonraker'   # debe dar ~70 M
+```
+
+Para la Ender `.66` bastó eso más la `moonraker.asvc` (su config ya estaba
+puesta de un intento anterior). Para la K1 `.68` hizo falta además el init
+script y la config sin el bloque helper-script, como en el Caso 1b — pero
+copiados con `scp`, no por pipe.
+
+> **Lo definitivo es que el iMac entre con llave, no con contraseña.** Con
+> `~/.ssh/config` (`PubkeyAcceptedAlgorithms +ssh-rsa` por el dropbear viejo) y
+> la llave copiada a las tres máquinas, el injerto de una línea del Caso 1b
+> vuelve a funcionar sin colgarse. Ver `printer-bridge/README.md`.
+
+> **La impresión pausada de la `.68` se perdió en el proceso.** Apareció como
+> `cancelled` con los calentadores apagados al terminar. El injerto no toca
+> Klipper, así que no se pudo confirmar si la canceló el `idle_timeout` de la
+> pausa larga o algo externo. Si vas a injertar una máquina con trabajo pausado,
+> asume que ese trabajo puede no sobrevivir.
 ---
 
 ## Caso 2 · La cámara no se ve
@@ -420,13 +469,13 @@ Cosas que cuestan media hora la primera vez y treinta segundos la segunda.
   procedimiento manual, va a repetirse.
 - **`printer.cfg` crece solo.** En la #4 pasó de 8,8 KB a 24 KB en cinco días,
   con un respaldo nuevo en cada cambio. A ese ritmo termina siendo un problema.
-- **La K1 #4 (`192.168.100.68`) está sin Moonraker**, igual que la #3. Falta
-  instalarle la llave (`install-printer-keys.sh --bridge 192.168.100.68`) y
-  hacerle el injerto del Caso 1b.
-- **Seis máquinas no aparecen en la red** (2026-08-19): K1 #1 `.51`, K1 #2
-  `.126`, K2 Plus #11 `.75`, Ender-5 Max #9 `.90`, Ender-5 Max #10 `.162` y
-  la Giga `.44`. Todas dan `EHOSTDOWN`, o sea que no están encendidas o no
-  están en esta red — no es un problema de telemetría.
+- **La K1 #4 (`.68`) y la Ender-5 Max #8 (`.66`) ya recibieron el injerto**
+  el 2026-08-19 (ver Caso 1d). Ambas siguen sin nginx/Fluidd ni cámara; lo
+  de fondo es reflashear.
+- **Cinco máquinas no aparecen en la red** (2026-08-19): K1 #1 `.51`, K1 #2
+  `.126`, K2 Plus #11 `.75`, Ender-5 Max #10 `.162` y la Giga `.44`. Todas
+  dan `EHOSTDOWN`: no están encendidas o no están en esta red — no es
+  telemetría.
 - **Reservas DHCP fijas** para las once máquinas. Media hora perdida el
   2026-08-11 buscando cuál impresora era cuál, y una IP documentada que no
   existía en el parque.
