@@ -557,7 +557,7 @@ function _npsStats(){
   if(!notas.length) return null;
   const n=notas.length,sum=notas.reduce((a,b)=>a+b,0);
   const prom=notas.filter(v=>v>=4).length,detr=notas.filter(v=>v<=2).length;
-  return {n,avg:sum/n,promotores:prom,detractores:detr,nps:Math.round((prom-detr)/n*100),pctProm:Math.round(prom/n*100)};
+  return {n,avg:sum/n,promotores:prom,detractores:detr,nps:Math.round((prom-detr)/n*100),pctProm:Math.round(prom/n*100),pctDetr:Math.round(detr/n*100)};
 }
 // Resumen de satisfacción (CSAT/NPS) con las notas ya recibidas de los clientes.
 function renderCsatSummary(){
@@ -576,7 +576,7 @@ function renderCsatSummary(){
       <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Promedio</span><span class="fac-kpi-val">${s.avg.toFixed(1)} <span style="font-size:11px;color:var(--text3)">/5</span></span></div>
       <div class="fac-kpi" style="flex:1;min-width:90px" title="Net Promoter Score: % de promotores (4-5) menos % de detractores (1-2)"><span class="fac-kpi-lbl">NPS</span><span class="fac-kpi-val" style="color:${npsCol}">${s.nps>0?'+':''}${s.nps}</span></div>
       <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Promotores</span><span class="fac-kpi-val" style="color:var(--accent3)">${s.pctProm}%</span></div>
-      <div class="fac-kpi ${s.detractores?'fac-kpi-danger':''}" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Detractores</span><span class="fac-kpi-val">${s.detractores}</span></div>
+      <div class="fac-kpi ${s.detractores?'fac-kpi-danger':''}" style="flex:1;min-width:90px" title="${s.detractores} de ${s.n} calificaciones"><span class="fac-kpi-lbl">Detractores</span><span class="fac-kpi-val">${s.pctDetr}%</span></div>
     </div>
   </div>`;
 }
