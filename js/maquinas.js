@@ -605,13 +605,23 @@ function renderMaqOcupacion(){
   // Eje: marcas de hora sobre el horizonte
   const marks=[];const stepH=horizon>6*3600?2:1;
   for(let hh=stepH;hh*3600<horizon;hh+=stepH) marks.push(`<span style="position:absolute;left:${(hh*3600/horizon*100).toFixed(1)}%;transform:translateX(-50%);font-size:10px;color:var(--text3)">+${hh}h</span>`);
+  // La columna del nombre se encoge en pantallas chicas: fija en 158px tapaba
+  // la barra en el teléfono. El eje de horas de abajo usa el mismo ancho + 23px
+  // (el punto de estado y los dos gaps) para no desalinearse.
+  const nameW='clamp(84px,26vw,158px)';
   const fila=r=>{
     const nom=`${escapeHtml(r.m.nombre||'—')} <span style="color:var(--text3)">#${r.m.numG||r.m.num||''}</span>`;
     let bar='',lbl='';
     if(r.k==='print'&&r.eta>0){
       const w=Math.min(100,r.eta/horizon*100).toFixed(1);
       const pct=(typeof r.s.progress==='number'&&r.s.progress>=0)?Math.round(r.s.progress<=1?r.s.progress*100:r.s.progress):null;
-      bar=`<div title="${escapeHtml(r.s.filename||'Imprimiendo')}${pct!=null?' · '+pct+'%':''}" style="height:100%;width:${w}%;background:linear-gradient(90deg,#00d4aa,#00d4cc);border-radius:5px;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;min-width:52px"><span style="font-size:10px;font-weight:700;color:#04121a;white-space:nowrap">${pct!=null?pct+'% · ':''}libre ${hhmm(r.eta)}</span></div>`;
+      // La etiqueta ya no vive DENTRO de la barra: cuando la barra era angosta,
+      // el texto (más ancho que ella) se desbordaba a la izquierda y se encimaba
+      // sobre el nombre. Ahora es una pastilla fija al borde derecho de la pista,
+      // con fondo propio para leerse igual sobre la barra o sobre el fondo vacío.
+      const txt=`${pct!=null?pct+'% · ':''}libre ${hhmm(r.eta)}`;
+      bar=`<div title="${escapeHtml(r.s.filename||'Imprimiendo')}${pct!=null?' · '+pct+'%':''}" style="height:100%;width:${w}%;background:linear-gradient(90deg,#00d4aa,#00d4cc);border-radius:5px;min-width:6px"></div>`
+        +`<span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:#00d4cc;white-space:nowrap;background:rgba(4,18,26,0.82);border:1px solid rgba(0,212,204,0.35);border-radius:4px;padding:0 4px;pointer-events:none">${txt}</span>`;
       lbl=`<span style="color:#00d4aa">🟢</span>`;
     }else if(r.k==='print'){
       bar=`<div title="Imprimiendo — sin ETA del bridge" style="height:100%;width:100%;background:repeating-linear-gradient(45deg,rgba(0,212,170,0.5),rgba(0,212,170,0.5) 8px,rgba(0,212,170,0.25) 8px,rgba(0,212,170,0.25) 16px);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#04121a">en curso · sin ETA</span></div>`;
@@ -634,17 +644,40 @@ function renderMaqOcupacion(){
     }
     return`<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
       <span style="flex-shrink:0;width:14px;text-align:center;font-size:12px">${lbl}</span>
-      <span style="flex-shrink:0;width:158px;font-size:11.5px;font-weight:600;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</span>
-      <div style="flex:1;height:20px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:2px;position:relative">${bar}</div>
+      <span style="flex-shrink:0;width:${nameW};font-size:11.5px;font-weight:600;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</span>
+      <div style="flex:1;min-width:0;height:20px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:2px;position:relative;overflow:hidden">${bar}</div>
     </div>`;
   };
+  // Dentro de cada tipo: primero las libres, luego las que imprimen por hora de
+  // liberación, y al final las desconectadas.
+  const cmp=(a,b)=>(a.eta||(a.k==='idle'?-1:1e9))-(b.eta||(b.k==='idle'?-1:1e9));
+  // Agrupadas por modelo, en un orden fijo del parque; un modelo desconocido
+  // cae al final por nombre.
+  const MODORDER=['K1','K2','K2 Plus','Ender-5 Max','Giga'];
+  const groups={};
+  rows.forEach(r=>{const g=r.m.modelo||'Otras';(groups[g]||(groups[g]=[])).push(r);});
+  const gkeys=Object.keys(groups).sort((a,b)=>{
+    const ia=MODORDER.indexOf(a),ib=MODORDER.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b);
+  });
+  const multiGrupo=gkeys.length>1;
+  const cuerpo=gkeys.map(g=>{
+    const items=groups[g].slice().sort(cmp).map(fila).join('');
+    if(!multiGrupo)return items;   // ya filtrado a un solo tipo: sin encabezado
+    const col=groups[g][0].m.color||'var(--text3)';
+    return`<div style="display:flex;align-items:center;gap:6px;margin:11px 0 5px">
+      <span style="width:7px;height:7px;border-radius:2px;background:${col};flex-shrink:0"></span>
+      <span style="font-size:10.5px;font-weight:700;color:var(--text2);letter-spacing:.02em">${escapeHtml(g)}</span>
+      <span style="font-size:10px;color:var(--text3)">${groups[g].length}</span>
+    </div>`+items;
+  }).join('');
   el.style.display='';
   el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <span style="font-size:12px;font-weight:700;color:var(--text)">⏱️ Ocupación de máquinas</span>
       <span style="font-size:10.5px;color:var(--text3)">${libres} libre${libres!==1?'s':''} ahora · ${imprimiendo} imprimiendo${proxima?' · próxima máquina libre ~'+proxima:''}</span>
     </div>
-    <div style="position:relative;height:12px;margin:0 0 4px 181px">${marks.join('')}</div>
-    ${rows.sort((a,b)=>(a.eta||(a.k==='idle'?-1:1e9))-(b.eta||(b.k==='idle'?-1:1e9))).map(fila).join('')}`;
+    <div style="position:relative;height:12px;margin:0 0 4px calc(${nameW} + 23px)">${marks.join('')}</div>
+    ${cuerpo}`;
 }
 
 function renderMonitorGrid(){
