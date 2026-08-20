@@ -42,6 +42,13 @@ Para cambiar la **versión de firmware** de una K1, ver
 
 Password SSH en todas: `creality`.
 
+> **El iMac del taller ya entra con llave** (enrolado el 2026-08-19 en `.51`,
+> `.89`, `.7`, `.68`, `.67`, `.64`, `.95`, `.66`, `.75`). No pide contraseña,
+> así que el injerto de una línea del Caso 1b **ya no se cuelga** — el truco de
+> dos tiempos del Caso 1d solo hace falta desde una máquina sin llave. Si
+> aparece una impresora nueva, enróllala con:
+> `ssh-copy-id -o PubkeyAcceptedAlgorithms=+ssh-rsa root@IP`.
+
 ### Barrer la red buscando impresoras
 
 ```bash
