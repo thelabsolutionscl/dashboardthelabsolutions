@@ -108,9 +108,30 @@ function printerUrl(ip,path){
   return _appendBridgeToken(`${getPrinterTunnel()}/${ip}${path}`);
 }
 function printerMediaUrl(ip,path){return _appendBridgeToken(printerUrl(ip,path));}
+// Cámara por defecto según el modelo, derivada de la IP viva de la máquina (no
+// una URL fija: las IP son DHCP y se mueven). Las K1/Ender publican MJPEG por
+// mjpg_streamer en :8080; las K2/K2 Plus dan un snapshot JPEG por go2rtc en
+// :1984. Así toda máquina intenta su cámara sola: la que no transmite muestra
+// "sin señal", y en cuanto arranca mjpg_streamer aparece sin configurar nada.
+function _defaultCamUrl(m){
+  const ip=(typeof getPrinterIp==='function')?getPrinterIp(m):(m&&m.ip);
+  if(!ip)return'';
+  return /K2/.test((m&&m.modelo)||'')
+    ? `http://${ip}:1984/api/frame.jpeg?src=k2plus`
+    : `http://${ip}:8080/?action=stream`;
+}
+// Fuente única de la URL de cámara: primero lo que el usuario fijó a mano
+// (localStorage o Airtable vía m.cam), y si no, el default por modelo.
+function _printerCamRaw(id){
+  const ex=localStorage.getItem('printer_cam_'+id);
+  if(ex)return ex;
+  const m=(typeof MAQUINAS!=='undefined')?MAQUINAS.find(x=>x.id===id):null;
+  if(m&&m.cam)return m.cam;
+  return m?_defaultCamUrl(m):'';
+}
 // Webcam: en modo remoto reescribe http://IP_LAN:PUERTO/ruta → túnel /{ip}:{puerto}/ruta
 function printerCamUrl(id){
-  const raw=localStorage.getItem('printer_cam_'+id)||(typeof MAQUINAS!=='undefined'?(MAQUINAS.find(x=>x.id===id)||{}).cam:'')||'';if(!raw)return'';
+  const raw=_printerCamRaw(id);if(!raw)return'';
   if(typeof _isLocalMode==='function'&&_isLocalMode())return raw;
   const mm=raw.match(/^http:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?(\/.*)?$/);
   if(!mm)return raw;
@@ -688,7 +709,7 @@ function renderMonitorGrid(){
     const s=_printerStatus[m.id]||_printerInitialStatus(m);
     const sm=printerStateMeta(s.state);
     const ip=getPrinterIp(m);
-    const _rawCam=localStorage.getItem('printer_cam_'+m.id)||m.cam;
+    const _rawCam=_printerCamRaw(m.id);
     const _camU=_rawCam?printerCamUrl(m.id):'';
     const _camSnap=_camIsSnapshot(_rawCam);
     const img=MODELO_IMGS[m.modelo]||'';
@@ -854,7 +875,7 @@ function _syncPrinterCam(id,camKey,force){
   if(!force&&slot.__camKey===camKey)return;
   if(!camKey){slot.innerHTML='';slot.__camKey='';return;}
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
-  const raw=localStorage.getItem('printer_cam_'+id)||m.cam;
+  const raw=_printerCamRaw(id);
   const camU=_safePrinterMediaUrl(printerCamUrl(id)),snap=_camIsSnapshot(raw);
   if(!camU){slot.innerHTML='';slot.__camKey='';return;}
   // El <img> se conserva SIEMPRE (para snapshots se refresca cada 1s vía data-snap,
