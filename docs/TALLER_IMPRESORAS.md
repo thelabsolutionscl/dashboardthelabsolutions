@@ -358,6 +358,14 @@ Esperado: `200 image/jpeg`. URL para el **📷** del dashboard:
 http://192.168.100.126:8080/?action=stream
 ```
 
+> **Ya no hace falta pegar esa URL en el 📷 de cada máquina.** Desde el
+> 2026-08-19 el dashboard **deriva la cámara sola** de la IP viva y el modelo:
+> K1/Ender → MJPEG en `:8080`, K2/K2 Plus → snapshot go2rtc en `:1984`. Toda
+> máquina intenta su cámara; la que no transmite muestra "sin señal". Para que
+> una aparezca solo hay que **dejar corriendo `mjpg_streamer`** (comando de
+> arriba) — el 📷 queda para casos raros (una IP de cámara distinta, otro
+> stream). El default por modelo vive en `js/maquinas.js` (`_defaultCamUrl`).
+
 > **`LD_LIBRARY_PATH` no es opcional en las K1.** Sin él falla con
 > `dlopen: input_memfd.so: cannot open shared object file`, aunque el plugin
 > exista en `/usr/lib/mjpg-streamer/`: el cargador no busca en esa carpeta. En
