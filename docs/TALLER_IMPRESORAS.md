@@ -283,6 +283,20 @@ scp -O /tmp/mk.tgz PACIENTE:/usr/data/
 ssh PACIENTE 'tar xzf /usr/data/mk.tgz -C /usr/data && rm /usr/data/mk.tgz && du -sh /usr/data/moonraker'   # debe dar ~70 M
 ```
 
+El **2026-08-19 por la tarde** apareció una tercera: la **K1 #2**, ahora en
+`192.168.100.89` (antes `.126`), otra vez sin stack. Mismo injerto.
+
+**Trampa nueva ahí: las K1 van por WiFi y el `scp` de 26 MB se corta**
+(`lost connection`) a media transferencia — a veces hasta un archivo de 1 KB.
+No es tamaño, es señal. Se envuelve el `scp` en un bucle que reintenta hasta
+que pase entero:
+
+```bash
+until scp -O /tmp/mk.tgz IP:/usr/data/; do echo reintentando; sleep 2; done
+```
+
+Si se corta muchas veces, acerca la máquina al router o pásale cable.
+
 Para la Ender `.66` bastó eso más la `moonraker.asvc` (su config ya estaba
 puesta de un intento anterior). Para la K1 `.68` hizo falta además el init
 script y la config sin el bloque helper-script, como en el Caso 1b — pero
@@ -472,10 +486,9 @@ Cosas que cuestan media hora la primera vez y treinta segundos la segunda.
 - **La K1 #4 (`.68`) y la Ender-5 Max #9 (`.66`) ya recibieron el injerto**
   el 2026-08-19 (ver Caso 1d). Ambas siguen sin nginx/Fluidd ni cámara; lo
   de fondo es reflashear.
-- **Cinco máquinas no aparecen en la red** (2026-08-19): K1 #1 `.51`, K1 #2
-  `.126`, K2 Plus #11 `.75`, Ender-5 Max #10 `.162` y la Giga `.44`. Todas
-  dan `EHOSTDOWN`: no están encendidas o no están en esta red — no es
-  telemetría.
+- **Cuatro máquinas no aparecen en la red** (2026-08-19): K1 #1 `.51`, K2 Plus
+  #11 `.75`, Ender-5 Max #10 `.162` y la Giga `.44`. Todas dan `EHOSTDOWN`:
+  no están encendidas o no están en esta red — no es telemetría.
 - **Reservas DHCP fijas** para las once máquinas. Media hora perdida el
   2026-08-11 buscando cuál impresora era cuál, y una IP documentada que no
   existía en el parque.
