@@ -27,7 +27,7 @@ const OFFLINE_FAILURES = Math.max(1, Math.min(10, Number(process.env.FARM_HEALTH
 const REGISTRY_STALE_MS = Math.max(5 * 60_000, Number(process.env.FARM_HEALTH_REGISTRY_STALE_MS || 30 * 60_000));
 const SAFETY_STALE_MS = Math.max(60_000, Number(process.env.FARM_HEALTH_SAFETY_STALE_MS || 3 * 60_000));
 const STUCK_JOB_MS = Math.max(5 * 60_000, Number(process.env.FARM_HEALTH_STUCK_JOB_MS || 20 * 60_000));
-const EVENT_LIMIT = Math.max(100, Math.min(5000, Number(process.env.FARM_HEALTH_EVENT_LIMIT || 1000)));
+const EVENT_LIMIT = Math.max(500, Math.min(20_000, Number(process.env.FARM_HEALTH_EVENT_LIMIT || 5_000)));
 const MAX_BODY = 256 * 1024;
 const STARTED_AT = Date.now();
 
@@ -145,12 +145,29 @@ function probeHttp(host, port, targetPath, timeoutMs = PROBE_TIMEOUT_MS) {
 
 function normalizeStoredHealth(raw) {
   const v = raw && typeof raw === 'object' ? raw : {};
+  const events = Array.isArray(v.events) ? v.events.slice(0, EVENT_LIMIT) : [];
+  const oldestEventAt = events.reduce((oldest, e) => {
+    const at = Math.max(0, finite(e?.at));
+    return at && (!oldest || at < oldest) ? at : oldest;
+  }, 0);
   return {
-    version: 1,
+    version: 2,
+    startedAt: Math.max(0, finite(v.startedAt) || oldestEventAt || finite(v.updatedAt) || STARTED_AT),
     updatedAt: Math.max(0, finite(v.updatedAt)),
     acks: v.acks && typeof v.acks === 'object' ? v.acks : {},
-    events: Array.isArray(v.events) ? v.events.slice(0, EVENT_LIMIT) : [],
+    events,
   };
+}
+function activeAlertIdsFromEvents(events) {
+  const active = new Set();
+  const ordered = (Array.isArray(events) ? events : []).slice().sort((a, b) => finite(a?.at) - finite(b?.at));
+  for (const e of ordered) {
+    const id = String(e?.alertId || '');
+    if (!id) continue;
+    if (e?.state === 'opened') active.add(id);
+    else if (e?.state === 'resolved') active.delete(id);
+  }
+  return active;
 }
 let persisted = normalizeStoredHealth(readJsonDetailed(HEALTH_FILE).value);
 let persistChain = Promise.resolve();
@@ -168,7 +185,7 @@ let lastSnapshot = {
 };
 let cyclePromise = null;
 let timer = null;
-let previousAlertIds = new Set();
+let previousAlertIds = activeAlertIdsFromEvents(persisted.events);
 
 function parseDateMs(value) { const n = Date.parse(String(value || '')); return Number.isFinite(n) ? n : 0; }
 function santiagoHour(now = Date.now()) {
@@ -379,6 +396,9 @@ function installPreload() {
     };
     return hasOptions ? originalCreateServer.call(this, options, wrapped) : originalCreateServer.call(this, wrapped);
   };
+  // Persiste un inicio de cobertura incluso si nunca hubo una alerta. Así las
+  // métricas históricas no confunden "sin incidentes" con "sin monitoreo".
+  persistHealth();
   setTimeout(() => runCycle(false), 1500).unref();
   timer = setInterval(() => runCycle(false), POLL_MS); timer.unref();
   return true;
@@ -387,8 +407,8 @@ function installPreload() {
 if (process.env.FARM_HEALTH_PRELOAD_DISABLE !== '1') installPreload();
 
 module.exports = {
-  isPrivateIp, normalizeStoredHealth, potentialUnattended, classifyMachine,
+  isPrivateIp, normalizeStoredHealth, activeAlertIdsFromEvents, potentialUnattended, classifyMachine,
   deriveMachineAlerts, deriveStaticAlerts, reconcileTransitions, ackAlert,
   roleForToken, runCycle, publicSnapshot, installPreload,
-  _test: { OFFLINE_FAILURES, REGISTRY_STALE_MS, SAFETY_STALE_MS, STUCK_JOB_MS, santiagoHour },
+  _test: { OFFLINE_FAILURES, REGISTRY_STALE_MS, SAFETY_STALE_MS, STUCK_JOB_MS, EVENT_LIMIT, santiagoHour },
 };
