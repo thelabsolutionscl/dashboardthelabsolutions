@@ -377,6 +377,9 @@ const server = http.createServer(async (req, res) => {
   setCors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   const u = new URL(req.url, 'http://farm.local'), p = u.pathname;
+  // El bridge legado ejecutaba /restart sin validar método. Desde el controller
+  // el reinicio es admin + POST-only, evitando que una navegación/GET lo dispare.
+  if (p === '/restart' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { ok: false, error: 'method not allowed' }); }
   if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => ['queued', 'retry', 'checking', 'uploading', 'uploaded'].includes(j.state)).length, machines: registry.machines.length });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
