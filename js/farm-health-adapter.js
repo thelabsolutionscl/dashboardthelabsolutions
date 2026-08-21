@@ -64,3 +64,20 @@ function install(root){
 }
 return{install,refresh,probe,ack,status,_test:{}};
 });
+
+// Extensiones visuales pequeñas e independientes. Se cargan desde aquí para no
+// tocar el index.html monolítico; una falla de UI no afecta FarmHealth.
+(function _loadDashboardUiExtensions(){
+  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_DASHBOARD_UI_EXT_LOADER__)return;
+  window.__TLS_DASHBOARD_UI_EXT_LOADER__=true;
+  const current=document.currentScript,raw=current?.src||'',suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';
+  const load=(path,label)=>{
+    if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return;
+    if(typeof document.createElement!=='function'||!document.head)return;
+    const s=document.createElement('script');s.src=path+suffix;s.async=false;
+    s.onerror=()=>console.warn('[Dashboard] no se pudo cargar '+label);
+    document.head.appendChild(s);
+  };
+  load('js/dashboard-notification-badges.js','badges de notificaciones');
+  load('js/correo-input-compat.js','compatibilidad de teclado de correo');
+})();
