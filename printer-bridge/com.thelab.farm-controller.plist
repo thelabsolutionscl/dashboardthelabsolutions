@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.thelab.farm-controller</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__REPO__/printer-bridge/farm-controller.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__/printer-bridge</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>BRIDGE_ALLOW_ORIGIN</key><string>https://dashboard.thelab.solutions</string>
+    <key>FARM_DATA_DIR</key><string>__DATA__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__DATA__/farm-controller.log</string>
+  <key>StandardErrorPath</key><string>__DATA__/farm-controller.err</string>
+</dict>
+</plist>
