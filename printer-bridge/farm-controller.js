@@ -15,11 +15,13 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const SafetyPolicy = require('../js/machineops-unattended-safety.js');
 
 const ROOT = __dirname;
 const DATA_DIR = process.env.FARM_DATA_DIR || path.join(ROOT, 'data');
 const QUEUE_FILE = process.env.FARM_QUEUE_FILE || path.join(DATA_DIR, 'queue.json');
 const REGISTRY_FILE = process.env.FARM_REGISTRY_FILE || path.join(DATA_DIR, 'registry.json');
+const SAFETY_FILE = process.env.FARM_SAFETY_FILE || path.join(DATA_DIR, 'safety.json');
 const PUBLIC_PORT = Number(process.env.BRIDGE_PORT || 8347);
 const LEGACY_PORT = Number(process.env.LEGACY_BRIDGE_PORT || 8348);
 const DASHBOARD_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || 'https://dashboard.thelab.solutions';
@@ -112,7 +114,8 @@ function normalizeRegistry(raw) {
 }
 let queue = normalizeQueue(readJson(QUEUE_FILE, null));
 let registry = normalizeRegistry(readJson(REGISTRY_FILE, null));
-let queueWrite = Promise.resolve(), registryWrite = Promise.resolve();
+let safety = SafetyPolicy.normalizeSnapshot(readJson(SAFETY_FILE, null));
+let queueWrite = Promise.resolve(), registryWrite = Promise.resolve(), safetyWrite = Promise.resolve();
 function persistQueue() {
   queue.updatedAt = Date.now();
   queueWrite = queueWrite.then(() => atomicWrite(QUEUE_FILE, queue)).catch(e => console.error('[queue] persist', e));
@@ -122,6 +125,11 @@ function persistRegistry() {
   registry.updatedAt = Date.now();
   registryWrite = registryWrite.then(() => atomicWrite(REGISTRY_FILE, registry)).catch(e => console.error('[registry] persist', e));
   return registryWrite;
+}
+function persistSafety() {
+  safety.updatedAt = Date.now();
+  safetyWrite = safetyWrite.then(() => atomicWrite(SAFETY_FILE, safety)).catch(e => console.error('[safety] persist', e));
+  return safetyWrite;
 }
 const recoveredAtBoot = recoverQueueJobs(queue);
 if (recoveredAtBoot) {
@@ -244,7 +252,7 @@ function enqueue(payload) {
     grams: Number(payload.grams || 0), secs: Number(payload.secs || 0),
     priority: Math.max(0, Math.min(100, Number(payload.priority || 50))),
     state: 'queued', attempts: 0, createdAt: nowIso(), updatedAt: nowIso(),
-    source: String(payload.source || 'dashboard'), lastError: '',
+    source: String(payload.source || 'dashboard'), lastError: '', safetyBlocked: false,
   };
   queue.jobs.push(j);
   queue.jobs.sort((a, b) => b.priority - a.priority || Date.parse(a.createdAt) - Date.parse(b.createdAt));
@@ -254,6 +262,18 @@ function enqueue(payload) {
 function markJob(id, patch) {
   const j = queueJobById(id); if (!j) return null;
   Object.assign(j, patch, { updatedAt: nowIso() }); persistQueue(); return j;
+}
+function requeueSafetyBlocked() {
+  let changed = 0;
+  for (const j of queue.jobs) {
+    if (j.state !== 'blocked' || j.safetyBlocked !== true) continue;
+    const check = SafetyPolicy.evaluateSnapshot(safety, j, Date.now());
+    if (!check.ok) continue;
+    Object.assign(j, { state: 'queued', safetyBlocked: false, safetyBlockers: [], lastError: '', updatedAt: nowIso() });
+    changed++;
+  }
+  if (changed) persistQueue();
+  return changed;
 }
 function requestLegacy(method, targetPath, body, headers = {}) {
   return new Promise(resolve => {
@@ -282,7 +302,17 @@ async function runQueuedJob(j) {
     markJob(j.id, { state: 'checking', lastError: '' });
     const machine = machineByIdentity({ id: j.machineId }) || machineByIdentity({ ip: j.ip });
     const ip = machine?.ip || j.ip;
-    if (!isPrivateIp(ip)) return markJob(j.id, { state: 'blocked', lastError: 'IP de máquina no disponible' });
+    if (!isPrivateIp(ip)) return markJob(j.id, { state: 'blocked', safetyBlocked: false, lastError: 'IP de máquina no disponible' });
+    // Fail-closed para trabajos largos/nocturnos. El controller decide de nuevo
+    // justo antes de hablar con Moonraker, sin confiar en que siga abierto el navegador.
+    const safetyCheck = SafetyPolicy.evaluateSnapshot(safety, j, Date.now());
+    if (!safetyCheck.ok) {
+      return markJob(j.id, {
+        state: 'blocked', safetyBlocked: true, safetyCheckedAt: nowIso(),
+        safetyBlockers: safetyCheck.blockers, lastError: 'seguridad desatendida: ' + safetyCheck.blockers.join(' '),
+      });
+    }
+    markJob(j.id, { safetyBlocked: false, safetyBlockers: [], safetyCheckedAt: nowIso() });
     const live = await requestLegacy('GET', `/${ip}/printer/objects/query?print_stats&webhooks`);
     if (!live.ok) return markJob(j.id, { state: 'retry', lastError: `preflight HTTP ${live.status}` });
     try {
@@ -299,7 +329,7 @@ async function runQueuedJob(j) {
         // La impresora está ocupada por OTRO trabajo: este sigue esperando.
         return markJob(j.id, { state: queuedState, lastError: `esperando: impresora ${printState}` });
       }
-      if (['shutdown', 'error', 'startup'].includes(String(wh.state || '').toLowerCase())) return markJob(j.id, { state: 'blocked', lastError: `Klipper ${wh.state}` });
+      if (['shutdown', 'error', 'startup'].includes(String(wh.state || '').toLowerCase())) return markJob(j.id, { state: 'blocked', safetyBlocked: false, lastError: `Klipper ${wh.state}` });
     } catch (_) { return markJob(j.id, { state: 'retry', lastError: 'preflight inválido' }); }
     const nextAttempts = Number(j.attempts || 0) + 1;
     markJob(j.id, { state: 'uploading', ip, attempts: nextAttempts, lastError: '' });
@@ -380,7 +410,7 @@ const server = http.createServer(async (req, res) => {
   // El bridge legado ejecutaba /restart sin validar método. Desde el controller
   // el reinicio es admin + POST-only, evitando que una navegación/GET lo dispare.
   if (p === '/restart' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { ok: false, error: 'method not allowed' }); }
-  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => ['queued', 'retry', 'checking', 'uploading', 'uploaded'].includes(j.state)).length, machines: registry.machines.length });
+  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => ['queued', 'retry', 'checking', 'uploading', 'uploaded'].includes(j.state)).length, machines: registry.machines.length, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
@@ -408,6 +438,21 @@ const server = http.createServer(async (req, res) => {
     queue.jobs = queue.jobs.filter(j => j.id !== id || ['checking', 'uploading', 'started'].includes(j.state));
     if (queue.jobs.length === before) return json(res, 409, { ok: false, error: 'job no encontrado o ya está ejecutándose' });
     persistQueue(); return json(res, 200, { ok: true });
+  }
+  if (p === '/farm/safety' && req.method === 'GET') {
+    const role = requireRole(req, res, 'viewer'); if (!role) return;
+    return json(res, 200, { ok: true, safety });
+  }
+  if (p === '/farm/safety' && req.method === 'PUT') {
+    const role = requireRole(req, res, 'operator'); if (!role) return;
+    try {
+      const body = JSON.parse((await readBody(req, 1024 * 1024)).toString('utf8') || '{}');
+      safety = SafetyPolicy.normalizeSnapshot({ ...body, updatedAt: Date.now() });
+      await persistSafety();
+      const released = requeueSafetyBlocked();
+      setTimeout(queueWorker, 0).unref?.();
+      return json(res, 200, { ok: true, released, safety });
+    } catch (e) { return json(res, 400, { ok: false, error: e.message }); }
   }
   if (p === '/farm/registry' && req.method === 'GET') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
@@ -445,6 +490,7 @@ function start(){
     console.log(`  CORS            : ${DASHBOARD_ORIGIN}`);
     console.log(`  Queue           : ${QUEUE_FILE}`);
     console.log(`  Registry        : ${REGISTRY_FILE}`);
+    console.log(`  Safety          : ${SAFETY_FILE}`);
     console.log(`  Roles           : viewer=${TOKENS.viewer ? 'sí' : 'fallback'} operator=${TOKENS.operator ? 'sí' : 'fallback'} admin=sí`);
     console.log('─'.repeat(64));
   });
@@ -459,4 +505,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, normalizeRegistry, roleForToken, routeMinimumRole, start };
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, normalizeRegistry, roleForToken, routeMinimumRole, start,
+  normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
