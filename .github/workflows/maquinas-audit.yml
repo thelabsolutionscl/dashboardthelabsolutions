@@ -20,6 +20,7 @@ on:
       - 'tests/machineops-storage-adapter.test.js'
       - 'tests/machineops-unattended-safety.test.js'
       - 'tests/printer-history-adapter.test.js'
+      - 'tests/printer-history-wiring.test.js'
       - 'tests/farm-controller.test.js'
       - 'tests/farm-production-preload.test.js'
       - '.github/workflows/maquinas-audit.yml'
@@ -41,6 +42,7 @@ on:
       - 'tests/machineops-storage-adapter.test.js'
       - 'tests/machineops-unattended-safety.test.js'
       - 'tests/printer-history-adapter.test.js'
+      - 'tests/printer-history-wiring.test.js'
       - 'tests/farm-controller.test.js'
       - 'tests/farm-production-preload.test.js'
       - '.github/workflows/maquinas-audit.yml'
@@ -92,7 +94,7 @@ jobs:
         run: node --test tests/machineops-unattended-safety.test.js
 
       - name: Probar historial y odómetro durable
-        run: node --test tests/printer-history-adapter.test.js
+        run: node --test tests/printer-history-adapter.test.js tests/printer-history-wiring.test.js
 
       - name: Auditar cableado integral
         run: node --test tests/maquinas-wiring.test.js
