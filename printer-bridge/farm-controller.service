@@ -1,0 +1,24 @@
+[Unit]
+Description=The Lab Solutions 3D Farm Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=thelab-farm
+Group=thelab-farm
+WorkingDirectory=/opt/thelab/dashboardthelabsolutions/printer-bridge
+ExecStart=/usr/bin/node /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-controller.js
+Restart=always
+RestartSec=3
+Environment=BRIDGE_ALLOW_ORIGIN=https://dashboard.thelab.solutions
+Environment=FARM_DATA_DIR=/var/lib/thelab-farm
+EnvironmentFile=-/etc/thelab-farm.env
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/thelab-farm /opt/thelab/dashboardthelabsolutions/printer-bridge
+
+[Install]
+WantedBy=multi-user.target
