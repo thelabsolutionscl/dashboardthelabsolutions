@@ -56,6 +56,8 @@ jobs:
           node --check js/slicer3d.js
           node --check printer-bridge/server.js
           node --check printer-bridge/farm-controller.js
+          bash -n printer-bridge/install-farm-controller.sh
+          bash -n printer-bridge/rollback-farm-controller.sh
 
       - name: Probar controlador de granja
         run: node --test tests/farm-controller.test.js
