@@ -59,10 +59,22 @@ test('métricas calculan disponibilidad, utilización, finalización, MTBF y MTT
   assert.equal(m.downtimeHours,1);
   assert.equal(m.completionRatePct,75);
   assert.equal(m.incidents,1);
+  assert.equal(m.resolvedIncidents,1);
   assert.equal(m.mtbfHours,9);
   assert.equal(m.mttrHours,1);
   assert.equal(m.printHours,2);
   assert.equal(m.utilizationPct,22.2);
+});
+
+test('MTTR de flota no se diluye con incidentes todavía abiertos',()=>{
+  const fleet=r.aggregateFleet([
+    {observedHours:10,availabilityPct:90,downtimeHours:1,printHours:2,completed:1,notCompleted:0,incidents:1,resolvedIncidents:1,openIncidents:0,mttrHours:1},
+    {observedHours:10,availabilityPct:80,downtimeHours:2,printHours:2,completed:1,notCompleted:0,incidents:1,resolvedIncidents:0,openIncidents:1,mttrHours:null},
+  ]);
+  assert.equal(fleet.incidents,2);
+  assert.equal(fleet.resolvedIncidents,1);
+  assert.equal(fleet.openIncidents,1);
+  assert.equal(fleet.mttrHours,1);
 });
 
 test('sin health.json no inventa disponibilidad ni MTBF',()=>{
