@@ -212,3 +212,31 @@ async function togglePrinterLight(id,button){
 
 // Primitivas expuestas solo para pruebas unitarias; no incluyen red ni credenciales.
 window.PrinterLights={_test:{parseOverride:_printerLightParseOverride,chooseCapability:_printerLightChooseCapability,readStatus:_printerLightReadStatus,buildCommand:_printerLightBuildCommand}};
+
+// Bootstrap de extensiones de Máquinas. Este archivo se carga entre maquinas.js
+// y maquinas-operaciones.js, por lo que aquí podemos insertar extensiones de
+// forma parser-blocking sin tocar el index.html gigante. Conservamos el mismo
+// ?v=BUILD del script actual para que el cache/versionado siga alineado.
+(function _loadMachineExtensions(){
+  if(typeof window==='undefined'||typeof document==='undefined')return;
+  if(window.__TLS_MACHINE_EXTENSIONS_BOOTSTRAP__)return;
+  window.__TLS_MACHINE_EXTENSIONS_BOOTSTRAP__=true;
+  const current=document.currentScript;
+  const raw=current?.src||'';
+  const suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';
+  const paths=['js/maquinas-farm-controller.js','js/machineops-storage-adapter.js'];
+  if(document.readyState==='loading'&&typeof document.write==='function'){
+    document.write(paths.map(path=>`<script src="${path}${suffix}"><\/script>`).join(''));
+    return;
+  }
+  // Fallback para cargas manuales/tardías (por ejemplo en tests o consola).
+  if(typeof document.createElement!=='function'||!document.head)return;
+  let chain=Promise.resolve();
+  paths.forEach(path=>{
+    chain=chain.then(()=>new Promise((resolve,reject)=>{
+      if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return resolve();
+      const s=document.createElement('script');s.src=path+suffix;s.onload=resolve;s.onerror=reject;document.head.appendChild(s);
+    }));
+  });
+  chain.catch(e=>console.warn('[Máquinas] no se pudo cargar una extensión',e));
+})();
