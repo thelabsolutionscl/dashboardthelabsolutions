@@ -155,15 +155,21 @@ function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWr
 return{install,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
 });
 
-// MachineOpsUnattendedSafety necesita ejecutarse después de que este adaptador
-// esté disponible, pero puede cargarse antes de maquinas-operaciones.js porque
-// espera a window.MachineOps antes de instalar sus wrappers.
-(function _loadUnattendedSafety(){
-  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_UNATTENDED_SAFETY_LOADER__)return;
-  window.__TLS_UNATTENDED_SAFETY_LOADER__=true;
+// Extensiones que dependen del bootstrap de Máquinas. Se cargan en serie para
+// que el historial central pueda envolver getHist/getOdometer antes de que las
+// vistas empiecen a consumir métricas, y luego se instala la política safety.
+(function _loadMachineOpsExtensions(){
+  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_MACHINEOPS_EXTENSIONS_LOADER__)return;
+  window.__TLS_MACHINEOPS_EXTENSIONS_LOADER__=true;
   const current=document.currentScript,raw=current?.src||'',suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';
-  const path='js/machineops-unattended-safety.js';
-  if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return;
+  const paths=['js/machine-production-history.js','js/machineops-unattended-safety.js'];
   if(typeof document.createElement!=='function'||!document.head)return;
-  const s=document.createElement('script');s.src=path+suffix;s.async=false;s.onerror=()=>console.warn('[Máquinas] no se pudo cargar seguridad desatendida');document.head.appendChild(s);
+  let chain=Promise.resolve();
+  for(const path of paths){
+    chain=chain.then(()=>new Promise((resolve,reject)=>{
+      if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return resolve();
+      const s=document.createElement('script');s.src=path+suffix;s.async=false;s.onload=resolve;s.onerror=reject;document.head.appendChild(s);
+    }));
+  }
+  chain.catch(e=>console.warn('[Máquinas] no se pudo cargar una extensión MachineOps',e));
 })();

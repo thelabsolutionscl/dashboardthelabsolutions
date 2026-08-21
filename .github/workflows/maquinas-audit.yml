@@ -10,6 +10,7 @@ on:
       - 'js/maquinas-led.js'
       - 'js/maquinas-operaciones.js'
       - 'js/maquinas-farm-controller.js'
+      - 'js/machine-production-history.js'
       - 'js/machineops-storage-adapter.js'
       - 'js/machineops-unattended-safety.js'
       - 'js/slicer3d.js'
@@ -28,6 +29,7 @@ on:
       - 'js/maquinas-led.js'
       - 'js/maquinas-operaciones.js'
       - 'js/maquinas-farm-controller.js'
+      - 'js/machine-production-history.js'
       - 'js/machineops-storage-adapter.js'
       - 'js/machineops-unattended-safety.js'
       - 'js/slicer3d.js'
@@ -66,6 +68,7 @@ jobs:
           node --check js/maquinas-led.js
           node --check js/maquinas-operaciones.js
           node --check js/maquinas-farm-controller.js
+          node --check js/machine-production-history.js
           node --check js/machineops-storage-adapter.js
           node --check js/machineops-unattended-safety.js
           node --check js/slicer3d.js
