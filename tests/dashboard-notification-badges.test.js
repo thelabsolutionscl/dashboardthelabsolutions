@@ -35,6 +35,22 @@ test('salud activa no reconocida aparece en Máquinas con severidad máxima',()=
   assert.equal(state.maquinas.severity,'critical');
 });
 
+test('config drift real suma un badge de Máquinas',()=>{
+  const state=buildState([],[],[
+    {id:'drift:k1',severity:'warning',machineId:'k1'}
+  ]);
+  assert.equal(state.maquinas.count,1);
+  assert.equal(state.maquinas.severity,'warning');
+});
+
+test('salud y drift se deduplican por sus namespaces separados',()=>{
+  const state=buildState([], [{id:'machine:k1:offline',severity:'critical',acked:false}], [
+    {id:'drift:k1',severity:'warning',machineId:'k1'}
+  ]);
+  assert.equal(state.maquinas.count,2);
+  assert.equal(state.maquinas.severity,'critical');
+});
+
 test('acciones internas o módulos desconocidos no generan globos',()=>{
   assert.equal(moduleForItem({type:'warning',read:false,action:'@hacerAlgo'}),'');
   assert.equal(moduleForItem({type:'warning',read:false,action:'inventado'}),'');
