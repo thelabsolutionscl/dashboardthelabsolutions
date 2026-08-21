@@ -1,7 +1,7 @@
 /* js/dashboard-notification-badges.js
  * Globos de notificación contextuales para el dock y corrección de anclaje
  * del badge de la campana. No duplica el panel de NOTIFY: solo resume pendientes
- * relevantes por módulo y añade la salud activa de la granja a Máquinas.
+ * relevantes por módulo y añade salud/config drift activo de la granja a Máquinas.
  */
 (function(root,factory){
   const api=factory();
@@ -28,7 +28,7 @@ function severityForItem(item){
   const type=String(item?.type||'').toLowerCase();
   return type==='warning'?'warning':type==='mail'?'info':'info';
 }
-function buildState(items,farmAlerts){
+function buildState(items,farmAlerts,driftAlerts){
   const out={};
   const add=(module,severity,id)=>{
     if(!module)return;
@@ -44,18 +44,21 @@ function buildState(items,farmAlerts){
   });
   (Array.isArray(farmAlerts)?farmAlerts:[]).forEach(a=>{
     if(!a||a.acked)return;
-    add('maquinas',String(a.severity||'warning').toLowerCase(), 'farm:'+String(a.id||a.message||''));
+    add('maquinas',String(a.severity||'warning').toLowerCase(),'farm:'+String(a.id||a.message||''));
+  });
+  // FarmDrift sólo expone drift real. Las máquinas sin baseline NO se convierten
+  // en notificación para evitar una avalancha de badges durante la instalación.
+  (Array.isArray(driftAlerts)?driftAlerts:[]).forEach(a=>{
+    if(!a)return;
+    add('maquinas',String(a.severity||'warning').toLowerCase(),'drift:'+String(a.id||a.machineId||a.message||''));
   });
   const plain={};
   Object.entries(out).forEach(([k,v])=>plain[k]={count:v.count,severity:v.severity});
   return plain;
 }
-function farmAlerts(){
-  try{return target?.FarmHealth?.status?.().alerts||[];}catch(_){return[];}
-}
-function notifyItems(){
-  try{return Array.isArray(target?.NOTIFY?.items)?target.NOTIFY.items:[];}catch(_){return[];}
-}
+function farmAlerts(){try{return target?.FarmHealth?.status?.().alerts||[];}catch(_){return[];}}
+function driftAlerts(){try{return target?.FarmDrift?.status?.().alerts||[];}catch(_){return[];}}
+function notifyItems(){try{return Array.isArray(target?.NOTIFY?.items)?target.NOTIFY.items:[];}catch(_){return[];}}
 function bellHost(){
   const b=target?.document?.getElementById('notifBadge');if(!b)return null;
   const host=b.closest('button,a,[role="button"],.topbar-action,.topbar-icon-btn')||b.parentElement;
@@ -70,10 +73,8 @@ function navTargets(module){
     `.dock-btn[onclick*='switchTab("${module}")']`,`.mbd-btn[onclick*='switchTab("${module}")']`,`.mg-item[onclick*='switchTab("${module}")']`
   ];
   const set=new Set();
-  for(const sel of sels){
-    try{d.querySelectorAll(sel).forEach(el=>set.add(el));}catch(_){}
-  }
-  return [...set];
+  for(const sel of sels){try{d.querySelectorAll(sel).forEach(el=>set.add(el));}catch(_){}}
+  return[...set];
 }
 function ensureStyle(){
   const d=target?.document;if(!d||d.getElementById('dashboardNotifBadgeStyle'))return;
@@ -91,21 +92,19 @@ function ensureStyle(){
 function render(){
   if(!target?.document)return{};
   ensureStyle();bellHost();
-  const state=buildState(notifyItems(),farmAlerts());
+  const state=buildState(notifyItems(),farmAlerts(),driftAlerts());
   target.document.querySelectorAll('.dashboard-context-badge[data-module]').forEach(b=>{
     const module=b.dataset.module;if(!state[module]||state[module].count<1)b.remove();
   });
-  for(const [module,meta] of Object.entries(state)){
+  for(const[module,meta]of Object.entries(state)){
     if(!meta.count)continue;
     for(const host of navTargets(module)){
       host.style.position='relative';host.style.overflow='visible';
       let b=host.querySelector(`:scope > .dashboard-context-badge[data-module="${module}"]`);
       if(!b){b=target.document.createElement('span');b.className='dock-badge dashboard-context-badge';b.dataset.module=module;host.appendChild(b);}
-      b.classList.remove('sev-critical','sev-warning','sev-info');
-      b.classList.add('sev-'+(meta.severity||'info'));
+      b.classList.remove('sev-critical','sev-warning','sev-info');b.classList.add('sev-'+(meta.severity||'info'));
       b.textContent=meta.count>99?'99+':String(meta.count);
-      b.title=`${meta.count} notificación${meta.count===1?'':'es'} pendiente${meta.count===1?'':'s'} en ${module}`;
-      b.setAttribute('aria-label',b.title);
+      b.title=`${meta.count} notificación${meta.count===1?'':'es'} pendiente${meta.count===1?'':'s'} en ${module}`;b.setAttribute('aria-label',b.title);
     }
   }
   lastState=state;return state;
@@ -113,21 +112,16 @@ function render(){
 function wireNotify(){
   const n=target?.NOTIFY;if(!n||typeof n.updateBadge!=='function')return false;
   if(n.__dashboardContextBadges)return true;
-  const original=n.updateBadge;
-  n.updateBadge=function(){const r=original.apply(this,arguments);try{render();}catch(_){}return r;};
-  n.__dashboardContextBadges=true;return true;
+  const original=n.updateBadge;n.updateBadge=function(){const r=original.apply(this,arguments);try{render();}catch(_){}return r;};n.__dashboardContextBadges=true;return true;
 }
 function install(root){
-  if(installed||!root||!root.document)return false;
-  target=root;installed=true;
+  if(installed||!root||!root.document)return false;target=root;installed=true;
   const tick=()=>{wireNotify();render();};
   if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',tick,{once:true});else setTimeout(tick,0);
-  root.addEventListener?.('farm-health-updated',tick);
-  root.addEventListener?.('storage',e=>{if(!e||String(e.key||'').startsWith('thelab_'))tick();});
-  root.addEventListener?.('focus',tick);
-  timer=root.setInterval?.(()=>{if(!root.document.hidden)tick();},5000)||null;
-  return true;
+  root.addEventListener?.('farm-health-updated',tick);root.addEventListener?.('farm-drift-updated',tick);
+  root.addEventListener?.('storage',e=>{if(!e||String(e.key||'').startsWith('thelab_'))tick();});root.addEventListener?.('focus',tick);
+  timer=root.setInterval?.(()=>{if(!root.document.hidden)tick();},5000)||null;return true;
 }
-function status(){return{installed,lastState:lastState||{},hasNotify:!!target?.NOTIFY,hasFarmHealth:!!target?.FarmHealth};}
+function status(){return{installed,lastState:lastState||{},hasNotify:!!target?.NOTIFY,hasFarmHealth:!!target?.FarmHealth,hasFarmDrift:!!target?.FarmDrift};}
 return{install,render,status,_test:{moduleForItem,buildState,rank}};
 });
