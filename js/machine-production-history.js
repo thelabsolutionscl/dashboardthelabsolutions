@@ -36,7 +36,7 @@ function normalizeHistoryRow(row,machineId=''){
   };
 }
 function emptyOdo(){return{hours:0,filamentMm:0,prints:0,failures:0,attempts:0};}
-function normalizeOdo(raw){const o={...emptyOdo(),...(raw||{})};for(const k of Object.keys(emptyOdo()))o[k]=Math.max(0,num(o[k]));return o;}
+function normalizeOdo(raw){const o={...emptyOdo(),...(raw||{})};for(const k of Object.keys(emptyOdo()))o[k]=Math.max(0,num(o[k]));o.attempts=Math.max(o.attempts,o.prints+o.failures);return o;}
 function normalizeProduction(raw,machineId=''){
   const p=raw&&typeof raw==='object'?raw:{};
   const seen=new Set(),history=[];
@@ -64,12 +64,14 @@ function seedProduction(machineId,history,legacyOdo){
   const derived=emptyOdo();for(const row of unique){derived.attempts++;derived.filamentMm+=row.filamentMm;if(isCompleted(row.result)){derived.hours+=row.dur/60;derived.prints++;}else derived.failures++;}
   const legacy=normalizeOdo(legacyOdo);
   const odometer={};for(const k of Object.keys(derived))odometer[k]=Math.max(derived[k],legacy[k]||0);
+  odometer.attempts=Math.max(odometer.attempts,odometer.prints+odometer.failures);
   const now=Date.now();return{version:VERSION,seededAt:now,updatedAt:now,history:unique.slice(0,MAX_PER_MACHINE),odometer};
 }
 function mergeProduction(a,b,machineId=''){
   const pa=normalizeProduction(a,machineId),pb=normalizeProduction(b,machineId),seen=new Set(),history=[];
   for(const row of [...pa.history,...pb.history].sort((x,y)=>y.ts-x.ts)){if(seen.has(row.eventKey))continue;seen.add(row.eventKey);history.push(row);}
   const odometer={};for(const k of Object.keys(emptyOdo()))odometer[k]=Math.max(pa.odometer[k]||0,pb.odometer[k]||0);
+  odometer.attempts=Math.max(odometer.attempts,odometer.prints+odometer.failures);
   return{version:VERSION,seededAt:Math.min(pa.seededAt||Infinity,pb.seededAt||Infinity)===Infinity?0:Math.min(pa.seededAt||Infinity,pb.seededAt||Infinity),updatedAt:Math.max(pa.updatedAt,pb.updatedAt),history:history.slice(0,MAX_PER_MACHINE),odometer};
 }
 function centralHistory(){
@@ -94,11 +96,11 @@ async function ensureSeed(machine){
   if(remote){
     const merged=mergeProduction(remote,localSeed,machine.id);byMachine[machine.id]=merged;
     const r=normalizeProduction(remote,machine.id),needsRepair=JSON.stringify(merged.odometer)!==JSON.stringify(r.odometer)||merged.history.length>r.history.length;
-    if(needsRepair)try{await patchMachine(machine,merged);}catch(e){writable=false;lastError=e.message;}
+    if(needsRepair)try{await patchMachine(machine,merged);}catch(e){writable=false;lastError=e.message;delete byMachine[machine.id];}
     return;
   }
   if(!localSeed.history.length&&!Object.values(localSeed.odometer).some(Boolean)){byMachine[machine.id]=localSeed;return;}
-  try{await patchMachine(machine,localSeed);}catch(e){writable=false;lastError=e.message;}
+  try{await patchMachine(machine,localSeed);}catch(e){writable=false;lastError=e.message;delete byMachine[machine.id];}
 }
 async function sync(force=false){
   if(syncPromise)return syncPromise;
@@ -112,12 +114,16 @@ async function sync(force=false){
         const remote=regs.find(x=>x.id===m.id)?.production;
         if(remote)byMachine[m.id]=normalizeProduction(remote,m.id);
       }
-      for(const m of machineList())if(!regs.find(x=>x.id===m.id)?.production)await ensureSeed(m);
-      centralReady=Object.keys(byMachine).length>0;lastSync=Date.now();lastError='';
+      // Cada navegador puede traer un historial/odómetro local distinto. Se
+      // reconcilia por máximos + eventKey para que el central gane información
+      // sin duplicar una misma impresión reportada desde dos equipos.
+      for(const m of machineList())await ensureSeed(m);
+      const machines=machineList();centralReady=machines.length>0&&machines.every(m=>!!byMachine[m.id]);lastSync=Date.now();
+      if(!lastError)writable=writable===false?false:writable;
       if(centralReady)try{localStorage.setItem('printer_odometer_seeded','1');}catch(_){}
     }catch(e){lastError=e.message;centralReady=false;}
     finally{syncPromise=null;}
-    return centralHistory();
+    return centralReady?centralHistory():localHist();
   })();
   return syncPromise;
 }
@@ -126,9 +132,10 @@ async function recordEvent(event){
   try{
     await window.FarmRegistry?.sync?.(true);
     const remote=registryMachines().find(x=>x.id===machine.id)?.production||byMachine[machine.id]||seedProduction(machine.id,localHist(),localOdo()[machine.id]);
-    const result=applyEvent(remote,event);byMachine[machine.id]=result.production;centralReady=true;
+    const result=applyEvent(remote,event);byMachine[machine.id]=result.production;
     if(result.added)await patchMachine(machine,result.production);
-  }catch(e){writable=false;lastError=e.message;}
+    const machines=machineList();centralReady=machines.length>0&&machines.every(m=>!!byMachine[m.id]);lastError='';
+  }catch(e){writable=false;lastError=e.message;centralReady=false;}
 }
 function install(target){
   if(installed||!target)return false;
@@ -144,7 +151,7 @@ function install(target){
   setTimeout(()=>sync(true),2200);
   setInterval(()=>{if(!document.hidden)sync(false);},30000);
   window.addEventListener('focus',()=>sync(true));
-  target.FarmProduction={sync,status:()=>({installed,centralReady,writable,lastSync,lastWrite,lastError,machines:Object.keys(byMachine).length,history:centralHistory().length,odometer:centralOdometer()})};
+  target.FarmProduction={sync,status:()=>({installed,centralReady,writable,lastSync,lastWrite,lastError,machines:Object.keys(byMachine).length,history:centralReady?centralHistory().length:localHist().length,odometer:centralReady?centralOdometer():localOdo()})};
   return true;
 }
 
