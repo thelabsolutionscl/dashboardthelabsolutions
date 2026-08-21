@@ -14,6 +14,8 @@ on:
       - 'js/machineops-unattended-safety.js'
       - 'js/printer-history-adapter.js'
       - 'js/farm-health-adapter.js'
+      - 'js/dashboard-notification-badges.js'
+      - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
@@ -25,6 +27,8 @@ on:
       - 'tests/farm-controller.test.js'
       - 'tests/farm-production-preload.test.js'
       - 'tests/farm-health-*.test.js'
+      - 'tests/dashboard-notification-badges.test.js'
+      - 'tests/correo-input-compat.test.js'
       - '.github/workflows/maquinas-audit.yml'
   pull_request:
     paths:
@@ -38,6 +42,8 @@ on:
       - 'js/machineops-unattended-safety.js'
       - 'js/printer-history-adapter.js'
       - 'js/farm-health-adapter.js'
+      - 'js/dashboard-notification-badges.js'
+      - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
@@ -49,6 +55,8 @@ on:
       - 'tests/farm-controller.test.js'
       - 'tests/farm-production-preload.test.js'
       - 'tests/farm-health-*.test.js'
+      - 'tests/dashboard-notification-badges.test.js'
+      - 'tests/correo-input-compat.test.js'
       - '.github/workflows/maquinas-audit.yml'
   workflow_dispatch:
 
@@ -82,6 +90,8 @@ jobs:
           node --check js/machineops-unattended-safety.js
           node --check js/printer-history-adapter.js
           node --check js/farm-health-adapter.js
+          node --check js/dashboard-notification-badges.js
+          node --check js/correo-input-compat.js
           node --check js/slicer3d.js
           node --check printer-bridge/server.js
           node --check printer-bridge/farm-controller.js
@@ -95,6 +105,9 @@ jobs:
 
       - name: Probar observabilidad central
         run: node --test tests/farm-health-preload.test.js tests/farm-health-adapter.test.js tests/farm-health-wiring.test.js
+
+      - name: Probar badges y teclado de correo
+        run: node --test tests/dashboard-notification-badges.test.js tests/correo-input-compat.test.js
 
       - name: Probar persistencia normalizada de MachineOps
         run: node --test tests/machineops-storage-adapter.test.js
