@@ -16,6 +16,7 @@ on:
       - 'js/printer-history-adapter.js'
       - 'js/farm-health-adapter.js'
       - 'js/farm-drift-adapter.js'
+      - 'js/farm-reliability-adapter.js'
       - 'js/dashboard-notification-badges.js'
       - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
@@ -30,6 +31,7 @@ on:
       - 'tests/farm-production-preload.test.js'
       - 'tests/farm-health-*.test.js'
       - 'tests/farm-drift-*.test.js'
+      - 'tests/farm-reliability-*.test.js'
       - 'tests/dashboard-notification-badges.test.js'
       - 'tests/correo-input-compat.test.js'
       - '.github/workflows/maquinas-audit.yml'
@@ -47,6 +49,7 @@ on:
       - 'js/printer-history-adapter.js'
       - 'js/farm-health-adapter.js'
       - 'js/farm-drift-adapter.js'
+      - 'js/farm-reliability-adapter.js'
       - 'js/dashboard-notification-badges.js'
       - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
@@ -61,6 +64,7 @@ on:
       - 'tests/farm-production-preload.test.js'
       - 'tests/farm-health-*.test.js'
       - 'tests/farm-drift-*.test.js'
+      - 'tests/farm-reliability-*.test.js'
       - 'tests/dashboard-notification-badges.test.js'
       - 'tests/correo-input-compat.test.js'
       - '.github/workflows/maquinas-audit.yml'
@@ -98,6 +102,7 @@ jobs:
           node --check js/printer-history-adapter.js
           node --check js/farm-health-adapter.js
           node --check js/farm-drift-adapter.js
+          node --check js/farm-reliability-adapter.js
           node --check js/dashboard-notification-badges.js
           node --check js/correo-input-compat.js
           node --check js/slicer3d.js
@@ -106,6 +111,7 @@ jobs:
           node --check printer-bridge/farm-production-preload.js
           node --check printer-bridge/farm-drift-preload.js
           node --check printer-bridge/farm-health-preload.js
+          node --check printer-bridge/farm-reliability-preload.js
           bash -n printer-bridge/install-farm-controller.sh
           bash -n printer-bridge/rollback-farm-controller.sh
 
@@ -113,10 +119,13 @@ jobs:
         run: node --test tests/farm-controller.test.js tests/farm-production-preload.test.js
 
       - name: Probar observabilidad central
-        run: node --test tests/farm-health-preload.test.js tests/farm-health-adapter.test.js tests/farm-health-wiring.test.js
+        run: node --test tests/farm-health-preload.test.js tests/farm-health-continuity.test.js tests/farm-health-adapter.test.js tests/farm-health-wiring.test.js
 
       - name: Probar config drift y firmware
         run: node --test tests/farm-drift-preload.test.js tests/farm-drift-adapter.test.js tests/farm-drift-wiring.test.js
+
+      - name: Probar confiabilidad histórica
+        run: node --test tests/farm-reliability-preload.test.js tests/farm-reliability-adapter.test.js tests/farm-reliability-wiring.test.js
 
       - name: Probar badges y teclado de correo
         run: node --test tests/dashboard-notification-badges.test.js tests/correo-input-compat.test.js
