@@ -82,4 +82,5 @@ return{install,refresh,probe,ack,status,_test:{}};
   load('js/correo-input-compat.js','compatibilidad de teclado de correo');
   load('js/maquinas-eta-clarity.js','claridad de disponibilidad de máquinas');
   load('js/farm-drift-adapter.js','integridad de configuración de máquinas');
+  load('js/farm-reliability-adapter.js','confiabilidad histórica de máquinas');
 })();
