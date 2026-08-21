@@ -12,13 +12,17 @@ on:
       - 'js/maquinas-farm-controller.js'
       - 'js/machineops-storage-adapter.js'
       - 'js/machineops-unattended-safety.js'
+      - 'js/printer-history-adapter.js'
       - 'js/slicer3d.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
       - 'tests/machine-ops-*.test.js'
       - 'tests/machineops-storage-adapter.test.js'
       - 'tests/machineops-unattended-safety.test.js'
+      - 'tests/printer-history-adapter.test.js'
+      - 'tests/printer-history-wiring.test.js'
       - 'tests/farm-controller.test.js'
+      - 'tests/farm-production-preload.test.js'
       - '.github/workflows/maquinas-audit.yml'
   pull_request:
     paths:
@@ -30,13 +34,17 @@ on:
       - 'js/maquinas-farm-controller.js'
       - 'js/machineops-storage-adapter.js'
       - 'js/machineops-unattended-safety.js'
+      - 'js/printer-history-adapter.js'
       - 'js/slicer3d.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
       - 'tests/machine-ops-*.test.js'
       - 'tests/machineops-storage-adapter.test.js'
       - 'tests/machineops-unattended-safety.test.js'
+      - 'tests/printer-history-adapter.test.js'
+      - 'tests/printer-history-wiring.test.js'
       - 'tests/farm-controller.test.js'
+      - 'tests/farm-production-preload.test.js'
       - '.github/workflows/maquinas-audit.yml'
   workflow_dispatch:
 
@@ -68,20 +76,25 @@ jobs:
           node --check js/maquinas-farm-controller.js
           node --check js/machineops-storage-adapter.js
           node --check js/machineops-unattended-safety.js
+          node --check js/printer-history-adapter.js
           node --check js/slicer3d.js
           node --check printer-bridge/server.js
           node --check printer-bridge/farm-controller.js
+          node --check printer-bridge/farm-production-preload.js
           bash -n printer-bridge/install-farm-controller.sh
           bash -n printer-bridge/rollback-farm-controller.sh
 
       - name: Probar controlador de granja
-        run: node --test tests/farm-controller.test.js
+        run: node --test tests/farm-controller.test.js tests/farm-production-preload.test.js
 
       - name: Probar persistencia normalizada de MachineOps
         run: node --test tests/machineops-storage-adapter.test.js
 
       - name: Probar seguridad desatendida
         run: node --test tests/machineops-unattended-safety.test.js
+
+      - name: Probar historial y odómetro durable
+        run: node --test tests/printer-history-adapter.test.js tests/printer-history-wiring.test.js
 
       - name: Auditar cableado integral
         run: node --test tests/maquinas-wiring.test.js
