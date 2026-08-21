@@ -11,7 +11,7 @@ WorkingDirectory=/opt/thelab/dashboardthelabsolutions/printer-bridge
 ExecStart=/usr/bin/node -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-production-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-drift-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-health-preload.js /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-controller.js
 Restart=always
 RestartSec=3
-Environment=BRIDGE_ALLOW_ORIGIN=https://dashboard.thelabsolutions
+Environment=BRIDGE_ALLOW_ORIGIN=https://dashboard.thelab.solutions
 Environment=FARM_DATA_DIR=/var/lib/thelab-farm
 EnvironmentFile=-/etc/thelab-farm.env
 NoNewPrivileges=true
