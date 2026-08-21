@@ -36,11 +36,13 @@ test('sin meta ignora fragmentos V3 incompletos',()=>{
   assert.deepEqual(out.data.jobs,[{id:'legacy'}]);
 });
 
-test('ignora un fragmento posterior al último meta confirmado',()=>{
+test('si Airtable sobreescribe un dominio antes de meta usa previous confirmado',()=>{
   const records=[
     {fields:{Name:'MACHINE_OPS_V2',Notes:JSON.stringify({jobs:[{id:'legacy'}]})}},
-    {fields:{Name:'MACHINE_OPS_V3:jobs',Notes:JSON.stringify({schema:3,domain:'jobs',writtenAt:20,data:[{id:'committed'}]})}},
-    {fields:{Name:'MACHINE_OPS_V3:jobs',Notes:JSON.stringify({schema:3,domain:'jobs',writtenAt:30,data:[{id:'partial-future'}]})}},
+    {fields:{Name:'MACHINE_OPS_V3:jobs',Notes:JSON.stringify({
+      schema:3,domain:'jobs',writtenAt:30,data:[{id:'partial-future'}],
+      previous:{writtenAt:20,data:[{id:'committed'}]}
+    })}},
     {fields:{Name:'MACHINE_OPS_V3:meta',Notes:JSON.stringify({schema:3,domain:'meta',writtenAt:21,version:4,updatedAt:21})}},
   ];
   assert.deepEqual(t.composePayload(records).data.jobs,[{id:'committed'}]);
