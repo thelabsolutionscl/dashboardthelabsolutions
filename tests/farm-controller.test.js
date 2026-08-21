@@ -27,9 +27,30 @@ test('rutas destructivas exigen admin y lectura solo viewer',()=>{
   assert.equal(api.routeMinimumRole({method:'POST'},'/192.168.100.51/printer/print/start'),'operator');
   assert.equal(api.routeMinimumRole({method:'POST'},'/recover/192.168.100.51'),'admin');
   assert.equal(api.routeMinimumRole({method:'POST'},'/update'),'admin');
+  assert.equal(api.routeMinimumRole({method:'POST'},'/restart'),'admin');
 });
 
 test('persistencia normaliza documentos dañados o incompletos',()=>{
   assert.deepEqual(api.normalizeQueue(null).jobs,[]);
   assert.deepEqual(api.normalizeRegistry({machines:'bad'}).machines,[]);
+});
+
+test('reinicio recupera estados intermedios sin perder el G-code',()=>{
+  const q=api.normalizeQueue({jobs:[
+    {id:'a',state:'checking',gcodeBase64:'QQ=='},
+    {id:'b',state:'uploading',gcodeBase64:'Qg=='},
+    {id:'c',state:'uploaded',gcodeBase64:'Qw=='},
+    {id:'d',state:'started',gcodeBase64:''},
+    {id:'e',state:'queued',gcodeBase64:'RQ=='},
+  ]});
+  assert.equal(api.recoverQueueJobs(q),3);
+  assert.deepEqual(q.jobs.map(j=>j.state),['retry','retry','retry','started','queued']);
+  assert.equal(q.jobs[0].gcodeBase64,'QQ==');
+  assert.match(q.jobs[0].lastError,/reinicio/i);
+});
+
+test('reconciliación reconoce el mismo archivo aunque Moonraker entregue una ruta',()=>{
+  assert.equal(api.samePrintFilename('/gcodes/Cliente%20A.gcode','Cliente A.gcode'),true);
+  assert.equal(api.samePrintFilename('TEST.GCODE','test.gcode'),true);
+  assert.equal(api.samePrintFilename('otro.gcode','test.gcode'),false);
 });
