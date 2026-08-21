@@ -136,7 +136,7 @@ function machineMetrics({machine,incidents=[],production=null,windowStart,window
   return{
     machineId:String(machine.id||''),name:String(machine.nombre||machine.name||machine.hostname||machine.id||''),model:String(machine.modelo||machine.model||''),
     observedFrom:observedStart,observedHours:hours(observedMs),availabilityPct:pct(availability),downtimeHours:downtimeMs==null?null:hours(downtimeMs),
-    incidents:failures,openIncidents,mtbfHours:mtbf==null?null:hours(mtbf),mttrHours:mttr==null?null:hours(mttr),
+    incidents:failures,resolvedIncidents:healthKnown?resolved.length:null,openIncidents,mtbfHours:mtbf==null?null:hours(mtbf),mttrHours:mttr==null?null:hours(mttr),
     printHours:hours(printMs),utilizationPct:pct(utilization),completed:production?.completed||0,notCompleted:production?.notCompleted||0,completionRatePct:pct(completionRate),
     lastFailureAt:incidentRows.reduce((m,x)=>Math.max(m,x.rawStart||0),0),
   };
@@ -148,8 +148,8 @@ function aggregateFleet(machines){
   const totalAvailable=Math.max(0,totalObserved-totalDowntime);
   const totalPrint=productionKnown.reduce((n,m)=>n+(m.printHours||0),0);
   const completed=machines.reduce((n,m)=>n+(m.completed||0),0),notCompleted=machines.reduce((n,m)=>n+(m.notCompleted||0),0),attempts=completed+notCompleted;
-  const incidents=known.reduce((n,m)=>n+(m.incidents||0),0),openIncidents=known.reduce((n,m)=>n+(m.openIncidents||0),0);
-  const weightedMttrNumerator=known.reduce((n,m)=>n+((m.mttrHours||0)*(m.incidents||0)),0);
+  const incidents=known.reduce((n,m)=>n+(m.incidents||0),0),resolvedIncidents=known.reduce((n,m)=>n+(m.resolvedIncidents||0),0),openIncidents=known.reduce((n,m)=>n+(m.openIncidents||0),0);
+  const weightedMttrNumerator=known.reduce((n,m)=>n+((m.mttrHours||0)*(m.resolvedIncidents||0)),0);
   return{
     machines:machines.length,healthKnown:known.length,
     availabilityPct:totalObserved?pct((totalObserved-totalDowntime)/totalObserved*100):null,
@@ -157,8 +157,8 @@ function aggregateFleet(machines){
     utilizationPct:totalAvailable?pct(totalPrint/totalAvailable*100):null,
     printHours:Math.round(totalPrint*10)/10,
     completed,notCompleted,completionRatePct:attempts?pct(completed/attempts*100):null,
-    incidents,openIncidents,mtbfHours:incidents?Math.round(totalAvailable/incidents*10)/10:null,
-    mttrHours:incidents&&weightedMttrNumerator?Math.round(weightedMttrNumerator/incidents*10)/10:null,
+    incidents,resolvedIncidents,openIncidents,mtbfHours:incidents?Math.round(totalAvailable/incidents*10)/10:null,
+    mttrHours:resolvedIncidents?Math.round(weightedMttrNumerator/resolvedIncidents*10)/10:null,
   };
 }
 function buildReliability({registry,production,health,healthDetail,days=DEFAULT_DAYS,now=Date.now()}){
