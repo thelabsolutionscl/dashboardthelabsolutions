@@ -5,18 +5,26 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'sw.js'
       - 'js/maquinas.js'
       - 'js/maquinas-operaciones.js'
+      - 'js/maquinas-farm-controller.js'
       - 'js/slicer3d.js'
+      - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
+      - 'tests/farm-controller.test.js'
       - '.github/workflows/maquinas-audit.yml'
   pull_request:
     paths:
       - 'index.html'
+      - 'sw.js'
       - 'js/maquinas.js'
       - 'js/maquinas-operaciones.js'
+      - 'js/maquinas-farm-controller.js'
       - 'js/slicer3d.js'
+      - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
+      - 'tests/farm-controller.test.js'
       - '.github/workflows/maquinas-audit.yml'
   workflow_dispatch:
 
@@ -44,10 +52,23 @@ jobs:
         run: |
           node --check js/maquinas.js
           node --check js/maquinas-operaciones.js
+          node --check js/maquinas-farm-controller.js
           node --check js/slicer3d.js
+          node --check printer-bridge/server.js
+          node --check printer-bridge/farm-controller.js
+          bash -n printer-bridge/install-farm-controller.sh
+          bash -n printer-bridge/rollback-farm-controller.sh
+
+      - name: Probar controlador de granja
+        run: node --test tests/farm-controller.test.js
 
       - name: Auditar cableado integral
         run: node --test tests/maquinas-wiring.test.js
 
-      - name: Probar operaciones y telemetría
-        run: node --test tests/maquinas-operaciones.test.js tests/maquinas-telemetria.test.js
+      - name: Probar operaciones, telemetría y regresiones de Máquinas
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(tests/maquinas-*.test.js tests/machine-ops-*.test.js tests/recuperar-telemetria.test.js tests/capacidad-futura.test.js tests/ocupacion-agrupada.test.js)
+          printf 'Ejecutando %s tests\n' "${#files[@]}"
+          node --test "${files[@]}"
