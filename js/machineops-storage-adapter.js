@@ -147,21 +147,31 @@ function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWr
 return{install,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
 });
 
-// Extensiones que dependen de que maquinas.js ya esté cargado. Se insertan
-// dinámicamente desde este punto porque este adaptador forma parte del bootstrap
-// de Máquinas y se ejecuta antes de maquinas-operaciones.js.
-(function _loadMachineOpsExtensions(){
-  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_MACHINEOPS_EXTENSION_LOADER__)return;
-  window.__TLS_MACHINEOPS_EXTENSION_LOADER__=true;
+// PrinterHistory se puede cargar de forma independiente: si este módulo falla,
+// la seguridad desatendida NO debe quedar bloqueada por su loader.
+(function _loadPrinterHistory(){
+  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_PRINTER_HISTORY_LOADER__)return;
+  window.__TLS_PRINTER_HISTORY_LOADER__=true;
   const current=document.currentScript,raw=current?.src||'',suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';
-  const paths=['js/printer-history-adapter.js','js/machineops-unattended-safety.js'];
+  const path='js/printer-history-adapter.js';
+  if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return;
   if(typeof document.createElement!=='function'||!document.head)return;
-  let chain=Promise.resolve();
-  paths.forEach(path=>{
-    chain=chain.then(()=>new Promise((resolve,reject)=>{
-      if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return resolve();
-      const s=document.createElement('script');s.src=path+suffix;s.async=false;s.onload=resolve;s.onerror=reject;document.head.appendChild(s);
-    }));
-  });
-  chain.catch(e=>console.warn('[Máquinas] no se pudo cargar una extensión MachineOps',e));
+  const s=document.createElement('script');s.src=path+suffix;s.async=false;
+  s.onerror=()=>console.warn('[Máquinas] no se pudo cargar historial durable');
+  document.head.appendChild(s);
+})();
+
+// MachineOpsUnattendedSafety necesita ejecutarse después de que este adaptador
+// esté disponible, pero puede cargarse antes de maquinas-operaciones.js porque
+// espera a window.MachineOps antes de instalar sus wrappers.
+(function _loadUnattendedSafety(){
+  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_UNATTENDED_SAFETY_LOADER__)return;
+  window.__TLS_UNATTENDED_SAFETY_LOADER__=true;
+  const current=document.currentScript,raw=current?.src||'',suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';
+  const path='js/machineops-unattended-safety.js';
+  if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return;
+  if(typeof document.createElement!=='function'||!document.head)return;
+  const s=document.createElement('script');s.src=path+suffix;s.async=false;
+  s.onerror=()=>console.warn('[Máquinas] no se pudo cargar seguridad desatendida');
+  document.head.appendChild(s);
 })();
