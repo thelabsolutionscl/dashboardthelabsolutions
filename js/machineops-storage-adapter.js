@@ -23,6 +23,7 @@ const DOMAINS=[
 ];
 const META_DOMAIN='meta';
 const hashes=new Map();
+const committedSnapshots=new Map();
 let installed=false,lastReadAt=0,lastWriteAt=0,lastMode='legacy';
 
 function stable(value){
@@ -43,16 +44,27 @@ function parseLegacy(records){
   if(!rec)return{};
   try{return JSON.parse(rec.fields?.Notes||'{}')||{};}catch(_){return{};}
 }
-function bestDomainRecord(records,domain,maxWrittenAt=Infinity){
-  const named=(records||[]).filter(r=>r?.fields?.Name===recordName(domain));
-  if(!named.length)return null;
-  return named.map(rec=>({rec,payload:parseNotes(rec)}))
-    .filter(x=>x.payload&&x.payload.schema===SCHEMA&&Number(x.payload.writtenAt||0)<=maxWrittenAt)
+function bestMetaRecord(records){
+  return (records||[]).filter(r=>r?.fields?.Name===recordName(META_DOMAIN))
+    .map(rec=>({rec,payload:parseNotes(rec)}))
+    .filter(x=>x.payload&&x.payload.schema===SCHEMA)
     .sort((a,b)=>Number(b.payload?.writtenAt||0)-Number(a.payload?.writtenAt||0))[0]||null;
+}
+function bestDomainSnapshot(records,domain,maxWrittenAt=Infinity){
+  const candidates=[];
+  for(const rec of (records||[]).filter(r=>r?.fields?.Name===recordName(domain))){
+    const payload=parseNotes(rec);if(!payload||payload.schema!==SCHEMA)continue;
+    const currentAt=Number(payload.writtenAt||0);
+    if(currentAt<=maxWrittenAt)candidates.push({writtenAt:currentAt,data:payload.data});
+    const prev=payload.previous;
+    const prevAt=Number(prev?.writtenAt||0);
+    if(prev&&prevAt<=maxWrittenAt)candidates.push({writtenAt:prevAt,data:prev.data});
+  }
+  return candidates.sort((a,b)=>b.writtenAt-a.writtenAt)[0]||null;
 }
 function composePayload(records){
   const base={...parseLegacy(records)};
-  const meta=bestDomainRecord(records,META_DOMAIN);
+  const meta=bestMetaRecord(records);
   // Sin meta no hay commit V3 completo: aunque existan fragmentos creados por
   // una escritura interrumpida, seguimos sirviendo el snapshot V2 conocido.
   if(!meta){
@@ -62,12 +74,13 @@ function composePayload(records){
   const commitAt=Number(meta.payload.writtenAt||0);
   let normalized=1;
   for(const domain of DOMAINS){
-    // Un fragmento posterior a meta pertenece a un commit aún incompleto y no
-    // debe hacerse visible. Los fragmentos antiguos siguen vigentes si ese
-    // dominio no cambió en el commit actual.
-    const hit=bestDomainRecord(records,domain,commitAt);if(!hit)continue;
-    base[domain]=hit.payload.data;
-    hashes.set(domain,domainHash(hit.payload.data));
+    // Un fragmento posterior a meta pertenece a un commit aún incompleto. Cada
+    // registro conserva además su snapshot confirmado anterior, lo que permite
+    // volver al commit previo aunque Airtable ya haya actualizado ese registro.
+    const hit=bestDomainSnapshot(records,domain,commitAt);if(!hit)continue;
+    base[domain]=hit.data;
+    hashes.set(domain,domainHash(hit.data));
+    committedSnapshots.set(domain,{writtenAt:hit.writtenAt,data:hit.data});
     normalized++;
   }
   base.version=Number(meta.payload.version||base.version||4);
@@ -81,10 +94,13 @@ function splitPayload(raw){
   const writtenAt=Date.now();
   const fragments=DOMAINS.map(domain=>{
     const value=Object.prototype.hasOwnProperty.call(data,domain)?data[domain]:null;
-    return{domain,name:recordName(domain),hash:domainHash(value),notes:JSON.stringify({schema:SCHEMA,domain,writtenAt,data:value})};
+    const previous=committedSnapshots.get(domain)||null;
+    const envelope={schema:SCHEMA,domain,writtenAt,data:value};
+    if(previous)envelope.previous={writtenAt:previous.writtenAt,data:previous.data};
+    return{domain,name:recordName(domain),hash:domainHash(value),writtenAt,data:value,notes:JSON.stringify(envelope)};
   });
   const meta={
-    domain:META_DOMAIN,name:recordName(META_DOMAIN),
+    domain:META_DOMAIN,name:recordName(META_DOMAIN),writtenAt,
     hash:domainHash({version:data.version||4,updatedAt:data.updatedAt||0}),
     notes:JSON.stringify({schema:SCHEMA,domain:META_DOMAIN,writtenAt,version:data.version||4,updatedAt:Number(data.updatedAt||0),domains:DOMAINS})
   };
@@ -121,13 +137,14 @@ function install(target){
     const changed=fragments.filter(f=>hashes.get(f.domain)!==f.hash);
     // La primera migración puede crear muchos registros. Se guardan de forma
     // secuencial para respetar límites de Airtable y meta va siempre al final.
-    // Si algo falla antes de meta, composePayload ignora ese commit parcial.
+    // Si algo falla antes de meta, composePayload vuelve al snapshot confirmado.
     for(const f of changed){
       await originalUpsert(f.name,f.notes,'machineOpsV3_'+f.domain+'RecordId');
       hashes.set(f.domain,f.hash);
     }
     await originalUpsert(meta.name,meta.notes,'machineOpsV3_metaRecordId');
     hashes.set(META_DOMAIN,meta.hash);
+    for(const f of changed)committedSnapshots.set(f.domain,{writtenAt:f.writtenAt,data:f.data});
     lastWriteAt=Date.now();lastMode='normalized';
     return true;
   };
@@ -135,5 +152,5 @@ function install(target){
 }
 function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWriteAt,knownDomains:[...hashes.keys()]};}
 
-return{install,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
+return{install,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
 });
