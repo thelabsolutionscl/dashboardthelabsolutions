@@ -3,12 +3,15 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const path=require('node:path');
+const fs=require('node:fs');
 
 process.env.BRIDGE_TOKEN='admin-test-token';
 process.env.BRIDGE_OPERATOR_TOKEN='operator-test-token';
 process.env.BRIDGE_VIEWER_TOKEN='viewer-test-token';
 process.env.FARM_DISCOVERY_ENABLED='0';
-const api=require(path.join(__dirname,'..','printer-bridge','farm-controller.js'));
+const controllerPath=path.join(__dirname,'..','printer-bridge','farm-controller.js');
+const api=require(controllerPath);
+const source=fs.readFileSync(controllerPath,'utf8');
 
 test('solo acepta IPv4 privadas como destino de impresoras',()=>{
   for(const ip of ['192.168.100.51','10.0.0.2','172.16.1.1','127.0.0.1'])assert.equal(api.isPrivateIp(ip),true);
@@ -28,6 +31,12 @@ test('rutas destructivas exigen admin y lectura solo viewer',()=>{
   assert.equal(api.routeMinimumRole({method:'POST'},'/recover/192.168.100.51'),'admin');
   assert.equal(api.routeMinimumRole({method:'POST'},'/update'),'admin');
   assert.equal(api.routeMinimumRole({method:'POST'},'/restart'),'admin');
+});
+
+test('restart queda protegido además por POST-only',()=>{
+  assert.match(source,/p === '\/restart' && req\.method !== 'POST'/);
+  assert.match(source,/res\.setHeader\('Allow', 'POST'\)/);
+  assert.match(source,/json\(res, 405/);
 });
 
 test('persistencia normaliza documentos dañados o incompletos',()=>{
