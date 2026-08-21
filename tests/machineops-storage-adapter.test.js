@@ -1,0 +1,35 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const adapter=require('../js/machineops-storage-adapter.js');
+const t=adapter._test;
+
+test('splitPayload separa dominios y meta',()=>{
+  const src={version:4,updatedAt:123,jobs:[{id:'j1'}],spools:[{id:'s1'}],automation:{enabled:true}};
+  const out=t.splitPayload(src);
+  assert.equal(out.fragments.length,t.DOMAINS.length);
+  const jobs=out.fragments.find(x=>x.domain==='jobs');
+  assert.equal(jobs.name,'MACHINE_OPS_V3:jobs');
+  assert.deepEqual(JSON.parse(jobs.notes).data,[{id:'j1'}]);
+  assert.equal(JSON.parse(out.meta.notes).updatedAt,123);
+});
+
+test('composePayload migra desde legacy y sobrepone V3',()=>{
+  const records=[
+    {id:'old',fields:{Name:'MACHINE_OPS_V2',Notes:JSON.stringify({version:4,updatedAt:10,jobs:[{id:'old'}],spools:[{id:'s1'}]})}},
+    {id:'jobs',fields:{Name:'MACHINE_OPS_V3:jobs',Notes:JSON.stringify({schema:3,domain:'jobs',writtenAt:20,data:[{id:'new'}]})}},
+    {id:'meta',fields:{Name:'MACHINE_OPS_V3:meta',Notes:JSON.stringify({schema:3,domain:'meta',writtenAt:21,version:4,updatedAt:30})}},
+  ];
+  const out=t.composePayload(records);
+  assert.equal(out.normalized,2);
+  assert.deepEqual(out.data.jobs,[{id:'new'}]);
+  assert.deepEqual(out.data.spools,[{id:'s1'}]);
+  assert.equal(out.data.updatedAt,30);
+});
+
+test('elige el fragmento V3 más nuevo por writtenAt',()=>{
+  const records=[
+    {fields:{Name:'MACHINE_OPS_V3:jobs',Notes:JSON.stringify({schema:3,domain:'jobs',writtenAt:10,data:[{id:'old'}]})}},
+    {fields:{Name:'MACHINE_OPS_V3:jobs',Notes:JSON.stringify({schema:3,domain:'jobs',writtenAt:20,data:[{id:'new'}]})}},
+  ];
+  assert.deepEqual(t.composePayload(records).data.jobs,[{id:'new'}]);
+});
