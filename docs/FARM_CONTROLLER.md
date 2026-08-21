@@ -15,13 +15,15 @@ Después:
 El controller agrega:
 
 - cola de impresión durable en disco;
+- recuperación de trabajos intermedios después de un reinicio;
+- reconciliación con Moonraker para no duplicar un trabajo que ya arrancó;
 - registry persistente de impresoras e historial de IP;
 - discovery de Moonraker en la LAN;
 - autorización por roles `viewer`, `operator` y `admin`;
 - CORS restringido al dashboard;
 - compatibilidad con las rutas antiguas del bridge.
 
-El bridge legado sigue existiendo, pero el controller lo inicia como proceso hijo sólo en el puerto interno configurado (por defecto `8348`) con un token interno efímero.
+El bridge legado sigue existiendo y el controller lo inicia en el puerto interno configurado (por defecto `8348`) con un token interno efímero. El controller se comunica con él por `127.0.0.1`; el acceso externo debe hacerse siempre por el puerto público del controller (`8347`).
 
 ## Archivos persistentes
 
@@ -45,6 +47,27 @@ Variables soportadas:
 Durante el primer piloto en el iMac se recomienda **mantener el token actual** para no cambiar dashboard + bridge + credenciales al mismo tiempo. Una vez estable, separar viewer/operator/admin en una segunda fase.
 
 Nunca pegar tokens en commits, issues, PRs o logs compartidos.
+
+## Cola durable: comportamiento de seguridad
+
+La cola se guarda en disco antes de intentar imprimir. El controller mantiene un lock por job para impedir que el worker automático y una acción manual intenten iniciar el mismo trabajo simultáneamente.
+
+Antes de subir/iniciar un G-code consulta `print_stats` y `webhooks` de Moonraker:
+
+- si Klipper está en `shutdown`, `error` o `startup`, bloquea el trabajo;
+- si la impresora está imprimiendo/pausada otro archivo, el trabajo permanece esperando;
+- si Moonraker ya está imprimiendo el mismo filename, el job se reconcilia como `started` en vez de volver a lanzarlo;
+- si el controller reinicia durante `checking`, `uploading` o `uploaded`, esos estados vuelven a `retry` conservando el payload G-code y se reconcilian contra Moonraker antes de actuar.
+
+Un job histórico `started` no bloquea los trabajos siguientes: la ocupación real se decide consultando Moonraker.
+
+## Registry e IP canónica
+
+Al cargar Máquinas, la integración consulta `/farm/registry`. Cuando el token tiene rol admin, las máquinas del dashboard se siembran con su `id` canónico la primera vez. El discovery posterior enriquece esos registros con hostname/MAC/versiones cuando Moonraker las expone.
+
+Una vez conocido el `id`, la IP del registry tiene prioridad frente a un `localStorage` antiguo. Si el operador guarda manualmente una IP nueva desde el dashboard, la integración la refleja también en el registry.
+
+Para que el registry aprenda la identidad antes de que ocurra el próximo cambio DHCP, durante el piloto conviene ejecutar al menos una vez `/farm/discover` mientras las IP actuales todavía son correctas.
 
 ## Piloto en el iMac actual
 
@@ -78,6 +101,14 @@ curl -s "http://127.0.0.1:8347/authcheck?bt=TU_TOKEN"
 
 `/authcheck` debe devolver `ok: true` y un rol válido.
 
+Comprobar además que un GET no puede reiniciar el bridge:
+
+```bash
+curl -i "http://127.0.0.1:8347/restart?bt=TU_TOKEN"
+```
+
+Debe devolver HTTP `405` y `Allow: POST`.
+
 ### Probar registry
 
 ```bash
@@ -92,17 +123,19 @@ curl -s -X POST "http://127.0.0.1:8347/farm/discover?bt=TU_TOKEN"
 
 Después de unos segundos, volver a consultar `/farm/registry` y comprobar que aparecen impresoras con IP/hostname y, cuando Moonraker lo expone, MAC/versiones.
 
-### Probar persistencia de cola sin imprimir
+### Probar persistencia de cola
 
-La prueba inicial debe hacerse con un G-code de prueba y una impresora disponible. Antes de enviar producción real:
+La primera prueba debe hacerse con una pieza corta y una impresora disponible.
 
 1. verificar que la impresora aparece libre en el dashboard;
-2. crear un trabajo de prueba;
+2. encolar el trabajo desde el flujo normal del dashboard;
 3. confirmar que aparece en `/farm/queue`;
-4. reiniciar únicamente el controller;
-5. comprobar que el trabajo sigue en `/farm/queue`.
+4. recargar/cerrar el navegador y confirmar que sigue en `/farm/queue`;
+5. para la prueba de reinicio, usar un trabajo que todavía esté esperando y reiniciar únicamente el controller;
+6. comprobar que el trabajo continúa disponible y que no aparece duplicado;
+7. dejar que el controller lo inicie y comprobar una sola impresión física.
 
-La persistencia está en disco: cerrar o recargar el navegador no debe borrar la cola.
+No reiniciar el controller deliberadamente durante el primer `print/start` de una pieza real. La reconciliación existe precisamente para recuperarse de una caída accidental, pero el primer piloto debe mantener el riesgo físico mínimo.
 
 ## Cloudflare Tunnel
 
@@ -177,7 +210,8 @@ No mergear hasta cumplir al menos:
 - CI general sin regresiones atribuibles al PR;
 - `/healthz` estable en el iMac;
 - dashboard operativo dentro y fuera de la LAN;
-- registry/discovery funcionando;
-- persistencia de cola comprobada tras reinicio del controller;
-- impresión corta exitosa;
+- registry/discovery funcionando y asociado a los IDs canónicos;
+- persistencia de cola comprobada tras recarga del navegador y reinicio del controller;
+- una sola impresión corta exitosa desde la cola durable;
+- `GET /restart` devuelve 405;
 - rollback probado al menos una vez.
