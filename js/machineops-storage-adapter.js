@@ -161,6 +161,20 @@ return{install,status,_test:{stable,hashText,domainHash,recordName,splitPayload,
   document.head.appendChild(s);
 })();
 
+// FarmHealth es independiente de historial y seguridad. Una falla de
+// observabilidad no puede impedir que carguen las protecciones operacionales.
+(function _loadFarmHealth(){
+  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_FARM_HEALTH_LOADER__)return;
+  window.__TLS_FARM_HEALTH_LOADER__=true;
+  const current=document.currentScript,raw=current?.src||'',suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';
+  const path='js/farm-health-adapter.js';
+  if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return;
+  if(typeof document.createElement!=='function'||!document.head)return;
+  const s=document.createElement('script');s.src=path+suffix;s.async=false;
+  s.onerror=()=>console.warn('[Máquinas] no se pudo cargar observabilidad central');
+  document.head.appendChild(s);
+})();
+
 // MachineOpsUnattendedSafety necesita ejecutarse después de que este adaptador
 // esté disponible, pero puede cargarse antes de maquinas-operaciones.js porque
 // espera a window.MachineOps antes de instalar sus wrappers.
