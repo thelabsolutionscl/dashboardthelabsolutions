@@ -48,6 +48,12 @@ function isPrivateIp(ip) {
   if (o.some(x => x < 0 || x > 255)) return false;
   return o[0] === 10 || o[0] === 127 || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168);
 }
+function cleanPrintFilename(value) {
+  const s = String(value || '').replace(/\\/g, '/');
+  return decodeURIComponentSafe(s.split('/').pop() || '').trim().toLowerCase();
+}
+function decodeURIComponentSafe(value) { try { return decodeURIComponent(value); } catch (_) { return value; } }
+function samePrintFilename(a, b) { return !!a && !!b && cleanPrintFilename(a) === cleanPrintFilename(b); }
 
 function loadOrCreateMasterToken() {
   if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN.trim();
@@ -88,6 +94,18 @@ function normalizeQueue(raw) {
   const q = raw && typeof raw === 'object' ? raw : {};
   return { version: 1, updatedAt: q.updatedAt || 0, jobs: Array.isArray(q.jobs) ? q.jobs : [] };
 }
+function recoverQueueJobs(q) {
+  let recovered = 0;
+  for (const j of (q && Array.isArray(q.jobs) ? q.jobs : [])) {
+    if (['checking', 'uploading', 'uploaded'].includes(j.state)) {
+      j.state = 'retry';
+      j.lastError = 'recuperado tras reinicio del Farm Controller';
+      j.updatedAt = nowIso();
+      recovered++;
+    }
+  }
+  return recovered;
+}
 function normalizeRegistry(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
   return { version: 1, updatedAt: r.updatedAt || 0, machines: Array.isArray(r.machines) ? r.machines : [] };
@@ -104,6 +122,11 @@ function persistRegistry() {
   registry.updatedAt = Date.now();
   registryWrite = registryWrite.then(() => atomicWrite(REGISTRY_FILE, registry)).catch(e => console.error('[registry] persist', e));
   return registryWrite;
+}
+const recoveredAtBoot = recoverQueueJobs(queue);
+if (recoveredAtBoot) {
+  console.warn(`[queue] ${recoveredAtBoot} trabajo(s) intermedio(s) recuperado(s) tras reinicio`);
+  persistQueue();
 }
 function publicJob(j) { const { gcodeBase64, ...rest } = j; return { ...rest, hasPayload: !!gcodeBase64 }; }
 function machineByIdentity({ id, serial, mac, hostname, ip } = {}) {
@@ -206,7 +229,9 @@ function queueJobById(id) { return queue.jobs.find(j => j.id === id); }
 function enqueue(payload) {
   const machineId = String(payload.machineId || '');
   const machine = machineByIdentity({ id: machineId }) || machineByIdentity({ ip: payload.ip });
-  const ip = String(payload.ip || machine?.ip || '');
+  // El registry es canónico: si conoce la máquina, su IP gana a cualquier IP
+  // enviada por un navegador que podría llevar horas/días guardada.
+  const ip = String(machine?.ip || payload.ip || '');
   if (!machineId && !ip) throw new Error('machineId o ip requerido');
   if (ip && !isPrivateIp(ip)) throw new Error('IP no válida');
   const filename = String(payload.filename || '').replace(/[\\/]/g, '_').slice(0, 200);
@@ -248,28 +273,48 @@ function multipartUpload(filename, content) {
   const mid = Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="root"\r\n\r\ngcodes\r\n--${boundary}--\r\n`);
   return { body: Buffer.concat([head, content, mid]), contentType: 'multipart/form-data; boundary=' + boundary };
 }
+const activeJobRuns = new Set();
 async function runQueuedJob(j) {
-  if (!j || !['queued', 'retry'].includes(j.state)) return;
-  const machine = machineByIdentity({ id: j.machineId }) || machineByIdentity({ ip: j.ip });
-  const ip = machine?.ip || j.ip;
-  if (!isPrivateIp(ip)) return markJob(j.id, { state: 'blocked', lastError: 'IP de máquina no disponible' });
-  const live = await requestLegacy('GET', `/${ip}/printer/objects/query?print_stats&webhooks`);
-  if (!live.ok) return markJob(j.id, { state: 'retry', lastError: `preflight HTTP ${live.status}` });
+  if (!j || !['queued', 'retry'].includes(j.state) || activeJobRuns.has(j.id)) return;
+  activeJobRuns.add(j.id);
+  const queuedState = j.state;
   try {
-    const body = JSON.parse(live.body.toString('utf8') || '{}');
-    const st = body.result?.status || {}, ps = st.print_stats || {}, wh = st.webhooks || {};
-    if (['printing', 'paused'].includes(String(ps.state || '').toLowerCase())) return;
-    if (['shutdown', 'error', 'startup'].includes(String(wh.state || '').toLowerCase())) return markJob(j.id, { state: 'blocked', lastError: `Klipper ${wh.state}` });
-  } catch (_) { return markJob(j.id, { state: 'retry', lastError: 'preflight inválido' }); }
-  j.attempts += 1; markJob(j.id, { state: 'uploading', ip, attempts: j.attempts, lastError: '' });
-  const gcode = Buffer.from(j.gcodeBase64, 'base64');
-  const mp = multipartUpload(j.filename, gcode);
-  const upload = await requestLegacy('POST', `/${ip}/server/files/upload`, mp.body, { 'content-type': mp.contentType });
-  if (!upload.ok) return markJob(j.id, { state: j.attempts < 4 ? 'retry' : 'failed', lastError: `upload HTTP ${upload.status}: ${upload.body.toString('utf8').slice(0, 300)}` });
-  markJob(j.id, { state: 'uploaded' });
-  const start = await requestLegacy('POST', `/${ip}/printer/print/start?filename=${encodeURIComponent(j.filename)}`);
-  if (!start.ok) return markJob(j.id, { state: j.attempts < 4 ? 'retry' : 'failed', lastError: `start HTTP ${start.status}: ${start.body.toString('utf8').slice(0, 300)}` });
-  return markJob(j.id, { state: 'started', startedAt: nowIso(), gcodeBase64: '' });
+    markJob(j.id, { state: 'checking', lastError: '' });
+    const machine = machineByIdentity({ id: j.machineId }) || machineByIdentity({ ip: j.ip });
+    const ip = machine?.ip || j.ip;
+    if (!isPrivateIp(ip)) return markJob(j.id, { state: 'blocked', lastError: 'IP de máquina no disponible' });
+    const live = await requestLegacy('GET', `/${ip}/printer/objects/query?print_stats&webhooks`);
+    if (!live.ok) return markJob(j.id, { state: 'retry', lastError: `preflight HTTP ${live.status}` });
+    try {
+      const body = JSON.parse(live.body.toString('utf8') || '{}');
+      const st = body.result?.status || {}, ps = st.print_stats || {}, wh = st.webhooks || {};
+      const printState = String(ps.state || '').toLowerCase();
+      if (['printing', 'paused'].includes(printState)) {
+        // Si caímos justo después de /print/start, queue.json puede decir
+        // retry/uploaded aunque Moonraker YA esté imprimiendo ese archivo. En
+        // vez de reimprimirlo cuando termine, reconciliamos y lo damos por started.
+        if (samePrintFilename(ps.filename, j.filename)) {
+          return markJob(j.id, { state: 'started', ip, startedAt: j.startedAt || nowIso(), recovered: true, gcodeBase64: '', lastError: '' });
+        }
+        // La impresora está ocupada por OTRO trabajo: este sigue esperando.
+        return markJob(j.id, { state: queuedState, lastError: `esperando: impresora ${printState}` });
+      }
+      if (['shutdown', 'error', 'startup'].includes(String(wh.state || '').toLowerCase())) return markJob(j.id, { state: 'blocked', lastError: `Klipper ${wh.state}` });
+    } catch (_) { return markJob(j.id, { state: 'retry', lastError: 'preflight inválido' }); }
+    const nextAttempts = Number(j.attempts || 0) + 1;
+    markJob(j.id, { state: 'uploading', ip, attempts: nextAttempts, lastError: '' });
+    const gcode = Buffer.from(j.gcodeBase64 || '', 'base64');
+    if (!gcode.length) return markJob(j.id, { state: 'failed', lastError: 'payload G-code ausente' });
+    const mp = multipartUpload(j.filename, gcode);
+    const upload = await requestLegacy('POST', `/${ip}/server/files/upload`, mp.body, { 'content-type': mp.contentType });
+    if (!upload.ok) return markJob(j.id, { state: nextAttempts < 4 ? 'retry' : 'failed', lastError: `upload HTTP ${upload.status}: ${upload.body.toString('utf8').slice(0, 300)}` });
+    markJob(j.id, { state: 'uploaded' });
+    const start = await requestLegacy('POST', `/${ip}/printer/print/start?filename=${encodeURIComponent(j.filename)}`);
+    if (!start.ok) return markJob(j.id, { state: nextAttempts < 4 ? 'retry' : 'failed', lastError: `start HTTP ${start.status}: ${start.body.toString('utf8').slice(0, 300)}` });
+    return markJob(j.id, { state: 'started', startedAt: nowIso(), gcodeBase64: '', lastError: '' });
+  } finally {
+    activeJobRuns.delete(j.id);
+  }
 }
 let queueWorkerBusy = false;
 async function queueWorker() {
@@ -278,8 +323,11 @@ async function queueWorker() {
   try {
     const candidates = queue.jobs.filter(j => ['queued', 'retry'].includes(j.state));
     for (const j of candidates) {
-      const sameMachineBusy = queue.jobs.some(x => x.id !== j.id && x.machineId === j.machineId && ['uploading', 'uploaded', 'started'].includes(x.state));
-      if (!sameMachineBusy) await runQueuedJob(j);
+      // `started` es histórico, NO un lock: el estado vivo de Moonraker decide
+      // si la máquina sigue ocupada. Contarlo aquí dejaba bloqueado el segundo
+      // trabajo para siempre después de arrancar el primero.
+      const sameMachineTransition = queue.jobs.some(x => x.id !== j.id && x.machineId === j.machineId && ['checking', 'uploading', 'uploaded'].includes(x.state));
+      if (!sameMachineTransition) await runQueuedJob(j);
     }
   } catch (e) { console.error('[queue] worker', e); } finally { queueWorkerBusy = false; }
 }
@@ -329,7 +377,7 @@ const server = http.createServer(async (req, res) => {
   setCors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   const u = new URL(req.url, 'http://farm.local'), p = u.pathname;
-  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => ['queued', 'retry', 'uploading', 'uploaded'].includes(j.state)).length, machines: registry.machines.length });
+  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => ['queued', 'retry', 'checking', 'uploading', 'uploaded'].includes(j.state)).length, machines: registry.machines.length });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
@@ -354,7 +402,7 @@ const server = http.createServer(async (req, res) => {
   if (qDel && req.method === 'DELETE') {
     const role = requireRole(req, res, 'operator'); if (!role) return;
     const id = decodeURIComponent(qDel[1]), before = queue.jobs.length;
-    queue.jobs = queue.jobs.filter(j => j.id !== id || ['uploading', 'started'].includes(j.state));
+    queue.jobs = queue.jobs.filter(j => j.id !== id || ['checking', 'uploading', 'started'].includes(j.state));
     if (queue.jobs.length === before) return json(res, 409, { ok: false, error: 'job no encontrado o ya está ejecutándose' });
     persistQueue(); return json(res, 200, { ok: true });
   }
@@ -408,4 +456,4 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, normalizeRegistry, roleForToken, routeMinimumRole, start };
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, normalizeRegistry, roleForToken, routeMinimumRole, start };
