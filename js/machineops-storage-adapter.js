@@ -65,8 +65,6 @@ function bestDomainSnapshot(records,domain,maxWrittenAt=Infinity){
 function composePayload(records){
   const base={...parseLegacy(records)};
   const meta=bestMetaRecord(records);
-  // Sin meta no hay commit V3 completo: aunque existan fragmentos creados por
-  // una escritura interrumpida, seguimos sirviendo el snapshot V2 conocido.
   if(!meta){
     lastMode='legacy';lastReadAt=Date.now();
     return{data:base,normalized:0};
@@ -74,9 +72,6 @@ function composePayload(records){
   const commitAt=Number(meta.payload.writtenAt||0);
   let normalized=1;
   for(const domain of DOMAINS){
-    // Un fragmento posterior a meta pertenece a un commit aún incompleto. Cada
-    // registro conserva además su snapshot confirmado anterior, lo que permite
-    // volver al commit previo aunque Airtable ya haya actualizado ese registro.
     const hit=bestDomainSnapshot(records,domain,commitAt);if(!hit)continue;
     base[domain]=hit.data;
     hashes.set(domain,domainHash(hit.data));
@@ -135,9 +130,6 @@ function install(target){
     let raw;try{raw=JSON.parse(notes||'{}');}catch(_){return originalUpsert.apply(this,arguments);}
     const {fragments,meta}=splitPayload(raw);
     const changed=fragments.filter(f=>hashes.get(f.domain)!==f.hash);
-    // La primera migración puede crear muchos registros. Se guardan de forma
-    // secuencial para respetar límites de Airtable y meta va siempre al final.
-    // Si algo falla antes de meta, composePayload vuelve al snapshot confirmado.
     for(const f of changed){
       await originalUpsert(f.name,f.notes,'machineOpsV3_'+f.domain+'RecordId');
       hashes.set(f.domain,f.hash);
@@ -155,15 +147,21 @@ function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWr
 return{install,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
 });
 
-// MachineOpsUnattendedSafety necesita ejecutarse después de que este adaptador
-// esté disponible, pero puede cargarse antes de maquinas-operaciones.js porque
-// espera a window.MachineOps antes de instalar sus wrappers.
-(function _loadUnattendedSafety(){
-  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_UNATTENDED_SAFETY_LOADER__)return;
-  window.__TLS_UNATTENDED_SAFETY_LOADER__=true;
+// Extensiones que dependen de que maquinas.js ya esté cargado. Se insertan
+// dinámicamente desde este punto porque este adaptador forma parte del bootstrap
+// de Máquinas y se ejecuta antes de maquinas-operaciones.js.
+(function _loadMachineOpsExtensions(){
+  if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_MACHINEOPS_EXTENSION_LOADER__)return;
+  window.__TLS_MACHINEOPS_EXTENSION_LOADER__=true;
   const current=document.currentScript,raw=current?.src||'',suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';
-  const path='js/machineops-unattended-safety.js';
-  if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return;
+  const paths=['js/printer-history-adapter.js','js/machineops-unattended-safety.js'];
   if(typeof document.createElement!=='function'||!document.head)return;
-  const s=document.createElement('script');s.src=path+suffix;s.async=false;s.onerror=()=>console.warn('[Máquinas] no se pudo cargar seguridad desatendida');document.head.appendChild(s);
+  let chain=Promise.resolve();
+  paths.forEach(path=>{
+    chain=chain.then(()=>new Promise((resolve,reject)=>{
+      if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return resolve();
+      const s=document.createElement('script');s.src=path+suffix;s.async=false;s.onload=resolve;s.onerror=reject;document.head.appendChild(s);
+    }));
+  });
+  chain.catch(e=>console.warn('[Máquinas] no se pudo cargar una extensión MachineOps',e));
 })();
