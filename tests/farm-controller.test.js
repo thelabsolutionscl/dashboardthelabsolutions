@@ -42,6 +42,7 @@ test('restart queda protegido además por POST-only',()=>{
 test('persistencia normaliza documentos dañados o incompletos',()=>{
   assert.deepEqual(api.normalizeQueue(null).jobs,[]);
   assert.deepEqual(api.normalizeRegistry({machines:'bad'}).machines,[]);
+  assert.equal(api.normalizeSafetySnapshot(null).config.strict,true);
 });
 
 test('reinicio recupera estados intermedios sin perder el G-code',()=>{
@@ -62,4 +63,18 @@ test('reconciliación reconoce el mismo archivo aunque Moonraker entregue una ru
   assert.equal(api.samePrintFilename('/gcodes/Cliente%20A.gcode','Cliente A.gcode'),true);
   assert.equal(api.samePrintFilename('TEST.GCODE','test.gcode'),true);
   assert.equal(api.samePrintFilename('otro.gcode','test.gcode'),false);
+});
+
+test('controller evalúa seguridad antes de subir el G-code',()=>{
+  const safetyPos=source.indexOf('SafetyPolicy.evaluateSnapshot(safety, j');
+  const uploadPos=source.indexOf("requestLegacy('POST', `/${ip}/server/files/upload`");
+  assert.ok(safetyPos>0,'debe existir evaluación de seguridad');
+  assert.ok(uploadPos>safetyPos,'la evaluación debe ocurrir antes del upload');
+  assert.match(source,/state: 'blocked', safetyBlocked: true/);
+});
+
+test('controller expone snapshot de seguridad y permite sincronizarlo',()=>{
+  assert.match(source,/p === '\/farm\/safety' && req\.method === 'GET'/);
+  assert.match(source,/p === '\/farm\/safety' && req\.method === 'PUT'/);
+  assert.match(source,/const role = requireRole\(req, res, 'operator'\)/);
 });

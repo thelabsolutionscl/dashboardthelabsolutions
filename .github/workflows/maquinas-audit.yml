@@ -11,11 +11,13 @@ on:
       - 'js/maquinas-operaciones.js'
       - 'js/maquinas-farm-controller.js'
       - 'js/machineops-storage-adapter.js'
+      - 'js/machineops-unattended-safety.js'
       - 'js/slicer3d.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
       - 'tests/machine-ops-*.test.js'
       - 'tests/machineops-storage-adapter.test.js'
+      - 'tests/machineops-unattended-safety.test.js'
       - 'tests/farm-controller.test.js'
       - '.github/workflows/maquinas-audit.yml'
   pull_request:
@@ -27,11 +29,13 @@ on:
       - 'js/maquinas-operaciones.js'
       - 'js/maquinas-farm-controller.js'
       - 'js/machineops-storage-adapter.js'
+      - 'js/machineops-unattended-safety.js'
       - 'js/slicer3d.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
       - 'tests/machine-ops-*.test.js'
       - 'tests/machineops-storage-adapter.test.js'
+      - 'tests/machineops-unattended-safety.test.js'
       - 'tests/farm-controller.test.js'
       - '.github/workflows/maquinas-audit.yml'
   workflow_dispatch:
@@ -63,6 +67,7 @@ jobs:
           node --check js/maquinas-operaciones.js
           node --check js/maquinas-farm-controller.js
           node --check js/machineops-storage-adapter.js
+          node --check js/machineops-unattended-safety.js
           node --check js/slicer3d.js
           node --check printer-bridge/server.js
           node --check printer-bridge/farm-controller.js
@@ -74,6 +79,9 @@ jobs:
 
       - name: Probar persistencia normalizada de MachineOps
         run: node --test tests/machineops-storage-adapter.test.js
+
+      - name: Probar seguridad desatendida
+        run: node --test tests/machineops-unattended-safety.test.js
 
       - name: Auditar cableado integral
         run: node --test tests/maquinas-wiring.test.js
