@@ -13,8 +13,9 @@ test('cliente expone refresh, rango, estado y render',()=>{
 });
 
 test('formatos no inventan valores cuando no existe dato',()=>{
-  assert.equal(api._test.fmtPct(null),'0.0%');
+  assert.equal(api._test.fmtPct(null),'—');
   assert.equal(api._test.fmtHours(undefined),'—');
+  assert.equal(api._test.metricClass(null,98,95),'neutral');
 });
 
 test('clasificación visual usa umbrales explícitos',()=>{
