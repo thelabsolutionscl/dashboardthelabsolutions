@@ -1,15 +1,27 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');
-process.env.FARM_DATA_DIR='/tmp/tls-hardening-core';process.env.FARM_MIN_FREE_BYTES='67108864';process.env.FARM_MIN_FREE_RATIO='.01';process.env.BRIDGE_ADMIN_TOKEN='adm';
+const os=require('os'),fs=require('fs'),path=require('path');
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tls-hardening-core-'));
+process.env.FARM_DATA_DIR=dir;process.env.FARM_QUEUE_FILE=path.join(dir,'queue.json');process.env.FARM_MIN_FREE_BYTES='67108864';process.env.FARM_MIN_FREE_RATIO='.01';process.env.BRIDGE_ADMIN_TOKEN='adm';
 const guard=require('../printer-bridge/farm-queue-guard-preload.js');
 const life=require('../printer-bridge/farm-lifecycle-preload.js');
 const safety=require('../printer-bridge/farm-safety-agent-preload.js');
 
-test('guard rechaza cantidad bytes y disco sin espacio',()=>{
-  assert.equal(guard.guardDecision({stats:{count:guard.MAX_PENDING,bytes:0},disk:{ok:true},contentLength:1}).status,429);
-  assert.equal(guard.guardDecision({stats:{count:0,bytes:guard.MAX_PENDING_BYTES},disk:{ok:true},contentLength:1}).status,413);
-  assert.equal(guard.guardDecision({stats:{count:0,bytes:0},disk:{ok:false},contentLength:1}).status,507);
-  assert.equal(guard.guardDecision({stats:{count:0,bytes:0},disk:{ok:true},contentLength:1}).ok,true);
+test('guard rechaza cantidad bytes disco y queue no confiable',()=>{
+  assert.equal(guard.guardDecision({stats:{count:guard.MAX_PENDING,bytes:0},reserved:{count:0,bytes:0},disk:{ok:true},queueOk:true,contentLength:1}).status,429);
+  assert.equal(guard.guardDecision({stats:{count:0,bytes:guard.MAX_PENDING_BYTES},reserved:{count:0,bytes:0},disk:{ok:true},queueOk:true,contentLength:1}).status,413);
+  assert.equal(guard.guardDecision({stats:{count:0,bytes:0},reserved:{count:0,bytes:0},disk:{ok:false,error:'statfs falló'},queueOk:true,contentLength:1}).status,507);
+  assert.equal(guard.guardDecision({stats:{count:0,bytes:0},reserved:{count:0,bytes:0},disk:{ok:true},queueOk:false,contentLength:1}).status,503);
+  assert.equal(guard.guardDecision({stats:{count:0,bytes:0},reserved:{count:0,bytes:0},disk:{ok:true},queueOk:true,contentLength:1}).ok,true);
+});
+test('queue.json ausente es inicialización válida pero corrupto es fail-closed',()=>{
+  try{fs.unlinkSync(process.env.FARM_QUEUE_FILE);}catch(_){}assert.equal(guard.readQueueState().ok,true);assert.equal(guard.readQueueState().missing,true);
+  fs.writeFileSync(process.env.FARM_QUEUE_FILE,'{mal json');const s=guard.readQueueState();assert.equal(s.ok,false);assert.match(s.error,/queue\.json/i);
+  fs.writeFileSync(process.env.FARM_QUEUE_FILE,JSON.stringify({version:1,jobs:[]}));assert.equal(guard.readQueueState().ok,true);
+});
+test('reservas concurrentes se suman a la cuota',()=>{
+  const r=guard.guardDecision({stats:{count:guard.MAX_PENDING-1,bytes:0},reserved:{count:1,bytes:0},disk:{ok:true},queueOk:true,contentLength:1});assert.equal(r.status,429);
+  const b=guard.guardDecision({stats:{count:0,bytes:guard.MAX_PENDING_BYTES-100},reserved:{count:0,bytes:90},disk:{ok:true},queueOk:true,contentLength:20});assert.equal(b.status,413);
 });
 test('lifecycle sólo termina estados terminales del archivo esperado',()=>{
   const j={filename:'a.gcode'};assert.equal(life.terminalDecision(j,{state:'printing',filename:'a.gcode'},{}).terminal,false);
