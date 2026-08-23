@@ -6,66 +6,48 @@ on:
     paths:
       - 'index.html'
       - 'sw.js'
-      - 'js/maquinas.js'
-      - 'js/maquinas-led.js'
-      - 'js/maquinas-operaciones.js'
-      - 'js/maquinas-farm-controller.js'
-      - 'js/maquinas-eta-clarity.js'
-      - 'js/machineops-storage-adapter.js'
-      - 'js/machineops-unattended-safety.js'
+      - 'js/maquinas*.js'
+      - 'js/machineops-*.js'
       - 'js/printer-history-adapter.js'
-      - 'js/farm-health-adapter.js'
-      - 'js/farm-drift-adapter.js'
+      - 'js/farm-*.js'
       - 'js/dashboard-notification-badges.js'
       - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
       - 'printer-bridge/**'
+      - 'printer-access-worker/**'
       - 'tests/maquinas-*.test.js'
       - 'tests/machine-ops-*.test.js'
-      - 'tests/machineops-storage-adapter.test.js'
-      - 'tests/machineops-unattended-safety.test.js'
-      - 'tests/printer-history-adapter.test.js'
-      - 'tests/printer-history-wiring.test.js'
-      - 'tests/farm-controller.test.js'
-      - 'tests/farm-production-preload.test.js'
-      - 'tests/farm-health-*.test.js'
-      - 'tests/farm-drift-*.test.js'
+      - 'tests/machineops-*.test.js'
+      - 'tests/farm-*.test.js'
+      - 'tests/printer-*.test.js'
       - 'tests/dashboard-notification-badges.test.js'
       - 'tests/correo-input-compat.test.js'
       - 'tests/service-worker-*.test.js'
       - '.github/workflows/maquinas-audit.yml'
+      - '.github/workflows/deploy.yml'
   pull_request:
     paths:
       - 'index.html'
       - 'sw.js'
-      - 'js/maquinas.js'
-      - 'js/maquinas-led.js'
-      - 'js/maquinas-operaciones.js'
-      - 'js/maquinas-farm-controller.js'
-      - 'js/maquinas-eta-clarity.js'
-      - 'js/machineops-storage-adapter.js'
-      - 'js/machineops-unattended-safety.js'
+      - 'js/maquinas*.js'
+      - 'js/machineops-*.js'
       - 'js/printer-history-adapter.js'
-      - 'js/farm-health-adapter.js'
-      - 'js/farm-drift-adapter.js'
+      - 'js/farm-*.js'
       - 'js/dashboard-notification-badges.js'
       - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
       - 'printer-bridge/**'
+      - 'printer-access-worker/**'
       - 'tests/maquinas-*.test.js'
       - 'tests/machine-ops-*.test.js'
-      - 'tests/machineops-storage-adapter.test.js'
-      - 'tests/machineops-unattended-safety.test.js'
-      - 'tests/printer-history-adapter.test.js'
-      - 'tests/printer-history-wiring.test.js'
-      - 'tests/farm-controller.test.js'
-      - 'tests/farm-production-preload.test.js'
-      - 'tests/farm-health-*.test.js'
-      - 'tests/farm-drift-*.test.js'
+      - 'tests/machineops-*.test.js'
+      - 'tests/farm-*.test.js'
+      - 'tests/printer-*.test.js'
       - 'tests/dashboard-notification-badges.test.js'
       - 'tests/correo-input-compat.test.js'
       - 'tests/service-worker-*.test.js'
       - '.github/workflows/maquinas-audit.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -78,7 +60,7 @@ concurrency:
 jobs:
   maquinas:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -97,32 +79,53 @@ jobs:
           node --check js/maquinas-eta-clarity.js
           node --check js/machineops-storage-adapter.js
           node --check js/machineops-unattended-safety.js
+          node --check js/machineops-farm-queue-adapter.js
           node --check js/printer-history-adapter.js
           node --check js/farm-health-adapter.js
           node --check js/farm-drift-adapter.js
+          node --check js/farm-reliability-adapter.js
+          node --check js/farm-identity-adapter.js
           node --check js/dashboard-notification-badges.js
           node --check js/correo-input-compat.js
           node --check js/slicer3d.js
           node --check sw.js
           node --check printer-bridge/server.js
           node --check printer-bridge/farm-controller.js
+          node --check printer-bridge/farm-bind-preload.js
+          node --check printer-bridge/farm-auth-preload.js
+          node --check printer-bridge/farm-queue-guard-preload.js
           node --check printer-bridge/farm-production-preload.js
           node --check printer-bridge/farm-drift-preload.js
           node --check printer-bridge/farm-health-preload.js
+          node --check printer-bridge/farm-reliability-preload.js
+          node --check printer-bridge/farm-safety-agent-preload.js
+          node --check printer-bridge/farm-lifecycle-preload.js
+          node --check printer-bridge/farm-identity-preload.js
+          node --check printer-access-worker/src/index.js
+          node --check printer-access-worker/src/session.mjs
           bash -n printer-bridge/install-farm-controller.sh
           bash -n printer-bridge/rollback-farm-controller.sh
 
       - name: Probar cache y actualización del dashboard
         run: node --test tests/service-worker-cache-safety.test.js tests/service-worker-registration.test.js
 
-      - name: Probar controlador de granja
+      - name: Probar autenticación y aislamiento del controller
+        run: node --test tests/farm-auth-preload.test.js tests/farm-bind-preload.test.js tests/printer-access-worker-session.test.mjs
+
+      - name: Probar cola única, cuotas y lifecycle central
+        run: node --test tests/machineops-farm-queue-adapter.test.js tests/farm-hardening-core.test.js
+
+      - name: Probar controlador y producción durable
         run: node --test tests/farm-controller.test.js tests/farm-production-preload.test.js
 
-      - name: Probar observabilidad central
-        run: node --test tests/farm-health-preload.test.js tests/farm-health-adapter.test.js tests/farm-health-wiring.test.js
+      - name: Probar observabilidad y continuidad
+        run: node --test tests/farm-health-preload.test.js tests/farm-health-adapter.test.js tests/farm-health-wiring.test.js tests/farm-health-continuity.test.js
 
-      - name: Probar config drift y firmware
-        run: node --test tests/farm-drift-preload.test.js tests/farm-drift-adapter.test.js tests/farm-drift-wiring.test.js
+      - name: Probar confiabilidad histórica
+        run: node --test tests/farm-reliability-preload.test.js tests/farm-reliability-adapter.test.js tests/farm-reliability-wiring.test.js
+
+      - name: Probar config drift e identidad firmware
+        run: node --test tests/farm-drift-preload.test.js tests/farm-drift-adapter.test.js tests/farm-drift-wiring.test.js tests/farm-identity-preload.test.js
 
       - name: Probar badges y teclado de correo
         run: node --test tests/dashboard-notification-badges.test.js tests/correo-input-compat.test.js
@@ -135,6 +138,17 @@ jobs:
 
       - name: Probar historial y odómetro durable
         run: node --test tests/printer-history-adapter.test.js tests/printer-history-wiring.test.js
+
+      - name: Verificar que Pages no publique el token de granja
+        run: |
+          if grep -q 'secrets.PRINTER_TUNNEL_TOKEN' .github/workflows/deploy.yml; then
+            echo 'deploy.yml vuelve a publicar PRINTER_TUNNEL_TOKEN' >&2
+            exit 1
+          fi
+          if grep -q '%%PRINTER_TUNNEL_TOKEN%%' index.html; then
+            echo 'index.html conserva un placeholder de credencial permanente' >&2
+            exit 1
+          fi
 
       - name: Auditar cableado integral
         run: node --test tests/maquinas-wiring.test.js
