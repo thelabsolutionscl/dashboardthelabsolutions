@@ -31,6 +31,7 @@ jobs:
           node --check printer-bridge/farm-bind-preload.js
           node --check printer-bridge/farm-auth-preload.js
           node --check printer-bridge/farm-queue-guard-preload.js
+          node --check printer-bridge/farm-storage-interlock-preload.js
           node --check printer-bridge/farm-queue-import-preload.js
           node --check printer-bridge/farm-queue-terminal-preload.js
           node --check printer-bridge/farm-production-preload.js
@@ -65,6 +66,7 @@ jobs:
             tests/machineops-farm-queue-adapter.test.js \
             tests/machineops-unattended-safety.test.js \
             tests/farm-hardening-core.test.js \
+            tests/farm-storage-interlock.test.js \
             tests/farm-queue-import-preload.test.js \
             tests/farm-queue-terminal-preload.test.js \
             tests/farm-safety-authority.test.js \
