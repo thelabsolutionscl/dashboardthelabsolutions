@@ -1,0 +1,5 @@
+import test from'node:test';import assert from'node:assert/strict';import{createRequire}from'module';import{mintSessionToken,roleForEmail,audMatches}from'../printer-access-worker/src/session.mjs';
+const require=createRequire(import.meta.url);process.env.FARM_SESSION_SECRET='shared-test-secret-123456';process.env.FARM_DATA_DIR='/tmp/tls-farm-auth-worker-test';
+const auth=require('../printer-bridge/farm-auth-preload.js');
+test('Worker y controller comparten formato HMAC',async()=>{const m=await mintSessionToken({secret:'shared-test-secret-123456',role:'admin',sub:'admin@example.com',now:100,ttlSec:60});const v=auth.verifySession(m.token,{secret:'shared-test-secret-123456',now:120});assert.equal(v.ok,true);assert.equal(v.role,'admin');assert.equal(v.sub,'admin@example.com');});
+test('roles y audience se resuelven explícitamente',()=>{assert.equal(roleForEmail('A@EXAMPLE.COM',{admins:'a@example.com',operators:''}),'admin');assert.equal(roleForEmail('x@example.com',{admins:'',operators:'op@example.com'}),'viewer');assert.equal(audMatches(['uno','dos'],'dos'),true);});
