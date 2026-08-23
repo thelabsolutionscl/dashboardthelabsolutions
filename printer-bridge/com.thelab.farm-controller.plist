@@ -9,6 +9,7 @@
     <string>-r</string><string>__REPO__/printer-bridge/farm-bind-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-auth-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-queue-guard-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-queue-import-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-production-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-drift-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-health-preload.js</string>
