@@ -1,13 +1,33 @@
 /* js/farm-health-adapter.js
  * Cliente de observabilidad central del Farm Controller.
  * También expone FarmHttpAuth para que todos los adaptadores centrales usen
- * Bearer con sesiones cortas y reserven ?bt= sólo para tokens legacy.
+ * Bearer con sesiones cortas y reserven ?bt= sólo para compatibilidad legacy.
  */
 (function(root,factory){const api=factory();if(typeof module!=='undefined'&&module.exports)module.exports=api;if(root){root.FarmHealth=api;api.install(root);}})(typeof window!=='undefined'?window:null,function(){'use strict';let target=null,installed=false,controllerOk=null,lastSync=0,lastError='',snapshot=null,syncing=null;
 function base(){try{return typeof target?.getPrinterTunnel==='function'?String(target.getPrinterTunnel()||'').replace(/\/$/,''):'';}catch(_){return'';}}
 function token(){try{return typeof target?.getPrinterTunnelToken==='function'?String(target.getPrinterTunnelToken()||''):'';}catch(_){return'';}}
 function isShortSession(value){return /^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(String(value||''));}
 function legacyUrl(path,t){const b=base();return b+path+(t?(path.includes('?')?'&':'?')+'bt='+encodeURIComponent(t):'');}
+function rewriteShortSessionUrl(value,tunnelBase){
+  try{
+    const u=new URL(String(value||'')),b=new URL(String(tunnelBase||'')),bt=u.searchParams.get('bt')||'';
+    const basePath=b.pathname.replace(/\/$/,'');
+    if(u.origin!==b.origin||(basePath&&basePath!=='/'&&!u.pathname.startsWith(basePath+'/')&&u.pathname!==basePath)||!isShortSession(bt))return null;
+    u.searchParams.delete('bt');return{url:u.toString(),token:bt};
+  }catch(_){return null;}
+}
+function installFetchSanitizer(root){
+  if(!root?.fetch||root.__TLS_FARM_FETCH_SANITIZER__)return false;root.__TLS_FARM_FETCH_SANITIZER__=true;
+  const nativeFetch=root.fetch.bind(root);
+  root.fetch=function(input,init){
+    const raw=typeof input==='string'||input instanceof URL?String(input):'';
+    const hit=raw?rewriteShortSessionUrl(raw,base()):null;
+    if(!hit)return nativeFetch(input,init);
+    const headers=new Headers(init?.headers||{});headers.set('Authorization','Bearer '+hit.token);
+    return nativeFetch(hit.url,{...(init||{}),headers});
+  };
+  return true;
+}
 async function readJson(r){let d=null;try{d=await r.json();}catch(_){}if(!r.ok)throw Object.assign(new Error((d&&d.error)||('HTTP '+r.status)),{status:r.status,data:d});return d||{};}
 async function authenticatedFetch(path,options={}){
   const b=base(),t=token();if(!b||!t)throw new Error('controller/sesión no disponible');
@@ -22,6 +42,6 @@ async function refresh(force=false){if(!target||target._DEMO_MODE)return null;if
 async function probe(){try{const d=await request('/farm/health/probe',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',timeout:15000});snapshot=d.health||null;controllerOk=true;lastSync=Date.now();lastError='';emit();return snapshot;}catch(e){controllerOk=false;lastError=e.message;emit();return null;}}
 async function ack(alertId){if(!alertId)return false;try{const d=await request('/farm/health/ack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alertId})});snapshot=d.health||snapshot;controllerOk=true;lastSync=Date.now();lastError='';emit();return true;}catch(e){controllerOk=false;lastError=e.message;emit();return false;}}
 function status(){return{installed,controllerOk,mode:controllerOk===true?'central':controllerOk===false?'unavailable':'checking',lastSync,lastError,summary:snapshot?.summary||null,machines:snapshot?.machines||[],alerts:snapshot?.alerts||[],sources:snapshot?.sources||{},events:snapshot?.events||[],generatedAt:snapshot?.generatedAt||0};}
-function install(root){if(installed||!root)return false;target=root;installed=true;root.FarmHttpAuth={request,fetch:authenticatedFetch,isShortSession};setTimeout(()=>refresh(true),1200);if(typeof root.setInterval==='function')root.setInterval(()=>{if(!root.document?.hidden)refresh(false);},30000);if(typeof root.addEventListener==='function')root.addEventListener('focus',()=>refresh(true));return true;}
-return{install,refresh,probe,ack,status,_test:{isShortSession}};});
+function install(root){if(installed||!root)return false;target=root;installed=true;installFetchSanitizer(root);root.FarmHttpAuth={request,fetch:authenticatedFetch,isShortSession};setTimeout(()=>refresh(true),1200);if(typeof root.setInterval==='function')root.setInterval(()=>{if(!root.document?.hidden)refresh(false);},30000);if(typeof root.addEventListener==='function')root.addEventListener('focus',()=>refresh(true));return true;}
+return{install,refresh,probe,ack,status,_test:{isShortSession,rewriteShortSessionUrl}};});
 (function _loadDashboardUiExtensions(){if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_DASHBOARD_UI_EXT_LOADER__)return;window.__TLS_DASHBOARD_UI_EXT_LOADER__=true;const current=document.currentScript,raw=current?.src||'',suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';const load=(path,label)=>{if(Array.from(document.scripts||[]).some(s=>String(s.src||'').includes('/'+path)))return;if(typeof document.createElement!=='function'||!document.head)return;const s=document.createElement('script');s.src=path+suffix;s.async=false;s.onerror=()=>console.warn('[Dashboard] no se pudo cargar '+label);document.head.appendChild(s);};load('js/dashboard-notification-badges.js','badges de notificaciones');load('js/correo-input-compat.js','compatibilidad de teclado de correo');load('js/maquinas-eta-clarity.js','claridad de disponibilidad de máquinas');load('js/farm-session-login-ui.js','inicio de sesión de máquinas');load('js/farm-drift-adapter.js','integridad de configuración de máquinas');load('js/farm-reliability-adapter.js','confiabilidad histórica de máquinas');load('js/farm-identity-adapter.js','identidad MCU/CAN de máquinas');load('js/machineops-farm-queue-adapter.js','cola única MachineOps/Farm Controller');load('js/machineops-terminology.js','terminología operativa de Máquinas');})();
