@@ -1,7 +1,7 @@
 /* Integración del Farm Controller con Máquinas.
  * - sesión corta obtenida mediante Cloudflare Access / Printer Access Worker
  * - registry canónico
- * - cola durable con fallback local únicamente durante migración
+ * - cola durable e idempotente
  */
 (function(){
 'use strict';
@@ -23,10 +23,12 @@ const DEFAULT_SESSION_URL='https://printer-access.thelab.solutions/session';
 const counts=Object.create(null);
 let jobs=[],lastQueueSync=0,queueSyncing=null,controllerOk=null;
 let registry=[],registryById=Object.create(null),lastRegistrySync=0,registrySyncing=null;
-let controllerRole='',session={token:'',role:'',expiresAt:0,email:'',lastError:''},sessionPromise=null;
+let controllerRole='',session={token:'',role:'',expiresAt:0,email:'',lastError:'',loginRequired:false},sessionPromise=null;
 
 function base(){try{return typeof getPrinterTunnel==='function'?getPrinterTunnel().replace(/\/$/,''):'';}catch(_){return'';}}
 function sessionUrl(){try{return(localStorage.getItem('printer_session_url')||DEFAULT_SESSION_URL).trim();}catch(_){return DEFAULT_SESSION_URL;}}
+function accessBase(){try{return new URL(sessionUrl()).origin;}catch(_){return'https://printer-access.thelab.solutions';}}
+function loginUrl(){return accessBase()+'/login?return='+encodeURIComponent(location.origin+location.pathname+location.search+location.hash);}
 function legacyToken(){try{return original.getToken?String(original.getToken()||''):'';}catch(_){return'';}}
 function sessionValid(){return!!session.token&&Date.now()+SESSION_SKEW_MS<Number(session.expiresAt||0);}
 function token(){return sessionValid()?session.token:legacyToken();}
@@ -35,6 +37,8 @@ function render(){try{if(typeof renderMonitorGrid==='function')renderMonitorGrid
 function machines(){try{return typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)?MAQUINAS:[];}catch(_){return[];}}
 function parseSessionPart(t){try{const p=String(t||'').split('.');return p.length===3&&p[0]==='v1'?JSON.parse(atob(p[1].replace(/-/g,'+').replace(/_/g,'/'))):null;}catch(_){return null;}}
 function looksShortSession(t){return!!parseSessionPart(t);}
+function uid(prefix='farm'){try{return prefix+'-'+crypto.randomUUID();}catch(_){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);}}
+function safeRemoteFilename(id,filename){const baseName=String(filename||'job.gcode').replace(/\\/g,'/').split('/').pop().replace(/[^a-zA-Z0-9._-]+/g,'_').slice(-120)||'job.gcode';const pre=String(id||'farm').replace(/[^a-zA-Z0-9._-]+/g,'_').slice(0,60);return(pre+'--'+baseName).slice(0,190);}
 
 async function refreshSession(force=false){
   if(!force&&sessionValid())return session.token;
@@ -43,29 +47,26 @@ async function refreshSession(force=false){
   sessionPromise=(async()=>{
     try{
       const r=await fetch(endpoint,{method:'GET',credentials:'include',cache:'no-store',signal:AbortSignal.timeout(8000)});
-      const d=await r.json().catch(()=>({}));if(!r.ok||!d.session)throw new Error(d.error||('HTTP '+r.status));
-      session={token:String(d.session),role:String(d.role||''),expiresAt:Number(d.expiresAt||0),email:String(d.email||''),lastError:''};
+      const d=await r.json().catch(()=>({}));if(!r.ok||!d.session)throw Object.assign(new Error(d.error||('HTTP '+r.status)),{status:r.status});
+      session={token:String(d.session),role:String(d.role||''),expiresAt:Number(d.expiresAt||0),email:String(d.email||''),lastError:'',loginRequired:false};
       controllerRole=session.role||controllerRole;
       try{sessionStorage.setItem('farm_session_hint',JSON.stringify({role:session.role,expiresAt:session.expiresAt,email:session.email}));}catch(_){ }
       window.dispatchEvent?.(new CustomEvent('farm-session-updated',{detail:statusSession()}));
       return session.token;
-    }catch(e){session.lastError=e?.message||String(e);return legacyToken();}
+    }catch(e){session.lastError=e?.message||String(e);session.loginRequired=!legacyToken();window.dispatchEvent?.(new CustomEvent('farm-session-updated',{detail:statusSession()}));return legacyToken();}
     finally{sessionPromise=null;}
   })();
   return sessionPromise;
 }
-function statusSession(){return{mode:sessionValid()?'short-session':legacyToken()?'legacy-token':'unavailable',role:session.role||controllerRole,expiresAt:session.expiresAt,email:session.email,lastError:session.lastError,sessionUrl:sessionUrl()};}
-// Todas las funciones heredadas que construyen URLs Moonraker/WebSocket reciben
-// la sesión corta sin saber que cambió el mecanismo de autenticación.
+function statusSession(){return{mode:sessionValid()?'short-session':legacyToken()?'legacy-token':'unavailable',role:session.role||controllerRole,expiresAt:session.expiresAt,email:session.email,lastError:session.lastError,loginRequired:session.loginRequired,sessionUrl:sessionUrl(),loginUrl:loginUrl()};}
 window.getPrinterTunnelToken=function(){return token();};
 
-async function readJson(r){let d=null;try{d=await r.json();}catch(_){}if(!r.ok)throw new Error((d&&d.error)||('HTTP '+r.status));return d||{};}
+async function readJson(r){let d=null;try{d=await r.json();}catch(_){}if(!r.ok)throw Object.assign(new Error((d&&d.error)||('HTTP '+r.status)),{status:r.status,data:d});return d||{};}
 async function farmFetch(path,options={},retry=true){
   if(!base())throw new Error('controller no configurado');
   if(!token())await refreshSession(false);
   let t=token();if(!t)throw new Error('sesión de granja no disponible');
-  const opts={cache:'no-store',...options};
-  const headers=new Headers(opts.headers||{});if(looksShortSession(t))headers.set('Authorization','Bearer '+t);opts.headers=headers;
+  const opts={cache:'no-store',...options},headers=new Headers(opts.headers||{});if(looksShortSession(t))headers.set('Authorization','Bearer '+t);opts.headers=headers;
   let r=await fetch(looksShortSession(t)?base()+path:url(path),opts);
   if(retry&&(r.status===401||r.status===403)&&looksShortSession(t)){
     session.token='';await refreshSession(true);t=token();
@@ -105,12 +106,23 @@ async function syncQueue(force=false){
 }
 function bytesToBase64(buffer){const bytes=new Uint8Array(buffer);let binary='';const CHUNK=0x8000;for(let i=0;i<bytes.length;i+=CHUNK)binary+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));return btoa(binary);}
 async function enqueuePayload(payload){
-  const d=await readJson(await farmFetch('/farm/queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)}));
-  if(!d.ok)throw new Error(d.error||'cola rechazada');await syncQueue(true);return d.job;
+  if(payload?.id){await syncQueue(true);const prior=jobs.find(x=>x.id===payload.id);if(prior)return prior;}
+  try{
+    const d=await readJson(await farmFetch('/farm/queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)}));
+    if(!d.ok)throw new Error(d.error||'cola rechazada');await syncQueue(true);return d.job;
+  }catch(e){if(payload?.id){await syncQueue(true);const recovered=jobs.find(x=>x.id===payload.id);if(recovered)return recovered;}throw e;}
 }
-async function enqueueGcode(id,gcode,filename,secs,grams,extra={}){
-  const m=machines().find(x=>x.id===id);const payload={machineId:id,ip:m?durableGetPrinterIp(m):'',filename,secs:Number(secs||0),grams:Number(grams||0),source:'dashboard',...extra,gcodeBase64:bytesToBase64(await new Blob([gcode],{type:'text/plain'}).arrayBuffer())};
+async function enqueueGcode(machineId,gcode,filename,secs,grams,extra={}){
+  const m=machines().find(x=>x.id===machineId),id=String(extra.id||uid('farm')),remoteFilename=String(extra.remoteFilename||safeRemoteFilename(id,filename));
+  const payload={id,machineId,ip:m?durableGetPrinterIp(m):'',filename:remoteFilename,secs:Number(secs||0),grams:Number(grams||0),source:'dashboard',...extra,id: id,filename:remoteFilename,gcodeBase64:bytesToBase64(await new Blob([gcode],{type:'text/plain'}).arrayBuffer())};
   return enqueuePayload(payload);
+}
+async function importGcode(machineId,sourceFile,secs,grams,extra={}){
+  const id=String(extra.id||uid('farm')),remoteFilename=String(extra.remoteFilename||safeRemoteFilename(id,sourceFile));
+  await syncQueue(true);const prior=jobs.find(x=>x.id===id);if(prior)return prior;
+  const body={id,machineId,sourceFile,remoteFilename,secs:Number(secs||0),grams:Number(grams||0),priority:Number(extra.priority||50),source:String(extra.source||'machineops')};
+  try{const d=await readJson(await farmFetch('/farm/queue/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(45000)}));await syncQueue(true);return d.job;}
+  catch(e){await syncQueue(true);const recovered=jobs.find(x=>x.id===id);if(recovered)return recovered;throw e;}
 }
 async function durableAdd(id,gcode,filename,secs,grams){
   try{const m=machines().find(x=>x.id===id),job=await enqueueGcode(id,gcode,filename,secs,grams);try{toast(`📋 Encolado de forma durable en ${m?.nombre||id}`,'success');}catch(_){}return job;}
@@ -132,7 +144,7 @@ setInterval(()=>{if(!document.hidden){refreshSession(false);syncQueue(false);syn
 window.addEventListener('focus',()=>{refreshSession(true);syncQueue(true);syncRegistry(true);});
 window.addEventListener('farm-controller-health',()=>{syncQueue(true);syncRegistry(true);});
 
-window.FarmSessionAuth={refresh:refreshSession,token,status:statusSession,setSessionUrl:(v)=>{localStorage.setItem('printer_session_url',String(v||''));session.token='';return refreshSession(true);}};
-window.FarmQueue={sync:syncQueue,enqueueGcode,enqueuePayload,runJob,findById:id=>jobs.find(x=>x.id===id)||null,status:()=>({controllerOk,lastSync:lastQueueSync,jobs:[...jobs],counts:{...counts}})};
+window.FarmSessionAuth={refresh:refreshSession,token,status:statusSession,login:()=>{location.href=loginUrl();},loginUrl,setSessionUrl:(v)=>{localStorage.setItem('printer_session_url',String(v||''));session.token='';return refreshSession(true);}};
+window.FarmQueue={sync:syncQueue,enqueueGcode,importGcode,enqueuePayload,runJob,findById:id=>jobs.find(x=>x.id===id)||null,status:()=>({controllerOk,lastSync:lastQueueSync,jobs:[...jobs],counts:{...counts}}),_test:{safeRemoteFilename}};
 window.FarmRegistry={sync:syncRegistry,seed:seedRegistry,ipFor:durableGetPrinterIp,status:()=>({controllerOk,role:controllerRole,lastSync:lastRegistrySync,machines:[...registry]})};
 })();
