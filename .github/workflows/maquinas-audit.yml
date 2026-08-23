@@ -83,6 +83,7 @@ jobs:
           node --check js/farm-drift-adapter.js
           node --check js/farm-reliability-adapter.js
           node --check js/farm-identity-adapter.js
+          node --check js/farm-session-login-ui.js
           node --check js/dashboard-notification-badges.js
           node --check js/correo-input-compat.js
           node --check js/slicer3d.js
