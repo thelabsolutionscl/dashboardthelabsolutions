@@ -2,6 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const os=require('os'),fs=require('fs'),path=require('path');
+const {spawnSync}=require('child_process');
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'farm-auth-'));
 process.env.FARM_DATA_DIR=tmp;process.env.FARM_SESSION_SECRET='test-secret-0123456789';process.env.BRIDGE_ADMIN_TOKEN='adm';process.env.BRIDGE_OPERATOR_TOKEN='op';process.env.BRIDGE_VIEWER_TOKEN='view';
 const auth=require('../printer-bridge/farm-auth-preload.js');
@@ -18,4 +19,13 @@ test('firma manipulada se rechaza y roles mapean a token local',()=>{
 test('bt de sesión corta se elimina antes del controller',()=>{
   const t=auth.mintSession({role:'viewer'});const out=auth.stripSessionQuery('/farm/health?bt='+encodeURIComponent(t)+'&x=1');assert.equal(out,'/farm/health?x=1');
   assert.equal(auth.stripSessionQuery('/farm/health?bt=legacy'),'/farm/health?bt=legacy');
+});
+test('sin tokens preconfigurados viewer/operator se generan credenciales distintas y nunca heredan admin',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'farm-auth-rbac-'));
+  const script=`const a=require(${JSON.stringify(path.resolve(__dirname,'../printer-bridge/farm-auth-preload.js'))});console.log(JSON.stringify({admin:a.localTokenForRole('admin'),operator:a.localTokenForRole('operator'),viewer:a.localTokenForRole('viewer'),oe:process.env.BRIDGE_OPERATOR_TOKEN,ve:process.env.BRIDGE_VIEWER_TOKEN}))`;
+  const env={...process.env,FARM_DATA_DIR:dir,FARM_SESSION_SECRET:'child-test-secret',BRIDGE_ADMIN_TOKEN:'admin-only'};
+  delete env.BRIDGE_OPERATOR_TOKEN;delete env.BRIDGE_VIEWER_TOKEN;delete env.BRIDGE_TOKEN;
+  const r=spawnSync(process.execPath,['-e',script],{env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);
+  const d=JSON.parse(r.stdout.trim());assert.equal(d.admin,'admin-only');assert.ok(d.operator);assert.ok(d.viewer);assert.notEqual(d.operator,d.admin);assert.notEqual(d.viewer,d.admin);assert.notEqual(d.viewer,d.operator);assert.equal(d.oe,d.operator);assert.equal(d.ve,d.viewer);
+  assert.equal(fs.statSync(path.join(dir,'bridge-operator-token')).mode&0o777,0o600);assert.equal(fs.statSync(path.join(dir,'bridge-viewer-token')).mode&0o777,0o600);
 });
