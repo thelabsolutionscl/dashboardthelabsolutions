@@ -1,6 +1,9 @@
 .claude/worktrees/
 printer-bridge/.bridge-token
 printer-bridge/maint-config.json
+printer-bridge/data/
+printer-access-worker/.dev.vars
+printer-access-worker/.wrangler/
 # Secretos server-side de mail-api.php (Resend) — nunca versionar
 mail-api-config.php
 resend.key

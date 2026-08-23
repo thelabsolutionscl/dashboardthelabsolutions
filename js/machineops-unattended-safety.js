@@ -118,12 +118,19 @@ function augmentPreflight(id,target=root){
 }
 function bridgeBase(){try{return typeof getPrinterTunnel==='function'?String(getPrinterTunnel()).replace(/\/$/,''):'';}catch(_){return'';}}
 function bridgeToken(){try{return typeof getPrinterTunnelToken==='function'?getPrinterTunnelToken():'';}catch(_){return'';}}
+function isShortSession(value){return /^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(String(value||''));}
 async function syncToController(target=root){
   if(!target||target._DEMO_MODE)return false;
-  const base=bridgeBase(),token=bridgeToken();if(!base||!token)return false;
   try{
-    const snapshot=buildSnapshot(target),url=base+'/farm/safety?bt='+encodeURIComponent(token);
-    const r=await target.fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot),signal:AbortSignal.timeout(7000)});
+    const snapshot=buildSnapshot(target),options={method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot),signal:AbortSignal.timeout(7000)};
+    let r;
+    if(target.FarmHttpAuth?.fetch)r=await target.FarmHttpAuth.fetch('/farm/safety',options);
+    else{
+      const base=bridgeBase(),token=bridgeToken();if(!base||!token)return false;
+      const headers=new Headers(options.headers);let url=base+'/farm/safety';
+      if(isShortSession(token))headers.set('Authorization','Bearer '+token);else url+='?bt='+encodeURIComponent(token);
+      r=await target.fetch(url,{...options,headers});
+    }
     if(!r.ok)throw new Error('HTTP '+r.status);
     lastSyncAt=Date.now();lastSyncOk=true;lastSyncError='';return true;
   }catch(e){lastSyncAt=Date.now();lastSyncOk=false;lastSyncError=e?.message||String(e);return false;}
@@ -158,5 +165,5 @@ function installWhenReady(target=root){
 }
 function status(){return{installed,lastSyncAt,lastSyncOk,lastSyncError,lastDecision};}
 
-return{DEFAULT_CONFIG,normalizeConfig,isNightHour,hourAt,jobMinutes,jobIsUnattended,normalizeSnapshot,evaluateSnapshot,buildSnapshot,decisionForJob,syncToController,install,installWhenReady,status};
+return{DEFAULT_CONFIG,normalizeConfig,isNightHour,hourAt,jobMinutes,jobIsUnattended,normalizeSnapshot,evaluateSnapshot,buildSnapshot,decisionForJob,syncToController,install,installWhenReady,status,_test:{isShortSession}};
 });

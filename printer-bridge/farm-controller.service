@@ -8,17 +8,24 @@ Type=simple
 User=thelab-farm
 Group=thelab-farm
 WorkingDirectory=/opt/thelab/dashboardthelabsolutions/printer-bridge
-ExecStart=/usr/bin/node -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-production-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-drift-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-health-preload.js /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-controller.js
+ExecStart=/usr/bin/node -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-bind-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-auth-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-queue-guard-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-storage-interlock-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-queue-import-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-production-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-drift-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-health-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-reliability-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-safety-agent-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-safety-authority-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-lifecycle-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-queue-terminal-preload.js -r /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-identity-preload.js /opt/thelab/dashboardthelabsolutions/printer-bridge/farm-controller.js
 Restart=always
 RestartSec=3
 Environment=BRIDGE_ALLOW_ORIGIN=https://dashboard.thelab.solutions
 Environment=FARM_DATA_DIR=/var/lib/thelab-farm
+Environment=FARM_BIND_HOST=127.0.0.1
+Environment=BRIDGE_UPDATE=0
 EnvironmentFile=-/etc/thelab-farm.env
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/thelab-farm /opt/thelab/dashboardthelabsolutions/printer-bridge
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/thelab-farm
 
 [Install]
 WantedBy=multi-user.target

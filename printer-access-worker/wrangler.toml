@@ -1,0 +1,21 @@
+name = "thelab-printer-access"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+# Valores NO secretos. Ajustar al dominio real de Cloudflare Zero Trust.
+[vars]
+DASHBOARD_ORIGIN = "https://dashboard.thelab.solutions"
+FARM_SESSION_AUDIENCE = "thelab-farm"
+FARM_SESSION_ISSUER = "printer-access-worker"
+SESSION_TTL_SEC = "300"
+
+# Configuración requerida antes del deploy:
+#   npx wrangler secret put FARM_SESSION_SECRET
+#   npx wrangler secret put CLOUDFLARE_TEAM_DOMAIN
+#   npx wrangler secret put CLOUDFLARE_ACCESS_AUD
+#   npx wrangler secret put ADMIN_EMAILS
+#   npx wrangler secret put OPERATOR_EMAILS
+#
+# CLOUDFLARE_TEAM_DOMAIN: ejemplo empresa.cloudflareaccess.com
+# CLOUDFLARE_ACCESS_AUD: Audience de la app Access que protege /session
+# FARM_SESSION_SECRET: debe ser EXACTAMENTE el mismo que usa Farm Controller.

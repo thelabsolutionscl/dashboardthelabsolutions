@@ -6,12 +6,20 @@
   <key>ProgramArguments</key>
   <array>
     <string>__NODE__</string>
-    <string>-r</string>
-    <string>__REPO__/printer-bridge/farm-production-preload.js</string>
-    <string>-r</string>
-    <string>__REPO__/printer-bridge/farm-drift-preload.js</string>
-    <string>-r</string>
-    <string>__REPO__/printer-bridge/farm-health-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-bind-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-auth-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-queue-guard-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-storage-interlock-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-queue-import-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-production-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-drift-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-health-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-reliability-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-safety-agent-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-safety-authority-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-lifecycle-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-queue-terminal-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-identity-preload.js</string>
     <string>__REPO__/printer-bridge/farm-controller.js</string>
   </array>
   <key>WorkingDirectory</key><string>__REPO__/printer-bridge</string>
@@ -19,6 +27,7 @@
   <dict>
     <key>BRIDGE_ALLOW_ORIGIN</key><string>https://dashboard.thelab.solutions</string>
     <key>FARM_DATA_DIR</key><string>__DATA__</string>
+    <key>FARM_BIND_HOST</key><string>127.0.0.1</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

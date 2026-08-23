@@ -2,6 +2,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
+const fs=require('fs'),os=require('os'),path=require('path');
 process.env.FARM_HEALTH_PRELOAD_DISABLE='1';
 process.env.BRIDGE_TOKEN='health-admin-test';
 const health=require('../printer-bridge/farm-health-preload.js');
@@ -38,11 +39,7 @@ test('archivos corruptos y cola atascada aparecen como alertas',()=>{
   const now=Date.now();
   const good={exists:true,ok:true,value:{},mtimeMs:now,error:''};
   const bad={exists:true,ok:false,value:null,mtimeMs:0,error:'Unexpected token'};
-  const alerts=health.deriveStaticAlerts({
-    registryDetail:bad,queueDetail:good,safetyDetail:good,productionDetail:good,
-    queue:{jobs:[{id:'j1',filename:'pieza.gcode',state:'retry',updatedAt:new Date(now-30*60000).toISOString()}]},
-    safety:{updatedAt:now},now,dataWritable:true,
-  });
+  const alerts=health.deriveStaticAlerts({registryDetail:bad,queueDetail:good,safetyDetail:good,productionDetail:good,queue:{jobs:[{id:'j1',filename:'pieza.gcode',state:'retry',updatedAt:new Date(now-30*60000).toISOString()}]},safety:{updatedAt:now},now,dataWritable:true});
   assert.equal(alerts.some(a=>a.id==='data:registry:invalid'&&a.severity==='critical'),true);
   assert.equal(alerts.some(a=>a.id==='queue:j1:stuck'),true);
 });
@@ -52,13 +49,13 @@ test('snapshot de seguridad stale sólo alerta cuando puede haber trabajo desate
   const good={exists:true,ok:true,value:{},mtimeMs:now,error:''};
   const stale={exists:true,ok:true,value:{updatedAt:now-10*60000},mtimeMs:now-10*60000,error:''};
   const base={registryDetail:good,queueDetail:good,safetyDetail:stale,productionDetail:good,safety:{updatedAt:now-10*60000},now,dataWritable:true};
-  const short=health.deriveStaticAlerts({...base,queue:{jobs:[]}});
-  assert.equal(short.some(a=>a.id==='safety:snapshot-stale'),false);
-  const long=health.deriveStaticAlerts({...base,queue:{jobs:[{id:'j2',state:'queued',secs:5*3600,createdAt:new Date(now).toISOString()}]}});
-  assert.equal(long.some(a=>a.id==='safety:snapshot-stale'),true);
+  const short=health.deriveStaticAlerts({...base,queue:{jobs:[]}});assert.equal(short.some(a=>a.id==='safety:snapshot-stale'),false);
+  const long=health.deriveStaticAlerts({...base,queue:{jobs:[{id:'j2',state:'queued',secs:5*3600,createdAt:new Date(now).toISOString()}]}});assert.equal(long.some(a=>a.id==='safety:snapshot-stale'),true);
 });
 
-test('roles del preload respetan token admin',()=>{
-  assert.equal(health.roleForToken('health-admin-test'),'admin');
-  assert.equal(health.roleForToken('malo'),'');
+test('health.json corrupto se detecta y clasifica como error de storage',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'health-corrupt-')),file=path.join(dir,'health.json');fs.writeFileSync(file,'{mal');
+  const d=health._test.readJsonDetailed(file);assert.equal(d.exists,true);assert.equal(d.ok,false);assert.equal(health._test.storageStatus(new Error('health.json inválido')),507);
 });
+
+test('roles del preload respetan token admin',()=>{assert.equal(health.roleForToken('health-admin-test'),'admin');assert.equal(health.roleForToken('malo'),'');});

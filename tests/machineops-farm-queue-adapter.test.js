@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const api=require('../js/machineops-farm-queue-adapter.js');
+test('prioridad se traduce de forma estable',()=>{assert.equal(api._test.priorityValue('urgente'),90);assert.equal(api._test.priorityValue('normal'),50);assert.equal(api._test.priorityValue('x'),50);});
+test('farmJobId se deriva de MachineOps y no depende de localStorage',()=>{assert.equal(api._test.farmJobIdForMachineOps('job-123'),'mops-job-123');assert.equal(api._test.farmJobIdForMachineOps('pedido / pieza #2'),'mops-pedido_pieza_2');assert.equal(api._test.farmJobIdForMachineOps(''),'');});
+test('estado central started mueve un trabajo en cola a imprimiendo',()=>{assert.equal(api._test.reconcileAction({status:'en_cola'},{state:'started',startedAt:'2026-08-23T00:00:00Z'}),'printing');});
+test('completed de una impresión iniciada requiere QA',()=>{assert.equal(api._test.reconcileAction({status:'imprimiendo'},{state:'completed',startedAt:'2026-08-23T00:00:00Z'}),'complete');});
+test('cancelled iniciado se trata como fallo de impresión',()=>{assert.equal(api._test.reconcileAction({status:'imprimiendo'},{state:'cancelled',startedAt:'2026-08-23T00:00:00Z'}),'cancelled');});
+test('failed distingue fallo técnico previo de fallo durante impresión',()=>{assert.equal(api._test.reconcileAction({status:'en_cola'},{state:'failed',lastError:'upload'}),'queue-failed');assert.equal(api._test.reconcileAction({status:'imprimiendo'},{state:'failed',startedAt:'2026-08-23T00:00:00Z'}),'failed-review');});
+test('estado terminal ya reconciliado no se vuelve a aplicar',()=>{assert.equal(api._test.reconcileAction({status:'qa'},{state:'completed',startedAt:'2026-08-23T00:00:00Z'}),'');assert.equal(api._test.reconcileAction({status:'fallido'},{state:'cancelled',startedAt:'2026-08-23T00:00:00Z'}),'');});
