@@ -17,7 +17,11 @@ function ensureAdminToken(){
   let token=String(process.env.BRIDGE_ADMIN_TOKEN||process.env.BRIDGE_TOKEN||'').trim();
   if(!token){try{token=fs.readFileSync(path.join(ROOT,'.bridge-token'),'utf8').trim();}catch(_){}}
   if(!token)token=secureReadOrCreate(path.join(DATA_DIR,'bridge-admin-token'),24);
-  process.env.BRIDGE_ADMIN_TOKEN=token;return token;
+  // Este preload corre primero. Propagar ambos nombres evita que preloads
+  // heredados intenten crear `.bridge-token` dentro del checkout read-only.
+  process.env.BRIDGE_ADMIN_TOKEN=token;
+  if(!String(process.env.BRIDGE_TOKEN||'').trim())process.env.BRIDGE_TOKEN=token;
+  return token;
 }
 function ensureRoleToken(role,envName){const configured=String(process.env[envName]||'').trim();if(configured)return configured;const token=secureReadOrCreate(path.join(DATA_DIR,`bridge-${role}-token`),24);process.env[envName]=token;return token;}
 const ROLE_TOKENS={admin:ensureAdminToken(),operator:ensureRoleToken('operator','BRIDGE_OPERATOR_TOKEN'),viewer:ensureRoleToken('viewer','BRIDGE_VIEWER_TOKEN')};
