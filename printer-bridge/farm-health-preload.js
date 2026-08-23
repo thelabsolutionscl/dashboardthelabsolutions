@@ -1,414 +1,83 @@
 #!/usr/bin/env node
 'use strict';
 
-/**
- * The Lab Solutions — observabilidad central de la granja (Node preload).
- *
- * Se carga antes de farm-controller.js y agrega /farm/health* sin reescribir
- * el controlador principal. El monitor vive en el controller, por lo que no
- * depende de una pestaña del dashboard abierta.
- */
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+/** Observabilidad central durable de la granja. */
+const http=require('http'),fs=require('fs'),path=require('path'),crypto=require('crypto');
+const ROOT=__dirname,DATA_DIR=process.env.FARM_DATA_DIR||path.join(ROOT,'data');
+const HEALTH_FILE=process.env.FARM_HEALTH_FILE||path.join(DATA_DIR,'health.json'),REGISTRY_FILE=process.env.FARM_REGISTRY_FILE||path.join(DATA_DIR,'registry.json'),QUEUE_FILE=process.env.FARM_QUEUE_FILE||path.join(DATA_DIR,'queue.json'),SAFETY_FILE=process.env.FARM_SAFETY_FILE||path.join(DATA_DIR,'safety.json'),PRODUCTION_FILE=process.env.FARM_PRODUCTION_FILE||path.join(DATA_DIR,'production.json');
+const DASHBOARD_ORIGIN=process.env.BRIDGE_ALLOW_ORIGIN||'https://dashboard.thelab.solutions';
+const POLL_MS=Math.max(15_000,Math.min(5*60_000,Number(process.env.FARM_HEALTH_INTERVAL_MS||30_000))),PROBE_TIMEOUT_MS=Math.max(800,Math.min(10_000,Number(process.env.FARM_HEALTH_PROBE_TIMEOUT_MS||2500))),OFFLINE_FAILURES=Math.max(1,Math.min(10,Number(process.env.FARM_HEALTH_OFFLINE_FAILURES||2)));
+const REGISTRY_STALE_MS=Math.max(5*60_000,Number(process.env.FARM_HEALTH_REGISTRY_STALE_MS||30*60_000)),SAFETY_STALE_MS=Math.max(60_000,Number(process.env.FARM_HEALTH_SAFETY_STALE_MS||3*60_000)),STUCK_JOB_MS=Math.max(5*60_000,Number(process.env.FARM_HEALTH_STUCK_JOB_MS||20*60_000));
+const EVENT_LIMIT=Math.max(500,Math.min(20_000,Number(process.env.FARM_HEALTH_EVENT_LIMIT||5000))),MAX_BODY=256*1024,STARTED_AT=Date.now();
+fs.mkdirSync(DATA_DIR,{recursive:true,mode:0o700});
 
-const ROOT = __dirname;
-const DATA_DIR = process.env.FARM_DATA_DIR || path.join(ROOT, 'data');
-const HEALTH_FILE = process.env.FARM_HEALTH_FILE || path.join(DATA_DIR, 'health.json');
-const REGISTRY_FILE = process.env.FARM_REGISTRY_FILE || path.join(DATA_DIR, 'registry.json');
-const QUEUE_FILE = process.env.FARM_QUEUE_FILE || path.join(DATA_DIR, 'queue.json');
-const SAFETY_FILE = process.env.FARM_SAFETY_FILE || path.join(DATA_DIR, 'safety.json');
-const PRODUCTION_FILE = process.env.FARM_PRODUCTION_FILE || path.join(DATA_DIR, 'production.json');
-const DASHBOARD_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || 'https://dashboard.thelab.solutions';
-const POLL_MS = Math.max(15_000, Math.min(5 * 60_000, Number(process.env.FARM_HEALTH_INTERVAL_MS || 30_000)));
-const PROBE_TIMEOUT_MS = Math.max(800, Math.min(10_000, Number(process.env.FARM_HEALTH_PROBE_TIMEOUT_MS || 2_500)));
-const OFFLINE_FAILURES = Math.max(1, Math.min(10, Number(process.env.FARM_HEALTH_OFFLINE_FAILURES || 2)));
-const REGISTRY_STALE_MS = Math.max(5 * 60_000, Number(process.env.FARM_HEALTH_REGISTRY_STALE_MS || 30 * 60_000));
-const SAFETY_STALE_MS = Math.max(60_000, Number(process.env.FARM_HEALTH_SAFETY_STALE_MS || 3 * 60_000));
-const STUCK_JOB_MS = Math.max(5 * 60_000, Number(process.env.FARM_HEALTH_STUCK_JOB_MS || 20 * 60_000));
-const EVENT_LIMIT = Math.max(500, Math.min(20_000, Number(process.env.FARM_HEALTH_EVENT_LIMIT || 5_000)));
-const MAX_BODY = 256 * 1024;
-const STARTED_AT = Date.now();
+function nowIso(ms=Date.now()){return new Date(ms).toISOString();}
+function finite(v,d=0){const n=Number(v);return Number.isFinite(n)?n:d;}
+function safeEq(a,b){const aa=Buffer.from(String(a||'')),bb=Buffer.from(String(b||''));return aa.length===bb.length&&aa.length>0&&crypto.timingSafeEqual(aa,bb);}
+function isPrivateIp(ip){const m=String(ip||'').match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);if(!m)return false;const o=m.slice(1).map(Number);if(o.some(x=>x<0||x>255))return false;return o[0]===10||o[0]===127||(o[0]===172&&o[1]>=16&&o[1]<=31)||(o[0]===192&&o[1]===168);}
+function atomicWrite(file,value){const tmp=file+'.tmp-'+process.pid+'-'+Date.now();try{fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n',{mode:0o600});const fd=fs.openSync(tmp,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(tmp,file);try{const dfd=fs.openSync(path.dirname(file),'r');try{fs.fsyncSync(dfd);}finally{fs.closeSync(dfd);}}catch(_){}}catch(e){try{fs.unlinkSync(tmp);}catch(_){}throw e;}}
+function readJsonDetailed(file){try{const stat=fs.statSync(file),raw=fs.readFileSync(file,'utf8');return{exists:true,ok:true,value:JSON.parse(raw),mtimeMs:stat.mtimeMs,error:''};}catch(e){if(e?.code==='ENOENT')return{exists:false,ok:true,value:null,mtimeMs:0,error:''};return{exists:true,ok:false,value:null,mtimeMs:0,error:String(e?.message||e)};}}
+function writableDataDir(){try{fs.accessSync(DATA_DIR,fs.constants.R_OK|fs.constants.W_OK);return true;}catch(_){return false;}}
+function loadOrCreateMasterToken(){if(process.env.BRIDGE_TOKEN)return process.env.BRIDGE_TOKEN.trim();const file=path.join(ROOT,'.bridge-token');try{const t=fs.readFileSync(file,'utf8').trim();if(t)return t;}catch(_){}const t=crypto.randomBytes(24).toString('base64url');fs.writeFileSync(file,t+'\n',{mode:0o600});return t;}
+const MASTER_TOKEN=loadOrCreateMasterToken(),TOKENS={admin:(process.env.BRIDGE_ADMIN_TOKEN||MASTER_TOKEN).trim(),operator:(process.env.BRIDGE_OPERATOR_TOKEN||'').trim(),viewer:(process.env.BRIDGE_VIEWER_TOKEN||'').trim()},ROLE_RANK={viewer:1,operator:2,admin:3};
+function tokenFromReq(req){const u=new URL(req.url,'http://farm.local');return String(req.headers['x-bridge-token']||u.searchParams.get('bt')||'');}
+function roleForToken(token){if(TOKENS.admin&&safeEq(token,TOKENS.admin))return'admin';if(TOKENS.operator&&safeEq(token,TOKENS.operator))return'operator';if(TOKENS.viewer&&safeEq(token,TOKENS.viewer))return'viewer';return'';}
+function requireRole(req,res,minimum){const role=roleForToken(tokenFromReq(req));if(!role||ROLE_RANK[role]<ROLE_RANK[minimum]){json(res,403,{ok:false,error:'forbidden',requiredRole:minimum});return'';}return role;}
+function setCors(req,res){const origin=String(req.headers.origin||'');if(!origin||DASHBOARD_ORIGIN==='*'||origin===DASHBOARD_ORIGIN){res.setHeader('Access-Control-Allow-Origin',origin||DASHBOARD_ORIGIN);res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,X-Bridge-Token,Authorization');res.setHeader('Access-Control-Expose-Headers','X-Farm-Role');res.setHeader('Access-Control-Max-Age','86400');res.setHeader('Cache-Control','no-store');}
+function json(res,status,body,headers={}){if(!res.headersSent)res.writeHead(status,{'Content-Type':'application/json; charset=utf-8',...headers});res.end(JSON.stringify(body));}
+function readBody(req,limit=MAX_BODY){return new Promise((resolve,reject)=>{const chunks=[];let size=0;req.on('data',c=>{size+=c.length;if(size>limit){reject(new Error('payload demasiado grande'));req.destroy();}else chunks.push(c);});req.on('end',()=>resolve(Buffer.concat(chunks)));req.on('error',reject);});}
 
-fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
-
-function nowIso(ms = Date.now()) { return new Date(ms).toISOString(); }
-function finite(v, d = 0) { const n = Number(v); return Number.isFinite(n) ? n : d; }
-function safeEq(a, b) {
-  const aa = Buffer.from(String(a || '')), bb = Buffer.from(String(b || ''));
-  return aa.length === bb.length && aa.length > 0 && crypto.timingSafeEqual(aa, bb);
-}
-function isPrivateIp(ip) {
-  const m = String(ip || '').match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!m) return false;
-  const o = m.slice(1).map(Number);
-  if (o.some(x => x < 0 || x > 255)) return false;
-  return o[0] === 10 || o[0] === 127 || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168);
-}
-function atomicWrite(file, value) {
-  const tmp = file + '.tmp-' + process.pid + '-' + Date.now();
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-  fs.renameSync(tmp, file);
-}
-function readJsonDetailed(file) {
-  try {
-    const stat = fs.statSync(file);
-    const raw = fs.readFileSync(file, 'utf8');
-    return { exists: true, ok: true, value: JSON.parse(raw), mtimeMs: stat.mtimeMs, error: '' };
-  } catch (e) {
-    if (e && e.code === 'ENOENT') return { exists: false, ok: true, value: null, mtimeMs: 0, error: '' };
-    return { exists: true, ok: false, value: null, mtimeMs: 0, error: String(e.message || e) };
-  }
-}
-function writableDataDir() {
-  try { fs.accessSync(DATA_DIR, fs.constants.R_OK | fs.constants.W_OK); return true; } catch (_) { return false; }
-}
-function loadOrCreateMasterToken() {
-  if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN.trim();
-  const file = path.join(ROOT, '.bridge-token');
-  try { const t = fs.readFileSync(file, 'utf8').trim(); if (t) return t; } catch (_) {}
-  const t = crypto.randomBytes(24).toString('base64url');
-  fs.writeFileSync(file, t + '\n', { mode: 0o600 });
-  return t;
-}
-const MASTER_TOKEN = loadOrCreateMasterToken();
-const TOKENS = {
-  admin: (process.env.BRIDGE_ADMIN_TOKEN || MASTER_TOKEN).trim(),
-  operator: (process.env.BRIDGE_OPERATOR_TOKEN || '').trim(),
-  viewer: (process.env.BRIDGE_VIEWER_TOKEN || '').trim(),
-};
-const ROLE_RANK = { viewer: 1, operator: 2, admin: 3 };
-function tokenFromReq(req) {
-  const u = new URL(req.url, 'http://farm.local');
-  return String(req.headers['x-bridge-token'] || u.searchParams.get('bt') || '');
-}
-function roleForToken(token) {
-  if (TOKENS.admin && safeEq(token, TOKENS.admin)) return 'admin';
-  if (TOKENS.operator && safeEq(token, TOKENS.operator)) return 'operator';
-  if (TOKENS.viewer && safeEq(token, TOKENS.viewer)) return 'viewer';
-  return '';
-}
-function requireRole(req, res, minimum) {
-  const role = roleForToken(tokenFromReq(req));
-  if (!role || ROLE_RANK[role] < ROLE_RANK[minimum]) {
-    json(res, 403, { ok: false, error: 'forbidden', requiredRole: minimum });
-    return '';
-  }
-  return role;
-}
-function setCors(req, res) {
-  const origin = String(req.headers.origin || '');
-  if (!origin || DASHBOARD_ORIGIN === '*' || origin === DASHBOARD_ORIGIN) {
-    res.setHeader('Access-Control-Allow-Origin', origin || DASHBOARD_ORIGIN);
-    res.setHeader('Vary', 'Origin');
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Bridge-Token,Authorization');
-  res.setHeader('Access-Control-Expose-Headers', 'X-Farm-Role');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  res.setHeader('Cache-Control', 'no-store');
-}
-function json(res, status, body, headers = {}) {
-  if (!res.headersSent) res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...headers });
-  res.end(JSON.stringify(body));
-}
-function readBody(req, limit = MAX_BODY) {
-  return new Promise((resolve, reject) => {
-    const chunks = []; let size = 0;
-    req.on('data', c => {
-      size += c.length;
-      if (size > limit) { reject(new Error('payload demasiado grande')); req.destroy(); }
-      else chunks.push(c);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
+function probeHttp(host,port,targetPath,timeoutMs=PROBE_TIMEOUT_MS){return new Promise(resolve=>{const started=Date.now(),req=http.get({host,port,path:targetPath,timeout:timeoutMs},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>{const body=Buffer.concat(chunks).toString('utf8');let data=null;try{data=JSON.parse(body);}catch(_){}resolve({ok:(res.statusCode||0)>=200&&(res.statusCode||0)<300,status:res.statusCode||0,latencyMs:Date.now()-started,data,error:''});});});req.on('timeout',()=>req.destroy(new Error('timeout')));req.on('error',e=>resolve({ok:false,status:0,latencyMs:Date.now()-started,data:null,error:String(e?.message||e)}));});}
+function normalizeStoredHealth(raw){const v=raw&&typeof raw==='object'?raw:{},events=Array.isArray(v.events)?v.events.slice(0,EVENT_LIMIT):[],oldestEventAt=events.reduce((oldest,e)=>{const at=Math.max(0,finite(e?.at));return at&&(!oldest||at<oldest)?at:oldest;},0);return{version:2,startedAt:Math.max(0,finite(v.startedAt)||oldestEventAt||finite(v.updatedAt)||STARTED_AT),updatedAt:Math.max(0,finite(v.updatedAt)),acks:v.acks&&typeof v.acks==='object'&&!Array.isArray(v.acks)?v.acks:{},events};}
+function clonePersisted(v){return normalizeStoredHealth(JSON.parse(JSON.stringify(v||{})));}
+function activeAlertIdsFromEvents(events){const active=new Set(),ordered=(Array.isArray(events)?events:[]).slice().sort((a,b)=>finite(a?.at)-finite(b?.at));for(const e of ordered){const id=String(e?.alertId||'');if(!id)continue;if(e?.state==='opened')active.add(id);else if(e?.state==='resolved')active.delete(id);}return active;}
+const initialHealth=readJsonDetailed(HEALTH_FILE);let healthLoadError=initialHealth.exists&&!initialHealth.ok?initialHealth.error:'';let persisted=normalizeStoredHealth(initialHealth.value),persistChain=Promise.resolve();
+function persistHealth(){
+  if(healthLoadError)return Promise.reject(new Error('health.json inválido; no se sobrescribirá: '+healthLoadError));
+  persisted.updatedAt=Date.now();const snap=clonePersisted(persisted),task=persistChain.then(()=>atomicWrite(HEALTH_FILE,snap));
+  persistChain=task.catch(e=>console.error('[health] persist',e));return task;
 }
 
-function probeHttp(host, port, targetPath, timeoutMs = PROBE_TIMEOUT_MS) {
-  return new Promise(resolve => {
-    const started = Date.now();
-    const req = http.get({ host, port, path: targetPath, timeout: timeoutMs }, res => {
-      const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('end', () => {
-        const body = Buffer.concat(chunks).toString('utf8');
-        let data = null; try { data = JSON.parse(body); } catch (_) {}
-        resolve({ ok: (res.statusCode || 0) >= 200 && (res.statusCode || 0) < 300, status: res.statusCode || 0, latencyMs: Date.now() - started, data, error: '' });
-      });
-    });
-    req.on('timeout', () => req.destroy(new Error('timeout')));
-    req.on('error', e => resolve({ ok: false, status: 0, latencyMs: Date.now() - started, data: null, error: String(e.message || e) }));
-  });
+const machineRuntime=new Map();let lastSnapshot={generatedAt:0,startedAt:STARTED_AT,uptimeSec:0,cycleMs:0,summary:{status:'checking',critical:0,warning:0,info:0,online:0,offline:0,total:0},machines:[],alerts:[],sources:{},events:[]};let cyclePromise=null,timer=null,previousAlertIds=activeAlertIdsFromEvents(persisted.events);
+function parseDateMs(value){const n=Date.parse(String(value||''));return Number.isFinite(n)?n:0;}
+function santiagoHour(now=Date.now()){try{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Santiago',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now));return Number(parts.find(p=>p.type==='hour')?.value||0);}catch(_){return new Date(now).getHours();}}
+function potentialUnattended(queue,now=Date.now()){const active=(queue?.jobs||[]).filter(j=>['queued','retry','blocked','checking','uploading','uploaded'].includes(String(j.state||''))),hour=santiagoHour(now),night=hour>=19||hour<9;return active.some(j=>j.safetyBlocked===true||finite(j.secs)>=4*3600||night);}
+function alert(id,severity,kind,message,extra={}){return{id,severity,kind,message,...extra};}
+function sourceInfo(file,detail){return{path:path.basename(file),exists:detail.exists,valid:detail.ok,mtimeMs:detail.mtimeMs||0,error:detail.error||''};}
+function jobAgeMs(job,now){return Math.max(0,now-Math.max(parseDateMs(job.updatedAt),parseDateMs(job.createdAt),0));}
+function deriveStaticAlerts({registryDetail,queueDetail,safetyDetail,productionDetail,queue,safety,now=Date.now(),dataWritable=true}){const alerts=[];if(!dataWritable)alerts.push(alert('data:dir:not-writable','critical','storage','El directorio persistente del Farm Controller no es escribible.'));for(const[name,detail]of[['registry',registryDetail],['queue',queueDetail],['safety',safetyDetail],['production',productionDetail]])if(detail.exists&&!detail.ok)alerts.push(alert(`data:${name}:invalid`,'critical','storage',`${name}.json no se puede leer o contiene JSON inválido.`,{detail:detail.error}));for(const job of(queue?.jobs||[])){if(!['checking','uploading','uploaded','retry'].includes(String(job.state||'')))continue;const ageMs=jobAgeMs(job,now);if(ageMs>=STUCK_JOB_MS)alerts.push(alert(`queue:${job.id}:stuck`,'warning','queue',`Trabajo ${job.filename||job.id} lleva ${Math.round(ageMs/60000)} min en estado ${job.state}.`,{jobId:job.id,machineId:job.machineId||'',ageMs}));}const safetyUpdated=Math.max(finite(safety?.updatedAt),safetyDetail.mtimeMs||0);if(potentialUnattended(queue,now)&&(!safetyUpdated||now-safetyUpdated>SAFETY_STALE_MS))alerts.push(alert('safety:snapshot-stale','warning','safety','La seguridad desatendida está stale; los trabajos largos/nocturnos pueden quedar bloqueados.',{ageMs:safetyUpdated?now-safetyUpdated:null}));return alerts;}
+function classifyMachine(machine,probe,previous,now=Date.now()){const prev=previous||{},failures=probe.ok?0:Math.max(0,finite(prev.consecutiveFailures))+1,lastOkAt=probe.ok?now:Math.max(0,finite(prev.lastOkAt)),lastSeenAt=parseDateMs(machine.lastSeenAt||machine.updatedAt),result=probe.data?.result||{},state=String(result.state||'').toLowerCase(),offline=!probe.ok&&failures>=OFFLINE_FAILURES,health=offline?'offline':!probe.ok?'degraded':state&&state!=='ready'?'degraded':'online';return{id:String(machine.id||''),name:String(machine.nombre||machine.name||machine.hostname||machine.id||''),ip:String(machine.ip||''),hostname:String(machine.hostname||result.hostname||''),health,online:probe.ok,klipperState:state||'',stateMessage:String(result.state_message||'').slice(0,240),latencyMs:Math.max(0,finite(probe.latencyMs)),lastProbeAt:now,lastOkAt,consecutiveFailures:failures,lastSeenAt,registryStale:!!lastSeenAt&&now-lastSeenAt>REGISTRY_STALE_MS,error:probe.ok?'':String(probe.error||`HTTP ${probe.status||0}`).slice(0,240)};}
+function deriveMachineAlerts(machine){const out=[];if(!machine.ip||!isPrivateIp(machine.ip)){out.push(alert(`machine:${machine.id}:no-ip`,'warning','registry',`${machine.name||machine.id} no tiene una IP privada válida en el registry.`,{machineId:machine.id}));return out;}if(machine.health==='offline')out.push(alert(`machine:${machine.id}:offline`,'critical','connectivity',`${machine.name||machine.id} está offline.`,{machineId:machine.id,ip:machine.ip,failures:machine.consecutiveFailures}));else if(machine.health==='degraded'&&!machine.online)out.push(alert(`machine:${machine.id}:probe-failed`,'warning','connectivity',`${machine.name||machine.id} falló el último probe.`,{machineId:machine.id,ip:machine.ip,failures:machine.consecutiveFailures}));if(machine.online&&machine.klipperState&&machine.klipperState!=='ready')out.push(alert(`machine:${machine.id}:klipper-${machine.klipperState}`,machine.klipperState==='shutdown'||machine.klipperState==='error'?'critical':'warning','klipper',`${machine.name||machine.id}: Klipper está en estado ${machine.klipperState}.`,{machineId:machine.id,state:machine.klipperState}));if(machine.registryStale)out.push(alert(`machine:${machine.id}:registry-stale`,'warning','registry',`${machine.name||machine.id}: identidad/IP no se refresca hace más de ${Math.round(REGISTRY_STALE_MS/60000)} min.`,{machineId:machine.id}));return out;}
+function severityRank(s){return s==='critical'?3:s==='warning'?2:1;}
+async function reconcileTransitions(alerts,now=Date.now()){
+  if(healthLoadError)return false;const before=clonePersisted(persisted),beforeIds=new Set(previousAlertIds),active=new Set(alerts.map(a=>a.id));let changed=false;
+  for(const a of alerts)if(!previousAlertIds.has(a.id)){persisted.events.unshift({id:crypto.randomBytes(8).toString('hex'),alertId:a.id,state:'opened',severity:a.severity,kind:a.kind,message:a.message,at:now});changed=true;}
+  for(const oldId of previousAlertIds){if(active.has(oldId))continue;persisted.events.unshift({id:crypto.randomBytes(8).toString('hex'),alertId:oldId,state:'resolved',severity:'',kind:'',message:'',at:now});if(persisted.acks[oldId])delete persisted.acks[oldId];changed=true;}
+  previousAlertIds=active;persisted.events=persisted.events.slice(0,EVENT_LIMIT);
+  if(changed){try{await persistHealth();}catch(e){persisted=before;previousAlertIds=beforeIds;throw e;}}
+  return changed;
 }
+function snapshotWithAcks(snapshot){const alerts=(snapshot.alerts||[]).map(a=>({...a,acked:!!persisted.acks[a.id],ack:persisted.acks[a.id]||null}));return{...snapshot,alerts,events:persisted.events.slice(0,100)};}
+async function probeMachine(machine){if(!isPrivateIp(machine.ip))return{ok:false,status:0,latencyMs:0,data:null,error:'IP privada inválida/no configurada'};return probeHttp(machine.ip,7125,'/printer/info');}
+async function mapLimit(items,limit,fn){const out=new Array(items.length);let next=0;async function worker(){while(true){const i=next++;if(i>=items.length)return;out[i]=await fn(items[i],i);}}await Promise.all(Array.from({length:Math.min(limit,Math.max(1,items.length))},worker));return out;}
+async function runCycle(force=false){
+  if(cyclePromise&&!force)return cyclePromise;if(cyclePromise&&force)await cyclePromise.catch(()=>{});
+  cyclePromise=(async()=>{const started=Date.now(),registryDetail=readJsonDetailed(REGISTRY_FILE),queueDetail=readJsonDetailed(QUEUE_FILE),safetyDetail=readJsonDetailed(SAFETY_FILE),productionDetail=readJsonDetailed(PRODUCTION_FILE),registry=registryDetail.ok&&registryDetail.value&&typeof registryDetail.value==='object'?registryDetail.value:{machines:[]},queue=queueDetail.ok&&queueDetail.value&&typeof queueDetail.value==='object'?queueDetail.value:{jobs:[]},safety=safetyDetail.ok&&safetyDetail.value&&typeof safetyDetail.value==='object'?safetyDetail.value:{},machines=Array.isArray(registry.machines)?registry.machines.filter(m=>m&&m.id):[],probes=await mapLimit(machines,4,probeMachine),current=machines.map((m,i)=>classifyMachine(m,probes[i],machineRuntime.get(m.id),started));current.forEach(m=>machineRuntime.set(m.id,m));
+    const alerts=[...deriveStaticAlerts({registryDetail,queueDetail,safetyDetail,productionDetail,queue,safety,now:started,dataWritable:writableDataDir()}),...current.flatMap(deriveMachineAlerts)];
+    if(healthLoadError)alerts.push(alert('data:health:invalid','critical','storage','health.json contiene JSON inválido; no se sobrescribirá hasta repararlo.',{detail:healthLoadError}));
+    else try{await reconcileTransitions(alerts,started);}catch(e){alerts.push(alert('data:health:persist','critical','storage','No se pudo persistir el historial de salud.',{detail:e?.message||String(e)}));}
+    alerts.sort((a,b)=>severityRank(b.severity)-severityRank(a.severity)||a.id.localeCompare(b.id));const counts=alerts.reduce((acc,a)=>{acc[a.severity]=(acc[a.severity]||0)+1;return acc;},{}),offline=current.filter(m=>m.health==='offline').length,online=current.filter(m=>m.online).length,status=counts.critical?'critical':counts.warning?'warning':'healthy';
+    lastSnapshot={generatedAt:started,startedAt:persisted.startedAt||STARTED_AT,uptimeSec:Math.floor((started-STARTED_AT)/1000),cycleMs:Date.now()-started,summary:{status,critical:counts.critical||0,warning:counts.warning||0,info:counts.info||0,online,offline,total:current.length},machines:current,alerts,sources:{registry:sourceInfo(REGISTRY_FILE,registryDetail),queue:sourceInfo(QUEUE_FILE,queueDetail),safety:sourceInfo(SAFETY_FILE,safetyDetail),production:sourceInfo(PRODUCTION_FILE,productionDetail),health:{path:path.basename(HEALTH_FILE),exists:initialHealth.exists,valid:!healthLoadError,error:healthLoadError},dataDirWritable:writableDataDir()},events:[]};return snapshotWithAcks(lastSnapshot);
+  })().catch(e=>{lastSnapshot={...lastSnapshot,generatedAt:Date.now(),summary:{...lastSnapshot.summary,status:'critical',critical:Math.max(1,lastSnapshot.summary.critical||0)},monitorError:String(e?.message||e)};return snapshotWithAcks(lastSnapshot);}).finally(()=>{cyclePromise=null;});return cyclePromise;
+}
+function publicSnapshot(){return snapshotWithAcks(lastSnapshot);}
+async function ackAlert(alertId,role,now=Date.now()){
+  const id=String(alertId||'').slice(0,200);if(!id||!lastSnapshot.alerts.some(a=>a.id===id))return false;if(healthLoadError)throw new Error('health.json inválido; ACK no se puede persistir');
+  const previous=persisted.acks[id];persisted.acks[id]={at:now,role:String(role||'operator')};try{await persistHealth();return true;}catch(e){if(previous)persisted.acks[id]=previous;else delete persisted.acks[id];throw e;}
+}
+function storageStatus(e){return/(health\.json inválido|ENOSPC|EACCES|EROFS|read-only|no space|espacio)/i.test(String(e?.message||e))?507:400;}
 
-function normalizeStoredHealth(raw) {
-  const v = raw && typeof raw === 'object' ? raw : {};
-  const events = Array.isArray(v.events) ? v.events.slice(0, EVENT_LIMIT) : [];
-  const oldestEventAt = events.reduce((oldest, e) => {
-    const at = Math.max(0, finite(e?.at));
-    return at && (!oldest || at < oldest) ? at : oldest;
-  }, 0);
-  return {
-    version: 2,
-    startedAt: Math.max(0, finite(v.startedAt) || oldestEventAt || finite(v.updatedAt) || STARTED_AT),
-    updatedAt: Math.max(0, finite(v.updatedAt)),
-    acks: v.acks && typeof v.acks === 'object' ? v.acks : {},
-    events,
-  };
-}
-function activeAlertIdsFromEvents(events) {
-  const active = new Set();
-  const ordered = (Array.isArray(events) ? events : []).slice().sort((a, b) => finite(a?.at) - finite(b?.at));
-  for (const e of ordered) {
-    const id = String(e?.alertId || '');
-    if (!id) continue;
-    if (e?.state === 'opened') active.add(id);
-    else if (e?.state === 'resolved') active.delete(id);
-  }
-  return active;
-}
-let persisted = normalizeStoredHealth(readJsonDetailed(HEALTH_FILE).value);
-let persistChain = Promise.resolve();
-function persistHealth() {
-  persisted.updatedAt = Date.now();
-  persistChain = persistChain.then(() => atomicWrite(HEALTH_FILE, persisted)).catch(e => console.error('[health] persist', e));
-  return persistChain;
-}
-
-const machineRuntime = new Map();
-let lastSnapshot = {
-  generatedAt: 0, startedAt: STARTED_AT, uptimeSec: 0, cycleMs: 0,
-  summary: { status: 'checking', critical: 0, warning: 0, info: 0, online: 0, offline: 0, total: 0 },
-  machines: [], alerts: [], sources: {}, events: [],
-};
-let cyclePromise = null;
-let timer = null;
-let previousAlertIds = activeAlertIdsFromEvents(persisted.events);
-
-function parseDateMs(value) { const n = Date.parse(String(value || '')); return Number.isFinite(n) ? n : 0; }
-function santiagoHour(now = Date.now()) {
-  try {
-    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Santiago', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(now));
-    return Number(parts.find(p => p.type === 'hour')?.value || 0);
-  } catch (_) { return new Date(now).getHours(); }
-}
-function potentialUnattended(queue, now = Date.now()) {
-  const active = (queue?.jobs || []).filter(j => ['queued', 'retry', 'blocked', 'checking', 'uploading', 'uploaded'].includes(String(j.state || '')));
-  const hour = santiagoHour(now), night = hour >= 19 || hour < 9;
-  return active.some(j => j.safetyBlocked === true || finite(j.secs) >= 4 * 3600 || night);
-}
-function alert(id, severity, kind, message, extra = {}) {
-  return { id, severity, kind, message, ...extra };
-}
-function sourceInfo(file, detail) {
-  return { path: path.basename(file), exists: detail.exists, valid: detail.ok, mtimeMs: detail.mtimeMs || 0, error: detail.error || '' };
-}
-function jobAgeMs(job, now) {
-  return Math.max(0, now - Math.max(parseDateMs(job.updatedAt), parseDateMs(job.createdAt), 0));
-}
-function deriveStaticAlerts({ registryDetail, queueDetail, safetyDetail, productionDetail, queue, safety, now = Date.now(), dataWritable = true }) {
-  const alerts = [];
-  if (!dataWritable) alerts.push(alert('data:dir:not-writable', 'critical', 'storage', 'El directorio persistente del Farm Controller no es escribible.'));
-  for (const [name, detail] of [['registry', registryDetail], ['queue', queueDetail], ['safety', safetyDetail], ['production', productionDetail]]) {
-    if (detail.exists && !detail.ok) alerts.push(alert(`data:${name}:invalid`, 'critical', 'storage', `${name}.json no se puede leer o contiene JSON inválido.`, { detail: detail.error }));
-  }
-  for (const job of (queue?.jobs || [])) {
-    if (!['checking', 'uploading', 'uploaded', 'retry'].includes(String(job.state || ''))) continue;
-    const ageMs = jobAgeMs(job, now);
-    if (ageMs >= STUCK_JOB_MS) alerts.push(alert(`queue:${job.id}:stuck`, 'warning', 'queue', `Trabajo ${job.filename || job.id} lleva ${Math.round(ageMs / 60000)} min en estado ${job.state}.`, { jobId: job.id, machineId: job.machineId || '', ageMs }));
-  }
-  const safetyUpdated = Math.max(finite(safety?.updatedAt), safetyDetail.mtimeMs || 0);
-  if (potentialUnattended(queue, now) && (!safetyUpdated || now - safetyUpdated > SAFETY_STALE_MS)) {
-    alerts.push(alert('safety:snapshot-stale', 'warning', 'safety', 'La seguridad desatendida está stale; los trabajos largos/nocturnos pueden quedar bloqueados.', { ageMs: safetyUpdated ? now - safetyUpdated : null }));
-  }
-  return alerts;
-}
-function classifyMachine(machine, probe, previous, now = Date.now()) {
-  const prev = previous || {};
-  const failures = probe.ok ? 0 : Math.max(0, finite(prev.consecutiveFailures)) + 1;
-  const lastOkAt = probe.ok ? now : Math.max(0, finite(prev.lastOkAt));
-  const lastSeenAt = parseDateMs(machine.lastSeenAt || machine.updatedAt);
-  const result = probe.data?.result || {};
-  const state = String(result.state || '').toLowerCase();
-  const offline = !probe.ok && failures >= OFFLINE_FAILURES;
-  const health = offline ? 'offline' : !probe.ok ? 'degraded' : (state && state !== 'ready' ? 'degraded' : 'online');
-  return {
-    id: String(machine.id || ''), name: String(machine.nombre || machine.name || machine.hostname || machine.id || ''),
-    ip: String(machine.ip || ''), hostname: String(machine.hostname || result.hostname || ''),
-    health, online: probe.ok, klipperState: state || '', stateMessage: String(result.state_message || '').slice(0, 240),
-    latencyMs: Math.max(0, finite(probe.latencyMs)), lastProbeAt: now, lastOkAt,
-    consecutiveFailures: failures, lastSeenAt, registryStale: !!lastSeenAt && now - lastSeenAt > REGISTRY_STALE_MS,
-    error: probe.ok ? '' : String(probe.error || `HTTP ${probe.status || 0}`).slice(0, 240),
-  };
-}
-function deriveMachineAlerts(machine) {
-  const out = [];
-  if (!machine.ip || !isPrivateIp(machine.ip)) {
-    out.push(alert(`machine:${machine.id}:no-ip`, 'warning', 'registry', `${machine.name || machine.id} no tiene una IP privada válida en el registry.`, { machineId: machine.id }));
-    return out;
-  }
-  if (machine.health === 'offline') out.push(alert(`machine:${machine.id}:offline`, 'critical', 'connectivity', `${machine.name || machine.id} está offline.`, { machineId: machine.id, ip: machine.ip, failures: machine.consecutiveFailures }));
-  else if (machine.health === 'degraded' && !machine.online) out.push(alert(`machine:${machine.id}:probe-failed`, 'warning', 'connectivity', `${machine.name || machine.id} falló el último probe.`, { machineId: machine.id, ip: machine.ip, failures: machine.consecutiveFailures }));
-  if (machine.online && machine.klipperState && machine.klipperState !== 'ready') out.push(alert(`machine:${machine.id}:klipper-${machine.klipperState}`, machine.klipperState === 'shutdown' || machine.klipperState === 'error' ? 'critical' : 'warning', 'klipper', `${machine.name || machine.id}: Klipper está en estado ${machine.klipperState}.`, { machineId: machine.id, state: machine.klipperState }));
-  if (machine.registryStale) out.push(alert(`machine:${machine.id}:registry-stale`, 'warning', 'registry', `${machine.name || machine.id}: identidad/IP no se refresca hace más de ${Math.round(REGISTRY_STALE_MS / 60000)} min.`, { machineId: machine.id }));
-  return out;
-}
-function severityRank(s) { return s === 'critical' ? 3 : s === 'warning' ? 2 : 1; }
-function reconcileTransitions(alerts, now = Date.now()) {
-  const active = new Set(alerts.map(a => a.id));
-  let changed = false;
-  for (const a of alerts) {
-    if (!previousAlertIds.has(a.id)) {
-      persisted.events.unshift({ id: crypto.randomBytes(8).toString('hex'), alertId: a.id, state: 'opened', severity: a.severity, kind: a.kind, message: a.message, at: now });
-      changed = true;
-    }
-  }
-  for (const oldId of previousAlertIds) {
-    if (active.has(oldId)) continue;
-    persisted.events.unshift({ id: crypto.randomBytes(8).toString('hex'), alertId: oldId, state: 'resolved', severity: '', kind: '', message: '', at: now });
-    if (persisted.acks[oldId]) delete persisted.acks[oldId];
-    changed = true;
-  }
-  previousAlertIds = active;
-  persisted.events = persisted.events.slice(0, EVENT_LIMIT);
-  if (changed) persistHealth();
-}
-function snapshotWithAcks(snapshot) {
-  const alerts = snapshot.alerts.map(a => ({ ...a, acked: !!persisted.acks[a.id], ack: persisted.acks[a.id] || null }));
-  return { ...snapshot, alerts, events: persisted.events.slice(0, 100) };
-}
-
-async function probeMachine(machine) {
-  if (!isPrivateIp(machine.ip)) return { ok: false, status: 0, latencyMs: 0, data: null, error: 'IP privada inválida/no configurada' };
-  return probeHttp(machine.ip, 7125, '/printer/info');
-}
-async function mapLimit(items, limit, fn) {
-  const out = new Array(items.length); let next = 0;
-  async function worker() {
-    while (true) {
-      const i = next++; if (i >= items.length) return;
-      out[i] = await fn(items[i], i);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, Math.max(1, items.length)) }, worker));
-  return out;
-}
-async function runCycle(force = false) {
-  if (cyclePromise && !force) return cyclePromise;
-  if (cyclePromise && force) await cyclePromise.catch(() => {});
-  cyclePromise = (async () => {
-    const started = Date.now();
-    const registryDetail = readJsonDetailed(REGISTRY_FILE);
-    const queueDetail = readJsonDetailed(QUEUE_FILE);
-    const safetyDetail = readJsonDetailed(SAFETY_FILE);
-    const productionDetail = readJsonDetailed(PRODUCTION_FILE);
-    const registry = registryDetail.ok && registryDetail.value && typeof registryDetail.value === 'object' ? registryDetail.value : { machines: [] };
-    const queue = queueDetail.ok && queueDetail.value && typeof queueDetail.value === 'object' ? queueDetail.value : { jobs: [] };
-    const safety = safetyDetail.ok && safetyDetail.value && typeof safetyDetail.value === 'object' ? safetyDetail.value : {};
-    const machines = Array.isArray(registry.machines) ? registry.machines.filter(m => m && m.id) : [];
-    const probes = await mapLimit(machines, 4, probeMachine);
-    const current = machines.map((m, i) => classifyMachine(m, probes[i], machineRuntime.get(m.id), started));
-    current.forEach(m => machineRuntime.set(m.id, m));
-    const alerts = [
-      ...deriveStaticAlerts({ registryDetail, queueDetail, safetyDetail, productionDetail, queue, safety, now: started, dataWritable: writableDataDir() }),
-      ...current.flatMap(deriveMachineAlerts),
-    ].sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || a.id.localeCompare(b.id));
-    reconcileTransitions(alerts, started);
-    const counts = alerts.reduce((acc, a) => { acc[a.severity] = (acc[a.severity] || 0) + 1; return acc; }, {});
-    const offline = current.filter(m => m.health === 'offline').length;
-    const online = current.filter(m => m.online).length;
-    const status = counts.critical ? 'critical' : counts.warning ? 'warning' : 'healthy';
-    lastSnapshot = {
-      generatedAt: started, startedAt: STARTED_AT, uptimeSec: Math.floor((started - STARTED_AT) / 1000), cycleMs: Date.now() - started,
-      summary: { status, critical: counts.critical || 0, warning: counts.warning || 0, info: counts.info || 0, online, offline, total: current.length },
-      machines: current,
-      alerts,
-      sources: {
-        registry: sourceInfo(REGISTRY_FILE, registryDetail), queue: sourceInfo(QUEUE_FILE, queueDetail),
-        safety: sourceInfo(SAFETY_FILE, safetyDetail), production: sourceInfo(PRODUCTION_FILE, productionDetail),
-        dataDirWritable: writableDataDir(),
-      },
-      events: [],
-    };
-    return snapshotWithAcks(lastSnapshot);
-  })().catch(e => {
-    lastSnapshot = { ...lastSnapshot, generatedAt: Date.now(), summary: { ...lastSnapshot.summary, status: 'critical', critical: Math.max(1, lastSnapshot.summary.critical || 0) }, monitorError: String(e.message || e) };
-    return snapshotWithAcks(lastSnapshot);
-  }).finally(() => { cyclePromise = null; });
-  return cyclePromise;
-}
-function publicSnapshot() { return snapshotWithAcks(lastSnapshot); }
-function ackAlert(alertId, role, now = Date.now()) {
-  const id = String(alertId || '').slice(0, 200);
-  if (!id || !lastSnapshot.alerts.some(a => a.id === id)) return false;
-  persisted.acks[id] = { at: now, role: String(role || 'operator') };
-  persistHealth();
-  return true;
-}
-
-async function handleHealth(req, res) {
-  setCors(req, res);
-  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-  const u = new URL(req.url, 'http://farm.local'), p = u.pathname;
-  if (p === '/farm/health' && req.method === 'GET') {
-    const role = requireRole(req, res, 'viewer'); if (!role) return;
-    if (!lastSnapshot.generatedAt) await runCycle(false);
-    return json(res, 200, { ok: true, health: publicSnapshot() }, { 'X-Farm-Role': role });
-  }
-  if (p === '/farm/health/probe' && req.method === 'POST') {
-    const role = requireRole(req, res, 'operator'); if (!role) return;
-    const health = await runCycle(true);
-    return json(res, 200, { ok: true, health }, { 'X-Farm-Role': role });
-  }
-  if (p === '/farm/health/ack' && req.method === 'POST') {
-    const role = requireRole(req, res, 'operator'); if (!role) return;
-    try {
-      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
-      if (!ackAlert(body.alertId, role)) return json(res, 404, { ok: false, error: 'alerta activa no encontrada' });
-      await persistChain;
-      return json(res, 200, { ok: true, health: publicSnapshot() }, { 'X-Farm-Role': role });
-    } catch (e) { return json(res, 400, { ok: false, error: e.message }); }
-  }
-  res.setHeader('Allow', 'GET,POST,OPTIONS');
-  return json(res, 405, { ok: false, error: 'method not allowed' });
-}
-
-function installPreload() {
-  if (http.__TLS_FARM_HEALTH_PRELOAD__) return false;
-  http.__TLS_FARM_HEALTH_PRELOAD__ = true;
-  const originalCreateServer = http.createServer;
-  http.createServer = function patchedCreateServer(options, requestListener) {
-    const hasOptions = typeof options !== 'function';
-    const listener = hasOptions ? requestListener : options;
-    if (typeof listener !== 'function') return originalCreateServer.apply(this, arguments);
-    const wrapped = function(req, res) {
-      let pathname = ''; try { pathname = new URL(req.url, 'http://farm.local').pathname; } catch (_) {}
-      if (pathname === '/farm/health' || pathname.startsWith('/farm/health/')) {
-        handleHealth(req, res).catch(e => {
-          if (!res.headersSent) json(res, 500, { ok: false, error: e.message });
-          else { try { res.end(); } catch (_) {} }
-        });
-        return;
-      }
-      return listener(req, res);
-    };
-    return hasOptions ? originalCreateServer.call(this, options, wrapped) : originalCreateServer.call(this, wrapped);
-  };
-  // Persiste un inicio de cobertura incluso si nunca hubo una alerta. Así las
-  // métricas históricas no confunden "sin incidentes" con "sin monitoreo".
-  persistHealth();
-  setTimeout(() => runCycle(false), 1500).unref();
-  timer = setInterval(() => runCycle(false), POLL_MS); timer.unref();
-  return true;
-}
-
-if (process.env.FARM_HEALTH_PRELOAD_DISABLE !== '1') installPreload();
-
-module.exports = {
-  isPrivateIp, normalizeStoredHealth, activeAlertIdsFromEvents, potentialUnattended, classifyMachine,
-  deriveMachineAlerts, deriveStaticAlerts, reconcileTransitions, ackAlert,
-  roleForToken, runCycle, publicSnapshot, installPreload,
-  _test: { OFFLINE_FAILURES, REGISTRY_STALE_MS, SAFETY_STALE_MS, STUCK_JOB_MS, EVENT_LIMIT, santiagoHour },
-};
+async function handleHealth(req,res){setCors(req,res);if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}const u=new URL(req.url,'http://farm.local'),p=u.pathname;if(p==='/farm/health'&&req.method==='GET'){const role=requireRole(req,res,'viewer');if(!role)return;if(!lastSnapshot.generatedAt)await runCycle(false);return json(res,200,{ok:true,health:publicSnapshot()},{'X-Farm-Role':role});}if(p==='/farm/health/probe'&&req.method==='POST'){const role=requireRole(req,res,'operator');if(!role)return;const health=await runCycle(true);return json(res,200,{ok:true,health},{'X-Farm-Role':role});}if(p==='/farm/health/ack'&&req.method==='POST'){const role=requireRole(req,res,'operator');if(!role)return;try{const body=JSON.parse((await readBody(req)).toString('utf8')||'{}');if(!await ackAlert(body.alertId,role))return json(res,404,{ok:false,error:'alerta activa no encontrada'});return json(res,200,{ok:true,health:publicSnapshot()},{'X-Farm-Role':role});}catch(e){return json(res,storageStatus(e),{ok:false,error:e.message});}}res.setHeader('Allow','GET,POST,OPTIONS');return json(res,405,{ok:false,error:'method not allowed'});}
+function installPreload(){if(http.__TLS_FARM_HEALTH_PRELOAD__)return false;http.__TLS_FARM_HEALTH_PRELOAD__=true;const originalCreateServer=http.createServer;http.createServer=function patchedCreateServer(options,requestListener){const hasOptions=typeof options!=='function',listener=hasOptions?requestListener:options;if(typeof listener!=='function')return originalCreateServer.apply(this,arguments);const wrapped=function(req,res){let pathname='';try{pathname=new URL(req.url,'http://farm.local').pathname;}catch(_){}if(pathname==='/farm/health'||pathname.startsWith('/farm/health/')){handleHealth(req,res).catch(e=>{if(!res.headersSent)json(res,500,{ok:false,error:e.message});else try{res.end();}catch(_){}});return;}return listener(req,res);};return hasOptions?originalCreateServer.call(this,options,wrapped):originalCreateServer.call(this,wrapped);};if(!healthLoadError)persistHealth().catch(e=>console.error('[health] initial persist',e));else console.error('[health] archivo inválido; no se sobrescribirá:',healthLoadError);setTimeout(()=>runCycle(false),1500).unref();timer=setInterval(()=>runCycle(false),POLL_MS);timer.unref();return true;}
+if(process.env.FARM_HEALTH_PRELOAD_DISABLE!=='1')installPreload();
+module.exports={isPrivateIp,normalizeStoredHealth,activeAlertIdsFromEvents,potentialUnattended,classifyMachine,deriveMachineAlerts,deriveStaticAlerts,reconcileTransitions,ackAlert,roleForToken,runCycle,publicSnapshot,installPreload,_test:{OFFLINE_FAILURES,REGISTRY_STALE_MS,SAFETY_STALE_MS,STUCK_JOB_MS,EVENT_LIMIT,santiagoHour,readJsonDetailed,storageStatus}};
