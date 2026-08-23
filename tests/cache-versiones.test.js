@@ -57,15 +57,19 @@ test('todo lo propio que carga la página va versionado', () => {
 
 test('el shell se revalida contra el servidor en vez de salir de la caché HTTP', () => {
   const nav = SW.slice(SW.indexOf("req.mode === 'navigate'"), SW.indexOf("url.searchParams.has('v')"));
-  assert.match(nav, /fetch\(req,\s*\{\s*cache:\s*'no-cache'\s*\}\)/,
-    'la navegación debe forzar revalidación');
-  assert.match(nav, /catch\(\)\s*=>\s*caches\.match\(req\)|\.catch\(\(\) => caches\.match\(req\)\)/,
-    'y conservar el respaldo sin conexión');
+  // #124 endureció esta regla: reload obliga a saltarse tanto una respuesta HTTP
+  // reutilizable como una entrada previa del navegador para el HTML del shell.
+  assert.match(nav, /fetch\(req,\s*\{\s*cache:\s*'reload'\s*\}\)/,
+    'la navegación debe forzar una carga fresca del shell');
+  assert.match(nav, /catch\(\(\)\s*=>\s*offlineNavigationResponse\(\)\)/,
+    'y debe caer a una página offline explícita, nunca a un index.html viejo');
+  assert.doesNotMatch(nav, /caches\.match\(req\)/,
+    'el HTML de navegación no debe recuperarse de la caché del service worker');
 });
 
 test('los archivos versionados se sirven de caché y los viejos se purgan', () => {
   assert.match(SW, /url\.searchParams\.has\('v'\)/, 'los ?v= son inmutables por URL: caché primero');
-  assert.match(SW, /keys\.filter\(k => k\.startsWith\('thelab-'\) && k !== CACHE\)\.map\(k => caches\.delete\(k\)\)/,
+  assert.match(SW, /\.filter\(\w+\s*=>\s*\w+\.startsWith\('thelab-'\)\s*&&\s*\w+\s*!==\s*CACHE\)[\s\S]{0,120}?\.map\(\w+\s*=>\s*caches\.delete\(\w+\)\)/,
     'al activar una versión nueva deben borrarse las cachés anteriores');
   assert.match(SW, /skipWaiting\(\)/);
   assert.match(SW, /clients\.claim\(\)/);
