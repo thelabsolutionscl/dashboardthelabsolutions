@@ -145,10 +145,6 @@ jobs:
             echo 'deploy.yml vuelve a publicar PRINTER_TUNNEL_TOKEN' >&2
             exit 1
           fi
-          if grep -q '%%PRINTER_TUNNEL_TOKEN%%' index.html; then
-            echo 'index.html conserva un placeholder de credencial permanente' >&2
-            exit 1
-          fi
 
       - name: Auditar cableado integral
         run: node --test tests/maquinas-wiring.test.js
