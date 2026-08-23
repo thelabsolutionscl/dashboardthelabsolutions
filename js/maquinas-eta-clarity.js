@@ -33,7 +33,9 @@ function install(root){
 
   // maquinas.js es un script clásico: sus bindings globales siguen disponibles
   // para esta función cuando el dashboard corre en navegador.
-  root.renderMaqOcupacion=function renderMaqOcupacion(){
+  // La asignación es deliberadamente anónima: es un override explícito del
+  // renderer base, no una segunda declaración global de renderMaqOcupacion.
+  root.renderMaqOcupacion=function(){
     const el=document.getElementById('maqOcupacion');if(!el)return;
     const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
     if(!lista.length){el.style.display='none';return;}
