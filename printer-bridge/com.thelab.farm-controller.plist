@@ -14,6 +14,7 @@
     <string>-r</string><string>__REPO__/printer-bridge/farm-health-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-reliability-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-safety-agent-preload.js</string>
+    <string>-r</string><string>__REPO__/printer-bridge/farm-safety-authority-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-lifecycle-preload.js</string>
     <string>-r</string><string>__REPO__/printer-bridge/farm-identity-preload.js</string>
     <string>__REPO__/printer-bridge/farm-controller.js</string>
