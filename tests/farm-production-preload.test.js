@@ -2,67 +2,19 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
+const fs=require('fs'),os=require('os'),path=require('path'),{spawnSync}=require('child_process');
 
 process.env.FARM_PRODUCTION_PRELOAD_DISABLE='1';
 process.env.BRIDGE_TOKEN='production-admin-test';
 const store=require('../printer-bridge/farm-production-preload.js');
 
-function event(overrides={}){
-  return{
-    machineId:'k1-01',nombre:'K1',numG:1,file:'pieza.gcode',
-    start:1000,end:3601000,dur:60,result:'Completado',filamentMm:1000,ts:3601000,
-    ...overrides,
-  };
-}
+function event(overrides={}){return{machineId:'k1-01',nombre:'K1',numG:1,file:'pieza.gcode',start:1000,end:3601000,dur:60,result:'Completado',filamentMm:1000,ts:3601000,...overrides};}
 
-test('evento repetido es idempotente y no duplica odómetro',()=>{
-  let state=store.normalizeProduction(null);
-  let out=store.recordEvent(state,event(),5000);state=out.state;
-  assert.equal(out.added,true);
-  assert.equal(state.odometer['k1-01'].prints,1);
-  assert.equal(state.odometer['k1-01'].hours,1);
-  assert.equal(state.odometer['k1-01'].filamentMm,1000);
-
-  out=store.recordEvent(state,event(),6000);state=out.state;
-  assert.equal(out.added,false);
-  assert.equal(state.odometer['k1-01'].prints,1);
-  assert.equal(state.odometer['k1-01'].hours,1);
-  assert.equal(state.history.length,1);
-});
-
-test('cancelado suma fallo y filamento, pero no horas ni impresión completada',()=>{
-  const out=store.recordEvent(store.normalizeProduction(null),event({result:'Cancelado',dur:30,filamentMm:250}),5000);
-  const row=out.state.odometer['k1-01'];
-  assert.equal(row.prints,0);
-  assert.equal(row.hours,0);
-  assert.equal(row.failures,1);
-  assert.equal(row.filamentMm,250);
-});
-
-test('migración conserva el mayor odómetro histórico sin sumar dos veces el historial',()=>{
-  const historical=[event({start:1,end:3600001,ts:3600001})];
-  const migrated=store.mergeMigration(
-    {odometer:{'k1-01':{hours:10,filamentMm:9000,prints:8,failures:2}},history:historical},
-    {odometer:{'k1-01':{hours:25,filamentMm:22000,prints:20}},history:historical},
-    9999,
-  );
-  assert.equal(migrated.odometer['k1-01'].hours,25);
-  assert.equal(migrated.odometer['k1-01'].prints,20);
-  assert.equal(migrated.odometer['k1-01'].filamentMm,22000);
-  assert.equal(migrated.odometer['k1-01'].failures,2);
-  assert.equal(migrated.history.length,1);
-});
-
-test('merge de historial deduplica por máquina/archivo/inicio/fin/resultado',()=>{
-  const a=event();
-  const b={...a,ts:a.ts+10};
-  const c=event({machineId:'k1-02'});
-  const merged=store.mergeHistory([a],[b,c]);
-  assert.equal(merged.length,2);
-  assert.equal(merged.filter(x=>x.machineId==='k1-01').length,1);
-});
-
-test('roles del preload respetan viewer/operator/admin',()=>{
-  assert.equal(store.roleForToken('production-admin-test'),'admin');
-  assert.equal(store.roleForToken('incorrecto'),'');
-});
+test('evento repetido es idempotente y no duplica odómetro',()=>{let state=store.normalizeProduction(null);let out=store.recordEvent(state,event(),5000);state=out.state;assert.equal(out.added,true);assert.equal(state.odometer['k1-01'].prints,1);assert.equal(state.odometer['k1-01'].hours,1);assert.equal(state.odometer['k1-01'].filamentMm,1000);out=store.recordEvent(state,event(),6000);state=out.state;assert.equal(out.added,false);assert.equal(state.odometer['k1-01'].prints,1);assert.equal(state.odometer['k1-01'].hours,1);assert.equal(state.history.length,1);});
+test('cancelado suma fallo y filamento, pero no horas ni impresión completada',()=>{const out=store.recordEvent(store.normalizeProduction(null),event({result:'Cancelado',dur:30,filamentMm:250}),5000),row=out.state.odometer['k1-01'];assert.equal(row.prints,0);assert.equal(row.hours,0);assert.equal(row.failures,1);assert.equal(row.filamentMm,250);});
+test('migración conserva el mayor odómetro histórico sin sumar dos veces el historial',()=>{const historical=[event({start:1,end:3600001,ts:3600001})],migrated=store.mergeMigration({odometer:{'k1-01':{hours:10,filamentMm:9000,prints:8,failures:2}},history:historical},{odometer:{'k1-01':{hours:25,filamentMm:22000,prints:20}},history:historical},9999);assert.equal(migrated.odometer['k1-01'].hours,25);assert.equal(migrated.odometer['k1-01'].prints,20);assert.equal(migrated.odometer['k1-01'].filamentMm,22000);assert.equal(migrated.odometer['k1-01'].failures,2);assert.equal(migrated.history.length,1);});
+test('merge de historial deduplica por máquina/archivo/inicio/fin/resultado',()=>{const a=event(),b={...a,ts:a.ts+10},c=event({machineId:'k1-02'}),merged=store.mergeHistory([a],[b,c]);assert.equal(merged.length,2);assert.equal(merged.filter(x=>x.machineId==='k1-01').length,1);});
+test('evento conserva queueJobId MachineOps y pedido para trazabilidad',()=>{const e=store.normalizeEvent(event({queueJobId:'farm-1',machineOpsJobId:'mops-1',pedidoId:'ped-1'}));assert.equal(e.queueJobId,'farm-1');assert.equal(e.machineOpsJobId,'mops-1');assert.equal(e.pedidoId,'ped-1');});
+test('atomicWrite persiste y sincroniza un documento válido',()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'prod-atomic-')),file=path.join(dir,'p.json');store.atomicWrite(file,{ok:true});assert.deepEqual(JSON.parse(fs.readFileSync(file,'utf8')),{ok:true});});
+test('production.json corrupto inicia fail-closed en vez de sobrescribirse silenciosamente',()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'prod-corrupt-')),file=path.join(dir,'production.json');fs.writeFileSync(file,'{roto');const script=`process.env.FARM_PRODUCTION_PRELOAD_DISABLE='1';const s=require(${JSON.stringify(path.resolve(__dirname,'../printer-bridge/farm-production-preload.js'))});console.log(JSON.stringify(s.snapshot()));s.persistProduction().then(()=>process.exit(2)).catch(()=>process.exit(0));`;const r=spawnSync(process.execPath,['-e',script],{encoding:'utf8',env:{...process.env,FARM_DATA_DIR:dir,FARM_PRODUCTION_FILE:file,BRIDGE_TOKEN:'t'}});assert.equal(r.status,0,r.stderr);const line=r.stdout.trim().split('\n').find(x=>x.startsWith('{')),snap=JSON.parse(line);assert.equal(snap.storageOk,false);assert.match(snap.storageError,/production\.json/i);assert.equal(fs.readFileSync(file,'utf8'),'{roto');});
+test('roles del preload respetan viewer/operator/admin',()=>{assert.equal(store.roleForToken('production-admin-test'),'admin');assert.equal(store.roleForToken('incorrecto'),'');});
