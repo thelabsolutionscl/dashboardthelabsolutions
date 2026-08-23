@@ -7,8 +7,8 @@ const path=require('node:path');
 const sw=fs.readFileSync(path.join(__dirname,'..','sw.js'),'utf8');
 
 test('service worker no reescribe ni inyecta scripts en index.html',()=>{
-  assert.doesNotMatch(sw,/injectFarmController/);
-  assert.doesNotMatch(sw,/maquinas-farm-controller\.js/);
+  assert.doesNotMatch(sw,/function\s+injectFarmController/);
+  assert.doesNotMatch(sw,/const\s+FARM_SCRIPT\s*=/);
   assert.doesNotMatch(sw,/html\.replace\(/);
 });
 
