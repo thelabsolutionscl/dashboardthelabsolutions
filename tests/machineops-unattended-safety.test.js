@@ -51,3 +51,8 @@ test('un trabajo corto diurno no queda secuestrado por la política desatendida'
   assert.equal(r.unattended,false);
   assert.equal(r.ok,true);
 });
+
+test('sesión corta se reconoce para usar Authorization y no query string',()=>{
+  assert.equal(policy._test.isShortSession('v1.eyJyb2xlIjoib3BlcmF0b3IifQ.sig_123-abc'),true);
+  assert.equal(policy._test.isShortSession('legacy-bridge-token'),false);
+});
