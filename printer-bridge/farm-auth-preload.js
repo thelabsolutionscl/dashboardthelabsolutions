@@ -4,13 +4,11 @@
 /**
  * Farm Auth Gateway (preload)
  *
- * Objetivo: el navegador nunca necesita conocer BRIDGE_*_TOKEN permanentes.
- * Un servicio autenticado (Printer Access Worker / Cloudflare Access) emite
- * sesiones HMAC de pocos minutos. Este preload valida la sesión y la traduce a
- * los tokens locales que ya entiende farm-controller.js y sus demás preloads.
- *
- * Compatibilidad: los tokens largos siguen funcionando para localhost/CLI y
- * para una migración controlada, pero no deben publicarse en HTML.
+ * El navegador usa sesiones HMAC cortas. Este preload valida la sesión y la
+ * traduce a tokens LOCALES separados por rol. Si operator/viewer no estaban
+ * configurados, se generan de forma estable dentro de FARM_DATA_DIR antes de
+ * cargar los demás preloads/controller. Nunca se degrada viewer/operator a
+ * admin: eso rompería RBAC aunque la sesión HMAC fuese válida.
  */
 const http=require('http');
 const fs=require('fs');
@@ -30,31 +28,36 @@ fs.mkdirSync(DATA_DIR,{recursive:true,mode:0o700});
 function b64url(buf){return Buffer.from(buf).toString('base64url');}
 function decodePart(value){try{return JSON.parse(Buffer.from(String(value||''),'base64url').toString('utf8'));}catch(_){return null;}}
 function safeEq(a,b){const aa=Buffer.from(String(a||'')),bb=Buffer.from(String(b||''));return aa.length===bb.length&&aa.length>0&&crypto.timingSafeEqual(aa,bb);}
+function secureReadOrCreate(file,bytes=32){
+  try{const s=fs.readFileSync(file,'utf8').trim();if(s){try{fs.chmodSync(file,0o600);}catch(_){}return s;}}catch(_){}
+  const s=crypto.randomBytes(bytes).toString('base64url');
+  fs.writeFileSync(file,s+'\n',{mode:0o600});
+  try{fs.chmodSync(file,0o600);}catch(_){}
+  return s;
+}
 function loadSecret(){
   const env=String(process.env.FARM_SESSION_SECRET||'').trim();
-  if(env)return env;
-  try{const s=fs.readFileSync(SECRET_FILE,'utf8').trim();if(s)return s;}catch(_){}
-  const s=crypto.randomBytes(32).toString('base64url');
-  fs.writeFileSync(SECRET_FILE,s+'\n',{mode:0o600});
-  try{fs.chmodSync(SECRET_FILE,0o600);}catch(_){}
-  return s;
+  return env||secureReadOrCreate(SECRET_FILE,32);
 }
 const SESSION_SECRET=loadSecret();
 
 function loadMasterToken(){
-  const env=String(process.env.BRIDGE_TOKEN||'').trim();if(env)return env;
+  const env=String(process.env.BRIDGE_ADMIN_TOKEN||process.env.BRIDGE_TOKEN||'').trim();if(env)return env;
   try{return fs.readFileSync(path.join(ROOT,'.bridge-token'),'utf8').trim();}catch(_){return'';}
 }
-const ROLE_TOKENS={
-  admin:String(process.env.BRIDGE_ADMIN_TOKEN||loadMasterToken()).trim(),
-  operator:String(process.env.BRIDGE_OPERATOR_TOKEN||'').trim(),
-  viewer:String(process.env.BRIDGE_VIEWER_TOKEN||'').trim(),
-};
-function localTokenForRole(role){
-  if(role==='viewer')return ROLE_TOKENS.viewer||ROLE_TOKENS.operator||ROLE_TOKENS.admin;
-  if(role==='operator')return ROLE_TOKENS.operator||ROLE_TOKENS.admin;
-  return ROLE_TOKENS.admin;
+function ensureRoleToken(role,envName){
+  const configured=String(process.env[envName]||'').trim();
+  if(configured)return configured;
+  const token=secureReadOrCreate(path.join(DATA_DIR,`bridge-${role}-token`),24);
+  process.env[envName]=token;
+  return token;
 }
+const ROLE_TOKENS={
+  admin:loadMasterToken(),
+  operator:ensureRoleToken('operator','BRIDGE_OPERATOR_TOKEN'),
+  viewer:ensureRoleToken('viewer','BRIDGE_VIEWER_TOKEN'),
+};
+function localTokenForRole(role){return ROLE_RANK[role]?String(ROLE_TOKENS[role]||''):'';}
 
 function signPayload(payload,secret=SESSION_SECRET){
   const body=b64url(Buffer.from(JSON.stringify(payload)));
@@ -78,23 +81,15 @@ function verifySession(token,{now=Math.floor(Date.now()/1000),secret=SESSION_SEC
   if(Number(payload.iat||0)-CLOCK_SKEW_SEC>now)return{ok:false,error:'iat'};
   return{ok:true,role:payload.role,sub:String(payload.sub||''),exp:Number(payload.exp),payload};
 }
-function bearer(req){
-  const h=String(req?.headers?.authorization||'');
-  const m=h.match(/^Bearer\s+(.+)$/i);return m?m[1].trim():'';
-}
+function bearer(req){const h=String(req?.headers?.authorization||'');const m=h.match(/^Bearer\s+(.+)$/i);return m?m[1].trim():'';}
 function sessionFromReq(req){
   const u=new URL(req.url,'http://farm.local');
-  // `bt` se acepta para compatibilidad con URLs de cámara/WebSocket del frontend
-  // existente. A diferencia del token antiguo, ahora contiene una sesión corta.
   const candidates=[bearer(req),u.searchParams.get('st')||'',u.searchParams.get('bt')||''];
   for(const token of candidates){const v=verifySession(token);if(v.ok)return{...v,token};}
   return null;
 }
 function stripSessionQuery(rawUrl){
-  const u=new URL(rawUrl,'http://farm.local');
-  const bt=u.searchParams.get('bt')||'';
-  // Sólo borramos bt cuando era una sesión HMAC. Un token largo de CLI debe
-  // seguir llegando al controller durante la etapa de migración.
+  const u=new URL(rawUrl,'http://farm.local'),bt=u.searchParams.get('bt')||'';
   if(verifySession(bt).ok)u.searchParams.delete('bt');
   u.searchParams.delete('st');
   return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'');
@@ -104,6 +99,9 @@ const originalCreateServer=http.createServer;
 http.createServer=function patchedCreateServer(listener){
   if(typeof listener!=='function')return originalCreateServer.apply(this,arguments);
   return originalCreateServer.call(this,function farmAuthWrapped(req,res){
+    // Nunca confiar en headers de rol enviados por el cliente/túnel.
+    delete req.headers['x-farm-session-role'];
+    delete req.headers['x-farm-session-sub'];
     const session=sessionFromReq(req);
     if(session){
       const local=localTokenForRole(session.role);
@@ -120,6 +118,6 @@ http.createServer=function patchedCreateServer(listener){
 
 module.exports={
   mintSession,verifySession,sessionFromReq,stripSessionQuery,localTokenForRole,
-  ROLE_RANK,AUDIENCE,ISSUER,
-  _test:{signPayload,decodePart,b64url,safeEq},
+  ROLE_RANK,ROLE_TOKENS,AUDIENCE,ISSUER,
+  _test:{signPayload,decodePart,b64url,safeEq,secureReadOrCreate,ensureRoleToken},
 };
