@@ -85,28 +85,39 @@ function normalizeDirectoryResult(data){
 }
 function fileName(item){return String(item?.filename||item?.name||'').replace(/^\/+|\/+$/g,'');}
 function dirName(item){return String(item?.dirname||item?.name||'').replace(/^\/+|\/+$/g,'');}
+function limitConfigPaths(paths,max=MAX_FILES){
+  const unique=[...new Set((Array.isArray(paths)?paths:[]).filter(configFileWanted))].sort();
+  return{files:unique.slice(0,max),truncated:unique.length>max,discovered:unique.length};
+}
 async function listConfigFiles(ip){
-  const out=[];const queue=[''];const seen=new Set();
-  while(queue.length&&out.length<MAX_FILES){
-    const rel=queue.shift();if(seen.has(rel))continue;seen.add(rel);
+  const out=[];const queue=[''];const seenDirs=new Set();let truncated=false,discovered=0;
+  while(queue.length&&!truncated){
+    const rel=queue.shift();if(seenDirs.has(rel))continue;seenDirs.add(rel);
     const full=rel?'config/'+rel:'config';
     const r=await requestJson(ip,'/server/files/directory?path='+encodeURIComponent(full)+'&extended=true');
     if(!r.ok)throw new Error('No se pudo listar '+full+': '+r.error);
     const d=normalizeDirectoryResult(r.data);
-    for(const f of d.files){const n=fileName(f);if(!n)continue;const p=rel?rel+'/'+n:n;if(configFileWanted(p))out.push(p);if(out.length>=MAX_FILES)break;}
+    for(const f of d.files){
+      const n=fileName(f);if(!n)continue;const p=rel?rel+'/'+n:n;if(!configFileWanted(p))continue;
+      discovered++;
+      if(out.length<MAX_FILES)out.push(p);else{truncated=true;break;}
+    }
+    if(truncated)break;
     for(const sub of d.dirs){const n=dirName(sub);if(!n||n==='.'||n==='..')continue;queue.push(rel?rel+'/'+n:n);}
   }
-  return[...new Set(out)].sort();
+  return{files:[...new Set(out)].sort(),truncated,discovered};
 }
 async function hashConfigBundle(ip){
-  const files=await listConfigFiles(ip);const hashes={};
-  for(const rel of files){
+  const listing=await listConfigFiles(ip);
+  if(listing.truncated)throw new Error(`escaneo incompleto: más de ${MAX_FILES} archivos .cfg/.conf; aumenta FARM_DRIFT_MAX_FILES`);
+  const hashes={};
+  for(const rel of listing.files){
     const r=await requestBuffer(ip,'/server/files/config/'+encodeRel(rel));
     if(!r.ok)throw new Error('No se pudo leer '+rel+': '+r.error);
     hashes[rel]=sha256(r.body);
   }
   const canonical=Object.keys(hashes).sort().map(k=>k+'\0'+hashes[k]).join('\n');
-  return{files:hashes,fileCount:Object.keys(hashes).length,configHash:sha256(canonical)};
+  return{files:hashes,fileCount:Object.keys(hashes).length,configHash:sha256(canonical),complete:true};
 }
 function versionFromPrinterInfo(data){const r=data?.result||data||{};return String(r.software_version||r.klipper_version||'');}
 function versionFromServerInfo(data){const r=data?.result||data||{};return String(r.moonraker_version||r.software_version||'');}
@@ -167,7 +178,7 @@ async function scanAll(machineId=''){
 async function approveBaseline(machineId,role='admin'){
   const id=String(machineId||'');if(!id)throw new Error('machineId requerido');
   let current=store.current[id];if(!current||current.status!=='ok'){await scanAll(id);current=store.current[id];}
-  if(!current||current.status!=='ok')throw new Error('no hay un escaneo válido para aprobar');
+  if(!current||current.status!=='ok')throw new Error('no hay un escaneo completo y válido para aprobar');
   store.baselines[id]={machineId:id,name:current.name,ip:current.ip,approvedAt:Date.now(),approvedBy:role,klipperVersion:current.klipperVersion,moonrakerVersion:current.moonrakerVersion,configHash:current.configHash,fileCount:current.fileCount,files:{...current.files}};
   await persist();return publicMachine(id);
 }
@@ -205,4 +216,4 @@ function installPreload(){
   const t=setInterval(()=>scanAll().catch(e=>console.warn('[drift] scan',e.message)),INTERVAL_MS);t.unref();return true;
 }
 if(process.env.FARM_DRIFT_PRELOAD_DISABLE!=='1')installPreload();
-module.exports={sha256,isPrivateIp,configFileWanted,normalizeDirectoryResult,compareFiles,compareSnapshot,normalizeStore,roleForToken,scanMachine,approveBaseline,snapshot,installPreload,_test:{MAX_FILES,MAX_FILE_BYTES,INTERVAL_MS,encodeRel,versionFromPrinterInfo,versionFromServerInfo}};
+module.exports={sha256,isPrivateIp,configFileWanted,normalizeDirectoryResult,limitConfigPaths,compareFiles,compareSnapshot,normalizeStore,roleForToken,scanMachine,approveBaseline,snapshot,installPreload,_test:{MAX_FILES,MAX_FILE_BYTES,INTERVAL_MS,encodeRel,versionFromPrinterInfo,versionFromServerInfo}};
