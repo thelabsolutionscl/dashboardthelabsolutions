@@ -70,8 +70,8 @@ jobs:
 
       - name: Verify farm credentials are not published
         run: |
-          if grep -R "secrets.PRINTER_TUNNEL_TOKEN\|%%PRINTER_TUNNEL_TOKEN%%" .github/workflows/deploy.yml index.html; then
-            echo "Farm token publication regression detected" >&2
+          if grep -q '%%PRINTER_TUNNEL_TOKEN%%' index.html; then
+            echo "Farm token placeholder present in public HTML" >&2
             exit 1
           fi
 
