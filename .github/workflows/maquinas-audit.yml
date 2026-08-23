@@ -32,7 +32,7 @@ on:
       - 'tests/farm-drift-*.test.js'
       - 'tests/dashboard-notification-badges.test.js'
       - 'tests/correo-input-compat.test.js'
-      - 'tests/service-worker-cache-safety.test.js'
+      - 'tests/service-worker-*.test.js'
       - '.github/workflows/maquinas-audit.yml'
   pull_request:
     paths:
@@ -64,7 +64,7 @@ on:
       - 'tests/farm-drift-*.test.js'
       - 'tests/dashboard-notification-badges.test.js'
       - 'tests/correo-input-compat.test.js'
-      - 'tests/service-worker-cache-safety.test.js'
+      - 'tests/service-worker-*.test.js'
       - '.github/workflows/maquinas-audit.yml'
   workflow_dispatch:
 
@@ -113,7 +113,7 @@ jobs:
           bash -n printer-bridge/rollback-farm-controller.sh
 
       - name: Probar cache y actualización del dashboard
-        run: node --test tests/service-worker-cache-safety.test.js
+        run: node --test tests/service-worker-cache-safety.test.js tests/service-worker-registration.test.js
 
       - name: Probar controlador de granja
         run: node --test tests/farm-controller.test.js tests/farm-production-preload.test.js
