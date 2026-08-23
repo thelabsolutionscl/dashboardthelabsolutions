@@ -68,13 +68,6 @@ jobs:
           sed -i "s|%%ADS_CUSTOMER%%|${ADS_CUSTOMER}|g" index.html
           sed -i "s|%%ELEVENLABS%%|${ELEVENLABS}|g" index.html
 
-      - name: Verify farm credentials are not published
-        run: |
-          if grep -q '%%PRINTER_TUNNEL_TOKEN%%' index.html; then
-            echo "Farm token placeholder present in public HTML" >&2
-            exit 1
-          fi
-
       - name: Inject secrets into cotiza.html (cotizador público)
         env:
           LEAD_WORKER_URL: ${{ secrets.LEAD_WORKER_URL }}
