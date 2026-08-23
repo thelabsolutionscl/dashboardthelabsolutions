@@ -9,7 +9,7 @@
 'use strict';
 let target=null,installed=false,snapshot=null,lastSync=0,lastError='',syncing=null,timer=null,days=30;
 async function request(path){if(!target?.FarmHttpAuth?.request)throw new Error('cliente autenticado de granja no disponible');return target.FarmHttpAuth.request(path,{timeout:12000});}
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function num(v){if(v===null||v===undefined||v==='')return null;const n=Number(v);return Number.isFinite(n)?n:null;}
 function fmtPct(v){const n=num(v);return n===null?'—':n.toFixed(1)+'%';}
 function fmtHours(v){const n=num(v);if(n===null)return'—';if(n<1)return Math.round(n*60)+' min';return n.toFixed(n<10?1:0)+' h';}
