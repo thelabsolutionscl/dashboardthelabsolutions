@@ -1,0 +1,5 @@
+/* Evita llamar "Fiabilidad" al score heurístico antiguo cuando ya existe MTBF/MTTR real. */
+(function(){'use strict';if(typeof window==='undefined'||typeof document==='undefined'||window.__TLS_MOPS_TERMS__)return;window.__TLS_MOPS_TERMS__=true;
+function replace(root=document){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n;while((n=walker.nextNode())){const t=n.nodeValue||'',trim=t.trim();if(trim==='Fiabilidad')n.nodeValue=t.replace('Fiabilidad','Índice operativo');else if(trim==='Salud y fiabilidad por impresora')n.nodeValue=t.replace('Salud y fiabilidad por impresora','Índice operativo por impresora');}}
+const start=()=>{replace();const target=document.getElementById('tab-maquinas')||document.body;if(!target)return;new MutationObserver(m=>m.forEach(x=>x.addedNodes.forEach(n=>{if(n.nodeType===1||n.nodeType===3)replace(n.nodeType===1?n:n.parentNode);}))).observe(target,{subtree:true,childList:true});};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
