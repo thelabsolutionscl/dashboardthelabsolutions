@@ -13,6 +13,16 @@ test('sólo archivos de configuración entran al fingerprint',()=>{
   assert.equal(drift.configFileWanted('database.db'),false);
 });
 
+test('límite de archivos distingue escaneo completo de truncado',()=>{
+  const exact=drift.limitConfigPaths(['a.cfg','b.conf','nota.txt'],2);
+  assert.equal(exact.truncated,false);
+  assert.deepEqual(exact.files,['a.cfg','b.conf']);
+  const extra=drift.limitConfigPaths(['a.cfg','b.conf','c.cfg'],2);
+  assert.equal(extra.truncated,true);
+  assert.equal(extra.discovered,3);
+  assert.deepEqual(extra.files,['a.cfg','b.conf']);
+});
+
 test('comparación de archivos informa agregados, removidos y modificados',()=>{
   const c=drift.compareFiles({
     'printer.cfg':'aaa','macros/a.cfg':'bbb','viejo.cfg':'ccc'
@@ -46,9 +56,10 @@ test('cambio de config o versión queda drift con razón explícita',()=>{
   assert.deepEqual(cmp.changes.changed,['printer.cfg']);
 });
 
-test('lectura fallida queda unknown, no drift',()=>{
-  const cmp=drift.compareSnapshot({status:'partial',error:'no se pudo listar config'},{});
+test('lectura parcial o truncada queda unknown, no clean',()=>{
+  const cmp=drift.compareSnapshot({status:'partial',error:'escaneo incompleto: más de 128 archivos .cfg/.conf'},{});
   assert.equal(cmp.state,'unknown');
+  assert.match(cmp.reasons[0],/escaneo incompleto/);
 });
 
 test('token maestro conserva rol admin',()=>{
