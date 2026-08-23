@@ -1,0 +1,60 @@
+name: Hardening Máquinas
+
+on:
+  pull_request:
+    paths:
+      - 'js/farm-*.js'
+      - 'js/machineops-*.js'
+      - 'printer-bridge/**'
+      - 'printer-access-worker/**'
+      - 'tests/farm-*.test.js'
+      - 'tests/machineops-*.test.js'
+      - 'tests/printer-access-worker-*.test.mjs'
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/maquinas-hardening-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hardening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxis hardening
+        run: |
+          node --check printer-bridge/farm-bind-preload.js
+          node --check printer-bridge/farm-auth-preload.js
+          node --check printer-bridge/farm-queue-guard-preload.js
+          node --check printer-bridge/farm-safety-agent-preload.js
+          node --check printer-bridge/farm-lifecycle-preload.js
+          node --check printer-bridge/farm-identity-preload.js
+          node --check printer-bridge/farm-reliability-preload.js
+          node --check js/machineops-farm-queue-adapter.js
+          node --check js/farm-reliability-adapter.js
+          node --check js/farm-identity-adapter.js
+          node --check js/machineops-terminology.js
+          node --check printer-access-worker/src/index.js
+          node --check printer-access-worker/src/session.mjs
+      - name: Contratos de autenticación cola lifecycle identidad y wiring
+        run: |
+          node --test \
+            tests/farm-auth-preload.test.js \
+            tests/farm-bind-preload.test.js \
+            tests/printer-access-worker-session.test.mjs \
+            tests/machineops-farm-queue-adapter.test.js \
+            tests/farm-hardening-core.test.js \
+            tests/farm-hardening-wiring.test.js \
+            tests/farm-identity-preload.test.js
+      - name: Continuidad y confiabilidad histórica
+        run: |
+          node --test \
+            tests/farm-health-continuity.test.js \
+            tests/farm-reliability-preload.test.js \
+            tests/farm-reliability-adapter.test.js \
+            tests/farm-reliability-wiring.test.js
