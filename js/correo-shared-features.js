@@ -16,7 +16,8 @@ const REMOTE_TEMPLATE_ID_KEY='mailTemplatesRecordId';
 const RECIPIENT_FIELDS=['mailCmpCc','mailCmpBcc'];
 const EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 let target=null,installed=false,mailPatched=false,recipientUiInstalled=false;
-let templatesHydrated=false,pendingBeforeHydration=null,writeTimer=null,writeChain=Promise.resolve();
+let templatesHydrated=false,remoteRecordFound=false,lastRemoteRead=0;
+let pendingBeforeHydration=null,writeTimer=null,writeChain=Promise.resolve(),hydratePromise=null;
 
 function cleanText(v){return String(v??'').trim();}
 function dedupeStrings(values){
@@ -50,22 +51,17 @@ function normalizeTemplate(t,index=0){
   if(!t||typeof t!=='object')return null;
   const subject=String(t.subject||'');
   const body=String(t.body||'');
-  const title=cleanText(t.title||t.name||subject||`Plantilla ${index+1}`);
-  if(!title&&!subject&&!body)return null;
-  return{
-    id:cleanText(t.id)||`tpl-${Date.now().toString(36)}-${index}-${Math.random().toString(36).slice(2,8)}`,
-    title:title||`Plantilla ${index+1}`,
-    subject,
-    body,
-  };
+  const name=cleanText(t.name||t.title||subject||`Plantilla ${index+1}`);
+  if(!name&&!subject&&!body)return null;
+  return{name:name||`Plantilla ${index+1}`,subject,body};
 }
 function normalizeTemplates(list){
-  const out=[],ids=new Set(),fingerprints=new Set();
+  const out=[],fingerprints=new Set();
   (Array.isArray(list)?list:[]).forEach((item,index)=>{
     const t=normalizeTemplate(item,index);if(!t)return;
-    const fp=[t.title,t.subject,t.body].join('\u0000').toLowerCase();
-    if(ids.has(t.id)||fingerprints.has(fp))return;
-    ids.add(t.id);fingerprints.add(fp);out.push(t);
+    const fp=[t.name,t.subject,t.body].join('\u0000').toLowerCase();
+    if(fingerprints.has(fp))return;
+    fingerprints.add(fp);out.push(t);
   });
   return out;
 }
@@ -78,10 +74,7 @@ function parseTemplatePayload(raw){
     return normalizeTemplates(value?.templates);
   }catch(_){return[];}
 }
-function templatesEqual(a,b){
-  const strip=list=>normalizeTemplates(list).map(t=>({id:t.id,title:t.title,subject:t.subject,body:t.body}));
-  return JSON.stringify(strip(a))===JSON.stringify(strip(b));
-}
+function templatesEqual(a,b){return JSON.stringify(normalizeTemplates(a))===JSON.stringify(normalizeTemplates(b));}
 function readSharedCache(){
   try{return normalizeTemplates(JSON.parse(target?.localStorage?.getItem(SHARED_TEMPLATE_KEY)||'[]'));}catch(_){return[];}
 }
@@ -90,20 +83,27 @@ function writeSharedCache(list){
   try{target?.localStorage?.setItem(SHARED_TEMPLATE_KEY,JSON.stringify(clean));}catch(_){}
   return clean;
 }
-function applyTemplates(mail,list){
-  const clean=writeSharedCache(list);
-  mail._templateState=clean;
-  try{if(typeof mail._renderTemplates==='function')mail._renderTemplates();}catch(e){console.warn('[Correo] no se pudieron renderizar plantillas compartidas',e);}
-  return clean;
+function readLegacyCache(key){
+  try{return key?normalizeTemplates(JSON.parse(target?.localStorage?.getItem(key)||'[]')):[];}catch(_){return[];}
+}
+function getAirtableFetch(){
+  try{if(typeof airtableFetch==='function')return airtableFetch;}catch(_){}
+  return typeof target?.airtableFetch==='function'?target.airtableFetch:null;
+}
+function getMonitorUpsert(){
+  try{if(typeof _monitorUpsert==='function')return _monitorUpsert;}catch(_){}
+  return typeof target?._monitorUpsert==='function'?target._monitorUpsert:null;
 }
 function setRemoteRecordId(recordId){
-  if(!recordId||!target)return;
-  try{if(target.state&&typeof target.state==='object')target.state[REMOTE_TEMPLATE_ID_KEY]=recordId;}catch(_){}
+  if(!recordId)return;
+  try{if(typeof state!=='undefined'&&state&&typeof state==='object')state[REMOTE_TEMPLATE_ID_KEY]=recordId;}catch(_){}
+  try{if(target?.state&&typeof target.state==='object')target.state[REMOTE_TEMPLATE_ID_KEY]=recordId;}catch(_){}
 }
 async function writeRemoteTemplates(list){
+  const upsert=getMonitorUpsert();
+  if(!target||target._DEMO_MODE||typeof upsert!=='function')return false;
   const clean=normalizeTemplates(list);
-  if(!target||target._DEMO_MODE||typeof target._monitorUpsert!=='function')return false;
-  await target._monitorUpsert(REMOTE_TEMPLATE_NAME,JSON.stringify(templatePayload(clean)),REMOTE_TEMPLATE_ID_KEY);
+  await upsert(REMOTE_TEMPLATE_NAME,JSON.stringify(templatePayload(clean)),REMOTE_TEMPLATE_ID_KEY);
   return true;
 }
 function queueRemoteWrite(list){
@@ -113,34 +113,83 @@ function queueRemoteWrite(list){
     writeChain=writeChain.then(()=>writeRemoteTemplates(snapshot)).catch(e=>console.warn('[Correo] respaldo de plantillas compartidas pendiente',e));
   },350);
 }
-async function hydrateTemplates(mail,legacyTemplates,migrationKey){
-  const sharedCache=readSharedCache();
-  let remote=[],record=null;
-  try{
-    if(!target._DEMO_MODE&&typeof target.airtableFetch==='function'){
-      const res=await target.airtableFetch('Monitor Sistema',200);
-      record=(res?.records||[]).find(r=>r?.fields?.Name===REMOTE_TEMPLATE_NAME)||null;
-      if(record){setRemoteRecordId(record.id);remote=parseTemplatePayload(record.fields?.Notes||'');}
+function applyRemoteTemplates(list){
+  const clean=writeSharedCache(list);
+  const menu=target?.document?.getElementById('mailTplMenu');
+  if(menu&&menu.style.display!=='none')menu.style.display='none';
+  return clean;
+}
+async function fetchRemoteTemplateRecord(){
+  const fetcher=getAirtableFetch();
+  if(!target||target._DEMO_MODE||typeof fetcher!=='function')return{record:null,templates:[]};
+  const res=await fetcher('Monitor Sistema',200);
+  const record=(res?.records||[]).find(r=>r?.fields?.Name===REMOTE_TEMPLATE_NAME)||null;
+  if(record)setRemoteRecordId(record.id);
+  return{record,templates:record?parseTemplatePayload(record.fields?.Notes||''):[]};
+}
+async function hydrateSharedTemplates(){
+  if(hydratePromise)return hydratePromise;
+  hydratePromise=(async()=>{
+    const sharedCache=readSharedCache();
+    let record=null,remote=[];
+    try{
+      const fetched=await fetchRemoteTemplateRecord();record=fetched.record;remote=fetched.templates;
+    }catch(e){console.warn('[Correo] no se pudieron cargar plantillas compartidas',e);}
+    remoteRecordFound=!!record;lastRemoteRead=Date.now();
+
+    let next=record?remote:sharedCache;
+    if(pendingBeforeHydration){
+      next=pendingBeforeHydration.authoritative
+        ?pendingBeforeHydration.list
+        :mergeTemplates(next,pendingBeforeHydration.list);
     }
-  }catch(e){console.warn('[Correo] no se pudieron cargar plantillas compartidas',e);}
+    next=applyRemoteTemplates(next);
+    templatesHydrated=true;
 
-  let migrated=false;
-  try{migrated=target.localStorage?.getItem(migrationKey)==='1';}catch(_){}
-  let next=record?remote:sharedCache;
-  if(!record&&!next.length)next=legacyTemplates;
-  if(!migrated&&legacyTemplates.length)next=mergeTemplates(next,legacyTemplates);
-  if(pendingBeforeHydration?.length)next=mergeTemplates(next,pendingBeforeHydration);
-  next=normalizeTemplates(next);
-  applyTemplates(mail,next);
-  templatesHydrated=true;
-
-  const remoteNeedsUpdate=!record||!templatesEqual(remote,next);
-  if(remoteNeedsUpdate&&next.length){
-    try{await writeRemoteTemplates(next);}catch(e){console.warn('[Correo] no se pudieron publicar plantillas compartidas',e);}
-  }
-  try{target.localStorage?.setItem(migrationKey,'1');}catch(_){}
-  pendingBeforeHydration=null;
-  return next;
+    if(pendingBeforeHydration){
+      try{await writeRemoteTemplates(next);remoteRecordFound=true;}catch(e){console.warn('[Correo] no se pudieron publicar plantillas compartidas',e);}
+    }else if(!record&&sharedCache.length){
+      try{await writeRemoteTemplates(next);remoteRecordFound=true;}catch(e){console.warn('[Correo] no se pudieron publicar plantillas compartidas',e);}
+    }
+    pendingBeforeHydration=null;
+    return next;
+  })().finally(()=>{hydratePromise=null;});
+  return hydratePromise;
+}
+async function refreshSharedTemplates(force=false){
+  if(!templatesHydrated)return hydrateSharedTemplates();
+  if(!force&&Date.now()-lastRemoteRead<15000)return readSharedCache();
+  try{
+    const fetched=await fetchRemoteTemplateRecord();lastRemoteRead=Date.now();
+    if(!fetched.record)return readSharedCache();
+    remoteRecordFound=true;
+    return applyRemoteTemplates(fetched.templates);
+  }catch(e){console.warn('[Correo] no se pudieron refrescar plantillas compartidas',e);return readSharedCache();}
+}
+function startLegacyMigration(originalTplKey){
+  let attempts=0;
+  const run=async()=>{
+    attempts++;
+    let legacyKey=null;
+    try{legacyKey=originalTplKey?originalTplKey():null;}catch(_){}
+    if(!legacyKey){if(attempts<120)target.setTimeout?.(run,500);return;}
+    const migrationKey=`thelab_mail_tpl_shared_migrated_v1:${legacyKey}`;
+    try{if(target.localStorage?.getItem(migrationKey)==='1')return;}catch(_){}
+    await hydrateSharedTemplates();
+    const legacy=readLegacyCache(legacyKey);
+    // Solo la primera instalación sin registro global importa las plantillas
+    // locales existentes. Si ya hay un registro compartido, no reintroducimos
+    // copias antiguas que otro usuario pudo haber borrado globalmente.
+    if(!remoteRecordFound&&legacy.length){
+      const merged=mergeTemplates(readSharedCache(),legacy);applyRemoteTemplates(merged);
+      try{
+        if(await writeRemoteTemplates(merged)){remoteRecordFound=true;target.localStorage?.setItem(migrationKey,'1');}
+      }catch(e){console.warn('[Correo] migración de plantillas locales pendiente',e);}
+      return;
+    }
+    try{target.localStorage?.setItem(migrationKey,'1');}catch(_){}
+  };
+  target.setTimeout?.(run,250);
 }
 
 function patchMail(mail){
@@ -150,30 +199,36 @@ function patchMail(mail){
   const originalValid=typeof mail._validEmails==='function'?mail._validEmails.bind(mail):null;
   mail._validEmails=function(value){
     const normalized=String(value||'').replace(/[;\n\r]+/g,',');
-    const values=originalValid?originalValid(normalized):validRecipients(normalized);
-    return dedupeStrings(values);
+    if(originalValid)return originalValid(normalized);
+    const all=splitRecipients(normalized);return all.length>0&&all.every(v=>EMAIL_RE.test(v));
   };
+
+  const originalSend=typeof mail.sendCompose==='function'?mail.sendCompose.bind(mail):null;
+  if(originalSend){
+    mail.sendCompose=async function(){
+      ['mailCmpTo','mailCmpCc','mailCmpBcc'].forEach(id=>{
+        const el=target?.document?.getElementById(id);if(el)el.value=normalizeRecipientValue(el.value);
+      });
+      return originalSend();
+    };
+  }
 
   const originalTplKey=typeof mail._tplKey==='function'?mail._tplKey.bind(mail):null;
-  const originalLoad=typeof mail._loadTemplates==='function'?mail._loadTemplates.bind(mail):null;
-  let legacyKey='thelab_mail_tpl_legacy';
-  let legacyTemplates=[];
-  try{if(originalTplKey)legacyKey=String(originalTplKey()||legacyKey);}catch(_){}
-  try{if(originalLoad)legacyTemplates=normalizeTemplates(originalLoad());}catch(_){}
-  const migrationKey=`thelab_mail_tpl_shared_migrated_v1:${legacyKey}`;
-
   mail._tplKey=()=>SHARED_TEMPLATE_KEY;
-  mail._loadTemplates=()=>readSharedCache();
-  mail._saveTemplates=function(list){
+  mail.getTpls=()=>readSharedCache();
+  mail.setTpls=function(list){
+    const previous=readSharedCache();
     const clean=writeSharedCache(list);
-    if(!templatesHydrated)pendingBeforeHydration=clean;
-    else queueRemoteWrite(clean);
+    if(!templatesHydrated){
+      const removed=previous.some(old=>!clean.some(t=>templatesEqual([old],[t])));
+      pendingBeforeHydration={list:clean,authoritative:removed||clean.length===0};
+      hydrateSharedTemplates();
+    }else queueRemoteWrite(clean);
   };
 
-  const cached=readSharedCache();
-  if(cached.length)applyTemplates(mail,cached);
-  else if(legacyTemplates.length)applyTemplates(mail,legacyTemplates);
-  hydrateTemplates(mail,legacyTemplates,migrationKey);
+  hydrateSharedTemplates();
+  startLegacyMigration(originalTplKey);
+  target.addEventListener?.('focus',()=>refreshSharedTemplates(true));
   return true;
 }
 
@@ -205,7 +260,7 @@ function addRecipientStyles(){
 function positionPopup(input,popup){
   const r=input.getBoundingClientRect();
   popup.style.left=`${Math.max(8,r.left)}px`;
-  popup.style.top=`${Math.min(target.innerHeight-80,r.bottom+4)}px`;
+  popup.style.top=`${Math.min((target.innerHeight||800)-80,r.bottom+4)}px`;
   popup.style.width=`${Math.max(260,r.width)}px`;
 }
 function setupRecipientField(input){
@@ -217,8 +272,7 @@ function setupRecipientField(input){
   input.title='Puedes agregar varios destinatarios. Selecciona un contacto y continúa escribiendo.';
 
   const popup=target.document.createElement('div');
-  popup.className='mail-multi-suggestions';popup.hidden=true;
-  popup.setAttribute('role','listbox');
+  popup.className='mail-multi-suggestions';popup.hidden=true;popup.setAttribute('role','listbox');
   target.document.body.appendChild(popup);
   let matches=[],active=-1,blurTimer=null;
 
@@ -265,9 +319,6 @@ function setupRecipientField(input){
     else if(e.key==='ArrowUp'&&!popup.hidden){e.preventDefault();setActive(active-1);}
     else if(e.key==='Enter'&&!popup.hidden&&active>=0){e.preventDefault();choose(active);}
     else if(e.key==='Escape'){hide();}
-    else if((e.key===','||e.key===';')&&activeRecipientToken(input.value)){
-      setTimeout(()=>{input.value=normalizeRecipientValue(input.value)+(input.value.trim()?', ':'');render();},0);
-    }
   });
   target.addEventListener?.('resize',()=>{if(!popup.hidden)positionPopup(input,popup);});
   target.addEventListener?.('scroll',()=>{if(!popup.hidden)positionPopup(input,popup);},true);
@@ -287,14 +338,13 @@ function tryInstallFeatures(){
 }
 function install(root){
   if(installed||!root)return false;target=root;installed=true;
-  const run=()=>tryInstallFeatures();
-  run();
+  const run=()=>tryInstallFeatures();run();
   let attempts=0;
   const timer=root.setInterval?.(()=>{attempts++;if(run()||attempts>150)root.clearInterval?.(timer);},100);
   root.document?.addEventListener?.('DOMContentLoaded',run,{once:true});
   return true;
 }
-function status(){return{installed,mailPatched,recipientUiInstalled,templatesHydrated,remoteName:REMOTE_TEMPLATE_NAME};}
+function status(){return{installed,mailPatched,recipientUiInstalled,templatesHydrated,remoteRecordFound,remoteName:REMOTE_TEMPLATE_NAME,lastRemoteRead};}
 
 return{install,status,_test:{splitRecipients,normalizeRecipientValue,validRecipients,mergeRecipient,activeRecipientToken,normalizeTemplates,mergeTemplates,parseTemplatePayload,templatesEqual,SHARED_TEMPLATE_KEY,REMOTE_TEMPLATE_NAME}};
 });
