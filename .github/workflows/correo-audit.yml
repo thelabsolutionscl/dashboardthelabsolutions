@@ -7,12 +7,14 @@ on:
       - 'index.html'
       - 'js/correo.js'
       - 'js/correo-shared-features.js'
+      - 'js/correo-to-multi-recipient-fix.js'
       - 'js/correo-hola-sender.js'
       - 'js/farm-health-adapter.js'
       - 'js/notify.js'
       - 'mail-api.php'
       - 'tests/correo-wiring.test.js'
       - 'tests/correo-shared-features.test.js'
+      - 'tests/correo-to-multi-recipient-fix.test.js'
       - 'tests/correo-hola-sender.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/correo-audit.yml'
@@ -21,12 +23,14 @@ on:
       - 'index.html'
       - 'js/correo.js'
       - 'js/correo-shared-features.js'
+      - 'js/correo-to-multi-recipient-fix.js'
       - 'js/correo-hola-sender.js'
       - 'js/farm-health-adapter.js'
       - 'js/notify.js'
       - 'mail-api.php'
       - 'tests/correo-wiring.test.js'
       - 'tests/correo-shared-features.test.js'
+      - 'tests/correo-to-multi-recipient-fix.test.js'
       - 'tests/correo-hola-sender.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/correo-audit.yml'
@@ -58,12 +62,14 @@ jobs:
         run: |
           node --check tests/correo-wiring.test.js
           node --check tests/correo-shared-features.test.js
+          node --check tests/correo-to-multi-recipient-fix.test.js
           node --check tests/correo-hola-sender.test.js
 
       - name: Validate mail JavaScript
         run: |
           node --check js/correo.js
           node --check js/correo-shared-features.js
+          node --check js/correo-to-multi-recipient-fix.js
           node --check js/correo-hola-sender.js
           node --check js/farm-health-adapter.js
           node --check js/notify.js
@@ -75,6 +81,7 @@ jobs:
         run: |
           node --test tests/correo-wiring.test.js
           node --test tests/correo-shared-features.test.js
+          node --test tests/correo-to-multi-recipient-fix.test.js
           node --test tests/correo-hola-sender.test.js
 
       - name: General smoke audit
