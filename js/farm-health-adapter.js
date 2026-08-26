@@ -83,6 +83,7 @@ return{install,refresh,probe,ack,status,_test:{}};
   load('js/correo-shared-features.js','CC/CCO multiples y plantillas compartidas');
   load('js/correo-to-multi-recipient-fix.js','multiples destinatarios en Para');
   load('js/correo-hola-sender.js','remitente predeterminado de hola@');
+  load('js/maquinas-identity-fix.js','corrección de identidad K1 #1');
   load('js/maquinas-eta-clarity.js','claridad de disponibilidad de máquinas');
   load('js/farm-drift-adapter.js','integridad de configuración de máquinas');
 })();
