@@ -80,6 +80,7 @@ return{install,refresh,probe,ack,status,_test:{}};
   };
   load('js/dashboard-notification-badges.js','badges de notificaciones');
   load('js/correo-input-compat.js','compatibilidad de teclado de correo');
+  load('js/correo-shared-features.js','CC/CCO multiples y plantillas compartidas');
   load('js/maquinas-eta-clarity.js','claridad de disponibilidad de máquinas');
   load('js/farm-drift-adapter.js','integridad de configuración de máquinas');
 })();
