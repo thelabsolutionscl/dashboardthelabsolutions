@@ -20,28 +20,26 @@ test('seleccionar un contacto reemplaza solo el token activo y conserva los ante
     t.mergeRecipient('ana@empresa.cl, bo', 'bob@empresa.cl'),
     'ana@empresa.cl, bob@empresa.cl, '
   );
-  assert.equal(
-    t.activeRecipientToken('ana@empresa.cl, bo'),
-    'bo'
-  );
+  assert.equal(t.activeRecipientToken('ana@empresa.cl, bo'), 'bo');
 });
 
-test('la validacion de destinatarios ignora entradas invalidas', () => {
+test('la validacion pura identifica solo emails validos', () => {
   assert.deepEqual(
     t.validRecipients('ana@empresa.cl, no-es-correo; bob@empresa.cl'),
     ['ana@empresa.cl', 'bob@empresa.cl']
   );
 });
 
-test('las plantillas compartidas se normalizan y deduplican', () => {
+test('las plantillas compartidas conservan el esquema name/subject/body y se deduplican', () => {
   const list = t.normalizeTemplates([
-    { id: '1', title: 'Cotizacion', subject: 'Hola', body: '<p>A</p>' },
-    { id: '2', title: 'Cotizacion', subject: 'Hola', body: '<p>A</p>' },
-    { id: '3', title: 'Seguimiento', subject: 'Seguimiento', body: '<p>B</p>' },
+    { name: 'Cotizacion', subject: 'Hola', body: '<p>A</p>' },
+    { title: 'Cotizacion', subject: 'Hola', body: '<p>A</p>' },
+    { name: 'Seguimiento', subject: 'Seguimiento', body: '<p>B</p>' },
   ]);
-  assert.equal(list.length, 2);
-  assert.equal(list[0].id, '1');
-  assert.equal(list[1].id, '3');
+  assert.deepEqual(list, [
+    { name: 'Cotizacion', subject: 'Hola', body: '<p>A</p>' },
+    { name: 'Seguimiento', subject: 'Seguimiento', body: '<p>B</p>' },
+  ]);
 });
 
 test('el payload remoto MAIL_TEMPLATES conserva todas las plantillas', () => {
@@ -49,13 +47,13 @@ test('el payload remoto MAIL_TEMPLATES conserva todas las plantillas', () => {
     version: 1,
     updatedAt: 123,
     templates: [
-      { id: '1', title: 'Uno', subject: 'A', body: 'Body A' },
-      { id: '2', title: 'Dos', subject: 'B', body: 'Body B' },
+      { name: 'Uno', subject: 'A', body: 'Body A' },
+      { name: 'Dos', subject: 'B', body: 'Body B' },
     ],
   });
   const parsed = t.parseTemplatePayload(payload);
   assert.equal(t.REMOTE_TEMPLATE_NAME, 'MAIL_TEMPLATES');
   assert.equal(t.SHARED_TEMPLATE_KEY, 'thelab_mail_tpl_shared_v1');
   assert.equal(parsed.length, 2);
-  assert.equal(parsed[1].title, 'Dos');
+  assert.equal(parsed[1].name, 'Dos');
 });
