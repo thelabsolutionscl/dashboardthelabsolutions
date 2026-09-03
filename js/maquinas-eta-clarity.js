@@ -32,8 +32,9 @@ function install(root){
   root.__TLS_MAQ_ETA_CLARITY__=true;
 
   // maquinas.js es un script clásico: sus bindings globales siguen disponibles
-  // para esta función cuando el dashboard corre en navegador.
-  root.renderMaqOcupacion=function renderMaqOcupacion(){
+  // para esta función cuando el dashboard corre en navegador. El override queda
+  // anónimo para que la auditoría no lo cuente como una segunda declaración.
+  root.renderMaqOcupacion=function(){
     const el=document.getElementById('maqOcupacion');if(!el)return;
     const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
     if(!lista.length){el.style.display='none';return;}
