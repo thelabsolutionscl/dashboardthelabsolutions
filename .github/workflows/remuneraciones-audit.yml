@@ -7,6 +7,7 @@ on:
       - 'index.html'
       - 'js/**.js'
       - 'tests/remuneraciones-wiring.test.js'
+      - 'tests/remuneraciones-dias.test.js'
       - 'tests/finanzas-wiring.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/remuneraciones-audit.yml'
@@ -15,6 +16,7 @@ on:
       - 'index.html'
       - 'js/**.js'
       - 'tests/remuneraciones-wiring.test.js'
+      - 'tests/remuneraciones-dias.test.js'
       - 'tests/finanzas-wiring.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/remuneraciones-audit.yml'
@@ -37,13 +39,16 @@ jobs:
           node-version: '22'
 
       - name: Validate audit syntax
-        run: node --check tests/remuneraciones-wiring.test.js
+        run: node --check tests/remuneraciones-wiring.test.js && node --check tests/remuneraciones-dias.test.js
 
       - name: Validate JavaScript modules
         run: find js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 
       - name: Audit remunerations wiring
         run: node --test tests/remuneraciones-wiring.test.js
+
+      - name: Audit remunerations by worked days
+        run: node --test tests/remuneraciones-dias.test.js
 
       - name: Audit finance integration when available
         run: |

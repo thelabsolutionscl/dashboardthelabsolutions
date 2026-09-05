@@ -33,7 +33,7 @@ function install(root){
 
   // maquinas.js es un script clásico: sus bindings globales siguen disponibles
   // para esta función cuando el dashboard corre en navegador.
-  root.renderMaqOcupacion=function renderMaqOcupacion(){
+  root.renderMaqOcupacion=function renderMaqOcupacionEtaClarity(){
     const el=document.getElementById('maqOcupacion');if(!el)return;
     const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
     if(!lista.length){el.style.display='none';return;}
