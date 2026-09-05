@@ -44,6 +44,16 @@ function calcRow({base=0,rate=0,days=0}={}){
   const pagoDias=Math.round(valorDia*dias);
   return{sueldoBase,valorDia,dias,pagoDias,subtotal:sueldoBase+pagoDias};
 }
+function commissionForOrders(orders,key=monthKey(),rate=0.035){
+  const mk=String(key||'');
+  return Math.round((Array.isArray(orders)?orders:[]).reduce((sum,r)=>{
+    const f=r?.fields||{},estado=String(f['Estado pedido']||'');
+    if(!['Despachado','Completado'].includes(estado))return sum;
+    const entrega=String(f['Fecha entrega']||'');if(!entrega.startsWith(mk))return sum;
+    const bruto=Math.max(0,number(f['Monto total (CLP)']));
+    return sum+(bruto/1.19)*rate;
+  },0));
+}
 function totalSummary(rows,commission=0){
   const list=Array.isArray(rows)?rows:[];
   const sueldoBase=list.reduce((s,r)=>s+number(r?.sueldoBase),0);
@@ -90,6 +100,18 @@ function sellerPeople(){
     if(byCrm.length)return byCrm;
   }
   return all;
+}
+function visibleOrders(){
+  const orders=Array.isArray(appState()?.pedidos)?appState().pedidos:[];
+  try{
+    if(typeof isVendorMode==='function'&&isVendorMode()&&typeof vendorOwnsRecord==='function')return orders.filter(vendorOwnsRecord);
+  }catch(_){}
+  return orders;
+}
+function currentMonthCommission(key=monthKey(),fallback=0){
+  const s=appState();
+  if(s&&Array.isArray(s.pedidos))return commissionForOrders(visibleOrders(),key,0.035);
+  return Math.round(number(fallback));
 }
 function currentMonthData(cfg,p,key=monthKey()){
   const pk=personKey(p),entry=cfg.vendedores?.[pk]||{};
@@ -170,7 +192,7 @@ function renderLiquidacion(_totalNeto,totalComision){
     const name=personName(p),m=currentMonthData(cfg,p,mk),calc=calcRow({base:number(sueldos[name]),rate:m.rate,days:m.days});
     return{...calc,nombre:name,avatar:p?.avatar||'👤'};
   }).filter(r=>r.sueldoBase>0||r.valorDia>0||r.dias>0||r.pagoDias>0);
-  const summary=totalSummary(rows,totalComision);renderKpi(summary);
+  const summary=totalSummary(rows,currentMonthCommission(mk,totalComision));renderKpi(summary);
   if(!rows.length&&summary.comision===0){liqBody.innerHTML='<div style="font-size:11px;color:var(--text3)">Configura un vendedor con valor por día y días trabajados para ver su remuneración.</div>';return;}
   const cards=rows.map(r=>`<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:11px;border:1px solid var(--border2)">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;font-weight:700">${escapeHtml(r.avatar)} ${escapeHtml(r.nombre)}</div>
@@ -186,7 +208,7 @@ function renderLiquidacion(_totalNeto,totalComision){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px">
       <div><span style="color:var(--text3)">Sueldo base total</span><div style="font-weight:700;margin-top:2px">${money(summary.sueldoBase)}</div></div>
       <div><span style="color:var(--text3)">Pago por días</span><div style="font-weight:700;color:var(--accent3);margin-top:2px">${money(summary.pagoDias)}</div></div>
-      <div><span style="color:var(--text3)">Comisiones del período</span><div style="font-weight:700;color:var(--warn);margin-top:2px">${money(summary.comision)}</div></div>
+      <div><span style="color:var(--text3)">Comisiones del mes</span><div style="font-weight:700;color:var(--warn);margin-top:2px">${money(summary.comision)}</div></div>
       <div><span style="color:var(--text3)">Total remuneraciones</span><div style="font-size:15px;font-weight:800;margin-top:1px">${money(summary.total)}</div></div>
     </div>
     <div style="font-size:9.5px;color:var(--text3);margin-top:7px">El pago por días y las comisiones se mantienen como conceptos separados.</div>
@@ -214,5 +236,5 @@ function install(root){
   return true;
 }
 function status(){return{installed,patched,storageKey:STORAGE_KEY,month:monthKey()};}
-return{install,status,_test:{norm,monthKey,calcRow,totalSummary,isSellerRole}};
+return{install,status,_test:{norm,monthKey,calcRow,commissionForOrders,totalSummary,isSellerRole}};
 });
