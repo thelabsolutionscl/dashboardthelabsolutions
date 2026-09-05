@@ -17,7 +17,7 @@ let target=null,installed=false,patched=false,pollTimer=null;
 function norm(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
 function number(v){const n=Number(v);return Number.isFinite(n)?n:0;}
 function clamp(v,min,max){return Math.min(max,Math.max(min,number(v)));}
-function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function remDiasEscape(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function money(v){
   try{return '$'+Math.round(number(v)).toLocaleString('es-CL');}catch(_){return '$'+Math.round(number(v));}
 }
@@ -125,12 +125,12 @@ function renderGrid(){
   const grid=target?.document?.getElementById('remSueldoGrid');if(!grid)return;
   const vendedores=sellerPeople(),cfg=readCfg(),sueldos=legacySueldos(),mk=monthKey();
   if(!vendedores.length){grid.innerHTML='<div style="font-size:11px;color:var(--text3)">No hay vendedores o integrantes configurados.</div>';return;}
-  grid.innerHTML=`<div style="grid-column:1/-1;font-size:11px;color:var(--text3);margin-bottom:2px">Remuneración de <b>${escapeHtml(monthLabel(mk))}</b>. El pago por días se calcula aparte de las comisiones.</div>`+
+  grid.innerHTML=`<div style="grid-column:1/-1;font-size:11px;color:var(--text3);margin-bottom:2px">Remuneración de <b>${remDiasEscape(monthLabel(mk))}</b>. El pago por días se calcula aparte de las comisiones.</div>`+
     vendedores.map((p,i)=>{
       const pk=personKey(p),name=personName(p),m=currentMonthData(cfg,p,mk),base=number(sueldos[name]);
       const row=calcRow({base,rate:m.rate,days:m.days});
       return `<div class="rem-dia-person" data-rem-index="${i}" data-rem-key="${encodeURIComponent(pk)}" data-rem-name="${encodeURIComponent(name)}" style="border:1px solid var(--border2);border-radius:9px;padding:10px;min-width:0">
-        <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;margin-bottom:8px"><span>${escapeHtml(p?.avatar||'👤')}</span><span>${escapeHtml(name)}</span></div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;margin-bottom:8px"><span>${remDiasEscape(p?.avatar||'👤')}</span><span>${remDiasEscape(name)}</span></div>
         <div style="display:grid;grid-template-columns:repeat(3,minmax(110px,1fr));gap:7px">
           <label style="font-size:9.5px;color:var(--text3)">Sueldo base mensual
             <input class="field-input" data-rem-field="base" type="number" min="0" step="10000" value="${row.sueldoBase||''}" placeholder="0" style="margin-top:3px">
@@ -182,7 +182,7 @@ function renderKpi(summary){
   box.querySelectorAll('.rem-dias-kpi').forEach(el=>el.remove());
   const el=target.document.createElement('div');el.className='rem-dias-kpi';
   el.style.cssText='background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:11px 13px;min-width:145px;flex:1';
-  el.innerHTML=`<div style="font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:700">Pago por días</div><div style="font-size:18px;font-weight:800;color:var(--accent3);margin-top:2px">${money(summary.pagoDias)}</div><div style="font-size:9.5px;color:var(--text3);margin-top:2px">${summary.dias.toLocaleString('es-CL')} día${summary.dias===1?'':'s'} · ${escapeHtml(monthLabel())}</div>`;
+  el.innerHTML=`<div style="font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:700">Pago por días</div><div style="font-size:18px;font-weight:800;color:var(--accent3);margin-top:2px">${money(summary.pagoDias)}</div><div style="font-size:9.5px;color:var(--text3);margin-top:2px">${summary.dias.toLocaleString('es-CL')} día${summary.dias===1?'':'s'} · ${remDiasEscape(monthLabel())}</div>`;
   box.appendChild(el);
 }
 function renderLiquidacion(_totalNeto,totalComision){
@@ -195,7 +195,7 @@ function renderLiquidacion(_totalNeto,totalComision){
   const summary=totalSummary(rows,currentMonthCommission(mk,totalComision));renderKpi(summary);
   if(!rows.length&&summary.comision===0){liqBody.innerHTML='<div style="font-size:11px;color:var(--text3)">Configura un vendedor con valor por día y días trabajados para ver su remuneración.</div>';return;}
   const cards=rows.map(r=>`<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:11px;border:1px solid var(--border2)">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;font-weight:700">${escapeHtml(r.avatar)} ${escapeHtml(r.nombre)}</div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;font-weight:700">${remDiasEscape(r.avatar)} ${remDiasEscape(r.nombre)}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:5px">
       ${r.sueldoBase?`<div><span style="color:var(--text3)">Sueldo base:</span> <b>${money(r.sueldoBase)}</b></div>`:''}
       <div><span style="color:var(--text3)">Valor día:</span> <b>${money(r.valorDia)}</b></div>
