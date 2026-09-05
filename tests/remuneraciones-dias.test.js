@@ -5,7 +5,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const mod=require('../js/remuneraciones-dias.js');
-const {monthKey,calcRow,totalSummary,isSellerRole}=mod._test;
+const {monthKey,calcRow,commissionForOrders,totalSummary,isSellerRole}=mod._test;
 
 test('calcula pago diario y conserva sueldo base separado',()=>{
   const r=calcRow({base:300000,rate:25000,days:12.5});
@@ -17,6 +17,16 @@ test('calcula pago diario y conserva sueldo base separado',()=>{
 test('limita días a un rango mensual razonable',()=>{
   assert.equal(calcRow({rate:10000,days:99}).dias,31);
   assert.equal(calcRow({rate:10000,days:-4}).dias,0);
+});
+
+test('comisión mensual usa pedidos entregados del mes y 3,5% del neto',()=>{
+  const orders=[
+    {fields:{'Estado pedido':'Despachado','Fecha entrega':'2026-09-03','Monto total (CLP)':119000}},
+    {fields:{'Estado pedido':'Completado','Fecha entrega':'2026-09-20','Monto total (CLP)':238000}},
+    {fields:{'Estado pedido':'En Proceso','Fecha entrega':'2026-09-21','Monto total (CLP)':119000}},
+    {fields:{'Estado pedido':'Despachado','Fecha entrega':'2026-08-31','Monto total (CLP)':119000}},
+  ];
+  assert.equal(commissionForOrders(orders,'2026-09'),10500);
 });
 
 test('comisiones permanecen separadas del pago fijo',()=>{
