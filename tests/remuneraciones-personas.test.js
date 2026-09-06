@@ -33,6 +33,15 @@ test('permite registrar cada jornada con fecha fracción y detalle',()=>{
   assert.match(src,/fraccion/);
 });
 
+test('permite marcar la remuneración mensual como pendiente o pagada',()=>{
+  assert.match(src,/Estado de pago/);
+  assert.match(src,/⏳ Pendiente/);
+  assert.match(src,/✅ Pagado/);
+  assert.match(src,/pagadoEn/);
+  assert.match(src,/remPersonaEstadoPago/);
+  assert.match(src,/new Date\(\)\.toISOString\(\)/);
+});
+
 test('evita registrar más de un día en la misma fecha',()=>{
   assert.match(src,/same\+fraccion>1/);
   assert.match(src,/misma fecha no puedes registrar más de 1 día/);
