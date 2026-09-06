@@ -35,7 +35,7 @@ function openModal(id){
   ensureModal();const mk=monthKey(),r=rowFor(p),card=document.getElementById('remPersonaCard');
   card.dataset.personId=p.id;
   card.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px"><div><div style="font-size:16px;font-weight:800">${esc(p.nombre)}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">${esc(p.rol||p.cargo||'Trabajador')} · ${esc(monthLabel(mk))}</div></div><button id="remPersonaClose" class="btn-mini" style="font-size:15px">✕</button></div>
-  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px">
     <label style="font-size:10px;color:var(--text3)">Sueldo base mensual<input id="remPersonaBase" class="field-input" type="number" min="0" step="10000" value="${r.base||''}" placeholder="0" style="margin-top:4px"></label>
     <label style="font-size:10px;color:var(--text3)">Valor por día<input id="remPersonaRate" class="field-input" type="number" min="0" step="1000" value="${r.rate||''}" placeholder="0" style="margin-top:4px"></label>
     <label style="font-size:10px;color:var(--text3)">Días trabajados<input id="remPersonaDays" class="field-input" type="number" min="0" max="31" step="0.5" value="${r.days||''}" placeholder="0" style="margin-top:4px"></label>
@@ -59,7 +59,13 @@ function saveModal(){
 }
 function injectButtons(){
   const body=document.getElementById('equipoBody'),ps=people();if(!body||!ps.length)return;
-  Array.from(body.querySelectorAll('tr')).forEach((tr,i)=>{const p=ps[i],cell=tr.querySelector('td');if(!p||!cell||cell.querySelector('[data-rem-person-btn]'))return;const r=rowFor(p),b=document.createElement('button');b.type='button';b.dataset.remPersonBtn=p.id;b.className='btn-mini';b.style.cssText='margin-top:5px;font-size:9.5px;white-space:nowrap';b.textContent=r.days>0?'💰 '+String(r.days).replace('.',',')+' días':'💰 Remuneración';b.onclick=e=>{e.stopPropagation();openModal(p.id);};const info=cell.querySelector('div>div')||cell;info.appendChild(b);});
+  Array.from(body.querySelectorAll('tr')).forEach((tr,i)=>{
+    const p=ps[i],cell=tr.querySelector('td');if(!p||!cell)return;
+    const r=rowFor(p),label=r.days>0?'💰 '+String(r.days).replace('.',',')+' días':'💰 Remuneración';
+    let b=cell.querySelector('[data-rem-person-btn]');
+    if(!b){b=document.createElement('button');b.type='button';b.dataset.remPersonBtn=p.id;b.className='btn-mini';b.style.cssText='display:block;margin-top:5px;font-size:9.5px;white-space:nowrap';b.onclick=e=>{e.stopPropagation();openModal(p.id);};cell.appendChild(b);}
+    b.textContent=label;
+  });
 }
 function start(){ensureModal();injectButtons();const body=document.getElementById('equipoBody');if(body&&typeof MutationObserver!=='undefined'){observer=new MutationObserver(()=>injectButtons());observer.observe(body,{childList:true,subtree:true});return;}let tries=0;const t=setInterval(()=>{injectButtons();const b=document.getElementById('equipoBody');if(b&&typeof MutationObserver!=='undefined'){clearInterval(t);observer=new MutationObserver(()=>injectButtons());observer.observe(b,{childList:true,subtree:true});}else if(++tries>120)clearInterval(t);},500);}
 root.openRemuneracionPersona=openModal;
