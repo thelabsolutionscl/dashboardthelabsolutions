@@ -87,4 +87,5 @@ return{install,refresh,probe,ack,status,_test:{}};
   load('js/maquinas-eta-clarity.js','claridad de disponibilidad de máquinas');
   load('js/farm-drift-adapter.js','integridad de configuración de máquinas');
   load('js/remuneraciones-dias.js','remuneraciones por días trabajados');
+  load('js/remuneraciones-personas.js','remuneraciones desde fichas de personas');
 })();
