@@ -64,10 +64,10 @@ function remPersonaInjectButtons(){
     const r=remPersonaRow(p),label=r.days>0?'💰 '+String(r.days).replace('.',',')+' días':'💰 Remuneración';
     let b=cell.querySelector('[data-rem-person-btn]');
     if(!b){b=document.createElement('button');b.type='button';b.dataset.remPersonBtn=p.id;b.className='btn-mini';b.style.cssText='display:block;margin-top:5px;font-size:9.5px;white-space:nowrap';b.onclick=e=>{e.stopPropagation();remPersonaOpenModal(p.id);};cell.appendChild(b);}
-    b.textContent=label;
+    if(b.textContent!==label)b.textContent=label;
   });
 }
-function remPersonaStart(){remPersonaEnsureModal();remPersonaInjectButtons();const body=document.getElementById('equipoBody');if(body&&typeof MutationObserver!=='undefined'){remPersonaObserver=new MutationObserver(()=>remPersonaInjectButtons());remPersonaObserver.observe(body,{childList:true,subtree:true});return;}let tries=0;const t=setInterval(()=>{remPersonaInjectButtons();const b=document.getElementById('equipoBody');if(b&&typeof MutationObserver!=='undefined'){clearInterval(t);remPersonaObserver=new MutationObserver(()=>remPersonaInjectButtons());remPersonaObserver.observe(b,{childList:true,subtree:true});}else if(++tries>120)clearInterval(t);},500);}
+function remPersonaStart(){remPersonaEnsureModal();remPersonaInjectButtons();const body=document.getElementById('equipoBody');if(body&&typeof MutationObserver!=='undefined'){remPersonaObserver=new MutationObserver(()=>remPersonaInjectButtons());remPersonaObserver.observe(body,{childList:true});return;}let tries=0;const t=setInterval(()=>{remPersonaInjectButtons();const b=document.getElementById('equipoBody');if(b&&typeof MutationObserver!=='undefined'){clearInterval(t);remPersonaObserver=new MutationObserver(()=>remPersonaInjectButtons());remPersonaObserver.observe(b,{childList:true});}else if(++tries>120)clearInterval(t);},500);}
 root.openRemuneracionPersona=remPersonaOpenModal;
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',remPersonaStart,{once:true});else remPersonaStart();
 })(typeof window!=='undefined'?window:null);
