@@ -14,18 +14,46 @@ test('PERSONAS expone acceso directo a remuneración',()=>{
   assert.match(src,/openRemuneracionPersona/);
 });
 
-test('la ficha permite editar base, valor diario y días trabajados',()=>{
+test('la ficha permite editar base, valor diario y conservar días antiguos',()=>{
   assert.match(src,/Sueldo base mensual/);
   assert.match(src,/Valor por día/);
-  assert.match(src,/Días trabajados/);
-  assert.match(src,/max=\"31\"/);
+  assert.match(src,/Días anteriores sin fecha/);
   assert.match(src,/step=\"0\.5\"/);
+});
+
+test('permite registrar cada jornada con fecha fracción y detalle',()=>{
+  assert.match(src,/Registrar día trabajado/);
+  assert.match(src,/type=\"date\"/);
+  assert.match(src,/Día completo/);
+  assert.match(src,/Medio día/);
+  assert.match(src,/Detalle de lo realizado/);
+  assert.match(src,/jornadas/);
+  assert.match(src,/fecha/);
+  assert.match(src,/detalle/);
+  assert.match(src,/fraccion/);
+});
+
+test('evita registrar más de un día en la misma fecha',()=>{
+  assert.match(src,/same\+fraccion>1/);
+  assert.match(src,/misma fecha no puedes registrar más de 1 día/);
+});
+
+test('el guardado es defensivo y no fuerza render de REMUNERACIONES',()=>{
+  assert.match(src,/try\{[\s\S]*remPersonaSaveModal/);
+  assert.match(src,/localStorage\.setItem\(REM_PERSONA_STORAGE_KEY/);
+  assert.match(src,/remuneraciones-dias-updated/);
+  assert.doesNotMatch(src,/root\.renderRemuneraciones\(\)/);
 });
 
 test('la ficha reutiliza el almacenamiento de REMUNERACIONES',()=>{
   assert.match(src,/thelab_remuneraciones_dias_v1/);
   assert.match(src,/rem_sueldos_v1/);
   assert.match(src,/America\/Santiago/);
+});
+
+test('el observer no vuelve a observar todo el subárbol',()=>{
+  assert.match(src,/observe\(body,\{childList:true\}\)/);
+  assert.doesNotMatch(src,/subtree:true/);
 });
 
 test('el bootstrap carga la extensión de PERSONAS después del módulo de días',()=>{
