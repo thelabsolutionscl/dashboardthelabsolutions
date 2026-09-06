@@ -6,6 +6,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const mod=require('../js/remuneraciones-dias.js');
 const {monthKey,calcRow,commissionForOrders,totalSummary,isSellerRole}=mod._test;
+const src=fs.readFileSync(path.join(__dirname,'..','js','remuneraciones-dias.js'),'utf8');
 
 test('calcula pago diario y conserva sueldo base separado',()=>{
   const r=calcRow({base:300000,rate:25000,days:12.5});
@@ -48,7 +49,18 @@ test('monthKey usa un año-mes estable para Chile',()=>{
   assert.match(monthKey(new Date('2026-09-15T12:00:00Z')),/^2026-09$/);
 });
 
+test('REMUNERACIONES permite cambiar estado de pago',()=>{
+  assert.match(src,/data-rem-field=\"paid\"/);
+  assert.match(src,/⏳ Pendiente/);
+  assert.match(src,/✅ Pagado/);
+  assert.match(src,/pagadoEn/);
+});
+
+test('guardar desde REMUNERACIONES preserva jornadas y metadatos mensuales',()=>{
+  assert.match(src,/entry\.meses\[mk\]=\{\.\.\.prev,dias:row\.dias,pagado,pagadoEn/);
+});
+
 test('el bootstrap del dashboard carga remuneraciones-dias.js',()=>{
-  const src=fs.readFileSync(path.join(__dirname,'..','js','farm-health-adapter.js'),'utf8');
-  assert.match(src,/load\('js\/remuneraciones-dias\.js','remuneraciones por días trabajados'\)/);
+  const loader=fs.readFileSync(path.join(__dirname,'..','js','farm-health-adapter.js'),'utf8');
+  assert.match(loader,/load\('js\/remuneraciones-dias\.js','remuneraciones por días trabajados'\)/);
 });
