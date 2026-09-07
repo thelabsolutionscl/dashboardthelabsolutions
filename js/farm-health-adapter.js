@@ -86,6 +86,7 @@ return{install,refresh,probe,ack,status,_test:{}};
   load('js/maquinas-identity-fix.js','corrección de identidad K1 #1');
   load('js/maquinas-eta-clarity.js','claridad de disponibilidad de máquinas');
   load('js/farm-drift-adapter.js','integridad de configuración de máquinas');
+  load('js/comisiones-35-standard.js','comisión de ventas estándar 3,5%');
   load('js/remuneraciones-dias.js','remuneraciones por días trabajados');
   load('js/remuneraciones-personas.js','remuneraciones desde fichas de personas');
 })();
