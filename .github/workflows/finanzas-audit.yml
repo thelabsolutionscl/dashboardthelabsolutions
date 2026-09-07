@@ -6,8 +6,11 @@ on:
     paths:
       - 'index.html'
       - 'js/finanzas.js'
+      - 'js/comisiones-35-standard.js'
+      - 'js/farm-health-adapter.js'
       - 'js/seo-ads.js'
       - 'tests/finanzas-wiring.test.js'
+      - 'tests/comisiones-35-standard.test.js'
       - 'tests/pedidos-wiring.test.js'
       - 'tests/cotizaciones-wiring.test.js'
       - 'tests/smoke.test.js'
@@ -16,8 +19,11 @@ on:
     paths:
       - 'index.html'
       - 'js/finanzas.js'
+      - 'js/comisiones-35-standard.js'
+      - 'js/farm-health-adapter.js'
       - 'js/seo-ads.js'
       - 'tests/finanzas-wiring.test.js'
+      - 'tests/comisiones-35-standard.test.js'
       - 'tests/pedidos-wiring.test.js'
       - 'tests/cotizaciones-wiring.test.js'
       - 'tests/smoke.test.js'
@@ -43,10 +49,15 @@ jobs:
       - name: Validate JavaScript syntax
         run: |
           node --check js/finanzas.js
+          node --check js/comisiones-35-standard.js
           node --check tests/finanzas-wiring.test.js
+          node --check tests/comisiones-35-standard.test.js
 
       - name: Audit Finanzas wiring
         run: node --test tests/finanzas-wiring.test.js
+
+      - name: Audit commission standard
+        run: node --test tests/comisiones-35-standard.test.js
 
       - name: Audit linked commercial flow
         run: |
