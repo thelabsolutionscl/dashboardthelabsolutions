@@ -35,6 +35,11 @@ function monthLabel(key=monthKey()){
   try{return new Intl.DateTimeFormat('es-CL',{timeZone:TZ,month:'long',year:'numeric'}).format(new Date(Date.UTC(y,m-1,15,12)));}
   catch(_){return String(key);}
 }
+function formatPaidAt(v){
+  if(!v)return'';
+  try{return new Intl.DateTimeFormat('es-CL',{timeZone:TZ,day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v));}
+  catch(_){return String(v);}
+}
 function personKey(p){return String(p?.id||p?.nombre||p?.name||'').trim();}
 function personName(p){return String(p?.nombre||p?.name||p?.id||'Sin nombre').trim();}
 function calcRow({base=0,rate=0,days=0}={}){
@@ -114,8 +119,8 @@ function currentMonthCommission(key=monthKey(),fallback=0){
   return Math.round(number(fallback));
 }
 function currentMonthData(cfg,p,key=monthKey()){
-  const pk=personKey(p),entry=cfg.vendedores?.[pk]||{};
-  return{rate:number(entry.valorDia),days:number(entry.meses?.[key]?.dias),entry};
+  const pk=personKey(p),entry=cfg.vendedores?.[pk]||{},month=entry.meses?.[key]||{};
+  return{rate:number(entry.valorDia),days:number(month.dias),pagado:month.pagado===true,pagadoEn:month.pagado===true?String(month.pagadoEn||''):'',month,entry};
 }
 function toastMsg(msg,type='success'){
   try{if(typeof toast==='function'){toast(msg,type);return;}}catch(_){}
@@ -130,8 +135,8 @@ function renderGrid(){
       const pk=personKey(p),name=personName(p),m=currentMonthData(cfg,p,mk),base=number(sueldos[name]);
       const row=calcRow({base,rate:m.rate,days:m.days});
       return `<div class="rem-dia-person" data-rem-index="${i}" data-rem-key="${encodeURIComponent(pk)}" data-rem-name="${encodeURIComponent(name)}" style="border:1px solid var(--border2);border-radius:9px;padding:10px;min-width:0">
-        <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;margin-bottom:8px"><span>${remDiasEscape(p?.avatar||'👤')}</span><span>${remDiasEscape(name)}</span></div>
-        <div style="display:grid;grid-template-columns:repeat(3,minmax(110px,1fr));gap:7px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11.5px;font-weight:700;margin-bottom:8px"><span>${remDiasEscape(p?.avatar||'👤')} ${remDiasEscape(name)}</span><span style="font-size:9.5px;color:${m.pagado?'var(--accent3)':'var(--warn)'}">${m.pagado?'✅ Pagado':'⏳ Pendiente'}</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:7px">
           <label style="font-size:9.5px;color:var(--text3)">Sueldo base mensual
             <input class="field-input" data-rem-field="base" type="number" min="0" step="10000" value="${row.sueldoBase||''}" placeholder="0" style="margin-top:3px">
           </label>
@@ -141,8 +146,11 @@ function renderGrid(){
           <label style="font-size:9.5px;color:var(--text3)">Días trabajados
             <input class="field-input" data-rem-field="days" type="number" min="0" max="31" step="0.5" value="${row.dias||''}" placeholder="0" style="margin-top:3px">
           </label>
+          <label style="font-size:9.5px;color:var(--text3)">Estado de pago
+            <select class="field-input" data-rem-field="paid" style="margin-top:3px"><option value="pendiente"${m.pagado?'':' selected'}>⏳ Pendiente</option><option value="pagado"${m.pagado?' selected':''}>✅ Pagado</option></select>
+          </label>
         </div>
-        <div data-rem-preview style="font-size:10.5px;color:var(--text2);margin-top:8px">Pago por días: <b>${money(row.pagoDias)}</b>${row.sueldoBase?` · Base: <b>${money(row.sueldoBase)}</b>`:''}</div>
+        <div data-rem-preview style="font-size:10.5px;color:var(--text2);margin-top:8px">Pago por días: <b>${money(row.pagoDias)}</b>${row.sueldoBase?` · Base: <b>${money(row.sueldoBase)}</b>`:''} · <b>${m.pagado?'✅ Pagado':'⏳ Pendiente'}</b>${m.pagadoEn?` · ${remDiasEscape(formatPaidAt(m.pagadoEn))}`:''}</div>
       </div>`;
     }).join('');
   grid.querySelectorAll('.rem-dia-person').forEach(card=>{
@@ -152,9 +160,11 @@ function renderGrid(){
         rate:card.querySelector('[data-rem-field="rate"]')?.value,
         days:card.querySelector('[data-rem-field="days"]')?.value,
       });
-      const prev=card.querySelector('[data-rem-preview]');if(prev)prev.innerHTML=`Pago por días: <b>${money(row.pagoDias)}</b>${row.sueldoBase?` · Base: <b>${money(row.sueldoBase)}</b>`:''}`;
+      const paid=card.querySelector('[data-rem-field="paid"]')?.value==='pagado';
+      const prev=card.querySelector('[data-rem-preview]');if(prev)prev.innerHTML=`Pago por días: <b>${money(row.pagoDias)}</b>${row.sueldoBase?` · Base: <b>${money(row.sueldoBase)}</b>`:''} · <b>${paid?'✅ Pagado':'⏳ Pendiente'}</b>`;
     };
-    card.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',update));
+    card.querySelectorAll('input,select').forEach(inp=>inp.addEventListener('input',update));
+    card.querySelectorAll('select').forEach(inp=>inp.addEventListener('change',update));
   });
 }
 function saveGrid(){
@@ -167,9 +177,12 @@ function saveGrid(){
       rate:card.querySelector('[data-rem-field="rate"]')?.value,
       days:card.querySelector('[data-rem-field="days"]')?.value,
     });
+    const pagado=card.querySelector('[data-rem-field="paid"]')?.value==='pagado';
     if(row.sueldoBase>0)sueldos[name]=row.sueldoBase;else delete sueldos[name];
     const entry=cfg.vendedores[pk]||(cfg.vendedores[pk]={nombre:name,valorDia:0,meses:{}});
-    entry.nombre=name;entry.valorDia=row.valorDia;entry.meses=entry.meses||{};entry.meses[mk]={dias:row.dias,actualizadoEn:new Date().toISOString()};
+    entry.nombre=name;entry.valorDia=row.valorDia;entry.meses=entry.meses&&typeof entry.meses==='object'?entry.meses:{};
+    const prev=entry.meses[mk]&&typeof entry.meses[mk]==='object'?entry.meses[mk]:{},pagadoEn=pagado?(prev.pagado===true&&prev.pagadoEn?prev.pagadoEn:new Date().toISOString()):null;
+    entry.meses[mk]={...prev,dias:row.dias,pagado,pagadoEn,actualizadoEn:new Date().toISOString()};
   });
   try{
     target.localStorage.setItem(LEGACY_SUELDO_KEY,JSON.stringify(sueldos));writeCfg(cfg);
@@ -190,18 +203,19 @@ function renderLiquidacion(_totalNeto,totalComision){
   const cfg=readCfg(),sueldos=legacySueldos(),mk=monthKey();
   const rows=sellerPeople().map(p=>{
     const name=personName(p),m=currentMonthData(cfg,p,mk),calc=calcRow({base:number(sueldos[name]),rate:m.rate,days:m.days});
-    return{...calc,nombre:name,avatar:p?.avatar||'👤'};
+    return{...calc,nombre:name,avatar:p?.avatar||'👤',pagado:m.pagado,pagadoEn:m.pagadoEn};
   }).filter(r=>r.sueldoBase>0||r.valorDia>0||r.dias>0||r.pagoDias>0);
   const summary=totalSummary(rows,currentMonthCommission(mk,totalComision));renderKpi(summary);
   if(!rows.length&&summary.comision===0){liqBody.innerHTML='<div style="font-size:11px;color:var(--text3)">Configura un vendedor con valor por día y días trabajados para ver su remuneración.</div>';return;}
   const cards=rows.map(r=>`<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:11px;border:1px solid var(--border2)">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;font-weight:700">${remDiasEscape(r.avatar)} ${remDiasEscape(r.nombre)}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;font-weight:700"><span>${remDiasEscape(r.avatar)} ${remDiasEscape(r.nombre)}</span><span style="font-size:10px;color:${r.pagado?'var(--accent3)':'var(--warn)'}">${r.pagado?'✅ Pagado':'⏳ Pendiente'}</span></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:5px">
       ${r.sueldoBase?`<div><span style="color:var(--text3)">Sueldo base:</span> <b>${money(r.sueldoBase)}</b></div>`:''}
       <div><span style="color:var(--text3)">Valor día:</span> <b>${money(r.valorDia)}</b></div>
       <div><span style="color:var(--text3)">Días trabajados:</span> <b>${r.dias.toLocaleString('es-CL')}</b></div>
       <div><span style="color:var(--text3)">Pago por días:</span> <b style="color:var(--accent3)">${money(r.pagoDias)}</b></div>
       <div><span style="color:var(--text3)">Subtotal fijo:</span> <b>${money(r.subtotal)}</b></div>
+      ${r.pagadoEn?`<div><span style="color:var(--text3)">Fecha pago:</span> <b>${remDiasEscape(formatPaidAt(r.pagadoEn))}</b></div>`:''}
     </div>
   </div>`).join('');
   liqBody.innerHTML=cards+`<div style="margin-top:8px;border:1px solid var(--border2);border-radius:9px;padding:11px 14px;background:var(--surface);font-size:11px">
