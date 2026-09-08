@@ -2002,6 +2002,8 @@ async function callClaude(env, system, user, opts = {}) {
     throw new Error(`Anthropic ${r.status}: ${e.slice(0, 300)}`);
   }
   const data = await r.json();
+  // Metadatos de consumo en los logs del Worker, sin PII ni contenido del lead.
+  console.info('[anthropic-usage]', JSON.stringify({id:data.id,model:data.model,usage:data.usage,source:'lead-worker'}));
   return data.content?.find((b) => b.type === "text")?.text || "";
 }
 

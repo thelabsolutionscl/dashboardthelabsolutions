@@ -143,14 +143,15 @@ CAPACIDADES Y REGLAS:
   }
 
   // ── Contador de tokens / costo estimado de la sesión (#8) ──
-  function _kaiUpdateUsage(inTok,outTok){
+  function _kaiUpdateUsage(inTok,outTok,cacheWrite=0,cacheRead=0){
     if(!$usage) return;
     JV.usage.in += (+inTok||0); JV.usage.out += (+outTok||0);
-    // claude-sonnet-4-6: ~US$3 / millón entrada, ~US$15 / millón salida
-    const usd = JV.usage.in/1e6*3 + JV.usage.out/1e6*15;
-    const tot = JV.usage.in + JV.usage.out;
+    JV.usage.cacheWrite=(JV.usage.cacheWrite||0)+cacheWrite;
+    JV.usage.cacheRead=(JV.usage.cacheRead||0)+cacheRead;
+    const tot = JV.usage.in + JV.usage.out + JV.usage.cacheWrite + JV.usage.cacheRead;
     $usage.style.display='';
-    $usage.textContent = '≈ '+tot.toLocaleString('es-CL')+' tok · US$'+usd.toFixed(usd<0.01?4:3);
+    $usage.textContent = tot.toLocaleString('es-CL')+' tok · caché '+JV.usage.cacheRead.toLocaleString('es-CL');
+    $usage.title='Sólo KAI en esta sesión; incluye entrada, salida y caché. No es una factura ni incluye agentes delegados.';
   }
 
   // ── Botones de acción rápida bajo una respuesta (#5) ──
@@ -534,7 +535,7 @@ CAPACIDADES Y REGLAS:
         }
         if(!r.ok){ const e=await r.json().catch(()=>({})); if(r.status===401){ localStorage.removeItem('anthropic_key'); sessionStorage.removeItem('anthropic_key'); } throw new Error(e.error?.message||('API '+r.status)); }
         const reader=r.body.getReader(); const decoder=new TextDecoder();
-        let buf='', text='', stopReason=''; const blocks={}; let inTok=0,outTok=0;
+        let buf='', text='', stopReason=''; const blocks={}; let inTok=0,outTok=0,usageMeta={};
         while(true){
           const {done,value}=await reader.read(); if(done) break;
           buf+=decoder.decode(value,{stream:true});
@@ -543,7 +544,7 @@ CAPACIDADES Y REGLAS:
             const t=line.trim(); if(!t.startsWith('data:')) continue;
             const payload=t.slice(5).trim(); if(!payload||payload==='[DONE]') continue;
             let ev; try{ ev=JSON.parse(payload); }catch(e){ continue; }
-            if(ev.type==='message_start'){ inTok=ev.message?.usage?.input_tokens||0; }
+            if(ev.type==='message_start'){ usageMeta={id:ev.message?.id,model:ev.message?.model,usage:{...ev.message?.usage}}; inTok=ev.message?.usage?.input_tokens||0; }
             else if(ev.type==='content_block_start'){ const cb=ev.content_block||{}; blocks[ev.index]={type:cb.type,name:cb.name,id:cb.id,text:'',json:''}; }
             else if(ev.type==='content_block_delta'){
               const b=blocks[ev.index]||(blocks[ev.index]={type:'text',text:'',json:''});
@@ -554,7 +555,9 @@ CAPACIDADES Y REGLAS:
             else if(ev.type==='error'){ throw new Error(ev.error?.message||'Error de stream'); }
           }
         }
-        _kaiUpdateUsage(inTok,outTok);
+        usageMeta.usage={...usageMeta.usage,output_tokens:outTok};
+        if(typeof _recordClaudeUsage==='function') _recordClaudeUsage(usageMeta,'kai');
+        _kaiUpdateUsage(inTok,outTok,usageMeta.usage.cache_creation_input_tokens||0,usageMeta.usage.cache_read_input_tokens||0);
         const toolUses=Object.keys(blocks).map(k=>blocks[k]).filter(b=>b.type==='tool_use').map(b=>{ let inp={}; try{ inp=b.json?JSON.parse(b.json):{}; }catch(e){} return {id:b.id,name:b.name,input:inp}; });
         return { text, toolUses, stopReason };
       }

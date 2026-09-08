@@ -123,6 +123,7 @@ async function _simClaude(system, user, maxTokens){
   }
   if(!r.ok){const e = await r.json().catch(()=>({})); throw new Error(e.error?.message || `IA error ${r.status}`);}
   const j = await r.json();
+  if(typeof _recordClaudeUsage==='function') _recordClaudeUsage(j,'simulacion');
   return {
     texto: j.content?.find(b=>b.type==='text')?.text || '',
     truncado: j.stop_reason === 'max_tokens',
