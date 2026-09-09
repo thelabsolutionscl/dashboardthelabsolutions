@@ -160,10 +160,10 @@ test('lo que devuelve la IA se escapa antes de pintarse', () => {
   assert.match(inlFn, /escapeHtml\(s\)/);
 });
 
-test('el modelo y el tope de tokens siguen siendo los baratos', () => {
-  // Los agentes corren en Haiku a propósito (≈3× más barato que Sonnet). Un
-  // cambio de modelo aquí multiplica la cuenta sin que se note en pantalla.
-  assert.match(HTML, /const AGENT_MODEL='claude-haiku-4-5'/, 'los agentes van en Haiku');
-  assert.match(HTML, /max_tokens:1500/, 'con tope de tokens por consulta');
+test('los modelos y topes siguen una política de costo explícita', () => {
+  assert.match(HTML, /FAST:'claude-haiku-4-5'/, 'Haiku es el modelo rápido');
+  assert.match(HTML, /REASONING:'claude-sonnet-4-6'/, 'Sonnet queda explícito para razonamiento');
+  assert.match(HTML, /Math\.min\(2000,Number\(opts\.maxTokens\)\|\|800\)/, 'cada consulta tiene un techo duro');
+  assert.doesNotMatch(HTML, /claude-opus|claude-fable/i, 'el dashboard no puede seleccionar modelos caros');
   assert.match(WORKER, /AUTO_PROCESS_DAILY_CAP \|\| "200"/, 'y el procesamiento automático tiene tope diario');
 });

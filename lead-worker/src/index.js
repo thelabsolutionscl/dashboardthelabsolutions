@@ -1982,7 +1982,15 @@ Responde SOLO un objeto JSON con EXACTAMENTE estas claves:
  "resumen": "<resumen interno breve>"
 }`;
 
+const CLAUDE_ALLOWED_MODELS = new Set([
+  "claude-haiku-4-5",
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-6",
+]);
+
 async function callClaude(env, system, user, opts = {}) {
+  const requestedModel = opts.model || env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
+  const model = CLAUDE_ALLOWED_MODELS.has(requestedModel) ? requestedModel : "claude-haiku-4-5-20251001";
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -1991,8 +1999,8 @@ async function callClaude(env, system, user, opts = {}) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: opts.model || env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
-      max_tokens: opts.maxTokens || 1200,
+      model,
+      max_tokens: Math.max(128, Math.min(2000, Number(opts.maxTokens) || 800)),
       system,
       messages: [{ role: "user", content: user }],
     }),
@@ -3002,7 +3010,7 @@ Responde SOLO un objeto JSON: {"resumen":"<2-3 líneas del razonamiento>","accio
       (l.camp ? ` · campaña="${l.camp.nombre}" [${l.camp.estado}] ppto=$${l.camp.presupuesto}/día gasto=$${Math.round(l.camp.gasto)} conv=${l.camp.conversiones}` : " · SIN CAMPAÑA")).join("\n") +
     `\nTOTALES: gasto=$${Math.round(totals.gasto)} · conversiones=${totals.conversiones} · pedidos activos=${totals.activos} · tope diario total=$${cfg.capTotalDiario}`;
 
-  const raw = await callClaude(env, sys, user, { maxTokens: 2000, model: env.ADS_AUTOPILOT_MODEL || undefined });
+  const raw = await callClaude(env, sys, user, { maxTokens: 1600, model: env.ADS_AUTOPILOT_MODEL || "claude-sonnet-4-6" });
   let prop = null;
   try { prop = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); } catch (e) { /* abajo */ }
   if (!prop || !Array.isArray(prop.acciones)) return { skipped: "respuesta IA inválida" };

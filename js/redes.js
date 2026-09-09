@@ -601,7 +601,7 @@ async function _redesSuggestReply(i){
   const f=i.fields;
   const cfg=AGENTES_CFG.find(a=>a.id==='COMMUNITY_AGENT'); if(!cfg) throw new Error('Falta COMMUNITY_AGENT');
   const ctx=`Red: ${f['Red']||'—'} · Tipo: ${f['Tipo']||'Comentario'} · Usuario: @${f['Usuario']||'usuario'}\nMensaje recibido: ${f['Mensaje']||''}`;
-  const out=await callClaude(cfg.sys,ctx);
+  const out=await callAgentClaude('COMMUNITY_AGENT',cfg.sys,ctx);
   const mResp=out.match(/RESPUESTA_PUBLICA:\s*([\s\S]*?)(?=\n\s*ES_LEAD:|$)/i);
   const mLead=out.match(/ES_LEAD:\s*(s[ií]|no)/i);
   const mInt=out.match(/INTENCION:\s*([^\n]+)/i);
@@ -719,7 +719,7 @@ async function _redesRunGenerate(agentId,input,media,pedidoNum){
   try{
     const ctx=state.loaded?buildAgentContext(agentId):'';
     const full=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
-    const out=await callClaude(cfg.sys,full);
+    const out=await callAgentClaude(agentId,cfg.sys,full);
     _redesLastGen=out; _redesLastAgent=agentId; _redesLastMedia=media||''; _redesLastPedido=pedidoNum||'';
     try{AGENT_LOG.add(cfg.label,input,out);}catch(_){}
     // CAPTION/CONTENT producen contenido por red → guardable (single o split). Estratega/Tendencias = planes.
@@ -858,7 +858,7 @@ async function redesWeeklyReport(){
   body.innerHTML='<div style="color:var(--text3)">⏳ Generando reporte…</div>'; modal.style.display='flex';
   try{showAgentWorking(cfg,{verb:'está preparando el reporte de redes…',messages:['Revisando métricas de la semana…','Detectando qué funcionó mejor…','Redactando el reporte…']});}catch(e){}
   try{
-    const out=await callClaude(cfg.sys,_redesBuildMetricsContext());
+    const out=await callAgentClaude('REPORT_SOCIAL_AGENT',cfg.sys,_redesBuildMetricsContext());
     _redesReportText=out;
     body.innerHTML=`<div class="ai-response" style="white-space:normal">${formatAgentReport(out)}</div>`;
     try{AGENT_LOG.add('REPORT_SOCIAL_AGENT','Reporte semanal de redes',out);}catch(_){}
@@ -1426,7 +1426,7 @@ async function nlGenerate(){
   try{
     const ctx=_nlBuildContext(seg);
     const full=`${ctx}\n\nCONSULTA: ${cfg.pre}${input}${seg?(' | Segmento: '+seg):''}`;
-    const out=await callClaude(cfg.sys,full);
+    const out=await callAgentClaude('NEWSLETTER_AGENT',cfg.sys,full);
     _nlLastGen=out; _nlLastParsed=_nlParse(out); _nlLastSegment=seg; _nlLastInput=input;
     try{AGENT_LOG.add(cfg.label,input,out);}catch(_){}
     const p=_nlLastParsed;
@@ -1582,7 +1582,7 @@ async function nlSubjectSuggest(){
   const cfg=AGENTES_CFG.find(a=>a.id==='NEWSLETTER_AGENT'); if(!cfg){toast('Falta NEWSLETTER_AGENT','error');return;}
   const box=document.getElementById('nlSubjOpts'); if(box) box.innerHTML='<div style="font-size:11px;color:var(--text3)">⏳ Pensando 3 asuntos…</div>';
   try{
-    const out=await callClaude(cfg.sys,`Devuelve EXACTAMENTE 3 líneas de asunto de email en español para esta edición del newsletter, una por línea, SIN numerar, SIN comillas: cortas (menos de 52 caracteres), atractivas, específicas y NO spammy. Edición: "${base}". Responde solo las 3 líneas.`);
+    const out=await callAgentClaude('NEWSLETTER_AGENT',cfg.sys,`Devuelve EXACTAMENTE 3 líneas de asunto de email en español para esta edición del newsletter, una por línea, SIN numerar, SIN comillas: cortas (menos de 52 caracteres), atractivas, específicas y NO spammy. Edición: "${base}". Responde solo las 3 líneas.`,{model:CLAUDE_MODELS.FAST,maxTokens:220});
     const opts=out.split('\n').map(x=>x.replace(/^[\s\-*•\d.)]+/,'').replace(/^["“]|["”]$/g,'').trim()).filter(x=>x&&x.length<90).slice(0,3);
     if(!opts.length){ if(box) box.innerHTML='<div style="font-size:11px;color:var(--text3)">No hubo sugerencias, intenta de nuevo.</div>'; return; }
     if(box) box.innerHTML=opts.map(o=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border)"><div style="flex:1;min-width:0;font-size:12px;color:var(--text)">${escapeHtml(o)}</div>${_nlScoreChip(o)}<button class="btn btn-ghost btn-sm" onclick="nlApplySubject(this.dataset.s)" data-s="${escapeHtml(o)}">Usar</button></div>`).join('');
@@ -1718,7 +1718,7 @@ async function _redesFillGapsCore(gaps){
       if(_redesDemo || !cfg){ const c=_redesDemoCopy(g.date); copy=c.copy; hashtags=c.hashtags; }
       else{
         const fecha=g.date.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
-        const out=await callClaude(cfg.sys,`${cfg.pre||''}Crea UN post breve de Instagram para The Lab Solutions para publicar el ${fecha}. Elige un producto (neón LED, impresión 3D, trofeos/medallas, señalética) con gancho y llamado a la acción. Termina con una línea "HASHTAGS: ..." con 3-5 hashtags.`);
+        const out=await callAgentClaude('CAPTION_AGENT',cfg.sys,`${cfg.pre||''}Crea UN post breve de Instagram para The Lab Solutions para publicar el ${fecha}. Elige un producto (neón LED, impresión 3D, trofeos/medallas, señalética) con gancho y llamado a la acción. Termina con una línea "HASHTAGS: ..." con 3-5 hashtags.`);
         const mh=out.match(/HASHTAGS?:\s*([^\n]+)/i); hashtags=mh?mh[1].trim():''; copy=mh?out.replace(/HASHTAGS?:\s*[^\n]+/i,'').trim():out.trim();
       }
       const rec=await _redesWrite('Social_Posts','POST',null,{Red:red,Estado:'Programado','Fecha programada':d.toISOString(),Copy:(copy||'').slice(0,9000),Hashtags:(hashtags||'').slice(0,1000),Agente:'CAPTION_AGENT · auto',Objetivo:'Captar leads'});

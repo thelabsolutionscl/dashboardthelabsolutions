@@ -87,8 +87,8 @@ const SIM_LINEAS = {
 // salida. Una corrida de 10 conceptos cuesta del orden de $80 CLP.
 const SIM_MODEL = 'claude-haiku-4-5';
 const SIM_USD_CLP = 980;   // referencia para mostrar el costo estimado; ajústalo si el dólar se mueve fuerte
-const SIM_MAX_CONCEPTOS = 25;
-const SIM_CONCURRENCIA = 3;   // conceptos en vuelo a la vez
+const SIM_MAX_CONCEPTOS = 10; // evita corridas accidentales de 25 prompts grandes
+const SIM_CONCURRENCIA = 2;   // menos ráfagas simultáneas y menor riesgo de 429
 
 let _simRun = null;        // corrida en curso o recién terminada
 let _simBusy = false;

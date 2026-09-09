@@ -152,7 +152,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
   const ctx=state.loaded?buildAgentContext(agentId):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${contextText}`:contextText;
   try{
-    const result=await callClaude(cfg.sys+AGENT_TONE,fullInput);
+    const result=await callAgentClaude(agentId,cfg.sys+AGENT_TONE,fullInput);
     _agentInlineText=result;
     resultEl.className='agent-modal-result';
     resultEl.style.whiteSpace='normal';resultEl.innerHTML=formatAgentReport(result);
@@ -1103,7 +1103,7 @@ Responde SOLO con un objeto JSON válido, sin texto adicional ni markdown, con e
 Genera 12 títulos, 4 descripciones y 2 rutas para esta keyword. Respeta los límites de caracteres al pie de la letra.`;
   try{showAgentWorking('ADS',{verb:'está escribiendo tus anuncios…',messages:['Analizando la palabra clave…','Redactando títulos que convierten…','Cuidando los límites de caracteres…']});}catch(e){}
   try{
-    const raw=await callClaude(sys,user);
+    const raw=await callAgentClaude('ADS',sys,user);
     let obj=null;
     try{const mm=String(raw).match(/\{[\s\S]*\}/);obj=JSON.parse(mm?mm[0]:raw);}catch(e){obj=null;}
     const body=document.getElementById('adsCopyBody');
@@ -1157,7 +1157,7 @@ async function adsAutoWeeklyCheck(){
   _adsAutoRunning=true;
   try{
     const sys=AGENTES_CFG.find(a=>a.id==='ADS').sys, ctx=buildAgentContext('ADS');
-    const resp=await callClaude(sys,ctx);
+    const resp=await callAgentClaude('ADS',sys,ctx);
     localStorage.setItem('ads_auto_last_week',wk);
     try{_adsLogRecommendation(_parseAdsActions(resp),resp);}catch(e){}
     const to=localStorage.getItem('ads_auto_email')||'';
@@ -1255,7 +1255,7 @@ async function rellenarFichaNotasIA(){
       mat?`Material: ${mat}`:'',col?`Color: ${col}`:'',cant?`Cantidad: ${cant}`:'',acab?`Acabado: ${acab}`:'',
       'TAREA: redacta SOLO las notas de producción (instrucciones concretas para el operador). Sin encabezados, conciso, en viñetas o párrafos cortos.'
     ].filter(Boolean).join('\n');
-    const raw=await callClaude(cfg.sys,ctx);
+    const raw=await callAgentClaude('PRODUCTION',cfg.sys,ctx);
     const ta=document.getElementById('fichaNotas');
     ta.value=(ta.value.trim()?ta.value.trim()+'\n\n':'')+raw.trim();
     toast('✓ Notas generadas con IA','success');
@@ -1317,7 +1317,7 @@ async function runAgentChain(pedidoId,solicitudOverride){
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='PRODUCTION');
     const ctx=state.loaded?buildAgentContext('PRODUCTION'):'';
-    ficha=await callClaude(cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
+    ficha=await callAgentClaude('PRODUCTION',cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
     try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,ficha);}catch(e){}
     const existing=parseFichaData(f['Ficha Tecnica'])||{};
     existing.instrucciones=ficha;
@@ -1340,7 +1340,7 @@ async function runAgentChain(pedidoId,solicitudOverride){
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='QA');
     const ctx=state.loaded?buildAgentContext('QA'):'';
-    checklist=await callClaude(cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
+    checklist=await callAgentClaude('QA',cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
     try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,checklist);}catch(e){}
     const qaItems=_parseQAChecklist(checklist);
     await airtableWrite('Pedidos','PATCH',pedidoId,{'Notas QA':qaItems?JSON.stringify(qaItems):checklist});

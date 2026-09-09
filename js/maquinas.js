@@ -1070,7 +1070,7 @@ async function audit3DReport(){
   const out=document.getElementById('audit3DAiOut');if(out){out.style.display='block';out.textContent='🧠 Analizando el estado del parque…';}
   if(!window._audit3D)await audit3DRun();
   try{showAgentWorking('MANTENCION3D',{verb:'está auditando el parque de impresoras…',messages:['Revisando el estado de cada máquina…','Detectando errores y mantenciones…','Sugiriendo calibraciones…']});}catch(e){}
-  try{const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id==='MANTENCION3D'):null;const resp=await callClaude(cfg?cfg.sys:'',buildAgentContext('MANTENCION3D'));if(out)out.textContent=resp;}
+  try{const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id==='MANTENCION3D'):null;const resp=await callAgentClaude('MANTENCION3D',cfg?cfg.sys:'',buildAgentContext('MANTENCION3D'));if(out)out.textContent=resp;}
   catch(e){if(out)out.textContent='Error IA: '+(e&&e.message||e);}
   finally{try{hideAgentWorking();}catch(e){}}
 }

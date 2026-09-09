@@ -538,7 +538,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const btn=el('slBtnIA');btn.disabled=true;btn.textContent='⏳ Analizando…';
     try{showAgentWorking('PRODUCTION',{name:'KAI-Slicer',emoji:'🖨️',verb:'está calculando los parámetros de impresión…',messages:['Analizando la geometría de la pieza…','Eligiendo capas, relleno y soportes…','Ajustando velocidad y temperatura…']});}catch(e){}
     try{
-      const out=await callClaude(IA_SYS,resumen());
+      const out=await callAgentClaude('PRODUCTION',IA_SYS,resumen());
       const a=out.indexOf('{'),b=out.lastIndexOf('}');
       if(a<0||b<=a)throw new Error('respuesta sin JSON');
       const p=JSON.parse(out.slice(a,b+1));

@@ -295,7 +295,7 @@ CAPACIDADES Y REGLAS:
     try{
       const ctx=(typeof buildAgentContext==='function'&&typeof state!=='undefined'&&state.loaded)?buildAgentContext(agentId):'';
       const fullInput=ctx?`${ctx}\n\nCONSULTA: ${consulta}`:consulta;
-      const result=await callClaude(cfg.sys,fullInput);
+      const result=await callAgentClaude(agentId,cfg.sys,fullInput);
       $res.classList.remove('jvs-cursor');
       $res.innerHTML=`<div style="font-size:10px;color:var(--text3);font-weight:700;margin-bottom:4px">[${escapeHtml(cfg.label)}]</div>`+formatRichText(result);
       $log.scrollTop=$log.scrollHeight;
@@ -475,7 +475,7 @@ CAPACIDADES Y REGLAS:
         if(typeof agenteVisible==='function'&&!agenteVisible(cfg)) return 'Ese agente pertenece a una sección que este usuario no tiene.';
         addMsg('a','Delegando a '+cfg.label+'...');
         const ctx=(typeof buildAgentContext==='function'&&typeof state!=='undefined'&&state.loaded)?buildAgentContext(agentId):'';
-        const result=await callClaude(cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+(input.instruccion||''));
+        const result=await callAgentClaude(agentId,cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+(input.instruccion||''));
         try{ if(typeof AGENT_LOG!=='undefined') AGENT_LOG.add(cfg.label,'KAI: '+(input.instruccion||''),result); }catch(e){}
         return 'Resultado de '+cfg.label+':\n'+result;
       }
@@ -562,11 +562,12 @@ CAPACIDADES Y REGLAS:
         return { text, toolUses, stopReason };
       }
 
-      // Orquesta rondas hasta que el modelo deje de pedir herramientas (tope 4)
+      // Orquesta rondas hasta que el modelo deje de pedir herramientas (tope 3).
+      // Un turno normal usa una; tres alcanzan para consulta → acción → resumen.
       JV.thinking=false; setState('speaking'); $typ.classList.remove('jvs-cursor');
-      let convo=JV.history.slice(-12).map(m=>({role:m.role,content:m.content}));
+      let convo=JV.history.slice(-8).map(m=>({role:m.role,content:m.content}));
       let guard=0;
-      while(guard++<4){
+      while(guard++<3){
         const res=await streamRound(convo);
         const shown=stripTags(res.text||'').trim();
         if(shown){ JV._accum += (JV._accum?'\n':'')+shown; $typ.textContent=JV._accum; }
@@ -587,7 +588,7 @@ CAPACIDADES Y REGLAS:
       _kaiRenderButtons(JV._btns);
       $log.scrollTop=$log.scrollHeight;
       JV.history.push({role:'assistant',content:(clean||'Listo.')});
-      if(JV.history.length>14) JV.history=JV.history.slice(-12);
+      if(JV.history.length>10) JV.history=JV.history.slice(-8);
       _kaiPersist();
       JV.busy=false;
 

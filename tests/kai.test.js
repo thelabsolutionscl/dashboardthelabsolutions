@@ -73,7 +73,7 @@ test('el chat no es la puerta de atrás para correr un agente vetado', () => {
   const del = trozo(KAI, "if(name==='delegar')", 'return \'Resultado de \'');
   assert.match(del, /agenteVisible\(cfg\)/, 'delegar debe comprobar el permiso del agente');
   const iVis = del.indexOf('agenteVisible');
-  const iRun = del.indexOf('callClaude(');
+  const iRun = del.indexOf('callAgentClaude(');
   assert.ok(iVis > 0 && iRun > iVis, 'la comprobación va ANTES de llamar al modelo');
 });
 
@@ -96,4 +96,11 @@ test('navegar y abrir_formulario se apoyan en el guardia que ya existe', () => {
   }
   const st = trozo(HTML, 'function switchTab(name)', '\nfunction ');
   assert.match(st, /No tienes acceso a esta sección/, 'y switchTab sigue siendo el que corta');
+});
+
+test('KAI cachea reglas estables y limita historial y rondas pagadas', () => {
+  assert.match(KAI, /cache_control:\{type:'ephemeral'\}/, 'las reglas estables deben usar prompt caching');
+  assert.match(KAI, /JV\.history\.slice\(-8\)/, 'no debe reenviar una conversación ilimitada');
+  assert.match(KAI, /while\(guard\+\+<3\)/, 'un turno no puede encadenar más de tres generaciones');
+  assert.match(KAI, /model:'claude-sonnet-4-6', max_tokens:1024/, 'KAI conserva Sonnet con salida acotada');
 });

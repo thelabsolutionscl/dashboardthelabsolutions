@@ -1,6 +1,14 @@
 const AIRTABLE_BASE = 'https://api.airtable.com';
 const ANTHROPIC_BASE = 'https://api.anthropic.com';
 const OPENAI_BASE = 'https://api.openai.com';
+// Defensa de costo en el servidor: aunque alguien manipule el JavaScript del
+// navegador, el proxy nunca permite Opus, Fable ni modelos futuros no revisados.
+const ANTHROPIC_ALLOWED_MODELS = new Set([
+  'claude-haiku-4-5',
+  'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-6',
+]);
+const ANTHROPIC_MAX_OUTPUT_TOKENS = 4000;
 
 // Solo se aceptan peticiones desde estos orígenes (el dashboard). Así, si la
 // APP_KEY se filtrara (va horneada en el HTML público), no sirve desde otro sitio.
@@ -77,9 +85,20 @@ export default {
 
     // ── Anthropic (Claude) — la API key vive como secreto del Worker ──
     // El dashboard llama a:  <worker>/anthropic/v1/messages
-    if (url.pathname === '/anthropic/v1/messages' || url.pathname.startsWith('/anthropic/')) {
+    if (url.pathname === '/anthropic/v1/messages') {
       if (!env.ANTHROPIC_TOKEN) {
-        return json({ error: 'Worker misconfigured: missing ANTHROPIC_TOKEN secret' }, 500);
+        return json({ error: 'Worker misconfigured: missing ANTHROPIC_TOKEN secret' }, 500, CORS);
+      }
+      if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, CORS);
+      let payload;
+      try { payload = await readAnthropicJson(request); }
+      catch (_) { return json({ error: 'Invalid Anthropic JSON body' }, 400, CORS); }
+      if (!payload || !ANTHROPIC_ALLOWED_MODELS.has(payload.model)) {
+        return json({ error: 'Anthropic model not allowed by cost policy' }, 403, CORS);
+      }
+      const maxTokens = Number(payload.max_tokens);
+      if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > ANTHROPIC_MAX_OUTPUT_TOKENS) {
+        return json({ error: `max_tokens must be between 1 and ${ANTHROPIC_MAX_OUTPUT_TOKENS}` }, 400, CORS);
       }
       const target = ANTHROPIC_BASE + url.pathname.replace(/^\/anthropic/, '') + url.search;
       const headers = new Headers();
@@ -95,6 +114,9 @@ export default {
       Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
       return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
     }
+
+    // No funciona como proxy Anthropic genérico: solo Messages está expuesto.
+    if (url.pathname.startsWith('/anthropic/')) return json({ error: 'Anthropic endpoint not allowed' }, 404, CORS);
 
     // ── OpenAI (visión + generación de imágenes de la ficha propuesta) ──
     // La API key vive como secreto del Worker; el navegador NO puede llamar a
@@ -146,6 +168,15 @@ export default {
     return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   },
 };
+
+async function readAnthropicJson(request) {
+  // Request real de Cloudflare: clone evita consumir el stream que luego se
+  // reenvía. El fallback string mantiene simples las pruebas unitarias.
+  if (request && typeof request.clone === 'function') return request.clone().json();
+  if (typeof request.body === 'string') return JSON.parse(request.body);
+  if (request.body && typeof request.body.text === 'function') return JSON.parse(await request.body.text());
+  throw new Error('body unavailable');
+}
 
 function json(data, status = 200, corsHeaders = cors('')) {
   return new Response(JSON.stringify(data), {

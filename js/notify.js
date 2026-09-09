@@ -331,7 +331,7 @@ const NOTIFY={
           const ceoCfg=AGENTES_CFG.find(a=>a.id==='CEO');
           if(ceoCfg){
             const ctx=state.loaded?buildAgentContext('CEO'):'';
-            const analysis=await callClaude(ceoCfg.sys,ctx+'\n\nCONSULTA: Genera el reporte ejecutivo del día.');
+            const analysis=await callAgentClaude('CEO',ceoCfg.sys,ctx+'\n\nCONSULTA: Genera el reporte ejecutivo del día.');
             try{AGENT_LOG.add(ceoCfg.label,'Resumen diario automático',analysis);}catch(e){}
             ceoHtml=`<div style="margin-top:20px;background:#1a1a1a;border-radius:8px;padding:16px">
 <h3 style="color:#00f3ff;margin:0 0 10px;font-size:14px">📊 Análisis CEO_AGENT</h3>

@@ -6454,7 +6454,7 @@ async function runSupplierSearch(prefix='ss'){
   const query=`PRODUCTO: ${producto}\nCATEGORÍA: ${cat||'Sin especificar'}\nMERCADO: ${mercadoLabel}\nCANTIDAD REQUERIDA: ${cantidad||'No especificada'}\nPRESUPUESTO MÁX: ${presupuesto||'No especificado'}\nPRIORIDAD: ${prioridad}`;
   try{showAgentWorking('SUPPLIER',{name:'Sourcing',emoji:'🔍',verb:'está buscando proveedores para ti…',messages:['Rastreando catálogos y marketplaces…','Comparando precios y plazos…','Filtrando por calidad y MOQ…','Armando la recomendación…']});}catch(e){}
   try{
-    const raw=await callClaude(SUPPLIER_SYS,query);
+    const raw=await callAgentClaude('SUPPLIER',SUPPLIER_SYS,query);
     renderSupplierResults(raw,producto,prefix);
   }catch(e){if(res) res.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-x-circle"/></svg></div>${escapeHtml(e.message)}</div>`;}
   finally{try{hideAgentWorking();}catch(e){}}
@@ -8451,19 +8451,42 @@ function _proxyCfg(){
 // ¿Hay CÓMO llamar a Claude? (proxy configurado O key local) — las compuertas de
 // features IA deben preguntar esto, no si existe una key en el navegador.
 function hasClaudeAccess(){return !!(_proxyCfg()||getAnthropicKey());}
-async function callClaude(system,user){
+async function callClaude(system,user,opts={}){
   // Con proxy: la API key de Anthropic vive en el Worker, no en el navegador
   const px=_proxyCfg();
-  if(px)return _callClaudeViaProxy(system,user,px);
+  if(px)return _callClaudeViaProxy(system,user,px,opts);
   let k=getAnthropicKey();
-  if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key));}catch(e){rej(e);}});});}
-  return _callClaudeRaw(system,user,k);
+  if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key,opts));}catch(e){rej(e);}});});}
+  return _callClaudeRaw(system,user,k,opts);
 }
-// Modelo de los agentes: Haiku 4.5 (~3× más barato que Sonnet: US$1/$5 vs US$3/$15 por millón
-// de tokens). Suficiente para redactar mensajes de reactivación, correos y seguimientos.
-// KAI (chat con herramientas) sigue en Sonnet aparte, en js/kai.js.
-const AGENT_MODEL='claude-haiku-4-5';
-const _CLAUDE_BODY=(system,user)=>JSON.stringify({model:AGENT_MODEL,max_tokens:1500,system,messages:[{role:'user',content:user}]});
+// Política central de modelos/costo. Haiku resuelve redacción y extracción; Sonnet
+// queda reservado para decisiones con datos, estrategia o diagnóstico técnico.
+const CLAUDE_MODELS=Object.freeze({FAST:'claude-haiku-4-5',REASONING:'claude-sonnet-4-6'});
+const AGENT_MODEL=CLAUDE_MODELS.FAST;
+const AGENT_AI_POLICY=Object.freeze({
+  SALES:{model:CLAUDE_MODELS.FAST,maxTokens:650}, QUOTE:{model:CLAUDE_MODELS.FAST,maxTokens:850},
+  QA:{model:CLAUDE_MODELS.FAST,maxTokens:600}, FOLLOWUP:{model:CLAUDE_MODELS.FAST,maxTokens:450},
+  ONBOARDING:{model:CLAUDE_MODELS.FAST,maxTokens:700}, REPCLIENTE:{model:CLAUDE_MODELS.FAST,maxTokens:550},
+  LINKEDIN:{model:CLAUDE_MODELS.FAST,maxTokens:650}, CAPTION_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:600},
+  COMMUNITY_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:400},
+  PRODUCTION:{model:CLAUDE_MODELS.REASONING,maxTokens:1000}, MANTENCION3D:{model:CLAUDE_MODELS.REASONING,maxTokens:900},
+  CEO:{model:CLAUDE_MODELS.REASONING,maxTokens:1200}, FINANCE:{model:CLAUDE_MODELS.REASONING,maxTokens:1200},
+  ADS:{model:CLAUDE_MODELS.REASONING,maxTokens:1400}, SOCIAL_ADS_AGENT:{model:CLAUDE_MODELS.REASONING,maxTokens:1200},
+  SOCIAL_STRATEGIST:{model:CLAUDE_MODELS.REASONING,maxTokens:1100}, REPORT_SOCIAL_AGENT:{model:CLAUDE_MODELS.REASONING,maxTokens:900},
+  CONTENT:{model:CLAUDE_MODELS.REASONING,maxTokens:1000}, NEWSLETTER_AGENT:{model:CLAUDE_MODELS.REASONING,maxTokens:1000},
+  TREND_AGENT:{model:CLAUDE_MODELS.REASONING,maxTokens:900}, LEADGEN:{model:CLAUDE_MODELS.REASONING,maxTokens:1000},
+  SUPPLIER:{model:CLAUDE_MODELS.REASONING,maxTokens:1000}, SEO:{model:CLAUDE_MODELS.FAST,maxTokens:650}
+});
+function agentAiPolicy(agentId,overrides={}){
+  const base=AGENT_AI_POLICY[String(agentId||'').toUpperCase()]||{model:CLAUDE_MODELS.FAST,maxTokens:800};
+  return {...base,...overrides,source:String(agentId||overrides.source||'agentes').toLowerCase()};
+}
+function callAgentClaude(agentId,system,user,overrides={}){return callClaude(system,user,agentAiPolicy(agentId,overrides));}
+const _CLAUDE_BODY=(system,user,opts={})=>JSON.stringify({
+  model:opts.model||AGENT_MODEL,
+  max_tokens:Math.max(128,Math.min(2000,Number(opts.maxTokens)||800)),
+  system,messages:[{role:'user',content:user}]
+});
 // Diagnóstico local, no facturación: sólo metadatos, nunca prompts ni respuestas.
 // La conciliación entre dispositivos debe hacerse con Usage de Anthropic.
 function _recordClaudeUsage(j,source='agentes'){
@@ -8478,7 +8501,7 @@ function _recordClaudeUsage(j,source='agentes'){
     console.info('[anthropic-usage]',row);
   }catch(e){} // un almacenamiento bloqueado no debe romper una respuesta pagada
 }
-function _claudeText(j){_recordClaudeUsage(j);return j.content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
+function _claudeText(j,source){_recordClaudeUsage(j,source);return j.content?.find(b=>b.type==='text')?.text||'Sin respuesta';}
 // Llamada a Claude con tiempo límite y reintentos. Los 21 agentes pasaban por un
 // fetch pelado: si Anthropic o el proxy se colgaban, el modal se quedaba en "está
 // pensando…" para siempre, sin forma de saber que ya no iba a llegar nada. Y un
@@ -8508,21 +8531,21 @@ async function _claudeHttp(url,opts,{reintentos=2,limite=60000}={}){
   }
   throw ultimo||new Error('No se pudo consultar a la IA');
 }
-async function _callClaudeViaProxy(system,user,px){
+async function _callClaudeViaProxy(system,user,px,opts={}){
   // No mandamos 'anthropic-version' como header: dispara un preflight CORS que el Worker podría no permitir.
   // El Worker la inyecta por defecto. Sólo 'Content-Type' y 'X-App-Key' (ambos ya permitidos por el Worker).
   let r;
   try{
-    r=await _claudeHttp(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key},body:_CLAUDE_BODY(system,user)});
+    r=await _claudeHttp(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key},body:_CLAUDE_BODY(system,user,opts)});
   }catch(e){
     // Un vencimiento por tiempo se explica solo; no lo disfraces de "revisa la URL".
     if(/no respondió en \d+ segundos/.test(e.message||'')) throw e;
     throw new Error('no se pudo conectar al proxy IA — revisa la URL/clave en Mi cuenta → Proxy y que el Worker esté desplegado');
   }
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`Proxy IA error ${r.status}`);}
-  return _claudeText(await r.json());
+  return _claudeText(await r.json(),opts.source);
 }
-async function _callClaudeRaw(system,user,k){const sk=k.replace(/[^\x20-\x7E]/g,'').trim();const r=await _claudeHttp('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':sk,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:new Blob([_CLAUDE_BODY(system,user)],{type:'application/json'})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return _claudeText(await r.json());}
+async function _callClaudeRaw(system,user,k,opts={}){const sk=k.replace(/[^\x20-\x7E]/g,'').trim();const r=await _claudeHttp('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':sk,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:new Blob([_CLAUDE_BODY(system,user,opts)],{type:'application/json'})});if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===401){localStorage.removeItem('anthropic_key');sessionStorage.removeItem('anthropic_key');}throw new Error(e.error?.message||`API error ${r.status}`);}return _claudeText(await r.json(),opts.source);}
 
 // ── HELPERS ───────────────────────────────────────────────────
 function getMargenCot(f){const t=f['Total final (CLP)']||0,s=f['Subtotal (CLP)']||0;if(t<=0||s<=0) return null;return((t/1.19)-s)/(t/1.19)*100;}
@@ -13720,7 +13743,7 @@ async function crearReporte(){
   const ceoCfg=typeof AGENTES_CFG!=='undefined'?AGENTES_CFG.find(a=>a.id==='CEO'):null;
   const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
   const liveCtx=(ceoCfg&&state.loaded)?buildAgentContext('CEO')+'\n\n':'';
-  const response=await callClaude(sys,`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
+  const response=await callAgentClaude('CEO',sys,`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
   out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(response);
   try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response);}catch(e){}
   const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':hoyCL(),'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
@@ -15773,7 +15796,7 @@ async function runAgent(id){
   const ctx=state.loaded?buildAgentContext(id):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
   try{
-    let _r=await callClaude(cfg.sys+AGENT_TONE,fullInput);
+    let _r=await callAgentClaude(id,cfg.sys+AGENT_TONE,fullInput);
     try{AGENT_LOG.add(cfg.label,input,_r);}catch(e){}
     try{ofCelebrate(cfg.label);}catch(e){}   // 🎉 reacción en la Oficina Virtual al completar
     const _oldIns=document.getElementById('qins_QUOTE');if(_oldIns) _oldIns.remove();

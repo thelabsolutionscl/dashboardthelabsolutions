@@ -128,7 +128,7 @@ async function seoOptimizeIA(){
     for(let i=0;i<rows.length;i+=3){
       out.innerHTML='<div class="loading-state" style="padding:14px 0"><div class="spinner"></div> La IA está redactando propuestas… '+Math.min(i+3,rows.length)+'/'+rows.length+' páginas</div>';
       const batch=rows.slice(i,i+3).map(function(r){return {url:r.url,score:r.score,problemas:r.checks.filter(function(c){return c.level!=='ok';}).map(function(c){return c.label+': '+(c.detail||'');})};});
-      const raw=await callClaude(SEO_IA_SYS,JSON.stringify(batch));
+      const raw=await callAgentClaude('SEO',SEO_IA_SYS,JSON.stringify(batch));
       const start=raw.indexOf('{');
       if(start<0) throw new Error('la IA no devolvió JSON');
       const j=JSON.parse(raw.slice(start,raw.lastIndexOf('}')+1));
@@ -290,7 +290,7 @@ Genera:
 - Meta description: máximo 155 caracteres, persuasiva con beneficio claro y CTA
 
 Responde SOLO en JSON: {"title":"...","description":"..."}`;
-    const raw=await callClaude(system,user);
+    const raw=await callAgentClaude('SEO',system,user);
     const json=JSON.parse(raw.replace(/```json|```/g,'').trim());
     if(json.title){document.getElementById(tid).value=json.title;seoCounter(document.getElementById(tid),60,tid+'-cnt');}
     if(json.description){document.getElementById(did).value=json.description;seoCounter(document.getElementById(did),155,did+'-cnt');}
@@ -1192,7 +1192,7 @@ async function iaBuildCampaign(){
   try{
     let ctx='';
     try{ if(typeof state!=='undefined'&&state.loaded&&window._adsLastData&&!window._adsLastData.demo) ctx=('\n\nDATOS ACTUALES DE LA CUENTA (referencia):\n'+buildAgentContext('ADS')).slice(0,3500); }catch(e){}
-    const raw=await callClaude(ADS_BUILDER_SYS,'BRIEF: '+q+ctx+'\n\nDevuelve SOLO el JSON.');
+    const raw=await callAgentClaude('ADS',ADS_BUILDER_SYS,'BRIEF: '+q+ctx+'\n\nDevuelve SOLO el JSON.');
     const prop=_parseCampaignJSON(raw);
     if(!prop||!prop.nombre){toast('La IA no devolvió una campaña válida — reintenta','error');return;}
     _applyIACampaign(prop);
