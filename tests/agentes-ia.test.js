@@ -53,7 +53,7 @@ test('una IA que no responde corta sola en vez de dejar el modal colgado', async
   assert.notEqual(err, COLGADO, 'la llamada quedó colgada: no hay tiempo límite');
   assert.ok(err, 'debe rendirse, no esperar para siempre');
   assert.match(err.message, /no respondió en \d+ segundos/, 'y explicarlo en castellano');
-  assert.equal(intentos, 2, 'reintenta antes de rendirse');
+  assert.equal(intentos, 1, 'no duplica una generación cuyo resultado es desconocido');
   assert.ok(Date.now() - t0 < 4000, 'sin quedarse pegado');
 });
 

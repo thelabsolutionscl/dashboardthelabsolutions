@@ -764,7 +764,7 @@ function runAdsCampaignAgent(id){
   const cpa=camp.conversiones>0?Math.round(camp.gasto/camp.conversiones):0;
   const ro=camp.gasto>0&&(camp.valor_conversion||0)>0?(camp.valor_conversion/camp.gasto).toFixed(2):0;
   const util=camp.presupuesto>0?Math.round(camp.gasto/days/camp.presupuesto*100):0;
-  const ctx=buildAgentContext('ADS')+`\n\nANALIZA EN PROFUNDIDAD SÓLO ESTA CAMPAÑA:\nid=${camp.id} "${camp.nombre}" [${camp.estado}] · ${days} días\nPpto ${fmtMoney(camp.presupuesto||0)}/día (${util}% uso) · Gasto ${fmtMoney(camp.gasto||0)} · CTR ${ctr}% · CPC ${fmtMoney(cpc)} · Conv ${camp.conversiones||0} · CPA ${camp.conversiones>0?fmtMoney(cpa):'—'} · ROAS-Google ${(camp.valor_conversion||0)>0?ro+'x':'—'}\nDa un diagnóstico específico y las acciones concretas (con [ACTIONS]) para esta campaña. Si la muestra es chica, dilo.`;
+  const ctx=`\n\nANALIZA EN PROFUNDIDAD SÓLO ESTA CAMPAÑA:\nid=${camp.id} "${camp.nombre}" [${camp.estado}] · ${days} días\nPpto ${fmtMoney(camp.presupuesto||0)}/día (${util}% uso) · Gasto ${fmtMoney(camp.gasto||0)} · CTR ${ctr}% · CPC ${fmtMoney(cpc)} · Conv ${camp.conversiones||0} · CPA ${camp.conversiones>0?fmtMoney(cpa):'—'} · ROAS-Google ${(camp.valor_conversion||0)>0?ro+'x':'—'}\nDa un diagnóstico específico y las acciones concretas (con [ACTIONS]) para esta campaña. Si la muestra es chica, dilo.`;
   runAgentInline('ADS',ctx,(result)=>{
     const actions=_parseAdsActions(result);window._adsAgentActions=actions;
     const rEl=document.getElementById('agentInlineResult');if(rEl){rEl.style.whiteSpace='normal';rEl.innerHTML=formatAgentReport(result);}

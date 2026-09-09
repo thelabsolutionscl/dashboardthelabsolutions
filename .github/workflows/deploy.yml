@@ -35,7 +35,6 @@ jobs:
           SII_WORKER_KEY: ${{ secrets.SII_WORKER_KEY }}   # clave del worker tributario (ver sii-worker)
           SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
-          ANTHROPIC_KEY: ${{ secrets.CLAUDE }}          # el secret se llama CLAUDE
           PROXY_URL: ${{ secrets.PROXY_URL }}
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
           PRINTER_TUNNEL: ${{ secrets.PRINTER_TUNNEL }}
@@ -55,8 +54,10 @@ jobs:
             echo "Modo proxy: AIRTABLE_TOKEN y ANTHROPIC_KEY no se inyectan en el HTML."
           else
             sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
-            sed -i "s|%%ANTHROPIC_KEY%%|${ANTHROPIC_KEY}|g" index.html
           fi
+          # Claude nunca se publica como credencial en el HTML, incluso sin proxy.
+          # El placeholder queda vacío; se configura el proxy o una clave local.
+          sed -i 's|%%ANTHROPIC_KEY%%||g' index.html
           sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
           sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
           # Portal del cliente: lo sirve el lead-worker. El dashboard solo necesita

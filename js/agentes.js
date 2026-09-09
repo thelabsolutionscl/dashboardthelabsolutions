@@ -1132,7 +1132,7 @@ Genera 12 títulos, 4 descripciones y 2 rutas para esta keyword. Respeta los lí
 function runAdsAgent(){
   if(!window._adsLastData){toast('Carga primero los datos de Google Ads','error');return;}
   if(window._adsLastData.demo){toast('Datos DEMO — conecta tu cuenta para acciones reales','info');}
-  const ctx=buildAgentContext('ADS');
+  const ctx='Analiza la cuenta de Google Ads y propone acciones concretas.';
   runAgentInline('ADS',ctx,(result)=>{
     const actions=_parseAdsActions(result);window._adsAgentActions=actions;
     // limpiar el bloque [ACTIONS] del texto visible
@@ -1438,4 +1438,3 @@ const AGENT_LOG={
   },
   clear(){if(!confirm('¿Borrar el historial local de agentes? (el historial compartido en Airtable no se borra)')) return;this._runs=[];this._merged=null;try{localStorage.removeItem(this._key);}catch(e){}this.render();}
 };
-
