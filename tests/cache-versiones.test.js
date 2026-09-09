@@ -57,15 +57,19 @@ test('todo lo propio que carga la página va versionado', () => {
 
 test('el shell se revalida contra el servidor en vez de salir de la caché HTTP', () => {
   const nav = SW.slice(SW.indexOf("req.mode === 'navigate'"), SW.indexOf("url.searchParams.has('v')"));
-  assert.match(nav, /fetch\(req,\s*\{\s*cache:\s*'no-cache'\s*\}\)/,
-    'la navegación debe forzar revalidación');
-  assert.match(nav, /catch\(\)\s*=>\s*caches\.match\(req\)|\.catch\(\(\) => caches\.match\(req\)\)/,
-    'y conservar el respaldo sin conexión');
+  // `reload` es incluso más estricto que `no-cache`: salta una respuesta HTTP
+  // fresca y obliga a ir a red. Ambas políticas cumplen la garantía buscada.
+  assert.match(nav, /fetch\(req,\s*\{\s*cache:\s*'(?:reload|no-cache)'\s*\}\)/,
+    'la navegación debe forzar red/revalidación');
+  // El HTML viejo no se guarda deliberadamente: mezclar shell y assets de builds
+  // distintos es peor que mostrar una pantalla offline autocontenida.
+  assert.match(nav, /\.catch\(\(\)\s*=>\s*offlineNavigationResponse\(\)\)/,
+    'y debe mostrar el respaldo offline seguro');
 });
 
 test('los archivos versionados se sirven de caché y los viejos se purgan', () => {
   assert.match(SW, /url\.searchParams\.has\('v'\)/, 'los ?v= son inmutables por URL: caché primero');
-  assert.match(SW, /keys\.filter\(k => k\.startsWith\('thelab-'\) && k !== CACHE\)\.map\(k => caches\.delete\(k\)\)/,
+  assert.match(SW, /keys\s*\n?\s*\.filter\(\s*(\w+)\s*=>\s*\1\.startsWith\('thelab-'\)\s*&&\s*\1\s*!==\s*CACHE\)\s*\n?\s*\.map\(\s*(\w+)\s*=>\s*caches\.delete\(\2\)\)/,
     'al activar una versión nueva deben borrarse las cachés anteriores');
   assert.match(SW, /skipWaiting\(\)/);
   assert.match(SW, /clients\.claim\(\)/);
