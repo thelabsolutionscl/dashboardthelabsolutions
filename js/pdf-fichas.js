@@ -412,21 +412,14 @@ async function testIAKey(){
     if(r.ok) lines.push('✅ GPT-4o-mini: OK');
     else{const e=await r.json();lines.push('❌ GPT-4o-mini: '+(e.error?.message||r.status));}
   }catch(e){lines.push('❌ GPT-4o-mini: '+e.message);}
-  // Test 2: gpt-image-1 (nuevo modelo), con fallback a dall-e-3
+  // Test 2: único modelo de imágenes autorizado por la política de costo
   res.innerHTML='🔄 Probando generación de imágenes...';
   try{
     const r=await _openaiFetch('/v1/images/generations',{directKey:key,
       body:JSON.stringify({model:'gpt-image-1',prompt:'a red apple on white background',n:1,size:'1024x1024',quality:'low'})
     });
     if(r.ok){lines.push('✅ gpt-image-1: OK — imágenes funcionan');}
-    else{
-      const e=await r.json();const msg=e.error?.message||r.status;
-      const r2=await _openaiFetch('/v1/images/generations',{directKey:key,
-        body:JSON.stringify({model:'dall-e-3',prompt:'a red apple',n:1,size:'1024x1024',quality:'standard'})
-      });
-      if(r2.ok){lines.push('✅ dall-e-3: OK — imágenes funcionan');}
-      else{const e2=await r2.json();lines.push('❌ Imágenes: gpt-image-1='+msg+' / dall-e-3='+(e2.error?.message||r2.status));}
-    }
+    else{const e=await r.json();lines.push('❌ gpt-image-1: '+(e.error?.message||r.status));}
   }catch(e){lines.push('❌ Imágenes: '+e.message);}
   const allOk=lines.every(l=>l.startsWith('✅'));
   res.style.background=allOk?'#d4edda':'#f8d7da';
@@ -593,7 +586,7 @@ async function generarVistasIA(idx, onlyCampo){
       setStatus('🔍 Analizando imagen con GPT-4o...');
       try{
         const visionRes=await _openaiFetch('/v1/chat/completions',{
-          body:JSON.stringify({model:'gpt-4o',max_tokens:150,messages:[{role:'user',content:[
+          body:JSON.stringify({model:'gpt-4o-mini',max_tokens:150,messages:[{role:'user',content:[
             {type:'image_url',image_url:{url:rawImg.dataUrl,detail:'low'}},
             {type:'text',text:'Describe this product concisely for a luxury product photography prompt. Include: product type, materials, colors, shape, key features. English only, max 50 words, no punctuation at end.'}
           ]}]})
@@ -678,15 +671,12 @@ async function generarVistasIA(idx, onlyCampo){
           try{
             setStatus('🎨 Generando '+v.label+' desde texto...');
             const fullPrompt='Entire product fully visible, NOT cropped, generous white margins on all sides, product centered at 65% of frame. '+v.prompt+'. Pure white background (#FFFFFF), background removed, no shadows. Product: '+descripcion.slice(0,200);
-            let r=await _openaiFetch('/v1/images/generations',{
+            const r=await _openaiFetch('/v1/images/generations',{
               body:JSON.stringify({model:'gpt-image-1',prompt:fullPrompt,n:1,size:'1024x1024',quality:'low'})
             });
             if(!r.ok){
               const e1=await r.json();
-              r=await _openaiFetch('/v1/images/generations',{
-                body:JSON.stringify({model:'dall-e-3',prompt:fullPrompt,n:1,size:'1024x1024',quality:'standard',response_format:'b64_json'})
-              });
-              if(!r.ok){const e2=await r.json();throw new Error('gpt-image-1: '+(e1.error?.message||'?')+' / dall-e-3: '+(e2.error?.message||r.statusText));}
+              throw new Error('gpt-image-1: '+(e1.error?.message||r.statusText));
             }
             const d=await r.json();
             imgData=d.data[0].b64_json?'data:image/png;base64,'+d.data[0].b64_json:null;
@@ -818,26 +808,4 @@ function renderFPItems(){
           </div>
         </div>
         <div>
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:10px">Fotos del producto</div>
-          <div class="fp-views-grid">
-            ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Lateral'}].map(({c,l})=>`
-              <div>
-                <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:6px 4px;border-radius:8px 8px 0 0;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase">${l}</div>
-                <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
-                  <img loading="lazy" decoding="async" id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:#fff;display:${item[c]?'block':'none'}">
-                  <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;color:var(--text3)">
-                    <span style="font-size:22px">📷</span>
-                    <span style="font-size:9px;font-weight:600">Subir foto</span>
-                  </div>
-                  <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${c}')">
-                </label>
-                <textarea class="field-input" rows="2" title="Prompt de la IA para esta vista — edítalo si la vista sale mal y regenera solo esta" placeholder="Prompt de esta vista (ángulo/indicaciones para la IA)" oninput="_fpSetPrompt(${idx},'${c}',this.value)" style="width:100%;font-size:9px;margin-top:6px;resize:vertical;line-height:1.4">${escapeHtml(_fpGetPrompt(idx,c))}</textarea>
-                <button class="btn btn-ghost btn-sm" id="fpRegenBtn-${idx}-${c}" onclick="generarVistasIA(${idx},'${c}')" style="width:100%;margin-top:4px;font-size:10px;padding:6px" title="Regenerar solo esta vista con el prompt de arriba">🔄 Regenerar</button>
-              </div>`).join('')}
-          </div>
-          <div style="font-size:9px;color:var(--text3);margin-top:6px">Las fotos se guardan localmente en este navegador al guardar la ficha.</div>
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
+          <div sty

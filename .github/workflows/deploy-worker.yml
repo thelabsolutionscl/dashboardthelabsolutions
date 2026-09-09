@@ -1,4 +1,4 @@
-name: Deploy Lead Worker
+name: Deploy Cloudflare Workers
 
 # Despliega automáticamente el lead-worker (Cloudflare Worker) cuando cambia su
 # código en main, para que producción no quede nunca desincronizada del repo.
@@ -14,6 +14,8 @@ on:
     branches: [main]
     paths:
       - 'lead-worker/**'
+      - 'airtable-proxy/**'
+      - '.github/workflows/deploy-worker.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -49,3 +51,29 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: lead-worker
+
+  deploy-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comprobar token de Cloudflare
+        id: check
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLOUDFLARE_API_TOKEN no configurado — se omite el deploy del proxy."
+          else
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Desplegar proxy seguro
+        if: steps.check.outputs.has_token == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: airtable-proxy

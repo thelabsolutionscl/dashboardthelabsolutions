@@ -73,7 +73,7 @@ test('la optimización SEO con IA parte desde hallazgos reales y solo propone te
   const body=functionBlock(SOURCE,'seoOptimizeIA');
   assert.match(body,/window\._seoLastRows/);
   assert.match(body,/runSeoAudit\s*\(/);
-  assert.match(body,/callClaude\s*\(/);
+  assert.match(body,/callAgentClaude\(\s*['"]SEO['"]/);
   assert.match(body,/JSON\.parse/);
   assert.match(body,/renderSeoIAProps\s*\(/);
   assert.doesNotMatch(body,/airtableWrite|fetch\([^)]*wp-json\/wp\/v2/,'la IA general no debe publicar directamente');

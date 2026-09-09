@@ -128,7 +128,7 @@ async function seoOptimizeIA(){
     for(let i=0;i<rows.length;i+=3){
       out.innerHTML='<div class="loading-state" style="padding:14px 0"><div class="spinner"></div> La IA estÃ¡ redactando propuestasâ€¦ '+Math.min(i+3,rows.length)+'/'+rows.length+' pÃ¡ginas</div>';
       const batch=rows.slice(i,i+3).map(function(r){return {url:r.url,score:r.score,problemas:r.checks.filter(function(c){return c.level!=='ok';}).map(function(c){return c.label+': '+(c.detail||'');})};});
-      const raw=await callClaude(SEO_IA_SYS,JSON.stringify(batch));
+      const raw=await callAgentClaude('SEO',SEO_IA_SYS,JSON.stringify(batch));
       const start=raw.indexOf('{');
       if(start<0) throw new Error('la IA no devolviÃ³ JSON');
       const j=JSON.parse(raw.slice(start,raw.lastIndexOf('}')+1));
@@ -290,7 +290,7 @@ Genera:
 - Meta description: mÃ¡ximo 155 caracteres, persuasiva con beneficio claro y CTA
 
 Responde SOLO en JSON: {"title":"...","description":"..."}`;
-    const raw=await callClaude(system,user);
+    const raw=await callAgentClaude('SEO',system,user);
     const json=JSON.parse(raw.replace(/```json|```/g,'').trim());
     if(json.title){document.getElementById(tid).value=json.title;seoCounter(document.getElementById(tid),60,tid+'-cnt');}
     if(json.description){document.getElementById(did).value=json.description;seoCounter(document.getElementById(did),155,did+'-cnt');}
@@ -418,428 +418,8 @@ async function runSEODiag(){
       testPageId=items[0].id;
       diagMeta=items[0].meta;
     }catch(e){
-      seoDiagStep('meta','âŒ','Error al leer meta',`${e.message} â€” Abre primero la pestaÃ±a Web para que el listado de pÃ¡ginas cargue, luego vuelve a ejecutar el diagnÃ³stico.`,'var(--danger)');
-      if(btn){btn.disabled=false;btn.textContent='â–¶ Ejecutar diagnÃ³stico';}
-      return;
-    }
-  }
-  {
-    const meta=diagMeta;
-    const hasTitle=meta&&meta._yoast_wpseo_title!==undefined;
-    const hasDesc=meta&&meta._yoast_wpseo_metadesc!==undefined;
-    if(hasTitle&&hasDesc){
-      seoDiagStep('meta','âœ“','Campos Yoast registrados correctamente',`_yoast_wpseo_title = "${meta._yoast_wpseo_title||'(vacÃ­o)'}" | _yoast_wpseo_metadesc = "${(meta._yoast_wpseo_metadesc||'').slice(0,60)||'(vacÃ­o)'}"`,'var(--success)');
-    } else {
-      const metaKeys=meta?Object.keys(meta):[];
-      const rawSnippet=JSON.stringify(meta).slice(0,120);
-      const metaDebug=meta
-        ?(metaKeys.length?`Claves en meta: ${metaKeys.slice(0,8).join(', ')} | raw: ${rawSnippet}`:'meta existe pero es {} vacÃ­o')
-        :'meta es null/undefined â€” WordPress no expone meta en este endpoint';
-      seoDiagStep('meta','âŒ','Campos Yoast NO estÃ¡n en la respuesta',metaDebug,'var(--danger)');
-      document.getElementById('seoDiagPhpBox').style.display='block';
-      if(btn){btn.disabled=false;btn.textContent='â–¶ Ejecutar diagnÃ³stico';}
-      return;
-    }
-  }
-
-  // Step 4: write test
-  seoDiagStep('write','â³','Probando escritura de campo SEOâ€¦','','var(--text3)');
-  try{
-    const testVal='__diag_test__';
-    const wr=await fetch(cfg.url+`/wp-json/wp/v2/pages/${testPageId}`,{
-      method:'POST',headers:wpAuthHeader(),
-      body:JSON.stringify({meta:{_yoast_wpseo_title:testVal}})
-    });
-    if(!wr.ok){const j=await wr.json().catch(()=>({}));throw new Error(`HTTP ${wr.status}: ${j.message||'sin detalle'}`);}
-    // verify write persisted
-    const vr=await fetch(cfg.url+`/wp-json/wp/v2/pages/${testPageId}`,{headers:wpAuthHeader()});
-    const vd=vr.ok?await vr.json():{};
-    const written=vd.meta&&vd.meta._yoast_wpseo_title===testVal;
-    if(written){
-      seoDiagStep('write','âœ“','Escritura verificada â€” el guardado SEO funciona','El campo _yoast_wpseo_title se guardÃ³ y se leyÃ³ correctamente.','var(--success)');
-      // restore (optional â€” leave test value, Yoast will overwrite on next save from WP admin)
-      seoDiagStep('done','ğŸ‰','Todo listo','Puedes guardar SEO desde el dashboard sin problemas.','var(--accent)');
-    } else {
-      seoDiagStep('write','âš ','Escritura aceptada pero valor no persistiÃ³',`WordPress aceptÃ³ el POST (HTTP ${wr.status}) pero el valor leÃ­do de vuelta no coincide. Puede ser un cache o un plugin de seguridad.`,'var(--warn)');
-    }
-  }catch(e){
-    seoDiagStep('write','âŒ','Error al escribir campo SEO',e.message,'var(--danger)');
-  }
-  if(btn){btn.disabled=false;btn.textContent='â–¶ Ejecutar diagnÃ³stico';}
-}
-function copySEODiagSnippet(){
-  const code=document.getElementById('seoDiagPhpCode')?.textContent||'';
-  navigator.clipboard.writeText(code).then(()=>toast('âœ“ CÃ³digo PHP copiado','success')).catch(()=>{
-    const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('âœ“ CÃ³digo PHP copiado','success');
-  });
-}
-async function testYoastWrite(){openSEODiag();await runSEODiag();}
-// â”€â”€ GOOGLE ADS AGENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// â”€â”€ Snapshot histÃ³rico â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function adsSaveSnapshot(data,days){
-  let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
-  const today=hoyCL();
-  const imp=data.impresiones||0,clics=data.clics||0,gasto=data.gasto||0;
-  const conv=data.conversiones||0;
-  const ctr=imp>0?(clics/imp*100):0;
-  const roas=gasto>0&&(data.valor_conversion||0)>0?data.valor_conversion/gasto:0;
-  // Verdad CRM: ingresos netos + leads del mismo perÃ­odo, para que el agente vea la direcciÃ³n REAL
-  let ingresoCRM=0,leads=0;
-  try{
-    const cutoff=new Date(Date.now()-days*86400000);
-    ingresoCRM=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const dd=p.createdTime?new Date(p.createdTime):null;return dd&&dd>=cutoff;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-    leads=(state.clientes||[]).filter(c=>{const dd=c.createdTime?new Date(c.createdTime):null;return dd&&dd>=cutoff;}).length;
-  }catch(e){}
-  const roasReal=gasto>0?ingresoCRM/gasto:0;
-  // Huella por campaÃ±a (idâ†’gasto/conv) para detectar anomalÃ­as a nivel campaÃ±a
-  const camps={};(data.campanas||[]).forEach(c=>{if(c&&c.id!=null)camps[c.id]={gasto:c.gasto||0,conv:c.conversiones||0};});
-  const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days,ingresoCRM,leads,roasReal,camps};
-  const idx=snaps.findIndex(s=>s.date===today);
-  if(idx>=0) snaps[idx]=snap; else snaps.push(snap);
-  snaps.sort((a,b)=>a.date.localeCompare(b.date));
-  if(snaps.length>30) snaps.splice(0,snaps.length-30);
-  localStorage.setItem('ads_snapshots',JSON.stringify(snaps));
-  localStorage.setItem('ads_last_sync',new Date().toISOString());
-}
-function adsGetPrevSnapshot(days){
-  let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
-  // Comparar SOLO contra un snapshot del MISMO largo de ventana. Los totales
-  // (impresiones/clics/conversiones) escalan con los dÃ­as, asÃ­ que tomar el
-  // snapshot anterior sin mirar `days` comparaba 7 vs 30 dÃ­as y pintaba subidas o
-  // caÃ­das falsas de ~Â±300%. snaps va ordenado por fecha; el de HOY es el Ãºltimo
-  // (mismo `date`); el "anterior" vÃ¡lido es el mÃ¡s reciente ANTES de hoy con igual `days`.
-  const today=hoyCL();
-  const previos=snaps.filter(s=>s&&s.date!==today&&(days==null||s.days===days));
-  return previos.length?previos[previos.length-1]:null;
-}
-function adsLastSyncStr(){
-  const ts=localStorage.getItem('ads_last_sync');
-  if(!ts) return '';
-  const diff=Date.now()-new Date(ts).getTime();
-  const mins=Math.floor(diff/60000);
-  if(mins<1) return 'actualizado ahora';
-  if(mins<60) return 'hace '+mins+' min';
-  const hrs=Math.floor(diff/3600000);
-  if(hrs<24) return 'hace '+hrs+'h';
-  return 'hace '+Math.floor(diff/86400000)+'d';
-}
-// â”€â”€ LÃ­neas de producciÃ³n â†” campaÃ±as Google Ads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const ADS_DEFAULT_URL='https://thelab.solutions';
-// Webhook de Make que crea el "cascarÃ³n" de campaÃ±a vÃ­a la API real de Google
-// Ads (con la declaraciÃ³n de anuncios polÃ­ticos UE que el CSV no puede setear).
-// El Script 2 completa la campaÃ±a (keywords/RSA/negativas) en su prÃ³xima corrida.
-const ADS_MAKE_SHELL={url:'https://hook.us2.make.com/4lvyro1ddp3nkqbiwteb1wmg5442dspk',clave:'tl-cascaron-9f27c4a1'};
-// id === slug de la landing /servicios/<slug>. finalUrl se arma en openCreateCampaignByLineaId.
-const ADS_LINEAS=[
-  {id:'activaciones',slug:'activaciones',label:'Activaciones',campaÃ±aSugerida:'BÃºsqueda - Activaciones de Marca',tipo:'SEARCH',presupuesto:6000,
-   palabrasClave:['activaciones de marca','activaciones btl','activacion de marca empresa','stands para activacion','activaciones publicitarias','produccion de eventos btl','activacion marca santiago','montaje de activaciones'],
-   titulos:['Activaciones de Marca','Activaciones BTL a Medida','Stands y Montajes de Marca','ProducciÃ³n de Activaciones','The Lab Solutions'],
-   descripciones:['Activaciones de marca y BTL producidas end-to-end para tu campaÃ±a o evento.','DiseÃ±o, fabricaciÃ³n y montaje. Cotiza tu activaciÃ³n en Santiago.']},
-  {id:'premiaciones',slug:'premiaciones',label:'Premiaciones',campaÃ±aSugerida:'BÃºsqueda - Premiaciones y Galvanos',tipo:'SEARCH',presupuesto:6000,
-   palabrasClave:['galvanos personalizados','trofeos personalizados','trofeos corporativos','medallas personalizadas','galvano de reconocimiento','premios para empresa','reconocimientos corporativos','trofeos para premiacion','placa de reconocimiento'],
-   titulos:['Galvanos y Trofeos','Premiaciones Corporativas','Trofeos Personalizados','Medallas y Reconocimientos','The Lab Solutions'],
-   descripciones:['Galvanos, trofeos y medallas personalizados para premiar a tu equipo.','FabricaciÃ³n a medida para tu premiaciÃ³n de fin de aÃ±o. Cotiza online.']},
-  {id:'merchandising',slug:'merchandising',label:'Merchandising',campaÃ±aSugerida:'BÃºsqueda - Merchandising Corporativo',tipo:'SEARCH',presupuesto:6000,
-   palabrasClave:['merchandising corporativo','regalos corporativos','articulos promocionales','regalos corporativos por mayor','merchandising personalizado','productos promocionales empresa','kit de bienvenida corporativo','regalos para empresas'],
-   titulos:['Merchandising Corporativo','Regalos Corporativos','ArtÃ­culos Promocionales','Kits para Empresas','The Lab Solutions'],
-   descripciones:['Merchandising y regalos corporativos personalizados para tu marca.','Kits, artÃ­culos promocionales y packs por mayor. Cotiza para tu empresa.']},
-  {id:'cajas-personalizadas',slug:'cajas-personalizadas',label:'Cajas Personalizadas',campaÃ±aSugerida:'BÃºsqueda - Cajas y Packaging',tipo:'SEARCH',presupuesto:4000,
-   palabrasClave:['cajas personalizadas','packaging personalizado','cajas para packaging','cajas de regalo personalizadas','packaging corporativo','cajas con logo empresa','cajas rigidas personalizadas','packaging a medida'],
-   titulos:['Cajas Personalizadas','Packaging a Medida','Cajas con tu Logo','Packaging Corporativo','The Lab Solutions'],
-   descripciones:['Cajas y packaging personalizados para regalo o producto corporativo.','DiseÃ±o y fabricaciÃ³n de cajas a medida con tu marca. Cotiza online.']},
-  {id:'impresion-3d',slug:'impresion-3d',label:'ImpresiÃ³n 3D',campaÃ±aSugerida:'BÃºsqueda - ImpresiÃ³n 3D Santiago',tipo:'SEARCH',presupuesto:8000,
-   palabrasClave:['impresiÃ³n 3d santiago','impresiÃ³n 3d','servicio de impresion 3d','piezas 3d a medida','prototipo 3d','fabricacion 3d','impresion 3d para empresas','modelos y maquetas 3d','repuestos impresos 3d'],
-   titulos:['ImpresiÃ³n 3D en Santiago','Piezas y Prototipos 3D','ImpresiÃ³n 3D a Medida','FabricaciÃ³n 3D Empresas','The Lab Solutions'],
-   descripciones:['ImpresiÃ³n 3D profesional: piezas, prototipos y repuestos a medida.','Llevamos tu idea a una pieza real. Cotiza tu proyecto 3D en Santiago.']},
-  {id:'volumetricos',slug:'volumetricos',label:'VolumÃ©tricos',campaÃ±aSugerida:'BÃºsqueda - VolumÃ©tricos y NeÃ³n LED',tipo:'SEARCH',presupuesto:5000,
-   palabrasClave:['letras corporeas','letras volumetricas','logo corporeo','letrero neon led','letras 3d para empresa','letreros luminosos led','estructuras para eventos','letras corporeas acrilico','neon personalizado'],
-   titulos:['Letras CorpÃ³reas y NeÃ³n','VolumÃ©tricos a Medida','Letreros NeÃ³n LED','Logos CorpÃ³reos 3D','The Lab Solutions'],
-   descripciones:['Letras corpÃ³reas, logos 3D y neÃ³n LED personalizados para tu marca.','VolumÃ©tricos y estructuras para oficina o evento. Cotiza a medida.']},
-  {id:'carteleria',slug:'carteleria',label:'CartelerÃ­a',campaÃ±aSugerida:'BÃºsqueda - CartelerÃ­a y SeÃ±alÃ©tica',tipo:'SEARCH',presupuesto:6000,
-   palabrasClave:['seÃ±aletica corporativa','seÃ±aletica acrilico','letrero acrilico','carteleria empresa','seÃ±alizacion empresa','rotulos corporativos','corte y grabado laser','placas acrilico','letreros para oficina'],
-   titulos:['CartelerÃ­a y SeÃ±alÃ©tica','SeÃ±alÃ©tica en AcrÃ­lico','Letreros para Empresas','RÃ³tulos y Placas a Medida','The Lab Solutions'],
-   descripciones:['CartelerÃ­a y seÃ±alÃ©tica corporativa en acrÃ­lico con corte lÃ¡ser.','Letreros, rÃ³tulos y placas a medida para tu empresa. Cotiza online.']},
-  {id:'papeleria',slug:'papeleria',label:'PapelerÃ­a',campaÃ±aSugerida:'BÃºsqueda - PapelerÃ­a Corporativa',tipo:'SEARCH',presupuesto:3000,
-   palabrasClave:['papeleria corporativa','tarjetas de presentacion','imprenta corporativa','membrete personalizado','carpetas corporativas','sellos para empresa','impresion corporativa santiago','tarjetas de presentacion empresa'],
-   titulos:['PapelerÃ­a Corporativa','Tarjetas y Membretes','Imprenta para Empresas','Sellos y Carpetas','The Lab Solutions'],
-   descripciones:['PapelerÃ­a corporativa: tarjetas, membretes, sellos y carpetas.','Imagen profesional para tu empresa. Cotiza tu papelerÃ­a online.']},
-  {id:'chip-the-lab',slug:'chip-the-lab',label:'Chip The Lab (NFC)',campaÃ±aSugerida:'BÃºsqueda - Tarjetas NFC',tipo:'SEARCH',presupuesto:3000,
-   palabrasClave:['tarjetas nfc','tarjeta de presentacion nfc','tarjeta digital nfc','tarjetas nfc empresa','tarjeta nfc personalizada','tarjeta de contacto nfc','tarjetas inteligentes nfc','nfc chile'],
-   titulos:['Tarjetas NFC','Tarjeta Digital NFC','Tarjetas NFC a Medida','NFC para Empresas','The Lab Solutions'],
-   descripciones:['Tarjetas de presentaciÃ³n NFC personalizadas: comparte tu contacto al tocar.','Tarjetas inteligentes NFC para tu equipo. Cotiza las tuyas online.']},
-];
-function _adsMatchCampaign(campanas,linea){
-  if(!campanas||!campanas.length) return null;
-  const kws=[
-    ...linea.campaÃ±aSugerida.toLowerCase().replace(/[â€“\-]/g,' ').split(/\s+/).filter(w=>w.length>3),
-    ...(linea.palabrasClave||[]).flatMap(k=>k.toLowerCase().split(/\s+/).filter(w=>w.length>3))
-  ];
-  return campanas.find(c=>kws.some(k=>(c.nombre||'').toLowerCase().includes(k)))||null;
-}
-function adsCopyKw(encoded){
-  const kw=decodeURIComponent(encoded);
-  navigator.clipboard.writeText(kw).then(()=>toast('âœ“ "'+kw+'" copiado','success')).catch(()=>{});
-}
-function adsCopyAllKw(lineaId){
-  const l=ADS_LINEAS.find(x=>x.id===lineaId);
-  if(!l||!l.palabrasClave) return;
-  navigator.clipboard.writeText(l.palabrasClave.join('\n')).then(()=>toast('âœ“ '+l.palabrasClave.length+' palabras clave copiadas','success')).catch(()=>{});
-}
-function getCapacidadLineas(){
-  const today=new Date();today.setHours(0,0,0,0);
-  const dow=today.getDay();
-  const lunes=new Date(today);lunes.setDate(today.getDate()-(dow===0?6:dow-1));
-  const dias=Array.from({length:5},(_,i)=>{const d=new Date(lunes);d.setDate(lunes.getDate()+i);return d.toISOString().slice(0,10);});
-  const calcSlots=ids=>{
-    let total=0,enUso=0,enMant=0;
-    ids.forEach(id=>{
-      const gMant=getMaquinaEstadoGlobal(id)==='mantencion';
-      dias.forEach(ds=>{
-        total++;
-        const ev=(maquinaState.eventos||{})[`${id}_${ds}`];
-        if(gMant||ev?.tipo==='mantencion') enMant++;
-        else if(ev?.tipo==='uso') enUso++;
-      });
-    });
-    const disp=Math.max(total-enMant,1);
-    return{enUso,disp,pct:Math.min(Math.round(enUso/disp*100),100)};
-  };
-  let fdmSmallIds=[],fdmLargeIds=[];
-  try{
-    fdmSmallIds=MAQUINAS.filter(m=>['K1','K2','K2 Plus','Ender-5 Max'].includes(m.modelo)).map(m=>m.id);
-    fdmLargeIds=MAQUINAS.filter(m=>m.modelo==='Giga').map(m=>m.id);
-  }catch(e){}
-  const fdmS=calcSlots(fdmSmallIds);
-  const fdmL=calcSlots(fdmLargeIds);
-  const activos=(state.pedidos||[]).filter(p=>{const e=(p.fields||{})['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(e);}).length;
-  const pedPct=Math.min(Math.round(activos/20*100),100);
-  const sem=pct=>{
-    if(pct>=85) return{s:'ğŸ”´',a:'PAUSAR',m:'LÃ­nea saturada â€” considera pausar campaÃ±as para no colapsar producciÃ³n',c:'var(--danger)'};
-    if(pct>=65) return{s:'ğŸŸ¡',a:'REDUCIR',m:'Carga alta â€” reduce el presupuesto ~30% para controlar el flujo de pedidos',c:'var(--warn)'};
-    if(pct<40)  return{s:'ğŸŸ¢',a:'ACTIVAR',m:'Capacidad disponible â€” activa o aumenta el presupuesto para captar mÃ¡s demanda',c:'var(--success)'};
-    return{s:'âšª',a:'MANTENER',m:'Carga moderada â€” mantÃ©n el presupuesto actual',c:'var(--accent)'};
-  };
-  const mkRow=(id,label,pct,info,lids)=>({id,label,pct,info,lineasIds:lids,...sem(pct)});
-  return[
-    mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['impresion-3d']),
-    mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['impresion-3d']),
-    mkRow('laser','LÃ¡ser / CartelerÃ­a',pedPct,activos+' pedidos activos en cola',['carteleria']),
-    mkRow('manual','Manual (Premiaciones Â· Merch Â· PapelerÃ­a Â· otros)',pedPct,activos+' pedidos activos en cola',['premiaciones','merchandising','papeleria','activaciones','cajas-personalizadas','volumetricos','chip-the-lab']),
-  ];
-}
-function renderAdsCapacidad(data){
-  const box=document.getElementById('adsCapacidadBox');
-  const list=document.getElementById('adsCapacidadList');
-  if(!box||!list) return;
-  let filas;
-  try{ filas=getCapacidadLineas(); }
-  catch(e){ box.style.display='none'; return; }
-  const camps=data.campanas||[];
-  _adsCapBtnStore=[];
-  list.innerHTML=filas.map((f,fi)=>{
-    const matchedCamps=f.lineasIds.flatMap(lid=>{
-      const linea=ADS_LINEAS.find(l=>l.id===lid);
-      return linea?[_adsMatchCampaign(camps,linea)].filter(Boolean):[];
-    });
-    const unique=[...new Map(matchedCamps.map(c=>[c.id,c])).values()];
-    const firstActive=unique.find(c=>c.estado==='ENABLED');
-    const firstAny=unique[0]||null;
-    let btnHtml='';
-    const mkBtn=(label,style)=>{const idx=_adsCapBtnStore.length-1;return`<button onclick="_adsCapBtn(${idx})" style="${style}">${label}</button>`;};
-    if(f.a==='PAUSAR'&&firstActive){
-      _adsCapBtnStore.push({type:'edit',id:firstActive.id,nombre:firstActive.nombre,estado:'PAUSED',presupuesto:firstActive.presupuesto||0});
-      btnHtml=mkBtn('â¸ Pausar','background:rgba(220,53,69,0.1);border:1px solid rgba(220,53,69,0.3);color:var(--danger);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0');
-    } else if(f.a==='REDUCIR'&&firstActive){
-      const nb=Math.round((firstActive.presupuesto||0)*0.7);
-      _adsCapBtnStore.push({type:'edit',id:firstActive.id,nombre:firstActive.nombre,estado:'ENABLED',presupuesto:nb});
-      btnHtml=mkBtn('â†“ -30%','background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.3);color:var(--warn);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0');
-    } else if(f.a==='ACTIVAR'){
-      if(firstAny&&firstAny.estado==='PAUSED'){
-        _adsCapBtnStore.push({type:'edit',id:firstAny.id,nombre:firstAny.nombre,estado:'ENABLED',presupuesto:firstAny.presupuesto||0});
-        btnHtml=mkBtn('â–¶ Reactivar','background:rgba(40,199,111,0.1);border:1px solid rgba(40,199,111,0.3);color:var(--success);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0');
-      } else if(!firstAny){
-        const pl=ADS_LINEAS.find(l=>f.lineasIds.includes(l.id));
-        if(pl){_adsCapBtnStore.push({type:'create',lineaId:pl.id});btnHtml=mkBtn('+ Crear','background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 9px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0');}
-      }
-    }
-    const pctBar=Math.max(f.pct,2);
-    return `${fi>0?'<hr style="border:none;border-top:1px solid var(--border2);margin:2px 0">':''}<div style="display:flex;flex-direction:column;gap:4px">
-      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0">
-          <span style="font-size:14px">${f.s}</span>
-          <span style="font-size:11px;font-weight:600;color:var(--text)">${f.label}</span>
-          ${f.info?`<span style="font-size:9px;color:var(--text3);background:var(--surface3);border-radius:3px;padding:1px 5px;white-space:nowrap">${f.info}</span>`:''}
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-          <span style="font-size:11px;font-weight:700;color:${f.c}">${f.pct}%</span>
-          ${btnHtml}
-        </div>
-      </div>
-      <div style="height:5px;background:var(--surface3);border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:${pctBar}%;background:${f.c};border-radius:3px;transition:width 0.6s ease"></div>
-      </div>
-      <div style="font-size:10px;color:var(--text3)">${f.m}</div>
-    </div>`;
-  }).join('');
-  box.style.display='block';
-}
-function renderAdsSugerencias(data){
-  const box=document.getElementById('adsSuggestBox');
-  const list=document.getElementById('adsSuggestList');
-  const badge=document.getElementById('adsSuggestBadge');
-  if(!box||!list) return;
-  const camps=data.campanas||[];
-  const faltantes=ADS_LINEAS.filter(l=>!_adsMatchCampaign(camps,l));
-  if(badge) badge.textContent=faltantes.length+' sugerida'+(faltantes.length!==1?'s':'');
-  if(!faltantes.length){
-    list.innerHTML='<div style="font-size:11px;color:var(--success);padding:4px 0">âœ“ Ya tienes campaÃ±as para todas las lÃ­neas de producciÃ³n activas.</div>';
-    box.style.display='block';return;
-  }
-  list.innerHTML=faltantes.map(l=>{
-    const kws=(l.palabrasClave||[]).slice(0,6);
-    const kwChips=kws.length?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${kws.map(k=>`<span onclick="adsCopyKw('${encodeURIComponent(k)}')" title="Clic para copiar" style="font-size:9px;color:var(--text2);background:var(--surface3);border:1px solid var(--border2);border-radius:10px;padding:1px 7px;cursor:pointer;white-space:nowrap">${escapeHtml(k)}</span>`).join('')}${(l.palabrasClave||[]).length>6?`<span onclick="adsCopyAllKw('${l.id}')" title="Copiar todas las palabras clave" style="font-size:9px;color:var(--accent);background:rgba(0,212,204,0.08);border:1px solid rgba(0,212,204,0.25);border-radius:10px;padding:1px 7px;cursor:pointer;white-space:nowrap">+${(l.palabrasClave||[]).length-6} Â· copiar todas</span>`:''}</div>`:'';
-    return `
-    <div style="padding:8px 10px;background:var(--surface2);border-radius:7px;border-left:3px solid rgba(0,212,204,0.4)">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px">${escapeHtml(l.campaÃ±aSugerida)}</div>
-          <div style="font-size:10px;color:var(--text3)">${escapeHtml(l.label)} Â· ${l.tipo} Â· Presupuesto sugerido: $${l.presupuesto.toLocaleString('es-CL')}/dÃ­a</div>
-        </div>
-        <button onclick="openCreateCampaignByLineaId('${l.id}')" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;white-space:nowrap;font-weight:600;flex-shrink:0">+ Crear</button>
-      </div>
-      ${kwChips}
-    </div>`;}).join('');
-  box.style.display='block';
-}
-// Palabras clave a incluir en la prÃ³xima campaÃ±a creada (Script 2 las usarÃ¡ para armar el grupo de anuncios)
-let _adsCreateKeywords=[];
-function openCreateCampaignTemplate(nombre,presupuesto,tipo,palabrasClave,titulos,descripciones,finalUrl){
-  openCreateCampaign();
-  _adsCreateKeywords=Array.isArray(palabrasClave)?palabrasClave.slice():[];
-  setTimeout(()=>{
-    const nm=document.getElementById('adsCampaignModalNombre');if(nm) nm.value=nombre;
-    const bd=document.getElementById('adsCampaignModalPresupuesto');if(bd) bd.value=presupuesto;
-    const st=document.getElementById('adsCampaignModalEstado');if(st) st.value='ENABLED';
-    const tp=document.getElementById('adsCampaignModalTipo');if(tp) tp.value=tipo||'SEARCH';
-    const fu=document.getElementById('adsCampaignModalFinalUrl');if(fu&&finalUrl) fu.value=finalUrl;
-    const tt=document.getElementById('adsCampaignModalTitulos');if(tt&&Array.isArray(titulos)&&titulos.length) tt.value=titulos.join('\n');
-    const ds=document.getElementById('adsCampaignModalDescripciones');if(ds&&Array.isArray(descripciones)&&descripciones.length) ds.value=descripciones.join('\n');
-    const kw=document.getElementById('adsCampaignModalKeywords');if(kw&&_adsCreateKeywords.length) kw.value=_adsCreateKeywords.join('\n');
-    const hint=document.getElementById('adsCampaignModalKwHint');
-    if(hint){
-      if(_adsCreateKeywords.length){hint.style.display='block';hint.textContent='âœ“ Se incluirÃ¡n '+_adsCreateKeywords.length+' palabras clave y un anuncio responsivo en el grupo de anuncios al crear la campaÃ±a. Revisa o edita el anuncio abajo.';}
-      else hint.style.display='none';
-    }
-  },80);
-}
-function openCreateCampaignByLineaId(lineaId){
-  const l=ADS_LINEAS.find(x=>x.id===lineaId);
-  if(l){
-    const finalUrl=l.slug?(ADS_DEFAULT_URL+'/servicios/'+l.slug):ADS_DEFAULT_URL;
-    openCreateCampaignTemplate(l.campaÃ±aSugerida,l.presupuesto,l.tipo,l.palabrasClave,l.titulos,l.descripciones,finalUrl);
-  }
-}
-let _adsCapBtnStore=[];
-function _adsCapBtn(idx){
-  const d=_adsCapBtnStore[idx];if(!d) return;
-  if(d.type==='edit') openEditCampaign(d.id,d.nombre,d.estado,d.presupuesto);
-  else openCreateCampaignByLineaId(d.lineaId);
-}
-// Acciones de la tabla de campaÃ±as (editar/eliminar) por Ã­ndice â€” evita escapes en onclick
-let _adsCampActions=[];
-function _adsCampAction(idx){
-  const d=_adsCampActions[idx];if(!d) return;
-  if(d.type==='edit') openEditCampaign(d.id,d.nombre,d.estado,d.presupuesto);
-  else if(d.type==='delete') openDeleteCampaign(d.id,d.nombre);
-  else if(d.type==='copy') runAdsCopyAgent(d);
-  else if(d.type==='analyze') runAdsCampaignAgent(d.id);
-}
-// AnÃ¡lisis profundo de UNA campaÃ±a (con sus acciones de 1 clic)
-function runAdsCampaignAgent(id){
-  const camp=(window._adsLastData?.campanas||[]).find(c=>String(c.id)===String(id));
-  if(!camp){toast('Carga primero los datos de Google Ads','error');return;}
-  const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
-  const ctr=camp.impresiones>0?(camp.clics/camp.impresiones*100).toFixed(2):0;
-  const cpc=camp.clics>0?Math.round(camp.gasto/camp.clics):0;
-  const cpa=camp.conversiones>0?Math.round(camp.gasto/camp.conversiones):0;
-  const ro=camp.gasto>0&&(camp.valor_conversion||0)>0?(camp.valor_conversion/camp.gasto).toFixed(2):0;
-  const util=camp.presupuesto>0?Math.round(camp.gasto/days/camp.presupuesto*100):0;
-  const ctx=`\n\nANALIZA EN PROFUNDIDAD SÃ“LO ESTA CAMPAÃ‘A:\nid=${camp.id} "${camp.nombre}" [${camp.estado}] Â· ${days} dÃ­as\nPpto ${fmtMoney(camp.presupuesto||0)}/dÃ­a (${util}% uso) Â· Gasto ${fmtMoney(camp.gasto||0)} Â· CTR ${ctr}% Â· CPC ${fmtMoney(cpc)} Â· Conv ${camp.conversiones||0} Â· CPA ${camp.conversiones>0?fmtMoney(cpa):'â€”'} Â· ROAS-Google ${(camp.valor_conversion||0)>0?ro+'x':'â€”'}\nDa un diagnÃ³stico especÃ­fico y las acciones concretas (con [ACTIONS]) para esta campaÃ±a. Si la muestra es chica, dilo.`;
-  runAgentInline('ADS',ctx,(result)=>{
-    const actions=_parseAdsActions(result);window._adsAgentActions=actions;
-    const rEl=document.getElementById('agentInlineResult');if(rEl){rEl.style.whiteSpace='normal';rEl.innerHTML=formatAgentReport(result);}
-    const btns=_adsRenderActionBtns(actions);
-    return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">ğŸ“‹ Copiar</button>`;
-  });
-}
-// â”€â”€ Health Score por campaÃ±a (0â€“100) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function adsHealthScore(c){
-  if(!c.impresiones||c.impresiones===0) return{score:0,color:'var(--text3)',label:'Sin datos'};
-  const ctr=c.clics/c.impresiones*100;
-  const convRate=c.clics>0?c.conversiones/c.clics*100:0;
-  const roas=c.gasto>0&&(c.valor_conversion||0)>0?c.valor_conversion/c.gasto:0;
-  const s=Math.round(Math.min(ctr/5,1)*35+Math.min(convRate/3,1)*35+(roas>0?Math.min(roas/4,1)*30:0));
-  const color=s>=70?'var(--success)':s>=40?'var(--warn)':'var(--danger)';
-  return{score:s,color,label:s>=70?'Bueno':s>=40?'Regular':'Bajo'};
-}
-// â”€â”€ Airtable sync â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-async function syncAdsToAirtable(data,days){
-  let cfg;try{cfg=_airtableConfig();}catch(e){return;}
-  const today=hoyCL();
-  const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
-  const conv=data.conversiones||0,valConv=data.valor_conversion||0;
-  const ctr=imp>0?clics/imp:0;
-  const cpc=clics>0?Math.round(gasto/clics):0;
-  const cpa=conv>0?Math.round(gasto/conv):0;
-  const roas=gasto>0?Math.round(valConv/gasto*100)/100:0;
-  const adsCfg=getAdsConfig();
-  const base=cfg.base+'/'+BASE_ID;
-  const headers={...cfg.headers,'Content-Type':'application/json'};
-  // KPI record
-  await airtableHttp(base+'/Google_Ads_KPIs',{method:'POST',headers,body:JSON.stringify({records:[{fields:{
-    'PerÃ­odo':today+' Â· '+days+'d',
-    'Fecha':today,'DÃ­as perÃ­odo':days,
-    'Gasto (CLP)':gasto,'Impresiones':imp,'Clics':clics,
-    'CTR (%)':ctr,'CPC Promedio (CLP)':cpc,
-    'Conversiones':conv,'Valor Conversiones (CLP)':valConv,
-    'CPA (CLP)':cpa,'ROAS':roas,
-    'Customer ID':adsCfg.customerId||'','Fuente':'real'
-  }}],typecast:true})});
-  // Campaign records (batch 10)
-  const camps=data.campanas||[];
-  if(camps.length){
-    const recs=camps.map(c=>{
-      const ct=c.impresiones>0?c.clics/c.impresiones:0;
-      const cp=c.clics>0?Math.round(c.gasto/c.clics):0;
-      const ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0;
-      const ro=c.gasto>0&&(c.valor_conversion||0)>0?Math.round(c.valor_conversion/c.gasto*100)/100:0;
-      return{fields:{
-        'CampaÃ±a':c.nombre||String(c.id),
-        'Campaign ID':String(c.id||''),
-        'Fecha snapshot':today,'Estado':c.estado||'ENABLED',
-        'Presupuesto diario (CLP)':c.presupuesto||0,'Gasto (CLP)':c.gasto||0,
-        'Impresiones':c.impresiones||0,'Clics':c.clics||0,
-        'CTR (%)':ct,'CPC (CLP)':cp,
-        'Conversiones':c.conversiones||0,'CPA (CLP)':ca,'ROAS':ro,
-        'Score salud':adsHealthScore(c).score,'PerÃ­odo (dÃ­as)':days
-      }};
-    });
-    for(let i=0;i<recs.length;i+=10){
-      await airtableHttp(base+'/Google_Ads_Campanas',{method:'POST',headers,body:JSON.stringify({records:recs.slice(i,i+10),typecast:true})});
-    }
-  }
-}
-async function loadAdsSnapshotsFromAirtable(){
-  let cfg;try{cfg=_airtableConfig();}catch(e){return;}
-  const res=await airtableFetch('Google_Ads_KPIs',60);
-  const records=res.records||[];if(!records.length) return;
-  records.sort((a,b)=>(b.fields['Fecha']||'').localeCompare(a.fields['Fecha']||''));
-  const seen=new Set();
-  const deduped=records.filter(r=>{const d=r.fields['Fecha']||'';if(seen.has(d)) return false;seen.add(d);return true;});
-  const snaps=deduped.reverse().map(r=>{const f=r.fields;return{
-    date:f['Fecha']||'',ts:f['Fecha']||'',
-    gasto:f['Gasto (CLP)']||0,clics:f['Clics']||0,conv:f['Conversiones']||0,
-    roas:f['ROAS']||0,imp:f['Impresiones']||0,ctr:f['CTR (%)']||0,days:f['DÃ­as perÃ­odo']||30
+      seoDiagStep('meta','âŒ','Error al leer meta',`${e.message} â€” Abre primero la pestaÃ±a Web para que elm«ëŒ+Š×®º+º$zzb¥âÆ—7FFòFR:v–æ26&wVRÂÇVVvògVVÇfRV¦V7WF"VÂF–vì;77F–6òæÂwf"‚ÒÖFævW"’r“°¢–b†'Fâ—¶'FâæF—6&ÆVCÖfÇ6S¶'FâçFW‡D6öçFVçCÒ~)kbV¦V7WF"F–vì;77F–6òs·Ğ¢&WGW&ã°¢Ğ¢Ğ¢°¢6öç7BÖWFÖF–tÖWF°¢6öç7B†5F—FÆSÖÖWFbfÖWFå÷–ö7E÷w6Võ÷F—FÆRÓ×VæFVf–æVC°¢6öç7B†4FW63ÖÖWFbfÖWFå÷–ö7E÷w6VõöÖWFFW62Ó×VæFVf–æVC°¢–b††5F—FÆRbf†4FW62—°¢6VôF–u7FW‚vÖWFrÂ~)É2rÂt6×÷2–ö7B&Vv—7G&F÷26÷'&V7FÖVçFRrÆ÷–ö7E÷w6Võ÷F—FÆRÒ"G¶ÖWFå÷–ö7E÷w6Võ÷F—FÆWÇÂr‡f<:Öò’wÒ"Â÷–ö7E÷w6VõöÖWFFW62Ò"G²†ÖWFå÷–ö7E÷w6VõöÖWFFW67ÇÂrr’ç6Æ–6RƒÃc—ÇÂr‡f<:Öò’wÒ&Âwf"‚Ò×7V66W72’r“°¢ÒVÇ6R°¢6öç7BÖWF¶W—3ÖÖWFôö&¦V7Bæ¶W—2†ÖWF“¥µÓ°¢6öç7B&u6æ—WCÔ¥4ôâç7G&–æv–g’†ÖWF’ç6Æ–6RƒÃ#“°¢6öç7BÖWFFV'VsÖÖWF¢ò†ÖWF¶W—2æÆVæwFƒö6ÆfW2VâÖWF¢G¶ÖWF¶W—2ç6Æ–6RƒÃ‚’æ¦ö–â‚rÂr—ÒÂ&s¢G·&u6æ—WGÖ¢vÖWFW†—7FRW&òW2·Òf<:Öòr¢¢vÖWFW2çVÆÂ÷VæFVf–æVB(	Bv÷&E&W72æòW‡öæRÖWFVâW7FRVæGö–çBs°¢6VôF–u7FW‚vÖWFrÂ~)ØÂrÂt6×÷2–ö7BäòW7L:âVâÆ&W7VW7FrÆÖWFFV'VrÂwf"‚ÒÖFævW"’r“°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚w6VôF–u‡&÷‚r’ç7G–ÆRæF—7Æ“Òv&Æö6²s°¢–b†'Fâ—¶'FâæF—6&ÆVCÖfÇ6S¶'FâçFW‡D6öçFVçCÒ~)kbV¦V7WF"F–vì;77F–6òs·Ğ¢&WGW&ã°¢Ğ¢Ğ ¢òò7FWC¢w&—FRFW7@¢6VôF–u7FW‚ww&—FRrÂ~(û2rÂu&ö&æFòW67&—GW&FR6×ò4Tş(
+brÂrrÂwf"‚Ò×FW‡C2’r“°¢G'—°¢6öç7BFW7EfÃÒuõöF–u÷FW7Eõòs°¢6öç7Bw#Öv—BfWF6‚†6frçW&Â¶÷wÖ§6öâ÷w÷c"÷vW2òG·FW7EvT–GÖÇ°¢ÖWF†öC¢uõ5BrÆ†VFW'3§wWF„†VFW"‚’À¢&öG“¤¥4ôâç7G&–æv–g’‡¶ÖWF§µ÷–ö7E÷w6Võ÷F—FÆS§FW7EfÇ×Ò¢Ò“°¢–b‚w"æö²—¶6öç7B£Öv—Bw"æ§6öâ‚’æ6F6‚‚‚“Óâ‡·Ò’“·F‡&÷ræWrW'&÷"†…EEG·w"ç7FGW7Ó¢G¶¢æÖW76vWÇÂw6–âFWFÆÆRwÖ“·Ğ¢òòfW&–g’w&—FRW'6—7FV@¢6öç7Bg#Öv—BfWF6‚†6frçW&Â¶÷wÖ§6öâ÷w÷c"÷vW2òG·FW7EvT–GÖÇ¶†VFW'3§wWF„†VFW"‚—Ò“°¢6öç7BfC×g"æö³öv—Bg"æ§6öâ‚“§·Ó°¢6öç7Bw&—GFVã×fBæÖWFbgfBæÖWFå÷–ö7E÷w6Võ÷F—FÆSÓÓ×FW7EfÃ°¢–b‡w&—GFVâ—°¢6VôF–u7FW‚ww&—FRrÂ~)É2rÂtW67&—GW&fW&–f–6F(	BVÂwV&FFò4TògVæ6–öærÂtVÂ6×ò÷–ö7E÷w6Võ÷F—FÆR6RwV&L;2’6RÆWœ;26÷'&V7FÖVçFRârÂwf"‚Ò×7V66W72’r“°¢òò&W7F÷&R†÷F–öæÂ(	BÆVfRFW7BfÇVRÂ–ö7Bv–ÆÂ÷fW'w&—FRöâæW‡B6fRg&öÒuFÖ–â¢6VôF–u7FW‚vFöæRrÂ	øè’rÂuFöFòÆ—7FòrÂuVVFW2wV&F"4TòFW6FRVÂF6†&ö&B6–â&ö&ÆVÖ2ârÂwf"‚ÒÖ66VçB’r“°¢ÒVÇ6R°¢6VôF–u7FW‚ww&—FRrÂ~)ªrÂtW67&—GW&6WFFW&òfÆ÷"æòW'6—7Fœ;2rÆv÷&E&W726WL;2VÂõ5B„…EEG·w"ç7FGW7Ò’W&òVÂfÆ÷"Æ\:ÖFòFRgVVÇFæò6ö–æ6–FRâVVFR6W"Vâ66†RòVâÇVv–âFR6VwW&–FBæÂwf"‚Ò×v&â’r“°¢Ğ¢Ö6F6‚†R—°¢6VôF–u7FW‚ww&—FRrÂ~)ØÂrÂtW'&÷"ÂW67&–&—"6×ò4TòrÆRæÖW76vRÂwf"‚ÒÖFævW"’r“°¢Ğ¢–b†'Fâ—¶'FâæF—6&ÆVCÖfÇ6S¶'FâçFW‡D6öçFVçCÒ~)kbV¦V7WF"F–vì;77F–6òs·Ğ§Ğ¦gVæ7F–öâ6÷•4TôF–u6æ—WB‚—°¢6öç7B6öFSÖFö7VÖVçBævWDVÆVÖVçD'”–B‚w6VôF–u‡6öFRr“òçFW‡D6öçFVçGÇÂrs°¢æf–vF÷"æ6Æ—&ö&Bçw&—FUFW‡B†6öFR’çF†Vâ‚‚“ÓçFö7B‚~)É2<;6F–vò…6÷–FòrÂw7V66W72r’’æ6F6‚‚‚“Óç°¢6öç7BFÖFö7VÖVçBæ7&VFTVÆVÖVçB‚wFW‡F&Vr“·FçfÇVSÖ6öFS¶Fö7VÖVçBæ&öG’æVæD6†–ÆB‡F“·Fç6VÆV7B‚“¶Fö7VÖVçBæW†V46öÖÖæB‚v6÷’r“¶Fö7VÖVçBæ&öG’ç&VÖ÷fT6†–ÆB‡F“·Fö7B‚~)É2<;6F–vò…6÷–FòrÂw7V66W72r“°¢Ò“°§Ğ¦7–æ2gVæ7F–öâFW7E–ö7Ew&—FR‚—¶÷Vå4TôF–r‚“¶v—B'Vå4TôF–r‚“·Ğ¢òò)H)HtôôtÄRE2tTåB)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¢òò)H)H6æ6†÷B†—7L;7&–6ò)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦gVæ7F–öâG56fU6æ6†÷B†FFÆF—2—°¢ÆWB6æ3·G'—·6æ3Ô¥4ôâç'6R†Æö6Å7F÷&vRævWD—FVÒ‚vG5÷6æ6†÷G2r—ÇÂuµÒr“·Ö6F6‚†R—·6æ3ÕµÓ·Ğ¢6öç7BFöF“Ö†÷”4Â‚“°¢6öç7B–×ÖFFæ–×&W6–öæW7ÇÃÆ6Æ–73ÖFFæ6Æ–77ÇÃÆv7FóÖFFæv7F÷ÇÃ°¢6öç7B6öçcÖFFæ6öçfW'6–öæW7ÇÃ°¢6öç7B7G#Ö–×ãò†6Æ–72ö–×£“£°¢6öç7B&ö3Öv7Fóãbb†FFçfÆ÷%ö6öçfW'6–öçÇÃ“ãöFFçfÆ÷%ö6öçfW'6–öâöv7Fó£°¢òòfW&FB5$Ó¢–æw&W6÷2æWF÷2²ÆVG2FVÂÖ—6ÖòW,:ÖöFòÂ&VRVÂvVçFRfVÆF—&V66œ;6â$TÀ¢ÆWB–æw&W6ô5$ÓÓÆÆVG3Ó°¢G'—°¢6öç7B7WFöfcÖæWrFFR„FFRææ÷r‚’ÖF—2£ƒcC“°¢–æw&W6ô5$ÓÒ‡7FFRçVF–F÷7ÇÅµÒ’æf–ÇFW"‡Óç¶6öç7Bc×æf–VÆG3¶–b‚†e²tW7FFòVF–Fòu×ÇÂrr“ÓÓÒt6æ6VÆFòr—&WGW&âfÇ6S¶6öç7BFC×æ7&VFVEF–ÖSöæWrFFR‡æ7&VFVEF–ÖR“¦çVÆÃ·&WGW&âFBbfFCãÖ7WFöfc·Ò’ç&VGV6R‚‡2Ç“Óç2´ÖF‚ç&÷VæB‚‡æf–VÆG5²tÖöçFòF÷FÂ„4Å’u×ÇÃ’óã’’Ã“°¢ÆVG3Ò‡7FFRæ6Æ–VçFW7ÇÅµÒ’æf–ÇFW"†3Óç¶6öç7BFCÖ2æ7&VFVEF–ÖSöæWrFFR†2æ7&VFVEF–ÖR“¦çVÆÃ·&WGW&âFBbfFCãÖ7WFöfc·Ò’æÆVæwFƒ°¢Ö6F6‚†R—·Ğ¢6öç7B&ö5&VÃÖv7Fóãö–æw&W6ô5$Òöv7Fó£°¢òò‡VVÆÆ÷"6×;†–N(i&v7Fòö6öçb’&FWFV7F"æöÖÌ:Ö2æ—fVÂ6×;¢6öç7B6×3×·Ó²†FFæ6×æ7ÇÅµÒ’æf÷$V6‚†3Óç¶–b†2bf2æ–BÖçVÆÂ–6×5¶2æ–EÓ×¶v7Fó¦2æv7F÷ÇÃÆ6öçc¦2æ6öçfW'6–öæW7ÇÃÓ·Ò“°¢6öç7B6æ×¶FFS§FöF’ÇG3¦æWrFFR‚’çFô•4õ7G&–ær‚’Æv7FòÆ6Æ–72Æ6öçbÇ&ö2Æ–×Æ7G"ÆF—2Æ–æw&W6ô5$ÒÆÆVG2Ç&ö5&VÂÆ6×7Ó°¢6öç7B–Gƒ×6æ2æf–æD–æFW‚‡3Óç2æFFSÓÓ×FöF’“°¢–b†–GƒãÓ’6æ5¶–G…Ó×6æ²VÇ6R6æ2çW6‚‡6æ“°¢6æ2ç6÷'B‚†Æ"“ÓææFFRæÆö6ÆT6ö×&R†"æFFR’“°¢–b‡6æ2æÆVæwFƒã3’6æ2ç7Æ–6RƒÇ6æ2æÆVæwF‚Ó3“°¢Æö6Å7F÷&vRç6WD—FVÒ‚vG5÷6æ6†÷G2rÄ¥4ôâç7G&–æv–g’‡6æ2’“°¢Æö6Å7F÷&vRç6WD—FVÒ‚vG5öÆ7E÷7–æ2rÆæWrFFR‚’çFô•4õ7G&–ær‚’“°§Ğ¦gVæ7F–öâG4vWE&We6æ6†÷B†F—2—°¢ÆWB6æ3·G'—·6æ3Ô¥4ôâç'6R†Æö6Å7F÷&vRævWD—FVÒ‚vG5÷6æ6†÷G2r—ÇÂuµÒr“·Ö6F6‚†R—·6æ3ÕµÓ·Ğ¢òò6ö×&"4ôÄò6öçG&Vâ6æ6†÷BFVÂÔ•4ÔòÆ&vòFRfVçFæâÆ÷2F÷FÆW0¢òò†–×&W6–öæW2ö6Æ–72ö6öçfW'6–öæW2’W66Æâ6öâÆ÷2L:Ö2Â<:ÒVRFöÖ"VÀ¢òò6æ6†÷BçFW&–÷"6–âÖ—&"F—66ö×&&rg23L:Ö2’–çF&7V&–F2ğ¢òò6:ÖF2fÇ62FRì+3Râ6æ2f÷&FVæFò÷"fV6†²VÂFR„õ’W2VÂ;¦ÇF–Öğ¢òò†Ö—6ÖòFFV“²VÂ&çFW&–÷""l:Æ–FòW2VÂÜ:2&V6–VçFRåDU2FR†÷’6öâ–wVÂF—6à¢6öç7BFöF“Ö†÷”4Â‚“°¢6öç7B&Wf–÷3×6æ2æf–ÇFW"‡3Óç2bg2æFFRÓ×FöF’bb†F—3ÓÖçVÆÇÇÇ2æF—3ÓÓÖF—2’“°¢&WGW&â&Wf–÷2æÆVæwFƒ÷&Wf–÷5·&Wf–÷2æÆVæwF‚ÓÓ¦çVÆÃ°§Ğ¦gVæ7F–öâG4Æ7E7–æ57G"‚—°¢6öç7BG3ÖÆö6Å7F÷&vRævWD—FVÒ‚vG5öÆ7E÷7–æ2r“°¢–b‚G2’&WGW&ârs°¢6öç7BF–fcÔFFRææ÷r‚’ÖæWrFFR‡G2’ævWEF–ÖR‚“°¢6öç7BÖ–ç3ÔÖF‚æfÆö÷"†F–fbóc“°¢–b†Ö–ç3Ã’&WGW&âv7GVÆ—¦Fò†÷&s°¢–b†Ö–ç3Ãc’&WGW&âv†6Rr¶Ö–ç2²rÖ–âs°¢6öç7B‡'3ÔÖF‚æfÆö÷"†F–fbó3c“°¢–b†‡'3Ã#B’&WGW&âv†6Rr¶‡'2²v‚s°¢&WGW&âv†6Rr´ÖF‚æfÆö÷"†F–fbóƒcC’²vBs°§Ğ¢òò)H)HÌ:ÖæV2FR&öGV66œ;6â(iB6×;2vöövÆRG2)H)H)H)H)H)H)H)H)H)H)H ¦6öç7BE5ôDTdTÅEõU$ÃÒv‡GG3¢ò÷F†VÆ"ç6öÇWF–öç2s°¢òòvV&†öö²FRÖ¶RVR7&VVÂ&666,;6â"FR6×;l:ÖÆ’&VÂFRvöövÆP¢òòG2†6öâÆFV6Æ&6œ;6âFRçVæ6–÷2öÌ:×F–6÷2TRVRVÂ55bæòVVFR6WFV"’à¢òòVÂ67&—B"6ö×ÆWFÆ6×;†¶W—v÷&G2õ%4öæVvF—f2’Vâ7R,;7†–Ö6÷'&–Fà¦6öç7BE5ôÔ´Uõ4„TÄÃ×·W&Ã¢v‡GG3¢òö†öö²çW3"æÖ¶Ræ6öÒóFÇg—&óFG6æ·&—wFV#vÖsSCC&G7²rÆ6ÆfS¢wFÂÖ666&öâÓ–c#v3FwÓ°¢òò–BÓÓÒ6ÇVrFRÆÆæF–ær÷6W'f–6–÷2óÇ6ÇVsââf–æÅW&Â6R&ÖVâ÷Vä7&VFT6×–vä'”Æ–æV–Bà¦6öç7BE5ôÄ”äT3Õ°¢¶–C¢v7F—f6–öæW2rÇ6ÇVs¢v7F—f6–öæW2rÆÆ&VÃ¢t7F—f6–öæW2rÆ6×;7VvW&–F¢t,;§7VVFÒ7F—f6–öæW2FRÖ&6rÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£cÀ¢Æ'&46ÆfS¥²v7F—f6–öæW2FRÖ&6rÂv7F—f6–öæW2'FÂrÂv7F—f6–öâFRÖ&6V×&W6rÂw7FæG2&7F—f6–öârÂv7F—f6–öæW2V&Æ–6—F&–2rÂw&öGV66–öâFRWfVçF÷2'FÂrÂv7F—f6–öâÖ&66çF–vòrÂvÖöçF¦RFR7F—f6–öæW2uÒÀ¢F—GVÆ÷3¥²t7F—f6–öæW2FRÖ&6rÂt7F—f6–öæW2%DÂÖVF–FrÂu7FæG2’ÖöçF¦W2FRÖ&6rÂu&öGV66œ;6âFR7F—f6–öæW2rÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²t7F—f6–öæW2FRÖ&6’%DÂ&öGV6–F2VæB×FòÖVæB&GR6×;òWfVçFòârÂtF—6\;òÂf'&–66œ;6â’ÖöçF¦Râ6÷F—¦GR7F—f6œ;6âVâ6çF–vòâu×ÒÀ¢¶–C¢w&VÖ–6–öæW2rÇ6ÇVs¢w&VÖ–6–öæW2rÆÆ&VÃ¢u&VÖ–6–öæW2rÆ6×;7VvW&–F¢t,;§7VVFÒ&VÖ–6–öæW2’vÇfæ÷2rÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£cÀ¢Æ'&46ÆfS¥²vvÇfæ÷2W'6öæÆ—¦F÷2rÂwG&öfV÷2W'6öæÆ—¦F÷2rÂwG&öfV÷26÷'÷&F—f÷2rÂvÖVFÆÆ2W'6öæÆ—¦F2rÂvvÇfæòFR&V6öæö6–Ö–VçFòrÂw&VÖ–÷2&V×&W6rÂw&V6öæö6–Ö–VçF÷26÷'÷&F—f÷2rÂwG&öfV÷2&&VÖ–6–öârÂwÆ6FR&V6öæö6–Ö–VçFòuÒÀ¢F—GVÆ÷3¥²tvÇfæ÷2’G&öfV÷2rÂu&VÖ–6–öæW26÷'÷&F—f2rÂuG&öfV÷2W'6öæÆ—¦F÷2rÂtÖVFÆÆ2’&V6öæö6–Ö–VçF÷2rÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²tvÇfæ÷2ÂG&öfV÷2’ÖVFÆÆ2W'6öæÆ—¦F÷2&&VÖ–"GRWV—òârÂtf'&–66œ;6âÖVF–F&GR&VÖ–6œ;6âFRf–âFR;òâ6÷F—¦öæÆ–æRâu×ÒÀ¢¶–C¢vÖW&6†æF—6–ærrÇ6ÇVs¢vÖW&6†æF—6–ærrÆÆ&VÃ¢tÖW&6†æF—6–ærrÆ6×;7VvW&–F¢t,;§7VVFÒÖW&6†æF—6–ær6÷'÷&F—fòrÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£cÀ¢Æ'&46ÆfS¥²vÖW&6†æF—6–ær6÷'÷&F—fòrÂw&VvÆ÷26÷'÷&F—f÷2rÂv'F–7VÆ÷2&öÖö6–öæÆW2rÂw&VvÆ÷26÷'÷&F—f÷2÷"Ö–÷"rÂvÖW&6†æF—6–ærW'6öæÆ—¦FòrÂw&öGV7F÷2&öÖö6–öæÆW2V×&W6rÂv¶—BFR&–VçfVæ–F6÷'÷&F—fòrÂw&VvÆ÷2&V×&W62uÒÀ¢F—GVÆ÷3¥²tÖW&6†æF—6–ær6÷'÷&F—fòrÂu&VvÆ÷26÷'÷&F—f÷2rÂt'L:Ö7VÆ÷2&öÖö6–öæÆW2rÂt¶—G2&V×&W62rÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²tÖW&6†æF—6–ær’&VvÆ÷26÷'÷&F—f÷2W'6öæÆ—¦F÷2&GRÖ&6ârÂt¶—G2Â'L:Ö7VÆ÷2&öÖö6–öæÆW2’6·2÷"Ö–÷"â6÷F—¦&GRV×&W6âu×ÒÀ¢¶–C¢v6¦2×W'6öæÆ—¦F2rÇ6ÇVs¢v6¦2×W'6öæÆ—¦F2rÆÆ&VÃ¢t6¦2W'6öæÆ—¦F2rÆ6×;7VvW&–F¢t,;§7VVFÒ6¦2’6¶v–ærrÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£CÀ¢Æ'&46ÆfS¥²v6¦2W'6öæÆ—¦F2rÂw6¶v–ærW'6öæÆ—¦FòrÂv6¦2&6¶v–ærrÂv6¦2FR&VvÆòW'6öæÆ—¦F2rÂw6¶v–ær6÷'÷&F—fòrÂv6¦26öâÆövòV×&W6rÂv6¦2&–v–F2W'6öæÆ—¦F2rÂw6¶v–ærÖVF–FuÒÀ¢F—GVÆ÷3¥²t6¦2W'6öæÆ—¦F2rÂu6¶v–ærÖVF–FrÂt6¦26öâGRÆövòrÂu6¶v–ær6÷'÷&F—fòrÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²t6¦2’6¶v–ærW'6öæÆ—¦F÷2&&VvÆòò&öGV7Fò6÷'÷&F—fòârÂtF—6\;ò’f'&–66œ;6âFR6¦2ÖVF–F6öâGRÖ&6â6÷F—¦öæÆ–æRâu×ÒÀ¢¶–C¢v–×&W6–öâÓ6BrÇ6ÇVs¢v–×&W6–öâÓ6BrÆÆ&VÃ¢t–×&W6œ;6â4BrÆ6×;7VvW&–F¢t,;§7VVFÒ–×&W6œ;6â4B6çF–vòrÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£ƒÀ¢Æ'&46ÆfS¥²v–×&W6œ;6â6B6çF–vòrÂv–×&W6œ;6â6BrÂw6W'f–6–òFR–×&W6–öâ6BrÂw–W¦26BÖVF–FrÂw&÷F÷F—ò6BrÂvf'&–66–öâ6BrÂv–×&W6–öâ6B&V×&W62rÂvÖöFVÆ÷2’ÖVWF26BrÂw&WVW7F÷2–×&W6÷26BuÒÀ¢F—GVÆ÷3¥²t–×&W6œ;6â4BVâ6çF–vòrÂu–W¦2’&÷F÷F—÷24BrÂt–×&W6œ;6â4BÖVF–FrÂtf'&–66œ;6â4BV×&W62rÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²t–×&W6œ;6â4B&öfW6–öæÃ¢–W¦2Â&÷F÷F—÷2’&WVW7F÷2ÖVF–FârÂtÆÆWfÖ÷2GR–FVVæ–W¦&VÂâ6÷F—¦GR&÷–V7Fò4BVâ6çF–vòâu×ÒÀ¢¶–C¢wföÇVÖWG&–6÷2rÇ6ÇVs¢wföÇVÖWG&–6÷2rÆÆ&VÃ¢uföÇVÜ:—G&–6÷2rÆ6×;7VvW&–F¢t,;§7VVFÒföÇVÜ:—G&–6÷2’æ\;6âÄTBrÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£SÀ¢Æ'&46ÆfS¥²vÆWG&26÷'÷&V2rÂvÆWG&2föÇVÖWG&–62rÂvÆövò6÷'÷&VòrÂvÆWG&W&òæVöâÆVBrÂvÆWG&26B&V×&W6rÂvÆWG&W&÷2ÇVÖ–æ÷6÷2ÆVBrÂvW7G'V7GW&2&WfVçF÷2rÂvÆWG&26÷'÷&V27&–Æ–6òrÂvæVöâW'6öæÆ—¦FòuÒÀ¢F—GVÆ÷3¥²tÆWG&26÷';7&V2’æ\;6ârÂuföÇVÜ:—G&–6÷2ÖVF–FrÂtÆWG&W&÷2æ\;6âÄTBrÂtÆöv÷26÷';7&V÷24BrÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²tÆWG&26÷';7&V2ÂÆöv÷24B’æ\;6âÄTBW'6öæÆ—¦F÷2&GRÖ&6ârÂuföÇVÜ:—G&–6÷2’W7G'V7GW&2&öf–6–æòWfVçFòâ6÷F—¦ÖVF–Fâu×ÒÀ¢¶–C¢v6'FVÆW&–rÇ6ÇVs¢v6'FVÆW&–rÆÆ&VÃ¢t6'FVÆW,:ÖrÆ6×;7VvW&–F¢t,;§7VVFÒ6'FVÆW,:Ö’6\;Ì:—F–6rÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£cÀ¢Æ'&46ÆfS¥²w6\;ÆWF–66÷'÷&F—frÂw6\;ÆWF–67&–Æ–6òrÂvÆWG&W&ò7&–Æ–6òrÂv6'FVÆW&–V×&W6rÂw6\;Æ—¦6–öâV×&W6rÂw&÷GVÆ÷26÷'÷&F—f÷2rÂv6÷'FR’w&&FòÆ6W"rÂwÆ627&–Æ–6òrÂvÆWG&W&÷2&öf–6–æuÒÀ¢F—GVÆ÷3¥²t6'FVÆW,:Ö’6\;Ì:—F–6rÂu6\;Ì:—F–6Vâ7,:ÖÆ–6òrÂtÆWG&W&÷2&V×&W62rÂu,;7GVÆ÷2’Æ62ÖVF–FrÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²t6'FVÆW,:Ö’6\;Ì:—F–66÷'÷&F—fVâ7,:ÖÆ–6ò6öâ6÷'FRÌ:6W"ârÂtÆWG&W&÷2Â,;7GVÆ÷2’Æ62ÖVF–F&GRV×&W6â6÷F—¦öæÆ–æRâu×ÒÀ¢¶–C¢wVÆW&–rÇ6ÇVs¢wVÆW&–rÆÆ&VÃ¢uVÆW,:ÖrÆ6×;7VvW&–F¢t,;§7VVFÒVÆW,:Ö6÷'÷&F—frÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£3À¢Æ'&46ÆfS¥²wVÆW&–6÷'÷&F—frÂwF&¦WF2FR&W6VçF6–öârÂv–×&VçF6÷'÷&F—frÂvÖVÖ'&WFRW'6öæÆ—¦FòrÂv6'WF26÷'÷&F—f2rÂw6VÆÆ÷2&V×&W6rÂv–×&W6–öâ6÷'÷&F—f6çF–vòrÂwF&¦WF2FR&W6VçF6–öâV×&W6uÒÀ¢F—GVÆ÷3¥²uVÆW,:Ö6÷'÷&F—frÂuF&¦WF2’ÖVÖ'&WFW2rÂt–×&VçF&V×&W62rÂu6VÆÆ÷2’6'WF2rÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²uVÆW,:Ö6÷'÷&F—f¢F&¦WF2ÂÖVÖ'&WFW2Â6VÆÆ÷2’6'WF2ârÂt–ÖvVâ&öfW6–öæÂ&GRV×&W6â6÷F—¦GRVÆW,:ÖöæÆ–æRâu×ÒÀ¢¶–C¢v6†—×F†RÖÆ"rÇ6ÇVs¢v6†—×F†RÖÆ"rÆÆ&VÃ¢t6†—F†RÆ"„äd2’rÆ6×;7VvW&–F¢t,;§7VVFÒF&¦WF2äd2rÇF—ó¢u4T$4‚rÇ&W7WVW7Fó£3À¢Æ'&46ÆfS¥²wF&¦WF2æf2rÂwF&¦WFFR&W6VçF6–öâæf2rÂwF&¦WFF–v—FÂæf2rÂwF&¦WF2æf2V×&W6rÂwF&¦WFæf2W'6öæÆ—¦FrÂwF&¦WFFR6öçF7Fòæf2rÂwF&¦WF2–çFVÆ–vVçFW2æf2rÂvæf26†–ÆRuÒÀ¢F—GVÆ÷3¥²uF&¦WF2äd2rÂuF&¦WFF–v—FÂäd2rÂuF&¦WF2äd2ÖVF–FrÂtäd2&V×&W62rÂuF†RÆ"6öÇWF–öç2uÒÀ¢FW67&—6–öæW3¥²uF&¦WF2FR&W6VçF6œ;6âäd2W'6öæÆ—¦F3¢6ö×'FRGR6öçF7FòÂFö6"ârÂuF&¦WF2–çFVÆ–vVçFW2äd2&GRWV—òâ6÷F—¦Æ2GW–2öæÆ–æRâu×ÒÀ¥Ó°¦gVæ7F–öâöG4ÖF6„6×–vâ†6×æ2ÆÆ–æV—°¢–b‚6×æ7ÇÂ6×æ2æÆVæwF‚’&WGW&âçVÆÃ°¢6öç7B·w3Õ°¢ââæÆ–æVæ6×;7VvW&–FçFôÆ÷vW$66R‚’ç&WÆ6R‚õ¾(	5ÂÕÒörÂrr’ç7Æ—B‚õÇ2²ò’æf–ÇFW"‡sÓçræÆVæwFƒã2’À¢âââ†Æ–æVçÆ'&46ÆfWÇÅµÒ’æfÆDÖ†³Óæ²çFôÆ÷vW$66R‚’ç7Æ—B‚õÇ2²ò’æf–ÇFW"‡sÓçræÆVæwFƒã2’¢Ó°¢&WGW&â6×æ2æf–æB†3Óæ·w2ç6öÖR†³Óâ†2ææöÖ'&WÇÂrr’çFôÆ÷vW$66R‚’æ–æ6ÇVFW2†²’’—ÇÆçVÆÃ°§Ğ¦gVæ7F–öâG46÷”·r†Væ6öFVB—°¢6öç7B·sÖFV6öFUU$”6ö×öæVçB†Væ6öFVB“°¢æf–vF÷"æ6Æ—&ö&Bçw&—FUFW‡B†·r’çF†Vâ‚‚“ÓçFö7B‚~)É2"r¶·r²r"6÷–FòrÂw7V66W72r’’æ6F6‚‚‚“Óç·Ò“°§Ğ¦gVæ7F–öâG46÷”ÆÄ·r†Æ–æV–B—°¢6öç7BÃÔE5ôÄ”äT2æf–æB‡ƒÓç‚æ–CÓÓÖÆ–æV–B“°¢–b‚ÇÇÂÂçÆ'&46ÆfR’&WGW&ã°¢æf–vF÷"æ6Æ—&ö&Bçw&—FUFW‡B†ÂçÆ'&46ÆfRæ¦ö–â‚uÆâr’’çF†Vâ‚‚“ÓçFö7B‚~)É2r¶ÂçÆ'&46ÆfRæÆVæwF‚²rÆ'&26ÆfR6÷–F2rÂw7V66W72r’’æ6F6‚‚‚“Óç·Ò“°§Ğ¦gVæ7F–öâvWD66–FDÆ–æV2‚—°¢6öç7BFöF“ÖæWrFFR‚“·FöF’ç6WD†÷W'2ƒÃÃÃ“°¢6öç7BF÷s×FöF’ævWDF’‚“°¢6öç7BÇVæW3ÖæWrFFR‡FöF’“¶ÇVæW2ç6WDFFR‡FöF’ævWDFFR‚’Ò†F÷sÓÓÓóc¦F÷rÓ’“°¢6öç7BF–3Ô'&’æg&öÒ‡¶ÆVæwFƒ£WÒÂ…òÆ’“Óç¶6öç7BCÖæWrFFR†ÇVæW2“¶Bç6WDFFR†ÇVæW2ævWDFFR‚’¶’“·&WGW&âBçFô•4õ7G&–ær‚’ç6Æ–6RƒÃ“·Ò“°¢6öç7B6Æ56Æ÷G3Ö–G3Óç°¢ÆWBF÷FÃÓÆVåW6óÓÆVäÖçCÓ°¢–G2æf÷$V6‚†–CÓç°¢6öç7BtÖçCÖvWDÖV–æW7FFôvÆö&Â†–B“ÓÓÒvÖçFVæ6–öâs°¢F–2æf÷$V6‚†G3Óç°¢F÷FÂ²³°¢6öç7BWcÒ†ÖV–æ7FFRæWfVçF÷7ÇÇ·Ò•¶G¶–GÕòG¶G7ÖÓ°¢–b†tÖçGÇÆWcòçF—óÓÓÒvÖçFVæ6–öâr’VäÖçB²³°¢VÇ6R–b†WcòçF—óÓÓÒwW6òr’VåW6ò²³°¢Ò“°¢Ò“°¢6öç7BF—7ÔÖF‚æÖ‚‡F÷FÂÖVäÖçBÃ“°¢&WGW&ç¶VåW6òÆF—7Ç7C¤ÖF‚æÖ–â„ÖF‚ç&÷VæB†VåW6òöF—7£’Ã—Ó°¢Ó°¢ÆWBfFÕ6ÖÆÄ–G3ÕµÒÆfFÔÆ&vT–G3ÕµÓ°¢G'—°¢fFÕ6ÖÆÄ–G3ÔÔT”ä2æf–ÇFW"†ÓÓå²t³rÂt³"rÂt³"ÇW2rÂtVæFW"ÓRÖ‚uÒæ–æ6ÇVFW2†ÒæÖöFVÆò’’æÖ†ÓÓæÒæ–B“°¢fFÔÆ&vT–G3ÔÔT”ä2æf–ÇFW"†ÓÓæÒæÖöFVÆóÓÓÒtv–vr’æÖ†ÓÓæÒæ–B“°¢Ö6F6‚†R—·Ğ¢6öç7BfFÕ3Ö6Æ56Æ÷G2†fFÕ6ÖÆÄ–G2“°¢6öç7BfFÔÃÖ6Æ56Æ÷G2†fFÔÆ&vT–G2“°¢6öç7B7F—f÷3Ò‡7FFRçVF–F÷7ÇÅµÒ’æf–ÇFW"‡Óç¶6öç7BSÒ‡æf–VÆG7ÇÇ·Ò•²tW7FFòVF–Fòu×ÇÂrs·&WGW&â²tFW76†FòrÂt6ö×ÆWFFòrÂt6æ6VÆFòuÒæ–æ6ÇVFW2†R“·Ò’æÆVæwFƒ°¢6öç7BVE7CÔÖF‚æÖ–â„ÖF‚ç&÷VæB†7F—f÷2ó#£’Ã“°¢6öç7B6VÓ×7CÓç°¢–b‡7CãÓƒR’&WGW&ç·3¢	ùKBrÆ¢uU4"rÆÓ¢tÌ:ÖæV6GW&F(	B6öç6–FW&W6"6×;2&æò6öÆ6"&öGV66œ;6ârÆ3¢wf"‚ÒÖFævW"’wÓ°¢–b‡7CãÓcR’&WGW&ç·3¢	ùúrÆ¢u$TET4•"rÆÓ¢t6&vÇF(	B&VGV6RVÂ&W7WVW7Fòã3R&6öçG&öÆ"VÂfÇV¦òFRVF–F÷2rÆ3¢wf"‚Ò×v&â’wÓ°¢–b‡7CÃC’&WGW&ç·3¢	ùú"rÆ¢t5D•d"rÆÓ¢t66–FBF—7öæ–&ÆR(	B7F—fòVÖVçFVÂ&W7WVW7Fò&6F"Ü:2FVÖæFrÆ3¢wf"‚Ò×7V66W72’wÓ°¢&WGW&ç·3¢~)ª¢rÆ¢tÔåDTäU"rÆÓ¢t6&vÖöFW&F(	BÖçL:–âVÂ&W7WVW7Fò7GVÂrÆ3¢wf"‚ÒÖ66VçB’wÓ°¢Ó°¢6öç7BÖµ&÷sÒ†–BÆÆ&VÂÇ7BÆ–æfòÆÆ–G2“Óâ‡¶–BÆÆ&VÂÇ7BÆ–æfòÆÆ–æV4–G3¦Æ–G2Âââç6VÒ‡7B—Ò“°¢&WGW&å°¢Öµ&÷r‚s6E÷6ÖÆÂrÂtdDÒ6ÖÆÂ„³ô³"ôVæFW"’rÆfFÕ2ç7BÆfFÕ2æVåW6ò²ròr¶fFÕ2æF—7²r6Æ÷G2W7F6VÖærÅ²v–×&W6–öâÓ6BuÒ’À¢Öµ&÷r‚s6EöÆ&vRrÂtdDÒÆ&vR„v–v’rÆfFÔÂç7BÆfFÔÂæVåW6ò²ròr¶fFÔÂæF—7²r6Æ÷G2W7F6VÖærÅ²v–×&W6–öâÓ6BuÒ’À¢Öµ&÷r‚vÆ6W"rÂtÌ:6W"ò6'FVÆW,:ÖrÇVE7BÆ7F—f÷2²rVF–F÷27F—f÷2Vâ6öÆrÅ²v6'FVÆW&–uÒ’À¢Öµ&÷r‚vÖçVÂrÂtÖçVÂ…&VÖ–6–öæW2+rÖW&6‚+rVÆW,:Ö+r÷G&÷2’rÇVE7BÆ7F—f÷2²rVF–F÷27F—f÷2Vâ6öÆrÅ²w&VÖ–6–öæW2rÂvÖW&6†æF—6–ærrÂwVÆW&–rÂv7F—f6–öæW2rÂv6¦2×W'6öæÆ—¦F2rÂwföÇVÖWG&–6÷2rÂv6†—×F†RÖÆ"uÒ’À¢Ó°§Ğ¦gVæ7F–öâ&VæFW$G466–FB†FF—°¢6öç7B&÷ƒÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG466–FD&÷‚r“°¢6öç7BÆ—7CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG466–FDÆ—7Br“°¢–b‚&÷‡ÇÂÆ—7B’&WGW&ã°¢ÆWBf–Æ3°¢G'—²f–Æ3ÖvWD66–FDÆ–æV2‚“²Ğ¢6F6‚†R—²&÷‚ç7G–ÆRæF—7Æ“ÒvæöæRs²&WGW&ã²Ğ¢6öç7B6×3ÖFFæ6×æ7ÇÅµÓ°¢öG46'Få7F÷&SÕµÓ°¢Æ—7Bæ–ææW$…DÔÃÖf–Æ2æÖ‚†bÆf’“Óç°¢6öç7BÖF6†VD6×3ÖbæÆ–æV4–G2æfÆDÖ†Æ–CÓç°¢6öç7BÆ–æVÔE5ôÄ”äT2æf–æB†ÃÓæÂæ–CÓÓÖÆ–B“°¢&WGW&âÆ–æVõµöG4ÖF6„6×–vâ†6×2ÆÆ–æV•Òæf–ÇFW"„&ööÆVâ“¥µÓ°¢Ò“°¢6öç7BVæ—VSÕ²ââææWrÖ†ÖF6†VD6×2æÖ†3Óå¶2æ–BÆ5Ò’’çfÇVW2‚•Ó°¢6öç7Bf—'7D7F—fS×Væ—VRæf–æB†3Óæ2æW7FFóÓÓÒtTä$ÄTBr“°¢6öç7Bf—'7Dç“×Væ—VU³×ÇÆçVÆÃ°¢ÆWB'Fä‡FÖÃÒrs°¢6öç7BÖ´'FãÒ†Æ&VÂÇ7G–ÆR“Óç¶6öç7B–GƒÕöG46'Få7F÷&RæÆVæwF‚Ó·&WGW&æÆ'WGFöâöæ6Æ–6³Ò%öG46'Fâ‚G¶–G‡Ò’"7G–ÆSÒ"G·7G–ÆWÒ#âG¶Æ&VÇÓÂö'WGFöãæ·Ó°¢–b†bæÓÓÒuU4"rbff—'7D7F—fR—°¢öG46'Få7F÷&RçW6‚‡·G—S¢vVF—BrÆ–C¦f—'7D7F—fRæ–BÆæöÖ'&S¦f—'7D7F—fRææöÖ'&RÆW7FFó¢uU4TBrÇ&W7WVW7Fó¦f—'7D7F—fRç&W7WVW7F÷ÇÃÒ“°¢'Fä‡FÖÃÖÖ´'Fâ‚~(û‚W6"rÂv&6¶w&÷VæC§&v&ƒ##ÃS2Ãc’Ãã“¶&÷&FW#£‚6öÆ–B&v&ƒ##ÃS2Ãc’Ãã2“¶6öÆ÷#§f"‚ÒÖFævW"“¶&÷&FW"×&F—W3£Wƒ·FF–æs£7‚—ƒ¶föçB×6—¦S£ƒ¶7W'6÷#§ö–çFW#·v†—FR×76S¦æ÷w&¶fÆW‚×6‡&–æ³£r“°¢ÒVÇ6R–b†bæÓÓÒu$TET4•"rbff—'7D7F—fR—°¢6öç7Bæ#ÔÖF‚ç&÷VæB‚†f—'7D7F—fRç&W7WVW7F÷ÇÃ’£ãr“°¢öG46'Få7F÷&RçW6‚‡·G—S¢vVF—BrÆ–C¦f—'7D7F—fRæ–BÆæöÖ'&S¦f—'7D7F—fRææöÖ'&RÆW7FFó¢tTä$ÄTBrÇ&W7WVW7Fó¦æ'Ò“°¢'Fä‡FÖÃÖÖ´'Fâ‚~(i2Ó3RrÂv&6¶w&÷VæC§&v&ƒ#SRÃ“2ÃrÃã“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃ“2ÃrÃã2“¶6öÆ÷#§f"‚Ò×v&â“¶&÷&FW"×&F—W3£Wƒ·FF–æs£7‚—ƒ¶föçB×6—¦S£ƒ¶7W'6÷#§ö–çFW#·v†—FR×76S¦æ÷w&¶fÆW‚×6‡&–æ³£r“°¢ÒVÇ6R–b†bæÓÓÒt5D•d"r—°¢–b†f—'7Dç’bff—'7Dç’æW7FFóÓÓÒuU4TBr—°¢öG46'Få7F÷&RçW6‚‡·G—S¢vVF—BrÆ–C¦f—'7Dç’æ–BÆæöÖ'&S¦f—'7Dç’ææöÖ'&RÆW7FFó¢tTä$ÄTBrÇ&W7WVW7Fó¦f—'7Dç’ç&W7WVW7F÷ÇÃÒ“°¢'Fä‡FÖÃÖÖ´'Fâ‚~)kb&V7F—f"rÂv&6¶w&÷VæC§&v&ƒCÃ“’ÃÃã“¶&÷&FW#£‚6öÆ–B&v&ƒCÃ“’ÃÃã2“¶6öÆ÷#§f"‚Ò×7V66W72“¶&÷&FW"×&F—W3£Wƒ·FF–æs£7‚—ƒ¶föçB×6—¦S£ƒ¶7W'6÷#§ö–çFW#·v†—FR×76S¦æ÷w&¶fÆW‚×6‡&–æ³£r“°¢ÒVÇ6R–b‚f—'7Dç’—°¢6öç7BÃÔE5ôÄ”äT2æf–æB†ÃÓæbæÆ–æV4–G2æ–æ6ÇVFW2†Âæ–B’“°¢–b‡Â—µöG46'Få7F÷&RçW6‚‡·G—S¢v7&VFRrÆÆ–æV–C§Âæ–GÒ“¶'Fä‡FÖÃÖÖ´'Fâ‚r²7&V"rÂv&6¶w&÷VæC§&v&ƒÃ#"Ã#BÃã“¶&÷&FW#£‚6öÆ–B&v&ƒÃ#"Ã#BÃã2“¶6öÆ÷#§f"‚ÒÖ66VçB“¶&÷&FW"×&F—W3£Wƒ·FF–æs£7‚—ƒ¶föçB×6—¦S£ƒ¶7W'6÷#§ö–çFW#·v†—FR×76S¦æ÷w&¶fÆW‚×6‡&–æ³£r“·Ğ¢Ğ¢Ğ¢6öç7B7D&#ÔÖF‚æÖ‚†bç7BÃ"“°¢&WGW&âG¶f“ãòsÆ‡"7G–ÆSÒ&&÷&FW#¦æöæS¶&÷&FW"×F÷£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶Ö&v–ã£'‚#âs¢rwÓÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶fÆW‚ÖF—&V7F–öã¦6öÇVÖã¶v£G‚#à¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‡ƒ¶§W7F–g’Ö6öçFVçC§76RÖ&WGvVVã¶fÆW‚×w&§w&#à¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£gƒ¶fÆWƒ£¶Ö–â×v–GFƒ£#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£G‚#âG¶bç7ÓÂ÷7ãà¢Ç7â7G–ÆSÒ&föçB×6—¦S£ƒ¶föçB×vV–v‡C£c¶6öÆ÷#§f"‚Ò×FW‡B’#âG¶bæÆ&VÇÓÂ÷7ãà¢G¶bæ–æfóöÇ7â7G–ÆSÒ&föçB×6—¦S£—ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶&6¶w&÷VæC§f"‚Ò×7W&f6S2“¶&÷&FW"×&F—W3£7ƒ·FF–æs£‚Wƒ·v†—FR×76S¦æ÷w&#âG¶bæ–æf÷ÓÂ÷7ãæ¢rwĞ¢ÂöF—cà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£gƒ¶fÆW‚×6‡&–æ³£#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢G¶bæ7Ò#âG¶bç7GÒSÂ÷7ãà¢G¶'Fä‡FÖÇĞ¢ÂöF—cà¢ÂöF—cà¢ÆF—b7G–ÆSÒ&†V–v‡C£Wƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S2“¶&÷&FW"×&F—W3£7ƒ¶÷fW&fÆ÷s¦†–FFVâ#à¢ÆF—b7G–ÆSÒ&†V–v‡C£S·v–GFƒ¢G·7D&'ÒS¶&6¶w&÷VæC¢G¶bæ7Ó¶&÷&FW"×&F—W3£7ƒ·G&ç6—F–öã§v–GF‚ãg2V6R#ãÂöF—cà¢ÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG¶bæ×ÓÂöF—cà¢ÂöF—cæ°¢Ò’æ¦ö–â‚rr“°¢&÷‚ç7G–ÆRæF—7Æ“Òv&Æö6²s°§Ğ¦gVæ7F–öâ&VæFW$G57VvW&Væ6–2†FF—°¢6öç7B&÷ƒÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG57VvvW7D&÷‚r“°¢6öç7BÆ—7CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG57VvvW7DÆ—7Br“°¢6öç7B&FvSÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG57VvvW7D&FvRr“°¢–b‚&÷‡ÇÂÆ—7B’&WGW&ã°¢6öç7B6×3ÖFFæ6×æ7ÇÅµÓ°¢6öç7BfÇFçFW3ÔE5ôÄ”äT2æf–ÇFW"†ÃÓâöG4ÖF6„6×–vâ†6×2ÆÂ’“°¢–b†&FvR’&FvRçFW‡D6öçFVçCÖfÇFçFW2æÆVæwF‚²r7VvW&–Fr²†fÇFçFW2æÆVæwF‚ÓÓòw2s¢rr“°¢–b‚fÇFçFW2æÆVæwF‚—°¢Æ—7Bæ–ææW$…DÔÃÒsÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×7V66W72“·FF–æs£G‚#î)É2–F–VæW26×;2&FöF2Æ2Ì:ÖæV2FR&öGV66œ;6â7F—f2ãÂöF—câs°¢&÷‚ç7G–ÆRæF—7Æ“Òv&Æö6²s·&WGW&ã°¢Ğ¢Æ—7Bæ–ææW$…DÔÃÖfÇFçFW2æÖ†ÃÓç°¢6öç7B·w3Ò†ÂçÆ'&46ÆfWÇÅµÒ’ç6Æ–6RƒÃb“°¢6öç7B·t6†—3Ö·w2æÆVæwFƒöÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶fÆW‚×w&§w&¶v£Gƒ¶Ö&v–â×F÷£g‚#âG¶·w2æÖ†³ÓæÇ7âöæ6Æ–6³Ò&G46÷”·r‚rG¶Væ6öFUU$”6ö×öæVçB†²—Òr’"F—FÆSÒ$6Æ–2&6÷–""7G–ÆSÒ&föçB×6—¦S£—ƒ¶6öÆ÷#§f"‚Ò×FW‡C"“¶&6¶w&÷VæC§f"‚Ò×7W&f6S2“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£ƒ·FF–æs£‚wƒ¶7W'6÷#§ö–çFW#·v†—FR×76S¦æ÷w&#âG¶W66T‡FÖÂ†²—ÓÂ÷7ãæ’æ¦ö–â‚rr—ÒG²†ÂçÆ'&46ÆfWÇÅµÒ’æÆVæwFƒãcöÇ7âöæ6Æ–6³Ò&G46÷”ÆÄ·r‚rG¶Âæ–GÒr’"F—FÆSÒ$6÷–"FöF2Æ2Æ'&26ÆfR"7G–ÆSÒ&föçB×6—¦S£—ƒ¶6öÆ÷#§f"‚ÒÖ66VçB“¶&6¶w&÷VæC§&v&ƒÃ#"Ã#BÃã‚“¶&÷&FW#£‚6öÆ–B&v&ƒÃ#"Ã#BÃã#R“¶&÷&FW"×&F—W3£ƒ·FF–æs£‚wƒ¶7W'6÷#§ö–çFW#·v†—FR×76S¦æ÷w&#â²G²†ÂçÆ'&46ÆfWÇÅµÒ’æÆVæwF‚ÓgÒ+r6÷–"FöF3Â÷7ãæ¢rwÓÂöF—cæ¢rs°¢&WGW&â ¢ÆF—b7G–ÆSÒ'FF–æs£‡‚ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW"×&F—W3£wƒ¶&÷&FW"ÖÆVgC£7‚6öÆ–B&v&ƒÃ#"Ã#BÃãB’#à¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶§W7F–g’Ö6öçFVçC§76RÖ&WGvVVã¶v£‚#à¢ÆF—b7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶föçB×vV–v‡C£c¶6öÆ÷#§f"‚Ò×FW‡B“¶Ö&v–âÖ&÷GFöÓ£'‚#âG¶W66T‡FÖÂ†Âæ6×;7VvW&–F—ÓÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG¶W66T‡FÖÂ†ÂæÆ&VÂ—Ò+rG¶ÂçF—÷Ò+r&W7WVW7Fò7VvW&–Fó¢BG¶Âç&W7WVW7FòçFôÆö6ÆU7G&–ær‚vW2Ô4Âr—ÒöL:ÖÂöF—cà¢ÂöF—cà¢Æ'WGFöâöæ6Æ–6³Ò&÷Vä7&VFT6×–vä'”Æ–æV–B‚rG¶Âæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§&v&ƒÃ#"Ã#BÃã“¶&÷&FW#£‚6öÆ–B&v&ƒÃ#"Ã#BÃã2“¶6öÆ÷#§f"‚ÒÖ66VçB“¶&÷&FW"×&F—W3£Wƒ·FF–æs£G‚ƒ¶föçB×6—¦S£ƒ¶7W'6÷#§ö–çFW#·v†—FR×76S¦æ÷w&¶föçB×vV–v‡C£c¶fÆW‚×6‡&–æ³£#â²7&V#Âö'WGFöãà¢ÂöF—cà¢G¶·t6†—7Ğ¢ÂöF—cæ·Ò’æ¦ö–â‚rr“°¢&÷‚ç7G–ÆRæF—7Æ“Òv&Æö6²s°§Ğ¢òòÆ'&26ÆfR–æ6ÇV—"VâÆ,;7†–Ö6×;7&VF…67&—B"Æ2W6,:&&Ö"VÂw'WòFRçVæ6–÷2¦ÆWBöG47&VFT¶W—v÷&G3ÕµÓ°¦gVæ7F–öâ÷Vä7&VFT6×–våFV×ÆFR†æöÖ'&RÇ&W7WVW7FòÇF—òÇÆ'&46ÆfRÇF—GVÆ÷2ÆFW67&—6–öæW2Æf–æÅW&Â—°¢÷Vä7&VFT6×–vâ‚“°¢öG47&VFT¶W—v÷&G3Ô'&’æ—4'&’‡Æ'&46ÆfR“÷Æ'&46ÆfRç6Æ–6R‚“¥µÓ°¢6WEF–ÖV÷WB‚‚“Óç°¢6öç7BæÓÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÄæöÖ'&Rr“¶–b†æÒ’æÒçfÇVSÖæöÖ'&S°¢6öç7B&CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÅ&W7WVW7Fòr“¶–b†&B’&BçfÇVS×&W7WVW7Fó°¢6öç7B7CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÄW7FFòr“¶–b‡7B’7BçfÇVSÒtTä$ÄTBs°¢6öç7BGÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÅF—òr“¶–b‡G’GçfÇVS×F—÷ÇÂu4T$4‚s°¢6öç7BgSÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÄf–æÅW&Âr“¶–b†gRbff–æÅW&Â’gRçfÇVSÖf–æÅW&Ã°¢6öç7BGCÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÅF—GVÆ÷2r“¶–b‡GBbd'&’æ—4'&’‡F—GVÆ÷2’bgF—GVÆ÷2æÆVæwF‚’GBçfÇVS×F—GVÆ÷2æ¦ö–â‚uÆâr“°¢6öç7BG3ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÄFW67&—6–öæW2r“¶–b†G2bd'&’æ—4'&’†FW67&—6–öæW2’bfFW67&—6–öæW2æÆVæwF‚’G2çfÇVSÖFW67&—6–öæW2æ¦ö–â‚uÆâr“°¢6öç7B·sÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÄ¶W—v÷&G2r“¶–b†·rbeöG47&VFT¶W—v÷&G2æÆVæwF‚’·rçfÇVSÕöG47&VFT¶W—v÷&G2æ¦ö–â‚uÆâr“°¢6öç7B†–çCÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–väÖöFÄ·t†–çBr“°¢–b††–çB—°¢–b…öG47&VFT¶W—v÷&G2æÆVæwF‚—¶†–çBç7G–ÆRæF—7Æ“Òv&Æö6²s¶†–çBçFW‡D6öçFVçCÒ~)É26R–æ6ÇV—,:ârµöG47&VFT¶W—v÷&G2æÆVæwF‚²rÆ'&26ÆfR’VâçVæ6–ò&W7öç6—fòVâVÂw'WòFRçVæ6–÷2Â7&V"Æ6×;â&Wf—6òVF—FVÂçVæ6–ò&¦òâs·Ğ¢VÇ6R†–çBç7G–ÆRæF—7Æ“ÒvæöæRs°¢Ğ¢ÒÃƒ“°§Ğ¦gVæ7F–öâ÷Vä7&VFT6×–vä'”Æ–æV–B†Æ–æV–B—°¢6öç7BÃÔE5ôÄ”äT2æf–æB‡ƒÓç‚æ–CÓÓÖÆ–æV–B“°¢–b†Â—°¢6öç7Bf–æÅW&ÃÖÂç6ÇVsò„E5ôDTdTÅEõU$Â²r÷6W'f–6–÷2òr¶Âç6ÇVr“¤E5ôDTdTÅEõU$Ã°¢÷Vä7&VFT6×–våFV×ÆFR†Âæ6×;7VvW&–FÆÂç&W7WVW7FòÆÂçF—òÆÂçÆ'&46ÆfRÆÂçF—GVÆ÷2ÆÂæFW67&—6–öæW2Æf–æÅW&Â“°¢Ğ§Ğ¦ÆWBöG46'Få7F÷&SÕµÓ°¦gVæ7F–öâöG46'Fâ†–G‚—°¢6öç7BCÕöG46'Få7F÷&U¶–G…Ó¶–b‚B’&WGW&ã°¢–b†BçG—SÓÓÒvVF—Br’÷VäVF—D6×–vâ†Bæ–BÆBææöÖ'&RÆBæW7FFòÆBç&W7WVW7Fò“°¢VÇ6R÷Vä7&VFT6×–vä'”Æ–æV–B†BæÆ–æV–B“°§Ğ¢òò66–öæW2FRÆF&ÆFR6×;2†VF—F"öVÆ–Ö–æ"’÷":ÖæF–6R(	BWf—FW66W2Vâöæ6Æ–6°¦ÆWBöG46×7F–öç3ÕµÓ°¦gVæ7F–öâöG46×7F–öâ†–G‚—°¢6öç7BCÕöG46×7F–öç5¶–G…Ó¶–b‚B’&WGW&ã°¢–b†BçG—SÓÓÒvVF—Br’÷VäVF—D6×–vâ†Bæ–BÆBææöÖ'&RÆBæW7FFòÆBç&W7WVW7Fò“°¢VÇ6R–b†BçG—SÓÓÒvFVÆWFRr’÷VäFVÆWFT6×–vâ†Bæ–BÆBææöÖ'&R“°¢VÇ6R–b†BçG—SÓÓÒv6÷’r’'VäG46÷”vVçB†B“°¢VÇ6R–b†BçG—SÓÓÒvæÇ—¦Rr’'VäG46×–vävVçB†Bæ–B“°§Ğ¢òòì:Æ—6—2&ögVæFòFRTä6×;†6öâ7W266–öæW2FR6Æ–2¦gVæ7F–öâ'VäG46×–vävVçB†–B—°¢6öç7B6×Ò‡v–æF÷råöG4Æ7DFFòæ6×æ7ÇÅµÒ’æf–æB†3Óå7G&–ær†2æ–B“ÓÓÕ7G&–ær†–B’“°¢–b‚6×—·Fö7B‚t6&v&–ÖW&òÆ÷2FF÷2FRvöövÆRG2rÂvW'&÷"r“·&WGW&ã·Ğ¢6öç7BF—3×'6T–çB†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG5W&–öE6VÆV7Br“òçfÇVWÇÂs3r“°¢6öç7B7G#Ö6×æ–×&W6–öæW3ãò†6×æ6Æ–72ö6×æ–×&W6–öæW2£’çFôf—†VBƒ"“£°¢6öç7B73Ö6×æ6Æ–73ãôÖF‚ç&÷VæB†6×æv7Fòö6×æ6Æ–72“£°¢6öç7B7Ö6×æ6öçfW'6–öæW3ãôÖF‚ç&÷VæB†6×æv7Fòö6×æ6öçfW'6–öæW2“£°¢6öç7B&óÖ6×æv7Fóãbb†6×çfÆ÷%ö6öçfW'6–öçÇÃ“ãò†6×çfÆ÷%ö6öçfW'6–öâö6×æv7Fò’çFôf—†VBƒ"“£°¢6öç7BWF–ÃÖ6×ç&W7WVW7FóãôÖF‚ç&÷VæB†6×æv7FòöF—2ö6×ç&W7WVW7Fò£“£°¢6öç7B7GƒÖÆåÆääÄ•¤Tâ$ôeTäD”DB<94ÄòU5D4Õ9¥Ææ–CÒG¶6×æ–GÒ"G¶6×ææöÖ'&WÒ"²G¶6×æW7FF÷ÕÒ+rG¶F—7ÒL:Ö5ÆåFòG¶f×DÖöæW’†6×ç&W7WVW7F÷ÇÃ—ÒöL:Ö‚G·WF–ÇÒRW6ò’+rv7FòG¶f×DÖöæW’†6×æv7F÷ÇÃ—Ò+r5E"G¶7G'ÒR+r52G¶f×DÖöæW’†72—Ò+r6öçbG¶6×æ6öçfW'6–öæW7ÇÃÒ+r5G¶6×æ6öçfW'6–öæW3ãöf×DÖöæW’†7“¢~(	BwÒ+r$ô2ÔvöövÆRG²†6×çfÆ÷%ö6öçfW'6–öçÇÃ“ã÷&ò²w‚s¢~(	BwÕÆäFVâF–vì;77F–6òW7V<:Öf–6ò’Æ266–öæW26öæ7&WF2†6öâ´5D”ôå5Ò’&W7F6×;â6’Æ×VW7G&W26†–6ÂF–Æòæ°¢'VävVçD–æÆ–æR‚tE2rÆ7G‚Â‡&W7VÇB“Óç°¢6öç7B7F–öç3Õ÷'6TG47F–öç2‡&W7VÇB“·v–æF÷råöG4vVçD7F–öç3Ö7F–öç3°¢6öç7B$VÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vvVçD–æÆ–æU&W7VÇBr“¶–b‡$VÂ—·$VÂç7G–ÆRçv†—FU76SÒvæ÷&ÖÂs·$VÂæ–ææW$…DÔÃÖf÷&ÖDvVçE&W÷'B‡&W7VÇB“·Ğ¢6öç7B'Fç3ÕöG5&VæFW$7F–öä'Fç2†7F–öç2“°¢&WGW&â'Fç2¶Æ'WGFöâ6Æ73Ò&'Fâ'FâÖv†÷7B'Fâ×6Ò"öæ6Æ–6³Ò&6÷”vVçE&W7VÇB‚’#ï	ù8²6÷–#Âö'WGFöãæ°¢Ò“°§Ğ¢òò)H)H†VÇF‚66÷&R÷"6×;ƒ(	3’)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦gVæ7F–öâG4†VÇF…66÷&R†2—°¢–b‚2æ–×&W6–öæW7ÇÆ2æ–×&W6–öæW3ÓÓÓ’&WGW&ç·66÷&S£Æ6öÆ÷#¢wf"‚Ò×FW‡C2’rÆÆ&VÃ¢u6–âFF÷2wÓ°¢6öç7B7G#Ö2æ6Æ–72ö2æ–×&W6–öæW2£°¢6öç7B6öçe&FSÖ2æ6Æ–73ãö2æ6öçfW'6–öæW2ö2æ6Æ–72££°¢6öç7B&ö3Ö2æv7Fóãbb†2çfÆ÷%ö6öçfW'6–öçÇÃ“ãö2çfÆ÷%ö6öçfW'6–öâö2æv7Fó£°¢6öç7B3ÔÖF‚ç&÷VæB„ÖF‚æÖ–â†7G"óRÃ’£3R´ÖF‚æÖ–â†6öçe&FRó2Ã’£3R²‡&ö3ãôÖF‚æÖ–â‡&ö2óBÃ’£3£’“°¢6öç7B6öÆ÷#×3ãÓsòwf"‚Ò×7V66W72’s§3ãÓCòwf"‚Ò×v&â’s¢wf"‚ÒÖFævW"’s°¢&WGW&ç·66÷&S§2Æ6öÆ÷"ÆÆ&VÃ§3ãÓsòt'VVæòs§3ãÓCòu&VwVÆ"s¢t&¦òwÓ°§Ğ¢òò)H)H—'F&ÆR7–æ2)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦7–æ2gVæ7F–öâ7–æ4G5Fô—'F&ÆR†FFÆF—2—°¢ÆWB6fs·G'—¶6fsÕö—'F&ÆT6öæf–r‚“·Ö6F6‚†R—·&WGW&ã·Ğ¢6öç7BFöF“Ö†÷”4Â‚“°¢6öç7Bv7FóÖFFæv7F÷ÇÃÆ–×ÖFFæ–×&W6–öæW7ÇÃÆ6Æ–73ÖFFæ6Æ–77ÇÃ°¢6öç7B6öçcÖFFæ6öçfW'6–öæW7ÇÃÇfÄ6öçcÖFFçfÆ÷%ö6öçfW'6–öçÇÃ°¢6öç7B7G#Ö–×ãö6Æ–72ö–×£°¢6öç7B73Ö6Æ–73ãôÖF‚ç&÷VæB†v7Fòö6Æ–72“£°¢6öç7B7Ö6öçcãôÖF‚ç&÷VæB†v7Fòö6öçb“£°¢6öç7B&ö3Öv7FóãôÖF‚ç&÷VæB‡fÄ6öçböv7Fò£’ó£°¢6öç7BG46fsÖvWDG46öæf–r‚“°¢6öç7B&6SÖ6fræ&6R²ròr´$4Uô”C°¢6öç7B†VFW'3×²ââæ6fræ†VFW'2Ât6öçFVçBÕG—Rs¢vÆ–6F–öâö§6öâwÓ°¢òòµ’&V6÷&@¢v—B—'F&ÆT‡GG†&6R²rôvöövÆUôG5ôµ—2rÇ¶ÖWF†öC¢uõ5BrÆ†VFW'2Æ&öG“¤¥4ôâç7G&–æv–g’‡·&V6÷&G3¥·¶f–VÆG3§°¢uW,:ÖöFòs§FöF’²r+rr¶F—2²vBrÀ¢tfV6†s§FöF’ÂtL:Ö2W,:ÖöFòs¦F—2À¢tv7Fò„4Å’s¦v7FòÂt–×&W6–öæW2s¦–×Ât6Æ–72s¦6Æ–72À¢t5E"‚R’s¦7G"Ât52&öÖVF–ò„4Å’s¦72À¢t6öçfW'6–öæW2s¦6öçbÂufÆ÷"6öçfW'6–öæW2„4Å’s§fÄ6öçbÀ¢t5„4Å’s¦7Âu$ô2s§&ö2À¢t7W7FöÖW"”Bs¦G46fræ7W7FöÖW$–GÇÂrrÂtgVVçFRs¢w&VÂp¢×ÕÒÇG—V67C§G'VWÒ—Ò“°¢òò6×–vâ&V6÷&G2†&F6‚¢6öç7B6×3ÖFFæ6×æ7ÇÅµÓ°¢–b†6×2æÆVæwF‚—°¢6öç7B&V73Ö6×2æÖ†3Óç°¢6öç7B7CÖ2æ–×&W6–öæW3ãö2æ6Æ–72ö2æ–×&W6–öæW3£°¢6öç7B7Ö2æ6Æ–73ãôÖF‚ç&÷VæB†2æv7Fòö2æ6Æ–72“£°¢6öç7B6Ö2æ6öçfW'6–öæW3ãôÖF‚ç&÷VæB†2æv7Fòö2æ6öçfW'6–öæW2“£°¢6öç7B&óÖ2æv7Fóãbb†2çfÆ÷%ö6öçfW'6–öçÇÃ“ãôÖF‚ç&÷VæB†2çfÆ÷%ö6öçfW'6–öâö2æv7Fò£’ó£°¢&WGW&ç¶f–VÆG3§°¢t6×;s¦2ææöÖ'&WÇÅ7G&–ær†2æ–B’À¢t6×–vâ”Bs¥7G&–ær†2æ–GÇÂrr’À¢tfV6†6æ6†÷Bs§FöF’ÂtW7FFòs¦2æW7FF÷ÇÂtTä$ÄTBrÀ¢u&W7WVW7FòF–&–ò„4Å’s¦2ç&W7WVW7F÷ÇÃÂtv7Fò„4Å’s¦2æv7F÷ÇÃÀ¢t–×&W6–öæW2s¦2æ–×&W6–öæW7ÇÃÂt6Æ–72s¦2æ6Æ–77ÇÃÀ¢t5E"‚R’s¦7BÂt52„4Å’s¦7À¢t6öçfW'6–öæW2s¦2æ6öçfW'6–öæW7ÇÃÂt5„4Å’s¦6Âu$ô2s§&òÀ¢u66÷&R6ÇVBs¦G4†VÇF…66÷&R†2’ç66÷&RÂuW,:ÖöFò†L:Ö2’s¦F—0¢×Ó°¢Ò“°¢f÷"†ÆWB“Ó¶“Ç&V72æÆVæwFƒ¶’³Ó—°¢v—B—'F&ÆT‡GG†&6R²rôvöövÆUôG5ô6×æ2rÇ¶ÖWF†öC¢uõ5BrÆ†VFW'2Æ&öG“¤¥4ôâç7G&–æv–g’‡·&V6÷&G3§&V72ç6Æ–6R†’Æ’³’ÇG—V67C§G'VWÒ—Ò“°¢Ğ¢Ğ§Ğ¦7–æ2gVæ7F–öâÆöDG56æ6†÷G4g&öÔ—'F&ÆR‚—°¢ÆWB6fs·G'—¶6fsÕö—'F&ÆT6öæf–r‚“·Ö6F6‚†R—·&WGW&ã·Ğ¢6öç7B&W3Öv—B—'F&ÆTfWF6‚‚tvöövÆUôG5ôµ—2rÃc“°¢6öç7B&V6÷&G3×&W2ç&V6÷&G7ÇÅµÓ¶–b‚&V6÷&G2æÆVæwF‚’&WGW&ã°¢&V6÷&G2ç6÷'B‚†Æ"“Óâ†"æf–VÆG5²tfV6†u×ÇÂrr’æÆö6ÆT6ö×&R†æf–VÆG5²tfV6†u×ÇÂrr’“°¢6öç7B6VVãÖæWr6WB‚“°¢6öç7BFVGWVC×&V6÷&G2æf–ÇFW"‡#Óç¶6öç7BC×"æf–VÆG5²tfV6†u×ÇÂrs¶–b‡6VVâæ†2†B’’&WGW&âfÇ6S·6VVâæFB†B“·&WGW&âG'VS·Ò“°¢6öç7B6æ3ÖFVGWVBç&WfW'6R‚’æÖ‡#Óç¶6öç7Bc×"æf–VÆG3·&WGW&ç°¢FFS¦e²tfV6†u×ÇÂrrÇG3¦e²tfV6†u×ÇÂrrÀ¢v7Fó¦e²tv7Fò„4Å’u×ÇÃÆ6Æ–73¦e²t6Æ–72u×ÇÃÆ6öçc¦e²t6öçfW'6–öæW2u×ÇÃÀ¢&ö3¦e²u$ô2u×ÇÃÆ–×¦e²t–×&W6–öæW2u×ÇÃÆ7G#¦e²t5E"‚R’u×ÇÃÆF—3¦fÚ±î¸Â¸­yêë¢°k¢G§¦*^['DÃ­as perÃ­odo']||30
   };});
   localStorage.setItem('ads_snapshots',JSON.stringify(snaps));
 }
@@ -1192,7 +772,7 @@ async function iaBuildCampaign(){
   try{
     let ctx='';
     try{ if(typeof state!=='undefined'&&state.loaded&&window._adsLastData&&!window._adsLastData.demo) ctx=('\n\nDATOS ACTUALES DE LA CUENTA (referencia):\n'+buildAgentContext('ADS')).slice(0,3500); }catch(e){}
-    const raw=await callClaude(ADS_BUILDER_SYS,'BRIEF: '+q+ctx+'\n\nDevuelve SOLO el JSON.');
+    const raw=await callAgentClaude('ADS',ADS_BUILDER_SYS,'BRIEF: '+q+ctx+'\n\nDevuelve SOLO el JSON.');
     const prop=_parseCampaignJSON(raw);
     if(!prop||!prop.nombre){toast('La IA no devolviÃ³ una campaÃ±a vÃ¡lida â€” reintenta','error');return;}
     _applyIACampaign(prop);
@@ -1265,401 +845,6 @@ function confirmDeleteCampaign(){
 }
 
 // Purga del servidor (Script 1) las mutaciones ya resueltas; conserva las pendientes.
-// El almacÃ©n crece para siempre (errores viejos, duplicados) y ensucia el diagnÃ³stico.
-async function adsLimpiarHistorialMutaciones(){
-  const cfg=getAdsConfig();
-  if(!cfg.endpoint){toast('No hay endpoint configurado','error');return;}
-  if(!cfg.secret){toast('Configura el secreto de mutaciones de Google Ads','error');return;}
-  try{
-    const r=await fetch(cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now());
-    const d=await r.json();
-    const todas=(d&&d.mutations)||[];
-    const pendientes=todas.filter(m=>m.status==='pending');
-    const resueltas=todas.length-pendientes.length;
-    if(!resueltas){toast('No hay mutaciones resueltas que limpiar','info');return;}
-    if(!confirm(`Se eliminarÃ¡n ${resueltas} mutaciones ya resueltas (aplicadas o con error) del historial del servidor. Se conservan las ${pendientes.length} pendientes. Â¿Continuar?`)) return;
-    const res=await fetch(cfg.endpoint,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({secret:cfg.secret,type:'update_mutations',mutations:pendientes})});
-    const dr=await res.json().catch(()=>({}));
-    if(dr&&dr.ok){
-      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status==='pending'||m.status==='enviado');
-      savePendingToStorage();renderPendingMutations();
-      toast('âœ“ Historial limpio â€” '+resueltas+' eliminadas, '+pendientes.length+' pendientes conservadas','success');
-    } else toast('No se pudo limpiar: '+((dr&&dr.error)||'el servidor no respondiÃ³ ok'),'error');
-  }catch(e){toast('Error limpiando historial: '+e.message,'error');}
-}
-
-// â”€â”€â”€ Piloto automÃ¡tico (propuestas semanales del Worker) â”€â”€â”€â”€
-let _adsAutopilotProps=[];
-async function renderAdsAutopilot(){
-  const panel=document.getElementById('adsAutopilotPanel');
-  const list=document.getElementById('adsAutopilotList');
-  const badge=document.getElementById('adsAutopilotBadge');
-  if(!panel||!list) return;
-  try{
-    const cfg=_airtableConfig();
-    const formula=encodeURIComponent("AND({Agente}='ADS_AUTOPILOT',{Estado}='Pendiente')");
-    const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue?filterByFormula=${formula}&pageSize=10`,{headers:cfg.headers});
-    if(!r.ok) throw new Error('Airtable '+r.status);
-    const d=await r.json();
-    _adsAutopilotProps=(d.records||[]).map(rec=>{
-      let out={};try{out=JSON.parse(rec.fields?.Output||'{}');}catch(e){}
-      return{id:rec.id,fecha:rec.fields?.['Fecha creaciÃ³n']||rec.createdTime,resumen:out.resumen||'',acciones:out.acciones||[],mutaciones:out.mutaciones||[],descartadas:out.descartadas||[]};
-    }).filter(p=>p.mutaciones.length);
-  }catch(e){ panel.style.display='none'; return; }
-  if(!_adsAutopilotProps.length){ panel.style.display='none'; return; }
-  if(badge) badge.textContent=_adsAutopilotProps.length+' pendiente'+(_adsAutopilotProps.length!==1?'s':'');
-  list.innerHTML=_adsAutopilotProps.map((p,i)=>{
-    const filas=p.acciones.map(a=>{
-      const det=a.tipo==='presupuesto'?`$${(a.anterior||0).toLocaleString('es-CL')} â†’ <b>$${(a.nuevo||0).toLocaleString('es-CL')}</b>/dÃ­a`:a.tipo;
-      return `<div style="display:flex;gap:8px;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border2)"><span style="min-width:120px;color:var(--accent)">${escapeHtml(a.linea||'')}</span><span style="flex:1;color:var(--text2)">${escapeHtml(a.campana||'')} Â· ${det}</span><span style="flex:1;color:var(--text3)">${escapeHtml(a.motivo||'')}</span></div>`;
-    }).join('');
-    return `<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;border-left:3px solid var(--accent)">
-      <div style="font-size:10px;color:var(--text3);margin-bottom:4px">${escapeHtml((p.fecha||'').slice(0,16).replace('T',' '))}</div>
-      ${p.resumen?`<div style="font-size:11px;color:var(--text);margin-bottom:6px">${escapeHtml(p.resumen)}</div>`:''}
-      ${filas}
-      ${p.descartadas.length?`<div style="font-size:10px;color:var(--text3);margin-top:6px">Descartadas por guardrails: ${p.descartadas.map(x=>escapeHtml((x.tipo||'')+' '+(x.linea||'')+' ('+(x.descarte||'')+')')).join(' Â· ')}</div>`:''}
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn btn-primary btn-sm" style="font-size:11px" onclick="adsAutopilotDecide(${i},true)">âœ“ Aprobar y aplicar</button>
-        <button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--danger)" onclick="adsAutopilotDecide(${i},false)">âœ— Rechazar</button>
-      </div>
-    </div>`;
-  }).join('');
-  panel.style.display='block';
-}
-async function adsAutopilotDecide(i,aprobar){
-  const p=_adsAutopilotProps[i]; if(!p) return;
-  // Re-verifica el estado justo antes (pudo aprobarse por email hace un momento):
-  // evita encolar dos veces las mismas mutaciones (un "create" duplicarÃ­a la campaÃ±a).
-  try{
-    const cfg=_airtableConfig();
-    const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue/${p.id}`,{headers:cfg.headers});
-    if(r.ok){const rec=await r.json();if((rec.fields?.Estado||'')!=='Pendiente'){toast('Esta propuesta ya fue procesada ('+(rec.fields?.Estado||'â€”')+')','info');renderAdsAutopilot();return;}}
-  }catch(e){}
-  if(aprobar){
-    if(!confirm(`Â¿Aprobar ${p.mutaciones.length} cambio(s) del piloto? Se aplicarÃ¡n en Google Ads en la prÃ³xima corrida del Script 2.`)) return;
-    p.mutaciones.forEach(m=>_adsQueueMutation({...m,timestamp:m.timestamp||new Date().toISOString(),status:'pending'}));
-    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Completado','Fecha ejecuciÃ³n':new Date().toISOString(),'Accion sugerida':`Aprobado desde dashboard: ${p.mutaciones.length} mutaciones encoladas`});}catch(e){}
-    toast('âœ“ '+p.mutaciones.length+' cambio(s) del piloto encolados','success');
-  }else{
-    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Error',Error:'Rechazado desde el dashboard ('+new Date().toISOString().slice(0,16)+')'});}catch(e){}
-    toast('Propuesta del piloto rechazada','info');
-  }
-  renderAdsAutopilot();
-}
-
-// â”€â”€â”€ Conversiones offline (CRM â†’ Google Ads) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function _adsOffSyncNames(){
-  const l=(document.getElementById('adsOffLeadName').value||'Lead calificado CRM').trim();
-  const v=(document.getElementById('adsOffVentaName').value||'Venta CRM').trim();
-  const e1=document.getElementById('adsOffNameEcho1'); if(e1) e1.textContent=l||'Lead calificado CRM';
-  const e2=document.getElementById('adsOffNameEcho2'); if(e2) e2.textContent=v||'Venta CRM';
-}
-function openAdsOfflineModal(){
-  const r=document.getElementById('adsOffResult'); if(r){r.style.display='none';r.innerHTML='';}
-  _adsOffSyncNames();
-  document.getElementById('adsOfflineModal').style.display='flex';
-}
-function closeAdsOfflineModal(){ document.getElementById('adsOfflineModal').style.display='none'; }
-function _adsOfflineTime(d){
-  try{ return d.toLocaleString('sv-SE',{timeZone:'America/Santiago'}).replace('T',' ').slice(0,19); }
-  catch(e){ return d.toISOString().slice(0,19).replace('T',' '); }
-}
-function _adsCsvCell(v){ const s=String(v==null?'':v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
-function _adsDownloadCSV(name,text){
-  const blob=new Blob([text],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download=name;
-  document.body.appendChild(a); a.click();
-  setTimeout(()=>{try{document.body.removeChild(a);}catch(e){} URL.revokeObjectURL(url);},150);
-}
-function _adsGetGclid(c){
-  if(!c||!c.fields) return '';
-  const g=c.fields['GCLID']; if(g) return String(g).trim();
-  const notas=c.fields['Notas internas']||''; const m=String(notas).match(/gclid=([^\s]+)/i);
-  return m?m[1]:'';
-}
-function adsExportOfflineConversions(){
-  if(typeof state==='undefined'||!state.loaded){toast('Carga primero los datos de Airtable','error');return;}
-  const days=Math.max(1,Math.min(90,parseInt(document.getElementById('adsOffDays').value)||90));
-  const thr=parseInt(document.getElementById('adsOffScore').value)||6;
-  const leadVal=parseInt(document.getElementById('adsOffLeadVal').value)||0;
-  const incLeads=document.getElementById('adsOffIncLeads').checked;
-  const incVentas=document.getElementById('adsOffIncVentas').checked;
-  const nLead=(document.getElementById('adsOffLeadName').value||'Lead calificado CRM').trim();
-  const nVenta=(document.getElementById('adsOffVentaName').value||'Venta CRM').trim();
-  const cutoff=new Date(Date.now()-days*86400000);
-  const etapasCalif=['Propuesta enviada','NegociaciÃ³n','Cliente activo'];
-  const rows=[]; let sinGclid=0, nLeads=0, nVentas=0;
-  if(incLeads){
-    (state.clientes||[]).forEach(c=>{
-      const f=c.fields||{}; const dd=c.createdTime?new Date(c.createdTime):null; if(!dd||dd<cutoff) return;
-      const score=Number(f['Lead Score IA']||f['Lead Score']||0);
-      const etapa=f['Etapa venta']||'';
-      if(!(score>=thr||etapasCalif.includes(etapa))) return;
-      const g=_adsGetGclid(c); if(!g){sinGclid++;return;}
-      rows.push([g,nLead,_adsOfflineTime(dd),leadVal>0?leadVal:'','CLP']); nLeads++;
-    });
-  }
-  if(incVentas){
-    (state.pedidos||[]).forEach(p=>{
-      const f=p.fields||{}; if((f['Estado pedido']||'')==='Cancelado') return;
-      const dd=p.createdTime?new Date(p.createdTime):null; if(!dd||dd<cutoff) return;
-      const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:(typeof f['Cliente']==='string'?f['Cliente']:null);
-      const cli=(cid&&state.clientesByIdRec)?state.clientesByIdRec[cid]:null;
-      const g=_adsGetGclid(cli); if(!g){sinGclid++;return;}
-      const val=Math.round((f['Monto total (CLP)']||0)/1.19);
-      rows.push([g,nVenta,_adsOfflineTime(dd),val>0?val:'','CLP']); nVentas++;
-    });
-  }
-  const out=document.getElementById('adsOffResult'); if(out) out.style.display='block';
-  if(!rows.length){
-    if(out) out.innerHTML='<span style="color:var(--warn)">No se encontraron conversiones con gclid en el perÃ­odo. Revisa que la columna <b>GCLID</b> exista en Clientes y que estÃ©n llegando leads desde Google Ads (o que el gclid quede en Notas internas).</span>';
-    return;
-  }
-  const header='Parameters:TimeZone=America/Santiago\nGoogle Click ID,Conversion Name,Conversion Time,Conversion Value,Conversion Currency';
-  const csv=header+'\n'+rows.map(r=>r.map(_adsCsvCell).join(',')).join('\n')+'\n';
-  _adsDownloadCSV('conversiones_offline_'+hoyCL()+'.csv',csv);
-  if(out) out.innerHTML='âœ“ CSV generado: <b>'+rows.length+'</b> conversiones ('+nLeads+' leads Â· '+nVentas+' ventas)'+(sinGclid?' Â· <span style="color:var(--warn)">'+sinGclid+' sin gclid omitidas</span>':'')+'.<br>SÃºbelo en Google Ads â†’ Objetivos â†’ Conversiones â†’ Cargas â†’ Subir.';
-}
-
-async function adsDiagnostico(){
-  const cfg=getAdsConfig();
-  const out=document.getElementById('adsDiagOutput');
-  if(!out) return;
-  out.style.display='block';
-  out.innerHTML='<div style="color:var(--text3)">â³ Diagnosticando...</div>';
-  const lines=[];
-  lines.push(`<b>Endpoint configurado:</b> <code style="font-size:9px;word-break:break-all">${escapeHtml(cfg.endpoint||'(ninguno)')}</code>`);
-  lines.push(`<b>Customer ID:</b> ${escapeHtml(cfg.customerId||'(no definido)')}`);
-  lines.push(`<b>Mutaciones locales (localStorage):</b> ${_adsPendingMutations.length} total`);
-  const byStatus={};_adsPendingMutations.forEach(m=>{byStatus[m.status]=(byStatus[m.status]||0)+1;});
-  Object.entries(byStatus).forEach(([s,n])=>lines.push(`  &nbsp;â†’ ${s}: ${n}`));
-  if(cfg.endpoint){
-    try{
-      const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now();
-      const r=await fetch(url);const d=await r.json();
-      if(d.ok&&Array.isArray(d.mutations)){
-        lines.push(`<b style="color:var(--success)">âœ“ Script 1 responde OK</b> â€” ${d.mutations.length} mutaciones almacenadas`);
-        const byS2={};d.mutations.forEach(m=>{byS2[m.status]=(byS2[m.status]||0)+1;});
-        Object.entries(byS2).forEach(([s,n])=>lines.push(`  &nbsp;â†’ <b>${s}</b>: ${n}`));
-        const pending=d.mutations.filter(m=>m.status==='pending'||m.status==='enviado');
-        if(pending.length){
-          const oldest=pending.sort((a,b)=>a.timestamp.localeCompare(b.timestamp))[0];
-          const mins=Math.round((Date.now()-new Date(oldest.timestamp).getTime())/60000);
-          lines.push(`<b style="color:var(--warn)">âš  ${pending.length} mutaciÃ³n(es) sin aplicar</b> â€” la mÃ¡s antigua tiene ${mins} min`);
-          if(mins>60) lines.push(`<span style="color:var(--danger)">â†’ El Script 2 no ha corrido en mÃ¡s de 1 hora. Verifica que tenga un trigger horario configurado en Google Ads â†’ Herramientas â†’ Scripts â†’ â±</span>`);
-          else lines.push(`â†’ El Script 2 deberÃ­a procesarlas en la prÃ³xima ejecuciÃ³n (si tiene trigger horario).`);
-        } else if(d.mutations.length){
-          lines.push(`<span style="color:var(--success)">âœ“ Todas las mutaciones han sido aplicadas por Script 2</span>`);
-        }
-      } else {
-        lines.push(`<b style="color:var(--danger)">âœ— Script 1 respondiÃ³ con error:</b> ${escapeHtml((d&&d.error)||'respuesta invÃ¡lida')}`);
-      }
-    }catch(e){
-      lines.push(`<b style="color:var(--danger)">âœ— No se pudo conectar con Script 1:</b> ${escapeHtml(e.message)}`);
-      lines.push(`â†’ Verifica que el Script 1 estÃ© publicado como <b>AplicaciÃ³n web</b> con acceso <b>Todos (Anyone)</b>.`);
-    }
-  } else {
-    lines.push(`<b style="color:var(--danger)">âœ— No hay endpoint configurado</b> â€” pega la URL del Script 1 arriba.`);
-  }
-  out.innerHTML=lines.map(l=>`<div style="margin-bottom:4px;font-size:11px">${l}</div>`).join('');
-}
-
-function sendAdsMutation(mutation){
-  const cfg=getAdsConfig();
-  if(!cfg.endpoint){mutation.status='error';mutation.error='No hay endpoint configurado';savePendingToStorage();renderPendingMutations();return;}
-  if(!cfg.secret){mutation.status='error';mutation.error='Configura el secreto de mutaciones';savePendingToStorage();renderPendingMutations();return;}
-  // text/plain evita el CORS preflight que bloquea los POSTs a Google Apps Script
-  fetch(cfg.endpoint,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify({secret:cfg.secret,type:'mutation',...mutation})
-  }).then(r=>r.json()).then(d=>{
-    if(d&&d.ok){mutation.status='enviado';mutation.error='';}
-    else{mutation.status='error';mutation.error=(d&&d.error)||'El servidor rechazÃ³ la mutaciÃ³n';}
-    savePendingToStorage();
-    renderPendingMutations();
-  }).catch(()=>{
-    mutation.status='error';mutation.error='Sin conexiÃ³n con el endpoint (se reintentarÃ¡ al guardar de nuevo)';
-    savePendingToStorage();
-    renderPendingMutations();
-  });
-}
-
-// Sincroniza el estado de las mutaciones desde el servidor (Script 1) â€” refleja lo que el Script 2 aplicÃ³
-async function syncMutationStatuses(){
-  const cfg=getAdsConfig();
-  if(!cfg.endpoint||!_adsPendingMutations.length) return;
-  try{
-    const r=await fetch(cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now());
-    const d=await r.json();
-    if(!d.ok||!Array.isArray(d.mutations)) return;
-    let aplicadas=0,errores=0,changed=false;
-    _adsPendingMutations.forEach(m=>{
-      const srv=d.mutations.find(s=>s.timestamp===m.timestamp);
-      if(srv&&srv.status&&srv.status!=='pending'&&m.status!==srv.status){
-        m.status=srv.status;m.error=srv.error||'';changed=true;
-        if(srv.status==='aplicado') aplicadas++;
-        if(srv.status==='error') errores++;
-      }
-    });
-    if(changed){
-      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
-      savePendingToStorage();
-      renderPendingMutations();
-      if(aplicadas) toast('âœ“ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
-      if(errores) toast('âš  '+errores+' mutaciÃ³n'+(errores>1?'es':'')+' con error â€” revisa el detalle en Cambios pendientes','error');
-    }
-  }catch(e){}
-}
-
-function renderPendingMutations(){
-  const panel=document.getElementById('adsPendingPanel');
-  const list=document.getElementById('adsPendingList');
-  const badge=document.getElementById('adsPendingBadge');
-  if(!_adsPendingMutations.length){if(panel)panel.style.display='none';return;}
-  if(panel)panel.style.display='block';
-  const visibles=_adsPendingMutations.filter(m=>m.status!=='aplicado');
-  if(!visibles.length){if(panel)panel.style.display='none';return;}
-  const nPend=visibles.filter(m=>m.status!=='error').length;
-  const nErr=visibles.filter(m=>m.status==='error').length;
-  if(badge) badge.textContent=nPend+' pendiente'+(nPend!==1?'s':'')+(nErr?' Â· '+nErr+' error'+(nErr!==1?'es':''):'');
-  const retryBtn=document.getElementById('adsRetryAllBtn');
-  if(retryBtn) retryBtn.style.display=nErr?'':'none';
-  const opLabel={create:'Crear',edit:'Editar',delete:'Eliminar',negative:'Negativo',pause_keyword:'Pausar kw'};
-  const mutDesc=m=>{
-    if(m.op==='negative'||m.op==='pause_keyword')return (m.data&&m.data.termino?'Â«'+m.data.termino+'Â»':'')+(m.data&&m.data.campana?' Â· '+m.data.campana:'');
-    return (m.data&&m.data.nombre)||m.id||'';
-  };
-  const stMap={
-    pending:{c:'var(--warn)',t:'â³ Pendiente'},
-    enviado:{c:'var(--accent3)',t:'âœ“ En cola â€” esperando Script 2'},
-    error:{c:'var(--danger)',t:'âŒ Error'}
-  };
-  list.innerHTML=visibles.map(m=>{
-    const st=stMap[m.status]||stMap.pending;
-    const retry=m.status==='error'?`<button onclick="retryMutation('${m.timestamp}')" style="background:none;border:1px solid var(--border2);color:var(--accent);cursor:pointer;font-size:9px;padding:1px 6px;border-radius:4px;line-height:1.4" title="Reintentar">â†» Reintentar</button>`:'';
-    const errLine=m.status==='error'&&m.error?`<div style="font-size:9px;color:var(--danger);margin-top:3px;padding-left:2px">${escapeHtml(m.error)}</div>`:'';
-    return `
-    <div style="padding:7px 10px;background:var(--surface2);border-radius:6px;font-size:11px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="color:${m.op==='delete'||m.op==='pause_keyword'?'var(--danger)':m.op==='create'?'var(--success)':'var(--accent)'};font-weight:600;flex-shrink:0">${opLabel[m.op]||m.op}</span>
-        <span style="color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(mutDesc(m))}</span>
-        <span style="color:${st.c};font-size:9px;white-space:nowrap;flex-shrink:0">${st.t}</span>
-        ${retry}
-        <button onclick="removePendingMutationByTs('${m.timestamp}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0;line-height:1;flex-shrink:0" title="Quitar de la cola">Ã—</button>
-      </div>
-      ${errLine}
-    </div>`;}).join('');
-}
-
-function removePendingMutationByTs(ts){
-  _adsPendingMutations=_adsPendingMutations.filter(m=>m.timestamp!==ts);
-  savePendingToStorage();
-  renderPendingMutations();
-}
-
-// Auto-poll: verifica estado de mutaciones cada 2 min si hay pendientes y el tab web estÃ¡ activo
-let _adsMutationPollInterval=null;
-function _startAdsMutationPoll(){
-  if(_adsMutationPollInterval) return;
-  _adsMutationPollInterval=setInterval(()=>{
-    const hasPending=_adsPendingMutations.some(m=>m.status==='enviado'||m.status==='pending');
-    const webActive=document.getElementById('tab-web')?.classList.contains('active');
-    if(hasPending&&webActive) syncMutationStatuses();
-    else if(!hasPending){clearInterval(_adsMutationPollInterval);_adsMutationPollInterval=null;}
-  },120000);
-}
-function _stopAdsMutationPoll(){if(_adsMutationPollInterval){clearInterval(_adsMutationPollInterval);_adsMutationPollInterval=null;}}
-
-function retryMutation(ts){
-  const m=_adsPendingMutations.find(x=>x.timestamp===ts);
-  if(!m) return;
-  m.status='pending';m.error='';
-  savePendingToStorage();
-  sendAdsMutation(m);
-  renderPendingMutations();
-}
-function retryAllErrors(){
-  const errors=_adsPendingMutations.filter(m=>m.status==='error');
-  if(!errors.length){toast('Sin errores que reintentar','info');return;}
-  errors.forEach(m=>{m.status='pending';m.error='';});
-  savePendingToStorage();
-  renderPendingMutations();
-  errors.forEach(m=>sendAdsMutation(m));
-  toast(`â†» Reintentando ${errors.length} mutaciÃ³n${errors.length>1?'es':''}...`,'info');
-}
-
-async function loadAdsData(){
-  const cfg=getAdsConfig();
-  const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
-  ['adsAgentBox','adsCapacidadBox','adsSuggestBox'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
-  ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='â€¦';});
-  if(!cfg.endpoint){
-    // Modo demo
-    document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div></div>';
-    await new Promise(r=>setTimeout(r,600));
-    const demo=getAdsDemoData(days);
-    window._adsLastData=demo;
-    renderAdsKPIs(demo,days);
-    renderAdsCampaigns(demo);
-    renderAdsAgent(demo);
-    renderAdsCapacidad(demo);
-    renderAdsSugerencias(demo);
-    renderPendingMutations();
-    try{loadWebStats();}catch(err){console.error('loadWebStats',err);}
-    const dot=document.getElementById('adsStatusDot');
-    if(dot){dot.style.background='var(--warn)';dot.title='Modo demo â€” configura tu endpoint real';}
-    return;
-  }
-  document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:40px 0"><div class="spinner"></div> Cargando Google Adsâ€¦</div>';
-  try{
-    const cidParam=cfg.customerId?'&customerId='+encodeURIComponent(cfg.customerId):'';
-    const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'days='+days+cidParam+'&_t='+Date.now();
-    const r=await fetch(url);
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const data=await r.json();
-    if(!data.ok) throw new Error(data.error||'Respuesta invÃ¡lida del script');
-    // Renders visuales aislados: un fallo en uno no debe bloquear la sincronizaciÃ³n de mutaciones
-    window._adsLastData=data;
-    try{ renderAdsKPIs(data,days); }catch(err){ console.error('renderAdsKPIs',err); }
-    try{ renderAdsCampaigns(data); }catch(err){ console.error('renderAdsCampaigns',err); }
-    try{ renderAdsAgent(data); }catch(err){ console.error('renderAdsAgent',err); }
-    try{ renderAdsCapacidad(data); }catch(err){ console.error('renderAdsCapacidad',err); }
-    try{ renderAdsSugerencias(data); }catch(err){ console.error('renderAdsSugerencias',err); }
-    try{ loadWebStats(); }catch(err){ console.error('loadWebStats',err); }
-    renderPendingMutations();
-    // Refleja en el dashboard lo que el Script 2 ya aplicÃ³ en Google Ads
-    syncMutationStatuses();
-    try{renderAdsAutopilot();}catch(err){}
-    const _aw=document.getElementById('adsAutoWeekly');if(_aw)_aw.checked=localStorage.getItem('ads_auto_weekly')==='1';
-    setTimeout(()=>{try{adsAutoWeeklyCheck();}catch(e){}},1200);
-    const dot=document.getElementById('adsStatusDot');
-    if(dot){dot.style.background='var(--success)';dot.title='Conectado';}
-    const btnNueva=document.getElementById('btnNuevaCampana');
-    if(btnNueva) btnNueva.style.display='inline-flex';
-    // Sync a Airtable (no bloqueante)
-    syncAdsToAirtable(data,days).then(()=>toast('âœ“ Google Ads sincronizado con Airtable','success')).catch(()=>{});
-  }catch(e){
-    // Sin configuraciÃ³n propia del usuario el endpoint es el default hardcodeado:
-    // si falla (sin red, script caÃ­do) caemos a modo demo en vez de mostrar error
-    if(!localStorage.getItem('ads_config')){
-      const demo=getAdsDemoData(days);
-      window._adsLastData=demo;
-      try{ renderAdsKPIs(demo,days); }catch(err){}
-      try{ renderAdsCampaigns(demo); }catch(err){}
-      try{ renderAdsAgent(demo); }catch(err){}
-      try{ renderAdsCapacidad(demo); }catch(err){}
-      try{ renderAdsSugerencias(demo); }catch(err){}
-      renderPendingMutations();
-      try{ renderWebStats(getWebDemoData(days),days); }catch(err){}
-      const dot=document.getElementById('adsStatusDot');
-      if(dot){dot.style.background='var(--warn)';dot.title='Modo demo â€” endpoint no disponible ('+e.message+')';}
-      return;
-    }
-    document.getElementById('adsCampaignsArea').innerHTML=`<div class="empty-state" style="padding:40px 0"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-warning"/></svg></div><div style="color:var(--danger)">${e.message}</div><div style="font-size:11px;color:var(--text3);margin-top:8px">Verifica que el Apps Script estÃ© publicado como aplicaciÃ³n web con acceso pÃºblico</div></div>`;
-    ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='â€”';});
-    const dot=document.getElementById('adsStatusDot');
-    if(dot){dot.style.background='var(--danger)';dot.title='Error: '+e.message;}
-  }
-}
+// El almacÃ©n crece para siempre (errores viejos, duplicados) y ensucia el diagnÃm«ëŒ+Š×®º+º$zzb¥ë77F–6òà¦7–æ2gVæ7F–öâG4Æ–×–$†—7F÷&–Ä×WF6–öæW2‚—°¢6öç7B6fsÖvWDG46öæf–r‚“°¢–b‚6fræVæGö–çB—·Fö7B‚tæò†’VæGö–çB6öæf–wW&FòrÂvW'&÷"r“·&WGW&ã·Ğ¢–b‚6frç6V7&WB—·Fö7B‚t6öæf–wW&VÂ6V7&WFòFR×WF6–öæW2FRvöövÆRG2rÂvW'&÷"r“·&WGW&ã·Ğ¢G'—°¢6öç7B#Öv—BfWF6‚†6fræVæGö–çB²†6fræVæGö–çBæ–æ6ÇVFW2‚sòr“òrbs¢sòr’²v7F–öãÖ×WFF–öç2e÷CÒr´FFRææ÷r‚’“°¢6öç7BCÖv—B"æ§6öâ‚“°¢6öç7BFöF3Ò†BbfBæ×WFF–öç2—ÇÅµÓ°¢6öç7BVæF–VçFW3×FöF2æf–ÇFW"†ÓÓæÒç7FGW3ÓÓÒwVæF–ærr“°¢6öç7B&W7VVÇF3×FöF2æÆVæwF‚×VæF–VçFW2æÆVæwFƒ°¢–b‚&W7VVÇF2—·Fö7B‚tæò†’×WF6–öæW2&W7VVÇF2VRÆ–×–"rÂv–æfòr“·&WGW&ã·Ğ¢–b‚6öæf—&Ò†6RVÆ–Ö–æ,:âG·&W7VVÇF7Ò×WF6–öæW2–&W7VVÇF2†Æ–6F2ò6öâW'&÷"’FVÂ†—7F÷&–ÂFVÂ6W'f–F÷"â6R6öç6W'fâÆ2G·VæF–VçFW2æÆVæwF‡ÒVæF–VçFW2â+ô6öçF–çV#ö’’&WGW&ã°¢6öç7B&W3Öv—BfWF6‚†6fræVæGö–çBÇ¶ÖWF†öC¢uõ5BrÆ†VFW'3§²t6öçFVçBÕG—Rs¢wFW‡B÷Æ–âwÒÆ&öG“¤¥4ôâç7G&–æv–g’‡·6V7&WC¦6frç6V7&WBÇG—S¢wWFFUö×WFF–öç2rÆ×WFF–öç3§VæF–VçFW7Ò—Ò“°¢6öç7BG#Öv—B&W2æ§6öâ‚’æ6F6‚‚‚“Óâ‡·Ò’“°¢–b†G"bfG"æö²—°¢öG5VæF–æt×WFF–öç3ÕöG5VæF–æt×WFF–öç2æf–ÇFW"†ÓÓæÒç7FGW3ÓÓÒwVæF–ærwÇÆÒç7FGW3ÓÓÒvVçf–Fòr“°¢6fUVæF–æuFõ7F÷&vR‚“·&VæFW%VæF–æt×WFF–öç2‚“°¢Fö7B‚~)É2†—7F÷&–ÂÆ–×–ò(	Br·&W7VVÇF2²rVÆ–Ö–æF2Âr·VæF–VçFW2æÆVæwF‚²rVæF–VçFW26öç6W'fF2rÂw7V66W72r“°¢ÒVÇ6RFö7B‚tæò6RVFòÆ–×–#¢r²‚†G"bfG"æW'&÷"—ÇÂvVÂ6W'f–F÷"æò&W7öæFœ;2ö²r’ÂvW'&÷"r“°¢Ö6F6‚†R—·Fö7B‚tW'&÷"Æ–×–æFò†—7F÷&–Ã¢r¶RæÖW76vRÂvW'&÷"r“·Ğ§Ğ ¢òò)H)H)H–Æ÷FòWFöÜ:F–6ò‡&÷VW7F26VÖæÆW2FVÂv÷&¶W"’)H)H)H)H ¦ÆWBöG4WF÷–Æ÷E&÷3ÕµÓ°¦7–æ2gVæ7F–öâ&VæFW$G4WF÷–Æ÷B‚—°¢6öç7BæVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4WF÷–Æ÷EæVÂr“°¢6öç7BÆ—7CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4WF÷–Æ÷DÆ—7Br“°¢6öç7B&FvSÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4WF÷–Æ÷D&FvRr“°¢–b‚æVÇÇÂÆ—7B’&WGW&ã°¢G'—°¢6öç7B6fsÕö—'F&ÆT6öæf–r‚“°¢6öç7Bf÷&×VÆÖVæ6öFUU$”6ö×öæVçB‚$äB‡´vVçFWÓÒtE5ôUDõ”ÄõBrÇ´W7FF÷ÓÒuVæF–VçFRr’"“°¢6öç7B#Öv—B—'F&ÆT‡GG†G¶6fræ&6WÒòG´$4Uô”GÒôvVçEõVWVSöf–ÇFW$'”f÷&×VÆÒG¶f÷&×VÆÒgvU6—¦SÓÇ¶†VFW'3¦6fræ†VFW'7Ò“°¢–b‚"æö²’F‡&÷ræWrW'&÷"‚t—'F&ÆRr·"ç7FGW2“°¢6öç7BCÖv—B"æ§6öâ‚“°¢öG4WF÷–Æ÷E&÷3Ò†Bç&V6÷&G7ÇÅµÒ’æÖ‡&V3Óç°¢ÆWB÷WC×·Ó·G'—¶÷WCÔ¥4ôâç'6R‡&V2æf–VÆG3òä÷WGWGÇÂw·Òr“·Ö6F6‚†R—·Ğ¢&WGW&ç¶–C§&V2æ–BÆfV6†§&V2æf–VÆG3òå²tfV6†7&V6œ;6âu×ÇÇ&V2æ7&VFVEF–ÖRÇ&W7VÖVã¦÷WBç&W7VÖVçÇÂrrÆ66–öæW3¦÷WBæ66–öæW7ÇÅµÒÆ×WF6–öæW3¦÷WBæ×WF6–öæW7ÇÅµÒÆFW66'FF3¦÷WBæFW66'FF7ÇÅµ×Ó°¢Ò’æf–ÇFW"‡Óçæ×WF6–öæW2æÆVæwF‚“°¢Ö6F6‚†R—²æVÂç7G–ÆRæF—7Æ“ÒvæöæRs²&WGW&ã²Ğ¢–b‚öG4WF÷–Æ÷E&÷2æÆVæwF‚—²æVÂç7G–ÆRæF—7Æ“ÒvæöæRs²&WGW&ã²Ğ¢–b†&FvR’&FvRçFW‡D6öçFVçCÕöG4WF÷–Æ÷E&÷2æÆVæwF‚²rVæF–VçFRr²…öG4WF÷–Æ÷E&÷2æÆVæwF‚ÓÓòw2s¢rr“°¢Æ—7Bæ–ææW$…DÔÃÕöG4WF÷–Æ÷E&÷2æÖ‚‡Æ’“Óç°¢6öç7Bf–Æ3×æ66–öæW2æÖ†Óç°¢6öç7BFWCÖçF—óÓÓÒw&W7WVW7FòsöBG²†æçFW&–÷'ÇÃ’çFôÆö6ÆU7G&–ær‚vW2Ô4Âr—Ò(i"Æ#âBG²†æçVWf÷ÇÃ’çFôÆö6ÆU7G&–ær‚vW2Ô4Âr—ÓÂö#âöL:Ö¦çF—ó°¢&WGW&âÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£‡ƒ¶föçB×6—¦S£ƒ·FF–æs£7‚¶&÷&FW"Ö&÷GFöÓ£‚6öÆ–Bf"‚ÒÖ&÷&FW#"’#ãÇ7â7G–ÆSÒ&Ö–â×v–GFƒ£#ƒ¶6öÆ÷#§f"‚ÒÖ66VçB’#âG¶W66T‡FÖÂ†æÆ–æVÇÂrr—ÓÂ÷7ããÇ7â7G–ÆSÒ&fÆWƒ£¶6öÆ÷#§f"‚Ò×FW‡C"’#âG¶W66T‡FÖÂ†æ6×æÇÂrr—Ò+rG¶FWGÓÂ÷7ããÇ7â7G–ÆSÒ&fÆWƒ£¶6öÆ÷#§f"‚Ò×FW‡C2’#âG¶W66T‡FÖÂ†æÖ÷F—f÷ÇÂrr—ÓÂ÷7ããÂöF—cæ°¢Ò’æ¦ö–â‚rr“°¢&WGW&âÆF—b7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW"×&F—W3£‡ƒ·FF–æs£‚'ƒ¶&÷&FW"ÖÆVgC£7‚6öÆ–Bf"‚ÒÖ66VçB’#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–âÖ&÷GFöÓ£G‚#âG¶W66T‡FÖÂ‚‡æfV6†ÇÂrr’ç6Æ–6RƒÃb’ç&WÆ6R‚uBrÂrr’—ÓÂöF—cà¢G·ç&W7VÖVãöÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡B“¶Ö&v–âÖ&÷GFöÓ£g‚#âG¶W66T‡FÖÂ‡ç&W7VÖVâ—ÓÂöF—cæ¢rwĞ¢G¶f–Æ7Ğ¢G·æFW66'FF2æÆVæwFƒöÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–â×F÷£g‚#äFW66'FF2÷"wV&G&–Ç3¢G·æFW66'FF2æÖ‡ƒÓæW66T‡FÖÂ‚‡‚çF—÷ÇÂrr’²rr²‡‚æÆ–æVÇÂrr’²r‚r²‡‚æFW66'FWÇÂrr’²r’r’’æ¦ö–â‚r+rr—ÓÂöF—cæ¢rwĞ¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£‡ƒ¶Ö&v–â×F÷£‚#à¢Æ'WGFöâ6Æ73Ò&'Fâ'Fâ×&–Ö'’'Fâ×6Ò"7G–ÆSÒ&föçB×6—¦S£‚"öæ6Æ–6³Ò&G4WF÷–Æ÷DFV6–FR‚G¶—ÒÇG'VR’#î)É2&ö&"’Æ–6#Âö'WGFöãà¢Æ'WGFöâ6Æ73Ò&'Fâ'FâÖv†÷7B'Fâ×6Ò"7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚ÒÖFævW"’"öæ6Æ–6³Ò&G4WF÷–Æ÷DFV6–FR‚G¶—ÒÆfÇ6R’#î)Ér&V6†¦#Âö'WGFöãà¢ÂöF—cà¢ÂöF—cæ°¢Ò’æ¦ö–â‚rr“°¢æVÂç7G–ÆRæF—7Æ“Òv&Æö6²s°§Ğ¦7–æ2gVæ7F–öâG4WF÷–Æ÷DFV6–FR†’Æ&ö&"—°¢6öç7BÕöG4WF÷–Æ÷E&÷5¶•Ó²–b‚’&WGW&ã°¢òò&R×fW&–f–6VÂW7FFò§W7FòçFW2‡VFò&ö&'6R÷"VÖ–Â†6RVâÖöÖVçFò“ ¢òòWf—FVæ6öÆ"F÷2fV6W2Æ2Ö—6Ö2×WF6–öæW2‡Vâ&7&VFR"GWÆ–6,:ÖÆ6×;’à¢G'—°¢6öç7B6fsÕö—'F&ÆT6öæf–r‚“°¢6öç7B#Öv—B—'F&ÆT‡GG†G¶6fræ&6WÒòG´$4Uô”GÒôvVçEõVWVRòG·æ–GÖÇ¶†VFW'3¦6fræ†VFW'7Ò“°¢–b‡"æö²—¶6öç7B&V3Öv—B"æ§6öâ‚“¶–b‚‡&V2æf–VÆG3òäW7FF÷ÇÂrr’ÓÒuVæF–VçFRr—·Fö7B‚tW7F&÷VW7F–gVR&ö6W6F‚r²‡&V2æf–VÆG3òäW7FF÷ÇÂ~(	Br’²r’rÂv–æfòr“·&VæFW$G4WF÷–Æ÷B‚“·&WGW&ã·×Ğ¢Ö6F6‚†R—·Ğ¢–b†&ö&"—°¢–b‚6öæf—&Ò†+ô&ö&"G·æ×WF6–öæW2æÆVæwF‡Ò6Ö&–ò‡2’FVÂ–Æ÷Fóò6RÆ–6,:âVâvöövÆRG2VâÆ,;7†–Ö6÷'&–FFVÂ67&—B"æ’’&WGW&ã°¢æ×WF6–öæW2æf÷$V6‚†ÓÓåöG5VWVT×WFF–öâ‡²ââæÒÇF–ÖW7F×¦ÒçF–ÖW7F×ÇÆæWrFFR‚’çFô•4õ7G&–ær‚’Ç7FGW3¢wVæF–ærwÒ’“°¢G'—¶v—B—'F&ÆUw&—FUFöÆW&çB‚tvVçEõVWVRrÂuD4‚rÇæ–BÇ´W7FFó¢t6ö×ÆWFFòrÂtfV6†V¦V7V6œ;6âs¦æWrFFR‚’çFô•4õ7G&–ær‚’Ât66–öâ7VvW&–Fs¦&ö&FòFW6FRF6†&ö&C¢G·æ×WF6–öæW2æÆVæwF‡Ò×WF6–öæW2Væ6öÆF6Ò“·Ö6F6‚†R—·Ğ¢Fö7B‚~)É2r·æ×WF6–öæW2æÆVæwF‚²r6Ö&–ò‡2’FVÂ–Æ÷FòVæ6öÆF÷2rÂw7V66W72r“°¢ÖVÇ6W°¢G'—¶v—B—'F&ÆUw&—FUFöÆW&çB‚tvVçEõVWVRrÂuD4‚rÇæ–BÇ´W7FFó¢tW'&÷"rÄW'&÷#¢u&V6†¦FòFW6FRVÂF6†&ö&B‚r¶æWrFFR‚’çFô•4õ7G&–ær‚’ç6Æ–6RƒÃb’²r’wÒ“·Ö6F6‚†R—·Ğ¢Fö7B‚u&÷VW7FFVÂ–Æ÷Fò&V6†¦FrÂv–æfòr“°¢Ğ¢&VæFW$G4WF÷–Æ÷B‚“°§Ğ ¢òò)H)H)H6öçfW'6–öæW2öffÆ–æR„5$Ò(i"vöövÆRG2’)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦gVæ7F–öâöG4öfe7–æ4æÖW2‚—°¢6öç7BÃÒ†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfdÆVDæÖRr’çfÇVWÇÂtÆVB6Æ–f–6Fò5$Òr’çG&–Ò‚“°¢6öç7BcÒ†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfefVçFæÖRr’çfÇVWÇÂufVçF5$Òr’çG&–Ò‚“°¢6öç7BSÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfdæÖTV6†ór“²–b†S’SçFW‡D6öçFVçCÖÇÇÂtÆVB6Æ–f–6Fò5$Òs°¢6öç7BS#ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfdæÖTV6†ó"r“²–b†S"’S"çFW‡D6öçFVçC×gÇÂufVçF5$Òs°§Ğ¦gVæ7F–öâ÷VäG4öffÆ–æTÖöFÂ‚—°¢6öç7B#ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfe&W7VÇBr“²–b‡"—·"ç7G–ÆRæF—7Æ“ÒvæöæRs·"æ–ææW$…DÔÃÒrs·Ğ¢öG4öfe7–æ4æÖW2‚“°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öffÆ–æTÖöFÂr’ç7G–ÆRæF—7Æ“ÒvfÆW‚s°§Ğ¦gVæ7F–öâ6Æ÷6TG4öffÆ–æTÖöFÂ‚—²Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öffÆ–æTÖöFÂr’ç7G–ÆRæF—7Æ“ÒvæöæRs²Ğ¦gVæ7F–öâöG4öffÆ–æUF–ÖR†B—°¢G'—²&WGW&âBçFôÆö6ÆU7G&–ær‚w7bÕ4RrÇ·F–ÖU¦öæS¢tÖW&–6õ6çF–vòwÒ’ç&WÆ6R‚uBrÂrr’ç6Æ–6RƒÃ’“²Ğ¢6F6‚†R—²&WGW&âBçFô•4õ7G&–ær‚’ç6Æ–6RƒÃ’’ç&WÆ6R‚uBrÂrr“²Ğ§Ğ¦gVæ7F–öâöG477d6VÆÂ‡b—²6öç7B3Õ7G&–ær‡cÓÖçVÆÃòrs§b“²&WGW&âõ²"ÅÆåÒòçFW7B‡2“òr"r·2ç&WÆ6R‚ò"örÂr""r’²r"s§3²Ğ¦gVæ7F–öâöG4F÷væÆöD55b†æÖRÇFW‡B—°¢6öç7B&Æö#ÖæWr&Æö"…·FW‡EÒÇ·G—S¢wFW‡Bö77c¶6†'6WC×WFbÓ‚wÒ“°¢6öç7BW&ÃÕU$Âæ7&VFTö&¦V7EU$Â†&Æö"“°¢6öç7BÖFö7VÖVçBæ7&VFTVÆVÖVçB‚vr“²æ‡&Vc×W&Ã²æF÷væÆöCÖæÖS°¢Fö7VÖVçBæ&öG’æVæD6†–ÆB†“²æ6Æ–6²‚“°¢6WEF–ÖV÷WB‚‚“Óç·G'—¶Fö7VÖVçBæ&öG’ç&VÖ÷fT6†–ÆB†“·Ö6F6‚†R—·ÒU$Âç&Wfö¶Tö&¦V7EU$Â‡W&Â“·ÒÃS“°§Ğ¦gVæ7F–öâöG4vWDv6Æ–B†2—°¢–b‚7ÇÂ2æf–VÆG2’&WGW&ârs°¢6öç7BsÖ2æf–VÆG5²tt4Ä”BuÓ²–b†r’&WGW&â7G&–ær†r’çG&–Ò‚“°¢6öç7Bæ÷F3Ö2æf–VÆG5²tæ÷F2–çFW&æ2u×ÇÂrs²6öç7BÓÕ7G&–ær†æ÷F2’æÖF6‚‚öv6Æ–CÒ…µåÇ5Ò²’ö’“°¢&WGW&âÓöÕ³Ó¢rs°§Ğ¦gVæ7F–öâG4W‡÷'DöffÆ–æT6öçfW'6–öç2‚—°¢–b‡G—Vöb7FFSÓÓÒwVæFVf–æVBwÇÂ7FFRæÆöFVB—·Fö7B‚t6&v&–ÖW&òÆ÷2FF÷2FR—'F&ÆRrÂvW'&÷"r“·&WGW&ã·Ğ¢6öç7BF—3ÔÖF‚æÖ‚ƒÄÖF‚æÖ–âƒ“Ç'6T–çB†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfdF—2r’çfÇVR—ÇÃ“’“°¢6öç7BF‡#×'6T–çB†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfe66÷&Rr’çfÇVR—ÇÃc°¢6öç7BÆVEfÃ×'6T–çB†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfdÆVEfÂr’çfÇVR—ÇÃ°¢6öç7B–æ4ÆVG3ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfd–æ4ÆVG2r’æ6†V6¶VC°¢6öç7B–æ5fVçF3ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfd–æ5fVçF2r’æ6†V6¶VC°¢6öç7BäÆVCÒ†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfdÆVDæÖRr’çfÇVWÇÂtÆVB6Æ–f–6Fò5$Òr’çG&–Ò‚“°¢6öç7BåfVçFÒ†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfefVçFæÖRr’çfÇVWÇÂufVçF5$Òr’çG&–Ò‚“°¢6öç7B7WFöfcÖæWrFFR„FFRææ÷r‚’ÖF—2£ƒcC“°¢6öç7BWF46Æ–cÕ²u&÷VW7FVçf–FrÂtæVvö6–6œ;6ârÂt6Æ–VçFR7F—fòuÓ°¢6öç7B&÷w3ÕµÓ²ÆWB6–äv6Æ–CÓÂäÆVG3ÓÂåfVçF3Ó°¢–b†–æ4ÆVG2—°¢‡7FFRæ6Æ–VçFW7ÇÅµÒ’æf÷$V6‚†3Óç°¢6öç7BcÖ2æf–VÆG7ÇÇ·Ó²6öç7BFCÖ2æ7&VFVEF–ÖSöæWrFFR†2æ7&VFVEF–ÖR“¦çVÆÃ²–b‚FGÇÆFCÆ7WFöfb’&WGW&ã°¢6öç7B66÷&SÔçVÖ&W"†e²tÆVB66÷&R”u×ÇÆe²tÆVB66÷&Ru×ÇÃ“°¢6öç7BWFÖe²tWFfVçFu×ÇÂrs°¢–b‚‡66÷&Sã×F‡'ÇÆWF46Æ–bæ–æ6ÇVFW2†WF’’’&WGW&ã°¢6öç7BsÕöG4vWDv6Æ–B†2“²–b‚r—·6–äv6Æ–B²³·&WGW&ã·Ğ¢&÷w2çW6‚…¶rÆäÆVBÅöG4öffÆ–æUF–ÖR†FB’ÆÆVEfÃãöÆVEfÃ¢rrÂt4ÅuÒ“²äÆVG2²³°¢Ò“°¢Ğ¢–b†–æ5fVçF2—°¢‡7FFRçVF–F÷7ÇÅµÒ’æf÷$V6‚‡Óç°¢6öç7Bc×æf–VÆG7ÇÇ·Ó²–b‚†e²tW7FFòVF–Fòu×ÇÂrr“ÓÓÒt6æ6VÆFòr’&WGW&ã°¢6öç7BFC×æ7&VFVEF–ÖSöæWrFFR‡æ7&VFVEF–ÖR“¦çVÆÃ²–b‚FGÇÆFCÆ7WFöfb’&WGW&ã°¢6öç7B6–CÔ'&’æ—4'&’†e²t6Æ–VçFRuÒ“öe²t6Æ–VçFRuÕ³Ó¢‡G—Vöbe²t6Æ–VçFRuÓÓÓÒw7G&–ærsöe²t6Æ–VçFRuÓ¦çVÆÂ“°¢6öç7B6Æ“Ò†6–Bbg7FFRæ6Æ–VçFW4'”–E&V2“÷7FFRæ6Æ–VçFW4'”–E&V5¶6–EÓ¦çVÆÃ°¢6öç7BsÕöG4vWDv6Æ–B†6Æ’“²–b‚r—·6–äv6Æ–B²³·&WGW&ã·Ğ¢6öç7BfÃÔÖF‚ç&÷VæB‚†e²tÖöçFòF÷FÂ„4Å’u×ÇÃ’óã’“°¢&÷w2çW6‚…¶rÆåfVçFÅöG4öffÆ–æUF–ÖR†FB’ÇfÃã÷fÃ¢rrÂt4ÅuÒ“²åfVçF2²³°¢Ò“°¢Ğ¢6öç7B÷WCÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4öfe&W7VÇBr“²–b†÷WB’÷WBç7G–ÆRæF—7Æ“Òv&Æö6²s°¢–b‚&÷w2æÆVæwF‚—°¢–b†÷WB’÷WBæ–ææW$…DÔÃÒsÇ7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×v&â’#äæò6RVæ6öçG&&öâ6öçfW'6–öæW26öâv6Æ–BVâVÂW,:ÖöFòâ&Wf—6VRÆ6öÇVÖæÆ#ät4Ä”CÂö#âW†—7FVâ6Æ–VçFW2’VRW7L:–âÆÆVvæFòÆVG2FW6FRvöövÆRG2†òVRVÂv6Æ–BVVFRVâæ÷F2–çFW&æ2’ãÂ÷7ãâs°¢&WGW&ã°¢Ğ¢6öç7B†VFW#Òu&ÖWFW'3¥F–ÖU¦öæSÔÖW&–6õ6çF–võÆävöövÆR6Æ–6²”BÄ6öçfW'6–öâæÖRÄ6öçfW'6–öâF–ÖRÄ6öçfW'6–öâfÇVRÄ6öçfW'6–öâ7W'&Væ7’s°¢6öç7B77cÖ†VFW"²uÆâr·&÷w2æÖ‡#Óç"æÖ…öG477d6VÆÂ’æ¦ö–â‚rÂr’’æ¦ö–â‚uÆâr’²uÆâs°¢öG4F÷væÆöD55b‚v6öçfW'6–öæW5ööffÆ–æUòr¶†÷”4Â‚’²ræ77brÆ77b“°¢–b†÷WB’÷WBæ–ææW$…DÔÃÒ~)É255bvVæW&Fó¢Æ#âr·&÷w2æÆVæwF‚²sÂö#â6öçfW'6–öæW2‚r¶äÆVG2²rÆVG2+rr¶åfVçF2²rfVçF2’r²‡6–äv6Æ–Còr+rÇ7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×v&â’#âr·6–äv6Æ–B²r6–âv6Æ–BöÖ—F–F3Â÷7ãâs¢rr’²rãÆ'#å<;¦&VÆòVâvöövÆRG2(i"ö&¦WF—f÷2(i"6öçfW'6–öæW2(i"6&v2(i"7V&—"âs°§Ğ ¦7–æ2gVæ7F–öâG4F–væ÷7F–6ò‚—°¢6öç7B6fsÖvWDG46öæf–r‚“°¢6öç7B÷WCÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4F–t÷WGWBr“°¢–b‚÷WB’&WGW&ã°¢÷WBç7G–ÆRæF—7Æ“Òv&Æö6²s°¢÷WBæ–ææW$…DÔÃÒsÆF—b7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2’#î(û2F–væ÷7F–6æFòââãÂöF—câs°¢6öç7BÆ–æW3ÕµÓ°¢Æ–æW2çW6‚†Æ#äVæGö–çB6öæf–wW&Fó£Âö#âÆ6öFR7G–ÆSÒ&föçB×6—¦S£—ƒ·v÷&BÖ'&V³¦'&V²ÖÆÂ#âG¶W66T‡FÖÂ†6fræVæGö–çGÇÂr†æ–æwVæò’r—ÓÂö6öFSæ“°¢Æ–æW2çW6‚†Æ#ä7W7FöÖW"”C£Âö#âG¶W66T‡FÖÂ†6fræ7W7FöÖW$–GÇÂr†æòFVf–æ–Fò’r—Ö“°¢Æ–æW2çW6‚†Æ#ä×WF6–öæW2Æö6ÆW2†Æö6Å7F÷&vR“£Âö#âGµöG5VæF–æt×WFF–öç2æÆVæwF‡ÒF÷FÆ“°¢6öç7B'•7FGW3×·ÓµöG5VæF–æt×WFF–öç2æf÷$V6‚†ÓÓç¶'•7FGW5¶Òç7FGW5ÓÒ†'•7FGW5¶Òç7FGW5×ÇÃ’³·Ò“°¢ö&¦V7BæVçG&–W2†'•7FGW2’æf÷$V6‚‚…·2ÆåÒ“ÓæÆ–æW2çW6‚†fæ'7¾(i"G·7Ó¢G¶çÖ’“°¢–b†6fræVæGö–çB—°¢G'—°¢6öç7BW&ÃÖ6fræVæGö–çB²†6fræVæGö–çBæ–æ6ÇVFW2‚sòr“òrbs¢sòr’²v7F–öãÖ×WFF–öç2e÷CÒr´FFRææ÷r‚“°¢6öç7B#Öv—BfWF6‚‡W&Â“¶6öç7BCÖv—B"æ§6öâ‚“°¢–b†Bæö²bd'&’æ—4'&’†Bæ×WFF–öç2’—°¢Æ–æW2çW6‚†Æ"7G–ÆSÒ&6öÆ÷#§f"‚Ò×7V66W72’#î)É267&—B&W7öæFRô³Âö#â(	BG¶Bæ×WFF–öç2æÆVæwF‡Ò×WF6–öæW2ÆÖ6VæF6“°¢6öç7B'•3#×·Ó¶Bæ×WFF–öç2æf÷$V6‚†ÓÓç¶'•3%¶Òç7FGW5ÓÒ†'•3%¶Òç7FGW5×ÇÃ’³·Ò“°¢ö&¦V7BæVçG&–W2†'•3"’æf÷$V6‚‚…·2ÆåÒ“ÓæÆ–æW2çW6‚†fæ'7¾(i"Æ#âG·7ÓÂö#ã¢G¶çÖ’“°¢6öç7BVæF–æsÖBæ×WFF–öç2æf–ÇFW"†ÓÓæÒç7FGW3ÓÓÒwVæF–ærwÇÆÒç7FGW3ÓÓÒvVçf–Fòr“°¢–b‡VæF–æræÆVæwF‚—°¢6öç7BöÆFW7C×VæF–ærç6÷'B‚†Æ"“ÓæçF–ÖW7F×æÆö6ÆT6ö×&R†"çF–ÖW7F×’•³Ó°¢6öç7BÖ–ç3ÔÖF‚ç&÷VæB‚„FFRææ÷r‚’ÖæWrFFR†öÆFW7BçF–ÖW7F×’ævWEF–ÖR‚’’óc“°¢Æ–æW2çW6‚†Æ"7G–ÆSÒ&6öÆ÷#§f"‚Ò×v&â’#î)ªG·VæF–æræÆVæwF‡Ò×WF6œ;6â†W2’6–âÆ–6#Âö#â(	BÆÜ:2çF–wVF–VæRG¶Ö–ç7ÒÖ–æ“°¢–b†Ö–ç3ãc’Æ–æW2çW6‚†Ç7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖFævW"’#î(i"VÂ67&—B"æò†6÷'&–FòVâÜ:2FR†÷&âfW&–f–6VRFVævVâG&–vvW"†÷&&–ò6öæf–wW&FòVâvöövÆRG2(i"†W'&Ö–VçF2(i"67&—G2(i"(ûÂ÷7ãæ“°¢VÇ6RÆ–æW2çW6‚†(i"VÂ67&—B"FV&W,:Ö&ö6W6&Æ2VâÆ,;7†–ÖV¦V7V6œ;6â‡6’F–VæRG&–vvW"†÷&&–ò’æ“°¢ÒVÇ6R–b†Bæ×WFF–öç2æÆVæwF‚—°¢Æ–æW2çW6‚†Ç7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×7V66W72’#î)É2FöF2Æ2×WF6–öæW2†â6–FòÆ–6F2÷"67&—B#Â÷7ãæ“°¢Ğ¢ÒVÇ6R°¢Æ–æW2çW6‚†Æ"7G–ÆSÒ&6öÆ÷#§f"‚ÒÖFævW"’#î)Ér67&—B&W7öæFœ;26öâW'&÷#£Âö#âG¶W66T‡FÖÂ‚†BbfBæW'&÷"—ÇÂw&W7VW7F–çl:Æ–Fr—Ö“°¢Ğ¢Ö6F6‚†R—°¢Æ–æW2çW6‚†Æ"7G–ÆSÒ&6öÆ÷#§f"‚ÒÖFævW"’#î)Éræò6RVFò6öæV7F"6öâ67&—B£Âö#âG¶W66T‡FÖÂ†RæÖW76vR—Ö“°¢Æ–æW2çW6‚†(i"fW&–f–6VRVÂ67&—BW7L:’V&Æ–6Fò6öÖòÆ#äÆ–66œ;6âvV#Âö#â6öâ66W6òÆ#åFöF÷2„ç–öæR“Âö#âæ“°¢Ğ¢ÒVÇ6R°¢Æ–æW2çW6‚†Æ"7G–ÆSÒ&6öÆ÷#§f"‚ÒÖFævW"’#î)Éræò†’VæGö–çB6öæf–wW&FóÂö#â(	BVvÆU$ÂFVÂ67&—B'&–&æ“°¢Ğ¢÷WBæ–ææW$…DÔÃÖÆ–æW2æÖ†ÃÓæÆF—b7G–ÆSÒ&Ö&v–âÖ&÷GFöÓ£Gƒ¶föçB×6—¦S£‚#âG¶ÇÓÂöF—cæ’æ¦ö–â‚rr“°§Ğ ¦gVæ7F–öâ6VæDG4×WFF–öâ†×WFF–öâ—°¢6öç7B6fsÖvWDG46öæf–r‚“°¢–b‚6fræVæGö–çB—¶×WFF–öâç7FGW3ÒvW'&÷"s¶×WFF–öâæW'&÷#Òtæò†’VæGö–çB6öæf–wW&Fòs·6fUVæF–æuFõ7F÷&vR‚“·&VæFW%VæF–æt×WFF–öç2‚“·&WGW&ã·Ğ¢–b‚6frç6V7&WB—¶×WFF–öâç7FGW3ÒvW'&÷"s¶×WFF–öâæW'&÷#Òt6öæf–wW&VÂ6V7&WFòFR×WF6–öæW2s·6fUVæF–æuFõ7F÷&vR‚“·&VæFW%VæF–æt×WFF–öç2‚“·&WGW&ã·Ğ¢òòFW‡B÷Æ–âWf—FVÂ4õ%2&VfÆ–v‡BVR&Æ÷VVÆ÷2õ5G2vöövÆR267&—@¢fWF6‚†6fræVæGö–çBÇ°¢ÖWF†öC¢uõ5BrÀ¢†VFW'3§²t6öçFVçBÕG—Rs¢wFW‡B÷Æ–âwÒÀ¢&öG“¤¥4ôâç7G&–æv–g’‡·6V7&WC¦6frç6V7&WBÇG—S¢v×WFF–öârÂââæ×WFF–öçÒ¢Ò’çF†Vâ‡#Óç"æ§6öâ‚’’çF†Vâ†CÓç°¢–b†BbfBæö²—¶×WFF–öâç7FGW3ÒvVçf–Fòs¶×WFF–öâæW'&÷#Òrs·Ğ¢VÇ6W¶×WFF–öâç7FGW3ÒvW'&÷"s¶×WFF–öâæW'&÷#Ò†BbfBæW'&÷"—ÇÂtVÂ6W'f–F÷"&V6†¬;2Æ×WF6œ;6âs·Ğ¢6fUVæF–æuFõ7F÷&vR‚“°¢&VæFW%VæF–æt×WFF–öç2‚“°¢Ò’æ6F6‚‚‚“Óç°¢×WFF–öâç7FGW3ÒvW'&÷"s¶×WFF–öâæW'&÷#Òu6–â6öæW†œ;6â6öâVÂVæGö–çB‡6R&V–çFVçF,:ÂwV&F"FRçVWfò’s°¢6fUVæF–æuFõ7F÷&vR‚“°¢&VæFW%VæF–æt×WFF–öç2‚“°¢Ò“°§Ğ ¢òò6–æ7&öæ—¦VÂW7FFòFRÆ2×WF6–öæW2FW6FRVÂ6W'f–F÷"…67&—B’(	B&VfÆV¦ÆòVRVÂ67&—B"Æ–<;0¦7–æ2gVæ7F–öâ7–æ4×WFF–öå7FGW6W2‚—°¢6öç7B6fsÖvWDG46öæf–r‚“°¢–b‚6fræVæGö–çGÇÂöG5VæF–æt×WFF–öç2æÆVæwF‚’&WGW&ã°¢G'—°¢6öç7B#Öv—BfWF6‚†6fræVæGö–çB²†6fræVæGö–çBæ–æ6ÇVFW2‚sòr“òrbs¢sòr’²v7F–öãÖ×WFF–öç2e÷CÒr´FFRææ÷r‚’“°¢6öç7BCÖv—B"æ§6öâ‚“°¢–b‚Bæö·ÇÂ'&’æ—4'&’†Bæ×WFF–öç2’’&WGW&ã°¢ÆWBÆ–6F3ÓÆW'&÷&W3ÓÆ6†ævVCÖfÇ6S°¢öG5VæF–æt×WFF–öç2æf÷$V6‚†ÓÓç°¢6öç7B7'cÖBæ×WFF–öç2æf–æB‡3Óç2çF–ÖW7F×ÓÓÖÒçF–ÖW7F×“°¢–b‡7'bbg7'bç7FGW2bg7'bç7FGW2ÓÒwVæF–ærrbfÒç7FGW2Ó×7'bç7FGW2—°¢Òç7FGW3×7'bç7FGW3¶ÒæW'&÷#×7'bæW'&÷'ÇÂrs¶6†ævVC×G'VS°¢–b‡7'bç7FGW3ÓÓÒvÆ–6Fòr’Æ–6F2²³°¢–b‡7'bç7FGW3ÓÓÒvW'&÷"r’W'&÷&W2²³°¢Ğ¢Ò“°¢–b†6†ævVB—°¢öG5VæF–æt×WFF–öç3ÕöG5VæF–æt×WFF–öç2æf–ÇFW"†ÓÓæÒç7FGW2ÓÒvÆ–6Fòr“°¢6fUVæF–æuFõ7F÷&vR‚“°¢&VæFW%VæF–æt×WFF–öç2‚“°¢–b†Æ–6F2’Fö7B‚~)É2r¶Æ–6F2²r6Ö&–òr²†Æ–6F3ãòw2s¢rr’²rÆ–6Fòr²†Æ–6F3ãòw2s¢rr’²rVâvöövÆRG2rÂw7V66W72r“°¢–b†W'&÷&W2’Fö7B‚~)ªr¶W'&÷&W2²r×WF6œ;6âr²†W'&÷&W3ãòvW2s¢rr’²r6öâW'&÷"(	B&Wf—6VÂFWFÆÆRVâ6Ö&–÷2VæF–VçFW2rÂvW'&÷"r“°¢Ğ¢Ö6F6‚†R—·Ğ§Ğ ¦gVæ7F–öâ&VæFW%VæF–æt×WFF–öç2‚—°¢6öç7BæVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG5VæF–æuæVÂr“°¢6öç7BÆ—7CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG5VæF–ætÆ—7Br“°¢6öç7B&FvSÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG5VæF–æt&FvRr“°¢–b‚öG5VæF–æt×WFF–öç2æÆVæwF‚—¶–b‡æVÂ—æVÂç7G–ÆRæF—7Æ“ÒvæöæRs·&WGW&ã·Ğ¢–b‡æVÂ—æVÂç7G–ÆRæF—7Æ“Òv&Æö6²s°¢6öç7Bf—6–&ÆW3ÕöG5VæF–æt×WFF–öç2æf–ÇFW"†ÓÓæÒç7FGW2ÓÒvÆ–6Fòr“°¢–b‚f—6–&ÆW2æÆVæwF‚—¶–b‡æVÂ—æVÂç7G–ÆRæF—7Æ“ÒvæöæRs·&WGW&ã·Ğ¢6öç7BåVæC×f—6–&ÆW2æf–ÇFW"†ÓÓæÒç7FGW2ÓÒvW'&÷"r’æÆVæwFƒ°¢6öç7BäW'#×f—6–&ÆW2æf–ÇFW"†ÓÓæÒç7FGW3ÓÓÒvW'&÷"r’æÆVæwFƒ°¢–b†&FvR’&FvRçFW‡D6öçFVçCÖåVæB²rVæF–VçFRr²†åVæBÓÓòw2s¢rr’²†äW'#òr+rr¶äW'"²rW'&÷"r²†äW'"ÓÓòvW2s¢rr“¢rr“°¢6öç7B&WG'”'FãÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG5&WG'”ÆÄ'Fâr“°¢–b‡&WG'”'Fâ’&WG'”'Fâç7G–ÆRæF—7Æ“ÖäW'#òrs¢væöæRs°¢6öç7B÷Æ&VÃ×¶7&VFS¢t7&V"rÆVF—C¢tVF—F"rÆFVÆWFS¢tVÆ–Ö–æ"rÆæVvF—fS¢tæVvF—fòrÇW6Uö¶W—v÷&C¢uW6"·rwÓ°¢6öç7B×WDFW63ÖÓÓç°¢–b†Òæ÷ÓÓÒvæVvF—fRwÇÆÒæ÷ÓÓÒwW6Uö¶W—v÷&Br—&WGW&â†ÒæFFbfÒæFFçFW&Ö–æóò|*²r¶ÒæFFçFW&Ö–æò²|+²s¢rr’²†ÒæFFbfÒæFFæ6×æòr+rr¶ÒæFFæ6×æ¢rr“°¢&WGW&â†ÒæFFbfÒæFFææöÖ'&R—ÇÆÒæ–GÇÂrs°¢Ó°¢6öç7B7DÖ×°¢VæF–æs§¶3¢wf"‚Ò×v&â’rÇC¢~(û2VæF–VçFRwÒÀ¢Vçf–Fó§¶3¢wf"‚ÒÖ66VçC2’rÇC¢~)É2Vâ6öÆ(	BW7W&æFò67&—B"wÒÀ¢W'&÷#§¶3¢wf"‚ÒÖFævW"’rÇC¢~)ØÂW'&÷"wĞ¢Ó°¢Æ—7Bæ–ææW$…DÔÃ×f—6–&ÆW2æÖ†ÓÓç°¢6öç7B7C×7DÖ¶Òç7FGW5×ÇÇ7DÖçVæF–æs°¢6öç7B&WG'“ÖÒç7FGW3ÓÓÒvW'&÷"söÆ'WGFöâöæ6Æ–6³Ò'&WG'”×WFF–öâ‚rG¶ÒçF–ÖW7F×Òr’"7G–ÆSÒ&&6¶w&÷VæC¦æöæS¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶6öÆ÷#§f"‚ÒÖ66VçB“¶7W'6÷#§ö–çFW#¶föçB×6—¦S£—ƒ·FF–æs£‚gƒ¶&÷&FW"×&F—W3£Gƒ¶Æ–æRÖ†V–v‡C£ãB"F—FÆSÒ%&V–çFVçF"#î(k²&V–çFVçF#Âö'WGFöãæ¢rs°¢6öç7BW'$Æ–æSÖÒç7FGW3ÓÓÒvW'&÷"rbfÒæW'&÷#öÆF—b7G–ÆSÒ&föçB×6—¦S£—ƒ¶6öÆ÷#§f"‚ÒÖFævW"“¶Ö&v–â×F÷£7ƒ·FF–ærÖÆVgC£'‚#âG¶W66T‡FÖÂ†ÒæW'&÷"—ÓÂöF—cæ¢rs°¢&WGW&â ¢ÆF—b7G–ÆSÒ'FF–æs£w‚ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW"×&F—W3£gƒ¶föçB×6—¦S£‚#à¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‚#à¢Ç7â7G–ÆSÒ&6öÆ÷#¢G¶Òæ÷ÓÓÒvFVÆWFRwÇÆÒæ÷ÓÓÒwW6Uö¶W—v÷&Bsòwf"‚ÒÖFævW"’s¦Òæ÷ÓÓÒv7&VFRsòwf"‚Ò×7V66W72’s¢wf"‚ÒÖ66VçB’wÓ¶föçB×vV–v‡C£c¶fÆW‚×6‡&–æ³£#âG¶÷Æ&VÅ¶Òæ÷×ÇÆÒæ÷ÓÂ÷7ãà¢Ç7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C"“¶fÆWƒ£¶Ö–â×v–GFƒ£¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—3·v†—FR×76S¦æ÷w&#âG¶W66T‡FÖÂ†×WDFW62†Ò’—ÓÂ÷7ãà¢Ç7â7G–ÆSÒ&6öÆ÷#¢G·7Bæ7Ó¶föçB×6—¦S£—ƒ·v†—FR×76S¦æ÷w&¶fÆW‚×6‡&–æ³£#âG·7BçGÓÂ÷7ãà¢G·&WG'—Ğ¢Æ'WGFöâöæ6Æ–6³Ò'&VÖ÷fUVæF–æt×WFF–öä'•G2‚rG¶ÒçF–ÖW7F×Òr’"7G–ÆSÒ&&6¶w&÷VæC¦æöæS¶&÷&FW#¦æöæS¶6öÆ÷#§f"‚Ò×FW‡C2“¶7W'6÷#§ö–çFW#¶föçB×6—¦S£Gƒ·FF–æs£¶Æ–æRÖ†V–v‡C£¶fÆW‚×6‡&–æ³£"F—FÆSÒ%V—F"FRÆ6öÆ#ì9sÂö'WGFöãà¢ÂöF—cà¢G¶W'$Æ–æWĞ¢ÂöF—cæ·Ò’æ¦ö–â‚rr“°§Ğ ¦gVæ7F–öâ&VÖ÷fUVæF–æt×WFF–öä'•G2‡G2—°¢öG5VæF–æt×WFF–öç3ÕöG5VæF–æt×WFF–öç2æf–ÇFW"†ÓÓæÒçF–ÖW7F×Ó×G2“°¢6fUVæF–æuFõ7F÷&vR‚“°¢&VæFW%VæF–æt×WFF–öç2‚“°§Ğ ¢òòWFò×öÆÃ¢fW&–f–6W7FFòFR×WF6–öæW26F"Ö–â6’†’VæF–VçFW2’VÂF"vV"W7L:7F—fğ¦ÆWBöG4×WFF–öåöÆÄ–çFW'fÃÖçVÆÃ°¦gVæ7F–öâ÷7F'DG4×WFF–öåöÆÂ‚—°¢–b…öG4×WFF–öåöÆÄ–çFW'fÂ’&WGW&ã°¢öG4×WFF–öåöÆÄ–çFW'fÃ×6WD–çFW'fÂ‚‚“Óç°¢6öç7B†5VæF–æsÕöG5VæF–æt×WFF–öç2ç6öÖR†ÓÓæÒç7FGW3ÓÓÒvVçf–FòwÇÆÒç7FGW3ÓÓÒwVæF–ærr“°¢6öç7BvV$7F—fSÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wF"×vV"r“òæ6Æ74Æ—7Bæ6öçF–ç2‚v7F—fRr“°¢–b††5VæF–ærbgvV$7F—fR’7–æ4×WFF–öå7FGW6W2‚“°¢VÇ6R–b‚†5VæF–ær—¶6ÆV$–çFW'fÂ…öG4×WFF–öåöÆÄ–çFW'fÂ“µöG4×WFF–öåöÆÄ–çFW'fÃÖçVÆÃ·Ğ¢ÒÃ#“°§Ğ¦gVæ7F–öâ÷7F÷G4×WFF–öåöÆÂ‚—¶–b…öG4×WFF–öåöÆÄ–çFW'fÂ—¶6ÆV$–çFW'fÂ…öG4×WFF–öåöÆÄ–çFW'fÂ“µöG4×WFF–öåöÆÄ–çFW'fÃÖçVÆÃ·×Ğ ¦gVæ7F–öâ&WG'”×WFF–öâ‡G2—°¢6öç7BÓÕöG5VæF–æt×WFF–öç2æf–æB‡ƒÓç‚çF–ÖW7F×ÓÓ×G2“°¢–b‚Ò’&WGW&ã°¢Òç7FGW3ÒwVæF–ærs¶ÒæW'&÷#Òrs°¢6fUVæF–æuFõ7F÷&vR‚“°¢6VæDG4×WFF–öâ†Ò“°¢&VæFW%VæF–æt×WFF–öç2‚“°§Ğ¦gVæ7F–öâ&WG'”ÆÄW'&÷'2‚—°¢6öç7BW'&÷'3ÕöG5VæF–æt×WFF–öç2æf–ÇFW"†ÓÓæÒç7FGW3ÓÓÒvW'&÷"r“°¢–b‚W'&÷'2æÆVæwF‚—·Fö7B‚u6–âW'&÷&W2VR&V–çFVçF"rÂv–æfòr“·&WGW&ã·Ğ¢W'&÷'2æf÷$V6‚†ÓÓç¶Òç7FGW3ÒwVæF–ærs¶ÒæW'&÷#Òrs·Ò“°¢6fUVæF–æuFõ7F÷&vR‚“°¢&VæFW%VæF–æt×WFF–öç2‚“°¢W'&÷'2æf÷$V6‚†ÓÓç6VæDG4×WFF–öâ†Ò’“°¢Fö7B†(k²&V–çFVçFæFòG¶W'&÷'2æÆVæwF‡Ò×WF6œ;6âG¶W'&÷'2æÆVæwFƒãòvW2s¢rwÒââæÂv–æfòr“°§Ğ ¦7–æ2gVæ7F–öâÆöDG4FF‚—°¢6öç7B6fsÖvWDG46öæf–r‚“°¢6öç7BF—3×'6T–çB†Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG5W&–öE6VÆV7Br“òçfÇVWÇÂs3r“°¢²vG4vVçD&÷‚rÂvG466–FD&÷‚rÂvG57VvvW7D&÷‚uÒæf÷$V6‚†–CÓç¶6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B†–B“¶–b†VÂ–VÂç7G–ÆRæF—7Æ“ÒvæöæRs·Ò“°¢²vG2Ö·’Öv7FòrÂvG2Ö·’Ö–×rÂvG2Ö·’Ö6Æ–72rÂvG2Ö·’Ö7G"rÂvG2Ö·’Ö72rÂvG2Ö·’Ö6öçbrÂvG2Ö·’Ö7rÂvG2Ö·’×&ö2uÒæf÷$V6‚†–CÓç¶6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B†–B“¶–b†VÂ–VÂçFW‡D6öçFVçCÒ~(
+bs·Ò“°¢–b‚6fræVæGö–çB—°¢òòÖöFòFVÖğ¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–vç4&Vr’æ–ææW$…DÔÃÒsÆF—b6Æ73Ò&ÆöF–ær×7FFR"7G–ÆSÒ'FF–æs£#‚#ãÆF—b6Æ73Ò'7–ææW"#ãÂöF—cãÂöF—câs°¢v—BæWr&öÖ—6R‡#Óç6WEF–ÖV÷WB‡"Ãc’“°¢6öç7BFVÖóÖvWDG4FVÖôFF†F—2“°¢v–æF÷råöG4Æ7DFFÖFVÖó°¢&VæFW$G4µ—2†FVÖòÆF—2“°¢&VæFW$G46×–vç2†FVÖò“°¢&VæFW$G4vVçB†FVÖò“°¢&VæFW$G466–FB†FVÖò“°¢&VæFW$G57VvW&Væ6–2†FVÖò“°¢&VæFW%VæF–æt×WFF–öç2‚“°¢G'—¶ÆöEvV%7FG2‚“·Ö6F6‚†W'"—¶6öç6öÆRæW'&÷"‚vÆöEvV%7FG2rÆW'"“·Ğ¢6öç7BF÷CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG57FGW4F÷Br“°¢–b†F÷B—¶F÷Bç7G–ÆRæ&6¶w&÷VæCÒwf"‚Ò×v&â’s¶F÷BçF—FÆSÒtÖöFòFVÖò(	B6öæf–wW&GRVæGö–çB&VÂs·Ğ¢&WGW&ã°¢Ğ¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–vç4&Vr’æ–ææW$…DÔÃÒsÆF—b6Æ73Ò&ÆöF–ær×7FFR"7G–ÆSÒ'FF–æs£C‚#ãÆF—b6Æ73Ò'7–ææW"#ãÂöF—câ6&væFòvöövÆRG>(
+cÂöF—câs°¢G'—°¢6öç7B6–E&ÓÖ6fræ7W7FöÖW$–Còrf7W7FöÖW$–CÒr¶Væ6öFUU$”6ö×öæVçB†6fræ7W7FöÖW$–B“¢rs°¢6öç7BW&ÃÖ6fræVæGö–çB²†6fræVæGö–çBæ–æ6ÇVFW2‚sòr“òrbs¢sòr’²vF—3Òr¶F—2¶6–E&Ò²re÷CÒr´FFRææ÷r‚“°¢6öç7B#Öv—BfWF6‚‡W&Â“°¢–b‚"æö²’F‡&÷ræWrW'&÷"‚t…EEr·"ç7FGW2“°¢6öç7BFFÖv—B"æ§6öâ‚“°¢–b‚FFæö²’F‡&÷ræWrW'&÷"†FFæW'&÷'ÇÂu&W7VW7F–çl:Æ–FFVÂ67&—Br“°¢òò&VæFW'2f—7VÆW2—6ÆF÷3¢VâfÆÆòVâVæòæòFV&R&Æ÷VV"Æ6–æ7&öæ—¦6œ;6âFR×WF6–öæW0¢v–æF÷råöG4Æ7DFFÖFF°¢G'—²&VæFW$G4µ—2†FFÆF—2“²Ö6F6‚†W'"—²6öç6öÆRæW'&÷"‚w&VæFW$G4µ—2rÆW'"“²Ğ¢G'—²&VæFW$G46×–vç2†FF“²Ö6F6‚†W'"—²6öç6öÆRæW'&÷"‚w&VæFW$G46×–vç2rÆW'"“²Ğ¢G'—²&VæFW$G4vVçB†FF“²Ö6F6‚†W'"—²6öç6öÆRæW'&÷"‚w&VæFW$G4vVçBrÆW'"“²Ğ¢G'—²&VæFW$G466–FB†FF“²Ö6F6‚†W'"—²6öç6öÆRæW'&÷"‚w&VæFW$G466–FBrÆW'"“²Ğ¢G'—²&VæFW$G57VvW&Væ6–2†FF“²Ö6F6‚†W'"—²6öç6öÆRæW'&÷"‚w&VæFW$G57VvW&Væ6–2rÆW'"“²Ğ¢G'—²ÆöEvV%7FG2‚“²Ö6F6‚†W'"—²6öç6öÆRæW'&÷"‚vÆöEvV%7FG2rÆW'"“²Ğ¢&VæFW%VæF–æt×WFF–öç2‚“°¢òò&VfÆV¦VâVÂF6†&ö&BÆòVRVÂ67&—B"–Æ–<;2VâvöövÆRG0¢7–æ4×WFF–öå7FGW6W2‚“°¢G'—·&VæFW$G4WF÷–Æ÷B‚“·Ö6F6‚†W'"—·Ğ¢6öç7BösÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG4WFõvVV¶Ç’r“¶–b…ör•öræ6†V6¶VCÖÆö6Å7F÷&vRævWD—FVÒ‚vG5öWFõ÷vVV¶Ç’r“ÓÓÒss°¢6WEF–ÖV÷WB‚‚“Óç·G'—¶G4WFõvVV¶Ç”6†V6²‚“·Ö6F6‚†R—·×ÒÃ#“°¢6öç7BF÷CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG57FGW4F÷Br“°¢–b†F÷B—¶F÷Bç7G–ÆRæ&6¶w&÷VæCÒwf"‚Ò×7V66W72’s¶F÷BçF—FÆSÒt6öæV7FFòs·Ğ¢6öç7B'FäçVWfÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v'FäçVWf6×ær“°¢–b†'FäçVWf’'FäçVWfç7G–ÆRæF—7Æ“Òv–æÆ–æRÖfÆW‚s°¢òò7–æ2—'F&ÆR†æò&Æ÷VVçFR¢7–æ4G5Fô—'F&ÆR†FFÆF—2’çF†Vâ‚‚“ÓçFö7B‚~)É2vöövÆRG26–æ7&öæ—¦Fò6öâ—'F&ÆRrÂw7V66W72r’’æ6F6‚‚‚“Óç·Ò“°¢Ö6F6‚†R—°¢òò6–â6öæf–wW&6œ;6â&÷–FVÂW7V&–òVÂVæGö–çBW2VÂFVfVÇB†&F6öFVFó ¢òò6’fÆÆ‡6–â&VBÂ67&—B6:ÖFò’6VÖ÷2ÖöFòFVÖòVâfW¢FRÖ÷7G&"W'&÷ ¢–b‚Æö6Å7F÷&vRævWD—FVÒ‚vG5ö6öæf–rr’—°¢6öç7BFVÖóÖvWDG4FVÖôFF†F—2“°¢v–æF÷råöG4Æ7DFFÖFVÖó°¢G'—²&VæFW$G4µ—2†FVÖòÆF—2“²Ö6F6‚†W'"—·Ğ¢G'—²&VæFW$G46×–vç2†FVÖò“²Ö6F6‚†W'"—·Ğ¢G'—²&VæFW$G4vVçB†FVÖò“²Ö6F6‚†W'"—·Ğ¢G'—²&VæFW$G466–FB†FVÖò“²Ö6F6‚†W'"—·Ğ¢G'—²&VæFW$G57VvW&Væ6–2†FVÖò“²Ö6F6‚†W'"—·Ğ¢&VæFW%VæF–æt×WFF–öç2‚“°¢G'—²&VæFW%vV%7FG2†vWEvV$FVÖôFF†F—2’ÆF—2“²Ö6F6‚†W'"—·Ğ¢6öç7BF÷CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG57FGW4F÷Br“°¢–b†F÷B—¶F÷Bç7G–ÆRæ&6¶w&÷VæCÒwf"‚Ò×v&â’s¶F÷BçF—FÆSÒtÖöFòFVÖò(	BVæGö–çBæòF—7öæ–&ÆR‚r¶RæÖW76vR²r’s·Ğ¢&WGW&ã°¢Ğ¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vG46×–vç4&Vr’æ–ææW$…DÔÃÖÆF—b6Æ73Ò&V×G’×7FFR"7G–ÆSÒ'FF–æs£C‚#ãÆF—b6Æ73Ò&V×G’Ö–6öâ#ãÇ7fr6Æ73Ò&F6†&ö&BÖ–6öâ"v–GFƒÒ##‚"†V–v‡CÒ##‚"7G&ö¶R×v–GFƒÒ#ãR#ãÇW6R‡&VcÒ"6–6öâ×v&æ–ær"óãÂ÷7fsãÂöF—cãÆF—b7G–ÆSÒ&6öÆ÷#§f"‚ÒÖFævW"’#âG¶RæÖW76vWÓÂöF—cãÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–â×F÷£‡‚#åfW&–f–6VRVÂ267&—BW7L:’V&Æ–6Fò6öÖòÆ–66œ;6âvV"6öâ66W6ò;¦&Æ–6óÂöF—cãÂöF—cæ°¢²vG2Ö·’Öv7FòrÂvG2Ö·’Ö–×rÂvG2Ö·’Ö6Æ–72rÂvG2Ö·’Ö7G"rÂvG2Ö·’Ö72rÂvG2Ö·’Ö6öçbrÂvG2Ö·’Ö7rÂvG2Ö·’×&ö2uÒæf÷$V6‚†–CÓç¶6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B†–B“¶–b†VÂ–VÂçFW‡D6öçFVçCÒ~(	Bs·Ò“°¢6öç7BF÷CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vG57FGW4F÷Br“°¢–b†F÷B—¶F÷Bç7G–ÆRæ&6¶w&÷VæCÒwf"‚ÒÖFævW"’s¶F÷BçF—FÆSÒtW'&÷#¢r¶RæÖW76vS·Ğ¢Ğ§Ğ

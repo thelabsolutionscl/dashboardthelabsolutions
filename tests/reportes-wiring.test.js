@@ -74,7 +74,7 @@ test('crearReporte usa datos vivos, CEO_AGENT y persiste el registro completo',(
   assert.match(body,/btn\.disabled\s*=\s*true/,'debe bloquear dobles clics durante la generación');
   assert.match(body,/AGENTES_CFG[\s\S]*CEO/,'debe usar la configuración oficial del CEO_AGENT');
   assert.match(body,/buildAgentContext\(\s*['"]CEO['"]\s*\)/,'debe incorporar el contexto vivo del CRM');
-  assert.match(body,/callClaude\s*\(/,'debe generar el análisis ejecutivo');
+  assert.match(body,/callAgentClaude\(\s*['"]CEO['"]/,'debe generar el análisis con la política del CEO');
   assert.match(body,/formatAgentReport\s*\(/,'la respuesta visible debe formatearse');
   assert.match(body,/airtableWrite\(\s*['"]Reportes['"]\s*,\s*['"]POST['"]/,'debe guardar en Airtable');
   for(const field of ['Semana','Revenue semana (CLP)','Cotizaciones enviadas','Cotizaciones aprobadas','Pedidos activos','Pedidos despachados','Resumen ejecutivo','Fecha generación','Tasa conversión (%)','Estado reporte']){

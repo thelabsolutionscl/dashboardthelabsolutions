@@ -1,6 +1,14 @@
 const AIRTABLE_BASE = 'https://api.airtable.com';
 const ANTHROPIC_BASE = 'https://api.anthropic.com';
 const OPENAI_BASE = 'https://api.openai.com';
+// Defensa de costo en el servidor: aunque alguien manipule el JavaScript del
+// navegador, el proxy nunca permite Opus, Fable ni modelos futuros no revisados.
+const ANTHROPIC_ALLOWED_MODELS = new Set([
+  'claude-haiku-4-5',
+  'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-6',
+]);
+const ANTHROPIC_MAX_OUTPUT_TOKENS = 4000;
 
 // Solo se aceptan peticiones desde estos orígenes (el dashboard). Así, si la
 // APP_KEY se filtrara (va horneada en el HTML público), no sirve desde otro sitio.
@@ -77,9 +85,20 @@ export default {
 
     // ── Anthropic (Claude) — la API key vive como secreto del Worker ──
     // El dashboard llama a:  <worker>/anthropic/v1/messages
-    if (url.pathname === '/anthropic/v1/messages' || url.pathname.startsWith('/anthropic/')) {
+    if (url.pathname === '/anthropic/v1/messages') {
       if (!env.ANTHROPIC_TOKEN) {
-        return json({ error: 'Worker misconfigured: missing ANTHROPIC_TOKEN secret' }, 500);
+        return json({ error: 'Worker misconfigured: missing ANTHROPIC_TOKEN secret' }, 500, CORS);
+      }
+      if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, CORS);
+      let payload;
+      try { payload = await readAnthropicJson(request); }
+      catch (_) { return json({ error: 'Invalid Anthropic JSON body' }, 400, CORS); }
+      if (!payload || !ANTHROPIC_ALLOWED_MODELS.has(payload.model)) {
+        return json({ error: 'Anthropic model not allowed by cost policy' }, 403, CORS);
+      }
+      const maxTokens = Number(payload.max_tokens);
+      if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > ANTHROPIC_MAX_OUTPUT_TOKENS) {
+        return json({ error: `max_tokens must be between 1 and ${ANTHROPIC_MAX_OUTPUT_TOKENS}` }, 400, CORS);
       }
       const target = ANTHROPIC_BASE + url.pathname.replace(/^\/anthropic/, '') + url.search;
       const headers = new Headers();
@@ -95,6 +114,9 @@ export default {
       Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
       return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
     }
+
+    // No funciona como proxy Anthropic genérico: solo Messages está expuesto.
+    if (url.pathname.startsWith('/anthropic/')) return json({ error: 'Anthropic endpoint not allowed' }, 404, CORS);
 
     // ── OpenAI (visión + generación de imágenes de la ficha propuesta) ──
     // La API key vive como secreto del Worker; el navegador NO puede llamar a
@@ -147,6 +169,15 @@ export default {
   },
 };
 
+async function readAnthropicJson(request) {
+  // Request real de Cloudflare: clone evita consumir el stream que luego se
+  // reenvía. El fallback string mantiene simples las pruebas unitarias.
+  if (request && typeof request.clone === 'function') return request.clone().json();
+  if (typeof request.body === 'string') return JSON.parse(request.body);
+  if (request.body && typeof request.body.text === 'function') return JSON.parse(await request.body.text());
+  throw new Error('body unavailable');
+}
+
 function json(data, status = 200, corsHeaders = cors('')) {
   return new Response(JSON.stringify(data), {
     status,
@@ -154,47 +185,4 @@ function json(data, status = 200, corsHeaders = cors('')) {
   });
 }
 
-// ── Heartbeat hacia la tabla Automations ──────────────────────────────
-// Actualiza la fila ID="airtable-proxy" con Estado=Activo y la hora actual,
-// como máximo una vez cada 5 min (throttle por isolate). Totalmente opcional:
-// si la base/tabla no existen o el token no puede escribir, falla en silencio.
-let _lastBeat = 0;
-const HEARTBEAT_ID = 'airtable-proxy';
-const HEARTBEAT_TABLE = 'Automations';
-const HEARTBEAT_MIN_MS = 5 * 60 * 1000;
-
-async function heartbeat(env) {
-  const now = Date.now();
-  if (now - _lastBeat < HEARTBEAT_MIN_MS) return;
-  _lastBeat = now;
-
-  const base = env.HEARTBEAT_BASE || 'app1YtD74AqiPWQhy';
-  const auth = { Authorization: 'Bearer ' + env.AIRTABLE_TOKEN };
-  const tbl = `${AIRTABLE_BASE}/v0/${base}/${encodeURIComponent(HEARTBEAT_TABLE)}`;
-
-  // 1) Buscar la fila del proxy por su ID técnico
-  const q = `${tbl}?maxRecords=1&filterByFormula=${encodeURIComponent(`{ID}='${HEARTBEAT_ID}'`)}`;
-  const found = await fetch(q, { headers: auth });
-  if (!found.ok) return;
-  const data = await found.json();
-  const rec = data.records && data.records[0];
-  if (!rec) return;
-
-  // 2) Marcar como Activo con la hora actual; EjecucionesHoy con reseteo diario
-  const f = rec.fields || {};
-  const sameDay = f.UltimaEjecucion && new Date(f.UltimaEjecucion).toDateString() === new Date().toDateString();
-  const ej = (sameDay ? (Number(f.EjecucionesHoy) || 0) : 0) + 1;
-  await fetch(`${tbl}/${rec.id}`, {
-    method: 'PATCH',
-    headers: { ...auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      fields: {
-        Estado: 'Activo',
-        UltimaEjecucion: new Date().toISOString(),
-        EjecucionesHoy: ej,
-        TareaActual: 'Proxy seguro Airtable + Claude operativo',
-      },
-      typecast: true,
-    }),
-  });
-}
+// ── He

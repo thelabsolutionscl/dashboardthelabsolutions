@@ -39,6 +39,7 @@ const ENV = {
   OPENAI_TOKEN: 'sk-openai-test',
 };
 const OK_ORIGIN = 'https://dashboard.thelab.solutions';
+const HAIKU_BODY = JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 800, messages: [{ role: 'user', content: 'hola' }] });
 
 // Request mínimo: el worker solo usa method, url, headers.get() y body.
 function req(pathname, { method = 'GET', origin, key, contentType, body } = {}) {
@@ -107,13 +108,42 @@ test('con Origin permitido, el proxy de Anthropic reenvía con la x-api-key del 
   const spy = espiarFetch(200, '{"content":[]}');
   try {
     const r = await worker.fetch(
-      req('/anthropic/v1/messages', { method: 'POST', origin: OK_ORIGIN, key: ENV.APP_KEY, contentType: 'application/json', body: '{}' }),
+      req('/anthropic/v1/messages', { method: 'POST', origin: OK_ORIGIN, key: ENV.APP_KEY, contentType: 'application/json', body: HAIKU_BODY }),
       ENV, undefined
     );
     assert.equal(r.status, 200);
     assert.equal(spy.calls.length, 1);
     assert.match(spy.calls[0].url, /^https:\/\/api\.anthropic\.com\/v1\/messages/);
     assert.equal(spy.calls[0].opts.headers.get('x-api-key'), 'sk-ant-test');
+  } finally { spy.restore(); }
+});
+
+test('el proxy bloquea modelos Anthropic caros aunque origen y clave sean válidos', async () => {
+  const spy = espiarFetch();
+  try {
+    const body = JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 800, messages: [] });
+    const r = await worker.fetch(req('/anthropic/v1/messages', { method: 'POST', origin: OK_ORIGIN, key: ENV.APP_KEY, body }), ENV, undefined);
+    assert.equal(r.status, 403);
+    assert.equal(spy.calls.length, 0, 'un modelo fuera de política no llega a Anthropic');
+  } finally { spy.restore(); }
+});
+
+test('el proxy limita la salida máxima para evitar respuestas descontroladas', async () => {
+  const spy = espiarFetch();
+  try {
+    const body = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 5000, messages: [] });
+    const r = await worker.fetch(req('/anthropic/v1/messages', { method: 'POST', origin: OK_ORIGIN, key: ENV.APP_KEY, body }), ENV, undefined);
+    assert.equal(r.status, 400);
+    assert.equal(spy.calls.length, 0);
+  } finally { spy.restore(); }
+});
+
+test('el proxy no expone otros endpoints de Anthropic', async () => {
+  const spy = espiarFetch();
+  try {
+    const r = await worker.fetch(req('/anthropic/v1/models', { method: 'GET', origin: OK_ORIGIN, key: ENV.APP_KEY }), ENV, undefined);
+    assert.equal(r.status, 404);
+    assert.equal(spy.calls.length, 0);
   } finally { spy.restore(); }
 });
 
