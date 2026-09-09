@@ -16535,6 +16535,595 @@ async function _demoAirtableHttp(url,opts={}){
   return _demoJson(upsert(recordId,body.fields||{},true),method==='POST'?201:200);
 }
 
+const DEMO_AGENT_RESPONSES=Object.freeze({
+  sales:`## Calificación del lead
+
+**Score:** 9/10 · **Probabilidad de cierre:** 75% · **Urgencia:** Alta · **Ticket estimado:** $1.600.000 netos
+
+El lead calza muy bien: volumen corporativo, fecha definida y necesidad de personalización. Antes de cerrar precio hay que confirmar material, altura final, cantidad de diseños y formato del logo.
+
+## Respuesta sugerida
+
+Hola María, gracias por escribirnos. Sí, podemos producir los 100 trofeos personalizados para su gala. Como referencia, proyectos de este volumen parten cerca de $16.000 netos por unidad y el valor final depende del material y la terminación.
+
+Para dejarlo cerrado hoy, ¿me compartes el logo, la altura aproximada y la fecha exacta del evento? Con eso te envío propuesta visual, plazo y cotización formal hoy antes de las 18:00.
+
+## Próximo paso comercial
+
+1. Pedir logo vectorial y fecha límite antes de las 12:00.
+2. Confirmar rango de presupuesto y responsable de aprobación.
+3. Enviar cotización con dos terminaciones y anticipo de 50%.
+4. Hacer seguimiento mañana a las 11:00 si no hay respuesta.`,
+
+  quote:`## Cotización propuesta
+
+| Cantidad | Descripción | Precio unitario neto | Subtotal neto |
+|---:|---|---:|---:|
+| 80 | Trofeo corporativo de 15 cm, cuerpo acrílico, base impresa 3D y logo grabado | $17.500 | $1.400.000 |
+| 1 | Preparación de archivo, prueba digital y muestra de terminación | $65.000 | $65.000 |
+
+**Subtotal neto:** $1.465.000
+**IVA 19%:** $278.350
+**Total con IVA:** $1.743.350
+
+## Condiciones
+
+- Producción: 7 días hábiles desde la aprobación del diseño y recepción del anticipo.
+- Pago: 50% de anticipo y 50% contra entrega.
+- Incluye una ronda de ajustes de diseño y embalaje individual simple.
+- Despacho en Santiago se cotiza según comuna.
+- Validez de la propuesta: 10 días hábiles.
+
+[ITEMS]
+[{"desc":"Trofeo corporativo acrílico con base 3D","qty":80,"costo":10500,"venta":17500},{"desc":"Preparación de archivo y muestra","qty":1,"costo":39000,"venta":65000}]
+[/ITEMS]`,
+
+  production:`## Ficha técnica de producción
+
+1. **Preparación:** validar STL, altura final de 150 mm y encaje de base con holgura de 0,25 mm. Separar cuerpo y base para reducir soportes.
+2. **Material:** PLA blanco premium, 1,75 mm. Consumo estimado: 92 g por unidad; total con 8% de merma: 4,97 kg.
+3. **Máquinas:** distribuir 30 unidades en K1 y 20 en Ender-5 Max. Cantidad por placa: 2 en K1 y 4 en Ender-5 Max.
+4. **Slicing:** capa 0,20 mm · 3 perímetros · 5 capas superiores/inferiores · relleno gyroid 18% · soportes solo desde la base.
+5. **Temperaturas:** boquilla 210 °C · cama 60 °C · ventilador 100% desde capa 3.
+6. **Velocidad:** pared exterior 55 mm/s · interior 90 mm/s · relleno 110 mm/s · primera capa 25 mm/s.
+7. **Tiempo estimado:** 5 h 20 min por placa K1 y 10 h 40 min por placa Ender-5 Max; 72 horas-máquina totales.
+8. **Postproceso:** retirar soportes, lijar grano 220/400, aplicar primer, dos manos de dorado y secado mínimo de 8 horas.
+9. **Ensamble:** adhesivo cianoacrilato gel; verificar escuadra y firmeza de la base antes de pintar.
+10. **Control final:** altura 150 ±0,5 mm, color uniforme, logo centrado, base sin juego y embalaje individual.
+
+**Plan:** iniciar primera tanda hoy 11:00, terminar impresión en 2 días hábiles, postproceso el día 3 y entregar a QA el día 4.`,
+
+  mantencion3d:`## 1. Semáforo del parque
+
+**14 máquinas auditadas:** 9 listas · 2 imprimiendo · 1 con error · 2 offline.
+
+| Estado | Máquinas | Observación |
+|---|---|---|
+| Listas | K1-1, K1-2, K1-3, K2-1, K2-2, K2 Plus-1, Ender-5-1, Ender-5-2, Ender-5-3 | Sin alarmas activas |
+| Imprimiendo | K1-4, Ender-5-4 | No intervenir ni calibrar |
+| Error | Ender-5-5 | Klipper desconectado; requiere reinicio controlado |
+| Offline | K1-5, Giga-1 | Sin respuesta de red |
+
+## 2. Acciones urgentes
+
+1. **Ender-5-5:** ejecutar FIRMWARE_RESTART cuando esté libre, comprobar temperatura en reposo durante 5 minutos y hacer una prueba corta. Si reincide, revisar termistor, cableado y MCU físicamente.
+2. **K1-5:** revisar energía y enlace de red; confirmar IP antes de declararla disponible.
+3. **Giga-1:** validar alimentación, switch y cable Ethernet; no asignar producción hasta recuperar telemetría.
+
+## 3. Calibración
+
+Calibrar bed mesh en K1-2 y Ender-5-2 por acumulación de horas. No tocar K1-4 ni Ender-5-4 mientras imprimen.
+
+## 4. Rutina automática 9:00
+
+Auditar Moonraker → aislar errores → reinicio preventivo solo en máquinas libres → home y bed mesh en equipos vencidos → prueba de extrusión → publicar semáforo a las 09:45. Objetivo: al menos 11 máquinas listas a las 10:00.`,
+
+  qa:`## Checklist pre-despacho — Trofeo acrílico con base 3D
+
+- [x] Cantidad completa: 15 unidades identificadas.
+- [x] Altura final dentro de tolerancia: 150 mm ±0,5 mm.
+- [x] Corte del acrílico limpio, sin rebabas ni cantos astillados.
+- [x] Grabado legible, centrado y consistente entre unidades.
+- [x] Impresión 3D sin warping, stringing ni desplazamiento de capas.
+- [x] Pintura dorada uniforme, seca y sin huellas.
+- [x] Base firme; ensamble sin juego al aplicar presión manual moderada.
+- [x] Superficie libre de rayas, polvo, adhesivo visible y manchas.
+- [x] Nombre/logo contrastado con la muestra aprobada.
+- [x] Embalaje individual protege caras, puntas y placa grabada.
+
+**Muestra inspeccionada:** 15 de 15 unidades.
+**Hallazgos:** sin defectos críticos; dos piezas fueron limpiadas antes del embalaje.
+
+✅ APROBADO`,
+
+  followup:`## WhatsApp
+
+Hola María 👋 Quería confirmar que recibiste la propuesta por los trofeos para la gala. Mantuvimos reservada la ventana de producción y la cotización vence en 2 días; si necesitas ajustar terminación o cantidad, lo revisamos encantados.
+
+## Email
+
+**Asunto:** Propuesta de trofeos para su gala corporativa
+
+Hola María,
+
+Quería confirmar que recibiste nuestra propuesta para los trofeos personalizados de la gala. La cotización mantiene sus valores por 2 días más y todavía tenemos disponible la ventana de producción indicada.
+
+Si necesitas ajustar la cantidad, terminación o fecha de entrega, puedo enviarte una versión actualizada hoy.
+
+Saludos,
+The Lab Solutions`,
+
+  ceo:`## 1. Resumen ejecutivo
+
+La semana cierra con **$2.180.000 netos vendidos**, margen bruto de **38,4%** y conversión de cotizaciones de **33,3%**. La operación está sana, pero un pedido atrasado y $380.000 vencidos requieren acción hoy. El pipeline abierto permite cerrar otros $1.240.000 si Comercial actúa antes del viernes.
+
+## 2. Métricas clave
+
+| Indicador | Resultado | Estado |
+|---|---:|---|
+| Revenue semanal neto | $2.180.000 | En objetivo |
+| Margen bruto | 38,4% | Sano |
+| Cotizaciones enviadas / ganadas | 9 / 3 | 33,3% conversión |
+| Pedidos activos | 5 | 1 atrasado |
+| Cartera vencida | $380.000 | Atención |
+| Pipeline con decisión esta semana | $1.240.000 | 4 oportunidades |
+
+## 3. Alertas críticas
+
+1. **PED-048 atrasado 2 días:** reasignar hoy una K1 libre y confirmar nueva entrega al cliente antes de las 10:30. Impacto protegido: $620.000.
+2. **Factura de Agencia Norte por $380.000 vencida hace 12 días:** llamada de cobranza hoy; suspender nuevo crédito hasta acuerdo de pago.
+3. **Dos cotizaciones por $710.000 vencen en 48 horas:** seguimiento personalizado hoy, no descuento automático.
+
+## 4. Top 3 prioridades de esta semana
+
+1. **Nicanor / Producción:** recuperar PED-048 y pasarlo a QA mañana a las 16:00.
+2. **Florencia / Comercial:** cerrar las cuatro oportunidades con fecha de decisión; meta mínima $700.000 netos.
+3. **Gustavo / Operaciones:** cobrar Agencia Norte y asegurar caja de al menos $300.000 antes del viernes.
+
+## 5. Oportunidad detectada
+
+Los proyectos de premiación concentran 61% del pipeline y mantienen margen sobre 40%. Conviene reservar capacidad para una campaña B2B de cierre de año y ofrecer dos paquetes estandarizados de 30 y 60 unidades, sin bajar precio unitario.`,
+
+  leadgen:`## 1. Productoras de eventos corporativos
+
+**Por qué encaja:** compran premiaciones, volumétricos y señalética en cada evento.
+**Decisor:** productor ejecutivo o director de cuentas en agencias de 10–80 personas.
+**LinkedIn:** Hola Camila, vi que producen experiencias para marcas. En The Lab resolvemos trofeos, señalética y volumétricos personalizados con producción local y un solo responsable. ¿Te sirve que te envíe un muestrario para próximos pitches?
+**Asunto email:** Producción local para sus próximas activaciones
+**Potencial mensual:** $1.200.000–$4.000.000.
+
+## 2. Áreas de Personas en empresas tecnológicas
+
+**Por qué encaja:** onboarding, aniversarios y reconocimientos recurrentes.
+**Decisor:** People Manager o jefe de Cultura.
+**LinkedIn:** Hola Diego, ayudamos a equipos de Personas a convertir hitos internos en kits y reconocimientos hechos a medida, desde pocas unidades. ¿Están planificando ingresos o premiaciones este trimestre?
+**Asunto email:** Reconocimientos para su equipo, sin catálogo genérico
+**Potencial mensual:** $600.000–$2.000.000.
+
+## 3. Cadenas de restaurantes en expansión
+
+**Por qué encaja:** necesitan cartelería, neones y señalética replicable por local.
+**Decisor:** gerente de Marketing o Expansión.
+**LinkedIn:** Hola Paula, fabricamos neones y señalética de marca con especificaciones repetibles para aperturas. Podemos producir e instalar por etapas en Santiago. ¿Tienen nuevas aperturas este semestre?
+**Asunto email:** Señalética replicable para nuevas aperturas
+**Potencial mensual:** $900.000–$3.500.000.
+
+## Prioridad de prospección
+
+Partir por productoras: ciclo más corto, múltiples productos por cuenta y mayor recurrencia. Crear una lista inicial de 30 empresas y contactar 10 por día durante tres días.`,
+
+  onboarding:`## 1. Bienvenida por WhatsApp
+
+¡Hola, equipo de Nova Eventos! 🎉 Confirmamos su primer proyecto con The Lab: 60 trofeos personalizados para la gala. Desde hoy tendrán un responsable único y les iremos mostrando cada hito. Para comenzar, necesitamos los archivos y referencias indicados abajo; la primera propuesta visual llegará mañana antes de las 17:00.
+
+## 2. Información requerida
+
+- [ ] Logo en AI, SVG o PDF vectorial.
+- [ ] Colores Pantone o códigos HEX aprobados.
+- [ ] Altura/medidas finales y texto de cada placa.
+- [ ] Referencia visual de terminación.
+- [ ] Dirección, contacto de recepción y fecha límite dura.
+- [ ] Confirmación del responsable que aprobará el diseño.
+
+## 3. Cronograma estimado
+
+| Día hábil | Hito |
+|---|---|
+| 0 | Recepción de archivos y anticipo |
+| 1 | Propuesta visual y muestra digital |
+| 2 | Aprobación final del cliente |
+| 3–6 | Producción del lote |
+| 7 | Terminaciones y ensamble |
+| 8 | QA y registro fotográfico |
+| 9 | Embalaje y despacho |
+
+## 4. Próximos pasos
+
+**The Lab hoy:** crea la ficha del proyecto y reserva capacidad.
+**Cliente hoy:** envía logo, colores, textos y dirección.
+**Primer hito:** propuesta visual mañana a las 17:00.
+**Responsable The Lab:** Florencia, quien centralizará aprobaciones y actualizaciones.`,
+
+  finance:`## Posición financiera
+
+**Dinero expuesto total:** $1.240.000 · **Vencido:** $580.000 · **Por vencer (7 días):** $660.000
+
+| Cliente | Documento | Monto | Mora | Riesgo | Acción |
+|---|---|---:|---:|---|---|
+| Agencia Norte | F-1048 | $380.000 | 12 días | Alto | Llamada hoy + email con compromiso de fecha |
+| Colegio San Martín | F-1051 | $200.000 | 5 días | Medio | WhatsApp al contacto de administración |
+| Retail Nova | F-1058 | $420.000 | Vence en 3 días | Bajo | Recordatorio preventivo por email |
+| FitPro | F-1060 | $240.000 | Vence en 7 días | Bajo | Confirmar recepción de factura |
+
+## Márgenes
+
+| Línea | Venta neta | Costo | Margen | Diagnóstico |
+|---|---:|---:|---:|---|
+| Premiaciones | $1.420.000 | $795.000 | 44,0% | Sano |
+| Impresión 3D | $510.000 | $347.000 | 32,0% | Bajo objetivo |
+| Señalética | $690.000 | $407.000 | 41,0% | Sano |
+
+## Decisiones recomendadas
+
+1. Cobrar hoy $380.000 a Agencia Norte y no aceptar un nuevo pedido a crédito hasta documentar el acuerdo.
+2. Subir 8% el precio de impresión 3D o reducir 12% el tiempo de máquina: hoy pierde 3 puntos frente al mínimo objetivo.
+3. Mantener el anticipo de 50% en proyectos personalizados; no financiar materiales con caja propia.
+4. Meta de recuperación semanal: **$500.000**; responsable: Gustavo.`,
+
+  repcliente:`## WhatsApp
+
+📦 Pedido PED-047 — Update de hoy
+✅ Estado actual: producción en curso, sin problemas.
+🔧 Avance: completamos 30 de 50 trofeos y comenzamos la terminación dorada del primer lote.
+⏭ Siguiente paso: terminamos impresión mañana y pasamos a ensamble/QA el jueves.
+📅 Entrega estimada: viernes, entre 14:00 y 17:00.
+
+## Email
+
+**Asunto:** Avance de su pedido PED-047
+
+Hola María,
+
+Su pedido de 50 trofeos está al 60% y avanza dentro del calendario acordado. Ya completamos 30 unidades; el primer lote está en terminación dorada y mañana finalizamos la impresión restante.
+
+El jueves realizaremos ensamble y control de calidad. Mantendremos la entrega para el viernes entre 14:00 y 17:00 y enviaremos fotografías una vez concluido el QA.
+
+Saludos,
+The Lab Solutions`,
+
+  content:`## Instagram
+
+**De una idea a 50 reconocimientos ✨**
+Cada trofeo de esta gala tecnológica fue diseñado, impreso y terminado en nuestro taller de Santiago. El detalle final no sale de un catálogo: cuenta la historia del equipo que será reconocido.
+¿Tienes un evento en camino? Escríbenos y creemos una propuesta para tu marca.
+
+#TrofeosPersonalizados #Premiaciones #EventosCorporativos #DiseñoChileno #FabricacionDigital #Impresion3DChile #RegalosCorporativos #Santiago #TheLabSolutions #BrandExperience #HechoEnChile #DiseñoAMedida
+
+## LinkedIn
+
+Una premiación corporativa también comunica cultura. Para la gala de una empresa tecnológica desarrollamos 50 piezas desde cero: concepto, prototipo, producción y control de calidad en un solo taller.
+
+Estandarizar el proceso nos permitió mantener consistencia sin perder el carácter de cada reconocimiento. El resultado llegó listo para entregar, con trazabilidad por lote y fecha comprometida.
+
+¿Qué debería representar el próximo reconocimiento de tu equipo?
+
+## TikTok / Reels
+
+**Gancho 0–3 s:** “Así nacen 50 trofeos únicos”.
+**3–10 s:** pantalla dividida con boceto y primera capa.
+**10–25 s:** time-lapse de impresión, lijado y pintura.
+**25–35 s:** ensamble, logo y fila completa.
+**35–42 s:** reveal con luz lateral + texto “listos para la gala”.
+**Audio:** base electrónica ascendente, corte marcado en cada cambio de proceso.
+**CTA:** “Guarda este proceso y cotiza tu premiación por DM”.`,
+
+  ads:`## 1. Diagnóstico
+
+En 30 días se invirtieron **$187.400**. Google reporta ROAS 6,1x, pero el CRM confirma **3,2x**: rentable, aunque la brecha exige optimizar por ventas reales. “Impresión 3D General” sostiene el volumen; “Display Remarketing” y YouTube tienen muestra insuficiente y no justifican más presupuesto todavía.
+
+## 2. Alertas críticas
+
+1. **“impresora 3d”** gastó $28.400 con solo 2 conversiones y QS 4/10: el tráfico amplio encarece el CPC y mezcla intención de compra de máquinas. Riesgo mensual: $18.000 desperdiciados.
+2. **“prototipo 3d”** gastó $13.900 sin conversiones y landing bajo promedio. Pausarla evita seguir quemando presupuesto mientras se corrige la página.
+3. **YouTube - Branding Lab** gastó $4.700 sin ventas. La muestra es pequeña; mantener sin escalar y fijar revisión al llegar a $12.000.
+
+## 3. Acciones inmediatas
+
+1. Pausar “prototipo 3d” y agregar “reparar” y “barata” como negativas.
+2. Pasar “impresión 3d santiago” a exacta: 11 conversiones, QS 8/10.
+3. Reescribir anuncios de “impresora 3d” para incluir servicio, Santiago y producción a pedido.
+4. Revisar CRM semanalmente y no usar el ROAS de Google como fuente de ingresos.
+
+## 4. Reasignación de presupuesto
+
+Mover **$2.000/día** desde Display Remarketing hacia Búsqueda - Impresión 3D General, dejando el total mensual proyectado bajo el tope neto de $250.000. No escalar YouTube hasta confirmar ventas en CRM.
+
+[ACTIONS]
+[{"tipo":"pausar_kw","campana":"Búsqueda - Arquitectura & Diseño","termino":"prototipo 3d","motivo":"Gastó $13.900 sin conversiones"},{"tipo":"negativo","campana":"Búsqueda - Impresión 3D General","termino":"reparar","motivo":"Intención de servicio técnico, no de fabricación"},{"tipo":"negativo","campana":"Búsqueda - Impresión 3D General","termino":"barata","motivo":"Intención de compra de impresora"},{"tipo":"keyword_exacta","campana":"Búsqueda - Impresión 3D General","termino":"impresión 3d santiago","motivo":"11 conversiones y QS 8"},{"tipo":"generar_copy","campana":"Búsqueda - Impresión 3D General","termino":"impresora 3d","motivo":"Relevancia de anuncio bajo promedio"},{"tipo":"presupuesto","id":"1","campana":"Búsqueda - Impresión 3D General","nuevo":10000,"motivo":"Concentra conversiones rentables del CRM"}]
+[/ACTIONS]`,
+
+  linkedin:`SCORE_B2B:
+9
+SERVICIO_RECOMENDADO:
+Merchandising corporativo
+DECISOR:
+Alto
+MENSAJE_LINKEDIN:
+Hola Andrea, vi que lideras Marketing en una empresa retail con varios puntos de contacto de marca. En The Lab desarrollamos merchandising y piezas físicas personalizadas con producción local, desde prototipo hasta despacho. ¿Te muestro tres formatos que están funcionando para campañas internas y lanzamientos?
+MENSAJE_EMAIL:
+Asunto: Merchandising local para su próxima campaña
+
+Hola Andrea,
+Ayudamos a equipos de marketing a producir merchandising corporativo a medida sin depender de catálogos genéricos. Podemos prototipar rápido, ajustar materiales al presupuesto y escalar la producción en Santiago. ¿Tienes una campaña o activación en planificación para este trimestre?
+
+Saludos,
+The Lab Solutions
+OBJECIONES_PROBABLES:
+- Ya trabajan con un proveedor habitual.
+- Necesitan validar precio por volumen.
+- Exigen muestra y cumplimiento de fecha antes de aprobar.
+PROXIMA_ACCION:
+Enviar un muestrario de tres soluciones y agendar una llamada de 15 minutos dentro de 48 horas.`,
+
+  social_strategist:`## Calendario de contenido — 4 semanas
+
+| Semana / día | Red | Pilar | Idea concreta | Objetivo | CTA |
+|---|---|---|---|---|---|
+| S1 · Martes | Instagram Reels | Proceso | Time-lapse de un trofeo desde primera capa hasta pintura | Alcance | Guarda el proceso |
+| S1 · Jueves | LinkedIn | Caso B2B | 50 trofeos entregados a empresa tecnológica: desafío, plazo y resultado | Leads | Agenda tu proyecto |
+| S1 · Sábado | TikTok | Educativo | PLA vs acrílico en 25 segundos | Alcance | Comenta qué elegirías |
+| S2 · Lunes | Instagram | Producto | Carrusel antes/después de neón para restaurante | Leads | Cotiza por DM |
+| S2 · Miércoles | LinkedIn | Craftsmanship | Cómo aseguramos consistencia en lotes de 50 piezas | Marca | Conversemos de tu evento |
+| S2 · Viernes | Reels | Prueba social | Reveal + reacción del cliente | Leads | Reserva fecha |
+| S3 · Martes | Instagram | Educativo | 5 datos necesarios para cotizar señalética | Leads | Envía tus medidas |
+| S3 · Jueves | TikTok | Proceso | ASMR de retiro de soportes y pulido | Alcance | Sigue para ver el resultado |
+| S3 · Viernes | LinkedIn | Caso B2B | Kit de reconocimiento para RRHH | Leads | Solicita muestrario |
+| S4 · Lunes | Instagram | Oferta | Cupos de producción del próximo mes | Leads | Reserva esta semana |
+| S4 · Miércoles | Reels | Producto | Fila completa de medallas con transición | Alcance | Comparte con tu equipo |
+| S4 · Viernes | LinkedIn | Educativo | Cuándo conviene fabricar localmente | Marca | ¿Qué plazo manejas? |
+
+## Campañas del mes
+
+1. **Tu reconocimiento no sale de un catálogo:** casos reales de premiaciones.
+2. **Del archivo a la instalación:** serie de proceso para neones y señalética.
+3. **Cupos de producción:** CTA directo para fechas corporativas.
+
+## KPIs
+
+Clics al sitio, conversaciones calificadas por DM, formularios, tasa de guardados y ventas atribuidas. Meta: 18 leads, 6 cotizaciones y 2 ventas desde redes.`,
+
+  caption_agent:`## Instagram
+
+**Esta luz cambió el local.** ✨
+Diseñamos y fabricamos este neón “OPEN” para convertir una pared oscura en el punto más fotografiado del restaurant. Hecho a medida e instalado en Vitacura.
+¿Quieres ver tu logo encendido? Escríbenos por DM.
+
+HASHTAGS: #NeonPersonalizado #NeonLED #DiseñoDeLocales #RestaurantesChile #Vitacura #FabricacionDigital #DiseñoChileno #TheLabSolutions #BrandingFisico #Interiorismo #HechoEnChile #Santiago #LetrerosLED
+
+**Gancho A:** Esta luz cambió el local.
+**Gancho B:** De pared vacía a ícono.
+
+## LinkedIn
+
+Una intervención física puede transformar cómo se recuerda una marca. Para este restaurant en Vitacura diseñamos, fabricamos e instalamos un neón a medida, cuidando escala, temperatura de color y visibilidad desde la calle.
+
+El proyecto quedó resuelto por un solo equipo y listo para operar en la fecha comprometida. ¿Qué espacio de tu marca merece convertirse en un punto de encuentro?
+
+#BrandExperience #DiseñoRetail #FabricaciónLocal
+
+## TikTok / Reels
+
+**Gancho 0–3 s:** “Mira cómo despertó esta pared”.
+**Guion:** pared apagada → trazado del diseño → fabricación → encendido → plano general del local.
+**Audio:** inicio silencioso y golpe rítmico en el encendido.
+**CTA:** “Comenta NEÓN y te enviamos la guía para cotizar”.
+HASHTAGS: #NeonLED #AntesYDespues #Santiago #DiseñoDeLocales #TheLabSolutions
+
+## Facebook
+
+Una pared vacía se convirtió en el sello de este restaurant en Vitacura. Diseñamos e instalamos el neón completo a medida. ¿Tienes un espacio para transformar? Escríbenos y cotizamos tu idea.`,
+
+  community_agent:`RESPUESTA_PUBLICA:
+¡Hola! Un neón personalizado parte aproximadamente desde $180.000 netos y varía según medida, complejidad y color. Envíanos por DM el logo, ancho deseado y fecha para darte el valor exacto 😊
+ES_LEAD:
+Sí
+INTENCION:
+consulta_precio
+SIGUIENTE_PASO:
+Pasar a DM, pedir logo/medida/fecha y derivar a SALES_AGENT para cotización dentro del día.`,
+
+  social_ads_agent:`## 1. Diagnóstico
+
+Meta invirtió **$164.000** y reporta ROAS 4,8x; el CRM confirma **2,4x**. La campaña de premiaciones genera ventas, mientras “Neones alcance” trae volumen barato pero cero oportunidades cerradas. LinkedIn tiene CPL alto de $21.800, aceptable por ticket B2B, aunque la muestra es de solo 6 leads.
+
+## 2. Alertas críticas
+
+1. **Neones alcance:** $42.000 gastados, 31 clics y 0 ventas; riesgo de seguir optimizando por interacción sin intención.
+2. **Premiaciones empresas:** frecuencia 4,7 y CTR cayó de 1,8% a 1,1%; fatiga creativa puede encarecer $2.300 cada lead.
+3. **LinkedIn RRHH:** solo 6 conversiones; muestra insuficiente para escalar agresivamente.
+
+## 3. Acciones inmediatas
+
+1. Pausar el conjunto amplio de Neones y reconstruirlo con intención: dueños/marketing de restaurantes en Santiago.
+2. Mantener Premiaciones, renovar las dos creatividades y subir presupuesto solo 15% si el CRM sostiene ROAS real sobre 3x durante 7 días.
+3. Mantener LinkedIn sin cambios hasta 8–10 leads y medir reuniones, no formularios.
+
+## 4. Creatividad
+
+**Idea A — “No sale de un catálogo”**
+Gancho: reveal de tres trofeos completamente distintos. Visual: boceto → impresión → pintura → evento. Público: RRHH, Marketing y productoras. CTA: “Pide una propuesta para tu fecha”.
+
+**Idea B — “La pared que todos fotografían”**
+Gancho: antes/después de un restaurant apagado y con neón. Visual vertical de 12 s con precio desde referencial. Público: dueños y gerentes de restaurantes RM. CTA: “Envía logo + medida por WhatsApp”.`,
+
+  trend_agent:`## 1. Del caos al reveal
+
+**Por qué funciona:** crea contraste y recompensa visual.
+**Adaptación:** mesa con piezas, soportes y pintura; corte al lote final de trofeos alineados.
+**Gancho 0–3 s:** “Esto no parece un trofeo… todavía”.
+**Audio:** percusión creciente con golpe en el reveal.
+**CTA / objetivo:** “Guárdalo para tu próxima premiación” · alcance.
+
+## 2. ASMR de terminaciones
+
+**Por qué funciona:** el sonido del proceso retiene sin explicación larga.
+**Adaptación:** retirar soportes, lijar, despegar protector de acrílico y encajar placa.
+**Gancho 0–3 s:** “Sube el volumen para este acabado”.
+**Audio:** sonido real, cortes secos, sin voz.
+**CTA / objetivo:** “¿Qué parte quieres ver completa?” · alcance.
+
+## 3. POV: aprobaste el diseño
+
+**Por qué funciona:** pone al espectador en el rol del cliente.
+**Adaptación:** render en pantalla → primera pieza → lote → gala.
+**Gancho 0–3 s:** “POV: faltan 7 días para tu evento”.
+**Audio:** ritmo rápido y optimista.
+**CTA / objetivo:** “Reserva fecha antes de enviar el diseño” · leads.
+
+## 4. Tres errores al cotizar
+
+**Por qué funciona:** educación práctica y guardable.
+**Adaptación:** mostrar medida, cantidad y fecha como datos que cambian el precio.
+**Gancho 0–3 s:** “Tu cotización demora por esto”.
+**Audio:** base mínima bajo voz directa.
+**CTA / objetivo:** “Envíanos estos 3 datos por DM” · leads.
+
+## 5. Una pieza, cinco etapas
+
+**Por qué funciona:** comprime oficio y prueba capacidad real.
+**Adaptación:** diseño, slicing, impresión, terminación y QA en cinco cortes idénticos.
+**Gancho 0–3 s:** “40 horas en 20 segundos”.
+**Audio:** pulso constante sincronizado con cada etapa.
+**CTA / objetivo:** “Síguenos para ver el siguiente proyecto” · marca.`,
+
+  report_social_agent:`## 1. Resumen
+
+Las redes generaron **14 leads**, 6 cotizaciones y 2 ventas por **$860.000 netos**. Instagram aporta volumen y una venta; LinkedIn trae menos contactos, pero el ticket más alto. TikTok elevó alcance, aunque todavía no convierte y necesita un CTA más comercial.
+
+## 2. Métricas clave
+
+| Red | Alcance | Engagement | Clics | Seguidores | Leads | Ventas atribuidas |
+|---|---:|---:|---:|---:|---:|---:|
+| Instagram | 38.420 | 4,8% | 326 | +184 | 8 | $340.000 |
+| LinkedIn | 9.860 | 3,1% | 142 | +47 | 4 | $520.000 |
+| TikTok | 51.300 | 6,2% | 88 | +296 | 1 | $0 |
+| Facebook | 7.240 | 1,4% | 35 | +18 | 1 | $0 |
+
+## 3. Mejor y peor post
+
+**Mejor:** Reel “50 trofeos en 20 segundos”: 18.700 reproducciones, 119 clics y 5 leads. Replicar el reveal, mostrar volumen y mantener CTA por DM.
+**Peor:** foto estática de impresora: 1.120 impresiones, 6 clics y 0 leads. Evitar maquinaria sin resultado, cliente o aprendizaje.
+
+## 4. Leads desde redes
+
+Instagram: 8 (3 cotizados, 1 ganado, 4 en calificación). LinkedIn: 4 (2 cotizados, 1 ganado, 1 reunión). TikTok y Facebook: 1 cada uno, ambos en calificación.
+
+## 5. Top 3 acciones
+
+1. Publicar martes 19:30 un Reel de proceso + reveal con CTA “envía cantidad y fecha”.
+2. Publicar jueves 09:00 en LinkedIn el caso B2B con cifra de plazo y enlace a cotización.
+3. Rehacer TikTok del viernes: conservar formato, añadir producto terminado, rango orientativo y CTA medible.`,
+
+  newsletter_agent:`ASUNTO: Reconocimientos que cuentan la historia de tu equipo
+PREHEADER: Diseña a tiempo una premiación que tu equipo quiera conservar.
+CUERPO:
+## El cierre de año ya se está fabricando
+
+Una buena premiación no empieza el día del evento. Empieza cuando definimos **qué queremos reconocer**, cómo debe sentirse la pieza y cuánto tiempo necesita una producción cuidada.
+
+Este mes acompañamos a una empresa tecnológica en la creación de 50 trofeos para su gala interna. Partimos con una idea simple, desarrollamos una muestra digital y fabricamos cada unidad en nuestro taller de Santiago. El resultado fue un lote consistente, personalizado y entregado listo para subir al escenario.
+
+---
+
+## Tres datos que aceleran una cotización
+
+- Cantidad estimada de piezas.
+- Fecha límite real del evento.
+- Logo vectorial y una referencia de estilo.
+
+Con eso podemos recomendar material, terminación y calendario sin hacerte perder tiempo. Para proyectos de fin de año, reservar la ventana de producción temprano también permite revisar la muestra con calma y evitar decisiones de última hora.
+
+---
+
+## Convirtamos el reconocimiento en una pieza de marca
+
+Si ya tienes fecha, cuéntanos la cantidad y el tipo de evento. Te responderemos con una ruta clara de diseño, producción y entrega.
+
+[Quiero cotizar mi proyecto](mailto:hola@thelab.solutions?subject=Cotización%20premiación%20corporativa)
+
+— Equipo The Lab Solutions`,
+
+  supplier:`---PROVEEDOR_START---
+NOMBRE: Filamentos Santiago — ficha demostrativa
+PAIS: Chile
+WEB: —
+TELEFONO: Consultar
+WHATSAPP: —
+TIPO: Nacional
+PRECIO_EST: $15.900–$22.900 por kg
+MOQ: 1 rollo de 1 kg
+PLAZO: 1–2 días hábiles
+CONDPAGO: Transferencia o tarjeta
+CATEGORIA: Filamentos 3D
+PROS: Despacho rápido en RM | Venta por unidad | Colores de línea disponibles
+CONTRAS: Precio mayor que importación | Stock sujeto a color
+NOTAS: Registro simulado para demostrar la comparación; verificar datos comerciales en modo real.
+---PROVEEDOR_END---
+
+---PROVEEDOR_START---
+NOMBRE: Polymer Pro Chile — ficha demostrativa
+PAIS: Chile
+WEB: —
+TELEFONO: Consultar
+WHATSAPP: —
+TIPO: Importador local
+PRECIO_EST: $13.500–$19.500 por kg
+MOQ: 5 kg surtidos
+PLAZO: 2–4 días hábiles
+CONDPAGO: Transferencia; crédito sujeto a evaluación
+CATEGORIA: Filamentos 3D
+PROS: Precio por volumen | Factura nacional | Variedad PLA y PETG
+CONTRAS: MOQ de 5 kg | Disponibilidad variable
+NOTAS: Registro simulado; solicitar muestra y ficha técnica antes de homologar.
+---PROVEEDOR_END---
+
+---PROVEEDOR_START---
+NOMBRE: Shenzhen Materials Direct — ficha demostrativa
+PAIS: China
+WEB: —
+TELEFONO: Consultar
+WHATSAPP: —
+TIPO: Internacional
+PRECIO_EST: USD 7–11 por kg FOB
+MOQ: 100 kg
+PLAZO: 35–55 días hábiles
+CONDPAGO: 30% anticipo y 70% antes del embarque
+CATEGORIA: Filamentos 3D
+PROS: Costo unitario bajo | Color personalizado | Empaque OEM
+CONTRAS: Capital inmovilizado | Control de calidad previo al embarque
+NOTAS: Proveedor simulado; en modo real se deben validar fabricante, muestras y documentación de importación.
+---PROVEEDOR_END---
+
+---PROVEEDOR_START---
+NOMBRE: Andes 3D Supply — ficha demostrativa
+PAIS: Chile
+WEB: —
+TELEFONO: Consultar
+WHATSAPP: —
+TIPO: Nacional
+PRECIO_EST: $18.500–$27.000 por kg
+MOQ: 1 rollo de 1 kg
+PLAZO: 1–3 días hábiles
+CONDPAGO: Tarjeta o transferencia
+CATEGORIA: Filamentos 3D
+PROS: Línea premium | Soporte técnico | Lotes trazables
+CONTRAS: Costo alto | Menor variedad económica
+NOTAS: Registro simulado para comparar el escenario premium.
+---PROVEEDOR_END---
+
+RECOMENDACIÓN: Para una compra urgente conviene comparar las dos opciones nacionales y homologar una muestra de cada lote. Para volumen estable, cotizar importación directa solo después de validar 5 kg de prueba y el costo puesto en Santiago.`
+});
+
 function _demoClaudeResponse(system,user,opts={}){
   const src=String(opts.source||'').toLowerCase(),all=String(system||'')+'\n'+String(user||'');
   if(src==='ads'&&all.includes('"nombre"')&&all.includes('"palabrasClave"'))return JSON.stringify({nombre:'Demo · Premiaciones Corporativas',tipo:'SEARCH',presupuesto:5000,concordancia:'FRASE',maxCpc:800,pujaEstrategia:'MAXIMIZE_CLICKS',pujaObjetivo:0,ubicaciones:'Región Metropolitana, Chile',ubicModo:'PRESENCE',redSocios:false,redDisplay:false,finalUrl:'https://thelab.solutions/servicios/premiaciones',path1:'trofeos',path2:'empresas',palabrasClave:['trofeos personalizados','galvanos corporativos','medallas para empresas','premios corporativos santiago'],negativas:['gratis','empleo','tutorial','usado'],titulos:['Trofeos Personalizados','Premios Para Empresas','Galvanos Corporativos','Diseño A Medida','Fabricación En Santiago','Cotiza Por WhatsApp'],descripciones:['Trofeos y galvanos corporativos diseñados a medida. Cotiza tu proyecto.','Fabricación local con terminaciones premium y entrega coordinada en Santiago.'],metricas:{ctr:'>3%',cpc:'<$1.200 CLP',cpa:'<$8.000 CLP',roas:'>3x (CRM)',convMes:'15-30'},checklist:['Verificar conversión','Confirmar ubicación en modo presencia']});
@@ -16542,11 +17131,8 @@ function _demoClaudeResponse(system,user,opts={}){
   if(src==='seo'&&all.includes('"paginas"')){let rows=[];try{rows=JSON.parse(String(user||'[]'));}catch(e){}return JSON.stringify({paginas:(Array.isArray(rows)?rows:[]).map(x=>({url:x.url,cambios:[{campo:'title',propuesto:'Fabricación Digital B2B · The Lab Solutions',nota:'Título demo optimizado para intención comercial.'},{campo:'metaDescription',propuesto:'Soluciones de fabricación digital para empresas en Santiago: impresión 3D, premiaciones, neón y señalética. Cotiza tu proyecto con nuestro equipo.',nota:'Incluye servicio, ubicación y llamado a la acción.'}]}))});}
   if(src==='seo')return JSON.stringify({title:'Fabricación Digital | The Lab Solutions',description:'Impresión 3D, premiaciones, neón y señalética para empresas en Santiago. Cuéntanos tu proyecto y recibe una cotización personalizada.'});
   if(all.includes('"layerHeight"')&&all.includes('"treeSupports"'))return JSON.stringify({layerHeight:.2,firstLayerHeight:.24,shells:3,topLayers:4,bottomLayers:3,infillPct:20,infillType:'gyroid',speed:90,outerSpeed:55,infillSpeed:100,firstLayerSpeed:25,travelSpeed:180,accel:0,nozzleTemp:210,bedTemp:60,fanPct:100,minLayerTime:8,overhangSpeed:40,flowRatio:100,pressureAdvance:0,wipeDist:.8,widthOuter:0,widthInfill:0,supports:false,treeSupports:false,supportAngle:50,adaptiveLayerHeight:false,seamMode:'alineado',outerWallLast:true,bridgeDetect:true,gapFill:true,fuzzySkin:0,coasting:0,elephantFoot:.1,xyCompensation:0,arcFitting:false,skirt:2,skirtGap:2,brim:0,raft:false,ironing:false,retractDist:.8,retractSpeed:35,zHop:.2,razonamiento:'Perfil demo equilibrado para PLA y acabado profesional. Prioriza calidad exterior sin alargar innecesariamente la producción.',advertencias:[]});
-  if(src==='community_agent')return 'RESPUESTA_PUBLICA: ¡Hola! Sí, hacemos proyectos a medida. Escríbenos por WhatsApp con medidas y fecha para cotizarte.\nES_LEAD: sí\nINTENCION: cotización';
   if(src==='newsletter_agent'&&/EXACTAMENTE 3 líneas/i.test(all))return 'Premios que representan tu marca\nTu próxima premiación empieza aquí\nTrofeos corporativos hechos a medida';
-  if(src==='newsletter_agent')return 'ASUNTO: Premios que representan tu marca\nPREHEADER: Trofeos y galvanos hechos a medida para tu evento.\nCUERPO:\n## Haz memorable tu próxima premiación\n\nCreamos trofeos corporativos con diseño, producción y entrega coordinada.\n\nhttps://thelab.solutions/servicios/premiaciones';
-  if(/checklist|control de calidad|QA_AGENT/i.test(all))return '- Terminación superficial uniforme\n- Medidas coinciden con la ficha técnica\n- Color y personalización correctos\n- Pieza limpia y sin daños\n- Embalaje protege todos los bordes';
-  if(/"desc"[\s\S]*"costo"[\s\S]*"venta"/.test(all))return JSON.stringify({desc:'Producción personalizada demo',costo:4500,venta:8500});
+  if(DEMO_AGENT_RESPONSES[src])return DEMO_AGENT_RESPONSES[src];
   return 'Resultado simulado en modo DEMO — no consumió tokens ni modificó servicios reales.\n\n• Diagnóstico: la información cargada es consistente.\n• Recomendación: priorizar las oportunidades con vencimiento cercano.\n• Siguiente paso: revisar el registro y probar la acción sugerida.';
 }
 

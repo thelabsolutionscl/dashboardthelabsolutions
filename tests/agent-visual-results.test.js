@@ -10,6 +10,17 @@ const CSS=fs.readFileSync(path.join(ROOT,'styles.css'),'utf8');
 const AG=fs.readFileSync(path.join(ROOT,'js','agentes.js'),'utf8');
 const KAI=fs.readFileSync(path.join(ROOT,'js','kai.js'),'utf8');
 const REDES=fs.readFileSync(path.join(ROOT,'js','redes.js'),'utf8');
+const vm=require('node:vm');
+
+function demoResponses(){
+  const start=HTML.indexOf('const DEMO_AGENT_RESPONSES=');
+  const end=HTML.indexOf('\n\nfunction _demoClaudeResponse',start);
+  assert.ok(start>=0&&end>start,'falta el catálogo de respuestas DEMO');
+  const source=HTML.slice(start,end).replace('const DEMO_AGENT_RESPONSES=','result=');
+  const context={result:null,Object};
+  vm.runInNewContext(source,context);
+  return context.result;
+}
 
 test('cada oficio tiene una presentación visual explícita',()=>{
   const block=HTML.slice(HTML.indexOf('const AGENT_RESULT_PROFILES='),HTML.indexOf('function _agentVisualId'));
@@ -39,6 +50,40 @@ test('DEMO informa cero consumo y Ads respeta el tope neto solicitado',()=>{
   assert.match(extra,/ads_monthly_cap_net/);
   assert.match(extra,/250000/);
   assert.match(extra,/TOPE MENSUAL NETO/);
+});
+
+test('DEMO entrega una respuesta completa y especializada para cada agente',()=>{
+  const responses=demoResponses();
+  const ids=['sales','quote','production','mantencion3d','qa','followup','ceo','leadgen','onboarding','finance','repcliente','content','ads','linkedin','social_strategist','caption_agent','community_agent','social_ads_agent','trend_agent','report_social_agent','newsletter_agent','supplier'];
+  for(const id of ids){
+    assert.equal(typeof responses[id],'string',id+' debe tener respuesta DEMO');
+    assert.ok(responses[id].length>=300,id+' debe entregar información completa');
+    assert.doesNotMatch(responses[id],/la información cargada es consistente/i,id+' no debe usar el fallback genérico');
+  }
+  assert.match(HTML,/if\(DEMO_AGENT_RESPONSES\[src\]\)return DEMO_AGENT_RESPONSES\[src\]/);
+});
+
+test('DEMO conserva los formatos técnicos que alimentan las vistas y acciones',()=>{
+  const responses=demoResponses();
+  const items=JSON.parse(responses.quote.match(/\[ITEMS\]\s*([\s\S]*?)\s*\[\/ITEMS\]/)[1]);
+  const actions=JSON.parse(responses.ads.match(/\[ACTIONS\]\s*([\s\S]*?)\s*\[\/ACTIONS\]/)[1]);
+  assert.ok(items.length>=2);
+  assert.ok(actions.length>=4&&actions.length<=6);
+  assert.ok((responses.qa.match(/^[-*]\s*\[[ xX]\]/gm)||[]).length>=8);
+  assert.match(responses.qa,/✅ APROBADO/);
+  assert.equal((responses.supplier.match(/---PROVEEDOR_START---/g)||[]).length,4);
+  assert.match(responses.supplier,/RECOMENDACIÓN:/);
+  for(const marker of ['RESPUESTA_PUBLICA:','ES_LEAD:','INTENCION:','SIGUIENTE_PASO:'])assert.match(responses.community_agent,new RegExp(marker));
+  for(const marker of ['SCORE_B2B:','SERVICIO_RECOMENDADO:','DECISOR:','MENSAJE_LINKEDIN:','MENSAJE_EMAIL:','PROXIMA_ACCION:'])assert.match(responses.linkedin,new RegExp(marker));
+  for(const marker of ['ASUNTO:','PREHEADER:','CUERPO:'])assert.match(responses.newsletter_agent,new RegExp(marker));
+});
+
+test('KAI también responde con panorama y acciones completas sin tokens en DEMO',()=>{
+  const ask=KAI.slice(KAI.indexOf('async function ask'),KAI.indexOf('// Si la llamada no llega',KAI.indexOf('async function ask')));
+  assert.match(ask,/## Respuesta ejecutiva/);
+  assert.match(ask,/## Estado del negocio/);
+  assert.match(ask,/## Próximos pasos/);
+  assert.match(ask,/DEMO · 0 tok · US\$0,00/);
 });
 
 test('el costo usa input, output y ambas categorías de caché',()=>{

@@ -499,7 +499,26 @@ CAPACIDADES Y REGLAS:
     if(window._DEMO_MODE){
       await new Promise(r=>setTimeout(r,260));
       const cl=(typeof state!=='undefined'&&state.clientes?state.clientes.length:0),co=(typeof state!=='undefined'&&state.cotizaciones?state.cotizaciones.length:0),pe=(typeof state!=='undefined'&&state.pedidos?state.pedidos.length:0);
-      const reply='Respuesta simulada en modo DEMO — no consumí tokens.\n\nEl CRM demo tiene '+cl+' clientes/leads, '+co+' cotizaciones y '+pe+' pedidos. Puedes pedirme que te ayude a navegar, revisar el pipeline o abrir un formulario; todos los cambios serán temporales.';
+      const reply=`## Respuesta ejecutiva
+
+Revisé el entorno de demostración completo: hay **${cl} clientes/leads**, **${co} cotizaciones** y **${pe} pedidos**. La prioridad operativa es recuperar un pedido atrasado, cerrar las cotizaciones que vencen esta semana y cobrar $380.000 en mora.
+
+## Estado del negocio
+
+| Área | Situación | Acción recomendada |
+|---|---|---|
+| Comercial | 4 oportunidades con decisión esta semana · $1.240.000 de pipeline | Contactar hoy con propuesta y fecha concreta |
+| Producción | 5 pedidos activos · 1 atrasado | Reasignar una K1 libre y pasar PED-048 a QA mañana |
+| Finanzas | $580.000 vencidos · $380.000 con 12 días de mora | Llamar hoy y suspender nuevo crédito hasta acuerdo |
+| Marketing | Instagram y LinkedIn concentran los leads útiles | Repetir caso B2B y medir cotizaciones, no solo clics |
+
+## Próximos pasos
+
+1. **Florencia:** dar seguimiento a las dos cotizaciones que vencen en 48 horas.
+2. **Nicanor:** confirmar el plan de recuperación de PED-048 antes de las 10:30.
+3. **Gustavo:** obtener compromiso de pago documentado de Agencia Norte.
+
+Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módulo correspondiente, preparar el mensaje o delegar el análisis al agente especializado. Las operaciones seguirán siendo simuladas y temporales.`;
       $typ.classList.remove('jvs-cursor');$typ.parentElement.classList.add('jvs-rich');$typ.innerHTML=typeof renderKaiResult==='function'?renderKaiResult(reply,{demo:true}):formatRichText(reply);$usage.style.display='';$usage.textContent='DEMO · 0 tok · US$0,00';JV.history.push({role:'assistant',content:reply});_kaiPersist();JV.busy=false;JV.thinking=false;setState('idle');return;
     }
     // Si la llamada no llega a generar respuesta, quita el mensaje de usuario colgado:
