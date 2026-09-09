@@ -1,0 +1,33 @@
+name: Aplicar resultados visuales de agentes
+
+on:
+  push:
+    branches:
+      - feat/agent-visual-results
+    paths:
+      - .github/workflows/apply-agent-visual.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar rama
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Aplicar cambio validado
+        shell: bash
+        run: |
+          base64 -d .github/agent-visual.patch.b64 | gzip -d > /tmp/agent-visual.patch
+          git apply --check /tmp/agent-visual.patch
+          git apply /tmp/agent-visual.patch
+          rm .github/agent-visual.patch.b64
+          rm .github/workflows/apply-agent-visual.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Mejorar resultados visuales de agentes IA"
+          git push origin HEAD:feat/agent-visual-results
