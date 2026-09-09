@@ -42,7 +42,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body>
+<body class="agent-view-simple">
 <div class="site-bg" aria-hidden="true"><div class="site-bg-glow-a"></div><div class="site-bg-glow-b"></div><div class="site-bg-vignette"></div></div>
 <svg style="display:none" aria-hidden="true" id="svgIcons"><defs>
 <symbol id="icon-overview" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
@@ -13919,11 +13919,11 @@ function formatAgentReport(raw){
   out+=`<div class="agr-toolbar"><span class="agr-chip" title="Nivel de urgencia estimado a partir del contenido">${urg.icon} ${urg.label}</span>`
      +`<button type="button" class="agr-tldr-btn" onclick="toggleReportTLDR(this)" title="Muestra solo el resumen y los próximos pasos">⚡ TL;DR</button></div>`;
   out+='<div class="agr-body">'+headHtml;
-  if(intro.some(l=>l.trim())) out+=`<div style="font-size:12.5px;color:var(--text);line-height:1.65;background:linear-gradient(135deg,rgba(0,212,204,0.08),rgba(0,212,204,0));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 14px">${renderBody(intro)}</div>`;
+  if(intro.some(l=>l.trim())) out+=`<div class="agr-intro" style="font-size:12.5px;color:var(--text);line-height:1.65;background:linear-gradient(135deg,rgba(0,212,204,0.08),rgba(0,212,204,0));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 14px">${renderBody(intro)}</div>`;
   sections.forEach(s=>{const mt=metaFor(s.title);const ess=_agrEssential(s.title)?1:0;
     out+=`<div class="agr-sec" data-essential="${ess}" style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${mt.color};border-radius:9px;padding:12px 14px">`
-      +`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:700;font-size:12px;letter-spacing:.3px;color:var(--text);text-transform:capitalize"><span style="font-size:14px">${mt.ico}</span>${escapeHtml(s.title.toLowerCase().replace(/_/g,' '))}</div>`
-      +`<div style="font-size:12px;color:var(--text2)">${renderBody(s.body)||'<span style="color:var(--text3)">—</span>'}</div></div>`;});
+      +`<div class="agr-sec-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:700;font-size:12px;letter-spacing:.3px;color:var(--text);text-transform:capitalize"><span style="font-size:14px">${mt.ico}</span>${escapeHtml(s.title.toLowerCase().replace(/_/g,' '))}</div>`
+      +`<div class="agr-sec-body" style="font-size:12px;color:var(--text2)">${renderBody(s.body)||'<span style="color:var(--text3)">—</span>'}</div></div>`;});
   out+='</div></div>';
   return out;
 }
@@ -14165,18 +14165,30 @@ function renderAgentResult(agentId,raw,meta){
   const summary=_agentResultSummary(clean)||'Resultado preparado. Revisa el análisis y las acciones sugeridas.';
   const metrics=_agentResultMetrics(clean,p),m=agentResultMeta(id,null,meta||{}),compact=!!m.compact,layout=(AGENT_RESULT_LAYOUTS[id]||[])[0]||'general';
   const metricsHtml=metrics.length?`<div class="avr-kpis">${metrics.map(x=>`<div class="avr-kpi"><span class="avr-kpi-icon">${x.icon}</span><div><div class="avr-kpi-label">${escapeHtml(x.label)}</div><div class="avr-kpi-value">${escapeHtml(x.value)}</div></div></div>`).join('')}</div>`:'';
+  const metaHtml=_agentUsageHtml(m),specialHtml=_agentExtraVisual(id)+_agentSpecialVisual(id,clean);
   return `<article class="agent-visual-result avr-layout-${escapeHtml(layout)}${compact?' avr-compact':''}" style="--avr-accent:${p.accent}" data-agent="${escapeHtml(id)}">
-    <header class="avr-hero">
-      <div class="avr-top"><span class="avr-mark">${p.icon}</span><div class="avr-heading"><span>${escapeHtml(p.area)}</span><strong>${escapeHtml(p.title)}</strong></div><span class="avr-status avr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</span></div>
-      <div class="avr-summary"><span>EN RESUMEN</span>${formatRichText(summary)}</div>
-      ${m.subject?`<div class="avr-subject" title="Contexto analizado">${escapeHtml(String(m.subject).split('\n')[0].slice(0,120))}</div>`:''}
-      <div class="avr-meta">${_agentUsageHtml(m)}</div>
-    </header>
-    ${metricsHtml}
-    ${_agentExtraVisual(id)}
-    ${_agentSpecialVisual(id,clean)}
-    <div class="avr-focus" aria-label="Contenido principal">${p.focus.map((f,i)=>`<span><b>${i+1}</b>${escapeHtml(f)}</span>`).join('')}</div>
-    <details class="avr-details"${m.expanded?' open':''}><summary><span>Ver análisis completo</span><small>datos, recomendaciones y mensajes</small></summary><div class="avr-details-body">${formatAgentReport(raw)}</div></details>
+    <div class="avr-simple-view">
+      <header class="avr-hero">
+        <div class="avr-top"><span class="avr-mark">${p.icon}</span><div class="avr-heading"><span>${escapeHtml(p.area)}</span><strong>${escapeHtml(p.title)}</strong></div><span class="avr-status avr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</span></div>
+        <div class="avr-summary"><span>EN RESUMEN</span>${formatRichText(summary)}</div>
+        ${m.subject?`<div class="avr-subject" title="Contexto analizado">${escapeHtml(String(m.subject).split('\n')[0].slice(0,120))}</div>`:''}
+        <div class="avr-meta">${metaHtml}</div>
+      </header>
+      ${metricsHtml}
+      <div class="avr-focus" aria-label="Contenido principal">${p.focus.map((f,i)=>`<span><b>${i+1}</b>${escapeHtml(f)}</span>`).join('')}</div>
+    </div>
+    <section class="avr-expert-view" aria-label="Informe completo de ${escapeHtml(p.title)}">
+      <header class="avr-expert-head">
+        <div class="avr-expert-identity"><span class="avr-mark">${p.icon}</span><div><span>INFORME COMPLETO · ${escapeHtml(p.area)}</span><strong>${escapeHtml(p.title)}</strong></div></div>
+        <span class="avr-status avr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</span>
+        <div class="avr-expert-meta">${metaHtml}</div>
+      </header>
+      <div class="avr-expert-content">
+        ${metricsHtml}
+        ${specialHtml}
+        <div class="avr-expert-report">${formatAgentReport(raw)}</div>
+      </div>
+    </section>
   </article>`;
 }
 function renderKaiResult(raw,meta){
@@ -15964,10 +15976,11 @@ function getAgentViewMode(){
 }
 function applyAgentViewMode(){
   const mode=getAgentViewMode(),tab=document.getElementById('tab-agentes');if(!tab)return;
+  document.body.classList.toggle('agent-view-simple',mode==='simple');
+  document.body.classList.toggle('agent-view-expert',mode==='expert');
   tab.classList.toggle('agent-view-simple',mode==='simple');
   tab.classList.toggle('agent-view-expert',mode==='expert');
   tab.querySelectorAll('[data-agent-view-mode]').forEach(btn=>{const on=btn.dataset.agentViewMode===mode;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',on?'true':'false');});
-  tab.querySelectorAll('.agent-visual-result .avr-details').forEach(details=>{details.open=mode==='expert';});
 }
 function setAgentViewMode(mode){
   try{localStorage.setItem(AGENT_VIEW_MODE_KEY,mode==='expert'?'expert':'simple');}catch(e){}
