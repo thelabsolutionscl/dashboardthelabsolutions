@@ -151,14 +151,17 @@ async function runAgentInline(agentId,contextText,actionsFn){
   try{showAgentWorking(cfg);}catch(e){}
   const ctx=state.loaded?buildAgentContext(agentId):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${contextText}`:contextText;
+  const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(agentId):Date.now();
   try{
     const result=await callAgentClaude(agentId,cfg.sys+AGENT_TONE,fullInput);
+    const meta=typeof agentResultMeta==='function'?agentResultMeta(agentId,started):{};
     _agentInlineText=result;
     resultEl.className='agent-modal-result';
-    resultEl.style.whiteSpace='normal';resultEl.innerHTML=formatAgentReport(result);
+    resultEl._agentMeta=meta;
+    resultEl.style.whiteSpace='normal';resultEl.innerHTML=typeof renderAgentResult==='function'?renderAgentResult(agentId,result,meta):formatAgentReport(result);
     if(actionsFn) actionsEl.innerHTML=actionsFn(result);
     else actionsEl.innerHTML=agentCtaButtonsHtml('',result)+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
-    try{AGENT_LOG.add(cfg.label,contextText,result);}catch(e){}
+    try{AGENT_LOG.add(cfg.label,contextText,result,meta);}catch(e){}
   }catch(e){
     resultEl.className='agent-modal-result';
     resultEl.textContent='❌ Error: '+e.message;
@@ -821,7 +824,7 @@ function runQuoteFormAgent(){
     if(qm){
       try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
       const stripped=result.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
-      document.getElementById('agentInlineResult').innerHTML=formatAgentReport(stripped);
+      const rEl=document.getElementById('agentInlineResult');rEl.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('QUOTE',stripped,rEl._agentMeta||{}):formatAgentReport(stripped);
       _agentInlineText=stripped;
       if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length)
         insBtn=`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();quoteInsertItems()">→ Insertar ${_quoteParsedItems.length} ítem${_quoteParsedItems.length>1?'s':''} en el formulario</button>`;
@@ -843,7 +846,7 @@ function runQuoteCotAgent(cotId){
     if(qm){
       try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
       const stripped=result.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
-      document.getElementById('agentInlineResult').innerHTML=formatAgentReport(stripped);
+      const rEl=document.getElementById('agentInlineResult');rEl.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('QUOTE',stripped,rEl._agentMeta||{}):formatAgentReport(stripped);
       _agentInlineText=stripped;
       if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length)
         insBtn=`<button class="btn btn-primary btn-sm" onclick="quoteInsertItemsToEdit('${cotId}')">→ Insertar ${_quoteParsedItems.length} ítem${_quoteParsedItems.length>1?'s':''} y editar</button>`;
@@ -1136,7 +1139,7 @@ function runAdsAgent(){
   runAgentInline('ADS',ctx,(result)=>{
     const actions=_parseAdsActions(result);window._adsAgentActions=actions;
     // limpiar el bloque [ACTIONS] del texto visible
-    const rEl=document.getElementById('agentInlineResult');if(rEl){rEl.style.whiteSpace='normal';rEl.innerHTML=formatAgentReport(result);}
+    const rEl=document.getElementById('agentInlineResult');if(rEl){rEl.style.whiteSpace='normal';rEl.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('ADS',result,rEl._agentMeta||{}):formatAgentReport(result);}
     // log de memoria (qué recomendó y cuándo)
     try{_adsLogRecommendation(actions,result);}catch(e){}
     const btns=_adsRenderActionBtns(actions);
@@ -1276,6 +1279,7 @@ function runQAAgent(pedidoId){
 async function saveQAFromAgent(pedidoId,resultado){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
   const p=state.pedidosById[pedidoId];if(!p) return;
+  if(!confirm(`¿Confirmas guardar el resultado “${resultado}” en el pedido ${p.fields['N° Pedido']||''}?`))return;
   try{
     await airtableWrite('Pedidos','PATCH',pedidoId,{'Resultado QA':resultado,'Notas QA':_agentInlineText});
     p.fields['Resultado QA']=resultado;p.fields['Notas QA']=_agentInlineText;
@@ -1312,13 +1316,15 @@ async function runAgentChain(pedidoId,solicitudOverride){
   const paint=()=>{resultEl.textContent=steps.prod+'\n'+steps.qa;};
   paint();
   try{showAgentWorking('PRODUCTION',{verb:'está generando la ficha técnica…',messages:['Leyendo el pedido…','Definiendo materiales y parámetros…','Escribiendo las instrucciones de producción…']});}catch(e){}
-  let ficha='',checklist='';
+  let ficha='',checklist='',metaProd=null,metaQa=null;
   // Paso 1: PRODUCTION
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='PRODUCTION');
     const ctx=state.loaded?buildAgentContext('PRODUCTION'):'';
+    const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('PRODUCTION'):Date.now();
     ficha=await callAgentClaude('PRODUCTION',cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
-    try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,ficha);}catch(e){}
+    metaProd=typeof agentResultMeta==='function'?agentResultMeta('PRODUCTION',started):{};
+    try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,ficha,metaProd);}catch(e){}
     const existing=parseFichaData(f['Ficha Tecnica'])||{};
     existing.instrucciones=ficha;
     existing.generadoIA=hoyCL();
@@ -1340,8 +1346,10 @@ async function runAgentChain(pedidoId,solicitudOverride){
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='QA');
     const ctx=state.loaded?buildAgentContext('QA'):'';
+    const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('QA'):Date.now();
     checklist=await callAgentClaude('QA',cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
-    try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,checklist);}catch(e){}
+    metaQa=typeof agentResultMeta==='function'?agentResultMeta('QA',started):{};
+    try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,checklist,metaQa);}catch(e){}
     const qaItems=_parseQAChecklist(checklist);
     await airtableWrite('Pedidos','PATCH',pedidoId,{'Notas QA':qaItems?JSON.stringify(qaItems):checklist});
     p.fields['Notas QA']=qaItems?JSON.stringify(qaItems):checklist;
@@ -1353,7 +1361,10 @@ async function runAgentChain(pedidoId,solicitudOverride){
   paint();
   renderPedidos();
   _agentInlineText='═══ FICHA TÉCNICA ═══\n'+ficha+(checklist?'\n\n═══ CHECKLIST QA ═══\n'+checklist:'');
-  resultEl.textContent=steps.prod+'\n'+steps.qa+'\n\n'+_agentInlineText;
+  resultEl.style.whiteSpace='normal';
+  resultEl.innerHTML=`<div style="display:grid;gap:7px;margin-bottom:12px"><div class="badge badge-green" style="justify-self:start">${escapeHtml(steps.prod)}</div><div class="badge ${checklist?'badge-green':'badge-red'}" style="justify-self:start">${escapeHtml(steps.qa)}</div></div>`+
+    (typeof renderAgentResult==='function'?renderAgentResult('PRODUCTION',ficha,Object.assign({expanded:false},metaProd||{})):formatAgentReport(ficha))+
+    (checklist?`<div style="height:12px"></div>${typeof renderAgentResult==='function'?renderAgentResult('QA',checklist,Object.assign({expanded:false},metaQa||{})):formatAgentReport(checklist)}`:'');
   actionsEl.innerHTML=`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();openFichaModal('${pedidoId}')">📋 Ver Ficha Técnica</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();openQAModal('${pedidoId}','${escapeHtml(num)}')">✓ Ver Checklist QA</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
 }
 
@@ -1372,10 +1383,11 @@ const AGENT_LOG={
   _runs:null,
   _merged:null,
   _load(){if(this._runs) return;try{this._runs=JSON.parse(localStorage.getItem(this._key)||'[]');}catch(e){this._runs=[];}},
-  add(agent,input,output){
+  add(agent,input,output,meta){
     this._load();
     const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
-    const entry={id:Date.now(),agent,input:(input||'').substring(0,300),output:output||'',time:new Date().toISOString(),user:u?.name||u?.username||'—'};
+    const safeMeta=meta?{agentId:meta.agentId||(typeof _agentVisualId==='function'?_agentVisualId(agent):agent),demo:!!meta.demo,model:meta.model||meta.usage?.model||'',elapsedMs:meta.elapsedMs??null,dataSource:meta.dataSource||'',usage:meta.usage?{input_tokens:meta.usage.input_tokens||0,output_tokens:meta.usage.output_tokens||0,cache_creation_input_tokens:meta.usage.cache_creation_input_tokens||0,cache_read_input_tokens:meta.usage.cache_read_input_tokens||0,total_tokens:meta.usage.total_tokens||0,cost_usd:meta.usage.cost_usd||0}:null}:null;
+    const entry={id:Date.now(),agent,input:(input||'').substring(0,300),output:output||'',time:new Date().toISOString(),user:u?.name||u?.username||'—',meta:safeMeta};
     // Comunicación entre agentes: si justo antes ejecutó otro agente distinto, es un handoff → el agente anterior camina a este departamento
     try{ const now=Date.now(); if(typeof ofLogComm==='function'){ if(_ofLastExec && _ofLastExec.label!==agent && now-_ofLastExec.t<120000) ofLogComm(_ofLastExec.label, agent); _ofLastExec={label:agent,t:now}; } }catch(e){}
     this._runs.unshift(entry);
@@ -1416,6 +1428,7 @@ const AGENT_LOG={
         <div class="notif-body">
           <div class="notif-title">🤖 ${escapeHtml(r.agent)} <span style="font-weight:400;color:var(--text3)">· ${escapeHtml(r.user)}${r.remote?' ☁':''}</span></div>
           <div class="notif-sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((r.input||r.output).substring(0,90))}</div>
+          ${r.meta?`<div class="agent-log-meta"><span>${escapeHtml(_agentModelLabel(r.meta.model))}</span><span>${r.meta.demo?'DEMO · 0 tokens':`${Number(r.meta.usage?.total_tokens||0).toLocaleString('es-CL')} tokens · ${_agentCostLabel(r.meta.usage?.cost_usd||0)}`}</span></div>`:''}
         </div>
         <div class="notif-time" style="white-space:nowrap;font-size:10px">${NOTIFY._fmtFull(r.time)}</div>
       </div>`).join('');
@@ -1431,7 +1444,8 @@ const AGENT_LOG={
     resultEl.style.whiteSpace='normal';
     // Consulta como cabecera ligera + salida procesada (suave y estructurada, igual que en Agentes).
     const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
-    resultEl.innerHTML=consultaHtml+formatAgentReport(r.output||'');
+    const rid=r.meta?.agentId||_agentVisualId(r.agent);
+    resultEl.innerHTML=consultaHtml+(typeof renderAgentResult==='function'?renderAgentResult(rid,r.output||'',r.meta||{}):formatAgentReport(r.output||''));
     _agentInlineText=r.output;
     document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();AGENT_LOG.open()">← Volver al historial</button>';
     document.getElementById('agentInlineModal').style.display='flex';

@@ -149,8 +149,9 @@ CAPACIDADES Y REGLAS:
     JV.usage.cacheWrite=(JV.usage.cacheWrite||0)+cacheWrite;
     JV.usage.cacheRead=(JV.usage.cacheRead||0)+cacheRead;
     const tot = JV.usage.in + JV.usage.out + JV.usage.cacheWrite + JV.usage.cacheRead;
+    const cost=typeof _estimateClaudeCost==='function'?_estimateClaudeCost('claude-sonnet-4-6',{input_tokens:JV.usage.in,output_tokens:JV.usage.out,cache_creation_input_tokens:JV.usage.cacheWrite,cache_read_input_tokens:JV.usage.cacheRead}):0;
     $usage.style.display='';
-    $usage.textContent = tot.toLocaleString('es-CL')+' tok · caché '+JV.usage.cacheRead.toLocaleString('es-CL');
+    $usage.textContent = tot.toLocaleString('es-CL')+' tok · '+(typeof _agentCostLabel==='function'?_agentCostLabel(cost):'costo estimado');
     $usage.title='Sólo KAI en esta sesión; incluye entrada, salida y caché. No es una factura ni incluye agentes delegados.';
   }
 
@@ -295,12 +296,15 @@ CAPACIDADES Y REGLAS:
     try{
       const ctx=(typeof buildAgentContext==='function'&&typeof state!=='undefined'&&state.loaded)?buildAgentContext(agentId):'';
       const fullInput=ctx?`${ctx}\n\nCONSULTA: ${consulta}`:consulta;
+      const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(agentId):Date.now();
       const result=await callAgentClaude(agentId,cfg.sys,fullInput);
+      const meta=typeof agentResultMeta==='function'?agentResultMeta(agentId,started,{compact:true}):{};
       $res.classList.remove('jvs-cursor');
-      $res.innerHTML=`<div style="font-size:10px;color:var(--text3);font-weight:700;margin-bottom:4px">[${escapeHtml(cfg.label)}]</div>`+formatRichText(result);
+      $res.parentElement.classList.add('jvs-rich');
+      $res.innerHTML=typeof renderAgentResult==='function'?renderAgentResult(agentId,result,meta):`<div style="font-size:10px;color:var(--text3);font-weight:700;margin-bottom:4px">[${escapeHtml(cfg.label)}]</div>`+formatRichText(result);
       $log.scrollTop=$log.scrollHeight;
       try{ const h=JV.history; if(h.length&&h[h.length-1].role==='assistant'){ h[h.length-1].content+='\n\n[Resultado de '+cfg.label+']: '+result; _kaiPersist(); } }catch(e){}
-      try{ if(typeof AGENT_LOG!=='undefined') AGENT_LOG.add(cfg.label,'KAI: '+consulta,result); }catch(e){}
+      try{ if(typeof AGENT_LOG!=='undefined') AGENT_LOG.add(cfg.label,'KAI: '+consulta,result,meta); }catch(e){}
     }catch(e){
       $res.classList.remove('jvs-cursor');
       $res.textContent='Error al consultar '+cfg.label+': '+e.message;
@@ -475,8 +479,10 @@ CAPACIDADES Y REGLAS:
         if(typeof agenteVisible==='function'&&!agenteVisible(cfg)) return 'Ese agente pertenece a una sección que este usuario no tiene.';
         addMsg('a','Delegando a '+cfg.label+'...');
         const ctx=(typeof buildAgentContext==='function'&&typeof state!=='undefined'&&state.loaded)?buildAgentContext(agentId):'';
+        const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(agentId):Date.now();
         const result=await callAgentClaude(agentId,cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+(input.instruccion||''));
-        try{ if(typeof AGENT_LOG!=='undefined') AGENT_LOG.add(cfg.label,'KAI: '+(input.instruccion||''),result); }catch(e){}
+        const meta=typeof agentResultMeta==='function'?agentResultMeta(agentId,started,{compact:true}):{};
+        try{ if(typeof AGENT_LOG!=='undefined') AGENT_LOG.add(cfg.label,'KAI: '+(input.instruccion||''),result,meta); }catch(e){}
         return 'Resultado de '+cfg.label+':\n'+result;
       }
     }catch(e){ return 'Error ejecutando '+name+': '+(e&&e.message||''); }
@@ -494,7 +500,7 @@ CAPACIDADES Y REGLAS:
       await new Promise(r=>setTimeout(r,260));
       const cl=(typeof state!=='undefined'&&state.clientes?state.clientes.length:0),co=(typeof state!=='undefined'&&state.cotizaciones?state.cotizaciones.length:0),pe=(typeof state!=='undefined'&&state.pedidos?state.pedidos.length:0);
       const reply='Respuesta simulada en modo DEMO — no consumí tokens.\n\nEl CRM demo tiene '+cl+' clientes/leads, '+co+' cotizaciones y '+pe+' pedidos. Puedes pedirme que te ayude a navegar, revisar el pipeline o abrir un formulario; todos los cambios serán temporales.';
-      $typ.classList.remove('jvs-cursor');$typ.innerHTML=formatRichText(reply);JV.history.push({role:'assistant',content:reply});_kaiPersist();JV.busy=false;JV.thinking=false;setState('idle');return;
+      $typ.classList.remove('jvs-cursor');$typ.parentElement.classList.add('jvs-rich');$typ.innerHTML=typeof renderKaiResult==='function'?renderKaiResult(reply,{demo:true}):formatRichText(reply);$usage.style.display='';$usage.textContent='DEMO · 0 tok · US$0,00';JV.history.push({role:'assistant',content:reply});_kaiPersist();JV.busy=false;JV.thinking=false;setState('idle');return;
     }
     // Si la llamada no llega a generar respuesta, quita el mensaje de usuario colgado:
     // dejarlo provocaría dos turnos 'user' seguidos y la API respondería 400.
@@ -524,6 +530,7 @@ CAPACIDADES Y REGLAS:
       // este turno: nunca se persisten ni se recortan entre turnos, evitando 400 por
       // bloques huérfanos.
       JV._delegations=0; JV._pendingFlow=null; JV._btns=[]; JV._accum='';
+      const turnUsage={model:'claude-sonnet-4-6',input_tokens:0,output_tokens:0,cache_creation_input_tokens:0,cache_read_input_tokens:0,total_tokens:0,cost_usd:0};
       const stripTags=s=>s.replace(/\[(NAV|NUEVO|AGENTE|FLUJO|BTN):[^\]]*\]/gi,'').replace(/\[COTIZAR\]/gi,'').replace(/\[(NAV|NUEVO|AGENTE|FLUJO|BTN):[^\]]*$/i,'');
 
       // Una ronda: streamea un mensaje del asistente (Blob body por Unicode/ISO-8859-1)
@@ -564,6 +571,10 @@ CAPACIDADES Y REGLAS:
         usageMeta.usage={...usageMeta.usage,output_tokens:outTok};
         if(typeof _recordClaudeUsage==='function') _recordClaudeUsage(usageMeta,'kai');
         _kaiUpdateUsage(inTok,outTok,usageMeta.usage.cache_creation_input_tokens||0,usageMeta.usage.cache_read_input_tokens||0);
+        turnUsage.model=usageMeta.model||turnUsage.model;
+        turnUsage.input_tokens+=inTok;turnUsage.output_tokens+=outTok;
+        turnUsage.cache_creation_input_tokens+=usageMeta.usage.cache_creation_input_tokens||0;
+        turnUsage.cache_read_input_tokens+=usageMeta.usage.cache_read_input_tokens||0;
         const toolUses=Object.keys(blocks).map(k=>blocks[k]).filter(b=>b.type==='tool_use').map(b=>{ let inp={}; try{ inp=b.json?JSON.parse(b.json):{}; }catch(e){} return {id:b.id,name:b.name,input:inp}; });
         return { text, toolUses, stopReason };
       }
@@ -590,7 +601,10 @@ CAPACIDADES Y REGLAS:
       const _toolBtns=(JV._btns||[]).slice();
       const clean=execActions(JV._accum||'Listo.');
       JV._btns=_toolBtns.concat(JV._btns||[]);
-      $typ.innerHTML=formatRichText(clean||'Listo.');
+      turnUsage.total_tokens=turnUsage.input_tokens+turnUsage.output_tokens+turnUsage.cache_creation_input_tokens+turnUsage.cache_read_input_tokens;
+      turnUsage.cost_usd=typeof _estimateClaudeCost==='function'?_estimateClaudeCost(turnUsage.model,turnUsage):0;
+      $typ.parentElement.classList.add('jvs-rich');
+      $typ.innerHTML=typeof renderKaiResult==='function'?renderKaiResult(clean||'Listo.',{usage:turnUsage,model:turnUsage.model}):formatRichText(clean||'Listo.');
       _kaiRenderButtons(JV._btns);
       $log.scrollTop=$log.scrollHeight;
       JV.history.push({role:'assistant',content:(clean||'Listo.')});

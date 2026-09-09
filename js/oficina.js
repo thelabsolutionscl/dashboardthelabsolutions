@@ -553,7 +553,8 @@ function _ofOpenRun(r){
   resultEl.className='agent-modal-result'; resultEl.style.whiteSpace='normal';
   // Consulta como cabecera ligera + salida procesada (suave y estructurada, igual que en Agentes).
   const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
-  resultEl.innerHTML=consultaHtml+(r.output?formatAgentReport(r.output):'<span style="color:var(--text3)">(sin resultado guardado)</span>');
+  const rid=r.meta?.agentId||(typeof _agentVisualId==='function'?_agentVisualId(r.agent):r.agent);
+  resultEl.innerHTML=consultaHtml+(r.output?(typeof renderAgentResult==='function'?renderAgentResult(rid,r.output,r.meta||{}):formatAgentReport(r.output)):'<span style="color:var(--text3)">(sin resultado guardado)</span>');
   _agentInlineText=r.output||'';
   document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
   document.getElementById('agentInlineModal').style.display='flex';

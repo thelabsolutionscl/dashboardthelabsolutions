@@ -6454,8 +6454,11 @@ async function runSupplierSearch(prefix='ss'){
   const query=`PRODUCTO: ${producto}\nCATEGORÍA: ${cat||'Sin especificar'}\nMERCADO: ${mercadoLabel}\nCANTIDAD REQUERIDA: ${cantidad||'No especificada'}\nPRESUPUESTO MÁX: ${presupuesto||'No especificado'}\nPRIORIDAD: ${prioridad}`;
   try{showAgentWorking('SUPPLIER',{name:'Sourcing',emoji:'🔍',verb:'está buscando proveedores para ti…',messages:['Rastreando catálogos y marketplaces…','Comparando precios y plazos…','Filtrando por calidad y MOQ…','Armando la recomendación…']});}catch(e){}
   try{
+    const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('SUPPLIER'):Date.now();
     const raw=await callAgentClaude('SUPPLIER',SUPPLIER_SYS,query);
-    renderSupplierResults(raw,producto,prefix);
+    const meta=typeof agentResultMeta==='function'?agentResultMeta('SUPPLIER',started):{};
+    renderSupplierResults(raw,producto,prefix,meta);
+    try{AGENT_LOG.add('SUPPLIER_SEARCH_AGENT',query,raw,meta);}catch(e){}
   }catch(e){if(res) res.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-x-circle"/></svg></div>${escapeHtml(e.message)}</div>`;}
   finally{try{hideAgentWorking();}catch(e){}}
   if(btn){btn.disabled=false;btn.textContent='🔍 Buscar Proveedores';}
@@ -6480,11 +6483,11 @@ function parseSupplierBlocks(text){
 const SS_FLAG={'Chile':'🇨🇱','China':'🇨🇳','EEUU':'🇺🇸','España':'🇪🇸','Alemania':'🇩🇪','Argentina':'🇦🇷','México':'🇲🇽','Brasil':'🇧🇷','Italia':'🇮🇹','Japón':'🇯🇵'};
 const SS_TIPO_BADGE={'Nacional':'badge-green','Internacional':'badge-orange','Marketplace':'badge-yellow','Importador local':'badge-purple','Importador':'badge-purple'};
 
-function renderSupplierResults(raw,producto,prefix='ss'){
+function renderSupplierResults(raw,producto,prefix='ss',meta){
   const{blocks,recomendacion}=parseSupplierBlocks(raw);
   const res=document.getElementById(`${prefix}Results`);
   if(!res) return;
-  if(!blocks.length){res.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-search"/></svg></div>No se encontraron resultados estructurados.<br><pre style="font-size:10px;color:var(--text2);margin-top:10px;text-align:left;max-height:200px;overflow:auto">${escapeHtml(raw)}</pre></div>`;return;}
+  if(!blocks.length){res.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('SUPPLIER',raw,meta||{}):`<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-search"/></svg></div>No se encontraron resultados estructurados.<br><pre style="font-size:10px;color:var(--text2);margin-top:10px;text-align:left;max-height:200px;overflow:auto">${escapeHtml(raw)}</pre></div>`;return;}
   const cards=blocks.map((p)=>{
     const flag=SS_FLAG[p.pais]||'🌍';
     const tipoBadge=SS_TIPO_BADGE[p.tipo]||'badge-gray';
@@ -6512,7 +6515,7 @@ function renderSupplierResults(raw,producto,prefix='ss'){
     </div>`;
   }).join('');
   const recHtml=recomendacion?`<div style="background:rgba(0,212,204,0.07);border:1px solid rgba(0,212,204,0.25);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text2);line-height:1.5"><span style="color:var(--accent);font-weight:700">⭐ Recomendación:</span> ${escapeHtml(recomendacion)}</div>`:'';
-  res.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--accent2)">${blocks.length} proveedor${blocks.length!==1?'es':''} encontrado${blocks.length!==1?'s':''} para: <em style="font-style:normal;color:var(--text)">${escapeHtml(producto)}</em></span><button onclick="document.getElementById('${prefix}Results').innerHTML=''" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer">✕ Limpiar</button></div><div class="ss-results-grid">${cards}</div>${recHtml}`;
+  res.innerHTML=`<div class="avr-hero" style="--avr-accent:#f59e0b;margin-bottom:12px"><div class="avr-top"><span class="avr-mark">⌕</span><div class="avr-heading"><span>ABASTECIMIENTO</span><strong>${blocks.length} proveedor${blocks.length!==1?'es':''} para ${escapeHtml(producto)}</strong></div><button onclick="document.getElementById('${prefix}Results').innerHTML=''" style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer">✕ Limpiar</button></div><div class="avr-meta">${typeof _agentUsageHtml==='function'?_agentUsageHtml(agentResultMeta('SUPPLIER',null,meta||{})):''}</div></div><div class="ss-results-grid">${cards}</div>${recHtml}`;
 }
 
 function togglePvssPanel(){
@@ -8497,6 +8500,26 @@ const _CLAUDE_BODY=(system,user,opts={})=>JSON.stringify({
   max_tokens:Math.max(128,Math.min(2000,Number(opts.maxTokens)||800)),
   system,messages:[{role:'user',content:user}]
 });
+// Tarifas de lista del API de Anthropic por millón de tokens. Se usan sólo para
+// dar visibilidad operativa en el dashboard; Anthropic sigue siendo la fuente
+// definitiva de facturación. Los valores incluyen prompt caching de 5 minutos.
+const CLAUDE_PRICE_USD_PER_MTOK=Object.freeze({
+  'claude-haiku-4-5':{input:1,output:5,cacheWrite:1.25,cacheRead:.10},
+  'claude-sonnet-4-6':{input:3,output:15,cacheWrite:3.75,cacheRead:.30},
+  'claude-sonnet-5':{input:2,output:10,cacheWrite:2.50,cacheRead:.20}
+});
+function _claudePrice(model){
+  const id=String(model||'').toLowerCase();
+  const exact=Object.keys(CLAUDE_PRICE_USD_PER_MTOK).find(k=>id.includes(k));
+  if(exact)return CLAUDE_PRICE_USD_PER_MTOK[exact];
+  if(id.includes('haiku'))return CLAUDE_PRICE_USD_PER_MTOK['claude-haiku-4-5'];
+  if(id.includes('sonnet-5'))return CLAUDE_PRICE_USD_PER_MTOK['claude-sonnet-5'];
+  return CLAUDE_PRICE_USD_PER_MTOK['claude-sonnet-4-6'];
+}
+function _estimateClaudeCost(model,usage){
+  const p=_claudePrice(model),u=usage||{},n=k=>Math.max(0,Number(u[k])||0);
+  return (n('input_tokens')*p.input+n('output_tokens')*p.output+n('cache_creation_input_tokens')*p.cacheWrite+n('cache_read_input_tokens')*p.cacheRead)/1000000;
+}
 // Diagnóstico local, no facturación: sólo metadatos, nunca prompts ni respuestas.
 // La conciliación entre dispositivos debe hacerse con Usage de Anthropic.
 function _recordClaudeUsage(j,source='agentes'){
@@ -8506,8 +8529,14 @@ function _recordClaudeUsage(j,source='agentes'){
     const row={id:j.id||null,at:new Date().toISOString(),source,model:j.model||AGENT_MODEL,
       input_tokens:n('input_tokens'),output_tokens:n('output_tokens'),
       cache_creation_input_tokens:n('cache_creation_input_tokens'),cache_read_input_tokens:n('cache_read_input_tokens')};
+    row.total_tokens=row.input_tokens+row.output_tokens+row.cache_creation_input_tokens+row.cache_read_input_tokens;
+    row.cost_usd=typeof _estimateClaudeCost==='function'?_estimateClaudeCost(row.model,row):0;
     const rows=JSON.parse(sessionStorage.getItem('claude_usage_v1')||'[]');
     rows.push(row);sessionStorage.setItem('claude_usage_v1',JSON.stringify(rows.slice(-500)));
+    if(typeof window!=='undefined'){
+      window._CLAUDE_LAST_USAGE=window._CLAUDE_LAST_USAGE||{};
+      window._CLAUDE_LAST_USAGE[String(source||'agentes').toLowerCase()]=row;
+    }
     console.info('[anthropic-usage]',row);
   }catch(e){} // un almacenamiento bloqueado no debe romper una respuesta pagada
 }
@@ -13761,9 +13790,11 @@ async function crearReporte(){
   const ceoCfg=typeof AGENTES_CFG!=='undefined'?AGENTES_CFG.find(a=>a.id==='CEO'):null;
   const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
   const liveCtx=(ceoCfg&&state.loaded)?buildAgentContext('CEO')+'\n\n':'';
+  const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('CEO'):Date.now();
   const response=await callAgentClaude('CEO',sys,`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
-  out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(response);
-  try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response);}catch(e){}
+  const meta=typeof agentResultMeta==='function'?agentResultMeta('CEO',started):{};
+  out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('CEO',response,meta):formatAgentReport(response);
+  try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response,meta);}catch(e){}
   const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':hoyCL(),'Tasa conversión (%)':conv,'Estado reporte':'Generado'};await airtableWrite('Reportes','POST',null,fields);toast('✓ Reporte guardado','success');await loadAllDataSilent();renderReportes();}
   catch(e){toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;}
   finally{try{hideAgentWorking();}catch(e){}}
@@ -13895,6 +13926,159 @@ function formatAgentReport(raw){
       +`<div style="font-size:12px;color:var(--text2)">${renderBody(s.body)||'<span style="color:var(--text3)">—</span>'}</div></div>`;});
   out+='</div></div>';
   return out;
+}
+// ── Resultado visual por oficio ───────────────────────────────────────────
+// Los agentes siguen pudiendo responder en markdown libre. Esta capa extrae
+// sólo datos inequívocos para el resumen visual y conserva la respuesta completa
+// en un bloque desplegable. Si el modelo cambia el formato, el fallback anterior
+// (formatAgentReport) continúa funcionando sin mostrar JSON ni romper la vista.
+const AGENT_RESULT_PROFILES=Object.freeze({
+  SALES:{title:'Análisis comercial',area:'Ventas',icon:'◎',accent:'#00d4aa',focus:['Score del lead','Objeciones','Próximo paso'],metricKeys:['score','prioridad','probabilidad','urgencia']},
+  QUOTE:{title:'Propuesta de cotización',area:'Cotizaciones',icon:'$',accent:'#22c55e',focus:['Neto e IVA','Margen','Entrega'],metricKeys:['neto','total','margen','entrega','vigencia']},
+  PRODUCTION:{title:'Ficha de producción',area:'Operaciones',icon:'⚙',accent:'#38bdf8',focus:['Parámetros','Capacidad','Posproceso'],metricKeys:['material','temperatura','tiempo','cantidad','velocidad']},
+  MANTENCION3D:{title:'Estado de la granja 3D',area:'Mantenimiento',icon:'⌁',accent:'#f59e0b',focus:['Disponibilidad','Alertas','Calibración'],metricKeys:['disponibles','imprimiendo','error','offline','estado']},
+  AUDITOR_3D:{title:'Estado de la granja 3D',area:'Mantenimiento',icon:'⌁',accent:'#f59e0b',focus:['Disponibilidad','Alertas','Calibración'],metricKeys:['disponibles','imprimiendo','error','offline','estado']},
+  QA:{title:'Control de calidad',area:'Producción',icon:'✓',accent:'#14b8a6',focus:['Veredicto','Checklist','Defectos'],metricKeys:['resultado','aprobado','avance','medida','defectos']},
+  FOLLOWUP:{title:'Seguimiento comercial',area:'Ventas',icon:'↗',accent:'#a78bfa',focus:['Sin respuesta','Vencimiento','Contacto'],metricKeys:['días','monto','vence','toque','prioridad']},
+  CEO:{title:'Resumen ejecutivo',area:'Dirección',icon:'◇',accent:'#f97316',focus:['Indicadores','Alertas','Prioridades'],metricKeys:['ventas','revenue','margen','conversión','vencido']},
+  LEADGEN:{title:'Oportunidades de prospección',area:'Crecimiento',icon:'⌖',accent:'#22d3ee',focus:['Afinidad','Decisor','Potencial'],metricKeys:['score','potencial','volumen','prioridad']},
+  ONBOARDING:{title:'Plan de incorporación',area:'Clientes',icon:'→',accent:'#2dd4bf',focus:['Avance','Pendientes','Primer hito'],metricKeys:['avance','fecha','hito','pendiente','días']},
+  FINANCE:{title:'Diagnóstico financiero',area:'Finanzas',icon:'▥',accent:'#34d399',focus:['Caja en riesgo','Mora','Margen'],metricKeys:['total','mora','margen','riesgo','recuperable']},
+  REPCLIENTE:{title:'Estado para el cliente',area:'Servicio',icon:'◷',accent:'#60a5fa',focus:['Avance','Próxima etapa','ETA'],metricKeys:['avance','estado','entrega','fecha','progreso']},
+  CONTENT:{title:'Contenido multicanal',area:'Marketing',icon:'✦',accent:'#e879f9',focus:['Copy','Guion','CTA'],metricKeys:['piezas','duración','publicaciones','alcance']},
+  ADS:{title:'Optimización Google Ads',area:'Performance',icon:'△',accent:'#4ade80',focus:['ROAS real','Presupuesto','Acciones'],metricKeys:['roas','inversión','gasto','conversiones','cpl','cpa']},
+  LINKEDIN:{title:'Oportunidad de LinkedIn',area:'Ventas B2B',icon:'in',accent:'#60a5fa',focus:['Decisor','Afinidad','Mensaje'],metricKeys:['score','nivel','potencial','prioridad']},
+  SOCIAL_STRATEGIST:{title:'Estrategia de contenidos',area:'Marketing',icon:'▦',accent:'#c084fc',focus:['Calendario','Pilares','KPI'],metricKeys:['frecuencia','publicaciones','alcance','leads']},
+  CAPTION_AGENT:{title:'Copys por plataforma',area:'Contenido',icon:'Aa',accent:'#f472b6',focus:['Hooks A/B','Copy','Hashtags'],metricKeys:['caracteres','variantes','duración']},
+  COMMUNITY_AGENT:{title:'Gestión de comunidad',area:'Social',icon:'◉',accent:'#fb7185',focus:['Intención','Sentimiento','Respuesta'],metricKeys:['lead','urgencia','sentimiento','prioridad']},
+  SOCIAL_ADS_AGENT:{title:'Rendimiento Social Ads',area:'Performance',icon:'↗',accent:'#fb7185',focus:['Rentabilidad','Alertas','Creatividades'],metricKeys:['roas','cpm','ctr','cpc','cpl']},
+  TREND_AGENT:{title:'Radar de tendencias',area:'Contenido',icon:'⌁',accent:'#facc15',focus:['Potencial','Formato','Adaptación'],metricKeys:['potencial','dificultad','ideas','tendencias']},
+  REPORT_SOCIAL_AGENT:{title:'Reporte de redes',area:'Analítica',icon:'▥',accent:'#818cf8',focus:['Evolución','Top contenido','Leads'],metricKeys:['alcance','interacciones','leads','ventas','crecimiento']},
+  NEWSLETTER_AGENT:{title:'Edición de newsletter',area:'Email marketing',icon:'✉',accent:'#38bdf8',focus:['Asunto','Audiencia','CTA'],metricKeys:['palabras','caracteres','audiencia','clics']},
+  SUPPLIER:{title:'Comparación de proveedores',area:'Abastecimiento',icon:'⌕',accent:'#f59e0b',focus:['Precio y MOQ','Entrega','Riesgo'],metricKeys:['precio','moq','entrega','proveedores','plazo']},
+  SUPPLIER_SEARCH_AGENT:{title:'Comparación de proveedores',area:'Abastecimiento',icon:'⌕',accent:'#f59e0b',focus:['Precio y MOQ','Entrega','Riesgo'],metricKeys:['precio','moq','entrega','proveedores','plazo']},
+  KAI:{title:'Respuesta ejecutiva',area:'Asistente global',icon:'K',accent:'#00d4cc',focus:['Respuesta','Datos usados','Acción'],metricKeys:['pedidos','cotizaciones','clientes','total','atrasados']}
+});
+function _agentVisualId(ref){
+  const key=String(ref||'').toUpperCase();
+  if(AGENT_RESULT_PROFILES[key])return key;
+  try{const cfg=AGENTES_CFG.find(a=>String(a.id).toUpperCase()===key||String(a.label).toUpperCase()===key);if(cfg)return cfg.id;}catch(e){}
+  if(key.includes('SUPPLIER'))return'SUPPLIER';
+  if(key.includes('AUDITOR'))return'MANTENCION3D';
+  return key||'KAI';
+}
+function _agentVisualProfile(ref){
+  const id=_agentVisualId(ref);
+  return AGENT_RESULT_PROFILES[id]||{title:'Resultado del agente',area:'Inteligencia artificial',icon:'◆',accent:'#00d4cc',focus:['Resumen','Hallazgos','Próximo paso'],metricKeys:['score','total','prioridad','estado']};
+}
+function beginAgentResultRun(agentId){
+  const key=_agentVisualId(agentId).toLowerCase();
+  try{if(window._CLAUDE_LAST_USAGE)delete window._CLAUDE_LAST_USAGE[key];}catch(e){}
+  return typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+}
+function agentResultMeta(agentId,startedAt,extra){
+  const id=_agentVisualId(agentId),key=id.toLowerCase();
+  const usage=(extra&&extra.usage)||((typeof window!=='undefined'&&window._CLAUDE_LAST_USAGE&&window._CLAUDE_LAST_USAGE[key])||null);
+  const now=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+  const elapsed=startedAt!=null?Math.max(0,Math.round(now-startedAt)):((extra&&extra.elapsedMs)||null);
+  const policy=typeof agentAiPolicy==='function'?agentAiPolicy(id):{};
+  const dataSource=(typeof state!=='undefined'&&state.loaded)?'CRM en vivo + consulta':'Consulta actual';
+  return Object.assign({agentId:id,demo:!!(typeof window!=='undefined'&&window._DEMO_MODE),usage,model:usage?.model||policy.model||'',elapsedMs:elapsed,dataSource},extra||{});
+}
+function _agentCleanResult(raw){return String(raw||'').replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/gi,'').replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/gi,'').replace(/\r/g,'').trim();}
+function _agentResultSummary(raw){
+  const txt=_agentCleanResult(raw),lines=txt.split('\n').map(x=>x.trim()).filter(Boolean);
+  let s='';
+  const idx=lines.findIndex(l=>/^\*{0,2}en resumen\*{0,2}\s*:/i.test(l));
+  if(idx>=0)s=lines[idx].replace(/^\*{0,2}en resumen\*{0,2}\s*:\s*/i,'');
+  if(!s){s=lines.find(l=>!/^#{1,4}\s/.test(l)&&!/^\*\*[^*]+\*\*:?$/.test(l)&&!/^[-*•]\s/.test(l)&&!/^\|/.test(l))||'';}
+  s=s.replace(/^\d+[.)]\s*/,'').replace(/\*\*/g,'').trim();
+  return s.length>360?s.slice(0,357).trim()+'…':s;
+}
+function _agentMetricIcon(label){
+  const l=String(label||'').toLowerCase();
+  if(/score|avance|progreso|probabilidad|convers/.test(l))return'◔';
+  if(/precio|monto|total|neto|margen|gasto|invers|roas|cpl|cpa/.test(l))return'$';
+  if(/d[ií]a|fecha|entrega|plazo|tiempo|vigencia/.test(l))return'◷';
+  if(/riesgo|urgencia|prioridad|alerta|estado|resultado/.test(l))return'!';
+  return'◆';
+}
+function _agentResultMetrics(raw,profile){
+  const candidates=[],seen=new Set(),prefs=profile.metricKeys||[];
+  const add=(label,value)=>{
+    label=String(label||'').replace(/[*_#`]/g,'').trim();value=String(value||'').replace(/[*_`]/g,'').trim();
+    if(!label||!value||label.length>42||value.length>72||/^(en resumen|resumen|whatsapp|email|correo|asunto|pr[oó]ximo paso)$/i.test(label))return;
+    if(!(/[\d$%]/.test(value)||/^(alta|media|baja|cr[ií]tic[oa]|aprobado|rechazado|apto|pendiente|activo|inactivo|positivo|negativo|neutro|bueno|regular|malo|sí|si|no)(\b|$)/i.test(value)))return;
+    const k=label.toLowerCase();if(seen.has(k))return;seen.add(k);
+    let rank=99;prefs.forEach((p,i)=>{if(rank===99&&k.includes(p))rank=i;});
+    candidates.push({label,value,rank,icon:_agentMetricIcon(label)});
+  };
+  _agentCleanResult(raw).split('\n').forEach(line=>{
+    const l=line.trim().replace(/^[-*•]\s*/,'').replace(/^\d+[.)]\s*/, '');
+    const m=l.match(/^\*{0,2}([^:*|]{2,42})\*{0,2}\s*:\s*(.{1,72})$/);if(m)add(m[1],m[2]);
+  });
+  const txt=_agentCleanResult(raw).replace(/\*\*/g,' ');
+  const scans=[
+    ['Score',/\bscore(?:\s+\w+){0,2}\s*[:=-]?\s*(\d{1,3}(?:\s*\/\s*100|\s*%))/i],
+    ['Probabilidad',/\bprobabilidad(?:\s+de\s+\w+)?\s*[:=-]?\s*(\d{1,3}\s*%)/i],
+    ['ROAS',/\broas(?:\s+\w+){0,2}\s*[:=-]?\s*(\d+(?:[.,]\d+)?\s*x)/i],
+    ['Margen',/\bmargen(?:\s+\w+){0,2}\s*[:=-]?\s*(\d+(?:[.,]\d+)?\s*%)/i]
+  ];
+  scans.forEach(([label,re])=>{const m=txt.match(re);if(m)add(label,m[1]);});
+  return candidates.sort((a,b)=>a.rank-b.rank).slice(0,4);
+}
+function _agentModelLabel(model){
+  const m=String(model||'').toLowerCase();
+  if(m.includes('haiku'))return'Haiku 4.5';
+  if(m.includes('sonnet-5'))return'Sonnet 5';
+  if(m.includes('sonnet'))return'Sonnet 4.6';
+  return model||'Modelo IA';
+}
+function _agentCostLabel(cost){
+  const n=Number(cost)||0;if(n===0)return'US$0,00';if(n<.01)return'< US$0,01';
+  return 'US$'+n.toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:4});
+}
+function _agentUsageHtml(meta){
+  if(meta?.demo)return'<span class="avr-meta-pill avr-demo">DEMO · 0 tokens · US$0,00</span>';
+  const u=meta?.usage,total=u?(u.total_tokens??((u.input_tokens||0)+(u.output_tokens||0)+(u.cache_creation_input_tokens||0)+(u.cache_read_input_tokens||0))):null;
+  const model=_agentModelLabel(meta?.model||u?.model||'');
+  let h=`<span class="avr-meta-pill">${escapeHtml(model)}</span>`;
+  if(total!=null)h+=`<span class="avr-meta-pill">${Number(total).toLocaleString('es-CL')} tokens</span><span class="avr-meta-pill" title="Costo estimado según tarifa de lista de Anthropic">${_agentCostLabel(u.cost_usd)}</span>`;
+  if(u?.cache_read_input_tokens)h+=`<span class="avr-meta-pill avr-cache">${Number(u.cache_read_input_tokens).toLocaleString('es-CL')} desde caché</span>`;
+  if(meta?.elapsedMs!=null)h+=`<span class="avr-meta-pill">${(meta.elapsedMs/1000).toFixed(meta.elapsedMs<10000?1:0)} s</span>`;
+  if(meta?.dataSource)h+=`<span class="avr-meta-pill">${escapeHtml(meta.dataSource)}</span>`;
+  return h;
+}
+function _agentExtraVisual(agentId){
+  if(_agentVisualId(agentId)!=='ADS'||typeof window==='undefined'||!window._adsLastData)return'';
+  const d=window._adsLastData,cap=Math.max(1,Number(localStorage.getItem('ads_monthly_cap_net')||250000));
+  const days=Math.max(1,Number(document.getElementById('adsPeriodSelect')?.value)||30),spent=Math.max(0,Number(d.gasto)||0);
+  const monthDays=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+  const projected=Math.round(spent/days*monthDays),pct=Math.min(100,Math.round(projected/cap*100));
+  const level=projected>cap?'over':projected>cap*.8?'near':'ok';
+  return `<section class="avr-budget avr-budget-${level}"><div class="avr-budget-head"><div><span>TOPE MENSUAL NETO</span><strong>${formatCLP(cap)}</strong></div><div><span>PROYECCIÓN</span><strong>${formatCLP(projected)}</strong></div></div><div class="avr-budget-track"><i style="width:${pct}%"></i></div><div class="avr-budget-foot"><span>${formatCLP(spent)} gastados en ${days} días</span><b>${projected>cap?'Excede el tope en '+formatCLP(projected-cap):formatCLP(cap-projected)+' disponibles en la proyección'}</b></div></section>`;
+}
+function renderAgentResult(agentId,raw,meta){
+  if(!raw||!String(raw).trim())return'';
+  const id=_agentVisualId(agentId),p=_agentVisualProfile(id),clean=_agentCleanResult(raw),urg=_reportUrgency(clean);
+  const summary=_agentResultSummary(clean)||'Resultado preparado. Revisa el análisis y las acciones sugeridas.';
+  const metrics=_agentResultMetrics(clean,p),m=agentResultMeta(id,null,meta||{}),compact=!!m.compact;
+  const metricsHtml=metrics.length?`<div class="avr-kpis">${metrics.map(x=>`<div class="avr-kpi"><span class="avr-kpi-icon">${x.icon}</span><div><div class="avr-kpi-label">${escapeHtml(x.label)}</div><div class="avr-kpi-value">${escapeHtml(x.value)}</div></div></div>`).join('')}</div>`:'';
+  return `<article class="agent-visual-result${compact?' avr-compact':''}" style="--avr-accent:${p.accent}" data-agent="${escapeHtml(id)}">
+    <header class="avr-hero">
+      <div class="avr-top"><span class="avr-mark">${p.icon}</span><div class="avr-heading"><span>${escapeHtml(p.area)}</span><strong>${escapeHtml(p.title)}</strong></div><span class="avr-status avr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</span></div>
+      <div class="avr-summary"><span>EN RESUMEN</span>${formatRichText(summary)}</div>
+      <div class="avr-meta">${_agentUsageHtml(m)}</div>
+    </header>
+    ${metricsHtml}
+    ${_agentExtraVisual(id)}
+    <div class="avr-focus" aria-label="Contenido principal">${p.focus.map((f,i)=>`<span><b>${i+1}</b>${escapeHtml(f)}</span>`).join('')}</div>
+    <details class="avr-details"${m.expanded?' open':''}><summary><span>Ver análisis completo</span><small>datos, recomendaciones y mensajes</small></summary><div class="avr-details-body">${formatAgentReport(raw)}</div></details>
+  </article>`;
+}
+function renderKaiResult(raw,meta){
+  const m=agentResultMeta('KAI',null,Object.assign({compact:true},meta||{})),urg=_reportUrgency(raw);
+  return `<div class="kai-visual-result"><div class="kvr-head"><span>KAI · RESPUESTA EJECUTIVA</span><b class="kvr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</b></div><div class="kvr-body">${formatRichText(raw)}</div><div class="avr-meta">${_agentUsageHtml(m)}</div></div>`;
 }
 // Urgencia del reporte a partir del texto (heurística): rojo = requiere acción ya,
 // ámbar = con observaciones, verde = todo en orden. Espeja el criterio del CEO_REPORT.
@@ -15813,9 +15997,11 @@ async function runAgent(id){
   if(typeof renderOficina==='function'&&document.getElementById('tab-oficina')?.classList.contains('active')) renderOficina();
   const ctx=state.loaded?buildAgentContext(id):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
+  const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(id):Date.now();
   try{
     let _r=await callAgentClaude(id,cfg.sys+AGENT_TONE,fullInput);
-    try{AGENT_LOG.add(cfg.label,input,_r);}catch(e){}
+    const meta=typeof agentResultMeta==='function'?agentResultMeta(id,started):{};
+    try{AGENT_LOG.add(cfg.label,input,_r,meta);}catch(e){}
     try{ofCelebrate(cfg.label);}catch(e){}   // 🎉 reacción en la Oficina Virtual al completar
     const _oldIns=document.getElementById('qins_QUOTE');if(_oldIns) _oldIns.remove();
     if(id==='QUOTE'){
@@ -15828,7 +16014,7 @@ async function runAgent(id){
         }
       }
     }
-    out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(_r);
+    out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult(id,_r,meta):formatAgentReport(_r);
     // CTA: si la respuesta trae un mensaje enviable (WhatsApp/correo), ofrece enviarlo
     document.getElementById('cta_'+id)?.remove();
     const _ctaHtml=agentCtaButtonsHtml('out_'+id,_r);
@@ -18071,7 +18257,7 @@ trusted_clients:
 
 <!-- ══ AGENTE INLINE MODAL ══════════════════════════════════════ -->
 <div class="modal-overlay" id="agentInlineModal" style="display:none" onclick="if(event.target===this)closeAgentInlineModal()">
-  <div class="modal-card" style="max-width:620px;width:calc(100% - 24px);display:flex;flex-direction:column;max-height:85vh" onclick="event.stopPropagation()">
+  <div class="modal-card agent-result-modal" style="max-width:860px;width:calc(100% - 24px);display:flex;flex-direction:column;max-height:88vh" onclick="event.stopPropagation()">
     <div class="modal-header" style="flex-shrink:0">
       <span class="modal-title" id="agentInlineTitle">🤖 Agente IA</span>
       <div style="display:flex;gap:6px">
