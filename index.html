@@ -1541,8 +1541,8 @@
   </div>
 
 <!-- AGENTES -->
-<div class="tab-panel pf" id="tab-agentes">
-  <div class="section-header"><div><div class="section-title">Centro de Agentes IA</div><div class="section-desc">Agentes inteligentes especializados que analizan tus datos en tiempo real y generan insights, reportes automáticos y propuestas de acción para tu negocio.</div></div><button class="btn btn-ghost btn-sm" onclick="AGENT_LOG.open()" style="flex-shrink:0">📜 Historial</button></div>
+<div class="tab-panel pf agent-view-simple" id="tab-agentes">
+  <div class="section-header agent-section-header"><div><div class="section-title">Centro de Agentes IA</div><div class="section-desc">Agentes inteligentes especializados que analizan tus datos en tiempo real y generan insights, reportes automáticos y propuestas de acción para tu negocio.</div></div><div class="agent-header-actions"><div class="agent-view-switch" role="group" aria-label="Nivel de detalle de los resultados"><span>Vista</span><button type="button" class="active" data-agent-view-mode="simple" aria-pressed="true" onclick="setAgentViewMode('simple')">Simplificado</button><button type="button" data-agent-view-mode="expert" aria-pressed="false" onclick="setAgentViewMode('expert')">Experto</button></div><button class="btn btn-ghost btn-sm" onclick="AGENT_LOG.open()">📜 Historial</button></div></div>
 
   <!-- SUPPLIER SEARCH AGENT -->
   <div class="card" style="margin-bottom:20px;border-color:rgba(255,107,53,0.35);box-shadow:0 0 24px rgba(255,107,53,0.07)">
@@ -14023,6 +14023,7 @@ function _agentResultMetrics(raw,profile){
     if(!(/[\d$%]/.test(value)||/^(alta|media|baja|cr[ií]tic[oa]|aprobado|rechazado|apto|pendiente|activo|inactivo|positivo|negativo|neutro|bueno|regular|malo|sí|si|no)(\b|$)/i.test(value)))return;
     const k=label.toLowerCase();if(seen.has(k))return;seen.add(k);
     let rank=99;prefs.forEach((p,i)=>{if(rank===99&&k.includes(p))rank=i;});
+    if(rank===99&&!/(score|probabilidad|urgencia|prioridad|ticket|precio|monto|total|neto|iva|margen|gasto|inversi[oó]n|roas|cpl|cpa|avance|progreso|conversi[oó]n|entrega|plazo|tiempo|vigencia|riesgo|mora|estado|resultado|aprobado|defecto|cantidad|material|temperatura|velocidad|disponible|imprimiendo|offline|error|lead|venta|revenue|alcance|interacci[oó]n|crecimiento|proveedor|moq)/i.test(k))return;
     candidates.push({label,value,rank,icon:_agentMetricIcon(label)});
   };
   _agentCleanResult(raw).split('\n').forEach(line=>{
@@ -14162,9 +14163,9 @@ function renderAgentResult(agentId,raw,meta){
   if(!raw||!String(raw).trim())return'';
   const id=_agentVisualId(agentId),p=_agentVisualProfile(id),clean=_agentCleanResult(raw),urg=_reportUrgency(clean);
   const summary=_agentResultSummary(clean)||'Resultado preparado. Revisa el análisis y las acciones sugeridas.';
-  const metrics=_agentResultMetrics(clean,p),m=agentResultMeta(id,null,meta||{}),compact=!!m.compact;
+  const metrics=_agentResultMetrics(clean,p),m=agentResultMeta(id,null,meta||{}),compact=!!m.compact,layout=(AGENT_RESULT_LAYOUTS[id]||[])[0]||'general';
   const metricsHtml=metrics.length?`<div class="avr-kpis">${metrics.map(x=>`<div class="avr-kpi"><span class="avr-kpi-icon">${x.icon}</span><div><div class="avr-kpi-label">${escapeHtml(x.label)}</div><div class="avr-kpi-value">${escapeHtml(x.value)}</div></div></div>`).join('')}</div>`:'';
-  return `<article class="agent-visual-result${compact?' avr-compact':''}" style="--avr-accent:${p.accent}" data-agent="${escapeHtml(id)}">
+  return `<article class="agent-visual-result avr-layout-${escapeHtml(layout)}${compact?' avr-compact':''}" style="--avr-accent:${p.accent}" data-agent="${escapeHtml(id)}">
     <header class="avr-hero">
       <div class="avr-top"><span class="avr-mark">${p.icon}</span><div class="avr-heading"><span>${escapeHtml(p.area)}</span><strong>${escapeHtml(p.title)}</strong></div><span class="avr-status avr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</span></div>
       <div class="avr-summary"><span>EN RESUMEN</span>${formatRichText(summary)}</div>
@@ -15957,6 +15958,23 @@ function showAgentCtx(id,btn){
   }else{box.style.display='none';btn.textContent='ver contexto ↓';}
 }
 
+const AGENT_VIEW_MODE_KEY='thelab_agent_view_mode';
+function getAgentViewMode(){
+  try{return localStorage.getItem(AGENT_VIEW_MODE_KEY)==='expert'?'expert':'simple';}catch(e){return'simple';}
+}
+function applyAgentViewMode(){
+  const mode=getAgentViewMode(),tab=document.getElementById('tab-agentes');if(!tab)return;
+  tab.classList.toggle('agent-view-simple',mode==='simple');
+  tab.classList.toggle('agent-view-expert',mode==='expert');
+  tab.querySelectorAll('[data-agent-view-mode]').forEach(btn=>{const on=btn.dataset.agentViewMode===mode;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',on?'true':'false');});
+  tab.querySelectorAll('.agent-visual-result .avr-details').forEach(details=>{details.open=mode==='expert';});
+}
+function setAgentViewMode(mode){
+  try{localStorage.setItem(AGENT_VIEW_MODE_KEY,mode==='expert'?'expert':'simple');}catch(e){}
+  applyAgentViewMode();
+}
+window.setAgentViewMode=setAgentViewMode;
+
 // Nombre a mostrar de un agente: "Rol - Personaje" (ej: "CEO - Elon Musk").
 // Si no tiene personaje asignado, cae al nombre de rol en español.
 function agentDisplayName(cfg){
@@ -15989,6 +16007,7 @@ function renderAgentesGrid(){
       </div>
     </div>`;
   }).join('');
+  applyAgentViewMode();
 }
 
 // ── Popup "TRABAJANDO PARA TI" ─────────────────────────────────
@@ -16116,7 +16135,7 @@ async function runAgent(id){
         }
       }
     }
-    out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult(id,_r,meta):formatAgentReport(_r);
+    out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult(id,_r,meta):formatAgentReport(_r);out.scrollTop=0;applyAgentViewMode();
     // CTA: si la respuesta trae un mensaje enviable (WhatsApp/correo), ofrece enviarlo
     document.getElementById('cta_'+id)?.remove();
     const _ctaHtml=agentCtaButtonsHtml('out_'+id,_r);

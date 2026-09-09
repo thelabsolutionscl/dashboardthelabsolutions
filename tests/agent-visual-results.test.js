@@ -99,3 +99,27 @@ test('las acciones de QA piden confirmación y la vista responde en móvil',()=>
   assert.match(CSS,/@media\(max-width:720px\)/);
   assert.match(CSS,/\.avr-kpis\{grid-template-columns:repeat\(2/);
 });
+
+test('la vista de agentes permite alternar entre Simplificado y Experto sin regenerar',()=>{
+  assert.match(HTML,/data-agent-view-mode="simple"[^>]*>Simplificado</);
+  assert.match(HTML,/data-agent-view-mode="expert"[^>]*>Experto</);
+  const setter=HTML.slice(HTML.indexOf('function setAgentViewMode'),HTML.indexOf('// Nombre a mostrar',HTML.indexOf('function setAgentViewMode')));
+  assert.match(setter,/localStorage\.setItem\(AGENT_VIEW_MODE_KEY/);
+  assert.match(setter,/applyAgentViewMode\(\)/);
+  assert.doesNotMatch(setter,/callClaude|callAgentClaude|fetch\(/);
+  assert.match(CSS,/\.agent-view-simple .*\.avr-special\{display:none/);
+  assert.match(CSS,/\.agent-view-expert .*avr-details/);
+});
+
+test('los resultados de la parrilla no se cortan ni usan scroll vertical interno',()=>{
+  assert.match(CSS,/#tab-agentes #agentesGrid\{grid-template-columns:repeat\(2/);
+  assert.match(CSS,/#tab-agentes #agentesGrid \.ai-response\{max-height:none;overflow:visible/);
+  assert.match(CSS,/@media\(max-width:900px\)[\s\S]*#tab-agentes #agentesGrid\{grid-template-columns:1fr!important/);
+  assert.match(HTML,/out\.scrollTop=0;applyAgentViewMode\(\)/);
+});
+
+test('las métricas visuales descartan horas y frases operativas falsas',()=>{
+  const metrics=HTML.slice(HTML.indexOf('function _agentResultMetrics'),HTML.indexOf('function _agentModelLabel'));
+  assert.match(metrics,/rank===99&&!\/\(score\|probabilidad/);
+  assert.match(HTML,/avr-layout-\$\{escapeHtml\(layout\)\}/);
+});
