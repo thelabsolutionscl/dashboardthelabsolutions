@@ -506,11 +506,329 @@ function _wsMergeStatus(m,ip,status){
 function connectPrinterWs(m){
   if(!_wsEnabled())return;
   const ip=getPrinterIp(m);if(!ip)return;
-  if(typeof WebSocket==='undefinedm«ëŒ+Š×®º+º$zzb¥âr—&WGW&ã°¢–b…÷w46öæå¶Òæ–EÒ—·G'—µ÷w46öæå¶Òæ–EÒæöæ6Æ÷6SÖçVÆÃµ÷w46öæå¶Òæ–EÒæ6Æ÷6R‚“·Ö6F6‚†R—·Õ÷w46öæå¶Òæ–EÓÖçVÆÃ·Ğ¢ÆWBw3°¢G'—·w3ÖæWrvV%6ö6¶WB…÷&–çFW%w5W&Â†—’“·Ö6F6‚†R—·&WGW&ã·Ğ¢÷w46öæå¶Òæ–EÓ×w3°¢w2æöæ÷VãÒ‚“Óç·G'—·w2ç6VæB„¥4ôâç7G&–æv–g’‡¶§6öç'3¢s"ãrÆÖWF†öC¢w&–çFW"æö&¦V7G2ç7V'67&–&RrÇ&×3§¶ö&¦V7G3¥÷&–çFW$Æ–v‡Ew4ö&¦V7G2†Òæ–B—ÒÆ–C¢²µ÷w5'4–GÒ’“·Ö6F6‚†R—·×Ó°¢w2æöæÖW76vSÖWcÓç°¢ÆWB×6s·G'—¶×6sÔ¥4ôâç'6R†WbæFF“·Ö6F6‚†R—·&WGW&ã·Ğ¢ÆWB7FGW3ÖçVÆÃ°¢–b†×6rç&W7VÇBbf×6rç&W7VÇBç7FGW2—7FGW3Ö×6rç&W7VÇBç7FGW3²òò&W7VW7F7V'67&–&R÷VW'¢VÇ6R–b†×6ræÖWF†öCÓÓÒvæ÷F–g•÷7FGW5÷WFFRrbd'&’æ—4'&’†×6rç&×2’—7FGW3Ö×6rç&×5³Ó²òòW6‚Vâf—fğ¢–b‡7FGW2bgG—Vöb7FGW3ÓÓÒvö&¦V7Br•÷w4ÖW&vU7FGW2†ÒÆ—Ç7FGW2“°¢Ó°¢w2æöæW'&÷#Ò‚“Óç·G'—·w2æ6Æ÷6R‚“·Ö6F6‚†R—·×Ó°¢w2æöæ6Æ÷6SÒ‚“Óç¶–b…÷w46öæå¶Òæ–EÓÓÓ×w2•÷w46öæå¶Òæ–EÓÖçVÆÃµ÷w46öææV7FVE¶Òæ–EÓÖfÇ6Sµ÷66†VGVÆUw5&V6öææV7B†Ò“·Ó°§Ğ¦gVæ7F–öâ÷66†VGVÆUw5&V6öææV7B†Ò—°¢–b‚÷w4Væ&ÆVB‚’—&WGW&ã°¢6öç7BãÒ…÷w4GFV×G5¶Òæ–EÓÒ…÷w4GFV×G5¶Òæ–E×ÇÃ’³“°¢6öç7BFVÆ“ÔÖF‚æÖ–âƒ3Ã¤ÖF‚ç÷rƒ"ÄÖF‚æÖ–â†âÃR’’’´ÖF‚æfÆö÷"„ÖF‚ç&æFöÒ‚’£“°¢6ÆV%F–ÖV÷WB…÷w5F–ÖW'5¶Òæ–EÒ“°¢÷w5F–ÖW'5¶Òæ–EÓ×6WEF–ÖV÷WB‚‚“Óç¶–b‚Fö7VÖVçBæ†–FFVâbfvWE&–çFW$—†Ò’–6öææV7E&–çFW%w2†Ò“·ÒÆFVÆ’“°§Ğ¦gVæ7F–öâ6öææV7DÆÅ&–çFW%w2‚—¶–b‚÷w4Væ&ÆVB‚’—&WGW&ã´ÔT”ä2æf÷$V6‚†ÓÓç¶–b†vWE&–çFW$—†Ò’–6öææV7E&–çFW%w2†Ò“·Ò“·Ğ¦gVæ7F–öâF—66öææV7DÆÅ&–çFW%w2‚—°¢ÔT”ä2æf÷$V6‚†ÓÓç°¢6ÆV%F–ÖV÷WB…÷w5F–ÖW'5¶Òæ–EÒ“°¢6öç7Bw3Õ÷w46öæå¶Òæ–EÓ¶–b‡w2—·G'—·w2æöæ6Æ÷6SÖçVÆÃ·w2æ6Æ÷6R‚“·Ö6F6‚†R—·×Ğ¢÷w46öæå¶Òæ–EÓÖçVÆÃµ÷w46öææV7FVE¶Òæ–EÓÖfÇ6Sµ÷w5&u¶Òæ–EÓÖçVÆÃµ÷w4GFV×G5¶Òæ–EÓÓ°¢Ò“°§Ğ¦gVæ7F–öâ&V6öææV7DÆÅ&–çFW%w2‚—¶F—66öææV7DÆÅ&–çFW%w2‚“¶6öææV7DÆÅ&–çFW%w2‚“·Ğ ¦gVæ7F–öâf×E6V72‡2—¶–b‚7ÇÇ3ÃÓ—&WGW&â~(	Bs¶6öç7BƒÔÖF‚æfÆö÷"‡2ó3c’ÆÓÔÖF‚æfÆö÷"‚‡2S3c’óc“·&WGW&âƒãöG¶‡Ö‚G¶×ÖÖ¦G¶×ÖÖ·Ğ¦gVæ7F–öâf×E&–çFW%6VVâ‡G2—°¢6öç7BvSÔÖF‚æÖ‚ƒÄFFRææ÷r‚’ÔçVÖ&W"‡G7ÇÃ’“¶–b‚G2—&WGW&âu6–âÆV7GW&&Wf–s°¢–b†vSÃS—&WGW&ât7GVÆ—¦Fò†÷&s°¢6öç7BÖ–ãÔÖF‚æfÆö÷"†vRóc“¶–b†Ö–ãÃc—&WGW&æ9¦ÇF–ÖÆV7GW&†6RG´ÖF‚æÖ‚ƒÆÖ–â—ÒÖ–æ°¢6öç7BƒÔÖF‚æfÆö÷"†Ö–âóc“·&WGW&æ9¦ÇF–ÖÆV7GW&†6RG¶‡Ò†°§Ğ ¦gVæ7F–öâ&–çFW%7FFTÖWF‡7FFR—°¢&WGW&â‡°¢6öææV7F–æs§¶Æ&VÃ¢t6öæV7FæFş(
-brÆ6öÆ÷#¢r33†&Fc‚rÆ&s¢w&v&ƒSbÃƒ’Ã#C‚Ãã"’wÒÀ¢&–çF–æs§¶Æ&VÃ¢t–×&–Ö–VæFòrÆ6öÆ÷#¢r3CFrÆ&s¢w&v&ƒÃ#"ÃsÃãR’wÒÀ¢W6VC§¶Æ&VÃ¢uW6FòrÆ6öÆ÷#¢r6ffrÆ&s¢w&v&ƒ#SRÃsÃÃãR’wÒÀ¢W'&÷#§¶Æ&VÃ¢tW'&÷"rÆ6öÆ÷#¢r6fcCCCBrÆ&s¢w&v&ƒ#SRÃc‚Ãc‚ÃãR’wÒÀ¢6ö×ÆWFS§¶Æ&VÃ¢t–×&W6œ;6âf–æÆ—¦FrÆ6öÆ÷#¢r6s†&frÆ&s¢w&v&ƒcrÃ3’Ã#SÃãR’wÒÀ¢6æ6VÆÆVC§¶Æ&VÃ¢t–×&W6œ;6â6æ6VÆFrÆ6öÆ÷#¢r6ffrÆ&s¢w&v&ƒ#SRÃsÃÃã"’wÒÀ¢7FæF'“§¶Æ&VÃ¢tVâÌ:ÖæV+rÆ–'&RrÆ6öÆ÷#¢wf"‚ÒÖ66VçC2’rÆ&s¢w&v&ƒÃ#"ÃsÃã‚’wÒÀ¢–FÆS§¶Æ&VÃ¢tVâÌ:ÖæV+rÆ–'&RrÆ6öÆ÷#¢wf"‚ÒÖ66VçC2’rÆ&s¢w&v&ƒÃ#"ÃsÃã‚’wÒÀ¢Væ¶æ÷vã§¶Æ&VÃ¢tW7FFòFR–×&W6œ;6âFW66öæö6–FòrÆ6öÆ÷#¢r6ffrÆ&s¢w&v&ƒ#SRÃsÃÃã"’wÒÀ¢6‡WFF÷vã§¶Æ&VÃ¢~)ªFWFVæ–FrÆ6öÆ÷#¢r6fcCCCBrÆ&s¢w&v&ƒ#SRÃc‚Ãc‚ÃãR’wÒÀ¢7F'GW§¶Æ&VÃ¢t–æ–6–æFş(
-brÆ6öÆ÷#¢r6ffrÆ&s¢w&v&ƒ#SRÃsÃÃã"’wÒÀ¢öffÆ–æS§¶Æ&VÃ¢u6–â6öæW†œ;6ârÆ6öÆ÷#¢r3ƒƒ‚rÆ&s¢w&v&ƒ#Ã#Ã#Ãã"’wÒÀ¢–F÷vã§¶Æ&VÃ¢uFVÆVÖWG,:Ö6:ÖFrÆ6öÆ÷#¢r6ffrÆ&s¢w&v&ƒ#SRÃsÃÃã"’wÒÀ¢æö—§¶Æ&VÃ¢u6–â•rÆ6öÆ÷#¢r6fcf#3RrÆ&s¢w&v&ƒ#SRÃrÃS2Ãã"’wÒÀ¢Õ·7FFUÒ—ÇÇ¶Æ&VÃ§7FFRÆ6öÆ÷#¢wf"‚Ò×FW‡C2’rÆ&s¢wf"‚Ò×7W&f6S"’wÓ°§Ğ ¦gVæ7F–öâ&VæFW%7&¶Æ–æR‡&VF–æw2Æ¶W’Æ6öÆ÷"—°¢–b‚&VF–æw7ÇÇ&VF–æw2æÆVæwFƒÃ"—&WGW&ârs°¢6öç7BfÇ3×&VF–æw2æÖ‡#Óç%¶¶W•×ÇÃ“°¢6öç7BÖƒÔÖF‚æÖ‚‚ââçfÇ2ÃS’ÆÖ–ãÔÖF‚æÖ‚ƒÄÖF‚æÖ–â‚ââçfÇ2’Ó’Ç&ævSÖÖ‚ÖÖ–çÇÃ°¢6öç7BsÓÄƒÓ##°¢6öç7BG3×fÇ2æÖ‚‡bÆ’“ÓæG²†’ò‡fÇ2æÆVæwF‚Ó’’¥wÒÂG´‚Ò‚‡bÖÖ–â’÷&ævR’¤‡Ö’æ¦ö–â‚rr“°¢&WGW&æÇ7frv–GFƒÒ"GµwÒ"†V–v‡CÒ"G´‡Ò"7G–ÆSÒ&÷fW&fÆ÷s§f—6–&ÆS¶F—7Æ“¦&Æö6²#ãÇöÇ–Æ–æRö–çG3Ò"G·G7Ò"f–ÆÃÒ&æöæR"7G&ö¶SÒ"G¶6öÆ÷'Ò"7G&ö¶R×v–GFƒÒ#ãR"7G&ö¶RÖÆ–æV6Ò'&÷VæB"7G&ö¶RÖÆ–æV¦ö–ãÒ'&÷VæB"÷6—G“Ò#ãƒR"óãÂ÷7fsæ°§Ğ ¦gVæ7F–öâ&VæFW$Ööæ—F÷$f–ÇFW%F'2‚—°¢6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖöæ—F÷$f–ÇFW%F'2r“¶–b‚VÂ—&WGW&ã°¢VÂæ–ææW$…DÔÃÔÔôä•Dõ%ôu%Uõ2æÖ†sÓç°¢6öç7B7F—fSÕöÖöæ—F÷$f–ÇFW#ÓÓÖræ¶W“°¢6öç7B6÷VçCÖræ¶W“ÓÓÒvÆÂsôÔT”ä2æÆVæwFƒ¤ÔT”ä2æf–ÇFW"†ÓÓæÒæÖöFVÆóÓÓÖræ¶W’’æÆVæwFƒ°¢&WGW&æÆ'WGFöâöæ6Æ–6³Ò&f–ÇFW$Ööæ—F÷"‚rG¶ræ¶W—Òr’"7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£Wƒ·FF–æs£W‚'ƒ¶&÷&FW"×&F—W3£#ƒ¶&÷&FW#£‚6öÆ–BG¶7F—fSöræ6öÆ÷#¢wf"‚ÒÖ&÷&FW#"’wÓ¶&6¶w&÷VæC¢G¶7F—fSöræ6öÆ÷"²s#"s¢wf"‚Ò×7W&f6S"’wÓ¶6öÆ÷#¢G¶7F—fSöræ6öÆ÷#¢wf"‚Ò×FW‡C2’wÓ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C¢G¶7F—fSós£SÓ¶7W'6÷#§ö–çFW#·G&ç6—F–öã¦ÆÂãW2#âG¶ræÆ&VÇÓÇ7â7G–ÆSÒ&&6¶w&÷VæC¢G¶7F—fSöræ6öÆ÷"²s32s¢wf"‚Ò×7W&f6S2’wÓ¶&÷&FW"×&F—W3£ƒ·FF–æs£‚gƒ¶föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£s#âG¶6÷VçGÓÂ÷7ããÂö'WGFöãæ°¢Ò’æ¦ö–â‚rr“°§Ğ ¦gVæ7F–öâf–ÇFW$Ööæ—F÷"†w'Wò—µöÖöæ—F÷$f–ÇFW#Öw'Wó·&VæFW$Ööæ—F÷$f–ÇFW%F'2‚“·&VæFW$Ööæ—F÷$µ—2‚“·&VæFW$Ööæ—F÷$w&–B‚“·Ğ ¦gVæ7F–öâ&VæFW$Ööæ—F÷$µ—2‚—°¢6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖöæ—F÷$µ—2r“¶–b‚VÂ—&WGW&ã°¢6öç7BÆ—7FÕöÖöæ—F÷$f–ÇFW#ÓÓÒvÆÂsôÔT”ä3¤ÔT”ä2æf–ÇFW"†ÓÓæÒæÖöFVÆóÓÓÕöÖöæ—F÷$f–ÇFW"“°¢ÆWB&–çF–æsÓÇW6VCÓÆ–FÆSÓÆW'&÷#ÓÆF÷vãÓÆöffÆ–æSÓÆæö—ÓÆ6öææV7F–æsÓÆ–F÷vãÓ°¢Æ—7Fæf÷$V6‚†ÓÓç¶6öç7B7CÒ…÷&–çFW%7FGW5¶Òæ–E×ÇÅ÷&–çFW$–æ—F–Å7FGW2†Ò’’ç7FFS¶–b‡7CÓÓÒw&–çF–ærr—&–çF–ær²³¶VÇ6R–b‡7CÓÓÒwW6VBr—W6VB²³¶VÇ6R–b‡7CÓÓÒvW'&÷"r–W'&÷"²³¶VÇ6R–b‡7CÓÓÒw6‡WFF÷vâr–F÷vâ²³¶VÇ6R–b‡7CÓÓÒvæö—r–æö—²³¶VÇ6R–b‡7CÓÓÒv–F÷vâr––F÷vâ²³¶VÇ6R–b‡7CÓÓÒvöffÆ–æRr–öffÆ–æR²³¶VÇ6R–b‡7CÓÓÒv6öææV7F–ærr–6öææV7F–ær²³¶VÇ6R–FÆR²³·Ò“°¢6öç7BF÷FÃÖÆ—7FæÆVæwF‚ÇWF–Å7C×F÷FÃãôÖF‚ç&÷VæB‚‡&–çF–ær·W6VB’÷F÷FÂ£“£°¢VÂæ–ææW$…DÔÃÖÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£Gƒ¶Æ–vâÖ—FV×3¦6VçFW#¶fÆW‚×w&§w&·FF–æs£‚gƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6R“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£ƒ¶föçB×6—¦S£'‚#à¢G·&–çF–æsãöÇ7â7G–ÆSÒ&6öÆ÷#¢3CF¶föçB×vV–v‡C£s#ï	ùú"G·&–çF–æwÒ–×&–Ö–VæFóÂ÷7ãæ¢rwĞ¢G·W6VCãöÇ7â7G–ÆSÒ&6öÆ÷#¢6ff¶föçB×vV–v‡C£s#î(û‚G·W6VGÒW6FóÂ÷7ãæ¢rwĞ¢G¶–FÆSãöÇ7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖ66VçC2’#î)ª¢G¶–FÆWÒVâÌ:ÖæV+rÆ–'&W3Â÷7ãæ¢rwĞ¢G¶6öææV7F–æsãöÇ7â7G–ÆSÒ&6öÆ÷#¢33†&Fc‚#î)xÂG¶6öææV7F–æwÒ6öæV7FæFóÂ÷7ãæ¢rwĞ¢G¶W'&÷#ãöÇ7â7G–ÆSÒ&6öÆ÷#¢6fcCCCC¶föçB×vV–v‡C£s#ï	ùKBG¶W'&÷'ÒW'&÷#Â÷7ãæ¢rwĞ¢G¶F÷vããöÇ7â7G–ÆSÒ&6öÆ÷#¢6fcCCCC¶föçB×vV–v‡C£s#î)ªG¶F÷vçÒFWFVæ–FG¶F÷vããòw2s¢rwÒ„¶Æ—W"“Â÷7ãæ¢rwĞ¢G¶–F÷vããöÇ7â7G–ÆSÒ&6öÆ÷#¢6ff¶föçB×vV–v‡C£s#ï	ù:G¶–F÷vçÒFVÆVÖWG,:Ö6:ÖFÂ÷7ãæ¢rwĞ¢G¶öffÆ–æSãöÇ7â7G–ÆSÒ&6öÆ÷#¢3ƒƒ‚#î)ª²G¶öffÆ–æWÒ6–â6öæW†œ;6ãÂ÷7ãæ¢rwĞ¢G¶æö—ãöÇ7â7G–ÆSÒ&6öÆ÷#¢6fcf#3R#î)Ù2G¶æö—Ò6–â•Â÷7ãæ¢rwĞ¢Ç7â7G–ÆSÒ&Ö&v–âÖÆVgC¦WFó¶föçB×vV–v‡C£s¶6öÆ÷#¢G·WF–Å7Cãòr3CFs¢wf"‚Ò×FW‡C2’wÒ#åWF–Æ—¦6œ;6âG·WF–Å7GÒSÂ÷7ãà¢ÂöF—cæ°¢G'—·&VæFW$Öö7W6–öâ‚“·Ö6F6‚†R—·Ğ§Ğ ¢òò)H)Hô5U4œ94âDRÜ8T”ä2)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¢òòÌ:ÖæVFRF–V×ò÷"–×&W6÷&6öâÆFVÆVÖWG,:Öf—fFVÂ'&–FvS¢\:’–×&–ÖP¢òò6FVæ’\:’†÷&VVFÆ–'&R„UD&VÂ’â&&öÖWFW"fV6†2FRVçG&Vv¢òò6öâFF÷2Âæò6öâ–çGV–6œ;6ââ6R&Vg&W66§VçFò6öâÆ÷2µ—2FVÂÖöæ—F÷"à¦gVæ7F–öâ&VæFW$Öö7W6–öâ‚—°¢6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖö7W6–öâr“¶–b‚VÂ—&WGW&ã°¢6öç7BÆ—7FÕöÖöæ—F÷$f–ÇFW#ÓÓÒvÆÂsôÔT”ä3¤ÔT”ä2æf–ÇFW"†ÓÓæÒæÖöFVÆóÓÓÕöÖöæ—F÷$f–ÇFW"“°¢–b‚Æ—7FæÆVæwF‚—¶VÂç7G–ÆRæF—7Æ“ÒvæöæRs·&WGW&ã·Ğ¢6öç7B6Æ6–c×7CÓç7CÓÓÒw&–çF–ærsòw&–çBs§7CÓÓÒwW6VBsòwW6VBs¢‡7CÓÓÒvW'&÷"wÇÇ7CÓÓÒw6‡WFF÷vâwÇÇ7CÓÓÒv–F÷vâr“òvW'&÷"s¢‡7CÓÓÒvöffÆ–æRwÇÇ7CÓÓÒvæö—r“òvöfbs§7CÓÓÒv6öææV7F–ærsòv6öææV7F–ærs¢v–FÆRs°¢6öç7B&÷w3ÖÆ—7FæÖ†ÓÓç¶6öç7B3Õ÷&–çFW%7FGW5¶Òæ–E×ÇÅ÷&–çFW$–æ—F–Å7FGW2†Ò“·&WGW&ç¶ÒÇ2Æ³¦6Æ6–b‡2ç7FFR’ÆWF¢‡2ç7FFSÓÓÒw&–çF–ærrbg2æWFã“÷2æWF£Ó·Ò“°¢6öç7BWF3×&÷w2æf–ÇFW"‡#Óç"æWFã’æÖ‡#Óç"æWF“°¢6öç7B†÷&—¦öãÔÖF‚æÖ‚ƒB£3cÄÖF‚æÖ–âƒ"£3cÆWF2æÆVæwFƒôÖF‚æÖ‚‚ââæWF2’£ãS£B£3c’“°¢6öç7BÆ–'&W3×&÷w2æf–ÇFW"‡#Óç"æ³ÓÓÒv–FÆRr’æÆVæwFƒ°¢6öç7B–×&–Ö–VæFó×&÷w2æf–ÇFW"‡#Óç"æ³ÓÓÒw&–çBr’æÆVæwFƒ°¢6öç7B††ÖÓ×6VsÓææWrFFR„FFRææ÷r‚’·6Vr£’çFôÆö6ÆUF–ÖU7G&–ær‚vW2Ô4ÂrÇ¶†÷W#¢s"ÖF–v—BrÆÖ–çWFS¢s"ÖF–v—BwÒ“°¢6öç7B&÷†–ÖÖWF2æÆVæwFƒö††ÖÒ„ÖF‚æÖ–â‚ââæWF2’“¦çVÆÃ°¢òòV¦S¢Ö&62FR†÷&6ö'&RVÂ†÷&—¦öçFP¢6öç7BÖ&·3ÕµÓ¶6öç7B7FWƒÖ†÷&—¦öããb£3có#£°¢f÷"†ÆWB†ƒ×7FWƒ¶†‚£3cÆ†÷&—¦öã¶†‚³×7FW‚’Ö&·2çW6‚†Ç7â7G–ÆSÒ'÷6—F–öã¦'6öÇWFS¶ÆVgC¢G²††‚£3cö†÷&—¦öâ£’çFôf—†VBƒ—ÒS·G&ç6f÷&Ó§G&ç6ÆFU‚‚ÓSR“¶föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#â²G¶†‡ÖƒÂ÷7ãæ“°¢òòÆ6öÇVÖæFVÂæöÖ'&R6RVæ6övRVâçFÆÆ26†–63¢f–¦VâS‡‚F&¢òòÆ&'&VâVÂFVÌ:–föæòâVÂV¦RFR†÷&2FR&¦òW6VÂÖ—6Öòæ6†ò²#7€¢òò†VÂVçFòFRW7FFò’Æ÷2F÷2v2’&æòFW6Æ–æV'6Rà¢6öç7BæÖUsÒv6Æ×ƒƒG‚Ã#ggrÃS‡‚’s°¢6öç7Bf–Æ×#Óç°¢6öç7BæöÓÖG¶W66T‡FÖÂ‡"æÒææöÖ'&WÇÂ~(	Br—ÒÇ7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2’#â2G·"æÒæçVÔwÇÇ"æÒæçV×ÇÂrwÓÂ÷7ãæ°¢ÆWB&#ÒrrÆÆ&ÃÒrs°¢–b‡"æ³ÓÓÒw&–çBrbg"æWFã—°¢6öç7BsÔÖF‚æÖ–âƒÇ"æWFö†÷&—¦öâ£’çFôf—†VBƒ“°¢6öç7B7CÒ‡G—Vöb"ç2ç&öw&W73ÓÓÒvçVÖ&W"rbg"ç2ç&öw&W73ãÓ“ôÖF‚ç&÷VæB‡"ç2ç&öw&W73ÃÓ÷"ç2ç&öw&W72£§"ç2ç&öw&W72“¦çVÆÃ°¢òòÆWF—VWF–æòf—fRDTåE$òFRÆ&'&¢7VæFòÆ&'&W&æv÷7FÀ¢òòVÂFW‡Fò†Ü:2æ6†òVRVÆÆ’6RFW6&÷&F&Æ—§V–W&F’6RVæ6–Ö&¢òò6ö'&RVÂæöÖ'&Râ†÷&W2Væ7F–ÆÆf–¦Â&÷&FRFW&V6†òFRÆ—7FÀ¢òò6öâföæFò&÷–ò&ÆVW'6R–wVÂ6ö'&RÆ&'&ò6ö'&RVÂföæFòf<:Öòà¢6öç7BG‡CÖG·7BÖçVÆÃ÷7B²rR+rs¢rwÖÆ–'&RG¶††ÖÒ‡"æWF—Ö°¢&#ÖÆF—bF—FÆSÒ"G¶W66T‡FÖÂ‡"ç2æf–ÆVæÖWÇÂt–×&–Ö–VæFòr—ÒG·7BÖçVÆÃòr+rr·7B²rRs¢rwÒ"7G–ÆSÒ&†V–v‡C£S·v–GFƒ¢G·wÒS¶&6¶w&÷VæC¦Æ–æV"Öw&F–VçBƒ“FVrÂ3CFÂ3CF62“¶&÷&FW"×&F—W3£Wƒ¶Ö–â×v–GFƒ£g‚#ãÂöF—cæ ¢¶Ç7â7G–ÆSÒ'÷6—F–öã¦'6öÇWFS·&–v‡C£Wƒ·F÷£SS·G&ç6f÷&Ó§G&ç6ÆFU’‚ÓSR“¶föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢3CF63·v†—FR×76S¦æ÷w&¶&6¶w&÷VæC§&v&ƒBÃ‚Ã#bÃãƒ"“¶&÷&FW#£‚6öÆ–B&v&ƒÃ#"Ã#BÃã3R“¶&÷&FW"×&F—W3£Gƒ·FF–æs£Gƒ·ö–çFW"ÖWfVçG3¦æöæR#âG·G‡GÓÂ÷7ãæ°¢Æ&ÃÖÇ7â7G–ÆSÒ&6öÆ÷#¢3CF#ï	ùú#Â÷7ãæ°¢ÖVÇ6R–b‡"æ³ÓÓÒw&–çBr—°¢&#ÖÆF—bF—FÆSÒ$–×&–Ö–VæFò(	B6–âUDFVÂ'&–FvR"7G–ÆSÒ&†V–v‡C£S·v–GFƒ£S¶&6¶w&÷VæC§&WVF–ærÖÆ–æV"Öw&F–VçBƒCVFVrÇ&v&ƒÃ#"ÃsÃãR’Ç&v&ƒÃ#"ÃsÃãR’‡‚Ç&v&ƒÃ#"ÃsÃã#R’‡‚Ç&v&ƒÃ#"ÃsÃã#R’g‚“¶&÷&FW"×&F—W3£Wƒ¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#·FF–ærÖÆVgC£‡‚#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢3C##æVâ7W'6ò+r6–âUDÂ÷7ããÂöF—cæ°¢Æ&ÃÖÇ7â7G–ÆSÒ&6öÆ÷#¢3CF#ï	ùú#Â÷7ãæ°¢ÖVÇ6R–b‡"æ³ÓÓÒwW6VBr—°¢&#ÖÆF—b7G–ÆSÒ&†V–v‡C£S·v–GFƒ£CRS¶&6¶w&÷VæC§&v&ƒ#SRÃsÃÃãb“¶&÷&FW"×&F—W3£Wƒ¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#·FF–ærÖÆVgC£‡‚#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢3#b#î(û‚VâW6Â÷7ããÂöF—cæ°¢Æ&ÃÖÇ7â7G–ÆSÒ&6öÆ÷#¢6ff#î(ûƒÂ÷7ãæ°¢ÖVÇ6R–b‡"æ³ÓÓÒvW'&÷"r—°¢&#ÖÆF—b7G–ÆSÒ&†V–v‡C£S·v–GFƒ£S¶&6¶w&÷VæC§&v&ƒ#SRÃc‚Ãc‚ÃãB“¶&÷&FW#£‚F6†VB&v&ƒ#SRÃc‚Ãc‚ÃãR“¶&÷&FW"×&F—W3£Wƒ¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#·FF–ærÖÆVgC£‡‚#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶6öÆ÷#§f"‚ÒÖFævW"’#î)ª6öâfÆÆ(	B&Wf—6#Â÷7ããÂöF—cæ°¢Æ&ÃÖÇ7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖFævW"’#ï	ùKCÂ÷7ãæ°¢ÖVÇ6R–b‡"æ³ÓÓÒv6öææV7F–ærr—°¢&#ÖÆF—b7G–ÆSÒ&†V–v‡C£S·v–GFƒ£S¶&6¶w&÷VæC§&v&ƒSbÃƒ’Ã#C‚Âã‚“¶&÷&FW#£‚F6†VB&v&ƒSbÃƒ’Ã#C‚Âã3R“¶&÷&FW"×&F—W3£Wƒ¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#·FF–ærÖÆVgC£‡‚#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#¢33†&Fc‚#æ6öç7VÇFæFòFVÆVÖWG,:Ö(
-cÂ÷7ããÂöF—cæ°¢Æ&ÃÖÇ7â7G–ÆSÒ&6öÆ÷#¢33†&Fc‚#î)xÃÂ÷7ãæ°¢ÖVÇ6R–b‡"æ³ÓÓÒvöfbr—°¢&#ÖÆF—b7G–ÆSÒ&†V–v‡C£S·v–GFƒ£S¶&6¶w&÷VæC§f"‚Ò×7W&f6S2“¶&÷&FW"×&F—W3£Wƒ¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#·FF–ærÖÆVgC£‡ƒ¶÷6—G“¢ãSR#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#ç6–â6öæW†œ;6ãÂ÷7ããÂöF—cæ°¢Æ&ÃÖÇ7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2’#î)ª³Â÷7ãæ°¢ÖVÇ6W°¢&#ÖÆF—b7G–ÆSÒ&†V–v‡C£S·v–GFƒ£S¶&6¶w&÷VæC§&v&ƒÃ#"ÃsÃã‚“¶&÷&FW#£‚F6†VB&v&ƒÃ#"ÃsÃã3R“¶&÷&FW"×&F—W3£Wƒ¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#·FF–ærÖÆVgC£‡‚#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢3CF#î)É2Æ–'&R†÷&Â÷7ããÂöF—cæ°¢Æ&ÃÖÇ7â7G–ÆSÒ&6öÆ÷#¢3CF#î)ª£Â÷7ãæ°¢Ğ¢&WGW&æÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£—ƒ¶Ö&v–âÖ&÷GFöÓ£g‚#à¢Ç7â7G–ÆSÒ&fÆW‚×6‡&–æ³£·v–GFƒ£Gƒ·FW‡BÖÆ–vã¦6VçFW#¶föçB×6—¦S£'‚#âG¶Æ&ÇÓÂ÷7ãà¢Ç7â7G–ÆSÒ&fÆW‚×6‡&–æ³£·v–GFƒ¢G¶æÖUwÓ¶föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£c¶6öÆ÷#§f"‚Ò×FW‡C"“¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—3·v†—FR×76S¦æ÷w&#âG¶æö×ÓÂ÷7ãà¢ÆF—b7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£¶†V–v‡C£#ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6R“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶&÷&FW"×&F—W3£gƒ·FF–æs£'ƒ·÷6—F–öã§&VÆF—fS¶÷fW&fÆ÷s¦†–FFVâ#âG¶&'ÓÂöF—cà¢ÂöF—cæ°¢Ó°¢òòFVçG&òFR6FF—ó¢&–ÖW&òÆ2Æ–'&W2ÂÇVVvòÆ2VR–×&–ÖVâ÷"†÷&FP¢òòÆ–&W&6œ;6âÂ’Âf–æÂÆ2FW66öæV7FF2à¢6öç7B6×Ò†Æ"“Óâ†æWFÇÂ†æ³ÓÓÒv–FÆRsòÓ£S’’’Ò†"æWFÇÂ†"æ³ÓÓÒv–FÆRsòÓ£S’’“°¢òòw'WF2÷"ÖöFVÆòÂVâVâ÷&FVâf–¦òFVÂ'VS²VâÖöFVÆòFW66öæö6–Fğ¢òò6RÂf–æÂ÷"æöÖ'&Rà¢6öç7BÔôDõ$DU#Õ²t³rÂt³"rÂt³"ÇW2rÂtVæFW"ÓRÖ‚rÂtv–vuÓ°¢6öç7Bw&÷W3×·Ó°¢&÷w2æf÷$V6‚‡#Óç¶6öç7Bs×"æÒæÖöFVÆ÷ÇÂt÷G&2s²†w&÷W5¶u×ÇÂ†w&÷W5¶uÓÕµÒ’’çW6‚‡"“·Ò“°¢6öç7Bv¶W—3Ôö&¦V7Bæ¶W—2†w&÷W2’ç6÷'B‚†Æ"“Óç°¢6öç7B–ÔÔôDõ$DU"æ–æFW„öb†’Æ–#ÔÔôDõ$DU"æ–æFW„öb†"“°¢&WGW&â†–Ãó““¦–’Ò†–#Ãó““¦–"—ÇÆæÆö6ÆT6ö×&R†"“°¢Ò“°¢6öç7B×VÇF”w'WóÖv¶W—2æÆVæwFƒã°¢6öç7B7VW'óÖv¶W—2æÖ†sÓç°¢6öç7B—FV×3Öw&÷W5¶uÒç6Æ–6R‚’ç6÷'B†6×’æÖ†f–Æ’æ¦ö–â‚rr“°¢–b‚×VÇF”w'Wò—&WGW&â—FV×3²òò–f–ÇG&FòVâ6öÆòF—ó¢6–âVæ6&W¦Fğ¢6öç7B6öÃÖw&÷W5¶uÕ³ÒæÒæ6öÆ÷'ÇÂwf"‚Ò×FW‡C2’s°¢&WGW&æÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£gƒ¶Ö&v–ã£‚W‚#à¢Ç7â7G–ÆSÒ'v–GFƒ£wƒ¶†V–v‡C£wƒ¶&÷&FW"×&F—W3£'ƒ¶&6¶w&÷VæC¢G¶6öÇÓ¶fÆW‚×6‡&–æ³£#ãÂ÷7ãà¢Ç7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£s¶6öÆ÷#§f"‚Ò×FW‡C"“¶ÆWGFW"×76–æs¢ã&VÒ#âG¶W66T‡FÖÂ†r—ÓÂ÷7ãà¢Ç7â7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG¶w&÷W5¶uÒæÆVæwF‡ÓÂ÷7ãà¢ÂöF—cæ¶—FV×3°¢Ò’æ¦ö–â‚rr“°¢VÂç7G–ÆRæF—7Æ“Òrs°¢VÂæ–ææW$…DÔÃÖÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£ƒ¶Ö&v–âÖ&÷GFöÓ£ƒ¶fÆW‚×w&§w&#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶6öÆ÷#§f"‚Ò×FW‡B’#î(ûûˆòö7W6œ;6âFRÜ:V–æ3Â÷7ãà¢Ç7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG¶Æ–'&W7ÒÆ–'&RG¶Æ–'&W2ÓÓòw2s¢rwÒ†÷&+rG¶–×&–Ö–VæF÷Ò–×&–Ö–VæFòG·&÷†–Öòr+r,;7†–ÖÜ:V–æÆ–'&Râr·&÷†–Ö¢rwÓÂ÷7ãà¢ÂöF—cà¢ÆF—b7G–ÆSÒ'÷6—F–öã§&VÆF—fS¶†V–v‡C£'ƒ¶Ö&v–ã£G‚6Æ2‚G¶æÖUwÒ²#7‚’#âG¶Ö&·2æ¦ö–â‚rr—ÓÂöF—cà¢G¶7VW'÷Ö°§Ğ ¦gVæ7F–öâ&VæFW$Ööæ—F÷$w&–B‚—°¢6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöäw&–Br“¶–b‚VÂ—&WGW&ã°¢6öç7B&6SÕöÖöæ—F÷$f–ÇFW#ÓÓÒvÆÂsôÔT”ä3¤ÔT”ä2æf–ÇFW"†ÓÓæÒæÖöFVÆóÓÓÕöÖöæ—F÷$f–ÇFW"“°¢6öç7BÆ—7F×6÷'FVDÆ—7B†&6R“°¢6öç7Bõö6&G3ÖÆ—7FæÖ†ÓÓç°¢6öç7B3Õ÷&–çFW%7FGW5¶Òæ–E×ÇÅ÷&–çFW$–æ—F–Å7FGW2†Ò“°¢6öç7B6Ó×&–çFW%7FFTÖWF‡2ç7FFR“°¢6öç7B—ÖvWE&–çFW$—†Ò“°¢6öç7B÷&t6ÓÕ÷&–çFW$6Õ&r†Òæ–B“°¢6öç7Bö6ÕSÕ÷&t6Ó÷&–çFW$6ÕW&Â†Òæ–B“¢rs°¢6öç7Bö6Õ6æÕö6Ô—56æ6†÷B…÷&t6Ò“°¢6öç7B–ÖsÔÔôDTÄõô”Ôu5¶ÒæÖöFVÆõ×ÇÂrs°¢6öç7B—5&–çF–æs×2ç7FFSÓÓÒw&–çF–ærs°¢6öç7B—5W6VC×2ç7FFSÓÓÒwW6VBs°¢6öç7B—47F—fSÖ—5&–çF–æwÇÆ—5W6VC°¢6öç7Bv3ÔÔôä•Dõ%ôu%Uõ2æf–æB†sÓæræ¶W“ÓÓÖÒæÖöFVÆò“°¢6öç7B†—7CÖvWD†—7F÷'”f÷%&–çFW"†Òæ–B“°¢6öç7BFƒÕ÷FV×†—7F÷'•¶Òæ–E×ÇÅµÓ°¢6öç7BÖ–çDÆW'G3ÖvWDÖ–çDÆW'G2†Ò“°¢6öç7B–FÆT†÷W'3ÖvWD–FÆT†÷W'2†Òæ–BÇ2ç7FFR“°¢6öç7B–FÆUv&ãÖ–FÆT†÷W'3ã°¢òòÆ<:Ö&6RÖöçFVâVâæöFò'FR’W'6—7FVçFR†æò6R&V7&VVâ6F¢òò6–6Æò’&VRVÂ7G&VÒæò'FVRâ6Ô¶W’6Ö&–6öÆò6’6Ö&–ÆU$Âà¢6öç7B6†÷t6ÓÒ‡2ç7FFSÓÓÒvæö—wÇÇ2ç7FFSÓÓÒvöffÆ–æRwÇÇ2ç7FFSÓÓÒw6‡WFF÷vâr“°¢6öç7B6Ô¶W“Ò…÷&t6Òbg6†÷t6Ò“ò…ö6ÕR²wÂr²…ö6Õ6æòw2s¢vÒr’“¢rs°¢òò‡VVÆÆW7G'V7GW&Ã¢4ôÄòÆòVR6Ö&–\:’&Ö26RF–'V¦ââW†6ÇW–P¢òò&öw&W6òöWF÷FV×W&GW&2‡6R&6†VâVâf—fò’(i"ÆF&¦WFæò6P¢òò&V6öç7G'W–R6FW2Ö–VçG&2–×&–ÖRÂWf—FæFòVÂ'FVòà¢6öç7B7G'V7DeÕ·2ç7FFRÇ2ç7FÆSó£Ç2æf–ÆVæÖWÇÂrrÇ2çF‡VÖ%W&Ãó£Æ—47F—fSó£Æ—5&–çF–æsó£Æ—5W6VCó£Ç2æ†÷FVæCòçF&vWGÇÃÇ2æ&VCòçF&vWGÇÃÆÖ–çDÆW'G2æÆVæwF‚Æ–FÆUv&ãó£Æ–FÆT†÷W'2Æ—ÇÂrrÆvWE&–çFW$”¶W’†Òæ–B“ó£Å÷VWVT6÷VçB†Òæ–B’Æ†—7BæÆVæwF‚Â…÷&t6Óó£’Â‡F‚æÆVæwFƒãÓ#ó£’Å÷&–çFW$Æ–v‡Df–ævW'&–çB†Òæ–B•Òæ¦ö–â‚wâr“° ¢ÆWB&öG“Òrs°¢–b‡2ç7FFSÓÓÒv6öææV7F–ærr—°¢&öG“ÖÆF—b6Æ73Ò'&–çFW"Ö6öææV7F–ær"7G–ÆSÒ&Ö&v–â×F÷£'ƒ·FW‡BÖÆ–vã¦6VçFW#¶6öÆ÷#¢33†&Fcƒ¶föçB×6—¦S£'ƒ·FF–æs£g‚‡‚#ãÇ7â6Æ73Ò'&–çFW"Ö6öææV7F–ærÖF÷B#î)xÃÂ÷7ããÆ'#ãÆ#ä6öç7VÇFæFòFVÆVÖWG,:Ö(
-cÂö#ãÆ'#ãÇ7â7G–ÆSÒ&föçBÖfÖ–Ç“¦Ööæ÷76S¶föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG¶—ÓÂ÷7ããÂöF—cæ°¢ÒVÇ6R–b‡2ç7FFSÓÓÒvæö—r—°¢&öG“ÖÆF—b7G–ÆSÒ&Ö&v–â×F÷£‚#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–âÖ&÷GFöÓ£gƒ¶föçB×vV–v‡C£c#ä6öæW†œ;6â÷&66Æ–6W"òÖööç&¶W#ÂöF—cà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£gƒ¶Ö&v–âÖ&÷GFöÓ£g‚#ãÆ–çWB–CÒ&—–åòG¶Òæ–GÒ"G—SÒ'FW‡B"Æ6V†öÆFW#Ò$•“"ãc‚ãç‡‡‚"7G–ÆSÒ&fÆWƒ£¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ·FF–æs£W‚‡ƒ¶6öÆ÷#§f"‚Ò×FW‡B“¶föçB×6—¦S£'ƒ¶föçBÖfÖ–Ç“¦Ööæ÷76S¶Ö–â×v–GFƒ£#à¢Æ'WGFöâöæ6Æ–6³Ò'6fU&–çFW$—‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚ÒÖ66VçB“¶6öÆ÷#¢3¶&÷&FW#¦æöæS¶&÷&FW"×&F—W3£gƒ·FF–æs£W‚ƒ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶7W'6÷#§ö–çFW#¶fÆW‚×6‡&–æ³£#äô³Âö'WGFöããÂöF—cà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£g‚#ãÆ–çWB–CÒ&—¶W•òG¶Òæ–GÒ"G—SÒ'77v÷&B"Æ6V†öÆFW#Ò$’¶W’†÷6–öæÂ’"fÇVSÒ"G¶vWE&–çFW$”¶W’†Òæ–B—Ò"7G–ÆSÒ&fÆWƒ£¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ·FF–æs£W‚‡ƒ¶6öÆ÷#§f"‚Ò×FW‡B“¶föçB×6—¦S£'ƒ¶föçBÖfÖ–Ç“¦Ööæ÷76S¶Ö–â×v–GFƒ£#à¢Æ'WGFöâöæ6Æ–6³Ò'6fU&–çFW$”¶W’‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ·FF–æs£W‚ƒ¶föçB×6—¦S£'ƒ¶7W'6÷#§ö–çFW#¶fÆW‚×6‡&–æ³£¶6öÆ÷#§f"‚Ò×FW‡C2’#ä¶W“Âö'WGFöããÂöF—cà¢ÂöF—cæ°¢ÒVÇ6R–b‡2ç7FFSÓÓÒv–F÷vâr—°¢òòÆÜ:V–æ6öçFW7FVâ7RT’vV"W&òæòVâÖööç&¶W"âäòW2ÆòÖ—6Öğ¢òòVRW7F"vF¢VVFRW7F"–×&–Ö–VæFò†÷&Ö—6Öòà¢6öç7BV•÷'C×2æÆ—fU÷'GÇÅôÄ•dUõ$ô$Uõõ%E5³Ó°¢6öç7B7f3ÖÒæÖöFVÆóÓÓÒt³sòröWF2ö–æ—BæBõ3SfÖööç&¶W%÷6W'f–6R&W7F'Bs¢röWF2ö–æ—BæBöÖööç&¶W"&W7F'Bs°¢&öG“ÖÆF—b7G–ÆSÒ&Ö&v–â×F÷£ƒ·FF–æs£ƒ¶&6¶w&÷VæC§&v&ƒ#SRÃsÃÃã‚“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃsÃÃã2“¶&÷&FW"×&F—W3£‡‚#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£'ƒ¶6öÆ÷#¢6ff¶föçB×vV–v‡C£s¶Ö&v–âÖ&÷GFöÓ£G‚#ï	ù:FVÆVÖWG,:Ö6:ÖF+rÆÜ:V–æW7L:f—fÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–âÖ&÷GFöÓ£gƒ¶Æ–æRÖ†V–v‡C£ãCR#å&W7öæFRVâVÂVW'FòG·V•÷'GÒW&òÖööç&¶W"æò6öçFW7FâÆ"7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C"’#åVVFRW7F"–×&–Ö–VæFò6–âVRVÂF6†&ö&BÆòfVÂö#â(	B&Wl:×6ÆçFW2FRF&Æ÷"Æ–'&RãÂöF—cà¢Æ'WGFöâ–CÒ'&V6÷eòG¶Òæ–GÒ"öæ6Æ–6³Ò'&V6÷fW%&–çFW%FVÆVÖWG'’‚rG¶Òæ–GÒr’"7G–ÆSÒ'v–GFƒ£S¶&6¶w&÷VæC§&v&ƒ#SRÃsÃÃã‚“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃsÃÃãR“¶6öÆ÷#¢6ff¶&÷&FW"×&F—W3£wƒ·FF–æs£wƒ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶7W'6÷#§ö–çFW#¶Ö&v–âÖ&÷GFöÓ£g‚#ï	ùJr&V7WW&"FVÆVÖWG,:ÖÂö'WGFöãà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–âÖ&÷GFöÓ£‡ƒ¶Æ–æRÖ†V–v‡C£ãB#å&V–æ–6–Öööç&¶W"FW6FRVÂ'&–FvRFVÂFÆÆW"âæò–çFW''V×RÆ–×&W6œ;6âVâ7W'6òãÆ'#äÖæòÂ÷"54ƒ¢Ç7â7G–ÆSÒ&föçBÖfÖ–Ç“¦Ööæ÷76S¶6öÆ÷#§f"‚Ò×FW‡C"’#ç76‚&ö÷DG¶—ÒrG¶W66T‡FÖÂ‡7f2—ÒsÂ÷7ããÂöF—cà¢Æ‡&VcÒ"G¶W66T‡FÖÂ…÷&–çFW%÷'EW&Â†—ÇV•÷'BÂròr’—Ò"F&vWCÒ%ö&Ææ²"&VÃÒ&æö÷VæW""7G–ÆSÒ&F—7Æ“¦&Æö6³·FW‡BÖÆ–vã¦6VçFW#¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶6öÆ÷#§f"‚Ò×FW‡C2“¶&÷&FW"×&F—W3£wƒ·FF–æs£wƒ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s·FW‡BÖFV6÷&F–öã¦æöæR#ï	ùHâ'&—"Æ–×&W6÷&Âöà¢ÂöF—cæ°¢ÒVÇ6R–b‡2ç7FFSÓÓÒvöffÆ–æRr—°¢&öG“ÖÆF—b7G–ÆSÒ&Ö&v–â×F÷£'ƒ·FW‡BÖÆ–vã¦6VçFW#¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£'ƒ·FF–æs£‡‚#ãÆ#å6–âFVÆVÖWG,:ÖÂö#ãÆ'#ãÇ7â7G–ÆSÒ&föçBÖfÖ–Ç“¦Ööæ÷76S¶föçB×6—¦S£ãW‚#âG¶—ÓÂ÷7ããÆ'#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ãW‚#âG¶W66T‡FÖÂ‡2æ6öææV7F–öäW'&÷'ÇÂtÆ–×&W6÷&æò&W7öæFœ;2r—ÓÂ÷7ããÆ'#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#¢3ssr#âG¶W66T‡FÖÂ†f×E&–çFW%6VVâ‡2æÆ7E6VVäB’—ÓÂ÷7ããÂöF—cæ°¢ÒVÇ6R–b‡2ç7FFSÓÓÒw6‡WFF÷vâr—°¢&öG“ÖÆF—b7G–ÆSÒ&Ö&v–â×F÷£ƒ·FF–æs£ƒ¶&6¶w&÷VæC§&v&ƒ#SRÃc‚Ãc‚Ãã‚“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃc‚Ãc‚Ãã2“¶&÷&FW"×&F—W3£‡‚#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£'ƒ¶6öÆ÷#¢6fcf#f#¶föçB×vV–v‡C£s¶Ö&v–âÖ&÷GFöÓ£G‚#î)ª¶Æ—W"FWFVæ–FóÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–âÖ&÷GFöÓ£—ƒ¶Æ–æRÖ†V–v‡C£ãB#âG¶W66T‡FÖÂ‡2æ¶Ä×6wÇÂtÆ–×&W6÷&&W÷'L;2VâW'&÷"’6RFWGWfòâÆ–×&W6œ;6âVâ7W'6ò6R–çFW''V×œ;2âr—ÓÂöF—cà¢Æ'WGFöâöæ6Æ–6³Ò'&–çFW$f—&×v&U&W7F'B‚rG¶Òæ–GÒr’"7G–ÆSÒ'v–GFƒ£S¶&6¶w&÷VæC§&v&ƒ#SRÃc‚Ãc‚ÃãR“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃc‚Ãc‚ÃãCR“¶6öÆ÷#¢6fcf#f#¶&÷&FW"×&F—W3£wƒ·FF–æs£wƒ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶7W'6÷#§ö–çFW"#ï	ùHB&V–æ–6–"f—&×v&SÂö'WGFöãà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶§W7F–g’Ö6öçFVçC§76RÖ&WGvVVã¶Ö&v–â×F÷£‡‚#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçBÖfÖ–Ç“¦Ööæ÷76R#âG¶—ÓÂ÷7ãà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£G‚#à¢Æ'WGFöâöæ6Æ–6³Ò&÷Vå&–çFW$6öæäÖöFÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$6öæf–wW&"•Â’¶W’’ÄTB#î)©“Âö'WGFöãà¢Æ'WGFöâöæ6Æ–6³Ò&÷VåvV&6ÔÖöFÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC¢G²†Æö6Å7F÷&vRævWD—FVÒ‚w&–çFW%ö6Õòr¶Òæ–B—ÇÆÒæ6Ò“òw&v&ƒÃ#"Ã#BÃã"’s¢wf"‚Ò×7W&f6S"’wÓ¶&÷&FW#£‚6öÆ–BG²†Æö6Å7F÷&vRævWD—FVÒ‚w&–çFW%ö6Õòr¶Òæ–B—ÇÆÒæ6Ò“òw&v&ƒÃ#"Ã#BÃã2’s¢wf"‚ÒÖ&÷&FW#"’wÓ¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#¢G²†Æö6Å7F÷&vRævWD—FVÒ‚w&–çFW%ö6Õòr¶Òæ–B—ÇÆÒæ6Ò“òwf"‚ÒÖ66VçB’s¢wf"‚Ò×FW‡C2’wÓ¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$6öæf–wW&"vV&6Ò#ï	ù;sÂö'WGFöãà¢Æ'WGFöâöæ6Æ–6³Ò&÷Vä†—7F÷'”ÖöFÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$†—7F÷&–ÂG¶†—7BæÆVæwF‡Ò&Vv—7G&÷2#ï	ù8²G¶†—7BæÆVæwFƒãöÇ7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖ66VçB“¶föçB×vV–v‡C£s#âG¶†—7BæÆVæwF‡ÓÂ÷7ãæ¢rwÓÂö'WGFöãà¢ÂöF—cà¢ÂöF—cà¢ÂöF—cæ°¢ÒVÇ6R°¢&öG“Ö ¢G¶—47F—fSöÆF—b7G–ÆSÒ&Ö&v–ã£‚gƒ¶F—7Æ“¦fÆWƒ¶v£—ƒ¶Æ–vâÖ—FV×3¦6VçFW"#à¢Gµ÷6fU&–çFW$ÖVF–W&Â‡2çF‡VÖ%W&Â“öÆ–ÖrÆöF–æsÒ&Æ§’"FV6öF–æsÒ&7–æ2"7&3Ò"Gµ÷6fU&–çFW$ÖVF–W&Â‡2çF‡VÖ%W&Â—Ò"7G–ÆSÒ'v–GFƒ£SGƒ¶†V–v‡C£SGƒ¶ö&¦V7BÖf—C¦6÷fW#¶&÷&FW"×&F—W3£‡ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶fÆW‚×6‡&–æ³£"öæW'&÷#Ò'F†—2ç7G–ÆRæF—7Æ“ÒvæöæRr#æ¢rwĞ¢ÆF—b7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“·v†—FR×76S¦æ÷w&¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—3¶Ö&v–âÖ&÷GFöÓ£G‚"F—FÆSÒ"G¶W66T‡FÖÂ‡2æf–ÆVæÖR—Ò#âG¶W66T‡FÖÂ‡2æf–ÆVæÖWÇÂ~(	Br—ÓÂöF—cà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦&6VÆ–æS¶v£gƒ¶Ö&v–âÖ&÷GFöÓ£W‚#à¢Ç7â6Æ73Ò'&–r"–CÒ'&–uòG¶Òæ–GÒ"7G–ÆSÒ&föçB×6—¦S£#'ƒ¶föçB×vV–v‡C£ƒ¶6öÆ÷#¢G·6Òæ6öÆ÷'Ò#âG·2ç&öw&W77ÒSÂ÷7ãà¢Ç7â–CÒ'WFòG¶Òæ–GÒ"7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–âÖÆVgC¦WFò#î(ûG¶f×E6V72‡2æWF—Ò&W7FçFSÂ÷7ãà¢ÂöF—cà¢ÆF—b6Æ73Ò'&"G¶—5&–çF–æsòvÆ—fRs¢rwÒ#ãÆ’–CÒ'&%òG¶Òæ–GÒ"7G–ÆSÒ'v–GFƒ¢G·2ç&öw&W77ÒR#ãÂö“ãÂöF—cà¢ÂöF—cà¢ÂöF—cæ¢rwĞ¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£gƒ¶Ö&v–â×F÷£‡‚#à¢ÆF—b7G–ÆSÒ&fÆWƒ£¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW"×&F—W3£wƒ·FF–æs£wƒ·FW‡BÖÆ–vã¦6VçFW"#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶ÆWGFW"×76–æs¢ãWƒ¶Ö&v–âÖ&÷GFöÓ£'‚#ä„õDTäCÂöF—cà¢ÆF—b6Æ73Ò'FV×"–CÒ'†÷EòG¶Òæ–GÒ"7G–ÆSÒ&föçB×6—¦S£wƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢G·2æ†÷FVæCòçF&vWCãòr6fcf#3Rs¢wf"‚Ò×FW‡B’wÓ¶Æ–æRÖ†V–v‡C£#âG·2æ†÷FVæCòæ7GVÇÇÃÜ+ÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–â×F÷£'‚#âG·2æ†÷FVæCòçF&vWCãò~(i"r·2æ†÷FVæBçF&vWB²|+s¢vg,:ÖwÓÂöF—cà¢ÂöF—cà¢ÆF—b7G–ÆSÒ&fÆWƒ£¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW"×&F—W3£wƒ·FF–æs£wƒ·FW‡BÖÆ–vã¦6VçFW"#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶ÆWGFW"×76–æs¢ãWƒ¶Ö&v–âÖ&÷GFöÓ£'‚#ä4ÔÂöF—cà¢ÆF—b6Æ73Ò'FV×"–CÒ'&VEòG¶Òæ–GÒ"7G–ÆSÒ&föçB×6—¦S£wƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢G·2æ&VCòçF&vWCãòr6ffs¢wf"‚Ò×FW‡B’wÓ¶Æ–æRÖ†V–v‡C£#âG·2æ&VCòæ7GVÇÇÃÜ+ÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–â×F÷£'‚#âG·2æ&VCòçF&vWCãò~(i"r·2æ&VBçF&vWB²|+s¢vg,:ÖwÓÂöF—cà¢ÂöF—cà¢ÂöF—cà¢G¶—47F—fSöÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£gƒ¶Ö&v–â×F÷£‡‚#à¢G¶—5&–çF–æsöÆ'WGFöâöæ6Æ–6³Ò'&–çFW$6öçG&öÂ‚rG¶Òæ–GÒrÂwW6Rr’"7G–ÆSÒ&fÆWƒ£¶&6¶w&÷VæC§&v&ƒ#SRÃsÃÃãR“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃsÃÃãB“¶6öÆ÷#¢6ff¶&÷&FW"×&F—W3£wƒ·FF–æs£gƒ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶7W'6÷#§ö–çFW"#î(û‚W6#Âö'WGFöãæ¢rwĞ¢G¶—5W6VCöÆ'WGFöâöæ6Æ–6³Ò'&–çFW$6öçG&öÂ‚rG¶Òæ–GÒrÂw&W7VÖRr’"7G–ÆSÒ&fÆWƒ£¶&6¶w&÷VæC§&v&ƒÃ#"ÃsÃãR“¶&÷&FW#£‚6öÆ–B&v&ƒÃ#"ÃsÃãB“¶6öÆ÷#¢3CF¶&÷&FW"×&F—W3£wƒ·FF–æs£gƒ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶7W'6÷#§ö–çFW"#î)kb&VçVF#Âö'WGFöãæ¢rwĞ¢Æ'WGFöâöæ6Æ–6³Ò'&–çFW$6öçG&öÂ‚rG¶Òæ–GÒrÂv6æ6VÂr’"7G–ÆSÒ&fÆWƒ£¶&6¶w&÷VæC§&v&ƒ#SRÃc‚Ãc‚Ãã"“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃc‚Ãc‚Ãã3R“¶6öÆ÷#¢6fcCCCC¶&÷&FW"×&F—W3£wƒ·FF–æs£gƒ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶7W'6÷#§ö–çFW"#î)j6æ6VÆ#Âö'WGFöãà¢ÂöF—cæ¢rwĞ¢G·F‚æÆVæwFƒãÓ#öÆF—b7G–ÆSÒ&Ö&v–â×F÷£‡ƒ·FF–æs£g‚‡ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW"×&F—W3£w‚#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–âÖ&÷GFöÓ£7‚#åFV×W&GW&†÷FVæCÂöF—cà¢ÆF—b–CÒ'7&µòG¶Òæ–GÒ#âG·&VæFW%7&¶Æ–æR‡F‚Âv‚rÂr6fcf#3Rr—ÓÂöF—cà¢ÂöF—cæ¢rwĞ¢ÆF—b6Æ73Ò'6&BÖ—&÷r"7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶§W7F–g’Ö6öçFVçC§76RÖ&WGvVVã¶Ö&v–â×F÷£‡‚#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçBÖfÖ–Ç“¦Ööæ÷76R#âG¶—ÒG¶vWE&–çFW$”¶W’†Òæ–B“öÇ7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖ66VçC2’"F—FÆSÒ$’¶W’6öæf–wW&F#ï	ùIÂ÷7ãæ¢rwÓÂ÷7ãà¢ÆF—b6Æ73Ò'6&BÖ7F–öç2"7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£G‚#à¢Gµ÷&VæFW%&–çFW$Æ–v‡D'WGFöâ†Òæ–B—Ğ¢Æ'WGFöâöæ6Æ–6³Ò&÷Vå&–çFW$6öçG&öÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC¢G¶—47F—fSòw&v&ƒÃ#"ÃsÃã"’s¢wf"‚Ò×7W&f6S"’wÓ¶&÷&FW#£‚6öÆ–BG¶—47F—fSòw&v&ƒÃ#"ÃsÃã3R’s¢wf"‚ÒÖ&÷&FW#"’wÓ¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#¢G¶—47F—fSòwf"‚ÒÖ66VçB’s¢wf"‚Ò×FW‡C2’wÓ¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$6öçG&öÂFR–×&W6÷&#ï	øé¾ûˆóÂö'WGFöãà¢Æ'WGFöâöæ6Æ–6³Ò&÷Väv6öFUWÆöB‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$Vçf–"rÖ6öFR#ï	ù:CÂö'WGFöãà¢Æ'WGFöâöæ6Æ–6³Ò&÷Vå&–çFW$6öæäÖöFÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$6öæf–wW&"•Â’¶W’’ÄTB#î)©“Âö'WGFöãà¢Æ'WGFöâöæ6Æ–6³Ò&÷VåvV&6ÔÖöFÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC¢G²†Æö6Å7F÷&vRævWD—FVÒ‚w&–çFW%ö6Õòr¶Òæ–B—ÇÆÒæ6Ò“òw&v&ƒÃ#"Ã#BÃã"’s¢wf"‚Ò×7W&f6S"’wÓ¶&÷&FW#£‚6öÆ–BG²†Æö6Å7F÷&vRævWD—FVÒ‚w&–çFW%ö6Õòr¶Òæ–B—ÇÆÒæ6Ò“òw&v&ƒÃ#"Ã#BÃã2’s¢wf"‚ÒÖ&÷&FW#"’wÓ¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#¢G²†Æö6Å7F÷&vRævWD—FVÒ‚w&–çFW%ö6Õòr¶Òæ–B—ÇÆÒæ6Ò“òwf"‚ÒÖ66VçB’s¢wf"‚Ò×FW‡C2’wÓ¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$6öæf–wW&"vV&6Ò#ï	ù;sÂö'WGFöãà¢Æ'WGFöâöæ6Æ–6³Ò&÷Vä&VDÖW6‚‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$&VBÖW6‚†ÖFRæ—fVÆ6œ;6âFR6Ö’#ï	ù{®ûˆóÂö'WGFöãà¢Æ'WGFöâöæ6Æ–6³Ò&÷Vä†—7F÷'”ÖöFÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ$†—7F÷&–ÂG¶†—7BæÆVæwF‡Ò&Vv—7G&÷2#ï	ù8²G¶†—7BæÆVæwFƒãöÇ7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖ66VçB“¶föçB×vV–v‡C£s#âG¶†—7BæÆVæwF‡ÓÂ÷7ãæ¢rwÒÂö'WGFöãà¢Gµ÷VWVT6÷VçB†Òæ–B“ãöÆ'WGFöâöæ6Æ–6³Ò&÷VåVWVTÖöFÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§&v&ƒ#SRÃsÃÃã"“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃsÃÃãB“¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#¢6ff¶föçB×6—¦S£ãWƒ·FF–æs£7‚wƒ¶7W'6÷#§ö–çFW""F—FÆSÒ"Gµ÷VWVT6÷VçB†Òæ–B—ÒG&&¦ò‡2’Vâ6öÆ#ï	ùHGµ÷VWVT6÷VçB†Òæ–B—ÓÂö'WGFöãæ¢rwĞ¢ÂöF—cà¢ÂöF—cæ°¢Ğ ¢6öç7B6&D‡FÖÃÖÆF—b–CÒ&Ö6&EòG¶Òæ–GÒ"6Æ73Ò'6&BG¶—47F—fSòr7F—fRs¢rwÒG·2ç7FÆSòr7FÆRs¢rwÒ"7G–ÆSÒ"ÒÖ63¢G·6Òæ6öÆ÷'Ó¶&6¶w&÷VæC§f"‚Ò×7W&f6R“¶&÷&FW#£‚6öÆ–BG¶Ö–çDÆW'G2æÆVæwFƒòw&v&ƒ#SRÃsÃÃãB’s¦—47F—fS÷6Òæ6öÆ÷"²sSRs¢wf"‚ÒÖ&÷&FW#"’wÓ¶&÷&FW"×F÷£7‚6öÆ–BG¶v3òæ6öÆ÷'ÇÂwf"‚ÒÖ&÷&FW#"’wÓ¶&÷&FW"×&F—W3£7ƒ·FF–æs£7ƒ¶F—7Æ“¦fÆWƒ¶fÆW‚ÖF—&V7F–öã¦6öÇVÖâ#à¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‡‚#à¢G¶–ÖsöÆ–ÖrÆöF–æsÒ&Æ§’"FV6öF–æsÒ&7–æ2"7&3Ò"G¶–ÖwÒ"7G–ÆSÒ'v–GFƒ£3Gƒ¶†V–v‡C£3Gƒ¶ö&¦V7BÖf—C¦6öçF–ã¶&÷&FW"×&F—W3£wƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶fÆW‚×6‡&–æ³£"öæW'&÷#Ò'F†—2ç7G–ÆRæF—7Æ“ÒvæöæRr#æ¢rwĞ¢ÆF—b7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£#à¢ÆF—b6Æ73Ò'6&BÖæÖR"7G–ÆSÒ&föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶6öÆ÷#§f"‚Ò×FW‡B“¶Æ–æRÖ†V–v‡C£ã#R#âG¶W64‡FÖÂ†ÒææöÖ'&R—ÓÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#äÜ:V–æ2G¶ÒæçVÔwÓÂöF—cà¢ÂöF—cà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶fÆW‚ÖF—&V7F–öã¦6öÇVÖã¶Æ–vâÖ—FV×3¦fÆW‚ÖVæC¶v£7ƒ¶fÆW‚×6‡&–æ³£#à¢Ç7â7G–ÆSÒ&F—7Æ“¦–æÆ–æRÖfÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£Wƒ¶&6¶w&÷VæC¢G·6Òæ&wÓ¶6öÆ÷#¢G·6Òæ6öÆ÷'Ó¶&÷&FW"×&F—W3£Wƒ·FF–æs£'‚‡ƒ¶föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶&÷&FW#£‚6öÆ–BG·6Òæ6öÆ÷'Ó32#ãÇ7â6Æ73Ò'F÷BG¶—47F—fSòrÆ—fRs¢rwÒ#ãÂ÷7ãâG·6ÒæÆ&VÇÓÂ÷7ãà¢G·2ç7FÆSöÇ7â7G–ÆSÒ&&6¶w&÷VæC§&v&ƒ#Ã#Ã#ÃãR“¶6öÆ÷#¢3“““¶&÷&FW"×&F—W3£Wƒ·FF–æs£‚gƒ¶föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶&÷&FW#£‚6öÆ–B&v&ƒ#Ã#Ã#Ãã#R’"F—FÆSÒ%6–â6\;ÂÖöÖVçL:æV(	BÖ÷7G&æFòVÂ;¦ÇF–ÖòW7FFò6öæö6–Fò#î)û2&V6öæV7FæFóÂ÷7ãæ¢rvÚ±î¸Â¸­yêë¢°k¢G§¦*^}
+  if(typeof WebSocket==='undefined')return;
+  if(_wsConn[m.id]){try{_wsConn[m.id].onclose=null;_wsConn[m.id].close();}catch(e){}_wsConn[m.id]=null;}
+  let ws;
+  try{ws=new WebSocket(_printerWsUrl(ip));}catch(e){return;}
+  _wsConn[m.id]=ws;
+  ws.onopen=()=>{try{ws.send(JSON.stringify({jsonrpc:'2.0',method:'printer.objects.subscribe',params:{objects:_printerLightWsObjects(m.id)},id:++_wsRpcId}));}catch(e){}};
+  ws.onmessage=ev=>{
+    let msg;try{msg=JSON.parse(ev.data);}catch(e){return;}
+    let status=null;
+    if(msg.result&&msg.result.status)status=msg.result.status;                              // respuesta a subscribe/query
+    else if(msg.method==='notify_status_update'&&Array.isArray(msg.params))status=msg.params[0]; // push en vivo
+    if(status&&typeof status==='object')_wsMergeStatus(m,ip,status);
+  };
+  ws.onerror=()=>{try{ws.close();}catch(e){}};
+  ws.onclose=()=>{if(_wsConn[m.id]===ws)_wsConn[m.id]=null;_wsConnected[m.id]=false;_scheduleWsReconnect(m);};
+}
+function _scheduleWsReconnect(m){
+  if(!_wsEnabled())return;
+  const n=(_wsAttempts[m.id]=(_wsAttempts[m.id]||0)+1);
+  const delay=Math.min(30000,1000*Math.pow(2,Math.min(n,5)))+Math.floor(Math.random()*1000);
+  clearTimeout(_wsTimers[m.id]);
+  _wsTimers[m.id]=setTimeout(()=>{if(!document.hidden&&getPrinterIp(m))connectPrinterWs(m);},delay);
+}
+function connectAllPrinterWs(){if(!_wsEnabled())return;MAQUINAS.forEach(m=>{if(getPrinterIp(m))connectPrinterWs(m);});}
+function disconnectAllPrinterWs(){
+  MAQUINAS.forEach(m=>{
+    clearTimeout(_wsTimers[m.id]);
+    const ws=_wsConn[m.id];if(ws){try{ws.onclose=null;ws.close();}catch(e){}}
+    _wsConn[m.id]=null;_wsConnected[m.id]=false;_wsRaw[m.id]=null;_wsAttempts[m.id]=0;
+  });
+}
+function reconnectAllPrinterWs(){disconnectAllPrinterWs();connectAllPrinterWs();}
+
+function fmtSecs(s){if(!s||s<=0)return'â€”';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;}
+function fmtPrinterSeen(ts){
+  const age=Math.max(0,Date.now()-Number(ts||0));if(!ts)return'Sin lectura previa';
+  if(age<15000)return'Actualizado ahora';
+  const min=Math.floor(age/60000);if(min<60)return`Ãšltima lectura hace ${Math.max(1,min)} min`;
+  const h=Math.floor(min/60);return`Ãšltima lectura hace ${h} h`;
+}
+
+function printerStateMeta(state){
+  return({
+    connecting:{label:'Conectandoâ€¦',color:'#38bdf8',bg:'rgba(56,189,248,0.12)'},
+    printing:{label:'Imprimiendo',color:'#00d4aa',bg:'rgba(0,212,170,0.15)'},
+    paused:{label:'Pausado',color:'#ffaa00',bg:'rgba(255,170,0,0.15)'},
+    error:{label:'Error',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
+    complete:{label:'ImpresiÃ³n finalizada',color:'#a78bfa',bg:'rgba(167,139,250,0.15)'},
+    cancelled:{label:'ImpresiÃ³n cancelada',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
+    standby:{label:'En lÃ­nea Â· libre',color:'var(--accent3)',bg:'rgba(0,212,170,0.08)'},
+    idle:{label:'En lÃ­nea Â· libre',color:'var(--accent3)',bg:'rgba(0,212,170,0.08)'},
+    unknown:{label:'Estado de impresiÃ³n desconocido',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
+    shutdown:{label:'âš  Detenida',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
+    startup:{label:'Iniciandoâ€¦',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
+    offline:{label:'Sin conexiÃ³n',color:'#888',bg:'rgba(120,120,120,0.12)'},
+    apidown:{label:'TelemetrÃ­a caÃ­da',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
+    noip:{label:'Sin IP',color:'#ff6b35',bg:'rgba(255,107,53,0.12)'},
+  }[state])||{label:state,color:'var(--text3)',bg:'var(--surface2)'};
+}
+
+function renderSparkline(readings,key,color){
+  if(!readings||readings.length<2)return'';
+  const vals=readings.map(r=>r[key]||0);
+  const max=Math.max(...vals,50),min=Math.max(0,Math.min(...vals)-10),range=max-min||1;
+  const W=110,H=22;
+  const pts=vals.map((v,i)=>`${(i/(vals.length-1))*W},${H-((v-min)/range)*H}`).join(' ');
+  return`<svg width="${W}" height="${H}" style="overflow:visible;display:block"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/></svg>`;
+}
+
+function renderMonitorFilterTabs(){
+  const el=document.getElementById('monitorFilterTabs');if(!el)return;
+  el.innerHTML=MONITOR_GRUPOS.map(g=>{
+    const active=_monitorFilter===g.key;
+    const count=g.key==='all'?MAQUINAS.length:MAQUINAS.filter(m=>m.modelo===g.key).length;
+    return`<button onclick="filterMonitor('${g.key}')" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid ${active?g.color:'var(--border2)'};background:${active?g.color+'22':'var(--surface2)'};color:${active?g.color:'var(--text3)'};font-size:12px;font-weight:${active?700:500};cursor:pointer;transition:all 0.15s">${g.label}<span style="background:${active?g.color+'33':'var(--surface3)'};border-radius:10px;padding:1px 6px;font-size:10.5px;font-weight:700">${count}</span></button>`;
+  }).join('');
+}
+
+function filterMonitor(grupo){_monitorFilter=grupo;renderMonitorFilterTabs();renderMonitorKPIs();renderMonitorGrid();}
+
+function renderMonitorKPIs(){
+  const el=document.getElementById('monitorKPIs');if(!el)return;
+  const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
+  let printing=0,paused=0,idle=0,error=0,down=0,offline=0,noip=0,connecting=0,apidown=0;
+  lista.forEach(m=>{const st=(_printerStatus[m.id]||_printerInitialStatus(m)).state;if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='apidown')apidown++;else if(st==='offline')offline++;else if(st==='connecting')connecting++;else idle++;});
+  const total=lista.length,utilPct=total>0?Math.round((printing+paused)/total*100):0;
+  el.innerHTML=`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:12px">
+    ${printing>0?`<span style="color:#00d4aa;font-weight:700">ğŸŸ¢ ${printing} Imprimiendo</span>`:''}
+    ${paused>0?`<span style="color:#ffaa00;font-weight:700">â¸ ${paused} Pausado</span>`:''}
+    ${idle>0?`<span style="color:var(--accent3)">âšª ${idle} En lÃ­nea Â· libres</span>`:''}
+    ${connecting>0?`<span style="color:#38bdf8">â—Œ ${connecting} Conectando</span>`:''}
+    ${error>0?`<span style="color:#ff4444;font-weight:700">ğŸ”´ ${error} Error</span>`:''}
+    ${down>0?`<span style="color:#ff4444;font-weight:700">âš  ${down} Detenida${down>1?'s':''} (Klipper)</span>`:''}
+    ${apidown>0?`<span style="color:#ffaa00;font-weight:700">ğŸ“¡ ${apidown} TelemetrÃ­a caÃ­da</span>`:''}
+    ${offline>0?`<span style="color:#888">âš« ${offline} Sin conexiÃ³n</span>`:''}
+    ${noip>0?`<span style="color:#ff6b35">â“ ${noip} Sin IP</span>`:''}
+    <span style="margin-left:auto;font-weight:700;color:${utilPct>0?'#00d4aa':'var(--text3)'}">UtilizaciÃ³n ${utilPct}%</span>
+  </div>`;
+  try{renderMaqOcupacion();}catch(e){}
+}
+
+// â”€â”€ OCUPACIÃ“N DE MÃQUINAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// LÃ­nea de tiempo por impresora con la telemetrÃ­a viva del bridge: quÃ© imprime
+// cada una y a quÃ© hora queda libre (ETA real). Para prometer fechas de entrega
+// con datos, no con intuiciÃ³n. Se refresca junto con los KPIs del monitor.
+function renderMaqOcupacion(){
+  const el=document.getElementById('maqOcupacion');if(!el)return;
+  const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
+  if(!lista.length){el.style.display='none';return;}
+  const clasif=st=>st==='printing'?'print':st==='paused'?'paused':(st==='error'||st==='shutdown'||st==='apidown')?'error':(st==='offline'||st==='noip')?'off':st==='connecting'?'connecting':'idle';
+  const rows=lista.map(m=>{const s=_printerStatus[m.id]||_printerInitialStatus(m);return{m,s,k:clasif(s.state),eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
+  const etas=rows.filter(r=>r.eta>0).map(r=>r.eta);
+  const horizon=Math.max(4*3600,Math.min(12*3600,etas.length?Math.max(...etas)*1.15:4*3600));
+  const libres=rows.filter(r=>r.k==='idle').length;
+  const imprimiendo=rows.filter(r=>r.k==='print').length;
+  const hhmm=seg=>new Date(Date.now()+seg*1000).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+  const proxima=etas.length?hhmm(Math.min(...etas)):null;
+  // Eje: marcas de hora sobre el horizonte
+  const marks=[];const stepH=horizon>6*3600?2:1;
+  for(let hh=stepH;hh*3600<horizon;hh+=stepH) marks.push(`<span style="position:absolute;left:${(hh*3600/horizon*100).toFixed(1)}%;transform:translateX(-50%);font-size:10px;color:var(--text3)">+${hh}h</span>`);
+  // La columna del nombre se encoge en pantallas chicas: fija en 158px tapaba
+  // la barra en el telÃ©fono. El eje de horas de abajo usa el mismo ancho + 23px
+  // (el punto de estado y los dos gaps) para no desalinearse.
+  const nameW='clamp(84px,26vw,158px)';
+  const fila=r=>{
+    const nom=`${escapeHtml(r.m.nombre||'â€”')} <span style="color:var(--text3)">#${r.m.numG||r.m.num||''}</span>`;
+    let bar='',lbl='';
+    if(r.k==='print'&&r.eta>0){
+      const w=Math.min(100,r.eta/horizon*100).toFixed(1);
+      const pct=(typeof r.s.progress==='number'&&r.s.progress>=0)?Math.round(r.s.progress<=1?r.s.progress*100:r.s.progress):null;
+      // La etiqueta ya no vive DENTRO de la barra: cuando la barra era angosta,
+      // el texto (mÃ¡s ancho que ella) se desbordaba a la izquierda y se encimaba
+      // sobre el nombre. Ahora es una pastilla fija al borde derecho de la pista,
+      // con fondo propio para leerse igual sobre la barra o sobre el fondo vacÃ­o.
+      const txt=`${pct!=null?pct+'% Â· ':''}libre ${hhmm(r.eta)}`;
+      bar=`<div title="${escapeHtml(r.s.filename||'Imprimiendo')}${pct!=null?' Â· '+pct+'%':''}" style="height:100%;width:${w}%;background:linear-gradient(90deg,#00d4aa,#00d4cc);border-radius:5px;min-width:6px"></div>`
+        +`<span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:#00d4cc;white-space:nowrap;background:rgba(4,18,26,0.82);border:1px solid rgba(0,212,204,0.35);border-radius:4px;padding:0 4px;pointer-events:none">${txt}</span>`;
+      lbl=`<span style="color:#00d4aa">ğŸŸ¢</span>`;
+    }else if(r.k==='print'){
+      bar=`<div title="Imprimiendo â€” sin ETA del bridge" style="height:100%;width:100%;background:repeating-linear-gradient(45deg,rgba(0,212,170,0.5),rgba(0,212,170,0.5) 8px,rgba(0,212,170,0.25) 8px,rgba(0,212,170,0.25) 16px);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#04121a">en curso Â· sin ETA</span></div>`;
+      lbl=`<span style="color:#00d4aa">ğŸŸ¢</span>`;
+    }else if(r.k==='paused'){
+      bar=`<div style="height:100%;width:45%;background:rgba(255,170,0,0.6);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#1a1206">â¸ en pausa</span></div>`;
+      lbl=`<span style="color:#ffaa00">â¸</span>`;
+    }else if(r.k==='error'){
+      bar=`<div style="height:100%;width:100%;background:rgba(255,68,68,0.14);border:1px dashed rgba(255,68,68,0.5);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:var(--danger)">âš  con falla â€” revisar</span></div>`;
+      lbl=`<span style="color:var(--danger)">ğŸ”´</span>`;
+    }else if(r.k==='connecting'){
+      bar=`<div style="height:100%;width:100%;background:rgba(56,189,248,.08);border:1px dashed rgba(56,189,248,.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;color:#38bdf8">consultando telemetrÃ­aâ€¦</span></div>`;
+      lbl=`<span style="color:#38bdf8">â—Œ</span>`;
+    }else if(r.k==='off'){
+      bar=`<div style="height:100%;width:100%;background:var(--surface3);border-radius:5px;display:flex;align-items:center;padding-left:8px;opacity:.55"><span style="font-size:10px;color:var(--text3)">sin conexiÃ³n</span></div>`;
+      lbl=`<span style="color:var(--text3)">âš«</span>`;
+    }else{
+      bar=`<div style="height:100%;width:100%;background:rgba(0,212,170,0.08);border:1px dashed rgba(0,212,170,0.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#00d4aa">âœ“ libre ahora</span></div>`;
+      lbl=`<span style="color:#00d4aa">âšª</span>`;
+    }
+    return`<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
+      <span style="flex-shrink:0;width:14px;text-align:center;font-size:12px">${lbl}</span>
+      <span style="flex-shrink:0;width:${nameW};font-size:11.5px;font-weight:600;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</span>
+      <div style="flex:1;min-width:0;height:20px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:2px;position:relative;overflow:hidden">${bar}</div>
+    </div>`;
+  };
+  // Dentro de cada tipo: primero las libres, luego las que imprimen por hora de
+  // liberaciÃ³n, y al final las desconectadas.
+  const cmp=(a,b)=>(a.eta||(a.k==='idle'?-1:1e9))-(b.eta||(b.k==='idle'?-1:1e9));
+  // Agrupadas por modelo, en un orden fijo del parque; un modelo desconocido
+  // cae al final por nombre.
+  const MODORDER=['K1','K2','K2 Plus','Ender-5 Max','Giga'];
+  const groups={};
+  rows.forEach(r=>{const g=r.m.modelo||'Otras';(groups[g]||(groups[g]=[])).push(r);});
+  const gkeys=Object.keys(groups).sort((a,b)=>{
+    const ia=MODORDER.indexOf(a),ib=MODORDER.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b);
+  });
+  const multiGrupo=gkeys.length>1;
+  const cuerpo=gkeys.map(g=>{
+    const items=groups[g].slice().sort(cmp).map(fila).join('');
+    if(!multiGrupo)return items;   // ya filtrado a un solo tipo: sin encabezado
+    const col=groups[g][0].m.color||'var(--text3)';
+    return`<div style="display:flex;align-items:center;gap:6px;margin:11px 0 5px">
+      <span style="width:7px;height:7px;border-radius:2px;background:${col};flex-shrink:0"></span>
+      <span style="font-size:10.5px;font-weight:700;color:var(--text2);letter-spacing:.02em">${escapeHtml(g)}</span>
+      <span style="font-size:10px;color:var(--text3)">${groups[g].length}</span>
+    </div>`+items;
+  }).join('');
+  el.style.display='';
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:700;color:var(--text)">â±ï¸ OcupaciÃ³n de mÃ¡quinas</span>
+      <span style="font-size:10.5px;color:var(--text3)">${libres} libre${libres!==1?'s':''} ahora Â· ${imprimiendo} imprimiendo${proxima?' Â· prÃ³xima mÃ¡quina libre ~'+proxima:''}</span>
+    </div>
+    <div style="position:relative;height:12px;margin:0 0 4px calc(${nameW} + 23px)">${marks.join('')}</div>
+    ${cuerpo}`;
+}
+
+function renderMonitorGrid(){
+  const el=document.getElementById('maquinaMonGrid');if(!el)return;
+  const base=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
+  const lista=sortedList(base);
+  const __cards=lista.map(m=>{
+    const s=_printerStatus[m.id]||_printerInitialStatus(m);
+    const sm=printerStateMeta(s.state);
+    const ip=getPrinterIp(m);
+    const _rawCam=_printerCamRaw(m.id);
+    const _camU=_rawCam?printerCamUrl(m.id):'';
+    const _camSnap=_camIsSnapshot(_rawCam);
+    const img=MODELO_IMGS[m.modelo]||'';
+    const isPrinting=s.state==='printing';
+    const isPaused=s.state==='paused';
+    const isActive=isPrinting||isPaused;
+    const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
+    const hist=getHistoryForPrinter(m.id);
+    const th=_tempHistory[m.id]||[];
+    const maintAlerts=getMaintAlerts(m);
+    const idleHours=getIdleHours(m.id,s.state);
+    const idleWarn=idleHours>0;
+    // La cÃ¡mara se monta en un nodo aparte y persistente (no se recrea en cada
+    // ciclo) para que el stream no parpadee. camKey cambia solo si cambia la URL.
+    const showCam=!(s.state==='noip'||s.state==='offline'||s.state==='shutdown');
+    const camKey=(_rawCam&&showCam)?(_camU+'|'+(_camSnap?'s':'m')):'';
+    // Huella estructural: SOLO lo que cambia quÃ© ramas se dibujan. Excluye
+    // progreso/eta/temperaturas (se parchean en vivo) â†’ la tarjeta no se
+    // reconstruye cada 15s mientras imprime, evitando el parpadeo.
+    const structFP=[s.state,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0),_printerLightFingerprint(m.id)].join('~');
+
+    let body='';
+    if(s.state==='connecting'){
+      body=`<div class="printer-connecting" style="margin-top:12px;text-align:center;color:#38bdf8;font-size:12px;padding:16px 8px"><span class="printer-connecting-dot">â—Œ</span><br><b>Consultando telemetrÃ­aâ€¦</b><br><span style="font-family:monospace;font-size:10.5px;color:var(--text3)">${ip}</span></div>`;
+    } else if(s.state==='noip'){
+      body=`<div style="margin-top:10px">
+        <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px;font-weight:600">ConexiÃ³n OrcaSlicer / Moonraker</div>
+        <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ipin_${m.id}" type="text" placeholder="IP  192.168.100.xxx" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;font-family:monospace;min-width:0">
+        <button onclick="savePrinterIp('${m.id}')" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">OK</button></div>
+        <div style="display:flex;gap:6px"><input id="ipkey_${m.id}" type="password" placeholder="API Key (opcional)" value="${getPrinterApiKey(m.id)}" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;font-family:monospace;min-width:0">
+        <button onclick="savePrinterApiKey('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;flex-shrink:0;color:var(--text3)">Key</button></div>
+      </div>`;
+    } else if(s.state==='apidown'){
+      // La mÃ¡quina contesta en su UI web pero no en Moonraker. NO es lo mismo
+      // que estar apagada: puede estar imprimiendo ahora mismo.
+      const uiPort=s.alivePort||_ALIVE_PROBE_PORTS[0];
+      const svc=m.modelo==='K1'?'/etc/init.d/S56moonraker_service restart':'/etc/init.d/moonraker restart';
+      body=`<div style="margin-top:10px;padding:10px;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.3);border-radius:8px">
+        <div style="font-size:12px;color:#ffaa00;font-weight:700;margin-bottom:4px">ğŸ“¡ TelemetrÃ­a caÃ­da Â· la mÃ¡quina estÃ¡ viva</div>
+        <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px;line-height:1.45">Responde en el puerto ${uiPort} pero Moonraker no contesta. <b style="color:var(--text2)">Puede estar imprimiendo sin que el dashboard lo vea</b> â€” revÃ­sala antes de darla por libre.</div>
+        <button id="recov_${m.id}" onclick="recoverPrinterTelemetry('${m.id}')" style="width:100%;background:rgba(255,170,0,0.18);border:1px solid rgba(255,170,0,0.5);color:#ffaa00;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:6px">ğŸ”§ Recuperar telemetrÃ­a</button>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.4">Reinicia Moonraker desde el bridge del taller. No interrumpe la impresiÃ³n en curso.<br>A mano, por SSH: <span style="font-family:monospace;color:var(--text2)">ssh root@${ip} '${escapeHtml(svc)}'</span></div>
+        <a href="${escapeHtml(_printerPortUrl(ip,uiPort,'/'))}" target="_blank" rel="noopener" style="display:block;text-align:center;background:var(--surface2);border:1px solid var(--border2);color:var(--text3);border-radius:7px;padding:7px;font-size:12px;font-weight:700;text-decoration:none">ğŸ” Abrir la impresora</a>
+      </div>`;
+    } else if(s.state==='offline'){
+      body=`<div style="margin-top:12px;text-align:center;color:var(--text3);font-size:12px;padding:8px 0"><b>Sin telemetrÃ­a</b><br><span style="font-family:monospace;font-size:10.5px">${ip}</span><br><span style="font-size:10.5px">${escapeHtml(s.connectionError||'La impresora no respondiÃ³')}</span><br><span style="font-size:10px;color:#777">${escapeHtml(fmtPrinterSeen(s.lastSeenAt))}</span></div>`;
+    } else if(s.state==='shutdown'){
+      body=`<div style="margin-top:10px;padding:10px;background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);border-radius:8px">
+        <div style="font-size:12px;color:#ff6b6b;font-weight:700;margin-bottom:4px">âš  Klipper detenido</div>
+        <div style="font-size:10.5px;color:var(--text3);margin-bottom:9px;line-height:1.4">${escapeHtml(s.klMsg||'La impresora reportÃ³ un error y se detuvo. La impresiÃ³n en curso se interrumpiÃ³.')}</div>
+        <button onclick="printerFirmwareRestart('${m.id}')" style="width:100%;background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.45);color:#ff6b6b;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">ğŸ”„ Reiniciar firmware</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span style="font-size:10px;color:var(--text3);font-family:monospace">${ip}</span>
+          <div style="display:flex;gap:4px">
+            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">âš™</button>
+            <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar webcam">ğŸ“·</button>
+            <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">ğŸ“‹${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}</button>
+          </div>
+        </div>
+      </div>`;
+    } else {
+      body=`
+        ${isActive?`<div style="margin:10px 0 6px;display:flex;gap:9px;align-items:center">
+          ${_safePrinterMediaUrl(s.thumbUrl)?`<img loading="lazy" decoding="async" src="${_safePrinterMediaUrl(s.thumbUrl)}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:10.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px" title="${escapeHtml(s.filename)}">${escapeHtml(s.filename||'â€”')}</div>
+            <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:5px">
+              <span class="pbig" id="pbig_${m.id}" style="font-size:22px;font-weight:800;color:${sm.color}">${s.progress}%</span>
+              <span id="peta_${m.id}" style="font-size:10.5px;color:var(--text3);margin-left:auto">â± ${fmtSecs(s.eta)} restante</span>
+            </div>
+            <div class="pbar ${isPrinting?'live':''}"><i id="pbar_${m.id}" style="width:${s.progress}%"></i></div>
+          </div>
+        </div>`:''}
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
+            <div style="font-size:10px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">HOTEND</div>
+            <div class="ptemp" id="phot_${m.id}" style="font-size:17px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'};line-height:1">${s.hotend?.actual||0}Â°</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">${s.hotend?.target>0?'â†’ '+s.hotend.target+'Â°':'frÃ­a'}</div>
+          </div>
+          <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
+            <div style="font-size:10px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">CAMA</div>
+            <div class="ptemp" id="pbed_${m.id}" style="font-size:17px;font-weight:700;color:${s.bed?.target>0?'#ffaa00':'var(--text)'};line-height:1">${s.bed?.actual||0}Â°</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">${s.bed?.target>0?'â†’ '+s.bed.target+'Â°':'frÃ­a'}</div>
+          </div>
+        </div>
+        ${isActive?`<div style="display:flex;gap:6px;margin-top:8px">
+          ${isPrinting?`<button onclick="printerControl('${m.id}','pause')" style="flex:1;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.4);color:#ffaa00;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">â¸ Pausar</button>`:''}
+          ${isPaused?`<button onclick="printerControl('${m.id}','resume')" style="flex:1;background:rgba(0,212,170,0.15);border:1px solid rgba(0,212,170,0.4);color:#00d4aa;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">â–¶ Reanudar</button>`:''}
+          <button onclick="printerControl('${m.id}','cancel')" style="flex:1;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.35);color:#ff4444;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">â–  Cancelar</button>
+        </div>`:''}
+        ${th.length>=2?`<div style="margin-top:8px;padding:6px 8px;background:var(--surface2);border-radius:7px">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Temperatura hotend</div>
+          <div id="pspark_${m.id}">${renderSparkline(th,'h','#ff6b35')}</div>
+        </div>`:''}
+        <div class="pcard-iprow" style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span style="font-size:10px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">ğŸ”‘</span>`:''}</span>
+          <div class="pcard-actions" style="display:flex;gap:4px">
+            ${_renderPrinterLightButton(m.id)}
+            <button onclick="openPrinterControl('${m.id}')" style="background:${isActive?'rgba(0,212,170,0.12)':'var(--surface2)'};border:1px solid ${isActive?'rgba(0,212,170,0.35)':'var(--border2)'};border-radius:6px;color:${isActive?'var(--accent)':'var(--text3)'};font-size:10.5px;padding:3px 7px;cursor:pointer" title="Control de impresora">ğŸ›ï¸</button>
+            <button onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Enviar G-code">ğŸ“¤</button>
+            <button onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">âš™</button>
+            <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar webcam">ğŸ“·</button>
+            <button onclick="openBedMesh('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Bed mesh (mapa de nivelaciÃ³n de cama)">ğŸ—ºï¸</button>
+            <button onclick="openHistoryModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Historial ${hist.length} registros">ğŸ“‹${hist.length>0?` <span style="color:var(--accent);font-weight:700">${hist.length}</span>`:''}  </button>
+            ${_queueCount(m.id)>0?`<button onclick="openQueueModal('${m.id}')" style="background:rgba(255,170,0,0.12);border:1px solid rgba(255,170,0,0.4);border-radius:6px;color:#ffaa00;font-size:10.5px;padding:3px 7px;cursor:pointer" title="${_queueCount(m.id)} trabajo(s) en cola">ğŸ” ${_queueCount(m.id)}</button>`:''}
+          </div>
+        </div>`;
+    }
+
+    const cardHtml=`<div id="mcard_${m.id}" class="pcard${isActive?' active':''}${s.stale?' stale':''}" style="--acc:${sm.color};background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:8px">
+        ${img?`<img loading="lazy" decoding="async" src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
+        <div style="flex:1;min-width:0">
+          <div class="pcard-name" style="font-size:12px;font-weight:700;color:var(--text);line-height:1.25">${escHtml(m.nombre)}</div>
+          <div style="font-size:10.5px;color:var(--text3)">MÃ¡quina #${m.numG}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+          <span style="display:inline-flex;align-items:center;gap:5px;background:${sm.bg};color:${sm.color};border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;border:1px solid ${sm.color}33"><span class="pdot${isActive?' live':''}"></span>${sm.label}</span>
+          ${s.stale?`<span style="background:rgba(120,120,120,0.15);color:#999;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;border:1px solid rgba(120,120,120,0.25)" title="Sin seÃ±al momentÃ¡nea â€” mostrando el Ãºltimo estado conocido">âŸ³ reconectando</span>`:''}
           ${maintAlerts.length?`<span style="background:rgba(255,170,0,0.15);color:#ffaa00;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;border:1px solid rgba(255,170,0,0.3)" title="${maintAlerts.map(a=>a.label).join(', ')}">ğŸ”§ ${maintAlerts.length} alerta${maintAlerts.length>1?'s':''}</span>`:''}
           ${idleWarn?`<span style="background:rgba(100,100,100,0.15);color:#888;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;border:1px solid rgba(100,100,100,0.2)">ğŸ’¤ ${idleHours}h idle</span>`:''}
         </div>
@@ -885,11 +1203,402 @@ function openPrinterControl(id){
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
       <span style="font-size:10px;color:var(--text3);align-self:center">Precalentar:</span>
-      ${Object.keys(PREHEAT_PRESETS).map(mat=>btn(mat,`preheatPrinter('${id}','${mat}')`,'padding:5px 10px')).join('m«ëŒ+Š×®º+º$zzb¥âr—Ğ¢G¶'Fâ‚~)ØNûˆòVæg&–"rÆ6ööÆF÷vå&–çFW"‚rG¶–GÒr–ÂwFF–æs£W‚ƒ¶Ö&v–âÖÆVgC¦WFòr—Ğ¢ÂöF—cà¢ÂÒÒÜ8T”äÒÓà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£s¶ÆWGFW"×76–æs£ƒ·FW‡B×G&ç6f÷&Ó§WW&66S¶6öÆ÷#§f"‚ÒÖ66VçB“¶Ö&v–âÖ&÷GFöÓ£‡‚#ï	øêâÜ:V–æÂöF—cà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£gƒ¶fÆW‚×w&§w&¶Ö&v–âÖ&÷GFöÓ£‡‚#à¢G¶'Fâ‚	øú†öÖRrÆ&–çFW$†öÖR‚rG¶–GÒr–—Ğ¢G¶'Fâ‚~*È~ûˆò6&v"f–ÆÖVçFòrÆ&–çFW$f–ÆÖVçB‚rG¶–GÒrÂvÆöBr–—Ğ¢G¶'Fâ‚~*ÈnûˆòFW66&v"rÆ&–çFW$f–ÆÖVçB‚rG¶–GÒrÂwVæÆöBr–—Ğ¢G¶'Fâ‚	ù*B6öÇF"Ö÷F÷&W2rÆ&–çFW$Ö÷F÷'4öfb‚rG¶–GÒr–—Ğ¢ÂöF—cà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£gƒ¶fÆW‚×w&§w&¶Æ–vâÖ—FV×3¦6VçFW#¶Ö&v–âÖ&÷GFöÓ£‡‚#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#äÖ÷fW#£Â÷7ãà¢Gµ²u‚rÂu’rÂu¢uÒæÖ†ƒÓæG¶'Fâ†‚²r²rÆ&–çFW$¦ör‚rG¶–GÒrÂrG¶‡ÒrÂG¶ƒÓÓÒu¢só£Ò–ÂwFF–æs£W‚—‚r—ÒG¶'Fâ†‚²~(‰"rÆ&–çFW$¦ör‚rG¶–GÒrÂrG¶‡ÒrÂG¶ƒÓÓÒu¢sòÓ¢ÓÒ–ÂwFF–æs£W‚—‚r—Ö’æ¦ö–â‚sÇ7â7G–ÆSÒ'v–GFƒ£g‚#ãÂ÷7ãâr—Ğ¢ÂöF—cà¢ÆF—b7G–ÆSÒ&Ö&v–âÖ&÷GFöÓ£‡‚#ãÆ'WGFöâöæ6Æ–6³Ò'&–çFW$VÖW&vVæ7•7F÷‚rG¶–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§&v&ƒ#SRÃc‚Ãc‚Ãã"“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃc‚Ãc‚ÃãB“¶6öÆ÷#¢6fcCCCC¶&÷&FW"×&F—W3£wƒ·FF–æs£w‚'ƒ¶föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶7W'6÷#§ö–çFW#·v–GFƒ£R#î)¹B&FFRVÖW&vVæ6–Âö'WGFöããÂöF—cà¢ÂÒÒ$4„•dõ2ÒÓà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶§W7F–g’Ö6öçFVçC§76RÖ&WGvVVã¶Ö&v–âÖ&÷GFöÓ£‡‚#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£s¶ÆWGFW"×76–æs£ƒ·FW‡B×G&ç6f÷&Ó§WW&66S¶6öÆ÷#§f"‚ÒÖ66VçB’#ï	ù8"&6†—f÷2VâÆ–×&W6÷&Â÷7ãà¢Æ'WGFöâöæ6Æ–6³Ò&ÆöE&–çFW$f–ÆW2‚rG¶–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶6öÆ÷#§f"‚Ò×FW‡C"“¶&÷&FW"×&F—W3£gƒ·FF–æs£G‚ƒ¶föçB×6—¦S£ãWƒ¶7W'6÷#§ö–çFW"#î(k²6&v#Âö'WGFöãà¢ÂöF—cà¢ÆF—b–CÒ'4f–ÆW2"7G–ÆSÒ&Ö‚Ö†V–v‡C£cƒ¶÷fW&fÆ÷r×“¦WFó¶Ö&v–âÖ&÷GFöÓ£‡ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6R“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶&÷&FW"×&F—W3£‡‚#ãÆF—b7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£'ƒ·FF–æs£‡‚#åVÇ6$6&v""&fW"Æ÷2rÖ6öFR’&V–×&–Ö—"ãÂöF—cãÂöF—cà¢ÂÒÒ„•5Dõ$”ÂÒÓà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶§W7F–g’Ö6öçFVçC§76RÖ&WGvVVã¶Ö&v–âÖ&÷GFöÓ£‡‚#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£s¶ÆWGFW"×76–æs£ƒ·FW‡B×G&ç6f÷&Ó§WW&66S¶6öÆ÷#§f"‚ÒÖ66VçB’#ï	ù8¢†—7F÷&–Â&VÂ„Öööç&¶W"“Â÷7ãà¢Æ'WGFöâöæ6Æ–6³Ò&ÆöE&–çFW$†—7F÷'’‚rG¶–GÒr’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶6öÆ÷#§f"‚Ò×FW‡C"“¶&÷&FW"×&F—W3£gƒ·FF–æs£G‚ƒ¶föçB×6—¦S£ãWƒ¶7W'6÷#§ö–çFW"#î(k²6&v#Âö'WGFöãà¢ÂöF—cà¢ÆF—b–CÒ'4†—7F÷'’"7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6R“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶&÷&FW"×&F—W3£‡ƒ·FF–æs£G‚#ãÆF—b7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£'ƒ·FF–æs£‡‚#åF–V×ò’f–ÆÖVçFò&VÆW2FR6FG&&¦ò(	B;§F–Â&6÷7F÷2ãÂöF—cãÂöF—cæ°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚w&–çFW$6öçG&öÄÖöFÂr’ç7G–ÆRæF—7Æ“ÒvfÆW‚s°§Ğ¦gVæ7F–öâ6Æ÷6U&–çFW$6öçG&öÂ‚—¶6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚w&–çFW$6öçG&öÄÖöFÂr“¶–b†VÂ–VÂç7G–ÆRæF—7Æ“ÒvæöæRs·Ğ ¢òò)H)HVWVRÖöFÂ)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦gVæ7F–öâ÷VåVWVTÖöFÂ†–B—°¢6öç7BÓÔÔT”ä2æf–æB‡ƒÓç‚æ–CÓÓÖ–B“¶–b‚Ò—&WGW&ã°¢6öç7BÕ÷VWVTvWB†–B“°¢6öç7Bf×EF–ÖS×3Óç¶6öç7BƒÔÖF‚æfÆö÷"‡2ó3c’ÆÖãÔÖF‚æfÆö÷"‚‡2S3c’óc“·&WGW&âƒöG¶‡Ö‚G¶ÖçÖÖ¦G¶ÖçÖÖ·Ó°¢6öç7B&÷w3×æÖ‚†¢Æ’“Óæ ¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‡ƒ·FF–æs£—‚'ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶&÷&FW"×&F—W3£‡‚#à¢Ç7â7G–ÆSÒ&föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s¶6öÆ÷#§f"‚ÒÖ66VçB“¶Ö–â×v–GFƒ£‡‚#â2G¶’³ÓÂ÷7ãà¢ÆF—b7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£#à¢ÆF—b7G–ÆSÒ&föçB×6—¦S£'ƒ¶föçB×vV–v‡C£c¶6öÆ÷#§f"‚Ò×FW‡B“·v†—FR×76S¦æ÷w&¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—2#âG¶W66T‡FÖÂ†¢æf–ÆVæÖR—ÓÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#î(ûâG¶¢ç6V73öf×EF–ÖR†¢ç6V72“¢~(	BwÒ+r)©bâG¶¢æw&×3ö¢æw&×2çFôf—†VBƒ“¢~(	BwÖsÂöF—cà¢ÂöF—cà¢Æ'WGFöâöæ6Æ–6³Ò%÷VWVU&VÖ÷fR‚rG¶–GÒrÂG¶—Ò’"7G–ÆSÒ&&6¶w&÷VæC§&v&ƒ#SRÃc‚Ãc‚Ãã“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃc‚Ãc‚Ãã2“¶&÷&FW"×&F—W3£gƒ¶6öÆ÷#¢6fcCCCC¶föçB×6—¦S£ãWƒ·FF–æs£7‚‡ƒ¶7W'6÷#§ö–çFW"#î)ÉSÂö'WGFöãà¢ÂöF—cæ’æ¦ö–â‚rr“°¢6öç7B&öG“×æÆVæwFƒöÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶fÆW‚ÖF—&V7F–öã¦6öÇVÖã¶v£g‚#âG·&÷w7ÓÂöF—cæ¦ÆF—b7G–ÆSÒ'FW‡BÖÆ–vã¦6VçFW#¶6öÆ÷#§f"‚Ò×FW‡C2“·FF–æs£#ƒ¶föçB×6—¦S£'‚#ä6öÆf<:ÖÂöF—cæ°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚wVWVTÖöFÅF—FÆRr’çFW‡D6öçFVçCÖ6öÆFR–×&W6œ;6â(	BG¶ÒææöÖ'&WÒ2G¶ÒæçVÔwÖ°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚wVWVTÖöFÄ&öG’r’æ–ææW$…DÔÃÖ&öG“°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚wVWVTÖöFÂr’ç7G–ÆRæF—7Æ“ÒvfÆW‚s°§Ğ¦gVæ7F–öâ6Æ÷6UVWVTÖöFÂ‚—¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚wVWVTÖöFÂr’ç7G–ÆRæF—7Æ“ÒvæöæRs·Ğ¦gVæ7F–öâ÷VWVU&VÖ÷fR†–BÆ–G‚—°¢6öç7BÕ÷&–çEVWVU¶–EÓ¶–b‚—&WGW&ã°¢ç7Æ–6R†–G‚Ã“°¢&VæFW$Ööæ—F÷$w&–B‚“°¢–b‡æÆVæwFƒã–÷VåVWVTÖöFÂ†–B“¶VÇ6R6Æ÷6UVWVTÖöFÂ‚“°¢Fö7B‚uG&&¦òVÆ–Ö–æFòFRÆ6öÆrÂw7V66W72r“°§Ğ ¦gVæ7F–öâ÷6VæEvÆW'D–dVæ&ÆVB‡F—FÆRÆ&öG’—°¢–b†Æö6Å7F÷&vRævWD—FVÒ‚vÖöæ—F÷%÷vöVæ&ÆVBr’ÓÒsr—&WGW&ã°¢6öç7B†öæSÖÆö6Å7F÷&vRævWD—FVÒ‚vÖöæ—F÷%÷v÷†öæRr“¶–b‚†öæR—&WGW&ã°¢6VæEvF”ÖW76vR‡†öæRÆG·F—FÆWÕÆâG¶&öG—Ö’æ6F6‚‚‚“Óç·Ò“°§Ğ¢òòFV6–FR\:’†6W"6öâÆ6W6œ;6âFR–×&W6œ;6â6V|;¦âVÂW7FFò7GVÃ ¢òò÷VâÒ'&—"6W6œ;6âçVWf†V×W¬;2–×&–Ö—"’æò†,:ÖVæf—f¢òò6Æ÷6RÒ6W'&"Æ6W6œ;6â†ÆÆV|;2VâW7FFòFW&Ö–æÂ¢òò&W7VÇCÒt6ö×ÆWFFòrÂt6æ6VÆFòr7VæFò6Æ÷6P¢òòU4’Æ:—&F–FFRFVÆVÖWG,:Ö†öffÆ–æRö6öææV7F–ær÷7F'GW÷Væ¶æ÷vâöæö—’äğ¢òò'&Vâæ’6–W'&ã¢Æ–×&W6œ;6â6–wVRf—fÂ6öÆòW7L:W6FòæòÆW7FÖ÷0¢òòf–VæFòâ&VçVF"FW6FRW66öç6W'fVÂ–æ–6–ò&VÂ†æò&V'&RÆ6W6œ;6â’à¢òòçFW27VÇV–W"6Æ–FFRw&–çF–ærr6ÇfòvöffÆ–æRr6W'&&Æ6W6œ;6ã¢Væ¢òòW6‡&–çF–æ~(i'W6VB’6R&Vv—7G&&6öÖò$6æ6VÆFò"ÂW&L:ÖVÂ–æ–6–ò’ÂÀ¢òò6ö×ÆWF"Â6Æ7VÆ&ÆGW&6œ;6â6öÆòFW6FRÆ&VçVF6œ;6â(	B6÷'&ö×–VæFò†÷&0¢òòFRöL;6ÖWG&òöÖçFVæ6œ;6â’ÆWFö6Æ–'&6œ;6âFRF–V×òVRW6VÂ6÷F—¦F÷"à¦gVæ7F–öâ÷&–çE6W76–öä7F–öâ‡7BÆ†56W76–öâ—°¢6öç7BG&ç6—F÷&–ó×7CÓÓÒwW6VBwÇÇ7CÓÓÒvöffÆ–æRwÇÇ7CÓÓÒv–F÷vâwÇÇ7CÓÓÒv6öææV7F–ærwÇÇ7CÓÓÒw7F'GWwÇÇ7CÓÓÒwVæ¶æ÷vâwÇÇ7CÓÓÒvæö—s°¢6öç7B÷Vã×7CÓÓÒw&–çF–ærrbb†56W76–öã°¢6öç7B6Æ÷6SÖ†56W76–öâbg7BÓÒw&–çF–ærrbbG&ç6—F÷&–ó°¢&WGW&ç¶÷VâÆ6Æ÷6RÇ&W7VÇC¦6Æ÷6Sò‡7CÓÓÒv6ö×ÆWFRsòt6ö×ÆWFFòs¢t6æ6VÆFòr“¦çVÆÇÓ°§Ğ¦gVæ7F–öâ6†V6µG&ç6—F–öç2†ÒÇ2—°¢6öç7B&WcÕ÷&We7FFU¶Òæ–EÓ¶6öç7B7C×2ç7FFS°¢–b‡7CÓÓÒvW'&÷"rbg&WbÓÒvW'&÷"r—°¢6öç7BF—FÆSÖ)ªW'&÷"VâG¶ÒææöÖ'&WÒ2G¶ÒæçVÔwÖ°¢6VæD'&÷w6W$æ÷F–f–6F–öâ‡F—FÆRÂu&WV–W&RFVæ6œ;6âr“°¢6VæEvV&†öö´ÆW'B†ÒÂvW'&÷"r“°¢÷6VæEvÆW'D–dVæ&ÆVB‡F—FÆRÂu&WV–W&RFVæ6œ;6â–æÖVF–Fâr“°¢Ğ¢–b‡7CÓÓÒw6‡WFF÷vârbg&WbÓÒw6‡WFF÷vârbg&WbÓ×VæFVf–æVBbg&WbÓÒvöffÆ–æRr—°¢6öç7BF—FÆSÖ)ªG¶ÒææöÖ'&WÒ2G¶ÒæçVÔwÒ6RFWGWfò„¶Æ—W"–°¢6öç7BFWF–Ã×2æ¶Ä×6wÇÂtVÂf—&×v&RVçG,;2Vâ6‡WFF÷vââ&Wf—6Æ–×&W6÷&’&V–æ–6–VÂf—&×v&Râs°¢6VæD'&÷w6W$æ÷F–f–6F–öâ‡F—FÆRÆFWF–Â“°¢6VæEvV&†öö´ÆW'B†ÒÂw6‡WFF÷vâr“°¢÷6VæEvÆW'D–dVæ&ÆVB‡F—FÆRÆFWF–Â“°¢Ğ¢6öç7B7CÕ÷&–çE6W76–öä7F–öâ‡7BÂ÷6W76–öç5¶Òæ–EÒ“°¢–b†7Bæ÷Vâ•÷6W76–öç5¶Òæ–EÓ×¶f–ÆS§2æf–ÆVæÖRÇ7F'C¤FFRææ÷r‚’Æf–ÆÖVçE7F'C§2æf–ÆÖVçDÖ×ÇÃÓ°¢–b†7Bæ6Æ÷6R—°¢6öç7B6W73Õ÷6W76–öç5¶Òæ–EÓ°¢–b‡6W72—°¢6öç7BGW#ÔÖF‚ç&÷VæB‚„FFRææ÷r‚’×6W72ç7F'B’óc“°¢6öç7Bf–ÆÖVçDÖÓÔÖF‚æÖ‚ƒÂ‡2æf–ÆÖVçDÖ×ÇÃ’×6W72æf–ÆÖVçE7F'B“°¢6fT†—7F÷'”VçG'’†ÒÇ6W72æf–ÆRÇ6W72ç7F'BÄFFRææ÷r‚’ÆGW"Æ7Bç&W7VÇBÆf–ÆÖVçDÖÒ“°¢FVÆWFR÷6W76–öç5¶Òæ–EÓ°¢–b‡7CÓÓÒv6ö×ÆWFRr—°¢òòWFòÖ6Æ–'&"W7F–Ö6œ;6âFRF–V×ò÷"ÖöFVÆòFR–×&W6÷&¢6öç7BW7D¶W“Òw6ÅöÆ7EöW7E÷6V72s¶6öç7BW7E6V73×'6TfÆöB†Æö6Å7F÷&vRævWD—FVÒ†W7D¶W’’“°¢–b†W7E6V73ãbfGW#ã—¶6öç7B&F–óÒ†GW"£c’öW7E6V73¶–b‡&F–óããBbg&F–óÃB—¶6öç7B6Ä¶W“Òw6Å÷F–ÖUö6Åòr²†ÒæÖöFVÆ÷ÇÂvFVfVÇBr“¶6öç7B&Wd6Ã×'6TfÆöB†Æö6Å7F÷&vRævWD—FVÒ†6Ä¶W’’—ÇÃ¶Æö6Å7F÷&vRç6WD—FVÒ†6Ä¶W’Â‡&Wd6Â£ãsR·&F–ò£ã#R’çFôf—†VBƒB’“·×Ğ¢Æö6Å7F÷&vRç&VÖ÷fT—FVÒ†W7D¶W’“°¢6öç7BF—FÆSÖ)ÈRG¶ÒææöÖ'&WÒ2G¶ÒæçVÔwÒ6ö×ÆWFFö°¢6VæD'&÷w6W$æ÷F–f–6F–öâ‡F—FÆRÆG·6W72æf–ÆWÒ+rG¶GW'ÖÖ“°¢÷6VæEvÆW'D–dVæ&ÆVB‡F—FÆRÆ&6†—fó¢G·6W72æf–ÆWÒÂGW&6œ;6ã¢G¶GW'ÒÖ–æ“°¢–b…÷VWVT6÷VçB†Òæ–B“ã—6WEF–ÖV÷WB‚‚“Óå÷VWVU7F'DæW‡B†Òæ–B’Ã#“°¢Ğ¢Ğ¢Ğ¢÷&We7FFU¶Òæ–EÓ×7C°§Ğ ¦gVæ7F–öâ6fT†—7F÷'”VçG'’†ÒÆf–ÆRÇ7F'BÆVæBÆGW"Ç&W7VÇBÆf–ÆÖVçDÖÓÓ—°¢G'—¶6öç7BƒÔ¥4ôâç'6R†Æö6Å7F÷&vRævWD—FVÒ„„•5Eô´U’—ÇÂuµÒr“¶‚çVç6†–gB‡¶–C¦Òæ–BÆæöÖ'&S¦ÒææöÖ'&RÆçVÔs¦ÒæçVÔrÆf–ÆRÇ7F'BÆVæBÆGW"Ç&W7VÇBÆf–ÆÖVçDÖÒÇG3¤FFRææ÷r‚—Ò“¶–b†‚æÆVæwFƒã#–‚ç7Æ–6Rƒ#“¶Æö6Å7F÷&vRç6WD—FVÒ„„•5Eô´U’Ä¥4ôâç7G&–æv–g’†‚’“·Ö6F6‚†R—·Ğ¢öFôFB†Òæ–BÂ†GW'ÇÃ’ócÆf–ÆÖVçDÖÒÇ&W7VÇCÓÓÒt6ö×ÆWFFòr“°§Ğ ¦gVæ7F–öâvWD†—7F÷'”f÷%&–çFW"†–B—·&WGW&âvWD†—7B‚’æf–ÇFW"†ƒÓæ‚æ–CÓÓÖ–B“·Ğ ¦gVæ7F–öâ&WVW7Dæ÷F–f–6F–öåW&Ö—76–öâ†ÖçVÂ—°¢–b‚‚tæ÷F–f–6F–öâv–âv–æF÷r’—&WGW&ã°¢–b„æ÷F–f–6F–öâçW&Ö—76–öãÓÓÒvFVfVÇBr”æ÷F–f–6F–öâç&WVW7EW&Ö—76–öâ‚’çF†Vâ‡Óç¶–b†ÖçVÂ—Fö7B‡ÓÓÒvw&çFVBsò	ùIBæ÷F–f–66–öæW27F—fF2s¢uW&Ö—6òFVæVvFòrÇÓÓÒvw&çFVBsòw7V66W72s¢vW'&÷"r“·Ò“°¢VÇ6R–b†ÖçVÂ—Fö7B„æ÷F–f–6F–öâçW&Ö—76–öãÓÓÒvw&çFVBsò	ùIBæ÷F–f–66–öæW2–7F—f2s¢uW&Ö—6òFVæVvFòrÄæ÷F–f–6F–öâçW&Ö—76–öãÓÓÒvw&çFVBsòw7V66W72s¢vW'&÷"r“°§Ğ ¦gVæ7F–öâ6VæD'&÷w6W$æ÷F–f–6F–öâ‡F—FÆRÆ&öG’—¶–b‚tæ÷F–f–6F–öâv–âv–æF÷rbdæ÷F–f–6F–öâçW&Ö—76–öãÓÓÒvw&çFVBr–æWræ÷F–f–6F–öâ‡F—FÆRÇ¶&öG—Ò“·Ğ ¦7–æ2gVæ7F–öâ6VæEvV&†öö´ÆW'B†ÒÆWfVçB—°¢6öç7BW&ÃÖÆö6Å7F÷&vRævWD—FVÒ‚vÖöæ—F÷%÷vV&†ööµ÷W&Âr“¶–b‚W&Â—&WGW&ã°¢G'—¶v—BfWF6‚‡W&ÂÇ¶ÖWF†öC¢uõ5BrÆ†VFW'3§²t6öçFVçBÕG—Rs¢vÆ–6F–öâö§6öâwÒÆ&öG“¤¥4ôâç7G&–æv–g’‡¶ÖV–æ¦ÒææöÖ'&RÆçVÓ¦ÒæçVÔrÆWfVçFó¦WfVçBÇF–ÖW7F×¦æWrFFR‚’çFô•4õ7G&–ær‚—Ò—Ò“·Ö6F6‚†R—·Ğ§Ğ ¦7–æ2gVæ7F–öâ÷Vä&VDÖW6‚†–B—°¢6öç7BÓÔÔT”ä2æf–æB‡ƒÓç‚æ–CÓÓÖ–B“¶–b‚Ò—&WGW&ã°¢6öç7B—ÖvWE&–çFW$—†Ò“¶–b‚——·Fö7B‚u6–â•6öæf–wW&FrÂvW'&÷"r“·&WGW&ã·Ğ¢Fö7B‚t6öç7VÇFæFò&VBÖW6(
-brÂv–æfòr“°¢G'—°¢6öç7BFFÖv—BöÖööç&¶W$vWB†–BÂr÷&–çFW"öö&¦V7G2÷VW'“ö&VEöÖW6‚r“°¢6öç7BÖW6ƒÖFFòç&W7VÇCòç7FGW3òæ&VEöÖW6ƒ°¢–b‚ÖW6‡ÇÂÖW6‚ç&ö&VEöÖG&—‚—·Fö7B‚u6–âFF÷2FR&VBÖW6‚(	BV¦V7WF$TEôÔU4…ô4Ä”%$DR&–ÖW&òrÂvW'&÷"r“·&WGW&ã·Ğ¢6öç7BÖG&—ƒÖÖW6‚ç&ö&VEöÖG&—ƒ°¢6öç7B&÷w3ÖÖG&—‚æÆVæwF‚Æ6öÇ3ÖÖG&—…³ÒæÆVæwFƒ°¢ÆWBÖãÓS’Æ×ƒÒÓS“°¢ÖG&—‚æf÷$V6‚‡#Óç"æf÷$V6‚‡cÓç¶–b‡cÆÖâ–Öã×c¶–b‡cæ×‚–×ƒ×c·Ò’“°¢6öç7B&ævSÖ×‚ÖÖçÇÃã°¢6öç7B6VÆÃÔÖF‚æÖ–âƒCBÄÖF‚æfÆö÷"ƒ3#ôÖF‚æÖ‚‡&÷w2Æ6öÇ2’’“°¢6öç7B7ft6VÆÇ3ÖÖG&—‚æÖ‚‡&÷rÇ&’“Óç&÷ræÖ‚‡bÆ6’“Óç°¢6öç7BCÒ‡bÖÖâ’÷&ævS°¢6öç7B'#ÔÖF‚ç&÷VæB‡B£##’ÆvsÔÖF‚ç&÷VæB‚ƒÔÖF‚æ'2‡BÓãR’£"’£ƒ’Æ&#ÔÖF‚ç&÷VæB‚ƒ×B’£##“°¢&WGW&æÇ&V7BƒÒ"G¶6’¦6VÆÇÒ"“Ò"G·&’¦6VÆÇÒ"v–GFƒÒ"G¶6VÆÂÓÒ"†V–v‡CÒ"G¶6VÆÂÓÒ"f–ÆÃÒ'&v"‚G·''ÒÂG¶vwÒÂG¶&'Ò’"'ƒÒ#2"óà£ÇFW‡BƒÒ"G¶6’¦6VÆÂ¶6VÆÂó'Ò"“Ò"G·&’¦6VÆÂ¶6VÆÂó"³GÒ"FW‡BÖæ6†÷#Ò&Ö–FFÆR"f–ÆÃÒ'&v&ƒ#SRÃ#SRÃ#SRÃã’’"föçB×6—¦SÒ"G´ÖF‚æÖ‚ƒrÆ6VÆÂóB—Ò"föçBÖfÖ–Ç“Ò&Ööæ÷76R#âG·bçFôf—†VBƒ"—ÓÂ÷FW‡Cæ°¢Ò’æ¦ö–â‚rr’’æ¦ö–â‚rr“°¢6öç7BsÖ6öÇ2¦6VÆÂÄƒ×&÷w2¦6VÆÃ°¢6öç7BÖöFÃÖFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“°¢ÖöFÂç7G–ÆRæ775FW‡CÒw÷6—F–öã¦f—†VC¶–ç6WC£¶&6¶w&÷VæC§&v&ƒÃÃÃãs‚“·¢Ö–æFWƒ£““““¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶§W7F–g’Ö6öçFVçC¦6VçFW"s°¢ÖöFÂæ–ææW$…DÔÃÖÆF—b7G–ÆSÒ&&6¶w&÷VæC§f"‚Ò×7W&f6R“¶&÷&FW"×&F—W3£Gƒ·FF–æs£#ƒ¶Ö‚×v–GFƒ£“Wgs¶Ö‚Ö†V–v‡C£“fƒ¶÷fW&fÆ÷s¦WFó¶Ö–â×v–GFƒ£3#‚#à¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶§W7F–g’Ö6öçFVçC§76RÖ&WGvVVã¶Æ–vâÖ—FV×3¦fÆW‚×7F'C¶Ö&v–âÖ&÷GFöÓ£Gƒ¶v£g‚#à¢ÆF—cà¢ÆF—b7G–ÆSÒ&föçB×vV–v‡C£s¶föçB×6—¦S£7ƒ¶Ö&v–âÖ&÷GFöÓ£G‚#ï	ù{®ûˆò&VBÖW6‚(	BG¶W66T‡FÖÂ†ÒææöÖ'&R—Ò2G¶ÒæçVÔwÓÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#äFW7f–6œ;6ã¢G¶ÖâçFôf—†VBƒ2—ÖÖÒ(
-bG¶×‚çFôf—†VBƒ2—ÖÖÒfæ'7¼+rfæ'7²&ævó¢Æ#âG²‡&ævR£’çFôf—†VBƒ—Ü+VÓÂö#âfæ'7¼+rfæ'7²G·&÷w7Ü9rG¶6öÇ7ÒVçF÷3ÂöF—cà¢ÂöF—cà¢Æ'WGFöâöæ6Æ–6³Ò'F†—2æ6Æ÷6W7B‚u·7G–ÆR£Öf—†VEÒr’ç&VÖ÷fR‚’"7G–ÆSÒ&&6¶w&÷VæC¦æöæS¶&÷&FW#¦æöæS¶6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£#ƒ¶7W'6÷#§ö–çFW#¶fÆW‚×6‡&–æ³£¶Æ–æRÖ†V–v‡C£#î)ÉSÂö'WGFöãà¢ÂöF—cà¢Ç7frv–GFƒÒ"GµwÒ"†V–v‡CÒ"G´‡Ò"7G–ÆSÒ&F—7Æ“¦&Æö6³¶&÷&FW"×&F—W3£‡ƒ¶÷fW&fÆ÷s¦†–FFVâ#âG·7ft6VÆÇ7ÓÂ÷7fsà¢ÆF—b7G–ÆSÒ&Ö&v–â×F÷£ƒ¶F—7Æ“¦fÆWƒ¶v£‡ƒ¶Æ–vâÖ—FV×3¦6VçFW#¶föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#à¢ÆF—b7G–ÆSÒ'v–GFƒ£ƒƒ¶†V–v‡C£ƒ¶&6¶w&÷VæC¦Æ–æV"Öw&F–VçB‡Fò&–v‡BÇ&v"ƒÃ#Ã##’Ç&v"ƒÃƒÃ’Ç&v"ƒ##ÃÃ’“¶&÷&FW"×&F—W3£7ƒ¶fÆW‚×6‡&–æ³£#ãÂöF—cà¢Ç7ãçÆæòö&¦ò†§VÂ’(i"&öÖVF–ò‡fW&FR’(i"ÇFò‡&ö¦ò“Â÷7ãà¢ÂöF—cà¢G·&ævSããCöÆF—b7G–ÆSÒ&Ö&v–â×F÷£‡ƒ·FF–æs£‡‚ƒ¶&6¶w&÷VæC§&v&ƒ#SRÃsÃÃã“¶&÷&FW#£‚6öÆ–B&v&ƒ#SRÃsÃÃãB“¶&÷&FW"×&F—W3£‡ƒ¶föçB×6—¦S£ãWƒ¶6öÆ÷#¢6ff#î)ª&ævòfwC³C+VÒ(	BÆ6ÖVVFRæV6W6—F"æ—fVÆ6œ;6âÖçVÂçFW2FRW6"ÖW6‚6ö×Vç6F–öãÂöF—cæ¢rwĞ¢ÂöF—cæ°¢ÖöFÂæöæ6Æ–6³ÖSÓç¶–b†RçF&vWCÓÓÖÖöFÂ–ÖöFÂç&VÖ÷fR‚“·Ó°¢Fö7VÖVçBæ&öG’æVæD6†–ÆB†ÖöFÂ“°¢Ö6F6‚†R—·Fö7B‚tW'&÷"6öç7VÇFæFò&VBÖW6ƒ¢r¶RæÖW76vRÂvW'&÷"r“·Ğ§Ğ¦gVæ7F–öâ÷VåvV&6ÔÖöFÂ†–B—°¢6öç7BÓÔÔT”ä2æf–æB‡ƒÓç‚æ–CÓÓÖ–B“¶–b‚Ò—&WGW&ã°¢6öç7BW&ÃÖÆö6Å7F÷&vRævWD—FVÒ‚w&–çFW%ö6Õòr¶–B—ÇÂrs°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÅF—FÆRr’çFW‡D6öçFVçCÖG¶ÒææöÖ'&WÒ2G¶ÒæçVÔwÖ°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÄ–Br’çfÇVSÖ–C°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÅW&Âr’çfÇVS×W&Ã°¢6öç7B–ÖsÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÄ–Örr“°¢6öç7BæcÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔæôfVVBr“°¢–b‡W&Â—¶6öç7B7S×&–çFW$6ÕW&Â†–B“¶–b…ö6Ô—56æ6†÷B‡W&Â’––Örç6WDGG&–'WFR‚vFF×6ærÆ7R“¶VÇ6R–Örç&VÖ÷fTGG&–'WFR‚vFF×6ær“¶–Örç7&3Ö7S¶–Örç7G–ÆRæF—7Æ“Òv&Æö6²s¶æbç7G–ÆRæF—7Æ“ÒvæöæRs·ÖVÇ6W¶–Örç&VÖ÷fTGG&–'WFR‚vFF×6ær“¶–Örç7&3Òrs¶–Örç7G–ÆRæF—7Æ“ÒvæöæRs¶æbç7G–ÆRæF—7Æ“ÒvfÆW‚s·Ğ¢6öç7BG3ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÕFW7E7FGW2r“¶–b‡G2—G2çFW‡D6öçFVçCÒrs°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÂr’ç7G–ÆRæF—7Æ“ÒvfÆW‚s°§Ğ¢òòF–vì;77F–6òFR<:Ö&¢†6RÆWF–6œ;6â$TÂ†G&l:—2FVÂL;¦æVÂö'&–FvRVà¢òòÖöFò&VÖ÷Fò’’G&GV6RVÂ&W7VÇFFòVâÖVç6¦R6Æ&ò(	B<:Ò6R6&R6’VÀ¢òò&ö&ÆVÖW2VÂFö¶VâÂVÂVW'FòÂVRvó''F2æò&W7öæFRÂòVÂæöÖ'&RFVÂ7G&VÒà¦7–æ2gVæ7F–öâFW7EvV&6Ò‚—°¢6öç7B–çÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÅW&Âr“°¢6öç7B÷WCÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÕFW7E7FGW2r“°¢–b‚–çÇÂ÷WB—&WGW&ã°¢6öç7B&sÒ†–ççfÇVWÇÂrr’çG&–Ò‚“°¢6öç7B6WCÒ†×6rÆ6öÂ“Óç¶÷WBçFW‡D6öçFVçCÖ×6s¶÷WBç7G–ÆRæ6öÆ÷#Ö6öÃ·Ó°¢–b‚&r—·6WB‚t–æw&W6VæU$Â&–ÖW&òârÂwf"‚Ò×v&â’r“·&WGW&ã·Ğ¢òòÖ—6Ö&VW67&—GW&VR&–çFW$6ÕW&Ã¢Vâ&VÖ÷Fòf÷"VÂ'&–FvR6öâVÂFö¶Vâà¢ÆWBW&Ã×&s°¢–b‚‡G—Vöbö—4Æö6ÄÖöFSÓÓÒvgVæ7F–öârbeö—4Æö6ÄÖöFR‚’’—°¢6öç7BÖÓ×&ræÖF6‚‚õæ‡GG¥ÂõÂò…ÆG³Ã7Òƒó¥ÂåÆG³Ã7Ò—³7Ò’ƒó£¢…ÆB²’“ò…Âòâ¢“òBò“°¢–b†ÖÒbgG—VöböVæD'&–FvUFö¶VãÓÓÒvgVæ7F–öâr’W&ÃÕöVæD'&–FvUFö¶Vâ†G¶vWE&–çFW%GVææVÂ‚—ÒòG¶ÖÕ³×Ó¢G¶ÖÕ³%×ÇÂsƒwÒG¶ÖÕ³5×ÇÂròwÖ“°¢Ğ¢6WB‚~(û2&ö&æFş(
-brÂwf"‚Ò×FW‡C2’r“°¢6öç7B7G&ÃÖæWr&÷'D6öçG&öÆÆW"‚“¶6öç7BFó×6WEF–ÖV÷WB‚‚“Óæ7G&Âæ&÷'B‚’Ã#“°¢G'—°¢6öç7B#Öv—BfWF6‚‡W&ÂÇ¶ÖWF†öC¢ttUBrÆ66†S¢væò×7F÷&RrÇ6–væÃ¦7G&Âç6–væÇÒ“°¢G'—·"æ&öG’bg"æ&öG’æ6æ6VÂ‚“·Ö6F6‚…ò—·Ğ¢6öç7B7CÒ‡"æ†VFW'2ævWB‚v6öçFVçB×G—Rr—ÇÂrr’çFôÆ÷vW$66R‚“°¢–b‡"æö²bb†7Bæ–æ6ÇVFW2‚v–ÖvRr—ÇÆ7Bæ–æ6ÇVFW2‚v×VÇF—'Br’’’6WB‚~)É2<:Ö&ô²(	BW7L:VçG&VvæFòf–FVòârÂwf"‚Ò×7V66W72’r“°¢VÇ6R–b‡"æö²’6WB†)ª&W7öæFR#W&òæòW2–ÖvVâ‡F—ó¢G¶7GÇÂsòwÒ’â6’W2vó''F2Â&Wf—6VÂæöÖ'&RFVÂ7G&VÒ‡7&3Ş(
-b’æÂwf"‚Ò×v&â’r“°¢VÇ6R–b‡"ç7FGW3ÓÓÓC’6WB‚~)ÉbC(	BFö¶VâFVÂ'&–FvR–çl:Æ–FòârÂwf"‚ÒÖFævW"’r“°¢VÇ6R–b‡"ç7FGW3ÓÓÓC2’6WB‚~)ÉbC2(	BVÂ'&–FvR&Æ÷V\;2W6RVW'Fò†w,:–vÆò%$”DtUõõ%E2’ârÂwf"‚ÒÖFævW"’r“°¢VÇ6R–b‡"ç7FGW3ÓÓÓCB’6WB‚~)ÉbCB(	B'WFò7G&VÒæòVæ6öçG&Fòâ&Wf—6ÆU$ÂòVÂ7&3ÒârÂwf"‚ÒÖFævW"’r“°¢VÇ6R–b‡"ç7FGW3ÓÓÓS'ÇÇ"ç7FGW3ÓÓÓSB’6WB†)ÉbG·"ç7FGW7Ò(	BVÂ'&–FvRæòVFò6öæV7F"6öâÆ<:Ö&¢vó''F2æò&W7öæFRVâW6•§VW'FòŒ+övFòÂ•WV—fö6FÂò<:Ö&öfbÂFW&Ö–æ"Æ–×&W6œ;6ãò’æÂwf"‚ÒÖFævW"’r“°¢VÇ6R6WB†)ÉbG·"ç7FGW7ÒG·"ç7FGW5FW‡GÇÂrwÖçG&–Ò‚’Âwf"‚ÒÖFævW"’r“°¢Ö6F6‚†R—°¢–b†RææÖSÓÓÒt&÷'DW'&÷"r’6WB‚~)Éb6–â&W7VW7Fƒ'2’(	BVÂ'&–FvRòÆ<:Ö&æò6öçFW7F&öâârÂwf"‚ÒÖFævW"’r“°¢VÇ6R6WB‚~)Ébæò6RVFò6öæV7F#¢'&–FvR6:ÖFòÂ6–â&VBÂò&Æ÷VVòFVÂæfVvF÷"â‚r²†RæÖW76vWÇÂvW'&÷"r’²r’rÂwf"‚ÒÖFævW"’r“°¢Öf–æÆÇ—¶6ÆV%F–ÖV÷WB‡Fò“·Ğ§Ğ¦gVæ7F–öâ6fUvV&6ÕW&Â‚—¶6öç7B–CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÄ–Br’çfÇVS¶6öç7BW&ÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÅW&Âr’çfÇVRçG&–Ò‚“¶–b‡W&Âbb÷6fU&–çFW$ÖVF–W&Â‡W&Â’—·Fö7B‚uU$ÂFRvV&6Ò–çl:Æ–F(	BW6‡GG¢òòò‡GG3¢òòrÂvW'&÷"r“·&WGW&ã·Ö–b‡W&Â–Æö6Å7F÷&vRç6WD—FVÒ‚w&–çFW%ö6Õòr¶–BÇW&Â“¶VÇ6RÆö6Å7F÷&vRç&VÖ÷fT—FVÒ‚w&–çFW%ö6Õòr¶–B“¶6öç7BÓÔÔT”ä2æf–æB‡ƒÓç‚æ–CÓÓÖ–B“¶–b†Ò—¶Òæ6Ó×W&ÇÇÆçVÆÃ¶–b†Òåö—'F&ÆT–B—¶–b††4—'F&ÆT66W72‚’•öDfWF6‚†òG´$4Uô”GÒôÖV–æ2òG¶Òåö—'F&ÆT–GÖÇ¶ÖWF†öC¢uD4‚rÆ†VFW'3§²t6öçFVçBÕG—Rs¢vÆ–6F–öâö§6öâwÒÆ&öG“¤¥4ôâç7G&–æv–g’‡¶f–VÆG3§¶6Ó§W&ÇÇÂrw×Ò—Ò“·×Ö6Æ÷6UvV&6ÔÖöFÂ‚“·&VæFW$Ööæ—F÷$w&–B‚“·Fö7B‡W&Ãò	ù;rvV&6Ò6öæf–wW&F(	BwV&FFVâ—'F&ÆRs¢uvV&6ÒVÆ–Ö–æFrÂw7V66W72r“·Ğ¦gVæ7F–öâ6Æ÷6UvV&6ÔÖöFÂ‚—¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÂr’ç7G–ÆRæF—7Æ“ÒvæöæRs¶6öç7Bv“ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wvV&6ÔÖöFÄ–Örr“¶–b‡v’—·v’ç&VÖ÷fTGG&–'WFR‚vFF×6ær“·v’ç7&3Òrs·×Ğ ¦gVæ7F–öâ÷Vä†—7F÷'”ÖöFÂ†–B—°¢6öç7BÓÔÔT”ä2æf–æB‡ƒÓç‚æ–CÓÓÖ–B“¶–b‚Ò—&WGW&ã°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚v†—7DÖöFÅF—FÆRr’çFW‡D6öçFVçCÖG¶ÒææöÖ'&WÒ2G¶ÒæçVÔwÖ°¢6öç7B†—7CÖvWD†—7F÷'”f÷%&–çFW"†–B“°¢6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v†—7DÖöFÄ&öG’r“°¢VÂæ–ææW$…DÔÃÖ†—7BæÆVæwFƒö†—7Bç6Æ–6RƒÃS’æÖ†ƒÓç¶6öç7BCÖæWrFFR†‚ç7F'B“·&WGW&æÆF—b7G–ÆSÒ'FF–æs£‡‚¶&÷&FW"Ö&÷GFöÓ£‚6öÆ–Bf"‚ÒÖ&÷&FW#"“¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‚#à¢Ç7â7G–ÆSÒ&&6¶w&÷VæC¢G¶‚ç&W7VÇCÓÓÒt6ö×ÆWFFòsòw&v&ƒÃ#"ÃsÃãR’s¢w&v&ƒ#SRÃc‚Ãc‚Ãã"’wÓ¶6öÆ÷#¢G¶‚ç&W7VÇCÓÓÒt6ö×ÆWFFòsòr3CFs¢r6fcCCCBwÓ¶&÷&FW"×&F—W3£Wƒ·FF–æs£'‚wƒ¶föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶fÆW‚×6‡&–æ³£#âG¶‚ç&W7VÇGÓÂ÷7ãà¢ÆF—b7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£#ãÆF—b7G–ÆSÒ&föçB×6—¦S£'ƒ¶föçB×vV–v‡C£c¶6öÆ÷#§f"‚Ò×FW‡B“·v†—FR×76S¦æ÷w&¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—2#âG¶W66T‡FÖÂ†‚æf–ÆWÇÂ~(	Br—ÓÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG¶BçFôÆö6ÆTFFU7G&–ær‚vW2Ô4Âr—ÒG¶BçFôÆö6ÆUF–ÖU7G&–ær‚vW2Ô4ÂrÇ¶†÷W#¢s"ÖF–v—BrÆÖ–çWFS¢s"ÖF–v—BwÒ—Ò+rG¶‚æGW'ÖÓÂöF—cãÂöF—cà¢ÂöF—cæ·Ò’æ¦ö–â‚rr“¢sÆF—b7G–ÆSÒ'FW‡BÖÆ–vã¦6VçFW#¶6öÆ÷#§f"‚Ò×FW‡C2“·FF–æs£#Gƒ¶föçB×6—¦S£'‚#å6–â†—7F÷&–Â&Vv—7G&Fò;¦ãÂöF—câs°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚v†—7DÖöFÂr’ç7G–ÆRæF—7Æ“ÒvfÆW‚s°§Ğ¦gVæ7F–öâ6Æ÷6T†—7F÷'”ÖöFÂ‚—¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v†—7DÖöFÂr’ç7G–ÆRæF—7Æ“ÒvæöæRs·Ğ ¦gVæ7F–öâ÷VäÆW'E6WGF–æw2‚—°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÆW'EvV&†ööµW&Âr’çfÇVSÖÆö6Å7F÷&vRævWD—FVÒ‚vÖöæ—F÷%÷vV&†ööµ÷W&Âr—ÇÂrs°¢6öç7BwÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÆW'Ev†öæRr“¶6öç7Bv3ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÆW'EvVæ&ÆVBr“°¢–b‡w—wçfÇVSÖÆö6Å7F÷&vRævWD—FVÒ‚vÖöæ—F÷%÷v÷†öæRr—ÇÂrs°¢–b‡v2—v2æ6†V6¶VCÖÆö6Å7F÷&vRævWD—FVÒ‚vÖöæ—F÷%÷vöVæ&ÆVBr“ÓÓÒss°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÆW'E6WGF–æw4ÖöFÂr’ç7G–ÆRæF—7Æ“ÒvfÆW‚s°§Ğ¦gVæ7F–öâ6fTÆW'E6WGF–æw2‚—°¢6öç7BW&ÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÆW'EvV&†ööµW&Âr’çfÇVRçG&–Ò‚“°¢–b‡W&Â–Æö6Å7F÷&vRç6WD—FVÒ‚vÖöæ—F÷%÷vV&†ööµ÷W&ÂrÇW&Â“¶VÇ6RÆö6Å7F÷&vRç&VÖ÷fT—FVÒ‚vÖöæ—F÷%÷vV&†ööµ÷W&Âr“°¢6öç7BwÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÆW'Ev†öæRr“¶6öç7Bv3ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÆW'EvVæ&ÆVBr“°¢–b‡w—¶6öç7Bƒ×wçfÇVRçG&–Ò‚“¶–b‡‚–Æö6Å7F÷&vRç6WD—FVÒ‚vÖöæ—F÷%÷v÷†öæRrÇ‚“¶VÇ6RÆö6Å7F÷&vRç&VÖ÷fT—FVÒ‚vÖöæ—F÷%÷v÷†öæRr“·Ğ¢–b‡v2–Æö6Å7F÷&vRç6WD—FVÒ‚vÖöæ—F÷%÷vöVæ&ÆVBrÇv2æ6†V6¶VCòss¢sr“°¢Fö7B‚tÆW'F2wV&FF2)É2rÂw7V66W72r“¶6Æ÷6TÆW'E6WGF–æw2‚“°§Ğ¦gVæ7F–öâ6Æ÷6TÆW'E6WGF–æw2‚—¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÆW'E6WGF–æw4ÖöFÂr’ç7G–ÆRæF—7Æ“ÒvæöæRs·Ğ ¢òò)H)H4õ%Bb´”õ4²)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦ÆWB÷6÷'D'•7FFS×G'VRÅö¶–÷6´ÖöFSÖfÇ6S°¦gVæ7F–öâ7FFT÷&FW"‡2—·&WGW&ç·&–çF–æs£ÇW6VC£ÆW'&÷#£"Æ–F÷vã£2Æ6ö×ÆWFS£BÇ7FæF'“£RÆöffÆ–æS£bÆæö—£wÕ·5Óóóƒ·Ğ¦gVæ7F–öâ6÷'FVDÆ—7B†Æ—7F—¶–b‚÷6÷'D'•7FFR—&WGW&âÆ—7F·&WGW&å²ââæÆ—7FÒç6÷'B‚†Æ"“Óç7FFT÷&FW"‚…÷&–çFW%7FGW5¶æ–E×ÇÇ·Ò’ç7FFWÇÂvöffÆ–æRr’×7FFT÷&FW"‚…÷&–çFW%7FGW5¶"æ–E×ÇÇ·Ò’ç7FFWÇÂvöffÆ–æRr’“·Ğ¦gVæ7F–öâFövvÆU6÷'B‚—µ÷6÷'D'•7FFSÒ÷6÷'D'•7FFS¶6öç7B'FãÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v'Få6÷'Br“¶–b†'Fâ–'Fâç7G–ÆRæ6öÆ÷#Õ÷6÷'D'•7FFSòwf"‚ÒÖ66VçB’s¢wf"‚Ò×FW‡C2’s·&VæFW$Ööæ—F÷$w&–B‚“·Ğ¦gVæ7F–öâFövvÆT¶–÷6²‚—°¢ö¶–÷6´ÖöFSÒö¶–÷6´ÖöFS°¢–b…ö¶–÷6´ÖöFR—¶Fö7VÖVçBæFö7VÖVçDVÆVÖVçBç&WVW7DgVÆÇ67&VVãòâ‚“¶Fö7VÖVçBæ&öG’æ6Æ74Æ—7BæFB‚v¶–÷6²r“·Ğ¢VÇ6W¶Fö7VÖVçBæW†—DgVÆÇ67&VVãòâ‚“¶Fö7VÖVçBæ&öG’æ6Æ74Æ—7Bç&VÖ÷fR‚v¶–÷6²r“·Ğ¢&VæFW$Ööæ—F÷$w&–B‚“°§Ğ¦Fö7VÖVçBæFDWfVçDÆ—7FVæW"‚vgVÆÇ67&VVæ6†ævRrÂ‚“Óç¶–b‚Fö7VÖVçBægVÆÇ67&VVäVÆVÖVçBbeö¶–÷6´ÖöFR—µö¶–÷6´ÖöFSÖfÇ6S¶Fö7VÖVçBæ&öG’æ6Æ74Æ—7Bç&VÖ÷fR‚v¶–÷6²r“·&VæFW$Ööæ—F÷$w&–B‚“·×Ò“° ¢òò)H)H”DÄRÄU%B)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦6öç7BöÆ7D7F—fUF–ÖS×·ÒÅö–FÆTÆW'FVC×·Ó°¦gVæ7F–öâvWD–FÆT†÷W'2†–BÇ7FFR—°¢–b‡7FFSÓÓÒw&–çF–ærwÇÇ7FFSÓÓÒwW6VBwÇÇ7FFSÓÓÒvöffÆ–æRwÇÇ7FFSÓÓÒvæö—r—&WGW&â°¢6öç7BÆ7CÕöÆ7D7F—fUF–ÖU¶–EÓ¶–b‚Æ7B—&WGW&â°¢6öç7BF‡&W6†öÆC×'6TfÆöB†Æö6Å7F÷&vRævWD—FVÒ‚v–FÆUöÆW'Eö†÷W'2r—ÇÂs"r“°¢6öç7BƒÒ„FFRææ÷r‚’ÖÆ7B’ó3c°¢&WGW&âƒã×F‡&W6†öÆCôÖF‚ç&÷VæB†‚“£°§Ğ¦gVæ7F–öâ6†V6´–FÆTÆW'G2‚—°¢6öç7Bæ÷sÖæWrFFR‚“¶6öç7BƒÖæ÷rævWD†÷W'2‚“°¢6öç7B—5v÷&³ÖƒãÓ‚bfƒÃ’bfæ÷rævWDF’‚“ãbfæ÷rævWDF’‚“Ãc°¢ÔT”ä2æf÷$V6‚†ÓÓç°¢6öç7B7CÒ…÷&–çFW%7FGW5¶Òæ–E×ÇÇ·Ò’ç7FFWÇÂvöffÆ–æRs°¢–b‡7CÓÓÒw&–çF–ærwÇÇ7CÓÓÒwW6VBr—µöÆ7D7F—fUF–ÖU¶Òæ–EÓÔFFRææ÷r‚“¶FVÆWFRö–FÆTÆW'FVE¶Òæ–EÓ·Ğ¢VÇ6R–b†—5v÷&²beöÆ7D7F—fUF–ÖU¶Òæ–EÒbbö–FÆTÆW'FVE¶Òæ–EÒ—°¢6öç7B–FÆTƒÒ„FFRææ÷r‚’ÕöÆ7D7F—fUF–ÖU¶Òæ–EÒ’ó3c°¢6öç7BF‡&W6†öÆC×'6TfÆöB†Æö6Å7F÷&vRævWD—FVÒ‚v–FÆUöÆW'Eö†÷W'2r—ÇÂs"r“°¢–b†–FÆTƒã×F‡&W6†öÆB—·6VæD'&÷w6W$æ÷F–f–6F–öâ†	ù*BG¶ÒææöÖ'&WÒ2G¶ÒæçVÔwÒÆÆWfG´ÖF‚ç&÷VæB†–FÆT‚—Ö‚6–â–×&–Ö—&ÂtÜ:V–æ–æ7F—fVâ†÷&&–òÆ&÷&Âr“·6VæEvV&†öö´ÆW'B†ÒÂv–FÆRr“µö–FÆTÆW'FVE¶Òæ–EÓ×G'VS·Ğ¢Ğ¢Ò“°§Ğ ¢òò)H)HÔåDTä”Ô”TåDò)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦6öç7BÔ”åEô´U“Òw&–çFW%öÖ–çE÷crÄÔ”åEô4duô´U“Òw&–çFW%öÖ–çEö6frrÄd”ÄÔTåEô4õ5Eô´U“Òvf–ÆÖVçEö6÷7Eö6Çs°¢òòW6òFVÂf–ÆÖVçFò6V|;¦âÖFW&–Â’Fœ:ÖWG&ò†6öæf–wW&&ÆRVâVÖ'&ÆW2FRÖçFVæ6œ;6â’à¢òòFWgVVÇfR¶r÷"ÖÒFRf–ÆÖVçFòW‡G'V–Fòâ÷"FVfV7FòÄãsRÖÒ(˜‚ã#“ƒ"¶röÖÒà¦6öç7Bd”ÄÔTåEôDTå4•E“×µÄ£ã#BÅUDs£ã#rÄ%3£ãBÄ4£ãrÅES£ã#Äç–Æöã£ãGÓ°¦gVæ7F–öâvWDf–ÆÖVçD¶uW$ÖÒ‚—°¢6öç7BFVç3Ôd”ÄÔTåEôDTå4•E•¶Æö6Å7F÷&vRævWD—FVÒ‚vf–ÆÖVçEöÖFW&–Âr—ÇÂuÄu×ÇÃã#C²òòrö6Ü+0¢6öç7BF–×'6TfÆöB†Æö6Å7F÷&vRævWD—FVÒ‚vf–ÆÖVçEöF–ÖWFW"r—ÇÂsãsRr—ÇÃãsS²òòÖĞ¢6öç7B&VÔÖF‚å’¢†F–ó"’¢†F–ó"“²òòÖÜ+ ¢&WGW&â&V¦FVç2óSc²òò¶röÖĞ§Ğ¦6öç7BÔ”åEõE•U3Õ°¢¶¶W“¢væ÷§¦ÆRrÆÆ&VÃ¢tæ÷§¦ÆRrÆ–6öã¢sÇ7fr6Æ73Ò&F6†&ö&BÖ–6öâ"v–GFƒÒ#B"†V–v‡CÒ#B"7G&ö¶R×v–GFƒÒ#ãR#ãÇW6R‡&VcÒ"6–6öâÖçWB"óãÂ÷7fsârÆFVfVÇD†÷W'3£#ÒÀ¢¶¶W“¢vÇV'&–6F–öârÆÆ&VÃ¢tÇV'&–66œ;6ârÆ–6öã¢sÇ7fr6Æ73Ò&F6†&ö&BÖ–6öâ"v–GFƒÒ#B"†V–v‡CÒ#B"7G&ö¶R×v–GFƒÒ#ãR#ãÇW6R‡&VcÒ"6–6öâÖG&÷ÆWB"óãÂ÷7fsârÆFVfVÇD†÷W'3£ÒÀ¢¶¶W“¢v&VÇBrÆÆ&VÃ¢t6÷'&VrÆ–6öã¢sÇ7fr6Æ73Ò&F6†&ö&BÖ–6öâ"v–GFƒÒ#B"†V–v‡CÒ#B"7G&ö¶R×v–GFƒÒ#ãR#ãÇW6R‡&VcÒ"6–6öâ×6WGF–æw2"óãÂ÷7fsârÆFVfVÇD†÷W'3£SÒÀ¢¶¶W“¢vW‡G'VFW"rÆÆ&VÃ¢tW‡G'W6÷"rÆ–6öã¢~)©ûˆòrÆFVfVÇD†÷W'3£3ÒÀ¢¶¶W“¢v&VBrÆÆ&VÃ¢t6Öò7WW&f–6–RrÆ–6öã¢~)jbrÆFVfVÇD†÷W'3£#SÒÀ¢¶¶W“¢w6Vç6÷'2rÆÆ&VÃ¢u6Vç6÷&W2òVÌ:–7G&–6òrÆ–6öã¢~)ªrÆFVfVÇD†÷W'3£cÒÀ¢¶¶W“¢vvVæW&ÂrÆÆ&VÃ¢tvVæW&ÂrÆ–6öã¢sÇ7fr6Æ73Ò&F6†&ö&BÖ–6öâ"v–GFƒÒ#B"†V–v‡CÒ#B"7G&ö¶R×v–GFƒÒ#ãR#ãÇW6R‡&VcÒ"6–6öâ×w&Væ6‚"óãÂ÷7fsârÆFVfVÇD†÷W'3£SÒÀ¥Ó°¦gVæ7F–öâvWDÖ–çD6öæf–r‚—·G'—·&WGW&â¥4ôâç'6R†Æö6Å7F÷&vRævWD—FVÒ„Ô”åEô4duô´U’—ÇÂw·Òr“·Ö6F6‚†R—·&WGW&ç·Ó·×Ğ¦gVæ7F–öâvWDÖ–çEF‡&W6†öÆB‡F—òÆÖV–æ–B—°¢–b†ÖV–æ–Bbgv–æF÷räÖ6†–æT÷3òæÖ–çFVææ6UF‡&W6†öÆB—°¢6öç7B7V6–f–3×v–æF÷räÖ6†–æT÷2æÖ–çFVææ6UF‡&W6†öÆB†ÖV–æ–BÇF—ò“°¢–b‡7V6–f–3ã—&WGW&â7V6–f–3°¢Ğ¢6öç7B6fsÖvWDÖ–çD6öæf–r‚“·&WGW&â'6T–çB†6fu·F—õÒ—ÇÄÔ”åEõE•U2æf–æB‡CÓçBæ¶W“ÓÓ×F—ò“òæFVfVÇD†÷W'7ÇÃ°§Ğ¦gVæ7F–öâvWDÖ–çDÆör‚—·&WGW&âÖV–æ7FFRæÖ–çDÆöræÆVæwFƒöÖV–æ7FFRæÖ–çDÆös¦vWDÖ–çDÆötÆö6Â‚“·Ğ¦gVæ7F–öâvWE&–çD†÷W'2†–B—¶–b…÷W6TöFöÖWFW"‚’—&WGW&â†vWDöFöÖWFW"‚•¶–E×ÇÇ·Ò’æ†÷W'7ÇÃ·&WGW&âvWD†—7B‚’æf–ÇFW"‡ƒÓç‚æ–CÓÓÖ–Bbg‚ç&W7VÇCÓÓÒt6ö×ÆWFFòr’ç&VGV6R‚‡2Ç‚“Óç2²‡‚æGW'ÇÃ’ócÃ“·Ğ¦gVæ7F–öâvWD†÷W'56–æ6TÖ–çB†–BÇF—ò—°¢6öç7BÆösÖvWDÖ–çDÆör‚’æf–ÇFW"‡ƒÓç‚æÖV–æ–CÓÓÖ–Bbg‚çF—óÓÓ×F—ò’ç6÷'B‚†Æ"“Óæ"çG2ÖçG2“°¢6öç7BF÷FÃÖvWE&–çD†÷W'2†–B“°¢–b‚ÆöræÆVæwF‚—&WGW&âF÷FÃ°¢&WGW&âÖF‚æÖ‚ƒÇF÷FÂÖÆöu³Òç&–çD†÷W'4EF–ÖR“°§Ğ¦gVæ7F–öâvWDÖ–çDÆW'G2†Ò—°¢&WGW&âÔ”åEõE•U2æf–ÇFW"‡CÓævWD†÷W'56–æ6TÖ–çB†Òæ–BÇBæ¶W’“ãÖvWDÖ–çEF‡&W6†öÆB‡Bæ¶W’ÆÒæ–B’£ã’¢æÖ‡CÓâ‡²ââçBÆ†÷W'3¦vWD†÷W'56–æ6TÖ–çB†Òæ–BÇBæ¶W’’ÇF‡&W6†öÆC¦vWDÖ–çEF‡&W6†öÆB‡Bæ¶W’ÆÒæ–B—Ò’“°§Ğ¢òò&—FÖòFR–×&W6œ;6â†‚÷6VÖæ’FRÆ2;¦ÇF–Ö2B6VÖæ2Â&&÷–V7F"ÖçFVæ6œ;6à¦gVæ7F–öâvWEvVV¶Ç•&–çE&FR†–B—°¢6öç7B7WCÔFFRææ÷r‚’Ó#‚£ƒcC·&WGW&âvWD†—7B‚’æf–ÇFW"‡ƒÓç‚æ–CÓÓÖ–Bbg‚ç&W7VÇCÓÓÒt6ö×ÆWFFòrbb‡‚çG7ÇÇ‚æVæGÇÃ“ãÖ7WB’ç&VGV6R‚‡2Ç‚“Óç2²‡‚æGW'ÇÃ’ócÃ’óC°§Ğ¢òòÖçFVæ6œ;6âÜ:2,;7†–ÖfVæ6W"Â6öâUDVâ6VÖæ26V|;¦âVÂ&—FÖòFRW6ğ¦gVæ7F–öâvWDÖ–çDf÷&V67B†Ò—°¢6öç7B&FSÖvWEvVV¶Ç•&–çE&FR†Òæ–B“¶ÆWB6ööæW7CÖçVÆÃ°¢Ô”åEõE•U2æf÷$V6‚‡CÓç°¢6öç7BÆVgCÖvWDÖ–çEF‡&W6†öÆB‡Bæ¶W’ÆÒæ–B’ÖvWD†÷W'56–æ6TÖ–çB†Òæ–BÇBæ¶W’“°¢6öç7BvVV·3ÖÆVgCÃÓó¢‡&FSãöÆVgB÷&FS¤–æf–æ—G’“°¢–b‚6ööæW7GÇÇvVV·3Ç6ööæW7BçvVV·2—6ööæW7C×·F—ó§BæÆ&VÂÆ¶W“§Bæ¶W’Æ†÷W'4ÆVgC¦ÆVgBÇvVV·2Ç&FWÓ°¢Ò“°¢&WGW&â6ööæW7C°§Ğ¦gVæ7F–öâvWEF÷FÄf–ÆÖVçD¶r†–B—°¢6öç7BÖÓÕ÷W6TöFöÖWFW"‚“ò‚†vWDöFöÖWFW"‚•¶–E×ÇÇ·Ò’æf–ÆÖVçDÖ×ÇÃ“¦vWD†—7B‚’æf–ÇFW"‡ƒÓç‚æ–CÓÓÖ–B’ç&VGV6R‚‡2Ç‚“Óç2²‡‚æf–ÆÖVçDÖ×ÇÃ’Ã“·&WGW&âÖÒ¦vWDf–ÆÖVçD¶uW$ÖÒ‚“·Ğ¦gVæ7F–öâvWDf–ÆÖVçD6÷7B†–B—¶6öç7B¶sÖvWEF÷FÄf–ÆÖVçD¶r†–B“¶6öç7B6÷7C×'6TfÆöB†Æö6Å7F÷&vRævWD—FVÒ„d”ÄÔTåEô4õ5Eô´U’—ÇÂsr“·&WGW&âÖF‚ç&÷VæB†¶r¦6÷7B“·Ğ ¦gVæ7F–öâ&VæFW$Ö–çFVææ6UF&ÆR‚—°¢6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖ–çEF&ÆRr“¶–b‚VÂ—&WGW&ã°¢ÆWBF÷DƒÓÇF÷D¶sÓÇF÷D6÷7CÓÇF÷E&–çG3ÓÇF÷DÆW'G3Ó²òò7V×VÆF÷&W2FRfÆ÷F¢6öç7B&÷w3ÔÔT”ä2æÖ†ÓÓç°¢6öç7BƒÖvWE&–çD†÷W'2†Òæ–B“°¢6öç7BF÷FÄƒ×‚çFôf—†VBƒ“°¢6öç7Bf–Ä¶tãÖvWEF÷FÄf–ÆÖVçD¶r†Òæ–B“¶6öç7Bf–Ä¶sÖf–Ä¶tâçFôf—†VBƒ2“°¢6öç7Bf–Ä6÷7CÖvWDf–ÆÖVçD6÷7B†Òæ–B“°¢6öç7B&–çG3Ò†vWDöFöÖWFW"‚•¶Òæ–E×ÇÇ·Ò’ç&–çG7ÇÃ°¢òòVæ6öÆ6F÷"VÂÆörFRÖçFVæ6œ;6âFRÆÜ:V–æ†Wf—Fã"&V<:Æ7VÆ÷2¢6öç7BÔÆösÖvWDÖ–çDÆör‚’æf–ÇFW"‡ƒÓç‚æÖV–æ–CÓÓÖÒæ–B“°¢6öç7BW%G—SÔÔ”åEõE•U2æÖ‡CÓç°¢6öç7BÃÖÔÆöræf–ÇFW"‡ƒÓç‚çF—óÓÓ×Bæ¶W’’ç6÷'B‚†Æ"“Óæ"çG2ÖçG2“¶6öç7BÆ7CÖÅ³Ó°¢6öç7BƒÖÆ7CôÖF‚æÖ‚ƒÇ‚ÖÆ7Bç&–çD†÷W'4EF–ÖR“§ƒ¶6öç7BF‡&W6ƒÖvWDÖ–çEF‡&W6†öÆB‡Bæ¶W’ÆÒæ–B“°¢&WGW&ç·BÆ‚ÇF‡&W6‚ÆÆ7BÇ7C§F‡&W6ƒãö‚÷F‡&W6ƒ£Ó°¢Ò“°¢6öç7BÆW'G4ã×W%G—Ræf–ÇFW"‡Óçç7CãÓã’’æÆVæwFƒ°¢F÷D‚³×ƒ·F÷D¶r³Öf–Ä¶tã·F÷D6÷7B³Öf–Ä6÷7C·F÷E&–çG2³×&–çG3·F÷DÆW'G2³ÖÆW'G4ã°¢6öç7B6†—3×W%G—RæÖ‚‡·BÆ‚ÇF‡&W6‚ÆÆ7BÇ7GÒ“Óç°¢6öç7Bö³×7CÃã’Æ÷fW#×7CãÓ°¢6öç7BÆ7E7G#ÖÆ7CõôEDeôDÒæf÷&ÖB†æWrFFR†Æ7BçG2’“¢w6–â&Vrâs°¢6öç7B7FGW4–6öãÖ÷fW#ò~)ªs¦ö³ò~)É2s¢wâs°¢&WGW&æÇ7âF—FÆSÒ"G·BæÆ&VÇÓ¢G¶‚çFôf—†VBƒ—Ö‚òG·F‡&W6‡Ö‚‚G´ÖF‚ç&÷VæB‡7B£—ÒR’+r9¦ÇF–Öó¢G¶Æ7E7G'Ò"7G–ÆSÒ&F—7Æ“¦–æÆ–æRÖfÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£7ƒ¶&6¶w&÷VæC¢G¶÷fW#òw&v&ƒ#SRÃc‚Ãc‚ÃãR’s§7CãÓã“òw&v&ƒ#SRÃsÃÃãR’s¦Æ7Còw&v&ƒÃ#"ÃsÃã"’s¢w&v&ƒ#SRÃ#SRÃ#SRÃãB’wÓ¶6öÆ÷#¢G¶÷fW#òr6fcCCCBs§7CãÓã“òr6ffs¦Æ7Còr3CFs¢wf"‚Ò×FW‡C2’wÓ¶&÷&FW#£‚6öÆ–BG¶÷fW#òw&v&ƒ#SRÃc‚Ãc‚Ãã2’s§7CãÓã“òw&v&ƒ#SRÃsÃÃã2’s¦Æ7Còw&v&ƒÃ#"ÃsÃã#R’s¢wf"‚ÒÖ&÷&FW#"’wÓ¶&÷&FW"×&F—W3£Wƒ·FF–æs£'‚gƒ¶föçB×6—¦S£ƒ¶föçB×vV–v‡C£s#âG·Bæ–6öçÒG·7FGW4–6öçÒÇ7â7G–ÆSÒ&föçB×vV–v‡C£C¶÷6—G“£ãƒR#âG´ÖF‚ç&÷VæB‡7B£—ÒSÂ÷7ããÂ÷7ãæ°¢Ò’æ¦ö–â‚rr“°¢6öç7Bv3ÔÔôä•Dõ%ôu%Uõ2æf–æB†sÓæræ¶W“ÓÓÖÒæÖöFVÆò“°¢6öç7BÆW'G3×¶ÆVæwFƒ¦ÆW'G4çÓ°¢6öç7B&FSÖvWEvVV¶Ç•&–çE&FR†Òæ–B“¶ÆWBf3ÖçVÆÃ°¢W%G—Ræf÷$V6‚‡Óç¶6öç7BÆVgC×çF‡&W6‚×æƒ¶6öç7BvVV·3ÖÆVgCÃÓó¢‡&FSãöÆVgB÷&FS¤–æf–æ—G’“¶–b‚f7ÇÇvVV·3Æf2çvVV·2–f3×·F—ó§çBæÆ&VÂÆ†÷W'4ÆVgC¦ÆVgBÇvVV·2Ç&FWÓ·Ò“°¢ÆWBf4‡FÖÃ°¢–b‚f7ÇÂ†f2ç&FSÃÓbff2æ†÷W'4ÆVgCã’—¶6öç7BöF—7Ò‡G—VöbvWDÖV–æW7FFôvÆö&ÃÓÓÒvgVæ7F–öâsövWDÖV–æW7FFôvÆö&Â†Òæ–B“¢vF—7öæ–&ÆRr“ÓÓÒvF—7öæ–&ÆRs¶f4‡FÖÃÕöF—7öÇ7â7G–ÆSÒ&6öÆ÷#¢6ff¶föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£c"F—FÆSÒ$†&–Æ—FFW&ò6–â–×&W6–öæW26ö×ÆWFF2VâB6VÖæ2(	B66–FBö6–÷6#î)ª7V'WF–Æ—¦FÂ÷7ãæ¦Ç7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£ãW‚"F—FÆSÒ%6–â–×&W6–öæW2&V6–VçFW2#ç6–âW6ò&V6–VçFSÂ÷7ãæ·Ğ¢VÇ6R–b†f2æ†÷W'4ÆVgCÃÓ–f4‡FÖÃÖÇ7â7G–ÆSÒ&6öÆ÷#¢6fcCCCC¶föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£s#î)ªG¶W66T‡FÖÂ†f2çF—ò—ÒfVæ6–FÂ÷7ãæ°¢VÇ6W¶6öç7BsÖf2çvVV·3¶6öç7B6öÃ×sÃòr6fcCCCBs§sÃ#òr6ffs¢r3CFs¶6öç7BÆ&Ã×sÃòvW7F6VÖæs§sÃ#öâG´ÖF‚ç&÷VæB‡r£r—ÒL:Ö6¦âG´ÖF‚ç&÷VæB‡r—Ò6VÖ¶f4‡FÖÃÖÇ7â7G–ÆSÒ&6öÆ÷#¢G¶6öÇÓ¶föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£c"F—FÆSÒ"G¶W66T‡FÖÂ†f2çF—ò—Ó¢fÇFâG¶f2æ†÷W'4ÆVgBçFôf—†VBƒ—Ö‚Â&—FÖòFRG¶f2ç&FRçFôf—†VBƒ—Ö‚÷6VÖæ#âG¶W66T‡FÖÂ†f2çF—ò—ÒVâG¶Æ&ÇÓÂ÷7ãâÇ7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£‚#ì+rG¶f2ç&FRçFôf—†VBƒ—Ö‚÷6VÓÂ÷7ãæ·Ğ¢&WGW&æÇG"7G–ÆSÒ&&÷&FW"Ö&÷GFöÓ£‚6öÆ–Bf"‚ÒÖ&÷&FW#"’#à¢ÇFB7G–ÆSÒ'FF–æs£—‚ƒ¶föçB×6—¦S£'ƒ·v†—FR×76S¦æ÷w&#ãÇ7â7G–ÆSÒ&F—7Æ“¦–æÆ–æRÖ&Æö6³·v–GFƒ£‡ƒ¶†V–v‡C£‡ƒ¶&÷&FW"×&F—W3£SS¶&6¶w&÷VæC¢G¶v3òæ6öÆ÷'ÇÂr3ƒƒ‚wÓ¶Ö&v–â×&–v‡C£g‚#ãÂ÷7ããÆ#âG¶ÒææöÖ'&WÓÂö#âÇ7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2’#â2G¶ÒæçVÔwÓÂ÷7ããÂ÷FCà¢ÇFB7G–ÆSÒ'FF–æs£—‚ƒ¶föçB×6—¦S£'ƒ·FW‡BÖÆ–vã¦6VçFW#¶föçB×vV–v‡C£s¶6öÆ÷#§f"‚ÒÖ66VçB’#âG·F÷FÄ‡ÖƒÂ÷FCà¢ÇFB7G–ÆSÒ'FF–æs£—‚‚#ãÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£Gƒ¶fÆW‚×w&§w&#âG¶6†—7ÓÂöF—cãÂ÷FCà¢ÇFB7G–ÆSÒ'FF–æs£—‚ƒ·v†—FR×76S¦æ÷w&#âG¶f4‡FÖÇÓÂ÷FCà¢ÇFB7G–ÆSÒ'FF–æs£—‚ƒ¶föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“·v†—FR×76S¦æ÷w&#âG¶f–Ä¶wÖ¶rG¶f–Ä6÷7Cãö+rBG¶f–Ä6÷7BçFôÆö6ÆU7G&–ær‚vW2Ô4Âr—Ö¢rwÒÂ÷FCà¢ÇFB7G–ÆSÒ'FF–æs£—‚‚#ãÆ'WGFöâöæ6Æ–6³Ò&÷VäÖ–çDÖöFÂ‚rG¶Òæ–GÒr’"7G–ÆSÒ&Ú±î¸Â¸­yêë¢°k¢G§¦*^background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:4px 10px;cursor:pointer;white-space:nowrap" ${alerts.length?'style="border-color:rgba(255,170,0,0.5)"':''}>+ Registrar</button></td>
+      ${Object.keys(PREHEAT_PRESETS).map(mat=>btn(mat,`preheatPrinter('${id}','${mat}')`,'padding:5px 10px')).join('')}
+      ${btn('â„ï¸ Enfriar',`cooldownPrinter('${id}')`,'padding:5px 10px;margin-left:auto')}
+    </div>
+    <!-- MÃQUINA -->
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">ğŸ® MÃ¡quina</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      ${btn('ğŸ  Home',`printerHome('${id}')`)}
+      ${btn('â¬‡ï¸ Cargar filamento',`printerFilament('${id}','load')`)}
+      ${btn('â¬†ï¸ Descargar',`printerFilament('${id}','unload')`)}
+      ${btn('ğŸ’¤ Soltar motores',`printerMotorsOff('${id}')`)}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <span style="font-size:10px;color:var(--text3)">Mover:</span>
+      ${['X','Y','Z'].map(ax=>`${btn(ax+'+',`printerJog('${id}','${ax}',${ax==='Z'?1:10})`,'padding:5px 9px')}${btn(ax+'âˆ’',`printerJog('${id}','${ax}',${ax==='Z'?-1:-10})`,'padding:5px 9px')}`).join('<span style="width:6px"></span>')}
+    </div>
+    <div style="margin-bottom:18px"><button onclick="printerEmergencyStop('${id}')" style="background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.4);color:#ff4444;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;width:100%">â›” Parada de emergencia</button></div>
+    <!-- ARCHIVOS -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">ğŸ“‚ Archivos en la impresora</span>
+      <button onclick="loadPrinterFiles('${id}')" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:10.5px;cursor:pointer">â†» Cargar</button>
+    </div>
+    <div id="pcFiles" style="max-height:160px;overflow-y:auto;margin-bottom:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px"><div style="color:var(--text3);font-size:12px;padding:8px">Pulsa "Cargar" para ver los g-code y reimprimir.</div></div>
+    <!-- HISTORIAL -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">ğŸ“Š Historial real (Moonraker)</span>
+      <button onclick="loadPrinterHistory('${id}')" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:10.5px;cursor:pointer">â†» Cargar</button>
+    </div>
+    <div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:12px;padding:8px">Tiempo y filamento reales de cada trabajo â€” Ãºtil para costos.</div></div>`;
+  document.getElementById('printerControlModal').style.display='flex';
+}
+function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';}
+
+// â”€â”€ Queue modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function openQueueModal(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const q=_queueGet(id);
+  const fmtTime=s=>{const h=Math.floor(s/3600),mn=Math.floor((s%3600)/60);return h?`${h}h ${mn}m`:`${mn}m`;};
+  const rows=q.map((j,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+      <span style="font-size:12px;font-weight:700;color:var(--accent);min-width:18px">#${i+1}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(j.filename)}</div>
+        <div style="font-size:10.5px;color:var(--text3)">â± ~${j.secs?fmtTime(j.secs):'â€”'} Â· âš– ~${j.grams?j.grams.toFixed(0):'â€”'}g</div>
+      </div>
+      <button onclick="_queueRemove('${id}',${i})" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.3);border-radius:6px;color:#ff4444;font-size:10.5px;padding:3px 8px;cursor:pointer">âœ•</button>
+    </div>`).join('');
+  const body=q.length?`<div style="display:flex;flex-direction:column;gap:6px">${rows}</div>`:`<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Cola vacÃ­a</div>`;
+  document.getElementById('queueModalTitle').textContent=`Cola de impresiÃ³n â€” ${m.nombre} #${m.numG}`;
+  document.getElementById('queueModalBody').innerHTML=body;
+  document.getElementById('queueModal').style.display='flex';
+}
+function closeQueueModal(){document.getElementById('queueModal').style.display='none';}
+function _queueRemove(id,idx){
+  const q=_printQueue[id];if(!q)return;
+  q.splice(idx,1);
+  renderMonitorGrid();
+  if(q.length>0)openQueueModal(id);else closeQueueModal();
+  toast('Trabajo eliminado de la cola','success');
+}
+
+function _sendWaAlertIfEnabled(title,body){
+  if(localStorage.getItem('monitor_wa_enabled')!=='1')return;
+  const phone=localStorage.getItem('monitor_wa_phone');if(!phone)return;
+  sendWatiMessage(phone,`${title}\n${body}`).catch(()=>{});
+}
+// Decide quÃ© hacer con la sesiÃ³n de impresiÃ³n segÃºn el estado actual:
+//   open  = abrir sesiÃ³n nueva (empezÃ³ a imprimir y no habÃ­a una viva)
+//   close = cerrar la sesiÃ³n (llegÃ³ a un estado terminal)
+//   result= 'Completado' | 'Cancelado' cuando close
+// PAUSA y la pÃ©rdida de telemetrÃ­a (offline/connecting/startup/unknown/noip) NO
+// abren ni cierran: la impresiÃ³n sigue viva, solo estÃ¡ pausada o no la estamos
+// viendo. Reanudar desde pausa conserva el inicio real (no reabre la sesiÃ³n).
+// Antes cualquier salida de 'printing' salvo 'offline' cerraba la sesiÃ³n: una
+// pausa (printingâ†’paused) se registraba como "Cancelado", perdÃ­a el inicio y, al
+// completar, calculaba la duraciÃ³n solo desde la reanudaciÃ³n â€” corrompiendo horas
+// de odÃ³metro/mantenciÃ³n y la autocalibraciÃ³n de tiempo que usa el cotizador.
+function _printSessionAction(st,hasSession){
+  const transitorio=st==='paused'||st==='offline'||st==='apidown'||st==='connecting'||st==='startup'||st==='unknown'||st==='noip';
+  const open=st==='printing'&&!hasSession;
+  const close=hasSession&&st!=='printing'&&!transitorio;
+  return{open,close,result:close?(st==='complete'?'Completado':'Cancelado'):null};
+}
+function checkTransitions(m,s){
+  const prev=_prevState[m.id];const st=s.state;
+  if(st==='error'&&prev!=='error'){
+    const title=`âš  Error en ${m.nombre} #${m.numG}`;
+    sendBrowserNotification(title,'Requiere atenciÃ³n');
+    sendWebhookAlert(m,'error');
+    _sendWaAlertIfEnabled(title,'Requiere atenciÃ³n inmediata.');
+  }
+  if(st==='shutdown'&&prev!=='shutdown'&&prev!==undefined&&prev!=='offline'){
+    const title=`âš  ${m.nombre} #${m.numG} se detuvo (Klipper)`;
+    const detail=s.klMsg||'El firmware entrÃ³ en shutdown. Revisa la impresora y reinicia el firmware.';
+    sendBrowserNotification(title,detail);
+    sendWebhookAlert(m,'shutdown');
+    _sendWaAlertIfEnabled(title,detail);
+  }
+  const act=_printSessionAction(st,!!_sessions[m.id]);
+  if(act.open)_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
+  if(act.close){
+    const sess=_sessions[m.id];
+    if(sess){
+      const dur=Math.round((Date.now()-sess.start)/60000);
+      const filamentMm=Math.max(0,(s.filamentMm||0)-sess.filamentStart);
+      saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,act.result,filamentMm);
+      delete _sessions[m.id];
+      if(st==='complete'){
+        // Auto-calibrar estimaciÃ³n de tiempo por modelo de impresora
+        const estKey='sl_last_est_secs';const estSecs=parseFloat(localStorage.getItem(estKey));
+        if(estSecs>0&&dur>0){const ratio=(dur*60)/estSecs;if(ratio>0.4&&ratio<4){const calKey='sl_time_cal_'+(m.modelo||'default');const prevCal=parseFloat(localStorage.getItem(calKey))||1;localStorage.setItem(calKey,(prevCal*0.75+ratio*0.25).toFixed(4));}}
+        localStorage.removeItem(estKey);
+        const title=`âœ… ${m.nombre} #${m.numG} completado`;
+        sendBrowserNotification(title,`${sess.file} Â· ${dur}m`);
+        _sendWaAlertIfEnabled(title,`Archivo: ${sess.file} | DuraciÃ³n: ${dur} min`);
+        if(_queueCount(m.id)>0)setTimeout(()=>_queueStartNext(m.id),2000);
+      }
+    }
+  }
+  _prevState[m.id]=st;
+}
+
+function saveHistoryEntry(m,file,start,end,dur,result,filamentMm=0){
+  try{const h=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');h.unshift({id:m.id,nombre:m.nombre,numG:m.numG,file,start,end,dur,result,filamentMm,ts:Date.now()});if(h.length>200)h.splice(200);localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
+  odoAdd(m.id,(dur||0)/60,filamentMm,result==='Completado');
+}
+
+function getHistoryForPrinter(id){return getHist().filter(h=>h.id===id);}
+
+function requestNotificationPermission(manual){
+  if(!('Notification'in window))return;
+  if(Notification.permission==='default')Notification.requestPermission().then(p=>{if(manual)toast(p==='granted'?'ğŸ”” Notificaciones activadas':'Permiso denegado',p==='granted'?'success':'error');});
+  else if(manual)toast(Notification.permission==='granted'?'ğŸ”” Notificaciones ya activas':'Permiso denegado',Notification.permission==='granted'?'success':'error');
+}
+
+function sendBrowserNotification(title,body){if('Notification'in window&&Notification.permission==='granted')new Notification(title,{body});}
+
+async function sendWebhookAlert(m,event){
+  const url=localStorage.getItem('monitor_webhook_url');if(!url)return;
+  try{await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({maquina:m.nombre,num:m.numG,evento:event,timestamp:new Date().toISOString()})});}catch(e){}
+}
+
+async function openBedMesh(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return;}
+  toast('Consultando bed meshâ€¦','info');
+  try{
+    const data=await _moonrakerGet(id,'/printer/objects/query?bed_mesh');
+    const mesh=data?.result?.status?.bed_mesh;
+    if(!mesh||!mesh.probed_matrix){toast('Sin datos de bed mesh â€” ejecuta BED_MESH_CALIBRATE primero','error');return;}
+    const matrix=mesh.probed_matrix;
+    const rows=matrix.length,cols=matrix[0].length;
+    let mn=1e9,mx=-1e9;
+    matrix.forEach(r=>r.forEach(v=>{if(v<mn)mn=v;if(v>mx)mx=v;}));
+    const range=mx-mn||0.001;
+    const cell=Math.min(44,Math.floor(320/Math.max(rows,cols)));
+    const svgCells=matrix.map((row,ri)=>row.map((v,ci)=>{
+      const t=(v-mn)/range;
+      const rr=Math.round(t*220),gg=Math.round((1-Math.abs(t-0.5)*2)*180),bb=Math.round((1-t)*220);
+      return`<rect x="${ci*cell}" y="${ri*cell}" width="${cell-1}" height="${cell-1}" fill="rgb(${rr},${gg},${bb})" rx="3"/>
+<text x="${ci*cell+cell/2}" y="${ri*cell+cell/2+4}" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="${Math.max(7,cell/4)}" font-family="monospace">${v.toFixed(2)}</text>`;
+    }).join('')).join('');
+    const W=cols*cell,H=rows*cell;
+    const modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9999;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML=`<div style="background:var(--surface);border-radius:14px;padding:20px;max-width:95vw;max-height:90vh;overflow:auto;min-width:320px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:16px">
+        <div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px">ğŸ—ºï¸ Bed Mesh â€” ${escapeHtml(m.nombre)} #${m.numG}</div>
+          <div style="font-size:10.5px;color:var(--text3)">DesviaciÃ³n: ${mn.toFixed(3)}mm â€¦ ${mx.toFixed(3)}mm &nbsp;Â·&nbsp; rango: <b>${(range*1000).toFixed(0)}Âµm</b> &nbsp;Â·&nbsp; ${rows}Ã—${cols} puntos</div>
+        </div>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;flex-shrink:0;line-height:1">âœ•</button>
+      </div>
+      <svg width="${W}" height="${H}" style="display:block;border-radius:8px;overflow:hidden">${svgCells}</svg>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;font-size:10.5px;color:var(--text3)">
+        <div style="width:80px;height:10px;background:linear-gradient(to right,rgb(0,120,220),rgb(0,180,0),rgb(220,0,0));border-radius:3px;flex-shrink:0"></div>
+        <span>plano/bajo (azul) â†’ promedio (verde) â†’ alto (rojo)</span>
+      </div>
+      ${range>0.4?`<div style="margin-top:8px;padding:8px 10px;background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:8px;font-size:10.5px;color:#ffaa00">âš  Rango &gt;400Âµm â€” la cama puede necesitar nivelaciÃ³n manual antes de usar mesh compensation</div>`:''}
+    </div>`;
+    modal.onclick=e=>{if(e.target===modal)modal.remove();};
+    document.body.appendChild(modal);
+  }catch(e){toast('Error consultando bed mesh: '+e.message,'error');}
+}
+function openWebcamModal(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const url=localStorage.getItem('printer_cam_'+id)||'';
+  document.getElementById('webcamModalTitle').textContent=`${m.nombre} #${m.numG}`;
+  document.getElementById('webcamModalId').value=id;
+  document.getElementById('webcamModalUrl').value=url;
+  const img=document.getElementById('webcamModalImg');
+  const nf=document.getElementById('webcamNoFeed');
+  if(url){const cu=printerCamUrl(id);if(_camIsSnapshot(url))img.setAttribute('data-snap',cu);else img.removeAttribute('data-snap');img.src=cu;img.style.display='block';nf.style.display='none';}else{img.removeAttribute('data-snap');img.src='';img.style.display='none';nf.style.display='flex';}
+  const ts=document.getElementById('webcamTestStatus');if(ts)ts.textContent='';
+  document.getElementById('webcamModal').style.display='flex';
+}
+// DiagnÃ³stico de cÃ¡mara: hace la peticiÃ³n REAL (a travÃ©s del tÃºnel/bridge en
+// modo remoto) y traduce el resultado a un mensaje claro â€” asÃ­ se sabe si el
+// problema es el token, el puerto, que go2rtc no responde, o el nombre del stream.
+async function testWebcam(){
+  const inp=document.getElementById('webcamModalUrl');
+  const out=document.getElementById('webcamTestStatus');
+  if(!inp||!out)return;
+  const raw=(inp.value||'').trim();
+  const set=(msg,col)=>{out.textContent=msg;out.style.color=col;};
+  if(!raw){set('Ingresa una URL primero.','var(--warn)');return;}
+  // Misma reescritura que printerCamUrl: en remoto va por el bridge con el token.
+  let url=raw;
+  if(!(typeof _isLocalMode==='function'&&_isLocalMode())){
+    const mm=raw.match(/^http:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?(\/.*)?$/);
+    if(mm&&typeof _appendBridgeToken==='function') url=_appendBridgeToken(`${getPrinterTunnel()}/${mm[1]}:${mm[2]||'80'}${mm[3]||'/'}`);
+  }
+  set('â³ Probandoâ€¦','var(--text3)');
+  const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),12000);
+  try{
+    const r=await fetch(url,{method:'GET',cache:'no-store',signal:ctrl.signal});
+    try{r.body&&r.body.cancel();}catch(_){}
+    const ct=(r.headers.get('content-type')||'').toLowerCase();
+    if(r.ok&&(ct.includes('image')||ct.includes('multipart'))) set('âœ“ CÃ¡mara OK â€” estÃ¡ entregando video.','var(--success)');
+    else if(r.ok) set(`âš  Responde 200 pero no es imagen (tipo: ${ct||'?'}). Si es go2rtc, revisa el nombre del stream (src=â€¦).`,'var(--warn)');
+    else if(r.status===401) set('âœ– 401 â€” token del bridge invÃ¡lido.','var(--danger)');
+    else if(r.status===403) set('âœ– 403 â€” el bridge bloqueÃ³ ese puerto (agrÃ©galo a BRIDGE_PORTS).','var(--danger)');
+    else if(r.status===404) set('âœ– 404 â€” ruta o stream no encontrado. Revisa la URL / el src=.','var(--danger)');
+    else if(r.status===502||r.status===504) set(`âœ– ${r.status} â€” el bridge no pudo conectar con la cÃ¡mara: go2rtc no responde en esa IP:puerto (Â¿apagado, IP equivocada, o cÃ¡mara off al terminar la impresiÃ³n?).`,'var(--danger)');
+    else set(`âœ– ${r.status} ${r.statusText||''}`.trim(),'var(--danger)');
+  }catch(e){
+    if(e.name==='AbortError') set('âœ– Sin respuesta (12s) â€” el bridge o la cÃ¡mara no contestaron.','var(--danger)');
+    else set('âœ– No se pudo conectar: bridge caÃ­do, sin red, o bloqueo del navegador. ('+(e.message||'error')+')','var(--danger)');
+  }finally{clearTimeout(to);}
+}
+function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url&&!_safePrinterMediaUrl(url)){toast('URL de webcam invÃ¡lida â€” usa http:// o https://','error');return;}if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);const m=MAQUINAS.find(x=>x.id===id);if(m){m.cam=url||null;if(m._airtableId){if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{cam:url||''}})});}}closeWebcamModal();renderMonitorGrid();toast(url?'ğŸ“· Webcam configurada â€” guardada en Airtable':'Webcam eliminada','success');}
+function closeWebcamModal(){document.getElementById('webcamModal').style.display='none';const wi=document.getElementById('webcamModalImg');if(wi){wi.removeAttribute('data-snap');wi.src='';}}
+
+function openHistoryModal(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  document.getElementById('histModalTitle').textContent=`${m.nombre} #${m.numG}`;
+  const hist=getHistoryForPrinter(id);
+  const el=document.getElementById('histModalBody');
+  el.innerHTML=hist.length?hist.slice(0,50).map(h=>{const d=new Date(h.start);return`<div style="padding:8px 0;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px">
+    <span style="background:${h.result==='Completado'?'rgba(0,212,170,0.15)':'rgba(255,68,68,0.12)'};color:${h.result==='Completado'?'#00d4aa':'#ff4444'};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;flex-shrink:0">${h.result}</span>
+    <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.file||'â€”')}</div>
+    <div style="font-size:10.5px;color:var(--text3)">${d.toLocaleDateString('es-CL')} ${d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})} Â· ${h.dur}m</div></div>
+  </div>`;}).join(''):'<div style="text-align:center;color:var(--text3);padding:24px;font-size:12px">Sin historial registrado aÃºn</div>';
+  document.getElementById('histModal').style.display='flex';
+}
+function closeHistoryModal(){document.getElementById('histModal').style.display='none';}
+
+function openAlertSettings(){
+  document.getElementById('alertWebhookUrl').value=localStorage.getItem('monitor_webhook_url')||'';
+  const wp=document.getElementById('alertWaPhone');const wc=document.getElementById('alertWaEnabled');
+  if(wp)wp.value=localStorage.getItem('monitor_wa_phone')||'';
+  if(wc)wc.checked=localStorage.getItem('monitor_wa_enabled')==='1';
+  document.getElementById('alertSettingsModal').style.display='flex';
+}
+function saveAlertSettings(){
+  const url=document.getElementById('alertWebhookUrl').value.trim();
+  if(url)localStorage.setItem('monitor_webhook_url',url);else localStorage.removeItem('monitor_webhook_url');
+  const wp=document.getElementById('alertWaPhone');const wc=document.getElementById('alertWaEnabled');
+  if(wp){const ph=wp.value.trim();if(ph)localStorage.setItem('monitor_wa_phone',ph);else localStorage.removeItem('monitor_wa_phone');}
+  if(wc)localStorage.setItem('monitor_wa_enabled',wc.checked?'1':'0');
+  toast('Alertas guardadas âœ“','success');closeAlertSettings();
+}
+function closeAlertSettings(){document.getElementById('alertSettingsModal').style.display='none';}
+
+// â”€â”€ SORT & KIOSK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let _sortByState=true,_kioskMode=false;
+function stateOrder(s){return{printing:0,paused:1,error:2,apidown:3,complete:4,standby:5,offline:6,noip:7}[s]??8;}
+function sortedList(lista){if(!_sortByState)return lista;return[...lista].sort((a,b)=>stateOrder((_printerStatus[a.id]||{}).state||'offline')-stateOrder((_printerStatus[b.id]||{}).state||'offline'));}
+function toggleSort(){_sortByState=!_sortByState;const btn=document.getElementById('btnSort');if(btn)btn.style.color=_sortByState?'var(--accent)':'var(--text3)';renderMonitorGrid();}
+function toggleKiosk(){
+  _kioskMode=!_kioskMode;
+  if(_kioskMode){document.documentElement.requestFullscreen?.();document.body.classList.add('kiosk');}
+  else{document.exitFullscreen?.();document.body.classList.remove('kiosk');}
+  renderMonitorGrid();
+}
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&_kioskMode){_kioskMode=false;document.body.classList.remove('kiosk');renderMonitorGrid();}});
+
+// â”€â”€ IDLE ALERT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const _lastActiveTime={},_idleAlerted={};
+function getIdleHours(id,state){
+  if(state==='printing'||state==='paused'||state==='offline'||state==='noip')return 0;
+  const last=_lastActiveTime[id];if(!last)return 0;
+  const threshold=parseFloat(localStorage.getItem('idle_alert_hours')||'2');
+  const h=(Date.now()-last)/3600000;
+  return h>=threshold?Math.round(h):0;
+}
+function checkIdleAlerts(){
+  const now=new Date();const h=now.getHours();
+  const isWork=h>=8&&h<19&&now.getDay()>0&&now.getDay()<6;
+  MAQUINAS.forEach(m=>{
+    const st=(_printerStatus[m.id]||{}).state||'offline';
+    if(st==='printing'||st==='paused'){_lastActiveTime[m.id]=Date.now();delete _idleAlerted[m.id];}
+    else if(isWork&&_lastActiveTime[m.id]&&!_idleAlerted[m.id]){
+      const idleH=(Date.now()-_lastActiveTime[m.id])/3600000;
+      const threshold=parseFloat(localStorage.getItem('idle_alert_hours')||'2');
+      if(idleH>=threshold){sendBrowserNotification(`ğŸ’¤ ${m.nombre} #${m.numG} lleva ${Math.round(idleH)}h sin imprimir`,'MÃ¡quina inactiva en horario laboral');sendWebhookAlert(m,'idle');_idleAlerted[m.id]=true;}
+    }
+  });
+}
+
+// â”€â”€ MANTENIMIENTO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const MAINT_KEY='printer_maint_v1',MAINT_CFG_KEY='printer_maint_cfg',FILAMENT_COST_KEY='filament_cost_clp';
+// Peso del filamento segÃºn material y diÃ¡metro (configurable en Umbrales de mantenciÃ³n).
+// Devuelve kg por mm de filamento extruido. Por defecto PLA 1.75 mm â‰ˆ 0.000002982 kg/mm.
+const FILAMENT_DENSITY={PLA:1.24,PETG:1.27,ABS:1.04,ASA:1.07,TPU:1.21,Nylon:1.14};
+function getFilamentKgPerMm(){
+  const dens=FILAMENT_DENSITY[localStorage.getItem('filament_material')||'PLA']||1.24; // g/cmÂ³
+  const dia=parseFloat(localStorage.getItem('filament_diameter')||'1.75')||1.75;       // mm
+  const area=Math.PI*(dia/2)*(dia/2);                                                  // mmÂ²
+  return area*dens/1e6;                                                                // kg/mm
+}
+const MAINT_TYPES=[
+  {key:'nozzle',label:'Nozzle',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-nut"/></svg>',defaultHours:200},
+  {key:'lubrication',label:'LubricaciÃ³n',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-droplet"/></svg>',defaultHours:100},
+  {key:'belt',label:'Correa',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg>',defaultHours:500},
+  {key:'extruder',label:'Extrusor',icon:'âš™ï¸',defaultHours:300},
+  {key:'bed',label:'Cama / superficie',icon:'â–¦',defaultHours:250},
+  {key:'sensors',label:'Sensores / elÃ©ctrico',icon:'âš¡',defaultHours:600},
+  {key:'general',label:'General',icon:'<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-wrench"/></svg>',defaultHours:50},
+];
+function getMaintConfig(){try{return JSON.parse(localStorage.getItem(MAINT_CFG_KEY)||'{}');}catch(e){return{};}}
+function getMaintThreshold(tipo,maquinaId){
+  if(maquinaId&&window.MachineOps?.maintenanceThreshold){
+    const specific=window.MachineOps.maintenanceThreshold(maquinaId,tipo);
+    if(specific>0)return specific;
+  }
+  const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;
+}
+function getMaintLog(){return maquinaState.maintLog.length?maquinaState.maintLog:getMaintLogLocal();}
+function getPrintHours(id){if(_useOdometer())return(getOdometer()[id]||{}).hours||0;return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
+function getHoursSinceMaint(id,tipo){
+  const log=getMaintLog().filter(x=>x.maquinaId===id&&x.tipo===tipo).sort((a,b)=>b.ts-a.ts);
+  const total=getPrintHours(id);
+  if(!log.length)return total;
+  return Math.max(0,total-log[0].printHoursAtTime);
+}
+function getMaintAlerts(m){
+  return MAINT_TYPES.filter(t=>getHoursSinceMaint(m.id,t.key)>=getMaintThreshold(t.key,m.id)*0.9)
+    .map(t=>({...t,hours:getHoursSinceMaint(m.id,t.key),threshold:getMaintThreshold(t.key,m.id)}));
+}
+// Ritmo de impresiÃ³n (h/semana) de las Ãºltimas 4 semanas, para proyectar mantenciÃ³n
+function getWeeklyPrintRate(id){
+  const cut=Date.now()-28*86400000;return getHist().filter(x=>x.id===id&&x.result==='Completado'&&(x.ts||x.end||0)>=cut).reduce((s,x)=>s+(x.dur||0)/60,0)/4;
+}
+// MantenciÃ³n mÃ¡s prÃ³xima a vencer, con ETA en semanas segÃºn el ritmo de uso
+function getMaintForecast(m){
+  const rate=getWeeklyPrintRate(m.id);let soonest=null;
+  MAINT_TYPES.forEach(t=>{
+    const left=getMaintThreshold(t.key,m.id)-getHoursSinceMaint(m.id,t.key);
+    const weeks=left<=0?0:(rate>0?left/rate:Infinity);
+    if(!soonest||weeks<soonest.weeks)soonest={tipo:t.label,key:t.key,hoursLeft:left,weeks,rate};
+  });
+  return soonest;
+}
+function getTotalFilamentKg(id){
+  const mm=_useOdometer()?((getOdometer()[id]||{}).filamentMm||0):getHist().filter(x=>x.id===id).reduce((s,x)=>s+(x.filamentMm||0),0);return mm*getFilamentKgPerMm();}
+function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFloat(localStorage.getItem(FILAMENT_COST_KEY)||'0');return Math.round(kg*cost);}
+
+function renderMaintenanceTable(){
+  const el=document.getElementById('maintTable');if(!el)return;
+  let totH=0,totKg=0,totCost=0,totPrints=0,totAlerts=0;       // acumuladores de flota
+  const rows=MAQUINAS.map(m=>{
+    const ph=getPrintHours(m.id);
+    const totalH=ph.toFixed(1);
+    const filKgN=getTotalFilamentKg(m.id);const filKg=filKgN.toFixed(3);
+    const filCost=getFilamentCost(m.id);
+    const prints=(getOdometer()[m.id]||{}).prints||0;
+    // Una sola pasada por el log de mantenciÃ³n de la mÃ¡quina (evita ~12 recÃ¡lculos)
+    const mLog=getMaintLog().filter(x=>x.maquinaId===m.id);
+    const perType=MAINT_TYPES.map(t=>{
+      const l=mLog.filter(x=>x.tipo===t.key).sort((a,b)=>b.ts-a.ts);const last=l[0];
+      const h=last?Math.max(0,ph-last.printHoursAtTime):ph;const thresh=getMaintThreshold(t.key,m.id);
+      return{t,h,thresh,last,pct:thresh>0?h/thresh:0};
+    });
+    const alertsN=perType.filter(p=>p.pct>=0.9).length;
+    totH+=ph;totKg+=filKgN;totCost+=filCost;totPrints+=prints;totAlerts+=alertsN;
+    const chips=perType.map(({t,h,thresh,last,pct})=>{
+      const ok=pct<0.9,over=pct>=1;
+      const lastStr=last?_DTF_DM.format(new Date(last.ts)):'sin reg.';
+      const statusIcon=over?'âš ':ok?'âœ“':'~';
+      return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h (${Math.round(pct*100)}%) Â· Ãšltimo: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':last?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':last?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':last?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${Math.round(pct*100)}%</span></span>`;
+    }).join('');
+    const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
+    const alerts={length:alertsN};
+    const rate=getWeeklyPrintRate(m.id);let fc=null;
+    perType.forEach(p=>{const left=p.thresh-p.h;const weeks=left<=0?0:(rate>0?left/rate:Infinity);if(!fc||weeks<fc.weeks)fc={tipo:p.t.label,hoursLeft:left,weeks,rate};});
+    let fcHtml;
+    if(!fc||(fc.rate<=0&&fc.hoursLeft>0)){const _disp=(typeof getMaquinaEstadoGlobal==='function'?getMaquinaEstadoGlobal(m.id):'disponible')==='disponible';fcHtml=_disp?`<span style="color:#ffaa00;font-size:10.5px;font-weight:600" title="Habilitada pero sin impresiones completadas en 4 semanas â€” capacidad ociosa">âš  subutilizada</span>`:`<span style="color:var(--text3);font-size:10.5px" title="Sin impresiones recientes">sin uso reciente</span>`;}
+    else if(fc.hoursLeft<=0)fcHtml=`<span style="color:#ff4444;font-size:10.5px;font-weight:700">âš  ${escapeHtml(fc.tipo)} vencida</span>`;
+    else{const w=fc.weeks;const col=w<1?'#ff4444':w<2?'#ffaa00':'#00d4aa';const lbl=w<1?'esta semana':w<2?`~${Math.round(w*7)} dÃ­as`:`~${Math.round(w)} sem`;fcHtml=`<span style="color:${col};font-size:10.5px;font-weight:600" title="${escapeHtml(fc.tipo)}: faltan ${fc.hoursLeft.toFixed(0)}h al ritmo de ${fc.rate.toFixed(1)}h/semana">${escapeHtml(fc.tipo)} en ${lbl}</span> <span style="color:var(--text3);font-size:10px">Â· ${fc.rate.toFixed(0)}h/sem</span>`;}
+    return`<tr style="border-bottom:1px solid var(--border2)">
+      <td style="padding:9px 10px;font-size:12px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc?.color||'#888'};margin-right:6px"></span><b>${m.nombre}</b> <span style="color:var(--text3)">#${m.numG}</span></td>
+      <td style="padding:9px 10px;font-size:12px;text-align:center;font-weight:700;color:var(--accent)">${totalH}h</td>
+      <td style="padding:9px 10px"><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div></td>
+      <td style="padding:9px 10px;white-space:nowrap">${fcHtml}</td>
+      <td style="padding:9px 10px;font-size:10.5px;color:var(--text3);white-space:nowrap">${filKg}kg${filCost>0?` Â· $${filCost.toLocaleString('es-CL')}`:''}  </td>
+      <td style="padding:9px 10px"><button onclick="openMaintModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:4px 10px;cursor:pointer;white-space:nowrap" ${alerts.length?'style="border-color:rgba(255,170,0,0.5)"':''}>+ Registrar</button></td>
     </tr>`;
   }).join('');
   el.innerHTML=`<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:700px">
@@ -1278,6 +1987,284 @@ function openMaquinaModal(maqId,nombre,dateStr){
     if(ev.pedidoId) sel.value=ev.pedidoId;
     else{const match=activos.find(p=>ev.desc&&ev.desc.startsWith(p.fields['NÂ° Pedido']||'##'));if(match) sel.value=match.id;}
   }else{
-    document.getElementById('maquinaModalTipo').m«ëŒ+Š×®º+º$zzb¥çfÇVSÒwW6òs°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÄFW62r’çfÇVSÒrs°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅF–V×òr’çfÇVSÒrs°¢6VÂçfÇVSÒrs°¢Ğ¢öäÖV–æÖöFÅF—ô6†ævR‚“°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æWfVçDÖöFÂr’ç7G–ÆRæF—7Æ“ÒvfÆW‚s°§Ğ¦gVæ7F–öâ6Æ÷6TÖV–æÖöFÂ‚—¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æWfVçDÖöFÂr’ç7G–ÆRæF—7Æ“ÒvæöæRs·Ğ¦gVæ7F–öâöäÖV–æÖöFÅF—ô6†ævR‚—°¢6öç7BF—óÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅF—òr’çfÇVS°¢6öç7BW5W6ó×F—óÓÓÒwW6òrÆW4F—7×F—óÓÓÒvF—7öæ–&ÆRs°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅVF–Fôw&÷Wr’ç7G–ÆRæF—7Æ“ÖW5W6óòvfÆW‚s¢væöæRs°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÄFW64w&÷Wr’ç7G–ÆRæF—7Æ“ÖW4F—7òvæöæRs¢vfÆW‚s°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅF–V×ôw&÷Wr’ç7G–ÆRæF—7Æ“ÖW5W6óòvfÆW‚s¢væöæRs°§Ğ¦gVæ7F–öâöäÖV–æÖöFÅVF–Fô6†ævR‚—°¢6öç7B6VÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅVF–Fòr“°¢6öç7B–C×6VÂçfÇVS¶–b‚–B’&WGW&ã°¢6öç7B×7FFRçVF–F÷4'”–E·–EÓ¶–b‚’&WGW&ã°¢6öç7Bc×æf–VÆG3°¢6öç7BåVCÖe²tì+VF–Fòu×ÇÂ~(	BrÆ6Æ–VçFS×&W6öÇfT6Æ–VçFTæÖR†e²t6Æ–VçFRuÒ’ÆW7FFóÖe²tW7FFòVF–Fòu×ÇÂ~(	Bs°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÄFW62r’çfÇVSÖG¶åVGÒ+rG¶6Æ–VçFWÖ°¢òò7VvW&—"†÷&26V|;¦âVF–Fò6’F–VæRÖöçFò†W7F–Ö6œ;6â,:–F¢6öç7BÖöçFóÒ†e²tÖöçFòF÷FÂ„4Å’u×ÇÃ’óã“°¢–b†ÖöçFóãbbFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅF–V×òr’çfÇVR—°¢6öç7B„W7CÔÖF‚æÖ‚ƒÄÖF‚ç&÷VæB†ÖöçFòóS’“²òò&÷‚CV²æWFòö‚6öÖò&VfW&Væ6–¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅF–V×òr’çfÇVSÔÖF‚æÖ–â†„W7BÃ#B“°¢Ğ§Ğ¦7–æ2gVæ7F–öâ6fTÖV–æWfVçFò‚—°¢6öç7BÖ–CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÄ–Br’çfÇVRÇF—óÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅF—òr’çfÇVRÆFW63ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÄFW62r’çfÇVRÇF–V×óÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅF–V×òr’çfÇVRÆf“ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÄfV6†–æ–6–òr’çfÇVRÆfcÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÄfV6†f–âr’çfÇVS°¢–b‚f—ÇÂfb—·Fö7B‚t–æw&W6Æ2fV6†2rÂvW'&÷"r“·&WGW&ã·Ğ¢6öç7BVF–Fô–CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vÖV–æÖöFÅVF–Fòr“òçfÇVWÇÂrs°¢6öç7B7F'CÖæWrFFR†f’²uC££r’ÆVæCÖæWrFFR†fb²uC££r“¶ÆWB6÷VçCÓ°¢f÷"†ÆWBCÖæWrFFR‡7F'B“¶CÃÖVæC¶Bç6WDFFR†BævWDFFR‚’³’—¶6öç7B¶W“ÖG¶Ö–GÕòG¶f×DFFR†æWrFFR†B’—Ö¶–b‡F—óÓÓÒvF—7öæ–&ÆRr’FVÆWFRÖV–æ7FFRæWfVçF÷5¶¶W•Ó¶VÇ6W¶6öç7BWc×·F—òÆFW62ÇF–V×ó§'6TfÆöB‡F–V×ò—ÇÆçVÆÇÓ¶–b‡VF–Fô–B’WbçVF–Fô–C×VF–Fô–C¶ÖV–æ7FFRæWfVçF÷5¶¶W•ÓÖWc·Ö6÷VçB²³·Ğ¢6Æ÷6TÖV–æÖöFÂ‚“·&VæFW$ÖV–æ46ÆVæF"‚“·Fö7B†)É2G¶6÷VçGÒL:ÖG¶6÷VçCãòw2s¢rwÒÖ&6F÷2(	BwV&FæFòââæÂv–æfòr“°¢G'—¶v—B6fTÖV–æWfVçF÷4—'F&ÆR‚“·Fö7B‚~)É2wV&FFòVâ—'F&ÆRrÂw7V66W72r“·Ğ¢6F6‚†R—·Fö7B‚tW'&÷"ÂwV&F#¢r¶RæÖW76vRÂvW'&÷"r“·Ğ§Ğ¦7–æ2gVæ7F–öâFVÆWFTÖV–æWfVçFò†Ö–BÆFFU7G"—°¢FVÆWFRÖV–æ7FFRæWfVçF÷5¶G¶Ö–GÕòG¶FFU7G'ÖÓ·&VæFW$ÖV–æ46ÆVæF"‚“°¢G'—¶v—B6fTÖV–æWfVçF÷4—'F&ÆR‚“·Fö7B‚tWfVçFòVÆ–Ö–æFòrÂv–æfòr“·Ğ¢6F6‚†R—·Fö7B‚tW'&÷"ÂVÆ–Ö–æ#¢r¶RæÖW76vRÂvW'&÷"r“·Ğ§Ğ ¢òò)H)HUT•ò)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦7–æ2gVæ7F–öâ–æ—DWV—ò‚—°¢v—BÆöDWV—ôWfVçF÷4—'F&ÆR‚“°¢6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vv6ÅW'6öæ46öæf–rr“¶–b†VÂ’VÂæ–ææW$…DÔÃÕU%4ôä2æÖ‡ÓæÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£ƒ¶Ö&v–âÖ&÷GFöÓ£‡‚#âGµöd‡FÖÂ‡Ã#‚—ÓÇ7â7G–ÆSÒ&Ö–â×v–GFƒ£Cƒ¶föçB×6—¦S£'‚#âG·ææöÖ'&WÓÂ÷7ããÆ–çWB6Æ73Ò&f–VÆBÖ–çWB"–CÒ&v6Åö6–EòG·æ–GÒ"Æ6V†öÆFW#Ò&VÖ–ÄvÖ–Âæ6öÒ"fÇVSÒ"G·æv6Ä–GÒ"7G–ÆSÒ&föçB×6—¦S£'ƒ¶fÆWƒ£#ãÆ–çWB6Æ73Ò&f–VÆBÖ–çWB"–CÒ&v6Åö¶W•òG·æ–GÒ"Æ6V†öÆFW#Ò$—¦âââ’¶W’"fÇVSÒ"G·6W76–öå7F÷&vRævWD—FVÒ‚vv6Åö•ö¶W’r—ÇÂrwÒ"7G–ÆSÒ&föçB×6—¦S£'ƒ¶fÆWƒ£#ãÂöF—cæ’æ¦ö–â‚rr“°¢6öç7Bç”v6ÃÕU%4ôä2ç6öÖR‡Óç6W76–öå7F÷&vRævWD—FVÒ‚vv6Å÷W'6öæòr·æ–B’“¶–b†ç”v6Â—µU%4ôä2æf÷$V6‚‡Óç¶6öç7B6–C×6W76–öå7F÷&vRævWD—FVÒ‚vv6Å÷W'6öæòr·æ–B“¶–b†6–B’æv6Ä–CÖ6–C·Ò“¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vv6ÄWV—õ7–æ4'Fâr’ç7G–ÆRæF—7Æ“Òv–æÆ–æRÖfÆW‚s·Ğ¢&VæFW$WV—ô6ÆVæF"‚“°¢G'—·&VæFW$6öÖ—6–öæW2‚“·Ö6F6‚†R—·Ğ§Ğ¦gVæ7F–öâFövvÆTv6ÄWV—ô6öæf–r‚—¶6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vv6ÄWV—ô6öæf–rr“¶VÂç7G–ÆRæF—7Æ“ÖVÂç7G–ÆRæF—7Æ“ÓÓÒvæöæRsòv&Æö6²s¢væöæRs·Ğ¦gVæ7F–öâ6fTv6ÄWV—ô6öæf–r‚—µU%4ôä2æf÷$V6‚‡Óç¶6öç7B6–CÖFö7VÖVçBævWDVÆVÖVçD'”–B†v6Åö6–EòG·æ–GÖ“òçfÇVRçG&–Ò‚“¶6öç7B¶W“ÖFö7VÖVçBævWDVÆVÖVçD'”–B†v6Åö¶W•òG·æ–GÖ“òçfÇVRçG&–Ò‚“¶–b†6–B—·æv6Ä–CÖ6–C·6W76–öå7F÷&vRç6WD—FVÒ‚vv6Å÷W'6öæòr·æ–BÆ6–B“·Ö–b†¶W’’6W76–öå7F÷&vRç6WD—FVÒ‚vv6Åö•ö¶W’rÆ¶W’“·Ò“·FövvÆTv6ÄWV—ô6öæf–r‚“¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vv6ÄWV—õ7–æ4'Fâr’ç7G–ÆRæF—7Æ“Òv–æÆ–æRÖfÆW‚s·Fö7B‚~)É26ÆVæF&–÷26öæf–wW&F÷2rÂw7V66W72r“·7–æ4v6ÄWV—ò‚“·Ğ¦gVæ7F–öâvWDWV—õ6VÖæÇVæW2‚—¶6öç7BCÖæWrFFR‚“·Bç6WD†÷W'2ƒÃÃÃ“¶6öç7BF“×BævWDF’‚“¶6öç7BÃÖæWrFFR‡B“¶Âç6WDFFR‡BævWDFFR‚’Ò†F“ÓÓÓóc¦F’Ó’²†WV—õ7FFRç6VÖæöfg6WB£r’“·&WGW&âÃ·Ğ¦gVæ7F–öâædWV—õ6VÖæ†B—¶WV—õ7FFRç6VÖæöfg6WB³ÖC·&VæFW$WV—ô6ÆVæF"‚“·Ğ¦gVæ7F–öâvôWV—õFöF’‚—¶WV—õ7FFRç6VÖæöfg6WCÓ·&VæFW$WV—ô6ÆVæF"‚“·Ğ¦gVæ7F–öâ&VæFW$WV—ô6ÆVæF"‚—°¢6öç7BÇVæW3ÖvWDWV—õ6VÖæÇVæW2‚“¶6öç7BF–3ÕµÓ¶f÷"†ÆWB“Ó¶“Ãs¶’²²—¶6öç7BCÖæWrFFR†ÇVæW2“¶Bç6WDFFR†ÇVæW2ævWDFFR‚’¶’“¶F–2çW6‚†B“·Ğ¢6öç7BFöF“Öf×DFFR†æWrFFR‚’“¶6öç7B÷G3×¶F“¢vçVÖW&–2rÆÖöçFƒ¢w6†÷'BwÓ°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—õ6VÖæÆ&VÂr’çFW‡D6öçFVçCÖG¶F–5³ÒçFôÆö6ÆTFFU7G&–ær‚vW2Ô4ÂrÆ÷G2—Ò(	BG¶F–5³eÒçFôÆö6ÆTFFU7G&–ær‚vW2Ô4ÂrÆ÷G2—ÒG¶F–5³ÒævWDgVÆÅ–V"‚—Ö°¢&VæFW$WV—õ&W7VÖVä†÷’‡FöF’“°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ô†VFW"r’æ–ææW$…DÔÃÖÇG#ãÇF‚7G–ÆSÒ'FF–æs£‚Gƒ¶föçB×6—¦S£ãWƒ·FW‡B×G&ç6f÷&Ó§WW&66S¶6öÆ÷#§f"‚Ò×FW‡C2“·FW‡BÖÆ–vã¦ÆVgC¶&÷&FW"Ö&÷GFöÓ£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶Ö–â×v–GFƒ£sƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6R“·÷6—F–öã§7F–6·“¶ÆVgC£·¢Ö–æFWƒ£"#åW'6öæÂ÷FƒâG¶F–2æÖ†CÓç¶6öç7B—4ƒÖf×DFFR†B“ÓÓ×FöF’ÆW4f–æFSÖBævWDF’‚“ÓÓÓÇÆBævWDF’‚“ÓÓÓc·&WGW&æÇF‚7G–ÆSÒ'FF–æs£w‚Wƒ¶föçB×6—¦S£ãWƒ¶föçB×vV–v‡C¢G¶—4ƒós£SÓ¶6öÆ÷#¢G¶—4ƒòwf"‚ÒÖ66VçB’s¦W4f–æFSòwf"‚Ò×FW‡C2’s¢wf"‚Ò×FW‡C"’wÓ·FW‡BÖÆ–vã¦6VçFW#¶&÷&FW"Ö&÷GFöÓ£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶Ö–â×v–GFƒ£ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6R’#âG¶f×DF”Æ&VÂ†B—ÒG¶W4f–æFSòsÆ'#ãÇ7â7G–ÆSÒ&föçB×6—¦S£’ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#æf–æFSÂ÷7ãâs¢rwÓÂ÷Fƒæ·Ò’æ¦ö–â‚rr—ÓÂ÷G#æ°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ô&öG’r’æ–ææW$…DÔÃÕU%4ôä2æÖ‡Óç°¢6öç7B6VÆF3ÖF–2æÖ†CÓç¶6öç7BG3Öf×DFFR†B’Æ¶W“ÖG·æ–GÕòG¶G7ÖÆWcÖWV—õ7FFRæWfVçF÷5¶¶W•ÒÆ—4ƒÖG3ÓÓ×FöF’ÆW4f–æFSÖBævWDF’‚“ÓÓÓÇÆBævWDF’‚“ÓÓÓc¶6öç7B6fsÖWcò„UT•õõD•õ5¶WbçF—õ×ÇÄUT•õõD•õ2æF—7öæ–&ÆR“¦çVÆÃ¶6öç7B&sÖ6fsö6fræ&s¦W4f–æFSòw&v&ƒ#SRÃ#SRÃ#SRÃã’s¢wG&ç7&VçBs¶ÆWB6öçFVçCÒrs¶–b†6fr—¶6öçFVçCÖÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢G¶6fræ6öÆ÷'Ò#âG¶6fræ–6öçÒG¶6fræÆ&VÇÓÂöF—câG¶WbæFW63öÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—3·v†—FR×76S¦æ÷w&¶Ö‚×v–GFƒ£ƒ‡‚#âG¶W66T‡FÖÂ†WbæFW62—ÓÂöF—cæ¢rwÓÆ'WGFöâöæ6Æ–6³Ò&WfVçBç7F÷&÷vF–öâ‚“¶FVÆWFTWV—ôWfVçFò‚rG·æ–GÒrÂrG¶G7Òr’"7G–ÆSÒ&&6¶w&÷VæC¦æöæS¶&÷&FW#¦æöæS¶6öÆ÷#§f"‚Ò×FW‡C2“¶7W'6÷#§ö–çFW#¶föçB×6—¦S£’ãWƒ·FF–æs£#î)ÉSÂö'WGFöãæ·ÖVÇ6W¶6öçFVçCÖÇ7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C2“¶föçB×6—¦S£ãW‚#âG¶W4f–æFSò~(	Bs¢r²wÓÂ÷7ãæ·×&WGW&æÇFBöæ6Æ–6³Ò&÷VäWV—ôÖöFÂ‚rG·æ–GÒrÂrG·ææöÖ'&WÒrÂrG¶G7Òr’"7G–ÆSÒ'FF–æs£7ƒ·FW‡BÖÆ–vã¦6VçFW#¶&÷&FW"Ö&÷GFöÓ£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶&÷&FW"ÖÆVgC¢G¶—4ƒòs'‚6öÆ–Bf"‚ÒÖ66VçB’s¢s‚6öÆ–Bf"‚ÒÖ&÷&FW"’wÓ¶&6¶w&÷VæC¢G¶&wÓ¶7W'6÷#§ö–çFW#·fW'F–6ÂÖÆ–vã¦Ö–FFÆR"öæÖ÷W6VVçFW#Ò'F†—2ç7G–ÆRæf–ÇFW#Òv'&–v‡FæW72ƒãB’r"öæÖ÷W6VÆVfSÒ'F†—2ç7G–ÆRæf–ÇFW#Òv'&–v‡FæW72ƒ’r#ãÆF—b7G–ÆSÒ&Ö–âÖ†V–v‡C£C'ƒ¶F—7Æ“¦fÆWƒ¶fÆW‚ÖF—&V7F–öã¦6öÇVÖã¶Æ–vâÖ—FV×3¦6VçFW#¶§W7F–g’Ö6öçFVçC¦6VçFW#¶v£'‚#âG¶6öçFVçGÓÂöF—cãÂ÷FCæ·Ò’æ¦ö–â‚rr“°¢6öç7BF—76÷VçCÖF–2æf–ÇFW"†CÓç¶6öç7BWcÖWV—õ7FFRæWfVçF÷5¶G·æ–GÕòG¶f×DFFR†B—ÖÓ·&WGW&âWgÇÆWbçF—óÓÓÒvF—7öæ–&ÆRs·Ò’æÆVæwFƒ°¢&WGW&æÇG#ãÇFB7G–ÆSÒ'FF–æs£‚Gƒ¶&÷&FW"Ö&÷GFöÓ£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶&6¶w&÷VæC§f"‚Ò×7W&f6R“·÷6—F–öã§7F–6·“¶ÆVgC£·¢Ö–æFWƒ£#ãÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£—‚#âGµöd‡FÖÂ‡Ã3B—ÓÆF—cãÆF—b7G–ÆSÒ&föçB×6—¦S£'ƒ¶föçB×vV–v‡C£c#âG¶W66T‡FÖÂ‡ææöÖ'&R—ÓÂöF—cãÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG·ç&öÇÒ+rG¶F—76÷VçGÒórF—7ãÂöF—cãÂöF—cãÂöF—cãÂ÷FCâG¶6VÆF7ÓÂ÷G#æ°¢Ò’æ¦ö–â‚rr“°¢&VæFW$WV—ôFWFÆÆU6VÖæ†F–2“°¢6öç7BW6VçFW3ÕU%4ôä2æf–ÇFW"‡Óç¶6öç7BWcÖWV—õ7FFRæWfVçF÷5¶G·æ–GÕòG·FöF—ÖÓ·&WGW&âWbbe²vW6VçFRrÂwf66–öæW2uÒæ–æ6ÇVFW2†WbçF—ò“·Ò’æÆVæwFƒ°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—õ7V'F—FÆRr’çFW‡D6öçFVçCÖGµU%4ôä2æÆVæwF‚ÖW6VçFW7ÒF—7öæ–&ÆW2+rG¶W6VçFW7ÒW6VçFW2†÷–°§Ğ¦gVæ7F–öâ&VæFW$WV—õ&W7VÖVä†÷’‡FöF’—°¢6öç7BFöF”FFSÖæWrFFR‡FöF’²uC££r“°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—õ&W7VÖVä†÷’r’æ–ææW$…DÔÃÕU%4ôä2æÖ‡Óç°¢6öç7BWcÖWV—õ7FFRæWfVçF÷5¶G·æ–GÕòG·FöF—ÖÓ°¢6öç7B6fsÖWcò„UT•õõD•õ5¶WbçF—õ×ÇÄUT•õõD•õ2æF—7öæ–&ÆR“¤UT•õõD•õ2æF—7öæ–&ÆS°¢òò36&vFRG&&¦ó¢VF–F÷27F—f÷26–væF÷2W7FW'6öæ¢6öç7Bfã×ææöÖ'&Rç7Æ—B‚rr•³ÒçFôÆ÷vW$66R‚“°¢6öç7BÖ—5VF–F÷3×7FFRçVF–F÷2æf–ÇFW"‡ƒÓç°¢6öç7BVÒ‡‚æf–VÆG5²tWV—ò6–væFòu×ÇÂrr’çFôÆ÷vW$66R‚“°¢&WGW&âVæ–æ6ÇVFW2†fâ’bb²tFW76†FòrÂt6ö×ÆWFFòrÂt6æ6VÆFòuÒæ–æ6ÇVFW2‡‚æf–VÆG5²tW7FFòVF–Fòu×ÇÂrr“°¢Ò“°¢6öç7B&÷„VçG&VvÖÖ—5VF–F÷0¢æf–ÇFW"‡ƒÓç‚æf–VÆG5²tfV6†VçG&VvuÒbfæWrFFR‡‚æf–VÆG5²tfV6†VçG&VvuÒ²uC££r“ã×FöF”FFR¢æÖ‡ƒÓç‚æf–VÆG5²tfV6†VçG&VvuÒ’ç6÷'B‚•³Ó°¢6öç7B&÷„Æ&VÃ×&÷„VçG&Vvö+r,;7ƒ¢G·&÷„VçG&Vvç7V'7G&–ærƒR’ç&WÆ6R‚rÒrÂròr—Ö¢rs°¢6öç7B6&v‡FÖÃÖÖ—5VF–F÷2æÆVæwF€¢öÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚ÒÖ66VçB“¶Ö&v–â×F÷£7‚#ï	ù:bG¶Ö—5VF–F÷2æÆVæwF‡ÒVF–FòG¶Ö—5VF–F÷2æÆVæwFƒãòw2s¢rwÒ7F—fòG¶Ö—5VF–F÷2æÆVæwFƒãòw2s¢rwÒG·&÷„Æ&VÇÓÂöF—cæ ¢¦ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö&v–â×F÷£7‚#å6–âVF–F÷27F—f÷3ÂöF—cæ°¢òò3"ÆW'F2FR6ö&W'GW&¢W6Væ6–6ö–æ6–FR6öâfV6†VçG&VvFRVâVF–Fğ¢6öç7B6öæfÆ–7F÷3ÕµÓ°¢ö&¦V7BæVçG&–W2†WV—õ7FFRæWfVçF÷2’æf÷$V6‚‚…¶¶W’ÆWc%Ò“Óç°¢–b‚¶W’ç7F'G5v—F‚‡æ–B²uòr—ÇÂ²vW6VçFRrÂwf66–öæW2uÒæ–æ6ÇVFW2†Wc"çF—ò’’&WGW&ã°¢6öç7BF³Ö¶W’ç7V'7G&–ær‡æ–BæÆVæwF‚³“°¢Ö—5VF–F÷2æf÷$V6‚‡ƒÓç°¢–b‚‡‚æf–VÆG5²tfV6†VçG&Vvu×ÇÂrr“ÓÓÖF²¢6öæfÆ–7F÷2çW6‚‡·VC§‚æf–VÆG5²tì+VF–Fòu×ÇÂsòrÆfV6†¦F²ç7V'7G&–ærƒR’ç&WÆ6R‚rÒrÂròr—Ò“°¢Ò“°¢Ò“°¢6öç7BÆW'F‡FÖÃÖ6öæfÆ–7F÷2æÆVæwF€¢öÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚ÒÖFævW"“¶föçB×vV–v‡C£s¶Ö&v–â×F÷£7‚#î)ª6öæfÆ–7Fó¢G¶6öæfÆ–7F÷2æÖ†3ÓæG¶2çVGÒfVæ6RVÂG¶2æfV6†Ö’æ¦ö–â‚r+rr—ÓÂöF—cæ ¢¢rs°¢&WGW&æÆF—b6Æ73Ò&6&B"7G–ÆSÒ'FF–æs£Gƒ¶F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‚G¶6öæfÆ–7F÷2æÆVæwFƒòs¶&÷&FW"Ö6öÆ÷#§&v&ƒ#SRÃc‚Ãc‚ÃãB’s¢rwÒ#âGµöd‡FÖÂ‡ÃC—ÓÆF—b7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£#ãÆF—b7G–ÆSÒ&föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s#âG¶W66T‡FÖÂ‡ææöÖ'&R—ÓÂöF—cãÆF—b7G–ÆSÒ&föçB×6—¦S£'ƒ¶6öÆ÷#¢G¶6fræ6öÆ÷'Ó¶föçB×vV–v‡C£s#âG¶6fræ–6öçÒG¶6fræÆ&VÇÓÂöF—câG¶WcòæFW63öÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—3·v†—FR×76S¦æ÷w&#âG¶W66T‡FÖÂ†WbæFW62—ÓÂöF—cæ¢rwÒG¶6&v‡FÖÇÒG¶ÆW'F‡FÖÇÓÂöF—cãÆ'WGFöâ6Æ73Ò&'FâÖÖ–æ’G¶WbbfWbçF—òÓÒvF—7öæ–&ÆRsòv'FâÖÖ–æ’×&VBs¢v'FâÖÖ–æ’Öw&VVâwÒ"öæ6Æ–6³Ò'V–6µFövvÆTWV—ò‚rG·æ–GÒrÂrG·FöF—Òr’#âG¶WbbfWbçF—òÓÒvF—7öæ–&ÆRsò	ùKBF—7âs¢	ùú"ô²wÓÂö'WGFöããÂöF—cæ°¢Ò’æ¦ö–â‚rr“°§Ğ¦gVæ7F–öâ&VæFW$WV—ôFWFÆÆU6VÖæ†F–2—°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôFWFÆÆU6VÖær’æ–ææW$…DÔÃÕU%4ôä2æÖ‡Óç°¢òò3VF–F÷27F—f÷26–væF÷2W7FW'6öæ¢6öç7Bfã×ææöÖ'&Rç7Æ—B‚rr•³ÒçFôÆ÷vW$66R‚“°¢6öç7BÖ—5VF–F÷3×7FFRçVF–F÷2æf–ÇFW"‡ƒÓç°¢6öç7BVÒ‡‚æf–VÆG5²tWV—ò6–væFòu×ÇÂrr’çFôÆ÷vW$66R‚“°¢&WGW&âVæ–æ6ÇVFW2†fâ’bb²tFW76†FòrÂt6ö×ÆWFFòrÂt6æ6VÆFòuÒæ–æ6ÇVFW2‡‚æf–VÆG5²tW7FFòVF–Fòu×ÇÂrr“°¢Ò“°¢òòÖfV6†(i&Æ—7FFRì+VF–FòVRfVæ6VâW6RL:Ö¢6öç7BVçG&Vv4F–3×·Ó°¢Ö—5VF–F÷2æf÷$V6‚‡ƒÓç¶6öç7BfS×‚æf–VÆG5²tfV6†VçG&VvuÓ¶–b†fR—¶–b‚VçG&Vv4F–5¶fUÒ–VçG&Vv4F–5¶fUÓÕµÓ¶VçG&Vv4F–5¶fUÒçW6‚‡‚æf–VÆG5²tì+VF–Fòu×ÇÂsòr“·×Ò“°¢òò6öçF"6öæfÆ–7F÷2VâÆ6VÖæf—6–&ÆP¢6öç7B6öæfÆ–7D6÷VçCÖF–2æf–ÇFW"†CÓç¶6öç7BG3Öf×DFFR†B’ÆWcÖWV—õ7FFRæWfVçF÷5¶G·æ–GÕòG¶G7ÖÓ·&WGW&âWbbe²vW6VçFRrÂwf66–öæW2uÒæ–æ6ÇVFW2†WbçF—ò’bb†VçG&Vv4F–5¶G5×ÇÅµÒ’æÆVæwFƒã·Ò’æÆVæwFƒ°¢òòf–Æ2FRL:Ö26öâ–æF–6F÷&W2FRVçG&Vv’6öæfÆ–7Fğ¢6öç7BWfVçF÷4‡FÖÃÖF–2æÖ†CÓç°¢6öç7BG3Öf×DFFR†B’ÆWcÖWV—õ7FFRæWfVçF÷5¶G·æ–GÕòG¶G7ÖÒÆ6fsÖWcò„UT•õõD•õ5¶WbçF—õ×ÇÆçVÆÂ“¦çVÆÂÆW4f–æFSÖBævWDF’‚“ÓÓÓÇÆBævWDF’‚“ÓÓÓc°¢6öç7BVDW6TF–ÖVçG&Vv4F–5¶G5×ÇÅµÓ°¢6öç7BW7FW6VçFSÖWbbe²vW6VçFRrÂwf66–öæW2uÒæ–æ6ÇVFW2†WbçF—ò“°¢6öç7B6öæfÆ–7FóÖW7FW6VçFRbgVDW6TF–æÆVæwFƒã°¢6öç7BVEFs×VDW6TF–æÆVæwFƒöÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶föçB×vV–v‡C£s¶6öÆ÷#¢G¶6öæfÆ–7Fóòwf"‚ÒÖFævW"’s¢wf"‚ÒÖ66VçB’wÓ¶Ö&v–âÖÆVgC¦WFó¶fÆW‚×6‡&–æ³£#âG¶6öæfÆ–7Fóò~)ªs¢	ù:bwÒG·VDW6TF–æ¦ö–â‚rÂr—ÓÂ÷7ãæ¢rs°¢&WGW&æÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£wƒ·FF–æs£g‚¶&÷&FW"Ö&÷GFöÓ£‚6öÆ–Bf"‚ÒÖ&÷&FW"’G¶6öæfÆ–7Fóòs¶&6¶w&÷VæC§&v&ƒ#SRÃc‚Ãc‚Ããb’s¢rwÒ#ãÇ7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶Ö–â×v–GFƒ£CG‚#âG¶f×DF”Æ&VÂ†B—ÓÂ÷7ãâG¶6fsöÇ7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£c¶6öÆ÷#¢G¶6fræ6öÆ÷'Ò#âG¶6fræ–6öçÒG¶6fræÆ&VÇÓÂ÷7ãâG¶WbæFW63öÇ7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2“¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—3¶fÆWƒ£#âG¶W66T‡FÖÂ†WbæFW62—ÓÂ÷7ãæ¢rwÖ¢Ç7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#¢G¶W4f–æFSòwf"‚Ò×FW‡C2’s¢wf"‚ÒÖ66VçC2’wÒ#î)É2G¶W4f–æFSòtf–æFRs¢tF—7öæ–&ÆRwÓÂ÷7ãæÒG·VEFwÓÂöF—cæ°¢Ò’æ¦ö–â‚rr“°¢6öç7BF—7F–3ÖF–2æf–ÇFW"†CÓç¶6öç7BWcÖWV—õ7FFRæWfVçF÷5¶G·æ–GÕòG¶f×DFFR†B—ÖÓ·&WGW&âWgÇÆWbçF—óÓÓÒvF—7öæ–&ÆRs·Ò’æÆVæwFƒ°¢6öç7B7CÔÖF‚ç&÷VæB‚†F—7F–2ór’£“°¢6öç7B&$6öÆ÷#×7CãÓsòwf"‚ÒÖ66VçC2’s§7CãÓCòwf"‚Ò×v&â’s¢wf"‚ÒÖFævW"’s°¢6öç7B7FD‡FÖÃÖÖ—5VF–F÷2æÆVæwF€¢öÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#¢G¶6öæfÆ–7D6÷VçCòwf"‚ÒÖFævW"’s¢wf"‚ÒÖ66VçB’wÓ¶Ö&v–â×F÷£'‚#âG¶6öæfÆ–7D6÷VçCö)ªG¶6öæfÆ–7D6÷VçGÒ6öæfÆ–7FòG¶6öæfÆ–7D6÷VçCãòw2s¢rwÖ¦	ù:bG¶Ö—5VF–F÷2æÆVæwF‡ÒVBâ7F—fòG¶Ö—5VF–F÷2æÆVæwFƒãòw2s¢rwÖÓÂöF—cæ ¢¢rs°¢&WGW&æÆF—b6Æ73Ò&6&B#ãÆF—b6Æ73Ò&6&BÖ†VFW"#ãÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£—‚#âGµöd‡FÖÂ‡Ã3—ÓÆF—cãÆF—b7G–ÆSÒ&föçB×6—¦S£'ƒ¶föçB×vV–v‡C£s#âG¶W66T‡FÖÂ‡ææöÖ'&R—ÓÂöF—cãÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG·ç&öÇÓÂöF—cãÂöF—cãÂöF—cãÆF—b7G–ÆSÒ'FW‡BÖÆ–vã§&–v‡B#ãÆF—b7G–ÆSÒ&föçB×6—¦S£gƒ¶föçBÖfÖ–Ç“¢t&V&2æWVRs¶6öÆ÷#¢G¶&$6öÆ÷'Ò#âG¶F—7F–7ÒósÂöF—cãÆF—b7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#æL:Ö2F—7ãÂöF—câG·7FD‡FÖÇÓÂöF—cãÂöF—cãÆF—b7G–ÆSÒ'FF–æs£G‚g‚#ãÆF—b7G–ÆSÒ&†V–v‡C£7ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S2“¶&÷&FW"×&F—W3£'ƒ¶Ö&v–âÖ&÷GFöÓ£‡ƒ¶÷fW&fÆ÷s¦†–FFVâ#ãÆF—b7G–ÆSÒ&†V–v‡C£S·v–GFƒ¢G·7GÒS¶&6¶w&÷VæC¢G¶&$6öÆ÷'Ó¶&÷&FW"×&F—W3£'‚#ãÂöF—cãÂöF—câG¶WfVçF÷4‡FÖÇÓÂöF—cãÂöF—cæ°¢Ò’æ¦ö–â‚rr“°§Ğ¦7–æ2gVæ7F–öâV–6µFövvÆTWV—ò‡W'6öæ–BÆFFU7G"—¶6öç7B¶W“ÖG·W'6öæ–GÕòG¶FFU7G'ÖÆWcÖWV—õ7FFRæWfVçF÷5¶¶W•Ó¶–b†WbbfWbçF—òÓÒvF—7öæ–&ÆRr—¶FVÆWFRWV—õ7FFRæWfVçF÷5¶¶W•Ó·&VæFW$WV—ô6ÆVæF"‚“¶v—B6fTWV—ôWfVçF÷4—'F&ÆR‚“·Fö7B‚~)É2F—7öæ–&ÆRrÂw7V66W72r“·ÖVÇ6R÷VäWV—ôÖöFÂ‡W'6öæ–BÅU%4ôä2æf–æB‡Óçæ–CÓÓ×W'6öæ–B“òææöÖ'&WÇÂrrÆFFU7G"“·Ğ¦gVæ7F–öâ÷VäWV—ôÖöFÂ‡W'6öæ–BÆæöÖ'&RÆFFU7G"—¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÅW'6öæ–Br’çfÇVS×W'6öæ–C¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄFFRr’çfÇVSÖFFU7G#¶6öç7BÕU%4ôä2æf–æB‡ƒÓç‚æ–CÓÓ×W'6öæ–B“¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÅF—FÆRr’æ–ææW$…DÔÃÖÇ7â7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‡‚#âGµöd‡FÖÂ‡Ã#‚—ß	ù8RG¶W66T‡FÖÂ†æöÖ'&R—Ò(	BG¶FFU7G'ÓÂ÷7ãæ¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄFW62r’çfÇVSÒrs¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄfV6†–æ–6–òr’çfÇVSÖFFU7G#¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄfV6†f–âr’çfÇVSÖFFU7G#¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄ†÷&–æ–6–òr’çfÇVSÒs“£s¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄ†÷&f–âr’çfÇVSÒsƒ£s¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÅF—òr’çfÇVSÒvö7WFòs¶öäWV—ôÖöFÅF—ô6†ævR‚“¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôWfVçDÖöFÂr’ç7G–ÆRæF—7Æ“ÒvfÆW‚s·Ğ¦gVæ7F–öâ6Æ÷6TWV—ôÖöFÂ‚—¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôWfVçDÖöFÂr’ç7G–ÆRæF—7Æ“ÒvæöæRs·Ğ¦gVæ7F–öâöäWV—ôÖöFÅF—ô6†ævR‚—¶6öç7BF—óÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÅF—òr’çfÇVS¶6öç7B6†÷tFW63Ò²wf66–öæW2rÂvW6VçFRrÂvF—7öæ–&ÆRuÒæ–æ6ÇVFW2‡F—ò“¶6öç7B6†÷t†÷&3Õ²vö7WFòrÂw&WVæ–öârÂw&VÖ÷FòuÒæ–æ6ÇVFW2‡F—ò“¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄFW64w&÷Wr’ç7G–ÆRæF—7Æ“×6†÷tFW63òvfÆW‚s¢væöæRs¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄ†÷&4w&÷Wr’ç7G–ÆRæF—7Æ“×6†÷t†÷&3òvfÆW‚s¢væöæRs·Ğ¦7–æ2gVæ7F–öâ6fTWV—ôWfVçFò‚—°¢6öç7B–CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÅW'6öæ–Br’çfÇVRÇF—óÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÅF—òr’çfÇVRÆFW63ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄFW62r’çfÇVRÆf“ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄfV6†–æ–6–òr’çfÇVRÆfcÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄfV6†f–âr’çfÇVRÆ†÷&–æ–6–óÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄ†÷&–æ–6–òr’çfÇVRÆ†÷&f–ãÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vWV—ôÖöFÄ†÷&f–âr’çfÇVS°¢–b‚f—ÇÂfb—·Fö7B‚t–æw&W6Æ2fV6†2rÂvW'&÷"r“·&WGW&ã·Ğ¢6öç7B7F'CÖæWrFFR†f’²uC££r’ÆVæCÖæWrFFR†fb²uC££r“¶ÆWB6÷VçCÓ°¢f÷"†ÆWBCÖæWrFFR‡7F'B“¶CÃÖVæC¶Bç6WDFFR†BævWDFFR‚’³’—¶6öç7B¶W“ÖG·–GÕòG¶f×DFFR†æWrFFR†B’—Ö¶–b‡F—óÓÓÒvF—7öæ–&ÆRr’FVÆWFRWV—õ7FFRæWfVçF÷5¶¶W•Ó¶VÇ6RWV—õ7FFRæWfVçF÷5¶¶W•Ó×·F—òÆFW62Æ†÷&–æ–6–òÆ†÷&f–çÓ¶6÷VçB²³·Ğ¢6öç7BÕU%4ôä2æf–æB‡ƒÓç‚æ–CÓÓ×–B“¶6Æ÷6TWV—ôÖöFÂ‚“·&VæFW$WV—ô6ÆVæF"‚“°¢Fö7B†)É2G¶6÷VçGÒL:ÖG¶6÷VçCãòw2s¢rwÒ(i"G·òææöÖ'&WÒ(	BwV&FæFòââæÂv–æfòr“°¢v—B6fTWV—ôWfVçF÷4—'F&ÆR‚“·Fö7B‚~)É2wV&FFòVâ—'F&ÆRrÂw7V66W72r“°§Ğ¦7–æ2gVæ7F–öâFVÆWFTWV—ôWfVçFò‡–BÆFFU7G"—¶FVÆWFRWV—õ7FFRæWfVçF÷5¶G·–GÕòG¶FFU7G'ÖÓ·&VæFW$WV—ô6ÆVæF"‚“¶v—B6fTWV—ôWfVçF÷4—'F&ÆR‚“·Fö7B‚tWfVçFòVÆ–Ö–æFòrÂv–æfòr“·Ğ¦7–æ2gVæ7F–öâ7–æ4v6ÄWV—ò‚—°¢6öç7B'FãÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vv6ÄWV—õ7–æ4'Fâr“¶'FâæF—6&ÆVC×G'VS¶'FâçFW‡D6öçFVçCÒ~(û27–æ2âââs°¢6öç7BÇVæW3ÖvWDWV—õ6VÖæÇVæW2‚“¶6öç7BF–3ÕµÓ¶f÷"†ÆWB“Ó¶“Ãs¶’²²—¶6öç7BCÖæWrFFR†ÇVæW2“¶Bç6WDFFR†ÇVæW2ævWDFFR‚’¶’“¶F–2çW6‚†B“·Ğ¢6öç7BF–ÖTÖ–ãÖVæ6öFUU$”6ö×öæVçB†F–5³ÒçFô•4õ7G&–ær‚’’ÇF–ÖTÖƒÖVæ6öFUU$”6ö×öæVçB†æWrFFR†F–5³eÒævWEF–ÖR‚’³ƒcC’çFô•4õ7G&–ær‚’“¶ÆWBF÷FÃÓ°¢f÷"†6öç7BöbU%4ôä2—¶6öç7Bv6Ä–C×6W76–öå7F÷&vRævWD—FVÒ‚vv6Å÷W'6öæòr·æ–B“¶6öç7B”¶W“×6W76–öå7F÷&vRævWD—FVÒ‚vv6Åö•ö¶W’r“¶–b‚v6Ä–GÇÂ”¶W’’6öçF–çVS°¢G'—¶6öç7B#Öv—BfWF6‚†‡GG3¢ò÷wwrævöövÆV—2æ6öÒö6ÆVæF"÷c2ö6ÆVæF'2òG¶Væ6öFUU$”6ö×öæVçB†v6Ä–B—ÒöWfVçG3ö¶W“ÒG¶”¶W—ÒgF–ÖTÖ–ãÒG·F–ÖTÖ–çÒgF–ÖTÖƒÒG·F–ÖTÖ‡Òg6–ævÆTWfVçG3×G'VRf÷&FW$'“×7F'EF–ÖRfÖ…&W7VÇG3ÓS“¶–b‚"æö²’6öçF–çVS¶6öç7BFFÖv—B"æ§6öâ‚“°¢†FFæ—FV×7ÇÅµÒ’æf÷$V6‚†WcÓç¶6öç7B6CÒ†Wbç7F'CòæFFWÇÆWbç7F'CòæFFUF–ÖWÇÂrr’ç6Æ–6RƒÃ“¶–b‚6B’&WGW&ã¶6öç7BF—FÆSÒ†Wbç7VÖÖ'—ÇÂrr’çFôÆ÷vW$66R‚“¶ÆWBF—óÒvö7WFòs¶–b‡F—FÆRæ–æ6ÇVFW2‚wf66–öâr’’F—óÒwf66–öæW2s¶VÇ6R–b‡F—FÆRæ–æ6ÇVFW2‚vW6VçFRr’’F—óÒvW6VçFRs¶VÇ6R–b‡F—FÆRæ–æ6ÇVFW2‚w&VÖ÷Fòr’’F—óÒw&VÖ÷Fòs¶VÇ6R–b‡F—FÆRæ–æ6ÇVFW2‚w&WVæ’r’’F—óÒw&WVæ–öâs°¢6öç7B3ÖæWrFFR‡6B²uC££r’ÆS#ÖæWrFFR‚†WbæVæCòæFFWÇÆWbæVæCòæFFUF–ÖWÇÇ6B’ç6Æ–6RƒÃ’²uC££r“°¢f÷"†ÆWBCÖæWrFFR‡2“¶CÃÖS#¶Bç6WDFFR†BævWDFFR‚’³’—¶6öç7BG3Öf×DFFR†æWrFFR†B’“¶–b†F–2ç6öÖR‡ƒÓæf×DFFR‡‚“ÓÓÖG2’—¶WV—õ7FFRæWfVçF÷5¶G·æ–GÕòG¶G7ÖÓ×·F—òÆFW63¦Wbç7VÖÖ'’Æ†÷&–æ–6–ó¢rrÆ†÷&f–ã¢rwÓ·F÷FÂ²³·××Ò“°¢Ö6F6‚†R—·Fö7B†W'&÷"7–æ2G·ææöÖ'&WÖÂvW'&÷"r“·Ğ¢Ğ¢Fö7B†)É2G·F÷FÇÒWfVçF÷2–×÷'FF÷6Âw7V66W72r“¶v—B6fTWV—ôWfVçF÷4—'F&ÆR‚“·&VæFW$WV—ô6ÆVæF"‚“¶'FâæF—6&ÆVCÖfÇ6S¶'FâçFW‡D6öçFVçCÒ	ùHB7–æ2s°§Ğ ¢òò)H)H4ôÄ”4•ETB•DTÕ2)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦gVæ7F–öâFövvÆUF—ôF–2‚—°¢6öç7B–çÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷B×F—òÖF–2r“°¢6öç7B'FãÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷B×F—òÖF–2Ö'Fâr“°¢–b‚–çÇÂ'Fâ’&WGW&ã°¢–b†–ççfÇVSÓÓÒtL8Ô2Œ8$”ÄU2r—°¢–ççfÇVSÒtL8Ô2äõ$ÔÄU2s°¢'FâçFW‡D6öçFVçCÒtL8Ô2äõ$ÔÄU2s°¢'Fâç7G–ÆRæ&6¶w&÷VæCÒw&v&ƒ#SRÃsÃÃãR’s°¢'Fâç7G–ÆRæ&÷&FW$6öÆ÷#Òw&v&ƒ#SRÃsÃÃãR’s°¢'Fâç7G–ÆRæ6öÆ÷#Òwf"‚ÒÖ66VçC"’s°¢ÒVÇ6R°¢–ççfÇVSÒtL8Ô2Œ8$”ÄU2s°¢'FâçFW‡D6öçFVçCÒtL8Ô2Œ8$”ÄU2s°¢'Fâç7G–ÆRæ&6¶w&÷VæCÒw&v&ƒÃ#"Ã#BÃãR’s°¢'Fâç7G–ÆRæ&÷&FW$6öÆ÷#Òw&v&ƒÃ#"Ã#BÃãR’s°¢'Fâç7G–ÆRæ6öÆ÷#Òwf"‚ÒÖ66VçB’s°¢Ğ§Ğ¦gVæ7F–öâFövvÆTVF—EF—ôF–2‚—°¢6öç7B–çÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vVF—D6÷EF—ôF–2r“°¢6öç7B'FãÖFö7VÖVçBævWDVÆVÖVçD'”–B‚vVF—D6÷EF—ôF–4'Fâr“°¢–b‚–çÇÂ'Fâ’&WGW&ã°¢–b†–ççfÇVSÓÓÒtL8Ô2Œ8$”ÄU2r—°¢–ççfÇVSÒtL8Ô2äõ$ÔÄU2s¶'FâçFW‡D6öçFVçCÒtL8Ô2äõ$ÔÄU2s°¢'Fâç7G–ÆRæ&6¶w&÷VæCÒw&v&ƒ#SRÃsÃÃãR’s¶'Fâç7G–ÆRæ&÷&FW$6öÆ÷#Òw&v&ƒ#SRÃsÃÃãR’s¶'Fâç7G–ÆRæ6öÆ÷#Òwf"‚ÒÖ66VçC"’s°¢ÒVÇ6R°¢–ççfÇVSÒtL8Ô2Œ8$”ÄU2s¶'FâçFW‡D6öçFVçCÒtL8Ô2Œ8$”ÄU2s°¢'Fâç7G–ÆRæ&6¶w&÷VæCÒw&v&ƒÃ#"Ã#BÃãR’s¶'Fâç7G–ÆRæ&÷&FW$6öÆ÷#Òw&v&ƒÃ#"Ã#BÃãR’s¶'Fâç7G–ÆRæ6öÆ÷#Òwf"‚ÒÖ66VçB’s°¢Ğ§Ğ ¢òò)H)HÄ¤òDRTåE$Tt‡&ævòFRL:Ö2òfV6†f–¦’)H)H)H)H)H)H)H)H)H)H)H)H)H ¢òòVâÖ—6Öò6öçG&öÂVâVÂf÷&×VÆ&–òçVWfò‚væWrr’’VâVÂFRVF–6œ;6â‚vVF—Br’à¦6öç7B4õEõÄ¤õô”E3×°¢væWrs¢¶ÖöFó¢v6÷EÆ¦ôÖöFòrÆF–5w&¢v6÷EÆ¦ôF–5w&rÆfV6†w&¢v6÷EÆ¦ôfV6†w&rÆÖ–ã¢v6÷B×F–V×ò×&öBrÆÖƒ¢v6÷B×F–V×ò×&öBÖÖ‚rÇF—ó¢v6÷B×F—òÖF–2rÇF—ô'Fã¢v6÷B×F—òÖF–2Ö'FârÆfV6†¢v6÷BÖfV6†ÖVçG&VvrÆ'FäF–3¢v6÷EÆ¦ô'FäF–2rÆ'FäfV6†¢v6÷EÆ¦ô'FäfV6†wÒÀ¢vVF—Bs§¶ÖöFó¢vVF—D6÷EÆ¦ôÖöFòrÆF–5w&¢vVF—D6÷EÆ¦ôF–5w&rÆfV6†w&¢vVF—D6÷EÆ¦ôfV6†w&rÆÖ–ã¢vVF—D6÷EF–V×õ&öBrÆÖƒ¢vVF—D6÷EF–V×õ&öDÖ‚rÇF—ó¢vVF—D6÷EF—ôF–2rÇF—ô'Fã¢vVF—D6÷EF—ôF–4'FârÆfV6†¢vVF—D6÷DfV6†VçG&VvrÆ'FäF–3¢vVF—D6÷EÆ¦ô'FäF–2rÆ'FäfV6†¢vVF—D6÷EÆ¦ô'FäfV6†wĞ§Ó°¢òòÇFW&æVÂÖöFòFVÂ6öçG&öÃ¢vF–2r‡&ævòâÔÒ’òvfV6†r†fV6†f–¦’à¦gVæ7F–öâ6÷EÆ¦õ6WDÖöFò‡66÷RÆÖöFò—°¢6öç7B–G3Ô4õEõÄ¤õô”E5·66÷UÓ¶–b‚–G2—&WGW&ã¶ÖöFóÒ†ÖöFóÓÓÒvfV6†r“òvfV6†s¢vF–2s°¢6öç7B†–CÖFö7VÖVçBævWDVÆVÖVçD'”–B†–G2æÖöFò“¶–b††–B–†–BçfÇVSÖÖöFó°¢6öç7BGsÖFö7VÖVçBævWDVÆVÖVçD'”–B†–G2æF–5w&’ÆgsÖFö7VÖVçBævWDVÆVÖVçD'”–B†–G2æfV6†w&“°¢–b†Gr–Grç7G–ÆRæF—7Æ“Ò†ÖöFóÓÓÒvfV6†r“òvæöæRs¢vfÆW‚s°¢–b†gr–grç7G–ÆRæF—7Æ“Ò†ÖöFóÓÓÒvfV6†r“òvfÆW‚s¢væöæRs°¢µ¶–G2æ'FäF–2ÆÖöFóÓÓÒvF–2uÒÅ¶–G2æ'FäfV6†ÆÖöFóÓÓÒvfV6†uÕÒæf÷$V6‚‚…¶–BÆöåÒ“Óç¶6öç7B#ÖFö7VÖVçBævWDVÆVÖVçD'”–B†–B“¶–b‚"—&WGW&ã¶"ç7G–ÆRæ&6¶w&÷VæCÖöãòw&v&ƒÃ#"Ã#BÃã‚’s¢wG&ç7&VçBs¶"ç7G–ÆRæ&÷&FW$6öÆ÷#Ööãòw&v&ƒÃ#"Ã#BÃãSR’s¢wf"‚ÒÖ&÷&FW#"’s¶"ç7G–ÆRæ6öÆ÷#Ööãòwf"‚ÒÖ66VçB’s¢wf"‚Ò×FW‡C2’s·Ò“°§Ğ¢òò–çFVÂ&÷L;6âFRF—òFRL:Ö2†Œ:&–ÆW2öæ÷&ÖÆW2’6V|;¦âVÂfÆ÷"wV&FFòà¦gVæ7F–öâö6÷E–çFF—ôF–2†–G2ÇF—ò—°¢6öç7BFCÖFö7VÖVçBævWDVÆVÖVçD'”–B†–G2çF—ò“¶–b‡FB—FBçfÇVS×F—ó°¢6öç7BFF#ÖFö7VÖVçBævWDVÆVÖVçD'”–B†–G2çF—ô'Fâ“¶–b‚FF"—&WGW&ã°¢6öç7Bæ÷&ÓÒ‡F—óÓÓÒtL8Ô2äõ$ÔÄU2r“·FF"çFW‡D6öçFVçC×F—ó°¢FF"ç7G–ÆRæ&6¶w&÷VæCÖæ÷&Óòw&v&ƒ#SRÃsÃÃãR’s¢w&v&ƒÃ#"Ã#BÃãR’s°¢FF"ç7G–ÆRæ&÷&FW$6öÆ÷#Öæ÷&Óòw&v&ƒ#SRÃsÃÃãR’s¢w&v&ƒÃ#"Ã#BÃãR’s°¢FF"ç7G–ÆRæ6öÆ÷#Öæ÷&Óòwf"‚ÒÖ66VçC"’s¢wf"‚ÒÖ66VçB’s°§Ğ¢òò6&vÆ÷2fÆ÷&W2FRÆ¦òFRVâ&Vv—7G&ò†òf<:Öò’VâVÂ6öçG&öÂà¦gVæ7F–öâ6÷EÆ¦ôÆöB‡66÷RÆb—°¢6öç7B–G3Ô4õEõÄ¤õô”E5·66÷UÓ¶–b‚–G2—&WGW&ã¶cÖgÇÇ·Ó°¢6öç7B6WEcÒ†–BÇb“Óç¶6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B†–B“¶–b†VÂ–VÂçfÇVS×c·Ó°¢6WEb†–G2æÖ–âÆe²uF–V×òFR&öGV66œ;6âu×ÇÂrr“°¢6WEb†–G2æÖ‚Æe²uF–V×òFR&öGV66œ;6âÜ:‚u×ÇÂrr“°¢6WEb†–G2æfV6†Æe²tfV6†FRVçG&Vvu×ÇÂrr“°¢ö6÷E–çFF—ôF–2†–G2Æe²uF—òL:Ö2&öGV66œ;6âu×ÇÂtL8Ô2Œ8$”ÄU2r“°¢6÷EÆ¦õ6WDÖöFò‡66÷RÆe²tfV6†FRVçG&VvuÓòvfV6†s¢vF–2r“°§Ğ¢òò&\;¦æRÆ÷26×÷2FRÆ¦ò&—'F&ÆR6V|;¦âVÂÖöFò7F—fòà¢òòVâ6FÖöFòöæRVâçVÆÂÆ÷26×÷2FVÂ÷G&ò&VRÂ6Ö&–"FRÖöFò6RÆ–×–Vâà¦gVæ7F–öâ6÷EÆ¦ôf–VÆG2‡66÷R—°¢6öç7B–G3Ô4õEõÄ¤õô”E5·66÷UÓ°¢6öç7BÖöFóÖFö7VÖVçBævWDVÆVÖVçD'”–B†–G2æÖöFò“òçfÇVWÇÂvF–2s°¢–b†ÖöFóÓÓÒvfV6†r—°¢6öç7BfV6†ÖFö7VÖVçBævWDVÆVÖVçD'”–B†–G2æfV6†“òçfÇVWÇÂrs°¢&WGW&â²tfV6†FRVçG&Vvs¦fV6†ÇÆçVÆÂÂuF–V×òFR&öGV66œ;6âs¦çVÆÂÂuF–V×òFR&öGV66œ;6âÜ:‚s¦çVÆÂÂuF—òL:Ö2&öGV66œ;6âs¦çVÆÇÓ°¢Ğ¢6öç7BÖ–ã×'6T–çB†Fö7VÖVçBævWDVÆVÖVçD'”–B†–G2æÖ–â“òçfÇVR—ÇÆçVÆÃ°¢ÆWBÖƒ×'6T–çB†Fö7VÖVçBævWDVÆVÖVçD'”–B†–G2æÖ‚“òçfÇVR—ÇÆçVÆÃ°¢–b‚†Ö–âbfÖ‚bfÖƒæÖ–â’–ÖƒÖçVÆÃ²òòVÂÜ:†–Öò6öÆò7VVçF6’W2Ö–÷"VRVÂÜ:Öæ–Öğ¢&WGW&â²uF–V×òFR&öGV66œ;6âs¦Ö–âÂuF–V×òFR&öGV66œ;6âÜ:‚s¦Ö‚ÂuF—òL:Ö2&öGV66œ;6âs¦Ö–ãò†Fö7VÖVçBævWDVÆVÖVçD'”–B†–G2çF—ò“òçfÇVWÇÂtL8Ô2Œ8$”ÄU2r“¦çVÆÂÂtfV6†FRVçG&Vvs¦çVÆÇÓ°§Ğ ¦gVæ7F–öâFE6öÆ–6—GVD—FVÒ‚—°¢6öç7B–çÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷B×6öÆ–6—GVBÖ–çr“¶6öç7BfÃÒ†–çòçfÇVWÇÂrr’çG&–Ò‚“¶–b‚fÂ’&WGW&ã°¢6öç7B6öçF–æW#ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚w6öÆ–6—GVD—FV×2r“¶6öç7B—FVÓÖFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“°¢—FVÒæFF6WBçfÇVS×fÃ°¢—FVÒç7G–ÆRæ775FW‡CÒvF—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‡ƒ¶&6¶w&÷VæC§f"‚Ò×7W&f6S"“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶&÷&FW"×&F—W3£Wƒ·FF–æs£W‚ƒ¶föçB×6—¦S£'‚s°¢—FVÒæ–ææW$…DÔÃÖÇ7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖ66VçB“¶fÆW‚×6‡&–æ³£#î(
-#Â÷7ããÇ7â7G–ÆSÒ&fÆWƒ£#âG¶W66T‡FÖÂ‡fÂ—ÓÂ÷7ããÆ'WGFöâöæ6Æ–6³Ò'&VÖ÷fU6öÆ–6—GVD—FVÒ‡F†—2’"7G–ÆSÒ&&6¶w&÷VæC¦æöæS¶&÷&FW#¦æöæS¶6öÆ÷#§f"‚Ò×FW‡C2“¶7W'6÷#§ö–çFW#¶föçB×6—¦S£7ƒ·FF–æs£¶Æ–æRÖ†V–v‡C£"öæÖ÷W6VVçFW#Ò'F†—2ç7G–ÆRæ6öÆ÷#Òwf"‚ÒÖFævW"’r"öæÖ÷W6VÆVfSÒ'F†—2ç7G–ÆRæ6öÆ÷#Òwf"‚Ò×FW‡C2’r#î)ÉSÂö'WGFöãæ°¢6öçF–æW"æVæD6†–ÆB†—FVÒ“¶–ççfÇVSÒrs·7–æ56öÆ–6—GVEFõFW‡F&V‚“¶–çæfö7W2‚“°§Ğ¦gVæ7F–öâ&VÖ÷fU6öÆ–6—GVD—FVÒ†'Fâ—¶'Fâæ6Æ÷6W7B‚u¶FF×fÇVUÒr’ç&VÖ÷fR‚“·7–æ56öÆ–6—GVEFõFW‡F&V‚“·Ğ¦gVæ7F–öâ7–æ56öÆ–6—GVEFõFW‡F&V‚—°¢6öç7B—FV×3Õ²ââæFö7VÖVçBçVW'•6VÆV7F÷$ÆÂ‚r76öÆ–6—GVD—FV×2¶FF×fÇVUÒr•ÒæÖ†VÃÓâ~(
-"r¶VÂæFF6WBçfÇVR“°¢6öç7BFÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷B×6öÆ–6—GVBr“¶–b‡F’FçfÇVSÖ—FV×2æ¦ö–â‚uÆâr“°§Ğ ¢òò)H)Hdõ$Ò„TÅU%2)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¦gVæ7F–öâöä6Æ–VçFU6V&6„–çWB‚—°¢6öç7B–çÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFR×6V&6‚r’ÆG&÷F÷vãÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖG&÷F÷vâr“°¢Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖ–Br’çfÇVSÒrs¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖ–æfòr’çFW‡D6öçFVçCÒrs°¢6öç7BÖ–ççfÇVRçFôÆ÷vW$66R‚’çG&–Ò‚“¶6öç7B7&3×÷7FFRæ6Æ–VçFW2æf–ÇFW"†3Óâ‚†2æf–VÆG5²tV×&W6u×ÇÂrr’²rr²†2æf–VÆG5²t6öçF7Fòu×ÇÂrr’’çFôÆ÷vW$66R‚’æ–æ6ÇVFW2‡’’ç6Æ–6RƒÃ‚“§7FFRæ6Æ–VçFW2ç6Æ–6RƒÃb“°¢ÆWB‡FÖÃ×7&2æÖ†3ÓæÆF—b6Æ73Ò'6V&6‚×6VÆV7BÖ—FVÒ"öæ6Æ–6³Ò'6VÆV7D6Æ–VçFR‚rG¶2æ–GÒr’#ãÇ7G&öæsâG¶W66T‡FÖÂ†2æf–VÆG5²tV×&W6u×ÇÂ~(	Br—ÓÂ÷7G&öæsãÇ7â6Æ73Ò'FW‡BÖ×WFVBFW‡B×6ÖÆÂ"7G–ÆSÒ&Ö&v–âÖÆVgC£w‚#âG¶W66T‡FÖÂ†2æf–VÆG5²t6öçF7Fòu×ÇÂrr—ÓÂ÷7ããÂöF—cæ’æ¦ö–â‚rr“°¢–b‡bb7&2ç6öÖR†3Óâ†2æf–VÆG5²tV×&W6u×ÇÂrr’çFôÆ÷vW$66R‚“ÓÓ×’’‡FÖÂ³ÖÆF—b6Æ73Ò'6V&6‚×6VÆV7BÖ—FVÒ7&VFRÖæWr"öæ6Æ–6³Ò'6VÆV7D6Æ–VçFTæWr‚’#â²W6""G¶W66T‡FÖÂ†–ççfÇVR—Ò#ÂöF—cæ°¢G&÷F÷vâæ–ææW$…DÔÃÖ‡FÖÃ¶G&÷F÷vâæ6Æ74Æ—7BçFövvÆR‚v÷VârÂ‡FÖÂ“°§Ğ¦gVæ7F–öâ6VÆV7D6Æ–VçFR†–B—¶6öç7B3×7FFRæ6Æ–VçFW4'”–E&V5¶–EÓ¶–b‚2’&WGW&ã¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFR×6V&6‚r’çfÇVSÖ2æf–VÆG5²tV×&W6u×ÇÂrs¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖ–Br’çfÇVSÖ–C¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖG&÷F÷vâr’æ6Æ74Æ—7Bç&VÖ÷fR‚v÷Vâr“¶6öç7BfVæ3Ö2æf–VÆG5²tf7GW&2fVæ6–F2u×ÇÃÆ–æfóÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖ–æfòr“¶6öç7B&Wd6÷G3×7FFRæ6÷F—¦6–öæW2æf–ÇFW"‡ƒÓç¶6öç7B6Ã×‚æf–VÆG5²t6Æ–VçFRuÓ·&WGW&â'&’æ—4'&’†6Â“ö6Âæ–æ6ÇVFW2†–B“¦6ÃÓÓÖ–C·Ò’ç6÷'B‚†Æ"“Óâ†"æf–VÆG5²tfV6†6÷F—¦6œ;6âu×ÇÆ"æ7&VFVEF–ÖWÇÂrr’æÆö6ÆT6ö×&R†æf–VÆG5²tfV6†6÷F—¦6œ;6âu×ÇÆæ7&VFVEF–ÖWÇÂrr’“¶6öç7B&Wd'Fã×&Wd6÷G2æÆVæwFƒöfæ'7³Æ'WGFöâG—SÒ&'WGFöâ"öæ6Æ–6³Ò&÷Vä6÷”6÷E–6¶W"‚vâr’"7G–ÆSÒ&&6¶w&÷VæC§&v&ƒcrÃ3’Ã#SÃã"“¶&÷&FW#£‚6öÆ–B&v&ƒcrÃ3’Ã#SÃã3R“¶&÷&FW"×&F—W3£Wƒ¶6öÆ÷#§f"‚ÒÖ66VçCB“¶föçB×6—¦S£ãWƒ¶föçB×vV–v‡C£s·FF–æs£'‚‡ƒ¶7W'6÷#§ö–çFW#·fW'F–6ÂÖÆ–vã¦Ö–FFÆR#ï	ù8²6÷BâçFW&–÷"‚G·&Wd6÷G2æÆVæwF‡Ò“Âö'WGFöãæ¢rs¶ÆWBFW65FsÒrs·G'—¶6öç7BCÒ‡G—VöböFW646Æ–VçFSÓÓÒvgVæ7F–öâr“õöFW646Æ–VçFR†–B“£¶–b†Cã—¶6öç7BF—63ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖFW67VVçFòr“¶–b†F—62bb‚F—62çfÇVWÇÇ'6TfÆöB†F—62çfÇVR“ÓÓÓ’—¶F—62çfÇVSÖC¶–b‡G—VöbWFFT—FV×5F÷FÃÓÓÒvgVæ7F–öâr—WFFT—FV×5F÷FÂ‚“·ÖFW65FsÖfæ'7³Ç7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖ66VçCB“¶föçB×6—¦S£'‚#ï	øû~ûˆòG¶GÒRGFòâ6Æ–VçFSÂ÷7ãæ·×Ö6F6‚†R—·Ğ¢–æfòæ–ææW$…DÔÃÒ‡fVæ3ãÓ#öÇ7â7G–ÆSÒ&6öÆ÷#§f"‚ÒÖFævW"’#î)ªG·fVæ7Òf7GW&2fVæ6–F3Â÷7ãæ¦Ç7â7G–ÆSÒ&6öÆ÷#§f"‚Ò×FW‡C"’#î)É26Æ–VçFR6VÆV66–öæFóÂ÷7ãæ’¶FW65Fr·&Wd'Fã·Ğ¦gVæ7F–öâ6VÆV7D6Æ–VçFTæWr‚—¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖ–Br’çfÇVSÒrs¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖG&÷F÷vâr’æ6Æ74Æ—7Bç&VÖ÷fR‚v÷Vâr“·Ğ¦Fö7VÖVçBæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÆSÓç¶–b‚RçF&vWBæ6Æ÷6W7B‚rç6V&6‚×6VÆV7B×w&r’’Fö7VÖVçBçVW'•6VÆV7F÷$ÆÂ‚rç6V&6‚×6VÆV7BÖG&÷F÷vâr’æf÷$V6‚†CÓæBæ6Æ74Æ—7Bç&VÖ÷fR‚v÷Vâr’“·Ò“°¦gVæ7F–öâ6ÆV$f÷&Ò‡G—R—°¢–b‡G—SÓÓÒvÆVBr—µ²væÂÖV×&W6rÂvæÂÖ6öçF7FòrÂvæÂÖ6&vòrÂvæÂ×FVÆVföæòrÂvæÂÖVÖ–ÂrÂvæÂ×'WBrÂvæÂ×vV"rÂvæÂÖæ÷F2rÂvæÂÖ6—VFBrÂvæÂÖF—&V66–öâuÒæf÷$V6‚†–CÓç¶6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B†–B“¶–b†VÂ’VÂçfÇVSÒrs·Ò“°¢G'—µöæÄV×6VÃÖçVÆÃµöæÄV×f÷&6SÖfÇ6S¶æÄV×&W66W'&"‚“¶6öç7BcÖFö7VÖVçBævWDVÆVÖVçD'”–B‚væÄV×&W6f—6òr“¶–b†b–bç7G–ÆRæF—7Æ“ÒvæöæRs·Ö6F6‚†R—·ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚væÂÖ÷&–vVâr’çfÇVSÒu&VfW&–Fòs¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚væÂÖ–æGW7G&–r’çfÇVSÒrs¶6öç7Bç#ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚væÂ×&Vv–öâr“¶–b†ç"’ç"çfÇVSÒrs¶6öç7Bæ3ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚væÂÖ6ö×Vær“¶–b†æ2—¶æ2æ–ææW$…DÔÃÒsÆ÷F–öâfÇVSÒ"#î(	B6VÆV66–öæ"&Vvœ;6â&–ÖW&ò(	CÂö÷F–öãâs¶æ2æF—6&ÆVC×G'VS·×Ğ¢–b‡G—SÓÓÒv6÷Br—µ²v6÷BÖçVÒrÂv6÷BÖÆ–2rÂv6÷B×7V'F÷FÂrÂv6÷B×F÷FÂrÂv6÷B×6öÆ–6—GVBrÂv6÷B×6öÆ–6—GVBÖ–çrÂv6÷BÖæ÷F2rÂv6÷BÖ6Æ–VçFR×6V&6‚rÂv6÷BÖ6Æ–VçFRÖ–BrÂv6÷B×F–V×ò×&öBrÂv6÷B×F–V×ò×&öBÖÖ‚rÂv6÷BÖfV6†ÖVçG&VvrÂv6÷BÖfV6†ÖÆ–Ö—FRrÂv6÷BÖFW67VVçFòuÒæf÷$V6‚†–CÓç¶6öç7BVÃÖFö7VÖVçBævWDVÆVÖVçD'”–B†–B“¶–b†VÂ’VÂçfÇVSÖ–CÓÓÒv6÷BÖFW67VVçFòsòss¢rs·Ò“¶6öç7B6“ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚w6öÆ–6—GVD—FV×2r“¶–b‡6’’6’æ–ææW$…DÔÃÒrs¶6öç7BgÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖf÷&Ö×vòr“¶–b†g’gçfÇVSÒrs¶6öç7B7SÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷B×W&vVçFRr“¶–b†7R’7RçfÇVSÒvfÇ6Rs¶6öç7B6SÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖW7FFòÖ–æ–6–Âr“¶–b†6R–6RçfÇVSÒtVçf–Fs·G'—¶6÷EÆ¦ôÆöB‚væWrrÇ·Ò“·Ö6F6‚†R—·Ó¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖ–æfòr’çFW‡D6öçFVçCÒrs¶Fö7VÖVçBævWDVÆVÖVçD'”–B‚v6÷BÖ6Æ–VçFRÖG&÷F÷vâr“òæ6Æ74Æ—7Bç&VÖ÷fR‚v÷Vâr“¶–æ—DFFW2‚“¶–æ—D—FV×46öçF–æW"‚“¶6öç7B36GÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v36BÖ–æÆ–æR×æVÂr“¶–b†36G’36Gç7G–ÆRæF—7Æ“ÒvæöæRs´ö&¦V7BçfÇVW2…ö36D'Fç2‚’’æf÷$V6‚†#Óç¶–b†"–"ç7G–ÆRæ&6¶w&÷VæCÒrs·Ò“¶6öç7B36FÃÖFö7VÖVçBævWDVÆVÖVçD'”–B‚v36BÖ’×–W¦2r“¶–b†36FÂ’36FÂæ–ææW$…DÔÃÒrs¶36E–W¦47F—f3ÕµÓ¶36E–W¦6÷VçFW#Óµ²vÇ7"rÂvæVòvÚ±î¸Â¸­yêë¢°k¢G§¦*^
+    document.getElementById('maquinaModalTipo').value='uso';
+    document.getElementById('maquinaModalDesc').value='';
+    document.getElementById('maquinaModalTiempo').value='';
+    sel.value='';
+  }
+  onMaquinaModalTipoChange();
+  document.getElementById('maquinaEventModal').style.display='flex';
+}
+function closeMaquinaModal(){document.getElementById('maquinaEventModal').style.display='none';}
+function onMaquinaModalTipoChange(){
+  const tipo=document.getElementById('maquinaModalTipo').value;
+  const esUso=tipo==='uso',esDisp=tipo==='disponible';
+  document.getElementById('maquinaModalPedidoGroup').style.display=esUso?'flex':'none';
+  document.getElementById('maquinaModalDescGroup').style.display=esDisp?'none':'flex';
+  document.getElementById('maquinaModalTiempoGroup').style.display=esUso?'flex':'none';
+}
+function onMaquinaModalPedidoChange(){
+  const sel=document.getElementById('maquinaModalPedido');
+  const pid=sel.value;if(!pid) return;
+  const p=state.pedidosById[pid];if(!p) return;
+  const f=p.fields;
+  const nPed=f['NÂ° Pedido']||'â€”',cliente=resolveClienteName(f['Cliente']),estado=f['Estado pedido']||'â€”';
+  document.getElementById('maquinaModalDesc').value=`${nPed} Â· ${cliente}`;
+  // sugerir horas segÃºn pedido si tiene monto (estimaciÃ³n rÃ¡pida)
+  const monto=(f['Monto total (CLP)']||0)/1.19;
+  if(monto>0&&!document.getElementById('maquinaModalTiempo').value){
+    const hEst=Math.max(1,Math.round(monto/15000)); // aprox $15k neto/h como referencia
+    document.getElementById('maquinaModalTiempo').value=Math.min(hEst,24);
+  }
+}
+async function saveMaquinaEvento(){
+  const maqId=document.getElementById('maquinaModalId').value,tipo=document.getElementById('maquinaModalTipo').value,desc=document.getElementById('maquinaModalDesc').value,tiempo=document.getElementById('maquinaModalTiempo').value,fi=document.getElementById('maquinaModalFechaInicio').value,ff=document.getElementById('maquinaModalFechaFin').value;
+  if(!fi||!ff){toast('Ingresa las fechas','error');return;}
+  const pedidoId=document.getElementById('maquinaModalPedido')?.value||'';
+  const start=new Date(fi+'T00:00:00'),end=new Date(ff+'T00:00:00');let count=0;
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){const key=`${maqId}_${fmtDate(new Date(d))}`;if(tipo==='disponible') delete maquinaState.eventos[key];else{const ev={tipo,desc,tiempo:parseFloat(tiempo)||null};if(pedidoId) ev.pedidoId=pedidoId;maquinaState.eventos[key]=ev;}count++;}
+  closeMaquinaModal();renderMaquinasCalendar();toast(`âœ“ ${count} dÃ­a${count>1?'s':''} marcados â€” guardando...`,'info');
+  try{await saveMaquinaEventosAirtable();toast('âœ“ Guardado en Airtable','success');}
+  catch(e){toast('Error al guardar: '+e.message,'error');}
+}
+async function deleteMaquinaEvento(maqId,dateStr){
+  delete maquinaState.eventos[`${maqId}_${dateStr}`];renderMaquinasCalendar();
+  try{await saveMaquinaEventosAirtable();toast('Evento eliminado','info');}
+  catch(e){toast('Error al eliminar: '+e.message,'error');}
+}
+
+// â”€â”€ EQUIPO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function initEquipo(){
+  await loadEquipoEventosAirtable();
+  const el=document.getElementById('gcalPersonasConfig');if(el) el.innerHTML=PERSONAS.map(p=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">${_avHtml(p,28)}<span style="min-width:140px;font-size:12px">${p.nombre}</span><input class="field-input" id="gcal_cid_${p.id}" placeholder="email@gmail.com" value="${p.gcalId}" style="font-size:12px;flex:1"><input class="field-input" id="gcal_key_${p.id}" placeholder="AIza... API Key" value="${sessionStorage.getItem('gcal_api_key')||''}" style="font-size:12px;flex:1"></div>`).join('');
+  const anyGcal=PERSONAS.some(p=>sessionStorage.getItem('gcal_persona_'+p.id));if(anyGcal){PERSONAS.forEach(p=>{const cid=sessionStorage.getItem('gcal_persona_'+p.id);if(cid) p.gcalId=cid;});document.getElementById('gcalEquipoSyncBtn').style.display='inline-flex';}
+  renderEquipoCalendar();
+  try{renderComisiones();}catch(e){}
+}
+function toggleGcalEquipoConfig(){const el=document.getElementById('gcalEquipoConfig');el.style.display=el.style.display==='none'?'block':'none';}
+function saveGcalEquipoConfig(){PERSONAS.forEach(p=>{const cid=document.getElementById(`gcal_cid_${p.id}`)?.value.trim();const key=document.getElementById(`gcal_key_${p.id}`)?.value.trim();if(cid){p.gcalId=cid;sessionStorage.setItem('gcal_persona_'+p.id,cid);}if(key) sessionStorage.setItem('gcal_api_key',key);});toggleGcalEquipoConfig();document.getElementById('gcalEquipoSyncBtn').style.display='inline-flex';toast('âœ“ Calendarios configurados','success');syncGcalEquipo();}
+function getEquipoSemanaLunes(){const t=new Date();t.setHours(0,0,0,0);const day=t.getDay();const l=new Date(t);l.setDate(t.getDate()-(day===0?6:day-1)+(equipoState.semanaOffset*7));return l;}
+function navEquipoSemana(d){equipoState.semanaOffset+=d;renderEquipoCalendar();}
+function goEquipoToday(){equipoState.semanaOffset=0;renderEquipoCalendar();}
+function renderEquipoCalendar(){
+  const lunes=getEquipoSemanaLunes();const dias=[];for(let i=0;i<7;i++){const d=new Date(lunes);d.setDate(lunes.getDate()+i);dias.push(d);}
+  const today=fmtDate(new Date());const opts={day:'numeric',month:'short'};
+  document.getElementById('equipoSemanaLabel').textContent=`${dias[0].toLocaleDateString('es-CL',opts)} â€” ${dias[6].toLocaleDateString('es-CL',opts)} ${dias[0].getFullYear()}`;
+  renderEquipoResumenHoy(today);
+  document.getElementById('equipoHeader').innerHTML=`<tr><th style="padding:10px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);min-width:170px;background:var(--surface);position:sticky;left:0;z-index:2">Persona</th>${dias.map(d=>{const isH=fmtDate(d)===today,esFinde=d.getDay()===0||d.getDay()===6;return`<th style="padding:7px 5px;font-size:10.5px;font-weight:${isH?700:500};color:${isH?'var(--accent)':esFinde?'var(--text3)':'var(--text2)'};text-align:center;border-bottom:1px solid var(--border);min-width:100px;background:var(--surface)">${fmtDayLabel(d)}${esFinde?'<br><span style="font-size:9.5px;color:var(--text3)">finde</span>':''}</th>`;}).join('')}</tr>`;
+  document.getElementById('equipoBody').innerHTML=PERSONAS.map(p=>{
+    const celdas=dias.map(d=>{const ds=fmtDate(d),key=`${p.id}_${ds}`,ev=equipoState.eventos[key],isH=ds===today,esFinde=d.getDay()===0||d.getDay()===6;const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):null;const bg=cfg?cfg.bg:esFinde?'rgba(255,255,255,0.01)':'transparent';let content='';if(cfg){content=`<div style="font-size:10.5px;font-weight:700;color:${cfg.color}">${cfg.icon} ${cfg.label}</div>${ev.desc?`<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:88px">${escapeHtml(ev.desc)}</div>`:''}<button onclick="event.stopPropagation();deleteEquipoEvento('${p.id}','${ds}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:9.5px;padding:0">âœ•</button>`;}else{content=`<span style="color:var(--text3);font-size:10.5px">${esFinde?'â€”':'+'}</span>`;}return`<td onclick="openEquipoModal('${p.id}','${p.nombre}','${ds}')" style="padding:3px;text-align:center;border-bottom:1px solid var(--border);border-left:${isH?'2px solid var(--accent)':'1px solid var(--border)'};background:${bg};cursor:pointer;vertical-align:middle" onmouseenter="this.style.filter='brightness(1.4)'" onmouseleave="this.style.filter='brightness(1)'"><div style="min-height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">${content}</div></td>`;}).join('');
+    const dispCount=dias.filter(d=>{const ev=equipoState.eventos[`${p.id}_${fmtDate(d)}`];return !ev||ev.tipo==='disponible';}).length;
+    return`<tr><td style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;left:0;z-index:1"><div style="display:flex;align-items:center;gap:9px">${_avHtml(p,34)}<div><div style="font-size:12px;font-weight:600">${escapeHtml(p.nombre)}</div><div style="font-size:10.5px;color:var(--text3)">${p.rol} Â· ${dispCount}/7 disp.</div></div></div></td>${celdas}</tr>`;
+  }).join('');
+  renderEquipoDetalleSemana(dias);
+  const ausentes=PERSONAS.filter(p=>{const ev=equipoState.eventos[`${p.id}_${today}`];return ev&&['ausente','vacaciones'].includes(ev.tipo);}).length;
+  document.getElementById('equipoSubtitle').textContent=`${PERSONAS.length-ausentes} disponibles Â· ${ausentes} ausentes hoy`;
+}
+function renderEquipoResumenHoy(today){
+  const todayDate=new Date(today+'T00:00:00');
+  document.getElementById('equipoResumenHoy').innerHTML=PERSONAS.map(p=>{
+    const ev=equipoState.eventos[`${p.id}_${today}`];
+    const cfg=ev?(EQUIPO_TIPOS[ev.tipo]||EQUIPO_TIPOS.disponible):EQUIPO_TIPOS.disponible;
+    // #1 Carga de trabajo: pedidos activos asignados a esta persona
+    const fn=p.nombre.split(' ')[0].toLowerCase();
+    const misPedidos=state.pedidos.filter(x=>{
+      const ea=(x.fields['Equipo asignado']||'').toLowerCase();
+      return ea.includes(fn)&&!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||'');
+    });
+    const proxEntrega=misPedidos
+      .filter(x=>x.fields['Fecha entrega']&&new Date(x.fields['Fecha entrega']+'T00:00:00')>=todayDate)
+      .map(x=>x.fields['Fecha entrega']).sort()[0];
+    const proxLabel=proxEntrega?` Â· prÃ³x: ${proxEntrega.substring(5).replace('-','/')}` :'';
+    const cargaHtml=misPedidos.length
+      ?`<div style="font-size:10.5px;color:var(--accent);margin-top:3px">ğŸ“¦ ${misPedidos.length} pedido${misPedidos.length>1?'s':''} activo${misPedidos.length>1?'s':''}${proxLabel}</div>`
+      :`<div style="font-size:10.5px;color:var(--text3);margin-top:3px">Sin pedidos activos</div>`;
+    // #2 Alertas de cobertura: ausencia coincide con fecha entrega de un pedido
+    const conflictos=[];
+    Object.entries(equipoState.eventos).forEach(([key,ev2])=>{
+      if(!key.startsWith(p.id+'_')||!['ausente','vacaciones'].includes(ev2.tipo)) return;
+      const dk=key.substring(p.id.length+1);
+      misPedidos.forEach(x=>{
+        if((x.fields['Fecha entrega']||'')===dk)
+          conflictos.push({ped:x.fields['NÂ° Pedido']||'?',fecha:dk.substring(5).replace('-','/')});
+      });
+    });
+    const alertaHtml=conflictos.length
+      ?`<div style="font-size:10.5px;color:var(--danger);font-weight:700;margin-top:3px">âš  Conflicto: ${conflictos.map(c=>`${c.ped} vence el ${c.fecha}`).join(' Â· ')}</div>`
+      :'';
+    return`<div class="card" style="padding:14px;display:flex;align-items:center;gap:10px${conflictos.length?';border-color:rgba(255,68,68,0.4)':''}">${_avHtml(p,40)}<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:12px;color:${cfg.color};font-weight:700">${cfg.icon} ${cfg.label}</div>${ev?.desc?`<div style="font-size:10.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(ev.desc)}</div>`:''}${cargaHtml}${alertaHtml}</div><button class="btn-mini ${ev&&ev.tipo!=='disponible'?'btn-mini-red':'btn-mini-green'}" onclick="quickToggleEquipo('${p.id}','${today}')">${ev&&ev.tipo!=='disponible'?'ğŸ”´ Disp.':'ğŸŸ¢ OK'}</button></div>`;
+  }).join('');
+}
+function renderEquipoDetalleSemana(dias){
+  document.getElementById('equipoDetalleSemana').innerHTML=PERSONAS.map(p=>{
+    // #1 Pedidos activos asignados a esta persona
+    const fn=p.nombre.split(' ')[0].toLowerCase();
+    const misPedidos=state.pedidos.filter(x=>{
+      const ea=(x.fields['Equipo asignado']||'').toLowerCase();
+      return ea.includes(fn)&&!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||'');
+    });
+    // Mapa fechaâ†’lista de NÂ°Pedido que vencen ese dÃ­a
+    const entregasDias={};
+    misPedidos.forEach(x=>{const fe=x.fields['Fecha entrega'];if(fe){if(!entregasDias[fe])entregasDias[fe]=[];entregasDias[fe].push(x.fields['NÂ° Pedido']||'?');}});
+    // Contar conflictos en la semana visible
+    const conflictCount=dias.filter(d=>{const ds=fmtDate(d),ev=equipoState.eventos[`${p.id}_${ds}`];return ev&&['ausente','vacaciones'].includes(ev.tipo)&&(entregasDias[ds]||[]).length>0;}).length;
+    // Filas de dÃ­as con indicadores de entrega y conflicto
+    const eventosHtml=dias.map(d=>{
+      const ds=fmtDate(d),ev=equipoState.eventos[`${p.id}_${ds}`],cfg=ev?(EQUIPO_TIPOS[ev.tipo]||null):null,esFinde=d.getDay()===0||d.getDay()===6;
+      const pedEseDia=entregasDias[ds]||[];
+      const estaAusente=ev&&['ausente','vacaciones'].includes(ev.tipo);
+      const conflicto=estaAusente&&pedEseDia.length>0;
+      const pedTag=pedEseDia.length?`<span style="font-size:10px;font-weight:700;color:${conflicto?'var(--danger)':'var(--accent)'};margin-left:auto;flex-shrink:0">${conflicto?'âš  ':'ğŸ“¦ '}${pedEseDia.join(', ')}</span>`:'';
+      return`<div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--border)${conflicto?';background:rgba(255,68,68,0.06)':''}"><span style="font-size:10.5px;color:var(--text3);min-width:44px">${fmtDayLabel(d)}</span>${cfg?`<span style="font-size:10.5px;font-weight:600;color:${cfg.color}">${cfg.icon} ${cfg.label}</span>${ev.desc?`<span style="font-size:10.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;flex:1">${escapeHtml(ev.desc)}</span>`:''}`: `<span style="font-size:10.5px;color:${esFinde?'var(--text3)':'var(--accent3)'}">âœ“ ${esFinde?'Finde':'Disponible'}</span>`}${pedTag}</div>`;
+    }).join('');
+    const dispDias=dias.filter(d=>{const ev=equipoState.eventos[`${p.id}_${fmtDate(d)}`];return !ev||ev.tipo==='disponible';}).length;
+    const pct=Math.round((dispDias/7)*100);
+    const barColor=pct>=70?'var(--accent3)':pct>=40?'var(--warn)':'var(--danger)';
+    const statHtml=misPedidos.length
+      ?`<div style="font-size:10px;color:${conflictCount?'var(--danger)':'var(--accent)'};margin-top:2px">${conflictCount?`âš  ${conflictCount} conflicto${conflictCount>1?'s':''}`:`ğŸ“¦ ${misPedidos.length} ped. activo${misPedidos.length>1?'s':''}`}</div>`
+      :'';
+    return`<div class="card"><div class="card-header"><div style="display:flex;align-items:center;gap:9px">${_avHtml(p,30)}<div><div style="font-size:12px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:10.5px;color:var(--text3)">${p.rol}</div></div></div><div style="text-align:right"><div style="font-size:16px;font-family:'Bebas Neue';color:${barColor}">${dispDias}/7</div><div style="font-size:10px;color:var(--text3)">dÃ­as disp.</div>${statHtml}</div></div><div style="padding:0 14px 6px"><div style="height:3px;background:var(--surface3);border-radius:2px;margin-bottom:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px"></div></div>${eventosHtml}</div></div>`;
+  }).join('');
+}
+async function quickToggleEquipo(personaId,dateStr){const key=`${personaId}_${dateStr}`,ev=equipoState.eventos[key];if(ev&&ev.tipo!=='disponible'){delete equipoState.eventos[key];renderEquipoCalendar();await saveEquipoEventosAirtable();toast('âœ“ Disponible','success');}else openEquipoModal(personaId,PERSONAS.find(p=>p.id===personaId)?.nombre||'',dateStr);}
+function openEquipoModal(personaId,nombre,dateStr){document.getElementById('equipoModalPersonaId').value=personaId;document.getElementById('equipoModalDate').value=dateStr;const p=PERSONAS.find(x=>x.id===personaId);document.getElementById('equipoModalTitle').innerHTML=`<span style="display:flex;align-items:center;gap:8px">${_avHtml(p,28)}ğŸ“… ${escapeHtml(nombre)} â€” ${dateStr}</span>`;document.getElementById('equipoModalDesc').value='';document.getElementById('equipoModalFechaInicio').value=dateStr;document.getElementById('equipoModalFechaFin').value=dateStr;document.getElementById('equipoModalHoraInicio').value='09:00';document.getElementById('equipoModalHoraFin').value='18:00';document.getElementById('equipoModalTipo').value='ocupado';onEquipoModalTipoChange();document.getElementById('equipoEventModal').style.display='flex';}
+function closeEquipoModal(){document.getElementById('equipoEventModal').style.display='none';}
+function onEquipoModalTipoChange(){const tipo=document.getElementById('equipoModalTipo').value;const showDesc=!['vacaciones','ausente','disponible'].includes(tipo);const showHoras=['ocupado','reunion','remoto'].includes(tipo);document.getElementById('equipoModalDescGroup').style.display=showDesc?'flex':'none';document.getElementById('equipoModalHorasGroup').style.display=showHoras?'flex':'none';}
+async function saveEquipoEvento(){
+  const pId=document.getElementById('equipoModalPersonaId').value,tipo=document.getElementById('equipoModalTipo').value,desc=document.getElementById('equipoModalDesc').value,fi=document.getElementById('equipoModalFechaInicio').value,ff=document.getElementById('equipoModalFechaFin').value,horaInicio=document.getElementById('equipoModalHoraInicio').value,horaFin=document.getElementById('equipoModalHoraFin').value;
+  if(!fi||!ff){toast('Ingresa las fechas','error');return;}
+  const start=new Date(fi+'T00:00:00'),end=new Date(ff+'T00:00:00');let count=0;
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){const key=`${pId}_${fmtDate(new Date(d))}`;if(tipo==='disponible') delete equipoState.eventos[key];else equipoState.eventos[key]={tipo,desc,horaInicio,horaFin};count++;}
+  const p=PERSONAS.find(x=>x.id===pId);closeEquipoModal();renderEquipoCalendar();
+  toast(`âœ“ ${count} dÃ­a${count>1?'s':''} â†’ ${p?.nombre} â€” guardando...`,'info');
+  await saveEquipoEventosAirtable();toast('âœ“ Guardado en Airtable','success');
+}
+async function deleteEquipoEvento(pId,dateStr){delete equipoState.eventos[`${pId}_${dateStr}`];renderEquipoCalendar();await saveEquipoEventosAirtable();toast('Evento eliminado','info');}
+async function syncGcalEquipo(){
+  const btn=document.getElementById('gcalEquipoSyncBtn');btn.disabled=true;btn.textContent='â³ Sync...';
+  const lunes=getEquipoSemanaLunes();const dias=[];for(let i=0;i<7;i++){const d=new Date(lunes);d.setDate(lunes.getDate()+i);dias.push(d);}
+  const timeMin=encodeURIComponent(dias[0].toISOString()),timeMax=encodeURIComponent(new Date(dias[6].getTime()+86400000).toISOString());let total=0;
+  for(const p of PERSONAS){const gcalId=sessionStorage.getItem('gcal_persona_'+p.id);const apiKey=sessionStorage.getItem('gcal_api_key');if(!gcalId||!apiKey) continue;
+    try{const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(gcalId)}/events?key=${apiKey}&timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=50`);if(!r.ok) continue;const data=await r.json();
+      (data.items||[]).forEach(ev=>{const sd=(ev.start?.date||ev.start?.dateTime||'').slice(0,10);if(!sd) return;const title=(ev.summary||'').toLowerCase();let tipo='ocupado';if(title.includes('vacacion')) tipo='vacaciones';else if(title.includes('ausente')) tipo='ausente';else if(title.includes('remoto')) tipo='remoto';else if(title.includes('reuni')) tipo='reunion';
+        const s=new Date(sd+'T00:00:00'),e2=new Date((ev.end?.date||ev.end?.dateTime||sd).slice(0,10)+'T00:00:00');
+        for(let d=new Date(s);d<=e2;d.setDate(d.getDate()+1)){const ds=fmtDate(new Date(d));if(dias.some(x=>fmtDate(x)===ds)){equipoState.eventos[`${p.id}_${ds}`]={tipo,desc:ev.summary,horaInicio:'',horaFin:''};total++;}}});
+    }catch(e){toast(`Error sync ${p.nombre}`,'error');}
+  }
+  toast(`âœ“ ${total} eventos importados`,'success');await saveEquipoEventosAirtable();renderEquipoCalendar();btn.disabled=false;btn.textContent='ğŸ”„ Sync';
+}
+
+// â”€â”€ SOLICITUD ITEMS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function toggleTipoDias(){
+  const inp=document.getElementById('cot-tipo-dias');
+  const btn=document.getElementById('cot-tipo-dias-btn');
+  if(!inp||!btn) return;
+  if(inp.value==='DÃAS HÃBILES'){
+    inp.value='DÃAS NORMALES';
+    btn.textContent='DÃAS NORMALES';
+    btn.style.background='rgba(255,170,0,0.15)';
+    btn.style.borderColor='rgba(255,170,0,0.5)';
+    btn.style.color='var(--accent2)';
+  } else {
+    inp.value='DÃAS HÃBILES';
+    btn.textContent='DÃAS HÃBILES';
+    btn.style.background='rgba(0,212,204,0.15)';
+    btn.style.borderColor='rgba(0,212,204,0.5)';
+    btn.style.color='var(--accent)';
+  }
+}
+function toggleEditTipoDias(){
+  const inp=document.getElementById('editCotTipoDias');
+  const btn=document.getElementById('editCotTipoDiasBtn');
+  if(!inp||!btn) return;
+  if(inp.value==='DÃAS HÃBILES'){
+    inp.value='DÃAS NORMALES';btn.textContent='DÃAS NORMALES';
+    btn.style.background='rgba(255,170,0,0.15)';btn.style.borderColor='rgba(255,170,0,0.5)';btn.style.color='var(--accent2)';
+  } else {
+    inp.value='DÃAS HÃBILES';btn.textContent='DÃAS HÃBILES';
+    btn.style.background='rgba(0,212,204,0.15)';btn.style.borderColor='rgba(0,212,204,0.5)';btn.style.color='var(--accent)';
+  }
+}
+
+// â”€â”€ PLAZO DE ENTREGA (rango de dÃ­as o fecha fija) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Un mismo control en el formulario nuevo ('new') y en el de ediciÃ³n ('edit').
+const COT_PLAZO_IDS={
+  'new': {modo:'cotPlazoModo',diasWrap:'cotPlazoDiasWrap',fechaWrap:'cotPlazoFechaWrap',min:'cot-tiempo-prod',max:'cot-tiempo-prod-max',tipo:'cot-tipo-dias',tipoBtn:'cot-tipo-dias-btn',fecha:'cot-fecha-entrega',btnDias:'cotPlazoBtnDias',btnFecha:'cotPlazoBtnFecha'},
+  'edit':{modo:'editCotPlazoModo',diasWrap:'editCotPlazoDiasWrap',fechaWrap:'editCotPlazoFechaWrap',min:'editCotTiempoProd',max:'editCotTiempoProdMax',tipo:'editCotTipoDias',tipoBtn:'editCotTipoDiasBtn',fecha:'editCotFechaEntrega',btnDias:'editCotPlazoBtnDias',btnFecha:'editCotPlazoBtnFecha'}
+};
+// Alterna el modo del control: 'dias' (rango N-M) o 'fecha' (fecha fija).
+function cotPlazoSetModo(scope,modo){
+  const ids=COT_PLAZO_IDS[scope];if(!ids)return;modo=(modo==='fecha')?'fecha':'dias';
+  const hid=document.getElementById(ids.modo);if(hid)hid.value=modo;
+  const dw=document.getElementById(ids.diasWrap),fw=document.getElementById(ids.fechaWrap);
+  if(dw)dw.style.display=(modo==='fecha')?'none':'flex';
+  if(fw)fw.style.display=(modo==='fecha')?'flex':'none';
+  [[ids.btnDias,modo==='dias'],[ids.btnFecha,modo==='fecha']].forEach(([id,on])=>{const b=document.getElementById(id);if(!b)return;b.style.background=on?'rgba(0,212,204,0.18)':'transparent';b.style.borderColor=on?'rgba(0,212,204,0.55)':'var(--border2)';b.style.color=on?'var(--accent)':'var(--text3)';});
+}
+// Pinta el botÃ³n de tipo de dÃ­as (hÃ¡biles/normales) segÃºn el valor guardado.
+function _cotPintaTipoDias(ids,tipo){
+  const td=document.getElementById(ids.tipo);if(td)td.value=tipo;
+  const tdb=document.getElementById(ids.tipoBtn);if(!tdb)return;
+  const norm=(tipo==='DÃAS NORMALES');tdb.textContent=tipo;
+  tdb.style.background=norm?'rgba(255,170,0,0.15)':'rgba(0,212,204,0.15)';
+  tdb.style.borderColor=norm?'rgba(255,170,0,0.5)':'rgba(0,212,204,0.5)';
+  tdb.style.color=norm?'var(--accent2)':'var(--accent)';
+}
+// Carga los valores de plazo de un registro (o vacÃ­o) en el control.
+function cotPlazoLoad(scope,f){
+  const ids=COT_PLAZO_IDS[scope];if(!ids)return;f=f||{};
+  const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  setV(ids.min,f['Tiempo de producciÃ³n']||'');
+  setV(ids.max,f['Tiempo de producciÃ³n mÃ¡x']||'');
+  setV(ids.fecha,f['Fecha de entrega']||'');
+  _cotPintaTipoDias(ids,f['Tipo dÃ­as producciÃ³n']||'DÃAS HÃBILES');
+  cotPlazoSetModo(scope,f['Fecha de entrega']?'fecha':'dias');
+}
+// ReÃºne los campos de plazo para Airtable segÃºn el modo activo.
+// En cada modo pone en null los campos del otro para que al cambiar de modo se limpien.
+function cotPlazoFields(scope){
+  const ids=COT_PLAZO_IDS[scope];
+  const modo=document.getElementById(ids.modo)?.value||'dias';
+  if(modo==='fecha'){
+    const fecha=document.getElementById(ids.fecha)?.value||'';
+    return {'Fecha de entrega':fecha||null,'Tiempo de producciÃ³n':null,'Tiempo de producciÃ³n mÃ¡x':null,'Tipo dÃ­as producciÃ³n':null};
+  }
+  const min=parseInt(document.getElementById(ids.min)?.value)||null;
+  let max=parseInt(document.getElementById(ids.max)?.value)||null;
+  if(!(min&&max&&max>min))max=null; // el mÃ¡ximo solo cuenta si es mayor que el mÃ­nimo
+  return {'Tiempo de producciÃ³n':min,'Tiempo de producciÃ³n mÃ¡x':max,'Tipo dÃ­as producciÃ³n':min?(document.getElementById(ids.tipo)?.value||'DÃAS HÃBILES'):null,'Fecha de entrega':null};
+}
+
+function addSolicitudItem(){
+  const inp=document.getElementById('cot-solicitud-inp');const val=(inp?.value||'').trim();if(!val) return;
+  const container=document.getElementById('solicitudItems');const item=document.createElement('div');
+  item.dataset.value=val;
+  item.style.cssText='display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:12px';
+  item.innerHTML=`<span style="color:var(--accent);flex-shrink:0">â€¢</span><span style="flex:1">${escapeHtml(val)}</span><button onclick="removeSolicitudItem(this)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0;line-height:1" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">âœ•</button>`;
+  container.appendChild(item);inp.value='';syncSolicitudToTextarea();inp.focus();
+}
+function removeSolicitudItem(btn){btn.closest('[data-value]').remove();syncSolicitudToTextarea();}
+function syncSolicitudToTextarea(){
+  const items=[...document.querySelectorAll('#solicitudItems [data-value]')].map(el=>'â€¢ '+el.dataset.value);
+  const ta=document.getElementById('cot-solicitud');if(ta) ta.value=items.join('\n');
+}
+
+// â”€â”€ FORM HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function onClienteSearchInput(){
+  const inp=document.getElementById('cot-cliente-search'),dropdown=document.getElementById('cot-cliente-dropdown');
+  document.getElementById('cot-cliente-id').value='';document.getElementById('cot-cliente-info').textContent='';
+  const q=inp.value.toLowerCase().trim();const src=q?state.clientes.filter(c=>((c.fields['Empresa']||'')+' '+(c.fields['Contacto']||'')).toLowerCase().includes(q)).slice(0,8):state.clientes.slice(0,6);
+  let html=src.map(c=>`<div class="search-select-item" onclick="selectCliente('${c.id}')"><strong>${escapeHtml(c.fields['Empresa']||'â€”')}</strong><span class="text-muted text-small" style="margin-left:7px">${escapeHtml(c.fields['Contacto']||'')}</span></div>`).join('');
+  if(q&&!src.some(c=>(c.fields['Empresa']||'').toLowerCase()===q)) html+=`<div class="search-select-item create-new" onclick="selectClienteNew()">+ Usar "${escapeHtml(inp.value)}"</div>`;
+  dropdown.innerHTML=html;dropdown.classList.toggle('open',!!html);
+}
+function selectCliente(id){const c=state.clientesByIdRec[id];if(!c) return;document.getElementById('cot-cliente-search').value=c.fields['Empresa']||'';document.getElementById('cot-cliente-id').value=id;document.getElementById('cot-cliente-dropdown').classList.remove('open');const venc=c.fields['Facturas vencidas']||0,info=document.getElementById('cot-cliente-info');const prevCots=state.cotizaciones.filter(x=>{const cl=x.fields['Cliente'];return Array.isArray(cl)?cl.includes(id):cl===id;}).sort((a,b)=>(b.fields['Fecha cotizaciÃ³n']||b.createdTime||'').localeCompare(a.fields['Fecha cotizaciÃ³n']||a.createdTime||''));const prevBtn=prevCots.length?` &nbsp;<button type="button" onclick="openCopyCotPicker('n')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:5px;color:var(--accent4);font-size:10.5px;font-weight:700;padding:2px 8px;cursor:pointer;vertical-align:middle">ğŸ“‹ Cot. anterior (${prevCots.length})</button>`:'';let descTag='';try{const d=(typeof _descCliente==='function')?_descCliente(id):0;if(d>0){const disc=document.getElementById('cot-descuento');if(disc&&(!disc.value||parseFloat(disc.value)===0)){disc.value=d;if(typeof updateItemsTotal==='function')updateItemsTotal();}descTag=` &nbsp;<span style="color:var(--accent4);font-size:12px">ğŸ·ï¸ ${d}% dto. cliente</span>`;}}catch(e){}
+  info.innerHTML=(venc>=2?`<span style="color:var(--danger)">âš  ${venc} facturas vencidas</span>`:`<span style="color:var(--text2)">âœ“ Cliente seleccionado</span>`)+descTag+prevBtn;}
+function selectClienteNew(){document.getElementById('cot-cliente-id').value='';document.getElementById('cot-cliente-dropdown').classList.remove('open');}
+document.addEventListener('click',e=>{if(!e.target.closest('.search-select-wrap')) document.querySelectorAll('.search-select-dropdown').forEach(d=>d.classList.remove('open'));});
+function clearForm(type){
+  if(type==='lead'){['nl-empresa','nl-contacto','nl-cargo','nl-telefono','nl-email','nl-rut','nl-web','nl-notas','nl-ciudad','nl-direccion'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
+    try{_nlEmpSel=null;_nlEmpForce=false;nlEmpresaCerrar();const av=document.getElementById('nlEmpresaAviso');if(av)av.style.display='none';}catch(e){}document.getElementById('nl-origen').value='Referido';document.getElementById('nl-industria').value='';const nr=document.getElementById('nl-region');if(nr) nr.value='';const nc=document.getElementById('nl-comuna');if(nc){nc.innerHTML='<option value="">â€” Seleccionar regiÃ³n primero â€”</option>';nc.disabled=true;}}
+  if(type==='cot'){['cot-num','cot-alias','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id','cot-tiempo-prod','cot-tiempo-prod-max','cot-fecha-entrega','cot-fecha-limite','cot-descuento'].forEach(id=>{const el=document.getElementById(id);if(el) el.value=id==='cot-descuento'?'0':'';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';const cu=document.getElementById('cot-urgente');if(cu) cu.value='false';const ce=document.getElementById('cot-estado-inicial');if(ce)ce.value='Enviada';try{cotPlazoLoad('new',{});}catch(e){};document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();const c3dp=document.getElementById('c3d-inline-panel');if(c3dp) c3dp.style.display='none';Object.values(_c3dBtns()).forEach(b=>{if(b)b.style.background='';});const c3dl=document.getElementById('c3d-i-piezas');if(c3dl) c3dl.innerHTML='';c3dPiezasActivas=[];c3dPiezaCounter=0;['lsr','neo'].forEach(k=>{const p=document.getElementById(k+'-inline-panel');if(p)p.style.display='none';Object.values(_qcalcBtns(k)).forEach(b=>{if(b)b.style.background='';});});}
+  if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-whatsapp','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});setPvSelectedCats('np',[]);const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
+}

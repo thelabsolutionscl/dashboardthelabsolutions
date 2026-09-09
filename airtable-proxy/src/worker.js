@@ -185,4 +185,47 @@ function json(data, status = 200, corsHeaders = cors('')) {
   });
 }
 
-// ── He
+// ── Heartbeat hacia la tabla Automations ──────────────────────────────
+// Actualiza la fila ID="airtable-proxy" con Estado=Activo y la hora actual,
+// como máximo una vez cada 5 min (throttle por isolate). Totalmente opcional:
+// si la base/tabla no existen o el token no puede escribir, falla en silencio.
+let _lastBeat = 0;
+const HEARTBEAT_ID = 'airtable-proxy';
+const HEARTBEAT_TABLE = 'Automations';
+const HEARTBEAT_MIN_MS = 5 * 60 * 1000;
+
+async function heartbeat(env) {
+  const now = Date.now();
+  if (now - _lastBeat < HEARTBEAT_MIN_MS) return;
+  _lastBeat = now;
+
+  const base = env.HEARTBEAT_BASE || 'app1YtD74AqiPWQhy';
+  const auth = { Authorization: 'Bearer ' + env.AIRTABLE_TOKEN };
+  const tbl = `${AIRTABLE_BASE}/v0/${base}/${encodeURIComponent(HEARTBEAT_TABLE)}`;
+
+  // 1) Buscar la fila del proxy por su ID técnico
+  const q = `${tbl}?maxRecords=1&filterByFormula=${encodeURIComponent(`{ID}='${HEARTBEAT_ID}'`)}`;
+  const found = await fetch(q, { headers: auth });
+  if (!found.ok) return;
+  const data = await found.json();
+  const rec = data.records && data.records[0];
+  if (!rec) return;
+
+  // 2) Marcar como Activo con la hora actual; EjecucionesHoy con reseteo diario
+  const f = rec.fields || {};
+  const sameDay = f.UltimaEjecucion && new Date(f.UltimaEjecucion).toDateString() === new Date().toDateString();
+  const ej = (sameDay ? (Number(f.EjecucionesHoy) || 0) : 0) + 1;
+  await fetch(`${tbl}/${rec.id}`, {
+    method: 'PATCH',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: {
+        Estado: 'Activo',
+        UltimaEjecucion: new Date().toISOString(),
+        EjecucionesHoy: ej,
+        TareaActual: 'Proxy seguro Airtable + Claude operativo',
+      },
+      typecast: true,
+    }),
+  });
+}

@@ -465,10 +465,453 @@ function _pdCliRec(p){const c=p.fields['Cliente'];const id=Array.isArray(c)?c[0]
 // a dejar reseÃ±a en Google (por eso se le pasa el enlace de reseÃ±a como &g).
 function _npsWorkerUrl(){
   try{
-    const u=(typeof _DEFAULTS!=='undefined'&&_DEFAULTS.Lm«ëŒ+Š×®º+º$zzb¥ç'3§·×Ò“°¢–b‚"æö²’&WGW&ã¶6öç7BCÖv—B"æ§6öâ‚“¶6öç7BF&ÃÖBçF&ÆW3òæf–æB‡ƒÓç‚ææÖSÓÓÒuVF–F÷2r“¶–b‚F&Â’&WGW&ã°¢6öç7B†fSÖæWr6WB‚‡F&Âæf–VÆG7ÇÅµÒ’æÖ‡ƒÓç‚ææÖR’“°¢6öç7BvçCÕ°¢¶æÖS¢tå266÷&RrÇG—S¢vçVÖ&W"rÆ÷F–öç3§·&V6—6–öã£×ÒÀ¢¶æÖS¢tå2fV6†rÇG—S¢w6–ævÆTÆ–æUFW‡BwÒÀ¢¶æÖS¢tå26öÖVçF&–òrÇG—S¢v×VÇF–Æ–æUFW‡BwÒÀ¢Ó°¢f÷"†6öç7BröbvçB—°¢–b††fRæ†2‡rææÖR’’6öçF–çVS°¢G'—¶v—BöDfWF6‚†öÖWFö&6W2òG´$4Uô”GÒ÷F&ÆW2òG·F&Âæ–GÒöf–VÆG6Ç¶ÖWF†öC¢uõ5BrÆ†VFW'3§²t6öçFVçBÕG—Rs¢vÆ–6F–öâö§6öâwÒÆ&öG“¤¥4ôâç7G&–æv–g’‡r—Ò“·Ö6F6‚†R—·Ğ¢Ğ¢Ö6F6‚†R—·Ğ§Ğ¢òòÆV7GW&öW7FL:×7F–6FRÆ2æ÷F2–&V6–&–F2‡6F—6f66œ;6âF—ò54BÓR’à¦gVæ7F–öâöç566÷&R‡—¶6öç7Bc×bgæf–VÆG3÷'6T–çB‡æf–VÆG5²tå266÷&RuÒÃ“¤æã·&WGW&â‡cãÓbgcÃÓR“÷c¦çVÆÃ·Ğ¦gVæ7F–öâöç57FG2‚—°¢6öç7Bæ÷F3ÕötÖ–æR‡7FFRçVF–F÷2’æÖ…öç566÷&R’æf–ÇFW"‡cÓçbÖçVÆÂ“°¢–b‚æ÷F2æÆVæwF‚’&WGW&âçVÆÃ°¢6öç7BãÖæ÷F2æÆVæwF‚Ç7VÓÖæ÷F2ç&VGV6R‚†Æ"“Óæ¶"Ã“°¢6öç7B&öÓÖæ÷F2æf–ÇFW"‡cÓçcãÓB’æÆVæwF‚ÆFWG#Öæ÷F2æf–ÇFW"‡cÓçcÃÓ"’æÆVæwFƒ°¢&WGW&â¶âÆfs§7VÒöâÇ&öÖ÷F÷&W3§&öÒÆFWG&7F÷&W3¦FWG"Æç3¤ÖF‚ç&÷VæB‚‡&öÒÖFWG"’öâ£’Ç7E&öÓ¤ÖF‚ç&÷VæB‡&öÒöâ£’Ç7DFWG#¤ÖF‚ç&÷VæB†FWG"öâ£—Ó°§Ğ¢òò&W7VÖVâFR6F—6f66œ;6â„54Bôå2’6öâÆ2æ÷F2–&V6–&–F2FRÆ÷26Æ–VçFW2à¦gVæ7F–öâ&VæFW$76E7VÖÖ'’‚—°¢6öç7B&#ÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wD76D&"r“²–b‚&"’&WGW&ã°¢6öç7B3Õöç57FG2‚“°¢–b‚2—¶&"ç7G–ÆRæF—7Æ“ÒvæöæRs¶&"æ–ææW$…DÔÃÒrs·&WGW&ã·Ğ¢6öç7BVÖó×2æfsãÓBãSò	ùˆÒs§2æfsãÓCò	ù˜"s§2æfsãÓ3ò	ù‰s¢	ù˜s°¢6öç7Bç46öÃ×2æç3ãÓSòwf"‚ÒÖ66VçC2’s§2æç3ãÓòwf"‚Ò×v&â’s¢wf"‚ÒÖFævW"’s°¢&"ç7G–ÆRæF—7Æ“Òrs°¢&"æ–ææW$…DÔÃÖÆF—b6Æ73Ò&6&B"7G–ÆSÒ'FF–æs£G‚g‚#à¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£‡ƒ¶Ö&v–âÖ&÷GFöÓ£‚#à¢Ç7â6Æ73Ò&6&B×F—FÆR"7G–ÆSÒ&föçB×6—¦S£7‚#âG¶VÖ÷Ò6F—6f66œ;6â÷7BÖVçG&VvÂ÷7ãà¢Ç7â7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG·2æçÒ6Æ–f–66œ;6âG·2æâÓÓòvW2s¢rwÓÂ÷7ãà¢ÂöF—cà¢ÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶v£‡ƒ¶fÆW‚×w&§w&#à¢ÆF—b6Æ73Ò&f2Ö·’"7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£“‚#ãÇ7â6Æ73Ò&f2Ö·’ÖÆ&Â#å&öÖVF–óÂ÷7ããÇ7â6Æ73Ò&f2Ö·’×fÂ#âG·2æfrçFôf—†VBƒ—ÒÇ7â7G–ÆSÒ&föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âóSÂ÷7ããÂ÷7ããÂöF—cà¢ÆF—b6Æ73Ò&f2Ö·’"7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£“‚"F—FÆSÒ$æWB&öÖ÷FW"66÷&S¢RFR&öÖ÷F÷&W2ƒBÓR’ÖVæ÷2RFRFWG&7F÷&W2ƒÓ"’#ãÇ7â6Æ73Ò&f2Ö·’ÖÆ&Â#äå3Â÷7ããÇ7â6Æ73Ò&f2Ö·’×fÂ"7G–ÆSÒ&6öÆ÷#¢G¶ç46öÇÒ#âG·2æç3ãòr²s¢rwÒG·2æç7ÓÂ÷7ããÂöF—cà¢ÆF—b6Æ73Ò&f2Ö·’"7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£“‚#ãÇ7â6Æ73Ò&f2Ö·’ÖÆ&Â#å&öÖ÷F÷&W3Â÷7ããÇ7â6Æ73Ò&f2Ö·’×fÂ"7G–ÆSÒ&6öÆ÷#§f"‚ÒÖ66VçC2’#âG·2ç7E&ö×ÒSÂ÷7ããÂöF—cà¢ÆF—b6Æ73Ò&f2Ö·’G·2æFWG&7F÷&W3òvf2Ö·’ÖFævW"s¢rwÒ"7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£“‚"F—FÆSÒ"G·2æFWG&7F÷&W7ÒFRG·2æçÒ6Æ–f–66–öæW2#ãÇ7â6Æ73Ò&f2Ö·’ÖÆ&Â#äFWG&7F÷&W3Â÷7ããÇ7â6Æ73Ò&f2Ö·’×fÂ#âG·2ç7DFWG'ÒSÂ÷7ããÂöF—cà¢ÂöF—cà¢ÂöF—cæ°§Ğ¦gVæ7F–öâ'V–ÆE÷7DVçG&VvG&’‚—°¢G'—·&VæFW$76E7VÖÖ'’‚“·Ö6F6‚†R—·Ğ¢6öç7B6&CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wEG&”6&Br“²–b‚6&B’&WGW&ã°¢6öç7BÆösÕ÷DÆör‚“°¢6öç7B÷CÖæWrFFR‚“µ÷Bç6WD†÷W'2ƒÃÃÃ“°¢6öç7B6æG3ÕötÖ–æR‡7FFRçVF–F÷2’æÖ‡Óç°¢6öç7Bc×æf–VÆG3°¢–b‚†e²tW7FFòVF–Fòu×ÇÂrr’ÓÒtFW76†Fòr’&WGW&âçVÆÃ°¢6öç7BfV6†Öe²tfV6†FW76†òu×ÇÆe²tfV6†VçG&Vvu×ÇÂrs°¢–b‚fV6†’&WGW&âçVÆÃ°¢6öç7BF–3ÔÖF‚æfÆö÷"‚…÷BÖæWrFFR†fV6†²uC££r’’óƒcFSR“°¢–b†F–3Ã7ÇÆF–3ã3’&WGW&âçVÆÃ²òòfVçFæ;§F–Ã¢æ’×W’&öçFòæ’VF–F÷2çF–wV÷0¢–b†Æöu·æ–EÒ’&WGW&âçVÆÃ°¢&WGW&â·ÆbÆF–7Ó°¢Ò’æf–ÇFW"„&ööÆVâ’ç6÷'B‚†Æ"“ÓææF–2Ö"æF–2“°¢6öç7B6çCÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wEG&”6÷VçBr“²–b†6çB’6çBçFW‡D6öçFVçCÖ6æG2æÆVæwFƒ°¢–b‚6æG2æÆVæwF‚—¶6&Bç7G–ÆRæF—7Æ“ÒvæöæRs·&WGW&ã·Ğ¢6&Bç7G–ÆRæF—7Æ“Òrs°¢6öç7BÆ—7CÖFö7VÖVçBævWDVÆVÖVçD'”–B‚wEG&”Æ—7Br“²–b‚Æ—7B’&WGW&ã°¢Æ—7Bæ–ææW$…DÔÃÖ6æG2ç6Æ–6RƒÃ’æÖ‡ƒÓç°¢6öç7B6Æ“Õ÷D6Æ•&V2‡‚ç“°¢6öç7BF–VæUFVÃÒ†6Æ’beövWD6Æ–VçFUt†öæR†6Æ’’“°¢&WGW&âÆF—b7G–ÆSÒ&F—7Æ“¦fÆWƒ¶Æ–vâÖ—FV×3¦6VçFW#¶v£ƒ·FF–æs£—‚gƒ¶&÷&FW"×F÷£‚6öÆ–Bf"‚ÒÖ&÷&FW"’#à¢Ç7â6Æ73Ò&&FvR&FvRÖw&VVâ"7G–ÆSÒ&fÆW‚×6‡&–æ³£"F—FÆSÒ$L:Ö2FW6FRVÂFW76†ò#âG·‚æF–7ÒCÂ÷7ãà¢ÆF—b7G–ÆSÒ&fÆWƒ£¶Ö–â×v–GFƒ£#à¢ÆF—b7G–ÆSÒ&föçB×vV–v‡C£c¶föçB×6—¦S£'ƒ¶6öÆ÷#§f"‚Ò×FW‡B“¶÷fW&fÆ÷s¦†–FFVã·FW‡BÖ÷fW&fÆ÷s¦VÆÆ—6—3·v†—FR×76S¦æ÷w&#âG¶W66T‡FÖÂ‡&W6öÇfT6Æ–VçFTæÖR‡‚æe²t6Æ–VçFRuÒ’—ÓÂöF—cà¢ÆF—b7G–ÆSÒ&föçB×6—¦S£ãWƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#âG¶W66T‡FÖÂ‡‚æe²tì+VF–Fòu×ÇÂ~(	Br—Ò+rFW76†FòVÂG¶f÷&ÖDfV6†‡‚æe²tfV6†FW76†òu×ÇÇ‚æe²tfV6†VçG&VvuÒ—ÓÂöF—cà¢ÂöF—cà¢Gµ÷öDÆ–æ²‡‚ç“ò…÷öD6öæf—&ÖFò‡‚ç“òsÇ7â6Æ73Ò&&FvR&FvRÖw&VVâ"7G–ÆSÒ&fÆW‚×6‡&–æ³£"F—FÆSÒ$VÂ6Æ–VçFR6öæf—&Ü;2Æ&V6W6œ;6â#î)ÈR&V6–&–FóÂ÷7ãâs¦Æ'WGFöâ6Æ73Ò&'Fâ'FâÖv†÷7B'Fâ×6Ò"7G–ÆSÒ&fÆW‚×6‡&–æ³£"öæ6Æ–6³Ò'VF—%ôB‚rG·‚çæ–GÒr’"F—FÆSÒ%VF—"6öæf—&Ö6œ;6âFR&V6W6œ;6â#ï	ù:cÂö'WGFöãæ“¢rwĞ¢Æ'WGFöâ6Æ73Ò&'Fâ'Fâ×&–Ö'’'Fâ×6Ò"7G–ÆSÒ&fÆW‚×6‡&–æ³£"öæ6Æ–6³Ò'Ev†G4‚rG·‚çæ–GÒr’"G·F–VæUFVÃòrs¢wF—FÆSÒ%6–âFVÌ:–föæòVâÆf–6†(	B6R'&—,:v†G4&VÆVv—"6öçF7Fò"wÓï	ù;#Âö'WGFöãà¢Æ'WGFöâ6Æ73Ò&'Fâ'FâÖv†÷7B'Fâ×6Ò"7G–ÆSÒ&fÆW‚×6‡&–æ³£"öæ6Æ–6³Ò'DVÖ–Â‚rG·‚çæ–GÒrÇF†—2’#ï	ù:sÂö'WGFöãà¢Æ'WGFöâ6Æ73Ò&'Fâ'FâÖv†÷7B'Fâ×6Ò"7G–ÆSÒ&fÆW‚×6‡&–æ³£"F—FÆSÒ$Ö&6"6öÖòvW7F–öæFò6–âVçf–""öæ6Æ–6³Ò'DÖ&´FöæR‚rG·‚çæ–GÒrÂvÖçVÂr’#î)É3Âö'WGFöãà¢ÂöF—cæ°¢Ò’æ¦ö–â‚rr’²†6æG2æÆVæwFƒãöÆF—b7G–ÆSÒ'FF–æs£‡‚gƒ¶föçB×6—¦S£ƒ¶6öÆ÷#§f"‚Ò×FW‡C2’#î(
-g’G¶6æG2æÆVæwF‚ÓÒÜ:3ÂöF—cæ¢rr“°§Ğ¦gVæ7F–öâEv†G4‡VF–Fô–B—°¢6öç7BÒ‡7FFRçVF–F÷4'”–GÇÇ·Ò•·VF–Fô–E×ÇÂ‡7FFRçVF–F÷7ÇÅµÒ’æf–æB‡ƒÓç‚æ–CÓÓ×VF–Fô–B“²–b‚—·Fö7B‚uVF–FòæòVæ6öçG&FòrÂvW'&÷"r“·&WGW&ã·Ğ¢6öç7B6Æ“Õ÷D6Æ•&V2‡“°¢6öç7B†öæSÖ6Æ“õövWD6Æ–VçFUt†öæR†6Æ’“¢rs°¢–b…öç4Æ–æ²‡’—·G'—¶Vç7W&Tç4f–VÆG2‚“·Ö6F6‚†R—·×Òòò&W&Æ÷26×÷2å2†&W7BÖVff÷'B¢v–æF÷ræ÷Vâ‚v‡GG3¢ò÷væÖRòr²‡†öæWÇÂrr’²s÷FW‡CÒr¶Væ6öFUU$”6ö×öæVçB…÷D×6r‡’’Âuö&Ææ²r“°¢DÖ&´FöæR‡VF–Fô–BÂuv†G4rÇG'VR“°§Ğ¢òò'&RVâ$õ%$Dõ"FVÂÖVç6¦R÷7BÖVçG&VvVâÆ6V66œ;6â6÷'&V÷2ÂÆ—7Fò&¢òò&Wf—6"öVF—F"çFW2FRÖæF&Æò†æò6RVçl:ÖWFöÜ:F–6ÖVçFR’âÂVçf–&ÆòFP¢òòfW&FBFW6FR6÷'&V÷2ÂVÂVF–FòVVFÖ&6Fò6öÖòvW7F–öæFò÷"v6÷'&Vòrà¦7–æ2gVæ7F–öâDVÖ–Â‡VF–Fô–BÆ'Fâ—°¢6öç7BÒ‡7FFRçVF–F÷4'”–GÇÇ·Ò•·VF–Fô–E×ÇÂ‡7FFRçVF–F÷7ÇÅµÒ’æf–æB‡ƒÓç‚æ–CÓÓ×VF–Fô–B“²–b‚—·Fö7B‚uVF–FòæòVæ6öçG&FòrÂvW'&÷"r“·&WGW&ã·Ğ¢6öç7B6Æ“Õ÷D6Æ•&V2‡“°¢ÆWBFóÖ6Æ“òæf–VÆG5²tVÖ–Âu×ÇÇ&ö×B‚|+ô\:’6÷'&VòVçf–Ö÷2VÂÖVç6¦R÷7BÖVçG&VvòrÂrr“°¢–b‚Fò—&WGW&ã²FóÕ7G&–ær‡Fò’çG&–Ò‚“°¢–b‚fÆ–DVÖ–Â‡Fò’—·Fö7B‚t6÷'&Vò–çl:Æ–FòrÂvW'&÷"r“·&WGW&ã·Ğ¢6öç7B&WcÖ'Fãö'Fâæ–ææW$…DÔÃ¢rs°¢–b†'Fâ—¶'FâæF—6&ÆVC×G'VS¶'FâçFW‡D6öçFVçCÒ~(
-bs·Ğ¢–b…öç4Æ–æ²‡’—·G'—¶v—BVç7W&Tç4f–VÆG2‚“·Ö6F6‚†R—·×Òòò&W&Æ÷26×÷2å2çFW2FR'&—"VÂ&÷'&F÷ ¢–b†'Fâ—¶'FâæF—6&ÆVCÖfÇ6S¶'Fâæ–ææW$…DÔÃ×&Wc·Ğ¢6öç7B&öG”‡FÖÃÖW66T‡FÖÂ…÷D×6r‡’’ç&WÆ6R‚õÆâörÂsÆ'#âr“°¢–b‡G—Vöb7v—F6…F#ÓÓÒvgVæ7F–öâr’7v—F6…F"‚v6÷'&Vòr“°¢6WEF–ÖV÷WB‚‚“Óç·G'—´Ô”Âæ÷Vä6ö×÷6R‡·FòÇ7V&¦V7C¢|+ô<;6ÖòÆÆV|;2GRVF–Fóò(	BF†RÆ"6öÇWF–öç2rÆ&öG“¦&öG”‡FÖÂÇF—FÆS¢tÖVç6¦R÷7BÖVçG&VvrÅ÷EVF–Fô–C§VF–Fô–BÅög&öÔæÖS¤tTåEô5Dôe$ôÒææÖRÅög&öÔVÖ–Ã¤tTåEô5Dôe$ôÒæVÖ–ÇÒ“·Ö6F6‚†R—·Fö7B‚tæò6RVFò'&—"VÂ&÷'&F÷"rÂvW'&÷"r“·×ÒÃ3S“°§Ğ¦7–æ2gVæ7F–öâDÖ&´FöæR‡VF–Fô–BÇf–Ç6–ÆVçB—°¢6öç7BÆösÕ÷DÆör‚“²Æöu·VF–Fô–EÓ×·G3¤FFRææ÷r‚’Çf–§f–ÇÂvÖçVÂwÓ°¢G'—¶Æö6Å7F÷&vRç6WD—FVÒ…õEôÄôuô´U’Ä¥4ôâç7G&–æv–g’†Æör’“·Ö6F6‚†R—·Ğ¢òòæ÷FVâVÂVF–Fò†&V6RVâæ÷F2–çFW&æ2FVÂVF–FòÂ&W7BÖVff÷'B¢G'—¶6öç7B'#ÕövWDæ÷F2‚wVBrÇVF–Fô–B“¶'"çW6‚‡¶–C¢vâr´FFRææ÷r‚’ÇG3¤FFRææ÷r‚’ÇFW‡C¢	ù)¢ÖVç6¦R÷7BÖVçG&VvVçf–Fò÷"r²‡f–ÇÂ~(	Br’²r„æG&V’wÒ“µ÷6fTæ÷F2‚wVBrÇVF–Fô–BÆ'"“·Ö6F6‚†R—·Ğ¢–b‚6–ÆVçBbgf–ÓÓÒvÖçVÂr’Fö7B‚~)É2÷7BÖVçG&VvÖ&6Fò6öÖòvW7F–öæFòrÂw7V66W72r“°¢VÇ6R–b‚6–ÆVçB’Fö7B‚~)É2÷7BÖVçG&Vv&Vv—7G&Fò‚r·f–²r’rÂw7V66W72r“°¢'V–ÆE÷7DVçG&VvG&’‚“°§Ğ ¢òò)H)HÔTÔõ$”DRtTåDU2)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¢òò&Æ÷VR6ö×7Fò6öâÆ÷26öçF7F÷2&Wf–÷2Â6Æ–VçFR†ÖVç6¦W2&VF7FF÷2÷ ¢òòvVçFW2Â6VwV–Ö–VçF÷2Â6ö'&ç¦2’÷7BÖVçG&Vv2&Vv—7G&F÷2’&VRVÀ¢òòvVçFRL:’6öçF–çV–FBÆ6öçfW'66œ;6â’æò6R&W—Fà¦gVæ7F–öâvVçDÖVÖ÷&–6Æ–VçFR†V×&W6Æ6Æ”–B—°¢G'—°¢6öç7BV×Õ7G&–ær†V×&W6ÇÂrr’çG&–Ò‚“°¢–b†V×æÆVæwFƒÃBbb6Æ”–B’&WGW&ârs°¢6öç7BWcÕµÓ°¢6öç7BW6ƒÒ‡G2ÇG‡B“Óç¶–b‡G2bgG‡B–WbçW6‚‡·G2ÇG‡GÒ“·Ó°¢G'—°¢tTåEôÄôråöÆöB‚“°¢6öç7BVÃÖV×çFôÆ÷vW$66R‚“°¢–b†VÂæÆVæwFƒãÓB’„tTåEôÄôrå÷'Vç7ÇÅµÒ’æf÷$V6‚‡#Óç°¢–b‚'ÇÂ"çF–ÖR—&WGW&ã°¢–b‚‚‚‡"æ–çWGÇÂrr’²rr²‡"æ÷WGWGÇÂrr’’çFôÆ÷vW$66R‚’’æ–æ6ÇVFW2†VÂ’—°¢6öç7B6æ—Õ7G&–ær‡"æ÷WGWGÇÂrr’ç&WÆ6R‚õÇ2²örÂrr’ç6Æ–6RƒÃ“°¢W6‚‡"çF–ÖRÆG²‡G—Vöbööe&WGG“ÓÓÒvgVæ7F–öâsõööe&WGG’‡"ævVçB“§"ævVçB—ÇÂtvVçFRwÒ&VF7L;3¢"G·6æ—Ş(
-b&“°¢Ğ¢Ò“°¢Ö6F6‚†R—·Ğ¢G'—°¢–b†6Æ”–B—¶6öç7BfÃÕögTÆör‚“°¢‡7FFRæ6÷F—¦6–öæW7ÇÅµÒ’æf÷$V6‚†3Óç¶6öç7B6–CÔ'&’æ—4'&’†2æf–VÆG5²t6Æ–VçFRuÒ“ö2æf–VÆG5²t6Æ–VçFRuÕ³Ó¦çVÆÃ¶–b†6–BÓÖ6Æ”–B—&WGW&ã¶6öç7BSÖfÅ¶2æ–EÓ¶–b†RbfRçG2—W6‚†RçG2Æ6VwV–Ö–VçFòVçf–Fò÷"G¶Rçf–ÇÂ~(	BwÒ†6÷BG¶2æf–VÆG5²tì+6÷F—¦6œ;6âu×ÇÂ~(	BwÒ–“·Ò“·Ğ¢Ö6F6‚†R—·Ğ¢G'—²…ö6ö$Æör‚•¶V×çFôÆ÷vW$66R‚•×ÇÅµÒ’æf÷$V6‚†SÓçW6‚†RçG2Æ&V6÷&FF÷&–òFR6ö'&ç¦÷"G¶Rçf–ÇÂ~(	BwÖ’“·Ö6F6‚†R—·Ğ¢G'—°¢–b†6Æ”–B—¶6öç7BÃÕ÷DÆör‚“°¢‡7FFRçVF–F÷7ÇÅµÒ’æf÷$V6‚‡Óç¶6öç7B6–CÔ'&’æ—4'&’‡æf–VÆG5²t6Æ–VçFRuÒ“÷æf–VÆG5²t6Æ–VçFRuÕ³Ó¦çVÆÃ¶–b†6–BÓÖ6Æ”–B—&WGW&ã¶6öç7BS×Å·æ–EÓ¶–b†RbfRçG2—W6‚†RçG2ÆÖVç6¦R÷7BÖVçG&Vv÷"G¶Rçf–ÇÂ~(	BwÒ‚G·æf–VÆG5²tì+VF–Fòu×ÇÂ~(	BwÒ–“·Ò“·Ğ¢Ö6F6‚†R—·Ğ¢–b‚WbæÆVæwF‚—&WGW&ârs°¢Wbç6÷'B‚†Æ"“Óæ"çG2ÖçG2“°¢6öç7Bf6ƒ×G3ÓææWrFFR‡G2’çFô•4õ7G&–ær‚’ç6Æ–6RƒÃ“°¢&WGW&âuÆä4ôåD5Dõ2$Ud”õ24ôâU5DR4Ä”TåDR†FÆW26öçF–çV–FB(	Bäò&W—F2VÂÖ—6Öò6ÇVFòæ’Æ÷2Ö—6Ö÷2&wVÖVçF÷3²6’—VFÂÇVFR'&WfVÖVçFRÂ6öçF7FòçFW&–÷"“¥Æâp¢¶Wbç6Æ–6RƒÃR’æÖ†SÓæÒ²G¶f6‚†RçG2—ÕÒG¶RçG‡GÖ’æ¦ö–â‚uÆâr“°¢Ö6F6‚†R—·&WGW&ârs·Ğ§Ğ ¦gVæ7F–öâ'VäföÆÆ÷wWvVçB†6÷D–B—°¢6öç7B3×7FFRæ6÷F—¦6–öæW4'”–E¶6÷D–EÓ¶–b‚2’&WGW&ã°¢6öç7BcÖ2æf–VÆG3°¢6öç7B÷CÖæWrFFR‚“µ÷Bç6WD†÷W'2ƒÃÃÃ“°¢6öç7B6Æ•&V3ÕövWD6Æ–VçFU&V4g&öÔf–VÆB†e²t6Æ–VçFRuÒ“°¢6öç7BæöÖ'&S×&W6öÇfT6Æ–VçFTæÖR†e²t6Æ–VçFRuÒ“°¢6öç7BF–3Öe²tfV6†6÷F—¦6œ;6âuÓôÖF‚ç&÷VæB‚…÷BÖæWrFFR†e²tfV6†6÷F—¦6œ;6âuÒ²uC££r’’óƒcC“¢~(	Bs°¢6öç7BgFóÖe²tfV6†fVæ6–Ö–VçFòuÓôÖF‚ç&÷VæB‚†æWrFFR†e²tfV6†fVæ6–Ö–VçFòuÒ²uC££r’Õ÷B’óƒcC“¦çVÆÃ°¢6öç7B6öÃÒ†e²u6öÆ–6—GVB6Æ–VçFR‡FW‡FòÆ–'&R’u×ÇÆe²tFWFÆÆR&öGV7F÷2u×ÇÆe²u6öÆ–6—GVBòFWFÆÆRu×ÇÂrr’ç7V'7G&–ærƒÃS“°¢6öç7BÖöçFóÖe²uF÷FÂf–æÂ„4Å’uÓöf÷&ÖD4Å„ÖF‚ç&÷VæB†e²uF÷FÂf–æÂ„4Å’uÒóã’’“¢rs°¢6öç7Bv†öæSÕövWD6Æ–VçFUt†öæR†6Æ•&V2“°¢6öç7BVÖ–ÃÖ6Æ•&V3òæf–VÆG5²tVÖ–Âu×ÇÂrs°¢6öç7B÷F÷VSÔÖF‚æÖ–â…ögUF÷VW2†6÷D–B’³Ã2“°¢6öç7BöwV–Õ÷F÷VSÓÓÓòw&V6÷&FF÷&–ò'&WfR’Ö&ÆRÂ6–â&W6œ;6âp¢¥÷F÷VSÓÓÓ#òv÷'FfÆ÷#¢&W7VVÇfRGVF2L:×–62Âög&V6R§W7F"VÂÆ6æ6RòVæÇFW&æF—fÂ&VgVW'¦VÂ&VæVf–6–òp¢¢|;¦ÇF–Öò6öçF7FòFRÆ6V7VVæ6–¢7&VW&vVæ6–7VfR‡fVæ6–Ö–VçFòÂ7WòFR&öGV66œ;6â’’f6–Æ—FVÂ6–W'&R6öâVæ&VwVçFF—&V7Fs°¢6öç7B7GƒÖ6Æ–VçFS¢G¶æöÖ'&WÒG¶VÖ–ÃòrÂVÖ–Ã¢r¶VÖ–Ã¢rwÒG·v†öæSòrÂFVÃ¢²r·v†öæS¢rwÕÆä6÷F—¦6œ;6ã¢G¶e²tì+6÷F—¦6œ;6âu×ÇÂ~(	BwÒG¶ÖöçFóòrÂÖöçFòæWFó¢r¶ÖöçFó¢rwÕÆäL:Ö26–â&W7VW7F¢G¶F–7ÒG·gFòÖçVÆÃòrÂfVæ6RVã¢r·gFò²vBs¢rwÕÆå&öGV7Fòõ6W'f–6–ó¢G·6öÇÇÂtæòW7V6–f–6FòwÕÆåF÷VRFRÆ6V7VVæ6–¢Gµ÷F÷VWÒFR2(	BVæf÷VS¢GµöwV–Òâæò&W—F2VÂÖ—6ÖòFW‡FòFRVâF÷VRçFW&–÷"æ¶vVçDÖVÖ÷&–6Æ–VçFR†æöÖ'&RÆ6Æ•&V3òæ–B’´tTåEôÕ4uõ%TÄU3°¢'VävVçD–æÆ–æR‚tdôÄÄõuUrÆ7G‚Â‡&W7VÇB“Óç°¢6öç7Bv'Fã×v†öæSöÆ'WGFöâ6Æ73Ò&'Fâ'Fâ×&–Ö'’'Fâ×6Ò"öæ6Æ–6³Ò&vVçE6VæEt‚rG·v†öæWÒrÂrG¶6Æ•&V3òæ–GÇÂrwÒr’#ï	ù;"'&—"v†G4Âö'WGFöãæ¢rs°¢6öç7BÖ–Ä'FãÖVÖ–ÃöÆ'WGFöâ6Æ73Ò&'Fâ'Fâ×&–Ö'’'Fâ×6Ò"öæ6Æ–6³Ò&G&gDvVçDVÖ–Â‚rG¶VÖ–Âç&WÆ6R‚òrörÂrr—ÒrÂu6VwV–Ö–VçFòFRGR6÷F—¦6œ;6â(	BF†RÆ"6öÇWF–öç2rÂrG¶6Æ•&V3òæ–GÇÂrwÒrÂrG¶6÷D–GÒr’#î)ÈûˆòVçf–"6÷'&VóÂö'WGFöãæ¢rs°¢&WGW&âG·v'FçÒG¶Ö–Ä'FçÓÆ'WGFöâ6Æ73Ò&'Fâ'FâÖv†÷7B'Fâ×6Ò"öæ6Æ–6³Ò&6÷”vVçE&W7VÇB‚’#ï	ù8²6÷–"FöFóÂö'WGFöãæ°¢Ò“°¢v–æF÷råögT6÷D–CÖ6÷D–C²òò&WFò×&Vv—7G&"VÂ6VwV–Ö–VçFòÂVçf–"÷"tö6÷'&Vğ§Ğ ¦gVæ7F–öâ÷VäföÆÆ÷wWt‡†öæR—°¢6öç7Bv'CÕöW‡G&7Et'B…övVçD–æÆ–æUFW‡B—ÇÅövVçD–æÆ–æUFW‡C°¢v–æF÷ræ÷Vâ‚v‡GG3¢ò÷væÖRòr·†öæR²s÷FW‡CÒr¶Væ6öFUU$”6ö×öæVçB‡v'B’Âuö&Ææ²r“°¢–b‡v–æF÷råögT6÷D–B—·G'—¶gTÖ&´FöæR‡v–æF÷råögT6÷D–BÂuv†G4r“·Ö6F6‚†R—·×v–æF÷råögT6÷D–CÖçVÆÃ·Ğ§Ğ ¢òò)H)H5DVæ—fW'6ÂFRvVçFW3¢Vçf–"VÂ&W7VÇFFò÷"v†G4ò6÷'&Vò)H)H ¢òò–FVçF–FB6öÖW&6–ÂFRÆ÷2Vçl:Ö÷3¢6ÆVâ4”TÕ$RFW6FRÆ66–ÆÆ6÷'÷&F—f¢òò6öâÆf—&ÖFRæG&VÂ6–â–×÷'F"\:’W7V&–òFVÂF6†&ö&BW7L:’ÆöwVVFòà¦6öç7BtTåEô5Dôe$ôÓ×¶VÖ–Ã¢vÚ±î¸Â¸­yêë¢°k¢G§¦*^lass="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Conversemos â€” The Lab Solutions','${cliId}')">âœ‰ï¸ Enviar correo</button>`:'';
+    const u=(typeof _DEFAULTS!=='undefined'&&_DEFAULTS.LEAD_WORKER_URL)||'';
+    if(!u||/^%%/.test(u)) return '';
+    return u.replace(/\/$/,'');
+  }catch(e){return '';}
+}
+function _npsLink(p){
+  const base=_npsWorkerUrl(); if(!base||!p||!p.id) return '';
+  let url=base+'/nps?p='+encodeURIComponent(btoa(p.id));
+  const rev=_pdReviewUrl(); if(rev) url+='&g='+encodeURIComponent(rev);
+  return url;
+}
+// â”€â”€ PORTAL DE SEGUIMIENTO DE PEDIDO (S2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Enlace pÃºblico (worker /pedido) donde el cliente ve el estado de su pedido.
+function _seguimientoLink(p){const base=_npsWorkerUrl();if(!base||!p||!p.id)return '';return base+'/pedido?p='+encodeURIComponent(btoa(p.id));}
+function compartirSeguimiento(pedidoId){
+  const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
+  const link=_seguimientoLink(p);if(!link){toast('Configura el lead-worker para compartir seguimiento','info');return;}
+  const cli=_pdCliRec(p);const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const msg=`Hola${nombre?' '+nombre:''} ğŸ‘‹ AquÃ­ puedes seguir el estado de tu pedido ${p.fields['NÂ° Pedido']?('('+p.fields['NÂ° Pedido']+')'):''} en tiempo real: ${link}\nâ€” The Lab Solutions`;
+  const phone=cli?_getClienteWAPhone(cli):'';
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg),'_blank');
+  toast('Compartiendo seguimiento del pedido','success');
+}
+
+// â”€â”€ COMPROBANTE DE ENTREGA / POD (Q7) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Pide al cliente confirmar la recepciÃ³n con un enlace de 1 clic (worker /pod),
+// que marca "RecepciÃ³n confirmada" en el pedido. Mismo patrÃ³n que el NPS (N4).
+function _podLink(p){const base=_npsWorkerUrl();if(!base||!p||!p.id)return '';return base+'/pod?p='+encodeURIComponent(btoa(p.id));}
+function _podConfirmado(p){return !!(p&&p.fields&&p.fields['RecepciÃ³n confirmada']);}
+async function ensurePodFields(){
+  try{
+    if(typeof getToken==='function'&&!getToken()&&!(typeof _proxyCfg==='function'&&_proxyCfg())) return;
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return;const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Pedidos');if(!tbl) return;
+    const have=new Set((tbl.fields||[]).map(x=>x.name));
+    const want=[{name:'RecepciÃ³n confirmada',type:'checkbox',options:{icon:'check',color:'greenBright'}},{name:'RecepciÃ³n fecha',type:'singleLineText'}];
+    for(const w of want){if(have.has(w.name))continue;try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(w)});}catch(e){}}
+  }catch(e){}
+}
+function _podMsg(p){
+  const f=p.fields;const cli=_pdCliRec(p);
+  const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const link=_podLink(p);
+  return `Hola${nombre?' '+nombre:''} ğŸ‘‹ Soy de The Lab Solutions. Te despachamos tu pedido ${f['NÂ° Pedido']?('('+f['NÂ° Pedido']+')'):''} y queremos confirmar que llegÃ³ todo bien. Â¿Nos confirmas la recepciÃ³n con un clic aquÃ­? ${link}\nÂ¡Gracias! ğŸ’™`;
+}
+function pedirPOD(pedidoId){
+  const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
+  if(!_podLink(p)){toast('Configura el lead-worker para enviar el comprobante','info');return;}
+  try{ensurePodFields();}catch(e){}
+  const cli=_pdCliRec(p);const phone=cli?_getClienteWAPhone(cli):'';
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_podMsg(p)),'_blank');
+  toast('Enviando solicitud de confirmaciÃ³n de entrega','success');
+}
+function _pdMsg(p){
+  const f=p.fields;
+  const cli=_pdCliRec(p);
+  const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
+  const prod=String(f['Detalle productos']||f['Solicitud cliente (texto libre)']||'').trim().slice(0,60);
+  const nps=_npsLink(p);
+  const rev=_pdReviewUrl();
+  const base=`Hola${nombre?' '+nombre:''} ğŸ‘‹ Soy Andrea de The Lab Solutions. Hace unos dÃ­as te entregamos ${prod?('tu pedido ('+prod+')'):'tu pedido'} y querÃ­amos saber cÃ³mo llegÃ³ todo â€” Â¿quedaste conforme? ğŸ˜Š`;
+  // Con lead-worker: encuesta de 1 clic (registra la nota y ofrece la reseÃ±a si quedÃ³ feliz).
+  if(nps) return `${base}\n\nCalifÃ­canos en 5 segundos (del 1 al 5): ${nps}\n\nÂ¡Gracias por preferirnos! ğŸ’™`;
+  // Sin worker: cae al flujo anterior (comentario libre + reseÃ±a directa).
+  return `${base} Si hubo cualquier detalle, cuÃ©ntame y lo resolvemos de inmediato.${rev?`\n\nY si quedaste contento/a, nos ayudarÃ­as un montÃ³n dejÃ¡ndonos una reseÃ±a en Google: ${rev}`:''}\nÂ¡Gracias por preferirnos! ğŸ’™`;
+}
+// Crea los campos NPS en Pedidos bajo demanda (nota, fecha, comentario) para que
+// las escrituras del worker persistan. Best-effort: requiere token/proxy con meta.
+async function ensureNpsFields(){
+  try{
+    if(typeof getToken==='function'&&!getToken()&&!(typeof _proxyCfg==='function'&&_proxyCfg())) return;
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok) return;const d=await r.json();const tbl=d.tables?.find(x=>x.name==='Pedidos');if(!tbl) return;
+    const have=new Set((tbl.fields||[]).map(x=>x.name));
+    const want=[
+      {name:'NPS score',type:'number',options:{precision:0}},
+      {name:'NPS fecha',type:'singleLineText'},
+      {name:'NPS comentario',type:'multilineText'},
+    ];
+    for(const w of want){
+      if(have.has(w.name)) continue;
+      try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(w)});}catch(e){}
+    }
+  }catch(e){}
+}
+// Lectura/estadÃ­stica de las notas ya recibidas (satisfacciÃ³n tipo CSAT 1-5).
+function _npsScore(p){const v=p&&p.fields?parseInt(p.fields['NPS score'],10):NaN;return(v>=1&&v<=5)?v:null;}
+function _npsStats(){
+  const notas=_agMine(state.pedidos).map(_npsScore).filter(v=>v!=null);
+  if(!notas.length) return null;
+  const n=notas.length,sum=notas.reduce((a,b)=>a+b,0);
+  const prom=notas.filter(v=>v>=4).length,detr=notas.filter(v=>v<=2).length;
+  return {n,avg:sum/n,promotores:prom,detractores:detr,nps:Math.round((prom-detr)/n*100),pctProm:Math.round(prom/n*100),pctDetr:Math.round(detr/n*100)};
+}
+// Resumen de satisfacciÃ³n (CSAT/NPS) con las notas ya recibidas de los clientes.
+function renderCsatSummary(){
+  const bar=document.getElementById('pdCsatBar'); if(!bar) return;
+  const s=_npsStats();
+  if(!s){bar.style.display='none';bar.innerHTML='';return;}
+  const emo=s.avg>=4.5?'ğŸ˜':s.avg>=4?'ğŸ™‚':s.avg>=3?'ğŸ˜':'ğŸ™';
+  const npsCol=s.nps>=50?'var(--accent3)':s.nps>=0?'var(--warn)':'var(--danger)';
+  bar.style.display='';
+  bar.innerHTML=`<div class="card" style="padding:14px 16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span class="card-title" style="font-size:13px">${emo} SatisfacciÃ³n post-entrega</span>
+      <span style="font-size:10.5px;color:var(--text3)">${s.n} calificaciÃ³n${s.n!==1?'es':''}</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Promedio</span><span class="fac-kpi-val">${s.avg.toFixed(1)} <span style="font-size:11px;color:var(--text3)">/5</span></span></div>
+      <div class="fac-kpi" style="flex:1;min-width:90px" title="Net Promoter Score: % de promotores (4-5) menos % de detractores (1-2)"><span class="fac-kpi-lbl">NPS</span><span class="fac-kpi-val" style="color:${npsCol}">${s.nps>0?'+':''}${s.nps}</span></div>
+      <div class="fac-kpi" style="flex:1;min-width:90px"><span class="fac-kpi-lbl">Promotores</span><span class="fac-kpi-val" style="color:var(--accent3)">${s.pctProm}%</span></div>
+      <div class="fac-kpi ${s.detractores?'fac-kpi-danger':''}" style="flex:1;min-width:90px" title="${s.detractores} de ${s.n} calificaciones"><span class="fac-kpi-lbl">Detractores</span><span class="fac-kpi-val">${s.pctDetr}%</span></div>
+    </div>
+  </div>`;
+}
+function buildPostEntregaTray(){
+  try{renderCsatSummary();}catch(e){}
+  const card=document.getElementById('pdTrayCard'); if(!card) return;
+  const log=_pdLog();
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const cands=_agMine(state.pedidos).map(p=>{
+    const f=p.fields;
+    if((f['Estado pedido']||'')!=='Despachado') return null;
+    const fecha=f['Fecha despacho']||f['Fecha entrega']||'';
+    if(!fecha) return null;
+    const dias=Math.floor((_t-new Date(fecha+'T00:00:00'))/864e5);
+    if(dias<3||dias>30) return null;   // ventana Ãºtil: ni muy pronto ni pedidos antiguos
+    if(log[p.id]) return null;
+    return {p,f,dias};
+  }).filter(Boolean).sort((a,b)=>a.dias-b.dias);
+  const cnt=document.getElementById('pdTrayCount'); if(cnt) cnt.textContent=cands.length;
+  if(!cands.length){card.style.display='none';return;}
+  card.style.display='';
+  const list=document.getElementById('pdTrayList'); if(!list) return;
+  list.innerHTML=cands.slice(0,10).map(x=>{
+    const cli=_pdCliRec(x.p);
+    const tieneTel=!!(cli&&_getClienteWAPhone(cli));
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
+      <span class="badge badge-green" style="flex-shrink:0" title="DÃ­as desde el despacho">${x.dias} d</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(resolveClienteName(x.f['Cliente']))}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${escapeHtml(x.f['NÂ° Pedido']||'â€”')} Â· despachado el ${formatFecha(x.f['Fecha despacho']||x.f['Fecha entrega'])}</div>
+      </div>
+      ${_podLink(x.p)?(_podConfirmado(x.p)?'<span class="badge badge-green" style="flex-shrink:0" title="El cliente confirmÃ³ la recepciÃ³n">âœ… recibido</span>':`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="pedirPOD('${x.p.id}')" title="Pedir confirmaciÃ³n de recepciÃ³n">ğŸ“¦</button>`):''}
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="pdWhatsApp('${x.p.id}')" ${tieneTel?'':'title="Sin telÃ©fono en la ficha â€” se abrirÃ¡ WhatsApp para elegir contacto"'}>ğŸ“²</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="pdEmail('${x.p.id}',this)">ğŸ“§</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado sin enviar" onclick="pdMarkDone('${x.p.id}','manual')">âœ“</button>
+    </div>`;
+  }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">â€¦y ${cands.length-10} mÃ¡s</div>`:'');
+}
+function pdWhatsApp(pedidoId){
+  const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
+  const cli=_pdCliRec(p);
+  const phone=cli?_getClienteWAPhone(cli):'';
+  if(_npsLink(p)){try{ensureNpsFields();}catch(e){}}   // prepara los campos NPS (best-effort)
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_pdMsg(p)),'_blank');
+  pdMarkDone(pedidoId,'WhatsApp',true);
+}
+// Abre un BORRADOR del mensaje post-entrega en la secciÃ³n Correos, listo para
+// revisar/editar antes de mandarlo (no se envÃ­a automÃ¡ticamente). Al enviarlo de
+// verdad desde Correos, el pedido queda marcado como gestionado por 'correo'.
+async function pdEmail(pedidoId,btn){
+  const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
+  const cli=_pdCliRec(p);
+  let to=cli?.fields['Email']||prompt('Â¿A quÃ© correo enviamos el mensaje post-entrega?','');
+  if(!to)return; to=String(to).trim();
+  if(!validEmail(to)){toast('Correo invÃ¡lido','error');return;}
+  const prev=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.textContent='â€¦';}
+  if(_npsLink(p)){try{await ensureNpsFields();}catch(e){}}   // prepara los campos NPS antes de abrir el borrador
+  if(btn){btn.disabled=false;btn.innerHTML=prev;}
+  const bodyHtml=escapeHtml(_pdMsg(p)).replace(/\n/g,'<br>');
+  if(typeof switchTab==='function') switchTab('correo');
+  setTimeout(()=>{try{MAIL.openCompose({to,subject:'Â¿CÃ³mo llegÃ³ tu pedido? â€” The Lab Solutions',body:bodyHtml,title:'Mensaje post-entrega',_pdPedidoId:pedidoId,_fromName:AGENT_CTA_FROM.name,_fromEmail:AGENT_CTA_FROM.email});}catch(e){toast('No se pudo abrir el borrador','error');}},350);
+}
+async function pdMarkDone(pedidoId,via,silent){
+  const log=_pdLog(); log[pedidoId]={ts:Date.now(),via:via||'manual'};
+  try{localStorage.setItem(_PD_LOG_KEY,JSON.stringify(log));}catch(e){}
+  // Nota en el pedido (aparece en Notas internas del pedido, best-effort)
+  try{const arr=_getNotas('ped',pedidoId);arr.push({id:'n'+Date.now(),ts:Date.now(),text:'ğŸ’š Mensaje post-entrega enviado por '+(via||'â€”')+' (Andrea)'});_saveNotas('ped',pedidoId,arr);}catch(e){}
+  if(!silent&&via==='manual') toast('âœ“ Post-entrega marcado como gestionado','success');
+  else if(!silent) toast('âœ“ Post-entrega registrado ('+via+')','success');
+  buildPostEntregaTray();
+}
+
+// â”€â”€ MEMORIA DE AGENTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Bloque compacto con los contactos previos al cliente (mensajes redactados por
+// agentes, seguimientos, cobranzas y post-entregas registrados) para que el
+// agente dÃ© continuidad a la conversaciÃ³n y no se repita.
+function agentMemoriaCliente(empresa,cliId){
+  try{
+    const emp=String(empresa||'').trim();
+    if(emp.length<4&&!cliId) return '';
+    const ev=[];
+    const push=(ts,txt)=>{if(ts&&txt)ev.push({ts,txt});};
+    try{
+      AGENT_LOG._load();
+      const el=emp.toLowerCase();
+      if(el.length>=4)(AGENT_LOG._runs||[]).forEach(r=>{
+        if(!r||!r.time)return;
+        if((((r.input||'')+' '+(r.output||'')).toLowerCase()).includes(el)){
+          const snip=String(r.output||'').replace(/\s+/g,' ').slice(0,110);
+          push(r.time,`${(typeof _ofPretty==='function'?_ofPretty(r.agent):r.agent)||'Agente'} redactÃ³: "${snip}â€¦"`);
+        }
+      });
+    }catch(e){}
+    try{
+      if(cliId){const fl=_fuLog();
+        (state.cotizaciones||[]).forEach(c=>{const cid=Array.isArray(c.fields['Cliente'])?c.fields['Cliente'][0]:null;if(cid!==cliId)return;const e=fl[c.id];if(e&&e.ts)push(e.ts,`Seguimiento enviado por ${e.via||'â€”'} (cot ${c.fields['NÂ° CotizaciÃ³n']||'â€”'})`);});}
+    }catch(e){}
+    try{(_cobLog()[emp.toLowerCase()]||[]).forEach(e=>push(e.ts,`Recordatorio de cobranza por ${e.via||'â€”'}`));}catch(e){}
+    try{
+      if(cliId){const pl=_pdLog();
+        (state.pedidos||[]).forEach(p=>{const cid=Array.isArray(p.fields['Cliente'])?p.fields['Cliente'][0]:null;if(cid!==cliId)return;const e=pl[p.id];if(e&&e.ts)push(e.ts,`Mensaje post-entrega por ${e.via||'â€”'} (${p.fields['NÂ° Pedido']||'â€”'})`);});}
+    }catch(e){}
+    if(!ev.length)return'';
+    ev.sort((a,b)=>b.ts-a.ts);
+    const fch=ts=>new Date(ts).toISOString().slice(0,10);
+    return '\nCONTACTOS PREVIOS CON ESTE CLIENTE (dales continuidad â€” NO repitas el mismo saludo ni los mismos argumentos; si ayuda, alude brevemente al contacto anterior):\n'
+      +ev.slice(0,5).map(e=>`- [${fch(e.ts)}] ${e.txt}`).join('\n');
+  }catch(e){return'';}
+}
+
+function runFollowupAgent(cotId){
+  const c=state.cotizacionesById[cotId];if(!c) return;
+  const f=c.fields;
+  const _t=new Date();_t.setHours(0,0,0,0);
+  const cliRec=_getClienteRecFromField(f['Cliente']);
+  const nombre=resolveClienteName(f['Cliente']);
+  const dias=f['Fecha cotizaciÃ³n']?Math.round((_t-new Date(f['Fecha cotizaciÃ³n']+'T00:00:00'))/86400000):'â€”';
+  const vto=f['Fecha vencimiento']?Math.round((new Date(f['Fecha vencimiento']+'T00:00:00')-_t)/86400000):null;
+  const sol=(f['Solicitud cliente (texto libre)']||f['Detalle productos']||f['Solicitud / detalle']||'').substring(0,150);
+  const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'';
+  const waPhone=_getClienteWAPhone(cliRec);
+  const email=cliRec?.fields['Email']||'';
+  const _toque=Math.min(_fuToques(cotId)+1,3);
+  const _guia=_toque===1?'recordatorio breve y amable, sin presiÃ³n'
+    :_toque===2?'aporta valor: resuelve dudas tÃ­picas, ofrece ajustar el alcance o una alternativa, refuerza el beneficio'
+    :'Ãºltimo contacto de la secuencia: crea urgencia suave (vencimiento, cupo de producciÃ³n) y facilita el cierre con una pregunta directa';
+  const ctx=`Cliente: ${nombre}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nCotizaciÃ³n: ${f['NÂ° CotizaciÃ³n']||'â€”'}${monto?' | Monto neto: '+monto:''}\nDÃ­as sin respuesta: ${dias}${vto!=null?' | Vence en: '+vto+'d':''}\nProducto/Servicio: ${sol||'No especificado'}\nToque de la secuencia: ${_toque} de 3 â€” enfoque: ${_guia}. No repitas el mismo texto de un toque anterior.`+agentMemoriaCliente(nombre,cliRec?.id)+AGENT_MSG_RULES;
+  runAgentInline('FOLLOWUP',ctx,(result)=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliRec?.id||''}')">ğŸ“² Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Seguimiento de tu cotizaciÃ³n â€” The Lab Solutions','${cliRec?.id||''}','${cotId}')">âœ‰ï¸ Enviar correo</button>`:'';
+    return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">ğŸ“‹ Copiar todo</button>`;
+  });
+  window._fuCotId=cotId;   // para auto-registrar el seguimiento al enviar por WA/correo
+}
+
+function openFollowupWA(phone){
+  const waPart=_extractWAPart(_agentInlineText)||_agentInlineText;
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(waPart),'_blank');
+  if(window._fuCotId){try{fuMarkDone(window._fuCotId,'WhatsApp');}catch(e){}window._fuCotId=null;}
+}
+
+// â”€â”€ CTA universal de agentes: enviar el resultado por WhatsApp o correo â”€â”€
+// Identidad comercial de los envÃ­os: salen SIEMPRE desde la casilla corporativa
+// con la firma de Andrea, sin importar quÃ© usuario del dashboard estÃ© logueado.
+const AGENT_CTA_FROM={email:'hola@thelab.solutions',name:'Andrea Garrido - The Lab Solutions'};
+// Extrae la secciÃ³n cuyo encabezado calza con re (misma nociÃ³n de encabezado que
+// formatAgentReport: #, **negrita**, o LÃNEA EN MAYÃšSCULAS corta).
+function _agentSection(raw,re){
+  const lines=String(raw||'').replace(/\r/g,'').split('\n');
+  const isHead=l=>{const t=l.trim();if(!t)return false;
+    if(/^#{1,4}\s+/.test(t)||/^\*\*[^*]+\*\*:?\s*$/.test(t))return true;
+    const c=t.replace(/^\d+[\.\)]\s*/,'').replace(/:\s*$/,'');
+    return c===c.toUpperCase()&&/[A-ZÃÃ‰ÃÃ“ÃšÃœÃ‘]/.test(c)&&c.split(/\s+/).length<=10&&c.length<=64;};
+  let start=-1;
+  for(let i=0;i<lines.length;i++){ if(isHead(lines[i])&&re.test(lines[i])){start=i+1;break;} }
+  if(start<0)return'';
+  const out=[];
+  for(let i=start;i<lines.length;i++){ if(isHead(lines[i]))break; out.push(lines[i]); }
+  return out.join('\n').trim();
+}
+// Texto crudo de la fuente: un output del grid (por id) o el modal inline.
+function _agentCtaRaw(srcId){
+  const el=srcId?document.getElementById(srcId):null;
+  return (el&&el._rawText)||_agentInlineText||'';
+}
+function _agentCtaClean(raw){return String(raw||'').replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/gi,'').replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/gi,'').trim();}
+function agentCtaWA(srcId,phone){
+  const raw=_agentCtaRaw(srcId); if(!raw){toast('Sin contenido','error');return;}
+  const msg=_agentSection(raw,/whatsapp|\bwsp\b/i)||_agentCtaClean(raw);
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg.slice(0,1800)),'_blank');
+}
+async function agentCtaEmail(srcId,btn,toEmail){
+  const raw=_agentCtaRaw(srcId); if(!raw){toast('Sin contenido','error');return;}
+  let to=toEmail||prompt('Â¿A quÃ© correo lo enviamos?','');
+  if(!to)return; to=to.trim();
+  if(!validEmail(to)){toast('Correo invÃ¡lido','error');return;}
+  const body=(_agentSection(raw,/e-?mail|correo/i)||_agentCtaClean(raw)).replace(/^\s*\**asunto\s*[:\-][^\n]*\n+/i,'');
+  const subjM=raw.match(/asunto\s*[:\-]\s*\**([^\n*]+)/i);
+  const subject=(subjM?subjM[1].trim():'The Lab Solutions');
+  const prev=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.textContent='Enviandoâ€¦';}
+  try{
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject,body,from_name:AGENT_CTA_FROM.name});
+    if(r&&!r.error) toast('âœ“ Enviado a '+to+' desde '+AGENT_CTA_FROM.email,'success');
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
+}
+// Botones CTA segÃºn el contenido de la respuesta (WhatsApp / correo detectados).
+function agentCtaButtonsHtml(srcId,raw){
+  raw=raw||_agentCtaRaw(srcId);
+  const hasWA=/whatsapp|\bwsp\b/i.test(raw);
+  const hasMail=/asunto\s*[:\-]|e-?mail|correo/i.test(raw);
+  if(!hasWA&&!hasMail)return'';
+  return (hasWA?`<button class="btn btn-primary btn-sm" onclick="agentCtaWA('${srcId||''}')">ğŸ“² Enviar por WhatsApp</button>`:'')
+       +(hasMail?`<button class="btn ${hasWA?'btn-ghost':'btn-primary'} btn-sm" onclick="agentCtaEmail('${srcId||''}',this)">ğŸ“§ Enviar por correo</button>`:'');
+}
+
+async function _sendFollowupEmail(cotId,toEmail){
+  if(!_agentInlineText){toast('Sin contenido','error');return;}
+  const c=state.cotizacionesById[cotId];if(!c) return;
+  const emailText=_extractEmailPart(_agentInlineText)||_agentInlineText;
+  const btnEl=document.querySelector('#agentInlineActions button:nth-child(2)');
+  if(btnEl){btnEl.disabled=true;btnEl.textContent='Enviando...';}
+  try{
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to:toEmail,subject:`Seguimiento â€” CotizaciÃ³n ${c.fields['NÂ° CotizaciÃ³n']||''}`,body:emailText,from_name:AGENT_CTA_FROM.name});
+    if(r&&!r.error){toast('âœ“ Correo enviado','success');try{fuMarkDone(cotId,'correo');}catch(e){}window._fuCotId=null;closeAgentInlineModal();}
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btnEl){btnEl.disabled=false;btnEl.textContent='ğŸ“§ Enviar por correo';}}
+}
+
+// â€” QUOTE: insertar Ã­tems parseados en Nueva CotizaciÃ³n
+let _quoteParsedItems=null;
+function quoteInsertItems(){
+  if(!Array.isArray(_quoteParsedItems)||!_quoteParsedItems.length){toast('Sin Ã­tems para insertar','error');return;}
+  const items=_quoteParsedItems;
+  switchTab('nueva-cot');
+  setTimeout(()=>{
+    let n=0;
+    items.forEach(it=>{
+      try{
+        qcalcInsertRow('n',{desc:String(it.desc||'Ãtem').substring(0,120),und:Math.max(1,parseInt(it.qty)||1),costoUnit:Math.max(0,Math.round(it.costo)||0),ventaUnit:Math.max(0,Math.round(it.venta)||0)});
+        n++;
+      }catch(e){}
+    });
+    toast(`âœ“ ${n} Ã­tem${n!==1?'s':''} insertado${n!==1?'s':''} en la cotizaciÃ³n`,'success');
+  },150);
+}
+
+// â€” QUOTE desde el formulario de Nueva CotizaciÃ³n
+function runQuoteFormAgent(){
+  const sol=(document.getElementById('cot-solicitud')?.value||'').trim();
+  if(!sol){toast('Escribe primero la solicitud del cliente en Observaciones','error');return;}
+  const cliNombre=(document.getElementById('cot-cliente-search')?.value||'').trim();
+  const urgente=document.getElementById('cot-urgente')?.value==='true';
+  const ctx=`${cliNombre?'Cliente: '+cliNombre+'\n':''}Solicitud: ${sol}${urgente?'\nURGENTE: aplicar recargo +25%':''}`;
+  runAgentInline('QUOTE',ctx,(result)=>{
+    let insBtn='';
+    const qm=result.match(/\[ITEMS\]([\s\S]*?)\[\/ITEMS\]/i);
+    if(qm){
+      try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
+      const stripped=result.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
+      document.getElementById('agentInlineResult').innerHTML=formatAgentReport(stripped);
+      _agentInlineText=stripped;
+      if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length)
+        insBtn=`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();quoteInsertItems()">â†’ Insertar ${_quoteParsedItems.length} Ã­tem${_quoteParsedItems.length>1?'s':''} en el formulario</button>`;
+    }
+    return `${insBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">ğŸ“‹ Copiar</button>`;
+  });
+}
+
+// â€” QUOTE para una cotizaciÃ³n existente en estado Solicitada
+function runQuoteCotAgent(cotId){
+  const c=state.cotizacionesById[cotId];if(!c) return;
+  const f=c.fields;
+  const sol=(f['Solicitud cliente (texto libre)']||f['Solicitud / detalle']||'').trim();
+  if(!sol){toast('La cotizaciÃ³n no tiene solicitud del cliente registrada â€” edÃ­tala primero','error');return;}
+  const ctx=`Cliente: ${resolveClienteName(f['Cliente'])}\nSolicitud: ${sol}${f['Urgencia (+25%)']?'\nURGENTE: aplicar recargo +25%':''}`;
+  runAgentInline('QUOTE',ctx,(result)=>{
+    let insBtn='';
+    const qm=result.match(/\[ITEMS\]([\s\S]*?)\[\/ITEMS\]/i);
+    if(qm){
+      try{_quoteParsedItems=JSON.parse(qm[1].trim());}catch(e){_quoteParsedItems=null;}
+      const stripped=result.replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/i,'').trim();
+      document.getElementById('agentInlineResult').innerHTML=formatAgentReport(stripped);
+      _agentInlineText=stripped;
+      if(Array.isArray(_quoteParsedItems)&&_quoteParsedItems.length)
+        insBtn=`<button class="btn btn-primary btn-sm" onclick="quoteInsertItemsToEdit('${cotId}')">â†’ Insertar ${_quoteParsedItems.length} Ã­tem${_quoteParsedItems.length>1?'s':''} y editar</button>`;
+    }
+    return `${insBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">ğŸ“‹ Copiar</button>`;
+  });
+}
+function quoteInsertItemsToEdit(cotId){
+  if(!Array.isArray(_quoteParsedItems)||!_quoteParsedItems.length){toast('Sin Ã­tems para insertar','error');return;}
+  const items=_quoteParsedItems;
+  closeAgentInlineModal();
+  openEditCot(cotId);
+  setTimeout(()=>{
+    document.querySelectorAll('#editItemsContainer .edit-item-row').forEach(r=>{
+      const d=(r.querySelector('.edit-item-desc')?.value||'').trim();
+      const v=parseFloat(r.querySelector('.edit-item-venta')?.value)||0;
+      if(!d&&!v) r.remove();
+    });
+    items.forEach(it=>addEditItemRow({desc:String(it.desc||'Ãtem').substring(0,120),und:Math.max(1,parseInt(it.qty)||1),costoUnit:Math.max(0,Math.round(it.costo)||0),ventaUnit:Math.max(0,Math.round(it.venta)||0)}));
+    updateEditItemTotal();
+    toast(`âœ“ ${items.length} Ã­tem${items.length>1?'s':''} insertado${items.length>1?'s':''} â€” revisa y guarda`,'success');
+  },200);
+}
+
+// â€” WIN-BACK: reactivar cotizaciÃ³n vencida o rechazada
+function runWinbackAgent(cotId){
+  const c=state.cotizacionesById[cotId];if(!c) return;
+  const f=c.fields;
+  const cliRec=_getClienteRecFromField(f['Cliente']);
+  const waPhone=_getClienteWAPhone(cliRec);
+  const email=cliRec?.fields['Email']||'';
+  const estado=f['Estado cotizaciÃ³n'];
+  const sol=(f['Solicitud cliente (texto libre)']||f['Solicitud / detalle']||'').substring(0,150);
+  const monto=f['Total final (CLP)']?formatCLP(Math.round(f['Total final (CLP)']/1.19)):'â€”';
+  const motivo=estado==='Rechazada'?`\nMotivo de rechazo: ${String(f['Motivo rechazo']||'no registrado').substring(0,150)}`:'';
+  const ctx=`CotizaciÃ³n ${estado==='Rechazada'?'RECHAZADA':'VENCIDA'}: ${f['NÂ° CotizaciÃ³n']||'â€”'} | Cliente: ${resolveClienteName(f['Cliente'])} | Monto neto: ${monto} | VencÃ­a: ${f['Fecha vencimiento']||'â€”'}${motivo}\nProducto: ${sol}\nTAREA: redacta un mensaje de REACTIVACIÃ“N (win-back): ofrecer actualizar la cotizaciÃ³n${estado==='Rechazada'?', abordando con tacto el motivo del rechazo si ayuda a recuperar la venta':''}, sin presionar.`+agentMemoriaCliente(resolveClienteName(f['Cliente']),cliRec?.id)+AGENT_MSG_RULES;
+  runAgentInline('FOLLOWUP',ctx,()=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliRec?.id||''}')">ğŸ“² Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Retomemos tu cotizaciÃ³n â€” The Lab Solutions','${cliRec?.id||''}')">âœ‰ï¸ Enviar correo</button>`:'';
+    return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">ğŸ“‹ Copiar</button>`;
+  });
+}
+
+// â€” EnvÃ­o genÃ©rico de correo desde resultado de agente
+async function _sendAgentEmail(toEmail,subject,btnEl){
+  if(!_agentInlineText){toast('Sin contenido','error');return;}
+  const emailText=_extractEmailPart(_agentInlineText)||_agentInlineText;
+  if(btnEl){btnEl.disabled=true;btnEl.dataset.orig=btnEl.textContent;btnEl.textContent='Enviando...';}
+  try{
+    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to:toEmail,subject,body:emailText,from_name:AGENT_CTA_FROM.name});
+    if(r&&!r.error){toast('âœ“ Correo enviado','success');closeAgentInlineModal();}
+    else throw new Error(r?.error||'Error desconocido');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btnEl){btnEl.disabled=false;btnEl.textContent=btnEl.dataset.orig||'ğŸ“§ Enviar';}}
+}
+
+// â€” SALES: estrategia de venta para un lead especÃ­fico
+function runSalesAgent(cliId){
+  const c=state.clientes.find(x=>x.id===cliId);if(!c) return;
+  const f=c.fields;
+  const waPhone=_getClienteWAPhone(c);
+  const email=f['Email']||'';
+  const cotsCli=state.cotizaciones.filter(x=>Array.isArray(x.fields['Cliente'])&&x.fields['Cliente'].includes(cliId));
+  const cotsTxt=cotsCli.length?cotsCli.slice(-3).map(x=>`${x.fields['NÂ° CotizaciÃ³n']||'â€”'} (${x.fields['Estado cotizaciÃ³n']||'â€”'})`).join(', '):'ninguna aÃºn';
+  const ctx=`Lead: ${f['Empresa']||'â€”'} | Contacto: ${f['Contacto']||'â€”'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nEtapa: ${f['Etapa venta']||'â€”'} | Origen: ${f['Origen lead']||'â€”'} | Industria: ${f['Industria / Rubro']||'â€”'}\nCotizaciones previas: ${cotsTxt}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,200):''}\nTAREA: dame la estrategia para avanzar este lead a la siguiente etapa: cÃ³mo abordarlo, quÃ© producto ofrecerle segÃºn su industria, posibles objeciones y cÃ³mo responderlas, y los mensajes de apertura listos para enviar.`+AGENT_MSG_RULES;
+  runAgentInline('SALES',ctx,()=>{
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliId}')">ğŸ“² Abrir WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Conversemos â€” The Lab Solutions','${cliId}')">âœ‰ï¸ Enviar correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">ğŸ“‹ Copiar</button>`;
   });
 }
@@ -855,4 +1298,143 @@ async function runAgentChain(pedidoId,solicitudOverride){
   const p=state.pedidosById[pedidoId];if(!p){toast('Pedido no encontrado','error');return;}
   const f=p.fields;
   const num=f['NÂ° Pedido']||'â€”';
-  const solicitud=(solicitudOverride||f['Solicitud clienm«ëŒ+Š×®º+º$zzb¥
+  const solicitud=(solicitudOverride||f['Solicitud cliente (texto libre)']||f['Detalle productos']||'').substring(0,300);
+  const resultEl=document.getElementById('agentInlineResult');
+  const actionsEl=document.getElementById('agentInlineActions');
+  document.getElementById('agentInlineTitle').textContent='âš¡ Cadena IA â€” '+num;
+  resultEl.className='agent-modal-result';
+  resultEl.style.whiteSpace='pre-wrap';
+  actionsEl.innerHTML='';
+  _agentInlineText='';
+  document.getElementById('agentInlineModal').style.display='flex';
+  const baseCtx=`Pedido: ${num} | Cliente: ${resolveClienteName(f['Cliente'])}\nEntrega: ${f['Fecha entrega']||'â€”'} | Equipo: ${f['Equipo asignado']||'Sin asignar'}\nSolicitud/Producto: ${solicitud||'Sin detalle'}`;
+  const steps={prod:'â³ Generando Ficha TÃ©cnica (PRODUCTION_AGENT)...',qa:'Â· Checklist QA â€” en espera'};
+  const paint=()=>{resultEl.textContent=steps.prod+'\n'+steps.qa;};
+  paint();
+  try{showAgentWorking('PRODUCTION',{verb:'estÃ¡ generando la ficha tÃ©cnicaâ€¦',messages:['Leyendo el pedidoâ€¦','Definiendo materiales y parÃ¡metrosâ€¦','Escribiendo las instrucciones de producciÃ³nâ€¦']});}catch(e){}
+  let ficha='',checklist='';
+  // Paso 1: PRODUCTION
+  try{
+    const cfg=AGENTES_CFG.find(a=>a.id==='PRODUCTION');
+    const ctx=state.loaded?buildAgentContext('PRODUCTION'):'';
+    ficha=await callAgentClaude('PRODUCTION',cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
+    try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,ficha);}catch(e){}
+    const existing=parseFichaData(f['Ficha Tecnica'])||{};
+    existing.instrucciones=ficha;
+    existing.generadoIA=hoyCL();
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Ficha Tecnica':JSON.stringify(existing)});
+    p.fields['Ficha Tecnica']=JSON.stringify(existing);
+    steps.prod='âœ… Ficha TÃ©cnica generada y guardada';
+    steps.qa='â³ Generando Checklist QA (QA_AGENT)...';
+    paint();
+  }catch(e){
+    steps.prod='âŒ Ficha TÃ©cnica: '+e.message;
+    steps.qa='Â· Checklist QA â€” cancelado';
+    paint();
+    try{hideAgentWorking();}catch(e){}
+    actionsEl.innerHTML='<button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal()">Cerrar</button>';
+    return;
+  }
+  // Paso 2: QA
+  try{showAgentWorking('QA',{verb:'estÃ¡ armando el checklist de calidadâ€¦',messages:['Revisando la ficha tÃ©cnicaâ€¦','Definiendo puntos de controlâ€¦','Escribiendo el checklist QAâ€¦']});}catch(e){}
+  try{
+    const cfg=AGENTES_CFG.find(a=>a.id==='QA');
+    const ctx=state.loaded?buildAgentContext('QA'):'';
+    checklist=await callAgentClaude('QA',cfg.sys,(ctx?ctx+'\n\nCONSULTA: ':'')+baseCtx);
+    try{AGENT_LOG.add(cfg.label,'Cadena IA: '+num,checklist);}catch(e){}
+    const qaItems=_parseQAChecklist(checklist);
+    await airtableWrite('Pedidos','PATCH',pedidoId,{'Notas QA':qaItems?JSON.stringify(qaItems):checklist});
+    p.fields['Notas QA']=qaItems?JSON.stringify(qaItems):checklist;
+    steps.qa='âœ… Checklist QA generado y guardado'+(qaItems?` (${qaItems.length} Ã­tems)`:'');
+  }catch(e){
+    steps.qa='âŒ Checklist QA: '+e.message;
+  }
+  try{hideAgentWorking();}catch(e){}
+  paint();
+  renderPedidos();
+  _agentInlineText='â•â•â• FICHA TÃ‰CNICA â•â•â•\n'+ficha+(checklist?'\n\nâ•â•â• CHECKLIST QA â•â•â•\n'+checklist:'');
+  resultEl.textContent=steps.prod+'\n'+steps.qa+'\n\n'+_agentInlineText;
+  actionsEl.innerHTML=`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();openFichaModal('${pedidoId}')">ğŸ“‹ Ver Ficha TÃ©cnica</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();openQAModal('${pedidoId}','${escapeHtml(num)}')">âœ“ Ver Checklist QA</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">ğŸ“‹ Copiar</button>`;
+}
+
+function _offerAgentChain(numPedido,solicitud){
+  try{
+    if(typeof hasClaudeAccess!=='function'||!hasClaudeAccess()) return;
+    const nuevo=state.pedidos.find(x=>x.fields['NÂ° Pedido']===numPedido);
+    if(!nuevo) return;
+    if(confirm(`âš¡ Â¿Generar Ficha TÃ©cnica + Checklist QA con IA para ${numPedido}?`)) runAgentChain(nuevo.id,solicitud);
+  }catch(e){}
+}
+
+// â”€â”€ HISTORIAL DE EJECUCIONES DE AGENTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const AGENT_LOG={
+  _key:'thelab_agent_runs_v1',
+  _runs:null,
+  _merged:null,
+  _load(){if(this._runs) return;try{this._runs=JSON.parse(localStorage.getItem(this._key)||'[]');}catch(e){this._runs=[];}},
+  add(agent,input,output){
+    this._load();
+    const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
+    const entry={id:Date.now(),agent,input:(input||'').substring(0,300),output:output||'',time:new Date().toISOString(),user:u?.name||u?.username||'â€”'};
+    // ComunicaciÃ³n entre agentes: si justo antes ejecutÃ³ otro agente distinto, es un handoff â†’ el agente anterior camina a este departamento
+    try{ const now=Date.now(); if(typeof ofLogComm==='function'){ if(_ofLastExec && _ofLastExec.label!==agent && now-_ofLastExec.t<120000) ofLogComm(_ofLastExec.label, agent); _ofLastExec={label:agent,t:now}; } }catch(e){}
+    this._runs.unshift(entry);
+    if(this._runs.length>100) this._runs=this._runs.slice(0,100);
+    try{localStorage.setItem(this._key,JSON.stringify(this._runs));}catch(e){}
+    this._merged=null;
+    // Write-behind a Airtable (silencioso: la tabla puede no existir o el rol no escribir)
+    try{
+      if(u&&typeof RBAC!=='undefined'&&RBAC.canWriteRole(u.role)){
+        airtableWrite('Agent_Log','POST',null,{'Agente':entry.agent,'Consulta':entry.input,'Resultado':entry.output.substring(0,5000),'Usuario':entry.user,'Fecha':entry.time}).catch(()=>{});
+      }
+    }catch(e){}
+  },
+  _dedupKey(r){return r.agent+'|'+(r.time||'').substring(0,16)+'|'+(r.input||'').substring(0,40);},
+  open(){
+    this._load();
+    const m=document.getElementById('agentLogModal');if(!m) return;
+    m.style.display='flex';
+    this._merged=this._runs;
+    this.render();
+    // Merge con el historial compartido de Airtable (si la tabla existe)
+    airtableFetch('Agent_Log',100).then(res=>{
+      const remote=(res.records||[]).map(rec=>({id:'at_'+rec.id,agent:rec.fields['Agente']||'â€”',input:rec.fields['Consulta']||'',output:rec.fields['Resultado']||'',time:rec.fields['Fecha']||rec.createdTime||'',user:rec.fields['Usuario']||'â€”',remote:true}));
+      const seen=new Set();
+      const all=[...this._runs,...remote].filter(r=>{const k=this._dedupKey(r);if(seen.has(k)) return false;seen.add(k);return true;});
+      all.sort((a,b)=>(b.time||'').localeCompare(a.time||''));
+      this._merged=all.slice(0,100);
+      this.render();
+    }).catch(()=>{});
+  },
+  close(){const m=document.getElementById('agentLogModal');if(m) m.style.display='none';},
+  render(){
+    const list=document.getElementById('agentLogList');if(!list) return;
+    const rows=this._merged||this._runs;
+    if(!rows.length){list.innerHTML='<div class="notif-empty">AÃºn no hay ejecuciones registradas</div>';return;}
+    list.innerHTML=rows.map(r=>`
+      <div class="notif-item" onclick="AGENT_LOG.view('${r.id}')" style="cursor:pointer">
+        <div class="notif-body">
+          <div class="notif-title">ğŸ¤– ${escapeHtml(r.agent)} <span style="font-weight:400;color:var(--text3)">Â· ${escapeHtml(r.user)}${r.remote?' â˜':''}</span></div>
+          <div class="notif-sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((r.input||r.output).substring(0,90))}</div>
+        </div>
+        <div class="notif-time" style="white-space:nowrap;font-size:10px">${NOTIFY._fmtFull(r.time)}</div>
+      </div>`).join('');
+  },
+  view(id){
+    this._load();
+    const rows=this._merged||this._runs;
+    const r=rows.find(x=>String(x.id)===String(id));if(!r) return;
+    this.close();
+    document.getElementById('agentInlineTitle').textContent='ğŸ“œ '+r.agent+' â€” '+NOTIFY._fmtFull(r.time);
+    const resultEl=document.getElementById('agentInlineResult');
+    resultEl.className='agent-modal-result';
+    resultEl.style.whiteSpace='normal';
+    // Consulta como cabecera ligera + salida procesada (suave y estructurada, igual que en Agentes).
+    const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">â–¸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
+    resultEl.innerHTML=consultaHtml+formatAgentReport(r.output||'');
+    _agentInlineText=r.output;
+    document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">ğŸ“‹ Copiar</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();AGENT_LOG.open()">â† Volver al historial</button>';
+    document.getElementById('agentInlineModal').style.display='flex';
+  },
+  clear(){if(!confirm('Â¿Borrar el historial local de agentes? (el historial compartido en Airtable no se borra)')) return;this._runs=[];this._merged=null;try{localStorage.removeItem(this._key);}catch(e){}this.render();}
+};

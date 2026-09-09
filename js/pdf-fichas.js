@@ -808,4 +808,26 @@ function renderFPItems(){
           </div>
         </div>
         <div>
-          <div sty
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:10px">Fotos del producto</div>
+          <div class="fp-views-grid">
+            ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Lateral'}].map(({c,l})=>`
+              <div>
+                <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:6px 4px;border-radius:8px 8px 0 0;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase">${l}</div>
+                <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
+                  <img loading="lazy" decoding="async" id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:#fff;display:${item[c]?'block':'none'}">
+                  <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;color:var(--text3)">
+                    <span style="font-size:22px">📷</span>
+                    <span style="font-size:9px;font-weight:600">Subir foto</span>
+                  </div>
+                  <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${c}')">
+                </label>
+                <textarea class="field-input" rows="2" title="Prompt de la IA para esta vista — edítalo si la vista sale mal y regenera solo esta" placeholder="Prompt de esta vista (ángulo/indicaciones para la IA)" oninput="_fpSetPrompt(${idx},'${c}',this.value)" style="width:100%;font-size:9px;margin-top:6px;resize:vertical;line-height:1.4">${escapeHtml(_fpGetPrompt(idx,c))}</textarea>
+                <button class="btn btn-ghost btn-sm" id="fpRegenBtn-${idx}-${c}" onclick="generarVistasIA(${idx},'${c}')" style="width:100%;margin-top:4px;font-size:10px;padding:6px" title="Regenerar solo esta vista con el prompt de arriba">🔄 Regenerar</button>
+              </div>`).join('')}
+          </div>
+          <div style="font-size:9px;color:var(--text3);margin-top:6px">Las fotos se guardan localmente en este navegador al guardar la ficha.</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
