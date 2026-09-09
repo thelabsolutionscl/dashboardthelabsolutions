@@ -716,9 +716,11 @@ async function finPlanCobranzaIA(){
   try{showAgentWorking('FINANCE',{verb:'está priorizando tu cobranza…',messages:['Revisando la cartera por cobrar…','Ordenando por mora y monto…','Definiendo canal y acción por cliente…']});}catch(e){}
   try{
     const cfg=AGENTES_CFG.find(a=>a.id==='FINANCE');
+    const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('FINANCE'):Date.now();
     const resp=await callAgentClaude('FINANCE',cfg.sys,ctx);
-    if(out){out.style.whiteSpace='normal';out.innerHTML=formatAgentReport(resp);}
-    try{AGENT_LOG.add('FINANCE_AGENT','Plan de cobranza ('+lista.length+' clientes)',resp);}catch(e){}
+    const meta=typeof agentResultMeta==='function'?agentResultMeta('FINANCE',started):{};
+    if(out){out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('FINANCE',resp,meta):formatAgentReport(resp);}
+    try{AGENT_LOG.add('FINANCE_AGENT','Plan de cobranza ('+lista.length+' clientes)',resp,meta);}catch(e){}
   }catch(e){if(out)out.textContent='Error: '+e.message;}
   finally{try{hideAgentWorking();}catch(e){}btn.disabled=false;btn.innerHTML=prev;}
 }

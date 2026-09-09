@@ -1071,7 +1071,7 @@ async function audit3DReport(){
   const out=document.getElementById('audit3DAiOut');if(out){out.style.display='block';out.textContent='🧠 Analizando el estado del parque…';}
   if(!window._audit3D)await audit3DRun();
   try{showAgentWorking('MANTENCION3D',{verb:'está auditando el parque de impresoras…',messages:['Revisando el estado de cada máquina…','Detectando errores y mantenciones…','Sugiriendo calibraciones…']});}catch(e){}
-  try{const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id==='MANTENCION3D'):null;const resp=await callAgentClaude('MANTENCION3D',cfg?cfg.sys:'',buildAgentContext('MANTENCION3D'));if(out)out.textContent=resp;}
+  try{const cfg=(typeof AGENTES_CFG!=='undefined')?AGENTES_CFG.find(a=>a.id==='MANTENCION3D'):null;const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('MANTENCION3D'):Date.now();const resp=await callAgentClaude('MANTENCION3D',cfg?cfg.sys:'',buildAgentContext('MANTENCION3D'));const meta=typeof agentResultMeta==='function'?agentResultMeta('MANTENCION3D',started):{};if(out){out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('MANTENCION3D',resp,meta):formatAgentReport(resp);}try{AGENT_LOG.add('AUDITOR_3D','Auditoría del parque 3D',resp,meta);}catch(e){}}
   catch(e){if(out)out.textContent='Error IA: '+(e&&e.message||e);}
   finally{try{hideAgentWorking();}catch(e){}}
 }

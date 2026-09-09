@@ -767,7 +767,7 @@ function runAdsCampaignAgent(id){
   const ctx=`\n\nANALIZA EN PROFUNDIDAD SÓLO ESTA CAMPAÑA:\nid=${camp.id} "${camp.nombre}" [${camp.estado}] · ${days} días\nPpto ${fmtMoney(camp.presupuesto||0)}/día (${util}% uso) · Gasto ${fmtMoney(camp.gasto||0)} · CTR ${ctr}% · CPC ${fmtMoney(cpc)} · Conv ${camp.conversiones||0} · CPA ${camp.conversiones>0?fmtMoney(cpa):'—'} · ROAS-Google ${(camp.valor_conversion||0)>0?ro+'x':'—'}\nDa un diagnóstico específico y las acciones concretas (con [ACTIONS]) para esta campaña. Si la muestra es chica, dilo.`;
   runAgentInline('ADS',ctx,(result)=>{
     const actions=_parseAdsActions(result);window._adsAgentActions=actions;
-    const rEl=document.getElementById('agentInlineResult');if(rEl){rEl.style.whiteSpace='normal';rEl.innerHTML=formatAgentReport(result);}
+    const rEl=document.getElementById('agentInlineResult');if(rEl){rEl.style.whiteSpace='normal';rEl.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('ADS',result,rEl._agentMeta||{}):formatAgentReport(result);}
     const btns=_adsRenderActionBtns(actions);
     return btns+`<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });

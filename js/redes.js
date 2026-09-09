@@ -603,7 +603,9 @@ async function _redesSuggestReply(i){
   const f=i.fields;
   const cfg=AGENTES_CFG.find(a=>a.id==='COMMUNITY_AGENT'); if(!cfg) throw new Error('Falta COMMUNITY_AGENT');
   const ctx=`Red: ${f['Red']||'—'} · Tipo: ${f['Tipo']||'Comentario'} · Usuario: @${f['Usuario']||'usuario'}\nMensaje recibido: ${f['Mensaje']||''}`;
+  const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('COMMUNITY_AGENT'):Date.now();
   const out=await callAgentClaude('COMMUNITY_AGENT',cfg.sys,ctx);
+  const meta=typeof agentResultMeta==='function'?agentResultMeta('COMMUNITY_AGENT',started):{};
   const mResp=out.match(/RESPUESTA_PUBLICA:\s*([\s\S]*?)(?=\n\s*ES_LEAD:|$)/i);
   const mLead=out.match(/ES_LEAD:\s*(s[ií]|no)/i);
   const mInt=out.match(/INTENCION:\s*([^\n]+)/i);
@@ -613,7 +615,7 @@ async function _redesSuggestReply(i){
   if(mInt) fields['Intención']=mInt[1].trim().slice(0,100);
   await _redesWrite('Social_Interactions','PATCH',i.id,fields);
   Object.assign(i.fields,fields);
-  try{AGENT_LOG.add('COMMUNITY_AGENT',ctx,out);}catch(_){}
+  try{AGENT_LOG.add('COMMUNITY_AGENT',ctx,out,meta);}catch(_){}
   return true;
 }
 async function redesReply(id){
@@ -721,12 +723,14 @@ async function _redesRunGenerate(agentId,input,media,pedidoNum){
   try{
     const ctx=state.loaded?buildAgentContext(agentId):'';
     const full=ctx?`${ctx}\n\nCONSULTA: ${cfg.pre}${input}`:`${cfg.pre}${input}`;
+    const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(agentId):Date.now();
     const out=await callAgentClaude(agentId,cfg.sys,full);
+    const meta=typeof agentResultMeta==='function'?agentResultMeta(agentId,started):{};
     _redesLastGen=out; _redesLastAgent=agentId; _redesLastMedia=media||''; _redesLastPedido=pedidoNum||'';
-    try{AGENT_LOG.add(cfg.label,input,out);}catch(_){}
+    try{AGENT_LOG.add(cfg.label,input,out,meta);}catch(_){}
     // CAPTION/CONTENT producen contenido por red → guardable (single o split). Estratega/Tendencias = planes.
     const multiNet=['CAPTION_AGENT','CONTENT'].includes(agentId);
-    res.innerHTML=`<div class="ai-response" style="white-space:normal">${formatAgentReport(out)}</div>
+    res.innerHTML=`<div class="ai-response" style="white-space:normal">${typeof renderAgentResult==='function'?renderAgentResult(agentId,out,meta):formatAgentReport(out)}</div>
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
         ${multiNet?`<button class="btn btn-primary btn-sm" onclick="redesSaveDraft()">💾 Guardar borrador</button>`:''}
         ${multiNet?`<button class="btn btn-ghost btn-sm" onclick="redesSaveSplit()">🗂️ Guardar 1 por red</button>`:''}
@@ -860,10 +864,12 @@ async function redesWeeklyReport(){
   body.innerHTML='<div style="color:var(--text3)">⏳ Generando reporte…</div>'; modal.style.display='flex';
   try{showAgentWorking(cfg,{verb:'está preparando el reporte de redes…',messages:['Revisando métricas de la semana…','Detectando qué funcionó mejor…','Redactando el reporte…']});}catch(e){}
   try{
+    const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('REPORT_SOCIAL_AGENT'):Date.now();
     const out=await callAgentClaude('REPORT_SOCIAL_AGENT',cfg.sys,_redesBuildMetricsContext());
+    const meta=typeof agentResultMeta==='function'?agentResultMeta('REPORT_SOCIAL_AGENT',started):{};
     _redesReportText=out;
-    body.innerHTML=`<div class="ai-response" style="white-space:normal">${formatAgentReport(out)}</div>`;
-    try{AGENT_LOG.add('REPORT_SOCIAL_AGENT','Reporte semanal de redes',out);}catch(_){}
+    body.innerHTML=`<div class="ai-response" style="white-space:normal">${typeof renderAgentResult==='function'?renderAgentResult('REPORT_SOCIAL_AGENT',out,meta):formatAgentReport(out)}</div>`;
+    try{AGENT_LOG.add('REPORT_SOCIAL_AGENT','Reporte semanal de redes',out,meta);}catch(_){}
   }catch(e){ body.innerHTML=`<div style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; toast('Error: '+e.message,'error'); }
   finally{try{hideAgentWorking();}catch(e){}}
   if(btn) btn.disabled=false;
@@ -1428,9 +1434,11 @@ async function nlGenerate(){
   try{
     const ctx=_nlBuildContext(seg);
     const full=`${ctx}\n\nCONSULTA: ${cfg.pre}${input}${seg?(' | Segmento: '+seg):''}`;
+    const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('NEWSLETTER_AGENT'):Date.now();
     const out=await callAgentClaude('NEWSLETTER_AGENT',cfg.sys,full);
+    const meta=typeof agentResultMeta==='function'?agentResultMeta('NEWSLETTER_AGENT',started):{};
     _nlLastGen=out; _nlLastParsed=_nlParse(out); _nlLastSegment=seg; _nlLastInput=input;
-    try{AGENT_LOG.add(cfg.label,input,out);}catch(_){}
+    try{AGENT_LOG.add(cfg.label,input,out,meta);}catch(_){}
     const p=_nlLastParsed;
     res.innerHTML=`<div style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:10px;color:var(--text3)">ASUNTO</span><span id="nlSubjScore">${_nlScoreChip(p.asunto||'')}</span><button class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 9px" onclick="nlSubjectSuggest()" title="3 alternativas con IA, cada una con su puntaje">✨ Ideas</button></div>
@@ -1438,7 +1446,7 @@ async function nlGenerate(){
         <div id="nlSubjOpts"></div>
         ${p.preheader?`<div style="font-size:10px;color:var(--text3);margin-top:6px">PREHEADER</div><div style="font-size:12px;color:var(--text2)">${escapeHtml(p.preheader)}</div>`:''}
       </div>
-      <div class="ai-response" style="white-space:normal">${formatAgentReport(p.cuerpo||out)}</div>
+      <div class="ai-response" style="white-space:normal">${typeof renderAgentResult==='function'?renderAgentResult('NEWSLETTER_AGENT',p.cuerpo||out,meta):formatAgentReport(p.cuerpo||out)}</div>
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="nlSaveDraft()">💾 Guardar borrador</button>
         <button class="btn btn-ghost btn-sm" onclick="nlPreviewGenerated()">👁 Vista previa</button>
