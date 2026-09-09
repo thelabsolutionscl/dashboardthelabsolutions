@@ -2201,6 +2201,7 @@ self.onmessage=function(ev){
     const m=MAQUINAS.find(x=>x.id===id),ip=getPrinterIp(m);if(!ip){toast('Esa impresora no tiene IP','error');return;}
     if(typeof _isPrinterBusy==='function'&&_isPrinterBusy((_printerStatus[id]||{}).state)){toast('🔒 La impresora está ocupada — no se interrumpe','error');return;}
     const fname=gcodeFileName(),btn=el('slBtnCalSend');btn.disabled=true;btn.textContent='⏳ Subiendo…';
+    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';toast(`▶ DEMO: calibración simulada en ${m.nombre} #${m.numG}`,'success');},250);return;}
     const fd=new FormData();fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);fd.append('root','gcodes');
     const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
@@ -2467,6 +2468,7 @@ self.onmessage=function(ev){
     // Con varias en vuelo el botón es uno solo: no se toca desde los envíos en lote.
     const btn=idExplicito?null:el('slBtnSend');
     if(btn){btn.disabled=true;btn.textContent='⏳ Subiendo…';}
+    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}toast(`✓ DEMO: ${fname} enviado de forma simulada a ${m.nombre} #${m.numG}`,'success');},250);return;}
     const fd=new FormData();
     fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);
     fd.append('root','gcodes');

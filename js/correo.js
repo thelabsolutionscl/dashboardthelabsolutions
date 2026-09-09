@@ -77,6 +77,7 @@ const MAIL={
     toast('🛡 Freno: máximo '+n+' correos/hora','success');
   },
   _sendGate(){
+    if(window._DEMO_MODE)return null;
     try{
       const now=Date.now();
       const ts=(JSON.parse(localStorage.getItem(this._SEND_LOG_KEY)||'[]')).filter(t=>now-t<3600e3);

@@ -7232,6 +7232,9 @@ function _hdrSafe(v,label){
   return v;
 }
 function _airtableConfig(){
+  // DEMO nunca hereda el proxy ni el PAT guardado en este navegador. Todas las
+  // operaciones se resuelven contra el almacén efímero de la sesión.
+  if(window._DEMO_MODE) return{base:'demo://airtable',headers:{'X-Demo-Mode':'1'}};
   const proxyUrl=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
   const proxyKey=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
   if(proxyUrl&&proxyKey) return{base:proxyUrl.replace(/\/$/,''),headers:{'X-App-Key':_hdrSafe(proxyKey,'La clave del proxy')}};
@@ -7243,6 +7246,7 @@ function _airtableConfig(){
 // sin proxy, directo con el token local. path SIN prefijo /v0.
 function _atFetch(path,opts={}){
   const cfg=_airtableConfig();
+  if(window._DEMO_MODE) return _demoAirtableHttp(cfg.base+path,opts);
   return fetch(cfg.base+path,{...opts,headers:{...(opts.headers||{}),...cfg.headers}});
 }
 function _atHttp(path,opts={}){
@@ -7266,6 +7270,9 @@ async function airtableFetch(table,max=100){
 }
 // fetch con timeout (AbortController) + reintentos ante 429/red. Devuelve Response.
 async function airtableHttp(url,opts,{retries=2,timeout=20000,idempotent=true}={}){
+  // Este guard vive debajo de TODOS los wrappers (incluye URLs del proxy y
+  // escrituras batch), así el DEMO no depende de reconocer api.airtable.com.
+  if(typeof window!=='undefined'&&window._DEMO_MODE) return _demoAirtableHttp(url,opts);
   let lastErr;
   for(let attempt=0;attempt<=retries;attempt++){
     const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),timeout);
@@ -8450,8 +8457,11 @@ function _proxyCfg(){
 }
 // ¿Hay CÓMO llamar a Claude? (proxy configurado O key local) — las compuertas de
 // features IA deben preguntar esto, no si existe una key en el navegador.
-function hasClaudeAccess(){return !!(_proxyCfg()||getAnthropicKey());}
+function hasClaudeAccess(){return !!(window._DEMO_MODE||_proxyCfg()||getAnthropicKey());}
 async function callClaude(system,user,opts={}){
+  // En DEMO la experiencia sigue funcionando con respuestas deterministas y
+  // formatos compatibles, sin tocar el proxy ni gastar tokens de Anthropic.
+  if(window._DEMO_MODE){await new Promise(r=>setTimeout(r,280));return _demoClaudeResponse(system,user,opts);}
   // Con proxy: la API key de Anthropic vive en el Worker, no en el navegador
   const px=_proxyCfg();
   if(px)return _callClaudeViaProxy(system,user,px,opts);
@@ -11404,6 +11414,14 @@ function _remFiltrarPorPeriodo(pedidos){
   }
   return pedidos;
 }
+function _remOwnsRecord(r){
+  const u=AUTH.getUser();
+  if(!u||u.role!=='demo')return vendorOwnsRecord(r);
+  const f=(r&&r.fields)||{};if(String(f['Vendedor']||'').toLowerCase().trim()==='florencia')return true;
+  const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:f['Cliente'];
+  const cli=(state.clientes||[]).find(x=>x.id===clienteId);
+  return String(cli?.fields?.['Vendedor']||'').toLowerCase().trim()==='florencia';
+}
 function renderRemuneraciones(){
   const tbody=document.getElementById('remTableBody');
   const kpisEl=document.getElementById('remKpis');
@@ -11415,17 +11433,17 @@ function renderRemuneraciones(){
   const today=new Date();today.setHours(0,0,0,0);
 
   // --- Completadas (Despachado) ---
-  const despachados=state.pedidos.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')).filter(vendorOwnsRecord);
+  const despachados=state.pedidos.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')).filter(_remOwnsRecord);
   const filtrados=_remFiltrarPorPeriodo(despachados);
   const totalBruto=filtrados.reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0),0);
   const totalNeto=filtrados.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
   const totalComision=Math.round(totalNeto*TASA);
 
   // --- En proceso (pedidos no despachados, no cancelados) ---
-  const enProceso=state.pedidos.filter(p=>{const est=p.fields['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(est);}).filter(vendorOwnsRecord);
+  const enProceso=state.pedidos.filter(p=>{const est=p.fields['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(est);}).filter(_remOwnsRecord);
 
   // --- Pipeline cotizaciones activas (Solicitada / Enviada) ---
-  const pipeline=(state.cotizaciones||[]).filter(c=>['Solicitada','Enviada'].includes(c.fields['Estado cotización']||'')).filter(vendorOwnsRecord);
+  const pipeline=(state.cotizaciones||[]).filter(c=>['Solicitada','Enviada'].includes(c.fields['Estado cotización']||'')).filter(_remOwnsRecord);
   const pipeNeto=pipeline.reduce((s,c)=>s+Math.round((c.fields['Total final (CLP)']||0)/1.19),0);
   const pipeComision=Math.round(pipeNeto*TASA);
 
@@ -11517,7 +11535,7 @@ function renderRemuneraciones(){
 }
 function exportRemCSV(){
   const TASA=0.035;
-  const despachados=state.pedidos.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')).filter(vendorOwnsRecord);
+  const despachados=state.pedidos.filter(p=>['Despachado','Completado'].includes(p.fields['Estado pedido']||'')).filter(_remOwnsRecord);
   const filtrados=_remFiltrarPorPeriodo(despachados);
   const rows=[['N° Pedido','Cliente','F. Despacho','Monto Bruto','Monto Neto','Comisión 3.5%']];
   filtrados.forEach(p=>{
@@ -16145,14 +16163,108 @@ const DEMO_DATA={
     {id:'recF005',fields:{'Tipo DTE':'52 - Guía de Despacho','Folio':501,'Fecha':'2026-05-24','Cliente':'Tech Solutions Ltda','Cliente ID':'recC005','Neto':243697,'IVA':46303,'Total':290000,'Estado Pago':'Cobrada','Estado SII':'Aceptado'}},
     {id:'recF006',fields:{'Tipo DTE':'33 - Factura Electrónica','Folio':998,'Fecha':'2026-03-10','Cliente':'Municipalidad Las Condes','Cliente ID':'recC008','Neto':268908,'IVA':51092,'Total':320000,'Estado Pago':'Vencida','Estado SII':'Aceptado'}},
   ]},
+  Inventario:{records:[
+    {id:'recI001',fields:{'Material':'Filamento PLA negro','Stock actual':4.5,'Unidad':'kg','Punto de reorden':6,'Notas':'Reposición sugerida esta semana'}},
+    {id:'recI002',fields:{'Material':'Filamento PETG blanco','Stock actual':12,'Unidad':'kg','Punto de reorden':5,'Notas':'Stock normal'}},
+    {id:'recI003',fields:{'Material':'Acrílico transparente 3 mm','Stock actual':0,'Unidad':'planchas','Punto de reorden':4,'Notas':'Sin stock'}},
+    {id:'recI004',fields:{'Material':'Tira neón LED rosa','Stock actual':28,'Unidad':'m','Punto de reorden':12,'Notas':'Stock normal'}},
+  ]},
+  Agent_Queue:{records:[
+    {id:'recAQ001',createdTime:'2026-06-04T13:20:00.000Z',fields:{Evento:'lead.created',Entidad:'Agencia Creativa DG',Agente:'LEAD_AGENT',Estado:'Completado',Prioridad:'Media',Source:'web',Output:'Lead clasificado y siguiente acción sugerida.'}},
+    {id:'recAQ002',createdTime:'2026-06-04T14:05:00.000Z',fields:{Evento:'quote.followup',Entidad:'Cotización 260519',Agente:'FOLLOWUP',Estado:'Pendiente',Prioridad:'Alta',Source:'demo'}},
+  ]},
+  Agent_Log:{records:[]},
+  Google_Ads_KPIs:{records:[]},
+  Google_Ads_Campanas:{records:[]},
+  Social_Posts:{records:[]},
+  Social_Interactions:{records:[]},
+  Social_Metrics:{records:[]},
+  Newsletter_Campañas:{records:[
+    {id:'recNL001',createdTime:'2026-06-01T12:00:00.000Z',fields:{'Campaña':'Premiaciones Q4','Asunto':'Haz que su premiación sea inolvidable','Preheader':'Trofeos y galvanos corporativos diseñados a medida.','Cuerpo (Markdown)':'## Premiaciones que representan tu marca\n\nDiseñamos trofeos, medallas y galvanos a medida para eventos corporativos.\n\nhttps://thelab.solutions/servicios/premiaciones','Estado':'Borrador','Segmento objetivo':'Eventos','Generada por NEWSLETTER_AGENT':true}},
+    {id:'recNL002',createdTime:'2026-05-15T12:00:00.000Z',fields:{'Campaña':'Neón para restaurantes','Asunto':'Tu local merece verse también de noche','Preheader':'Neones LED personalizados, eficientes y listos para instalar.','Cuerpo (Markdown)':'## Dale luz a tu marca\n\nCreamos neones LED a medida para restaurantes y retail.','Estado':'Enviada','Fecha envío':'2026-05-16','Enviados':84,'Aperturas':39,'Clicks':11,'Tasa apertura (%)':46.4,'Tasa click (%)':13.1}},
+  ]},
+  Newsletter_Envios:{records:[
+    {id:'recNE001',createdTime:'2026-05-16T13:00:00.000Z',fields:{Email:'contacto@agenciadg.cl',Campaña:['recNL002'],Abierto:true,Clicks:2,'Lead caliente':true,'Tarea creada':false}},
+  ]},
   'Monitor Sistema':{records:[]},
 };
+
+let _demoStore=null,_demoSeq=0,_demoOriginalFetch=null;
+const _demoClone=v=>{try{return structuredClone(v);}catch(e){return JSON.parse(JSON.stringify(v));}};
+const _demoJson=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json','X-Demo-Mode':'1'}});
+function _demoTableFromUrl(url){
+  const dec=decodeURIComponent(String(url||''));
+  const store=_demoStore||DEMO_DATA;
+  const known=Object.keys(store).sort((a,b)=>b.length-a.length).find(name=>dec.includes('/'+name)||dec.includes('/'+encodeURIComponent(name)));
+  if(known)return known;
+  const marker='/'+BASE_ID+'/',at=dec.lastIndexOf(marker);
+  return at>=0?(dec.slice(at+marker.length).split(/[/?#]/)[0]||null):null;
+}
+function _demoSchema(){
+  const store=_demoStore||DEMO_DATA;
+  return{tables:Object.entries(store).map(([name,bucket],i)=>{
+    const names=new Set();(bucket.records||[]).forEach(r=>Object.keys(r.fields||{}).forEach(k=>names.add(k)));
+    return{id:'tblDemo'+String(i+1).padStart(3,'0'),name,fields:[...names].map((field,j)=>({id:'fldDemo'+i+'_'+j,name:field,type:'singleLineText'}))};
+  })};
+}
+// Airtable completo en memoria: las altas, ediciones y eliminaciones se ven en
+// la UI durante la sesión, pero nunca llegan al proxy ni a la base productiva.
+async function _demoAirtableHttp(url,opts={}){
+  if(!_demoStore)_demoStore=_demoClone(DEMO_DATA);
+  const method=String(opts.method||'GET').toUpperCase();
+  const dec=decodeURIComponent(String(url||''));
+  if(dec.includes('/meta/bases/')){
+    if(method==='GET')return _demoJson(_demoSchema());
+    let body={};try{body=JSON.parse(String(opts.body||'{}'));}catch(e){}
+    return _demoJson({id:'fldDemo'+(++_demoSeq),...body});
+  }
+  const table=_demoTableFromUrl(dec);
+  if(!table)return _demoJson({records:[]});
+  const bucket=_demoStore[table]||(_demoStore[table]={records:[]});
+  const marker='/'+table;
+  const tail=dec.slice(dec.lastIndexOf(marker)+marker.length).split('?')[0].split('/').filter(Boolean);
+  const recordId=tail[0]||null;
+  if(method==='GET'){
+    if(recordId){const rec=bucket.records.find(r=>r.id===recordId);return rec?_demoJson(_demoClone(rec)):_demoJson({error:{message:'Registro demo no encontrado'}},404);}
+    return _demoJson({records:_demoClone(bucket.records)});
+  }
+  let body={};try{body=JSON.parse(String(opts.body||'{}'));}catch(e){}
+  if(method==='DELETE'){
+    const batchIds=[...dec.matchAll(/[?&]records\[\]=([^&]+)/g)].map(m=>decodeURIComponent(m[1]));
+    const ids=recordId?[recordId]:batchIds;
+    bucket.records=bucket.records.filter(r=>!ids.includes(r.id));
+    return _demoJson(batchIds.length?{records:ids.map(id=>({id,deleted:true}))}:{id:recordId,deleted:true,demo:true});
+  }
+  const upsert=(id,fields,create)=>{
+    let rec=id?bucket.records.find(r=>r.id===id):null;
+    if(!rec){rec={id:id||('recDemo'+String(++_demoSeq).padStart(6,'0')),createdTime:new Date().toISOString(),fields:{}};if(create||id)bucket.records.push(rec);}
+    Object.assign(rec.fields,fields||{});return _demoClone(rec);
+  };
+  if(Array.isArray(body.records)){
+    const records=body.records.map(x=>upsert(x.id,x.fields,true));
+    return _demoJson({records,demo:true});
+  }
+  return _demoJson(upsert(recordId,body.fields||{},true),method==='POST'?201:200);
+}
+
+function _demoClaudeResponse(system,user,opts={}){
+  const src=String(opts.source||'').toLowerCase(),all=String(system||'')+'\n'+String(user||'');
+  if(src==='ads'&&all.includes('"nombre"')&&all.includes('"palabrasClave"'))return JSON.stringify({nombre:'Demo · Premiaciones Corporativas',tipo:'SEARCH',presupuesto:5000,concordancia:'FRASE',maxCpc:800,pujaEstrategia:'MAXIMIZE_CLICKS',pujaObjetivo:0,ubicaciones:'Región Metropolitana, Chile',ubicModo:'PRESENCE',redSocios:false,redDisplay:false,finalUrl:'https://thelab.solutions/servicios/premiaciones',path1:'trofeos',path2:'empresas',palabrasClave:['trofeos personalizados','galvanos corporativos','medallas para empresas','premios corporativos santiago'],negativas:['gratis','empleo','tutorial','usado'],titulos:['Trofeos Personalizados','Premios Para Empresas','Galvanos Corporativos','Diseño A Medida','Fabricación En Santiago','Cotiza Por WhatsApp'],descripciones:['Trofeos y galvanos corporativos diseñados a medida. Cotiza tu proyecto.','Fabricación local con terminaciones premium y entrega coordinada en Santiago.'],metricas:{ctr:'>3%',cpc:'<$1.200 CLP',cpa:'<$8.000 CLP',roas:'>3x (CRM)',convMes:'15-30'},checklist:['Verificar conversión','Confirmar ubicación en modo presencia']});
+  if(src==='ads'&&all.includes('"titulos"')&&all.includes('"descripciones"'))return JSON.stringify({titulos:['Trofeos Personalizados','Premios Para Empresas','Galvanos Corporativos','Diseño A Medida','Cotiza En Santiago','Entrega Coordinada','Calidad Premium','Premiaciones Únicas','Tu Marca En Cada Premio','Producción Local','Cotiza Por WhatsApp','Atención Para Empresas'],descripciones:['Trofeos y galvanos a medida para eventos corporativos. Cotiza hoy.','Diseño, fabricación y entrega coordinada para tu próxima premiación.','Convierte tu reconocimiento en una pieza que represente realmente a tu marca.','Atención B2B en Santiago con terminaciones premium y asesoría personalizada.'],rutas:['trofeos','empresas']});
+  if(src==='seo'&&all.includes('"paginas"')){let rows=[];try{rows=JSON.parse(String(user||'[]'));}catch(e){}return JSON.stringify({paginas:(Array.isArray(rows)?rows:[]).map(x=>({url:x.url,cambios:[{campo:'title',propuesto:'Fabricación Digital B2B · The Lab Solutions',nota:'Título demo optimizado para intención comercial.'},{campo:'metaDescription',propuesto:'Soluciones de fabricación digital para empresas en Santiago: impresión 3D, premiaciones, neón y señalética. Cotiza tu proyecto con nuestro equipo.',nota:'Incluye servicio, ubicación y llamado a la acción.'}]}))});}
+  if(src==='seo')return JSON.stringify({title:'Fabricación Digital | The Lab Solutions',description:'Impresión 3D, premiaciones, neón y señalética para empresas en Santiago. Cuéntanos tu proyecto y recibe una cotización personalizada.'});
+  if(all.includes('"layerHeight"')&&all.includes('"treeSupports"'))return JSON.stringify({layerHeight:.2,firstLayerHeight:.24,shells:3,topLayers:4,bottomLayers:3,infillPct:20,infillType:'gyroid',speed:90,outerSpeed:55,infillSpeed:100,firstLayerSpeed:25,travelSpeed:180,accel:0,nozzleTemp:210,bedTemp:60,fanPct:100,minLayerTime:8,overhangSpeed:40,flowRatio:100,pressureAdvance:0,wipeDist:.8,widthOuter:0,widthInfill:0,supports:false,treeSupports:false,supportAngle:50,adaptiveLayerHeight:false,seamMode:'alineado',outerWallLast:true,bridgeDetect:true,gapFill:true,fuzzySkin:0,coasting:0,elephantFoot:.1,xyCompensation:0,arcFitting:false,skirt:2,skirtGap:2,brim:0,raft:false,ironing:false,retractDist:.8,retractSpeed:35,zHop:.2,razonamiento:'Perfil demo equilibrado para PLA y acabado profesional. Prioriza calidad exterior sin alargar innecesariamente la producción.',advertencias:[]});
+  if(src==='community_agent')return 'RESPUESTA_PUBLICA: ¡Hola! Sí, hacemos proyectos a medida. Escríbenos por WhatsApp con medidas y fecha para cotizarte.\nES_LEAD: sí\nINTENCION: cotización';
+  if(src==='newsletter_agent'&&/EXACTAMENTE 3 líneas/i.test(all))return 'Premios que representan tu marca\nTu próxima premiación empieza aquí\nTrofeos corporativos hechos a medida';
+  if(src==='newsletter_agent')return 'ASUNTO: Premios que representan tu marca\nPREHEADER: Trofeos y galvanos hechos a medida para tu evento.\nCUERPO:\n## Haz memorable tu próxima premiación\n\nCreamos trofeos corporativos con diseño, producción y entrega coordinada.\n\nhttps://thelab.solutions/servicios/premiaciones';
+  if(/checklist|control de calidad|QA_AGENT/i.test(all))return '- Terminación superficial uniforme\n- Medidas coinciden con la ficha técnica\n- Color y personalización correctos\n- Pieza limpia y sin daños\n- Embalaje protege todos los bordes';
+  if(/"desc"[\s\S]*"costo"[\s\S]*"venta"/.test(all))return JSON.stringify({desc:'Producción personalizada demo',costo:4500,venta:8500});
+  return 'Resultado simulado en modo DEMO — no consumió tokens ni modificó servicios reales.\n\n• Diagnóstico: la información cargada es consistente.\n• Recomendación: priorizar las oportunidades con vencimiento cercano.\n• Siguiente paso: revisar el registro y probar la acción sugerida.';
+}
 
 function enableDemoMode(){
   window._DEMO_MODE=true;
   if(typeof disconnectAllPrinterWs==='function')disconnectAllPrinterWs();   // sin WS real en demo
-  // Token falso para pasar la guarda de airtableFetch
-  try{localStorage.setItem('airtable_token','DEMO_TOKEN');}catch(e){}
   // Badge DEMO en el chip de usuario
   const chip=document.getElementById('userChip');
   if(chip){
@@ -16180,6 +16292,7 @@ function enableDemoMode(){
     {id:'recEQ14',fields:{persona_id:'florencia',fecha:_rd(1), tipo:'vacaciones',desc:'Vacaciones',hora_inicio:'',hora_fin:''}},
     {id:'recEQ15',fields:{persona_id:'florencia',fecha:_rd(2), tipo:'vacaciones',desc:'Vacaciones',hora_inicio:'',hora_fin:''}},
   ]};
+  _demoStore=_demoClone(DEMO_DATA);_demoSeq=0;
   // Datos WordPress ficticios para modo demo
   const DEMO_WP_PAGES=[
     {id:1,slug:'home',title:{rendered:'Inicio'},link:'https://thelab.solutions/',_type:'page',yoast_head_json:{title:'The Lab Solutions — Impresión 3D y Diseño en Santiago',description:'Somos expertos en impresión 3D, trofeos personalizados, neones y papelería corporativa en Santiago de Chile. Cotiza online, entrega rápida.'},meta:{}},
@@ -16192,27 +16305,13 @@ function enableDemoMode(){
     {id:101,slug:'guia-impresion-3d-piezas-industriales',title:{rendered:'Guía completa: impresión 3D para piezas industriales en Chile'},link:'https://thelab.solutions/blog/guia-impresion-3d/',_type:'post',yoast_head_json:{title:'Impresión 3D Piezas Industriales Chile | Blog The Lab Solutions',description:'Todo lo que necesitas saber sobre impresión 3D industrial en Chile: materiales, tolerancias, costos y plazos. Actualizado 2026.'},meta:{}},
     {id:102,slug:'diferencias-pla-petg-abs',title:{rendered:'PLA vs PETG vs ABS: ¿qué material elegir para tu proyecto?'},link:'https://thelab.solutions/blog/pla-petg-abs/',_type:'post',yoast_head_json:{title:'PLA vs PETG vs ABS — Guía 2026 | The Lab Solutions',description:'Comparativa completa de los filamentos más usados en impresión 3D. Temperatura, resistencia, costo y aplicaciones recomendadas.'},meta:{}},
   ];
-  // Interceptar fetch — devolver datos demo para Airtable y WordPress, bloquear escrituras
-  const _fetch=window.fetch;
+  // Cinturón final: además de los wrappers centrales, cualquier fetch externo
+  // queda simulado. Así un módulo nuevo tampoco puede enviar correo, WhatsApp,
+  // DTE, archivos, campañas, órdenes de impresora ni llamadas pagadas por error.
+  if(!_demoOriginalFetch)_demoOriginalFetch=window.fetch.bind(window);
   window.fetch=async(url,opts={})=>{
     const u=typeof url==='string'?url:url.toString();
-    if(u.includes('api.airtable.com')){
-      const method=(opts.method||'GET').toUpperCase();
-      if(method!=='GET'){
-        return new Response(JSON.stringify({records:[{id:'recDEMO',fields:{}}]}),{status:200,headers:{'Content-Type':'application/json'}});
-      }
-      const dec=decodeURIComponent(u);
-      let data={records:[]};
-      if(dec.includes('Cotizaciones')) data=DEMO_DATA.Cotizaciones;
-      else if(dec.includes('Pedidos')) data=DEMO_DATA.Pedidos;
-      else if(dec.includes('Reportes')) data=DEMO_DATA.Reportes;
-      else if(dec.includes('Proveedores')) data=DEMO_DATA.Proveedores;
-      else if(dec.includes('Monitor')) data=DEMO_DATA['Monitor Sistema'];
-      else if(dec.includes('Equipo_Eventos')) data=DEMO_DATA.Equipo_Eventos;
-      else if(dec.includes('Facturas')) data=DEMO_DATA.Facturas;
-      else if(dec.includes('Clientes')) data=DEMO_DATA.Clientes;
-      return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
-    }
+    if(u.startsWith('demo://airtable')||_demoTableFromUrl(u))return _demoAirtableHttp(u,opts);
     if(u.includes('wp-json')){
       const method=(opts.method||'GET').toUpperCase();
       if(method!=='GET'){
@@ -16223,8 +16322,20 @@ function enableDemoMode(){
       if(u.includes('/posts')) return new Response(JSON.stringify(DEMO_WP_POSTS),{status:200,headers:{'Content-Type':'application/json'}});
       return new Response(JSON.stringify([]),{status:200,headers:{'Content-Type':'application/json'}});
     }
-    return _fetch(url,opts);
+    if(u.includes('/seo-fetch')){
+      const html='<!doctype html><html lang="es"><head><title>Fabricación Digital B2B · The Lab Solutions</title><meta name="description" content="Impresión 3D, premiaciones, neón y señalética para empresas en Santiago. Cotiza tu proyecto con nuestro equipo."><meta name="viewport" content="width=device-width"><meta property="og:title" content="The Lab Solutions"><meta property="og:description" content="Fabricación digital B2B"><meta property="og:image" content="/og.jpg"><link rel="canonical" href="https://thelab.solutions/"></head><body><h1>Fabricación digital para empresas</h1><p>'+('Diseño y producción personalizada. '.repeat(140))+'</p></body></html>';
+      return _demoJson({ok:true,demo:true,html});
+    }
+    try{
+      const target=new URL(u,location.href);
+      if(target.origin!==location.origin&&!['blob:','data:'].includes(target.protocol)){
+        console.info('[demo] fetch externo simulado',String(opts.method||'GET').toUpperCase(),target.origin+target.pathname);
+        return _demoJson({ok:true,demo:true,simulated:true,id:'demo',url:'#',webViewLink:'#'});
+      }
+    }catch(e){}
+    return _demoOriginalFetch(url,opts);
   };
+  setTimeout(()=>toast('Modo DEMO seguro: los cambios son temporales y la IA no consume tokens','success'),350);
   // Inicializar simulación de impresoras (diferido para que MAQUINAS cargue primero desde Airtable)
   setTimeout(()=>{
     initDemoPrinters();
@@ -16396,11 +16507,14 @@ function applyRBAC(role){
   const mobileNuevoAccordion = document.querySelector('#mobileNuevoBody')?.closest('div[style*="border-bottom"]');
   if(mobileNuevoAccordion) mobileNuevoAccordion.style.display = allowedNuevos.length ? '' : 'none';
 
-  // Ocultar configuración avanzada para roles sin permiso (siempre dejar visible el token Airtable)
+  // Ocultar configuración avanzada para roles sin permiso. DEMO no debe ver ni
+  // poder alterar ninguna credencial que ya exista en el navegador anfitrión.
   if(!RBAC.canConfigRole(role)){
     document.querySelectorAll('.user-menu-token').forEach((el,i)=>{
-      if(i>0) el.style.display='none'; // índice 0 = Token Airtable, siempre visible
+      if(role==='demo'||i>0) el.style.display='none';
     });
+    const mobileConfig=document.getElementById('mobileConfigBody')?.parentElement;
+    if(mobileConfig)mobileConfig.style.display='none';
   }
 
   // Botón "+" móvil — visible solo si el rol tiene items en Nuevo
@@ -16519,6 +16633,11 @@ function initDashboard(){
   // En modo proxy el deploy deja %%…%% a propósito: en ese caso NO se siembra y
   // además se limpia cualquier placeholder que una versión antigua haya guardado.
   const _isPlaceholder=v=>!v||v.startsWith('%%');
+  // Versiones antiguas del DEMO escribían este valor falso de forma persistente
+  // y lo dejaban al volver a una cuenta real. Se elimina una vez al arrancar.
+  if(localStorage.getItem('airtable_token')==='DEMO_TOKEN'){
+    localStorage.removeItem('airtable_token');sessionStorage.removeItem('airtable_token');
+  }
   const _seed=(k,v)=>{
     if(!_isPlaceholder(v)){ if(_isPlaceholder(lsGet(k))) lsSet(k,v); }
     else if((localStorage.getItem(k)||'').startsWith('%%')){ try{localStorage.removeItem(k);sessionStorage.removeItem(k);}catch(e){} }
@@ -17487,7 +17606,7 @@ function _isLocalMode(){const v=localStorage.getItem('printer_local_mode');if(v=
 function renderLocalModeBtn(){const btn=document.getElementById('btnLocalMode');if(!btn)return;const local=_isLocalMode();btn.textContent=local?'📡 Local':'🌐 Remoto';btn.style.color=local?'var(--accent)':'var(--text3)';btn.title=local?'Conectado directo por IP (red local)':'Conectado vía tunnel remoto';}
 function toggleLocalMode(){const next=_isLocalMode()?'0':'1';localStorage.setItem('printer_local_mode',next);renderLocalModeBtn();pollPrinters();if(typeof reconnectAllPrinterWs==='function')reconnectAllPrinterWs();toast(next==='1'?'📡 Modo local — IPs directas':'🌐 Modo remoto — tunnel','info');if(next==='1'&&!localStorage.getItem('local_mode_seen')){localStorage.setItem('local_mode_seen','1');document.getElementById('localModeModal').style.display='flex';}}
 function openGcodeUpload(id){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada para esta impresora','error');return;}_uploadTargetId=id;const inp=document.getElementById('gcodeFileInput');inp.value='';inp.click();}
-async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));const _headers=getPrinterAuthHeaders(id);for(const _name in _headers)xhr.setRequestHeader(_name,_headers[_name]);xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}','${file.name.replace(/'/g,"\\'")}')" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
+async function handleGcodeUpload(evt){const file=evt.target.files?.[0];if(!file)return;const id=_uploadTargetId;if(!id)return;const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;const modal=document.getElementById('gcodeUploadModal');const prog=document.getElementById('gcodeUploadProg');const statusEl=document.getElementById('gcodeUploadStatus');const actionsEl=document.getElementById('gcodeUploadActions');const titleEl=document.getElementById('gcodeUploadModalTitle');titleEl.textContent=`${m.nombre} #${m.numG}`;document.getElementById('gcodeUploadLabel').textContent=file.name;prog.style.width='0%';statusEl.textContent='Subiendo...';statusEl.style.color='var(--text3)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cancelar</button>`;modal.style.display='flex';if(window._DEMO_MODE){await new Promise(r=>setTimeout(r,250));prog.style.width='100%';statusEl.textContent='Archivo simulado correctamente — no se envió a una impresora';statusEl.style.color='var(--success)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;return;}try{const fd=new FormData();fd.append('file',file,file.name);fd.append('root','gcodes');await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));const _headers=getPrinterAuthHeaders(id);for(const _name in _headers)xhr.setRequestHeader(_name,_headers[_name]);xhr.upload.onprogress=e=>{if(e.lengthComputable)prog.style.width=Math.round(e.loaded/e.total*100)+'%';};xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve(xhr);else reject(new Error(`HTTP ${xhr.status}`));};xhr.onerror=()=>reject(new Error('Error de red — verifica que la impresora esté en línea'));xhr.send(fd);});prog.style.width='100%';statusEl.textContent='Archivo subido correctamente ✓';statusEl.style.color='var(--success)';actionsEl.innerHTML=`<button class="btn btn-primary" onclick="startUploadedPrint('${id}','${file.name.replace(/'/g,"\\'")}')" style="flex:1">▶ Iniciar impresión</button><button class="btn btn-ghost" onclick="closeGcodeUpload()" style="flex:1">Solo subir</button>`;}catch(e){prog.style.width='0%';statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--danger)';actionsEl.innerHTML=`<button class="btn btn-ghost" onclick="closeGcodeUpload()" style="width:100%">Cerrar</button>`;}}
 async function startUploadedPrint(id,filename){const m=MAQUINAS.find(x=>x.id===id);if(!m)return;const ip=getPrinterIp(m);if(!ip)return;try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});if(r.ok){toast(`▶ Iniciando: ${filename}`,'success');closeGcodeUpload();setTimeout(pollPrinters,2000);}else{toast('Error al iniciar impresión: '+r.status,'error');}}catch(e){toast('Sin conexión con la impresora','error');}}
 function closeGcodeUpload(){document.getElementById('gcodeUploadModal').style.display='none';}
 function openOrcaConfigModal(){const rows=MAQUINAS.filter(m=>getPrinterIp(m)).map(m=>{const ip=getPrinterIp(m);return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--accent)">${escapeHtml(ip)}</td><td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text2)">7125</td><td style="padding:8px 10px"><span style="background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">Moonraker</span></td></tr>`;}).join('');document.getElementById('orcaTableBody').innerHTML=rows||`<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text3);font-size:11px">No hay IPs configuradas. Agrégalas en cada tarjeta de impresora primero.</td></tr>`;document.getElementById('orcaConfigModal').style.display='flex';}

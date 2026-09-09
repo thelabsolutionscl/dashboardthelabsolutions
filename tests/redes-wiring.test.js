@@ -302,10 +302,8 @@ test('diagnóstico: las lecturas sociales deben paginar', (t) => {
 
 test('diagnóstico: eliminar en demo debe pasar por _redesWrite', (t) => {
   const del = fn('redesDeletePost');
-  if (/airtableWrite\(['"]Social_Posts['"],\s*['"]DELETE['"]/.test(del) && !/_redesWrite/.test(del)) {
-    t.todo('usar _redesWrite también para DELETE para que el modo demo no llame al backend productivo');
-    return;
-  }
+  assert.match(del, /_redesWrite\(['"]Social_Posts['"],\s*['"]DELETE['"]/);
+  assert.doesNotMatch(del, /airtableWrite\(['"]Social_Posts['"],\s*['"]DELETE['"]/);
 });
 
 test('diagnóstico: Respondido debe guardar evidencia', (t) => {

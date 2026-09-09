@@ -107,6 +107,13 @@ function _simMaxTokens(nPerfiles){ return Math.min(8000, nPerfiles*70 + 600); }
 // Devuelve {texto, truncado}. `truncado` es la señal de que la respuesta se cortó
 // por techo de tokens: sin ella, una respuesta parcial se procesa como completa.
 async function _simClaude(system, user, maxTokens){
+  if(window._DEMO_MODE){
+    const precio=Number(String(user).match(/PRECIO AL PÚBLICO:\s*\$([\d.]+)/)?.[1]?.replace(/\./g,'')||0);
+    const perfiles=[...String(user).matchAll(/^([CN]\d+)\s*\|\s*tope\s*\$([\d.]+)/gm)].map(m=>({id:m[1],tope:Number(m[2].replace(/\./g,''))||1}));
+    const lineas=perfiles.map((p,i)=>{const ratio=precio?p.tope/precio:1,nota=ratio>=2?4:ratio>=1?3:ratio>=.55?2:1;return `${p.id}|${Math.max(0,Math.min(5,nota-(i%7===0?1:0)))}|${nota>=3?'Le ve utilidad y el precio entra en su rango':'El precio compite con prioridades más urgentes'}|${nota>=3?'Otra solución personalizada':'Una alternativa estándar más barata'}`;});
+    lineas.push('---','FRENOS: precio y necesidad no urgente','COMPRADOR: empresas y personas que valoran personalización y entrega local','PRECIO: validar con una preventa antes de producir inventario');
+    await new Promise(r=>setTimeout(r,220));return{texto:lineas.join('\n'),truncado:false};
+  }
   const body = JSON.stringify({model:SIM_MODEL, max_tokens:maxTokens||3000, system, messages:[{role:'user', content:user}]});
   const px = (typeof _proxyCfg === 'function') ? _proxyCfg() : null;
   let r;

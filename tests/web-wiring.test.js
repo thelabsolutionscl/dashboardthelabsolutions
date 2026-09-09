@@ -200,7 +200,16 @@ test.todo('runSEODiag debe restaurar el título SEO original después de probar 
 test.todo('credenciales WordPress y secreto de Ads no deben persistirse en localStorage');
 test.todo('el webhook y la clave de Make no deben estar expuestos en el bundle público');
 test.todo('la creación debe confirmar primero la cola y después solicitar el cascarón a Make');
-test.todo('el modo demo debe bloquear todas las acciones que puedan crear o modificar campañas reales');
+test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ads o Make',()=>{
+  const load=functionBlock(SOURCE,'loadAdsData');
+  const send=functionBlock(SOURCE,'sendAdsMutation');
+  const save=functionBlock(SOURCE,'saveCampaignMutation');
+  assert.match(load,/window\._DEMO_MODE\|\|!cfg\.endpoint/);
+  assert.match(send,/if\(window\._DEMO_MODE\)/);
+  assert.match(send,/status=['"]demo['"]/);
+  assert.match(save,/ADS_MAKE_SHELL\.url&&!window\._DEMO_MODE/);
+  assert.match(SOURCE,/ads_demo_pending_mutations/,'la cola demo debe estar separada de la real');
+});
 test.todo('syncAdsToAirtable debe hacer upsert por fecha/campaña y no duplicar snapshots al refrescar');
 test.todo('ROAS real debe usar ingresos atribuibles a Google Ads, no todo el revenue del CRM');
 test.todo('la carga de líneas manuales y láser debe usar pedidos de su propia línea, no el total global');

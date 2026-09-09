@@ -205,6 +205,7 @@ async function _queueStartNext(id){
   const q=_printQueue[id];if(!q||!q.length)return;
   const job=q[0];                                    // peek: no se saca hasta confirmar la subida
   const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);
+  if(typeof window!=='undefined'&&window._DEMO_MODE){q.shift();renderMonitorGrid();toast(`▶ DEMO: ${job.filename} iniciado de forma simulada en ${m?.nombre||id}`,'success');return;}
   if(!ip)return;                                     // sin IP: el trabajo queda en cola, se reintenta luego
   if(job._starting)return;                           // ya hay un intento en curso, no duplicar
   job._starting=true;

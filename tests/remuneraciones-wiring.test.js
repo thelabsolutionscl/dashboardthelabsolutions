@@ -42,7 +42,7 @@ test('la vista conserva sus contenedores operativos', () => {
 });
 
 test('las funciones implementadas de comisiones existen una sola vez', () => {
-  ['setRemPeriodo', '_remFiltrarPorPeriodo', 'renderRemuneraciones', 'exportRemCSV'].forEach(unique);
+  ['setRemPeriodo', '_remFiltrarPorPeriodo', '_remOwnsRecord', '_remSueldoStorage', '_remPersonas', '_remLoadSueldos', 'remRenderLiquidacion', 'remRenderSueldoGrid', 'remToggleSueldos', 'remSaveSueldos', 'renderRemuneraciones', 'exportRemCSV'].forEach(unique);
 });
 
 test('la vista se actualiza al cargar pedidos y al abrir la pestaña', () => {
@@ -52,8 +52,8 @@ test('la vista se actualiza al cargar pedidos y al abrir la pestaña', () => {
 
 test('el rol comercial tiene acceso explícito y los registros se filtran por vendedor', () => {
   assert.match(SOURCE, /comercial\s*:\s*\[[^\]]*['"]remuneraciones['"]/s);
-  assert.match(SOURCE, /state\.pedidos[\s\S]*?filter\(vendorOwnsRecord\)/);
-  assert.match(SOURCE, /state\.cotizaciones[\s\S]*?filter\(vendorOwnsRecord\)/);
+  assert.match(SOURCE, /state\.pedidos[\s\S]*?filter\(_remOwnsRecord\)/);
+  assert.match(SOURCE, /state\.cotizaciones[\s\S]*?filter\(_remOwnsRecord\)/);
 });
 
 test('la vista distingue ventas finalizadas, pipeline y pedidos en proceso', () => {
@@ -63,17 +63,24 @@ test('la vista distingue ventas finalizadas, pipeline y pedidos en proceso', () 
   assert.match(SOURCE, /Comisión Ganada \(3\.5%\)/);
 });
 
-// Hallazgos confirmados. Deben convertirse en pruebas obligatorias al corregirse.
-test.todo('definir remRenderLiquidacion antes de invocarla');
-test.todo('definir remToggleSueldos para que Configurar sueldos funcione');
-test.todo('definir remSaveSueldos y persistir cambios con manejo de errores');
+test('la liquidación y configuración de sueldo están implementadas', () => {
+  assert.match(SOURCE, /function remRenderLiquidacion\([^)]*totalNeto[^)]*totalComision/);
+  assert.match(SOURCE, /function remToggleSueldos\(/);
+  assert.match(SOURCE, /function remSaveSueldos\(/);
+  assert.match(SOURCE, /REM_SUELDO_KEY=['"]rem_sueldos_v1['"]/);
+});
 test.todo('centralizar y versionar la tasa de comisión por vendedor, contrato y vigencia');
 test.todo('reconocer comisión ganada con una política explícita de cobro, pago y reversas');
 test.todo('calcular neto desde datos tributarios reales y no dividiendo siempre por 1.19');
 test.todo('excluir o separar cotizaciones vencidas del pipeline potencial');
 test.todo('aplicar probabilidad, vigencia y etapa al pipeline potencial');
 test.todo('proteger remuneraciones con autorización de datos en backend, no solo filtro del navegador');
-test.todo('evitar que demo acceda a remuneraciones reales o a todos los vendedores');
+test('demo limita remuneraciones al vendedor ficticio y usa almacenamiento de sesión', () => {
+  assert.match(SOURCE, /window\._DEMO_MODE\?personas\.filter\(p=>p\.id===['"]florencia['"]\)/);
+  assert.match(SOURCE, /u\.role!==['"]demo['"]\)return vendorOwnsRecord/);
+  assert.match(SOURCE, /window\._DEMO_MODE\?sessionStorage:localStorage/);
+  assert.match(SOURCE, /window\._DEMO_MODE&&!sueldos\[['"]Florencia Cancino['"]\]/);
+});
 test.todo('cerrar períodos y registrar aprobaciones, ajustes, reversas y auditoría');
 test.todo('exportar CSV con escape RFC 4180, BOM UTF-8 y nombre de período/vendedor');
 test.todo('usar zona America/Santiago y una definición empresarial de inicio de semana');
